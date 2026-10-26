@@ -88,7 +88,7 @@ expect_exit = 0
 snapshot_stream = "stdout"
 snapshot_compare = "gir_dot_isomorphic"
 golden = "./golden/gir.dot"
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
 [[tests]]
@@ -101,7 +101,7 @@ expect_exit = 0
 snapshot_stream = "stdout"
 snapshot_compare = "gir_dot_isomorphic"
 golden = "./golden/inline_gir.dot"
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
 [[tests]]

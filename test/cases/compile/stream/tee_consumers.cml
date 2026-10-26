@@ -1,0 +1,36 @@
+/**
+ * `tee` is what reads one stream from two places (design principles 5.4): it reads `s` once and
+ * gives two streams, each of which is read once, and both see the same elements. This is the
+ * program `stream.consumed_twice` writes without a `tee` -- a `for` over one stream and a pull of
+ * another -- and it is not refused, because the two readers are the two streams the `tee` gave
+ * and neither stream has a second consumer.
+ */
+module stream_tee_consumers
+
+import stream
+
+func count(n: int): int.. {
+    return step(n)
+}
+
+func step(n: int): () => (int, int..)? {
+    return () => if n > 0 then (n, step(n - 1)) else null
+}
+
+func firstOf(p: (int, int..)?): int {
+    return match p {
+        case null => 0
+        case v => v.0
+    }
+}
+
+func twice(s: int..): int {
+    let (left, right) = stream::tee(s, 2)
+    let whole = loop acc = 0 for x in left do acc + x
+    return whole + firstOf(right())
+}
+
+func main(): int sync {
+    println(twice(count(3)))
+    return 0
+}

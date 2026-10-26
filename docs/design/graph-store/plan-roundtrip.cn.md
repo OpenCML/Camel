@@ -4,7 +4,7 @@
 
 实测基线：`develop 102dbc5d1`（本计划的提交基底），在 88zjwei 上构建后的 `out/latest/bin/camel`。下面每个数字、每条诊断都是这一版跑出来的；测量脚本是本次临时加入、**不提交**的 `test/cases/trans/cml_probe.py`（11 个探针），命令形式是 `camel <file> std::cml [passes]`。反例程序都写在下文里，可逐条重跑。
 
-**基线与移动的目标**：写这份文件时 `origin/develop` 已经前进到 `38fbbb7b1`（H242 的数据边与顺序边语义、两份裁定——《一元算子比 `->` 结合得松》与《改写保持源码程序运行的每个效应》、数组归约内核，以及 `h242a-*` 两份问题文件）。本计划依据的文件在这段区间里**只有一处变化**：`src/compile/gir/builder_expr.cpp#Builder::orderAfterLastWriter` 的注释（把待办指向裁定后的说明），行为没有变；`src/passes/trans/json/**`、`src/passes/trans/cml/**`、`test/tools/cml_roundtrip.py`、`include/camel/runtime/graph.h` 都没有改动。所以下面的数字与缺口在新基线上同样成立；实施 S3a 时以当时的 `develop` 为准，并注意 §8 第 5 问已经由那份裁定回答了一半。
+**基线与移动的目标**：写这份文件时 `origin/develop` 已经前进到 `38fbbb7b1`（图的边重构的数据边与顺序边语义、两份裁定——《一元算子比 `->` 结合得松》与《改写保持源码程序运行的每个效应》、数组归约内核，以及两份问题文件）。本计划依据的文件在这段区间里**只有一处变化**：`src/compile/gir/builder_expr.cpp#Builder::orderAfterLastWriter` 的注释（把待办指向裁定后的说明），行为没有变；`src/passes/trans/json/**`、`src/passes/trans/cml/**`、`test/tools/cml_roundtrip.py`、`include/camel/runtime/graph.h` 都没有改动。所以下面的数字与缺口在新基线上同样成立；实施 S3a 时以当时的 `develop` 为准，并注意 §8 第 5 问已经由那份裁定回答了一半。
 
 **第一份计划里已经过期的一条事实**：任务书第 218 行的表格仍写「S0（规范转储与等价匹配器，不改语言与流水线）在跑」。S0 已经合入 develop：`77bb8b124`（canonical GIR 与独立等价检查器）、`5815e6802` + `684ecc6ca`（S1 打印机）、`14b43005b`（分支、循环、闭包、`with`/`var` 参数），测试在 `test/plans/feat/trans/cml.plan.toml`。那行是作者的表，本计划不改。
 
@@ -14,10 +14,10 @@
 2. **往返性质今天就有反例**：打印成功且能重新编译的 348 个里，**309 个等价、35 个不等价、4 个的打印结果连 `std::jgir canonical=true` 都跑不出来**。这 35 个不是「看起来不整齐」，是打印器**丢节点**或**改接线**，见 §3.9 与 §7。
 3. **最大的两类缺口是声明与类型**：拒绝理由归并后 131 类，最多的是「算子没有源码形式」463 个、「参数的类型打不出来」273 个、「`with` 参数是命名类型」66 个、「图名不是源码标识符」58 个、「宏图」38 个、「参数是命名类型」35 个、「返回类型是带标签/可空/单元组」31 个、「间接调用少了函数值」26 个。
 4. **优化过的图打不出来**：`camel x.cml std::opt std::cml` 与 `std::opt::inline std::cml` 今天都拒绝，理由是 `Inline` 区域（`cml.cpp#validateGraph`）。第一份计划把这当成给人用的附带功能；按裁决 9.7（改写必须保持源码程序运行的每个效应）它其实是**必须**能打的一条路。
-5. **等价判定器看不见第三种边**：canonical v2 的节点输入只有 `normal`/`context`/`control` 三种（`gir_canonical.cpp#CanonicalDocument::inputsJson`），**没有顺序边**（实测：一个带 `var` 写与同资源效应的程序，整个 canonical 文档里 `order` 出现 0 次；节点字段只有 `callee/id/inputs/kind/payload/type/value`）。H242 落地后每个同资源效应对与每个 `var` 写写对都有顺序边，判定器却看不见——**这是假绿的来源**。
+5. **等价判定器看不见第三种边**：canonical v2 的节点输入只有 `normal`/`context`/`control` 三种（`gir_canonical.cpp#CanonicalDocument::inputsJson`），**没有顺序边**（实测：一个带 `var` 写与同资源效应的程序，整个 canonical 文档里 `order` 出现 0 次；节点字段只有 `callee/id/inputs/kind/payload/type/value`）。图的边重构落地后每个同资源效应对与每个 `var` 写写对都有顺序边，判定器却看不见——**这是假绿的来源**。
 6. **判定器也看不见 `Block` 区域**：canonical 主动**抹掉** `Inline` 与 `Block`（`gir_canonical.cpp#CanonicalDocument::canonicalRegionOf`），而标签是程序的一部分（设计原则 2.5 明说「含区域、写法、标签」）。`Inline` 抹掉是对的（内联体不是另一个程序），`Block` 必须留下。
-7. **与 H242 的接口是 8 处读今天表示的地方**：`cml.cpp#findEntry`、`cml.cpp#isEffectful`、`cml.cpp#regionReturnsValue`、`cml.cpp#bindLoopCond`、`cml.cpp#expression`（`Gate`/`Sync` 节点）与 `cml.cpp#buildTopo`、`cml.cpp#isEffectful`、`cml.cpp#regionReturnsValue`、`cml.cpp#regionNeedsSync`（`ctrlInputsOf`）。H242 删掉 `Ctrl` 这一种类与这两种节点（`edges.cn.md:15, 25, 48`；`README.cn.md:402, 409`）。**打印机今天就是按这些写的**，本计划的第一步就是让它不按这些写（§5）。
-8. **顺序**：先做一个**一个提交就能看证据的竖切片**（三种边 + 端口角色进判定器与打印器视图，§6 的 S3a），再做优化过的图（S3b）、声明（S4）、其余算子与整程序（S5）、与 H242 合流（S6）。每一步的验收都是「跑一条命令、看三份输出」，不是「看起来更好了」。
+7. **与图的边重构的接口是 8 处读今天表示的地方**：`cml.cpp#findEntry`、`cml.cpp#isEffectful`、`cml.cpp#regionReturnsValue`、`cml.cpp#bindLoopCond`、`cml.cpp#expression`（`Gate`/`Sync` 节点）与 `cml.cpp#buildTopo`、`cml.cpp#isEffectful`、`cml.cpp#regionReturnsValue`、`cml.cpp#regionNeedsSync`（`ctrlInputsOf`）。图的边重构删掉 `Ctrl` 这一种类与这两种节点（`edges.cn.md:15, 25, 48`；`README.cn.md:402, 409`）。**打印机今天就是按这些写的**，本计划的第一步就是让它不按这些写（§5）。
+8. **顺序**：先做一个**一个提交就能看证据的竖切片**（三种边 + 端口角色进判定器与打印器视图，§6 的 S3a），再做优化过的图（S3b）、声明（S4）、其余算子与整程序（S5）、与图的边重构合流（S6）。每一步的验收都是「跑一条命令、看三份输出」，不是「看起来更好了」。
 
 ## 1. 今天已经有什么（事实，带提交与位置）
 
@@ -115,16 +115,16 @@ func main(): int sync { var x = 1
 
 - **normalizer**：`std::jgir canonical=true`（版本 2）。它只留等价定义涉及的东西：可达图、活节点、节点种类与按种类和槽位的输入、算子身份（语义键）、静态值（按值）、区域（kind/parent/owner/index/result/ports/params/attrs）、类型表、声明原子、标签原子；名字、源码位置、编号都不在文档里（`docs/technical/gir-interchange.md`；`gir_canonical.cpp#CanonicalDocument`）。
 - **检查器**：`test/tools/cml_roundtrip.py`。它对整份结构做颜色细化 + 互异个体化，比较结构类；预算用尽是 exit 2，**不会**被读成等价（`cml_roundtrip.py#equivalent`、`cml_roundtrip.py#main`）。
-- **共享比较工具（不对往返负责）**：`test/tools/gir-dot.mjs#compareGirDotIsomorphic` + `test/tools/normalizers.mjs#applyNormalizers`，在 `graph_equal.mjs#GOLDENS` 记的那几条上用于「Camel 遍 vs C++ 遍」的语料对照（`graph_equal.mjs#NORMALIZERS` 是它用的规范化器）。它比的是 **GIR DOT**：节点签名是 `type|shape|style|in|out 度`，边签名是两端签名 + `linktype` + `label`（`gir-dot.mjs#nodeSignature`、`gir-dot.mjs#edgeType`），所以它**看不到算子身份、静态值、区域的 index/params/attrs**，而且它依赖显示转储的边类型——H242 正改这个（`gir.cpp#dumpJsonRuntimeGraph` 今天写 `control`）。结论：往返的判据仍是 v2 文档 + `cml_roundtrip.py`；`graph_equal.mjs` 只在它现有的语料里用，**不搬到往返上**，代价是同一个仓库里有两套图比较工具（比把它们合并便宜：合并要先让 DOT 携带算子身份与静态值，那是另一个任务）。
+- **共享比较工具（不对往返负责）**：`test/tools/gir-dot.mjs#compareGirDotIsomorphic` + `test/tools/normalizers.mjs#applyNormalizers`，在 `graph_equal.mjs#GOLDENS` 记的那几条上用于「Camel 遍 vs C++ 遍」的语料对照（`graph_equal.mjs#NORMALIZERS` 是它用的规范化器）。它比的是 **GIR DOT**：节点签名是 `type|shape|style|in|out 度`，边签名是两端签名 + `linktype` + `label`（`gir-dot.mjs#nodeSignature`、`gir-dot.mjs#edgeType`），所以它**看不到算子身份、静态值、区域的 index/params/attrs**，而且它依赖显示转储的边类型——图的边重构正改这个（`gir.cpp#dumpJsonRuntimeGraph` 今天写 `control`）。结论：往返的判据仍是 v2 文档 + `cml_roundtrip.py`；`graph_equal.mjs` 只在它现有的语料里用，**不搬到往返上**，代价是同一个仓库里有两套图比较工具（比把它们合并便宜：合并要先让 DOT 携带算子身份与静态值，那是另一个任务）。
 - **今天的实测结果**：348 个能打印的程序里 **309 等价 / 35 不等价 / 4 个打印不出 canonical**（`SWEEP files=2387 printed=348 refused=1338 frontend=701`、`ROUNDTRIP checked=348 equivalent=309 not_equivalent=35 unfaithful=4`）。
 - **执行对照**：`cml_contract.py` 已经把「打印后重新编译的程序 stdout 与退出码相同」钉住（`cml_contract.py#check_round_trip`）。它与设计原则 9.7（改写必须保持源码程序运行的每个效应）的关系：**必须在同一次构建里对照**。理由是这条规则自己的验收用例 `func f(): int { let a = println(1); let b = println(2); return b }` 在重构前打印 `1`、重构后只打印 `2`——同一段源码的执行结果会随边的模型变，所以「和昨天记录的 stdout 一样」不是判据，「这一次构建里原程序与打印后程序一样」才是。
 - **名字**：不进等价（第一份计划 §2.3 第 5 条），由 `cml_contract.py#check_names` 的名字检查单独钉。
 
-## 5. 三种边与 H242：怎么做到不针对今天的表示
+## 5. 三种边与图的边重构：怎么做到不针对今天的表示
 
-**今天打印机从哪里读边（8 处，逐处都会在 H242 后失效）**：
+**今天打印机从哪里读边（8 处，逐处都会在图的边重构后失效）**：
 
-| 位置 | 读什么 | H242 之后 |
+| 位置 | 读什么 | 图的边重构之后 |
 |---|---|---|
 | `cml.cpp#findEntry`、`cml.cpp#isEffectful`、`cml.cpp#regionReturnsValue`、`cml.cpp#bindLoopCond`、`cml.cpp#expression` | `GCNodeKind::Gate` / `GCNodeKind::Sync` | 两种节点删除（`edges.cn.md:48`） |
 | `cml.cpp#buildTopo`、`cml.cpp#isEffectful`、`cml.cpp#regionReturnsValue`、`cml.cpp#regionNeedsSync` | `ctrlInputsOf(ref)` | `Ctrl` 种类删除，存活只沿数据端口与同步边（`edges.cn.md:15, 19`） |
@@ -132,7 +132,7 @@ func main(): int sync { var x = 1
 
 **做法（一个视图层，两个实现）**：在 `src/passes/trans/cml/` 里加一个只读视图 `PrintedGraph`，它把运行时图翻译成打印器唯一认识的东西：`ports(node)`（有序，带 `Normal`/`Context` 角色）、`syncPreds(node)`、`orderPreds(node)`、`regionOf(node)`、区域表；打印器其余部分只调视图，不再直接碰 `normInputsOf`/`withInputsOf`/`ctrlInputsOf`/`Gate`/`Sync`。
 
-- 过渡期：视图有两个实现（今天的一套；H242 落地后的一套），用现有测试钉住两者对同一批语料的输出逐字节相同。代价：一个约 200 行的适配文件与一段"两份实现并存"的窗口；收益是不用在 H242 落地当天重写 2433 行里的 8 处深浅不一的读法。
+- 过渡期：视图有两个实现（今天的一套；边重构落地后的一套），用现有测试钉住两者对同一批语料的输出逐字节相同。代价：一个约 200 行的适配文件与一段"两份实现并存"的窗口；收益是不用在边重构落地当天重写 2433 行里的 8 处深浅不一的读法。
 - **同步边必须复原成 `sync`**：它是效应"被用到"的唯一载体，漏掉一个 `sync` 块，重编译后的程序就不再运行原程序运行的效应，直接违反 9.7。所以 `sync` 的复原判据要从「同区域内的控制边」换成视图的 `syncPreds`。
 - **顺序边不打印**（设计稿 `edges.cn.md:42`：从 `sync` 与资源重新推出），但**必须进判定器**（缺口 D），否则"打印机把顺序边丢了"这种错误永远是绿的。
 - **`BRCH` 与臂、`JOIN` 的端口**按设计稿第 5 节由节点种类定（`edges.cn.md:46`），视图不改这一层。
@@ -152,7 +152,7 @@ func main(): int sync { var x = 1
 
 **S5——其余算子与整程序。** 算子源码形式表（463 个用例，逐 URI 给语法或给"内部算子"的判定）、模块级捕获、间接调用、收集循环、宏图、大常量的数据文件、随机程序扫描（第一份计划 S5 的原文要求）。代价：表与逐 URI 证据，最耗时。
 
-**S6——与 H242 合流。** 视图切到新实现、三种边的合流验收（`README.cn.md:398-410` 的 7 条）、四个后端一致、整语料扫描的通过数与"允许拒绝"清单一起交决策者裁定。
+**S6——与图的边重构合流。** 视图切到新实现、三种边的合流验收（`README.cn.md:398-410` 的 7 条）、四个后端一致、整语料扫描的通过数与"允许拒绝"清单一起交决策者裁定。
 
 ## 7. 验收用例（今天的结果是基线，不是目标）
 
@@ -179,8 +179,8 @@ func main(): int sync { var x = 1
 2. `Block` 留在 canonical，`Inline` 抹掉——是否照此裁定？（依据：标签是程序内容，内联体不是另一个程序。代价：`Block` 的 attrs 要参与等价，含标签的图会比较得更严。）
 3. 大常量的数据文件形式（第一份计划把形状留到现在）：源码旁一个数据文件 + 一条读它的声明，还是别的形状？
 4. 算子源码形式表里哪些 URI 判为"编译期/内部算子"（`:mark/*`、`:struct/*`）而永久拒绝？（这直接决定 §7 的"允许拒绝清单"。）
-5. 裁决 9.7 与 H242 的合流验收里，「同一段源码在重构前后执行不同」是否需要语言侧的说明（教程/语言参考），以免用户把它当成往返的缺陷。
+5. 裁决 9.7 与边重构的合流验收里，「同一段源码在重构前后执行不同」是否需要语言侧的说明（教程/语言参考），以免用户把它当成往返的缺陷。
 
 ## 9. 本计划明确不做
 
-不把源码或文本存进图；不为打印在图里加"源形状"字段；不因为打印不出就改语言语义；不把 `std::cml` 做成部署格式；不合并 `graph_equal.mjs` 与 `cml_roundtrip.py`；不在本计划里动 `src/runtime/**`（边的实现）、类型系统、`modules/tensor` 与 runner——那些是别的任务；GPU 与 `std::cml` 的交互（`#gpu` 块）留给 H49/H50 落地后另立计划。
+不把源码或文本存进图；不为打印在图里加"源形状"字段；不因为打印不出就改语言语义；不把 `std::cml` 做成部署格式；不合并 `graph_equal.mjs` 与 `cml_roundtrip.py`；不在本计划里动 `src/runtime/**`（边的实现）、类型系统、`modules/tensor` 与 runner——那些是别的任务；GPU 与 `std::cml` 的交互（`#gpu` 块）留给 GPU 那两项落地后另立计划。

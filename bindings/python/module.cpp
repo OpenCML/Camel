@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The CApi extension behind `import camel` (H253): a Python project calls the functions of a
+ * The CApi extension behind `import camel`: a Python project calls the functions of a
  * Camel module and the arrays cross in both directions through DLPack, without a copy.
  *
  * What it is. A host of libcamel, like `camel` itself: one `Context`, module search paths from
@@ -774,7 +774,7 @@ PyMethodDef moduleMethods[] = {
 struct PyModuleDef camelModule = {
     PyModuleDef_HEAD_INIT,
     "_camel",
-    "The Camel runtime behind `import camel` (H253).",
+    "The Camel runtime behind `import camel`.",
     -1,
     moduleMethods,
     nullptr,

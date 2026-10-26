@@ -11,10 +11,12 @@ Writes DIR/list.txt, one source path per line:
 
   * every .cml file of the parse corpus, test/cases/parse/ (the cases that own the parser), or,
     with --scope repository, every .cml file of the repository (tests, benchmarks, exemplars,
-    examples, the standard library, the tutorial), the syntax-negative cases included. The
+    examples, the standard library, the tutorial), the syntax-negative cases included, and the
+    handover directory aside (HANDOVER): that directory holds the drafts the language author works
+    from, and a module joins the corpus where it is integrated into the standard library. The
     snapshot that check.py compares (test/plans/feat/parse/golden/ast_hashes.txt) is the parse
-    corpus: a snapshot of the parser's tests, not of the repository (H188). The repository scope
-    is what check.py's format and fuzz checks traverse;
+    corpus: a snapshot of the parser's tests, not of the repository. The repository scope is what
+    check.py's format and fuzz checks traverse;
   * every ```cml block of the Markdown documents, extracted to DIR/docs/;
   * N programs of the random generator test/tools/progen (seeds 1..N) and M at --size 4,
     written to DIR/progen/.
@@ -37,6 +39,16 @@ SKIP_DIRS = {".git", "node_modules", "build", "out", "tmp", "third_party", "dist
 
 PARSE_ROOT = Path("test/cases/parse")
 
+# The language author's handover directory is not part of the repository corpus. It is where a
+# decision is prepared: his version of a standard library module, the notes that go with it, and
+# the tombstone of a file whose content moved elsewhere. Those .cml files are material for a
+# decision, not the repository's language surface - the corpus is the programs the repository
+# holds - and a module enters the corpus where it is integrated, as
+# docs/handover/stdlib/<module>.cml becomes stdlib/<module>.cml. The document guards read the
+# directory the same way: test/tools/check-doc-pass-forms.mjs keeps docs/handover/ out of its
+# pages, because a note there quotes a spelling it is calling removed.
+HANDOVER = Path("docs/handover")
+
 
 def walk(root: Path, suffix: str):
     for base, dirs, files in os.walk(root):
@@ -46,9 +58,21 @@ def walk(root: Path, suffix: str):
                 yield Path(base) / name
 
 
+def repository_sources(root: Path = Path(".")):
+    """Every .cml file of the repository (tests, benchmarks, exemplars, examples, the standard
+    library, the tutorial), the syntax-negative cases included and the handover directory left
+    out (HANDOVER). This is the breadth the format and fuzz checks traverse: they are not
+    snapshots, and a program outside the parser's own cases is checked here rather than by the
+    snapshot."""
+    handover = (root / HANDOVER).parts
+    for source in walk(root, ".cml"):
+        if source.parts[:len(handover)] != handover:
+            yield source
+
+
 def parse_cases():
     """The parse corpus: every .cml case under test/cases/parse/. The AST snapshot hashes these
-    and the probes: the snapshot is a snapshot of the tests that own the parser (H188)."""
+    and the probes: the snapshot is a snapshot of the tests that own the parser."""
     return walk(PARSE_ROOT, ".cml")
 
 
@@ -101,7 +125,7 @@ def main():
         choices=["parse", "repository"],
         default="parse",
         help="the .cml files of list.txt: the parse corpus test/cases/parse (the default) or every"
-             " .cml file of the repository",
+             " .cml file of the repository, the handover directory aside",
     )
     ap.add_argument("--progen", type=int, default=0)
     ap.add_argument("--progen-big", type=int, default=0)
@@ -111,7 +135,7 @@ def main():
     if args.scope == "parse":
         cml = list(parse_cases())
     else:
-        cml = list(walk(Path("."), ".cml"))
+        cml = list(repository_sources())
     groups = {
         args.scope: cml,
         "documents": doc_blocks(out),

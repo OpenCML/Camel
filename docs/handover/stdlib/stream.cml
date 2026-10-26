@@ -1,0 +1,155 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * Streams, written in Camel. A stream is a value: `T..` is a step function together with its
+ * state, an ordinary function value of the signature `() => (T, T..)?`. One call is one pull; a
+ * pull answers the next element together with the rest of the stream, or `null` when the stream
+ * is over. The consumer is `for x in s`, which the compiler expands on the graph into the `while`
+ * it already has (language reference 7.3.2), so nothing here needs a node kind of its own and
+ * nothing runs until something pulls.
+ *
+ * - A stream is consumed once: on every execution path a stream value has one consumer, and a
+ *   second use is a compile-time error (design principles 5.4). A function that takes a stream
+ *   takes it as an argument; a lambda cannot capture one. So every transformation below keeps the
+ *   upstream stream as the state of `unfold` (an argument of its step), never in a closure.
+ * - The transformations are pure and lazy: an element is computed when something pulls it, and
+ *   not before. Sharing is written, with `tee`.
+ * - A generator (`yield`) produces the same kind of value; `unfold` is the producer for a state
+ *   and a step that need no generator.
+ * - What depends on the order of arrival or on time (merging streams, windows by time) is not
+ *   here: those declare their non-determinism and belong to the libraries that own a clock.
+ */
+
+// ---- producing ----
+
+/// The stream of what `step` answers from `state` on: one element with the state after it, or
+/// `null` when there is nothing more. The states are threaded, not repeated.
+/// @example loop acc = 0 for x in unfold(3, (n: int) => if n > 0 then (n, n - 1) else null) do acc + x    // 6
+export func unfold::<S, T>(state: S, step: (state: S) => (T, S)?): T.. {
+    return () => match step(state) {
+        case null => null
+        case next => (next.0, unfold(next.1, step))
+    }
+}
+
+/// The stream with no element.
+/// @example loop n = 0 for x in empty::<int>() do n + 1    // 0
+export func empty::<T>(): T.. {
+    return unfold(0, (n: int): (T, int)? => null)
+}
+
+/// The elements of xs, in order.
+/// @example loop acc = 0 for x in from_array([1, 2, 3]) do acc + x    // 6
+export func from_array::<T>(xs: T[]): T.. {
+    return unfold(0, (i: int): (T, int)? => if i < len(xs) then (xs[i], i + 1) else null)
+}
+
+/// x, f(x), f(f(x)), ... without end.
+/// @example 1->iterate<(x: int) => x * 2>->take<4>->collect    // [1, 2, 4, 8]
+with <f: (x: T) => T>
+export func iterate::<T>(x: T): T.. {
+    return unfold(x, (s: T): (T, T)? => (s, f(s)))
+}
+
+// ---- transforming ----
+
+/// f of every element.
+/// @example from_array([1, 2, 3])->map<(x: int) => x * 2>->collect    // [2, 4, 6]
+with <f: (x: T) => U>
+export func map::<T, U>(s: T..): U.. {
+    return unfold(s, (rest: T..): (U, T..)? => match rest() {
+        case null => null
+        case next => (f(next.0), next.1)
+    })
+}
+
+// The first pair of the stream whose element satisfies pred, with the rest after it.
+func next_where::<T>(s: T.., pred: (x: T) => bool): (T, T..)? {
+    return match s() {
+        case null => null
+        case next => if pred(next.0) then next else next_where(next.1, pred)
+    }
+}
+
+/// The elements for which pred is true, in order.
+/// @example from_array([1, 2, 3, 4])->filter<(x: int) => x % 2 == 0>->collect    // [2, 4]
+with <pred: (x: T) => bool>
+export func filter::<T>(s: T..): T.. {
+    return unfold(s, (rest: T..): (T, T..)? => next_where(rest, pred))
+}
+
+/// The first n elements; fewer when the stream ends first, none when n is not positive. The
+/// element after the n-th is never pulled.
+/// @example 1->iterate<(x: int) => x + 1>->take<3>->collect    // [1, 2, 3]
+with <n: int>
+export func take::<T>(s: T..): T.. {
+    return unfold((s, n), (st: (T.., int)): (T, (T.., int))? => if st.1 <= 0 then null else match st.0() {
+        case null => null
+        case next => (next.0, (next.1, st.1 - 1))
+    })
+}
+
+/// The running results of folding the elements with f from init: one per element, the first
+/// being f(init, first element).
+/// @example from_array([1, 2, 3])->scan<(acc: int, x: int) => acc + x, 0>->collect    // [1, 3, 6]
+with <f: (acc: A, x: T) => A, init: A>
+export func scan::<T, A>(s: T..): A.. {
+    return unfold((s, init), (st: (T.., A)): (A, (T.., A))? => match st.0() {
+        case null => null
+        case next => {
+            let total = f(st.1, next.0)
+            (total, (next.1, total))
+        }
+    })
+}
+
+// Up to k elements from the front of the stream, with the rest after them.
+func pull_chunk::<T>(s: T.., k: int, got: T[]): (T[], T..) {
+    return if len(got) == k then (got, s) else match s() {
+        case null => (got, empty::<T>())
+        case next => pull_chunk(next.1, k, got->append<next.0>)
+    }
+}
+
+/// The elements in arrays of k, in order; the last array is shorter when the stream does not end
+/// on a multiple of k.
+/// @example from_array([1, 2, 3])->chunks<2>->collect    // [[1, 2], [3]]
+with <k: int>
+export func chunks::<T>(s: T..): T[].. {
+    return unfold(s, (rest: T..): (T[], T..)? => match pull_chunk(rest, k, [] as T[]) {
+        case got => if len(got.0) == 0 then null else got
+    })
+}
+
+/// The elements of two streams in pairs, until the shorter ends.
+/// @example zip(from_array([1, 2]), from_array(['a', 'b', 'c']))->collect    // [(1, 'a'), (2, 'b')]
+export func zip::<T, U>(a: T.., b: U..): (T, U).. {
+    return unfold((a, b), (st: (T.., U..)): ((T, U), (T.., U..))? => match st.0() {
+        case null => null
+        case x => match st.1() {
+            case null => null
+            case y => ((x.0, y.0), (x.1, y.1))
+        }
+    })
+}
+
+// ---- consuming ----
+
+/// All the elements, as an array. The stream must end: a stream without end never returns.
+/// @example from_array([1, 2, 3])->collect    // [1, 2, 3]
+export func collect::<T>(s: T..): T[] {
+    return loop out = [] as T[] for x in s do out->append<x>
+}
+
+// ---- sharing ----
+
+/// Two streams that each see every element of s, in the same order. s is read once; the elements
+/// one side has taken and the other not yet are held until it takes them. n is a hint for the
+/// executor's buffer (a leading side may be blocked, or the buffer grown): it changes no
+/// result. Each of the two may be passed to `tee` again.
+/// @fails fault `InvalidArgument` when n is below 1 (refused where it is written when n is constant)
+/// @example let (a, b) = from_array([1, 2, 3])->tee
+#op('stream:tee')
+with <n: int = 8>
+export func tee::<T>(s: T..): (T.., T..)

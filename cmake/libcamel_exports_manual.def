@@ -1,4 +1,4 @@
-; The exports that cannot be derived from a dependent target's object files (H36).
+; The exports that cannot be derived from a dependent target's object files.
 ;
 ; Everything else that libcamel exports is generated before each link by
 ; cmake/generate_libcamel_exports.mjs: the intersection of the symbols the object files of the
@@ -17,7 +17,7 @@
 ;       is test/plans/feat/trans/cpp.plan.toml, which links every program it translates.
 ;
 ;   camel::core::rtdata::printSlotCapped
-;       The frame log's capped printer (H31). Its only caller is the inline Frame::get /
+;       The frame log's capped printer. Its only caller is the inline Frame::get /
 ;       FrameView::get in include/camel/core/context/frame.h, inside EXEC_WHEN_DEBUG, so a Release
 ;       object names it only if something else does, and a Debug object names it only while that
 ;       template instantiation is emitted. The scan finds it in a Debug build (where the resulting

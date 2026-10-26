@@ -1,0 +1,574 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * The standard rules of arithmetic (rewrite design 7): the ones that hold bit for bit, for the
+ * integers and for the floats, and the ones a numeric permission allows, written as rules. No rule
+ * enters this file before `check` passes it (the plan modules.rules_library).
+ *
+ * A rule is a `Rule` value, so a rule set is an ordinary `Rule[]`, and the passes are functions
+ * from a function to a function of the same type, `(f: F) => F!`, with the choices in angle
+ * brackets:
+ *
+ * - `f->simplify` applies `algebra` and the accuracy laws, the rules that always make an
+ *   expression smaller, one way, to a fixpoint;
+ * - `f->saturate_all` adds `distribution`, the rule that rearranges, to the saturation and
+ *   extracts the smallest writing of each value;
+ * - `f->accuracy` and `f->fusion` apply the opt-in libraries of the same names.
+ *
+ * The scheduling combinators at the end compose rule sets without new syntax (rewrite design 8.5):
+ * `seq` runs the stages in the written order once each, `first` takes the first stage that rewrites
+ * something, `repeat` applies one round at a time to a fixpoint, `until` stops on a predicate of
+ * the function, and `alternate` alternates two stages until a full pair changes nothing. Each
+ * answers a `Run`.
+ *
+ * One law is written once. The head declares the type parameter and the condition names the
+ * family (`rule mul_one::<T>(x: T) when is_real::<T>()`), so there is one instance per element
+ * type and the engine fires the instance whose type the matched node has. A law that is the same
+ * for the integers and the floats (`x * 1`, `x / 1`, `x - 0`, `-(-x)`, `x + x`) is one rule for
+ * both; a law that differs (`x + 0` for integers, `x + -0.0` for floats), or needs a permission
+ * only one family asks for, is one rule per family. The array form of a law is a rule of its own
+ * (`array_mul_one`): `x: T[..]` binds `T` to the element type, so one rule is the law for every
+ * shape, which a parameter that bound the whole array type could not be. A parameter of a rule is
+ * the node it matches, of type `Node<T>`; a `const` parameter is the constant's value.
+ *
+ * The order and the bracketing the program wrote an expression in are the matcher's business, not
+ * the law's: an operator's declaration says whether exchanging its operands and regrouping its
+ * chain gives the same value, so `x + 0` reads `0 + x` and every bracketing of the sum, and there
+ * is no rule per operand order and no rule for commutation or association (rewrite design 6).
+ */
+
+import { Op } from graph
+import { Proof, Rule, Run, rewrite, saturate, extract, run } from rewrite
+import { abs, exp, expm1, log, log1p, trunc } from math
+import { log_softmax, sigmoid, softmax } from nn
+import { is_float, is_integer, is_function } from types
+
+// ---- the families ----
+
+// A type whose arithmetic the laws below are about: an integer (wrapping) or a float.
+func is_real::<T>(): bool {
+    return is_integer::<T>() || is_float::<T>()
+}
+
+// The largest integer c for which doubling a rounded product commutes with rounding and 2c is
+// exactly representable: 2^(p - 1) for a significand of p bits.
+func exact_limit::<T>(): float {
+    return match type T {
+        case float => 4503599627370496.0
+        case f32 => 8388608.0
+        case f16 => 1024.0
+        case bf16 => 128.0
+        case _ => 0.0
+    }
+}
+
+// ---- Real numbers: the laws that are exact for the integers and for the floats ----
+
+/// `x * 1` is `x`.
+export rule mul_one::<T>(x: T) when is_real::<T>() { x * 1 => x }
+
+/// `x / 1` is `x`.
+export rule div_one::<T>(x: T) when is_real::<T>() { x / 1 => x }
+
+/// `x - 0` is `x`.
+export rule sub_zero::<T>(x: T) when is_real::<T>() { x - 0 => x }
+
+/// `-(-x)` is `x`.
+export rule neg_neg::<T>(x: T) when is_real::<T>() { -(-x) => x }
+
+/// `x + x` is `x * 2`: doubling is exact in IEEE arithmetic for every value, including the
+/// infinities, the NaNs and the subnormals (the exponent grows by one, the significand is
+/// unchanged), and an integer wraps either way.
+export rule add_self::<T>(x: T) when is_real::<T>() { x + x => x * 2 }
+
+/// `x * 1` is `x`, elementwise.
+export rule array_mul_one::<T>(x: T[..]) when is_real::<T>() { x * 1 => x }
+
+/// `x / 1` is `x`, elementwise.
+export rule array_div_one::<T>(x: T[..]) when is_real::<T>() { x / 1 => x }
+
+/// `x - 0` is `x`, elementwise.
+export rule array_sub_zero::<T>(x: T[..]) when is_real::<T>() { x - 0 => x }
+
+/// `-(-x)` is `x`, elementwise.
+export rule array_neg_neg::<T>(x: T[..]) when is_real::<T>() { -(-x) => x }
+
+/// `x + x` is `x * 2`, elementwise.
+export rule array_add_self::<T>(x: T[..]) when is_real::<T>() { x + x => x * 2 }
+
+// ---- Integers: wrapping arithmetic, every law is exact ----
+//
+// Two's-complement wraparound is a ring, so the neutral elements, the inverse laws, association,
+// commutation and distribution hold at every width, and the coefficients wrap exactly as the
+// program does because `c1 + c2` in an instance at `i32` *is* an i32 addition. A rule reads a
+// coefficient only where the pattern's operators accept its type: `const c1: T` at `T = i32`
+// matches an i32 constant and nothing else. The zero on the right of `int_mul_zero` and
+// `int_sub_self` is written `0 as T`: the right side of a rule stands on its own, where a bare `0`
+// is an `int`.
+
+/// `x + 0` is `x`.
+export rule int_add_zero::<T>(x: T) when is_integer::<T>() { x + 0 => x }
+
+/// `x * 0` is `0`.
+export rule int_mul_zero::<T>(x: T) when is_integer::<T>() { x * 0 => 0 as T }
+
+/// `x - x` is `0`.
+export rule int_sub_self::<T>(x: T) when is_integer::<T>() { x - x => 0 as T }
+
+/// `x * c1 + x * c2` is `x * (c1 + c2)`.
+export rule int_combine::<T>(x: T, const c1: T, const c2: T) when is_integer::<T>() {
+    x * c1 + x * c2 => x * (c1 + c2)
+}
+
+/// `(x * c1) * c2` is `x * (c1 * c2)`.
+export rule int_fold::<T>(x: T, const c1: T, const c2: T) when is_integer::<T>() {
+    (x * c1) * c2 => x * (c1 * c2)
+}
+
+/// `(x + c1) + c2` is `x + (c1 + c2)`.
+export rule int_fold_add::<T>(x: T, const c1: T, const c2: T) when is_integer::<T>() {
+    (x + c1) + c2 => x + (c1 + c2)
+}
+
+/// The bare operand: `x * c + x` is `x * c + x * 1`. No rule can write `1 * x` (a rule matches the
+/// graph it is given, it cannot add a multiplication to read a coefficient), so the coefficient 1
+/// is implicit here. The law wraps exactly like `int_combine` and needs no permission.
+export rule int_combine_one::<T>(x: T, const c: T) when is_integer::<T>() { x * c + x => x * (c + 1) }
+
+/// `a * (b + c)` and `a * b + a * c` are one value. It grows a writing, so it belongs to the
+/// saturation, not to `simplify`.
+export rule int_distribute::<T>(a: T, b: T, c: T) when is_integer::<T>() { a * (b + c) <=> a * b + a * c }
+
+/// `a * (b + c)` and `a * b + a * c` are one value, elementwise and with the same broadcasting on
+/// both sides. It is an integer law only: for floats it is not a law under any permission the
+/// design grants, because the products may overflow where the sum does not (`a * (b + c)` is 0
+/// where `a * b + a * c` is `inf + -inf`, a NaN).
+#requires(reassociate)
+export rule array_distribute::<T>(a: T[..], b: T[..], c: T[..]) when is_integer::<T>() {
+    a * (b + c) <=> a * b + a * c
+}
+
+// ---- Floats: only what rounding does not touch ----
+//
+// `x * 1` also reads `1 * x` and `x + -0.0` also reads the sum the program bracketed the other way,
+// because a float multiplication and addition are declared commutative; regrouping a float sum is
+// *not* read that way, since a float sum is not exactly associative (rewrite design 6), so the
+// laws that need a regrouping carry `reassociate` below. `is_float` covers the reduced-precision
+// types `bf16` and `f16` as well; an element type whose instance cannot be built (a pattern
+// operator that type does not have) simply has no instance, quietly.
+
+/// `x + -0.0` is `x`: `+0.0` is not neutral, for `-0.0 + 0.0` is `+0.0`.
+export rule float_add_neg_zero::<T>(x: T) when is_float::<T>() { x + -0.0 => x }
+
+/// `x + -0.0` is `x`, elementwise.
+export rule array_add_neg_zero::<T>(x: T[..]) when is_float::<T>() { x + -0.0 => x }
+
+// ---- Floats: the laws a numeric permission allows (design principles 7.2-7.4) ----
+//
+// A rule that changes the rounding path needs the permission for it, and the check compares its
+// two sides with the error bound of that permission. The conditions are functions of the matched
+// constants' values: a `const` parameter is the constant itself, of its declared type, so a guard
+// is arithmetic on that value. The guards are generic: at `T = f32` the rule's kernel rounds in
+// f32, so `c1 + c2` in the guard must round in f32 too.
+
+// Whether a value is finite: NaN and the infinities are the only values that are not equal to
+// themselves after a subtraction. The subtraction is the instance's own width.
+func finite_value::<T>(x: T): bool {
+    return x - x == 0.0
+}
+
+// `x*c1 + x*c2 => x*(c1+c2)` with two finite, nonzero coefficients of the same sign: the
+// reassociation changes rounding only, so the default `reassociate` grant suffices.
+func combine_same_sign::<T>(c1: T, c2: T): bool {
+    return finite_value(c1) && finite_value(c2) && c1 != 0.0 && c2 != 0.0
+        && (c1 > 0.0) == (c2 > 0.0) && finite_value(c1 + c2)
+}
+
+// The opposite-sign case: cancellation can turn an infinity into a finite value or lose the sign of
+// a zero, so the rule also needs the assumptions that rule those out. A sum of zero (the
+// coefficients cancel) is left alone: the rewrite would only change the sign of the zero.
+func combine_mixed_sign::<T>(c1: T, c2: T): bool {
+    return finite_value(c1) && finite_value(c2) && c1 != 0.0 && c2 != 0.0
+        && (c1 > 0.0) != (c2 > 0.0) && c1 + c2 != 0.0
+}
+
+// `(x*c1)*c2 => x*(c1*c2)`: both coefficients finite and nonzero, and their product finite and
+// nonzero. An overflowing product would become an infinity (the rewrite then computes `x*inf`),
+// and one that underflows to zero would erase the term. Removing the intermediate product may
+// remove an overflow, which `no_infs` allows.
+func fold_coefficients::<T>(c1: T, c2: T): bool {
+    return finite_value(c1) && finite_value(c2) && c1 != 0.0 && c2 != 0.0
+        && finite_value(c1 * c2) && c1 * c2 != 0.0
+}
+
+// The bare term in `x*c + x => x*(c+1)`: the same two conditions as `combine_same_sign` and
+// `combine_mixed_sign` read at the implicit second coefficient 1. Same sign means `c > 0`;
+// opposite sign means `c < 0`, and `c == -1` (the coefficients cancel) stays as it is.
+func combine_one_same_sign::<T>(c: T): bool {
+    return finite_value(c) && c != 0.0 && c > 0.0 && finite_value(c + 1.0)
+}
+
+func combine_one_mixed_sign::<T>(c: T): bool {
+    return finite_value(c) && c != 0.0 && c < 0.0 && c + 1.0 != 0.0
+}
+
+// `x*c + x*c => x*(2c)` is exact when `c` is a finite integer with `1 <= |c| <= 2^(p-1)`, p the
+// bits of the element type's significand: doubling a rounded product commutes with rounding there,
+// and `2c` is exactly representable. The rule therefore needs no permission; the condition is what
+// makes that true.
+func exact_doubling::<T>(c: T): bool {
+    return finite_value(c) && abs(c) >= 1.0 && trunc(c) == c && float(abs(c)) <= exact_limit::<T>()
+}
+
+/// `x * c1 + x * c2` is `x * (c1 + c2)` for coefficients of one sign.
+#requires(reassociate)
+export rule float_combine::<T>(x: T, const c1: T, const c2: T)
+    when is_float::<T>() && combine_same_sign(c1, c2) {
+    x * c1 + x * c2 => x * (c1 + c2)
+}
+
+/// The same for coefficients of opposite signs, which needs the assumptions that cancellation
+/// cannot invalidate.
+#requires(reassociate, no_infs, no_signed_zeros)
+export rule float_combine_mixed::<T>(x: T, const c1: T, const c2: T)
+    when is_float::<T>() && combine_mixed_sign(c1, c2) {
+    x * c1 + x * c2 => x * (c1 + c2)
+}
+
+/// `(x * c1) * c2` is `x * (c1 * c2)`.
+#requires(reassociate, no_infs)
+export rule float_fold::<T>(x: T, const c1: T, const c2: T)
+    when is_float::<T>() && fold_coefficients(c1, c2) {
+    (x * c1) * c2 => x * (c1 * c2)
+}
+
+/// `x * c + x * c` is `x * (c + c)`, exact for a small integer `c`, so it needs no permission.
+export rule float_double::<T>(x: T, const c: T) when is_float::<T>() && exact_doubling(c) {
+    x * c + x * c => x * (c + c)
+}
+
+/// The bare operand: `x * c + x` is `x * c + x * 1.0`, the same law and the same permission as
+/// `float_combine` with the coefficient 1 implicit. One rule reads both orders of the sum: the
+/// matcher exchanges the operands of a commutative operator.
+#requires(reassociate)
+export rule float_combine_one::<T>(x: T, const c: T) when is_float::<T>() && combine_one_same_sign(c) {
+    x * c + x => x * (c + 1.0)
+}
+
+/// The bare operand with a coefficient of the other sign.
+#requires(reassociate, no_infs, no_signed_zeros)
+export rule float_combine_one_mixed::<T>(x: T, const c: T)
+    when is_float::<T>() && combine_one_mixed_sign(c) {
+    x * c + x => x * (c + 1.0)
+}
+
+// The array forms of the permissioned laws. A scalar beside an array takes the array's element
+// type (design principles 5.1), so a coefficient is declared `T` and the guards are the element
+// guards above at that instance.
+
+/// `x * c1 + x * c2` is `x * (c1 + c2)`, elementwise.
+#requires(reassociate)
+export rule array_combine::<T>(x: T[..], const c1: T, const c2: T)
+    when is_float::<T>() && combine_same_sign(c1, c2) {
+    x * c1 + x * c2 => x * (c1 + c2)
+}
+
+/// The same for coefficients of opposite signs.
+#requires(reassociate, no_infs, no_signed_zeros)
+export rule array_combine_mixed::<T>(x: T[..], const c1: T, const c2: T)
+    when is_float::<T>() && combine_mixed_sign(c1, c2) {
+    x * c1 + x * c2 => x * (c1 + c2)
+}
+
+/// `(x * c1) * c2` is `x * (c1 * c2)`, elementwise.
+#requires(reassociate, no_infs)
+export rule array_fold::<T>(x: T[..], const c1: T, const c2: T)
+    when is_float::<T>() && fold_coefficients(c1, c2) {
+    (x * c1) * c2 => x * (c1 * c2)
+}
+
+/// `x * c + x * c` is `x * (c + c)`, elementwise, exact for a small integer `c`.
+export rule array_double::<T>(x: T[..], const c: T) when is_float::<T>() && exact_doubling(c) {
+    x * c + x * c => x * (c + c)
+}
+
+/// The bare operand, elementwise: `x * c + x` is `x * c + x * 1.0`.
+#requires(reassociate)
+export rule array_combine_one::<T>(x: T[..], const c: T)
+    when is_float::<T>() && combine_one_same_sign(c) {
+    x * c + x => x * (c + 1.0)
+}
+
+/// The bare operand with a coefficient of the other sign, elementwise.
+#requires(reassociate, no_infs, no_signed_zeros)
+export rule array_combine_one_mixed::<T>(x: T[..], const c: T)
+    when is_float::<T>() && combine_one_mixed_sign(c) {
+    x * c + x => x * (c + 1.0)
+}
+
+// ---- Accuracy (rewrite design 8.10) ----
+//
+// These rules compute the same value in a form with no larger error. They change the bits on
+// purpose, so each one carries the numeric permission `refine_accuracy` ("replace a form with one
+// whose error is not larger"). The permission is not granted by default and is not applicable
+// under `#strict`. `check` measures them against a higher-precision reference, sample by sample,
+// and rejects a right side that is worse anywhere.
+//
+// The naive softmax is deliberately not here: `exp(x) / sum(exp(x), axis, true) => softmax(x)` is
+// rejected by `check` on f32 `[-1e-16, 27.004, -33.563]` (the naive form's small element has error
+// 7.76e-8, the stable form's 1.91e-6), pinned by
+// `test/cases/modules/rules/check_rejected_softmax.cml`. `log(softmax(x))` is different: both
+// sides share the same subtraction, so the log-of-softmax rule is accepted. The design's third
+// example, `sqrt(x*x + y*y) => hypot(x, y)`, is absent: `hypot` returns +inf when one operand is
+// +inf and the other NaN, where squaring first returns NaN, so the rewrite would not be "no worse"
+// on the whole domain.
+
+/// `log(softmax(x))` is `log_softmax(x)`: rounding each probability becomes an absolute error in
+/// its log, and a probability that rounds to zero gives -inf where the true log-softmax is finite.
+#requires(refine_accuracy)
+export rule array_log_softmax_of_softmax::<T>(x: T[..], const axis: int) when is_float::<T>() {
+    log(x->softmax<axis>) => x->log_softmax<axis>
+}
+
+/// `log(1 + x)` is `log1p(x)`: `1 + x` rounds before the log, and for |x| below the spacing of 1
+/// the naive log is 0 and its relative error is 100%.
+#requires(refine_accuracy)
+export rule float_log1p::<T>(x: T) when is_float::<T>() {
+    log(1.0 + x) => log1p(x)
+}
+
+/// `exp(x) - 1` is `expm1(x)`: for |x| below the spacing of 1 the naive `exp(x)` rounds to
+/// exactly 1 and the subtraction gives 0.
+#requires(refine_accuracy)
+export rule float_expm1::<T>(x: T) when is_float::<T>() {
+    exp(x) - 1.0 => expm1(x)
+}
+
+// ---- Fusion ----
+//
+// One chain of elementwise operators replaced by one operator whose kernel does the same work in a
+// single pass over the data, bit for bit. Not here, for what each would need: a fused logsumexp
+// (an operator, its definition and a kernel), a fused multiply-add (an operator that says which of
+// the two roundings it keeps, and `#contract`), a fusion region marked by an attribute (an
+// attribute or region form on a rule's right side), and the QKV multi-root fusion (multi-root
+// patterns, rewrite design 3). They are gaps in the engine, not in this file.
+
+/// The sigmoid chain `1 / (1 + exp(-x))` is `sigmoid(x)`. It is exactly the definition of
+/// `sigmoid` (`nn`), the same `exp` runs on both sides, the negation is exact, and the `+` and `/`
+/// are the same IEEE operations in the same order, so the rewrite changes no bit
+/// (`rules.fusion_bit_identical`); what changes is the cost: four kernels and four passes over the
+/// data become one.
+export rule array_sigmoid_chain::<T>(x: T[..]) when is_float::<T>() {
+    1 / (1 + exp(-x)) => x->sigmoid
+}
+
+// ---- the rule sets ----
+
+/// The rules that make an expression smaller, applied one way: the real-number laws, then the
+/// integer laws, then the float laws, each followed by its array forms. Commutation and
+/// association are not rules: the matcher reads them from the operator's declaration.
+///
+/// The order is the order the engine reads the rules in, and a law that fires first decides the
+/// shape: the combining and doubling laws stand before `add_self`, whose `x + x => x * 2` would
+/// otherwise take `x*c + x*c` first and leave `(x*c)*2` where the doubling law writes `x*(c+c)`
+/// (the shape `strict32` of `cases/opt/generic/algebra.cml` pins).
+export let algebra: Rule[] = [
+    int_add_zero, int_mul_zero, int_sub_self, int_combine, int_fold, int_fold_add, int_combine_one,
+    float_add_neg_zero, float_combine, float_combine_mixed, float_fold, float_double,
+    float_combine_one, float_combine_one_mixed,
+    mul_one, div_one, sub_zero, neg_neg, add_self,
+    array_add_neg_zero, array_combine, array_combine_mixed, array_fold, array_double,
+    array_combine_one, array_combine_one_mixed,
+    array_mul_one, array_div_one, array_sub_zero, array_neg_neg, array_add_self,
+]
+
+/// The rules that rearrange and grow a writing: distribution, which only the saturation applies.
+export let distribution: Rule[] = [int_distribute, array_distribute]
+
+/// The accuracy laws, each behind `#requires(refine_accuracy)`: an unlicensed or `#strict`
+/// program is returned unchanged by them.
+export let accuracy_laws: Rule[] = [array_log_softmax_of_softmax, float_log1p, float_expm1]
+
+/// The fusion laws.
+export let fusion_laws: Rule[] = [array_sigmoid_chain]
+
+// ---- the passes ----
+
+/// The laws of `algebra` and the accuracy laws, one way, to a fixpoint, under the numeric policy
+/// of the pass. `strict` grants no permission, as `std::opt safe_fp=true` does, so only the laws
+/// that need none fire.
+/// @fails error value `RuleInvalid` when a rule does not compile
+/// @example ((x: int): int => x + 0)->simplify
+with <strict: bool = false>
+export func simplify::<F>(f: F): F! when is_function::<F>() {
+    return f->rewrite<concat(algebra, accuracy_laws), strict: strict>
+}
+
+/// Every rule of `algebra` and `distribution`, applied both ways to the writings of every value,
+/// for at most `rounds` rounds; then the smallest writing of each value. (`std::opt::saturate` is
+/// the saturation alone, which keeps every writing.)
+/// @fails error value `RuleInvalid` when a rule does not compile
+/// @example ((x: int): int => x * 3 + x * 4)->saturate_all
+with <rounds: int = 6, strict: bool = false>
+export func saturate_all::<F>(f: F): F! when is_function::<F>() {
+    return f->saturate<concat(algebra, distribution), rounds: rounds, strict: strict>
+        -> extract<nodes>
+}
+
+/// The accuracy laws, as the opt-in pass `rules::accuracy`.
+/// @example ((x: float): float => log(1.0 + x))->accuracy
+export func accuracy::<F>(f: F): F! when is_function::<F>() {
+    return f->rewrite<accuracy_laws>
+}
+
+/// The fusion laws, as the opt-in pass `rules::fusion`.
+/// @example-fragment the sigmoid chain is written on an array
+/// @example f->fusion
+export func fusion::<F>(f: F): F! when is_function::<F>() {
+    return f->rewrite<fusion_laws>
+}
+
+// ---- cost functions for `extract` ----
+
+/// The cost of a writing is the number of nodes in it: one for the operator and the costs of its
+/// inputs.
+/// @example-fragment used as the cost of an extraction
+/// @example f->extract<nodes>
+export func nodes(o: Op, inputs: float[]): float {
+    return 1.0 + inputs->reduce<(a, b) => a + b, 0.0>
+}
+
+// ---- scheduling rule sets (rewrite design 8.5) ----
+//
+// A stage is a `Rule[]`: `run` applies it one way to a fixpoint. The combinators are ordinary Camel
+// functions over stages, written with `loop` and `->`: no helper carries an index or an
+// accumulator. No combinator reorders a stage's rules or drops a match. The rule sets and the
+// choices are configuration, so they are `with` parameters: `f->seq<[algebra, fusion_laws]>`,
+// `f->repeat<algebra, rounds: 8>`. A pass that only wants the function reads `.result`.
+
+// The schedule before its first stage: `f` unchanged, nothing applied, no fixpoint reached.
+func start::<F>(f: F): Run<F> {
+    return {
+        result: f,
+        rewrites: 0,
+        rounds: 0,
+        visited: 0,
+        erased: 0,
+        fixpoint: false,
+        seconds: 0.0,
+        proof: null as Proof?,
+    }
+}
+
+// The state after one more application `next`: its function, and the costs of `r` and `next`
+// added. `fixpoint` is the last application's, so it says whether the schedule has just stopped
+// changing, which is what `repeat` and `alternate` read.
+func plus::<F>(r: Run<F>, next: Run<F>): Run<F> {
+    return {
+        result: next.result,
+        rewrites: r.rewrites + next.rewrites,
+        rounds: r.rounds + next.rounds,
+        visited: r.visited + next.visited,
+        erased: r.erased + next.erased,
+        fixpoint: next.fixpoint,
+        seconds: r.seconds + next.seconds,
+        proof: null as Proof?,
+    }
+}
+
+// One application of `rules` on the result of `r`, at most `rounds` rounds, its cost added.
+func stage::<F>(r: Run<F>, rules: Rule[], rounds: int, strict: bool): Run<F>! {
+    return r.result->run<rules, rounds: rounds, strict: strict> -> (next) => plus(r, next)
+}
+
+// Whether the last application reached a fixpoint. An error stops the loop that asks.
+func settled::<F>(r: Run<F>!): bool {
+    return (r -> (x) => x.fixpoint) !! false
+}
+
+// Whether `r` has not rewritten anything yet.
+func untouched::<F>(r: Run<F>!): bool {
+    return (r -> (x) => x.rewrites == 0) !! false
+}
+
+// Whether `done` holds for the function `r` holds; an error stops the loop.
+func finished::<F>(r: Run<F>!, done: (q: F) => bool): bool {
+    return (r -> (x) => done(x.result)) !! true
+}
+
+/// `seq`: the stages once each, in the written order, each to a fixpoint; a stage that fails fails
+/// the whole sequence. The stages are not interleaved or reordered.
+/// @fails error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow
+/// @example-fragment the stages are rule sets of the caller
+/// @example f->seq<[algebra, fusion_laws]>
+with <stages: Rule[][], rounds: int = 16, strict: bool = false>
+export func seq::<F>(f: F): Run<F>! when is_function::<F>() {
+    return loop r = start(f) as Run<F>! for s in stages do
+        r -> (x) => stage(x, s, rounds, strict)
+}
+
+/// `first`: the stages tried in the written order, and the first one that rewrites something is
+/// the result. A stage that matches nothing does not stop the choice; when no stage rewrites
+/// anything the function is returned unchanged. A failing stage fails the choice.
+/// @fails error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow
+/// @example-fragment the stages are rule sets of the caller
+/// @example f->first<[algebra, fusion_laws]>
+with <stages: Rule[][], rounds: int = 16, strict: bool = false>
+export func first::<F>(f: F): Run<F>! when is_function::<F>() {
+    return loop r = start(f) as Run<F>! for s in stages while untouched(r) do
+        r -> (x) => stage(x, s, rounds, strict)
+}
+
+/// `repeat`: one round of the rule set at a time, until a round applies nothing or `rounds`
+/// rounds were made. A rule is therefore applied at most once per round, and the round that
+/// proves the fixpoint is made and counted.
+/// @fails error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow
+/// @example-fragment the rule set is the caller's
+/// @example f->repeat<algebra, rounds: 8>
+with <rules: Rule[], rounds: int = 16, strict: bool = false>
+export func repeat::<F>(f: F): Run<F>! when is_function::<F>() {
+    return loop r = start(f) as Run<F>! for i in 0..rounds while !settled(r) do
+        r -> (x) => stage(x, rules, 1, strict)
+}
+
+/// `until`: a round at a time, while `done` is false for the function; stops at a fixpoint, at
+/// `rounds` rounds, or when `done` holds. `done` is read before a round, so the function it holds
+/// for already has every rewrite before it.
+/// @fails error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow
+/// @example-fragment a predicate and a rule set come from the caller
+/// @example f->until<algebra, done>
+with <rules: Rule[], done: (q: F) => bool, rounds: int = 16, strict: bool = false>
+export func until::<F>(f: F): Run<F>! when is_function::<F>() {
+    return loop r = start(f) as Run<F>! for i in 0..rounds while !finished(r, done) do
+        r -> (x) => stage(x, rules, 1, strict)
+}
+
+/// `alternate`: one round of `left`, then one round of `right`, until a full pair applies nothing
+/// or `rounds` pairs were made. Both stages see the function the other produced, in that order.
+/// @fails error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow
+/// @example-fragment two rule sets come from the caller
+/// @example f->alternate<algebra, fusion_laws>
+with <left: Rule[], right: Rule[], rounds: int = 16, strict: bool = false>
+export func alternate::<F>(f: F): Run<F>! when is_function::<F>() {
+    return loop r = start(f) as Run<F>! for i in 0..rounds while !settled(r) do
+        r -> (x) => pair(x, left, right, strict)
+}
+
+// One round of `left` and one round of `right`, in that order; `fixpoint` says whether the pair
+// changed nothing, which ends `alternate`.
+func pair::<F>(r: Run<F>, left: Rule[], right: Rule[], strict: bool): Run<F>! {
+    return stage(r, left, 1, strict) -> (a) => stage(a, right, 1, strict) -> (b) => {
+        let out: Run<F> = {
+            result: b.result,
+            rewrites: b.rewrites,
+            rounds: b.rounds,
+            visited: b.visited,
+            erased: b.erased,
+            fixpoint: b.rewrites == r.rewrites,
+            seconds: b.seconds,
+            proof: null as Proof?,
+        }
+        return out
+    }
+}

@@ -1,6 +1,6 @@
-# 57. Python 绑定：数组经 DLPack 零拷贝进出、诊断变成带位置的异常、`pip install` 能装（H253）
+# 57. Python 绑定：数组经 DLPack 零拷贝进出、诊断变成带位置的异常、`pip install` 能装
 
-H253 要的是"从 Python 里调用 Camel 模块的函数"这条采用路径：**在 Python 项目里用一部分 Camel**，
+这里要的是"从 Python 里调用 Camel 模块的函数"这条采用路径：**在 Python 项目里用一部分 Camel**，
 不是整体迁移。这一页记的是盘点、选定的最小端到端路径、实现、以及每一处结论的证据。
 
 ## 57.1 盘点：这一片之前，Python 侧能做什么
@@ -43,7 +43,7 @@ H253 要的是"从 Python 里调用 Camel 模块的函数"这条采用路径：*
 - **pybind11**：仓库里已经有它（`modules/python`），但那一层要绑的是 C++ 类型；这里要绑的是
   模块名、函数名、一组 `slot_t`，用 `Python.h` 直接写反而少一层语义转换，也少一个"Python 版本与
   pybind11 版本"的组合。
-- **先把 C API 抽成一个稳定的 C 头**：那是更大的工程（要定义 ABI、版本、生命周期），而 H253 要的是
+- **先把 C API 抽成一个稳定的 C 头**：那是更大的工程（要定义 ABI、版本、生命周期），而这里要的是
   一条能走的路；现在的门是 `include/` 里已有的 C++ 接口，扩展模块直接编译在仓库里，不需要新的 ABI。
 
 ## 57.3 实现
@@ -125,7 +125,7 @@ memory:        8 results of a 4 MiB pass-through hold 4.0 MiB, 8 results of a 4 
 ```
 error value:   camel.FaultError name=RangeError at python_rules.cml:36:15
                message=the factor must not be negative
-diagnostic:    camel.DiagnosticError name=SemanticDiag::UnresolvedReference code=0x0300000B at /home/zjwei/camel-work/h424-python-bindings/test/cases/feat/bindings/python_broken.cml:9:12
+diagnostic:    camel.DiagnosticError name=SemanticDiag::UnresolvedReference code=0x0300000B at <work>/test/cases/feat/bindings/python_broken.cml:9:12
                message=Unresolved reference: 'missing_name'.
 absent name:   camel.DiagnosticError name=NoSuchExport: 'python_rules' exports no 'not_declared'
 ```

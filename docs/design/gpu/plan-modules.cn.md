@@ -26,7 +26,7 @@
 | 循环按图内区域读 | `graph_regions.cpp::analyzeRegions` 用 `LoopView::regionNodes` 把条件与循环体归给 LOOP 节点 | `tiles.plan.toml` 的 `static_loop_device`、`multi_state_loop_device` |
 
 看板第 229、491 行仍写「S2 放置属性在跑」「API 面仍是旧的 `@gpu` 偏好」——与树不符：
-S1–S4 与 H218 的删除都已在 `origin/develop` 上。**按树，不按看板。**
+S1–S4 与设备 API 的删除都已在 `origin/develop` 上。**按树，不按看板。**
 
 ### 1.1 本日实测（设备无关，探针不随分支提交）
 
@@ -79,7 +79,7 @@ runner 自测（`not_contains_fails`，`test/tools/**` 属他人），与本项�
 - **改什么**：`#gpu` 作用域里静态类型没定住 extent 的算子今天不进任何段（`eligibility` 的
   `unresolved_type`），运行期由调用点按实参重试（`1b97de680`）；重试成功即执行，但**每次调用都走一遍
   建程序**，没有"同签名只编一次"的账。M2 把编译缓存的键补成**形状签名**（各实参的 dtype + extents 的
-  规范形式）+ 已有结构键，并让 `?` 走有界队列；同一签名第二次命中，不再建程序。H47/H48 复核的第一条硬要求
+  规范形式）+ 已有结构键，并让 `?` 走有界队列；同一签名第二次命中，不再建程序。复核的第一条硬要求
   落在这里。
 - **文件**：`modules/tiles/src/codegen_cache.cpp`（键与命中计数），`modules/tiles/include/tiles/internal/codegen_cache.h`，
   `modules/tiles/src/compiled_region.cpp` / `compiler.cpp`（按实参特化的入口），`modules/tiles/src/module.cpp`
@@ -117,7 +117,7 @@ runner 自测（`not_contains_fails`，`test/tools/**` 属他人），与本项�
 
 ### M5 驻留由图推出、传输由遍插成节点
 - **改什么**：新 `modules/tiles/src/residency.cpp`：每个块的 owner 由产生它的节点决定；调用的形参跟随实参的块；
-  循环状态跨轮驻留；`#cpu` 块的入口一个 download、出口一个 upload（不是每算子一次）；传输沿用 H49a 的合批。
+  循环状态跨轮驻留；`#cpu` 块的入口一个 download、出口一个 upload（不是每算子一次）；传输沿用已有的合批。
   `region_outline.cpp` 按驻留结论在放置变化处插节点，`schedule.cpp` 按放置做存储计划。
 - **证据**：`resident_loop.cml`（状态跨轮驻留 + 每轮传输计数）、`resident_cpu_block.cml`（每轮恰好两次），
   两条都钉住数字而不是"没有崩"；`tiles::inspect` 的 transfers 表与 `std::profile` 的 `toDevice`/`toHost` 对照。
@@ -170,7 +170,7 @@ runner 自测（`not_contains_fails`，`test/tools/**` 属他人），与本项�
 - **本项窄门禁（每步）**：`smoke` + `test/plans/feat` 的 fast 层，加该步新建的 GPU 用例。
 - **程序级**：C2（`showcase/c2-mlp-mnist/train.cml`）与 `transformer_step`（`benchmarks/transformer/model.cml`）的
   **全部**算子（含反向与优化器）在设备上，与 PyTorch（CUDA、f32）同精度对照；容差按 plan.cn.md §6.3。
-  支持面缺口（bf16/Tensor Core、`take`/散射、规范化、随机数）是 H50 的输入，按 plan.cn.md §6.5 列成清单，
+  支持面缺口（bf16/Tensor Core、`take`/散射、规范化、随机数）是支持面补齐那一项的输入，按 plan.cn.md §6.5 列成清单，
   不在本项补齐。
 - **"全部算子在设备上"怎么测**：不看源码意图，看两张表——`std::profile json` 的
   `operator_rows[].device`（每一行都必须是 `cuda`）、`device_work.{kernels,toDevice,toHost,syncs}`，

@@ -192,7 +192,7 @@ jobs:
         # auditwheel is what knows which glibc the bundled libraries actually need. It is also
         # what makes the tag publishable.
         #
-        # `--exclude libcamel.so` (H604): the wheel already carries its own libcamel at
+        # `--exclude libcamel.so`: the wheel already carries its own libcamel at
         # `camel/.cmlenv/libs/libcamel.so`, which is the copy the launcher loads (`$ORIGIN/libs`
         # comes first in its RUNPATH), and every `.cmo` in `.cmlenv/stdlib` has `libcamel.so` as
         # NEEDED. Left alone, auditwheel vendors a *second* copy as
@@ -419,7 +419,7 @@ jobs:
           "$BIN/python" -m pip install --upgrade pip
           "$BIN/python" -m pip install --find-links wheelhouse camel-lang
           "$BIN/python" -m pip list --format=freeze | grep -i camel
-          # This program imports a stdlib module on purpose (H604). A program that imports
+          # This program imports a stdlib module on purpose. A program that imports
           # nothing loads no `.cmo` at all and cannot see a defect in the module path: the wheel
           # that carried two copies of libcamel ran `println("Hello, Camel!")` and exited 0, and
           # died on every program that imported anything (`camel hello.cml` with
@@ -533,7 +533,7 @@ jobs:
           assert camel.__version__ == importlib.metadata.version("camel-lang"), camel.__version__
           print("numpy", numpy.__version__)
 
-          # The interop surface the wheel promises (H253).
+          # The interop surface the wheel promises.
           for name in ("load", "Module", "Session", "CamelError"):
               assert hasattr(camel, name), name
           print("camel.load / Module / Session / CamelError present")
@@ -542,7 +542,7 @@ jobs:
           # call to a module function"). NumPy 2 writes the strides explicitly even for a compact
           # array, and that is the form the import path has to read as compact: testing the strides
           # pointer for null refused every NumPy array while this smoke stayed green, because it
-          # only ever asked whether the names were there (H604).
+          # only ever asked whether the names were there.
           rules = camel.load("/shared/rules.cml")
           values = numpy.arange(4, dtype=numpy.float32)
           doubled = rules.double_totals(values)

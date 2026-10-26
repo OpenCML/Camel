@@ -3,7 +3,7 @@
 // The encoder maps a point to (mu, log variance); the reparameterization `mu + exp(logvar/2)*eps`
 // turns it into a sample; the decoder maps the sample back.  The loss is reconstruction plus the
 // closed-form KL term.  The epsilons come from `make_data.py`, so the run is deterministic and
-// the PyTorch counterpart can use exactly the same samples (keyed random numbers, H20-3, will
+// the PyTorch counterpart can use exactly the same samples (keyed random numbers will
 // replace that file when they land).
 //
 // Run:

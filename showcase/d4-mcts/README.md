@@ -11,7 +11,7 @@ what lets "the search is right" be an assertion instead of a look at the numbers
 
 ## Scope
 
-D4 in H13 (`docs/design/showcase/README.cn.md`) reads **a simplified AlphaZero: MCTS + a
+D4 in the showcase design (`docs/design/showcase/README.cn.md`) reads **a simplified AlphaZero: MCTS + a
 policy/value network + self-play**. This example does only the **deterministic half** of that, and
 does it completely:
 
@@ -21,7 +21,7 @@ does it completely:
   length), not a language gap: `modules/nn` and autodiff can already train a small network and the
   search half would be reused as is; growing the example until it needs training is what does not
   belong in a showcase that runs in a fast plan. The search half also needs no runtime conversion of
-  an array into a tensor (H13's Q7 / H17's P2–P4), so it does not depend on those steps landing.
+  an array into a tensor (the showcase design's question 7 / the native array work's steps 2–4), so it does not depend on those steps landing.
 
 ## Layout
 
@@ -151,7 +151,7 @@ back ends produce one output.
   not dodge the defect itself.
 
   A review has already decided the rule that applies here: an empty array literal `[]` takes its
-  type from context, like any other literal (5.1), and that one need not wait for H23. The
+  type from context, like any other literal (5.1), and that one need not wait. The
   literal-only forms above do get `Node[]`; the position with a variable sibling does not and
   becomes `void[]`, so this is that rule not reaching this position rather than a missing feature.
   The fix is for `[]` in a struct literal to be inferred from the declared field type throughout.

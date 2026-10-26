@@ -6,7 +6,7 @@ tags = ["feat", "linear", "runtime", "effects", "gir"]
 # The edge model of docs/design/effects/edges.cn.md, asserted on the graph of one frozen input
 # (`test/cases/linear/runtime/effects_model_edges.cml`) read with `std::gir`.
 #
-# Each entry below states one clause of the design. They are marked `known_fail` against H242, the
+# Each entry below states one clause of the design. They are marked `known_fail` against the
 # integration of the edge model, which the decision-maker put ahead of new small
 # tasks. The layer that holds all four is the graph's construction and its
 # consumers, not this plan, and the code is what disagrees with the design: the code still has a
@@ -32,7 +32,7 @@ tags = ["feat", "linear", "runtime", "effects", "gir"]
 #   - the `SYNC` node's own deletion is unreachable code plus the 30 consumer cases the note at the
 #     end of this file lists.
 #
-# The mark is what makes H242's work measurable: the runner refuses a `known_fail` that passes, so
+# The mark is what makes that integration measurable: the runner refuses a `known_fail` that passes, so
 # the entry that flips to green fails the run until its mark is removed in the same commit that
 # fixes the clause. No criterion here is relaxed: each entry asserts its clause of
 # docs/design-principles.cn.md 3.1 (normative: an edge only orders does not pass "used"; the edges
@@ -54,7 +54,7 @@ kind = "behavior"
 case = "../../../cases/linear/runtime/effects_model_edges.cml"
 backends = ["gir"]
 known_fail = ["gir"]
-known_fail_note = "H242's construction part: the builder still generates a control edge where the model puts a sync or an order edge (fourteen `linkNodes(LinkType::Ctrl, ...)` sites under src/compile/gir/), and src/runtime/writings.cpp#DraftWritings::rewrite carries a statement's waits across a rewrite as Ctrl. It cannot be burned alone: the 53 files that read the control kind and the 26 stored pictures with 143 CTRL edges move in the same commit."
+known_fail_note = "The graph edge restructure's construction part: the builder still generates a control edge where the model puts a sync or an order edge (fourteen `linkNodes(LinkType::Ctrl, ...)` sites under src/compile/gir/), and src/runtime/writings.cpp#DraftWritings::rewrite carries a statement's waits across a rewrite as Ctrl. It cannot be burned alone: the 53 files that read the control kind and the 26 stored pictures with 143 CTRL edges move in the same commit."
 args = ["${case}", "${run_gir}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -133,7 +133,7 @@ kind = "behavior"
 case = "../../../cases/linear/runtime/effects_model_edges.cml"
 backends = ["gir"]
 known_fail = ["gir"]
-known_fail_note = "H242's construction part and the `std::opt::ctrl` -> `std::opt::order` change: no site in the tree passes `LinkType::Order`, so the builder cannot make an order edge; the write/read ordering is Ctrl (which orders *and* carries used, so it cannot be read as one thing or the other), and the only order edges in a graph come from the inliner and the relink paths (src/runtime/draft_inline.cpp#appendOrderDependency)."
+known_fail_note = "The graph edge restructure's construction part and the `std::opt::ctrl` -> `std::opt::order` change: no site in the tree passes `LinkType::Order`, so the builder cannot make an order edge; the write/read ordering is Ctrl (which orders *and* carries used, so it cannot be read as one thing or the other), and the only order edges in a graph come from the inliner and the relink paths (src/runtime/draft_inline.cpp#appendOrderDependency)."
 args = ["${case}", "${run_gir}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -168,7 +168,7 @@ kind = "behavior"
 case = "../../../cases/linear/runtime/effects_model_edges.cml"
 backends = ["gir"]
 known_fail = ["gir"]
-known_fail_note = "H242's construction part and its item on the GATE (edges.cn.md 5.3): the builder gives the arm's output a control input (src/compile/gir/builder_control.cpp#coerceArmExit), the inliner keeps a GATE's control inputs (src/runtime/draft_inline.cpp#setCtrlInputs) and std::opt::ctrl preserves them on purpose (src/runtime/control.cpp#appendControlDependency). The GATE loses that port only when the sync chain carries the wait instead."
+known_fail_note = "The graph edge restructure's construction part and the GATE rule (edges.cn.md 5.3): the builder gives the arm's output a control input (src/compile/gir/builder_control.cpp#coerceArmExit), the inliner keeps a GATE's control inputs (src/runtime/draft_inline.cpp#setCtrlInputs) and std::opt::ctrl preserves them on purpose (src/runtime/control.cpp#appendControlDependency). The GATE loses that port only when the sync chain carries the wait instead."
 args = ["${case}", "${run_gir}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

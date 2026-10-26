@@ -2,7 +2,7 @@
 # Copyright (c) the OpenCML Organization
 # SPDX-License-Identifier: MIT
 
-"""The Python binding (H253), from the Python side.
+"""The Python binding, from the Python side.
 
 Runs against `out/latest/python/_camel*.so` and the package in `pypi/camel-lang/src`, and needs no
 third-party library: the DLPack capsules here are built with `ctypes`, so the test measures the
@@ -244,7 +244,7 @@ def main():
         # And the direction a project takes: a NumPy array goes in as itself, through the
         # `__dlpack__` its producer implements, not through a capsule this test built by hand. NumPy
         # 2 writes the strides explicitly even for a compact array -- the capsule above says null --
-        # and the import path has to read that form as compact rather than as strided (H604: it
+        # and the import path has to read that form as compact rather than as strided (it
         # tested the strides pointer for null, so every NumPy array was refused as "not contiguous"
         # while `examples/python/rules/basket.py` handed one over).
         source = numpy.arange(4, dtype=numpy.float32) * 1.5

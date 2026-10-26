@@ -1,0 +1,30 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * Binary data. `Bytes` is an immutable value of the core; a string is text and never holds
+ * arbitrary bytes, so the only crossing between the two is `encode` and `decode`.
+ *
+ * Length (`len`), concatenation (`a + b`) and cutting (`b[a:b]`) are the core's, as they are for
+ * a string. What is here converts, and is native: a `Bytes` is a data block, and reading or
+ * building one needs the layout control the language does not show (design principles 10.4).
+ */
+
+/// The UTF-8 bytes of text.
+/// @example encode('hello')
+export func encode(text: string): Bytes
+
+/// The text the bytes spell. Bytes that are not valid UTF-8 are an error value, not a fault: they
+/// come from the outside world.
+/// @fails error `EncodingError` when the bytes are not valid UTF-8 or the text is larger than a string can be
+/// @example decode(encode('中文')) !! ''    // '中文'
+export func decode(content: Bytes): string!
+
+/// The bytes with the given values.
+/// @fails fault `InvalidArgument` when an element is outside 0..255
+/// @example from_array([0, 128, 255])
+export func from_array(values: int[]): Bytes
+
+/// The values of the bytes, each in 0..255.
+/// @example to_array(encode('AB'))    // [65, 66]
+export func to_array(content: Bytes): int[]

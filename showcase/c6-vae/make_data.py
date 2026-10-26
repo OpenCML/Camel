@@ -2,7 +2,7 @@
 #
 # The data is a mixture of four Gaussian clusters in the plane; the noise for the
 # reparameterization is generated here, not inside either implementation, so both sides see the
-# same epsilons and the comparison isolates the implementation.  Keyed random numbers (H20-3)
+# same epsilons and the comparison isolates the implementation.  Keyed random numbers
 # will replace the pre-generated file once they land.
 
 import argparse

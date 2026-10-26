@@ -103,7 +103,7 @@ numeric disagreement.
 
 ### Differentiation spelling
 
-Design principles 9.9 (H21 item 3 was withdrawn; see H25): weights are `with` parameters, and
+Design principles 9.9: weights are `with` parameters, and
 `with_grad(loss)<m>(x, y)` differentiates the first `with` parameter, returning a gradient of
 the same type as `m`; the remaining `with` parameters are constants and ordinary parameters are
 data.  This example binds `with_grad(loss)` outside the loop and calls it with the weights

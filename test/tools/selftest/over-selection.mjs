@@ -118,18 +118,18 @@ export function overSelectionProblems(repoRoot = defaultRepoRoot) {
         const name = String(entry.plan || '').replace(/\\/g, '/')
         const why = typeof entry.why === 'string' ? entry.why.trim() : ''
         if (!name || !why) {
-            problems.push(`plan-selection: a slowCaseOwners entry needs a plan and a why (H205)`)
+            problems.push(`plan-selection: a slowCaseOwners entry needs a plan and a why`)
             continue
         }
         const planFile = selectionTargetPath(repoRoot, name)
         if (!fs.existsSync(planFile) || !fs.statSync(planFile).isFile()) {
-            problems.push(`plan-selection: slowCaseOwners names '${name}', which is not a plan file under test/plans (H205)`)
+            problems.push(`plan-selection: slowCaseOwners names '${name}', which is not a plan file under test/plans`)
             continue
         }
         const relative = relFromRepo(repoRoot, planFile)
         if (!isSlowCost(relative)) {
             problems.push(
-                `plan-selection: slowCaseOwners names '${name}', which is not slow-cost, so it excuses nothing (H205)`
+                `plan-selection: slowCaseOwners names '${name}', which is not slow-cost, so it excuses nothing`
             )
             continue
         }
@@ -138,7 +138,7 @@ export function overSelectionProblems(repoRoot = defaultRepoRoot) {
         )
         if (!shares) {
             problems.push(
-                `plan-selection: slowCaseOwners names '${name}', which shares no case with a fast plan, so it excuses nothing (H205)`
+                `plan-selection: slowCaseOwners names '${name}', which shares no case with a fast plan, so it excuses nothing`
             )
             continue
         }
@@ -180,7 +180,7 @@ export function overSelectionProblems(repoRoot = defaultRepoRoot) {
                     ? 'the plan runs the case but is not its only owner, so the fast plan already covers the change; '
                     : 'the plan does not run that case, so the change cannot invalidate it; ')
                 + 'name the costly plan only for the cases it runs (`ownCases`), or record the shared case in '
-                + "plan-selection.json's `slowCaseOwners` with a reason (H205)"
+                + "plan-selection.json's `slowCaseOwners` with a reason"
             )
         }
     }
