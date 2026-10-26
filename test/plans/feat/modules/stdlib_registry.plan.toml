@@ -36,7 +36,7 @@ const notPure = ['time:now', 'time:strftime', 'time:strptime', 'rand:rand', 'ran
 for (const uri of notPure) {
   assert(purity[uri] === 'effectful', `${uri} is declared ${purity[uri]}, expected effectful`)
 }
-const pure = ['str:split', 'str:codepoints', 'math:sin_d', 'math:shl', 'statistics:median',
+const pure = ['str:to_upper', 'str:codepoints', 'math:sin_d', 'math:shl', 'statistics:median',
   're:test', 'json:encode', 'json:decode', 'hash:sha256_str', 'hash:sha256_bytes', 'this:zen', ':op/add_l', ':op/idx_str', ':struct/slice_arr', ':str/format',
   // They return a new array and leave their argument unchanged (design principles 11.3), one
   // operator per element type: the name carries the element type it takes.

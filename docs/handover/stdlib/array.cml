@@ -11,8 +11,8 @@
  * - The array is the ordinary argument; what configures the function (a count, a value, a
  *   function) is in angle brackets, so calls chain: `xs->filter<keep>->sort_by<key>->take<3>`.
  * - A result that may not exist (`find`, `find_index`, `index_of`) is `T?`; nothing here returns
- *   an error value. A reduction over no element (`sum`, `mean`, `min`, `max`, `argmax`,
- *   `argmin`) is a fault, as design principles 7.7 say.
+ *   an error value. The `sum` of no element is 0; `mean`, `min`, `max`, `argmax` and `argmin`
+ *   of no element are faults, as design principles 7.7 say.
  * - A function passed to these runs element by element in order and stops as soon as the answer
  *   is known (`find`, `any`, `all`), or is mapped, with no order among the calls (`sort_by`,
  *   `flat_map`, `zip_with`). None of them asks for a `pure` function.
@@ -146,12 +146,12 @@ func sum64::<T>(es: T[]): float {
 /// A float element type is added in f64 and rounded once into the element type: the rule of
 /// every float reduction, not a rounding after each addition. An integer or complex element
 /// type is added in itself and wraps around on overflow, as `+` does.
-/// @fails fault `InvalidArgument` when the array has no element
+/// The sum of no element is 0, the identity of addition.
 /// @example [1, 2, 3]->sum    // 6
 /// @example [0.5, 0.25]->sum    // 0.75
 #impl(sum_kernel)
 export func sum::<T>(xs: T[..]): T when is_numeric::<T>() {
-    let es = some_elements(xs)
+    let es = flatten(xs)
     return match type T {
         case _ when is_float::<T>() => T(sum64(es))
         case _ => es->reduce<(acc, x) => acc + x, T(0)>
@@ -220,9 +220,9 @@ func precedes::<T>(a: T, b: T): bool {
 // brackets. Each is a Camel function over a native kernel, for the result shape follows the
 // axis and the kernels sweep one axis of a contiguous block.
 
-/// The sum along an axis, with the rule of the whole sum: a float element type is added in f64
+/// The sum along an axis (0 along an axis of extent 0), with the rule of the whole sum: a float element type is added in f64
 /// from +0 in ascending order and rounded once, an integer one wraps around.
-/// @fails fault `InvalidArgument` when the axis is outside the rank or its extent is 0
+/// @fails fault `InvalidArgument` when the axis is outside the rank
 /// @example [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]->sum<0>    // [4.0, 6.0]
 with <axis: int, keepdims: bool = false>
 export func sum::<T>(xs: T[..]): T[..] when is_integer::<T>() || is_float::<T>() {
@@ -381,7 +381,7 @@ func argmin_axis::<T>(xs: T[..], axis: int, keepdims: bool): int[..]
 // native executor, adopted for the element types that have one (design principles 10.4) and
 // checked against the body element type by element type
 // (test/cases/modules/stdlib/array_reduction_kernels.cml). An element type with no kernel runs
-// the body. A kernel sweeps every element and faults on an empty array as the body does. There is
+// the body. A kernel sweeps every element and, on an empty array, answers as the body does (0 for `sum`, a fault for `min` and `max`). There is
 // one executor per element type, so one declaration per element type; its `when` names the type,
 // and a call is written `sum(xs)`, never with a kernel's name.
 //

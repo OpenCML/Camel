@@ -2,17 +2,13 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The string library (design principles 11.1: a string is valid UTF-8, its length and
- * indices count code points; `bytes::encode`/`bytes::decode` cross to the UTF-8 bytes).
+ * The native half of the string library (design principles 11.1: a string is valid UTF-8, its
+ * length and indices count code points; `bytes::encode`/`bytes::decode` cross to the UTF-8 bytes).
  *
- * Every operator is a primitive written in C++ and is pure. The string an operator works on is
- * its one ordinary argument and everything else is a `with` argument, as for the built-in
- * `join<sep>(xs)` and `slice<start, end>(xs)`, so calls chain: `s->trim->split<','>`.
- * DESIGN-QUESTION(param-style): the alternative is ordinary arguments, `split(s, ',')`.
- *
- * The signatures are written once, in the declaration module `stdlib/str.cml` (design
- * principles 6.4). What is left here is what only C++ knows: the kernels
- * in operators.cpp, the executor that runs them, and the operator traits declared at load.
+ * `stdlib/str.cml` is the module: it declares every signature and writes in Camel everything a
+ * string's code points can express. What stays here is what Camel cannot say -- letter case and
+ * code points as numbers -- and the kernels `split` and `index_of` carry under `#impl`, which
+ * answer exactly what their Camel bodies say. Every operator is a function of its arguments.
  */
 
 #include "module.h"
@@ -36,16 +32,9 @@ bool StrModule::load() {
     camel::core::OperatorTable::instance().declare(
         "str",
         {{"split", true},
-         {"trim", true},
-         {"trim_start", true},
-         {"trim_end", true},
          {"to_upper", true},
          {"to_lower", true},
-         {"replace", true},
          {"find", true},
-         {"substr", true},
-         {"starts_with", true},
-         {"ends_with", true},
          {"repeat", true},
          {"codepoints", true},
          {"from_codepoints", true}});

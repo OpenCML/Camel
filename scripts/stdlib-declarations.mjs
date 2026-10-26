@@ -512,9 +512,9 @@ function declarationModules() {
         const dir = cppModuleDir(name)
         if (!dir) continue
         const source = path.join(STDLIB_DIR, file)
+        // A file is a module and its name is the file name (design principles 10.2).
         const header = read(source).match(/^\s*module\s+([A-Za-z_]\w*)\s*$/m)
-        // `stdlib/perf.cml` says `module util`: it is not the module named after its file.
-        if (!header || header[1] !== name) continue
+        if (header && header[1] !== name) continue
         modules.push({ name, cppDir: dir, source })
     }
     return modules
