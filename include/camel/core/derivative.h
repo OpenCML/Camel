@@ -183,13 +183,21 @@ class DerivativeRegistry {
     VjpRule findRule(std::string_view uri) const;
 
     /// Registers a tangent space for the values of type code `code`. A space that owns all of
-    /// them (no `owns` predicate) replaces what is registered for the code; a space that owns
-    /// some of them is added in front of it, and answers only for the values it owns. A code has
-    /// one space that owns all of it and any number that own a subset, in registration order.
+    /// them (no `owns` predicate) is the code's own entry; a space that owns some of them is
+    /// added after it, and answers only for the values it owns. A code has one space that owns
+    /// all of it and any number that own a subset, in registration order. A registration replaces
+    /// the entry with the same `owns` and touches no other: the registry is one per process and a
+    /// second `Context` in the same process registers the core's spaces again, which must not
+    /// take a module's subset space away -- a module registers its own once (C24, AD/H1).
     void setTangentSpace(type::TypeCode code, TangentSpace space);
     /// The tangent space of `type`: the most recently registered space of its code that owns it,
     /// or nullptr when values of that type have no tangent.
     const TangentSpace *findTangentSpace(const type::Type *type) const;
+
+    /// One line per registered tangent space, sorted: `code=<n> owns=all|subset add=<uri>`. The
+    /// reading a diagnostic or a test takes of what the process has registered, the way
+    /// `rootSourceDescriptions` answers for the allocator's root sets (C24, AD/H1).
+    std::vector<std::string> tangentSpaceDescriptions() const;
 
     /// Registers a predicate for the values of type code `code` that says they are discrete (an
     /// integer or a boolean held by a module type, such as a tensor of integers): their
