@@ -1307,3 +1307,22 @@ Linux 包在 manylinux 里构建，用 auditwheel 修正标签，并在构建时
   - 传给 `f: (x: int) => int pure`：被拒，因为写格子不包含在空集里。
 - 第 4 条：`pure` **可以**写在函数类型上（3.3 的原例就是 `f: (x: T) => U pure`），调用方能用形参要求纯度。`applyPure` 的形参没写资源、体却声明了 `pure`：体里推出的资源就是 `f` 的资源（泛型），证明不了是空集，所以在 `applyPure` 自己的子句处报 `UsesPromiseViolated`，帮助里建议给形参写上 `pure`。
 - 计划里那句如实描述的改写，按上面的口径再改一次：效应由值推断出的资源集承载，经函数类型形参调用时随实例化可见。
+
+## 纯数据聚合的字节读写
+
+收下：`to_bytes`、`from_bytes` 按数据布局逐叶读写，`from_bytes` 只剩一个以 `is_plain` 为守卫的签名，非纯数据由 `WhenConditionUnmet` 拒绝。
+
+## 2026-10-26-what-prints-for-an-array-whose-element-type-nobody-wrote
+
+**甲，在绑定处拒绝**。设计原则 5.1、5.2：没写元素类型的空字面量 `[]`，由它所在的位置定元素类型。泛型形参 `T[..]` 里的 `T` 正是要推的东西，这个位置定不了，`[]` 也给不出，所以 `T` 推不出来。`void` 是"没有值"，不是元素类型，`T := Void` 不接受。
+- 诊断：沿用 `EnumTypeArgumentNotInferred` 那一类，在函数上补一条同类的"推不出类型实参"（`Cannot infer the type argument 'T' of 'show': the empty literal '[]' states no element type`）。帮助写两种改法：`show::<f32>([])`，或者给字面量一个有类型的位置（`let e: f32[] = []`）。
+- 拒绝在推断处，内核碰不到这种值，所以 `isElementTypeUnstatedOpenArray` 及它在 `assignableFrom` 里的守卫一起删掉，`Void[..]` 再也造不出来。`native.tensor_show_empty_array` 的期望改成这条诊断。
+- 打印：别处还需要说"没写元素类型的空字面量"的类型时（比如重载表里列实参类型），打印成 `[]`，就是程序里写的那个样子，不打印 `void[]`。
+
+## 2026-10-26-where-do-a-facts-type-arguments-come-from-at-the-query
+
+**按 5.9 的普通规则：能从实参推出就推，推不出就写 `::<T>`**。这就是丙，也包含了甲。乙不行：两个无关声明的 `T` 因为同名就连在一起，违反作用域。
+- rule 与 fact 的形参保留声明的类型，不再一律擦成 `Node`（`visitFactDecl` 的 `queryParams`、条件函数的形参）。`rule abs_nonneg::<T>(x: T) when range(x).lo >= 0` 里的 `x` 是 `T`，`range(x)` 从它推出 `T`，与任何泛型调用一样。
+- 实参只有 `Node`（在 Camel 写的遍里拿到一个节点）时推不出，写 `range::<int>(n)`，诊断提示写出类型实参。
+- 不做"可切换的小分支"：直接按这条实现。查询、case、子句函数泛型化，`__fact` 按类型实参实例化，类型实参进入事实的键，这三步照你们的侦察做。
+- **设计稿 7.5 的例子由你们直接改**（这类改动已授权）：`abs_nonneg` 写出 `::<T>`；`Interval::of_type` 不补进库，改用现有的 `hull`、`intersect` 写法（9.5 那种）。改好后，它就是这项的验收。
