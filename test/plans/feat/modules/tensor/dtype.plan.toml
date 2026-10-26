@@ -352,3 +352,15 @@ expect_exit = 0
 expect_stdout = "20.0 5.0 18.0 6.0 5.0\n20.0 5.0 18.0 6.0\n20.0 20.0\n7.0 7.0\n20.0 18.0 -2.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+[[tests]]
+name = "f64_variable_beside_f32_tensor"
+desc = "A value that carries an element type is that type: a float variable beside an f32 tensor is a mixed pair with no arm (design principles 5.1), and the call is refused rather than narrowed into one. Only a literal takes its element type from the context it is written in, which is what keeps `x * 0.5` with an f32 x a single-width call; the same holds for an f64 array whose extents no fact pins down, refused for its element type whatever is known of the shape."
+kind = "negative"
+case = "../../../../cases/modules/tensor/dtype/f64_variable_beside_f32_tensor.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["the scalar operand has type 'float', but the tensor's element type is 'f32'", "no implicit conversion between numeric types"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
