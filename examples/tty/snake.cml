@@ -1,6 +1,7 @@
 module snake
 
 import { set_terminal_raw_mode, has_input, get_char, clear_input_buffer } from io
+import { sleep } from process
 
 // Map size
 let WIDTH = 20
@@ -54,7 +55,7 @@ func game_loop(snake: Point[], dir: string, steps: int): void sync {
         'Game over! You hit the wall after {} steps.'->format<steps>->println
         return null
     } else sync {
-        sleep(300)  // Delay for visual effect
+        sleep(0.3)  // Delay for visual effect
         // Recursive call for next frame
         let d = if has_input() then sync {
             let ch = get_char()

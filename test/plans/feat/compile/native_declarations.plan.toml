@@ -1280,7 +1280,7 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F",
 
 [[tests]]
 name = "native.process_declaration_import"
-desc = "`process`'s declarations are what an importer sees: `sleep` takes the declared `int` and answers nothing, `whoami` and `cpu_count` take nothing and answer the declared `string` and `int`. Every call reaches the C++ kernels, and all three stay effectful (they run in a `sync` block)."
+desc = "`process`'s declarations are what an importer sees: `sleep` takes the declared `float` (seconds) and answers nothing, `user_name` and `cpu_count` take nothing and answer the declared `string!` and `int`. Every call reaches the C++ kernels, and all three stay effectful (they run in a `sync` block)."
 kind = "behavior"
 case = "../../../cases/compile/native/process_declaration_import.cml"
 args = ["${case}"]
@@ -1289,21 +1289,21 @@ expect_stdout_exact = "true\ntrue\n"
 
 [[tests]]
 name = "native.process_wrong_arity"
-desc = "`process:sleep` is declared with one ordinary argument: none is refused at the call. The message lists the built-in's `(int) => void` — `sleep` is also built in — and the declaration's `(milliseconds: int) => void` from `stdlib/process.cml`."
+desc = "`process:sleep` is declared with one ordinary argument: none is refused at the call. The message lists the declaration's `(seconds: float) => void` from `stdlib/process.cml`."
 kind = "negative"
 case = "../../../cases/compile/native/process_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "process_arity.cml:10:5", "argument types: <> ()", "<process:sleep>: (milliseconds: int) => void"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "process_arity.cml:10:5", "argument types: <> ()", "<process:sleep>: (seconds: float) => void"]
 
 [[tests]]
 name = "native.process_wrong_type"
-desc = "The parameter of `process:sleep` is the declaration's `int`: a `string` there is refused at the call. The message lists the built-in's `(int) => void` and the declaration's `(milliseconds: int) => void`, whose parameter name comes from `stdlib/process.cml`."
+desc = "The parameter of `process:sleep` is the declaration's `float`: a `string` there is refused at the call. The message lists the declaration's `(seconds: float) => void`, whose parameter name comes from `stdlib/process.cml`."
 kind = "negative"
 case = "../../../cases/compile/native/process_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "process_type.cml:11:5", "argument types: <> (string)", "<process:sleep>: (milliseconds: int) => void"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "process_type.cml:11:5", "argument types: <> (string)", "<process:sleep>: (seconds: float) => void"]
 
 [[tests]]
 name = "native.hash_declaration_import"

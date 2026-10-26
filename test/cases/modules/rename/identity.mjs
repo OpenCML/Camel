@@ -41,7 +41,7 @@ const CASES = {
         old: 'os',
         now: 'process',
         file: 'process_identity.cml',
-        expected: 'd08da5491e23d6999032d46e703435cb17e8973fe45327eba4ca6dfe218d7c49',
+        expected: 'c41d0172551db184b35633737ba59e41340b5d7175cf41d7e60bea24ccaafcb4',
     },
 }
 

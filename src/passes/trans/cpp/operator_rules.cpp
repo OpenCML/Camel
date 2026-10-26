@@ -534,8 +534,8 @@ Rules buildRules() {
         r[std::format("math:im_{}", t)]   = runtimeFunction("complexImag");
     }
 
-    // ---- The end of the program (`exit(n)`, `process.exit(n)`) ----
-    for (const char *uri : {":exit", "exit", "process:exit"}) {
+    // ---- The end of the program (`process::exit(n)`) ----
+    for (const char *uri : {"process:exit"}) {
         r[uri] = {
             [](OperatorCall &c) -> std::optional<std::string> {
                 return std::format("rt::exit({})", c.norm(0).text);

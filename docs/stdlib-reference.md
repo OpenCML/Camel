@@ -421,29 +421,6 @@ Writes prompt and reads one line from standard input.
 - With effects: reads standard input.
 - Example: `input('name: ')` gives `what the user typed`
 
-#### `sleep`
-
-```camel
-sleep: (milliseconds: int) => void
-```
-
-Suspends the program for the given number of milliseconds.
-
-- With effects: waits.
-- Failure: fault `InvalidArgument` when the duration is negative.
-- Example: `sleep(100)`
-
-#### `exit`
-
-```camel
-exit: (code: int) => void
-```
-
-Ends the program with the given exit code, after writing buffered output.
-
-- With effects: ends the program.
-- Example: `exit(2)`
-
 ### Strings
 
 #### `format`
@@ -3970,32 +3947,46 @@ Discards the terminal input that is waiting.
 
 ## `process`: the process and the machine
 
-Every function touches the process or the machine and is declared with effects. `sleep` and
-`exit` are also built in: they need no import. The terminal is `io`'s.
+The process and the machine it runs on: waiting, ending, who runs it and how many threads it can
+have. Durations are seconds as a `float`, like `time::now`. The terminal is `io`'s, the
+environment `env`'s.
 
 #### `sleep`
 
 ```camel
-sleep: (milliseconds: int) => void
+sleep: (seconds: float) => void
 ```
 
-Suspends the program for the given number of milliseconds.
+Suspends the program for the given number of seconds. The wait is on the clock, so a call is
+never folded away and the work of other ready nodes goes on meanwhile.
 
 - With effects: waits.
-- Failure: fault `InvalidArgument` when the duration is negative.
-- Example: `sleep(100)`
+- Failure: fault `InvalidArgument` when seconds is negative or not a number.
+- Example: `sleep(0.1)`
 
-#### `whoami`
+#### `exit`
 
 ```camel
-whoami: () => string
+exit: (code: int) => void
+```
+
+Ends the program with the given exit code, after the buffered output is written and the
+external resources are released. Nothing that is written after the call runs.
+
+- With effects: ends the program.
+- Example: `exit(2)`
+
+#### `user_name`
+
+```camel
+user_name: () => string!
 ```
 
 The name of the user the process runs as.
 
 - With effects: reads the environment.
-- Failure: fault `RuntimeError` when the name cannot be found.
-- Example: `whoami()` gives `'alice'`
+- Failure: error value `NotFound` when the system has no name for the user.
+- Example: `user_name() !! 'unknown'` gives `'alice'`
 
 #### `cpu_count`
 

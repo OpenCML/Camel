@@ -5,6 +5,7 @@ module file_written_before_exit
 
 import { write_text, read_text, mkdirs } from fs
 import { get_env } from env
+import { exit } from process
 
 func main(): int sync {
     let dir = get_env('CAMEL_TEST_DIR') ?? ''

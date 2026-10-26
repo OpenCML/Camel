@@ -298,7 +298,7 @@ const expect = {
   'time:strftime': 'read ambient env; external',
   'env:get_env': 'read ambient env; external',
   'process:sleep': 'read ambient clock; external',
-  'process:whoami': 'read ambient env; external',
+  'process:user_name': 'read ambient env; external',
   'process:exit': 'rmw ambient process; external',
   'ckpt:load_tree': 'read ambient fs; write ambient stderr; external',
   'ckpt:save_tree': 'rmw ambient fs; external',

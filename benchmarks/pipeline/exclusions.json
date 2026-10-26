@@ -99,7 +99,7 @@
   {"path": "test/cases/modules/tensor/static_types.cml", "reason": "tensor:seed precedes every tensor:random in the zero-pass trace"},
   {"path": "test/cases/modules/std/random/basic.cml", "reason": "seed(42) is the first operator; every draw follows it"},
   {"path": "exemplars/07_export_integrity/program.cml", "reason": "tensor.randn appears in the source, in a function the zero-pass run does not execute: no record of the after-run has a random draw for this program"},
-  {"path": "test/cases/modules/std/process/basic.cml", "reason": "prints whoami() and cpu_count(): they depend on the machine, not on the run; a run on another machine is another reference"},
+  {"path": "test/cases/modules/std/process/basic.cml", "reason": "prints user_name() and cpu_count(): they depend on the machine, not on the run; a run on another machine is another reference"},
   {"path": "test/cases/modules/std/env/basic.cml", "reason": "its trace has env:get_cwd, which depends on the machine, not on the run (source not read in detail; the harness replaces the repository path by {repo})"},
   {"path": "test/cases/trans/macro/runtime_boundary.cml", "reason": "seed() is a user function returning 41, not a random-number operator"}
  ]

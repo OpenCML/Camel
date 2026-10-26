@@ -567,7 +567,6 @@ void registerBuiltinOperatorTraits() {
     registry.set(
         std::string(camel::execute::kFaultIsolationUri),
         {.pure = false, .callsGraphs = true});
-    registry.declare("process", {{"exit", false}, {"sleep", false}});
     // The block counters are ambient state: two calls with the same arguments can return
     // different structs, so the call must not be folded, merged or dropped as a pure one.
     registry.set(":op/mem_blocks", {.pure = false});

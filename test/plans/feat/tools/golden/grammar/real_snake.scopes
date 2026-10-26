@@ -11,6 +11,12 @@
 #                                                                        ^ meta.block.camel punctuation.section.block.end.camel
 #                                                                          ^^^^ keyword.control.import.from.camel
 #                                                                               ^^ entity.name.namespace.module.camel
+>import { sleep } from process
+#^^^^^^ keyword.control.import.camel
+#       ^ meta.block.camel punctuation.section.block.begin.camel
+#               ^ meta.block.camel punctuation.section.block.end.camel
+#                 ^^^^ keyword.control.import.from.camel
+#                      ^^^^^^^ entity.name.namespace.module.camel
 >
 >// Map size
 #^^ comment.line.double-slash.camel punctuation.definition.comment.camel
@@ -408,10 +414,10 @@
 #      ^^^^ meta.block.camel keyword.control.conditional.camel
 #           ^^^^ meta.block.camel storage.modifier.sync.camel
 #                ^ meta.block.camel meta.block.camel punctuation.section.block.begin.camel
->        sleep(300)  // Delay for visual effect
+>        sleep(0.3)  // Delay for visual effect
 #        ^^^^^ meta.block.camel meta.block.camel entity.name.function.call.camel
 #             ^ meta.block.camel meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
-#              ^^^ meta.block.camel meta.block.camel meta.parens.camel constant.numeric.integer.decimal.camel
+#              ^^^ meta.block.camel meta.block.camel meta.parens.camel constant.numeric.float.camel
 #                 ^ meta.block.camel meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
 #                    ^^ meta.block.camel meta.block.camel comment.line.double-slash.camel punctuation.definition.comment.camel
 #                      ^^^^^^^^^^^^^^^^^^^^^^^^ meta.block.camel meta.block.camel comment.line.double-slash.camel

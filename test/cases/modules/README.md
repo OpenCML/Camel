@@ -6,7 +6,7 @@
 # io 模块（print/println，globals 预加载）
 camel test/modules/io/basic.cml
 
-# process 模块（whoami, sleep 等）
+# process 模块（user_name, sleep 等）
 camel test/cases/modules/std/process/basic.cml
 
 # math 模块

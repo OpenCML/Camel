@@ -4,6 +4,8 @@
  */
 module not_isolated_exit
 
+import { exit } from process
+
 func leave(x: int): int sync {
     println('leaving')
     if x == 3 then sync { exit(7) }

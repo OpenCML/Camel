@@ -2329,23 +2329,6 @@ std::make_shared<StaticCheckedResolver>(
                         }),
                 },
             }),
-        // ======= process (implemented in process.cmo) ======
-        OperatorGroup::create(
-            "sleep",
-            {
-                {
-                    "process:sleep",
-                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Void()),
-                },
-            }),
-        OperatorGroup::create(
-            "exit",
-            {
-                {
-                    "process:exit",
-                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Void()),
-                },
-            }),
         // ======= string =======
         OperatorGroup::create(
             "format",
