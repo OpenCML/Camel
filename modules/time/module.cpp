@@ -6,7 +6,7 @@
  * text in UTC, and `strptime` turns text into a timestamp using the process's time zone.
  *
  * The signatures are written once, in the declaration module `stdlib/time.cml` (design principles
- * 6.4; handover H19, step 10). What is left here is what only C++ knows: the kernels in
+ * 6.4). What is left here is what only C++ knows: the kernels in
  * operators.cpp, the executor that runs them, and the operator traits declared at load.
  */
 

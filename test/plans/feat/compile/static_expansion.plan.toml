@@ -607,12 +607,12 @@ timeout_ms = 8000
 
 [[tests]]
 name = "static_loop_sequence_range_two"
-desc = "The sequence of a `static loop` follows the interval rules of design principles 4.2: the two-argument `range(a, b)` is deleted (one thing one spelling -- a step of one is `a..b`), so it is refused where it is written, pointing at the name, before any sequence is worked out."
+desc = "The sequence of a `static loop` follows the interval rules of design principles 4.2: the two-argument `range(a, b)` is deleted (one thing one spelling -- a step of one is `a..b`), so it is refused where it is written, pointing at the name, by the ordinary no-match against the built-in group's one signature, which has three parameters."
 kind = "negative"
 case = "../../../cases/compile/static_expansion/static_loop_sequence_range_two.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::RangeTwoArgumentsRemoved"
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -779,7 +779,10 @@ kind = "negative"
 case = "../../../cases/compile/static_expansion/indices_struct_comprehension.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
+expect_diagnostic_name = "SemanticDiag::StructComprehensionWithoutFields"
+expect_diagnostic_code = "0x030001F4"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 14
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

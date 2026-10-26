@@ -1,6 +1,6 @@
 /**
  * The adjoint of `cast` on a numeric array (design principles 9.9). `cast(xs, 'float32')`
- * accepts a numeric array (`Tensor | number[]`) and returns a tensor; an array's tangent is the
+ * accepts a numeric array (`f32[..] | number[]`) and returns a tensor; an array's tangent is the
  * array of its elements' tangents, so the adjoint is the tensor's gradient cast back to the
  * element type of the array. Until the flip this program was refused by name at the cast call,
  * and the rule before the refusal dropped the gradient and the pass materialized the array's
@@ -23,14 +23,14 @@ import { grad } from autodiff
 with <xs: float[]>
 func plain(): float {
     let t = cast(xs, 'float32')
-    return sum(t)
+    return float(sum(t))
 }
 
 with <w: float[]>
 func weighted(): float {
     let t = cast(w, 'float32')
     let c = cast([2.0, 3.0, 4.0] as f64[], 'float32')
-    return sum(t * c)
+    return float(sum(t * c))
 }
 
 func main(): int sync {

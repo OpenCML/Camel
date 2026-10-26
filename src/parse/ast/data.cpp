@@ -217,7 +217,7 @@ const std::string TypeCaseLoad::geneCode() const {
 }
 
 const std::string TypeCaseLoad::toString() const {
-    return "TypeCase(" + geneCode() + ")" + this->status();
+    return "TypeCase(" + geneCode() + ")";
 }
 
 const std::string LiteralLoad::geneCode() const { return value_.toString(); }
@@ -280,7 +280,7 @@ const std::string LoopExprLoad::toString() const {
     if (hasFor()) {
         result += " for " + binder_.toString();
     }
-    return result + this->status();
+    return result;
 }
 
 } // namespace camel::parse::ast

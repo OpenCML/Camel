@@ -7,7 +7,7 @@
  */
 module export_train_step_branch_scalar
 
-import { Tensor, relu, mean, abs, reshape } from tensor
+import { relu, mean, abs, reshape } from tensor
 import { with_grad } from autodiff
 import { sgd } from nn
 import { export_model } from onnx
@@ -19,8 +19,8 @@ with <m: Mlp>
 func loss(x: float[..]): float {
     let h = relu(x @ m.w1 + m.b1)
     let y = h @ m.w2 + m.b2
-    let s = mean(y * y)
-    let c = mean(abs(h))
+    let s = float(mean(y * y))
+    let c = float(mean(abs(h)))
     return if c > 0.5 then s * 2.0 else s
 }
 

@@ -2,7 +2,7 @@ id = "compile.when"
 order = 328
 tier = "fast"
 tags = ["feat", "compile", "generics", "overloads"]
-desc = "Applicability conditions: `when` after a function signature (design principles 5.13, handover H234). The condition is a compile-time predicate over the declaration's type parameters and `with` parameters, evaluated at instantiation; a false condition makes the overload inapplicable, not erroneous, and the call site lists the unmet conditions."
+desc = "Applicability conditions: `when` after a function signature (design principles 5.13). The condition is a compile-time predicate over the declaration's type parameters and `with` parameters, evaluated at instantiation; a false condition makes the overload inapplicable, not erroneous, and the call site lists the unmet conditions."
 
 # Each case states what it pins. A condition that does not hold must not become a declaration
 # error, and a condition that cannot be evaluated must not be taken for `true`; the call-site
@@ -100,14 +100,14 @@ timeout_ms = 8000
 
 [[tests]]
 name = "when.not_constant"
-desc = "A `when` that calls an ordinary function is not a compile-time predicate: it is a declaration-site error (WhenConditionNotConstant) and is never taken for true."
+desc = "A `when` that reads a run-time value is not a compile-time predicate: the condition calls a `sync` function, so it is a declaration-site error (WhenConditionNotConstant) and is never taken for true."
 kind = "negative"
 case = "../../../cases/compile/when/not_constant.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::WhenConditionNotConstant"
-expect_diagnostic_line = 11
-expect_output_contains = ["The 'when' condition of 'bad' cannot be evaluated"]
+expect_diagnostic_line = 15
+expect_output_contains = ["The 'when' condition of 'bad' cannot be evaluated", "it reads 'counter', which is not a compile-time constant"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -249,4 +249,63 @@ args = ["${case}", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "numeric\nnot integer\nnot float\ncomplex\nnumeric\nnot ordered\nnot numeric\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.ordinary_call"
+desc = "A `when` calls an ordinary function of this module with a compile-time constant: the condition is evaluated where the declaration is written, so `is_positive(1)` holds and `is_positive(0)` does not, and the two overloads are told apart by the folded value."
+kind = "behavior"
+case = "../../../cases/compile/when/ordinary_call.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "42\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.ordinary_call_unmet"
+desc = "The same ordinary call where it does not hold: `is_positive(0)` is folded to false, the only candidate is inapplicable, and the call site lists `is_positive(0)` among the conditions."
+kind = "negative"
+case = "../../../cases/compile/when/ordinary_call_unmet.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenConditionUnmet"
+expect_diagnostic_line = 16
+expect_output_contains = ["is_positive(0)", "every candidate's 'when' condition is false"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.plain_struct"
+desc = "A predicate whose fold recurses over a field's own type is answered: `is_plain::<T>()` walks `fields T` and asks `is_plain::<F>()` about each field, so a struct of plain fields is plain and the declaration it guards applies."
+kind = "behavior"
+case = "../../../cases/compile/when/plain_struct.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "plain\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.plain_nested"
+desc = "The same fold one field deep: the struct holds a struct, so the nested call is folded with the field's own type bound rather than left open."
+kind = "behavior"
+case = "../../../cases/compile/when/plain_nested.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "plain\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.plain_struct_false"
+desc = "The recursion's false side: a field whose type is not plain makes the struct not plain, so the guarded declaration is inapplicable and the call site lists `is_plain::<T>()`."
+kind = "negative"
+case = "../../../cases/compile/when/plain_struct_false.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenConditionUnmet"
+expect_diagnostic_line = 16
+expect_output_contains = ["is_plain::<T>()", "every candidate's 'when' condition is false"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

@@ -44,7 +44,7 @@ using json = nlohmann::json;
 // a limit that a program can reach must be diagnosed). The limit is checked on the text before
 // parsing, so a document deeper than this is the error value JsonTooDeep, never a crash (design
 // principles 11.2: a document that is too deep is distinguished from text that is not JSON).
-// The value is fixed and named here only (the author's ruling on H16 question 4: a limit is not
+// The value is fixed and named here only (a limit is not
 // an environment-variable switch; it will become an optional parameter of `decode`, design
 // principles 11.2). It leaves room for the recursive walk on every scheduler's stack.
 // test/cases/modules/std/json/depth_limit.cml pins it: a document of 10001 levels is the error

@@ -1,7 +1,6 @@
 /**
  * The core's own slice exported to ONNX: `t[a:b:s]` is `:op/slice_sub`, the node the `[]` forms
- * build for any rank and any axis (design principles 5.4), and the tensor module's `tensor:slice`
- * is not on this path at all.
+ * build for any rank and any axis (design principles 5.4).
  *
  * The mask word of the node says which bounds the source wrote; the exporter reads it and never
  * writes it to the graph, and the step and the axis are words of the node too.
@@ -23,7 +22,7 @@
  * Checked by ort_core_slice.py.
  */
 module ort_core_slice
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env
 

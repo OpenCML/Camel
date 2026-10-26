@@ -1,0 +1,40 @@
+/**
+ * The reverse of the core's own slice exported to ONNX: the gradient of a value a slice produced
+ * goes back to the positions the slice took, which is `:tangent/scatter_slice_arr` -- the core's
+ * own scatter, the adjoint of `:op/slice_sub` (design principles 5.4). Both values are `with`
+ * values, so the backward pass is exported with them: the loss is `sum(m.w[1:3] * m.x[1:3])`, and
+ * both of its gradients are scatters -- `d loss / d x` is `m.w` at the two positions the slice
+ * took and zero everywhere else, and `d loss / d w` is `m.x` there -- which is exactly what the
+ * reverse of `[1:3]` writes.
+ *
+ * The gradient Camel prints is checked against ONNX Runtime by ort_core_slice_grad.py.
+ */
+module ort_core_slice_grad
+import { Tensor, reshape, sum } from tensor
+import { with_grad } from autodiff
+import { export_model } from onnx
+import { get_env } from env
+
+type P = { w: f32[4], x: f32[4] }
+
+with <m: P>
+func loss(): f32 {
+    return sum(m.w[1:3] * m.x[1:3])
+}
+
+func step(w: f32[4], x: f32[4]): (f32[..], f32[..]) {
+    let m = { w: w, x: x }
+    let vg = with_grad(loss)<m>()
+    return (reshape([f32(vg.0)], [1]), vg.1.x)
+}
+
+func main(): int sync {
+    let w = reshape([0.5, 0.25, -1.0, 2.0] as f32[], [4])
+    let x = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [4])
+    let r = step(w, x)
+    println(r.0)
+    println(r.1)
+    export_model((w: f32[4], x: f32[4]): (f32[..], f32[..]) => step(w, x), (w, x), get_env('ONNX_OUT'))
+    println('exported')
+    return 0
+}

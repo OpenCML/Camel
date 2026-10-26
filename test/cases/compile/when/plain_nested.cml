@@ -1,0 +1,20 @@
+/**
+ * The same predicate one field deep: `Q` holds `P`, so the fold asks about `P` while it is
+ * already asking about `Q`'s fields -- the field's type is bound for the nested call, not left
+ * open (design principles 5.5).
+ */
+module when_plain_nested
+
+import { is_plain } from types
+
+type P = { x: int, y: f32 }
+type Q = { p: P, tag: int }
+
+func take::<T>(v: T): string when is_plain::<T>() {
+    return 'plain'
+}
+
+func main(): int sync {
+    println(take({ p: { x: 1, y: 2.0 }, tag: 3 }))
+    return 0
+}

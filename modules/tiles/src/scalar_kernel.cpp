@@ -26,16 +26,22 @@ KernelBody scalarBody(const Program &p, Launch &launch) {
         if (auto it = values.find(id); it != values.end())
             return it->second;
         const auto name = "k_input" + std::to_string(id);
+        // A load's fallback is the value's own width: it is the predicate's value when the
+        // access is masked off, and the checker holds it to the buffer's type.
+        const DType type = p.nodes[id].dtype;
         kernel.statements.push_back(
-            Load{name, {id, IndexExpr(0), Predicate(true)}, ScalarValue::f64(0)});
-        auto value = ScalarExpr::symbol(name, DType::F64);
+            Load{name,
+                 {id, IndexExpr(0), Predicate(true)},
+                 type == DType::F32 ? ScalarValue::f32(0) : ScalarValue::f64(0)});
+        auto value = ScalarExpr::symbol(name, type);
         values.emplace(id, value);
         return value;
     };
     for (auto id : launch.members) {
         const auto &n     = p.nodes[id];
         const auto name   = "k_value" + std::to_string(id);
-        ScalarExpr result = ScalarExpr::literal(ScalarValue::f64(0));
+        const auto zero   = n.dtype == DType::F32 ? ScalarValue::f32(0) : ScalarValue::f64(0);
+        ScalarExpr result = ScalarExpr::literal(zero);
         if (n.op == "constant64")
             result = ScalarExpr::literal({DType::F64, static_cast<uint64_t>(n.attributes.at(0))});
         else {
@@ -45,7 +51,7 @@ KernelBody scalarBody(const Program &p, Launch &launch) {
                                    : n.op == "scalar_mul" ? "multiply"
                                    : n.op == "scalar_div" ? "divide"
                                                           : "neg";
-            result               = elementwiseExpression(operation, DType::F64).substitute("a", a);
+            result               = elementwiseExpression(operation, n.dtype).substitute("a", a);
             if (n.inputs.size() == 2) {
                 auto b = operand(n.inputs[1]);
                 if (n.op == "scalar_div")
@@ -54,17 +60,17 @@ KernelBody scalarBody(const Program &p, Launch &launch) {
                             ScalarPredicate{
                                 ScalarCompare::Equal,
                                 b,
-                                ScalarExpr::literal(ScalarValue::f64(0))},
+                                ScalarExpr::literal(zero)},
                             {ReportFault{static_cast<uint32_t>(id)},
                              Store{
                                  {launch.node, IndexExpr(0), Predicate(true)},
-                                 ScalarExpr::literal(ScalarValue::f64(0))},
+                                 ScalarExpr::literal(zero)},
                              Return{}}});
                 result = result.substitute("b", b);
             }
         }
         kernel.statements.push_back(ScalarBinding{name, result});
-        values.emplace(id, ScalarExpr::symbol(name, DType::F64));
+        values.emplace(id, ScalarExpr::symbol(name, n.dtype));
     }
     kernel.statements.push_back(
         Store{{launch.node, IndexExpr(0), Predicate(true)}, values.at(launch.node)});

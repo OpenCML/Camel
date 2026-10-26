@@ -55,7 +55,8 @@ bool binary(const std::string &op) {
            std::string::npos;
 }
 bool indexedScalar(const std::string &op) {
-    return unary(op) || binary(op) || op == "reshape" || op == "reindex" || op == "cast_f32";
+    return unary(op) || binary(op) || op == "reshape" || op == "reindex" || op == "cast_f32" ||
+           op == "cast_f64";
 }
 bool scalar64(const std::string &op) {
     return op == "constant64" || op == "scalar_add" || op == "scalar_sub" || op == "scalar_mul" ||
@@ -225,20 +226,25 @@ void validate(const Program &p, InputBindings bindings) {
         }
         if (n.op == "scalar_add" || n.op == "scalar_sub" || n.op == "scalar_mul" ||
             n.op == "scalar_div" || n.op == "scalar_neg") {
+            // A scalar operation is written at one width and its operands are that width: the
+            // element type a whole-tensor reduction answers (`:op/div_f` divides a gradient by a
+            // count) is as much a scalar as the f64 one.
             require(
-                n.dtype == DType::F64 && n.shape.empty() && n.attributes.empty() &&
-                    n.inputs.size() == (n.op == "scalar_neg" ? 1 : 2),
+                (n.dtype == DType::F32 || n.dtype == DType::F64) && n.shape.empty() &&
+                    n.attributes.empty() && n.inputs.size() == (n.op == "scalar_neg" ? 1 : 2),
                 "scalar arithmetic type or arity");
             for (auto in : n.inputs)
                 require(
-                    p.nodes[in].dtype == DType::F64 && p.nodes[in].shape.empty(),
+                    p.nodes[in].dtype == n.dtype && p.nodes[in].shape.empty(),
                     "scalar operand type");
             continue;
         }
         if (n.op == "sum_all" || n.op == "mean_all") {
+            // The annotation is the elements' type (design principles 7.3) and the kernel casts
+            // its f64 accumulator into it once; the device has the two float widths only.
             require(
-                n.dtype == DType::F64 && n.shape.empty() && n.inputs.size() == 1 &&
-                    p.nodes[n.inputs[0]].dtype == DType::F32,
+                (n.dtype == DType::F32 || n.dtype == DType::F64) && n.shape.empty() &&
+                    n.inputs.size() == 1 && p.nodes[n.inputs[0]].dtype == DType::F32,
                 "scalar reduction type");
             (void)kernel::reductionAccess(p, n, kernel::IndexExpr(0), kernel::IndexExpr(0));
             continue;
@@ -254,6 +260,13 @@ void validate(const Program &p, InputBindings bindings) {
             require(
                 n.dtype == DType::F32 && n.shape.empty() && n.inputs.size() == 1 &&
                     p.nodes[n.inputs[0]].dtype == DType::F64,
+                "scalar conversion type");
+            continue;
+        }
+        if (n.op == "cast_f64") {
+            require(
+                n.dtype == DType::F64 && n.shape.empty() && n.inputs.size() == 1 &&
+                    p.nodes[n.inputs[0]].dtype == DType::F32,
                 "scalar conversion type");
             continue;
         }

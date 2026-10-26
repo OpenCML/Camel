@@ -475,10 +475,9 @@ std::optional<Num> pointwise(std::string_view op, const std::vector<Num> &v) {
     return std::nullopt;
 }
 
-/// The operators whose Unique write copies the one value it reads (converted to the result's
-/// dtype: broadcast_like and expand_axis produce f32).
+/// The operators whose Unique write copies the one value it reads.
 bool isMove(std::string_view op) {
-    for (std::string_view m : {"transpose", "permute", "slice", "reshape", "flatten", "unsqueeze",
+    for (std::string_view m : {"transpose", "permute", "reshape", "flatten", "unsqueeze",
                                "broadcast_like", "expand_axis", "sum_to"}) {
         if (op == m) {
             return true;
@@ -843,21 +842,6 @@ Generator permuteCases() {
     };
 }
 
-Generator sliceCases() {
-    return [](Rng &rng) {
-        const size_t rank   = static_cast<size_t>(rng.range(1, 3));
-        const StaticShape s = randomShape(rng, rank, 9);
-        const int64_t axis  = rng.range(-static_cast<int64_t>(rank), static_cast<int64_t>(rank) - 1);
-        const int64_t n     = *s[static_cast<size_t>(axis < 0 ? axis + static_cast<int64_t>(rank) : axis)];
-        Case c{Arg::tensor(randomData(rng, pickDtype(rng), s)), Arg::integerArg(axis),
-               Arg::integerArg(rng.range(-n - 2, n + 2)), Arg::integerArg(rng.range(-n - 2, n + 2))};
-        if (rng.chance(60)) {
-            c.push_back(Arg::integerArg(rng.range(1, 3)));
-        }
-        return c;
-    };
-}
-
 /// A reshape target for `s`: the element count split into factors, one of them maybe -1.
 std::vector<int64_t> reshapeTarget(Rng &rng, const StaticShape &s) {
     int64_t n = numelOf(s);
@@ -917,13 +901,18 @@ Generator unsqueezeCases() {
 Generator broadcastLikeCases() {
     return [](Rng &rng) {
         const StaticShape like = randomShape(rng, static_cast<size_t>(rng.range(0, 4)));
+        // `broadcast_like` is ::<T>(g: T[..], like: T[..]) (gradient_ops.cpp), and its first
+        // operand may also be a number, which the kernel reads as the f32 scalar operand of the
+        // tensor it is broadcast to: the generator writes one element type for the whole call,
+        // since two of them is the mixed caller to fix, not a call the operator accepts.
+        const TypeCode t = rng.chance(15) ? TypeCode::Float32 : pickDtype(rng, false);
         Case c;
-        if (rng.chance(15)) {
+        if (t == TypeCode::Float32 && rng.chance(20)) {
             c.push_back(Arg::num(static_cast<double>(randomFloat(rng))));
         } else {
-            c.push_back(Arg::tensor(randomData(rng, pickDtype(rng, false), broadcastFrom(rng, like))));
+            c.push_back(Arg::tensor(randomData(rng, t, broadcastFrom(rng, like))));
         }
-        c.push_back(Arg::tensor(randomData(rng, TypeCode::Float32, like)));
+        c.push_back(Arg::tensor(randomData(rng, t, like)));
         return c;
     };
 }
@@ -979,7 +968,12 @@ Generator sumToCases() {
     return [](Rng &rng) {
         const StaticShape g = randomShape(rng, static_cast<size_t>(rng.range(0, 4)));
         const StaticShape like = rng.chance(20) ? g : broadcastFrom(rng, g);
-        return Case{Arg::tensor(randomData(rng, pickDtype(rng), g)), Arg::tensor(randomData(rng, TypeCode::Float32, like))};
+        // `sum_to` (and `broadcast_like`) are ::<T>(g: T[..], like: T[..]) (gradient_ops.cpp):
+        // the two operands are one element type, and a generator that writes two is the mixed
+        // caller the ruling says to fix rather than a call the operator accepts. `like`'s
+        // elements are not read, so only its element type has to agree.
+        const TypeCode t = pickDtype(rng);
+        return Case{Arg::tensor(randomData(rng, t, g)), Arg::tensor(randomData(rng, t, like))};
     };
 }
 
@@ -1091,12 +1085,40 @@ void runOperator(
             }
         } catch (const std::exception &) {
         }
+        // The view carries the call's static result type, which is what every scheduler hands a
+        // kernel (`node->dataType()`, `header->dataType`, the frame's `typeAt(bc.result)`): this is
+        // the type `ops::wrap` asks to decide between the element and the array box, so a kernel run
+        // without it answers a rank-zero result as a box, and the reading below -- which follows the
+        // type rule and takes the element -- would take the box's pointer for the element. A real
+        // call therefore never disagreed with itself here; only this tool did, by not asking.
+        norm.setResultType(resultType);
         std::optional<Data> kernelResult;
         bool kernelFault = false;
         try {
             const slot_t r = def->kernel(with, norm, ctx);
-            if (resultType && resultType->code() == TypeCode::Float64) {
+            // A number comes back in the slot and a tensor comes back as a pointer to an array. An
+            // array states its elements' code, so the code alone puts an f32 array and an f32
+            // scalar together; the shape separates them, and a rank-zero result states an empty
+            // one. The whole-tensor `sum` and `mean` answer in their elements' own type (design
+            // principles 7.3) and are such results; the test used to be `code() == Float64`, which
+            // read them as a pointer and ended the process.
+            bool numberResult = false;
+            if (resultType != nullptr) {
+                const TensorFacts facts = tensorFactsOf(resultType);
+                numberResult = facts.isStaticShape() && facts.shape->empty() &&
+                               (resultType->code() == TypeCode::Float32 ||
+                                resultType->code() == TypeCode::Float64 ||
+                                resultType->code() == TypeCode::Int64 ||
+                                resultType->code() == TypeCode::Bool);
+            }
+            if (numberResult && resultType->code() == TypeCode::Float32) {
+                kernelResult = Data{TypeCode::Float32, {}, {f32(camel::core::rtdata::fromSlot<float>(r))}};
+            } else if (numberResult && resultType->code() == TypeCode::Float64) {
                 kernelResult = Data{TypeCode::Float64, {}, {f64(camel::core::rtdata::fromSlot<double>(r))}};
+            } else if (numberResult && resultType->code() == TypeCode::Int64) {
+                kernelResult = Data{TypeCode::Int64, {}, {i64(camel::core::rtdata::fromSlot<int64_t>(r))}};
+            } else if (numberResult && resultType->code() == TypeCode::Bool) {
+                kernelResult = Data{TypeCode::Bool, {}, {boolean(camel::core::rtdata::fromSlot<bool>(r))}};
             } else {
                 kernelResult = dataOf(camel::core::rtdata::fromSlot<Array *>(r));
             }
@@ -1219,16 +1241,27 @@ void queries(std::ostream &os) {
     query(os, "show_sum_axis_unknown_extents", "tensor:sum_axis", {T(StaticShape{std::nullopt, std::nullopt, 4}), integer},
           {std::nullopt, Arg::integerArg(-2)});
     query(os, "permute_not_constant", "tensor:permute", {T(StaticShape{2, 3}), ints}, {});
-    query(os, "slice_unknown_extent", "tensor:slice", {T(StaticShape{std::nullopt, 3}), integer, integer, integer},
+    // The core's own slice node, `:op/slice_sub`, is the one node `t[a:b:s]` and
+    // `slice(t, axis, a, b, s)` both build, and the tensor module publishes its declaration
+    // (ops/indexing.cpp). A bound is a position from 0 to the axis' length, so a negative one is
+    // a fault whatever the extent is, and it is the declaration that has to say so.
+    query(os, "slice_unknown_extent", ":op/slice_sub", {T(StaticShape{std::nullopt, 3}), integer, integer, integer},
           {std::nullopt, Arg::integerArg(0), Arg::integerArg(0), Arg::integerArg(2)});
-    query(os, "slice_unknown_extent_negative", "tensor:slice",
+    query(os, "slice_unknown_extent_negative", ":op/slice_sub",
           {T(StaticShape{std::nullopt, 3}), integer, integer, integer},
           {std::nullopt, Arg::integerArg(0), Arg::integerArg(-1), Arg::integerArg(2)});
-    query(os, "show_slice", "tensor:slice", {T(StaticShape{std::nullopt, 7}), integer, integer, integer, integer},
+    query(os, "show_slice", ":op/slice_sub",
+          {T(StaticShape{std::nullopt, 7}), integer, integer, integer, integer},
           {std::nullopt, Arg::integerArg(1), Arg::integerArg(1), Arg::integerArg(-1), Arg::integerArg(2)});
-    query(os, "slice_out_of_range", "tensor:slice", {T(StaticShape{5}), integer, integer, integer},
+    query(os, "show_slice_written", ":op/slice_sub",
+          {T(StaticShape{std::nullopt, 7}), integer, integer, integer, integer},
+          {std::nullopt, Arg::integerArg(1), Arg::integerArg(1), Arg::integerArg(5), Arg::integerArg(2)});
+    query(os, "slice_out_of_range", ":op/slice_sub", {T(StaticShape{5}), integer, integer, integer},
           {std::nullopt, Arg::integerArg(0), Arg::integerArg(2), Arg::integerArg(6)});
-    query(os, "slice_step_zero", "tensor:slice", {T(StaticShape{5}), integer, integer, integer, integer},
+    query(os, "slice_backward", ":op/slice_sub",
+          {T(StaticShape{5}), integer, integer, integer, integer},
+          {std::nullopt, Arg::integerArg(0), Arg::integerArg(4), Arg::integerArg(0), Arg::integerArg(-2)});
+    query(os, "slice_step_zero", ":op/slice_sub", {T(StaticShape{5}), integer, integer, integer, integer},
           {std::nullopt, Arg::integerArg(0), Arg::integerArg(0), Arg::integerArg(5), Arg::integerArg(0)});
     query(os, "reshape_unknown_input", "tensor:reshape", {T(StaticShape{std::nullopt, 4}), ints},
           {std::nullopt, Arg::intsArg({4, -1})});
@@ -1261,6 +1294,10 @@ IndexEvalTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         Generator gen;
         size_t count;
     };
+    // No slice entry: the module's slice kernel is gone with its operator, and the core's own
+    // slice node (the one `t[a:b:s]` and `slice(t, axis, a, b, s)` both build) has no module
+    // definition to compare a declaration with. The queries below and the core's own cases cover
+    // that declaration instead.
     const std::vector<Entry> entries = {
         {"tensor:add", binaryCases(), 120},
         {"tensor:subtract", binaryCases(), 80},
@@ -1277,7 +1314,6 @@ IndexEvalTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         {"tensor:log", unaryCases(false), 40},
         {"tensor:transpose", transposeCases(), 60},
         {"tensor:permute", permuteCases(), 80},
-        {"tensor:slice", sliceCases(), 150},
         {"tensor:reshape", reshapeCases(), 100},
         {"tensor:flatten", flattenCases(), 60},
         {"tensor:unsqueeze", unsqueezeCases(), 60},

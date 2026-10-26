@@ -12,17 +12,17 @@
  */
 module f32_broadcast_grad
 
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { with_grad } from autodiff
 
 type M = {
-    p0: Tensor<f32, [3]>,
-    x: Tensor<f32, [2, 3]>,
+    p0: f32[3],
+    x: f32[2, 3],
 }
 
 with <m: M>
 func loss(): float sync {
-    return sum(m.x * m.p0)
+    return float(sum(m.x * m.p0))
 }
 
 func main(): int sync {

@@ -6,12 +6,12 @@
  */
 module optim_unknown_optimizer
 
-import { Tensor, full } from tensor
+import { full } from tensor
 import { init } from optim
 
 type Unknown = { rate: float }
 
-type Model = { w: Tensor<f32, [?]> }
+type Model = { w: f32[?] }
 
 func model_at(): Model {
     return { w: full([4], f32(0.5)) }

@@ -6,7 +6,7 @@
  * container's type named -- `refuse_container_reshape.cml` is the same refusal for `reshape`.
  *
  * Without it the program got a run-time fault from the kernels that read the container as a tensor
- * ("Expected Tensor argument", with no place in the source), which is what makes this case worth
+ * ("Expected an array argument", with no place in the source), which is what makes this case worth
  * its own assertion. A numeric array is a tensor and is not refused: `adjoint_new_array.cml`
  * asserts its adjoint. A constant container is converted by the forward rule as usual and is never
  * visited here.
@@ -18,7 +18,7 @@ import { grad } from autodiff
 
 with <xs: float[][]>
 func loss(): float {
-    return sum(new(xs))
+    return float(sum(new(xs)))
 }
 
 func main(): int sync {

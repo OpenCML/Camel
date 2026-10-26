@@ -1,7 +1,7 @@
 module tiles_scalar_zero_control
-import { Tensor, zeros } from tensor
+import { zeros } from tensor
 import { upload, run_preferred_resident, download } from tiles
-func check(x: Tensor<f32>, b: float): Tensor<f32> sync {
+func check(x: f32[..], b: float): f32[..] sync {
     let q = 1.0 / b
     return x
 }

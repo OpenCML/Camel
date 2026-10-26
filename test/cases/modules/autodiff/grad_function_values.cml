@@ -9,7 +9,7 @@
  * against central finite differences in float64 (grad_function_values_reference.py).
  */
 module grad_function_values
-import { Tensor, reshape, sum, tanh } from tensor
+import { reshape, sum, tanh } from tensor
 import { grad } from autodiff
 
 func make(s: float): (t: f32[..]) => f32[..] {
@@ -39,78 +39,78 @@ func twice(f: (t: f32[..]) => f32[..]): (t: f32[..]) => f32[..] {
 // 1. a closure called, twice, inside a second closure that captured it
 with <p: f32[..]>
 func loss1(): float {
-    let s = sum(p)
+    let s = float(sum(p))
     let g = (t: f32[..]): f32[..] => tanh(t * f32(s))
     let h = (t: f32[..]): f32[..] => g(t) * 2.0 + g(t * 0.5)
-    return sum(h(p))
+    return float(sum(h(p)))
 }
 
 // 2. the same, three closures deep, the innermost called once
 with <p: f32[..]>
 func loss2(): float {
-    let s = sum(p * p)
+    let s = float(sum(p * p))
     let g = (t: f32[..]): f32[..] => tanh(t * f32(s))
     let h = (t: f32[..]): f32[..] => g(t) * f32(s)
     let k = (t: f32[..]): f32[..] => h(t + 1.0) + t
-    return sum(k(p))
+    return float(sum(k(p)))
 }
 
 // 3. a closure returned by a factory, called twice
 with <p: f32[..]>
 func loss3(): float {
-    let s = sum(p)
+    let s = float(sum(p))
     let g = make(s)
-    return sum(g(p) * g(p * 0.5))
+    return float(sum(g(p) * g(p * 0.5)))
 }
 
 // 4. a factory whose closure captures a TENSOR that depends on the parameter
 with <p: f32[..]>
 func loss4(): float {
     let g = make_affine(tanh(p) * 2.0)
-    return sum(g(p * p))
+    return float(sum(g(p * p)))
 }
 
 // 5. a closure passed to a function that calls it twice
 with <p: f32[..]>
 func loss5(): float {
-    let s = sum(p)
-    return sum(apply((t: f32[..]): f32[..] => tanh(t * f32(s)), p))
+    let s = float(sum(p))
+    return float(sum(apply((t: f32[..]): f32[..] => tanh(t * f32(s)), p)))
 }
 
 // 6. a named function passed to a function that calls it
 with <p: f32[..]>
 func loss6(): float {
-    return sum(apply(square, p))
+    return float(sum(apply(square, p)))
 }
 
 // 7. a closure passed on through two functions
 with <p: f32[..]>
 func loss7(): float {
-    let s = sum(p)
-    return sum(apply_outer((t: f32[..]): f32[..] => tanh(t * f32(s)), p))
+    let s = float(sum(p))
+    return float(sum(apply_outer((t: f32[..]): f32[..] => tanh(t * f32(s)), p)))
 }
 
 // 8. the closure of a factory passed to a function that calls it
 with <p: f32[..]>
 func loss8(): float {
-    return sum(apply(make(sum(p)), p))
+    return float(sum(apply(make(float(sum(p))), p)))
 }
 
 // 9. a function that takes a closure and returns a closure capturing it
 with <p: f32[..]>
 func loss9(): float {
-    let s = sum(p)
+    let s = float(sum(p))
     let g = (t: f32[..]): f32[..] => tanh(t * f32(s))
     let h = twice(g)
-    return sum(h(p))
+    return float(sum(h(p)))
 }
 
 // 10. a lambda that returns a lambda
 with <p: f32[..]>
 func loss10(): float {
-    let s = sum(p)
+    let s = float(sum(p))
     let mk = (a: float) => (t: f32[..]): f32[..] => tanh(t * f32(a)) * f32(s)
-    return sum(mk(s * 0.5)(p))
+    return float(sum(mk(s * 0.5)(p)))
 }
 
 func main(): int sync {

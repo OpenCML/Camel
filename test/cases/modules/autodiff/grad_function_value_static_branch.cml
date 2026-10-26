@@ -1,14 +1,14 @@
 module grad_function_value_static_branch
-import { Tensor, reshape, sum, tanh } from tensor
+import { reshape, sum, tanh } from tensor
 import { grad } from autodiff
 
 // Refused like any branch: the condition is a constant expression, but the graph grad sees
 // still chooses the function by a branch (nothing folds it before grad runs).
 with <p: f64[..]>
 func loss(): float {
-    let s = sum(p)
+    let s = float(sum(p))
     let g = if 1 > 0 then (t: f64[..]): f64[..] => tanh(t * s) else (t: f64[..]): f64[..] => t * s
-    return sum(g(p))
+    return float(sum(g(p)))
 }
 
 func main(): int sync {

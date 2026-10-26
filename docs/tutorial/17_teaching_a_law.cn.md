@@ -13,7 +13,6 @@
 ```cml
 // The law of this program's arithmetic, written the way the compiler reads laws.
 // Run: camel docs/tutorial/examples/17_rule.cml
-module law
 
 import { check } from rewrite
 
@@ -122,7 +121,6 @@ dot -Tsvg negated.dot -o negated.svg
 ```cml
 // The knowledge of your field that is not an equation, handed to the compiler.
 // Run: camel docs/tutorial/examples/17_fact.cml
-module domain
 
 import { check } from rewrite
 import { abs } from math
@@ -188,7 +186,6 @@ sampled abs_of_nonnegative: proposition equality, evidence samples 100, fired 8 
 // The answer to the exercise of chapter 18: a law written as a `rule`, and the verdict `check`
 // gives it.
 // Run: camel docs/tutorial/examples/17_exercise.cml
-module exercise
 
 import { check } from rewrite
 

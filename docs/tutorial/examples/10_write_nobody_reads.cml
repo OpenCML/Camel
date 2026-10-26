@@ -2,7 +2,6 @@
 // earlier uses of the variable. Both programs below print the same `1`: what the sync block adds is
 // the guarantee, not the value.
 // Run: camel docs/tutorial/examples/10_write_nobody_reads.cml
-module write_nobody_reads
 
 func unordered(): int {
     var c = 1

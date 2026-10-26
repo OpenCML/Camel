@@ -392,9 +392,9 @@ reports a fault located at the operator's own origin (`VjpCall::origin`) and
 naming it, and asks the builder `isActive` whether the input it cannot handle
 depends on a differentiated parameter at all (a constant array is skipped; a
 float array is continuous, design principles 9.9, and is refused). `t[a:b]`
-(`tensor:slice_sub`) is a selection of indices, so its adjoint is the upstream
+(`:op/slice_sub`) is a selection of indices, so its adjoint is the upstream
 gradient scattered back into the parent's shape at those indices, padded with
-zeros — `tensor:slice_grad` is that scatter. An array says the same thing in
+zeros — `:tangent/scatter_slice_arr` is that scatter. An array says the same thing in
 its own tangent space: `xs->slice<a, b>` (`:struct/slice_arr`) and `xs[a:b:s]`
 (`:op/slice_sub`) place the gradient back in the range they took with
 `tangent/scatter_slice_arr`, whose bounds go through the same normalization as
@@ -428,8 +428,7 @@ mutable parameter objects.
 The current exporter performs partial evaluation itself (folding, inlining,
 unrolling, branch selection, shape facts). These move to general passes:
 
-- **Shape specialization:** bind the example input types (`Tensor<float32,
-  [64, 784]>`, or with a dynamic batch dimension) to the function's ports and
+- **Shape specialization:** bind the example input types (`float32[64, 784]`, or with a dynamic batch dimension) to the function's ports and
   re-run operator inference, so shapes live in node types.
 - **Static simplification:** `std::opt::devirtualize` / `std::opt::specialize` /
   `std::opt::inline` / `std::opt::fold` / branch pruning / `dce` until a fixpoint.

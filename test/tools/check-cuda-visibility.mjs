@@ -73,8 +73,14 @@ const CUDA_AWARE_MODULES = [
  * (`feat/modules/onnx.plan.toml`). It is a CPU-only program -- it exports a model and compares
  * values -- so it names no device and the runner hides the machine's cards from it, like every
  * other ONNX Runtime probe in that plan.
+ * 32 -> 33 on 2026-10-26: `ort_core_slice_grad` joined, the ONNX Runtime probe of that slice's
+ * adjoint in the same plan. It is CPU-only too -- `providers=["CPUExecutionProvider"]` on a model
+ * it exports and compares -- so it names no device either, and the runner's default hides the
+ * machine's cards from it as it does for `ort_core_slice` beside it. The lane that added it left
+ * this pin at 32, and the pin is what makes that visible: the runner's self-test reads the same
+ * audit, so the stale number was red there before anyone ran the guard alone.
  */
-export const EXPECTED_EXAMINED = 32
+export const EXPECTED_EXAMINED = 33
 export const EXPECTED_DEVICE_LAYER = 17
 
 function walkPlanFiles(dir, out = []) {

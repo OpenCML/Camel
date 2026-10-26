@@ -2,30 +2,30 @@
 // Every rule is used; the regression requires safepoint stress, without importing Tiles.
 // The differentiated tensor is the first `with` parameter of every loss.
 module autodiff_macro_round_lifetime_gc
-import { Tensor, reshape, shape, sum, zeros } from tensor
+import { reshape, shape, sum, zeros } from tensor
 import { grad } from autodiff
 
 let weights = reshape([1.0, -2.0, 3.0, -4.0, 5.0, -6.0], [2, 3])
-func rule(x: Tensor<f32>, dy: Tensor<f32>): Tensor<f32> { return reshape(dy, [3, 2]) }
+func rule(x: f32[..], dy: f32[..]): f32[..] { return reshape(dy, [3, 2]) }
 #vjp(rule)
-func mark(x: Tensor<f32>): Tensor<f32> { return x }
-with <x: Tensor<f32>>
+func mark(x: f32[..]): f32[..] { return x }
+with <x: f32[..]>
 func loss(): float { return sum(mark(sum(x, 1)) * weights) }
-with <x: Tensor<f32>>
+with <x: f32[..]>
 func negative_loss(): float { return sum(mark(sum(x, -2)) * weights) }
-with <x: Tensor<f32>>
+with <x: f32[..]>
 func keep_loss(): float { return sum(sum(x, -2, true)) }
 
-func narrow_rule(x: Tensor<f32>, dy: Tensor<f32>): Tensor<f32> { return reshape(dy, [4]) }
+func narrow_rule(x: f32[..], dy: f32[..]): f32[..] { return reshape(dy, [4]) }
 #vjp(narrow_rule)
-func narrow_mark(x: Tensor<f32>): Tensor<f32> { return x }
-with <x: Tensor<f32>>
+func narrow_mark(x: f32[..]): f32[..] { return x }
+with <x: f32[..]>
 func narrow_loss(): float { return sum(narrow_mark(sum(x, 1))) }
 
-func wide_rule(x: Tensor<f32>, dy: Tensor<f32>): Tensor<f32> { return reshape(dy, [4, 5, 2]) }
+func wide_rule(x: f32[..], dy: f32[..]): f32[..] { return reshape(dy, [4, 5, 2]) }
 #vjp(wide_rule)
-func wide_mark(x: Tensor<f32>): Tensor<f32> { return x }
-with <x: Tensor<f32>>
+func wide_mark(x: f32[..]): f32[..] { return x }
+with <x: f32[..]>
 func wide_loss(): float { return sum(wide_mark(sum(x, 1))) }
 
 func main(): int sync {

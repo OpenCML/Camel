@@ -1,11 +1,11 @@
 module constas_as_value
-import { Tensor, ones, sum } from tensor
+import { ones, sum } from tensor
 
-func total(constas n: int, x: Tensor<f32, [n]>): float {
-    return sum(x)
+func total(constas n: int, x: f32[n]): float {
+    return float(sum(x))
 }
 
-func apply(f: (x: Tensor<f32>) => float, x: Tensor<f32>): float {
+func apply(f: (x: f32[..]) => float, x: f32[..]): float {
     return f(x)
 }
 

@@ -1,12 +1,12 @@
 module named_dims_unknown_extent_mismatch
-import { Tensor, ones, sum, load_npy } from tensor
+import { ones, sum, load_npy } from tensor
 // The same call as unknown_extent_checked, with a file of four elements: the extent is unknown
 // statically, so the check is made when the call runs, like `as`.
-func fit(a: Tensor<f32, [n]>, b: Tensor<f32, [n]>): float {
-    return sum(a) + sum(b)
+func fit(a: f32[n], b: f32[n]): float {
+    return float(sum(a)) + float(sum(b))
 }
 func main(): int sync {
-    let t = load_npy::<f32>('test/cases/compile/entry_args/b.npy') as Tensor<f32, [?]>
+    let t = load_npy::<f32>('test/cases/compile/entry_args/b.npy') as f32[?]
     println(fit(t, ones([3])))
     return 0
 }

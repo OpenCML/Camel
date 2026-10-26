@@ -161,7 +161,7 @@ assert(!byUri.get('tensor:matmul').semantics.definition, 'matmul has none')
 
 [[tests]]
 name = "mean_empty_fault"
-desc = "mean of a tensor without elements faults like its definition (sum(x) / (numel(x) as float), a float division by zero): the kernel raises DivisionByZero with the same message the expanded definition gives (mean_empty_fault_expanded), located at the call; the fault kinds agree, not only the fact of a fault (design principles 7.1)."
+desc = "mean of a tensor without elements faults like its definition (the sum and the division in f64, one rounding into the element type, a float division by zero): the kernel raises DivisionByZero with the same message the expanded definition gives (mean_empty_fault_expanded), located at the call; the fault kinds agree, not only the fact of a fault (design principles 7.1)."
 kind = "behavior"
 case = "../../../cases/definitions/mean_empty.cml"
 args = ["${case}", "${backend}"]
@@ -173,7 +173,7 @@ verify_script = """
 const out = input.normalized.stdout
 assert(out.startsWith('0.0\n'), out)
 assert(out.includes('[Error]: Attempted division by zero.') && out.includes('(name=RuntimeDiag::DivisionByZero,'), out)
-assert(out.includes('mean_empty.cml:8:13'), `located at the call: ${out}`)
+assert(out.includes('mean_empty.cml:9:13'), `located at the call: ${out}`)
 }
 """
 
@@ -193,13 +193,13 @@ const out = input.normalized.stdout
 assert(input.normalized.stderr.includes('EXPANDED tensor:mean 2\n'), input.normalized.stderr)
 assert(out.startsWith('0.0\n'), out)
 assert(out.includes('[Error]: Attempted division by zero.') && out.includes('(name=RuntimeDiag::DivisionByZero,'), out)
-assert(out.includes('tensor_definitions.cml:55:'), `located at the division of the definition: ${out}`)
+assert(out.includes('tensor_definitions.cml:62:'), `located at the division of the definition: ${out}`)
 }
 """
 
 [[tests]]
 name = "gradients_numel_shape"
-desc = "An element count is a shape, not data whose gradient is dropped: differentiating the definition graph of `tensor_definitions::mean` (`sum(x) / (numel(x) as float)`) uses `numel(x)` as a constant shape count, so the mean is 2.5 and the gradient of the mean is 1/n per element (sum 1.0). This is the definition-level form of the `tensor:numel` exemption (design principles 9.9, 5.4)."
+desc = "An element count is a shape, not data whose gradient is dropped: differentiating the definition graph of `tensor_definitions::mean` (the sum and the division in f64, one rounding into the element type) uses `numel(x)` as a constant shape count, so the mean is 2.5 and the gradient of the mean is 1/n per element (sum 1.0). This is the definition-level form of the `tensor:numel` exemption (design principles 9.9, 5.4)."
 kind = "behavior"
 case = "../../../cases/definitions/numel_shape.cml"
 args = ["${case}", "std::macro"]

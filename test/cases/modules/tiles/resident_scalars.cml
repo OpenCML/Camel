@@ -1,23 +1,23 @@
 module tiles_resident_scalars
-import { Tensor, reshape, sum, abs, zeros } from tensor
+import { reshape, sum, abs, zeros } from tensor
 import { with_grad } from autodiff
 import { Device, upload, download, run_preferred_resident } from tiles
-with <x: Tensor<f32>>
+with <x: f32[..]>
 func loss(): float { return sum(x * x) }
-func total(x: Tensor<f32>): float { return sum(x) }
+func total(x: f32[..]): float { return sum(x) }
 func identity(x: float): float { return x }
 // A scalar at the boundary takes the element type it is written with (design principles 7.3): the
 // scalar this region takes is `f32` and stays `f32` in it, so `x * k` needs no conversion. A
 // `float` k beside an f32 tensor is a type error (design principles 5.1); a program that really
 // wrote an f64 scalar passes one and gets a `Device<float>` leaf.
-func scale(x: Tensor<f32>, k: f32): Tensor<f32> { return x * k }
-func mixed(x: Tensor<f32>): (float, Tensor<f32>, float) {
+func scale(x: f32[..], k: f32): f32[..] { return x * k }
+func mixed(x: f32[..]): (float, f32[..], float) {
     return (sum(x), x + 1.0, 1.0000000000000002)
 }
 func read(x: Device<float>): float { return download(x) }
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
-    let vg = (v: Tensor<f32>): (float, Tensor<f32>) => with_grad(loss)<v>()
+    let vg = (v: f32[..]): (float, f32[..]) => with_grad(loss)<v>()
     let result = run_preferred_resident<vg>(upload(x))
     println(read(result.0) - 14.0)
     println(sum(abs(download(result.1) - x * 2.0)))

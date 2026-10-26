@@ -10,7 +10,7 @@
 
 module perf_mlp_step
 
-import { Tensor, cast, numel, relu, sum, zeros } from tensor
+import { cast, numel, relu, sum, zeros } from tensor
 import { with_grad } from autodiff
 import { adam, adam_state, softmax_cross_entropy } from nn
 import { now } from time

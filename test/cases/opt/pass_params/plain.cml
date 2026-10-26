@@ -4,8 +4,8 @@
  * adds no pass to the pipeline: the module's passes run only where the command line writes them.
  */
 module plain
+import tensor
 
-import { Tensor } from tensor
 
 func main(): int sync {
     println("camel-ran-marker")

@@ -3,13 +3,13 @@
 /// `tiles::compile` prints the answer for every graph as `TILES_PLACEMENT`; the pass does not
 /// switch an executor on it yet, and these graphs need not run for the answer to be printed.
 module tiles_placement_query
+import tensor
 
-import { Tensor } from tensor
 
 // The body is `#gpu`, so the graph is a device unit; the `#cpu` block it writes is the inner
 // scope and wins, so those nodes are the host. `plain` is untagged: its own nodes are the host.
 #gpu
-func on_device(x: Tensor<f32>): Tensor<f32> {
+func on_device(x: f32[..]): f32[..] {
     let y = x * 2.0
     #cpu {
         let z = y + 3.0
@@ -17,12 +17,12 @@ func on_device(x: Tensor<f32>): Tensor<f32> {
     }
 }
 
-func plain(x: Tensor<f32>): Tensor<f32> { return x + 1.0 }
+func plain(x: f32[..]): f32[..] { return x + 1.0 }
 
 // The body of an untagged function is a `#gpu` block, and that block writes a `#cpu` block:
 // the graph body has no fact (the host's), the block's nodes are on the device, and the inner
 // block wins over the outer one.
-func blocks(x: Tensor<f32>): Tensor<f32> {
+func blocks(x: f32[..]): f32[..] {
     #gpu {
         let b = x * 2.0
         #cpu {

@@ -15,6 +15,7 @@
 #include "camel/core/numeric_convert.h"
 #include "camel/core/operator_names.h"
 #include "camel/core/rtdata/string.h"
+#include "camel/core/type/composite/stream.h"
 #include "camel/execute/entry_args.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/graph.h"
@@ -1583,8 +1584,10 @@ node_handle_t Builder::composeFunctionValue(
 node_handle_t Builder::intervalValue(
     node_handle_t lhs, node_handle_t rhs, const GCT::node_ptr_t &gct) {
     // `a..b` of two integers is the array of them from `a` to `b - 1`, left closed and right
-    // open, as the slice `t[a:b]` is (design principles 4.2). That is what `range(a, b)` gives,
-    // and the interval is that call; the written form is retired, not the operation.
+    // open, as the slice `t[a:b]` is (design principles 4.2). It is the step-1 case of `range`,
+    // written out as that call with the step, `range(a, b, 1)`: the group has one rule and it
+    // takes three arguments, so the two-argument spelling is an ordinary no-match while the
+    // interval keeps its own lowering -- the operation is retired nowhere.
     const auto make = [&](GCT::node_ptr_t node) {
         node->setOrigin(gct->origin());
         return node;
@@ -1592,9 +1595,11 @@ node_handle_t Builder::intervalValue(
     const auto nameNode = [&](const std::string &name) { return make(tree_->makeDRef(name)); };
     const std::string lhsName = bindTemporary(lhs);
     const std::string rhsName = bindTemporary(rhs);
-    GCT::node_ptr_t call      = make(tree_->makeLink(2));
+    GCT::node_ptr_t call      = make(tree_->makeLink(3));
     *call << make(tree_->makeDRef(std::string(kRangeCall))) << nameNode(lhsName)
-          << nameNode(rhsName);
+          << nameNode(rhsName)
+          << make(tree_->makeData(
+                 tt::as_shared<Data>(std::make_shared<PrimaryData<int64_t>>(int64_t{1}))));
     node_handle_t value = visitLinkNode(call);
     nodeScope_->erase(lhsName, false);
     nodeScope_->erase(rhsName, false);
@@ -2224,7 +2229,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     ExtentPacks dimPacks;
     const auto enterParameters = [&](FunctionType *funcType) {
         // The parameter types may write their extents over names the signature binds, e.g.
-        // `func f(x: Tensor<f32, const [constas n]>, y: Tensor<f32, const [n]>)`. Bind each name
+        // `func f(x: f32[n], y: f32[n])`. Bind each name
         // from every argument whose extent is statically known; what the arguments leave open is
         // checked when the call runs, by passing the argument through the checked conversion
         // (`as`) to the refined parameter type. Nothing here depends on the values at runtime,
@@ -2957,22 +2962,6 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 throw BuildAbortException();
             }
             targetOperator = *res;
-            // The interval of two integers is written `a..b` and nothing else: the two-parameter
-            // `range(a, b)` is deleted, one thing one spelling (design principles 4.2; the
-            // rule on ` -generator-and-composition`). The call the
-            // program writes is refused here, where it stands, with the spelling to write
-            // instead. The operation stays: it is what `a..b` becomes on the graph
-            // (`intervalValue`), and the compiler writes that call with the built-in callee name
-            // (`$builtin::range`), which no program writes and which this does not touch.
-            if (targetOperator->uri() == ":struct/range" && normInputs.size() == 2 &&
-                withInputs.empty() && gct->size() >= 1 &&
-                gct->at(0)->type() == GCT::NodeKind::DREF && gct->at(0)->name() == "range") {
-                // The caret is under the name the program wrote, so the refused spelling is what
-                // the reader sees marked.
-                const auto where = gct->at(0)->origin() != 0 ? gct->at(0)->origin() : gct->origin();
-                diags_->of(SemanticDiag::RangeTwoArgumentsRemoved).atOrigin(where).commit();
-                throw BuildAbortException();
-            }
             // `range(a, b, step)` is the integers `a`, `a + step`, ... below `b` (design
             // principles 4.2; the rule on ` -interval-step-form`), so
             // a step of 0 names no sequence at all: a fault when the step is known only at the
@@ -3216,6 +3205,16 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         }
     } else {
         Type *dataType = nodeTypeOf(targetNode);
+        // A stream's value is its step function (StreamType::stepType), so a call of a stream is
+        // one pull: the element with the rest of the stream, or `null` at the end. The call reads
+        // the signature the stream type gives it, and nothing is converted -- the value already
+        // is that function value -- so no arguments are taken and `s()` is the form.
+        if (dataType != nullptr && dataType->code() == TypeCode::Stream) {
+            // A pull is one consumer of the stream (design principles 5.4: a stream is read once on
+            // each execution path), the other being a `for` over it.
+            consumeStream(targetNode, gct);
+            dataType = tt::as_ptr<StreamType>(dataType)->stepType();
+        }
         ASSERT(
             dataType->code() == TypeCode::Function,
             "Target node of LINK must be a function or operator node.");
@@ -3427,7 +3426,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     }
     if (targetOperator == nullptr && (!dimValues.empty() || !dimPacks.empty()) &&
         targetFuncType != nullptr && targetFuncType->hasExitType()) {
-        // The return type may speak about the names the parameters bound (`: Tensor<[n, k]>`).
+        // The return type may speak about the names the parameters bound (`: f32[n, k]`).
         // The function still has one graph: what varies with the call is only the static type,
         // and the value is passed through the checked conversion to it (the same check `as`
         // makes), so a body that breaks the relation is caught where the call runs.

@@ -17,6 +17,7 @@
 #include "camel/core/operator_names.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/struct.h"
+#include "camel/core/type/composite/stream.h"
 #include "camel/execute/entry_args.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/graph.h"
@@ -127,8 +128,6 @@ bool isEmptyArrayLiteral(node_handle_t node) {
 
 /// The type of the untyped empty array literal `[]`: an array whose element type nobody wrote.
 /// Its element type is the only thing it leaves open, so every position it stands in fixes it.
-/// (An array whose element type nobody stated is not one of these when its rank is open;
-/// isElementTypeOpenArray tells them apart.)
 bool isEmptyArrayLiteralType(const Type *type) { return isUntypedArrayType(type); }
 
 /// Whether a value of this type is a struct or tuple whose parts can be the components of a
@@ -2042,17 +2041,14 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
             const GCT::node_ptr_t &boundCase = gct->at(i);
             if (boundCase->caseType() == GCT::CaseType::Bind ||
                 boundCase->caseType() == GCT::CaseType::Error) {
-                // The two patterns that bind are defined over `T?` / `T!` only. What an
-                // identifier pattern means over any other type has not been decided.
+                // The two patterns that bind are the fixed forms of `T?` and `T!` (design
+                // principles 3.8): over any other type there is no mark to take apart.
                 const bool isError = boundCase->caseType() == GCT::CaseType::Error;
-                diags_->of(SemanticDiag::ConstructNotSupported)
+                diags_->of(SemanticDiag::IdentifierPatternNeedsNullableOrErrorType)
                     .atOrigin(boundCase->origin())
                     .commit(
                         (isError ? "error " : "") + boundCase->binding(),
-                        std::string(isError ? "the pattern 'error e'" : "an identifier pattern") +
-                            " is implemented only for a value of type 'T?' or 'T!'; over '" +
-                            nodeTypeOf(condNode)->toString() +
-                            "' only literal patterns and '_' are");
+                        nodeTypeOf(condNode)->toString());
                 throw BuildAbortException();
             }
         }
@@ -2505,6 +2501,9 @@ node_handle_t Builder::buildBranch(
 
     linkNodes(LinkType::Norm, brchNode, joinNode);
     linkArmEntries(armList, brchNode);
+    // The arms of this branch exclude each other: a stream consumed in one of them is not
+    // consumed twice by a use in another (design principles 5.4).
+    noteArmGroup(armList);
 
     // The branch is the user of the variables its arms used, and the writer of those they
     // wrote. It begins at BRCH and is complete at JOIN.
@@ -2867,6 +2866,14 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     } else if (hasIterable) {
         const auto &expr = gct->loopSequence();
         sequence         = valueOf(functionValueOf(valueNodeOf(visit(expr)), expr));
+        Type *sequenceType = valueTypeOf(nodeTypeOf(sequence));
+        // `for x in s` where `s` is a stream: the rounds are the pulls of the stream's step
+        // function, and the graph already has the loop for that (the `while`, with a condition
+        // and no iterable), so nothing about the driver or a back end is new.
+        if (sequenceType != nullptr && sequenceType->code() == TypeCode::Stream && k > 0) {
+            LEAVE("LOOP");
+            return buildStreamLoop(gct, sequence, initial, stateTypes);
+        }
         elementType      = iterableElementType(sequence, expr);
     }
     Type *stateType =
@@ -3457,6 +3464,418 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     }
     LEAVE("LOOP");
     return loopValue;
+}
+
+// `for x in s` where `s` is a stream. The stream's value is its step function
+// (StreamType::stepType), so a round is one pull of it, and the graph already has the loop that
+// takes one step per round: the `while`, whose condition and body are regions and whose state is
+// what the next round starts from. The loop is therefore written here as that `while`, with the
+// state the program wrote carried beside the pull:
+//
+//   state (next, acc); next is the last pull, acc the program's state
+//   entering:   (s(), a0)
+//   condition:  next != null, and the condition the head wrote after it
+//   body:       the element is next.0, the program's body gives acc', and the round ends by
+//               pulling next.1() into the next next
+//
+// `next` is the last pull -- the element with the rest of the stream, or `null` -- and the body
+// reads the element out of it and pulls the next one from the rest at its end, after the
+// statements it wrote ran. `for ... while c` folds `c` into the condition, after the test that
+// the pull has a value: the stream ending is the loop ending, and `c` is asked only while there
+// is something to iterate. Nothing here is a new node kind, a new region kind or a new loop
+// form: a back end sees the LOOP node it always did, and the driver the same.
+node_handle_t Builder::buildStreamLoop(
+    const GCT::node_ptr_t &gct, node_handle_t sequence,
+    const std::vector<node_handle_t> &initial, const std::vector<Type *> &stateTypes) {
+    using camel::core::LoopKind;
+    using camel::core::oper::TagIsNull;
+    using camel::core::oper::TagNullValue;
+    const LoopKind kind    = gct->loopKind();
+    const size_t k         = initial.size();
+    StreamType *stream     = tt::as_ptr<StreamType>(valueTypeOf(nodeTypeOf(sequence)));
+    FunctionType *stepType = stream->stepType();
+    Type *pullType         = stepType->exitType();
+    Type *elementType      = stream->elemType();
+    // A `for` over a stream is one consumer of it (design principles 5.4: a stream is read once on
+    // each execution path).
+    consumeStream(sequence, gct);
+
+    // The names of the machine's parts. They are no names a program writes -- the names of the
+    // head are the states and the element -- and the parts read the round through them.
+    const std::string streamName = "$stream";
+    const std::string doneName   = "$done";
+    std::vector<std::string> stateNames(k);
+    for (size_t j = 0; j < k; ++j) {
+        stateNames[j] = gct->loopStateName(j);
+    }
+
+    // The state of the loop: the stream this round pulls from, whether that stream is over, then
+    // the state the program wrote. The pull itself stands inside the round, after the condition:
+    // every round judges the condition first and takes its element afterwards (design principles
+    // 3.10), and a pull may have effects, so the round a condition refuses reads nothing.
+    std::vector<Type *> machineTypes{stream, Type::Bool()};
+    machineTypes.insert(machineTypes.end(), stateTypes.begin(), stateTypes.end());
+    Type *machineType = static_cast<Type *>(TupleType::create(machineTypes));
+    Type *stateType =
+        k == 1 ? stateTypes.front() : static_cast<Type *>(TupleType::create(stateTypes));
+
+    // One pull, where the round stands. The value of `T..` is that function value, so the call
+    // reads the step signature and nothing is converted.
+    const auto pullOf = [&](node_handle_t value, const GCT::node_ptr_t &at) {
+        node_handle_t call = currGraph_->addCallNode(pullType);
+        linkNodes(LinkType::With, value, call);
+        registerNodeOrigin(context_, call, at, "gir.loop.pull");
+        return call;
+    };
+    // A value on its way into the loop's state: one of the state's type as it is, a value that
+    // enters it (an `int` where the state is an `int?`, design principles 3.8) converted, and
+    // anything else the body's mismatch.
+    const auto intoState = [&](node_handle_t value, Type *type) {
+        if (value == nullptr || type == nullptr) {
+            return value;
+        }
+        Type *valueType = valueTypeOf(nodeTypeOf(value));
+        if (valueType != nullptr && type->assignableFrom(valueType)) {
+            return value;
+        }
+        if (valueType != nullptr && entersImplicitly(type, valueType)) {
+            if (node_handle_t coerced = coerceTo(value, type, gct->loopBody());
+                coerced != nullptr) {
+                return coerced;
+            }
+        }
+        diags_->of(SemanticDiag::LoopBodyTypeMismatch)
+            .atOrigin(gct->loopBody()->origin())
+            .commit(valueType ? valueType->toString() : std::string("void"), type->toString());
+        throw BuildAbortException();
+    };
+    // The state the next round starts from, in the order the loop's state holds it.
+    const auto machineStateOf = [&](const std::vector<node_handle_t> &components) {
+        std::vector<size_t> slots(components.size());
+        std::iota(slots.begin(), slots.end(), size_t{0});
+        node_handle_t fill = currGraph_->addFillNode(
+            machineType, runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
+        const slot_t empty = camel::core::rtdata::toSlot(
+            ::Tuple::create(components.size(), camel::core::mm::autoSpace()));
+        node_handle_t source = currGraph_->draft().ref(
+            currGraph_->draft().materializeStaticValue(empty, machineType));
+        linkNodes(LinkType::Norm, source, fill);
+        for (node_handle_t component : components) {
+            linkNodes(LinkType::With, component, fill);
+        }
+        registerNodeOrigin(context_, fill, gct, "gir.loop.state");
+        return fill;
+    };
+    const auto booleanConstant = [&](bool each) {
+        node_handle_t node = currGraph_->addStaticDataNode(
+            tt::as_shared<Data>(std::make_shared<PrimaryData<bool>>(each)));
+        registerNodeOrigin(context_, node, gct, "gir.data");
+        return node;
+    };
+
+    // Entering the loop takes the stream as it is: the first pull waits for the first round, so a
+    // loop whose condition refuses every round reads nothing at all.
+    std::vector<node_handle_t> machineInitial{sequence, booleanConstant(false)};
+    machineInitial.insert(machineInitial.end(), initial.begin(), initial.end());
+
+    // The parts declare the pull and the states they read; the element is bound inside the body,
+    // out of the pull, so that the body reads it as the name the program wrote.
+    const auto refreshPorts = [&](ArmBuild &part) {
+        FunctionTypeFactory params;
+        std::vector<runtime::gc_node_ref_t> ids;
+        for (size_t i = 0; i < part.ports.size(); ++i) {
+            const std::string &name =
+                i == 0 ? streamName : (i == 1 ? doneName : stateNames[i - 2]);
+            params.addNormArg(name, nodeTypeOf(part.ports[i]), false);
+            ids.push_back(nodeIdOf(part.ports[i]));
+        }
+        params.setExitType(Type::Void());
+        part.graph->draft().setRegionPorts(part.region, ids);
+        part.graph->draft().setRegionParams(part.region, params.build());
+    };
+    const auto declarePorts = [&](ArmBuild &part, const GCT::node_ptr_t &exec) {
+        const auto add = [&](const std::string &name, Type *type) {
+            node_handle_t port = currGraph_->addRegionPortNode(type, name);
+            part.graph->draft().setNodeRegion(nodeIdOf(port), part.region);
+            insertNode(name, port);
+            if (recorder_) {
+                recordDeclaration(name, port, exec);
+            }
+            part.ports.push_back(port);
+        };
+        add(streamName, stream);
+        add(doneName, Type::Bool());
+        for (size_t j = 0; j < k; ++j) {
+            add(stateNames[j], stateTypes[j]);
+        }
+        refreshPorts(part);
+    };
+
+    arm_ptr_t condPart;
+    arm_ptr_t bodyPart;
+    {
+        ExpectedValueScope partScope(expectedValueType_, nullptr);
+        // The condition of the loop: where the stream is not over, the condition of the head --
+        // and a `for` head wrote none, so there it is `true` and nothing is asked. A round whose
+        // stream is over ends the loop without asking the head's condition again, so a condition
+        // is asked once per round that has an element and once for the round that finds the end,
+        // as the `while` of the array form is asked.
+        //
+        // The parts the condition is made of stand where the loop is: a `for` head wrote no
+        // condition, so the body is what they take their position from.
+        const GCT::node_ptr_t condExec =
+            camel::core::loopHasCondition(kind) ? gct->loopCondition() : gct->loopBody();
+        const auto conditionArms = [&]() -> node_handle_t {
+            node_handle_t over = *nodeAt(doneName);
+            std::vector<arm_ptr_t> arms(2);
+            // The stream is over: the loop ends without asking the condition the head wrote.
+            arms[0] = buildArm(condExec, [&] { return booleanConstant(false); });
+            arms[1] = buildArm(condExec, [&] {
+                return camel::core::loopHasCondition(kind) ? visitBodyNode(gct->loopCondition())
+                                                           : booleanConstant(true);
+            });
+            return buildBranch(condExec, over, &arms);
+        };
+        condPart = buildArm(
+            condExec,
+            conditionArms,
+            runtime::GCRegionKind::LoopCond,
+            [&](ArmBuild &part) { declarePorts(part, condExec); });
+        Type *condType = condPart->exitType();
+        if (condType == nullptr || condType->code() != TypeCode::Bool) {
+            diags_->of(SemanticDiag::LoopConditionNotBool)
+                .atOrigin(condExec->origin())
+                .commit(condType ? condType->toString() : std::string("void"));
+            throw BuildAbortException();
+        }
+        // The body of the loop: the pull of this round -- the condition has already held, so this
+        // is where the step function is called -- and then, where the pull answered an element,
+        // the element, the program's body and the state of the next round.
+        bodyPart = buildArm(
+            gct->loopBody(),
+            [&]() -> node_handle_t {
+                node_handle_t pull = pullOf(*nodeAt(streamName), gct->loopBody());
+                const std::string pullTemp = bindTemporary(pull);
+                node_handle_t isNull = applyTagOperator(TagIsNull, pullTemp, gct->loopBody());
+                std::vector<arm_ptr_t> arms(2);
+                // The pull answered `null`: the stream is over. The program's body does not run,
+                // the stream and the state stay as they are, and the round that begins after it
+                // ends the loop without asking the condition again.
+                arms[0] = buildArm(gct->loopBody(), [&] {
+                    std::vector<node_handle_t> next{*nodeAt(streamName), booleanConstant(true)};
+                    for (size_t j = 0; j < k; ++j) {
+                        next.push_back(*nodeAt(stateNames[j]));
+                    }
+                    return machineStateOf(next);
+                });
+                arms[1] = buildArm(gct->loopBody(), [&] {
+                    // The element this round is about and the rest of the stream, taken out of
+                    // the pull that has just answered.
+                    node_handle_t pair = applyTagOperator(TagNullValue, pullTemp, gct->loopBody());
+                    node_handle_t element = currGraph_->addAccsNode(elementType, 0);
+                    linkNodes(LinkType::Norm, pair, element);
+                    registerNodeOrigin(context_, element, gct->loopBody(), "gir.loop.element");
+                    insertNode(gct->loopElementName(), element);
+                    if (recorder_) {
+                        recordDeclaration(gct->loopElementName(), element, gct->loopBody());
+                    }
+                    node_handle_t rest = currGraph_->addAccsNode(stream, 1);
+                    linkNodes(LinkType::Norm, pair, rest);
+                    registerNodeOrigin(context_, rest, gct->loopBody(), "gir.loop.rest");
+
+                    // What the program's body gives is the state of the next round.
+                    node_handle_t state = intoState(
+                        loopStateValueOf(visitBodyNode(gct->loopBody())), stateType);
+                    if (state == nullptr) {
+                        diags_->of(SemanticDiag::LoopBodyTypeMismatch)
+                            .atOrigin(gct->loopBody()->origin())
+                            .commit(std::string("void"), stateType->toString());
+                        throw BuildAbortException();
+                    }
+                    // The body runs after the pull it reads its element from.
+                    linkNodes(LinkType::Ctrl, pull, state);
+                    std::vector<node_handle_t> next{rest, booleanConstant(false)};
+                    if (k == 1) {
+                        next.push_back(state);
+                    } else {
+                        for (size_t j = 0; j < k; ++j) {
+                            node_handle_t component = currGraph_->addAccsNode(
+                                stateTypes[j], static_cast<uint32_t>(j));
+                            linkNodes(LinkType::Norm, state, component);
+                            registerNodeOrigin(
+                                context_, component, gct->loopBody(), "gir.loop.state");
+                            next.push_back(component);
+                        }
+                    }
+                    return machineStateOf(next);
+                });
+                return buildBranch(gct->loopBody(), isNull, &arms);
+            },
+            runtime::GCRegionKind::LoopBody,
+            [&](ArmBuild &part) { declarePorts(part, gct->loopBody()); });
+    }
+
+    node_handle_t loopNode = currGraph_->addRegionLoopNode(LoopKind::While, machineType);
+    registerNodeOrigin(context_, loopNode, gct, "gir.loop");
+    stampPermissions(loopNode);
+    for (node_handle_t value : machineInitial) {
+        linkNodes(LinkType::Norm, value, loopNode);
+    }
+    // The With inputs of the node are the results of its parts (the body's, then the
+    // condition's) and the slot the rounds are counted in; the parts are its regions.
+    std::vector<arm_ptr_t> parts{bodyPart};
+    linkNodes(LinkType::With, bodyPart->output, loopNode);
+    if (condPart) {
+        parts.push_back(condPart);
+        linkNodes(LinkType::With, condPart->output, loopNode);
+    }
+    linkNodes(LinkType::With, currGraph_->addRegionPortNode(Type::Int64(), ""), loopNode);
+    runtime::GraphDraft &draft = currGraph_->draft();
+    draft.setRegionOwner(bodyPart->region, nodeIdOf(loopNode), 1);
+    draft.setRegionResult(bodyPart->region, nodeIdOf(bodyPart->output));
+    if (condPart) {
+        draft.setRegionOwner(condPart->region, nodeIdOf(loopNode), 0);
+        draft.setRegionResult(condPart->region, nodeIdOf(condPart->output));
+    }
+
+    // Running the loop is like entering an arm: it uses every variable its parts used and
+    // writes those they wrote.
+    std::vector<node_handle_t> capturedWrites;
+    mergeArmVariables(parts, loopNode, capturedWrites);
+    const auto originOf = [&](node_handle_t variable) {
+        const auto origin = captureOriginOf_.find(variable);
+        return origin != captureOriginOf_.end() ? origin->second : variable;
+    };
+    std::vector<DraftGraphBuilder *> callees;
+    std::set<node_handle_t> directWrites;
+    for (const arm_ptr_t &part : parts) {
+        callees.insert(callees.end(), part->callees.begin(), part->callees.end());
+        for (node_handle_t variable : part->directWrites) {
+            directWrites.insert(originOf(variable));
+        }
+    }
+    if (ArmBuild *outer = activeArm()) {
+        outer->callees.insert(outer->callees.end(), callees.begin(), callees.end());
+        for (const arm_ptr_t &part : parts) {
+            outer->directWrites.insert(part->directWrites.begin(), part->directWrites.end());
+        }
+    }
+    if (!capturedWrites.empty() && !synced_) {
+        std::vector<node_handle_t> origins;
+        for (node_handle_t variable : capturedWrites) {
+            origins.push_back(originOf(variable));
+        }
+        unit_->pendingIgnoredWrites.push_back(
+            {callees, origins, directWrites, gct->origin(), "The loop", "its body writes"});
+    }
+    if (synced_) {
+        if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, loopNode)) {
+            linkNodes(LinkType::Ctrl, lastSyncedNode_, loopNode);
+        }
+        lastSyncedNode_ = loopNode;
+        chainedNodes_.insert(loopNode);
+    }
+
+    // The program sees the state it wrote, not the stream and the flag beside it: one state is
+    // its own value, several are a tuple of them.
+    node_handle_t loopValue = nullptr;
+    if (k == 1) {
+        loopValue = currGraph_->addAccsNode(stateTypes.front(), 2);
+        linkNodes(LinkType::Norm, loopNode, loopValue);
+        registerNodeOrigin(context_, loopValue, gct, "gir.loop.value");
+    } else {
+        std::vector<size_t> slots(k);
+        std::iota(slots.begin(), slots.end(), size_t{0});
+        loopValue = currGraph_->addFillNode(
+            stateType, runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
+        const slot_t empty = camel::core::rtdata::toSlot(
+            ::Tuple::create(k, camel::core::mm::autoSpace()));
+        node_handle_t source =
+            currGraph_->draft().ref(currGraph_->draft().materializeStaticValue(empty, stateType));
+        linkNodes(LinkType::Norm, source, loopValue);
+        for (size_t j = 0; j < k; ++j) {
+            node_handle_t component =
+                currGraph_->addAccsNode(stateTypes[j], static_cast<uint32_t>(j + 2));
+            linkNodes(LinkType::Norm, loopNode, component);
+            linkNodes(LinkType::With, component, loopValue);
+        }
+        registerNodeOrigin(context_, loopValue, gct, "gir.loop.value");
+    }
+    return loopValue;
+}
+
+void Builder::noteArmGroup(const std::vector<arm_ptr_t> &arms) {
+    // One arm excludes nothing: an `if` without `else` has a path where no arm ran and the value
+    // passed on, so only two arms or more say which uses cannot both happen.
+    if (arms.size() < 2 || currGraph_ == nullptr) {
+        return;
+    }
+    std::vector<uint32_t> regions;
+    regions.reserve(arms.size());
+    for (const arm_ptr_t &arm : arms) {
+        regions.push_back(arm->region);
+    }
+    armGroups_.emplace_back(currGraph_.get(), std::move(regions));
+}
+
+void Builder::consumeStream(node_handle_t value, const GCT::node_ptr_t &at) {
+    if (value == nullptr || currGraph_ == nullptr || at == nullptr) {
+        return;
+    }
+    std::vector<uint32_t> arms;
+    arms.reserve(armStack_.size());
+    for (ArmBuild *arm : armStack_) {
+        arms.push_back(arm->region);
+    }
+    streamConsumptions_.push_back({currGraph_.get(), value, std::move(arms), at->origin()});
+}
+
+void Builder::checkStreamConsumption(DraftGraphBuilder *graph) {
+    // Two uses of one stream are one consumer when one of them stands in an arm the other does
+    // not: only one arm of a branch runs, so the two uses cannot both happen on one path. The arms
+    // of a branch are complete only once it is, and the uses stand in the arms while those are
+    // built, so this runs where the graph is complete.
+    const auto apart = [&](const StreamConsumption &left, const StreamConsumption &right) {
+        for (const auto &group : armGroups_) {
+            if (group.first != graph) {
+                continue;
+            }
+            const auto regionOf = [&](const std::vector<uint32_t> &use) -> uint32_t {
+                for (uint32_t region : use) {
+                    if (std::find(group.second.begin(), group.second.end(), region) !=
+                        group.second.end()) {
+                        return region;
+                    }
+                }
+                return 0;
+            };
+            const uint32_t mine   = regionOf(left.arms);
+            const uint32_t theirs = regionOf(right.arms);
+            if (mine != 0 && theirs != 0 && mine != theirs) {
+                return true;
+            }
+        }
+        return false;
+    };
+    for (size_t i = 0; i < streamConsumptions_.size(); ++i) {
+        const StreamConsumption &first = streamConsumptions_[i];
+        if (first.graph != graph) {
+            continue;
+        }
+        for (size_t j = i + 1; j < streamConsumptions_.size(); ++j) {
+            const StreamConsumption &second = streamConsumptions_[j];
+            if (second.graph != graph || second.value != first.value || apart(first, second)) {
+                continue;
+            }
+            // The later use is the second consumer, and the first is where the stream was read.
+            Type *valueType = valueTypeOf(nodeTypeOf(second.value));
+            diags_->of(SemanticDiag::StreamConsumedTwice)
+                .atOrigin(second.origin)
+                .relatedOrigin(first.origin, "the stream is consumed here first")
+                .commit(valueType != nullptr ? valueType->toString() : std::string("a stream"));
+            throw BuildAbortException();
+        }
+    }
 }
 
 node_handle_t Builder::visitAnnoNode(const GCT::node_ptr_t &gct) {

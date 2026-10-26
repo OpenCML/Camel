@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: MIT
 
 #include "camel/core/type/composite/array.h"
-#include "camel/core/data/composite/array.h"
-#include "camel/core/data/primary.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
@@ -207,8 +205,6 @@ ArrayType *ArrayType::openRank(Type *elemType, std::span<const ExtentForm> prefi
     return make(elemType, std::vector<ExtentForm>(prefix.begin(), prefix.end()), true, {});
 }
 
-ArrayType *ArrayType::elementTypeOpen() { return openRank(nullptr); }
-
 ArrayType *ArrayType::fromFactory(ArrayTypeFactory &factory) { return create(factory.elemType_); }
 
 ArrayType *ArrayType::fromData(Type *elemType) { return create(elemType); }
@@ -252,8 +248,8 @@ std::string ArrayType::shapeMangle() const {
 
 ArrayType *ArrayType::withElementType(Type *elemType) const {
     if (!elemType || elemType == elemType_) {
-        // Nothing states another element type: an array whose element type is still a name (the
-        // object `elementTypeOpen()` hands out) keeps it, and so does a type asking for its own.
+        // Nothing states another element type: asking a type for its own element type leaves it
+        // as it is.
         return const_cast<ArrayType *>(this);
     }
     return make(elemType, extents_, anyRank_, packName());
@@ -278,100 +274,6 @@ Type *ArrayType::firstDimensionElement() const {
         return elemType_;
     }
     return create(elemType_, rest, packName());
-}
-
-const Type *
-ArrayType::applyArguments(std::span<const TypeArgument> arguments, std::string &error) const {
-    // The array a name that requires an element type is bound to (`elementTypeOpen()`) reads the
-    // arguments of that name: one element type and then one shape. `Tensor<f32>` is `f32[..]` (a
-    // rank nobody fixed) and `Tensor<f32, [2, 3]>` is `f32[2, 3]`, so the two spellings of one
-    // type are one type. The element type is required: the element type of a value is always in
-    // its type (docs/design/arrays-memory/plan.cn.md section 5.1a), so a spelling that leaves it
-    // out denotes nothing.
-    if (!isElementTypeOpenArray(this)) {
-        error = "an array that states its element type takes no type arguments: write the element "
-                "type and the shape as the type itself, 'f32[2, 3]'";
-        return nullptr;
-    }
-    Type *elemType = nullptr;
-    std::vector<ExtentForm> extents;
-    bool hasShape = false;
-    for (const TypeArgument &argument : arguments) {
-        if (argument.type != nullptr) {
-            if (elemType != nullptr || hasShape) {
-                error = "a Tensor takes one element type, written before the shape: "
-                        "Tensor<dtype, [d0, d1, ...]> (or dtype[d0, d1, ...])";
-                return nullptr;
-            }
-            // The element of a numeric array is a numeric scalar (array.h), or a type variable the
-            // signature binds at the call: `func f::<T>(x: Tensor<T>)` is `T[..]`, and the call
-            // gives `T` the element type its argument has. The written type is kept exactly,
-            // because the array stores it and the kernels dispatch on it.
-            const TypeCode code = argument.type->code();
-            if (!isNumericScalarTypeCode(code) && code != TypeCode::TypeVar) {
-                error = "the element type of a Tensor is a numeric scalar (i32, i64, f32, f64, "
-                        "bf16, f16, bool, c64 or c128), not '" +
-                        typeCodeToString(code) + "'";
-                return nullptr;
-            }
-            elemType = argument.type;
-            continue;
-        }
-        if (hasShape) {
-            error = "a Tensor takes one shape: Tensor<dtype, [d0, d1, ...]>";
-            return nullptr;
-        }
-        if (argument.extents) {
-            // A shape written over dimension names: the forms are kept as written, and the
-            // non-constant ones are the shape's unknown dimensions (the name is the metadata).
-            extents.assign(argument.extents->begin(), argument.extents->end());
-            hasShape = true;
-            continue;
-        }
-        // A constant argument is a shape of integer constants, the spelling a tensor shape had
-        // before the array type took shapes over (plan P3, 4.1): a negative extent is the
-        // unknown dimension it always was, now written `?`.
-        const auto array = std::dynamic_pointer_cast<camel::core::data::ArrayData>(argument.data);
-        if (!array) {
-            error = "the constant argument of a Tensor type is its shape, an array of integers "
-                    "such as const [3, 4] (a negative extent means unknown)";
-            return nullptr;
-        }
-        for (const auto &element : array->raw()) {
-            if (auto i = std::dynamic_pointer_cast<camel::core::data::IntData>(element)) {
-                extents.push_back(
-                    i->data() < 0 ? ExtentForm::unknown()
-                                  : ExtentForm::constant(static_cast<int64_t>(i->data())));
-            } else if (auto l = std::dynamic_pointer_cast<camel::core::data::LongData>(element)) {
-                extents.push_back(
-                    l->data() < 0 ? ExtentForm::unknown() : ExtentForm::constant(l->data()));
-            } else {
-                error = "every extent of a Tensor shape must be an integer constant (a negative "
-                        "extent means unknown)";
-                return nullptr;
-            }
-        }
-        hasShape = true;
-    }
-    if (elemType == nullptr) {
-        // The element type is what the name exists to be given: a spelling that states only a
-        // shape answers no question about the element type of a value, and the element type of a
-        // value is always in its type.
-        error = "a Tensor needs its element type: write 'Tensor<f32>' or 'Tensor<f32, [2, 3]>', "
-                "or name the array type itself ('f32[..]', 'f32[2, 3]')";
-        return nullptr;
-    }
-    if (!hasShape) {
-        // `Tensor<f32>`: no shape is stated, so nothing fixes the rank (`f32[..]`).
-        return openRank(elemType);
-    }
-    if (extents.empty()) {
-        // Every dimension is removed, and a type with no dimension is its element type (the
-        // rank-zero rule, docs/handover/reviews/questions-2026-10-23.md): `Tensor<f32, []>`
-        // is `f32`, the scalar.
-        return elemType;
-    }
-    return create(elemType, std::span<const ExtentForm>(extents));
 }
 
 Type *ArrayType::resolve(const type_vec_t &typeList) const {
@@ -463,11 +365,6 @@ Type *ArrayType::unify(Type *other) const {
 // the source leaves open is checked when the conversion runs (castSlotFrom): Unsafe.
 CastSafety ArrayType::castSafetyFrom(Type *sourceType) const {
     if (sourceType == nullptr) {
-        return CastSafety::Forbidden;
-    }
-    if (isElementTypeOpenArray(this)) {
-        // No value has this type: it is a name still waiting for its element type, and nothing
-        // converts into it.
         return CastSafety::Forbidden;
     }
     if (assignableFrom(sourceType)) {
@@ -569,9 +466,9 @@ bool ArrayType::assignableFrom(Type *sourceType) const {
     if (this == sourceType) {
         return true;
     }
-    if (isElementTypeOpenArray(this)) {
-        // No value has this type: it is a name still waiting for its element type, and it takes
-        // nothing (design principles 5.1: the element type of a value is in its type).
+    if (isElementTypeUnstatedOpenArray(this)) {
+        // No value has this type: it is an open-rank array whose element type nobody stated, and
+        // it takes nothing (design principles 5.1: the element type of a value is in its type).
         return false;
     }
     if (!sourceType || sourceType->code() != TypeCode::Array) {
@@ -706,13 +603,13 @@ bool isUntypedArrayType(const Type *type) {
     return array->elemType()->code() == TypeCode::Void;
 }
 
-bool isElementTypeOpenArray(const Type *type) {
+bool isElementTypeUnstatedOpenArray(const Type *type) {
     const ArrayType *array = asArrayType(type);
     if (array == nullptr || !isUntypedArrayType(array)) {
         return false;
     }
-    // The array literal states one unknown dimension (`Void[]`); the object a name that requires
-    // an element type is bound to states an open rank and no prefix at all.
+    // The empty literal states one unknown dimension (`Void[]`); the open rank with no prefix and
+    // no pack is what a type variable bound to `Void` leaves behind.
     return array->anyRank() && array->extents().empty() && array->packName().empty();
 }
 

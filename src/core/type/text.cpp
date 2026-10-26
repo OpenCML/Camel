@@ -32,6 +32,21 @@ namespace camel::core::type {
 
 namespace {
 
+/// How two resource clauses are compared inside the structural walk: `equals` compares them as
+/// they stand, and the relation a written type asks of a value lets a clause nobody wrote take
+/// the resources of the other side (text.h, sameTypeWithUnwrittenResources).
+using ResourceMatch = bool (*)(
+    const sem::ResourceSignature &target, const sem::ResourceSignature &source);
+
+bool sameResources(const sem::ResourceSignature &left, const sem::ResourceSignature &right) {
+    return left == right;
+}
+
+bool takesUnwrittenResources(
+    const sem::ResourceSignature &target, const sem::ResourceSignature &source) {
+    return target.mode == sem::ResourceSignature::Mode::Generic || target == source;
+}
+
 bool isStructured(const Type *type) {
     if (type == nullptr) {
         return false;
@@ -415,12 +430,6 @@ std::vector<TextItem> typeParts(const Type *type, bool mangle) {
     switch (type->code()) {
     case TypeCode::Array: {
         const auto *array = static_cast<const ArrayType *>(type);
-        // The name that awaits its element type prints as the name the author wrote, so the
-        // report about it names what is on the page. The name is deleted once no program writes
-        // it (docs/design/arrays-memory/plan.cn.md section 5.1a).
-        if (isElementTypeOpenArray(array)) {
-            return {literal("Tensor")};
-        }
         if (mangle) {
             return {
                 literal("Array_"),
@@ -493,7 +502,7 @@ std::string typeText(const Type *type, bool mangle) {
     return out;
 }
 
-bool sameType(const Type *a, const Type *b) {
+bool sameTypeWith(const Type *a, const Type *b, ResourceMatch resources) {
     if (a == b) {
         return true;
     }
@@ -639,7 +648,7 @@ bool sameType(const Type *a, const Type *b) {
                 pending.emplace_back(lhs->exitType(), rhs->exitType());
             }
             // What a function promises about resources is part of its type (effects plan 2.2).
-            if (!(lhs->resources() == rhs->resources())) {
+            if (!resources(lhs->resources(), rhs->resources())) {
                 return false;
             }
             break;
@@ -677,7 +686,11 @@ std::string typeToString(const Type *type) { return typeText(type, false); }
 
 std::string typeMangle(const Type *type) { return typeText(type, true); }
 
-bool typeEquals(const Type *a, const Type *b) { return sameType(a, b); }
+bool typeEquals(const Type *a, const Type *b) { return sameTypeWith(a, b, sameResources); }
+
+bool sameTypeWithUnwrittenResources(const Type *target, const Type *source) {
+    return sameTypeWith(target, source, takesUnwrittenResources);
+}
 
 bool sameCanonicalType(const Type *a, const Type *b) {
     if (a == b) {

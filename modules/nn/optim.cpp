@@ -101,8 +101,8 @@ void setElement(Type *type, slot_t aggregate, size_t index, slot_t value) {
     }
 }
 
-/// A trainable leaf that is a tensor, in whichever spelling its type uses (`Tensor`, `Tensor<f32,
-/// [4, 4]>`, `f32[4, 4]`, `f32[]`): a numeric array is one tensor, not an array of its elements.
+/// A trainable leaf that is a tensor, in whichever spelling its type uses (`f32[4, 4]`, `f32[..]`,
+/// `f32[]`): a numeric array is one tensor, not an array of its elements.
 bool isTensorLeaf(Type *type) { return camel::tensor::isTensorType(type); }
 
 /// Rebuilds one array of a trainable tree, element by element and with the length the primal
@@ -590,9 +590,8 @@ const std::vector<oper_group_ptr_t> &optimizerOperatorGroups() {
         OperatorGroup::create(
             "adam",
             {{"nn:adam", std::make_shared<OptimizerResolver>(Kind::Adam)}}),
-        // `save_params` is not here: its signature is declared in `stdlib/nn.cml` (handover H19,
-        // step 10; H165), and the C++ side keeps its kernel (`optimizerKernels`) and its
-        // resource and traits (`NnModule::load`).
+        // `save_params` is not here: its signature is declared in `stdlib/nn.cml`, and C++ keeps
+        // only its kernel (`optimizerKernels`) and its resource and traits (`NnModule::load`).
     };
     return groups;
 }

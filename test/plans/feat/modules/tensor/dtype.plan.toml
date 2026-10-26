@@ -2,13 +2,13 @@ id = "modules.tensor.dtype"
 order = 367
 tier = "fast"
 tags = ["feat", "modules", "tensor", "types"]
-desc = "A tensor's element type is the one the program writes (design/arrays-memory, P4 \"element type exact\"): Tensor<f64> holds f64, Tensor<i32> holds i32 and Tensor<bf16>/Tensor<f16> hold two bytes of their own reduced type end to end — creation, arithmetic, reduction, to_bytes/from_bytes — with no storage dtype a written type is replaced with. A conversion into bf16 or f16 rounds to nearest, ties to even, once; one the program writes needs no numeric permission, because `change_precision` governs a computation the compiler moves to lower precision (design principles 7.2-7.3), and reading it back into a wider type is exact. A kernel that computes in f32 only refuses the other element types at the call, naming the operator, the argument type and the set it takes, instead of narrowing. f32 programs keep their bytes."
+desc = "A tensor's element type is the one the program writes (design/arrays-memory, P4 \"element type exact\"): f64[..] holds f64, i32[..] holds i32 and bf16[..]/f16[..] hold two bytes of their own reduced type end to end — creation, arithmetic, reduction, to_bytes/from_bytes — with no storage dtype a written type is replaced with. A conversion into bf16 or f16 rounds to nearest, ties to even, once; one the program writes needs no numeric permission, because `change_precision` governs a computation the compiler moves to lower precision (design principles 7.2-7.3), and reading it back into a wider type is exact. A kernel that computes in f32 only refuses the other element types at the call, naming the operator, the argument type and the set it takes, instead of narrowing. f32 programs keep their bytes."
 
 # The element type is the one written, through every step of the value's life.
 
 [[tests]]
 name = "f64_exact"
-desc = "`Tensor<f64>` is f64 end to end: the sum of 16777217.0 (16777216.0 in f32), an f64 scalar product, an f64 mean, 8-byte elements in `to_bytes`, and a `from_bytes` round trip. Under f32 normalization the first line printed 16777216 and every element was four bytes."
+desc = "`f64[..]` is f64 end to end: the sum of 16777217.0 (16777216.0 in f32), an f64 scalar product, an f64 mean, 8-byte elements in `to_bytes`, and a `from_bytes` round trip. Under f32 normalization the first line printed 16777216 and every element was four bytes."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/dtype/f64_exact.cml"
 args = ["${case}", "${backend}"]
@@ -21,14 +21,14 @@ timeout_ms = 8000
 
 [[tests]]
 name = "i32_exact"
-desc = "`Tensor<i32>` is i32 end to end: four-byte elements in `to_bytes`, int32 wrapping in arithmetic (`2147483647 * 2` is -2, so the products sum to -4; under int64 normalization they summed to 4294967296), and a `from_bytes` round trip that gives the four bytes back."
+desc = "`i32[..]` is i32 end to end: four-byte elements in `to_bytes`, int32 wrapping in arithmetic (`2147483647 * 2` is -2, so the products sum to -4; under int64 normalization they summed to 4294967296), and a `from_bytes` round trip that gives the four bytes back."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/dtype/i32_exact.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout = "2147483646.0\n16\n[255, 255, 255, 127, 1, 0, 0, 0, 254, 255, 255, 255, 0, 0, 0, 0]\n-4.0\n[254, 255, 255, 255, 2, 0, 0, 0, 252, 255, 255, 255, 0, 0, 0, 0]\n[255, 255, 255, 127, 1, 0, 0, 0]\n"
+expect_stdout = "2147483646\n16\n[255, 255, 255, 127, 1, 0, 0, 0, 254, 255, 255, 255, 0, 0, 0, 0]\n-4\n[254, 255, 255, 255, 2, 0, 0, 0, 252, 255, 255, 255, 0, 0, 0, 0]\n[255, 255, 255, 127, 1, 0, 0, 0]\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -37,7 +37,7 @@ timeout_ms = 8000
 # that is not the derivative.
 [[tests]]
 name = "gather_grad_f64"
-desc = "`sum(w[labels])` on a `Tensor<f64>` (w = [[1, 2, 3], [-4, 5, -6]], labels = [1, 0]) has adjoint 1.0 at every element: each row enters the loss once, so the gradient sums to 6.0 and each row to 3.0. The scalar broadcast that starts the pullback used to fill f32, so the same buffer read as f64 summed to 3 * 2^-7 = 0.0234375 (six f32 1.0s: one row as f32 pairs, one row from the bytes past its end), with no error. The plain sum's gradient is pinned beside it because both start from that broadcast."
+desc = "`sum(w[labels])` on a `f64[..]` (w = [[1, 2, 3], [-4, 5, -6]], labels = [1, 0]) has adjoint 1.0 at every element: each row enters the loss once, so the gradient sums to 6.0 and each row to 3.0. The scalar broadcast that starts the pullback used to fill f32, so the same buffer read as f64 summed to 3 * 2^-7 = 0.0234375 (six f32 1.0s: one row as f32 pairs, one row from the bytes past its end), with no error. The plain sum's gradient is pinned beside it because both start from that broadcast."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/dtype/gather_grad_f64.cml"
 args = ["${case}", "${backend}"]
@@ -55,7 +55,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "bf16_storage"
-desc = "`Tensor<bf16>` and `Tensor<f16>` hold two bytes per element and their own rounding: 0.1 is bf16 0x3DCD ([205, 61]) and f16 0x2E66 ([102, 46]), reading either back into f32 is exact (0x3DCD0000 is [0, 0, 205, 61], not the f32 0.1, which is [205, 204, 204, 61]), a bf16 sum of [1, 2^-8] rounds the exact halfway 1 + 2^-8 to 1 (ties to even), and 3 * 1.0078125 rounds 3.0234375 to 3.03125 (ties to even). A bf16 tensor backed by f32 storage would be 4 bytes and would print the f32 0.1."
+desc = "`bf16[..]` and `f16[..]` hold two bytes per element and their own rounding: 0.1 is bf16 0x3DCD ([205, 61]) and f16 0x2E66 ([102, 46]), reading either back into f32 is exact (0x3DCD0000 is [0, 0, 205, 61], not the f32 0.1, which is [205, 204, 204, 61]), a bf16 sum of [1, 2^-8] rounds the exact halfway 1 + 2^-8 to 1 (ties to even), and 3 * 1.0078125 rounds 3.0234375 to 3.03125 (ties to even). A bf16 tensor backed by f32 storage would be 4 bytes and would print the f32 0.1."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/dtype/bf16_storage.cml"
 args = ["${case}", "${backend}"]
@@ -198,36 +198,13 @@ case = "../../../../cases/modules/tensor/dtype/f32_only.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::OperandTypeUnsupported"
-expect_output_contains = ["'conv2d' does not support a value of type 'Tensor<f64>'", "it takes f32 tensors."]
+expect_output_contains = ["'conv2d' does not support a value of type 'f64[..]'", "it takes f32 tensors."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
-# An element type that is not a tensor element type at all is the type's own refusal, and it says
-# which ones it takes (it used to leave the constructor as an exception).
-[[tests]]
-name = "string_refused"
-desc = "`Tensor<string>` is rejected with InvalidTypeArgument, naming the element types a tensor takes."
-kind = "negative"
-case = "../../../../cases/modules/tensor/dtype/string_refused.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::InvalidTypeArgument"
-# `Tensor` is the numeric array (P4: `Tensor<dtype, shape>` and `dtype[shape]` are one type), so the
-# element type is refused where the array's own arguments are read, and the sentence says so in the
-# type-argument frame the other parameterised types use: the accepted set is still enumerated and the
-# offending type is still named. Measured on the host, verbatim:
-#   .../string_refused.cml:8:15: [Error]: The arguments of the type 'Tensor<...>' are not accepted:
-#   the element type of a Tensor is a numeric scalar (i32, i64, f32, f64, bf16, f16, bool, c64 or
-#   c128), not 'string'.
-expect_output_contains = ["the element type of a Tensor is a numeric scalar (i32, i64, f32, f64, bf16, f16, bool, c64 or c128), not 'string'"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 10000
-
-# f32 keeps working, on every backend: the same values, the same bits.
-
 [[tests]]
 name = "f32_works"
-desc = "`Tensor<f32>` is accepted as a parameter type and as the element type of a literal, and creation, arithmetic, reduction and `to_bytes` give the f32 values and IEEE-754 bytes on every backend."
+desc = "`f32[..]` is accepted as a parameter type and as the element type of a literal, and creation, arithmetic, reduction and `to_bytes` give the f32 values and IEEE-754 bytes on every backend."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/dtype/f32_works.cml"
 args = ["${case}", "${backend}"]
@@ -300,7 +277,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "npy_element_type"
-desc = "`load_npy` reads an f32 `.npy` as `Tensor<f32>` (`load_npy::<f32>`) and the tree's only int64 `.npy` as `Tensor<i64>` (`load_npy::<i64>`), each with the file's extents (3 and 2 elements); a third load writes no type argument at all and takes the element type from the declared type of the position it stands in (`let typed: Tensor<f32> = load_npy(p)`). Before H466 the result had no element type the program could state, and the only spelling was the untyped `load_npy(p)`."
+desc = "`load_npy` reads an f32 `.npy` as `f32[..]` (`load_npy::<f32>`) and the tree's only int64 `.npy` as `i64[..]` (`load_npy::<i64>`), each with the file's extents (3 and 2 elements); a third load writes no type argument at all and takes the element type from the declared type of the position it stands in (`let typed: f32[..] = load_npy(p)`). Before H466 the result had no element type the program could state, and the only spelling was the untyped `load_npy(p)`."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/dtype/npy_element_type.cml"
 args = ["${case}"]
@@ -323,12 +300,12 @@ timeout_ms = 10000
 
 [[tests]]
 name = "npy_no_element_type"
-desc = "`load_npy(p)` with no type argument, standing where no element type is expected, does not resolve: the element type is the one type variable no parameter mentions, so the call is refused (No matching function found, `SemanticDiag::NoMatchingFunction`) and the candidates print the five element types a `.npy` file can hold, each with the type argument it takes (`<tensor:load_npy_f32>: ::<float32>(path: string) => Tensor<float32>`). Before H466 this call compiled and returned a tensor whose element type was whatever the file held (design principles 5.5)."
+desc = "`load_npy(p)` with no type argument, standing where no element type is expected, does not resolve: the element type is the one type variable no parameter mentions, so the call is refused (No matching function found, `SemanticDiag::NoMatchingFunction`) and the candidates print the five element types a `.npy` file can hold, each with the type argument it takes (`<tensor:load_npy_f32>: ::<float32>(path: string) => float32[..]`). Before H466 this call compiled and returned a tensor whose element type was whatever the file held (design principles 5.5)."
 kind = "negative"
 case = "../../../../cases/modules/tensor/dtype/npy_no_element_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "<tensor:load_npy_f32>: ::<float32>(path: string) => Tensor<float32>", "<tensor:load_npy_i64>: ::<int64>(path: string) => Tensor<int64>"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "<tensor:load_npy_f32>: ::<float32>(path: string) => float32[..]", "<tensor:load_npy_i64>: ::<int64>(path: string) => int64[..]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
@@ -367,11 +344,150 @@ timeout_ms = 10000
 # program wrote met as two different values, and nothing was diagnosed.
 [[tests]]
 name = "reduced_scalar_operand"
-desc = "A literal and an f32 value beside a `Tensor<bf16>` or a `Tensor<f16>` are read in the element type: `sum(b * 2.0)` is 20, `sum(b + 2.0)` is 18, `sum(h * 2.0)` is 20, `sum(where(b > 2.0, b, 0.0))` is 7, and a tensor on the right reads by the same rule (`sum(2.0 - b)` is -2). Read through a wider member of the storage, the products were 9.18e-40 and the sums 10."
+desc = "A literal and an f32 value beside a `bf16[..]` or a `f16[..]` are read in the element type: `sum(b * 2.0)` is 20, `sum(b + 2.0)` is 18, `sum(h * 2.0)` is 20, `sum(where(b > 2.0, b, 0.0))` is 7, and a tensor on the right reads by the same rule (`sum(2.0 - b)` is -2). Read through a wider member of the storage, the products were 9.18e-40 and the sums 10."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/dtype/reduced_scalar_operand.cml"
 args = ["${case}"]
 expect_exit = 0
 expect_stdout = "20.0 5.0 18.0 6.0 5.0\n20.0 5.0 18.0 6.0\n20.0 20.0\n7.0 7.0\n20.0 18.0 -2.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "f64_variable_beside_f32_tensor"
+desc = "A value that carries an element type is that type: a float variable beside an f32 tensor is a mixed pair with no arm (design principles 5.1), and the call is refused rather than narrowed into one. Only a literal takes its element type from the context it is written in, which is what keeps `x * 0.5` with an f32 x a single-width call; the same holds for an f64 array whose extents no fact pins down, refused for its element type whatever is known of the shape."
+kind = "negative"
+case = "../../../../cases/modules/tensor/dtype/f64_variable_beside_f32_tensor.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["the scalar operand has type 'float', but the tensor's element type is 'f32'", "no implicit conversion between numeric types"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+[[tests]]
+name = "mixed_width_known_shapes"
+desc = "Two tensor operands of different element types are refused: the element type of each is the one its type carries, so `float[2] * f32[2]` matches no arm rather than being widened into one, and the report names the conversion to write (design principles 5.1)."
+kind = "negative"
+case = "../../../../cases/modules/tensor/dtype/mixed_width_known_shapes.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["Invalid call to '__mul__'", "(float[2], f32[2])", "the two tensor operands have different element types ('float' and 'f32')", "cast(value, \"float\") or cast(value, \"f32\")"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "mixed_width_open_shapes"
+desc = "The same refusal with open shapes: `float[..] * f32[..]` is refused for its element types whether or not the extents are known, since a shape no fact pins down is not a number and not an open element type."
+kind = "negative"
+case = "../../../../cases/modules/tensor/dtype/mixed_width_open_shapes.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["(float[..], f32[..])", "the two tensor operands have different element types ('float' and 'f32')"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "mixed_width_scalar_value"
+desc = "A scalar whose type is its own is refused beside a tensor of another element type, and a conversion is such a value: `f32(2)` beside an f64 array is the mixed call. Only a literal takes its element type from the context it is written in."
+kind = "negative"
+case = "../../../../cases/modules/tensor/dtype/mixed_width_scalar_value.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["the scalar operand has type 'f32', but the tensor's element type is 'float'", "write the conversion, float(value)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "one_width_arithmetic"
+desc = "The positive control of the mixed refusal: `f32 * f32` and `f64 * f64` compute as before, and a literal takes the element type of the context it is written in, so `x * 2.0` beside a tensor of either width needs no conversion."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/dtype/one_width_arithmetic.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout = "17.0\n17.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "mask_bool_times_f32"
+desc = "A mask is a bool array, and a bool is an element type like any other: `mask * x` is a mixed pair with no arm (design principles 5.1) and the call is refused, naming the conversion to write. The rule is the same for every pair of element types; this one is not about the two float widths."
+kind = "negative"
+case = "../../../../cases/modules/tensor/dtype/mask_bool_times_f32.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["the two tensor operands have different element types ('f32' and 'bool')", "no implicit conversion between numeric types"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "mask_written_conversion"
+desc = "The two writings a mask is read with once the conversion is written: `where(mask, x, 0.0)` selects what the mask keeps, and `x * cast(mask, \"f32\")` reads the mask as the number it stands for. Both compute in the tensor's element type - four bytes an element in `to_bytes`, the width the tensor states and not the wider one the pair could have been read at - and both answer the numbers the mask idiom always gave."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/dtype/mask_written_conversion.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout = "4.0\n4.0\n16\n16\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "int_beside_f32_tensor"
+desc = "An integer is an element type like any other on the array side: `i64[..] * f32[..]` states two of them and matches no arm (design principles 5.1), whatever the values would fit, and the report names the conversion to write."
+kind = "negative"
+case = "../../../../cases/modules/tensor/dtype/int_beside_f32_tensor.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["the two tensor operands have different element types ('f32' and 'int')", "no implicit conversion between numeric types"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "int_written_conversion"
+desc = "The integer operand with its conversion written: `x * cast(k, \"f32\")` computes in the tensor's element type and answers the values the program asked for (design principles 5.1)."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/dtype/int_written_conversion.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout = "20.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "compare_mixed_width"
+desc = "A comparison reads its two operands at one element type, the rule of the arithmetic around it (design principles 4.2 and 5.1): `f64[..] === f32[..]` matches no arm, so the elementwise comparison is refused rather than answered at a width the program did not write."
+kind = "negative"
+case = "../../../../cases/modules/tensor/dtype/compare_mixed_width.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["the two tensor operands have different element types ('float' and 'f32')", "no implicit conversion between numeric types"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "matmul_mixed_width"
+desc = "A product is computed in the one element type its two arrays state, so `f64[..] @ f32[..]` is the mixed pair that matches no arm (design principles 5.1), the same answer the arithmetic gives; the shape rule is untouched by it."
+kind = "negative"
+case = "../../../../cases/modules/tensor/dtype/matmul_mixed_width.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["the two tensor operands have different element types ('float' and 'f32')", "no implicit conversion between numeric types"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "linalg_written_conversion"
+desc = "The product and the linear layer with the conversion written: `cast(x, \"f64\") @ w` computes in f64 because that is what the program wrote, and a bias is passed at the tensor's own element type rather than beside it (design principles 5.1). Both answer the numbers the same call answered when the widths were silently widened."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/dtype/linalg_written_conversion.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout = "10.0\n54.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000

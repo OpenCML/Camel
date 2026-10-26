@@ -7,14 +7,14 @@
 // `Tensor` with no argument is the transitional type the deletion step removes (the arrays and
 // memory plan, docs/design/arrays-memory/plan.cn.md): a numeric array
 // whose element type nobody fixed. P4 deletes it, and a signature that still writes it becomes a
-// compile error whose help text says "write `Tensor<T>` and declare `T` at the head, or write the
+// compile error whose help text says "write `T[..]` and declare `T` at the head, or write the
 // concrete element type". This tool reports every occurrence of the bare spelling, sorts each one
 // by the position it stands in, and rewrites the ones a mechanical rule can justify. Everything
 // else it refuses and lists: a migration lane decides those, one file at a time.
 //
-// What the target writing is, measured on the flip line (h465) rather than assumed:
+// What the target writing is, measured rather than assumed:
 //
-//   * `Tensor<T>` with `T` a type variable is REFUSED today -- "the element type of a Tensor is a
+//   * `T[..]` with `T` a type variable is REFUSED today -- "the element type of a Tensor is a
 //     numeric scalar" -- so no rule writes it (stdlib/rules.cml records the same measurement);
 //   * a parameter whose element type is the call site's is written
 //     `func f::<T>(x: T[..]) when is_numeric::<T>()` -- the spelling stdlib/tensor.cml already
@@ -41,7 +41,7 @@
 // caller, and the report names it.
 //
 // The body test is the rule's evidence, not a guess: the deletion step refuses a bare `Tensor` in
-// a type position (src/core/error/diagnostics/messages/semantic.cpp#TensorElementTypeRequired),
+// a type position (src/core/type/composite/array.cpp),
 // so the rewrite's whole job is to write the element type down. Where the element type is the
 // call site's, writing it down is exactly one type parameter declared at the head of the
 // signature -- the spelling the hand migrations use for the same reason. A body that reads the
@@ -57,12 +57,12 @@
 //   --json                 print the report as JSON instead of text
 //   --quiet-sites          text report without the per-site lines
 //   --spelling array|tensor  what `--write` writes: `T[..]` (default, compiles today) or
-//                          `Tensor<T>` (report only: today's compiler refuses that argument)
+//                          `T[..]` (report only: today's compiler refuses that argument)
 //   --root DIR             read under DIR instead of this checkout (the fixture of a test)
 //
 // It never touches a `Tensor` in a comment or in a string (the scanner blanks both before it
 // looks), never the lowercase module name `tensor`, and never an occurrence that is an argument
-// of `Tensor<...>` or of any other type constructor. A second run over a tree the first one wrote
+// of `...[..]` or of any other type constructor. A second run over a tree the first one wrote
 // reports the same tree it wrote -- the rewritten signature no longer holds a bare `Tensor`, and
 // the head it now has stops R1 -- so a diff of two runs is empty.
 //
@@ -858,10 +858,10 @@ function splitArguments(inner) {
 }
 
 /// Whether an argument expression's WRITTEN type is the transitional `Tensor`, which is what
-/// stops a free `T` from binding. Measured on the flip line (test/cases/compile/_h551probe):
-/// `count(m)` with `let m: Tensor = ones([2, 3])` is refused ("cannot be called with argument
-/// types (Tensor)"), while an untyped `let m = ones([2, 3])` binds, an array literal binds, and an
-/// elementwise operator's result binds -- so the annotation, not the producer, is the blocker.
+/// stops a free `T` from binding. Measured: `count(m)` with `let m: Tensor = ones([2, 3])` is
+/// refused ("cannot be called with argument types (Tensor)"), while an untyped
+/// `let m = ones([2, 3])` binds, an array literal binds, and an elementwise operator's result
+/// binds -- so the annotation, not the producer, is the blocker.
 function argumentTypeText(site, expr) {
     const bare = expr.replace(/^\(([\s\S]*)\)$/, '$1').trim()
     if (/^\[[\s\S]*\]$/.test(bare)) return { ok: true, why: 'array literal' }
@@ -1066,7 +1066,7 @@ function editsForFunction(files, record, options) {
     const { func } = record
     const edits = []
     const file = files.find((f) => f.rel === record.file)
-    const spelling = options.spelling === 'tensor' ? 'Tensor<T>' : 'T[..]'
+    const spelling = options.spelling === 'tensor' ? 'T[..]' : 'T[..]'
     for (const s of record.sites) edits.push({ start: s.index, end: s.index + 'Tensor'.length, text: spelling })
     edits.push({ start: func.nameEnd, end: func.nameEnd, text: `::<T>` })
     if (!func.whenSpan) {
@@ -1232,8 +1232,8 @@ function main(argv) {
 
     if (write && spelling === 'tensor') {
         console.error(
-            '--spelling tensor writes `Tensor<T>`, which this compiler refuses today ' +
-                '("the arguments of the type \'Tensor<...>\' are not accepted: the element type of a Tensor is a numeric scalar"). ' +
+            '--spelling tensor writes `T[..]`, which this compiler refuses today ' +
+                '("the arguments of the type \'...[..]\' are not accepted: the element type of a Tensor is a numeric scalar"). ' +
                 'It is a report-only spelling until the deletion step lands; nothing is written.'
         )
         return 2

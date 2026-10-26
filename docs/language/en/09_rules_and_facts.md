@@ -118,13 +118,8 @@ export func apply(p: Program): Program! {
 - When every parameter has a default, the rule's name alone is a `Rule`; whether a binding is written is visible in the declaration.
 - A parameter with no default that is not bound where the rule set is written is a compile error (`SemanticDiag::RuleWithParameterUnbound`): no value in that rule value is there for its condition to read.
 - **Type arguments and `with` arguments go through the same instantiation channel, and the key of an instance is that pair**: the same pair hits the same instance, and different bindings are different instances. This is the same thing as the instantiation of a generic function, and with both written the spelling is the function's too: `name::<T><value>`.
-
-**Not implemented.** These two forms are ruled, and do not compile today:
-
-- **The right side of a rule reading a `with` parameter** (`x + 0 => x + shift`): refused today with `SemanticDiag::RuleWithParameterOnASide`. The ruled target is that **both sides** — `when` and the right side — can read it.
-- **Type parameters and `with` parameters on one rule** (`with <tile: int> rule tiled::<T>(...)`): refused today with `SemanticDiag::RuleWithParameterGenericHead`.
-
-The acceptance form of this rule is `tile_matmul` in [rules language v2, section 1](../../design/rewrite/v2.cn.md): `with <tile: int> rule tile_matmul::<T>(a: T[m, k], b: T[k, n]) when m % tile == 0 { a @ b => tiled_matmul<tile>(a, b) }`. What can be written today is each half of the two layers — the scheduling parameter as a `with` parameter bound by whoever chooses the rule (`add_zero_tiled<1>` above), and the type as a generic head instantiated by the matched type (`rule add_zero::<T>(x: T) when is_integer::<T>() { x + 0 => x }`) — and both keys on one rule are the ruled target form.
+- **Both sides of a rule and its condition read the `with` parameters**: the left side, the right side and the `when` are all functions of them and read them by name -- `{ x + 0 => x + shift }` and `when shift > 0` are the two halves of one rule and the same value is bound to both, so the `shift` of the right side is the one this instance was bound to.
+- The bullet above and this one are one thing: a rule may write `::<T>` and `with <tile: int>` together, the type half comes from the matched type, the scheduling half is bound where the rule is used, and together they are the key of the instance. The acceptance form is `tile_matmul` in [rules language v2, section 1](../../design/rewrite/v2.cn.md): `with <tile: int> rule tile_matmul::<T>(a: T[m, k], b: T[k, n]) when m % tile == 0 { a @ b => tiled_matmul<tile>(a, b) }`.
 
 ## 9.4 A rule set is handed over explicitly
 
@@ -322,7 +317,7 @@ rule reads_constant(x: int, y: int) when capped<y>(x) > 0 { x * y => x }
 error[SemanticDiag::FactArgumentNotConstant]: The argument 'cap' of a fact is not a compile-time constant of type 'int'.
 ```
 
-**Where a `with` parameter is visible, and the instantiation channel.** A `with` parameter is visible to **every** part of the fact: the clauses (`case`, `join`/`meet`/`widen`/`narrow`) read the same arguments as everything else — the functions generated for them declare the same `with` parameters, which is the mechanism a function's `with` parameters use. Facts and rules **share one instantiation channel**: the key of an instance is the type arguments plus the `with` arguments, so a fact head with type parameters (`fact range::<T>(v: T): Interval`) and a fact with `with` parameters on one declaration are the same thing, exactly as the target form of a rule in [9.3](#93-type-parameters-and-with-parameters).
+**Where a `with` parameter is visible, and the instantiation channel.** A `with` parameter is visible to **every** part of the fact: the clauses (`case`, `join`/`meet`/`widen`/`narrow`) read the same arguments as everything else — the functions generated for them declare the same `with` parameters, which is the mechanism a function's `with` parameters use. A query written with other arguments is another fact: the engine computes and caches one fact per argument. Facts and rules **share one instantiation channel**: the key of an instance is the type arguments plus the `with` arguments. A fact head with type parameters (`fact range::<T>(v: T): Interval`) is read by the grammar and not compiled yet ([9.8](#98-forms-that-are-not-implemented)).
 
 ## 9.7 Checking, explaining, and "which rule fired"
 
@@ -394,8 +389,8 @@ camel fired.cml fired::simplify std::gir
             label="distance";
             F04 [label="ARGS", type="ARGS"];
             O04 [label="EXIT", type="EXIT"];
-            N03 [label="a", type="PORT", param_name="a", param_kind="normal", param_index="0", value_type="int"];
-            N04 [label="b", type="PORT", param_name="b", param_kind="normal", param_index="1", value_type="int"];
+            N03 [label="a", type="PORT", param_name="a", param_kind="normal", param_index="0", value_type="int", origin=73, span="14:14-14:20", srcfile="fired.cml"];
+            N04 [label="b", type="PORT", param_name="b", param_kind="normal", param_index="1", value_type="int", origin=75, span="14:22-14:28", srcfile="fired.cml"];
             N05 [label=":op/add_l", type="OPER", origin=4343, span="14:17-14:18", srcfile="fired.cml", value_type="int"];
             F04 -> N03 [label="0", type="NORM_PORT"];
             F04 -> N04 [label="1", type="NORM_PORT"];
@@ -415,8 +410,7 @@ These forms are all ruled ([rules language v2](../../design/rewrite/v2.cn.md), s
 
 | Form | Today |
 |---|---|
-| the right side of a rule reading a `with` parameter | `SemanticDiag::RuleWithParameterOnASide`, whose message says "not implemented yet" |
-| type parameters and `with` parameters on one rule | `SemanticDiag::RuleWithParameterGenericHead` |
+| a fact head with type parameters (`fact range::<T>(v: T): Interval`) | `SemanticDiag::ConstructNotSupported`: the engine is given the functions the fact is made of, and a function with type parameters is not a value it can hold |
 | `std::opt rules=[law::negate]` on the command line, `f->std::opt<rules: [negate]>` in source | `SemanticDiag::ParamArgumentUnknown`; the name `std::opt` does not resolve in source today either |
 
 ## Related documents

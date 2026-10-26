@@ -67,7 +67,7 @@ expect_diagnostic_name = "SemanticDiag::CompOperandNotUnary"
 expect_diagnostic_code = "0x030001E2"
 expect_diagnostic_line = 9
 expect_diagnostic_column = 13
-expect_output_contains = ["'..' composes a unary function on the left; '(a: int, b: int) => int' takes 2 parameters."]
+expect_output_contains = ["'..' composes a unary function on the left; '(a: int, b: int) => int pure' takes 2 parameters."]
 expect_output_not_contains = ["UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -100,13 +100,13 @@ const signature = (name) => {
     assert(graph, `${name} is missing from ${doc.graphs.map((g) => g.name).join(', ')}`)
     return graph.signature
 }
-assert(signature('count') === '(s: int..) => int', `count is ${signature('count')}`)
+assert(signature('count') === '(s: int..) => int pure', `count is ${signature('count')}`)
 assert(
-    signature('shapes') === '(a: int?.., b: int!.., c: int..?, d: int[3].., e: int[..]..) => int',
+    signature('shapes') === '(a: int?.., b: int!.., c: int..?, d: int[3].., e: int[..]..) => int pure',
     `shapes is ${signature('shapes')}`,
 )
-assert(signature('teePair') === '(pair: (int.., int)) => int', `teePair is ${signature('teePair')}`)
-assert(signature('openRank') === '(rows: f32[..]) => int', `openRank is ${signature('openRank')}`)
+assert(signature('teePair') === '(pair: (int.., int)) => int pure', `teePair is ${signature('teePair')}`)
+assert(signature('openRank') === '(rows: f32[..]) => int pure', `openRank is ${signature('openRank')}`)
 const types = [...new Set(doc.graphs.flatMap((g) => g.nodes.map((n) => n.outputType)).filter(Boolean))]
 for (const wanted of ['int..', 'int?..', 'int!..', 'int..?', 'int[3]..', 'int[..]..', 'f32[..]', '(int.., int)']) {
     assert(types.includes(wanted), `${wanted} is not among ${JSON.stringify(types)}`)
@@ -132,10 +132,10 @@ const signature = (name) => {
     assert(graph, `${name} is missing from ${doc.graphs.map((g) => g.name).join(', ')}`)
     return graph.signature
 }
-assert(signature('take') === '(s: int..) => int', `take is ${signature('take')}`)
-assert(signature('give') === '(s: int..) => int', `give is ${signature('give')}`)
+assert(signature('take') === '(s: int..) => int pure', `take is ${signature('take')}`)
+assert(signature('give') === '(s: int..) => int pure', `give is ${signature('give')}`)
 const pick = doc.graphs.filter((g) => g.name.startsWith('pick')).map((g) => g.signature)
-for (const wanted of ['(x: int) => int', '(x: int..) => int', '(x: int[]) => int']) {
+for (const wanted of ['(x: int) => int pure', '(x: int..) => int pure', '(x: int[]) => int pure']) {
     assert(pick.includes(wanted), `${wanted} is not in ${JSON.stringify(pick)}`)
 }
 }
@@ -309,7 +309,7 @@ expect_diagnostic_name = "SemanticDiag::CompOperandMismatch"
 expect_diagnostic_code = "0x030001E1"
 expect_diagnostic_line = 13
 expect_diagnostic_column = 20
-expect_output_contains = ["'..' takes two functions or two integers; the left operand is '(x: int) => int' and the right one 'int'."]
+expect_output_contains = ["'..' takes two functions or two integers; the left operand is '(x: int) => int pure' and the right one 'int'."]
 expect_output_not_contains = ["UnknownInternalError", "Warning", "has no instance here"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -356,29 +356,29 @@ timeout_ms = 20000
 
 [[tests]]
 name = "stream.interval_own_range"
-desc = "The deletion is the built-in, not the identifier: a module's own `range(a, b)` keeps its name and is called as it declares (the tensor module's `range` is the standard case), so the diagnostic cannot misfire on one."
+desc = "The deletion is the built-in, not the identifier: a module's own `range(a, b)` keeps its name and is called as it declares (the tensor module's `range` is the standard case), so the ordinary no-match the built-in's two-argument spelling gets cannot misfire on one."
 kind = "behavior"
 case = "../../../cases/compile/stream/interval_own_range.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
 expect_stdout_starts_with = "[3, 0]\n"
-expect_output_not_contains = ["RangeTwoArgumentsRemoved", "UnknownInternalError", "[Error]"]
+expect_output_not_contains = ["No matching function found", "UnknownInternalError", "[Error]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
 
 [[tests]]
 name = "stream.range_two_arguments"
-desc = "The two-parameter `range(a, b)` is deleted: `a..b` is the one spelling, so the call is refused where it stands, under the name the program wrote, with the interval to write instead."
+desc = "The two-parameter `range(a, b)` is deleted: `a..b` is the one spelling, and the built-in group has one signature -- three parameters -- so the call is refused where it stands, under the name the program wrote, as any other call the overload set has no match for."
 kind = "negative"
 case = "../../../cases/compile/stream/range_two_arguments.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::RangeTwoArgumentsRemoved"
-expect_diagnostic_code = "0x030001E5"
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+expect_diagnostic_code = "0x0300000F"
 expect_diagnostic_line = 7
-expect_diagnostic_column = 14
-expect_output_contains = ["The two-parameter 'range(a, b)' is gone; write the interval 'a..b'."]
+expect_diagnostic_column = 19
+expect_output_contains = ["No matching function found for argument types"]
 expect_output_not_contains = ["UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -480,16 +480,16 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.range_two_arguments_builtin"
-desc = "A named import does not take the built-in out of the language: where the imported `range` has no rule for two arguments, the built-in still answers, and the two-parameter spelling is still the one that is gone (SemanticDiag::RangeTwoArgumentsRemoved), refused under the name the program wrote."
+desc = "A named import does not take the built-in out of the language: where the imported `range` has no rule for two arguments, the built-in still answers, and the two-parameter spelling is still the one that is gone (the ordinary no-match against the group's one signature, three parameters), refused under the name the program wrote."
 kind = "negative"
 case = "../../../cases/compile/stream/range_two_arguments_builtin.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::RangeTwoArgumentsRemoved"
-expect_diagnostic_code = "0x030001E5"
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+expect_diagnostic_code = "0x0300000F"
 expect_diagnostic_line = 8
-expect_diagnostic_column = 13
-expect_output_contains = ["The two-parameter 'range(a, b)' is gone; write the interval 'a..b'."]
+expect_diagnostic_column = 18
+expect_output_contains = ["No matching function found for argument types"]
 expect_output_not_contains = ["UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -588,4 +588,201 @@ expect_diagnostic_name = "SyntaxDiag::MissingComma"
 expect_output_contains = ["Expected ',' or ')' before '!'"]
 expect_output_not_contains = ["UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+
+[[tests]]
+name = "stream.step_value"
+desc = "A stream`s value is its step function with its state: a function value of the step signature `() => (T, T..)?` is a stream where a stream is expected, and a stream is read through that signature, where one pull answers the element with the rest of the stream. The consumer threads the rest it was handed, so the same closure answers the same element twice, and the stream ends with `null`."
+kind = "behavior"
+case = "../../../cases/compile/stream/step_value.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["6"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.step_value_other_signature"
+desc = "The step signature is the only function value that is a stream: a function value of any other signature is refused where a stream is expected, so the seam between a stream and a function value is exactly one signature wide. The lambda writes no resource clause, so its type carries what its body was measured to reach -- it touches nothing, which is `pure` -- and the refusal quotes the type it has."
+kind = "behavior"
+case = "../../../cases/compile/stream/step_value_signature.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["has type '(x: int) => int pure', which is not the declared type 'int..'"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+[[tests]]
+name = "stream.step_value_pull_type"
+desc = "One pull of a stream has the type of the step signature`s exit: the nullable pair of the element and the rest of the stream. The probe reads that type back out of a declared position, so the type a consumer takes apart is a reading rather than a belief."
+kind = "behavior"
+case = "../../../cases/compile/stream/probe_pull_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["has type '(int, int..)?'"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+[[tests]]
+name = "stream.for_loop"
+desc = "`for x in s` over a stream expands into the `while` the graph already has: the rounds are the pulls of the stream`s step function, the element is read out of the pull, the body gives the state of the next round and the round ends by pulling the element that follows. The case walks a hand-written stream through the three shapes (one state, the empty stream, and a head that wrote a condition) and through two states."
+kind = "behavior"
+case = "../../../cases/compile/stream/for_loop.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["6", "0", "3", "3 6"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.for_loop_fvm"
+desc = "The same case through `std::opt::inline std::fvm`: a loop over a stream is an ordinary LOOP node with an ordinary CALL per round, so the bytecode back end runs it unchanged."
+kind = "behavior"
+case = "../../../cases/compile/stream/for_loop.cml"
+args = ["${case}", "std::opt::inline", "std::fvm"]
+expect_exit = 0
+expect_stdout_contains = ["6", "0", "3", "3 6"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.for_loop_jit"
+desc = "The same case through `std::opt::inline std::opt std::jit`: the JIT back end runs the same LOOP node, so the four back ends agree on a loop over a stream."
+kind = "behavior"
+case = "../../../cases/compile/stream/for_loop.cml"
+args = ["${case}", "std::opt::inline", "std::opt", "std::jit"]
+expect_exit = 0
+expect_stdout_contains = ["6", "0", "3", "3 6"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.for_loop_prl"
+desc = "The same case through `std::opt std::prl`: the parallel back end runs the same LOOP node, so the four back ends agree on a loop over a stream."
+kind = "behavior"
+case = "../../../cases/compile/stream/for_loop.cml"
+args = ["${case}", "std::opt", "std::prl"]
+expect_exit = 0
+expect_stdout_contains = ["6", "0", "3", "3 6"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+[[tests]]
+name = "stream.for_loop_gir"
+desc = "The graph `for x in s` over a stream becomes, printed before anything runs: the expansion is a LOOP node of the form the graph already has, so the shape is a reading rather than a belief."
+kind = "behavior"
+case = "../../../cases/compile/stream/for_loop.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+expect_stdout_contains = ["LOOP"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+[[tests]]
+name = "stream.tuple_stream"
+desc = "A tuple may hold a stream: building one and reading the other item out of it is what `tee` and a loop carrying a stream beside its state need, so the form is pinned here."
+kind = "behavior"
+case = "../../../cases/compile/stream/tuple_stream.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["1"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+[[tests]]
+name = "stream.unfold"
+desc = "`stream::unfold(state, step)` -- the standard library`s producer, written in Camel -- gives a stream, and `for x in s` consumes it: the program writes no `yield` at all, so this is the whole producer-and-consumer path on one case. The empty stream is the second reading."
+kind = "behavior"
+case = "../../../cases/compile/stream/unfold.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["6", "0"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.unfold_fvm"
+desc = "The same case through `std::opt::inline std::fvm`: a stream from `unfold` is an ordinary closure and a round an ordinary call, so the bytecode back end runs it unchanged."
+kind = "behavior"
+case = "../../../cases/compile/stream/unfold.cml"
+args = ["${case}", "std::opt::inline", "std::fvm"]
+expect_exit = 0
+expect_stdout_contains = ["6", "0"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.unfold_gir"
+desc = "The graph `stream::unfold` and a `for` over its stream become, printed before anything runs: a closure, a call per round, and a LOOP node of the form the graph already has."
+kind = "behavior"
+case = "../../../cases/compile/stream/unfold.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+expect_stdout_contains = ["LOOP", "CALL"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+[[tests]]
+name = "stream.generic_stream"
+desc = "`T..` in a generic signature: passing an `int..` binds `T` to `int` and the instantiation answers `int..`, so `same(count(3))` is consumed by the same `for`. This is the reading every producer written in the library needs, `unfold` included."
+kind = "behavior"
+case = "../../../cases/compile/stream/generic_stream.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["6"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+[[tests]]
+name = "stream.while_effects"
+desc = "When the condition `c` of `for x in s while c` is asked, and how often: the condition prints the state it is asked with, so the exact output is the reading. The stream and the array read the same -- four asks for three elements, one for an empty one -- because the condition is judged first and the step function is called only where it holds."
+kind = "behavior"
+case = "../../../cases/compile/stream/while_effects.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "stream-drain\nc 0\nc 3\nc 5\nc 6\n6\narray-drain\nc 0\nc 1\nc 3\nc 6\n6\nstream-empty\nc 0\n0\narray-empty\nc 0\n0\ndone\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+[[tests]]
+name = "stream.pull_order"
+desc = "The order of a round is the array`s: `c` is judged first and the step function is called only where it holds. The step prints on every call, so the reading counts calls: a condition that accepts ten rounds reads ten elements and not eleven, and the plain `for` reads one per round plus the call that answers the stream is over."
+kind = "behavior"
+case = "../../../cases/compile/stream/pull_order.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "ten\nread 10\nread 9\nread 8\nread 7\nread 6\nread 5\nread 4\nread 3\nread 2\nread 1\n10\ntwo\nread 3\nread 2\n2\ntotal\nread 3\nread 2\nread 1\nread 0\n6\ndone\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+[[tests]]
+name = "stream.consumed_twice"
+desc = "A stream is read once on each execution path (design principles 5.4). A `for` over `s` is one consumer and a pull of `s` is another, so the pull is refused with the two places named and `tee(s, n)` written out as the way to read one stream from two places."
+kind = "negative"
+case = "../../../cases/compile/stream/consumed_twice.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StreamConsumedTwice"
+expect_diagnostic_code = "0x030001E5"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 29
+expect_output_contains = ["consumed twice", "the stream is consumed here first", "tee(s, n)"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.arms_consume_once"
+desc = "Two arms of one branch each consume the same stream once: only one arm runs on a path, so this is one consumer and compiles (design principles 5.4). Covers both ways a stream is consumed, a pull and a `for`."
+kind = "behavior"
+case = "../../../cases/compile/stream/arms_consume_once.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "3\n3\n3\n3\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000

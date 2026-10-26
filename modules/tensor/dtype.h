@@ -7,8 +7,8 @@
  * A tensor is an array of one scalar element type: f32, f64, bf16, f16, i32, i64 or bool.
  * The element type a program writes is the one the tensor stores (design
  * principles 5.1, "no implicit conversions between numeric types";
- * design/arrays-memory plan 5.2, "element type exact"): `Tensor<f64>` holds
- * f64 and `Tensor<i32>` holds i32. There is no storage dtype that a written
+ * design/arrays-memory plan 5.2, "element type exact"): `f64[..]` holds
+ * f64 and `i32[..]` holds i32. There is no storage dtype that a written
  * type is replaced with.
  *
  * bf16 and f16 are stored as two bytes (camel/core/rtdata/half.h) and are written only by a
@@ -60,18 +60,10 @@ bool isFloatingTensorType(type::TypeCode code);
 /// written by a conversion that rounds, computed in f32.
 bool isReducedFloatTensorType(type::TypeCode code);
 
-/// The element type as a program writes it inside `Tensor<...>`: "f32", "f64", "bf16", "f16",
+/// The element type as a program writes it in the array spelling: "f32", "f64", "bf16", "f16",
 /// "i32", "i64", "bool"; other codes fall back to their source name
 /// (`type::typeCodeToString`).
 std::string elementTypeSpelling(type::TypeCode code);
-
-/// NumPy-style promotion of two tensor element types, exact. Among the scalar types the order
-/// is bool < i32 < i64 < f32 < f64; a bf16 or f16 promotes with f32 and f64 (to the wider one)
-/// and with itself, but not with the other reduced type or an integer: there is no type that
-/// holds every value of both, so the call is refused and the program casts one operand to the
-/// element type the result should have. The result of a promotion that succeeds is one of the
-/// two operand types; neither operand is first replaced by a third.
-type::TypeCode promoteTensorTypes(type::TypeCode lhs, type::TypeCode rhs);
 
 /// Human-readable element type name ("float32", "float64", "bfloat16", "float16", "int32",
 /// "int64", "bool"): the storage name the tensor print and the intern key use.
@@ -126,7 +118,7 @@ template <typename Fn> decltype(auto) dispatchDType(type::TypeCode dtype, Fn &&f
     case type::TypeCode::Float16:
         return fn.template operator()<camel::core::rtdata::Float16>();
     default:
-        throw std::invalid_argument("Unsupported Tensor dtype");
+        throw std::invalid_argument("Unsupported array element type");
     }
 }
 

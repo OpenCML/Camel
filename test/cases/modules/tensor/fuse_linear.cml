@@ -7,7 +7,7 @@
  */
 module fuse_linear
 
-import { Tensor, reshape, relu, sum } from tensor
+import { reshape, relu, sum } from tensor
 
 func main(): int sync {
     let x = reshape([1.0, -2.0, 3.0, 0.5, -1.5, 2.5] as f32[], [2, 3])

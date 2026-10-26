@@ -27,7 +27,7 @@
  * product that is the whole work splits its output rows over the tensor pool
  * (rows only, so every output element's sum stays inside one call), and each
  * chunk's library call is one thread. Its own worker pool is the second pool
- * the tensor pool would compete with (H288, H303).
+ * the tensor pool would compete with.
  *
  * `matmul` follows NumPy semantics: rank-1 operands are promoted to a row or
  * column vector and the promoted dimension is removed from the result; leading

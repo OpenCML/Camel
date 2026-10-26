@@ -3,7 +3,7 @@
 
 /*
  * onnx module wiring: the `export_model` operator group and its executor. `supported_operators`
- * has a fixed signature and is declared in stdlib/onnx.cml (handover H179); the module keeps its
+ * has a fixed signature and is declared in stdlib/onnx.cml; the module keeps its
  * kernel in the executor below.
  */
 

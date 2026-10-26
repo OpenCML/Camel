@@ -8,12 +8,20 @@
 #include "camel/core/rtdata/bytes.h"
 #include "camel/core/type/bytes.h"
 #include "camel/core/type/composite/array.h"
+#include "camel/core/type/pure.h"
 #include "camel/core/type/resolver.h"
 #include "support.h"
+
+#include <iostream>
 
 namespace camel::tensor::ops {
 using namespace core::type;
 namespace {
+/// The result of a call whose element type is an aggregate: the array the call names, `P[..]`.
+/// The element type is the call's own (a type variable that only the result mentions), so the
+/// call writes it and the array is built here rather than computed from a dtype.
+Type *aggregateResultType(Type *requested) { return ArrayType::openRank(requested); }
+
 Type *resultType(TypeCode dtype, const InferContext &ctx) {
     std::optional<StaticShape> shape;
     if (auto values = ctx.constInts(1)) {
@@ -44,6 +52,20 @@ template <TypeCode DType> slot_t fromBytesKernel(ArgsView &, ArgsView &norm, con
     });
 }
 
+/// The same read for an element type that is not one scalar the tensor module stores but a
+/// compact aggregate of pure data: the result's own element type is the one to fill (the call
+/// names it, `from_bytes::<P>(b, [2])`), and its layout says where each field's bytes go.
+slot_t fromBytesAggregateKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    return runKernel("from_bytes", [&] {
+        const auto *arrayType = asArrayType(norm.resultType());
+        ASSERT(arrayType != nullptr, "a sequence read declares the array it gives");
+        const auto shape = shapeArg(norm, 1);
+        Array *result    = plainSequenceFromLittleEndian(
+            norm.get<core::rtdata::BytesObject *>(0)->view(), arrayType, shape, resultAllocator());
+        return wrap(norm.resultType(), result);
+    });
+}
+
 class FromBytesResolver final : public FuncTypeResolver {
   public:
     explicit FromBytesResolver(TypeCode dtype) : dtype_(dtype) {}
@@ -60,6 +82,20 @@ class FromBytesResolver final : public FuncTypeResolver {
         const auto elem = static_cast<ArrayType *>(norm[1])->elemType()->code();
         if (elem != TypeCode::Int64 && elem != TypeCode::Int32)
             return std::nullopt;
+        // An element type that is an aggregate of pure data is not one the tensor module stores,
+        // so the call names it rather than declaring it by dtype (`from_bytes::<P>(b, [2])`). The
+        // aggregate entry is the one that answers for it: the dtype entries keep to their own
+        // element type, so a call has one candidate and not one per entry.
+        if (dtype_ == TypeCode::Void && types.size() == 1) {
+            const DataLayout *layout = pureDataLayout(types[0]);
+            if (layout != nullptr && layout->aggregate) {
+                return FunctionType::create(
+                    {},
+                    {{norm[0], false}, {norm[1], false}},
+                    aggregateResultType(types[0]),
+                    modifiers);
+            }
+        }
         std::optional<TypeCode> requested;
         if (types.size() == 1)
             requested = types[0]->code();
@@ -95,7 +131,12 @@ class FromBytesResolver final : public FuncTypeResolver {
         return std::nullopt;
     }
     std::string signature() const override {
-        return "::<" + std::string(dtypeName(dtype_)) + ">(bytes: Bytes, shape: int[]) => Tensor";
+        // The aggregate arm carries no dtype: its element type is the one the call names, so the
+        // signature says that rather than a letter standing in for it.
+        if (dtype_ == TypeCode::Void) {
+            return "::<T>(bytes: Bytes, shape: int[]) => T[..]";
+        }
+        return "::<" + std::string(dtypeName(dtype_)) + ">(bytes: Bytes, shape: int[]) => " + std::string(dtypeName(dtype_)) + "[..]";
     }
 
   private:
@@ -111,7 +152,7 @@ std::vector<OpDef> binaryOps() {
                 .name      = name,
                 .exports   = {},
                 .params    = {{"bytes", ParamKind::Bytes}, {"shape", ParamKind::IntArray}},
-                .resultDoc = "Tensor",
+                .resultDoc = "float[..]",
                 .infer     = [dtype](const InferContext &ctx) -> std::optional<Type *> {
                     return resultType(dtype, ctx);
                 },
@@ -128,6 +169,18 @@ std::vector<OpDef> binaryOps() {
     // they hold was rounded when it was written (the `cast` that produced it).
     add("from_bytes_bf16", TypeCode::BFloat16, fromBytesKernel<TypeCode::BFloat16>);
     add("from_bytes_f16", TypeCode::Float16, fromBytesKernel<TypeCode::Float16>);
+    // The read of an element type that is a compact aggregate of pure data. Its element type is
+    // the call's own, and a declaration's parameters cannot mention a type variable that only
+    // the result mentions, so the signature is computed rather than declared: the group entry
+    // below is what a call resolves against and the kernel takes the result type it fixed.
+    defs.push_back(
+        OpDef{
+            .name      = "from_bytes_aggregate",
+            .exports   = {},
+            .params    = {{"bytes", ParamKind::Bytes}, {"shape", ParamKind::IntArray}},
+            .resultDoc = "void[..]",
+            .kernel    = &fromBytesAggregateKernel,
+            .traits    = {}});
     return defs;
 }
 
@@ -142,6 +195,10 @@ oper_group_ptr_t fromBytesOperatorGroup() {
             {"tensor:from_bytes_bool", std::make_shared<FromBytesResolver>(TypeCode::Bool)},
             {"tensor:from_bytes_bf16", std::make_shared<FromBytesResolver>(TypeCode::BFloat16)},
             {"tensor:from_bytes_f16", std::make_shared<FromBytesResolver>(TypeCode::Float16)},
+            // The aggregate read comes first: it is the one this resolver answers for an element
+            // type that is a struct or a tuple, and the dtype entries refuse those in any order.
+            {"tensor:from_bytes_aggregate",
+             std::make_shared<FromBytesResolver>(TypeCode::Void)},
         });
 }
 } // namespace camel::tensor::ops

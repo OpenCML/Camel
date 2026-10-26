@@ -1,0 +1,22 @@
+/**
+ * The mask of the usual idiom is a bool array, and a bool is an element type on the array side like
+ * any other: `mask * x` puts a bool array beside an f32 one, which is the mixed pair no arm matches
+ * (design principles 5.1), and the number that comes of a bool is a conversion the program writes -
+ * `where(mask, x, 0.0)`, or `cast(mask, "f32")` where the multiplication itself is what is wanted.
+ * The refusal names the conversion to write, and it is the same answer for every pair of element
+ * types: this one is not about the two widths of a float.
+ */
+module mask_bool_times_f32
+
+import { reshape, multiply, sum } from tensor
+
+func masked(x: f32[4], mask: bool[4]): float {
+    return float(sum(multiply(x, mask)))
+}
+
+func main(): int sync {
+    let x = reshape([1.0, -2.0, 3.0, -4.0] as f32[], [4])
+    let mask = x > 0.0
+    println(masked(x, mask))
+    return 0
+}

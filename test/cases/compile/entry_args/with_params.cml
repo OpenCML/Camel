@@ -6,15 +6,15 @@
  */
 module with_params
 
-import { Tensor, tanh } from tensor
+import { tanh } from tensor
 
-with <w: Tensor<f32, [3, 4]>, b: Tensor<f32, [4]>>
-func layer(x: Tensor<f32>): Tensor<f32> {
+with <w: f32[3, 4], b: f32[4]>
+func layer(x: f32[..]): f32[..] {
     return tanh(x @ w + b)
 }
 
-with <w: Tensor<f32, [3, 4]>, b: Tensor<f32, [4]>>
-func main(x: Tensor<f32, [?, 3]>): int sync {
+with <w: f32[3, 4], b: f32[4]>
+func main(x: f32[?, 3]): int sync {
     println(layer<w, b>(x))
     println(x->layer<w, b>)
     return 0

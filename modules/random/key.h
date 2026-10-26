@@ -6,7 +6,7 @@
  *
  * The bits are the value; the two fields are the high and low halves, both printed and compared
  * as signed int64. The design's opaque `Key` (docs/design/training/README.cn.md 4.1) awaits a
- * nominal type declaration (H5); until then a struct with one canonical field layout is the
+ * nominal type declaration; until then a struct with one canonical field layout is the
  * representation every back end can carry.
  */
 

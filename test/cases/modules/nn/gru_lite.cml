@@ -6,7 +6,7 @@
 module gru_lite
 
 import { grad, with_grad } from autodiff
-import { Tensor, full, ones, shape, sigmoid, sum, tanh, zeros } from tensor
+import { full, ones, shape, sigmoid, sum, tanh, zeros } from tensor
 import { sgd } from nn
 
 type GruLite = {
@@ -35,7 +35,7 @@ func predict(h: f32[..]): f32[..] {
 func mse_loss(pred: f32[..], target: f32[..]): float {
     let diff = pred - target
     let squared = diff * diff
-    return sum(squared) / float(shape(pred)[0])
+    return float(sum(squared)) / float(shape(pred)[0])
 }
 
 with <model: GruLite>

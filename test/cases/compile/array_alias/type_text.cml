@@ -1,10 +1,10 @@
-// The printed form of each spelling: `Tensor<f32>` is `f32[..]` and `Tensor<f32, [2, 3]>` is
-// `f32[2, 3]`. The candidate list of a refused call is where the text is visible.
+// The printed form of an array type is the array spelling: `f32[..]` and `f32[2, 3]`. The
+// candidate list of a refused call is where the text is visible.
 module array_alias_type_text
+import tensor
 
-import { Tensor } from tensor
 
-func takes(a: Tensor<f32>, b: Tensor<f32, [2, 3]>): int {
+func takes(a: f32[..], b: f32[2, 3]): int {
     return 0
 }
 

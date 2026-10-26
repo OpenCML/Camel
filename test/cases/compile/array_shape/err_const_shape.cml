@@ -1,9 +1,8 @@
-// A shape argument is written without `const`; the old spelling is refused and the message
-// gives the new one.
+// A shape is written without `const`: the extents of an array type are expressions, so a `const`
+// in front of one is the retired spelling and the parser refuses the word there.
 module array_shape_err_const
-import { Tensor } from tensor
 
-func bad(x: Tensor<f32, const [3]>): int {
+func bad(x: f32[const 3]): int {
     return 0
 }
 

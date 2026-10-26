@@ -1,0 +1,78 @@
+/**
+ * The width the matmul gradient accumulates in. `loss = sum(x @ w)` with `x: f64[2, 3]` and
+ * `w: f64[3, 1]` makes `d/dw = x^T @ dy` (`tensor:matmul_grad_rhs`) and `d/dx = dy @ w^T`
+ * (`tensor:matmul_grad_lhs`), and those two are the only gradient operators of this lane's list
+ * that *add several products together*: `sum_to` adds over the like-operand's axes, while
+ * `expand_axis`, `gelu_grad` and `erf_grad` are elementwise or a spread. The
+ * arithmetic below is written from the forward expression, so the expectations are not read back
+ * from a kernel.
+ *
+ * The two gradient operators used to declare f32 whatever the value's own width was (the
+ * `gradientLike` inference this lane replaced with `gradientLikeTyped`, gradient_ops.cpp), and an
+ * f64 training step then reached `sum_to` with an f32 gradient and an f64 like-operand, which the
+ * signature refuses -- the ONNX train-step cases lost the rank facts of the node that fed them.
+ * The declaration now follows the value's width, and this case is the numerical pair that pins
+ * what that declaration has to mean: a value of the gradient whose last bit an f32 accumulator
+ * cannot hold.
+ *
+ *   narrow: x = [[1, 2, 3], [4, 5, 6]], w = [[1], [1], [1]]
+ *     y    = x @ w = [[6], [15]], loss = sum(y) = 21
+ *     dy   = [[1], [1]]
+ *     d/dw = x^T @ dy = [5, 7, 9]      (the column sums of x)
+ *     d/dx = dy @ w^T = [[1, 1, 1], [1, 1, 1]]
+ *   wide: x = [[2^24, 1, 0], [1, 0, 0]], w = [[1], [1], [1]]
+ *     d/dw = [2^24 + 1, 1, 0] = [16777217.0, 1.0, 0.0]
+ *
+ * 2^24 + 1 is exactly 16777217.0 in f64 and rounds back to 2^24 under an f32 accumulator: 1 is
+ * below half an ulp of 2^24, so 16777216.0 is what an f32 accumulation of the two rows answers.
+ * The distance to the hand-written [16777217.0, 1.0, 0.0] is therefore 0.0 when the two rows are
+ * added at f64's width and 1.0 when they are added at f32's, and the printed tensor shows which
+ * one ran.
+ *
+ * Red when: the f64 gradient is refused (no line printed, exit 1), the accumulator is f32 (the
+ * third distance is 1.0 and the printed first coordinate is 16777216.0), the gradient of `w` is
+ * not the column sums of x, or the gradient of `x` loses the row of w.
+ */
+module f64_matmul_grad_width
+
+import { abs, reshape, sum } from tensor
+import { with_grad } from autodiff
+
+type M = {
+    x: f64[2, 3],
+    w: f64[3, 1],
+}
+
+with <m: M>
+func loss(): float sync {
+    return float(sum(m.x @ m.w))
+}
+
+func main(): int sync {
+    let m = {
+        x: reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f64[], [2, 3]),
+        w: reshape([1.0, 1.0, 1.0] as f64[], [3, 1]),
+    }
+    let gw = reshape([5.0, 7.0, 9.0] as f64[], [3, 1])
+    let gx = reshape([1.0, 1.0, 1.0, 1.0, 1.0, 1.0] as f64[], [2, 3])
+    let vg = with_grad(loss)<m>()
+    let g = vg.1
+
+    // The wide pair: the two rows of x add to a value f32 cannot hold.
+    let mw = {
+        x: reshape([16777216.0, 1.0, 0.0, 1.0, 0.0, 0.0] as f64[], [2, 3]),
+        w: reshape([1.0, 1.0, 1.0] as f64[], [3, 1]),
+    }
+    let wgw = reshape([16777217.0, 1.0, 0.0] as f64[], [3, 1])
+    let wvg = with_grad(loss)<mw>()
+    let wg = wvg.1.w
+
+    let a_w = sum(gw - gw) + sum(abs(g.w - gw))
+    let a_x = sum(gx - gx) + sum(abs(g.x - gx))
+    let wa = sum(wgw - wgw) + sum(abs(wg - wgw))
+
+    println("f64_matmul_grad_width value={} a_w={} a_x={} wa={}"->format<vg.0, a_w, a_x, wa>)
+    println("gw {}"->format<g.w>)
+    println("wg {}"->format<wg>)
+    return 0
+}

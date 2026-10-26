@@ -4,7 +4,7 @@
 /*
  * Reduction and normalization operators.
  *
- * `sum(t)` / `mean(t)` reduce everything to a Camel float. The axis forms
+ * `sum(t)` / `mean(t)` reduce everything to the operand's element type. The axis forms
  * (`sum(t, axis)`, `sum(t, axis, keepdims)`, ...) share the export name with
  * the full forms and are selected by arity. Softmax-family operators take an
  * optional axis that defaults to the last one.
@@ -12,14 +12,19 @@
  * Where the accumulation happens, per form (reduction and rounding are one rule,
  * design principles 7.3 and ruling reduced-precision.md (d)):
  *
- *   - `sum(t)`, `mean(t)`: accumulate in f64 (kernels/reduce.h `sumAll`) and answer
- *     f64 — the accumulator's own width, so no rounding into a narrow element type.
+ *   - `sum(t)`, `mean(t)`: accumulate exactly as the axis forms do — f64 for a floating
+ *     element type (kernels/reduce.h `sumAll`), the exact int64 accumulator for an int64
+ *     or bool one — and answer the element type, converting once at the end: the same
+ *     element type and the same one rounding as `sum(t, axis, ...)`. A mean of an integer
+ *     or bool tensor is f32, as by axis.
  *   - `sum(t, axis, ...)`, `mean(t, axis, ...)`: keep the element type (bf16, f16 and
  *     f64 keep theirs; a mean of integers or bools is f32) and accumulate in f64,
  *     rounding once when the element is stored (kernels/reduce.cpp).
  *   - `max` / `min` / `argmax` / `argmin` over an axis: no accumulator at all; they
  *     carry element values and IEEE 754-2019 maximum/minimum are exactly
- *     associative and commutative (7.7).
+ *     associative and commutative (7.7). Their rule is not this one: nothing is
+ *     converted, so there is no rounding to do once, and their result is an element
+ *     (max/min, over an axis) or a position (argmax/argmin, int64).
  *
  * `array::sum` in stdlib/array.cml accumulates in f64 and rounds once for the same
  * reason, so the array path and the axis form agree bit for bit.
@@ -92,34 +97,119 @@ template <k::ReduceOp Op> OpDef reduceAxisDef(std::string_view name, std::string
             {{"t", ParamKind::Tensor},
              {"axis", ParamKind::Int},
              {"keepdims", ParamKind::Bool, true}},
-        .resultDoc = "Tensor",
+        .resultDoc = "float[..]",
         .infer     = reduceAxisInfer(Op),
         .kernel    = &reduceAxisKernel<Op>,
         .traits    = {},
     };
 }
 
+/// The element type the whole-tensor `sum` and `mean` answer: the rule of their axis forms
+/// (reduceAxisInfer), so the full form and the axis form agree on the element type the way they
+/// agree on the accumulation. A float element type keeps itself, an int64 or bool sum is int64
+/// (the exact accumulator), and a mean of an integer or bool element type is f32.
+TypeCode wholeReductionDtype(k::ReduceOp op, std::optional<TypeCode> dtype) {
+    if (!dtype) {
+        // The operand states no element type (the bare `Tensor` spelling). Such a value reads as
+        // `float` by the element-type rule (an unstated element type takes the array and literal
+        // rule, f64), so the answer is `float` — the width this reduction answered with while its
+        // result type was `float`, which is what a caller of an unstated element type reads.
+        return TypeCode::Float64;
+    }
+    switch (*dtype) {
+    case TypeCode::Bool:
+        // A bool tensor is summed exactly in int64; a mean of bools has always been f32.
+        return op == k::ReduceOp::Mean ? TypeCode::Float32 : TypeCode::Int64;
+    case TypeCode::Int32:
+    case TypeCode::Int64:
+        // An integer sum keeps its element type and is the exact int64 accumulator truncated into
+        // it, which is what the axis form stores; a mean of integers has always been f32.
+        return op == k::ReduceOp::Mean ? TypeCode::Float32 : *dtype;
+    case TypeCode::Float32:
+    case TypeCode::Float64:
+    case TypeCode::BFloat16:
+    case TypeCode::Float16:
+        // Every float element type keeps itself: a sum rounds into it once, and a mean keeps
+        // f64, bf16 and f16 and answers f32 for f32 (the axis form's rule).
+        return op == k::ReduceOp::Mean && *dtype == TypeCode::Float32 ? TypeCode::Float32 : *dtype;
+    default:
+        // No other element type is one this reduction answers for.
+        return TypeCode::Float64;
+    }
+}
+
+/// The accumulator converted into the result's element type: the one rounding of the
+/// whole-tensor reduction (design principles 7.3), the same rounding the axis form stores with.
+/// A bf16 or f16 result is the f32 the conversion gives brought to that type once.
+slot_t elementTypedSlot(TypeCode result, double value) {
+    switch (result) {
+    case TypeCode::Float32:
+        return camel::core::rtdata::toSlot(static_cast<float>(value));
+    case TypeCode::BFloat16:
+        return camel::core::rtdata::halfFromValue<camel::core::rtdata::BFloat16>(value);
+    case TypeCode::Float16:
+        return camel::core::rtdata::halfFromValue<camel::core::rtdata::Float16>(value);
+    default:
+        return camel::core::rtdata::toSlot(value);
+    }
+}
+
+/// The element type the result slot is written as: the type the node itself carries, which is the
+/// fact the infer and the kernel both read. A node that states no type, or states an array where
+/// the whole-tensor reduction answers one element, is written as the f64 answer this operator
+/// gave while its result type was `float`.
+TypeCode resultElementCode(const Type *result) {
+    if (result == nullptr || result->code() == TypeCode::Array) {
+        return TypeCode::Float64;
+    }
+    return result->code();
+}
+
 slot_t sumAllKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    Array *t              = tensorArg(norm, 0);
+    const TypeCode result = resultElementCode(norm.resultType());
     return runKernel("sum", [&] {
-        return camel::core::rtdata::toSlot(k::sumAll(tensorArg(norm, 0)));
+        // An integer result is the exact int64 accumulator (5.1, 7.7): int64 as it stands, and
+        // int32 truncated into its own element type, where truncating once gives the same bits as
+        // wrapping at every step — what the axis form stores. Every float element type takes the
+        // f64 accumulator converted once.
+        if (result == TypeCode::Int64) {
+            return camel::core::rtdata::toSlot(k::sumAllInt64(t));
+        }
+        if (result == TypeCode::Int32) {
+            return camel::core::rtdata::toSlot(static_cast<int32_t>(k::sumAllInt64(t)));
+        }
+        return elementTypedSlot(result, k::sumAll(t));
     });
 }
 
 slot_t meanAllKernel(ArgsView &, ArgsView &norm, context::Context &) {
     Array *t = tensorArg(norm, 0);
-    // The definition (stdlib/tensor_definitions.cml) is sum(x) / (numel(x) as float): for a
-    // tensor without elements that float division by zero faults, so the kernel raises the same
-    // fault (design principles 7.1: a kernel agrees with its definition, faults included).
-    // Raised outside runKernel, which would turn it into a kernel error.
+    // The definition of `mean` is sum(x) / (numel(x) as float) (stdlib/tensor_definitions.cml),
+    // and the canonical form of the element type T is T(sum(float(x)) / float(numel(x))): the
+    // sum and the division both happen in f64 and the result is rounded into T once, which is
+    // what this kernel computes. For a tensor without elements that float division by zero
+    // faults, so the kernel raises the same fault (design principles 7.1: a kernel agrees with
+    // its definition, faults included). Raised outside runKernel, which would turn it into a
+    // kernel error.
     if (t->numel() == 0) {
         throwRuntimeFault(RuntimeDiag::DivisionByZero);
     }
+    const TypeCode result = resultElementCode(norm.resultType());
     return runKernel("mean", [&] {
-        return camel::core::rtdata::toSlot(k::sumAll(t) / static_cast<double>(t->numel()));
+        // The accumulation and the division are in f64, and the conversion into the element type
+        // is the only rounding of the whole reduction — never a sum rounded to the element type
+        // and then divided again.
+        return elementTypedSlot(result, k::sumAll(t) / static_cast<double>(t->numel()));
     });
 }
 
-std::optional<Type *> scalarFloatInfer(const InferContext &) { return Type::Float64(); }
+/// The whole-tensor form's result type, from the operand's element type.
+InferFn wholeReductionInfer(k::ReduceOp op) {
+    return [op](const InferContext &ctx) -> std::optional<Type *> {
+        return Type::create(wholeReductionDtype(op, ctx.facts(0).dtype));
+    };
+}
 
 int64_t axisOrLast(ArgsView &norm, size_t index) {
     return hasArg(norm, index) ? intArg(norm, index) : -1;
@@ -237,9 +327,19 @@ void meanVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 1, 1);
     if (auto dy = b.gradientOf(call.output)) {
         const vjp_node_t x = call.inputs[0];
+        // dy is a scalar of the mean's element type (design principles 7.3): an f32 mean's
+        // pullback shares the gradient out in f32, not in the f64 the count is written in. The
+        // count is narrowed to dy's width and the division uses that width's operator, so an f32
+        // mean does not divide an f32 gradient by an f64 count as if it were f64.
         const vjp_node_t count =
             addFloatOper(b, ":op/ltod", {b.addOper(Type::Int64(), "tensor:numel", std::array{x})});
-        const vjp_node_t share = addFloatOper(b, ":op/div_d", {*dy, count});
+        const vjp_node_t atWidth = floatGradientAtWidth(b, *dy, count);
+        const type::Type *dyType = b.nodeType(*dy);
+        const bool narrow = dyType != nullptr && dyType->code() == type::TypeCode::Float32;
+        const vjp_node_t share =
+            narrow ? b.addOper(
+                         type::Type::Float32(), ":op/div_f", std::array<vjp_node_t, 2>{*dy, atWidth})
+                   : addFloatOper(b, ":op/div_d", {*dy, atWidth});
         b.accumulateGradient(x, addTensorOperFor(b, x, "tensor:broadcast_like", {share, x}));
     }
 }
@@ -274,15 +374,20 @@ void meanAxisVjp(VjpBuilder &b, const VjpCall &call) {
     }
 }
 
-// max / min over an axis: the gradient goes to the elements equal to the extremum.
+// max / min over an axis: the gradient goes to the elements equal to the extremum. The selection
+// is a bool mask and a mask is not a number (design principles 5.1): the conversion the
+// multiplication needs is written, and `cast_like` puts the mask at the gradient's element type,
+// which is what the rule can name - it serves f32 and f64 models alike.
 void extremumAxisVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 2, 3);
     if (auto dy = b.gradientOf(call.output)) {
+        const vjp_node_t expanded = expandReduced(b, call, *dy);
         const vjp_node_t selected = addTensorOper(
             b, "tensor:strict_eq", {call.inputs[0], expandReduced(b, call, call.output)});
+        const vjp_node_t share =
+            addTensorOperFor(b, expanded, "tensor:cast_like", {selected, expanded});
         b.accumulateGradient(
-            call.inputs[0],
-            addTensorOper(b, "tensor:multiply", {expandReduced(b, call, *dy), selected}));
+            call.inputs[0], addTensorOper(b, "tensor:multiply", {share, expanded}));
     }
 }
 
@@ -345,8 +450,8 @@ std::vector<OpDef> reductionOps() {
         .name      = "sum",
         .exports   = {"sum"},
         .params    = {{"t", ParamKind::Tensor}},
-        .resultDoc = "float",
-        .infer     = scalarFloatInfer,
+        .resultDoc = "the tensor's element type",
+        .infer     = wholeReductionInfer(k::ReduceOp::Sum),
         .kernel    = &sumAllKernel,
         .traits    = {}});
     defs.push_back(reduceAxisDef<k::ReduceOp::Sum>("sum_axis", "sum"));
@@ -354,8 +459,8 @@ std::vector<OpDef> reductionOps() {
         .name      = "mean",
         .exports   = {"mean"},
         .params    = {{"t", ParamKind::Tensor}},
-        .resultDoc = "float",
-        .infer     = scalarFloatInfer,
+        .resultDoc = "the tensor's element type (f32 for an integer or bool one)",
+        .infer     = wholeReductionInfer(k::ReduceOp::Mean),
         .kernel    = &meanAllKernel,
         .traits    = {}});
     defs.push_back(reduceAxisDef<k::ReduceOp::Mean>("mean_axis", "mean"));
@@ -368,7 +473,7 @@ std::vector<OpDef> reductionOps() {
         .name      = "softmax",
         .exports   = {"softmax"},
         .params    = {{"t", ParamKind::Tensor}, {"axis", ParamKind::Int, true}},
-        .resultDoc = "Tensor",
+        .resultDoc = "float[..]",
         .infer     = softmaxInfer,
         .kernel    = &softmaxKernel,
         .traits    = {}});
@@ -376,7 +481,7 @@ std::vector<OpDef> reductionOps() {
         .name      = "log_softmax",
         .exports   = {"log_softmax"},
         .params    = {{"t", ParamKind::Tensor}, {"axis", ParamKind::Int, true}},
-        .resultDoc = "Tensor",
+        .resultDoc = "float[..]",
         .infer     = softmaxInfer,
         .kernel    = &logSoftmaxKernel,
         .traits    = {}});
@@ -385,7 +490,7 @@ std::vector<OpDef> reductionOps() {
         .exports = {"softmax_grad"},
         .params =
             {{"y", ParamKind::Tensor}, {"dy", ParamKind::Tensor}, {"axis", ParamKind::Int, true}},
-        .resultDoc = "Tensor",
+        .resultDoc = "float[..]",
         .infer     = floatLikeFirst,
         .kernel    = &softmaxGradKernel,
         .traits    = {}});
@@ -397,7 +502,7 @@ std::vector<OpDef> reductionOps() {
              {"gamma", ParamKind::Tensor},
              {"beta", ParamKind::Tensor},
              {"eps", ParamKind::Number, true}},
-        .resultDoc = "Tensor",
+        .resultDoc = "float[..]",
         .infer     = layerNormInfer,
         .kernel    = &layerNormKernel,
         .traits    = {}});

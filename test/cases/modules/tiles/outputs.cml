@@ -1,16 +1,16 @@
 module tiles_outputs
-import { Tensor, reshape, sum, abs, transpose, slice } from tensor
+import { reshape, sum, abs, transpose } from tensor
 import { inspect, benchmark, run_preferred_resident, download } from tiles
 
-type Results = { first: Tensor<f32>, rest: (Tensor<f32>, Tensor<f32>) }
-func compute(x: Tensor<f32>): Results {
+type Results = { first: f32[..], rest: (f32[..], f32[..]) }
+func compute(x: f32[..]): Results {
     let y = x + 1.0
     return { first: y, rest: (transpose(y * 2.0), y) }
 }
-func consume(x: Results): Tensor<f32> { return x.first + x.rest.1 }
-func through(x: Tensor<f32>): Tensor<f32> { return consume(compute(x)) }
-func identity(x: Tensor<f32>): (Tensor<f32>, Tensor<f32>) { return (x, x) }
-func with_empty(x: Tensor<f32>): (Tensor<f32>, Tensor<f32>) { return (slice(x, 0, 0, 0), x + 2.0) }
+func consume(x: Results): f32[..] { return x.first + x.rest.1 }
+func through(x: f32[..]): f32[..] { return consume(compute(x)) }
+func identity(x: f32[..]): (f32[..], f32[..]) { return (x, x) }
+func with_empty(x: f32[..]): (f32[..], f32[..]) { return (slice(x, 0, 0, 0), x + 2.0) }
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3])
     let gpu = download(run_preferred_resident<compute>(x))

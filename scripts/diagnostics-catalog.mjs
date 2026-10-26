@@ -111,6 +111,51 @@ function hex8(value) {
     return '0x' + value.toString(16).toUpperCase().padStart(8, '0')
 }
 
+/**
+ * The brace rules of `substitute` in src/core/error/diagnostics/format.cpp, checked here so that
+ * a pattern which would throw while a report is rendered is refused at the registry instead. A
+ * message and a help are both put through it: `{}` and `{N}` are fields, `{{` and `}}` are
+ * literal braces, a field carries no format specifier, and one pattern does not mix the two ways
+ * of indexing. A program that meets a broken pattern would be told about an internal error, and
+ * the position it should carry is lost, so the registry is the place to catch it.
+ */
+function substitutionProblem(pattern) {
+    let automatic = false
+    let explicit = false
+    let i = 0
+    while (i < pattern.length) {
+        const current = pattern[i]
+        if (current === '}') {
+            if (pattern[i + 1] === '}') {
+                i += 2
+                continue
+            }
+            return "has an unmatched '}'"
+        }
+        if (current !== '{') {
+            i += 1
+            continue
+        }
+        if (pattern[i + 1] === '{') {
+            i += 2
+            continue
+        }
+        let cursor = i + 1
+        while (cursor < pattern.length && pattern[cursor] >= '0' && pattern[cursor] <= '9') cursor += 1
+        const digits = pattern.slice(i + 1, cursor)
+        if (cursor >= pattern.length) return "has an unmatched '{'"
+        if (pattern[cursor] === ':') return 'has a format specifier, which a diagnostic message carries none of'
+        if (pattern[cursor] !== '}') {
+            return `has a malformed field beginning '${pattern.slice(i, cursor + 1)}'`
+        }
+        if (digits) explicit = true
+        else automatic = true
+        if (explicit && automatic) return 'mixes {} and {N} fields'
+        i = cursor + 1
+    }
+    return null
+}
+
 function fail(lines) {
     console.log(`diagnostics registry: ${lines.length} problem(s)`)
     for (const line of lines) console.log(`  - ${line}`)
@@ -192,6 +237,20 @@ function readRegistry(root) {
             }
         }
         if (!message) problems.push(`${where}: ${sectionId}:${name} has an empty message`)
+        // A brace that is not a field is a defect here, not when a program is told about its
+        // error: see substitutionProblem.
+        for (const [what, pattern] of [
+            ['message', message],
+            ['help', suggestion],
+        ]) {
+            const problem = substitutionProblem(pattern)
+            if (problem) {
+                problems.push(
+                    `${where}: ${sectionId}:${name} ${what} ${problem}; write '{0}' or '{1}' for a ` +
+                        `field and '{{' or '}}' for a literal brace`
+                )
+            }
+        }
         // What the declaration says about an edit. `edit` promises that a report of this code
         // attaches one where the text is known, and a promise the reader is told in words to
         // carry out needs the words: an edit without help says nothing to a person.

@@ -7,7 +7,7 @@
  */
 module var_tensor_reference
 
-import { Tensor, zeros, sum } from tensor
+import { zeros, sum } from tensor
 
 func step(var w: f32[?, ?], d: f32) {
     w = w + d
@@ -16,7 +16,7 @@ func step(var w: f32[?, ?], d: f32) {
 func twice(var w: f32[?, ?]): float sync {
     step(w, 1.0)
     step(w, 1.0)
-    return sum(w)
+    return float(sum(w))
 }
 
 func main(): int sync {
@@ -27,7 +27,7 @@ func main(): int sync {
     println('{} {}'->format<s, sum(w)>)
     let f = (): float => sync {
         w = w * 2.0
-        return sum(w)
+        return float(sum(w))
     }
     let r = f()
     println('{} {}'->format<r, sum(w)>)

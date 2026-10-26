@@ -368,6 +368,64 @@ ResourceSignature signatureOf(const ResourceSpec &spec, size_t withCount) {
     return sig;
 }
 
+bool covers(const ResourceSignature &target, const ResourceSignature &source) {
+    if (target.mode == ResourceSignature::Mode::Generic) {
+        return true; // a signature that promises nothing asks for nothing
+    }
+    if (source.mode == ResourceSignature::Mode::Generic) {
+        return false; // nothing is known about the source, so it is not proved to fit
+    }
+    // `read-modify-write` at the target allows either mode at the source: the source may read
+    // less than it is allowed to. The other direction is not symmetric, which is why the mode is
+    // compared with this helper rather than for equality.
+    const auto coversMode = [](AccessMode targetMode, AccessMode sourceMode) {
+        return targetMode == AccessMode::ReadModifyWrite || targetMode == sourceMode;
+    };
+    for (const auto &use : source.params) {
+        const bool covered = std::any_of(
+            target.params.begin(), target.params.end(), [&](const auto &t) {
+                return t.index == use.index && t.cls == use.cls && t.name == use.name &&
+                       coversMode(t.mode, use.mode);
+            });
+        const bool any = std::any_of(target.anyOf.begin(), target.anyOf.end(), [&](auto cls) {
+            return cls == use.cls || cls == ResourceClass::Unknown;
+        });
+        if (!covered && !any) {
+            return false;
+        }
+    }
+    for (const auto &use : source.ambient) {
+        const bool covered = std::any_of(
+            target.ambient.begin(), target.ambient.end(), [&](const auto &t) {
+                return t.name == use.name && coversMode(t.mode, use.mode);
+            });
+        if (!covered) {
+            return false;
+        }
+    }
+    for (uint8_t capture : source.captures) {
+        if (std::find(target.captures.begin(), target.captures.end(), capture) ==
+            target.captures.end()) {
+            return false;
+        }
+    }
+    for (ResourceClass cls : source.anyOf) {
+        if (std::find(target.anyOf.begin(), target.anyOf.end(), cls) == target.anyOf.end()) {
+            return false;
+        }
+    }
+    if (source.allocates && !target.allocates) {
+        return false;
+    }
+    if (source.allocates && target.allocates && !(*source.allocates == *target.allocates)) {
+        return false;
+    }
+    if (source.external && !target.external) {
+        return false;
+    }
+    return true;
+}
+
 std::span<const std::string_view> standardResourceNames() {
     // Design principles 3.3: the state the language gives every program, with the names a
     // declaration uses for it. `rng`, `tensor:generator` and the other module resources are

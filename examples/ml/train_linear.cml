@@ -4,7 +4,7 @@
 module train_linear
 
 import { grad } from autodiff
-import { Tensor, reshape, shape, sum } from tensor
+import { reshape, shape, sum } from tensor
 import { sgd } from nn
 
 type Linear = { weight: f32[..] }
@@ -15,7 +15,7 @@ type Linear = { weight: f32[..] }
 with <layer: Linear, y: f32[..]>
 func mse_loss(X: f32[..]): float {
     let errors = X @ layer.weight - y
-    return sum(errors * errors) / float(shape(X)[0])
+    return float(sum(errors * errors)) / float(shape(X)[0])
 }
 
 func train(layer: Linear, X: f32[..], y: f32[..], rate: float, steps: int): Linear {

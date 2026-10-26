@@ -59,7 +59,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 203
+**Semantic — errors** (`SemanticDiag`) — 206
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -134,7 +134,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `LoopStateWithoutType` | The first value of the loop state '{0}' does not give it a type ('{1}'). |
 | `LoopConditionNotBool` | The condition after 'while' has type '{0}'; a condition is a 'bool'. |
 | `LoopNameRepeated` | The name '{0}' is declared twice in this loop head. |
-| `LoopSequenceNotIterable` | 'for' takes the elements of an array, a string, a map or a tensor; '{0}' has type '{1}'. |
+| `LoopSequenceNotIterable` | 'for' takes the elements of an array, a string, a map, a tensor or a stream; '{0}' has type '{1}'. |
 | `DuplicateEnumVariant` | The variant '{0}' is declared twice in enum '{1}'. |
 | `DuplicateEnumField` | The field '{0}' is declared twice in variant '{1}' of enum '{2}'. |
 | `EnumVariantFieldCount` | The variant '{0}' of enum '{1}' takes {2} field(s), but {3} were given. |
@@ -247,7 +247,6 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `CompOperandMismatch` | '..' takes two functions or two integers; the left operand is '{0}' and the right one '{1}'. |
 | `CompOperandNotUnary` | '..' composes a unary function on the left; '{0}' takes {1} parameters. |
 | `CompOperandGenericWithoutType` | '..' composes two functions, and its {0} operand, the generic function '{1}', has no instance here: write its type arguments ('{1}::<int>'), or give the whole expression an expected function type. |
-| `RangeTwoArgumentsRemoved` | The two-parameter 'range(a, b)' is gone; write the interval 'a..b'. |
 | `RangeStepZero` | The range 'range({0}, {1}, 0)' has a step of 0, so it is no sequence of integers. |
 | `SliceStepZero` | The slice 't[a:b:s]' has a step of 0, so it takes no element at all, whatever its bounds are. |
 | `ReducedPrecisionUnsupported` | The call of '{0}' cannot take a value of the reduced-precision element type '{1}'. |
@@ -257,13 +256,17 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ImplSignatureMismatch` | The kernel '{0}' of the '#impl' function '{1}' has the signature {2}, but the function has {3}. |
 | `ImplKernelNotBodyless` | The '#impl' tag of '{0}' names '{1}', which has a body. |
 | `StreamInContainer` | '{0}' cannot be the element of {1}: a stream is consumed once, while the elements of a container are read more than once. |
+| `StreamConsumedTwice` | '{0}' is consumed twice: a stream is read once on each execution path. |
 | `NodeOfNotAParameter` | '{0}' is not a const parameter of the rule '{1}', so node_of({0}) names no node. |
-| `TensorElementTypeRequired` | The type '{0}' states no element type: a tensor's element type is part of its type, so this spelling is not a type of a value. |
 | `BranchElementTypeMismatch` | The two arms of the branch have different element types: '{0}' and '{1}'. An array's element type is part of its type, and a number of one element type does not become a number of another by itself. |
 | `RuleConstParamNotMatched` | '{0}' is a `const` parameter of the rule '{1}', and the left side matches no constant for it. |
 | `RuleWithParameterUnbound` | '{0}' is a `with` parameter of the rule '{1}', it has no default, and the rule value here binds nothing for it. |
 | `RuleWithArgumentNotConstant` | The value bound to the `with` parameter '{0}' of the rule '{1}' is not a compile-time constant of the type '{2}'. |
 | `UsesPromiseViolated` | '{0}' does not keep its resource promise: {1}. |
+| `TypeAliasRecursionUnrepresented` | The type '{0}' mentions itself through a collection: recursion through an array, a map, a set or an enum is admitted by the language, and this compiler does not have that representation. |
+| `EnumWrittenWhereATypeIsExpected` | An enum is declared in a type declaration ('type Shape = enum ...') and its type is the name that declaration gives it: the variants are written there and nowhere else. |
+| `StructComprehensionWithoutFields` | A struct comprehension takes its field names from 'fields T', and 'indices' walks positions, which have no names: write a tuple comprehension '( static for ... in indices ... )', or walk 'fields T'. |
+| `IdentifierPatternNeedsNullableOrErrorType` | The pattern '{0}' takes a value of type 'T?' or 'T!' apart, and this value has type '{1}': write '??' or '!!', or a 'match' pattern that is a literal or '_'. |
 
 **Semantic — warnings** (`SemanticDiag`) — 12
 
@@ -286,7 +289,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `DivisionByZero` | Attempted division by zero. |
 | `IndexOutOfRange` | Index {0} is out of range for {1} of length {2}. |
 | `MaxRecursionDepthExceeded` | Maximum recursion depth ({1}) exceeded when evaluating graph '{0}'. |
-| `TensorDimensionMismatch` | Tensor shape mismatch in '{0}': {1}. |
+| `TensorDimensionMismatch` | Array shape mismatch in '{0}': {1}. |
 | `UnrecognizedGraphPass` | Unrecognized graph rewriting/scheduling/translation pass '{0}'. |
 | `TranslationRefused` | Translation pass '{0}' refused the graph: {1}. |
 | `PassInternalError` | Pass '{0}' failed with an internal error: {1}. |

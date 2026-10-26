@@ -45,7 +45,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "unknown_extent_checked"
-desc = "An argument whose extent the compiler does not know (`Tensor<... const [-1]>`) is accepted; the extent another argument binds is checked where the call runs."
+desc = "An argument whose extent the compiler does not know (`f32[?]`) is accepted; the extent another argument binds is checked where the call runs."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/named_dims/unknown_extent_checked.cml"
 args = ["${case}", "${backend}"]
@@ -133,7 +133,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DimensionNameNotBound"
 expect_diagnostic_line = 4
-expect_diagnostic_column = 48
+expect_diagnostic_column = 35
 expect_output_contains = ["The dimension name 'n' is not bound by any parameter of this signature."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000

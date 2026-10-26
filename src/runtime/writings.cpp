@@ -62,8 +62,8 @@ class EngineRootScope {
 };
 
 /// The type a replacement writing gets. A pattern's type is what the rule was written with, and it
-/// can be less informed than the node the rule replaces: a law for `Tensor<f32>` replaces a
-/// `Tensor<f32, [3]>` node. When the pattern accepts the node's own type, the writing keeps it, so
+/// can be less informed than the node the rule replaces: a law for `f32[..]` replaces a
+/// `f32[3]` node. When the pattern accepts the node's own type, the writing keeps it, so
 /// a rewritten value has the type of the place it is written to (and a saturation, which merges
 /// writings by type, can merge them).
 camel::core::type::Type *writingType(
@@ -471,7 +471,8 @@ bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node) {
         return true;
     case GCNodeKind::Gate:
         // Either kind of wait is what makes a gate more than plain forwarding: the sync edge is
-        // what the chain of a `sync` block writes (docs/design/effects/edges.cn.md 5.3).
+        // what the chain of a `sync` block writes (docs/design/effects/edges.cn.md 5.3), and the
+        // control input is the other kind of wait such a gate was written with.
         return !draft.ctrlInputsOf(node).empty() || !draft.syncInputsOf(node).empty();
     case GCNodeKind::Oper: {
         const std::span<const std::byte> payload = draft.payloadOf(node);
@@ -1400,8 +1401,8 @@ gc_node_ref_t DraftWritings::constantNode(
 }
 
 /// Whether a pattern term of `patternType` may match a node of `nodeType`: the type the pattern
-/// was written for must accept the node's (a `Tensor<f32>` pattern reads a `Tensor<f32, [3]>`,
-/// a pattern for `Tensor<f32>` never reads a `Tensor<int>`). The scalar operators have one id per
+/// was written for must accept the node's (a `f32[..]` pattern reads a `f32[3]`,
+/// a pattern for `f32[..]` never reads a `int[..]`). The scalar operators have one id per
 /// element type, so their id already says this; the tensor operators share one id for every
 /// element type, and without the check a tensor law would rewrite another dtype's arithmetic
 /// with an f32 rounding argument (rewrite design 2.2).
@@ -2057,9 +2058,10 @@ RewriteStats DraftWritings::rewrite(
                 std::vector<gc_node_ref_t> matchedWaits(
                     draft_.ctrlInputsOf(node).begin(), draft_.ctrlInputsOf(node).end());
                 // A statement of a `sync` block is ordered by the statement written before it, and
-                // that edge is a sync edge (docs/design/effects/edges.cn.md 1.5) -- the
-                // control edge is the kind it was written as until the chain moved onto it. Both
-                // are "everything the match read that ordered it" (below): a law over data inputs
+                // that edge is a sync edge (docs/design/effects/edges.cn.md 1.5); a control input
+                // is the other kind of wait such a statement carries, and one taken from the node
+                // already sits in `matchedWaits`. Both are "everything the match read that ordered
+                // it" (below): a law over data inputs
                 // is sound whatever the node is ordered after, and the writing that replaces it
                 // must not be moved across an effect, whichever kind of wait named that effect.
                 for (gc_node_ref_t wait : draft_.syncInputsOf(node)) {

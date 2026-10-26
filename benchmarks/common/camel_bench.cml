@@ -13,7 +13,7 @@
  */
 module camel_bench
 
-import { Tensor, load_npy, save_npy, set_num_threads } from tensor
+import { load_npy, save_npy, set_num_threads } from tensor
 import { get_env } from env
 import { export_model } from onnx
 import { now } from time

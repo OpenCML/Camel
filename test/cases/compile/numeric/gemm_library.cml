@@ -12,7 +12,7 @@
  */
 module gemm_library
 
-import { Tensor, abs, max, randn, seed, sum } from tensor
+import { abs, max, randn, seed, sum } from tensor
 import { is_numeric } from types
 
 #strict
@@ -25,7 +25,7 @@ func fast::<T>(a: T[..], b: T[..]): T[..] when is_numeric::<T>() {
 }
 
 func max_abs(t: f32[..]): float {
-    return sum(max(max(abs(t), 0), 0))
+    return float(sum(max(max(abs(t), 0), 0)))
 }
 
 func main(): int sync {

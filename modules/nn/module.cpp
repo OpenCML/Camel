@@ -20,7 +20,7 @@ using namespace camel::core::module;
 
 namespace {
 
-/// The operators whose signatures `stdlib/nn.cml` declares (handover H19, step 10; H165). The
+/// The operators whose signatures `stdlib/nn.cml` declares. The
 /// C++ side keeps their kernels, executors, traits, resources and semantics; the declaration is
 /// the module's signature, so their groups are not exported here. `save_params` comes from the
 /// optimizer groups rather than the tensor registry, but it stays on this list: the registry

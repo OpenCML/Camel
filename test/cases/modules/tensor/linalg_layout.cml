@@ -13,10 +13,10 @@ func main(): int sync {
     let b = ones([4, 5])
     let c = a @ b
     let w = ones([4, 2])
-    let bias = reshape([0.5, -0.5], [2])
+    let bias = cast(reshape([0.5, -0.5], [2]), 'f32')
     let y = linear(a, w, bias)
     'linalg matmul_shape={} matmul_sum={} linear_shape={} linear_sum={}'->format<shape(c), sum(c), shape(y), sum(y)>->println
-    let v = matmul(ones([3, 4]), reshape([1.0, 2.0, 3.0, 4.0], [4]))
+    let v = matmul(ones([3, 4]), cast(reshape([1.0, 2.0, 3.0, 4.0], [4]), 'f32'))
     'linalg matvec_shape={} matvec_sum={}'->format<shape(v), sum(v)>->println
     let n = layer_norm(a, ones([4]), zeros([4]))
     'linalg layernorm_sum={}'->format<sum(n)>->println

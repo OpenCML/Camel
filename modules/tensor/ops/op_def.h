@@ -131,7 +131,7 @@ struct OpDef {
     std::string_view name;                 // URI suffix, e.g. "matmul" -> "tensor:matmul"
     std::vector<std::string_view> exports; // module-level names (overloads share a name)
     std::vector<ParamSpec> params;
-    std::string_view resultDoc; // result text for signatures, e.g. "Tensor"
+    std::string_view resultDoc; // result text for signatures, e.g. "float[..]"
     InferFn infer;
     operator_t kernel;
     OpTraits traits;

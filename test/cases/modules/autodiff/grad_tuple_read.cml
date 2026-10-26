@@ -8,7 +8,7 @@
  *   pair: 3.0 2.0
  */
 module grad_tuple_read
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { with_grad } from autodiff
 
 type P = { p0: f64[] }
@@ -17,7 +17,7 @@ with <m: P>
 func loss(x: f64[], var acc: f64[]): float sync {
     let a = acc * 1.0
     acc = a * 0.5 + x
-    return sum(m.p0 * x) + sum(a)
+    return float(sum(m.p0 * x)) + float(sum(a))
 }
 
 func pair(x: float, y: float): (float, float) {

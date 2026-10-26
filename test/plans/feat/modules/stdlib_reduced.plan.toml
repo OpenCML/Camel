@@ -54,7 +54,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "reduced_reduction_bytes"
-desc = "A `sum` over a Tensor<bf16> of shape [2, 3] along axis 1 gives two elements in four bytes: row [2^24, 1, -2^24] answers bf16 1.0 (0x3F80, bytes [128, 63]) because the accumulator is wider than f32 (an f32 accumulator answers 0), and row [3, 2^-7, 0] rounds the halfway 3.0078125 once, with ties to even, to bf16 3.0 (0x4040, bytes [64, 64])."
+desc = "A `sum` over a bf16[..] of shape [2, 3] along axis 1 gives two elements in four bytes: row [2^24, 1, -2^24] answers bf16 1.0 (0x3F80, bytes [128, 63]) because the accumulator is wider than f32 (an f32 accumulator answers 0), and row [3, 2^-7, 0] rounds the halfway 3.0078125 once, with ties to even, to bf16 3.0 (0x4040, bytes [64, 64])."
 kind = "behavior"
 case = "../../../cases/modules/stdlib/reduced_reduction_bytes.cml"
 args = ["${case}", "${backend}"]

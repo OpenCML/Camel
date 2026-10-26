@@ -6,7 +6,7 @@ tags = ["feat", "modules", "tensor", "types"]
 
 [[tests]]
 name = "body_mismatch"
-desc = "A shape written on a tensor parameter is part of its type (it used to be dropped): adding a [4] tensor to a parameter declared `Tensor<[3]>` is a compile-time error at the operator, and the program does not run."
+desc = "A shape written on a tensor parameter is part of its type (it used to be dropped): adding a [4] tensor to a parameter declared `f32[3]` is a compile-time error at the operator, and the program does not run."
 kind = "negative"
 case = "../../../../cases/modules/tensor/shape_types/body_mismatch.cml"
 args = ["${case}"]
@@ -18,7 +18,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "call_mismatch"
-desc = "Passing a [4] tensor to a parameter declared `Tensor<[3]>` is a compile-time error at the call."
+desc = "Passing a [4] tensor to a parameter declared `f32[3]` is a compile-time error at the call."
 kind = "negative"
 case = "../../../../cases/modules/tensor/shape_types/call_mismatch.cml"
 args = ["${case}"]
@@ -29,7 +29,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "rank_mismatch"
-desc = "Passing a [3, 1] tensor to a parameter declared `Tensor<[3]>` is a compile-time error at the call."
+desc = "Passing a [3, 1] tensor to a parameter declared `f32[3]` is a compile-time error at the call."
 kind = "negative"
 case = "../../../../cases/modules/tensor/shape_types/rank_mismatch.cml"
 args = ["${case}"]
@@ -71,18 +71,6 @@ envs = ["X=test/cases/modules/tensor/shape_types/x3.npy"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentNeedsConversion"
 expect_output_contains = ["argument 1 ('t', for parameter 'b') has type 'f32[..]', which is less exact than 'f32[3]'", "'t as f32[3]'"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 10000
-
-[[tests]]
-name = "bad_argument"
-desc = "A constant argument that is not a shape is rejected by the Tensor type with a diagnostic at the type; it is not ignored."
-kind = "negative"
-case = "../../../../cases/modules/tensor/shape_types/bad_argument.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::InvalidTypeArgument"
-expect_output_contains = ["the constant argument of a Tensor type is its shape"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 

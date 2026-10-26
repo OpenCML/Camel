@@ -8,21 +8,21 @@
  * (grad_function_values_reference.py, suite "arms").
  */
 module grad_function_values_arms
-import { Tensor, reshape, sum, tanh } from tensor
+import { reshape, sum, tanh } from tensor
 import { grad } from autodiff
 
 with <p: f32[..]>
 func loss1(): float {
-    let s = sum(p)
+    let s = float(sum(p))
     let g = (t: f32[..]): f32[..] => tanh(t * f32(s))
-    return if s > 0.0 then sum(g(p)) else sum(g(p * 2.0)) * 0.5
+    return if s > 0.0 then float(sum(g(p))) else float(sum(g(p * 2.0))) * 0.5
 }
 
 with <p: f32[..]>
 func loss2(): float {
-    let s = sum(p)
+    let s = float(sum(p))
     let g = (t: f32[..]): f32[..] => tanh(t * f32(s))
-    return if s < 0.0 then sum(g(p)) else sum(g(p * 2.0)) * 0.5
+    return if s < 0.0 then float(sum(g(p))) else float(sum(g(p * 2.0))) * 0.5
 }
 
 func main(): int sync {

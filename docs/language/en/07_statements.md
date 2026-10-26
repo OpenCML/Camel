@@ -93,6 +93,15 @@ error InvalidAge: age is negative
 - A fault happens at the pull that produces that element (a fault is not a value), and elements already handed out are unaffected.
 - The syntax reads it (`yield` is a keyword and `retStmt` reads it, see [8.2](08_top_level_and_grammar.md)); **the generator state machine is not built yet** ([`../../design/io-concurrency-streams/plan.cn.md`](../../design/io-concurrency-streams/plan.cn.md), slice E): compiling a function body that writes `yield` reports `SemanticDiag::FeatureNotSupported` with `'generators'` in the message -- it does not run the `yield` as a `return`.
 
+#### 7.3.2 The value of a stream, and one pull
+
+- The value of a stream **is its step function together with its state**: a value of `T..` is a zero-argument function value of the signature `() => (T, T..)?` -- calling it answers the next element together with **the rest of the stream**, and `null` when the stream is over. The state lives in what the function value captured, so a stream needs no runtime representation of its own and is an ordinary function value: it writes in a signature, is passed and returned (design principles 5.4).
+- The other reading holds too: **exactly that** signature makes a function value a `T..` (`let s: int.. = step(3)`), any other signature does not, and a `T..` is not converted from anything else. `T..` and its step signature are two writings of one runtime value, and the conversion moves nothing.
+- Consuming is a pull through that signature: `s()` pulls one element. A stream is a value and is pure, so pulling the same stream value twice answers the same element, and **the consumer holds the rest it was handed and passes it on** -- an empty stream is one that answers `null` at once (see [7.3.1](#731-yield)).
+- `s()` takes no arguments: the step signature has none, and `s(1)` is an ordinary mismatch report.
+- On each execution path a stream value has **one consumer at most**: a `s()` and a `for x in s` are both consumption, reading one value twice is a compile error, and the diagnostic names **both places** and writes out the primitive `tee(s, n)` (which is not in the standard library yet); two arms of one branch that each consume once **count as one**, because one path takes one of them (design principles 5.4).
+- A stream writes directly in a `for`: every round of `for x in s` is one pull, expanded on the graph into the `while` that already exists (no new node kind, no new driver, no new loop form; a back end sees the LOOP node it always saw). The state of the head is the state of the loop, and `x` is the element of this round's pull. Every round **judges its condition first and takes its element afterwards**, the order an array takes: `for x in s while c` asks `c` first and calls the step function only where `c` holds, and a pull that answers `null` ends the loop -- so `for line in read_lines(f) while n < 10` does not read line 11. An impure call in the condition without `sync` is not executed and is warned about, exactly as in a statement. An empty stream asks `c` once, pulls nothing and runs no round, and its value is the initial state (see [7.3.1](#731-yield)).
+
 ## 7.4 Functions
 
 ### 7.4.1 Declaration
@@ -669,7 +678,7 @@ id
 - Arguments can only be types, and their number must equal the number of parameters; using it without arguments is an error.
 - The right-hand side can only refer to types already declared, so a type function cannot refer to itself.
 - It can be `export`ed, and is used in another module as `module::Pair<int>`.
-- The angle brackets of a module type are interpreted by the type itself, and the arguments can be types or `const data`; the angle brackets of `Tensor<f32, [2, 3]>`, another spelling of a numeric array, are interpreted by the array type itself (a shape argument is written without `const`: `Tensor<f32, const [2, 3]>` is `SemanticDiag::InvalidTypeArgument`).
+- The angle brackets of a module type are interpreted by the type itself, and the arguments can be types or `const data`; the angle brackets of `f32[2, 3]`, another spelling of a numeric array, are interpreted by the array type itself (a shape argument is written without `const`: `f32[2, 3]` is `SemanticDiag::InvalidTypeArgument`).
 
 A type expression has no type operations: `A & B`, `A \ B`, `A + B` and `A ^ B` are ordinary syntax errors (`&`, `\`, `+`, `-`, `^` mean nothing in a type position; they are the operators of an expression, so `x as T + U` is `(x as T) + U`). `keyof` and `of` are not keywords: the ones in `keyof T` and `name of T` are ordinary names, and writing them is a syntax error. `typeof e` is a whole type, the type of the value of `e`, expanded by the compiler where the type is used. It cannot be nested inside a larger type (`typeof(1)[]` is `SemanticDiag::TypeOfNotWholeType`), and an operand with no value (`void`) is `SemanticDiag::TypeOfNotAValue`.
 

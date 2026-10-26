@@ -56,7 +56,7 @@ export func eye(n: int): f32[..]
 /// @pure
 /// @fails fault `RuntimeError` when stop and start leave a step of 0
 /// @example range(0, 10, 2)    // [0, 2, 4, 6, 8]
-export func range(start: int, stop?: int, step?: int): Tensor<int64>
+export func range(start: int, stop?: int, step?: int): int64[..]
 
 // ---- random ----
 
@@ -218,11 +218,6 @@ export func permute(t: float[..], perm: int[]): float[..]
 /// @example concat(new([[1.0]]), new([[2.0]]), 0)    // shape [2, 1]
 export func concat(a: float[..] | number[], b: float[..] | number[], axis: int): float[..]
 
-/// The elements start, start + step, ... of one axis before end; step is 1 by default.
-/// @pure
-/// @example slice(new([1.0, 2.0, 3.0, 4.0]), 0, 1, 3)    // [2.0, 3.0]
-export func slice(t: float[..], axis: int, start: int, end: int, step?: int): float[..]
-
 /// The entries of the first axis that indices name, in that order.
 /// @pure
 /// @fails fault `RuntimeError` when an index is outside the first axis
@@ -238,11 +233,18 @@ export func one_hot(labels: int64[..] | number[], classes: int): int64[..]
 
 // ---- reduction ----
 
-/// Every element converted to `f64` and summed in row-major order from +0; `int64` and `bool`
-/// elements are summed exactly in `int64` and converted once.
+/// The sum of every element, in the operand's element type: the canonical form of the element
+/// type `T` is `sum::<T>(x: T[..]): T = T(sum(float(x)))`, so the elements are widened into an
+/// `f64` accumulator (`float(x)`), the additions happen in `f64` in row-major order from +0, and
+/// their sum is rounded into `T` once, at the end — the same element type and the same one
+/// rounding as the axis form below, so the full form and the axis form agree bit for bit
+/// (design principles 7.3). An `int64`, `int32` or `bool` tensor has no float accumulator: it is
+/// summed exactly in `int64`, wrapping on overflow as integer arithmetic does (design principles
+/// 5.1, 7.7), and that exact value is the answer — `int64` as it stands, `int32` truncated into
+/// its element type, `bool` as `int64`.
 /// @pure
 /// @example sum(new([[1.0, 2.0], [3.0, 4.0]]))    // 10.0
-export func sum(t: float[..]): float
+export func sum::<T>(t: T[..]): T
 
 /// The same sum over one axis, in an `f64` accumulator; keepdims keeps the axis with extent 1.
 /// @pure
@@ -251,11 +253,16 @@ export func sum(t: float[..]): float
 #op('tensor:sum_axis')
 export func sum(t: float[..], axis: int, keepdims?: bool): float[..]
 
-/// The sum of `sum` divided by the element count in `f64`; an empty tensor is a fault.
+/// The mean of every element, in the operand's element type, with one rounding: the canonical
+/// form of the element type `T` is `mean::<T>(x: T[..]): T = T(sum(float(x)) / float(numel(x)))`.
+/// The sum and the division by the element count both happen in `f64`, and their result is
+/// rounded into `T` once — never a sum rounded to the element type and divided again, which
+/// would round twice. A mean of an integer or bool tensor is `f32`, as by axis; an empty tensor
+/// is a fault.
 /// @pure
 /// @fails fault `DivisionByZero` when the tensor has no element
 /// @example mean(new([[1.0, 2.0], [3.0, 4.0]]))    // 2.5
-export func mean(t: float[..]): float
+export func mean::<T>(t: T[..]): T
 
 /// The same mean over one axis; keepdims keeps the axis with extent 1.
 /// @pure
@@ -380,7 +387,7 @@ export func cast(t: float[..] | number[], dtype: string): int64[..]
 /// 5.5). `T` is `f32`, `f64`, `i32`, `i64` or `bool`, the element types the format's storage types
 /// (`'<f4'`, `'<f8'`, `'<i4'`, `'<i8'`, `'|b1'`) map to, exactly the type given. It is written at
 /// the call (`load_npy::<f32>(p)`) or taken from the type of the position the call stands in
-/// (`Tensor<f32, [3]>`, `f32[..]`); `T` is the one type variable no parameter mentions, so a call
+/// (`f32[3]`, `f32[..]`); `T` is the one type variable no parameter mentions, so a call
 /// that says neither is not a use of this operator.
 /// @effect reads a file
 /// @fails fault `RuntimeError` when the file is missing, is not a NumPy file, holds a storage type the module does not read, or holds another element type than `T`
@@ -390,13 +397,17 @@ export func load_npy::<T>(path: string): T[..]
 
 // ---- binary form ----
 
-/// A tensor of the given shape made of little-endian elements. The element type is the explicit
-/// type argument (`from_bytes::<f32>(b, [2])`) or comes from the expected type of the result; it
-/// is `f32`, `f64`, `bf16`, `f16`, `i32`, `i64` or `bool`, exactly the type given. A byte count
-/// that does not fit the shape is a fault. The bits are copied: reading `bf16` or `f16` here
-/// passes the stored values through without rounding, so it needs no numeric permission.
+/// An array of the given shape made of little-endian elements: the payload `to_bytes` wrote. The
+/// element type is the explicit type argument (`from_bytes::<f32>(b, [2])`) or comes from the
+/// expected type of the result; it is `f32`, `f64`, `bf16`, `f16`, `i32`, `i64` or `bool`, exactly
+/// the type given, or a struct or tuple whose fields are all pure data, which takes its element
+/// type from the call (`from_bytes::<P>(b, [2])`) -- a declaration's parameters cannot mention a
+/// type variable that only the result mentions. The element's bytes are its layout's, written as
+/// `to_bytes` wrote them. A byte count that does not fit the shape is a fault. The bits are
+/// copied: reading `bf16` or `f16` here passes the stored values through without rounding, so it
+/// needs no numeric permission.
 /// @pure
 /// @fails fault `TensorDimensionMismatch` when the number of bytes does not fit the shape and the element type
 /// @example from_bytes::<f32>(to_bytes(new([1.0, 2.0])), [2])
 #op('tensor:from_bytes_*')
-export func from_bytes(bytes: Bytes, shape: int[]): f32[..]
+export func from_bytes::<T>(bytes: Bytes, shape: int[]): T[..] when is_plain::<T>()

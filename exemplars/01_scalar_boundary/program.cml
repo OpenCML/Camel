@@ -5,7 +5,7 @@
  * join (branch-contract) and the effect (println).
  *
  * `gate` is written with its element type and shape (`f32[4]`), the terminal spelling: a bare
- * `Tensor` parameter leaves the element type unstated, so `t[0]` had no type for `t[0] > 0.5`.
+ * A parameter that writes no element type leaves it unstated, so `t[0]` had no type for `t[0] > 0.5`.
  */
 module scalar_boundary
 

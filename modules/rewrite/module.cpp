@@ -10,7 +10,7 @@
  * the import of this module itself. The engines, `rewrite`, `run`, `saturate` and `extract`, take
  * the rules as an array.
  *
- * The callable operators are declared in `stdlib/rewrite.cml` (handover H183; `run`, H226); this
+ * The callable operators (`run` among them) are declared in `stdlib/rewrite.cml`; this
  * file keeps their kernels, the executor and their purity. The reserved groups the language's
  * `rule` and `fact` declarations compile to (`__rule`, `__rule_when`, `__rule_generic`,
  * `__fact`) have no callable Camel name, so they stay exported from here.
@@ -788,10 +788,11 @@ bool ProofType::assignableFrom(Type *source) const { return is(source); }
 
 OtherType *ProofType::cloneWithParams(std::span<Type *const>) const { return get(); }
 
-/// `CheckReport`, the type of what `check` answers (H247, slice S0). A report is a table of rows
-/// (checkreport.h), not a string: the fixed rendering of the table is its `print`, so a reader
-/// keeps the fields and gets the text, and no caller has to parse the text back into fields. The
-/// type holds text and no reference into any GC space, so it is an ordinary other type.
+/// `CheckReport`, the type of what `check` answers (docs/design/rewrite/plan-verification.cn.md,
+/// S0). A report is a table of rows (checkreport.h), not a string: the fixed rendering of the
+/// table is its `print`, so a reader keeps the fields and gets the text, and no caller has to
+/// parse the text back into fields. The type holds text and no reference into any GC space, so
+/// it is an ordinary other type.
 class CheckReportType final : public OtherType {
   public:
     static CheckReportType *get();
@@ -971,8 +972,8 @@ slot_t rewriteKernel(ArgsView &, ArgsView &norm, Context &ctx) {
 }
 
 /// `run<rules, rounds: 16, strict: false, explain: false>(p)`: one application of the rules, with
-/// what it cost (H226). The configuration is the declaration's `with` parameters (handover H235),
-/// which is why the kernel reads them from `with` and the program from `norm`. It answers the
+/// what it cost. The configuration is the declaration's `with` parameters, which is why the
+/// kernel reads them from `with` and the program from `norm`. It answers the
 /// `Run<Program>` that `stdlib/rewrite.cml` declares: a struct with the program, the rewrites
 /// applied, the rounds, the nodes visited, the nodes erased, whether the last round reached a
 /// fixpoint, the wall time in seconds, and the proof when the attribution was recorded. The fields
@@ -1933,16 +1934,43 @@ RefTensor tensorOfSample(const TensorSample &sample) {
     return out;
 }
 
+/// `value` rounded once into `element`: the value the element type's own arithmetic would hold, so a
+/// step whose exact result leaves the type's range reads as the infinity (or the zero) it becomes
+/// there. The reduced-precision types are rounded through f32 and their own two bytes, exactly as
+/// the sampler rounds a drawn value into a parameter's type.
+long double roundToElement(long double value, TypeCode element) {
+    switch (element) {
+    case TypeCode::Float64:
+        return static_cast<long double>(static_cast<double>(value));
+    case TypeCode::Float32:
+        return static_cast<long double>(static_cast<float>(value));
+    case TypeCode::BFloat16:
+        return static_cast<long double>(
+            halfToFloat<BFloat16>(halfFromFloat<BFloat16>(static_cast<float>(value))));
+    case TypeCode::Float16:
+        return static_cast<long double>(
+            halfToFloat<Float16>(halfFromFloat<Float16>(static_cast<float>(value))));
+    default:
+        return value;
+    }
+}
+
 /**
  * The higher-precision reference of one side of a rule: the side's expression evaluated over the
  * same argument values in long double. It reads the operators the accuracy library uses, and
  * refuses (rather than guesses) an operator it does not know, so a rule the check cannot examine
  * fails the check instead of passing it silently.
+ *
+ * With an `element` it also holds the side in that element type: every step is rounded into it and
+ * the special values the steps produce are recorded. That is the arithmetic the side is written in,
+ * and it is what the licences `no_nans` and `no_infs` speak about (`no_infs` assumes no value is an
+ * infinity, the intermediate results included, design principles 7.2).
  */
 class RefEvaluator {
   public:
-    RefEvaluator(const camel::runtime::GCGraph &graph, const std::vector<Sample> &args)
-        : graph_(graph), args_(args),
+    RefEvaluator(const camel::runtime::GCGraph &graph, const std::vector<Sample> &args,
+        std::optional<TypeCode> element = std::nullopt)
+        : graph_(graph), args_(args), element_(element),
           ports_(graph.normPorts().begin(), graph.normPorts().end()) {}
 
     RefValue eval(camel::runtime::gc_node_ref_t ref) {
@@ -1951,11 +1979,34 @@ class RefEvaluator {
             return found->second;
         }
         RefValue value = evalUncached(ref);
+        if (element_) {
+            value = refMap(value, [&](long double x) { return roundToElement(x, *element_); });
+        }
+        recordSpecials(value);
         memo_.emplace(ref, value);
         return value;
     }
 
+    /// Whether a step of the side evaluated to an infinity / a NaN. Both are false without an
+    /// element type: the reference's own precision is not the side's arithmetic.
+    bool stepWasInfinite() const { return sawInfinity_; }
+    bool stepWasNaN() const { return sawNaN_; }
+
   private:
+    void recordSpecials(const RefValue &value) {
+        const auto note = [&](long double x) {
+            sawInfinity_ = sawInfinity_ || std::isinf(x);
+            sawNaN_      = sawNaN_ || std::isnan(x);
+        };
+        if (!value.tensor) {
+            note(value.scalar);
+            return;
+        }
+        for (const long double x : value.t.values) {
+            note(x);
+        }
+    }
+
     RefValue evalUncached(camel::runtime::gc_node_ref_t ref) {
         const camel::runtime::GCNode *node = graph_.node(ref);
         if (node == nullptr || node->kind == camel::runtime::GCNodeKind::Dead) {
@@ -2074,19 +2125,23 @@ class RefEvaluator {
                 in[1],
                 [&](long double a, long double b) { return fn(a, b); });
         };
-        if (uri == ":op/add_f" || uri == ":op/add_d") {
+        // The element type a side is written in decides the operator's uri, and the reduced-precision
+        // types have stems of their own -- `_bf` for bfloat16, `_f6` for float16
+        // (src/builtin/modules/globals.cpp) -- so a rule instantiated at bf16 or f16 is read exactly
+        // as one at f32 or f64 is. `_f` is f32's stem and `_d` is f64's.
+        if (uri == ":op/add_f" || uri == ":op/add_d" || uri == ":op/add_bf" || uri == ":op/add_f6") {
             return binary([](long double a, long double b) { return a + b; });
         }
-        if (uri == ":op/sub_f" || uri == ":op/sub_d") {
+        if (uri == ":op/sub_f" || uri == ":op/sub_d" || uri == ":op/sub_bf" || uri == ":op/sub_f6") {
             return binary([](long double a, long double b) { return a - b; });
         }
-        if (uri == ":op/mul_f" || uri == ":op/mul_d") {
+        if (uri == ":op/mul_f" || uri == ":op/mul_d" || uri == ":op/mul_bf" || uri == ":op/mul_f6") {
             return binary([](long double a, long double b) { return a * b; });
         }
-        if (uri == ":op/div_f" || uri == ":op/div_d") {
+        if (uri == ":op/div_f" || uri == ":op/div_d" || uri == ":op/div_bf" || uri == ":op/div_f6") {
             return binary([](long double a, long double b) { return a / b; });
         }
-        if (uri == ":op/neg_f" || uri == ":op/neg_d") {
+        if (uri == ":op/neg_f" || uri == ":op/neg_d" || uri == ":op/neg_bf" || uri == ":op/neg_f6") {
             return unary([](long double a) { return -a; });
         }
         if (uri == "math:sqrt") {
@@ -2171,8 +2226,11 @@ class RefEvaluator {
 
     const camel::runtime::GCGraph &graph_;
     const std::vector<Sample> &args_;
+    std::optional<TypeCode> element_;
     std::vector<camel::runtime::gc_node_ref_t> ports_;
     std::unordered_map<camel::runtime::gc_node_ref_t, RefValue> memo_;
+    bool sawInfinity_ = false;
+    bool sawNaN_      = false;
 };
 
 /// The normalized error of a native value against the reference: the difference relative to the
@@ -2667,9 +2725,12 @@ class Sampler {
 /// needs no permission, or within the numeric contract below when it does. `element` is the
 /// element type the two values are of (`f32`, `f64`, `bf16` or `f16`): it decides both the bit
 /// pattern an exact comparison compares and the epsilon a bounded one is measured in, so a
-/// reduced-precision instance is never judged with f32's tolerance.
+/// reduced-precision instance is never judged with f32's tolerance. `needs` decides what an exact
+/// comparison looks at: `no_signed_zeros` says a zero's sign is not observable, so the two zeros are
+/// one bit pattern under it, where a rule without the licence has the sign as part of its bits.
 bool agreeFloat(double x, double y, TypeCode element,
-    const camel::core::sem::RewriteErrorBound &bound, double scale) {
+    const camel::core::sem::RewriteErrorBound &bound, double scale,
+    camel::core::sem::PermissionMask needs) {
     if (std::isnan(x) || std::isnan(y)) {
         return std::isnan(x) && std::isnan(y);
     }
@@ -2677,6 +2738,9 @@ bool agreeFloat(double x, double y, TypeCode element,
         return true; // no contract to compare against (reported as unchecked)
     }
     if (bound.ulps == 0.0 && bound.relative == 0.0) {
+        if ((needs & camel::core::sem::kNoSignedZeros) != 0 && x == 0.0 && y == 0.0) {
+            return true;
+        }
         // A bf16 or an f16 widens to its f32 exactly (camel/core/rtdata/half.h), so comparing the
         // widened f32 bits compares the two-byte patterns: the two paths are one comparison.
         return element == TypeCode::Float64
@@ -2709,7 +2773,8 @@ double tensorElement(const TensorSample &t, size_t at) {
 /// a byte comparison (which would fail a legal rounding) nor with f32's (which would call an
 /// illegal one equal).
 bool agreeTensor(const TensorSample &a, const TensorSample &b,
-    const camel::core::sem::RewriteErrorBound &bound, double scale) {
+    const camel::core::sem::RewriteErrorBound &bound, double scale,
+    camel::core::sem::PermissionMask needs) {
     if (a.dtype != b.dtype || a.shape != b.shape || a.bytes.size() != b.bytes.size()) {
         return false;
     }
@@ -2719,7 +2784,8 @@ bool agreeTensor(const TensorSample &a, const TensorSample &b,
     const size_t elementBytes = elementBytesOf(a.dtype);
     const size_t count = elementBytes == 0 ? 0 : a.bytes.size() / elementBytes;
     for (size_t i = 0; i < count; ++i) {
-        if (!agreeFloat(tensorElement(a, i), tensorElement(b, i), a.dtype, bound, scale)) {
+        if (!agreeFloat(
+                tensorElement(a, i), tensorElement(b, i), a.dtype, bound, scale, needs)) {
             return false;
         }
     }
@@ -2728,15 +2794,17 @@ bool agreeTensor(const TensorSample &a, const TensorSample &b,
 
 /// Whether two results agree: bit for bit when the rule needs no permission (a NaN is a NaN),
 /// otherwise within the numeric contract of the rule's permissions and the operators' declared
-/// bounds (camel/core/operator_semantics.h, rewriteErrorBound).
+/// bounds (camel/core/operator_semantics.h, rewriteErrorBound). `needs` is the rule's licences: an
+/// exact comparison reads the sign of a zero only when `no_signed_zeros` is not one of them.
 bool agree(
     const Sample &a, const Sample &b, const camel::core::sem::RewriteErrorBound &bound,
-    double scale) {
+    double scale, camel::core::sem::PermissionMask needs) {
     if (a.tensor != nullptr || b.tensor != nullptr) {
-        return a.tensor != nullptr && b.tensor != nullptr && agreeTensor(*a.tensor, *b.tensor, bound, scale);
+        return a.tensor != nullptr && b.tensor != nullptr &&
+               agreeTensor(*a.tensor, *b.tensor, bound, scale, needs);
     }
     if (isFloatingScalar(a.code)) {
-        return agreeFloat(a.asDouble, b.asDouble, a.code, bound, scale);
+        return agreeFloat(a.asDouble, b.asDouble, a.code, bound, scale, needs);
     }
     if (a.code == TypeCode::Int32) {
         return fromSlot<Int32>(a.slot) == fromSlot<Int32>(b.slot);
@@ -2760,7 +2828,7 @@ bool agree(
 // contract that remains is the rule's own -- a rule whose syntax rounds (`x * (c1 + c2)` folds
 // `c1 + c2` in the element type, one rounding the permission covers) may differ by that rounding --
 // but the cancellation that inflates two element-type results is not part of the comparison any
-// more, which is the whole of the correction: at `x = 1e+30` the library's `tensor_f32_combine_mixed`
+// more, which is the whole of the correction: at `x = 1e+30` the library's `tensor_combine_mixed`
 // has two element-type results 27 ulps apart and one real value.
 //
 // The method needs the reference, so it applies to the element types the reference reads; a rule
@@ -2853,6 +2921,46 @@ bool zeroSignsDiffer(const Sample &a, const Sample &b) {
            std::signbit(a.asDouble) != std::signbit(b.asDouble);
 }
 
+/// Whether a licence of the rule puts this point outside the domain the rule claims. A rule that
+/// asks for `no_infs` or `no_nans` assumes that no value is an infinity or a NaN, the intermediate
+/// results of its own sides included (design principles 7.2), so a point where a step of either side
+/// produces one is not a counterexample to it: the check leaves that point out instead of refusing
+/// the rule with it. Both sides are evaluated in the element type they are written in, so a step that
+/// leaves the type's range reads as the infinity it becomes there. One side the reference cannot read
+/// is not evidence about the licence and does not keep a point the other side puts outside it; when
+/// neither side can be read the caller judges the point as it did before.
+bool outsideLicensedDomain(const camel::runtime::GCGraph &leftGraph,
+    const camel::runtime::GCGraph &rightGraph, const std::vector<Sample> &values, TypeCode element,
+    camel::core::sem::PermissionMask needs) {
+    const bool noInfs = (needs & camel::core::sem::kNoInfs) != 0;
+    const bool noNans = (needs & camel::core::sem::kNoNans) != 0;
+    if (!noInfs && !noNans) {
+        return false;
+    }
+    bool infinity = false;
+    bool nan      = false;
+    bool readOne  = false;
+    for (const camel::runtime::GCGraph *side : {&leftGraph, &rightGraph}) {
+        if (side->normPorts().size() > values.size()) {
+            continue; // the two sides do not take the same arguments
+        }
+        try {
+            RefEvaluator reference(*side, values, element);
+            reference.eval(side->exitNodeRef());
+            readOne  = true;
+            infinity = infinity || reference.stepWasInfinite();
+            nan      = nan || reference.stepWasNaN();
+        } catch (const std::exception &) {
+            // A side the reference cannot read is not evidence about the licence: the other side
+            // still is.
+        }
+    }
+    if (!readOne) {
+        return false; // no side could be read: the caller's own comparison stands
+    }
+    return (noInfs && infinity) || (noNans && nan);
+}
+
 /// What the check found when it compared two values under the proposition of a `reassociate` /
 /// `contract` rule.
 struct RealComparison {
@@ -2863,6 +2971,9 @@ struct RealComparison {
     /// type is not one the reference reads -- or when the reference cannot evaluate a side; the
     /// caller then compares the two element-type values as it did before.
     bool compared = false;
+    /// True when a licence of the rule puts this point outside the domain the rule claims, so the
+    /// point is not a counterexample and the caller leaves it out of the comparison.
+    bool outsideDomain = false;
     /// Which half of the proposition failed, for the row's line.
     std::string why;
 };
@@ -2877,6 +2988,10 @@ RealComparison propositionComparison(const std::string &proposition,
     camel::core::sem::PermissionMask needs, const camel::core::sem::RewriteErrorBound &bound,
     double scale) {
     RealComparison result;
+    if (outsideLicensedDomain(leftGraph, rightGraph, values, elementCodeOf(leftValue), needs)) {
+        result.outsideDomain = true;
+        return result;
+    }
     if (proposition != kPropositionRealEquality || !realComparable(elementCodeOf(leftValue)) ||
         leftGraph.normPorts().size() != rightGraph.normPorts().size()) {
         return result;
@@ -2895,7 +3010,7 @@ RealComparison propositionComparison(const std::string &proposition,
     const bool special = std::isinf(refSampleError(leftValue, referenceLeft)) ||
                          std::isinf(refSampleError(rightValue, referenceRight));
     if (special) {
-        result.agree = agree(leftValue, rightValue, {}, 1.0);
+        result.agree = agree(leftValue, rightValue, {}, 1.0, needs);
         result.why   = "a special value is not the same bit for bit";
         return result;
     }
@@ -3121,8 +3236,9 @@ uint64_t constMaskOf(const camel::runtime::RuleSource &source) {
 /// reported. `stream` picks the samples; the caller derives it from the rule's identity, not from
 /// its place in the array (the ruling of 2026-10-24 on `accuracy-check-sampling`, 1).
 ///
-/// The rows this appends are the verdict table `check` answers (H247, slice S0): the verdict, what
-/// it is about, and the evidence or the reason it is what it is. With no solver in the build a rule
+/// The rows this appends are the verdict table `check` answers
+/// (docs/design/rewrite/plan-verification.cn.md, S0): the verdict, what it is about, and the
+/// evidence or the reason it is what it is. With no solver in the build a rule
 /// whose two sides agree on every sample is `sampled`, never `proved`: the check compared samples,
 /// and `proved` is reserved for a licence's proposition being established (the ruling of
 /// 2026-10-24 on `verification-licence-to-precondition`).
@@ -3141,8 +3257,9 @@ void checkOneRule(
     const std::string proposition              = propositionOf(source.needs);
     const bool conditional                       = source.when != nullptr;
     const camel::core::sem::PermissionMask needs = source.needs;
-    // What the translation layer made of this rule's two sides (H247, slice S1). The sides are read
-    // once, here: the same two sides are the rule's own graphs, whatever the instance. A rule the
+    // What the translation layer made of this rule's two sides
+    // (docs/design/rewrite/plan-verification.cn.md, S1). The sides are read once, here: the same
+    // two sides are the rule's own graphs, whatever the instance. A rule the
     // layer cannot translate is `sampled` with the reason written in the coverage column (the ruling
     // of 2026-10-24 on `verification-verdict-surface`, 3).
     const std::string coverage = camel::verify::translate(source).column();
@@ -3310,7 +3427,11 @@ void checkOneRule(
             const RealComparison real = propositionComparison(
                 proposition, *lhsGraph, *program->graph(rhsId), values, left, right, needs, bound,
                 sampleScale);
-            const bool holds = real.compared ? real.agree : agree(left, right, bound, sampleScale);
+            if (real.outsideDomain) {
+                continue; // a licence of the rule leaves this point outside what it claims
+            }
+            const bool holds =
+                real.compared ? real.agree : agree(left, right, bound, sampleScale, needs);
             if (!holds) {
                 std::string at;
                 for (size_t i = 0; i < values.size(); ++i) {
@@ -3426,8 +3547,11 @@ void checkOneRule(
                     needs,
                     bound,
                     sampleScale);
+                if (real.outsideDomain) {
+                    continue; // a licence of the rule leaves this point outside what it claims
+                }
                 const bool holds =
-                    real.compared ? real.agree : agree(before, after, bound, sampleScale);
+                    real.compared ? real.agree : agree(before, after, bound, sampleScale, needs);
                 if (!holds) {
                     std::string at;
                     for (const Sample &value : values) {
@@ -3696,11 +3820,12 @@ void checkGenericRule(
 /// groups registered (the ruling of 2026-10-24 on
 /// `generic-rule-check-surface-and-multi-parameter-instances`).
 ///
-/// It answers a `CheckReport` (H247, slice S0): the verdict table, one row per rule or per instance
-/// of a generic law, each row carrying the rule, the instance, the verdict, what the verdict is
-/// about and the evidence or the reason (the ruling of 2026-10-24 on
-/// `verification-verdict-surface`, 2: the verdict is published by `check` and the text output is
-/// the fixed rendering of that table, which is what a reader -- and the acceptance -- reads).
+/// It answers a `CheckReport` (docs/design/rewrite/plan-verification.cn.md, S0): the verdict
+/// table, one row per rule or per instance of a generic law, each row carrying the rule, the
+/// instance, the verdict, what the verdict is about and the evidence or the reason (the ruling
+/// of 2026-10-24 on `verification-verdict-surface`, 2: the verdict is published by `check` and
+/// the text output is the fixed rendering of that table, which is what a reader -- and the
+/// acceptance -- reads).
 slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     const int64_t samples = std::max<int64_t>(1, norm.get<Int64>(1));
     const uint64_t seed   = static_cast<uint64_t>(norm.get<Int64>(2));
@@ -3823,8 +3948,9 @@ slot_t checkReasonKernel(ArgsView &, ArgsView &norm, Context &) {
     return rowColumnKernel(norm, "<rewrite::check_reason>", &CheckRow::reason);
 }
 
-/// What the translation layer made of one row's rule (H247, slice S1): the proposition it read out
-/// of the two sides, or `beyond translation coverage` with the reason it refused. A rule outside
+/// What the translation layer made of one row's rule
+/// (docs/design/rewrite/plan-verification.cn.md, S1): the proposition read out of the two sides,
+/// or `beyond translation coverage` with the reason it refused. A rule outside
 /// the coverage is `sampled` and this is where the reason is written (the ruling of 2026-10-24 on
 /// `verification-verdict-surface`, 3).
 slot_t checkCoverageKernel(ArgsView &, ArgsView &norm, Context &) {
@@ -4022,7 +4148,7 @@ class RewriteModule final : public BuiltinModule {
                       })}}));
         // The callable operators (`rewrite`, `saturate`, `extract`, `check`, `run` and the four
         // rule readers) are declared in `stdlib/rewrite.cml`; the declarations are the one source
-        // of their signatures, so the module exports none of them itself (handover H183).
+        // of their signatures, so the module exports none of them itself.
     }
 
     bool load() override {

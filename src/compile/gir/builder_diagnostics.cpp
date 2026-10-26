@@ -39,6 +39,8 @@ using namespace camel::core::module;
 using namespace camel::core::data;
 using namespace camel::core::type;
 
+namespace sem = camel::core::sem;
+
 namespace camel::compile::gir {
 
 std::set<node_handle_t> Builder::capturedWritesOf(DraftGraphBuilder *root) const {
@@ -170,11 +172,16 @@ void Builder::reportIgnoredCapturedWrites() {
 }
 
 bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
-    const auto declaresEffects = [](Type *type) {
-        if (type == nullptr || type->code() != TypeCode::Function) {
-            return false;
-        }
-        const auto *func = tt::as_ptr<FunctionType>(type);
+    // What a call touches is in the resources of the value's type, not in a flag on it: `sync` is
+    // a property of a body block, not of a type (design principles 3.3, effects plan 5). A clause
+    // that names a resource means the call touches it, `pure` means it touches nothing, and a
+    // `var` parameter is a resource by itself, so a signature that leaves it out is still read as
+    // one.
+    const auto clauseSaysEffect = [](const FunctionType *func) {
+        return func->resources().mode == sem::ResourceSignature::Mode::Concrete &&
+               !func->resources().pure();
+    };
+    const auto shapeSaysEffect = [](const FunctionType *func) {
         if (func->modifiers().sync()) {
             return true;
         }
@@ -197,15 +204,35 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
         return op != nullptr && camel::core::OperatorTable::instance().hasExternalEffect(op->uri());
     }
     case runtime::GCNodeKind::Func: {
+        // A call of a function this compiler has a body for is judged by that body first
+        // (effectfulGraphs_); its signature is the summary of the same body, so a clause that
+        // names a resource says the same thing. A signature with no clause is one the measuring
+        // walk could not write down, which is not evidence of an effect.
         const auto callee = calleeOf(node);
         if (callee == nullptr) {
             return false;
         }
-        return declaresEffects(callee->funcType()) || effectfulGraphs_.contains(callee.get());
+        if (effectfulGraphs_.contains(callee.get())) {
+            return true;
+        }
+        const FunctionType *type = callee->funcType();
+        return type != nullptr && (shapeSaysEffect(type) || clauseSaysEffect(type));
     }
     case runtime::GCNodeKind::Call: {
+        // A call through a function value: the value's type is all there is to read at this call,
+        // and one that writes no clause promises nothing -- what it reaches is fixed by the
+        // instantiation, which may write a cell or print -- so it is read conservatively. Only a
+        // type that promises the empty set says the call is not an effect.
         const auto callee = withInputsOf(node);
-        return !callee.empty() && declaresEffects(nodeTypeOf(nodeDraftOf(node)->ref(callee[0])));
+        if (callee.empty()) {
+            return false;
+        }
+        Type *type = nodeTypeOf(nodeDraftOf(node)->ref(callee[0]));
+        if (type == nullptr || type->code() != TypeCode::Function) {
+            return false;
+        }
+        const auto *func = tt::as_ptr<FunctionType>(type);
+        return !func->resources().pure() || shapeSaysEffect(func);
     }
     case runtime::GCNodeKind::Loop: {
         // Each round runs the condition and the body, regions of the graph.
@@ -282,6 +309,77 @@ void Builder::settleEffectfulGraphs() {
             }
         }
     }
+}
+
+void Builder::reportResourceViolation(
+    const compile_graph_ptr_t &graph, const camel::core::sem::ResourceSignature &promised,
+    const camel::core::sem::ResourceSignature &measured) {
+    // What the clause does not promise, said in the terms the clause is written in: the caller of
+    // this function can see only the clause, so the report names the resources the body reaches
+    // that the clause leaves out.
+    std::vector<std::string> unnamed;
+    for (const auto &use : measured.ambient) {
+        const bool promisedUse =
+            std::any_of(promised.ambient.begin(), promised.ambient.end(), [&](const auto &other) {
+                return other.name == use.name;
+            });
+        const bool anyPromised = std::any_of(
+            promised.anyOf.begin(), promised.anyOf.end(), [](auto cls) {
+                return cls == sem::ResourceClass::Unknown;
+            });
+        if (!promisedUse && !anyPromised) {
+            unnamed.push_back(use.name);
+        }
+    }
+    for (const auto &use : measured.params) {
+        const bool promisedUse = std::any_of(
+            promised.params.begin(), promised.params.end(), [&](const auto &other) {
+                return other.index == use.index;
+            });
+        if (!promisedUse && !use.name.empty()) {
+            unnamed.push_back(use.name);
+        }
+    }
+    if (measured.external && !promised.external) {
+        unnamed.push_back("an effect outside the program");
+    }
+    // The first use the clause does not name, which is what the writer has to look at: the
+    // declaration says what a caller may assume, and this is where the body stopped matching it.
+    camel::source::origin_id_t noteOrigin = 0;
+    for (draft_node_ref_t id = 0; id < graph->draft().nodeSlotCount(); ++id) {
+        if (!graph->draft().alive(id)) {
+            continue;
+        }
+        const node_handle_t node = graph->draft().ref(id);
+        if (!isEffectNode(graph.get(), node)) {
+            continue;
+        }
+        noteOrigin = nodeDraftOf(node)->nodeOrigin(nodeIdOf(node));
+        break;
+    }
+    // One builder, mutated in place and committed once: `of` hands out a value, and assigning a
+    // builder from the chain of another would copy state that is not meant to be copied.
+    DiagnosticBuilder builder = diags_->of(SemanticDiag::UsesPromiseViolated);
+    if (const auto sourceContext = context_ ? context_->sourceContext() : nullptr) {
+        const auto origin = sourceContext->debugMap().graphOrigin(graph->graphId());
+        if (origin != camel::source::kInvalidOriginId) {
+            builder.atOrigin(origin);
+        }
+    }
+    if (noteOrigin != 0) {
+        builder.relatedOrigin(
+            noteOrigin,
+            "the body reaches past the promise from here on: this is the first use the signature "
+            "does not name");
+    }
+    std::sort(unnamed.begin(), unnamed.end());
+    unnamed.erase(std::unique(unnamed.begin(), unnamed.end()), unnamed.end());
+    builder.commit(
+        graph->funcType()->toString(),
+        unnamed.empty() ? std::string("an effect outside the program")
+                        : strutil::join(unnamed, ", ", [](const std::string &name) {
+                              return name;
+                          }));
 }
 
 void Builder::reportDroppedEffectsOfBodies() {

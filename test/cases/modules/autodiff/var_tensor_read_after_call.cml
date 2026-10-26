@@ -3,7 +3,7 @@
  * and may write it (`push` stores a value that depends on the parameter).
  */
 module var_tensor_read_after_call
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { with_grad } from autodiff
 
 type P = { p0: f64[] }
@@ -17,7 +17,7 @@ with <m: P>
 func loss(x: f64[], var acc: f64[]): float sync {
     push(m.p0 * x, acc)
     let b = acc * 1.0
-    return sum(m.p0 * x) + sum(b)
+    return float(sum(m.p0 * x)) + float(sum(b))
 }
 
 func main(): int sync {

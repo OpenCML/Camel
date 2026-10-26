@@ -13,7 +13,6 @@ Camel 的执行模型只有一句话：**一个表达式会被求值，是因为
 // Who needs whose result decides what runs, and what can run at the same time.
 // Run: camel docs/tutorial/examples/09_dependency.cml
 //      camel docs/tutorial/examples/09_dependency.cml std::gir
-module dependency
 
 func price(n: int): int {
     return n * 3
@@ -69,7 +68,6 @@ docs/tutorial/examples/09_dependency.cml std::gir` 输出里 `total` 这一段�
 // Who needs whose result decides what runs, and what can run at the same time.
 // Run: camel docs/tutorial/examples/09_dependency.cml
 //      camel docs/tutorial/examples/09_dependency.cml std::gir
-module dependency
 
 func price(n: int): int {
     return n * 3
@@ -112,7 +110,7 @@ camel docs/tutorial/examples/09_dependency.cml std::gir
                 label="price";
                 F03 [label="ARGS", type="ARGS"];
                 O03 [label="EXIT", type="EXIT"];
-                N00 [label="n", type="PORT", param_name="n", param_kind="normal", param_index="0", value_type="int"];
+                N00 [label="n", type="PORT", param_name="n", param_kind="normal", param_index="0", value_type="int", origin=5, span="4:11-4:17", srcfile="docs/tutorial/examples/09_dependency.cml"];
                 N01 [label="3", type="DATA", origin=227, span="6:15-6:16", srcfile="docs/tutorial/examples/09_dependency.cml", value_type="int"];
                 N02 [label=":op/mul_l", type="OPER", origin=228, span="6:13-6:14", srcfile="docs/tutorial/examples/09_dependency.cml", value_type="int"];
                 F03 -> N00 [label="0", type="NORM_PORT"];
@@ -124,7 +122,7 @@ camel docs/tutorial/examples/09_dependency.cml std::gir
                 label="tax";
                 F04 [label="ARGS", type="ARGS"];
                 O04 [label="EXIT", type="EXIT"];
-                N03 [label="n", type="PORT", param_name="n", param_kind="normal", param_index="0", value_type="int"];
+                N03 [label="n", type="PORT", param_name="n", param_kind="normal", param_index="0", value_type="int", origin=23, span="8:9-8:15", srcfile="docs/tutorial/examples/09_dependency.cml"];
                 N04 [label="10", type="DATA", origin=231, span="10:15-10:17", srcfile="docs/tutorial/examples/09_dependency.cml", value_type="int"];
                 N05 [label=":op/div_l", type="OPER", origin=232, span="10:13-10:14", srcfile="docs/tutorial/examples/09_dependency.cml", value_type="int"];
                 F04 -> N03 [label="0", type="NORM_PORT"];
@@ -134,7 +132,7 @@ camel docs/tutorial/examples/09_dependency.cml std::gir
             }
             F02 [label="ARGS", type="ARGS"];
             O02 [label="EXIT", type="EXIT"];
-            N06 [label="n", type="PORT", param_name="n", param_kind="normal", param_index="0", value_type="int"];
+            N06 [label="n", type="PORT", param_name="n", param_kind="normal", param_index="0", value_type="int", origin=41, span="13:11-13:17", srcfile="docs/tutorial/examples/09_dependency.cml"];
             N07 [label="price", type="FUNC", origin=236, span="15:11-15:19", srcfile="docs/tutorial/examples/09_dependency.cml", value_type="int"];
             N08 [label="tax", type="FUNC", origin=238, span="15:22-15:28", srcfile="docs/tutorial/examples/09_dependency.cml", value_type="int"];
             N09 [label=":op/add_l", type="OPER", origin=239, span="15:20-15:21", srcfile="docs/tutorial/examples/09_dependency.cml", value_type="int"];
@@ -190,7 +188,6 @@ camel docs/tutorial/examples/09_dependency.cml std::gir
 // command line; the program does not change and the results keep the order of the elements.
 // Run: camel examples/parallel/parallel_map.cml
 //      camel examples/parallel/parallel_map.cml std::prl
-module parallel_map
 
 // Number of steps the Collatz sequence takes from `n` down to 1.
 func collatz_steps(n: int, steps: int): int {
@@ -251,7 +248,6 @@ longest up to 16000: start 13255 takes 275 steps
 // The answer to the exercise of chapter 9: one call now needs the other's result, so the graph
 // has an edge between them and they no longer stand side by side.
 // Run: camel docs/tutorial/examples/09_exercise.cml
-module exercise
 
 func price(n: int): int {
     return n * 3

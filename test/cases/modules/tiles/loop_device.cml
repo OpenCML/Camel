@@ -1,25 +1,25 @@
 module tiles_loop_device
-import { Tensor, load_npy, save_npy } from tensor
+import { load_npy, save_npy } from tensor
 import { source, run_preferred_resident, download } from tiles
 import { get_env } from env
 
 func scalar(a: float, bias: float): float {
     return loop s = a for k in [2147483649, -2147483649, 9007199254740993, 9007199254740995] do s * 0.5 + float(k) + bias
 }
-func recurrence(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
+func recurrence(a: f32[..], b: f32[..]): f32[..] {
     return loop s = a for k in [1, 2, 3] do s * b + a
 }
-func no_round(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
+func no_round(a: f32[..], b: f32[..]): f32[..] {
     let empty: int[] = []
     return loop s = a for k in empty do s * b + a
 }
-func rounding(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
+func rounding(a: f32[..], b: f32[..]): f32[..] {
     return loop s = a for k in [1, 2, 3] do s + b
 }
 func main(): int sync {
     let folder = get_env('TILES_TEST_OUT')
-    let a = load_npy::<f32>(folder + '/a.npy') as Tensor<f32>
-    let b = load_npy::<f32>(folder + '/b.npy') as Tensor<f32>
+    let a = load_npy::<f32>(folder + '/a.npy') as f32[..]
+    let b = load_npy::<f32>(folder + '/b.npy') as f32[..]
     println(scalar(1.0, 0.25), download(run_preferred_resident<scalar>((1.0, 0.25))))
     println(scalar(3.0, -2.0), download(run_preferred_resident<scalar>((3.0, -2.0))))
     println(scalar(1.0, 0.25), download(run_preferred_resident<scalar>((1.0, 0.25))))

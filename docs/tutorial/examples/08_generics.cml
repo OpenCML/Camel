@@ -1,6 +1,5 @@
 // Generic functions declare a type parameter at the head (`::<T>`); type declarations may take parameters.
 // Run: camel docs/tutorial/examples/08_generics.cml
-module generics
 
 type Pair<T> = (T, T)
 

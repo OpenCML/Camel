@@ -96,8 +96,9 @@ func main(): int sync {
   - 只配了前几个上下文参数时，剩下的仍是结果的上下文参数：`let above = clamp<0>` 之后写 `above<5>(9)`。已经配齐的函数不能再配（`g<2>` 是错误）。
   - `f` 必须是能由这些实参确定的一个函数。同名函数有多个时，取唯一一个接受这些上下文实参的；仍有多个时由所在位置的函数类型（形参）决定，都定不下来是 `SemanticDiag::PartialApplicationRefused`。
   - 图上它是一个携带了捕获值的函数值，与闭包同构：自己的一张子图，配好的实参通过端口进入，没有新增节点种类。
-  - 带 `var` 上下文参数的函数（`SemanticDiag::ConstructNotSupported`）、类型规则随实参变化的内建算子（如 `len`；`SemanticDiag::FunctionNameAsValue`）。这两种情形把调用写在 lambda 里。
-- 关键字实参 `f(a: 1)` 报 `SemanticDiag::FeatureNotSupported`。
+  - 把 `with` 形参声明成 `var` 的函数照样能部分应用：`f<w>` 捕获的是那个变量本身，不是它的值，所以调用它时函数对这个变量做的写落在原来的变量上（[3.5](03_data_model.md)）；这样的调用是一次有副作用的调用，写在 `sync` 块里才运行。
+  - 名字下不止一个函数时没有函数值：重载的内建算子（如 `len` 有三个签名）就是这样，报 `SemanticDiag::FunctionNameAsValue`。把调用写在 lambda 里。
+- 实参可以按名字给（`f(x: 1)`）：位置实参写在前面，按名字给的写在后面；名字不是被调函数声明的形参时是 `SemanticDiag::ParamArgumentUnknown`。
 - 同一个实参表里写两个带尖括号的调用（`f<a>(x), g<b>(y)`）会被读成比较；带尖括号的调用后面再接带尖括号的管道（`f<a>(x)->g<b>`）也可能如此。把它们分成两条语句。
 - 写在括号里的 lambda 可以直接调用：`((x: int): int => x + 1)(3)`；也可以直接写在 `->`、`?->` 的右边：`3->(x: int): int => x + 1`、`parse_int(s) ?-> (x: int): int => x * 2`。
 
@@ -229,7 +230,7 @@ false
 - 进入可空或可能出错的形式：`5 as int?`、`null as int?`、`v as int!`（目标类型已知的位置不必写，见 [3.4](03_data_model.md)）；
 - 构造映射与集合：`[...] as Map<K, V>`、`[...] as Set<T>`；
 - 模块类型的检查式转换：在转换处检查该类型自己的条件。
-- 数组的检查式转换：`a as f32[4]`，形状在转换处检查；`Tensor<f32, [3]>` 是数值数组的另一种拼写（过渡期保留），`t as Tensor<f32, [3]>` 是同一种转换。
+- 数组的检查式转换：`a as f32[4]`，形状在转换处检查；`f32[3]` 是数值数组的另一种拼写（过渡期保留），`t as f32[3]` 是同一种转换。
 
 `as` 不会不经检查地改变一个值的类型。`json::decode` 的结果是 `Json`，不能 `as` 成别的类型；已知形状的 JSON 用 `json::decode_as(s, [0])`，它在解码时检查形状，结果是 `T!`。
 
@@ -383,7 +384,7 @@ func main(): int sync {
 
 **`match` 必须有默认分支。** 没有 `case _` 是编译期错误 `SemanticDiag::MatchWithoutDefault`，定位在 `match` 上。三种情形不必写：对 `bool` 写全了 `case true` 与 `case false`；对 `T?`、`T!` 用上面的固定模式；对枚举列全了所有变体。编译器不会追加程序里没有写的分支臂，所以图上的臂与源码里的 `case` 一一对应。
 
-元组模式与结构体模式不在语言里：`case (...)`、`case {...}` 是普通语法错误。对普通类型的值的标识符模式（`case n => ...`）报 `SemanticDiag::ConstructNotSupported`；用 `if` 链或先取成员再匹配。枚举变体的元组、结构体模式已经实现，但字段位置只能写名字或 `_`。
+元组模式与结构体模式不在语言里：`case (...)`、`case {...}` 是普通语法错误。对普通类型的值的标识符模式（`case n => ...`），以及配普通类型的 `error e`，报 `SemanticDiag::IdentifierPatternNeedsNullableOrErrorType`：能拆开的只有 `T?` 与 `T!` 这两个标记（3.8），要读值或接住错误就写 `??`、`!!`，或 `match` 的字面量模式与 `_`。枚举变体的元组、结构体模式已经实现，但字段位置只能写名字或 `_`。
 
 `try`/`catch`/`finally` 不属于 Camel（它在图上没有稳定的映射），它们也不是关键字：这三个词是普通的名字，用它们写出的 `try { ... }` 是普通的语法错误。可能失败的操作返回 `T!`，用 `!!`、`?->` 与 `case error e` 处理。
 
@@ -454,7 +455,7 @@ func first(t: (int, float)) {
 - **操作数只用来取类型。** 操作数是编译期元组（剩余参数的 `ts`，或元组推导式）时不建容器结点：`indices ts` 不建 `FILL`，块里的 `ts.[j]` 直接取元素结点、不建 `ACCS`。运行期元组变量或参数本来就有自己的结点，`indices` 不会为它再建一个。
 - `j` 可以当值用（例如 `print(j)` 或参与计算），也可以当 `t.[j]` 的键：每轮它都是编译期常量。块里再声明同名变量仍会遮蔽它，此时当键报 `SemanticDiag::StaticAccessNotConstant`（与 `fields` 的 `n` 相同）。
 - `indices` 只绑定一个名字（没有 `F`）；元素的类型由 `ts` 的类型给出，目前不另给名字。写 `static for j, F in indices ts` 是语法错误。
-- `indices` 只遍历元组：结构体有字段名，用 `fields T`。`{ static for j in indices ts => e }` 没有字段名可给，报 `SemanticDiag::ConstructNotSupported`；需要值的位置写 `( static for j in indices ts => e )`。
+- `indices` 只遍历元组：结构体有字段名，用 `fields T`。`{ static for j in indices ts => e }` 没有字段名可给，报 `SemanticDiag::StructComprehensionWithoutFields`；需要值的位置写 `( static for j in indices ts => e )`。
 - 图与手写的展开相同：生成器本身没有节点。编译期元组的 `ts.[j]` 直接是元素结点，与手写的 `ts.[0]`、`ts.[1]` 的选择相同；运行期元组值的 `ts.[j]` 仍建一个 `ACCS`。
 
 ```cml
@@ -570,7 +571,7 @@ let found    = loop hit = -1 for x in xs while hit < 0 do if x > 9 then x else h
   - **数组**：元素本身，`a..b` 就是一个数组。
   - **字符串**：按码点，每个元素是只含这个字符的字符串，与 `s[i]` 相同（11.1）：`for c in '中文'` 的两轮是 `'中'`、`'文'`；多字节的字符按一个码点算一次。
   - **映射**：`(键, 值)` 元组，按键的顺序（11.3 的遍历顺序，与 `items(m)` 相同），不是插入顺序：`for kv in m` 取到的键严格递增，元组用 `kv.0`、`kv.1` 取出。
-  - **张量**：张量是数值数组（`Tensor<f32, [2, 3]>` 与 `f32[2, 3]` 写的是同一个类型），遍历与数组同一条规则：沿第一维，每个元素是去掉第一维后的子数组（与这一维上的一段共享同一份数据，不复制）：rank 2 的 `f32[2, 3]` 给出两个 `f32[3]`，rank 1 给出元素本身（`sum(x)` 是它的数）。元素类型未定的 `Tensor` 给出的元素仍是这个类型；维数不定的 `f32[..]` 给出的元素还是 `f32[..]`。rank 0 的数组没有第一维，不是序列。
+  - **张量**：张量是数值数组（`f32[2, 3]` 就是一种数值数组类型），遍历与数组同一条规则：沿第一维，每个元素是去掉第一维后的子数组（与这一维上的一段共享同一份数据，不复制）：rank 2 的 `f32[2, 3]` 给出两个 `f32[3]`，rank 1 给出元素本身（`sum(x)` 是它的数）。元素类型没写在类型里时，给出的元素仍是那个类型；维数不定的 `f32[..]` 给出的元素还是 `f32[..]`。rank 0 的数组没有第一维，不是序列。
   空数组、空字符串、空映射、第一维为 0 的数组一轮都不执行，循环的值是初值。**`while c`** 在条件成立时继续；条件是 `bool`（`SemanticDiag::LoopConditionNotBool`）。两者都写时，每一轮先看条件，再取下一个元素：条件不成立或元素取完即结束。至少写其中一个。
 - **没有 `break` 与 `continue`**：提前结束写成 `while` 条件，跳过一轮的其余部分写成 `if`。
 - **作用域**：初值与序列在循环所在处求值一次，其中看不到循环头的名字；条件看得到状态的名字，循环体看得到状态的名字与 `for` 的名字。循环头的名字不能重复（`SemanticDiag::LoopNameRepeated`）。条件与循环体看得到外面的名字，读到的是循环开始时的值（`var` 每轮读其当前值）。

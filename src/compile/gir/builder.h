@@ -1008,6 +1008,26 @@ class Builder {
     using arm_ptr_t = std::shared_ptr<ArmBuild>;
     /// The arms being built, outermost first.
     std::vector<ArmBuild *> armStack_;
+    /// One place a stream value is consumed: which value, the arms the use stands in (outermost
+    /// first), and where it was written. A stream is read once on each execution path (design
+    /// principles 5.4), so two uses of one value are refused unless they stand in different arms
+    /// of one branch.
+    struct StreamConsumption {
+        DraftGraphBuilder *graph         = nullptr;
+        node_handle_t value              = 0;
+        std::vector<uint32_t> arms;
+        camel::source::origin_id_t origin = camel::source::kInvalidOriginId;
+    };
+    std::vector<StreamConsumption> streamConsumptions_;
+    /// The arms of one branch, with the graph they belong to: a use in one of them excludes a use
+    /// in another, which is what makes `if c then s() else s()` one consumer rather than two.
+    std::vector<std::pair<DraftGraphBuilder *, std::vector<uint32_t>>> armGroups_;
+    /// Remembers the arms of one branch, so a later use can tell exclusion from a second consumer.
+    void noteArmGroup(const std::vector<arm_ptr_t> &arms);
+    /// Records that `value` is consumed at `at`, and refuses the second consumer of one path.
+    void consumeStream(node_handle_t value, const GCT::node_ptr_t &at);
+    /// Refuses two consumers of one stream on one execution path, once the graph's arms are known.
+    void checkStreamConsumption(DraftGraphBuilder *graph);
     /// The `match type` arm being built: its cases are not regions (only one is selected),
     /// but a `return` written in the selected body still gives the value of the match, not of
     /// the function around it.
@@ -1170,6 +1190,16 @@ class Builder {
     std::unordered_set<DraftGraphBuilder *> effectfulGraphs_;
     // The function bodies and arms of a module, in the order they were built, are in
     // ModuleUnit::builtBodies.
+    //
+    // The resources each body was found to touch (design effects plan, step 5). A declaration's
+    // own clause is a promise, not a measurement: it is what the declaration asked its callers to
+    // believe, and the body is held to it. This is the measurement, kept here rather than written
+    // onto the signature, because a function type's resources take part in its text form and in
+    // its mangled name (core/type/text.cpp), so completing one after the bodies are built would
+    // change names that were already computed. What reads it is the promise check below and,
+    // through a callee, the next round of the measurement.
+    std::unordered_map<DraftGraphBuilder *, camel::core::sem::ResourceSignature>
+        inferredResources_;
     node_handle_t lastSyncedNode_{};
     size_t syntheticRefIndex_ = 0;
 
@@ -1769,8 +1799,12 @@ class Builder {
 
     // Enters the scope of the function `name` whose declared type is the object `funcType`,
     // creating its graph the first time. Functions of one name in one block are overloads;
-    // the declared type object identifies which one is meant.
-    compile_graph_ptr_t enterScope(FunctionType *funcType, const std::string &name = "");
+    // the declared type object identifies which one is meant. `parameterOrigins` are the
+    // positions the parameters are written at, `with` ones first, by slot: the ports of the new
+    // graph carry them.
+    compile_graph_ptr_t enterScope(
+        FunctionType *funcType, const std::string &name = "",
+        const std::vector<camel::source::origin_id_t> &parameterOrigins = {});
     // A second function of this name with the same parameter types in the same block, or an
     // ordinary declaration under a generic function of the name (`plain`): reports
     // Redeclaration at `gct` and abandons the declaration.
@@ -1971,6 +2005,27 @@ class Builder {
     // Once every body of the program is built: settles which graphs are effectful (a callee
     // may be written after its caller, in another module).
     void settleEffectfulGraphs();
+    // The resources a body touches, from what its nodes already publish: an operator's own
+    // signature, a callee's, and the signature of the function value a call goes through. Empty
+    // when the body touches nothing. A call through a value that writes no clause promises
+    // nothing, so the call is read conservatively (any class, any ambient resource) rather than
+    // as touching nothing: a body is never measured as pure because the measurement gave up.
+    // `nullopt` when something in the body cannot be determined at all -- a resource the walk
+    // cannot place.
+    std::optional<camel::core::sem::ResourceSignature> footprintOf(DraftGraphBuilder *graph) const;
+    // Once every body is built: measures each one and settles the measurements against each other
+    // (a callee may be written after its caller, in another module). This reports nothing: it runs
+    // before the module-by-module reporting begins.
+    void measureInferredResources();
+    // Then holds each declaration of the current module to the clause it wrote: `uses` is an
+    // upper bound and `pure` promises the empty set, so a body that reaches past its clause is
+    // UsesPromiseViolated at the declaration. Reported with the other per-module diagnostics,
+    // while the bodies are still in hand.
+    void checkInferredResources();
+    // The report of one declaration whose body reaches past the clause it wrote.
+    void reportResourceViolation(
+        const compile_graph_ptr_t &graph, const camel::core::sem::ResourceSignature &promised,
+        const camel::core::sem::ResourceSignature &measured);
     // Then warns for each body of the current module.
     void reportDroppedEffectsOfBodies();
     // Reports EffectInRuleCondition: a rule's condition may not have an effect. The condition is
@@ -2213,6 +2268,14 @@ class Builder {
     /// where the loop is, its condition and its body as regions of the current graph (built where
     /// they are written, like the arms of a branch), and one LOOP node that has them.
     node_handle_t visitLoopNode(const GCT::node_ptr_t &gct);
+    /// `for x in s` where `s` is a stream (design principles 5.4; the shape the ruling of
+    /// 2026-10-26 gives): the rounds are the pulls of the stream's step function, so the loop is
+    /// the `while` the graph already has, whose state is the pull together with the state the
+    /// program wrote. `sequence` is the stream value, `initial` the program's first values (in
+    /// the head's order) and `stateTypes` their types.
+    node_handle_t buildStreamLoop(
+        const GCT::node_ptr_t &gct, node_handle_t sequence,
+        const std::vector<node_handle_t> &initial, const std::vector<camel::core::type::Type *> &stateTypes);
     /// Rewrites the body of a loop whose state values are handed back as `xs->append<v>`, when
     /// that state's first value is a fresh literal, to the form that may append to the state in
     /// place (design principles 10.5): the state's old value cannot be seen once the next round

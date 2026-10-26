@@ -154,9 +154,10 @@ export targets and a backend's table doubles as its capability registry.
 dimensions, where each dimension is either a known extent or unknown (`?`).
 An unknown rank is represented by an absent shape.
 
-- Every `OpDef::infer` computes the result dtype (with promotion) and propagates
-  shape where inputs are known: broadcasting, matmul contraction, reductions,
-  convolution and pooling arithmetic.
+- Every `OpDef::infer` computes the result dtype, which is the one element type its operands
+  state (two different ones match no arm, design principles 5.1), and propagates shape where
+  inputs are known: broadcasting, matmul contraction, reductions, convolution and pooling
+  arithmetic.
 - A shape conflict that is certain at compile time is a semantic diagnostic
   (`TensorShapeMismatch`, carrying the operator and both shapes). Unknown
   dimensions never produce errors; they fall back to runtime checks.
@@ -165,10 +166,10 @@ An unknown rank is represented by an absent shape.
 
 #### Shapes written in a program
 
-A program writes a tensor type as `Tensor<f32, [2, 3]>`: the element type
+A program writes a tensor type as `f32[2, 3]`: the element type
 (`f32`, `f64`, `i32`, `i64`, `bool`), then the shape. Either part may be left
-out (`Tensor<f32>`, `Tensor<[3]>`), and an extent written `?` is unknown
-(`Tensor<f32, [?, 3]>`).
+out (`f32[..]`, `f32[3]`), and an extent written `?` is unknown
+(`f32[?, 3]`).
 A declared shape is checked at compile time wherever the value's type is at
 least as exact: at a call, at a `return` against the declared return type, in
 the operators of the body.
@@ -177,7 +178,7 @@ A shape may also name its extents (design principles 5.4). The first appearance 
 a parameter type binds the name, and later occurrences write it plainly:
 
 ```camel
-func dense(x: Tensor<f32, [n, 3]>, w: Tensor<f32, [3, k]>): Tensor<f32, [n, k]>
+func dense(x: f32[n, 3], w: f32[3, k]): f32[n, k]
 ```
 
 The extents of a type are linear forms over those names: a name, an integer
@@ -211,10 +212,10 @@ What inference derives without help, besides the propagation listed above:
 
 #### When you need `as`
 
-`e as Tensor<...>` is a checked conversion: the compiler refuses it when the two
+`e as f32[..]` is a checked conversion: the compiler refuses it when the two
 types already contradict each other, and otherwise the element type and the
 shape are checked when the conversion runs. A failure stops the program at the
-conversion and names both sides (`conversion to 'Tensor<float32, [4]>' failed:
+conversion and names both sides (`conversion to 'float32[4]' failed:
 the tensor has shape [6]`). Nothing else converts or checks implicitly: a type
 that leaves open what a declared type fixes is refused with
 `ArgumentNeedsConversion` or `ReturnNeedsConversion`, which name the argument
@@ -224,14 +225,14 @@ The cases where the shape is knowledge of the run, so that `as` is the answer:
 
 | Case | Example |
 |---|---|
-| A tensor read from outside the program | `load_npy::<f32>(path) as Tensor<f32, [3, 3]>` (the call declares the element type, the `as` the shape) |
-| A result that a function declares as plain `Tensor` (the declaration is what callers see, whatever the body computes); declaring the shape is the alternative | `let t = g(x)` ... `h(t as Tensor<f32, [3]>)` |
-| A slice or index with computed bounds | `slice(x, 0, i, i + 1) as Tensor<f32, [1, 3]>` |
-| A reduction with a computed axis, a reshape whose target is computed as a whole or has two computed extents, a computed extent itself | `reshape(x, [n, 3]) as Tensor<f32, [2, 3]>` when `x` is `[?, 3]` |
-| A shape in which more than one extent is indexed out of a shape or computed by arithmetic, even from constants (such expressions are folded by `std::opt`, after types are checked) | `reshape(x, [shape(x)[1], shape(x)[0]]) as Tensor<f32, [3, 2]>` |
-| The end of a recursion over a shrinking tensor | `if n <= 1 then x as Tensor<f32, [1]> else ...` |
-| Branch arms of different extents (they join to `?`) | `(if c then a else b) as Tensor<f32, [3]>` |
-| The value read from a `var` variable (a variable has the widened type `Tensor` of its first value, so that later assignments may change the shape) | `(s as Tensor<f32, [3]>) + x` |
+| A tensor read from outside the program | `load_npy::<f32>(path) as f32[3, 3]` (the call declares the element type, the `as` the shape) |
+| A result that a function declares as plain `Tensor` (the declaration is what callers see, whatever the body computes); declaring the shape is the alternative | `let t = g(x)` ... `h(t as f32[3])` |
+| A slice or index with computed bounds | `slice(x, 0, i, i + 1) as f32[1, 3]` |
+| A reduction with a computed axis, a reshape whose target is computed as a whole or has two computed extents, a computed extent itself | `reshape(x, [n, 3]) as f32[2, 3]` when `x` is `[?, 3]` |
+| A shape in which more than one extent is indexed out of a shape or computed by arithmetic, even from constants (such expressions are folded by `std::opt`, after types are checked) | `reshape(x, [shape(x)[1], shape(x)[0]]) as f32[3, 2]` |
+| The end of a recursion over a shrinking tensor | `if n <= 1 then x as f32[1] else ...` |
+| Branch arms of different extents (they join to `?`) | `(if c then a else b) as f32[3]` |
+| The value read from a `var` variable (a variable has the widened type `Tensor` of its first value, so that later assignments may change the shape) | `(s as f32[3]) + x` |
 
 A `var` parameter takes the variable itself, so no conversion applies to its
 argument: declare the `var` parameter with the variable's type (`var s:
@@ -330,8 +331,9 @@ Every node evaluates to either a constant or a symbolic tensor:
   table (`lowering.h`/`lowering.cpp`, keyed by URI and minimum opset). Result
   dtype and shape come from the operator's `OpDef::infer` with constant
   arguments supplied, so the emitted graph carries full shape information.
-  Operand dtypes are converted to the inferred result dtype, which reproduces
-  Camel's promotion rules (ONNX requires equal input types).
+  Operand dtypes are emitted in that one element type, the same answer the operator's own
+  inference gives (ONNX requires equal input types and Camel has no implicit conversion
+  between numeric types).
 - `tensor:take` lowers to `Gather(axis = 0)`; constant `int[]` indices become an i64 initializer
   (the same mapping `nn:embedding` uses). `take`'s reverse is the internal `tensor:take_grad`,
   which has no ONNX lowering.
@@ -464,7 +466,7 @@ Implemented in `modules/tensor/`:
 
 | Path | Responsibility |
 |---|---|
-| `dtype.h/.cpp` | storage dtypes (float32, int64, bool), promotion, `dispatchDType` |
+| `dtype.h/.cpp` | storage dtypes (float32, int64, bool), element-type helpers, `dispatchDType` |
 | `tensor.h/.cpp` | `TensorObject`, `ShapeError` |
 | `interop.h/.cpp` | scalar/array/shape/DLPack conversions |
 | `type.h/.cpp` | interned `TensorType` with optional dtype and partially known shape |
@@ -557,7 +559,7 @@ rejection reason. That resolver extension is part of step 2.
     back to comparing dynamic types.
   - Struct, tuple, and array assignability is covariant in the element types
     (they are immutable), and array literals take the unified element type.
-    Precise tensor types previously made `{ w: Tensor<float32> }` unusable
+    Precise tensor types previously made `{ w: float32[..] }` unusable
     where `{ w: Tensor }` was declared.
 
 ### Step 3 landed: graph optimization and kernel quality

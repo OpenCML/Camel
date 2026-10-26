@@ -1,8 +1,8 @@
 module tiles_slice_bounds
-import { Tensor, slice, zeros } from tensor
+import { zeros } from tensor
 import { source } from tiles
 
-func outside(x: Tensor<f32>): Tensor<f32> { return slice(x, 0, 0, 9) }
+func outside(x: f32[..]): f32[..] { return slice(x, 0, 0, 9) }
 func main(): int sync {
     println(source<outside>(zeros([3])))
     return 0

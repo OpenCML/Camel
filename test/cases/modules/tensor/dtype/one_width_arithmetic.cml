@@ -1,0 +1,27 @@
+/**
+ * One element type per call, from the other side: `f32 * f32` and `f64 * f64` compute as before,
+ * and a *literal* takes the element type of the context it is written in, so `x * 2.0` beside an
+ * f32 `x` is an f32 call and needs no conversion. This is the positive control of the mixed
+ * refusal: the refusal is about two element types, and neither of these has two.
+ */
+module one_width_arithmetic
+
+import { reshape, sum } from tensor
+
+func f32_pair(x: f32[2], y: f32[2]): float {
+    return float(sum(x * y)) + float(sum(x * 2.0))
+}
+
+func f64_pair(x: f64[2], y: f64[2]): float {
+    return float(sum(x * y)) + float(sum(x * 2.0))
+}
+
+func main(): int sync {
+    let a = reshape([1.0, 2.0] as f32[], [2])
+    let b = reshape([3.0, 4.0] as f32[], [2])
+    let c = reshape([1.0, 2.0] as f64[], [2])
+    let d = reshape([3.0, 4.0] as f64[], [2])
+    println(f32_pair(a, b))
+    println(f64_pair(c, d))
+    return 0
+}

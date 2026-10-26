@@ -129,6 +129,7 @@ anyOf   : 资源类列表；非空表示"说不出是哪个值"，即保守的�
 - `assignableFrom`：目标是 `Generic` 时接受任何源；目标是 `Concrete S` 时源必须是 `Concrete T ⊆ S`（资源少的能用在要求多的地方）；源是 `Generic`（一个还没实例化的回调形参）时**不能证明**，拒绝——除非它就是目标位置同一个泛型形参。`pure`（空集）因此可用在任何位置，而"任意资源"的函数值不能当纯函数用。
 - 与 6.6 的关系：6.6 说算子的纯度、资源等事实是标准标签；`pure`/`uses` 是**表面子句**，降级后仍然是声明上的事实（存储可以就是属性/标签），不产生第二套写法。这一条写进文档，避免实现时另造一份真值。
 - 驻留与打印：`Generic`/`Concrete` 与 `params`/`ambient` 进 `FunctionType` 的 intern key（`func.cpp#FunctionType`）与 `mangle`，`toString` 打印 `uses s, fs` / `pure`；没有形参名时打印 `uses #0`。`captures` 与 `anyOf` 只出现在推断出的类型上，同样进 key。
+- 打印口径：**值的类型打印推断出的子句**（一个没写资源子句的函数，其值的类型带上函数体度量出的资源集，空集就打印 `pure`），**写出来的类型照写的样子打印**——没写就不打印子句，也不加"声明时没写"之类的标记。所以同一个签名今天可能打印成 `(x: int) => int`（写出来、没写子句）或 `(x: int) => int pure`（推断出空集），两者是不同的类型。
 - 实现落点：`FunctionType::Parts`（`func.h#FunctionType::Parts`）加一个 `ResourceSignature`，尾部字节与 `Parts` 一起复制；`OpenFunctionType` 加"先开后定"的 `setResources`（与 `setExitType` 同一模式，`func.h#FunctionType::Parts`）。**不改** `TypeCode`，不加新的 `Type` 子类。
 
 ### 2.3 调用处怎么推
@@ -142,6 +143,8 @@ anyOf   : 资源类列表；非空表示"说不出是哪个值"，即保守的�
 5. `anyOf`：生成 `anyValue` 的访问，与同类的一切冲突（今天 `conservativeResources` 的效果）。
 
 这几步与运行期 `Resolver::node` 对 `FUNC` 的映射完全同构（`resources.cpp#Resolver::node` 的 `bind` lambda 就是第 2 步），差别只在运行期是事后查询，H7 要在建图时就知道。`uses s` 与 `var` 形参因此共用同一条路径：**都是"用第 i 个实参的名义"**，只是类不同。
+
+**资源分量进入特化键是规则的一部分。** 只绑定类型的特化（`loop$tspec3`，`draft_inline.cpp#kTypeSpecializationTag`）以形参**类型**为键，而资源子句是函数类型身份的一部分（进 intern key 与 `mangle`，见 2.2），所以两个只差一个形参资源子句的实例是两个键、两张图——`exemplars/05_effect_order` 里的 `visit$tspec2` 正是这个形状（该实例的 `cb` 口是 `(x: int) => int uses stdout`，与基础实例的 `(x: int) => int` 不同键）。这是规则而不是副作用：资源不同的实例效应不同（哪些调用在同步链上、丢掉结果时执不执行、按哪个资源排序，都可能不一样），用一个实例的效应代表另一个就会算错。
 
 调用点的结果摘要只需要存成三条事实：这个节点碰哪些类/名字、其中哪些绑到哪个输入值、哪些完全说不清（`anyValue`）。图上**不加节点、不加边**：句柄/变量本来就是该调用的普通输入边，那条边就是身份。
 
@@ -327,15 +330,15 @@ pump(s, open("b"))   同上：被调用者不知道 s 与新句柄不同，仍�
 
 ## 6. 诊断
 
-诊断目录的下一个空块是低 20 位的 `0x1A0`（最后一处错误是  的 `0x000190`，最后一处警告是  的 `0x100160`；全目录无 `0x1A0`）。约定：错误 `0x0001A0` 起，警告 `0x1001A0` 起，提示 `0x3001A0` 起。下表写的是**枚举值**（低 24 位）；JSON 与 `--explain` 里的完整码在前面再加类型 `0x03`（例如 `0x033001A0`）。先占 6 个：
+下表写的是**枚举值**（低 24 位）；JSON 与 `--explain` 里的完整码在前面再加类型 `0x03`（例如 `0x030001A0`）。**落地时分配到哪些码以 `diagnostics/registry.tsv` 为准**：`UnknownResource`、`PureAndUses`、`ResourceGroupCycle`、`HandleTypeNotNominal`、`NativeResourceMismatch` 落在 `0x0001A0`–`0x0001A4`，`UsesPromiseViolated` 落在 `0x0001F1`；底下最后两条（`UndeclaredOperatorEffect`、`ExportedResourcesChanged`）还没进目录：
 
 | 码 | 名字 | 严重性 | 位置 | 何时 |
 |---|---|---|---|---|
 | `0x0001A0` | `UnknownResource` | Error | `uses` 里的名字 | 名字既不是本函数形参、也不是可见资源（附注列出形参与资源） |
-| `0x0001A1` | `UsesPromiseViolated` | Error | 声明（`uses`/`pure`） | 推断集超出 `uses`；`pure` 却非空（含 `var` 形参与捕获）；附注指向第一个超出的使用点 |
-| `0x0001A2` | `HandleTypeNotNominal` | Error | `#resource` 标签 | 标在别名或内建类型上 |
-| `0x0001A3` | `PureAndUses` | Error | 第二个子句 | `pure` 与 `uses` 同时写（帮助：`pure` 是 `uses` 为空的特例） |
-| `0x0001A4` | `ResourceGroupCycle` | Error | 组声明 | 组展开成环（`a = [b]; b = [a]`） |
+| `0x0001F1` | `UsesPromiseViolated` | Error | 声明（`uses`/`pure`） | 推断集超出 `uses`；`pure` 却非空（含 `var` 形参与捕获）；附注指向第一个超出的使用点 |
+| `0x0001A3` | `HandleTypeNotNominal` | Error | `#resource` 标签 | 标在别名或内建类型上 |
+| `0x0001A1` | `PureAndUses` | Error | 第二个子句 | `pure` 与 `uses` 同时写（帮助：`pure` 是 `uses` 为空的特例） |
+| `0x0001A2` | `ResourceGroupCycle` | Error | 组声明 | 组展开成环（`a = [b]; b = [a]`） |
 | `0x3001A0` | `UndeclaredOperatorEffect` | Hint | 模块级（无源位置） | 模块有算子既无 `pure` 也无 `uses`；按全局资源对待 |
 
 另有一条**条件**警告，取决于 Q2：

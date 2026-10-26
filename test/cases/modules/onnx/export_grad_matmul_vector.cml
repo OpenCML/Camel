@@ -4,7 +4,7 @@
  * [-0.1339, -5.774, 3.692]; NumPy and the exported model on ONNX Runtime agree.
  */
 module export_grad_matmul_vector
-import { Tensor, reshape, sum, tanh } from tensor
+import { reshape, sum, tanh } from tensor
 import { with_grad } from autodiff
 import { export_model } from onnx
 import { get_env } from env
@@ -17,7 +17,7 @@ func loss(x: f32[..]): float {
     let a = m.w @ x        // matrix @ vector -> [3]
     let b = m.v @ m.w      // vector @ matrix -> [2]
     let c = m.v @ tanh(a)  // vector @ vector -> scalar
-    return sum(a * a) + sum(b * x) + sum(c * c)
+    return float(sum(a * a)) + float(sum(b * x)) + float(sum(c * c))
 }
 
 func step(w: f32[..], v: f32[..], x: f32[..]): (f32[..], f32[..], f32[..]) {

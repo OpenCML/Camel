@@ -18,7 +18,7 @@
  *     `return 2` under `f32`). A value the type cannot hold is a compile-time error, never a
  *     value cut to size;
  *   - an operand that is an array or a tensor gives its element type, so `t * 0.5` with a
- *     `Tensor<int64>` asks for an integer `0.5` and is refused: the element type of the
+ *     `int64[..]` asks for an integer `0.5` and is refused: the element type of the
  *     declaration, or of the instantiation the body is checked for (design principles 5.5), is
  *     the type every element of the result is computed in.
  *
@@ -344,7 +344,7 @@ void Builder::adaptLiteralOperands(
             // report: `n + 1.0` with `n: int` has no `(int, float)` overload, and that is the
             // answer the program gets. Beside an array or a tensor, the operand gave its element
             // type, and the operator computes in it throughout, so a value of another kind would
-            // be narrowed into every element without a word: `t * 0.5` with a `Tensor<int64>`
+            // be narrowed into every element without a word: `t * 0.5` with a `int64[..]`
             // computes the f32 product the declaration's return type then contradicts. Design
             // principles 5.1 and 5.5: the element type is the one the declaration writes or the
             // one the instantiation fixes, and a literal it cannot hold is refused at the

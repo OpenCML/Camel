@@ -54,6 +54,7 @@ Not in this reference: the profiler (`perf`).
 | [tensor](#tensor) | `import { ... } from tensor` | C++ |
 | [types](#types) | `import { ... } from types` | Camel |
 | [array](#array) | `import { ... } from array` | Camel |
+| [stream](#stream) | `import { ... } from stream` | Camel |
 | [math](#math) | `import { ... } from math` | C++ |
 | [statistics](#statistics) | `import { ... } from statistics` | C++ |
 | [random](#random) | `import { ... } from random` | C++ |
@@ -85,6 +86,7 @@ Not in this reference: the profiler (`perf`).
 | [tensor](#tensor) | `import { ... } from tensor` |  |
 | [types](#types) | `import { ... } from types` |  |
 | [array](#array) | `import { ... } from array` |  |
+| [stream](#stream) | `import { ... } from stream` |  |
 | [math](#math) | `import { ... } from math` |  |
 | [statistics](#statistics) | `import { ... } from statistics` |  |
 | [random](#random) | `import { ... } from random` |  |
@@ -1398,7 +1400,7 @@ The `f32` n by n identity matrix.
 #### `range`
 
 ```camel
-range: (start: int, stop?: int, step?: int) => Tensor<int64>
+range: (start: int, stop?: int, step?: int) => int64[..]
 ```
 
 The integer sequence start, start + step, ... below stop, as a rank-1 `int64` tensor: one
@@ -1741,17 +1743,6 @@ a and b joined along axis; every other extent must agree.
 - Pure.
 - Example: `concat(new([[1.0]]), new([[2.0]]), 0)` gives `shape [2, 1]`
 
-#### `slice`
-
-```camel
-slice: (t: float[..], axis: int, start: int, end: int, step?: int) => float[..]
-```
-
-The elements start, start + step, ... of one axis before end; step is 1 by default.
-
-- Pure.
-- Example: `slice(new([1.0, 2.0, 3.0, 4.0]), 0, 1, 3)` gives `[2.0, 3.0]`
-
 #### `take`
 
 ```camel
@@ -1817,11 +1808,18 @@ The extent of one axis; a negative axis counts from the last one (`-1` is the la
 #### `sum`
 
 ```camel
-sum: (t: float[..]) => float
+sum: (t: T[..]) => T
 ```
 
-Every element converted to `f64` and summed in row-major order from +0; `int64` and `bool`
-elements are summed exactly in `int64` and converted once.
+The sum of every element, in the operand's element type: the canonical form of the element
+type `T` is `sum::<T>(x: T[..]): T = T(sum(float(x)))`, so the elements are widened into an
+`f64` accumulator (`float(x)`), the additions happen in `f64` in row-major order from +0, and
+their sum is rounded into `T` once, at the end — the same element type and the same one
+rounding as the axis form below, so the full form and the axis form agree bit for bit
+(design principles 7.3). An `int64`, `int32` or `bool` tensor has no float accumulator: it is
+summed exactly in `int64`, wrapping on overflow as integer arithmetic does (design principles
+5.1, 7.7), and that exact value is the answer — `int64` as it stands, `int32` truncated into
+its element type, `bool` as `int64`.
 
 - Pure.
 - Example: `sum(new([[1.0, 2.0], [3.0, 4.0]]))` gives `10.0`
@@ -1841,10 +1839,15 @@ The same sum over one axis, in an `f64` accumulator; keepdims keeps the axis wit
 #### `mean`
 
 ```camel
-mean: (t: float[..]) => float
+mean: (t: T[..]) => T
 ```
 
-The sum of `sum` divided by the element count in `f64`; an empty tensor is a fault.
+The mean of every element, in the operand's element type, with one rounding: the canonical
+form of the element type `T` is `mean::<T>(x: T[..]): T = T(sum(float(x)) / float(numel(x)))`.
+The sum and the division by the element count both happen in `f64`, and their result is
+rounded into `T` once — never a sum rounded to the element type and divided again, which
+would round twice. A mean of an integer or bool tensor is `f32`, as by axis; an empty tensor
+is a fault.
 
 - Pure.
 - Failure: fault `DivisionByZero` when the tensor has no element.
@@ -2050,7 +2053,7 @@ be `T` -- a file of another element type is a fault, never a conversion (design 
 5.5). `T` is `f32`, `f64`, `i32`, `i64` or `bool`, the element types the format's storage types
 (`'<f4'`, `'<f8'`, `'<i4'`, `'<i8'`, `'|b1'`) map to, exactly the type given. It is written at
 the call (`load_npy::<f32>(p)`) or taken from the type of the position the call stands in
-(`Tensor<f32, [3]>`, `f32[..]`); `T` is the one type variable no parameter mentions, so a call
+(`f32[3]`, `f32[..]`); `T` is the one type variable no parameter mentions, so a call
 that says neither is not a use of this operator.
 
 - With effects: reads a file.
@@ -2073,14 +2076,18 @@ Prints t to the console, in the module's layout.
 #### `from_bytes`
 
 ```camel
-from_bytes: (bytes: Bytes, shape: int[]) => f32[..]
+from_bytes: (bytes: Bytes, shape: int[]) => T[..] when is_plain::<T>()
 ```
 
-A tensor of the given shape made of little-endian elements. The element type is the explicit
-type argument (`from_bytes::<f32>(b, [2])`) or comes from the expected type of the result; it
-is `f32`, `f64`, `bf16`, `f16`, `i32`, `i64` or `bool`, exactly the type given. A byte count
-that does not fit the shape is a fault. The bits are copied: reading `bf16` or `f16` here
-passes the stored values through without rounding, so it needs no numeric permission.
+An array of the given shape made of little-endian elements: the payload `to_bytes` wrote. The
+element type is the explicit type argument (`from_bytes::<f32>(b, [2])`) or comes from the
+expected type of the result; it is `f32`, `f64`, `bf16`, `f16`, `i32`, `i64` or `bool`, exactly
+the type given, or a struct or tuple whose fields are all pure data, which takes its element
+type from the call (`from_bytes::<P>(b, [2])`) -- a declaration's parameters cannot mention a
+type variable that only the result mentions. The element's bytes are its layout's, written as
+`to_bytes` wrote them. A byte count that does not fit the shape is a fault. The bits are
+copied: reading `bf16` or `f16` here passes the stored values through without rounding, so it
+needs no numeric permission.
 
 - Pure.
 - Failure: fault `TensorDimensionMismatch` when the number of bytes does not fit the shape and the element type.
@@ -2680,6 +2687,41 @@ f(xs[i], ys[i]) for every i.
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Failure: fault `InvalidArgument` (of zip) when the two arrays differ in length.
 - Example: `zip_with<(a: int, b: int) => a + b>([1, 2], [10, 20])` gives `[11, 22]`
+
+<a id="stream"></a>
+
+## `stream`: producing and consuming streams
+
+Streams, written in Camel. A stream's value is its step function together with its state (design
+principles 5.4, and the reading of 2026-10-26): `T..` is an ordinary function value of the
+signature `() => (T, T..)?`, one call is one pull, and a pull answers the next element together
+with the rest of the stream -- `null` when the stream is over. So the producers here are
+ordinary functions that return such a closure, and the consumer is `for x in s`, which the
+compiler expands on the graph into the `while` it already has (language reference 7.3.2). No
+part of this module needs a new node kind, and none of it runs anything by itself: pulling is
+what runs, one element at a time.
+
+- `unfold(state, step)` is the smallest producer: a state and a step that answers the next
+  element with the state after it, or `null` when the stream is over. A `yield` generator
+  compiles to the same kind of value, and one written `#op` source can hand one out too.
+- A stream is a value and is pure, so pulling the same stream value twice answers the same
+  element; the rest a pull hands out is what threads the stream, and the consumer passes it on.
+  One stream value has one consumer per execution path (design principles 5.4).
+
+### Producing
+
+#### `unfold`
+
+```camel
+unfold: (state: S, step: (state: S) => (T, S)?) => T..
+```
+
+The stream of what `step` answers from `state` on: one element with the state after it, or
+`null` when there is nothing more. The first round of `for x in s` over it is `step(state)`,
+and every later round is a pull of the rest, so the states are threaded rather than repeated.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `loop acc = 0 for x in unfold(3, (n: int) => if n > 0 then (n, n - 1) else null) do acc + x` gives `6`
 
 <a id="math"></a>
 
@@ -5103,7 +5145,7 @@ The device holds a foreign resource (`tiles:device`) and the driver is ambient s
 #### `upload`
 
 ```camel
-upload: (value: Tensor<f32>) => Device<Tensor<f32>>
+upload: (value: f32[..]) => Device<f32[..]>
 ```
 
 Uploads every leaf of the value — a tensor, or a scalar of the element type it is written with,
@@ -5111,12 +5153,12 @@ alone or inside a tuple or a struct — and returns the same tree with each leaf
 `Device<...>`. A leaf of any other type is refused when the call is compiled.
 
 - With effects: transfers to the device.
-- Example: `upload(host)` gives `a Device<Tensor<f32>>`
+- Example: `upload(host)` gives `a Device<f32[..]>`
 
 #### `download`
 
 ```camel
-download: (value: Device<Tensor<f32>>) => Tensor<f32>
+download: (value: Device<f32[..]>) => f32[..]
 ```
 
 Downloads every device leaf of the value and returns the host value it came from. A tree with a
@@ -5425,7 +5467,7 @@ Drops this program's reference to the Python object `obj`.
 Neural-network primitives: 2-D convolution and its gradients, max and average pooling with
 their gradients, batch normalization, embedding, the fused softmax cross-entropy loss, the
 optimizers, and the checkpoint writer for a parameter tree. The operators work on the core
-`Tensor` type; nothing here needs PyTorch or a GPU.
+array type; nothing here needs PyTorch or a GPU.
 
 ### Convolution
 
@@ -5930,7 +5972,7 @@ needs neither the ONNX runtime nor a GPU; only a run of `export_model` writes a 
 #### `export_model`
 
 ```camel
-export_model: (fn: (x: Tensor<f32>) => void, example: Tensor<f32>, path: string) => void
+export_model: (fn: (x: f32[..]) => void, example: f32[..], path: string) => void
 ```
 
 Writes the ONNX model of `fn` applied to arguments like `example` to the file `path`, at the

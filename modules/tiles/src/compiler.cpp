@@ -420,8 +420,7 @@ class Compiler {
         // Only values read from outside the regions are captured; a constant is lowered in place
         // by eval() (a DATA node, or a node whose value is known at build time), so a constant
         // (a tensor literal, a tuple FILL template, the round counter's initial value) is not a
-        // capture (H91, "a constant is not a capture"). Capturing the tuple template of the
-        // next-state FILL is what used to make a multi-state loop unlowerable.
+        // capture (a constant is not a capture).
         const std::vector<rt::gc_node_ref_t> outerRefs = view.externalInputs(false);
         for (auto ref : outerRefs) {
             const auto outer = eval(frame, ref);
@@ -475,9 +474,9 @@ class Compiler {
         for (const auto &value : node.loop->body.nodes) {
             const auto &op       = value.op;
             const bool supported = op == "input" || op == "constant64" || op == "loop_index_f64" ||
-                                   op == "cast_f32" || op == "scalar_add" || op == "scalar_sub" ||
-                                   op == "scalar_mul" || op == "scalar_div" || op == "scalar_neg" ||
-                                   elementwise(op);
+                                   op == "cast_f32" || op == "cast_f64" || op == "scalar_add" ||
+                                   op == "scalar_sub" || op == "scalar_mul" || op == "scalar_div" ||
+                                   op == "scalar_neg" || elementwise(op);
             if (!supported || value.loop || (!value.shape.empty() && value.shape != node.shape) ||
                 (elementwise(op) && !kernel::canonicalPointwise(node.loop->body, value)) ||
                 (op == "input" && !value.data.empty() && !value.shape.empty()))
@@ -757,6 +756,52 @@ class Compiler {
         return result;
     }
 
+    /// The result type of an operator the core answers itself, from its resolver: the type rule
+    /// the front end ran and a rewrite re-runs the same way (draft_types.cpp, operResultType).
+    /// Null when the rule is missing or the arguments do not fix a type.
+    ty::Type *coreResult(core::OperId id, const std::vector<Value> &args) {
+        const auto resolver = core::OperatorTable::instance().resolver(id);
+        if (!resolver)
+            return nullptr;
+        std::vector<ty::Type *> types;
+        std::vector<ty::StaticArg> statics;
+        for (const auto &arg : args) {
+            types.push_back(arg.type);
+            statics.emplace_back(arg.staticSlot);
+        }
+        try {
+            const auto resolved = resolver->resolveWith({}, types, statics, ModifierSet{});
+            if (!resolved || !*resolved)
+                return nullptr;
+            return (*resolved)->exitType();
+        } catch (const std::exception &) {
+            return nullptr; // the region stays on the CPU, where the call's own check runs
+        }
+    }
+
+    /// Why the core's rule for these arguments says the call can never be right -- a bound outside
+    /// the axis of an extent the value states, a slice axis the rank does not have -- with the
+    /// empty string when it has no such reason to give (globals.cpp, the checked slice rules).
+    /// The region cannot be mapped in either case; this is what tells the program which of the two
+    /// it is looking at.
+    std::string coreRejection(core::OperId id, const std::vector<Value> &args) {
+        const auto resolver = core::OperatorTable::instance().resolver(id);
+        if (!resolver)
+            return {};
+        std::vector<ty::Type *> types;
+        std::vector<ty::StaticArg> statics;
+        for (const auto &arg : args) {
+            types.push_back(arg.type);
+            statics.emplace_back(arg.staticSlot);
+        }
+        try {
+            const auto reason = resolver->explainRejection({}, types, statics, ModifierSet{});
+            return reason ? *reason : std::string();
+        } catch (const std::exception &) {
+            return {};
+        }
+    }
+
     Value operation(
         core::OperId id, const std::vector<Value> &args,
         const std::optional<core::sem::IndexedInstance> &indexed, ty::Type *knownResult = nullptr) {
@@ -790,39 +835,160 @@ class Compiler {
                                 static_cast<double>(std::get<int64_t>(*args[0].constant)))},
                             .dtype      = DType::F64})};
         }
+        // The two float widths convert both ways. A whole-tensor `sum` or `mean` answers in its
+        // elements' type (design principles 7.3), so a region that reads it as a float widens,
+        // and the narrowing is the conversion the tensor path already carries as `cast_f32`.
+        static const auto floatToDouble = core::OperatorTable::instance().intern(":op/ftod");
+        if (id == floatToDouble && args.size() == 1) {
+            const Value &arg = args[0];
+            if (!arg.type || arg.type->code() != ty::TypeCode::Float32)
+                throw std::runtime_error("float widening requires an f32 operand");
+            if (arg.tensor != SIZE_MAX) {
+                if (program.nodes[arg.tensor].dtype != DType::F32)
+                    throw std::runtime_error("scalar operand storage mismatch");
+                return {
+                    .type   = ty::Type::Float64(),
+                    .tensor = append(Node{
+                        .op = "cast_f64", .shape = {}, .inputs = {arg.tensor}, .dtype = DType::F64})};
+            }
+            if (arg.constant && std::holds_alternative<double>(*arg.constant)) {
+                // The value read at the element width is the value the conversion returns: the
+                // rounding of the f32 read happens here, once, as it does at runtime.
+                const double value = static_cast<double>(static_cast<float>(std::get<double>(*arg.constant)));
+                return {
+                    .type   = ty::Type::Float64(),
+                    .tensor = append(
+                        Node{
+                            .op         = "constant64",
+                            .shape      = {},
+                            .attributes = {std::bit_cast<int64_t>(value)},
+                            .dtype      = DType::F64})};
+            }
+            throw std::runtime_error("scalar operand is unavailable");
+        }
+        static const auto doubleToFloat = core::OperatorTable::instance().intern(":op/dtof");
+        if (id == doubleToFloat && args.size() == 1) {
+            const Value &arg = args[0];
+            if (!arg.type || arg.type->code() != ty::TypeCode::Float64)
+                throw std::runtime_error("float narrowing requires an f64 operand");
+            if (arg.tensor != SIZE_MAX) {
+                if (program.nodes[arg.tensor].dtype != DType::F64)
+                    throw std::runtime_error("scalar operand storage mismatch");
+                return {
+                    .type   = ty::Type::Float32(),
+                    .tensor = append(Node{
+                        .op = "cast_f32", .shape = {}, .inputs = {arg.tensor}, .dtype = DType::F32})};
+            }
+            if (arg.constant && std::holds_alternative<double>(*arg.constant))
+                return {
+                    .type     = ty::Type::Float32(),
+                    .constant = static_cast<double>(static_cast<float>(std::get<double>(*arg.constant)))};
+            throw std::runtime_error("scalar operand is unavailable");
+        }
         static const auto scalarOps = [] {
             auto &table = core::OperatorTable::instance();
-            return std::unordered_map<core::OperId, std::string>{
-                {table.intern(":op/add_d"), "scalar_add"},
-                {table.intern(":op/sub_d"), "scalar_sub"},
-                {table.intern(":op/mul_d"), "scalar_mul"},
-                {table.intern(":op/div_d"), "scalar_div"},
-                {table.intern(":op/neg_d"), "scalar_neg"}};
+            return std::unordered_map<core::OperId, std::pair<std::string, DType>>{
+                {table.intern(":op/add_d"), {"scalar_add", DType::F64}},
+                {table.intern(":op/sub_d"), {"scalar_sub", DType::F64}},
+                {table.intern(":op/mul_d"), {"scalar_mul", DType::F64}},
+                {table.intern(":op/div_d"), {"scalar_div", DType::F64}},
+                {table.intern(":op/neg_d"), {"scalar_neg", DType::F64}},
+                {table.intern(":op/add_f"), {"scalar_add", DType::F32}},
+                {table.intern(":op/sub_f"), {"scalar_sub", DType::F32}},
+                {table.intern(":op/mul_f"), {"scalar_mul", DType::F32}},
+                {table.intern(":op/div_f"), {"scalar_div", DType::F32}},
+                {table.intern(":op/neg_f"), {"scalar_neg", DType::F32}}};
         }();
         auto uri = [&] { return std::string(core::OperatorTable::instance().uri(id)); };
         if (auto op = scalarOps.find(id); op != scalarOps.end()) {
-            const size_t arity = op->second == "scalar_neg" ? 1 : 2;
+            // One scalar operation per width: the element type a whole-tensor reduction answers is
+            // as much a scalar as the f64 one, so `div_f` divides a gradient by a count at the
+            // element width and its operands are that width.
+            const std::string opName = op->second.first;
+            const DType width        = op->second.second;
+            const size_t arity       = opName == "scalar_neg" ? 1 : 2;
             if (args.size() != arity)
                 throw std::runtime_error("scalar operation arity");
-            Node node{.op = op->second, .shape = {}, .dtype = DType::F64};
+            const auto code = width == DType::F32 ? ty::TypeCode::Float32 : ty::TypeCode::Float64;
+            Node node{.op = opName, .shape = {}, .dtype = width};
             for (const auto &arg : args) {
-                if (!arg.type || arg.type->code() != ty::TypeCode::Float64)
-                    throw std::runtime_error("scalar operation requires f64 operands");
+                if (!arg.type || arg.type->code() != code)
+                    throw std::runtime_error("scalar operation operand type");
                 if (arg.tensor != SIZE_MAX) {
-                    if (program.nodes[arg.tensor].dtype != DType::F64)
+                    if (program.nodes[arg.tensor].dtype != width)
                         throw std::runtime_error("scalar operand storage mismatch");
                     node.inputs.push_back(arg.tensor);
                 } else if (arg.constant && std::holds_alternative<double>(*arg.constant)) {
-                    node.inputs.push_back(append(
+                    const size_t constant = append(
                         Node{
                             .op         = "constant64",
                             .shape      = {},
                             .attributes = {std::bit_cast<int64_t>(std::get<double>(*arg.constant))},
-                            .dtype      = DType::F64}));
+                            .dtype      = DType::F64});
+                    // The device carries one constant width: an f32 operand is that constant
+                    // narrowed into the width the operation is written at.
+                    node.inputs.push_back(
+                        width == DType::F32 ? append(
+                                                  Node{
+                                                      .op     = "cast_f32",
+                                                      .shape  = {},
+                                                      .inputs = {constant},
+                                                      .dtype  = DType::F32})
+                                            : constant);
                 } else
                     throw std::runtime_error("scalar operand is unavailable");
             }
-            return {.type = ty::Type::Float64(), .tensor = append(std::move(node))};
+            return {
+                .type   = width == DType::F32 ? ty::Type::Float32() : ty::Type::Float64(),
+                .tensor = append(std::move(node))};
+        }
+        // The core's own slice node -- `:op/slice_sub`, the one node `t[a:b:s]` and
+        // `slice(t, axis, a, b, s)` both build (design principles 5.4) -- is a view of one axis
+        // of its input, mapped as the layout operators below are. It is no module's definition:
+        // what it is comes from the core's table, where the tensor module publishes its index
+        // declaration, and its result type from the core's own resolver.
+        static const auto coreSlice = core::OperatorTable::instance().intern(":op/slice_sub");
+        if (id == coreSlice) {
+            const auto declared = core::OperatorTable::instance().find(id);
+            if (!declared || !declared->pure)
+                throw UnsupportedComputation("'slice' is not declared pure", uri());
+            ty::Type *inferred = knownResult != nullptr ? knownResult : coreResult(id, args);
+            const tensor::TensorFacts result =
+                inferred != nullptr ? tensor::tensorFactsOf(inferred) : tensor::TensorFacts{};
+            if (inferred == nullptr || result.dtype != ty::TypeCode::Float32 ||
+                !result.isStaticShape()) {
+                // A call the core's rule refuses is a defect of the program, and its reason is
+                // what the program must hear; only a call that is right, whose shape this
+                // backend cannot see, is the shape refusal below.
+                const std::string why = coreRejection(id, args);
+                if (!why.empty())
+                    throw UnsupportedComputation(why, uri(), UnsupportedComputation::Reason::Shape);
+                throw UnsupportedComputation(
+                    "operator '" + uri() + "' needs a statically known f32 tensor result",
+                    uri(),
+                    UnsupportedComputation::Reason::Shape);
+            }
+            Node n{.op = "reindex", .shape = tensor::extentsOf(*result.shape)};
+            n.inputs   = {tensorValue(args.at(0))};
+            n.indexing = indexed;
+            if (!n.indexing)
+                throw UnsupportedComputation(
+                    "slice lacks a concrete core index instance",
+                    uri(),
+                    UnsupportedComputation::Reason::Shape);
+            try {
+                (void)kernel::coreViewAddress(program, n, kernel::IndexExpr(0));
+            } catch (const std::exception &e) {
+                // The core's own refusal -- a negative coordinate, a map this backend cannot
+                // emit an address for -- is not a defect of the program: the region stays on the
+                // CPU, where the slice kernel takes the positions the declaration states. A
+                // backward slice (a negative step) is one such map.
+                throw UnsupportedComputation(
+                    "slice is not a representable view: " + std::string(e.what()),
+                    uri(),
+                    UnsupportedComputation::Reason::Shape);
+            }
+            return {.type = inferred, .tensor = append(std::move(n))};
         }
         const auto *def = tensor::ops::OpRegistry::instance().find(id);
         if (!def || !def->traits.pure)
@@ -865,13 +1031,16 @@ class Compiler {
         // core shape fact; only invocation specialization needs to infer again.
         auto inferred = knownResult ? std::optional<ty::Type *>(knownResult)
                                     : def->infer(tensor::ops::InferContext(types, constants));
-        // A whole-tensor reduction answers f64 today (the accumulator's type): `tensor:sum`
-        // declares `float` for every tensor dtype. Taking the element type here is the second half
-        // of the ruling in `9acbac6f7`;
-        // `docs/handover/reviews/questions-2026-10-23.md（§tensor-reduction-element-type-slice）` records what it needs
-        // (the run-time answer cannot disagree with the inferred type) and what it still costs.
-        if (inferred && (*inferred)->code() == ty::TypeCode::Float64 &&
-            (def->name == "sum" || def->name == "mean")) {
+        // A whole-tensor reduction answers in its elements' own type (design principles 7.3), so
+        // the device accumulates in f64 and rounds into the annotation once: the reduction kernel
+        // casts its f64 accumulator to the node's dtype, and `mean_all` divides by the count
+        // there, which is the definition's own sum-then-divide. Only the two float widths this
+        // device has are represented here; an integer or bool reduction -- whose exact int64
+        // accumulator the device does not have -- is refused below and stays on the CPU.
+        if (inferred && (def->name == "sum" || def->name == "mean") &&
+            ((*inferred)->code() == ty::TypeCode::Float32 ||
+             (*inferred)->code() == ty::TypeCode::Float64)) {
+            const bool wide = (*inferred)->code() == ty::TypeCode::Float64;
             size_t input = tensorValue(args.at(0));
             return {
                 .type   = *inferred,
@@ -880,7 +1049,7 @@ class Compiler {
                         .op     = def->name == "sum" ? "sum_all" : "mean_all",
                         .shape  = {},
                         .inputs = {input},
-                        .dtype  = DType::F64})};
+                        .dtype  = wide ? DType::F64 : DType::F32})};
         }
         const tensor::TensorFacts result =
             inferred ? tensor::tensorFactsOf(*inferred) : tensor::TensorFacts{};

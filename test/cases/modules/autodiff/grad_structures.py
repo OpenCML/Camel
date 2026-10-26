@@ -91,7 +91,7 @@ class Gen:
         return self.let(f"{g}({v})", f"{g}({v})")
 
     def stage_nested(self, v: str) -> str:
-        s = self.let(f"sum({v})", f"{v}.sum()")
+        s = self.let(f"float(sum({v}))", f"{v}.sum()")
         g = self.name("inner_fn")
         c1, p1 = self.unary("p")
         self.body_c.append(f"    func {g}(p: f32[..]): f32[..] {{\n        return {c1} * f32({s})\n    }}")
@@ -107,7 +107,7 @@ class Gen:
             self.helpers_c.append(f"func {fb}(y: f32[..]): f32[..] {{\n    return {c2} * 0.5\n}}\n")
             self.helpers_p.append(f"def {fa}(y):\n    return {p1}\n")
             self.helpers_p.append(f"def {fb}(y):\n    return {p2} * 0.5\n")
-            return self.let(f"if sum({v}) > 0.1 then {fa}({v}) else {fb}({v})", f"{fa}({v}) if {v}.sum() > 0.1 else {fb}({v})")
+            return self.let(f"if float(sum({v})) > 0.1 then {fa}({v}) else {fb}({v})", f"{fa}({v}) if {v}.sum() > 0.1 else {fb}({v})")
         # arms return a tuple whose second component also depends on the argument
         self.helpers_c.append(
             f"func {fa}(y: f32[..]): (f32[..], f32[..]) {{\n    let t = {c1}\n    return (t, tanh(mean(t, 0, true)))\n}}\n")
@@ -116,7 +116,7 @@ class Gen:
         self.helpers_p.append(f"def {fa}(y):\n    t = {p1}\n    return (t, np.tanh(t.mean(0, keepdims=True)))\n")
         self.helpers_p.append(f"def {fb}(y):\n    t = {p2}\n    return (t * 0.5, y.mean(0, keepdims=True))\n")
         a, b = self.name("pa"), self.name("pb")
-        self.body_c.append(f"    let ({a}, {b}) = if sum({v}) > 0.1 then {fa}({v}) else {fb}({v})")
+        self.body_c.append(f"    let ({a}, {b}) = if float(sum({v})) > 0.1 then {fa}({v}) else {fb}({v})")
         self.body_p.append(f"    {a}, {b} = {fa}({v}) if {v}.sum() > 0.1 else {fb}({v})")
         return self.let(f"{a} + {b}", f"{a} + {b}")
 
@@ -129,7 +129,7 @@ class Gen:
             kinds.append(stage.__name__[6:])
             v = stage(v)
         name = f"loss{self.index}"
-        camel = "".join(self.helpers_c) + f"with <b: f32[..]>\nfunc {name}(): float {{\n" + "\n".join(self.body_c) + f"\n    return sum({v})\n}}\n"
+        camel = "".join(self.helpers_c) + f"with <b: f32[..]>\nfunc {name}(): float {{\n" + "\n".join(self.body_c) + f"\n    return float(sum({v}))\n}}\n"
         python = "".join(self.helpers_p) + f"def {name}(b):\n" + "\n".join(self.body_p) + f"\n    return float({v}.sum())\n"
         return camel, python, kinds
 
@@ -157,7 +157,7 @@ def main() -> int:
                 kinds.append(kd)
             source = (
                 f"module grad_structures_{k}\n"
-                "import { Tensor, mean, reshape, save_npy, sigmoid, sum, tanh } from tensor\n"
+                "import { mean, reshape, save_npy, sigmoid, sum, tanh } from tensor\n"
                 "import { grad } from autodiff\n\n" + "\n".join(camel) + "\nfunc main(): int sync {\n"
                 "    let xs: f32[] = [0.3, -0.2, 0.7]\n" + "    let x = reshape(xs, [3])\n"
                 + "".join(f"    save_npy(grad(loss{j})<x>(), 'g{k}_{j}.npy')\n" for j in range(args.losses))

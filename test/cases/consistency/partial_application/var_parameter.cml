@@ -1,0 +1,22 @@
+/**
+ * A `with` parameter declared `var` is a variable the function writes, and binding one with
+ * `f<w>` is an ordinary partial application (graph model Q9, `partial-application-var`): the
+ * function value captures the cell, and every call of it writes through the capture, so the
+ * accumulator after three calls is what the three calls added.
+ */
+module partial_application_var_parameter
+
+with <var total: int>
+func add(x: int): int sync {
+    total = total + x
+    return total
+}
+
+func main(): int sync {
+    var t = 0
+    let g = add<t>
+    println(g(1), g(2), g(3), t)
+    let direct = add<t>
+    println(direct(10), t)
+    return 0
+}

@@ -4,7 +4,7 @@
  * `SemanticDiag::SliceStepZero` and the program after it does not run (design principles 3.9).
  */
 module subscript_slice_step_zero
-import { Tensor, reshape, shape } from tensor
+import { reshape, shape } from tensor
 
 func main(): int sync {
     let b = reshape([1.0, 2.0, 3.0, 4.0], [4])

@@ -1,0 +1,106 @@
+/**
+ * The full-form tensor reduction returns the element type: `sum(t)` and `mean(t)` over a whole
+ * tensor answer `f32` for an `f32` tensor, `f64` for an `f64` one, and `bf16`/`f16` for those,
+ * exactly as their by-axis forms already did (design principles 7.3: "浮点数组的归约在 f64 中累加、
+ * 舍入一次，返回元素类型"). The element type is proved by the declaration, not by the digits: each
+ * function below declares the element type it expects, so `return sum(x)` in it compiles only
+ * when the call answers that type — a reduction that answered `float` would be a
+ * `SemanticDiag::ReturnTypeMismatch` here, and that is the reading this case pins.
+ *
+ * The bf16 and f16 readings then show the rounding into that type. The two elements are stored in
+ * the element type first (1.0, and the type's neighbour of 0.001), summed in an f64 accumulator,
+ * and the one-rounding answer is the grid point nearest the exact sum: 1.0 for bf16 (spacing
+ * 2^-8 above 1.0) and 1.0009765625 for f16 (spacing 2^-10). The same elements through an f32
+ * tensor answer the exact sum as f32 (1.0009994506835938), and through an f64 tensor the exact
+ * sum itself, so the three widths are told apart by value and not only by the declaration.
+ */
+module whole_reduction_element_type
+
+import { new, cast, sum, mean } from tensor
+
+/// The probe: an f32 tensor's whole-tensor sum is an f32, so returning it as one type-checks.
+func total(x: f32[..]): f32 {
+    return sum(x)
+}
+
+/// The same for the mean, whose one rounding is the whole reduction's.
+func meanOf(x: f32[..]): f32 {
+    return mean(x)
+}
+
+/// An f64 tensor keeps f64.
+func totalF64(x: f64[..]): f64 {
+    return sum(x)
+}
+
+/// A bf16 tensor's sum is a bf16 (the element type), never an f32 or a float.
+func totalBf16(x: bf16[..]): bf16 {
+    return sum(x)
+}
+
+/// A bf16 tensor's mean is a bf16 too.
+func meanBf16(x: bf16[..]): bf16 {
+    return mean(x)
+}
+
+/// An f16 tensor's sum is an f16.
+func totalF16(x: f16[..]): f16 {
+    return sum(x)
+}
+
+/// An f16 tensor's mean is an f16.
+func meanF16(x: f16[..]): f16 {
+    return mean(x)
+}
+
+func main(): int sync {
+    // The element type's neighbour of 0.001: 1.0 plus it is not a value of the element type, so
+    // the one rounding has somewhere to land.
+    let tiny = [1.0, 0.001] as f32[]
+    let tb   = cast(tiny, 'bf16')
+    let th   = cast(tiny, 'f16')
+    // The same stored values widened: the f32 tensor holds what bf16 and f16 hold, and the f64
+    // one is the exact accumulator.
+    let t32b = cast(tb, 'float32')
+    let t32h = cast(th, 'float32')
+    let t64b = cast(tb, 'float')
+    let t64h = cast(th, 'float')
+
+    println("f32 sum")
+    println(total(new([1.0, 2.0, 3.0] as f32[])))
+    println("f32 mean")
+    println(meanOf(new([1.0, 2.0, 3.0] as f32[])))
+    println("f64 sum")
+    println(totalF64(new([1.0, 2.0, 3.0])))
+    println("bf16 sum")
+    println(totalBf16(tb))
+    println("bf16 mean")
+    println(meanBf16(tb))
+    println("bf16 widened sum (f32)")
+    println(total(t32b))
+    println("bf16 widened sum (f64)")
+    println(totalF64(t64b))
+    println("f16 sum")
+    println(totalF16(th))
+    println("f16 mean")
+    println(meanF16(th))
+    println("f16 widened sum (f32)")
+    println(total(t32h))
+    println("f16 widened sum (f64)")
+    println(totalF64(t64h))
+
+    // One rounding into the element type: the answer is the f64 accumulation rounded into it.
+    let bf16Once = totalBf16(tb) == bf16(totalF64(t64b))
+    let f16Once  = totalF16(th) == f16(totalF64(t64h))
+    // And not the f32 accumulation: on this input the element type's grid and f32's disagree.
+    let bf16Narrow = f32(totalBf16(tb)) != total(t32b)
+    let f16Narrow  = f32(totalF16(th)) != total(t32h)
+    // The two reduced widths are not one answer.
+    let widthsDiffer = f32(totalBf16(tb)) != f32(totalF16(th))
+    'bf16 rounds once: {}'->format<bf16Once>->println
+    'f16 rounds once: {}'->format<f16Once>->println
+    'the element grid, not f32: {} {}'->format<bf16Narrow, f16Narrow>->println
+    'bf16 and f16 differ: {}'->format<widthsDiffer>->println
+
+    return if bf16Once && f16Once && bf16Narrow && f16Narrow && widthsDiffer then 0 else 1
+}

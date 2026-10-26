@@ -183,6 +183,33 @@ inline camel::source::SemanticPart semanticPart(
         .label  = label};
 }
 
+/// Appends one `Parameter` part per parameter written in a function type load (`with` parameters
+/// first, then the ordinary ones; each with its slot in the signature and the position it is
+/// written at). A port of the function's graph stands for one parameter, so that what is said
+/// about a parameter -- the refusal of a function value that came in through it -- points at the
+/// parameter itself. The list keeps its own `params` part as well, for what reads the parameter
+/// list as one place.
+inline void appendParameterParts(
+    std::vector<camel::source::SemanticPart> &parts, const node_ptr_t &funcTypeNode) {
+    if (!funcTypeNode || funcTypeNode->size() < 2) {
+        return;
+    }
+    const auto add = [&](const node_ptr_t &params, size_t firstSlot) {
+        if (!params) {
+            return;
+        }
+        for (size_t i = 0; i < params->size(); ++i) {
+            parts.push_back(semanticPart(
+                camel::source::SemanticRole::Parameter,
+                nodeOrigin(params->at(i)),
+                static_cast<int32_t>(firstSlot + i),
+                "param"));
+        }
+    };
+    add(funcTypeNode->at(0), 0);
+    add(funcTypeNode->at(1), funcTypeNode->at(0)->size());
+}
+
 inline void registerAstSemanticBundle(
     const node_ptr_t &node, std::vector<camel::source::SemanticPart> parts = {},
     std::vector<camel::source::origin_id_t> mergedInputs = {}, bool synthetic = false,
@@ -740,31 +767,34 @@ Value Builder::visitFuncData(cst::FuncData context) {
     setNodeTokenRangeByContext(funcNode, context);
     *funcNode << funcTypeNode;
     *funcNode << blockNode;
-    registerAstSemanticBundle(
-        funcNode,
-        {
-            semanticPart(
-                camel::source::SemanticRole::GenericParameter,
-                nodeOrigin(funcTypeNode->at(0)),
-                -1,
-                "withParams"),
-            semanticPart(
-                camel::source::SemanticRole::Parameter,
-                nodeOrigin(funcTypeNode->at(1)),
-                -1,
-                "params"),
-            semanticPart(
-                camel::source::SemanticRole::ReturnType,
-                typeOptNode->empty() ? camel::source::kInvalidOriginId
-                                     : nodeOrigin(typeOptNode->front()),
-                -1,
-                "returnType"),
-            semanticPart(
-                camel::source::SemanticRole::ValueProducer,
-                nodeOrigin(blockNode),
-                -1,
-                "body"),
-        });
+    std::vector<camel::source::SemanticPart> semanticParts{
+        semanticPart(
+            camel::source::SemanticRole::GenericParameter,
+            nodeOrigin(funcTypeNode->at(0)),
+            -1,
+            "withParams"),
+        semanticPart(
+            camel::source::SemanticRole::Parameter,
+            nodeOrigin(funcTypeNode->at(1)),
+            -1,
+            "params"),
+        semanticPart(
+            camel::source::SemanticRole::ReturnType,
+            typeOptNode->empty() ? camel::source::kInvalidOriginId
+                                 : nodeOrigin(typeOptNode->front()),
+            -1,
+            "returnType"),
+        semanticPart(
+            camel::source::SemanticRole::ValueProducer,
+            nodeOrigin(blockNode),
+            -1,
+            "body"),
+    };
+    // Each parameter as written, with its own position and its slot in the signature: a port of
+    // the function's graph stands for one parameter, and what is said about a parameter points at
+    // where it is written.
+    appendParameterParts(semanticParts, funcTypeNode);
+    registerAstSemanticBundle(funcNode, std::move(semanticParts));
 
     LEAVE("FuncData");
     return funcNode;
@@ -945,7 +975,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         }
     }
 
-// A `with` parameter of a rule is a compile-time value the rule is specialised by: every
+    // A `with` parameter of a rule is a compile-time value the rule is specialised by: every
     // function the declaration becomes -- the two sides and the condition -- takes it as a
     // `constas` parameter, so the instance an application makes reads it from a static slot and
     // both sides may write it (design principles 5.4, 5.5). The grammar writes the type of a `with`
@@ -1401,9 +1431,10 @@ resolved where the fact's type is known.
 The declaration's `with` parameters are the arguments the query is written with
 (`depth<8>(x)`, and one with a default may be left out). They are copied onto the query function
 and marked `constas` there: the compiler must compute the argument, since the argument is part of
-which fact this is, and the engine computes and caches one fact per argument. A case or a trailing
-clause cannot name one: the engine calls those functions with the value the fact is about, without
-the arguments the query was written with (the refusal below says so).
+which fact this is, and the engine computes and caches one fact per argument. Every function the
+declaration becomes carries them as well, so a case or a trailing clause names one and reads the
+value: on the query they are `constas`, and on the functions the engine calls they are plain
+`with` parameters, which the engine fills with the arguments the query was written with.
 
 The head parameters are the parts of a value the query is written on
 (`aligned(x, y)` for `fact aligned(a: int, b: int)`), and are typed `Node` in the generated
@@ -2102,30 +2133,11 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
     unwrapNodeAs<FuncDataLoad>(funcNode)->setWhenText(std::move(whenText));
     *funcNode << funcTypeNode;
     *funcNode << blockNode;
-
-    node_ptr_t funcDeclNode = createNodeAs<FuncDeclLoad>(ref);
-    unwrapNodeAs<FuncDeclLoad>(funcDeclNode)->setDoc(docOf(context));
-    unwrapNodeAs<FuncDeclLoad>(funcDeclNode)->setOperatorSymbol(operatorSymbol);
-    if (!operatorSymbol.empty()) {
-        unwrapNodeAs<FuncDeclLoad>(funcDeclNode)->setDeclaredIn(namespaceStack_);
-    }
-    if (annoListNode) {
-        *funcDeclNode << annoListNode;
-    }
-    // The tag uses written before the function, after the decorators. They are read when the
-    // function is compiled: a tag declared `on func` belongs to the declaration, one declared
-    // `on nodes` to the nodes of its body (design principles 6.2).
-    addTagUses(funcDeclNode, context);
-    *funcDeclNode << funcNode;
-    setNodeTokenRangeByContext(funcDeclNode, context);
-    registerAstSemanticBundle(
-        funcDeclNode,
-        {
-            semanticPart(
-                camel::source::SemanticRole::FuncName,
-                deriveAstAnchorOrigin(funcDeclNode, nameNode, "ast.func.name"),
-                -1,
-                ref.toString()),
+    // The signature as the node the function is built from knows it: the same parts the body of a
+    // lambda registers (`visitFuncData`), so that the graph of a declared function reads its
+    // parameters from where its body is built, whichever of the two nodes it is entered from.
+    {
+        std::vector<camel::source::SemanticPart> funcParts{
             semanticPart(
                 camel::source::SemanticRole::GenericParameter,
                 nodeOrigin(funcTypeNode->at(0)),
@@ -2147,7 +2159,59 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
                 blockNode ? nodeOrigin(blockNode) : camel::source::kInvalidOriginId,
                 -1,
                 "body"),
-        });
+        };
+        appendParameterParts(funcParts, funcTypeNode);
+        registerAstSemanticBundle(funcNode, std::move(funcParts));
+    }
+
+    node_ptr_t funcDeclNode = createNodeAs<FuncDeclLoad>(ref);
+    unwrapNodeAs<FuncDeclLoad>(funcDeclNode)->setDoc(docOf(context));
+    unwrapNodeAs<FuncDeclLoad>(funcDeclNode)->setOperatorSymbol(operatorSymbol);
+    if (!operatorSymbol.empty()) {
+        unwrapNodeAs<FuncDeclLoad>(funcDeclNode)->setDeclaredIn(namespaceStack_);
+    }
+    if (annoListNode) {
+        *funcDeclNode << annoListNode;
+    }
+    // The tag uses written before the function, after the decorators. They are read when the
+    // function is compiled: a tag declared `on func` belongs to the declaration, one declared
+    // `on nodes` to the nodes of its body (design principles 6.2).
+    addTagUses(funcDeclNode, context);
+    *funcDeclNode << funcNode;
+    setNodeTokenRangeByContext(funcDeclNode, context);
+    std::vector<camel::source::SemanticPart> declSemanticParts{
+        semanticPart(
+            camel::source::SemanticRole::FuncName,
+            deriveAstAnchorOrigin(funcDeclNode, nameNode, "ast.func.name"),
+            -1,
+            ref.toString()),
+        semanticPart(
+            camel::source::SemanticRole::GenericParameter,
+            nodeOrigin(funcTypeNode->at(0)),
+            -1,
+            "withParams"),
+        semanticPart(
+            camel::source::SemanticRole::Parameter,
+            nodeOrigin(funcTypeNode->at(1)),
+            -1,
+            "params"),
+        semanticPart(
+            camel::source::SemanticRole::ReturnType,
+            typeOptNode->empty() ? camel::source::kInvalidOriginId
+                                 : nodeOrigin(typeOptNode->front()),
+            -1,
+            "returnType"),
+        semanticPart(
+            camel::source::SemanticRole::ValueProducer,
+            blockNode ? nodeOrigin(blockNode) : camel::source::kInvalidOriginId,
+            -1,
+            "body"),
+    };
+    // Each parameter as written, with its own position and its slot in the signature: the
+    // declaration's own node is where the parameter list is read as one place, and where the
+    // parameters of a declaration without a body are the whole of it.
+    appendParameterParts(declSemanticParts, funcTypeNode);
+    registerAstSemanticBundle(funcDeclNode, std::move(declSemanticParts));
 
     LEAVE("FuncDecl");
     return funcDeclNode;
@@ -2555,8 +2619,8 @@ Value Builder::visitIndexValues(cst::IndexValues context) {
 
 /*
 pairedValues : keyValuePair (',' keyValuePair)* ;
-In a call's parentheses the list may also hold a positional argument written after a named one
-(handover H276): it is a StrayPositional, and the call refuses it. The named arguments are all
+In a call's parentheses the list may also hold a positional argument written after a named one:
+it is a StrayPositional, and the call refuses it. The named arguments are all
 this function returns.
 */
 Value Builder::visitPairedValues(cst::PairedValues context) {
@@ -2912,7 +2976,7 @@ staticForExpr
 staticForHeader
     : FOR '(' identDef (',' identDef)* ')' IN ('fields' typeExpr | 'indices' dataExpr)
     ;
-`indices` (H51 step 6) walks the positions of a tuple value; its operand is child 0 as an
+`indices` walks the positions of a tuple value; its operand is child 0 as an
 ordinary expression, where `fields` has a type there. The head may name up to three things --
 `fields`'s element is the triple (name, type, tags), every other element is one thing -- and
 whether the count fits is read from the element (`SemanticDiag::StaticHeadNameCount`).
@@ -2965,7 +3029,7 @@ staticLoopExpr
     ;
 The children of the node are described at StaticLoopLoad: a Repeated Data of the first values,
 the walked shape (a type for `fields`, a value for `indices` and for a sequence), and the body.
-The head's own production (H462) is `staticLoopHeader`: `for i in <序列>`, without the
+The head's own production is `staticLoopHeader`: `for i in <序列>`, without the
 parentheses `static for` still has.
 */
 Value Builder::visitStaticLoopExpr(cst::StaticLoopExpr context) {
@@ -4293,7 +4357,7 @@ node_ptr_t Builder::makeStaticAccess(
 /*
 structData
     : '{' (pairedValues ','?)? '}' // no list comprehension because the struct is immutable
-    | '{' staticForExpr '}'        // a struct comprehension (H51 step 4)
+    | '{' staticForExpr '}'        // a struct comprehension
     ;
 */
 Value Builder::visitStructData(cst::StructData context) {
@@ -4368,7 +4432,7 @@ Value Builder::visitArrayData(cst::ArrayData context) {
 /*
 tupleData
     : '(' dataList? ','? ')'
-    | '(' staticForExpr ')'        // a tuple comprehension (H51 step 4)
+    | '(' staticForExpr ')'        // a tuple comprehension
     ;
 */
 Value Builder::visitTupleData(cst::TupleData context) {

@@ -1,10 +1,10 @@
 module tiles_reduction_benchmark
-import { Tensor, exp, sum, random, seed } from tensor
+import { exp, sum, random, seed } from tensor
 import { benchmark } from tiles
-func rows(x: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
+func rows(x: f32[..], b: f32[..]): f32[..] {
     return sum(exp((x + b) * 0.5), 1)
 }
-func row_affine(x: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
+func row_affine(x: f32[..], b: f32[..]): f32[..] {
     return (sum(exp((x + b) * 0.5), 1) + 1.0) * 0.25
 }
 func main(): int sync {

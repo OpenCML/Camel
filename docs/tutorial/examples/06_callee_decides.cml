@@ -1,6 +1,5 @@
 // A function's behaviour is decided by its own body, not by its caller.
 // Run: camel docs/tutorial/examples/06_callee_decides.cml
-module callee_decides
 
 func log(x: int): int {
     println(x)          // result unused, body is not a sync block: not executed

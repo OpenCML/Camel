@@ -4,7 +4,7 @@
  * gradient.
  */
 module var_tensor_local
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { with_grad } from autodiff
 
 type P = { p0: f64[..] }
@@ -13,7 +13,7 @@ with <m: P>
 func loss(x: f64[..]): float sync {
     var t = m.p0 * x
     t = t * 2.0
-    return sum(t)
+    return float(sum(t))
 }
 
 func main(): int sync {

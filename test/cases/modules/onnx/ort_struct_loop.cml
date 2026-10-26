@@ -14,7 +14,7 @@
  * every model are saved there, and the model named by MODEL is exported when ONNX_OUT is set.
  */
 module ort_struct_loop
-import { Tensor, load_npy, reshape, save_npy, sum, tanh } from tensor
+import { load_npy, reshape, save_npy, sum, tanh } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
@@ -64,7 +64,7 @@ func walkS(s: Small): Small {
 }
 
 func startS(x: f32[..]): Small {
-    return walkS({ x: sum(x), n: 0 })
+    return walkS({ x: float(sum(x)), n: 0 })
 }
 
 // empt: a struct with an empty struct field; the field has no leaf, the tensor still changes.
