@@ -325,10 +325,22 @@ class GenerationalAllocatorWithGC : public IAllocator {
 
     bool isObjectAddressStable(rtdata::Object *object) const;
 
-    void setObjectRootSet(std::vector<rtdata::Object *> *rootSet);
+    /// Process-level state is registered by the owner that holds it and unregistered by that same
+    /// owner. There is one allocator per process and more than one `Context` may exist at once (a
+    /// language server analysing several entries, a tool that builds a second context beside its
+    /// main one, the Python binding next to a tool), so a registration never replaces another
+    /// owner's: the allocator keeps them all and traces every root set it was given. Unregistering
+    /// removes only the caller's own entry, which is what lets one `Context` be destroyed while
+    /// another keeps running.
+    void registerObjectRootSet(
+        const void *owner, std::string name, std::vector<rtdata::Object *> *rootSet);
+    void unregisterObjectRootSet(const void *owner);
     /// Called by a major collection once it has marked what it reaches, before the spaces are
-    /// swept: the graph space holds Programs and graphs, which it frees when unmarked.
-    void setGraphSweeper(std::function<void()> sweeper);
+    /// swept: the graph space holds Programs and graphs, which it frees when unmarked. One per
+    /// owner, for the same reason as the root sets: a second context's sweeper must not replace
+    /// the first's, or a graph the first is running is freed as unreachable.
+    void registerGraphSweeper(const void *owner, std::string name, std::function<void()> sweeper);
+    void unregisterGraphSweeper(const void *owner);
     /// Asks for a major collection at the next safepoint, for a space the collector does not
     /// budget itself (the graph space: Programs and graph versions).
     void requestMajorCollection(std::string_view reason);
@@ -362,6 +374,10 @@ class GenerationalAllocatorWithGC : public IAllocator {
     void reportStats(std::ostream &os) const;
 
     std::vector<std::string> rootSourceDescriptions() const;
+
+    /// One line per registered graph sweeper (`name`): for diagnostics and for the process-state
+    /// test, which reads how many owners the allocator is holding state for.
+    std::vector<std::string> graphSweeperDescriptions() const;
 
     std::vector<HeapVerificationIssue> verifyHeap();
 
@@ -452,6 +468,15 @@ class GenerationalAllocatorWithGC : public IAllocator {
     void minorGCUnlocked();
 
     void majorGCUnlocked();
+
+    /// A collection that threw. The heap is half relocated at that point (the haven has been
+    /// swapped, some objects carry forwarding pointers, the remembered set has been rewritten),
+    /// so there is no state to go on from: this names what was being collected and why it failed,
+    /// and ends the process. Called from the one place a collection is started
+    /// (collectAtSafepointUnlocked), so an exception from a collection never reaches ordinary
+    /// fault handling as if the heap were still usable (C24, MG/R8).
+    [[noreturn]] static void reportFatalCollectionFailure(
+        CollectionKind kind, std::string_view reason);
 
     // ============================================================================
     // Allocation region tag
@@ -552,8 +577,19 @@ class GenerationalAllocatorWithGC : public IAllocator {
     std::atomic<uint32_t> collectionInhibit_{0};
     // Untyped roots are reserved for graph carriers whose updateRefs implementation owns its
     // layout. Runtime frames and temporary values must register typed external tracers instead.
-    std::vector<rtdata::Object *> *rootObjectSet_{};
-    std::function<void()> graphSweeper_;
+    // One entry per owner: see registerObjectRootSet.
+    struct ObjectRootSetEntry {
+        const void *owner = nullptr;
+        std::string name;
+        std::vector<rtdata::Object *> *set = nullptr;
+    };
+    std::vector<ObjectRootSetEntry> objectRootSets_;
+    struct GraphSweeperEntry {
+        const void *owner = nullptr;
+        std::string name;
+        std::function<void()> sweeper;
+    };
+    std::vector<GraphSweeperEntry> graphSweepers_;
     struct ExternalRootTracerEntry {
         const void *owner = nullptr;
         std::string name;

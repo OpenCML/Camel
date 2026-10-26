@@ -8,6 +8,7 @@
 
 #include "camel/core/effect_trace.h"
 #include "camel/core/error/runtime.h"
+#include "camel/core/mm/blocking.h"
 #include "camel/core/mm/root_handle.h"
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/array.h"
@@ -289,6 +290,44 @@ void TaskflowGcGate::reportStats(std::ostream &os) const {
         residentMegabytes());
 }
 
+namespace {
+
+// A wait runs outside every GC region (C24, MG/R5/BE/6). A worker that blocks holds its region
+// for as long as it waits, and that is what makes a cooperative stop-the-world collection give
+// up; leaving the region for the wait and re-entering it after lets the collector in, so a
+// blocked worker stops being what stops the world. The depth is kept and put back exactly, so
+// nesting works and a region is as deep after the wait as it was before it.
+thread_local uint32_t blockingWaitNesting = 0;
+thread_local uint32_t blockingSavedDepth  = 0;
+
+void taskflowBlockingWaitEnter() {
+    if (blockingWaitNesting++ != 0) {
+        return;
+    }
+    TaskflowGcGate &gate            = TaskflowGcGate::instance();
+    TaskflowGcGate::ThreadState &ts = gate.self();
+    blockingSavedDepth              = ts.depth;
+    while (ts.depth > 0) {
+        gate.leave(ts);
+    }
+}
+
+void taskflowBlockingWaitLeave() {
+    if (blockingWaitNesting == 0 || --blockingWaitNesting != 0) {
+        return;
+    }
+    TaskflowGcGate &gate            = TaskflowGcGate::instance();
+    TaskflowGcGate::ThreadState &ts = gate.self();
+    for (uint32_t i = 0; i < blockingSavedDepth; ++i) {
+        // Re-entering waits for a collector already in, as every region entry does: the thread
+        // joins the world at a safepoint, not in the middle of a collection.
+        gate.enter(ts);
+    }
+    blockingSavedDepth = 0;
+}
+
+} // namespace
+
 TaskflowGcGate &TaskflowGcGate::instance() {
     // Never destroyed: worker threads may still hold their state while statics are torn down.
     static TaskflowGcGate *gate = new TaskflowGcGate();
@@ -319,6 +358,9 @@ void TaskflowGcGate::collect(ThreadState &ts, std::string_view reason) {
     constexpr auto kPatience          = 500ms;
     constexpr int64_t kFirstBackoffNs = 10'000'000;
     constexpr int64_t kMaxBackoffNs   = 1'000'000'000;
+    // Give-ups in a row after which a refusal stops reading as a transient and is reported as
+    // what it is: the heap is not being collected while it lasts (C24, MG/R5/BE/6).
+    constexpr uint64_t kEscalateAfterGiveUps = 3;
     static std::atomic<int64_t> backoffNs{kFirstBackoffNs};
 
     stats_.pendingPolls.fetch_add(1, std::memory_order_relaxed);
@@ -422,6 +464,7 @@ void TaskflowGcGate::collect(ThreadState &ts, std::string_view reason) {
                 capUntilNs_.store(end + 2 * (end - begin), std::memory_order_relaxed);
             }
             backoffNs.store(kFirstBackoffNs, std::memory_order_relaxed);
+            consecutiveGiveUps_.store(0, std::memory_order_relaxed);
         } else {
             stats_.gaveUp.fetch_add(1, std::memory_order_relaxed);
             if (gcTraceEnabled()) {
@@ -433,6 +476,28 @@ void TaskflowGcGate::collect(ThreadState &ts, std::string_view reason) {
             const int64_t wait = backoffNs.load(std::memory_order_relaxed);
             retryAfterNs_.store(steadyNowNs() + wait, std::memory_order_relaxed);
             backoffNs.store(std::min(wait * 2, kMaxBackoffNs), std::memory_order_relaxed);
+            // Escalation (C24, MG/R5/BE/6): one give-up is a transient -- an operator that blocks
+            // once -- and the run goes on. A refusal that keeps repeating is not: for as long as
+            // it lasts the heap is not collected at all, so the heap limit is a request rather
+            // than a limit, and the loop that says "the collector will catch this" is not being
+            // told the truth. Say so, on stderr and regardless of the trace switches, because a
+            // user's diagnostic has to carry it: the first threshold reached and then every
+            // doubling of it, which keeps a long block to a handful of lines.
+            const uint64_t inARow = consecutiveGiveUps_.fetch_add(1, std::memory_order_relaxed) + 1;
+            if (inARow >= kEscalateAfterGiveUps &&
+                (inARow == kEscalateAfterGiveUps || (inARow & (inARow - 1)) == 0)) {
+                std::cerr << std::format(
+                    "[taskflow] gc: no collection for {} polls in a row: a thread has been inside "
+                    "a GC region for at least {:.0f} ms (flows={} rss_mb={} reason={}); the heap "
+                    "is not being collected, so its limit does not hold while this lasts. The "
+                    "region a wait is taken in is what the cooperative stop cannot end: a "
+                    "blocking operator leaves it (C24, MG/R5/BE/6).\n",
+                    inARow,
+                    static_cast<double>(kPatience.count()),
+                    flowsRunning_.load(std::memory_order_relaxed),
+                    residentMegabytes(),
+                    reason);
+            }
         }
     } catch (...) {
         stopRequested_.store(false, std::memory_order_seq_cst);
@@ -1062,6 +1127,16 @@ TaskflowExecSchedPass::apply(const camel::runtime::Program *program, std::ostrea
     linearArmEntryCache_.clear();
     const bool gcStats = options_.gcStats > 0;
     TaskflowGcGate::instance().resetStats();
+    // The one scheduler of the process says how a wait announces itself, so that a blocking
+    // operator can take its thread out of its region for the wait (C24, MG/R5/BE/6). A run that
+    // asks for the old behaviour (`blocking_leaves=false`) clears the pair instead: the wait then
+    // holds the region and a collector that finds it gives up, which is the path the escalation
+    // diagnostic reports on.
+    if (options_.blockingLeaves) {
+        camel::core::mm::setBlockingWaitHooks(taskflowBlockingWaitEnter, taskflowBlockingWaitLeave);
+    } else {
+        camel::core::mm::setBlockingWaitHooks(nullptr, nullptr);
+    }
     prepareBytecodeHandoff(graph);
     // The bytecode side of the run, on the line after the collector's.
     const auto reportHandoff = [this]() {

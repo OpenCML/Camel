@@ -23,6 +23,8 @@
 #include "camel/execute/observer.h"
 #include "camel_pass.h"
 #include "camel/passes/test/chunks.h"
+#include "camel/passes/test/contexts.h"
+#include "camel/passes/test/derivatives.h"
 #include "camel/passes/test/edges.h"
 #include "camel/passes/test/graph_release.h"
 #include "camel/passes/test/keepfn.h"
@@ -494,6 +496,7 @@ PassMaker taskflowPass() {
         options.bytecode  = args.getBool("bytecode");
         options.gcStats   = static_cast<int>(args.getInt("gc_stats"));
         options.gcStress  = args.getBool("gc_stress");
+        options.blockingLeaves = args.getBool("blocking_leaves");
         auto pass         = std::make_unique<TaskflowExecSchedPass>(ctx);
         pass->setOptions(options);
         return pass;
@@ -908,6 +911,8 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kEdgesOkTestPass, EdgesOkTestPass),
         TEST_PASS(kCommitConflictTestPass, CommitConflictTestPass),
         TEST_PASS(kKeepFnTestPass, KeepFnTestPass),
+        TEST_PASS(kContextsTestPass, ContextsTestPass),
+        TEST_PASS(kDerivativesTestPass, DerivativesTestPass),
         TEST_PASS(kCommitMergeTestPass, CommitMergeTestPass),
         TEST_PASS(kEdgesOrderOkTestPass, EdgesOrderOkTestPass),
         TEST_PASS(kEdgesOrderPureTestPass, EdgesOrderPureTestPass),

@@ -1,0 +1,125 @@
+id = "mm.process_state"
+order = 372
+tier = "fast"
+tags = ["feat", "mm", "gc", "process-state"]
+desc = """
+The process-level state of the runtime, registered by the owner that holds it (C24).
+
+The allocator is one per process; the object root set and the graph sweeper belong to one `Context`
+each. `test::contexts` creates a second context beside the running one, collects the heap while both
+are alive, makes a registration of its own and takes it back, and reads how many `runtimeGraphRoots`
+entries the allocator holds at each step from `rootSourceDescriptions()` -- the list the profiler and
+`std::gcsnap` already report. `before=1 second=2` is one registration per context, and
+`released=2 own=1 own_released=0` says that taking one registration back removes that one and
+nobody else's.
+
+Before the fix the allocator held one slot and every later registration replaced the earlier one:
+`second` read 1 (the second context took the running one's over), the pass's own registration took
+the second's over (`released` read 0), and the major collection taken in between marked almost
+nothing -- the string constants the running program reaches through its own graphs were swept, and
+the back end printed `contexts-1c2contexts-1c3` for `contexts-1-2-3`. That corrupted line, not a
+crash, is what the defect cost the program itself.
+"""
+
+[[tests]]
+name = "process_state.two_contexts_nvm"
+desc = "A second Context beside the running one registers its own root set instead of taking the running one's over, and a registration taken back removes only its own entry: the allocator holds 1 runtimeGraphRoots entry before (held=5: the second context has four other owners -- its own modules keep it alive -- so it is never destroyed), 2 while both contexts exist and 2 again after the pass's own registration is released (own 1 -> 0), the running program's graph survives the major collection taken in between, and the back end prints the program's line -- before the fix that line read contexts-1c2contexts-1c3, its string constants swept as unreachable."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/contexts.cml"
+args = ["--gc", "generational", "${case}", "test::contexts", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["CONTEXTS before=1 second=2 held=5 released=2 own=1 own_released=0 alive=1", "contexts-1-2-3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "process_state.two_contexts_fvm"
+desc = "The same reading on the bytecode back end: the registrations are the allocator's, not a back end's."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/contexts.cml"
+args = ["--gc", "generational", "${case}", "test::contexts", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_contains = ["CONTEXTS before=1 second=2 held=5 released=2 own=1 own_released=0 alive=1", "contexts-1-2-3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+# The derivative registry is one per process as well (C24, AD/H1): the core's tangent spaces are
+# registered on every `Context` construction, the tensor module's subset space only once
+# (`tensor:add`, for the values it owns), and a registration that replaced the whole code dropped
+# the module's. `test::derivatives` reads the registry on both sides of a second context.
+
+[[tests]]
+name = "process_state.second_context_tangent_space"
+desc = "A second Context in one process keeps the tensor module's tangent space: `test::derivatives` reads the registry before and after the second context is built, and the module's `tensor:add` space (which owns a subset of the array code) is still there, while the core's own entries were replaced in place and no entry was added. Before the fix the second context's core registration cleared the array code, `after_tensor` read 0, and the tensor module's values fell back to the generic slot-wise array space for the rest of the process."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/two_contexts_grad.cml"
+args = ["--devices", "cpu", "${case}", "test::derivatives", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_contains = ["DERIVATIVES tensor=1 before_total=4 after_total=4 after_tensor=1"]
+verify_script = """
+({ input, assert }) => {
+const line = /DERIVATIVES tensor=[0-9]+ before_total=[0-9]+ after_total=[0-9]+ after_tensor=[0-9]+/.exec(input.normalized.stdout)
+assert(line !== null, 'no derivative reading in: ' + input.normalized.stdout)
+const field = (name) => Number(new RegExp(name + '=([0-9]+)').exec(line[0])[1])
+assert(field('tensor') === 1, 'the module had no tangent space to lose: ' + line[0])
+assert(field('after_tensor') === 1, 'the second context dropped the module tangent space: ' + line[0])
+assert(field('after_total') === field('before_total'),
+    'the second context added entries instead of replacing its own: ' + line[0])
+assert(input.normalized.stdout.includes('two_contexts_grad grad='), 'the program did not run: ' + input.normalized.stdout)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+# The stop-the-world handshake (C24, MG/R5/BE/6). One worker of a parallel map spends 2.5 s inside
+# `process::sleep` while five allocate far more than the birth space holds. The wait is announced
+# (`mm::BlockingWaitScope`), so the sleeper's region is left for the duration and the collector gets
+# in: the gate's own statistics line reports no refusal (`gave_up=0`) -- before the fix the same
+# command reported `gave_up>=1`, because the wait held the region and every collection the churning
+# workers asked for waited 500 ms and was refused. The second arm asks for the refusal
+# (`blocking_leaves=false`, the behaviour a wait that does not announce itself still has): the
+# refusals repeat, and the escalation diagnostic names them on stderr.
+
+[[tests]]
+name = "process_state.stw_sleep_leaves_its_region"
+desc = "A worker asleep for 2.5 s does not stop the world: `gave_up=0` on the gate's statistics line while five workers allocate 150 MB and ask for collections, and the program finishes with all seven elements (before the fix gave_up>=1 and one collection after another was refused for as long as the sleep lasted)."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_prl_blocked_worker.cml"
+args = ["--gc", "generational", "-t", "2", "--arg", "millis=2500", "--arg", "rounds=4000", "${case}", "${run_prl}", "gc_stats=1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const line = /pending_polls=[0-9]+ collections=[0-9]+ in_flow=[0-9]+/.exec(input.normalized.stderr)
+assert(line !== null, 'no gate statistics line in: ' + input.normalized.stderr)
+const gaveUp = Number(/gave_up=([0-9]+)/.exec(input.normalized.stderr)[1])
+assert(gaveUp === 0, 'a sleeping worker still stopped the world: ' + line[0])
+assert(/ collections=[1-9][0-9]* in_flow/.test(line[0]), 'no collection ran while the sleeper slept: ' + line[0])
+assert(input.normalized.stdout.includes('gc_prl_blocked_worker sums=[1,'), 'the program did not finish: ' + input.normalized.stdout)
+assert(!input.normalized.stderr.includes('no collection for'), 'the escalation diagnostic fired with an announced wait: ' + line[0])
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 180000
+
+[[tests]]
+name = "process_state.stw_give_up_escalates"
+desc = "The refusal path itself, asked for with `blocking_leaves=false`: the waiting worker holds its region, the churning workers' collections are refused again and again, and the gate reports it once it repeats -- `gave_up>=3` and a `[taskflow] gc: no collection for N polls in a row ...` line naming the wait, the flows, the resident megabytes and the reason of the collection it could not serve. Before the fix this line did not exist at all: the refusal was counted and shown only under the gate's trace switch."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_prl_blocked_worker.cml"
+args = ["--gc", "generational", "-t", "2", "--arg", "millis=2500", "--arg", "rounds=4000", "${case}", "${run_prl}", "gc_stats=1", "blocking_leaves=false"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const line = /pending_polls=[0-9]+ collections=[0-9]+ in_flow=[0-9]+/.exec(input.normalized.stderr)
+assert(line !== null, 'no gate statistics line in: ' + input.normalized.stderr)
+const gaveUp = Number(/gave_up=([0-9]+)/.exec(input.normalized.stderr)[1])
+assert(gaveUp >= 3, 'the wait did not hold its region long enough to refuse three collections: ' + line[0])
+assert(/no collection for [0-9]+ polls in a row: a thread has been inside a GC region/.test(input.normalized.stderr),
+    'the refusals were not reported: ' + input.normalized.stderr)
+assert(/flows=[0-9]+ rss_mb=[0-9]+ reason=[a-z]/.test(input.normalized.stderr),
+    'the escalation line does not name the flows, the resident megabytes and the reason: ' + input.normalized.stderr)
+assert(input.normalized.stdout.includes('gc_prl_blocked_worker sums=[1,'), 'the program did not finish: ' + input.normalized.stdout)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 180000
