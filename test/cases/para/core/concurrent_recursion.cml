@@ -7,10 +7,10 @@
  */
 module concurrent_recursion
 
-import { rendezvous } from para
+import { rendezvous } from test_support
 
 func leaf(): int sync {
-    return rendezvous(2, 5000) - 1
+    return rendezvous(2, 5.0) - 1
 }
 
 func tree(depth: int): int {

@@ -618,11 +618,10 @@ sha256_rounds: (s: string, rounds: int) => string
 test: (pattern: string, text: string) => bool
 ```
 
-**`para`** — import { ... } from para — 3 name(s)
+**`para`** — import { ... } from para — 2 name(s)
 
 ```text
-rendezvous: (parties: int, timeout_ms: int) => int
-unordered_foreach: <f: (item: T) => R> (xs: T[]) => void
+unordered_foreach: <f: (item: T) => void> (xs: T[]) => void
 unordered_reduce: <f: (acc: T, item: T) => T, initial: T> (xs: T[]) => T
 ```
 

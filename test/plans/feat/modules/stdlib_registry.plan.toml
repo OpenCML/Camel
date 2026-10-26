@@ -20,6 +20,9 @@ verify_script = """
 const ops = input.normalized.stdout.split('\n').filter((l) => l.startsWith('OPERATOR ')).map((l) => JSON.parse(l.slice(9)))
 assert(ops.length > 300, `only ${ops.length} operators listed`)
 const modules = new Set(ops.map((o) => o.module))
+// `para` is listed through the two operators its declaration carries: they are built-in element
+// calls (`:mark/...`), and `inspect --ops` names the module that declares them, not the one whose
+// executor runs them.
 for (const m of ['<builtin>', 'array', 'hash', 'fs', 'io', 'json', 'math', 'process', 'para', 'test_support', 'random', 're', 'sim', 'statistics', 'str', 'env', 'this', 'time']) {
   assert(modules.has(m), `module ${m} is not listed`)
 }
@@ -31,7 +34,7 @@ const purity = Object.fromEntries(ops.map((o) => [o.uri, o.purity]))
 const notPure = ['time:now', 'time:strftime', 'time:strptime', 'rand:rand', 'rand:seed', 'rand:shuffle', 'rand:choice', 'env:get_env', 'env:get_cwd',
   'fs:read_text', 'fs:try_read_text', 'fs:exists', 'fs:file_size', 'fs:write_text', 'process:whoami', 'process:cpu_count', 'process:sleep', 'process:exit',
   'io:set_terminal_raw_mode', 'io:has_input', 'io:get_char', 'io:get_chars', 'io:clear_input_buffer',
-  ':io/print', ':io/println', ':io/eprintln', ':io/input', ':op/assn', ':op/assn_owned', 'para:rendezvous',
+  ':io/print', ':io/println', ':io/eprintln', ':io/input', ':op/assn', ':op/assn_owned',
   'test_support:rendezvous', 'test_support:thread_count',
   ':mark/map_arr', ':mark/foreach_arr']
 for (const uri of notPure) {

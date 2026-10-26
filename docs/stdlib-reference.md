@@ -4307,31 +4307,18 @@ Whether the regular expression (ECMAScript syntax) matches somewhere in text.
 ## `para`: unordered iteration
 
 The unordered counterparts of the built-in `foreach` and `reduce`: the scheduler may run the
-calls of the function in any order and at the same time.
-
-#### `rendezvous`
-
-```camel
-rendezvous: (parties: int, timeout_ms: int) => int
-```
-
-Blocks until `parties` calls are waiting at the one meeting point of the process, or until
-timeout_ms milliseconds have passed; returns how many calls met (after a timeout, how many
-were waiting). A tool for showing that calls really run at the same time.
-
-- With effects: waits for other calls.
-- Failure: fault `RuntimeError` when parties is below 1 or timeout_ms is negative.
-- Example: `rendezvous(2, 1000)` gives `2 when another call arrived in time`
+calls of the function in any order and at the same time. The effects the function has are those
+of the callback, and the order they happen in is not fixed; that is the promise `unordered_` makes
+and the reason to use these only for work whose calls do not depend on one another.
 
 #### `unordered_foreach`
 
 ```camel
-unordered_foreach: <f: (item: T) => R> (xs: T[]) => void
+unordered_foreach: <f: (item: T) => void> (xs: T[]) => void
 ```
 
-Calls f for every element; the calls have no order among them.
+Calls f for every element, for its effects; the calls have no order among them.
 
-- With effects: what f does.
 - Example: `[1, 2]->unordered_foreach<(x: int) => println(x)>`
 
 #### `unordered_reduce`
@@ -4340,11 +4327,10 @@ Calls f for every element; the calls have no order among them.
 unordered_reduce: <f: (acc: T, item: T) => T, initial: T> (xs: T[]) => T
 ```
 
-Combines the elements with f starting from initial; the order in which elements are
-combined is not fixed, so f should be associative and commutative.
+Combines the elements with f starting from initial; the order in which elements are combined is
+not fixed, so f should be associative and commutative.
 
-- With effects: what f does.
-- Example: `[1, 2, 3]->unordered_reduce<(acc: int, x: int): int => acc + x, 0>`
+- Example: `[1, 2, 3]->unordered_reduce<(acc: int, x: int): int => acc + x, 0>` gives `6`
 
 <a id="test_support"></a>
 

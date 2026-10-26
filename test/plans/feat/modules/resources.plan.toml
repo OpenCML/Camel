@@ -273,13 +273,13 @@ for (const op of ops) {
   for (const m of text.matchAll(/(?:ambient|foreign) ([^\s;]+)/g)) names.add(m[1])
 }
 const expected = [
-  'clock', 'env', 'fs', 'para:rendezvous', 'process', 'rendezvous_point', 'rng', 'stderr',
+  'clock', 'env', 'fs', 'process', 'rendezvous_point', 'rng', 'stderr',
   'stdin', 'stdout', 'tensor:generator', 'tensor:threads', 'tiles:device', 'tiles:driver',
 ]
 const got = [...names].sort()
 assert(got.length === expected.length, `expected ${expected.length} resources, got ${got.length}: ${got.join(', ')}`)
 for (const name of expected) assert(names.has(name), `missing resource ${name}`)
-for (const old of ['io:stdout', 'io:stdin', 'io:stderr', 'time:clock', 'process:environment', 'rand:generator'])
+for (const old of ['io:stdout', 'io:stdin', 'io:stderr', 'time:clock', 'process:environment', 'rand:generator', 'para:rendezvous'])
   assert(!names.has(old), `old resource name ${old} is back`)
 // One operator of each kind, so a name cannot move between operators unnoticed.
 const expect = {

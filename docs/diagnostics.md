@@ -3310,15 +3310,16 @@ The result of '{0}' is not used, and '{0}' changes nothing: it returns a new val
 The operations of the standard library return new values and leave their arguments as they were: after 'let ys = xs->append<5>', 'xs' is unchanged. To change a variable, bind it to the result, 'xs = xs->append<5>', as 'x = x + 1' does for a number.
 ```
 
-**Example** (`test/cases/consistency/new_values/unused_var.cml`, run as `camel test/cases/consistency/new_values/unused_var.cml`)
+**Example** (`test/cases/compile/native/para_unordered_pure_result.cml`, run as `camel test/cases/compile/native/para_unordered_pure_result.cml`)
 
 ```camel
-module unused_var
+module para_unordered_pure_result
+
+import { abs } from math
+import { unordered_foreach } from para
 
 func main(): int sync {
-    var xs = [1, 2]
-    xs->append<5>
-    println(xs)
+    unordered_foreach<(item: int) => abs(item)>([-1, 2])
     return 0
 }
 ```
