@@ -120,19 +120,96 @@ def write_artifacts(root: Path, model: str, weights: Dict[str, np.ndarray], x: n
 # ---------------------------------------------------------------- camel
 
 
+# One import name list per module: `import { a, b } from module`.
+IMPORT_LIST = re.compile(r"^import \{([^}]*)\} from ([A-Za-z_][A-Za-z0-9_]*)[ \t]*$", re.MULTILINE)
+
+
+def imported_names(text: str, module: str) -> List[str]:
+    """The names `text` imports from `module`, over every `import { ... } from module` list."""
+    names: List[str] = []
+    for match in IMPORT_LIST.finditer(text):
+        if match.group(2) == module:
+            names += [n.strip() for n in match.group(1).split(",") if n.strip()]
+    return names
+
+
+def replace_import(text: str, module: str, old: str, new: List[str], what: str) -> str:
+    """`text` with `old` replaced by `new` in the `import { ... } from <module>` list, refusing
+    a rewrite it did not make.
+
+    The list is rewritten by name, so the order of the names and their neighbours do not
+    matter: the anchor these variants used to rely on (`import { Tensor, relu,`) stopped
+    matching when 3602386ea deleted the transitional `Tensor` type name from the surface,
+    while `relu(` -> `tanh(` went on being renamed, and the variant died on `Unresolved
+    reference: 'tanh'` instead of being refused where it was built. A model whose import list
+    this does not find is a failure of this tool, not a variant to measure.
+    """
+    hits = [0]
+
+    def rewrite(match: "re.Match[str]") -> str:
+        if match.group(2) != module:
+            return match.group(0)
+        names = [n.strip() for n in match.group(1).split(",") if n.strip()]
+        if old not in names:
+            return match.group(0)
+        names[names.index(old) : names.index(old) + 1] = new
+        hits[0] += 1
+        return f"import {{ {', '.join(dict.fromkeys(names))} }} from {module}"
+
+    out = IMPORT_LIST.sub(rewrite, text)
+    if hits[0] != 1:
+        raise SystemExit(
+            f"grad_referee: {what}: no `import {{ ... {old} ... }} from {module}` in the model source"
+            f" ({hits[0]} found), so the variant would call a name it does not import"
+        )
+    return out
+
+
 def make_variant(model: str, activation: str, out_dir: Path) -> Path:
     """A copy of the model with relu replaced by `activation` (tensor.tanh, or softplus written
-    as log(1 + exp(x)))."""
-    text = camel_model(model).read_text()
+    as log(1 + exp(x))).
+
+    The copy is the only thing rewritten -- the benchmark's own model.cml is never written
+    back -- and the variant is checked before it is returned: the import list must carry every
+    name the variant calls, and no `relu` may be left behind after the rename.
+    """
+    source = camel_model(model)
+    text = source.read_text()
+    imports: List[str]
     if activation == "tanh":
-        text = re.sub(r"import \{ Tensor, relu,", "import { Tensor, tanh,", text)
+        imports = ["tanh"]
+        text = replace_import(text, "tensor", "relu", imports, f"{model} with {activation}")
         text = re.sub(r"\brelu\(", "tanh(", text)
     elif activation == "softplus":
-        text = re.sub(r"import \{ Tensor, relu,", "import { Tensor, exp, log,", text)
-        text = text.replace("\nfunc block(", "\nfunc softplus(x: f32[..]): f32[..] {\n    return log(exp(x) + 1.0)\n}\n\nfunc block(", 1)
+        # softplus is defined in the variant itself; it needs exp and log from tensor. It goes in
+        # front of the model's first function rather than in front of a function called `block`,
+        # which only resnet and resnetbn happen to have (a name that is not there used to leave
+        # the variant calling a softplus that nothing defines).
+        imports = ["exp", "log"]
+        text = replace_import(text, "tensor", "relu", imports, f"{model} with {activation}")
+        definition = "func softplus(x: f32[..]): f32[..] {\n    return log(exp(x) + 1.0)\n}\n\n"
+        text, added = re.subn(r"^func ", definition + "func ", text, count=1, flags=re.MULTILINE)
+        if added != 1:
+            raise SystemExit(f"grad_referee: {model} with {activation}: no top-level func to define softplus before")
         text = re.sub(r"\brelu\(", "softplus(", text)
+        imports = imports + ["softplus"]
+    else:
+        raise SystemExit(f"grad_referee: no variant for activation {activation}")
+
+    missing = [n for n in imports if n not in imported_names(text, "tensor") and f"func {n}(" not in text]
+    if missing:
+        raise SystemExit(f"grad_referee: {model} with {activation}: the variant calls {missing} without importing it")
+    left = re.search(r"\brelu\b", text)
+    if left:
+        raise SystemExit(
+            f"grad_referee: {model} with {activation}: relu is still named at offset {left.start()}"
+            f" ({text[left.start() : left.start() + 40]!r}); importing {imports} would leave that call unresolved"
+        )
+
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / "model.cml"
+    if path.resolve() == source.resolve():
+        raise SystemExit(f"grad_referee: {model} with {activation}: refusing to write the variant over {source}")
     path.write_text(text)
     return path
 
