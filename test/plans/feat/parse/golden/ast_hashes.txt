@@ -3,7 +3,7 @@
 24c01e4ed5e664d0 ok test/cases/parse/constructs/constas.cml
 f8fbb115949675ad ok test/cases/parse/constructs/constas_param.cml
 a92cd5d813f4a125 ok test/cases/parse/constructs/enum.cml
-c8b0fd90f4375e2e ok test/cases/parse/constructs/fact.cml
+923c38ebe821fa17 ok test/cases/parse/constructs/fact.cml
 fdacf4c225920fb2 ok test/cases/parse/constructs/fstring.cml
 1d77ce0fdbb60066 ok test/cases/parse/constructs/literals.cml
 7197f493107101b4 ok test/cases/parse/constructs/match_guard.cml
