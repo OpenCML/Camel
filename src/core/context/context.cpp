@@ -16,6 +16,7 @@
 
 #include "camel/core/global_config.h"
 #include "camel/core/mm.h"
+#include "camel/core/mm/deferred.h"
 #include "camel/core/module/builtin.h"
 #include "camel/core/module/dynamic.h"
 #include "camel/core/module/introspect.h"
@@ -308,6 +309,13 @@ Context::~Context() {
         camel::core::mm::autoSpace().setGraphSweeper(nullptr);
     }
     runtimeGraphMgr_.reset();
+    // The deferred-release queue is drained last. The queue is one per process, and the blocks the
+    // last collection found dead carry release callbacks (an external buffer's release, a
+    // producer's deleter) that no later collection runs when this is the end of the runtime; the
+    // teardown above has just queued what the modules and the graph manager finalized. A context
+    // that is not the last one of the process needs this as much as the last one does: a context
+    // whose destructor never runs leaves its releases to whoever drains next (mm/deferred.h).
+    camel::core::mm::runDeferredReleases();
 }
 
 camel::core::module::ProgramExports &Context::programExports() {
