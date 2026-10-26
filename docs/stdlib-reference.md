@@ -4324,6 +4324,9 @@ combined is not fixed, so f should be associative and commutative.
 
 ## `this`
 
+The text of the Zen of Camel. The file `ZEN` of the repository is built into the module, so the
+text has one source and a program that asks for it reads no file.
+
 #### `zen`
 
 ```camel
@@ -4332,7 +4335,6 @@ zen: () => string
 
 The Zen of Camel, the text of the file ZEN.
 
-- Pure.
 - Example: `println(zen())`
 
 <a id="graph"></a>
@@ -5375,7 +5377,6 @@ py_call: (fn: string | PyObject, args?: (...PyObject) | PyObject[], kwargs?: Str
 Calls `fn` with a tuple (or an array) of positional arguments and a struct of keyword
 arguments. Both collections are optional; every element is a `PyObject`.
 
-- With effects: not pure.
 - Example: `py_call(fn, (py_wrap(2.0),), {x: py_wrap(1)})`
 
 #### `py_print`
