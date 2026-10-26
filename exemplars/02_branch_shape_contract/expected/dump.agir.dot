@@ -49,7 +49,7 @@ digraph GraphIR {
         N0F -> N11 [label="0|0", type="CTRL"];
     }
     O00 [label="EXIT", type="EXIT"];
-    N12 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="16:0-20:1", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="() => int"];
+    N12 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="16:0-20:1", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="() => int uses env, stdout"];
     N13 [label="CALL", type="CALL", value_type="int"];
     N13 -> O00 [label="0", type="EXIT"];
     N12 -> N13 [label="0|0", type="WITH"];

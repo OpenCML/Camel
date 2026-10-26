@@ -12,7 +12,7 @@
 <text text-anchor="middle" x="222.5" y="-621.79" font-family="Times,serif" font-size="14.00">total 的子图：谁要谁的结果</text>
 <g id="clust1" class="cluster">
 <title>cluster_F02</title>
-<g id="a_clust1"><a xlink:title="(n: int) =&gt; int">
+<g id="a_clust1"><a xlink:title="(n: int) =&gt; int pure">
 <polygon fill="none" stroke="black" points="8,-8 8,-605.99 437,-605.99 437,-8 8,-8"/>
 <text text-anchor="middle" x="222.5" y="-590.79" font-family="Times,serif" font-size="14.00">total</text>
 </a>

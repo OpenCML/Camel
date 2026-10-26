@@ -1,7 +1,7 @@
 digraph GraphIR {
         subgraph cluster_F02 {
             label="total";
-            tooltip="(n: int) => int";
+            tooltip="(n: int) => int pure";
             subgraph cluster_F03 {
                 label="price";
                 tooltip="(n: int) => int pure";
