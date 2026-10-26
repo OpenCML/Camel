@@ -1,0 +1,11 @@
+import { is_same } from types
+import { inf } from math
+
+#op('math:shl_i')
+with <count: int>
+func shl::<T>(x: T): T when is_same::<T, i32>()
+
+func main(): int sync {
+    println(i32(1)->shl<32>)
+    return 0
+}
