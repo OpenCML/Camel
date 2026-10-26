@@ -378,9 +378,9 @@ bool FunctionType::assignableFrom(Type *other) const {
     if (other->code() == TypeCode::Stream) {
         // A stream's value is its step function (StreamType::stepType), which is this signature,
         // and a stream is read only through it: `s()` is the next element with the rest of the
-        // stream. So a stream enters a signature exactly when that signature is its own step
+        // stream. So a stream enters a signature exactly when that signature accepts its own step
         // signature, and nothing else about it is converted.
-        return static_cast<StreamType *>(other)->stepType()->equals(
+        return static_cast<StreamType *>(other)->stepType()->assignableFrom(
             const_cast<FunctionType *>(this));
     }
     if (other->code() != TypeCode::Function)
