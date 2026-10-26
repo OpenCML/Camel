@@ -362,10 +362,12 @@ struct ExtractStats {
 bool hasWritings(const Program &program);
 
 /// The program with one writing per value in every graph that has several, chosen by `model`
-/// (the program itself when it has none).
+/// (the program itself when it has none). `detached` for a caller that holds the result as a
+/// value (the Camel `extract`): the commit then leaves the context's program as it is (design
+/// principles 9.1); the pipeline's own extraction installs it.
 const Program *extractWritings(
     const std::shared_ptr<camel::core::context::Context> &context, const Program *program,
-    const CostModel &model);
+    const CostModel &model, bool detached = false);
 
 /// The writings of the values of a draft: the classes (WritingStore) and the congruence closure
 /// over them. Nodes that compute the same thing from the same classes are one value, so

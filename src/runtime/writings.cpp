@@ -1192,7 +1192,7 @@ bool hasWritings(const Program &program) {
 
 const Program *extractWritings(
     const std::shared_ptr<camel::core::context::Context> &context, const Program *program,
-    const CostModel &model) {
+    const CostModel &model, bool detached) {
     if (program == nullptr || !hasWritings(*program)) {
         return program;
     }
@@ -1205,7 +1205,7 @@ const Program *extractWritings(
         DraftWritings writings(draft);
         writings.extract(model, context.get());
     }
-    return session.commit();
+    return session.commit(detached);
 }
 
 gc_node_ref_t DraftWritings::find(gc_node_ref_t node) { return store_.find(contextOf(node), node); }
@@ -2493,6 +2493,15 @@ SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget 
             try {
                 made = build(rule.rhs, Match{*this, match.root, match.vars, match.remainder}, base);
             } catch (const RuleSkipped &) {
+                continue;
+            }
+            // The writings of one value share a region: extraction may put any writing of a class
+            // in the place of any other, and a node of an arm cannot stand for a value read outside
+            // the arm. A right side that is a node of another region -- a bound variable from an
+            // enclosing region, as `x + 1 => x` with `x` outside the arm of `&&` -- is therefore
+            // no writing of this value, and the equivalence is not recorded. The one-way rewrite
+            // still makes the replacement: reading an enclosing value inside an arm is a plain edge.
+            if (made != match.root && draft_.nodeRegion(made) != draft_.nodeRegion(match.root)) {
                 continue;
             }
             stats.newWritings += draft_.nodeSlotCount() - before;
