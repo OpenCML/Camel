@@ -240,7 +240,7 @@ inline bool collectConversionGaps(
         // the whole value: one `as` reaches it, whatever is left open inside it. Without this
         // branch a call like `f(t)` with `t: Tensor` and `b: f32[3]` was refused as
         // "no matching function" with the overload list, which says less than the conversion to
-        // write (ruling 2026-10-24 evening, h450 item 2).
+        // write (ruling 2026-10-24 evening, item 2).
         if (want->castSafetyFrom(have) != CastSafety::Unsafe) {
             return false;
         }
