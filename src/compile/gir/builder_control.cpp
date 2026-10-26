@@ -669,8 +669,8 @@ node_handle_t Builder::coerceTo(node_handle_t node, Type *target, const GCT::nod
             }
         }
     }
-    // An error value in a position of a `T!` is that type's failed form: the value `throw`
-    // gives (design principles 3.9). It is how `return if c then error(...) else v` is accepted
+    // An error value in a position of a `T!` is that type's failed form: the written failed arm
+    // (design principles 3.9). It is how `return if c then error(...) else v` is accepted
     // under a declared `T!` -- the position's type is what each arm takes, and the error arm is
     // the failing one. Without an expected type nothing joins the error value with the other
     // arm, and the branch is still refused. This is a rule of the position, like the literal
@@ -1275,37 +1275,29 @@ Type *Builder::expectedExitTypeHere() const {
 }
 
 node_handle_t Builder::adaptExitValue(const GCT::node_ptr_t &gct, node_handle_t value) {
-    Type *declared   = declaredExitTypeHere();
-    Type *valueType  = valueTypeOf(nodeTypeOf(value));
-    const auto where = gct->origin() != 0 ? gct->origin() : gct->at(0)->origin();
-    if (gct->exitType() == ExitType::Throw) {
-        // `throw e`: the exit `return` is, with the failed form of the declared `T!` as its
-        // value (design principles 3.9). OPER __throw__ makes the failed value, the CAST
-        // gives it the declared type; both are the same object.
-        TupleType *fallible = asFallible(declared);
-        if (fallible == nullptr) {
-            diags_->of(SemanticDiag::ThrowOutsideFallible)
-                .atOrigin(where)
-                .commit(
-                    declared == nullptr
-                        ? "the function around it declares no return type"
-                        : "the function around it returns '" + declared->toString() + "'");
-            throw BuildAbortException();
+    Type *declared  = declaredExitTypeHere();
+    Type *valueType = valueTypeOf(nodeTypeOf(value));
+    if (valueType != nullptr && valueType->equals(errorType())) {
+        // An error value handed out by a function that declares a `T!` is that type's failed
+        // arm (design principles 3.9): `return error('DivByZero', '...')` fails with that
+        // error. This holds wherever the exit stands, an arm of a branch included -- there the
+        // arm's own position may be nothing at all (the branch is a statement whose value
+        // nothing uses), and the function's declaration is what the error value is read
+        // against. OPER __throw__ makes the failed value and the CAST gives it the declared
+        // type; both are the same object. A function that declares no `T!` leaves the value as
+        // it is, and the diagnostic for an exit that does not fit its position is the one the
+        // position gives.
+        if (TupleType *fallible = asFallible(declared); fallible != nullptr) {
+            node_handle_t failed =
+                applyTagOperator(camel::core::oper::TagThrow, bindTemporary(value), gct->at(0));
+            return fallible->equals(nodeTypeOf(failed)) ? failed
+                                                        : castNodeTo(failed, fallible, gct->at(0));
         }
-        // Design principles 3.9: `throw` takes an error value (made by `error(kind,
-        // message)` or bound by `case error e`), nothing else.
-        if (!valueType->equals(errorType())) {
-            diags_->of(SemanticDiag::ThrowNotAnError).atOrigin(where).commit(valueType->toString());
-            throw BuildAbortException();
-        }
-        node_handle_t thrown =
-            applyTagOperator(camel::core::oper::TagThrow, bindTemporary(value), gct->at(0));
-        return fallible->equals(nodeTypeOf(thrown)) ? thrown
-                                                    : castNodeTo(thrown, fallible, gct->at(0));
     }
-    // `return v` under a declared `T?` / `T!` puts `v` into that form: the counterpart of
-    // `throw`, and one of the positions where a value enters by itself (design principles
-    // 3.8; coerceTo). The declared type is also the name the value is used as: an unnamed
+    // `return v` under a declared `T?` / `T!` puts `v` into that form (design principles 3.8;
+    // coerceTo): it is the position a value enters by itself, and an error value written there
+    // becomes the failed arm of that `T!`. The declared type is also the name the value is used
+    // as: an unnamed
     // struct value in a declared named type is given that type here (a CAST that moves
     // nothing, or a copy when the fields are written in another order; design principles
     // 5.1, 5.2), so a named type is never erased to its shape. Applying the position's type

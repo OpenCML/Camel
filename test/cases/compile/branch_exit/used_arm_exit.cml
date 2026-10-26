@@ -1,12 +1,12 @@
 /**
- * `return` and `throw` in arms of an `if` / `match` whose value is used: none of these is
+ * `return` in arms of an `if` / `match` whose value is used: none of these is
  * reported by ExitInUnusedBranch.
  */
 module used_arm_exit
 
 // The branch is the last expression of the function body: its value is the result.
 func safe_div(a: int, b: int): int! {
-    if b == 0 then sync { throw error('DivByZero', 'the divisor is zero') } else sync { return a / b }
+    if b == 0 then sync { return error('DivByZero', 'the divisor is zero') } else sync { return a / b }
 }
 
 // The branch is the operand of a return.

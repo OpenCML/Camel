@@ -1,4 +1,4 @@
-/// `T?`, `T!` and error values: `??`, `!!`, `->`, `match` on them, `throw`, `parse_int`, and
+/// `T?`, `T!` and error values: `??`, `!!`, `->`, `match` on them, `parse_int`, and
 /// `attempt`, which makes a fault inside a call an error value (design principles 3.9).
 module tagged
 
@@ -7,7 +7,7 @@ func find(xs: int[], v: int): int? {
 }
 
 func checked(x: int): int! {
-    if x < 0 then sync { throw error('Negative', 'the argument is negative') } else sync { return x * 2 }
+    if x < 0 then sync { return error('Negative', 'the argument is negative') } else sync { return x * 2 }
 }
 
 func risky(x: int): int {

@@ -52,7 +52,7 @@ Hello, Camel!
 | [4 执行模型](04_execution_model.md) | 按依赖求值、`sync`、引用、故障与退出、遍 |
 | [5 模块](05_modules.md) | `module`、`import`、`export`、`namespace` |
 | [6 表达式](06_expressions.md) | 字面量、访问、调用、管道、运算符、`if`、`match`、lambda |
-| [7 语句与声明](07_statements.md) | `let`/`var`、`return`/`throw`、块、函数、泛型、类型声明 |
+| [7 语句与声明](07_statements.md) | `let`/`var`、`return`、块、函数、泛型、类型声明 |
 | [8 程序与文法](08_top_level_and_grammar.md) | 顶层结构、入口、文法概要 |
 | [9 规则与事实](09_rules_and_facts.md) | `rule` 与条件、类型参数与 `with` 参数、规则集、`fact`、检查与解释 |
 

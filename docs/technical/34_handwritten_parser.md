@@ -156,7 +156,7 @@ on one line the operator loops behave as they always did, so nothing new can be 
 the first statement ends where its expression cannot go on. `;` separates statements wherever
 the author wants to be explicit.
 
-`return`, `throw`, `let x =`, `import … from` and the like require what follows them, so a line
+`return`, `let x =`, `import … from` and the like require what follows them, so a line
 break after them continues. There is no `return` without a value in the grammar.
 
 ## 4. Grammar and decisions

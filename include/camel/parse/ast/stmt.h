@@ -26,7 +26,7 @@ enum class TagPosition : uint8_t {
     Param = 1u << 4,
 };
 
-enum class ExitType { Yield, Raise, Return, Throw };
+enum class ExitType { Yield, Return };
 
 class StmtLoad : public Load {
   public:

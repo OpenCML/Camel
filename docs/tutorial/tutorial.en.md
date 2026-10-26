@@ -627,7 +627,7 @@ Camel has no exceptions and no `try`/`catch`. A function that may fail declares 
 
 func safe_div(a: int, b: int): int! {
     return if b == 0 then {
-        throw error('DivByZero', 'the divisor is zero')
+        return error('DivByZero', 'the divisor is zero')
     } else {
         return a / b
     }
@@ -662,7 +662,7 @@ DivByZero: the divisor is zero
 error DivByZero: the divisor is zero
 ```
 
-- **`throw e` returns an error value**; it is the same kind of construct as `return`. It does not unwind the call stack; what the caller gets is simply a value of type `int!`.
+- **An error value is handed out by `return e`**: it does not unwind the call stack; what the caller gets is simply a value of type `int!`.
 - An `int!` cannot be used as an `int`; it must be unwrapped first:
   - `a !! b`: takes `b` on an error, otherwise the value inside;
   - `x -> f`: on an error passes the error on unchanged, otherwise calls `f`; these can be chained;

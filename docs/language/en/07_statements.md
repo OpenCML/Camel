@@ -2,7 +2,7 @@
 
 English | [中文](../07_statements.md)
 
-A block is made up of statements. A statement is: an expression, a `let`/`var` declaration, `return`/`throw`, a nested block, or a declaration of a function or a type.
+A block is made up of statements. A statement is: an expression, a `let`/`var` declaration, `return`/`yield`, a nested block, or a declaration of a function or a type.
 
 ---
 
@@ -55,19 +55,17 @@ var count = 0
 - **`let _ = e` drops the value of `e` on purpose.** `_` is not a name: nothing is bound, so it can be written any number of times in one block, and it cannot be read. The expression is evaluated like the initial value of any `let` (in a sync block, in order). It is the way to say that a `T!` is ignored deliberately ([7.1](#71-expression-statements)). Only this form exists: `var _`, and `_` among several names, are syntax errors.
 - A `let` at the module top level is a global constant; a top-level `var` can be read and written by functions, also by an imported function of the module that declares it ([5.3](05_modules.md#53-exports)). **The top-level declarations do not depend on the order they are written in, only on what they use**: `let area = pi * r * r` may come before `let pi`; top-level values that depend on each other are `SemanticDiag::ModuleValueCycle` ([5.6](05_modules.md#56-loading-modules)). A local `let` in a function body is still declared before it is used.
 
-## 7.3 `return` and `throw`
+## 7.3 `return`
 
 - `return e` gives the value of **the block it is in**. A function body is a block, so a `return` written at the top level of the function body gives the return value of the function; a `return` written in the block of a branch arm gives the value of that branch, and does not leave the function ([6.8.1](06_expressions.md#681-if)).
 - A `return` without a value and `return null` are used in blocks that have no value.
-- `throw e` gives an error value and has the same structure as `return`: it does not unwind the call stack, and there is no "propagation" or "catching".
-  - The enclosing function must declare its return type as `T!`; otherwise it is `SemanticDiag::ThrowOutsideFallible`.
-  - `e` must be an error value: one constructed by `error(kind, message)`, or one bound by `case error e`; otherwise it is `SemanticDiag::ThrowNotAnError`.
-- `raise` is not part of the language and is not a reserved word (it is an ordinary name); an error value is returned with `throw`.
+- Handing out an error value is `return error('Kind', 'message')`: `error(...)` builds an ordinary value, and `return` hands it out as it hands out any other value -- it does not unwind the call stack, and there is no "propagation" or "catching" (design principles 3.9). A function that declares its return type as `T!` takes a value built by `error(...)` in that position as its failed arm.
+- To let the caller take another path on a missing or failed value without unwinding the call stack, leave it to `->` (which passes both on), or take it up at the call with `??` and `!!`.
 
 ```cml
 func check_age(age: int): int! {
-    return if age < 0 then {
-        throw error('InvalidAge', 'age is negative')
+    if age < 0 then {
+        return error('InvalidAge', 'age is negative')
     } else {
         return age
     }

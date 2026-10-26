@@ -53,11 +53,11 @@ export func report(p: Program): Program! sync {
 export func counted_two(p: Program): Program! sync {
     let rules = [tile_scale<2>]
     return match p->run<rules, explain: true> {
-        case error e => { throw e }
+        case error e => { return e }
         case r => sync {
             println('rewrites', r.rewrites, 'rule', rule_name(tile_scale<2>))
             return match explain_all(r) {
-                case error e => { throw e }
+                case error e => { return e }
                 case proof => sync {
                     println(proof)
                     return r.result
@@ -72,11 +72,11 @@ export func counted_two(p: Program): Program! sync {
 export func counted_three(p: Program): Program! sync {
     let rules = [tile_scale<3>]
     return match p->run<rules, explain: true> {
-        case error e => { throw e }
+        case error e => { return e }
         case r => sync {
             println('rewrites', r.rewrites, 'rule', rule_name(tile_scale<3>))
             return match explain_all(r) {
-                case error e => { throw e }
+                case error e => { return e }
                 case proof => sync {
                     println(proof)
                     return r.result
@@ -91,11 +91,11 @@ export func counted_three(p: Program): Program! sync {
 export func counted_zero(p: Program): Program! sync {
     let rules = [tile_scale<0>]
     return match p->run<rules, explain: true> {
-        case error e => { throw e }
+        case error e => { return e }
         case r => sync {
             println('rewrites', r.rewrites, 'rule', rule_name(tile_scale<0>))
             return match explain_all(r) {
-                case error e => { throw e }
+                case error e => { return e }
                 case proof => sync {
                     println(proof)
                     return r.result

@@ -26,7 +26,7 @@
 //     `match type` case (`typeCasePattern`); they are listed in the reserved table, not here;
 //   * `yield` was listed as a contextual keyword by, and the author corrected
 //     that: it
-//     is an ordinary keyword, in the Control row with `return` and `throw`. Its lexical half is not
+//     is an ordinary keyword, in the Control row with `return`. Its lexical half is not
 //     on develop (no `KwYield` in token_kinds.def).
 
 export const CONTEXT_KEYWORD_GROUPS = [

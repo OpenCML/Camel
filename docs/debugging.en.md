@@ -332,7 +332,7 @@ is raised, as an exception: the editor shows the text of the diagnostic at its p
 the stack and variables of that moment. Resuming lets the fault take its course: the program
 ends with the diagnostic and exit code 1, exactly as without a debugger.
 
-An error *value* (`throw`, a `T!` that failed) is not a fault: it is an ordinary value, shown
+An error *value* (built by `error(...)`, handed out by `return`: a `T!` that failed) is not a fault: it is an ordinary value, shown
 in the variables as `error <kind>: <message>`, and does not stop the program.
 
 A fault raised inside `attempt(...)` is isolated: it becomes an error value at the boundary
@@ -381,7 +381,7 @@ survive. What changes:
   unverified (*this line only defines constants*).
 - An error value that reaches the exit of `main` unhandled (`main(): T!`) is not a stop: no
   frame is left by then. It is reported as without a debugger, `UnhandledError` on standard
-  error and exit code 1; break on the `throw` to see where it is made.
+  error and exit code 1; break on the line that hands the error out to see where it is made.
 - After `std::opt::inline` a name bound to an inlined call is not shown under its name (see section 4).
 - Verified: Windows Release and Linux Debug protocol tests, plus the Windows VS Code UI.
   macOS remains unverified. Windows Debug currently exceeds the PE DLL export limit, a build

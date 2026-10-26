@@ -50,7 +50,7 @@ CAMEL_NODE(FactPattern, Other)         // 'const' identDef (':' typeExpr)? | dat
 CAMEL_NODE(FactClause, Other)          // IDENTIFIER dataExpr
 CAMEL_NODE(DataDecl, Other)            // ('let' | 'var') carrier (':' typeList)? '=' dataList
 CAMEL_NODE(TypeDecl, Other)            // 'type' identRef ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>=')) (typeExpr | STRING), with the tag uses before it
-CAMEL_NODE(RetStmt, Other)             // ('return' | 'throw' | 'yield') dataList
+CAMEL_NODE(RetStmt, Other)             // ('return' | 'yield') dataList
 CAMEL_NODE(Modifiers, Other)           // 'sync'+
 CAMEL_NODE(ParentIdents, Other)        // '(' identList? ','? ')'
 CAMEL_NODE(BracedIdents, Other)        // '{' identList? ','? '}'

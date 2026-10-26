@@ -30,10 +30,10 @@ export func energy(xs: f32[]): float {
 }
 
 /// An error value: a negative factor gives a Python exception whose file, line and column are
-/// the position of the `throw` below (the compiler records it, `error()` does not).
+/// the position the error value records (design principles 3.9).
 export func checked_scale(xs: f32[], k: f32): f32[]! {
     return if k < 0.0 then {
-        throw error('RangeError', 'the factor must not be negative')
+        return error('RangeError', 'the factor must not be negative')
     } else {
         return xs->map<(v: f32): f32 => v * k>
     }

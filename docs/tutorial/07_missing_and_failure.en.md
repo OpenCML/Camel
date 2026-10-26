@@ -66,12 +66,12 @@ not a control flow:
 [`examples/07_errors.cml`](examples/07_errors.cml):
 
 ```cml
-// A function that may fail returns T!; `throw` returns an error value.
+// A function that may fail returns T!: an error value is handed out by `return`.
 // Run: camel docs/tutorial/examples/07_errors.cml
 
 func safe_div(a: int, b: int): int! {
     return if b == 0 then {
-        throw error('DivByZero', 'the divisor is zero')
+        return error('DivByZero', 'the divisor is zero')
     } else {
         return a / b
     }
@@ -110,7 +110,7 @@ DivByZero: the divisor is zero
 error DivByZero: the divisor is zero
 ```
 
-- **`throw e` returns an error value** and is the same structure as `return`: it does not unwind the stack, and the
+- **An error value is handed out by `return e`**: it does not unwind the stack, and the
   caller receives an `int!`. The error has three fields: `e.kind`, `e.message` and `e.location`.
 - The three ways to open one: `a !! b` (take `b` on failure), `x -> f` (pass the error on unchanged, otherwise call
   `f`; the operators chain), and `match` with `case error e` and `case v`.
@@ -205,4 +205,4 @@ camel docs/tutorial/examples/07_exercise.cml
 
 - [Language reference 3.4 May be null `T?` and may fail `T!`](../language/en/03_data_model.md#34-may-be-null-t-and-may-fail-t)
 - [Language reference 6.6 Operators for null and errors](../language/en/06_expressions.md#66-operators-for-null-and-errors)
-- [Language reference 7.3 `return` and `throw`](../language/en/07_statements.md#73-return-and-throw)
+- [Language reference 7.3 `return`](../language/en/07_statements.md#73-return)

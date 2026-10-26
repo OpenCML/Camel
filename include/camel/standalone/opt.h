@@ -58,8 +58,8 @@ template <typename T> class Fallible {
     Fallible() = default;
     Fallible(T value) : value_(std::move(value)) {}
 
-    /// The failed value carrying `error` (`throw error(...)`, a failed parse, an `attempt` that
-    /// caught a fault).
+    /// The failed value carrying `error` (`return error(...)` in a function declared `T!`, a
+    /// failed parse, an `attempt` that caught a fault).
     static Fallible failure(Error error) {
         Fallible f;
         f.failed_ = true;

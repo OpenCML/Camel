@@ -4,9 +4,11 @@
 /*
  * Operators over the tagged forms `T?` and `T!`; see tagged.h.
  *
- * None of them faults. The three that take a part out of a value are only ever placed in
- * the branch arm their tag selects; applied to the other case they return the zero slot, so
- * a pass that evaluates one early changes nothing as long as its result is used in that arm.
+ * None of the lowerings faults; `fail` is the one library operator here that does, and it is
+ * how a program raises a fault of its own. The three that take a part out of a value are only
+ * ever placed in the branch arm their tag selects; applied to the other case they return the
+ * zero slot, so a pass that evaluates one early changes nothing as long as its result is used
+ * in that arm.
  */
 
 #include "camel/utils/number_text.h"
@@ -60,6 +62,28 @@ slot_t __error_new__(ArgsView &with, ArgsView &norm, Context &ctx) {
         return str ? str->toString() : std::string();
     };
     return makeErrorInfo(text(0), text(1), text(2));
+}
+
+slot_t __fail__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    const auto text = [](ArgsView &args, size_t index) {
+        if (index >= args.size()) {
+            return std::string();
+        }
+        String *str = args.get<String *>(index);
+        return str ? str->toString() : std::string();
+    };
+    // A fault the program raises itself: it is reported where the call stands, as the fault of
+    // any operator is, and the kind is the one the program wrote (design principles 3.9). The
+    // call has no value, so there is nothing to return.
+    throw camel::core::error::RuntimeFault(
+        camel::core::error::RuntimeDiag::ProgramFault,
+        {text(norm, 0)},
+        "",
+        nullptr,
+        {},
+        camel::core::error::RuntimeFaultPolicy::AbortCurrentExecution,
+        {},
+        text(with, 0));
 }
 
 namespace {
@@ -118,7 +142,7 @@ const std::vector<oper_group_ptr_t> &getTaggedOperatorGroups() {
             });
     };
     static const std::vector<oper_group_ptr_t> groups = {
-        // ======= Lowering targets of ??, !!, ->, throw and the match patterns =======
+// ======= Lowering targets of ??, !!, -> and the match patterns =======
         OperatorGroup::create(
             "__is_null__",
             {{":op/tag_is_null",
@@ -176,6 +200,30 @@ const std::vector<oper_group_ptr_t> &getTaggedOperatorGroups() {
                           }
                       }
                       return errorType();
+                  })}}),
+// fail<'Kind'>(message): the program's own premise check (design principles 3.9). The
+        // kind is the with-argument it writes, the message its argument, and the result is the
+        // bottom type `never`: the call gives no value, so it may stand where any type is
+        // expected and a branch arm that raises the fault leaves the branch's type to the other
+        // arm. It is the fault of an operator, raised where the call is written and isolatable
+        // by `attempt`; like every other computation it happens only where its value is wanted,
+        // and it is no effect of its own.
+        OperatorGroup::create(
+            "fail",
+            {{":op/fail",
+              DynamicFuncTypeResolver::create(
+                  {{1, {false}}, {1, {false}}},
+                  "<Kind: string> (message: string) => never",
+                  [](const type_vec_t &with, const type_vec_t &norm) -> optional<Type *> {
+                      if (with.size() != 1 || norm.size() != 1) {
+                          return nullopt;
+                      }
+                      for (Type *type : {with[0], norm[0]}) {
+                          if (type == nullptr || type->code() != TypeCode::String) {
+                              return nullopt;
+                          }
+                      }
+                      return Type::Never();
                   })}}),
         // Fault isolation (design principles 3.9): `attempt(f)` is a function transform. It
         // gives the function whose parameters are `f`'s and whose result is `f`'s result plus

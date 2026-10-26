@@ -6,7 +6,7 @@ module fallible_ok_string
 
 func greet(name: string): string! {
     if name == '' then {
-        throw error('Empty', 'no name')
+        return error('Empty', 'no name')
     } else {
         return 'hello ' + name
     }

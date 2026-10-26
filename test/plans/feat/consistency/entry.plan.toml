@@ -74,13 +74,13 @@ assert(input.normalized.stdout === 'a\n', JSON.stringify(input.normalized.stdout
 
 [[tests]]
 name = "entry.error_thrown"
-desc = "An error made by throw reaches the exit of main: UnhandledError on standard error, located at the error(...) call; exit code 1; standard output holds only the program's output."
+desc = "An error value handed out by a return reaches the exit of main: UnhandledError on standard error, located at the error(...) call; exit code 1; standard output holds only the program's output."
 case = "../../../cases/consistency/entry/error_thrown.cml"
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::UnhandledError"
 expect_diagnostic_code = "0x04000051"
 expect_diagnostic_line = 9
-expect_diagnostic_column = 15
+expect_diagnostic_column = 16
 expect_stderr_contains = ["An error value reached the exit of 'main' without being handled: Negative: the argument is negative."]
 verify_script = """
 assert(input.normalized.stdout === 'before\n', JSON.stringify(input.normalized.stdout))
@@ -125,7 +125,7 @@ assert(diags.length === 1, input.stderr)
 const d = diags[0]
 assert(d.data.name === 'RuntimeDiag::UnhandledError' && d.code === '0x04000051', input.stderr)
 assert(d.severity === 'Error' && d.data.stage === 'run', input.stderr)
-assert(d.range.start.line === 8 && d.range.start.character === 14, JSON.stringify(d.range))
+assert(d.range.start.line === 8 && d.range.start.character === 15, JSON.stringify(d.range))
 assert(d.data.modulePath.endsWith('error_thrown.cml'), d.data.modulePath)
 """
 

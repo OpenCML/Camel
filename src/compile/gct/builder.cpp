@@ -328,6 +328,9 @@ void Builder::initInnerTypes() {
     // The type of binary data (design principles 11.1), a built-in name like `string`.
     typeScope_->insert(Reference("Bytes"), camel::core::type::BytesType::get());
     typeScope_->insert(Reference("void"), Type::Void());
+    // The bottom type (design principles 3.9): a function that never returns, and an
+    // expression that leaves the function, are written `never`.
+    typeScope_->insert(Reference("never"), Type::Never());
     // The built-in collection types, written `Map<K, V>` and `Set<T>` (design principles 11.3).
     typeScope_->insert(Reference("Map"), MapType::prototype());
     typeScope_->insert(Reference("Set"), SetType::prototype());
@@ -2041,8 +2044,7 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
     // Ensure the AST node is of the expected type (Stmt)
     ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for ExitStmt");
 
-    // Create an ExitLoad node to represent the exit statement. `throw` is an exit as well:
-    // it returns the failed form of the function's declared `T!` (the graph builder checks).
+    // Create an ExitLoad node to represent the exit statement.
     const AST::ExitType astExit = ast->loadAs<AST::ExitStmtLoad>()->exitType();
     if (astExit == AST::ExitType::Yield) {
         // The syntax reads `yield` (design principles 5.4: a function whose body writes it
@@ -2055,9 +2057,8 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
         diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("generators");
         throw BuildAbortException();
     }
-    const bool isThrow  = astExit == AST::ExitType::Throw;
-    node_ptr_t exitNode = tree_->makeExit(isThrow ? ExitType::Throw : ExitType::Return);
-    reportExitInUnusedArm(ast, isThrow);
+    node_ptr_t exitNode = tree_->makeExit(ExitType::Return);
+    reportExitInUnusedArm(ast);
 
     // Retrieve the data nodes associated with the exit statement
     const auto &dataNodes = ast->atAs<AST::RepeatedLoad>(0);
@@ -2104,7 +2105,7 @@ void Builder::enterArmOf(const AST::node_ptr_t &ctrl, bool valueUnused) {
     valueUse_.unusedArmOf = valueUnused ? ctrl : nullptr;
 }
 
-void Builder::reportExitInUnusedArm(const AST::node_ptr_t &exit, bool isThrow) {
+void Builder::reportExitInUnusedArm(const AST::node_ptr_t &exit) {
     const AST::node_ptr_t &ctrl = valueUse_.unusedArmOf;
     if (ctrl == nullptr) {
         return;
@@ -2118,7 +2119,7 @@ void Builder::reportExitInUnusedArm(const AST::node_ptr_t &exit, bool isThrow) {
         return;
     }
     const bool isMatch  = ctrl->loadAs<AST::DataLoad>()->dataType() == AST::DataType::MatchExpr;
-    const char *keyword = isThrow ? "throw" : "return";
+    const char *keyword = "return";
     const char *branch  = isMatch ? "match" : "if";
     diags_->of(SemanticDiag::ExitInUnusedBranch)
         .at(range)

@@ -15,7 +15,7 @@
 /// powerExpr : nullableExpr ('^' powerExpr)?
 /// nullableExpr : unaryExpr (('??' | '!!') dataExpr)?
 /// unaryExpr : linkExpr (('as' | 'is') typeExpr)?
-/// linkExpr : negExpr (('->' | '?->') compExpr)*
+/// linkExpr : negExpr ('->' compExpr)*
 /// negExpr : ('-' | '!') negPower | compExpr
 /// negPower : ('-' | '!') negPower | compExpr ('^' negPower)?
 /// compExpr : annoExpr ('..' annoExpr)*

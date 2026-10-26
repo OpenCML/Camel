@@ -26,7 +26,7 @@ func add_year(year: int): Row! {
 func parse_row(line: string): Row! {
     let f = line->split<','>->map<(s: string): string => trim(s)>
     return if len(f) != 3 then {
-        throw error('FieldCount', 'expected 3 fields, got ' + string(len(f)))
+        return error('FieldCount', 'expected 3 fields, got ' + string(len(f)))
     } else parse_int(f[1]) -> add_year<f[0], f[2]>
 }
 

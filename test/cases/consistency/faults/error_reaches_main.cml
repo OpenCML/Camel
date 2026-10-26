@@ -5,7 +5,7 @@ module error_reaches_main
 
 func safe_div(a: int, b: int): int! {
     if b == 0 then {
-        throw error('DivByZero', 'the divisor is zero')
+        return error('DivByZero', 'the divisor is zero')
     } else {
         return a / b
     }

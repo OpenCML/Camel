@@ -46,11 +46,11 @@ The following words are reserved and cannot be used as names (using one gives `S
 | Category | Keywords |
 |---|---|
 | Declarations | `let` `var` `func` `type` `with` `module` `import` `export` `from` `namespace` `using` |
-| Control | `if` `then` `else` `match` `case` `return` `throw` `yield` `sync` `loop` `while` `do` `for` `in` `static` |
+| Control | `if` `then` `else` `match` `case` `return` `yield` `sync` `loop` `while` `do` `for` `in` `static` |
 | Types and conversion | `as` `const` `constas` `enum` `typeof` |
 | Literals | `null` `true` `false` |
 
-`is`, `of`, `keyof`, `try`, `catch` and `finally` are not keywords: they are ordinary names, and writing one is an ordinary name or a syntax error (design principles 3.9).
+`is`, `of`, `keyof`, `throw`, `try`, `catch` and `finally` are not keywords: they are ordinary names, and writing one is an ordinary name or a syntax error (design principles 3.9).
 
 
 Names of the form `__x__` (two underscores on each side) are the compiler's own: the operators are functions of such names (`a + b` is `__add__(a, b)`). A variable, a parameter or a function cannot take one (`SemanticDiag::ReservedIdentifier`). To define an operator for a type of the program, write `func operator +(a: V, b: V): V` ([7.4.5](07_statements.md#745-operator-overloading)); `operator` is not a keyword, and is read this way only right after `func` and before an operator.
