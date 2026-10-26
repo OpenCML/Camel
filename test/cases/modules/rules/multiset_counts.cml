@@ -86,7 +86,7 @@ func reported(label: string, r: Run<Program>): Program sync {
 }
 
 func one(label: string, p: Program, rules: Rule[]): Program! sync {
-    return p->run<rules, rounds: 16, strict: false> ?-> sync (r: Run<Program>) => reported(label, r)
+    return p->run<rules, rounds: 16, strict: false> ?-> (r: Run<Program>) => sync { reported(label, r) }
 }
 
 /// The laws without a parameter for the rest of a sum, and the zero law.

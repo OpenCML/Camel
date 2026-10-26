@@ -186,7 +186,7 @@ A string is immutable text and is **always valid UTF-8**; length and subscripts 
 | `strs->join<sep>` | Joins an array of strings |
 | `s[i]` | The `i`-th code point; the result is a string containing just that one character; an out-of-range subscript is a fault |
 
-The remaining string functions are in the `str` module ([standard library reference](../../stdlib-reference.md)): `split`, `trim`, `to_upper`, `to_lower`, `replace`, `find`, `substr` (index and length in code points), `starts_with`, `ends_with`, `repeat`, `codepoints`, `from_codepoints`.
+The remaining string functions are in the `str` module ([standard library reference](../../stdlib-reference.md)): `split`, `trim`, `to_upper`, `to_lower`, `replace`, `index_of` (positions in code points; a cut is the core's `s[a:b]`), `starts_with`, `ends_with`, `repeat`, `codepoints`, `from_codepoints`.
 
 ```cml
 import { split, trim, to_upper } from str
@@ -200,7 +200,7 @@ func main(): int sync {
 
 ```text
 [a, b, c]
-HéLLO 5 é e
+HÉLLO 5 é e
 ```
 
 The result of `s[i]` is a one-character string, not a number; use `str::codepoints` for the numbers. In a string literal the escape `\xHH` can only build valid UTF-8 (`'\xE4\xB8\xAD'` is `'中'`; `'\xE4'` alone is a compile-time error); `\u{4E2D}` writes a code point directly.

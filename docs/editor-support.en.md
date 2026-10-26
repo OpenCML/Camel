@@ -102,7 +102,7 @@ The server's legend uses standard token types (`namespace`, `type`, `typeParamet
 | `readonly` | yes | An immutable binding (`let`). |
 | `defaultLibrary` | yes | A name of the standard library or a built-in. |
 | `mutable` | no | A variable or parameter declared with `var`. |
-| `sync` | no | A sync block: a function whose body is written `: T sync { ... }`, and a lambda such as `sync (x: int) => ...`. |
+| `sync` | no | A sync block: a function whose body is written `: T sync { ... }`, and a lambda such as `(x: int) => sync { ... }`. |
 
 `mutable` is the distinction that matters when reading Camel: whether a name can be assigned again. The VS Code extension declares both `mutable` and `sync` and styles them by default (`mutable` underlined, `sync` italic); `sync` marks a sync block ([4.3.3](language/en/04_execution_model.md#433-sync-on-a-function-body-function-modifier)), which only the `: T sync` function body and the `sync` lambda spell today. In another editor, map them to a highlight of your choice; an editor that does not know a modifier ignores it.
 

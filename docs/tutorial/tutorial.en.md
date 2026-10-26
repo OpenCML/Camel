@@ -463,7 +463,7 @@ g
 3
 ```
 
-A `sync` written before a lambda (`sync (x: int) => ...`) is a different use: it modifies the function type, and is unchanged.
+When the body of a lambda has to run in order, write the `sync` before the block: `(x: int) => sync { ... }`. A lambda head has no `sync`.
 
 ### 6.5 `var`, references and order
 
@@ -540,7 +540,7 @@ func main(): int sync {
     println(ops->map<(f: (x: int) => int): int => f(10)>)
 
     var total = 0                            // captured by reference
-    [1, 2, 3]->foreach<sync (x: int) => sync { total = total + x }>
+    [1, 2, 3]->foreach<(x: int) => sync { total = total + x }>
     println(total)
     return 0
 }
@@ -809,7 +809,7 @@ The modules that come with Camel are `str` (strings), `array` (arrays), `math`, 
 
 ```cml
 
-import { split, trim, to_upper, replace, find } from str
+import { split, trim, to_upper, replace, index_of } from str
 import { sort_by, take, sum, reverse, unique } from array
 import { abs, hypot, bit_and, pi } from math
 import { mean } from statistics
@@ -822,8 +822,8 @@ func main(): int sync {
     println('hello'->to_upper, 'a-b-c'->replace<'-', '+'>, len('héllo'))
 
     // A result that may not exist is a T?.
-    let at_l = 'hello'->find<'l'> ?? -1
-    let at_z = 'hello'->find<'z'> ?? -1
+    let at_l = 'hello'->index_of<'l'> ?? -1
+    let at_z = 'hello'->index_of<'z'> ?? -1
     println(at_l, at_z)
 
     // Arrays and numbers.

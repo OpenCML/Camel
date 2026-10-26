@@ -393,17 +393,19 @@ Invalid number format: '{0}'.
 **Help**
 
 ```text
-A number is decimal digits without a leading zero, or '0x', '0b' or '0o' followed by digits of that base: octal 63 is '0o77', not '077'; '09' and '077' are not number tokens. In an entry argument and a conversion text a leading zero is decimal ('077' is 77).
+A number is decimal digits without a leading zero in its whole part (an integer or a real: '0.5' is a number, '007' and '007.5' are not), or '0x', '0b' or '0o' followed by digits of that base: octal 63 is '0o77', not '077'; '09' and '077' are not number tokens. In an entry argument and a conversion text a leading zero is decimal ('077' is 77).
 ```
 
-**Example** (`test/cases/parse/numbers/leading_zero.cml`, run as `camel -E short test/cases/parse/numbers/leading_zero.cml`)
+**Example** (`test/cases/compile/precedence/leading_zero_real.cml`, run as `camel test/cases/compile/precedence/leading_zero_real.cml`)
 
 ```camel
-module parse_numbers_leading_zero
-
+// A real has no leading zero in its whole part, as an integer has none: `007.5` is refused like
+// `007`; `0.5` is a number.
 func main(): int sync {
-    let a = 077
-    return a
+    let a = 0.5
+    let b = 007.5
+    println(a + b)
+    return 0
 }
 ```
 
@@ -427,7 +429,18 @@ This string literal is not closed.
 A string ends with the quote character it starts with ({0}). Add the closing quote; to put a quote character inside the string, write it with a backslash.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/precedence/unterminated_string.cml`, run as `camel test/cases/compile/precedence/unterminated_string.cml`)
+
+```camel
+// A string no quote closes is an error on the line it opened on; it does not run on to the last
+// escaped quote of the file.
+func main(): int sync {
+    let s = 'abc
+    println(s)
+    let t = "it\'s"
+    return 0
+}
+```
 
 ### UnterminatedComment
 
@@ -6983,8 +6996,8 @@ The body of a folded call is read from the same constructs a 'when' condition re
 module fold_call_not_evaluable
 
 func first_of_list(): int {
-    let xs = [1, 2, 3]
-    return xs.[0]
+    let step = (n: int): int => n + 1
+    return step(1)
 }
 
 func main(): int {

@@ -436,10 +436,10 @@ additiveExpr       : multiplicativeExpr (('+' | '-') multiplicativeExpr)*
 multiplicativeExpr : powerExpr (('*' | '/' | '@' | '%') powerExpr)*
 powerExpr          : nullableExpr ('^' powerExpr)?
 nullableExpr       : unaryExpr (('??' | '!!') dataExpr)?
-unaryExpr          : linkExpr ('as' typeExpr)?
-linkExpr           : negExpr (('->' | '?->') compExpr)*
-negExpr            : ('-' | '!' | '~') negPower | compExpr
-negPower           : ('-' | '!' | '~') negPower | compExpr ('^' negPower)?
+unaryExpr          : negExpr ('as' typeExpr)?
+linkExpr           : compExpr (('->' | '?->') compExpr)*
+negExpr            : ('-' | '!' | '~') negPower | linkExpr
+negPower           : ('-' | '!' | '~') negPower | linkExpr ('^' negPower)?
 compExpr           : annoExpr ('..' annoExpr)*
 annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | memberAccess)*
 ```

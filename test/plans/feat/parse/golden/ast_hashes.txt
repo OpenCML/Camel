@@ -34,8 +34,8 @@ ee32bfc8973342f9 no test/cases/parse/rulings/lambda_without_parentheses.cml
 8480c0dccf1c1a2e ok test/cases/parse/rulings/loop_forms.cml
 c52fec6465c58bb2 no test/cases/parse/rulings/loop_is_keyword.cml
 3a1e14b153143d1c no test/cases/parse/rulings/loop_needs_clause.cml
-8070ca344fe96b1a ok test/cases/parse/rulings/minus.cml
-fd67753d7a033ebd ok test/cases/parse/rulings/not_by_precedence.cml
+a28174e6bfd10294 ok test/cases/parse/rulings/minus.cml
+bde48b562c5b0ba8 ok test/cases/parse/rulings/not_by_precedence.cml
 2031bb2e91cb1cc0 ok test/cases/parse/rulings/null_compare.cml
 245a6f02d7392e1f no test/cases/parse/rulings/optional_comp_removed.cml
 4d0c0b28f23cf112 ok test/cases/parse/rulings/power.cml
@@ -127,7 +127,7 @@ ea2462f5369b2c1a ok probes/probe_s020.cml
 f83cc56d415c41e4 ok probes/probe_s021.cml
 8850be84953b1977 ok probes/probe_s022.cml
 c0a73839faefe780 no probes/probe_s023.cml
-0803b46f26bff415 ok probes/probe_s024.cml
+fa40906dd52daee8 no probes/probe_s024.cml
 df4c2c28f0a988da ok probes/probe_s025.cml
 82d4df3fb67b34be ok probes/probe_s026.cml
 a92037855d2f89de ok probes/probe_s027.cml
@@ -184,8 +184,8 @@ c942d688cede1e2c ok probes/probe_s077.cml
 107faaa52cfb5960 ok probes/probe_s078.cml
 7cb8efca3407b132 ok probes/probe_s079.cml
 8f98c521420544f2 ok probes/probe_s080.cml
-000f58a52fff5b78 ok probes/probe_s081.cml
-cd24a82ed06b25d3 ok probes/probe_s082.cml
+0a599cb8da56d627 ok probes/probe_s081.cml
+912aa349678ddde0 ok probes/probe_s082.cml
 f69429a589844311 ok probes/probe_s083.cml
 7065a443b725138e ok probes/probe_s084.cml
 527c92f938ef263c ok probes/probe_s085.cml
@@ -200,10 +200,10 @@ b03c480322338990 ok probes/probe_s093.cml
 b26c931722500318 ok probes/probe_s094.cml
 460f6dd3d68054e5 ok probes/probe_s095.cml
 43094c1dd2e5fcd2 ok probes/probe_s096.cml
-b42e5d4012066512 ok probes/probe_s097.cml
+774133a53bc13b9e ok probes/probe_s097.cml
 464ec71142b2dfbc ok probes/probe_s098.cml
 59b9a19c24fe4958 ok probes/probe_s099.cml
-d11ed187b71a1523 ok probes/probe_s100.cml
+b52bdf100f1b3a68 ok probes/probe_s100.cml
 13bd02004fd85b3f ok probes/probe_s101.cml
 9108045b32bbea2e ok probes/probe_s102.cml
 e4c2a1419adcde80 ok probes/probe_s103.cml

@@ -190,7 +190,7 @@ func main(): int sync {
 | `strs->join<sep>` | 连接字符串数组 |
 | `s[i]` | 第 `i` 个码点，结果是只含这一个字符的字符串；越界是故障 |
 
-其余的字符串函数在 `str` 模块里（[标准库参考](../stdlib-reference.md)）：`split`、`trim`、`to_upper`、`to_lower`、`replace`、`find`、`substr`（下标与长度按码点）、`starts_with`、`ends_with`、`repeat`、`codepoints`、`from_codepoints`。
+其余的字符串函数在 `str` 模块里（[标准库参考](../stdlib-reference.md)）：`split`、`trim`、`to_upper`、`to_lower`、`replace`、`index_of`（位置按码点；切片是核心的 `s[a:b]`）、`starts_with`、`ends_with`、`repeat`、`codepoints`、`from_codepoints`。
 
 ```cml
 import { split, trim, to_upper } from str
@@ -204,7 +204,7 @@ func main(): int sync {
 
 ```text
 [a, b, c]
-HéLLO 5 é e
+HÉLLO 5 é e
 ```
 
 `s[i]` 的结果是单字符的字符串，不是数值；取码点的数值用 `str::codepoints`。字符串字面量里的转义 `\xHH` 只能拼出合法的 UTF-8（`'\xE4\xB8\xAD'` 是 `'中'`，单独的 `'\xE4'` 是编译错误）；`\u{4E2D}` 直接写码点。

@@ -6,8 +6,8 @@ module closure_var
 
 func main(): int sync {
     var total = 0
-    let add = sync (x: int) => sync {
-        let twice = sync (y: int) => sync {
+    let add = (x: int) => sync {
+        let twice = (y: int) => sync {
             total = total + y + y
         }
         twice(x)

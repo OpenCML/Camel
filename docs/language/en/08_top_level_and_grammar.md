@@ -166,10 +166,10 @@ additiveExpr       : multiplicativeExpr (('+' | '-') multiplicativeExpr)*
 multiplicativeExpr : powerExpr (('*' | '/' | '@' | '%') powerExpr)*
 powerExpr          : nullableExpr ('^' powerExpr)?
 nullableExpr       : unaryExpr (('??' | '!!') dataExpr)?
-unaryExpr          : linkExpr ('as' typeExpr)?
-linkExpr           : negExpr (('->' | '?->') compExpr)*
-negExpr            : ('-' | '!' | '~') negPower | compExpr
-negPower           : ('-' | '!' | '~') negPower | compExpr ('^' negPower)?
+unaryExpr          : negExpr ('as' typeExpr)?
+linkExpr           : compExpr (('->' | '?->') compExpr)*
+negExpr            : ('-' | '!' | '~') negPower | linkExpr
+negPower           : ('-' | '!' | '~') negPower | linkExpr ('^' negPower)?
 compExpr           : annoExpr ('..' annoExpr)*
 annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments
 memberAccess       : '.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']')
@@ -197,7 +197,7 @@ arrayData          : '[' ((indexValues ','?) | dataExpr 'for' identRef 'in' data
                      ']'
 structData         : '{' (pairedValues ','?)? '}' | '{' staticForExpr '}'
 tupleData          : '(' dataList? ','? ')' | '(' staticForExpr ')'
-funcData           : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr
+funcData           : angledParams? parentParams (':' typeExpr)? '=>' blockExpr
 matchTypeExpr      : 'match' 'type' typeExpr '{' typeCase* '}'
 typeCase           : 'case' typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
 staticForExpr      : 'static' staticForHeader '=>' blockExpr

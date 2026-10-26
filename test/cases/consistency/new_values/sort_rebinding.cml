@@ -34,7 +34,7 @@ func main(): int sync {
     println(n, zs)
 
     var fs = [2.5, -1.0, 0.5]
-    let resort = sync (): int => sync {
+    let resort = (): int => sync {
         fs = fs->insert_sort
         return len(fs)
     }
