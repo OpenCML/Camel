@@ -1592,3 +1592,5 @@ Linux 包在 manylinux 里构建，用 auditwheel 修正标签，并在构建时
 4. **普通规则和泛型规则的实例共用一个 `uint16_t` 编号空间**，`explain` 可能把一步算到错的规则头上。分开编号或加宽。
 5. **泛型规则提前枚举程序里的所有类型，上限 64 个，第 65 个起静默跳过**：按原则在匹配处实例化，不设静默上限；`check` 用同一套类型范围。
 6. 其余照报告：`check` 用 `std::shuffle`（各家标准库结果不同，换成自己的确定性洗牌）；一条坏规则让整份报告中止；任何 `std::invalid_argument` 都报成 `RuleTwoWay`；条件抛异常没被接住；`greedy_` 不复位；`rewrite` 不报告是否到了不动点；`saturate` 预算用尽和正常完成看起来一样；`carriesOrdering`、`declaredCommutative` 和三个匹配器重复；`module.cpp` 4179 行要拆。
+
+**内存审查第 1 条已由决策者修复**（`set_value.cpp`，原地写只看数组自己的回答；用例 `linear.var_param_slot_array`，四个后端）。之后槽数组也要按实际引用计数判断能否原地写（现在一律复制，正确但慢），随第 3 条一起做。
