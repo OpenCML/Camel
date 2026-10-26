@@ -3863,6 +3863,48 @@ assert(cells > 0, `an escaping var keeps its cell, found ${cells} :var/new nodes
 """
 timeout_ms = 8000
 
+[[tests]]
+name = "var_argument_reads_the_nearest_write"
+desc = "A `var` handed to a function is read before the callee writes it, and the port carries the version the variable's nearest write made as a data edge: the write that made it is a direct input of the call and no control input stands in for it (the placeholder an order edge would leave the read behind a write with). The version is the same cell the write stored into, so the callee writes the one cell and the value read back is 2."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_argument_reads_the_nearest_write.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout = "2\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+
+[[tests]]
+name = "var_argument_reads_the_nearest_write.the_edge_is_data"
+desc = "The graph of the same case: the `var` argument's port is a data edge from the version the nearest write made, and that write is not a control input of the call (a control edge there is the placeholder the read is owed a data edge for, docs/design/effects/edges.cn.md 5.6)."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_argument_reads_the_nearest_write.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const lines = out.split(String.fromCharCode(10))
+const callLine = lines.find((l) => l.includes(' [label="bump", type="FUNC"'))
+assert(callLine !== undefined, 'the call of bump is in the graph')
+const call = callLine.trim().split(' ')[0]
+const link = (l) => {
+  const parts = l.split(' -> ')
+  if (parts.length !== 2) return null
+  const kind = parts[1].includes('type="NORM"') ? 'NORM'
+             : parts[1].includes('type="CTRL"') ? 'CTRL' : 'other'
+  return { from: parts[0].trim(), to: parts[1].split(' ')[0], kind }
+}
+const into = lines.map(link).filter((e) => e !== null && e.to === call)
+const port = into.find((e) => e.kind === 'NORM')
+assert(port !== undefined, `the call takes the variable's port as a data edge: ${JSON.stringify(into)}`)
+const write = lines.find((l) => l.trim().startsWith(port.from + ' [') && l.includes('label=":op/assn_l"'))
+assert(write !== undefined, `the port carries the version the nearest write made, an assignment node: ${port.from}`)
+assert(!into.some((e) => e.from === port.from && e.kind === 'CTRL'), `and that write is not also a control input of the call: ${JSON.stringify(into)}`)
+}
+"""
+timeout_ms = 8000
+
 # A value with two names is one storage both names can write: what a write in place may touch is
 # decided by the array's own count, so the count has to count the names. A name that appears for
 # a value -- a store into a `var` cell, a read that lets the value out of a variable -- makes the

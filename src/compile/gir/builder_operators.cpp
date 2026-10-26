@@ -3519,10 +3519,35 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
     const bool takesVariables = targetOperator == nullptr ||
                                 targetOperator->name().starts_with("__assn") ||
                                 targetOperator->name().starts_with("__var_");
+    // Whether a node stands in the block the call is written in. A version of a variable that a
+    // branch arm or another block wrote is not what this call reads: what the call reads there is
+    // the join, which is not a cell.
+    const auto inSameRegion = [&](node_handle_t a, node_handle_t b) {
+        if (a == nullptr || b == nullptr || nodeGraphOf(a) != nodeGraphOf(b)) {
+            return false;
+        }
+        runtime::GraphDraft *draft = nodeDraftOf(a);
+        const draft_node_ref_t first  = nodeIdOf(a);
+        const draft_node_ref_t second = nodeIdOf(b);
+        if (!draft->alive(first) || !draft->alive(second)) {
+            return false;
+        }
+        return draft->nodeRegion(first) == draft->nodeRegion(second);
+    };
+    // An argument as it is linked: the node the call reads, the variable the callee writes at a
+    // `var` position (if any), and how it is passed.
+    struct Passed {
+        node_handle_t node;
+        node_handle_t written;
+        LinkType link;
+        // The port carries the version the variable's nearest write made, so the call is ordered
+        // after that write by the data edge itself and needs no control input for it.
+        bool readsVersion = false;
+    };
     // The node to link and, at a `var` position, the variable the callee writes (if any).
     const auto passArgument = [&](const Argument &arg, bool isVar) {
         if (!isVar) {
-            return std::pair{valueOf(arg.node), node_handle_t{}};
+            return Passed{valueOf(arg.node), node_handle_t{}, LinkType::Norm};
         }
         requireMutableArgument(arg, calleeLabel);
         const bool named = isVariable(arg.node);
@@ -3538,35 +3563,54 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
             // An expression that is not a name, passed to a function, is a fresh object
             // nobody else refers to.
             node_handle_t variable = named ? arg.node : newVariable(arg.node);
-            return std::pair{variable, variable};
+            // A `var` handed to another graph is read before the callee writes it, and what that
+            // read takes is the version the variable's nearest write made, not the cell the
+            // first write made: the port carries that version as a data edge, and the control
+            // input the writer used to stand in for it is gone with it (linkCaptureSites links a
+            // capture the same way; Builder::valueVersionOf says what a version is). The version
+            // is the cell the write stored into -- `:op/assn` gives that cell back as its own
+            // value -- so the callee still writes the variable's one cell, and the write the
+            // callee does is recorded where the call is built (recordWrite). The `var` position
+            // of an assignment or of a variable operator is the write itself rather than a read
+            // of the cell, so it keeps the cell (docs/design/effects/edges.cn.md 5.6).
+            if (named && targetOperator == nullptr) {
+                if (node_handle_t version = valueVersionOf(variable);
+                    version != nullptr && inSameRegion(version, targetNode)) {
+                    return Passed{version, variable, LinkType::Norm, true};
+                }
+            }
+            return Passed{variable, variable, LinkType::Norm};
         }
-        return std::pair{valueOf(arg.node), named ? arg.node : node_handle_t{}};
+        return Passed{valueOf(arg.node), named ? arg.node : node_handle_t{}, LinkType::Norm};
     };
 
     // All arguments are read before the call is recorded as a writer: a variable passed both
     // by value and to a `var` parameter (`f(c, c)`) is read before the call, not after it.
-    struct Passed {
-        node_handle_t node;
-        node_handle_t written;
-        LinkType link;
-    };
     std::vector<Passed> passed;
     bool hasVarArgument = false;
     for (size_t i = 0; i < withInputs.size(); i++) {
         bool isVar = i < targetFuncType->withTypesCount() && targetFuncType->withIsVarAt(i);
-        const auto [node, written] = passArgument(withInputs[i], isVar);
-        passed.push_back({node, written, LinkType::With});
+        Passed arg = passArgument(withInputs[i], isVar);
+        arg.link   = LinkType::With;
+        passed.push_back(arg);
         hasVarArgument |= isVar;
     }
     for (size_t i = 0; i < normInputs.size(); i++) {
         bool isVar = i < targetFuncType->normTypesCount() && targetFuncType->normIsVarAt(i);
-        const auto [node, written] = passArgument(normInputs[i], isVar);
-        passed.push_back({node, written, LinkType::Norm});
+        Passed arg = passArgument(normInputs[i], isVar);
+        arg.link   = LinkType::Norm;
+        passed.push_back(arg);
         hasVarArgument |= isVar;
     }
     for (const Passed &arg : passed) {
         tryRemoveCtrlLink(arg.node, targetNode);
         linkNodes(arg.link, arg.node, targetNode);
+        if (arg.readsVersion) {
+            // The port carries the nearest write's version, and that data edge is what runs the
+            // write this read uses and orders the call after it (design principles 3.5, F3): the
+            // control input the writer used to stand in for it is not written.
+            continue;
+        }
         if (auto modifierNode = modifierOf(arg.node); modifierNode.has_value()) {
             if (sameGraph(*modifierNode, currGraph_) &&
                 shouldAddSyncCtrlLink(*modifierNode, targetNode)) {
