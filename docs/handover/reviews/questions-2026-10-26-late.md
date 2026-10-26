@@ -50,3 +50,9 @@
 
 - `attempt` 改为函数变换那条车道（4775c956c）收下。合并时把它新写的 `?->` 改成 `->`，lambda 的 `sync () => {…}` 改成 `() => sync {…}`。今后从 fsh-dev 开新车道，避免带进已删的写法。
 - **语言参考英文版缺 6.10.1 故障隔离一节**，中文 `06_expressions.md` 有，英文 `en/06_expressions.md` 没有，而 `en/04_execution_model.md:243` 还链接着它。按中文补上，按 `attempt(f)(x)` 的写法。
+
+## 合并备注（onnx 命名实参，4e77ad6a5）
+
+- 181 处调用改成命名的 `with` 形式，收下。合并时 `export_impure.cml` 用 `f64(...)` 取代已删的 `cast(..., "f64")`，期望的列号相应改为 87。
+- **三条过渡规则现在就可以删**：核心缺口已经在 fsh-dev 上修好（`264fa733c`：有默认值的 `with` 参数可以省略，有声明的原生算子从声明取名字和默认值）。`onnx:export_model` 改成声明里的一条 `with <out: string, dynamic_axes: int[]? = null, target: string? = null>`，删掉三条规则。
+- **流程**：`08d1e5377`、`ce5e732b5` 两个 `wip:` 提交又进了 develop。车道上的过渡提交合并前压掉，这一条请协调者在合并前检查。
