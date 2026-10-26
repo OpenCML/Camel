@@ -76,19 +76,35 @@ expect_output_contains = ["native_clause_wrong.cml:", "exists", "fs:exists", "pu
 
 # ---- Step 5, the other half: what a clause-less declaration publishes ----
 #
-# Not covered here yet. A declaration that wrote no clause has no promise to read, so the only
-# thing that could answer "does this function value fit this `pure` parameter" is what its body
-# touches. The body is measured (that is what the refusals below are checked against), but the
-# measurement is not written into the signature: a function type's resources take part in its
-# identity (core/type/text.cpp, "what a function promises about resources is part of its type"),
-# and the same function type is materialized more than once -- the declaration's own signature,
-# and the interned snapshot a function value is created with -- so completing one of them leaves
-# the others Generic and two spellings of one type stop comparing equal. Doing this soundly means
-# judging the conversion against the measurement of the graph the value names, after the bodies
-# are built, rather than against the type; until then a clause-less function value still meets a
-# `pure` parameter with NoMatchingFunction.
+# A function that writes no clause has no promise to read, so what it promises is what its body
+# was measured to reach, and that measurement is written onto its own signature -- the open one,
+# which no other function shares (the language author's ruling: only a function-typed *parameter*
+# that writes no resources stays Generic, because it is determined per instantiation). A value of
+# the function is therefore judged by the same set the declaration is, and the two cases below
+# pin both halves: a resource-generic parameter takes whatever instantiates it, and a clause-less
+# function that reaches `stdout` does not fit a `pure` parameter.
+
+[[tests]]
+name = "inferred.parameter_is_resource_generic"
+desc = "A function-typed parameter that writes no clause is determined per instantiation: `apply` says nothing about what `f` touches, so `noisy`, whose body prints, is a value it takes, and the program runs as it always did."
+kind = "behavior"
+case = "../../../cases/effects/generic_parameter_takes_instantiation.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "4\n8\n"
 
 # ---- Refusals ----
+
+[[tests]]
+name = "err.inferred_not_pure"
+desc = "A clause-less function promises what its body was measured to reach: `noisy` prints, so the value it is known by says `uses stdout`, and the `pure` parameter does not take it. The refusal is at the call and names the signature that would have matched."
+kind = "negative"
+case = "../../../cases/effects/err_inferred_not_pure.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+expect_diagnostic_code = "0x0300000F"
+expect_output_contains = ["err_inferred_not_pure.cml:19:", "uses stdout", "(x: int) => int pure"]
 
 [[tests]]
 name = "err.unknown_resource"
