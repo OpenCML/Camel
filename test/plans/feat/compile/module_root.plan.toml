@@ -180,7 +180,7 @@ kind = "negative"
 case = "../../../cases/compile/module_root/export_var.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["export_var_lib.cml:4:12: [Error]: The variable 'count' cannot be exported", "name=SemanticDiag::ExportedVariable", "name=SemanticDiag::ImportedModuleHasErrors"]
+expect_output_contains = ["export_var_lib.cml:3:12: [Error]: The variable 'count' cannot be exported", "name=SemanticDiag::ExportedVariable", "name=SemanticDiag::ImportedModuleHasErrors"]
 
 [[tests]]
 name = "root.value_conflict"

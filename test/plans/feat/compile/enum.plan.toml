@@ -316,7 +316,7 @@ case = "../../../cases/compile/enum/refuse_grad.cml"
 args = ["-E", "short", "${case}", "std::macro"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MacroEvaluationFailed"
-expect_diagnostic_line = 23
+expect_diagnostic_line = 25
 expect_diagnostic_column = 13
 expect_output_contains = ["a value that depends on a differentiated parameter is put into an enum 'Shape'", "Gradients do not flow through it"]
 expect_output_not_contains = ["Segmentation fault", "dumped core", "UnknownInternalError"]
@@ -331,7 +331,7 @@ case = "../../../cases/compile/enum/refuse_onnx.cml"
 args = ["-E", "short", "${case}", "onnx::export out=\"${test_tmp}/enum_never_written.onnx\""]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
-expect_diagnostic_line = 14
+expect_diagnostic_line = 15
 expect_diagnostic_column = 1
 expect_output_contains = ["Translation pass 'onnx::export_model' refused the graph: parameter 's' of 'main' has type 'Shape'"]
 expect_output_not_contains = ["wrote", "Segmentation fault", "dumped core", "UnknownInternalError"]
