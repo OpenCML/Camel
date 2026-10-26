@@ -92,7 +92,7 @@ constexpr int kNVec   = kNR / kVecWidth;
 constexpr int64_t kKC = 256;
 constexpr int64_t kMC = 72;  // multiple of both MR choices
 constexpr int64_t kNC = 256; // default column-tile width; multiple of both NR choices
-// Serial cost of one flop of the packed micro-kernel, measured on the reference host (H54):
+// Serial cost of one flop of the packed micro-kernel, measured on the reference host:
 // 128^3 (4.19 MFLOP) takes 45 us on one thread, 256^3 (33.5 MFLOP) 334 us, i.e. ~0.010 ns, or
 // about 100 GFLOP/s (AVX2 FMA, a little under the 118 GFLOP/s the core's peak allows).
 constexpr double kNsPerFlop = 0.010;

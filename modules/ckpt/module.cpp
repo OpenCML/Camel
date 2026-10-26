@@ -7,7 +7,7 @@
 // from their Camel bodies like any other function, with no intrinsic left here.
 // The module is not called `tree`: `stdlib/tree.cml` is the Camel tree library, and a `.cml`
 // beside a same-named `.cmo` would be that native module's declaration file instead of the
-// library (H19 plan section 1.6).
+// library.
 
 #include "../tensor/ops/registry.h"
 #include "camel/core/context/context.h"

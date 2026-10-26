@@ -21,7 +21,7 @@ namespace {
 /// pass's library, and compiling a pass written in Camel imports what that library imports; those
 /// modules join the context without becoming dependencies of the program. Reading the import
 /// graph is what tells the two apart, and it is why a pass library that fails to compile no
-/// longer suppresses the pass resolution that reports it as `InvalidPassParameter` (H198).
+/// longer suppresses the pass resolution that reports it as `InvalidPassParameter`.
 ///
 /// The import sites are the ones the graph builder recorded while it bound the module's imports,
 /// including the declaration module a C++ module stands behind: an import of `math` resolves to
@@ -90,7 +90,7 @@ void reportModuleFailures(
         }
     }
     // Report what the question was about. The context may hold more failed modules than the
-    // scope names (a pass library the pass list loaded, H198/H210); printing them would report a
+    // scope names (a pass library the pass list loaded); printing them would report a
     // failure the command never asked about and, for a pass library, replace the pass
     // resolution's `InvalidPassParameter` with the raw parse diagnostic.
     ctx->dumpModuleDiagnostics(diagnosticsOut, json, wrapInArray, failures.modules);

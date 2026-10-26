@@ -12,7 +12,7 @@
 // by the position it stands in, and rewrites the ones a mechanical rule can justify. Everything
 // else it refuses and lists: a migration lane decides those, one file at a time.
 //
-// What the target writing is, measured on the flip line (h465) rather than assumed:
+// What the target writing is, measured rather than assumed:
 //
 //   * `T[..]` with `T` a type variable is REFUSED today -- "the element type of a Tensor is a
 //     numeric scalar" -- so no rule writes it (stdlib/rules.cml records the same measurement);
@@ -858,10 +858,10 @@ function splitArguments(inner) {
 }
 
 /// Whether an argument expression's WRITTEN type is the transitional `Tensor`, which is what
-/// stops a free `T` from binding. Measured on the flip line (test/cases/compile/_h551probe):
-/// `count(m)` with `let m: Tensor = ones([2, 3])` is refused ("cannot be called with argument
-/// types (Tensor)"), while an untyped `let m = ones([2, 3])` binds, an array literal binds, and an
-/// elementwise operator's result binds -- so the annotation, not the producer, is the blocker.
+/// stops a free `T` from binding. Measured: `count(m)` with `let m: Tensor = ones([2, 3])` is
+/// refused ("cannot be called with argument types (Tensor)"), while an untyped
+/// `let m = ones([2, 3])` binds, an array literal binds, and an elementwise operator's result
+/// binds -- so the annotation, not the producer, is the blocker.
 function argumentTypeText(site, expr) {
     const bare = expr.replace(/^\(([\s\S]*)\)$/, '$1').trim()
     if (/^\[[\s\S]*\]$/.test(bare)) return { ok: true, why: 'array literal' }

@@ -94,9 +94,10 @@ std::string defaultModuleName(const ExecutionSite &site, const std::string &sour
 
 RuntimeFault::RuntimeFault(
     RuntimeDiag diag, std::vector<std::string> formatArgs, std::string detail,
-    std::exception_ptr cause, ExecutionSiteHint hint, RuntimeFaultPolicy policy)
+    std::exception_ptr cause, ExecutionSiteHint hint, RuntimeFaultPolicy policy,
+    std::vector<CarriedReport> carried)
     : diag_(diag), formatArgs_(std::move(formatArgs)), detail_(std::move(detail)), cause_(cause),
-      hint_(std::move(hint)), policy_(policy) {}
+      hint_(std::move(hint)), policy_(policy), carried_(std::move(carried)) {}
 
 std::string runtimeDiagMessage(RuntimeDiag diag, const std::vector<std::string> &args) {
     return formatIndexedMessage(getDiagInfo(diag).message, args);
@@ -173,6 +174,15 @@ RuntimeErrorReporter::describe(const RuntimeFault &fault, const ExecutionSite &s
         const ResolvedRuntimeLocation raised = resolver_.resolve(site);
         if (raised.origin != camel::source::kInvalidOriginId) {
             d.related.push_back(DiagLabel{raised.origin, "raised here", raised.sourcePath});
+        }
+    }
+    // The places the fault is about beside the one it stands at (see CarriedReport): this
+    // diagnostic is the fault's own report, which is the first of the carried ones, and the
+    // places it names are attached to it. A fault that collected more than one refusal has them
+    // attached to this same report, one entry each, by whoever reports it (the macro evaluator).
+    if (!fault.carried().empty()) {
+        for (const DiagLabel &label : fault.carried().front().related) {
+            d.related.push_back(label);
         }
     }
     d.moduleName = defaultModuleName(site, resolved.sourcePath);

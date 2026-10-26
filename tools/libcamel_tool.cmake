@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 # A tool that links libcamel is compiled in two steps so that its imports can be read before
-# libcamel links (H36): the sources become an OBJECT library, and the executable is linked from
+# libcamel links: the sources become an OBJECT library, and the executable is linked from
 # those objects. Compiling a translation unit needs only the headers, so the object library has
 # no dependency on libcamel and the export-list generation can use it.
 #
@@ -67,9 +67,9 @@ endfunction()
 set(CAMEL_STACK_SIZE_BYTES 33554432)
 
 # A Debug build nests larger native frames, and the limit a program meets must be the language's
-# recursion limit, not an accident of the frame size (H30 review, answer 2; design principles
+# recursion limit, not an accident of the frame size (design principles
 # 3.9: 1000 open calls). At -O0 one open call of std::nvm costs about 5.1 KiB of native stack
-# (measured on Windows x64, H32), and Windows lets a call use only a sixteenth of the stack
+# (measured on Windows x64), and Windows lets a call use only a sixteenth of the stack
 # before the guard keeps the other fifteen sixteenths for SEH fault unwinding
 # (src/execute/limits.cpp): 32 MiB therefore refuses the 400th open call, well before 1000.
 #

@@ -5,8 +5,9 @@
 
 /**
  * @file checkreport.h
- * @brief What `check` answers: the verdict table (H247, slice S0; the rulings of 2026-10-24 on
- * `verification-verdict-surface` and on `verification-licence-to-precondition`).
+ * @brief What `check` answers: the verdict table (docs/design/rewrite/plan-verification.cn.md,
+ * S0; the rulings of 2026-10-24 on `verification-verdict-surface` and on
+ * `verification-licence-to-precondition`).
  *
  * The verdict vocabulary is closed and has three words -- `proved`, `refuted`, `sampled` -- and
  * every line of the report wears one of them as its first word. The fourth word the check used to
@@ -22,8 +23,9 @@
  * `samples <n>`, `counterexample` or `none`), the `reason` (why nothing was examined, or why a
  * rule that is not a counterexample is still `refuted`), the `detail` (the rest of the line:
  * how often the engine fired, the worst error ratio, the values a counterexample has), and the
- * `coverage` (H247, slice S1: what the translation layer made of the rule's two sides -- the
- * proposition it read, or `beyond translation coverage` with the reason it refused; a rule outside
+ * `coverage` (docs/design/rewrite/plan-verification.cn.md, S1: what the translation layer made of
+ * the rule's two sides -- the proposition it read, or `beyond translation coverage` with the
+ * reason it refused; a rule outside
  * the coverage is `sampled` and this is where the reason is written, the ruling of 2026-10-24 on
  * `verification-verdict-surface`, 3).
  *

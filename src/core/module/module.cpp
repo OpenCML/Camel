@@ -27,6 +27,19 @@ std::optional<entity> mergeImportedEntities(const std::vector<entity> &entities)
         return std::nullopt;
     }
     const entity &first = entities.front();
+    // A name a module declares as a decorated function and as plain functions of the same name
+    // is one entity carrying both (EntityAccess::makeDecoratedOverloads). Its overloads merge
+    // with the overloads of every other form of the name, and the decorated function is taken
+    // from the first form that has one: a name decorated in two modules is one name, exactly as
+    // the plain case below.
+    const auto decoratedOf = [&]() -> std::optional<detail::EntityAccess::graph_handle_t> {
+        for (const auto &ent : entities) {
+            if (detail::EntityAccess::isDecoratedGraph(ent)) {
+                return detail::EntityAccess::decoratedGraph(ent);
+            }
+        }
+        return std::nullopt;
+    };
     if (detail::EntityAccess::isGraphSet(first)) {
         auto merged = std::make_shared<detail::EntityAccess::graph_set_t>();
         for (const auto &ent : entities) {
@@ -44,6 +57,11 @@ std::optional<entity> mergeImportedEntities(const std::vector<entity> &entities)
                     }
                 }
             }
+        }
+        // The name stands for the decorated function and its overloads alike, so the two leave
+        // together when the module exported both.
+        if (const auto decorated = decoratedOf(); decorated.has_value() && *decorated != nullptr) {
+            return detail::EntityAccess::makeDecoratedOverloads(*decorated, std::move(merged));
         }
         return detail::EntityAccess::makeGraphSet(std::move(merged));
     }
@@ -77,14 +95,11 @@ std::optional<entity> mergeImportedEntities(const std::vector<entity> &entities)
         return OperatorGroup::merged(name, std::move(allResolvers));
     }
     if (detail::EntityAccess::isDecoratedGraph(first)) {
-        for (const auto &ent : entities) {
-            if (detail::EntityAccess::isDecoratedGraph(ent) &&
-                detail::EntityAccess::decoratedGraph(ent)) {
-                return detail::EntityAccess::makeDecoratedGraph(
-                    detail::EntityAccess::decoratedGraph(ent));
-            }
+        const auto decorated = decoratedOf();
+        if (!decorated.has_value() || *decorated == nullptr) {
+            return std::nullopt;
         }
-        return std::nullopt;
+        return detail::EntityAccess::makeDecoratedGraph(*decorated);
     }
     // node_ptr_t or anything else: return the first one.
     return first;

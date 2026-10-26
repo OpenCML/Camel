@@ -184,7 +184,7 @@ function parseArgs(argv) {
             die(
                 `REFUSED: '${arg}' selects plans by tier or by the whole tree, which would start ` +
                     `the ${FORBIDDEN.length} plan files the policy holds back for the milestone layer.\n[gate] ${POLICY}.\n` +
-                    `[gate] The slow layer is an explicit plan file list (H154 §3); see --include for one file.`
+                    `[gate] The slow layer is an explicit plan file list; see --include for one file.`
             )
         } else if (arg.startsWith('-')) {
             die(`unknown option '${arg}'`)
@@ -425,7 +425,7 @@ async function main() {
     console.log('\n[gate] coverage')
     console.log(`[gate]   fast: ${FAST_TARGETS.join(' ')} (--tier fast: slow tests of those directories are the slow layer's)`)
     console.log(`[gate]   slow: ${slowPlans.length} named plan file(s), in full -- naming the file is what makes a slow test run`)
-    if (extra.length > 0) console.log(`[gate]   extra: ${extra.join(', ')} (caller-requested, not in the H154 §3 list)`)
+    if (extra.length > 0) console.log(`[gate]   extra: ${extra.join(', ')} (caller-requested, not in the slow layer's list)`)
     console.log('[gate]   the slow files that are also fast plans are run in full, so their fast tests appear in both phases')
     printSkipList()
 

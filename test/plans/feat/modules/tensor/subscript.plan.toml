@@ -126,7 +126,7 @@ case = "../../../../cases/modules/tensor/subscript/slice_one_node.cml"
 args = ["${case}", "std::gir"]
 expect_exit = 0
 expect_stdout_contains = ["label=\":op/slice_sub\"", "label=\":op/idx_take\""]
-expect_stdout_not_contains = ["label=\"tensor:slice\"", "label=\"tensor:idx_take\""]
+expect_stdout_not_contains = ["label=\"tensor:idx_take\""]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
@@ -138,7 +138,6 @@ case = "../../../../cases/modules/tensor/subscript/slice_node_subscript.cml"
 args = ["${case}", "std::gir"]
 expect_exit = 0
 expect_stdout_contains = ["label=\":op/slice_sub\""]
-expect_stdout_not_contains = ["label=\"tensor:slice\""]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
@@ -150,7 +149,6 @@ case = "../../../../cases/modules/tensor/subscript/slice_node_open_end.cml"
 args = ["${case}", "std::gir"]
 expect_exit = 0
 expect_stdout_contains = ["label=\":op/slice_sub\""]
-expect_stdout_not_contains = ["label=\"tensor:slice\""]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
@@ -162,7 +160,6 @@ case = "../../../../cases/modules/tensor/subscript/slice_node_function.cml"
 args = ["${case}", "std::gir"]
 expect_exit = 0
 expect_stdout_contains = ["label=\":op/slice_sub\""]
-expect_stdout_not_contains = ["label=\"tensor:slice\""]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 

@@ -279,7 +279,7 @@ std::string locationOf(const core::context::Context &ctx, uint64_t origin) {
 /// at run time is refused at that branch: what the arm computes is not a constant of the graph
 /// (it waits for the branch), and that is the reason the program has to change first. When the
 /// request cannot be read either (its own target or an argument is not constant), the two
-/// reasons are reported together, the branch one first (review of H8, "导出拒绝的诊断优先级").
+/// reasons are reported together, the branch one first.
 Request readEntryRequest(
     const core::context::Context &ctx, GCGraph *g, gc_node_ref_t node, const std::string &out) {
     // The request may be unreadable for its own reason; that reason is kept and joined with the

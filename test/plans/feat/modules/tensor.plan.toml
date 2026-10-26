@@ -81,6 +81,54 @@ assert(lines[2] === '[1, 0, 1]' && lines[3] === '0', 'bool or empty payload chan
 timeout_ms = 10000
 
 [[tests]]
+name = "binary_aggregate_bytes"
+desc = "An array whose element type is a struct of pure data writes the element's layout bytes: each field little-endian at its own offset, the padding the layout keeps left as zeros, the fields in declaration order."
+kind = "behavior"
+case = "../../../cases/modules/tensor/binary_aggregate_bytes.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+const two = '[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 64, 0, 0, 0, 0, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 64, 64, 0, 0, 0, 0]'
+assert(lines[0] === two, `the two-element aggregate payload changed: ${lines[0]}`)
+assert(lines[1] === '[7, 0, 0, 0, 0, 0, 0, 0]', `the one-field aggregate payload changed: ${lines[1]}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "binary_aggregate_roundtrip"
+desc = "Reading a payload back into an array of a struct element type fills each field from its own offset, both for bytes the writer produced and for bytes written by hand."
+kind = "behavior"
+case = "../../../cases/modules/tensor/binary_aggregate_roundtrip.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+assert(lines.length === 6, `expected six lines, got ${lines.length}`)
+assert(lines[0] === '1' && lines[1] === '2.0' && lines[2] === '258' && lines[3] === '3.0', `the roundtrip changed: ${lines.slice(0, 4).join(' ')}`)
+assert(lines[4] === '-1' && lines[5] === '-2.5', `the hand-written payload changed: ${lines[4]} ${lines[5]}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "binary_aggregate_not_plain"
+desc = "A struct with a field that is not pure data has no compact layout, so no run of bytes is its value: `to_bytes` is refused where it stands, naming the `is_plain` condition its candidate failed."
+kind = "negative"
+case = "../../../cases/modules/tensor/binary_aggregate_not_plain.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenConditionUnmet"
+expect_output_contains = ["No candidate of 'to_bytes' applies to", "(t: T[..]) => Bytes — when is_plain::<T>()"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
 name = "broadcast_ops"
 desc = "NumPy-style broadcasting across arithmetic, comparison, where, cast, relu, and maximum."
 kind = "behavior"

@@ -268,10 +268,9 @@ using TimeitDiagnosticsEmitter = std::function<bool(std::ostream &, bool)>;
 /// The report of one failed `--timeit` iteration. Text mode writes the `[timeit] i/N` line the
 /// completed iterations write, with `failed` in place of the time, then the diagnostics; the
 /// number is the one the failures are counted by. JSON mode writes one timeit object that names
-/// the 1-based `iteration` that failed (before H16 item 6 a failed run said nothing about it) and
-/// keeps the samples of the iterations that did complete, so a reader can tell how far the run got
-/// and what ended it. `emitDiagnostics` returns false when there is nothing to write; `fallback`
-/// is the sentence used then.
+/// the 1-based `iteration` that failed, and keeps the samples of the iterations that did
+/// complete, so a reader can tell how far the run got and what ended it. `emitDiagnostics`
+/// returns false when there is nothing to write; `fallback` is the sentence used then.
 void reportTimeitIterationFailure(
     std::ostream &os, bool useJsonFormat, unsigned int iteration,
     const std::vector<double> &samplesMs, std::string_view fallback,
@@ -473,7 +472,7 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
                         // One scope, one report: the same `findModuleFailures` answer that
                         // entered this branch decides what it prints. A bare
                         // `dumpAllModuleDiagnostics` would print a module the earlier question
-                        // had already put out of scope (H198/H210).
+                        // had already put out of scope.
                         camel_cli::reportModuleFailures(
                             ctx,
                             camel_cli::findModuleFailures(
@@ -617,7 +616,7 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
             // main's arguments reported it; the program's module diagnostics otherwise. The
             // latter are the program's dependencies, the scope the compile gate above asked
             // about: a pass library is not one of them, and its bare parse diagnostic belongs
-            // to pass resolution (H198/H210), not to this fallback.
+            // to pass resolution, not to this fallback.
             const TimeitDiagnosticsEmitter diagnostics =
                 invocation && invocation->ctx
                     ? TimeitDiagnosticsEmitter([ctx = invocation->ctx](

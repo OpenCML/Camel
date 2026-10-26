@@ -1,5 +1,5 @@
 module tiles_slice_bounds
-import { slice, zeros } from tensor
+import { zeros } from tensor
 import { source } from tiles
 
 func outside(x: f32[..]): f32[..] { return slice(x, 0, 0, 9) }

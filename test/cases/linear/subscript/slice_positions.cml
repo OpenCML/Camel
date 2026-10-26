@@ -1,0 +1,46 @@
+/**
+ * The core's slice node -- `:op/slice_sub`, the one node `t[a:b:s]` and `slice(t, axis, a, b, s)`
+ * both build (design principles 5.4) -- takes the positions its declaration states. The tensor
+ * holds its own positions, so what this program prints is the positions each slice took, and
+ * slice_declaration.py reads the same program's declaration (`camel inspect --instances`) and
+ * checks that the two agree: the length of the domain, the access `start + step*d`, and the
+ * interval a bound only the run knows is accepted in, which is the interval the fault of the
+ * SLICE_FAULT=1 run reports.
+ *
+ * Red when the kernel stops taking the positions the declaration states (a bound read another
+ * way, the sign of a step, the end meaning another position) or the declaration stops stating
+ * them.
+ */
+module slice_positions
+
+import { reshape } from tensor
+import { get_env } from env
+
+/// Every second position from 1 up to 7: 1, 3, 5 (the end is one past the last one taken).
+func window(x: f32[8]): f32[..] {
+    return x[1:7:2]
+}
+
+/// Backwards from 6 down to 0, a step of -1: 6, 5, 4, 3, 2, 1.
+func backward(x: f32[8]): f32[..] {
+    return x[6:0:-1]
+}
+
+/// Bounds only the run knows: the declaration states the interval they are accepted in, not
+/// their values.
+func range_of(x: f32[8], a: int, b: int): f32[..] {
+    return x[a:b]
+}
+
+func main(): int sync {
+    let x = reshape([0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0] as f32[], [8]) as f32[8]
+    // SLICE_FAULT=1 slices with a bound the axis cannot hold: the run faults with the interval
+    // the declaration states for a bound only the run knows.
+    let fault = get_env('SLICE_FAULT') == '1'
+    let lo = if fault then -1 else 1
+    let hi = if fault then 3 else 7
+    println('window', window(x))
+    println('backward', backward(x))
+    println('range_of', range_of(x, lo, hi))
+    return 0
+}

@@ -3,9 +3,9 @@
 
 /*
  * The signatures are written once, in the declaration module `stdlib/json.cml` (design
- * principles 6.4; handover H19, step 10). What is left here is what only C++ knows: the kernels
+ * principles 6.4). What is left here is what only C++ knows: the kernels
  * in operators.cpp, the executor that runs them, the operator traits declared at load, and the
- * two type rules a declaration cannot express (handover H115):
+ * two type rules a declaration cannot express:
  *
  *   - `encode`: the value's type must have a JSON form, a condition on the argument type;
  *   - `decode_as`: the result type is the type of the `shape` argument.
@@ -90,7 +90,7 @@ JsonModule::JsonModule(context_ptr_t ctx) : BuiltinModule("json", ctx) {
     // `decode_as<[] as Map<string, int>>(text)` or `decode_as(text, [] as Map<string, int>)`.
     // The result is a `T!`. What is decoded is a text, or a Json decoded before (a member of
     // it whose shape is known). The result type comes from the shape argument, which a
-    // declaration cannot express, so the resolver here is the one source (handover H115).
+    // declaration cannot express, so the resolver here is the one source.
 }
 
 module_ptr_t JsonModule::create(context_ptr_t ctx) { return std::make_shared<JsonModule>(ctx); }
