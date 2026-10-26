@@ -13,7 +13,6 @@
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/resolver.h"
-#include "camel/profile/profile.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/type.h"
 
@@ -160,8 +159,8 @@ slot_t __builtin__set_index__(ArgsView &with, ArgsView &norm, Context &) {
 
 // The in-place form. The memory plan decided, for the node that names it, whether the old value
 // has an observer it can see: where it could not prove that (docs/design/arrays-memory/README.cn.md
-// 4.3.1), the array itself answers -- `canWriteInPlace` is true when the only reference to a block
-// it owns is the array's own -- and the update copies when it is not.
+// 4.3.1), the array itself answers -- `writableInPlace` is true when the storage the write would
+// reach is this value's alone (array.h) -- and the update copies when it is not.
 slot_t __builtin__set_index_in_place__(ArgsView &with, ArgsView &norm, Context &) {
     (void)with;
     auto *array           = norm.get<Array *>(0);
@@ -170,11 +169,7 @@ slot_t __builtin__set_index_in_place__(ArgsView &with, ArgsView &norm, Context &
     const slot_t val      = norm.slot(2);
     checkElementIndex(array, raw);
     const size_t index = static_cast<size_t>(raw);
-    const bool ownStorage = array->isSlots() || array->canWriteInPlace();
-    if (camel::profile::enabledInline()) {
-        camel::profile::arrayCountAnswer(ownStorage);
-    }
-    if (ownStorage) {
+    if (array->writableInPlace()) {
         array->setSlot(index, val, arrayType);
         return toSlot(array);
     }
