@@ -1805,3 +1805,16 @@ C9 已合入（`22d03dd80` 经 `a503f6130`），`thread_count` 只在 `test_supp
 6. **`uses rng` 是草稿漏了声明**：`random` 要 `export resource rng`。
 7. **`ckpt.cml` 的草稿由决策者补写。**
 8. **顺序**：前奏先接（它带 `fail`/`never`），然后是四项核心能力（决策者这边正在做）、`array` 的核函数、`math` 的核函数。
+
+## 返工：`Context::handle()`（7f788be11）
+
+修法的方向对：模块和执行器管理器不该拥有上下文。但 `handle()` 的做法要换：
+- **问题**：它造了一个删除器什么都不做的 `shared_ptr`，看上去和拥有它的指针一模一样，类型上说"持有"，实际上是悬空指针。
+  - 谁把它存得比上下文久，就会静默悬空。
+  - `use_count`、`shared_from_this` 的含义被破坏。
+  - 以后有人把它当普通的 `context_ptr_t` 传出去，类型系统拦不住。
+- **改法**：不拥有就在类型上写明。
+  - 回指用 `Context &`（所有者保证寿命时）或 `std::weak_ptr<Context>`（真有可能活得更久时）。`Module`、`ExecutorManager` 是上下文的成员，用引用即可。
+  - 执行器工厂捕获 `weak_ptr`，用时 `lock()`，拿不到是内部错误。
+  - 删掉 `handle()`。
+- 测试保持不变：第二个上下文能析构。
