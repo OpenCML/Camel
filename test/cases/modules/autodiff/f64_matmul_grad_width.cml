@@ -3,7 +3,7 @@
  * `w: f64[3, 1]` makes `d/dw = x^T @ dy` (`tensor:matmul_grad_rhs`) and `d/dx = dy @ w^T`
  * (`tensor:matmul_grad_lhs`), and those two are the only gradient operators of this lane's list
  * that *add several products together*: `sum_to` adds over the like-operand's axes, while
- * `expand_axis`, `slice_grad`, `gelu_grad` and `erf_grad` are elementwise or a spread. The
+ * `expand_axis`, `gelu_grad` and `erf_grad` are elementwise or a spread. The
  * arithmetic below is written from the forward expression, so the expectations are not read back
  * from a kernel.
  *

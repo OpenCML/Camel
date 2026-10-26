@@ -267,66 +267,6 @@ concat(std::span<const Array *const> inputs, int64_t axisArg, mm::IAllocator &al
     return out;
 }
 
-std::optional<int64_t> normalizeSliceBound(int64_t extent, int64_t bound) {
-    const int64_t b = bound < 0 ? bound + extent : bound;
-    if (b < 0 || b > extent) {
-        return std::nullopt;
-    }
-    return b;
-}
-
-std::optional<SliceRange> normalizeSliceBounds(int64_t extent, int64_t start, int64_t end) {
-    const auto s = normalizeSliceBound(extent, start);
-    const auto e = normalizeSliceBound(extent, end);
-    if (!s || !e) {
-        return std::nullopt;
-    }
-    return SliceRange{*s, *e};
-}
-
-SubscriptSliceRange
-subscriptSliceRange(int64_t extent, int64_t start, int64_t end, int64_t step, int64_t written) {
-    const bool wroteEnd   = (written & 1) != 0;
-    const bool wroteStart = (written & 2) != 0;
-    SubscriptSliceRange range;
-    range.step = step;
-    if (step > 0) {
-        range.first = wroteStart ? start : 0;
-        const int64_t stop = wroteEnd ? end : extent;
-        range.stop  = stop;
-        range.inRange =
-            range.first >= 0 && range.first <= extent && stop >= 0 && stop <= extent;
-        range.count = range.first < stop ? (stop - range.first + step - 1) / step : 0;
-        return range;
-    }
-    range.first = wroteStart ? start : extent - 1;
-    const int64_t stop = wroteEnd ? end : -1;
-    range.stop = stop;
-    range.inRange = (!wroteStart || (range.first >= 0 && range.first < extent)) &&
-                    (!wroteEnd || (stop >= 0 && stop <= extent));
-    range.count = range.first > stop ? (range.first - stop + (-step) - 1) / (-step) : 0;
-    return range;
-}
-
-Array *subscriptSlice(
-    const Array *input, const SubscriptSliceRange &range, mm::IAllocator &allocator) {
-    if (input->rank() != 1) {
-        throw std::invalid_argument("a slice of a tensor of rank 1");
-    }
-    Shape outShape{range.count};
-    Array *out            = createTensor(input->dtype(), outShape, allocator, false);
-    const size_t itemSize = elementSize(input->dtype());
-    for (int64_t i = 0; i < range.count; ++i) {
-        const uint64_t srcIndex = static_cast<uint64_t>(range.first + i * range.step);
-        const uint64_t dstIndex = static_cast<uint64_t>(i);
-        std::memcpy(
-            out->rawData() + dstIndex * itemSize,
-            input->rawData() + srcIndex * itemSize,
-            itemSize);
-    }
-    return out;
-}
-
 Array *
 take(const Array *input, std::span<const int64_t> indices, mm::IAllocator &allocator) {
     if (input->rank() < 1) {

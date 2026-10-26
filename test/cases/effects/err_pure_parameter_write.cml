@@ -1,0 +1,23 @@
+/**
+ * What a `pure` parameter asks for is the empty set, and a value that writes a cell is not in it:
+ * `add<t>` carries the write in its type, so the call is refused where the two meet (design
+ * principles 3.3). The refusal is the ordinary one for a call that no signature accepts.
+ */
+module err_pure_parameter_write
+
+with <var total: int>
+func add(x: int): int sync {
+    total = total + x
+    return total
+}
+
+func usePure(f: (x: int) => int pure): int {
+    return f(1)
+}
+
+func main(): int sync {
+    var t = 0
+    let g = add<t>
+    println(usePure(g))
+    return 0
+}

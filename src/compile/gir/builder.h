@@ -2007,9 +2007,11 @@ class Builder {
     void settleEffectfulGraphs();
     // The resources a body touches, from what its nodes already publish: an operator's own
     // signature, a callee's, and the signature of the function value a call goes through. Empty
-    // when the body touches nothing. `nullopt` when something in it cannot be determined -- a
-    // call through a signature that promises nothing, a resource the walk cannot place -- so a
-    // body is never measured as pure because the measurement gave up.
+    // when the body touches nothing. A call through a value that writes no clause promises
+    // nothing, so the call is read conservatively (any class, any ambient resource) rather than
+    // as touching nothing: a body is never measured as pure because the measurement gave up.
+    // `nullopt` when something in the body cannot be determined at all -- a resource the walk
+    // cannot place.
     std::optional<camel::core::sem::ResourceSignature> footprintOf(DraftGraphBuilder *graph) const;
     // Once every body is built: measures each one and settles the measurements against each other
     // (a callee may be written after its caller, in another module). This reports nothing: it runs

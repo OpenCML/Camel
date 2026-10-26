@@ -2059,14 +2059,14 @@ None: context: the construct is not built here, so the program has to be restruc
 The grammar accepts this construct, but the compiler does not implement it. Remove it; nothing in the language replaces it yet.
 ```
 
-**Example** (`test/cases/modules/tensor/subscript/slice_multidim.cml`, run as `camel test/cases/modules/tensor/subscript/slice_multidim.cml`)
+**Example** (`test/cases/modules/tensor/subscript/index_other_dimension.cml`, run as `camel test/cases/modules/tensor/subscript/index_other_dimension.cml`)
 
 ```camel
-module subscript_multidim
+module subscript_index_other_dimension
 import { reshape, shape } from tensor
 
 func main(): int sync {
-    println('ran')
+    println('reached')
     let m = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3])
     let column = m[:, 0]
     println(shape(column))
@@ -8208,25 +8208,24 @@ None: choice: the repair is a decision only the writer can make
 **Help**
 
 ```text
-A signature is a promise the compiler checks against the resources the function uses. 'uses' is an upper bound, so every resource the body uses must be named there, and 'pure' promises the empty set; a 'var' parameter is a resource by itself, and so is a capture. Change the body so that it no longer reaches for it, or change the signature to name it.
+A signature is a promise the compiler checks against the resources the function uses. 'uses' is an upper bound, so every resource the body uses must be named there, and 'pure' promises the empty set; a 'var' parameter is a resource by itself, and so is a capture. Change the body so that it no longer reaches for it, or change the signature to name it. When the use is a call through a parameter of function type, what the call reaches is the instantiation's: write 'pure' on the parameter to promise the empty set, or write there the resources the values it takes reach.
 ```
 
-**Example** (`test/cases/effects/err_pure_var.cml`, run as `camel test/cases/effects/err_pure_var.cml`)
+**Example** (`test/cases/effects/err_promise_through_parameter.cml`, run as `camel test/cases/effects/err_promise_through_parameter.cml`)
 
 ```camel
-// `pure` promises that a call touches no resource at all. A `var` parameter is a resource by
-// itself: the cell is shared with the caller, so a call through the parameter reads and writes it
-// wherever the body is written, and no body can bring the set back to empty. So the signature is
-// refused at its own clause, and the note points at the parameter that breaks the promise
-// (UsesPromiseViolated).
-func bump(var c: int): int pure sync {
-    c = c + 1
-    return c
+module err_promise_through_parameter
+
+func applyPure(f: (x: int) => int): int pure {
+    return f(1)
+}
+
+func twice(x: int): int {
+    return x * 2
 }
 
 func main(): int sync {
-    var n = 1
-    println(bump(n))
+    println(applyPure(twice))
     return 0
 }
 ```
