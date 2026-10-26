@@ -14,6 +14,7 @@
  */
 
 #include "camel/init.h"
+#include "camel/utils/install_layout.h"
 #include "camel/utils/log.h"
 #include "camel/utils/windows_parser_guard.h"
 #include "command/commands.h"
@@ -78,6 +79,12 @@ int main(int argc, char *argv[]) {
     }
 
     camel::ScopedRuntime camelRuntime;
+    // `CAMEL_HOME` picks the installation whose standard library the run reads; a value that does
+    // not name an installation is reported as that, before anything is loaded.
+    if (const std::string problem = camel::utils::camelHomeProblem(); !problem.empty()) {
+        std::cerr << "camel-debugger: " << problem << "\n";
+        return 1;
+    }
     // 行缓冲关闭，便于 pipe/日志实时输出到 Web UI 或控制台，避免输出延迟。
     std::setvbuf(stdout, nullptr, _IONBF, 0);
     std::setvbuf(stderr, nullptr, _IONBF, 0);

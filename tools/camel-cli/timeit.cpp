@@ -29,6 +29,7 @@
 #include "camel/utils/install_layout.h"
 #include "camel/utils/log.h"
 #include "camel/utils/memperf.h"
+#include "camel/utils/path.h"
 #include "config.h"
 #include "module_failures.h"
 #include "passes/trans/dot/graphviz.h"
@@ -228,7 +229,9 @@ RunInvocation makeRunInvocation(const std::string &inputPath) {
     invocation.input = std::move(file);
     CAMEL_LOG_INFO_S("Main", "Reading from file '{}'.", inputPath);
 
-    invocation.diagnostics = make_shared<Diagnostics>("main", inputPath);
+    // The entry module is named by its file, as in the ordinary run (design principles 10.2).
+    const std::string entryModuleName = camel::utils::moduleNameOfFile(inputPath);
+    invocation.diagnostics            = make_shared<Diagnostics>(entryModuleName, inputPath);
     invocation.diagnostics->setConfig(
         DiagsConfig{
             .total_limit         = -1,
@@ -257,7 +260,7 @@ RunInvocation makeRunInvocation(const std::string &inputPath) {
 
     invocation.parser = std::make_shared<CamelParser>(invocation.diagnostics);
     invocation.mainModule =
-        make_shared<UserDefinedModule>("main", inputPath, invocation.ctx, invocation.parser);
+        make_shared<UserDefinedModule>(entryModuleName, inputPath, invocation.ctx, invocation.parser);
     invocation.ctx->setMainModule(invocation.mainModule);
     return invocation;
 }
