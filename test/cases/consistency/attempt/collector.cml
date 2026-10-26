@@ -16,7 +16,7 @@ func build(i: int, d: int): string[] {
 }
 
 func round(i: int): int {
-    let r = attempt(build, i, i % 3)
+    let r = attempt(build)(i, i % 3)
     let text = match r {
         case error e => [e.kind, e.message, e.location]
         case v => v
@@ -31,8 +31,8 @@ func rounds(i: int, n: int, acc: int): int {
 func main(): int sync {
     let n = int(get_env('N') ?? '')
     println(rounds(0, n, 0))
-    println(attempt(build, 1, 0))
-    println((attempt(build, 1, 5) !! ['none'])[19])
+    println(attempt(build)(1, 0))
+    println((attempt(build)(1, 5) !! ['none'])[19])
     println('end')
     return 0
 }

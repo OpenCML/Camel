@@ -22,7 +22,7 @@ func main(): int sync {
     // the same seed gives the same draws again
     seed(7)
     println(rand())
-    println(attempt(pick, [1]) !! 0, attempt(pick, none) !! -1)
+    println(attempt(pick)([1]) !! 0, attempt(pick)(none) !! -1)
     println(sample(xs, 7))
     return 0
 }

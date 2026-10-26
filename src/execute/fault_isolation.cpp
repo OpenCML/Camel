@@ -16,6 +16,19 @@ namespace camel::execute {
 
 using namespace camel::core::type;
 
+namespace {
+
+/// The result type of a marked call of a function whose result type is `calleeResult`: `T` gives
+/// `T!`, and a function that already returns `U!` gives `U!`, because there is no `U!!`.
+Type *isolatedResultType(Type *calleeResult) {
+    if (calleeResult->code() == TypeCode::Tuple && tt::as_ptr<TupleType>(calleeResult)->isFallible()) {
+        return calleeResult;
+    }
+    return TupleType::fallible(calleeResult);
+}
+
+} // namespace
+
 std::optional<Type *> resolveFaultIsolationType(const type_vec_t &with, const type_vec_t &norm) {
     if (!with.empty() || norm.empty() || norm[0]->code() != TypeCode::Function) {
         return std::nullopt;
@@ -33,11 +46,38 @@ std::optional<Type *> resolveFaultIsolationType(const type_vec_t &with, const ty
             return std::nullopt;
         }
     }
-    Type *exitType = funcType->exitType();
-    if (exitType->code() == TypeCode::Tuple && tt::as_ptr<TupleType>(exitType)->isFallible()) {
-        return exitType; // `U!` stays `U!`: there is no `U!!`
+    return isolatedResultType(funcType->exitType());
+}
+
+FunctionType *attemptFunctionType(FunctionType *f) {
+    if (f == nullptr || f->withTypesCount() != 0 || !f->hasExitType() || f->hasRest()) {
+        return nullptr;
     }
-    return TupleType::fallible(exitType);
+    // The marked call is given values: a parameter the callee writes in place (`var`) cannot be
+    // one, exactly as it cannot be an argument of any other operator.
+    for (size_t i = 0; i < f->normTypesCount(); ++i) {
+        if (f->normIsVarAt(i)) {
+            return nullptr;
+        }
+    }
+    // The value is built at the call site out of a callee the type does not name, and a call
+    // through it is read as reaching what the callee reaches: the signature publishes no
+    // resources rather than the callee's, which the compiler cannot check against the closure it
+    // builds (design effects plan 2.2).
+    return f->withExitType(isolatedResultType(f->exitType()))
+        ->withResources(core::sem::ResourceSignature{});
+}
+
+std::optional<Type *> resolveAttemptTransformType(const type_vec_t &with, const type_vec_t &norm) {
+    if (!with.empty() || norm.size() != 1 || norm[0] == nullptr ||
+        norm[0]->code() != TypeCode::Function) {
+        return std::nullopt;
+    }
+    if (FunctionType *transformed = attemptFunctionType(tt::as_ptr<FunctionType>(norm[0]));
+        transformed != nullptr) {
+        return transformed;
+    }
+    return std::nullopt;
 }
 
 slot_t wrapIsolatedResult(slot_t value, const Type *calleeResultType, const Type *nodeType) {

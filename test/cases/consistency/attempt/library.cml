@@ -31,25 +31,25 @@ func main(): int sync {
     let good = [4, 5, 6, 8]
     let bad = [1, 2, 3, 4]
 
-    println(kind(attempt(() => good->find<big> ?? -1)))
-    println(kind(attempt(() => bad->find<big> ?? -1)))
-    println(kind_b(attempt(() => good->any<big>)))
-    println(kind_b(attempt(() => bad->any<big>)))
-    println(kind_b(attempt(() => bad->all<big>)))
-    println(kind(attempt(() => good->count<big>)))
-    println(kind(attempt(() => bad->count<big>)))
+    println(kind(attempt(() => good->find<big> ?? -1)()))
+    println(kind(attempt(() => bad->find<big> ?? -1)()))
+    println(kind_b(attempt(() => good->any<big>)()))
+    println(kind_b(attempt(() => bad->any<big>)()))
+    println(kind_b(attempt(() => bad->all<big>)()))
+    println(kind(attempt(() => good->count<big>)()))
+    println(kind(attempt(() => bad->count<big>)()))
 
-    println(attempt(() => good->flat_map<(x: int) => [x, inv(x)]>) !! [-1])
-    println(attempt(() => bad->flat_map<(x: int) => [x, inv(x)]>) !! [-1])
-    println(attempt(() => good->sort_by<inv>) !! [-2])
-    println(attempt(() => bad->sort_by<inv>) !! [-2])
-    println(kind(attempt(() => sum(zip_with<(a: int, b: int) => a / b>(good, [1, 2, 3, 4])))))
-    println(kind(attempt(() => sum(zip_with<(a: int, b: int) => a / b>(good, [1, 0, 3, 4])))))
+    println(attempt(() => good->flat_map<(x: int) => [x, inv(x)]>)() !! [-1])
+    println(attempt(() => bad->flat_map<(x: int) => [x, inv(x)]>)() !! [-1])
+    println(attempt(() => good->sort_by<inv>)() !! [-2])
+    println(attempt(() => bad->sort_by<inv>)() !! [-2])
+    println(kind(attempt(() => sum(zip_with<(a: int, b: int) => a / b>(good, [1, 2, 3, 4])))()))
+    println(kind(attempt(() => sum(zip_with<(a: int, b: int) => a / b>(good, [1, 0, 3, 4])))()))
 
     // Operators written in C++ that fault.
-    println(kind(attempt(() => sum(zip_with<(a: int, b: int) => a + b>(good, [1, 2])))))
-    println(kind(attempt(() => sum(['1', '2', 'x']->map<(s: string) => int(s)>))))
-    println(kind(attempt(() => sum(take<2>(good)))))
+    println(kind(attempt(() => sum(zip_with<(a: int, b: int) => a + b>(good, [1, 2])))()))
+    println(kind(attempt(() => sum(['1', '2', 'x']->map<(s: string) => int(s)>))()))
+    println(kind(attempt(() => sum(take<2>(good)))()))
 
     // The library functions are as they were.
     println(good->find<big> ?? -1, good->count<big>, sum(good->sort_by<inv>))

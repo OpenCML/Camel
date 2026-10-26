@@ -17,6 +17,7 @@
 #include "camel/core/rtdata/string.h"
 #include "camel/core/type/composite/stream.h"
 #include "camel/execute/entry_args.h"
+#include "camel/execute/fault_isolation.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/graph.h"
 #include "camel/utils/log.h"
@@ -757,6 +758,74 @@ Builder::operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &o
     leaveScope();
     operatorValueGraphs_[key] = graph;
     return graph;
+}
+
+node_handle_t
+Builder::attemptFunctionValue(const Argument &f, const GCT::node_ptr_t &origin) {
+    // The argument is what the call would pass: a variable is read here, once, and the value
+    // read is what the function captures.
+    node_handle_t fValue = valueOf(f.node);
+    Type *fType          = valueTypeOf(nodeTypeOf(fValue));
+    ASSERT(
+        fType != nullptr && fType->code() == TypeCode::Function,
+        "The transform is given a function value.");
+    FunctionType *type = camel::execute::attemptFunctionType(tt::as_ptr<FunctionType>(fType));
+    ASSERT(type != nullptr, "The resolver accepted a function the transform cannot take.");
+
+    // The captured function is bound to a name no program can write, in the scope the call
+    // stands in, so that the new graph captures it the way any closure captures a name
+    // (captureInto).
+    const std::string fName = bindTemporary(fValue);
+
+    compile_graph_ptr_t graph = enterScope(type);
+    registerGraphOrigin(context_, graph, origin, "gir.attempt.graph");
+    const bool outerSynced        = synced_;
+    const node_handle_t outerLast = lastSyncedNode_;
+    const auto restore            = [&] {
+        synced_                  = outerSynced;
+        lastSyncedNode_          = outerLast;
+        bodyStates_[graph.get()] = BodyState::Built;
+    };
+    const auto make = [&](GCT::node_ptr_t node) {
+        node->setOrigin(origin->origin());
+        return node;
+    };
+    // The marked call stands where the program wrote the transform: a node of a call takes the
+    // origin of the callee the program wrote (`gir.link.oper` reads gct->at(0)), so the call
+    // inside the new graph is given the name's origin rather than the argument list's.
+    const auto nameOrigin = [&] {
+        return origin != nullptr && !origin->empty() ? origin->at(0)->origin() : origin->origin();
+    }();
+    try {
+        bodyStates_[graph.get()] = BodyState::Open;
+        // Its body is the one marked call `attempt's function(f, args...)`, built from
+        // a synthesized GCT so that resolution, the argument checks and the origins are what
+        // they are for any call.
+        GCT::node_ptr_t callee =
+            make(tree_->makeDRef(std::string(camel::execute::kFaultIsolationOperatorName)));
+        callee->setOrigin(nameOrigin);
+        GCT::node_ptr_t call = make(tree_->makeLink(1 + type->normTypesCount()));
+        *call << callee << make(tree_->makeDRef(fName));
+        size_t index = 0;
+        for (draft_node_ref_t port : graph->draft().normPorts()) {
+            const std::string name = "$attempt" + std::to_string(index++);
+            nodeScope_->insert(name, graph->draft().ref(port));
+            *call << make(tree_->makeDRef(name));
+        }
+        // The call is the value of the function, so it runs whenever the function is called.
+        synced_             = true;
+        lastSyncedNode_     = {};
+        node_handle_t value = visitLinkNode(call);
+        setGraphReturnFromResult(graph, nodeIdOf(value), nodeIdOf(value), nodeTypeOf(value));
+        restore();
+        registerBuiltBody(graph);
+    } catch (...) {
+        restore();
+        leaveScope();
+        throw;
+    }
+    leaveScope();
+    return createFuncDataNode(graph, true, false);
 }
 
 node_handle_t Builder::overloadValueFor(
@@ -3437,6 +3506,14 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
                     }
                 }
             }
+            if (targetOperator->uri() == camel::execute::kAttemptTransformUri) {
+                // `attempt(f)` (design principles 3.9) is a function transform and not a node:
+                // the call gives a function value whose body is the marked call of `f`. What the
+                // value captures is the argument, so no operand of this graph stands for it.
+                node_handle_t transformed = attemptFunctionValue(normInputs[0], gct);
+                LEAVE("LINK");
+                return transformed;
+            }
             targetNode = currGraph_->addOperNode(targetOperator, 0);
             stampPermissions(targetNode);
             // An operator declared macro runs in std::macro once its inputs are static, like a call
@@ -3634,10 +3711,35 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
     const bool takesVariables = targetOperator == nullptr ||
                                 targetOperator->name().starts_with("__assn") ||
                                 targetOperator->name().starts_with("__var_");
+    // Whether a node stands in the block the call is written in. A version of a variable that a
+    // branch arm or another block wrote is not what this call reads: what the call reads there is
+    // the join, which is not a cell.
+    const auto inSameRegion = [&](node_handle_t a, node_handle_t b) {
+        if (a == nullptr || b == nullptr || nodeGraphOf(a) != nodeGraphOf(b)) {
+            return false;
+        }
+        runtime::GraphDraft *draft = nodeDraftOf(a);
+        const draft_node_ref_t first  = nodeIdOf(a);
+        const draft_node_ref_t second = nodeIdOf(b);
+        if (!draft->alive(first) || !draft->alive(second)) {
+            return false;
+        }
+        return draft->nodeRegion(first) == draft->nodeRegion(second);
+    };
+    // An argument as it is linked: the node the call reads, the variable the callee writes at a
+    // `var` position (if any), and how it is passed.
+    struct Passed {
+        node_handle_t node;
+        node_handle_t written;
+        LinkType link;
+        // The port carries the version the variable's nearest write made, so the call is ordered
+        // after that write by the data edge itself and needs no control input for it.
+        bool readsVersion = false;
+    };
     // The node to link and, at a `var` position, the variable the callee writes (if any).
     const auto passArgument = [&](const Argument &arg, bool isVar) {
         if (!isVar) {
-            return std::pair{valueOf(arg.node), node_handle_t{}};
+            return Passed{valueOf(arg.node), node_handle_t{}, LinkType::Norm};
         }
         requireMutableArgument(arg, calleeLabel);
         const bool named = isVariable(arg.node);
@@ -3653,35 +3755,54 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
             // An expression that is not a name, passed to a function, is a fresh object
             // nobody else refers to.
             node_handle_t variable = named ? arg.node : newVariable(arg.node);
-            return std::pair{variable, variable};
+            // A `var` handed to another graph is read before the callee writes it, and what that
+            // read takes is the version the variable's nearest write made, not the cell the
+            // first write made: the port carries that version as a data edge, and the control
+            // input the writer used to stand in for it is gone with it (linkCaptureSites links a
+            // capture the same way; Builder::valueVersionOf says what a version is). The version
+            // is the cell the write stored into -- `:op/assn` gives that cell back as its own
+            // value -- so the callee still writes the variable's one cell, and the write the
+            // callee does is recorded where the call is built (recordWrite). The `var` position
+            // of an assignment or of a variable operator is the write itself rather than a read
+            // of the cell, so it keeps the cell (docs/design/effects/edges.cn.md 5.6).
+            if (named && targetOperator == nullptr) {
+                if (node_handle_t version = valueVersionOf(variable);
+                    version != nullptr && inSameRegion(version, targetNode)) {
+                    return Passed{version, variable, LinkType::Norm, true};
+                }
+            }
+            return Passed{variable, variable, LinkType::Norm};
         }
-        return std::pair{valueOf(arg.node), named ? arg.node : node_handle_t{}};
+        return Passed{valueOf(arg.node), named ? arg.node : node_handle_t{}, LinkType::Norm};
     };
 
     // All arguments are read before the call is recorded as a writer: a variable passed both
     // by value and to a `var` parameter (`f(c, c)`) is read before the call, not after it.
-    struct Passed {
-        node_handle_t node;
-        node_handle_t written;
-        LinkType link;
-    };
     std::vector<Passed> passed;
     bool hasVarArgument = false;
     for (size_t i = 0; i < withInputs.size(); i++) {
         bool isVar = i < targetFuncType->withTypesCount() && targetFuncType->withIsVarAt(i);
-        const auto [node, written] = passArgument(withInputs[i], isVar);
-        passed.push_back({node, written, LinkType::With});
+        Passed arg = passArgument(withInputs[i], isVar);
+        arg.link   = LinkType::With;
+        passed.push_back(arg);
         hasVarArgument |= isVar;
     }
     for (size_t i = 0; i < normInputs.size(); i++) {
         bool isVar = i < targetFuncType->normTypesCount() && targetFuncType->normIsVarAt(i);
-        const auto [node, written] = passArgument(normInputs[i], isVar);
-        passed.push_back({node, written, LinkType::Norm});
+        Passed arg = passArgument(normInputs[i], isVar);
+        arg.link   = LinkType::Norm;
+        passed.push_back(arg);
         hasVarArgument |= isVar;
     }
     for (const Passed &arg : passed) {
         tryRemoveCtrlLink(arg.node, targetNode);
         linkNodes(arg.link, arg.node, targetNode);
+        if (arg.readsVersion) {
+            // The port carries the nearest write's version, and that data edge is what runs the
+            // write this read uses and orders the call after it (design principles 3.5, F3): the
+            // control input the writer used to stand in for it is not written.
+            continue;
+        }
         if (auto modifierNode = modifierOf(arg.node); modifierNode.has_value()) {
             if (sameGraph(*modifierNode, currGraph_) &&
                 shouldAddSyncCtrlLink(*modifierNode, targetNode)) {

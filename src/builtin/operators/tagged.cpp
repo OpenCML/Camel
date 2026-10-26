@@ -177,10 +177,25 @@ const std::vector<oper_group_ptr_t> &getTaggedOperatorGroups() {
                       }
                       return errorType();
                   })}}),
-        // Fault isolation: a marked call of the function value given first. The schedulers
-        // run it themselves (":mark/..."); see camel/execute/fault_isolation.h.
+        // Fault isolation (design principles 3.9): `attempt(f)` is a function transform. It
+        // gives the function whose parameters are `f`'s and whose result is `f`'s result plus
+        // `!`; the builder makes that value and the marked call it holds is the node the
+        // schedulers run themselves, which no program writes.
         OperatorGroup::create(
             camel::execute::kFaultIsolationName,
+            {{std::string(camel::execute::kAttemptTransformUri),
+              DynamicFuncTypeResolver::create(
+                  {{0, {}}, {1, {false}}},
+                  "(f: (...args: A) => T) => ((...args: A) => T!)",
+                  [](const type_vec_t &with, const type_vec_t &norm)
+                      -> optional<Type *> {
+                      return camel::execute::resolveAttemptTransformType(with, norm);
+                  })}}),
+        // The marked call itself, the body of the value `attempt(f)` gives. No program writes
+        // this name: the builder synthesises the call (Builder::attemptFunctionValue), and the
+        // schedulers run the node it resolves to themselves (":mark/...").
+        OperatorGroup::create(
+            camel::execute::kFaultIsolationOperatorName,
             {{std::string(camel::execute::kFaultIsolationUri),
               DynamicFuncTypeResolver::create(
                   {{0, {}}, {-1, {}}},

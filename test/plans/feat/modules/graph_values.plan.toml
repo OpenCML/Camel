@@ -97,7 +97,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "attempt_leaves_the_function"
-desc = "attempt(ratio, x) isolates the fault at the call; ratio called directly afterwards still faults with its location, and its graph keeps its size."
+desc = "attempt(ratio)(x) isolates the fault at the call; ratio called directly afterwards still faults with its location, and its graph keeps its size."
 kind = "behavior"
 case = "../../../cases/modules/graph_values/attempt_holders.cml"
 backends = ["nvm", "fvm"]

@@ -1,0 +1,22 @@
+/**
+ * A `var` handed to a function as a `var` argument is read before the callee writes it, and what
+ * that read takes is the version the variable's nearest write made, not the cell the first write
+ * made: the call's port carries that version as a data edge, and the control input the writer used
+ * to stand in for it is gone with it (docs/design-principles.cn.md 3.5; the same link a capture
+ * gets, Builder::linkCaptureSites). The two are one cell -- `:op/assn` gives the cell back as its
+ * own value -- so the callee still writes the one cell of the variable, and `a` is 2 when it is
+ * read back.
+ */
+module var_argument_reads_the_nearest_write
+
+func bump(var x: int) sync {
+    x = x + 1
+}
+
+func main(): int sync {
+    var a = 0
+    a = 1
+    bump(a)
+    println(a)
+    return 0
+}

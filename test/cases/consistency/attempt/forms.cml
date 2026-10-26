@@ -35,28 +35,28 @@ func describe(r: int!): string {
 
 func main(): int sync {
     // !!
-    println(attempt(half, 4) !! -1)
-    println(attempt(half, 0) !! -1)
+    println(attempt(half)(4) !! -1)
+    println(attempt(half)(0) !! -1)
     // ->
-    println(describe(attempt(half, 4) -> plus_one))
-    println(describe(attempt(half, 0) -> plus_one))
+    println(describe(attempt(half)(4) -> plus_one))
+    println(describe(attempt(half)(0) -> plus_one))
     // match
-    println(describe(attempt(half, 0)))
+    println(describe(attempt(half)(0)))
     // printing an error value
-    println(attempt(half, 0))
-    println(attempt(half, 5))
+    println(attempt(half)(0))
+    println(attempt(half)(5))
     // U! stays U!
-    println(describe(attempt(checked, 4)))
-    println(describe(attempt(checked, -4)))
-    println(describe(attempt(checked, 0)))
+    println(describe(attempt(checked)(4)))
+    println(describe(attempt(checked)(-4)))
+    println(describe(attempt(checked)(0)))
     // U? gives U?!
-    let m = attempt(maybe, 0)
+    let m = attempt(maybe)(0)
     let text = match m {
         case error e => 'error ' + e.kind
         case v => 'value ' + format<v ?? -5>('{}')
     }
     println(text)
-    let n = attempt(maybe, 80)
+    let n = attempt(maybe)(80)
     let text2 = match n {
         case error e => 'error ' + e.kind
         case v => 'value ' + format<v ?? -5>('{}')

@@ -55,7 +55,7 @@ for (const l of [
   'RESOURCES footprint main rmw ambient rng; write ambient stdout; read ambient fs; rmw object (any); external',
   'RESOURCES node main 2 :var/new: allocates variable',
   'RESOURCES node main 9 :op/assn_l: write variable (node 2); result same 0',
-  'RESOURCES node main 10 FUNC bump: rmw variable (node 2); result unknown',
+  'RESOURCES node main 10 FUNC bump: rmw variable (node 9); result unknown',
   'RESOURCES node main 12 FUNC countdown: rmw variable (node 5); result unknown',
   'RESOURCES node main 19 :var/take: rmw variable (node 18); result may_alias 0',
   'RESOURCES node main 20 array:sort_l_in_place: rmw object (node 19); result same 0',
@@ -63,7 +63,7 @@ for (const l of [
   'RESOURCES node main 29 fs:exists: read ambient fs; external',
   'RESOURCES node countdown 12 FUNC countdown: rmw variable (node 0); result unknown',
   'RESOURCES order main 8 9 resource ordered by data',
-  'RESOURCES order main 9 10 resource ordered by control',
+  'RESOURCES order main 9 10 resource ordered by data',
   'RESOURCES order main 12 34 resource ordered by control',
   'RESOURCES order main 19 21 resource ordered by data',
   'RESOURCES order countdown 4 12 resource ordered by control',
@@ -75,6 +75,14 @@ for (const l of [
 // body reaches and not what its result aliases, so the conservative answer is the one written
 // down, never the `Fresh` a default would claim. The `CALL` node of `main` records no access of
 // its own.
+// The node a `var` argument's access is named by is the version the variable's nearest write made,
+// not the cell's first value: a read takes that version as a data edge (design principles 3.5;
+// docs/design/effects/edges.cn.md 5.6), so `bump` is handed node 9, the `:op/assn_l` that wrote the
+// cell, rather than node 2, the `:var/new` the variable was made in. Both name the one cell -- `:op/assn`
+// gives the cell back as its own value -- so this is where the access is bound and not what it is.
+// The pair of that write and that read is `ordered by data` for the same reason: the data edge
+// already gives the order, and a pair ordered by data takes no control edge
+// (docs/design/effects/plan.cn.md 5.5) -- the control edge this clause retires.
 // The closure `let inc = () => sync { c += 1 }` is an anonymous graph, and its name is the number
 // the compilation had reached when it was built -- how many graphs were created before it, the
 // imported modules' and the speculative instantiations' included -- not a fact about the program

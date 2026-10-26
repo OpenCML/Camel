@@ -20,8 +20,8 @@ func main(): int sync {
     counter = counter + 5
     let some = pick(true, 9)
     let none = pick(false, 9)
-    let good = attempt(risky, 4)
-    let bad = attempt(risky, 0)
+    let good = attempt(risky)(4)
+    let bad = attempt(risky)(0)
     let table = [('a', 1), ('b', 2)] as Map<string, int>
     let later = n + 1                // mark:later
     println(xs)                      // mark:stop

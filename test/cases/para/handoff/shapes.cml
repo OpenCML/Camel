@@ -83,7 +83,7 @@ func main(): int sync {
     println(sum_to(10))
     println(sum_to(300))
     // serial code behind a fault-isolation boundary
-    println(attempt(gcd, 84, 36) !! -1)
-    println(attempt(mix, 5, 7) !! -1)
+    println(attempt(gcd)(84, 36) !! -1)
+    println(attempt(mix)(5, 7) !! -1)
     return 0
 }

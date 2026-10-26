@@ -32,10 +32,10 @@ func bad(x: int): int {
 
 func main(): int sync {
     println('before')
-    let ys = attempt(() => 0..48->map<work>) !! [-1]
+    let ys = attempt(() => 0..48->map<work>)() !! [-1]
     println('isolated')
     println(ys)
-    let r = attempt(() => 0..64->map<bad>)
+    let r = attempt(() => 0..64->map<bad>)()
     let text = match r {
         case error e => e.kind
         case v => 'no fault'
