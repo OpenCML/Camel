@@ -118,13 +118,8 @@ export func apply(p: Program): Program! {
 - 参数都有默认值时，规则的名字本身就是 `Rule`；有没有绑定，看声明就知道。
 - 没有默认值又没绑定就放进规则集，是编译错误（`SemanticDiag::RuleWithParameterUnbound`）：这个规则值里没有任何值给它的条件读。
 - **类型实参与 `with` 实参走同一条实例化通道，实例的键就是这一对**：同一对键命中同一个实例，不同的绑定是不同的实例。这与泛型函数的实例化是同一件事，两个都写出来时的写法也与函数相同：`名字::<T><值>`。
-
-**尚未实现。** 下面两条已经裁定，今天还编不过：
-
-- **规则的右边读 `with` 参数**（`x + 0 => x + shift`）：今天被 `SemanticDiag::RuleWithParameterOnASide` 拒。裁定的目标是 `when` 与右边**两侧都能读**。
-- **类型参数与 `with` 参数同时写在一条规则上**（`with <tile: int> rule tiled::<T>(...)`）：今天被 `SemanticDiag::RuleWithParameterGenericHead` 拒。
-
-这一条的验收形态是[规则语言第二版第 1 节](../design/rewrite/v2.cn.md)的 `tile_matmul`：`with <tile: int> rule tile_matmul::<T>(a: T[m, k], b: T[k, n]) when m % tile == 0 { a @ b => tiled_matmul<tile>(a, b) }`。今天写得出的是两层各自的那一半——调度参数那一层用 `with` 参数、由使用者绑定（上面的 `add_zero_tiled<1>`），类型那一层用泛型头、由匹配到的类型实例化（`rule add_zero::<T>(x: T) when is_integer::<T>() { x + 0 => x }`）——两个键写在同一条规则上是裁决的目标形态。
+- **规则的两边与条件都读 `with` 参数**：左边、右边与 `when` 都是它的函数，按名字读它——`{ x + 0 => x + shift }` 与 `when shift > 0` 是同一条规则的两半，绑定的是同一个值，右边的 `shift` 就是绑定给这个实例的那个。
+- 上一条与这一条是同一件事：一条规则可以同时写 `::<T>` 与 `with <tile: int>`，类型那一半由匹配到的类型给出，调度那一半由用它的地方绑定，合起来是实例的键。验收形态是[规则语言第二版第 1 节](../design/rewrite/v2.cn.md)的 `tile_matmul`：`with <tile: int> rule tile_matmul::<T>(a: T[m, k], b: T[k, n]) when m % tile == 0 { a @ b => tiled_matmul<tile>(a, b) }`。
 
 ## 9.4 规则集是显式交出去的
 
@@ -322,7 +317,7 @@ rule reads_constant(x: int, y: int) when capped<y>(x) > 0 { x * y => x }
 error[SemanticDiag::FactArgumentNotConstant]: The argument 'cap' of a fact is not a compile-time constant of type 'int'.
 ```
 
-**`with` 参数的可见范围与实例化通道。** `with` 参数对事实的**所有**片段可见：子句（`case`、`join`/`meet`/`widen`/`narrow`）与别处读到的都是同一组实参——生成出来的这些函数各自声明同样的 `with` 参数，与函数的 `with` 参数是同一个机制。事实与规则**共用同一条实例化通道**：实例的键 = 类型实参 + `with` 实参，所以带类型参数的事实头（`fact range::<T>(v: T): Interval`）与带 `with` 参数的事实写在一条声明里也是同一件事，与 [9.3](#93-类型参数与-with-参数) 里规则的目标形态一致。
+**`with` 参数的可见范围与实例化通道。** `with` 参数对事实的**所有**片段可见：子句（`case`、`join`/`meet`/`widen`/`narrow`）与别处读到的都是同一组实参——生成出来的这些函数各自声明同样的 `with` 参数，与函数的 `with` 参数是同一个机制。查询写出别的实参就是另一项事实：引擎按"事实 + 实参"分开计算与缓存。事实与规则**共用同一条实例化通道**：实例的键 = 类型实参 + `with` 实参。带类型参数的事实头（`fact range::<T>(v: T): Interval`）语法读得下，编译还没有（[9.8](#98-尚未实现的形态)）。
 
 ## 9.7 检查、解释与"哪个规则开火了"
 
@@ -412,8 +407,7 @@ camel fired.cml fired::simplify std::gir
 
 | 形态 | 今天 |
 |---|---|
-| 规则的右边读 `with` 参数 | `SemanticDiag::RuleWithParameterOnASide`，消息里写着"not implemented yet" |
-| 类型参数与 `with` 参数同时写在一条规则上 | `SemanticDiag::RuleWithParameterGenericHead` |
+| 带类型参数的事实头（`fact range::<T>(v: T): Interval`） | `SemanticDiag::ConstructNotSupported`：引擎拿到的是构成这项事实的那些函数，带类型参数的函数不是一个值它拿得住 |
 | 命令行 `std::opt rules=[law::negate]`，源码 `f->std::opt<rules: [negate]>` | `SemanticDiag::ParamArgumentUnknown`；源码里的 `std::opt` 这个名字今天还解析不到 |
 
 ## 相关文档
