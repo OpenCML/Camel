@@ -16,7 +16,7 @@ func double(t: float[..]): float[..] {
 
 func main(): int sync {
     let x = reshape([1.0, 2.0], [2])
-    return if get_env('P7_MODE') == 'export' then sync {
+    return if (get_env('P7_MODE') ?? '') == 'export' then sync {
         export_model(double, x, 'tmp/test/onnx/refusal_request_in_arm.onnx')
         println('exported')
         return 0

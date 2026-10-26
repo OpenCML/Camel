@@ -1,0 +1,17 @@
+/**
+ * The text forms of a moment are in UTC, whatever the time zone of the machine: a text read with
+ * a format gives the moment its fields name in UTC, and a text that does not have the format is an
+ * error value, not a fault.
+ */
+module utc_text
+
+import { strftime, strptime } from time
+
+func main(): int sync {
+    println('1970-01-02'->strptime<'%Y-%m-%d'> !! -1.0)
+    println('2001-09-09 01:46:40'->strptime<'%Y-%m-%d %H:%M:%S'> !! -1.0)
+    println(86400.0->strftime<'%Y-%m-%d %H:%M'>)
+    println(1000000000.0->strftime<'%Y-%m-%dT%H:%M:%S'>)
+    println('not a date'->strptime<'%Y-%m-%d'> !! -1.0)
+    return 0
+}

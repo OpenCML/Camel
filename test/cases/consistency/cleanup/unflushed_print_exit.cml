@@ -3,6 +3,8 @@
  */
 module unflushed_print_exit
 
+import { exit } from process
+
 func main(): int sync {
     println('line')
     print('pending')

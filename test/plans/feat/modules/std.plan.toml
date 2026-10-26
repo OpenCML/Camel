@@ -268,6 +268,29 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
 
 [[tests]]
+name = "env.unset_and_empty"
+desc = "An environment variable that is not set is null, and one set to a value gives that value; `??` supplies the default for the first only."
+kind = "behavior"
+case = "../../../cases/modules/std/env/unset_and_empty.cml"
+args = ["${case}"]
+envs = ["CAMEL_TEST_ENV_SET=abc"]
+expect_exit = 0
+expect_stdout_exact = "unset\nset to abc\ndefault\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "time.utc_text"
+desc = "A moment is written and read in UTC: the fields of a text are the fields of the moment, and a text without the format is an error value that `!!` replaces."
+kind = "behavior"
+case = "../../../cases/modules/std/time/utc_text.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "86400.0\n1000000000.0\n1970-01-02 00:00\n2001-09-09T01:46:40\n-1.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
 name = "re.match"
 desc = "`find` returns the first `Match` or null with positions in code points (text outside ASCII and above the BMP) and null for a group that took no part; `find_all`, `replace`, `replace_with`, `split`, `validate` and `has_match` are written on it."
 kind = "behavior"

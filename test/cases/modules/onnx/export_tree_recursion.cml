@@ -14,7 +14,7 @@ func tree(h: float[..]): float[..] {
 
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
-    export_model((x: float[..]): float[..] => tree(x), x, get_env('ONNX_OUT'))
+    export_model((x: float[..]): float[..] => tree(x), x, get_env('ONNX_OUT') ?? '')
     println('exported')
     return 0
 }

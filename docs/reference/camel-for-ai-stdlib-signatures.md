@@ -19,7 +19,7 @@ Source: `docs/stdlib-reference.md`, generated from the declarations in `stdlib/*
 `node scripts/stdlib-reference.mjs --write`.
 
 <!-- camel-for-ai region: stdlib-signatures (generated from docs/stdlib-reference.md; node scripts/camel-for-ai.mjs --write) -->
-**`Built-in functions`** — no import — 62 name(s)
+**`Built-in functions`** — no import — 60 name(s)
 
 ```text
 std::mem::blocks: () => { allocs: int, frees: int, live: int, bytes: int }
@@ -97,8 +97,6 @@ print: (x: T, ...rest: U...) => T
 println: (x: T, ...rest: U...) => T
 eprintln: (x: T, ...rest: U...) => T
 input: (prompt: string) => string
-sleep: (milliseconds: int) => void
-exit: (code: int) => void
 format: <...args: T...> (fmt: string) => string
 join: <sep: string> (xs: string[]) => string
 len: (x: string) => int
@@ -510,26 +508,27 @@ permutation: (key: { hi: int, lo: int }, n: int) => int[]
 
 ```text
 now: () => float
-strftime: (timestamp: float, format: string) => string
-strptime: (text: string, format: string) => float
+strftime: <format: string> (timestamp: float) => string
+strptime: <format: string> (text: string) => float!
 ```
 
-**`fs`** — import { ... } from fs — 15 name(s)
+**`fs`** — import { ... } from fs — 16 name(s)
 
 ```text
-read_text: (path: string) => string
-try_read_text: (path: string) => string!
-read_chunk: (path: string, offset: int, size: int) => Bytes
-read_bytes: (path: string) => Bytes
-write_bytes: (path: string, content: Bytes) => void
-replace: (path: string, content: Bytes) => void
-write_text: (path: string, content: string) => void
+read_text: (path: string) => string!
+read_bytes: (path: string) => Bytes!
+read_chunk: <offset: int, size: int> (path: string) => Bytes!
+write_text: <path: string, atomic: bool = false> (content: string) => void!
+write_bytes: <path: string, atomic: bool = false> (content: Bytes) => void!
+append_text: <path: string> (content: string) => void!
+append_bytes: <path: string> (content: Bytes) => void!
 exists: (path: string) => bool
 is_file: (path: string) => bool
 is_dir: (path: string) => bool
-file_size: (path: string) => int
-mkdir: (path: string) => bool
-mkdirs: (path: string) => bool
+file_size: (path: string) => int!
+list_dir: (path: string) => string[]!
+mkdir: (path: string) => void!
+mkdirs: (path: string) => void!
 remove: (path: string) => void!
 remove_dir: (path: string) => void!
 ```
@@ -537,18 +536,19 @@ remove_dir: (path: string) => void!
 **`io`** — import { ... } from io — 5 name(s)
 
 ```text
-set_terminal_raw_mode: (enabled: bool) => void
+set_terminal_raw_mode: (enabled: bool) => void!
 has_input: () => bool
-get_char: () => string
 get_chars: (max: int) => string
+get_char: () => string?
 clear_input_buffer: () => void
 ```
 
-**`process`** — import { ... } from process — 4 name(s)
+**`process`** — import { ... } from process — 5 name(s)
 
 ```text
-sleep: (milliseconds: int) => void
-whoami: () => string
+sleep: (seconds: float) => void
+exit: (code: int) => void
+user_name: () => string!
 cpu_count: () => int
 thread_count: () => int
 ```
@@ -556,17 +556,17 @@ thread_count: () => int
 **`env`** — import { ... } from env — 2 name(s)
 
 ```text
-get_env: (name: string) => string
-get_cwd: () => string
+get_env: (name: string) => string?
+get_cwd: () => string!
 ```
 
-**`json`** — import { ... } from json — 14 name(s)
+**`json`** — import { ... } from json — 13 name(s)
 
 ```text
 encode: (value: T) => string
-encode: (value: T, indent: int) => string
-decode_as: <shape: T> (text: string) => T!
-decode_as: <shape: T> (text: Json) => T!
+encode: <indent: int?> (value: T) => string
+decode_as: (source: string) => T!
+decode_as: (source: Json) => T!
 decode: (text: string) => Json!
 kind: (j: Json) => string
 is_null: (j: Json) => bool
@@ -604,12 +604,11 @@ as_object: (j: Json!) => Map<string, Json>!?
 as_object: (j: Json!?) => Map<string, Json>!?
 ```
 
-**`hash`** — import { ... } from hash — 3 name(s)
+**`hash`** — import { ... } from hash — 2 name(s)
 
 ```text
-sha256: (s: string) => string
-sha256: (s: Bytes) => string
-sha256_rounds: (s: string, rounds: int) => string
+sha256: (data: Bytes) => string
+sha256: (text: string) => string
 ```
 
 **`re`** — import { ... } from re — 7 name(s)

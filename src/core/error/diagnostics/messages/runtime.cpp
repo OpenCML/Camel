@@ -157,14 +157,6 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
-            RuntimeDiag::FileOpenFailed,
-            {
-                "FileOpenFailed",
-                "'{0}' cannot open the file '{1}': {2}.",
-                "Check that the path exists and that the program may access it; a relative path is taken from the directory the program is run in. Where a missing file is expected, fs.try_read_text returns an error value instead of ending the program.",
-            },
-        },
-        {
             RuntimeDiag::FileSystemError,
             {
                 "FileSystemError",

@@ -2,10 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The process and the machine it runs on: how long to wait, who the user is, how many hardware
- * threads there are, and how many threads the process itself has. `exit` is the built-in operator
- * of `src/builtin/modules/globals.cpp`, so it is not a group of this module; the terminal is
- * `io`'s.
+ * The process and the machine it runs on: how long to wait (in seconds), when to end, who the user is, how many hardware
+ * threads there are, and how many threads the process itself has. The terminal is `io`'s.
  *
  * The signatures are written once, in the declaration module `stdlib/process.cml` (design
  * principles 6.4). What is left here is what only C++ knows: the
@@ -37,7 +35,7 @@ bool ProcessModule::load() {
             // The process and the machine it runs on. The terminal is `io`'s.
             {"exit", false},
             {"sleep", false},
-            {"whoami", false},
+            {"user_name", false},
             {"cpu_count", false},
             {"thread_count", false},
         });
@@ -50,7 +48,7 @@ bool ProcessModule::load() {
             {
                 {"exit", externalAmbient("process", AccessMode::ReadModifyWrite)},
                 {"sleep", externalAmbient("clock", AccessMode::Read)},
-                {"whoami", externalAmbient("env", AccessMode::Read)},
+                {"user_name", externalAmbient("env", AccessMode::Read)},
                 {"cpu_count", externalAmbient("env", AccessMode::Read)},
                 {"thread_count", externalAmbient("process", AccessMode::Read)},
             });

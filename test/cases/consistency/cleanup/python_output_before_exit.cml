@@ -4,6 +4,7 @@
 module python_output_before_exit
 
 import { py_call, py_wrap } from python
+import { exit } from process
 
 func main(): int sync {
     println('camel 1')

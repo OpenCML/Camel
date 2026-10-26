@@ -69,7 +69,7 @@ camel docs/tutorial/examples/08_modules.cml
 `math`、`str`、`fs`、`json`、`array`、`map`、`tensor` 等都是随 Camel 一起发布的模块，写法与自己写的模块
 完全一样。这一章用到三个：
 
-- [`fs`](../stdlib-reference.md#fs)：`read_text(path)` 读一个文本文件，`write_text(path, text)` 写一个。
+- [`fs`](../stdlib-reference.md#fs)：`path->read_text` 读一个文本文件（失败是错误值），`text->write_text<path>` 写一个。
 - [`str`](../stdlib-reference.md#str)：`split<' '>` 按分隔符切开，`to_lower`、`trim` 整理单词。
 - [`json`](../stdlib-reference.md#json)：`encode(value)` 把值写成一行 JSON，`decode(text)` 读一段 JSON。
 
@@ -97,7 +97,7 @@ func tally(words: string[]): Map<string, int> {
 }
 
 func main(path: string): int sync {
-    let words = words_of(read_text(path))
+    let words = words_of(path->read_text !! '')
     let counts = tally(words)
     println(len(words))
     println(encode(counts))
@@ -148,7 +148,7 @@ func words_of(text: string): string[] {
 }
 
 func tally(path: string): Map<string, int> {
-    let words = words_of(read_text(path))
+    let words = words_of(path->read_text !! '')
     return words->reduce<(acc: Map<string, int>, w: string): Map<string, int> => acc->put<w, (acc[w] ?? 0) + 1>, [] as Map<string, int>>
 }
 

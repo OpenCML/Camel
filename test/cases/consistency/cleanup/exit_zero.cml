@@ -4,6 +4,8 @@
  */
 module exit_zero
 
+import { exit } from process
+
 func deep(n: int): int sync {
     if n == 0 then sync { exit(0) }
     println('level', n)

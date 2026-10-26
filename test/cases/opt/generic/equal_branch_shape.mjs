@@ -1,7 +1,7 @@
 // The branch structure of `cases/opt/generic/equal_branch_values.cml`, asserted as a comparison of
 // the branches themselves rather than as counts of BRCH, JOIN and multiply nodes.
 //
-// The source has three conditional expressions. Each must still be one branch, recognized by the
+// The source has three conditional expressions (and the `??` that defaults the environment read, which is left out). Each must still be one branch, recognized by the
 // values its arms join over and by its condition being the runtime `env:get_env` read (a folded
 // condition, a swapped arm, an extra branch and a lost branch all fail), and the two effects of the
 // first branch's arms must still be controlled by that branch. The BRCH and JOIN totals follow from
@@ -56,19 +56,40 @@ const productOf = (join) =>
             return operands.length === 2 && operands[0].id === join.id && operands[1].id === join.id
         })
 
+// The condition compares the value of the read, which `??` turns into a null test, a branch and a
+// join; the read is found through them.
+const findRead = (start) => {
+    const seen = new Set()
+    const work = [start]
+    while (work.length) {
+        const at = work.pop()
+        if (!at || seen.has(at.id)) continue
+        seen.add(at.id)
+        if (at.label === 'env:get_env') return at
+        for (const kind of ['normal', 'context']) work.push(...inputs(at.id, kind))
+    }
+    return undefined
+}
+
 const readOf = (branch) => {
     const condition = inputs(branch.id, 'normal')[0]
     assert(
         condition && condition.kind === 'OPER',
         `a branch condition is not an operator: ${condition && condition.label}`,
     )
-    const read = inputs(condition.id, 'normal').find((n) => n.label === 'env:get_env')
+    const read = findRead(condition)
     assert(read, `a branch is no longer over the runtime read: ${condition.label}`)
     return read
 }
 
+// The `??` of the read is a branch of its own: its condition is a null test.
+const isDefault = (brch) => {
+    const condition = inputs(brch.id, 'normal')[0]
+    return condition && condition.label === ':op/tag_is_null'
+}
+
 const branches = main.nodes
-    .filter((n) => n.kind === 'BRCH')
+    .filter((n) => n.kind === 'BRCH' && !isDefault(n))
     .map((brch) => {
         const joins = users(brch.id, 'normal').filter((n) => n.kind === 'JOIN')
         assert(joins.length === 1, `a branch drives ${joins.length} joins, not one`)

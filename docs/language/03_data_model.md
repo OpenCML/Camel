@@ -30,7 +30,7 @@
 
 没有 `any` 类型：编译之后每个值都有确定的类型（设计原则 5.10）。在任何类型位置写 `any`，与写别的未知类型名一样，是编译期错误 `SemanticDiag::UnresolvedTypeReference`；接受多种类型的形参用类型参数（见 [7.5](07_statements.md#75-泛型函数)），不同类型的值并排放用元组或结构体。
 
-读取 JSON：形状事先知道时用 `json::decode_as(text, shape)`，结果是 `T!`；形状事先不知道时用 `json::decode(text)`，它给出 `Json!`：文字不是 JSON 时是错误值 `JsonParseError`，嵌套超过深度上限时是 `JsonTooDeep`（都不是故障，设计原则 11.2；上限固定为 10000），否则是 `Json`，类型确定，内容运行时才知道；用 `get`、`as_int`、`as_array` 等取出，每个都给出类型确定的值（找不到时为空），并接受 `Json?`、`Json!`（以及 `Json!?`）以便链式取值，例如 `j->get<'server'>->get<'port'>->as_int ?? 8080`；对 `Json!` 取值时错误原样传下去，结果是 `Json!?` 这样的两层，用 `??`、`!!` 拆开；`as_float` 也接受整数，`get<下标>` 越界给 `null`（11.2 定下的访问器设计）。
+读取 JSON：形状事先知道时用 `json::decode_as::<T>(text)`，结果是 `T!`；形状事先不知道时用 `json::decode(text)`，它给出 `Json!`：文字不是 JSON 时是错误值 `JsonParseError`，嵌套超过深度上限时是 `JsonTooDeep`（都不是故障，设计原则 11.2；上限固定为 10000），否则是 `Json`，类型确定，内容运行时才知道；用 `get`、`as_int`、`as_array` 等取出，每个都给出类型确定的值（找不到时为空），并接受 `Json?`、`Json!`（以及 `Json!?`）以便链式取值，例如 `j->get<'server'>->get<'port'>->as_int ?? 8080`；对 `Json!` 取值时错误原样传下去，结果是 `Json!?` 这样的两层，用 `??`、`!!` 拆开；`as_float` 也接受整数，`get<下标>` 越界给 `null`（11.2 定下的访问器设计）。
 
 标准库签名说明里的 `T`、`U...`（如 `println: (x: T, ...rest: U...) => T`）只是说明的记法：这些算子由类型规则按实参的类型检查，图上只有具体类型。
 
@@ -261,7 +261,7 @@ error DivByZero: the divisor is zero
 - 两种标记可以组合：`T?!`、`T!?`。标记从最内层写起：`T?!` 是 fallible(nullable(T))，`T!?` 是 nullable(fallible(T))；`match` 只拆开最外层。同一种不能重复。数组元素等位置需要括号：`(int?)[]`。
 - 与泛型配合：函数头声明 `T` 后，形参类型 `T?` 从可空实参里绑定 `T`（[7.5](07_statements.md#75-泛型函数)）。
 - `let x: int! = v` 中 `!` 与 `=` 之间要有空格。
-- 内建的可能出错的函数：`parse_int(s)`、`parse_float(s)`，`fs` 模块的 `try_read_text(path)`、`remove(path)`、`remove_dir(path)`，`json` 模块的 `decode`、`decode_as`。`error(kind, message)` 构造错误值并记下调用处的位置。
+- 内建的可能出错的函数：`parse_int(s)`、`parse_float(s)`，`fs` 模块的 `read_text(path)`、`remove(path)`、`remove_dir(path)`，`json` 模块的 `decode`、`decode_as`。`error(kind, message)` 构造错误值并记下调用处的位置。
 
 **错误与故障是两回事。** 只有声明为返回 `T!` 的操作才产生错误值。除零、下标越界、递归过深是故障：程序带位置终止，`!!` 接不住它（见 [4.6](04_execution_model.md#46-故障退出与资源上限)）。
 
@@ -388,7 +388,7 @@ func main(): int sync {
 - 顺序是按键排序（整数按数值，`false` 在 `true` 前，字符串按字节，元组逐个元素），`keys`、`values`、`items`、打印都按这个顺序。
 - 运行期才知道的数组里有重复的键时，后面的条目覆盖前面的。
 - 值类型本身可空时（`Map<string, int?>`），`m[k]` 的类型就是 `int?`：键不存在与值为 `null` 无法区分，需要时用 `has`。
-- 三种调用写法并存；打印的格式；`json::decode_as` 用一个值的类型指定解码的目标类型。
+- 三种调用写法并存；打印的格式；`json::decode_as` 用类型实参指定解码的目标类型。
 
 实现与取舍见 [技术文档 31](../technical/31_map_and_set.md)。
 

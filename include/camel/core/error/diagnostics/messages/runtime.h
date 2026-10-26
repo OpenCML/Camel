@@ -37,7 +37,6 @@ enum class RuntimeDiag : uint32_t {
     OperandTypeUnsupported = 0x000032,
     FieldNotFound          = 0x000033,
     InvalidArgument        = 0x000034,
-    FileOpenFailed         = 0x000035,
     FileSystemError        = 0x000036,
     // 0x000037: empty. The number is not reused.
     RegexInvalid                = 0x000039,

@@ -1,14 +1,14 @@
 /**
  * A stable sample for the `os` -> `process` rename: `std::jgir` translates the program without
- * running it, so `whoami`/`cpu_count` never read the machine and `sleep(0)` never waits; only
+ * running it, so `user_name`/`cpu_count` never read the machine and `sleep(0.0)` never waits; only
  * literals stand in the graph, and the rename may change only the module name in the URIs.
  */
 module process_identity
 
-import { sleep, whoami, cpu_count } from process
+import { sleep, user_name, cpu_count } from process
 
 func main(): int sync {
-    sleep(0)
-    println(whoami(), cpu_count())
+    sleep(0.0)
+    println(user_name() !! '', cpu_count())
     return 0
 }

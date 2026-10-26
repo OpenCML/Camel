@@ -296,7 +296,7 @@ Three operators that can fail, added without changing an existing signature:
 |---|---|---|
 | `parse_int(s)` | `(string) => int!` | `ParseError` |
 | `parse_float(s)` | `(string) => float!` | `ParseError` |
-| `fs::try_read_text(path)` | `(string) => string!` | `IOError` |
+| `fs::read_text(path)` | `(string) => string!` | `IOError` |
 
 An operator written in C++ builds its result with `rtdata::makeOk` / `rtdata::makeError`
 (`include/camel/core/rtdata/tagged.h`); the position of an error raised by an operator is the

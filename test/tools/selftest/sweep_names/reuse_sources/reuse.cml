@@ -5,6 +5,6 @@ module reuse
 import { get_env } from env
 
 func main(): int sync {
-    println(get_env('SELFTEST_SWEEP'))
+    println(get_env('SELFTEST_SWEEP') ?? '')
     return 0
 }
