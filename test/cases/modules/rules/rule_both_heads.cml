@@ -1,0 +1,35 @@
+/**
+ * A rule that declares type parameters and `with` parameters together (design principles 5.5,
+ * rewrite design 2 (second version) 1).
+ *
+ * The two are one instantiation channel: the key of an instance is the pair of the type arguments
+ * the matched types give and the `with` arguments the use of the rule binds (`scaled_zero<7>`
+ * here), so a rule with both heads is one rule, instantiated once per pair. `scaled_zero` writes
+ * both: `::<T>` is instantiated at the type of the matched constant and `tile` is bound by the
+ * name it is used under, and the right side reads `tile` -- the side is a function of the rule's
+ * `with` parameters exactly as its condition is.
+ *
+ * `left` writes `x + 0`, so what the run prints says whether the rule fired at all and which
+ * value the binding gave: the rewrite adds `tile` (7), and `3 + 0` printed without it is the
+ * program as it was written.
+ */
+module rule_both_heads
+
+import { Program } from graph
+import { is_integer } from types
+import { rewrite } from rewrite
+
+with <tile: int>
+rule scaled_zero::<T>(x: T, const c: T) when is_integer::<T>() && tile > 0 { x + c => x + tile }
+
+/// The rule, bound to a tile of 7, as the pass the test runs.
+export func apply(p: Program): Program! {
+    return rewrite(p, [scaled_zero<7>])
+}
+
+func left(x: int): int { return x + 0 }
+
+func main(): int sync {
+    println(left(3))
+    return 0
+}
