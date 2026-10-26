@@ -4,18 +4,14 @@
 
 import { withServer, check, checkEq, fmtRange, marked } from '../../../tools/lsp/client.mjs'
 
-const LIB = `module type_lib
-
-export type Point = { x: int, y: int }
+const LIB = `export type Point = { x: int, y: int }
 
 export func norm(p: Point): int {
     return p.x * p.x + p.y * p.y
 }
 `
 
-const MAIN = `module type_main
-
-import { Point, norm } from type_lib
+const MAIN = `import { Point, norm } from type_lib
 
 func main() sync {
     let p: Point = { x: 3, y: 4 }
@@ -44,7 +40,7 @@ await withServer(async (ls) => {
         const d = await ls.request('textDocument/definition', at('let ', nth, 7))
         checkEq(d.length, 1, `one definition for the type used at line ${nth}`)
         checkEq(d[0].uri, libUri, 'in the module that declares it')
-        checkEq(fmtRange(d[0].range), '2:12-2:17', 'at the name of the type declaration')
+        checkEq(fmtRange(d[0].range), '0:12-0:17', 'at the name of the type declaration')
     }
 
     // Completion of the imported type name, with the kind of a type.

@@ -45,8 +45,8 @@ await withServer(async (ls) => {
     check(g.text.includes('sub'), 'an unsaved edit is in the graph', g.text.slice(0, 600))
 
     // A program with an error: no graph, the compiler's report instead.
-    ls.change(uri, 'module main\n\nfunc main() sync {\n    return nope\n}\n', 3)
-    g = await ls.request('camel/graph', { textDocument: { uri }, position: { line: 3, character: 4 } })
+    ls.change(uri, 'func main() sync {\n    return nope\n}\n', 3)
+    g = await ls.request('camel/graph', { textDocument: { uri }, position: { line: 1, character: 4 } })
     checkEq(g.text, '', 'no graph for a program in error')
     check(g.diagnostics.includes('nope') && g.diagnostics.includes('main.cml'),
         'the report names the document, not the scratch file', g.diagnostics)
