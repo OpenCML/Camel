@@ -301,7 +301,7 @@ def run_one(program: dict, pipeline_id: str, passes: List[str], repeat: int, set
     env.setdefault("CAMEL_HOME", str(Path(settings.camel).resolve().parents[1]))
     for key, value in program.get("env", {}).items():
         env[key] = fill(value, tmp, settings)
-    # The effect trace is a parameter of `std::profile`, not an environment variable (H81):
+    # The effect trace is a parameter of `std::profile`, not an environment variable:
     # the pass observes the run, so it goes first in the pipeline and keeps its own report
     # quiet with `report=false` so the program's output is what the run is measuring.
     trace = f'std::profile effect_trace="{effects_path.as_posix()}" report=false'

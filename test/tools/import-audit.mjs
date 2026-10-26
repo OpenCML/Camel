@@ -268,7 +268,7 @@ function importOnlyProgram(dir, module) {
     const file = path.join(dir, `import_only_${module}.cml`)
     fs.writeFileSync(
         file,
-        `// H222 probe: import ${module} and do nothing else.\n` +
+        `// probe: import ${module} and do nothing else.\n` +
             `module import_only_${module}\n\n` +
             `import ${module}\n\n` +
             `func main(): int {\n    return 0\n}\n`,

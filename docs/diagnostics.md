@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-288 diagnostics: 271 errors, 17 warnings. 15 carry a machine-applicable edit, 273 say why they carry none.
+287 diagnostics: 270 errors, 17 warnings. 15 carry a machine-applicable edit, 272 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -243,7 +243,9 @@ prints one entry.
 | `0x030001EA` | [SemanticDiag::TagFieldNameAmbiguous](#tagfieldnameambiguous) | Error | no |
 | `0x030001EB` | [SemanticDiag::TagFunctionArgumentNotReadable](#tagfunctionargumentnotreadable) | Error | no |
 | `0x030001EC` | [SemanticDiag::GenericTypeArgumentGrows](#generictypeargumentgrows) | Error | no |
+| `0x030001ED` | [SemanticDiag::StreamConsumedInLoop](#streamconsumedinloop) | Error | no |
 | `0x030001EE` | [SemanticDiag::BranchElementTypeMismatch](#branchelementtypemismatch) | Error | no |
+| `0x030001EF` | [SemanticDiag::TeeHintNotPositive](#teehintnotpositive) | Error | no |
 | `0x030001F0` | [SemanticDiag::RuleWithArgumentNotConstant](#rulewithargumentnotconstant) | Error | no |
 | `0x030001F1` | [SemanticDiag::UsesPromiseViolated](#usespromiseviolated) | Error | no |
 | `0x030001F2` | [SemanticDiag::TypeAliasRecursionUnrepresented](#typealiasrecursionunrepresented) | Error | no |
@@ -251,9 +253,6 @@ prints one entry.
 | `0x030001F4` | [SemanticDiag::StructComprehensionWithoutFields](#structcomprehensionwithoutfields) | Error | no |
 | `0x030001F5` | [SemanticDiag::IdentifierPatternNeedsNullableOrErrorType](#identifierpatternneedsnullableorerrortype) | Error | no |
 | `0x030001F6` | [SemanticDiag::FunctionTypeArgumentNotInferred](#functiontypeargumentnotinferred) | Error | no |
-| `0x030001F7` | [SemanticDiag::FactConstCaseTypeRequired](#factconstcasetyperequired) | Error | no |
-| `0x030001F8` | [SemanticDiag::FactCaseBindsNoVariable](#factcasebindsnovariable) | Error | no |
-| `0x030001F9` | [SemanticDiag::FactJoinRequired](#factjoinrequired) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -8147,6 +8146,55 @@ func main(): int sync {
 }
 ```
 
+### StreamConsumedInLoop
+
+`0x030001ED` · Error · `SemanticDiag::StreamConsumedInLoop`
+
+**Fix**
+
+None: choice: a stream read once per round is the loop's own state, so which name carries it and how the round writes it are the writer's to write
+
+**Message**
+
+```text
+'{0}' is consumed once per round of this loop.
+```
+
+**Help**
+
+```text
+A loop's condition and its body run again on every round, so a stream named in one of them is read once per round, and under value semantics every round reads the same stream (design principles 5.4). To read one element per round, carry the stream as the loop's own state: `loop acc = 0, rest = s while ... do ...` takes the rest a round's pull answers and hands it back as the next state. To read the stream to its end, write `for x in s`, which is the loop the compiler builds for exactly that.
+```
+
+**Example** (`test/cases/compile/stream/consumed_in_loop.cml`, run as `camel test/cases/compile/stream/consumed_in_loop.cml`)
+
+```camel
+module stream_consumed_in_loop
+
+func count(n: int): int.. {
+    return step(n)
+}
+
+func step(n: int): () => (int, int..)? {
+    return () => if n > 0 then (n, step(n - 1)) else null
+}
+
+func firstOf(p: (int, int..)?): int {
+    return match p {
+        case null => 0
+        case v => v.0
+    }
+}
+
+func twice(s: int..): int {
+    return loop acc = 0 while acc < 2 do acc + firstOf(s())
+}
+
+func main(): int sync {
+    return twice(count(3))
+}
+```
+
 ### BranchElementTypeMismatch
 
 `0x030001EE` · Error · `SemanticDiag::BranchElementTypeMismatch`
@@ -8179,6 +8227,51 @@ func pick(flag: bool, whole: int[], real: f32[]): int[] {
 func main(): int sync {
     let picked = pick(true, new([1, 2, 3] as int[]), new([f32(1.0), f32(2.0), f32(3.0)]))
     return if picked[0] > 0 then 0 else 1
+}
+```
+
+### TeeHintNotPositive
+
+`0x030001EF` · Error · `SemanticDiag::TeeHintNotPositive`
+
+**Fix**
+
+None: choice: how wide the buffer is expected to be is the writer's to say, and any width of 1 or more says it
+
+**Message**
+
+```text
+The `tee` width '{0}' is below 1.
+```
+
+**Help**
+
+```text
+`tee(s, n)` reads `s` once and gives two streams over the same elements, each read once (design principles 5.4). A side that runs ahead of the other buffers the elements the other has not read yet, and `n` says how wide that buffer is expected to be: it is a hint, so the executor grows the buffer rather than make a side wait, and a hint wider than the implementation's cap is clamped to it. What no buffer can be is narrower than the one element being handed over, so write `n` as 1 or more, or leave it out for the default of 8.
+```
+
+**Example** (`test/cases/compile/stream/tee_hint_not_positive.cml`, run as `camel test/cases/compile/stream/tee_hint_not_positive.cml`)
+
+```camel
+module stream_tee_hint_not_positive
+
+import stream
+
+func count(n: int): int.. {
+    return step(n)
+}
+
+func step(n: int): () => (int, int..)? {
+    return () => if n > 0 then (n, step(n - 1)) else null
+}
+
+func total(s: int..): int {
+    return loop acc = 0 for x in s do acc + x
+}
+
+func main(): int sync {
+    let (left, right) = stream::tee(count(3), 0)
+    return total(left) + total(right)
 }
 ```
 
@@ -8433,114 +8526,6 @@ import { show } from tensor
 
 func main(): int sync {
     show([])
-    return 0
-}
-```
-
-### FactConstCaseTypeRequired
-
-`0x030001F7` · Error · `SemanticDiag::FactConstCaseTypeRequired`
-
-**Fix**
-
-None: choice: which of the two places writes the constant's type is the writer's to write
-
-**Message**
-
-```text
-The 'const' case '{0}' of the fact '{1}' writes no type.
-```
-
-**Help**
-
-```text
-A `const` case matches one constant, and the fact function is given the value itself, so the type of that constant is written somewhere (rewrite design 7.5): in the case (`case const c: int => c`), or in the head of a fact that declares the value it is about with a type (`fact sign(v: int): int`), whose first parameter's type the case then takes.
-```
-
-**Example** (`test/cases/modules/rules/fact_const_case_without_type.cml`, run as `camel test/cases/modules/rules/fact_const_case_without_type.cml`)
-
-```camel
-module fact_const_case_without_type
-import { max } from math
-
-fact one: int match v {
-    case const c => c
-    case _       => 0
-} join max
-
-func main(): int sync {
-    return 0
-}
-```
-
-### FactCaseBindsNoVariable
-
-`0x030001F8` · Error · `SemanticDiag::FactCaseBindsNoVariable`
-
-**Fix**
-
-None: choice: the part of the value the case reads is the writer's to write
-
-**Message**
-
-```text
-This case of the fact '{0}' names no variable.
-```
-
-**Help**
-
-```text
-The cases read how a value was built, and the parts they read are the variables their patterns name: `case x + y` binds the two operands, and the fact function is computed from them (rewrite design 7.5). A pattern that names no variable leaves the case with nothing to read, so the fact says nothing about the values it matches; bind a part with a name, or write `case _`, which is the last case and says what the fact is for a value no other case matched.
-```
-
-**Example** (`test/cases/modules/rules/fact_case_binds_nothing.cml`, run as `camel test/cases/modules/rules/fact_case_binds_nothing.cml`)
-
-```camel
-module fact_case_binds_nothing
-import { max } from math
-
-fact one(v: int): int match v {
-    case 1 => 1
-    case _ => 0
-} join max
-
-func main(): int sync {
-    return 0
-}
-```
-
-### FactJoinRequired
-
-`0x030001F9` · Error · `SemanticDiag::FactJoinRequired`
-
-**Fix**
-
-None: choice: the function that merges the two facts is the writer's to write
-
-**Message**
-
-```text
-The fact '{0}' writes no 'join'.
-```
-
-**Help**
-
-```text
-`join` is the clause that is required: it says how the facts of two writings of one value are merged, and it is the least upper bound of the two (rewrite design 7.5). Write it after the cases, naming one binary function or a lambda: `} join max`, `} join (lhs: int, rhs: int) => lhs | rhs`. Without it a value the program wrote two ways has no fact the engine can settle on.
-```
-
-**Example** (`test/cases/modules/rules/fact_no_join.cml`, run as `camel test/cases/modules/rules/fact_no_join.cml`)
-
-```camel
-module fact_no_join
-import { max } from math
-
-fact sign(v: int): int match v {
-    case const c => c
-    case _       => 0
-}
-
-func main(): int sync {
     return 0
 }
 ```

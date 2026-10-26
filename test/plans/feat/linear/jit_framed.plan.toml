@@ -202,7 +202,7 @@ expect_output_not_contains = ["compile skipped", "Segmentation fault", "dumped c
 
 [[tests]]
 name = "framed.loops.regions.lowered"
-desc = "Which rounds of a compiled loop are native code and which go through the loop helpers (H55), from the compile line of `-vv`, which reports the lowering of every loop of the graph: a `while` loop whose state is several components the body writes in place is native (the test a compare and branch, the back edge a jump, no round count kept), and every shape that cannot be lowered says so and why. No loop of this program that takes the helpers is reported native."
+desc = "Which rounds of a compiled loop are native code and which go through the loop helpers, from the compile line of `-vv`, which reports the lowering of every loop of the graph: a `while` loop whose state is several components the body writes in place is native (the test a compare and branch, the back edge a jump, no round count kept), and every shape that cannot be lowered says so and why. No loop of this program that takes the helpers is reported native."
 case = "../../../cases/loops/compiled.cml"
 backends = false
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]

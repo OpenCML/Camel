@@ -28,6 +28,7 @@
 #include <fstream>
 #include <format>
 #include <iostream>
+#include <map>
 #include <mutex>
 #include <ostream>
 #include <string>
@@ -184,6 +185,16 @@ std::atomic<uint64_t> gUpdatePlannedByCount{0};
 std::atomic<uint64_t> gUpdatePlannedCopy{0};
 std::atomic<uint64_t> gArrayCountInPlace{0};
 std::atomic<uint64_t> gArrayCountCopied{0};
+
+/// One record per tee, by the number a report prints for it, in the order the run first heard of
+/// each tee. A tee is pulled on whichever thread reads it -- a scheduler may read two of them at
+/// once -- and a record is updated once per element, so the maps are behind their own mutex rather
+/// than the report's. What tells two tees apart is the stream value each reads, which arrives
+/// unchanged on every pull of that tee.
+std::map<const void *, uint64_t> gStreamTeeNumbers;
+std::map<uint64_t, StreamTee> gStreamTees;
+uint64_t gStreamTeeCount = 0;
+std::mutex gStreamTeeMutex;
 
 Totals totalsNow() {
     Totals totals;
@@ -567,6 +578,12 @@ void reset() {
         gOptions = ReportOptions{};
         gJsonPath.clear();
     }
+    {
+        std::lock_guard lock(gStreamTeeMutex);
+        gStreamTeeNumbers.clear();
+        gStreamTees.clear();
+        gStreamTeeCount = 0;
+    }
     gOrigin = Clock::now();
 }
 
@@ -582,6 +599,26 @@ void arrayCountAnswer(bool inPlace) noexcept {
     } else {
         gArrayCountCopied.fetch_add(1, std::memory_order_relaxed);
     }
+}
+
+void streamTee(const void *stream, const StreamTee &record) {
+    std::lock_guard lock(gStreamTeeMutex);
+    // The first pull of a tee is the run's first word of it, and gives it its number; every later
+    // pull of the same stream value joins that record.
+    uint64_t &number = gStreamTeeNumbers[stream];
+    if (number == 0) {
+        number = ++gStreamTeeCount;
+    }
+    StreamTee &stored = gStreamTees[number];
+    // What a tee is given and what it is does not change while it runs: the hint, the cap and the
+    // element type are written once and repeated. The two counts are running totals, so what is
+    // kept is the widest each has been.
+    stored.hint      = record.hint;
+    stored.cap       = record.cap;
+    stored.elem      = record.elem;
+    stored.elemBytes = record.elemBytes;
+    stored.elements  = std::max(stored.elements, record.elements);
+    stored.peak      = std::max(stored.peak, record.peak);
 }
 
 void loopRound(uint64_t origin) noexcept {
@@ -1159,6 +1196,39 @@ void reportText(std::ostream &os, const ReportOptions &options) {
                     "    rounds           {}\n",
                     stat != nullptr ? std::to_string(stat->rounds) : std::string("none (the loop did not run)"));
                 os << std::format("    why on the host  {}\n", hint.reason);
+            }
+        }
+    }
+
+    // The tees of the run, one line each, in the order the run first heard of them (profile.h). A
+    // program that writes no `tee` records none and prints nothing here, so its report is what it
+    // was.
+    {
+        std::vector<std::pair<uint64_t, StreamTee>> tees;
+        {
+            std::lock_guard lock(gStreamTeeMutex);
+            tees.reserve(gStreamTees.size());
+            for (const auto &[number, tee] : gStreamTees) {
+                tees.emplace_back(number, tee);
+            }
+        }
+        if (!tees.empty()) {
+            os << "\nstreams - one line per tee (element counts; bytes where one element's size is "
+                  "known)\n";
+            for (const auto &[number, tee] : tees) {
+                const std::string size =
+                    tee.elemBytes == 0
+                        ? std::string()
+                        : std::format(
+                              ",\"elem_bytes\":{},\"bytes\":{}", tee.elemBytes, tee.elemBytes * tee.peak);
+                os << std::format(
+                          "STREAM_TEE {{\"tee\":{},\"elem\":\"{}\",\"elements\":{},\"peak\":{}",
+                          number,
+                          tee.elem,
+                          tee.elements,
+                          tee.peak)
+                   << size
+                   << std::format(",\"hint\":{},\"cap\":{}}}\n", tee.hint, tee.cap);
             }
         }
     }

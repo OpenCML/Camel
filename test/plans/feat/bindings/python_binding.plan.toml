@@ -3,7 +3,7 @@ order = 960
 tier = "fast"
 debug_tier = true # also selected by --tier debug (Debug build)
 tags = ["feat", "bindings", "python", "dlpack", "zero-copy", "diagnostics"]
-desc = "The Python binding (H253): a Python caller runs a Camel module's exported functions, an array crosses in and out through DLPack without a copy, a Camel error value and a Camel diagnostic arrive as Python exceptions with a position, and the bytes a call moves are measured against the bytes it does not (docs/design/arrays-memory/README.cn.md 3.2 and 3.3; include/camel/runtime/definitions.h, `libraryFunction`)."
+desc = "The Python binding: a Python caller runs a Camel module's exported functions, an array crosses in and out through DLPack without a copy, a Camel error value and a Camel diagnostic arrive as Python exceptions with a position, and the bytes a call moves are measured against the bytes it does not (docs/design/arrays-memory/README.cn.md 3.2 and 3.3; include/camel/runtime/definitions.h, `libraryFunction`)."
 
 # The Python test builds its DLPack capsules with ctypes, so it needs no third-party library; the
 # extension module it imports is the one the build puts in out/<tag>/python/.

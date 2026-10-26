@@ -1,4 +1,4 @@
-# The Python binding (H253): the CPython extension `camel._camel`, built only where Python's
+# The Python binding: the CPython extension `camel._camel`, built only where Python's
 # development files are, and skipped with a STATUS line where they are not.
 #
 # Why a target of its own rather than a part of modules/python: that module embeds Python inside
@@ -23,7 +23,7 @@ endif()
 
 include(${PROJECT_SOURCE_DIR}/tools/libcamel_tool.cmake)
 
-# Two steps, like every other target that links libcamel (H36): the sources become an OBJECT
+# Two steps, like every other target that links libcamel: the sources become an OBJECT
 # library whose undefined symbols can be read before libcamel links, and the extension module is
 # linked from those objects. On Windows that is what puts the symbols this file calls into
 # libcamel's export list.

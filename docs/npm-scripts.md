@@ -54,7 +54,7 @@ the command exit 1. The delete is `fs.rmSync` after resolving and checking the p
 `rm -rf`.
 
 `node scripts/check-source-artifacts.mjs --clean` delegates to `node scripts/clean.js --source`
-(`--clean --dry-run` to `--source --dry-run`), so the H191 guard and `npm run clean` share one
+(`--clean --dry-run` to `--source --dry-run`), so the source-artifact guard and `npm run clean` share one
 implementation of the delete. The build's guard and `feat/tools/portability` still run the scan
 without deleting; `feat/tools/clean` pins the tiers, the dry run and the tracked-file rule.
 

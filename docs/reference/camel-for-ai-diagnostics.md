@@ -59,7 +59,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 210
+**Semantic — errors** (`SemanticDiag`) — 209
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -258,6 +258,8 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ImplKernelNotBodyless` | The '#impl' tag of '{0}' names '{1}', which has a body. |
 | `StreamInContainer` | '{0}' cannot be the element of {1}: a stream is consumed once, while the elements of a container are read more than once. |
 | `StreamConsumedTwice` | '{0}' is consumed twice: a stream is read once on each execution path. |
+| `StreamConsumedInLoop` | '{0}' is consumed once per round of this loop. |
+| `TeeHintNotPositive` | The `tee` width '{0}' is below 1. |
 | `NodeOfNotAParameter` | '{0}' is not a const parameter of the rule '{1}', so node_of({0}) names no node. |
 | `BranchElementTypeMismatch` | The two arms of the branch have different element types: '{0}' and '{1}'. An array's element type is part of its type, and a number of one element type does not become a number of another by itself. |
 | `RuleConstParamNotMatched` | '{0}' is a `const` parameter of the rule '{1}', and the left side matches no constant for it. |
@@ -268,9 +270,6 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `EnumWrittenWhereATypeIsExpected` | An enum is declared in a type declaration ('type Shape = enum ...') and its type is the name that declaration gives it: the variants are written there and nowhere else. |
 | `StructComprehensionWithoutFields` | A struct comprehension takes its field names from 'fields T', and 'indices' walks positions, which have no names: write a tuple comprehension '( static for ... in indices ... )', or walk 'fields T'. |
 | `IdentifierPatternNeedsNullableOrErrorType` | The pattern '{0}' takes a value of type 'T?' or 'T!' apart, and this value has type '{1}': write '??' or '!!', or a 'match' pattern that is a literal or '_'. |
-| `FactJoinRequired` | The fact '{0}' writes no 'join'. |
-| `FactConstCaseTypeRequired` | The 'const' case '{0}' of the fact '{1}' writes no type. |
-| `FactCaseBindsNoVariable` | This case of the fact '{0}' names no variable. |
 
 **Semantic — warnings** (`SemanticDiag`) — 12
 

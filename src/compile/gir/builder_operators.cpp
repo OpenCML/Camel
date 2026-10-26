@@ -3392,6 +3392,44 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     // A function value has no name of its own; its type stands for it in diagnostics.
     const std::string calleeLabel = targetName.empty() ? targetFuncType->toString() : targetName;
 
+    // `tee(s, n)` reads one stream from two places: the two streams it gives share one buffer,
+    // which holds the elements one side has read and the other has not (design principles 5.4).
+    // `n` says how wide that buffer is expected to be -- a hint the executor may exceed by growing
+    // the buffer -- but no buffer holds fewer than one element, the one being handed over, so a
+    // constant width below 1 is refused where it is written, as a constant step of 0 is. A width
+    // that is not constant is the executor's to take: it is a hint, and the executor clamps it and
+    // grows the buffer, so it never faults. The callee is the library's `tee`, the only function of
+    // that name whose stream it splits: a program's own function of that name is left alone.
+    // The callee's name without the instantiation a generic function carries (`stream::tee<int>`),
+    // so a check for a library function names it as it is written.
+    const auto baseGraphName = [](const std::string &name) {
+        const size_t generic = name.find('<');
+        return generic == std::string::npos ? name : name.substr(0, generic);
+    };
+    if (targetGraph != nullptr && baseGraphName(targetGraph->name()) == "stream::tee" &&
+        normInputs.size() == 2 && targetFuncType->normTypesCount() == 2 &&
+        targetFuncType->normTypeAt(0) != nullptr &&
+        targetFuncType->normTypeAt(0)->code() == TypeCode::Stream) {
+        const auto widthBelowOne = [](const data_ptr_t &data) {
+            if (const auto integer = std::dynamic_pointer_cast<LongData>(data); integer != nullptr) {
+                return integer->data() < 1;
+            }
+            const auto integer = std::dynamic_pointer_cast<IntData>(data);
+            return integer != nullptr && integer->data() < 1;
+        };
+        if (widthBelowOne(constantOfNode(normInputs[1].node))) {
+            // The caret is under the width, the argument that says why the call can never be right.
+            const GCT::node_ptr_t &widthExpr = normInputs[1].expr;
+            const auto where                 = widthExpr != nullptr && widthExpr->origin() != 0
+                                                   ? widthExpr->origin()
+                                                   : gct->origin();
+            diags_->of(SemanticDiag::TeeHintNotPositive)
+                .atOrigin(where)
+                .commit(sourceTextOf(normInputs[1].expr));
+            throw BuildAbortException();
+        }
+    }
+
     // How an argument is passed. A function (a graph or a function value) and assignment take
     // a `var` argument as the variable itself. Any other operator with a `var` parameter mutates
     // an object in place and takes the object; the call still counts as a write of the variable

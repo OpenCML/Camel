@@ -1,7 +1,7 @@
 # Copyright (c) the OpenCML Organization
 # SPDX-License-Identifier: MIT
 
-"""Where the native extension module is, and how it is loaded (H253).
+"""Where the native extension module is, and how it is loaded.
 
 The extension is `_camel`, a CPython module that links `libcamel`. Two layouts are real:
 

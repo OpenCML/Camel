@@ -1,0 +1,163 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * Text functions. A string is always valid UTF-8, and its length and indices count code points:
+ * `len('中文')` is 2 and `'中文'[0]` is `'中'`. Binary data is `Bytes`; `bytes::encode` and
+ * `bytes::decode` are the one place where a string becomes UTF-8 bytes and back.
+ *
+ * - The string a function works on is its ordinary argument; everything that configures the
+ *   call is a with-argument, so calls chain: `s->trim->split<','>`.
+ * - Every function returns a new string; none changes its argument.
+ * - A result that may not exist is `T?` (`index_of`, `strip_prefix`). A number that is not a
+ *   code point is an error value (`from_codepoints`). An index outside the string is a fault.
+ * - Only what Camel cannot say about a string is native: code points as numbers and
+ *   letter case (cutting by code point is the subscript `s[a:b]` of the core). The rest is
+ *   written here; `index_of` and `split` carry a native kernel under `#impl` for speed, with the same result as their bodies.
+ */
+
+// ---- native primitives ----
+
+/// The code points of s, as numbers.
+/// @example codepoints('h€')    // [104, 8364]
+export func codepoints(s: string): int[]
+
+/// The string made of the given code points.
+/// @fails error `EncodingError` when an element is not a code point (negative, above 0x10FFFF, or a surrogate)
+/// @example from_codepoints([104, 8364]) !! ''    // 'h€'
+export func from_codepoints(xs: int[]): string!
+
+/// s with every letter in upper case, by the Unicode simple (one code point to one code point)
+/// case mapping; a letter without one is kept as it is.
+/// @example to_upper('héllo')    // 'HÉLLO'
+export func to_upper(s: string): string
+
+/// s with every letter in lower case, by the Unicode simple case mapping.
+/// @example to_lower('HeLLo')    // 'hello'
+export func to_lower(s: string): string
+
+// The kernels of `index_of` and `split`: the operators `str:find` and `str:split`, private to
+// this module. They answer exactly what the bodies below say.
+#op('str:find')
+with <sub: string>
+func index_of_kernel(s: string): int?
+
+#op('str:split')
+with <sep: string>
+func split_kernel(s: string): string[]
+
+// ---- searching ----
+
+/// The index (in code points) of the first occurrence of sub in s, or null when there is none.
+/// An empty sub is found at 0.
+/// @example 'hello'->index_of<'l'>    // 2
+#impl(index_of_kernel)
+with <sub: string>
+export func index_of(s: string): int? {
+    let n = len(sub)
+    let i = loop i = 0 while i + n <= len(s) && s[i:i + n] != sub do i + 1
+    return if i + n <= len(s) then i else null
+}
+
+/// Whether s begins with prefix. Every string begins with the empty string.
+/// @example 'hello'->starts_with<'he'>    // true
+with <prefix: string>
+export func starts_with(s: string): bool {
+    return len(s) >= len(prefix) && s[:len(prefix)] == prefix
+}
+
+/// Whether s ends with suffix. Every string ends with the empty string.
+/// @example 'hello'->ends_with<'lo'>    // true
+with <suffix: string>
+export func ends_with(s: string): bool {
+    return len(s) >= len(suffix) && s[len(s) - len(suffix):] == suffix
+}
+
+/// s without the prefix at its start, or null when s does not begin with it.
+/// @example 'v1.2'->strip_prefix<'v'>    // '1.2'
+with <prefix: string>
+export func strip_prefix(s: string): string? {
+    return if s->starts_with<prefix> then s[len(prefix):] else null
+}
+
+/// s without the suffix at its end, or null when s does not end with it.
+/// @example 'a.cml'->strip_suffix<'.cml'>    // 'a'
+with <suffix: string>
+export func strip_suffix(s: string): string? {
+    return if s->ends_with<suffix> then s[:len(s) - len(suffix)] else null
+}
+
+// ---- cutting and joining ----
+
+// The pieces of s between the occurrences of the non-empty sep.
+func cut(s: string, sep: string): string[] {
+    let n = len(sep)
+    let (parts, start, i) = loop parts = [] as string[], start = 0, i = 0 while i + n <= len(s) do
+        if s[i:i + n] == sep
+        then (concat(parts, [s[start:i]]), i + n, i + n)
+        else (parts, start, i + 1)
+    return concat(parts, [s[start:]])
+}
+
+/// The pieces of s between occurrences of sep. An empty s gives one empty piece; a separator at
+/// the start or the end gives an empty piece there. An empty sep cuts s into its code points
+/// (no pieces for an empty s).
+/// @example 'a,b,,c'->split<','>    // ['a', 'b', '', 'c']
+#impl(split_kernel)
+with <sep: string>
+export func split(s: string): string[] {
+    let n = len(sep)
+    return if n == 0 then [s[i] for i in 0..len(s)] else cut(s, sep)
+}
+
+/// The lines of s, cut at a line feed or a carriage return followed by a line feed. A line
+/// feed at the very end does not start another line.
+/// @example 'a\r\nb\n'->lines    // ['a', 'b']
+export func lines(s: string): string[] {
+    let parts = s->replace<'\r\n', '\n'>->split<'\n'>
+    return if len(parts) > 0 && parts[len(parts) - 1] == '' then parts[:len(parts) - 1] else parts
+}
+
+/// s with every occurrence of old replaced by new, found from left to right without overlap.
+/// An empty old puts new between the code points of s.
+/// @example 'a-b-c'->replace<'-', '+'>    // 'a+b+c'
+with <old: string, new: string>
+export func replace(s: string): string {
+    return s->split<old>->join<new>
+}
+
+/// s written count times in a row; the empty string when count is not positive.
+/// @example 'ab'->repeat<3>    // 'ababab'
+with <count: int>
+export func repeat(s: string): string {
+    return [s for i in 0..count]->join<''>
+}
+
+// ---- white space ----
+
+// The ASCII white space: space, tab, line feed, carriage return, vertical tab, form feed.
+// Other white space, such as U+00A0, is not trimmed.
+func is_space(c: string): bool {
+    return ' \t\n\r\v\f'->contains<c>
+}
+
+/// s without the ASCII white space (space, tab, line feed, carriage return, vertical tab, form
+/// feed) at its start.
+/// @example trim_start('  hi  ')    // 'hi  '
+export func trim_start(s: string): string {
+    let i = loop i = 0 while i < len(s) && is_space(s[i]) do i + 1
+    return s[i:]
+}
+
+/// s without the ASCII white space at its end.
+/// @example trim_end('  hi  ')    // '  hi'
+export func trim_end(s: string): string {
+    let j = loop j = len(s) while j > 0 && is_space(s[j - 1]) do j - 1
+    return s[:j]
+}
+
+/// s without the ASCII white space at both ends. Other white space, such as U+00A0, is kept.
+/// @example trim('  hi \n')    // 'hi'
+export func trim(s: string): string {
+    return s->trim_start->trim_end
+}

@@ -4,7 +4,7 @@
 
 The pricing rules of a small shop live in [`rules.cml`](rules.cml), and the project around them is
 Python: it reads the baskets, keeps them in NumPy, prints the report. This is the adoption path
-H253 was written for -- "use a part of Camel in a Python project", not "move the project".
+The Python binding was written for -- "use a part of Camel in a Python project", not "move the project".
 
 ```sh
 pip install camel-lang

@@ -1,0 +1,20 @@
+/**
+ * A program with no `tee` is reported as it was before there was one (design principles 5.4): the
+ * profile session prints what it records, and it records nothing about a tee here. The pair of
+ * this case is `stream.tee_report`, whose program does write tees and whose report carries one
+ * `STREAM_TEE` line each; the same assertions are made here and no line of that kind may appear.
+ */
+module stream_tee_no_report
+
+func count(n: int): int.. {
+    return step(n)
+}
+
+func step(n: int): () => (int, int..)? {
+    return () => if n > 0 then (n, step(n - 1)) else null
+}
+
+func main(): int sync {
+    println(loop acc = 0 for x in count(3) do acc + x)
+    return 0
+}

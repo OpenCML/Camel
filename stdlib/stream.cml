@@ -14,6 +14,8 @@
  * - `unfold(state, step)` is the smallest producer: a state and a step that answers the next
  *   element with the state after it, or `null` when the stream is over. A `yield` generator
  *   compiles to the same kind of value, and one written `#op` source can hand one out too.
+ * - `tee(s, n)` is the one way to read one stream from two places: it reads `s` once and gives two
+ *   streams, each of which is read once, and both see the same elements.
  * - A stream is a value and is pure, so pulling the same stream value twice answers the same
  *   element; the rest a pull hands out is what threads the stream, and the consumer passes it on.
  *   One stream value has one consumer per execution path (design principles 5.4).
@@ -31,4 +33,79 @@ export func unfold::<S, T>(state: S, step: (state: S) => (T, S)?): T.. {
         case null => null
         case next => (next.0, unfold(next.1, step))
     }
+}
+
+// ---- splitting ----
+
+/// The widest hint a `tee` takes. The buffer a `tee` keeps is unbounded in meaning (design
+/// principles 5.4): a side that runs ahead of the other buffers the elements the other has not
+/// read yet, and the executor grows that buffer rather than make the leading side wait. So `n` is
+/// a hint -- how wide the buffer is expected to be -- and a hint wider than this is clamped to it,
+/// which is what the report of a profile session shows, one `STREAM_TEE` line per tee.
+let tee_hint_cap = 64
+
+/// Two streams over the elements of `s` (design principles 5.4), each read once, both seeing the
+/// same elements in the same order. `s` is read once: the first side to need an element the buffer
+/// does not hold pulls it, and the other side finds it there. `n` is a hint -- the width the
+/// buffer is expected to have -- and is clamped to the implementation's cap.
+/// The result is a tuple, and taking it apart is what consumes the two streams; the streams
+/// themselves are values like any other, so a `tee` of one of them is another `tee`.
+/// @example let (left, right) = tee(unfold(3, (n: int) => if n > 0 then (n, n - 1) else null), 2)
+/// @example-fragment the two streams are live values a page shows; a program reads them where it consumes them
+export func tee::<T>(s: T.., n: int = 8): (T.., T..) sync {
+    // What the executor is told to expect.
+    let hint = if n > tee_hint_cap then tee_hint_cap else n
+    // The source as far as it has been pulled, one element per position already pulled, how far
+    // each side has read, and the widest the part of the buffer that one side has not read yet
+    // has been.
+    var src: T.. = s
+    var buffer: T[] = []
+    var taken: int[] = [0, 0]
+    var peak: int = 0
+
+    // One element more from the source, kept for the other side; `false` when the source is over.
+    // The write stands in a sync block, so it is ordered before the reads of a later pull.
+    func pull(): bool sync {
+        return match src() {
+            case null => false
+            case p => sync {
+                buffer = buffer->append<p.0>
+                src = p.1
+                true
+            }
+        }
+    }
+
+    // One side's pull, at the position it has reached: the element the buffer already holds
+    // there, or one more element pulled from the source, which both sides then see. The stream of
+    // a side is `unfold` over those positions -- the recursion is the one `unfold` already writes
+    // -- so this function calls nothing that would call it back. Every write below stands in a
+    // sync block: a sync body does not reach into the arms and blocks written inside it (design
+    // principles 3.4), and a write nothing orders is a write a later pull cannot count on (3.5).
+    func read(side: int, at: int): (T, int)? sync {
+        let holds = if at < len(buffer) then true else sync { pull() }
+        if holds then sync {
+            taken[side] = at + 1
+            let other = 1 - side
+            let slow = if taken[side] < taken[other] then taken[side] else taken[other]
+            let unread = len(buffer) - slow
+            if unread > peak then sync {
+                peak = unread
+            }
+            tee_note(hint, tee_hint_cap, len(buffer), peak, s)
+        }
+        return if holds then (buffer[at], at + 1) else null
+    }
+
+    // The two steps of the two streams, each a sync function so that what its pull writes is
+    // ordered where the `unfold` above it asks for it.
+    func side0(at: int): (T, int)? sync {
+        return read(0, at)
+    }
+
+    func side1(at: int): (T, int)? sync {
+        return read(1, at)
+    }
+
+    return (unfold(0, side0), unfold(0, side1))
 }
