@@ -5965,51 +5965,69 @@ the parameters by the decoupled weight decay first.
 
 ## `autodiff`: gradients of functions
 
-Automatic differentiation: `grad` turns a function into its gradient function, `with_grad`
-returns the value together with that gradient, and `stop_gradient` marks a value as a
-constant. The gradient of a function is a function of the same parameters, so the useful
-signature is the type of the function it differentiates.
+Automatic differentiation: function transforms that turn a function into the function of its
+gradient. `grad(f)` and `with_grad(f)` take the function as an ordinary argument (it is what is
+transformed, not a configuration) and give a function of the same parameters, so
+`with_grad(loss)<model>(x, y)` is the loss together with the gradient of the model, and the two
+steps can be written apart: `let step = with_grad(loss)`, then `step<model>(x, y)` in the loop.
+
+What is differentiated is the first `with` parameter of `f` (the weights); every other `with`
+parameter is a constant, and so is every ordinary parameter. To differentiate the data, bind it
+as a `with` parameter with a lambda. A function with no `with` parameter, or whose first one has
+no tangent, or a result that is not a scalar float, is refused where the call is compiled.
+
+The gradient has the type of the parameter it is the gradient of: a struct gives a struct of
+gradients, a tuple a tuple, an array of floats an array of the same element type and shape, a
+float a float of its own type. An integer or a bool leaf is not a continuous quantity: its
+gradient is a zero of its own type, so a parameter tree that carries a counter can be updated by
+leaving the counter as it is. A string or a function leaf has no gradient and is refused with
+the path of the leaf named. A value that depends on the differentiated parameter but has no way
+for its gradient to flow (an array of strings read inside a loop) is refused as well, never
+dropped.
+
+`grad` and `with_grad` are the transforms of reverse mode, built on the pass mechanism: they
+need `std::macro` to have expanded what they differentiate, and they leave a call whose callee is
+not known when they run to a run-time refusal. `vjp` is reverse mode for a result that is not a
+scalar (it gives the result and the pullback from the cotangent of the result to the gradient),
+and `jvp` is forward mode (the result and its tangent along a direction); both land with the
+autodiff lane, not before they work.
+`stop_gradient` marks a value as a constant, and a custom derivative of a function is the tag
+`#vjp(rule)` on its declaration.
 
 #### `grad`
 
 ```camel
-grad: (f: (x: float) => float) => (x: float) => float
+grad: (f: F) => Gradient<F> when is_function::<F>()
 ```
 
-The gradient function of `f`: it takes the same parameters and returns the gradient of `f`'s
-result with respect to its first `with` parameter (for a scalar result, a value of the same
-shape). A function with no `with` parameter, or whose first `with` parameter has no
-differentiable tangent, is refused when the call is compiled.
+The gradient function of `f`: it takes the parameters of `f` and gives the gradient of `f`'s
+result with respect to its first `with` parameter, in the type of that parameter.
 
-- With effects: differentiates the function's graph.
-- Example (a fragment, not compiled): `let dh = grad(h)`
-- Why it is not compiled: `h` must have a `with` parameter for its gradient to exist, and that takes a declaration, so the example is a fragment of a program that declares it
+- Example (a fragment, not compiled): `let loss_grad = grad(loss)`
+- Why it is not compiled: `loss` must have a `with` parameter for its gradient to exist, and that takes a declaration, so the example is a fragment of a program that declares it
 
 #### `with_grad`
 
 ```camel
-with_grad: (f: (x: float) => float) => (x: float) => (float, float)
+with_grad: (f: F) => ValueAndGradient<F> when is_function::<F>()
 ```
 
-The value and the gradient together: the result function returns `f`'s result followed by its
-gradient with respect to the first `with` parameter. The same compile-time refusal as `grad`
-applies.
+The value and the gradient together: the function it gives returns `(result of f, gradient)`,
+the pair a training step needs from one evaluation. The same compile-time refusals as `grad`.
 
-- With effects: differentiates the function's graph.
-- Example (a fragment, not compiled): `let value_and_grad = with_grad(h)`
-- Why it is not compiled: `h` must have a `with` parameter for its gradient to exist, and that takes a declaration, so the example is a fragment of a program that declares it
+- Example (a fragment, not compiled): `let step = with_grad(loss)`
+- Why it is not compiled: `loss` must have a `with` parameter for its gradient to exist, and that takes a declaration, so the example is a fragment of a program that declares it
 
 #### `stop_gradient`
 
 ```camel
-stop_gradient: (x: T) => T
+stop_gradient: (x: T) => T pure
 ```
 
-Returns its argument unchanged, and cuts the gradient at this point: a value passed through
+Gives its argument unchanged and cuts the gradient at this point: a value passed through
 `stop_gradient` is a constant to `grad`. Any value is accepted, and the result has the
 argument's own type.
 
-- Pure.
 - Example: `stop_gradient(3.0)` gives `3.0`
 
 <a id="sim"></a>
