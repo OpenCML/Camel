@@ -575,6 +575,21 @@ class GraphDraft {
     /// leaves a hole; a rewrite that erases the node through its own path calls it before the edges
     /// go.
     void closeChainOver(gc_node_ref_t id);
+    /// Hands the chain place `id` had in its block to `tail`: the statements written after `id` are
+    /// written after `tail`, and `tail` is written after what `id` followed when it stands in no
+    /// chain of its own (docs/design/effects/edges.cn.md 4 and 5.7). The node that takes the place
+    /// is the last statement of the code that replaces `id` -- the tail of a taken branch arm or of
+    /// an inlined body: what the block's value reads, or, when that value carries no chain of its own
+    /// (a void block, a constant), the last statement of that block's chain
+    /// (docs/design/effects/edges.cn.md 5.3).
+    ///
+    /// A rewrite that replaces a statement by a node of the same region can call takeStatementPlace
+    /// instead. This is the other case: the replacing code keeps a block of its own (a branch arm,
+    /// the body of an inlined call), and a sync edge never leaves the region of its block (4.6), so
+    /// the place is handed over rather than closed over `id`. Handing it over is what keeps the
+    /// replacing code reachable from the graph's result: the chain is what says a statement runs
+    /// (docs/design/effects/edges.cn.md 2), and closing the chain over `id` steps over that code.
+    void handChainPlaceTo(gc_node_ref_t id, gc_node_ref_t tail);
     /// The node `newId` takes the place `oldId` had in its block's chain: the statements written
     /// after `oldId` are written after `newId`, and `newId` is written after what `oldId` followed
     /// (docs/design/effects/edges.cn.md 4: a replacement transfers the replaced node's orderings to

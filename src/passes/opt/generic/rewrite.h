@@ -62,6 +62,23 @@ bool reaches(const GraphDraft &draft, gc_node_ref_t from, gc_node_ref_t to);
 std::vector<gc_node_ref_t> orderedSources(const GraphDraft &draft, gc_node_ref_t id);
 
 /**
+ * True for nodes that run in order with effects: calls, branches, effectful operators, and gates
+ * or joins that wait on something -- on a control input, or on the sync edge the chain of a `sync`
+ * block is written as (docs/design/effects/edges.cn.md 5.3). The chain of a block names its
+ * statements with this predicate: the nodes it holds are the ones a rewrite may not step over
+ * without handing their ordering on.
+ */
+bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t id);
+
+/**
+ * True when nothing the value of `id` is computed from reads a slot the program writes: walking up
+ * its value inputs -- and the waits of the nodes on the way, which is what orders a computation
+ * inside a `sync` block -- the walk meets no node written in place. Replacing such a computation by
+ * one value gives every reader the value of a single read of that slot.
+ */
+bool readsNoWrittenSlot(const GraphDraft &draft, gc_node_ref_t id);
+
+/**
  * Replaces node `id` by `replacement` (or just removes it when `replacement` is invalid, which
  * requires `id` to have no value users) and erases it. Ordering is preserved: every user of
  * `id`, value or control, inherits `id`'s control predecessors, because a pure node on a
