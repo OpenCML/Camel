@@ -18,7 +18,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "source.declared_resources"
-desc = "Two calls of `consume` touch the same handle (the value they are given) and are ordered by control, two calls of `tick` touch the group's `db` and `stdout`, two calls of `bump` touch the same cell: the bodies touch nothing, so the footprint can only come from the clauses. The program's own output is unchanged."
+desc = "Two calls of `consume` touch the same handle (the value they are given) and are ordered by control, two calls of `tick` touch the group's `db` and `stdout` and are visible outside the program -- naming an ambient resource in a clause promises the effect that comes with it -- and two calls of `bump` touch the same cell: the bodies touch nothing, so the footprint can only come from the clauses. The program's own output is unchanged."
 kind = "behavior"
 case = "../../../cases/effects/declared.cml"
 args = ["${case}", "test::resources"]
@@ -43,7 +43,7 @@ const cells = nodes(/^RESOURCES node \S+ (\d+) FUNC bump: rmw variable \(node (\
 pair('bump', cells)
 assert(cells[0][2] === cells[1][2], `bump: the two calls name different cells: ${cells[0][0]} | ${cells[1][0]}`)
 
-const ambient = nodes(/^RESOURCES node \S+ (\d+) FUNC tick: rmw ambient db; rmw ambient stdout$/)
+const ambient = nodes(/^RESOURCES node \S+ (\d+) FUNC tick: rmw ambient db; rmw ambient stdout; external$/)
 assert(ambient.length === 2, `tick: expected two calls of the group, got ${ambient.map((m) => m[0]).join(' | ')}; all nodes: ${allNodes}`)
 pair('tick', ambient)
 
@@ -121,6 +121,15 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_exact = "0\n"
 expect_output_not_contains = ["SemanticDiag::EffectNotExecuted"]
+
+[[tests]]
+name = "effect.ambient_clause_covers_body"
+desc = "A clause that names the resource its body reaches keeps its promise, the effect outside the program included: `stdout` is state the program does not own, so a clause that writes it promises the effect that comes with it, and the resource and the effect are not two things the writer has to say."
+kind = "behavior"
+case = "../../../cases/effects/uses_ambient_covers_body.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "x\n1\n"
 
 # ---- Refusals ----
 
@@ -243,3 +252,25 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::HandleTypeNotNominal"
 expect_diagnostic_code = "0x030001A3"
 expect_output_contains = ["err_handle_not_nominal.cml:", "'Id'"]
+
+[[tests]]
+name = "err.callee_clause_reaches"
+desc = "A call reads the signature of the function it calls: `stamp` promises `db` and its body calls `fill`, which promises `cache`, so the caller has reached `cache` and is refused even though `fill`'s body touches nothing -- the clause is the contract, which is what lets `fill` change its body within it later without touching its callers."
+kind = "negative"
+case = "../../../cases/effects/err_callee_clause_reaches.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_diagnostic_code = "0x030001F1"
+expect_output_contains = ["err_callee_clause_reaches.cml:16:", "uses db", "cache"]
+
+[[tests]]
+name = "err.promise_note"
+desc = "The note of a violation points at the first use the clause does not name, skipping the uses it does name: `bump` promises the cell `c` and then prints, so the report names `stdout` and the note lands on the print rather than on the write of `c` above it."
+kind = "negative"
+case = "../../../cases/effects/err_promise_note.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_diagnostic_code = "0x030001F1"
+expect_output_contains = ["err_promise_note.cml:8:", "stdout", "at 10:5]"]
