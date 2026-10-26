@@ -10,7 +10,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "escapes.plain"
-desc = "A plain string: the seven probes of the ruling and the three octal-looking forms. `\\101`, `\\8`, `\\01`, `\\012` and `\\033` are unknown (six warnings, the text kept); `\\0` is the null byte, `\\x41` is `A`, `\\u{1F600}` is one code point, `\\n` is the line feed, and `\\0x` is the null byte and an `x`."
+desc = "A plain string: the seven probes of the rule and the three octal-looking forms. `\\101`, `\\8`, `\\01`, `\\012` and `\\033` are unknown (six warnings, the text kept); `\\0` is the null byte, `\\x41` is `A`, `\\u{1F600}` is one code point, `\\n` is the line feed, and `\\0x` is the null byte and an `x`."
 kind = "behavior"
 case = "../../../cases/compile/escapes/plain.cml"
 args = ["${case}"]

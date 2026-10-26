@@ -1,5 +1,5 @@
 /**
- * Handover, item 1: a `return` written in a branch arm takes its type from the position
+ * a `return` written in a branch arm takes its type from the position
  * of the arm (the branch's expected type), not from the declared return type of the function
  * around it. Nothing here expects a type in `free`, so `2` is an int, as the arm next to it
  * is: the float the function returns does not reach it. The declaration of `v` in `positioned`

@@ -36,7 +36,7 @@ struct InlineRewriteConfig {
     /// computation: its OPERs, the calls it makes and its structural nodes. A constant, a
     /// parameter, a GATE and the bookkeeping an inline splice adds are not counted, so the same
     /// function answers the same whatever the splice does (see engine.cpp,
-    /// inlinedComputeNodeCount; review 2026-10-24: "how small is a function" measures the
+    /// inlinedComputeNodeCount; "how small is a function" measures the
     /// compute nodes of the function being inlined).
     size_t smallSubgraphMaxComputeNodes = 8;
     /// An acyclic callee called from several places is inlined everywhere when the code this

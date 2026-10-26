@@ -13,8 +13,7 @@
  *   - Sum and Mean of a floating element type (f32, f64, bf16, f16) accumulate in
  *     `double` from +0 in ascending order and round once, when the element is
  *     stored back into the result's element type. This is the rule of design
- *     principles 7.3 ("浮点数组的归约在 f64 中累加、舍入一次，返回元素类型") and the ruling
- *     docs/handover/reviews/reduced-precision.md (d); `array::sum` in stdlib/array.cml
+ *     principles 7.3 ("浮点数组的归约在 f64 中累加、舍入一次，返回元素类型"); `array::sum` in stdlib/array.cml
  *     follows it too, so the array path and this one agree bit for bit.
  *   - Sum and Mean of an integer or bool element type have no float accumulator at
  *     all: they accumulate exactly in int64 (on uint64_t, where wrapping is

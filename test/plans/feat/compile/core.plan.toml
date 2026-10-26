@@ -88,7 +88,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "semantic.not_keywords_are_names"
-desc = "`is`, `of`, `keyof`, `try`, `catch` and `finally` are not part of the language and are not keywords any more: they are ordinary names a program may bind and call, as `raise` already was (design principles 3.9; handover 5.00 \"语法层收口\" item 5). Writing the construct they used to head is an ordinary syntax error, not a dedicated diagnostic."
+desc = "`is`, `of`, `keyof`, `try`, `catch` and `finally` are not part of the language and are not keywords any more (design principles 3.9): they are ordinary names a program may bind and call, as `raise` already was. Writing the construct they used to head is an ordinary syntax error, not a dedicated diagnostic."
 kind = "behavior"
 case = "../../../cases/compile/semantic/not_keywords_are_names.cml"
 args = ["${case}"]

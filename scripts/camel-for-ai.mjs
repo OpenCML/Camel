@@ -225,8 +225,7 @@ function read(root, rel) {
 // names as the source of its `Group` field -- plus the operators of `token_kinds.def`.
 //
 // The table has one row per group of `token_kinds.def`; the `Reserved` row is gone with the words
-// that were in it (`is`, `of`, `keyof`, `try`, `catch`, `finally`; handover 5.00 "语法层收口"
-// item 5), and `enum` and `typeof` now stand with the types, as the token table groups them.
+// that were in it, and `enum` and `typeof` now stand with the types, as the token table groups them.
 const KEYWORD_GROUPS = [
     ['声明', 'Declaration'],
     ['控制', 'Control'],

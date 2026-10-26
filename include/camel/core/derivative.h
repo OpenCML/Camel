@@ -18,8 +18,7 @@
  * Composite types (structs, tuples, arrays) have no entry: the two questions
  * below derive their answers from their element types. Which of the two a
  * caller asks is decided by *who the answer is for*, not by the aggregate's
- * shape (the author's ruling of 2026-10-25 on
- * discrete-tuple-tangent-space-and-machinery-aggregates):
+ * shape:
  *
  *   - `gradientTypeOf` answers for the user: the gradient type of the
  *     parameter `P` a `grad`/`with_grad` call differentiates, which is what the

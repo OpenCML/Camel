@@ -1,5 +1,5 @@
 /**
- * Handover: a composite literal argument enters its parameter's type, but an element that
+ * a composite literal argument enters its parameter's type, but an element that
  * is a name is a value of its own type. `pick([n])` with `n: int` and `xs: f32[]` has no
  * matching function: the literal does not become an `f32[]` around a variable.
  */

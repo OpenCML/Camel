@@ -1318,6 +1318,52 @@ void GraphDraft::closeChainOver(gc_node_ref_t id) {
     }
 }
 
+void GraphDraft::handChainPlaceTo(gc_node_ref_t id, gc_node_ref_t tail) {
+    requireOneWriting("handChainPlaceTo");
+    if (id == tail || node(id) == nullptr || node(tail) == nullptr) {
+        return;
+    }
+    ++mutations_;
+    const std::vector<gc_node_ref_t> preds(syncInputsOf(id).begin(), syncInputsOf(id).end());
+    const std::vector<gc_node_ref_t> users(syncUsersOf(id).begin(), syncUsersOf(id).end());
+    const auto markStatement = [&](gc_node_ref_t n) {
+        const DraftNodeHeader *h = header(n);
+        if (h != nullptr) {
+            setNodeRuntimeFlags(
+                n, static_cast<uint8_t>(h->runtimeFlags | kGCNodeFlagSyncStatement));
+        }
+    };
+    const auto chainTo = [&](gc_node_ref_t user, gc_node_ref_t pred) {
+        markStatement(user);
+        markStatement(pred);
+        const gc_node_ref_t only[1] = {pred};
+        setSyncInputs(user, only);
+        const auto ctrl = ctrlInputsOf(user);
+        if (std::ranges::find(ctrl, pred) == ctrl.end()) {
+            appendInput(DraftEdgeKind::Ctrl, user, pred);
+        }
+    };
+    markStatement(tail);
+    // The statements written after `id` are written after the code that replaced it: they were
+    // waiting on the place `id` had, and that place is `tail`'s now. The edge is written in both
+    // kinds while the control kind exists (src/runtime/graph_edges.cpp, `checkSyncEdges`).
+    for (gc_node_ref_t user : users) {
+        if (user != tail && alive(user)) {
+            chainTo(user, tail);
+        }
+    }
+    // The replacing code is entered from where `id` stood: with no chain of its own, `tail` heads
+    // the chain of the block it joined. A tail that already stands in a chain keeps its place.
+    if (syncInputsOf(tail).empty()) {
+        for (gc_node_ref_t pred : preds) {
+            if (pred != tail && alive(pred)) {
+                chainTo(tail, pred);
+                break;
+            }
+        }
+    }
+}
+
 void GraphDraft::replaceOrderEdgesAt(gc_node_ref_t oldId, gc_node_ref_t newId) {
     requireOneWriting("replaceOrderEdgesAt");
     if (oldId == newId || !alive(oldId) || !alive(newId)) {

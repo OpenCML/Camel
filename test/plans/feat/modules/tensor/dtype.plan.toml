@@ -271,7 +271,7 @@ expect_stdout = "bf16 values: 1.5 -1.5 1.5 1.0\nbf16 bytes: 8 [192, 63, 192, 191
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
-# `load_npy` declares the element type of the file it reads (handover H466, design principles 5.5):
+# `load_npy` declares the element type of the file it reads (design principles 5.5):
 # the call writes it, or the position the call stands in fixes it, and the file's own element type
 # has to be that one.
 

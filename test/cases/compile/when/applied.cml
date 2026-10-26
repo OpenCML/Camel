@@ -3,7 +3,7 @@
  *
  * `double` asks about a written type, `twice` about its own type parameter T, which the call
  * binds (int and float here). The condition is evaluated when the declaration is instantiated,
- * before its body is built (design principles 5.13).
+ * before its body is built (design principles 4.4).
  *
  * The predicates are written here as any user predicate is; the standard ones with these names
  * live in the standard module `types`.

@@ -1,10 +1,10 @@
 /**
  * Which operator a call of a body-less declaration reaches is decided by the call's argument
  * types and the declaration's `when`, never by the order the declarations are written in
- * (design principles 4.4: "条件在实例化时求值；不成立时**这个重载不适用**，重载选择去试同名的
- *  其他候选；没有一个适用时在调用处报错，列出每个候选没满足的条件"
- * of 2026-10-24 on `impl-declaration-arms`: "`when` 是规则、函数重载与 `match` 守卫唯一的适用
- * 条件", `docs/handover/reviews/questions-2026-10-23.md`).
+ * (design principles 4.4: a `when` condition is evaluated at instantiation; an overload whose
+ * condition does not hold does not apply, and overload selection tries the other candidates of
+ * the same name; when none applies the call is reported at the call, with the condition each
+ * candidate failed).
  *
  * Two declarations of one name, one generic signature, conditions that exclude each other: the
  * `i32` rule is the subtraction and the `int` rule is the addition, so the two results say which

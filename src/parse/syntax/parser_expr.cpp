@@ -1380,8 +1380,8 @@ void ParserImpl::parseTypeCasePattern() {
 }
 
 /// matchCase : 'case' pattern ('|' pattern)* whenClause? '=>' blockExpr
-/// The optional `when` is the guard of the case (language reference 6.8.2, review
-/// `docs/handover/reviews/questions-2026-10-23.md` 「when-placement-and-match-guards」): the case
+/// The optional `when` is the guard of the case (language reference 6.8.2; design principles
+/// 4.4): the case
 /// is taken when its pattern matches *and* the condition holds. The condition is written in the
 /// one position a condition is written in (`when` before the body it guards, the same clause a
 /// declaration carries), so a `when` after the body is named rather than left as a token that

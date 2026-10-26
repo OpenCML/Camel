@@ -46,7 +46,7 @@ arithmetic on the value and needs neither `constant(node, sample)` nor the `matc
 layers around a read. The engine passes that value where it passed a node, and the parameter bit
 the rule carries is what tells it which parameters are which.
 
-Reaching the *node* of a `const` parameter is `node_of(c)` (the ruling of 2026-10-23 on
+Reaching the *node* of a `const` parameter is `node_of(c)` (the rule on
 `rule_when_const_node`: "条件函数按 `const` 形参追加隐藏的节点形参，构建期把 `node_of(c)` 换成它；
 不引入新类型"). The condition takes one hidden node parameter per `const` parameter, appended after
 the rule's own, in the same order:
@@ -311,7 +311,7 @@ them.
 ## 6. The rest of the engine (H38)
 
 The rule declaration, the engines and the check are the first step; `when` is implemented (H38
-item 1), the rest is planned in the H38 report (`handover note ⟨50954d0⟩ (H38)`, section 1). In
+item 1), the rest is planned in the H38 report (section 1). In
 short:
 
 **`when` (implemented).** `rule … when expr { lhs => rhs }` compiles to a third function
@@ -346,7 +346,7 @@ the fact type is restricted to trivial data, and the fact becomes one `user.fact
 (Derived, scope Node, Anchors dependency). The facts are propagated in post-order, merged at JOIN
 nodes and across the writings of a value, cached per graph revision and per draft revision. Which
 of a case's variables are values and which are facts was the open question the design's example
-left ambiguous; they are `Node`s, as the review of H38 decided.
+left ambiguous; they are `Node`s.
 
 **`fact` with parameters (H61).** `fact pair(a: Node, b: Node): bool match (a, b) { … }` is the same
 declaration with a parameter list: the parameters are pattern variables, so a rule's condition
@@ -410,8 +410,7 @@ libcamel function the module calls is exported without a hand edit; `rewrite` li
   `x + (a * b)` the parameter `a` is the multiplication's operand, not the multiplication node.
   A fact about a compound is read by declaring a `fact` over its parts (H61): `pair(x, y)`
   answers the fact of the value those parts belong to.
-- `fact`: are a case's variables values or nodes? They are `Node`s (the review of H38;
-  implemented in H38b).
+- `fact`: are a case's variables values or nodes? They are `Node`s (implemented in H38b).
 
 
 

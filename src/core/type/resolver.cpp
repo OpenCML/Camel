@@ -3,6 +3,7 @@
 
 #include "camel/core/type/resolver.h"
 
+#include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/typevar.h"
@@ -252,7 +253,23 @@ std::optional<FunctionType *> DeclaredFuncTypeResolver::resolve(
     }
     // The variables are what the arguments say they are; a call that leaves one open is not a
     // use of the operator (nothing decides the code it runs on), so it is rejected here and
-    // reported at the call as the mismatch it is.
+    // reported at the call as the mismatch it is. An argument that states no element type is one
+    // of those: the empty literal `[]` describes the variable standing at its element type as
+    // `void`, and `void` is the "no value" marker rather than an element type, so the position the
+    // literal stands in is not one that can fix the variable (design principles 5.1, 5.2). A
+    // variable that no parameter stands a type at is another question, answered where it is
+    // bound: a callback that gives nothing is a value of `void`, not an element type nobody
+    // stated.
+    for (size_t i = 0; i < with.size(); ++i) {
+        if (!unstatedBindingOf(funcType_->withTypeAt(i), valueTypeOf(with[i])).empty()) {
+            return std::nullopt;
+        }
+    }
+    for (size_t i = 0; i < norm.size(); ++i) {
+        if (!unstatedBindingOf(funcType_->normTypeAt(i), valueTypeOf(norm[i])).empty()) {
+            return std::nullopt;
+        }
+    }
     type_bindings_t bindings;
     for (size_t i = 0; i < with.size(); ++i) {
         if (!unifyTypeVars(funcType_->withTypeAt(i), valueTypeOf(with[i]), bindings)) {
@@ -282,6 +299,37 @@ std::optional<FunctionType *> DeclaredFuncTypeResolver::resolve(
     }
     (void)modifiers;
     return concrete;
+}
+
+std::optional<FunctionType *> DeclaredFuncTypeResolver::resolveForCall(
+    const type_vec_t &types, Type *expectedResult, const type_vec_t &with, const type_vec_t &norm,
+    static_args_t normStatics, const ModifierSet &modifiers) const {
+    (void)expectedResult;
+    (void)normStatics;
+    if (types.empty()) {
+        return resolve(with, norm, modifiers);
+    }
+    // The call writes the declaration's own variables (`show::<f32>([])`): they are fixed by
+    // position, the way a generic function's `::<...>` fixes its head parameters, and the
+    // arguments are then read against the declaration with them already written in. A rule
+    // without variables takes no type argument.
+    if (!generic_ || types.size() != bindable_.size()) {
+        return std::nullopt;
+    }
+    type_bindings_t bindings;
+    for (size_t i = 0; i < types.size(); ++i) {
+        bindings.emplace_back(bindable_[i], types[i]);
+    }
+    auto *concrete = static_cast<FunctionType *>(substituteTypeVars(funcType_, bindings));
+    // What is left is the ordinary resolution, against the declaration with those variables
+    // written in: the variables the explicit types did not write are read from the arguments,
+    // and an argument that states none of them -- the empty literal `[]` -- is refused here like
+    // any other mismatch. Its answer is the instance, so a call that says `::<f32>` is not asked
+    // again what it already said.
+    return resolve(
+        type_vec_t(concrete->withTypesSpan().begin(), concrete->withTypesSpan().end()),
+        type_vec_t(concrete->normTypesSpan().begin(), concrete->normTypesSpan().end()),
+        modifiers);
 }
 
 std::optional<FunctionType *> StaticFuncTypeResolver::resolve(

@@ -1,6 +1,6 @@
 /**
  * The stream mark `..` is a postfix mark of a type like `?` and `!`, read left to right with no
- * special case (the author's ruling of 2026-10-24): `T..` is the stream of T, `T?..` the stream
+ * special case: `T..` is the stream of T, `T?..` the stream
  * of a nullable T, `T!..` the stream of a fallible T, `T..?` the possibly absent stream,
  * `T[3]..` the stream of three-element arrays and `T[..]..` the stream of open-rank arrays.
  * `T[..]` keeps its own reading: an array whose extents are a prefix, which is not a stream. An

@@ -94,6 +94,15 @@ class FuncTypeResolver {
     virtual FunctionType *fixedSignature() const { return nullptr; }
 
     /**
+     * The signature the rule declares, type variables and all: the same function type as
+     * fixedSignature() for a rule without variables, and the declared form for one that is a
+     * family. nullptr for a rule whose signature is computed rather than declared. It is what a
+     * reader asks about the parameters themselves -- which of them mentions a type variable --
+     * where fixedSignature() cannot answer, a family having no one signature.
+     */
+    virtual FunctionType *declaredSignature() const { return nullptr; }
+
+    /**
      * The names this rule gives its parameters, the `with` ones first and the ordinary ones
      * after: what a named argument binds to (`len(x: xs)`). A rule whose signature is fixed
      * answers from it; a rule whose result follows its arguments has no signature object to
@@ -350,6 +359,16 @@ class DeclaredFuncTypeResolver : public FuncTypeResolver {
         const type_vec_t &with, const type_vec_t &norm,
         const ModifierSet &modifiers) const override;
 
+    /// The declaration's own variables, fixed by the call's `::<...>` type arguments before the
+    /// arguments are read: a variable the call writes is what the call is an instance of, so the
+    /// arguments are matched against the declaration with those variables already bound
+    /// (`show::<f32>([])`). A rule without variables takes no type argument, as an ordinary
+    /// resolver does.
+    std::optional<FunctionType *> resolveForCall(
+        const type_vec_t &types, Type *expectedResult, const type_vec_t &with,
+        const type_vec_t &norm, static_args_t normStatics,
+        const ModifierSet &modifiers) const override;
+
     std::string signature() const override { return funcType_->toString(); }
 
     bool varParameters(std::vector<bool> &with, std::vector<bool> &norm) const override {
@@ -365,6 +384,11 @@ class DeclaredFuncTypeResolver : public FuncTypeResolver {
     /// The signature as declared, closed (an operator's type is not a function still being
     /// built); null when the declaration has type variables, whose instances are not this rule.
     FunctionType *fixedSignature() const override { return generic_ ? nullptr : funcType_; }
+
+    /// The declaration's own type, the variables still in it: a family's parameters are the ones
+    /// the rule writes, and a call that leaves one of their variables without a type is a
+    /// question about the declaration rather than about one of its instances.
+    FunctionType *declaredSignature() const override { return funcType_; }
 
     /// A declaration names every parameter it writes, whatever its signature resolves to: the
     /// names are the declaration's own, and a named call reads them from here.

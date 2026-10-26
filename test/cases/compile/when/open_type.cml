@@ -1,7 +1,7 @@
 /**
  * A type query the declaration cannot answer: T is declared at the head but written nowhere in
  * the signature, so at instantiation it still has no type. The query is reported, not taken for
- * false (design principles 5.13).
+ * false (design principles 4.4).
  */
 module when_open_type
 

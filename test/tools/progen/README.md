@@ -236,7 +236,7 @@ the rewrite sequence it was found with and under `std::opt::inline`, `std::opt`,
   those were fixed (`generate.VERSION` 2); an ordering comparison is no longer parenthesized
   for F30. A statement-form `if` without `else` written with a block arm ends that arm in
   `null` (it used to be `return null`, which the warning ExitInUnusedBranch now reports);
-  since the ruling of 2026-10-12 the arm may be one expression of any type, which the feature
+  since the rule the arm may be one expression of any type, which the feature
   `ifnoelse` writes (`generate.VERSION` 3, with `comprehension`, `nullable` and `partial`).
   `generate.VERSION` 5 adds `append` and `opover` (design principles 11.3).
   `generate.VERSION` 6 adds `loop` (design principles 3.10). Seeds 1-100 under `--matrix full`:

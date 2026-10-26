@@ -47,7 +47,7 @@ tags = ["perf", "training", "gpu"]
 # load 20 (1.19 ms in the step at load 65). The chain runs no optimizer, which is why it does not
 # move.
 #
-# std::nvm has no budget at all: by the rule (reviews/H24-H25-H26.md, item 7) it
+# std::nvm has no budget at all: by the rule  it
 # is the node-at-a-time reference implementation, the performance is fvm's and jit's to carry, and
 # its per-step numbers are recorded here only to be compared against.
 #

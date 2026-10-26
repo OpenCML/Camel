@@ -622,14 +622,13 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
                 // (design principles 9.3), and for a function with a body the record is where the
                 // condition of the declaration is read while the declarations of one name are
                 // compared -- two of them whose conditions exclude each other are overloads and
-                // may stand side by side (design principles 4.4; the rule on
-                // `impl-declaration-arms`, docs/handover/reviews/questions-2026-10-23.md).
+                // may stand side by side (design principles 4.4).
                 if (const auto *when = tree_->whenOf(node); when != nullptr) {
                     tree_->setWhen(declNode, *when);
                 }
                 if (node->nativeDeclaration()) {
                     // The declaration keeps what makes it one: no body, so the graph builder
-                    // makes an operator rule of it instead of a graph (handover step 1),
+                    // makes an operator rule of it instead of a graph (design principles 10.4),
                     // and its tag uses go with it (`#op('module:function')`; design principles
                     // 6.2).
                     declNode->setNativeDeclaration();
@@ -1346,7 +1345,7 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
         // reads and writes that cell wherever the body is written, and no body can bring the set
         // back to empty. So a signature that writes `pure` and gives a parameter `var` is refused
         // where it is written, and the note points at the parameter that breaks the promise (the
-        // author's ruling: the error is at the declaration's clause, the note at the first use the
+        // error is at the declaration's clause, and the note at the first use the
         // signature does not promise).
         const auto varRangeOf =
             [&](const std::string &name) -> std::optional<camel::core::error::TokenRange> {
@@ -2042,11 +2041,10 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
         // The syntax reads `yield` (design principles 5.4: a function whose body writes it
         // produces a stream, and its head writes the stream type). What produces that stream is
         // the generator state machine of docs/design/io-concurrency-streams/plan.cn.md slice E,
-        // which is not built yet; the ruling on what it means is
-        // docs/handover/reviews/questions-2026-10-23.md:394 (several `yield`s a round, any
-        // nesting, `match` arms and `sync` blocks, per-element faults, linear values). Refusing
-        // it by name here is what keeps a `yield` from running as a `return`: a wrong value
-        // would be worse than a named gap.
+        // which is not built yet: several `yield`s in one round, any nesting, `match` arms and
+        // `sync` blocks, per-element faults and linear values are all things that machine has to
+        // produce. Refusing it by name here is what keeps a `yield` from running as a `return`:
+        // a wrong value would be worse than a named gap.
         diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("generators");
         throw BuildAbortException();
     }
@@ -2952,7 +2950,7 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
     case AST::ReservedDataOp::Comp: {
         const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);
         // `a..b` has two readings, and the types of its two operands tell them apart (design
-        // principles 4.2; the rule on ` -generator-and-composition`):
+        // principles 4.2):
         // between two functions it is the composition `f..g`, the lambda `(x) => g(f(x))`, and
         // between two integers it is the interval `[a, b)`. GCT has no types, so the construct
         // is handed on as one call of the compiler's own name for it, which the GIR builder
@@ -3372,7 +3370,7 @@ node_ptr_t Builder::visitMatchExpr(const AST::node_ptr_t &ast) {
         // The guard of the case, when it has one. `case p when c => ...` is taken only when the
         // pattern matches *and* `c` holds, so the graph builder evaluates the guard in the arm
         // this case becomes and sends the value on to the cases written after it when it does
-        // not hold (review 「when-placement-and-match-guards」). The guard is kept beside the
+        // not hold. The guard is kept beside the
         // CASE rather than among its children: the arm's body is the last child every reader of
         // that node takes, and the guard is read in the arm's scope, where the names the
         // pattern binds are in force.
@@ -5110,7 +5108,7 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     }
     node_ptr_t typeNode = tree_->makeType(funcType);
     // The applicability condition is built in the scope of the signature: it sees the type
-    // parameters declared at the head and the `with` parameters (design principles 5.13). It is
+    // parameters declared at the head and the `with` parameters (design principles 4.4). It is
     // not evaluated here -- instantiation is where its type parameters have types -- so it is
     // kept on the FUNC, beside the type, for the graph builder.
     node_ptr_t whenNode = nullptr;

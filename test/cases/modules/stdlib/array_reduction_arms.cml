@@ -1,7 +1,7 @@
 /**
- * The rule's three cases for the array reductions' kernels, over the module itself (design
- * principles 10.4; the rule on the declaration arms,
- * `docs/handover/reviews/questions-2026-10-23.md`): one body-less declaration per element type,
+ * The rule's three cases for the
+ * array reductions' kernels, over
+ * the module itself: one body-less declaration per element type,
  * each naming its own element type's operator, and the element-type switch in the executor gone
  * with them.
  *

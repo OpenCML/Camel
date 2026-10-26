@@ -197,7 +197,7 @@ class OperatorGroup {
 
     /// Makes each overload's resolver findable by its URI (see OperatorTable::setResolver), and
     /// tells the table which overloads this group has, so that the types it was registered for can
-    /// be listed (OperatorTable::registeredTypes; handover).
+    /// be listed (OperatorTable::registeredTypes).
     void publishResolvers() const {
         std::vector<std::string> uris;
         uris.reserve(resolvers_.size());

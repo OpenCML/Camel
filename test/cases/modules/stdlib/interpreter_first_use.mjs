@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * `import` executes no code (design principles 3.1; 
- * in answer to `docs/technical/50_pyplot_cpython_init.md`; handover): importing `pyplot` or
+ * in answer to `docs/technical/50_pyplot_cpython_init.md`): importing `pyplot` or
  * `python` must not create the embedded CPython, and the first operator call must create it.
  *
  * The strongest honest proof is the environment, not a clock. CPython cannot start with a

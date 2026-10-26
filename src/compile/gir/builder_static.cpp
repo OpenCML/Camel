@@ -977,8 +977,7 @@ Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
     // not read here at all: it is left to the call path, which reports the ordinary no-match
     // against the group's one signature (three parameters), as it does for any other call the
     // set has no overload for. A step of zero, which names no sequence at
-    // all, is `RangeStepZero` here as it is there (design principles 4.2; the rules of
-    //  2026-10-24 on ` -generator-and-composition` and on ` -interval-step-form`).
+    // all, is `RangeStepZero` here as it is there (design principles 4.2).
     if (subject->type() == GCT::NodeKind::LINK && subject->size() >= 1) {
         const GCT::node_ptr_t &callee = subject->at(0);
         const bool namedRange = callee != nullptr && callee->type() == GCT::NodeKind::DREF &&

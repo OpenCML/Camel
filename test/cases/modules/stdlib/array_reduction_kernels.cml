@@ -1,8 +1,8 @@
 /**
  * The reductions of `array` — `sum`, `min` and `max` — have native kernels, and each kernel
- * answers what the Camel body beside it says (design principles 10.4
- * docs/handover/reviews/questions-2026-10-23.md, section "array-kernel-executors": 「`array:sum`/
- * `min`/`max` 是数组归约的实现原子」, acceptance 「内核与函数体一致（含 bf16/f16、空数组、NaN）」).
+ * answers what the Camel body beside it says (design principles 10.4: `array:sum` and
+ * `array:min`/`array:max` are the implementation atoms of the array reductions, and an
+ * acceptance is that the kernel agrees with the body, bf16/f16 and NaN included).
  *
  * Design principles 7.3 is the rule a floating-point reduction follows: 「浮点数组的归约在 f64 中
  * 累加、舍入一次，返回元素类型」. Each number below moves if a kernel reads it differently:

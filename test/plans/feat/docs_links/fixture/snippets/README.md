@@ -10,8 +10,7 @@ taken from another file and another layout is accepted -- is pinned by the pages
 tutorial's whole dumps (`01_five_minutes`, `09_evaluation_by_dependency`) carry the path of their own
 `examples/` file, and the checker compiles the fence out of a temporary directory.
 
-An excerpt is compared up to renaming its numbers one-to-one onto the dump's (the author's ruling of
-2026-10-25), so three more pages pin that rule from both sides: `dump_renumbered.md` names every
+An excerpt is compared up to renaming its numbers one-to-one onto the dump's, so three more pages pin that rule from both sides: `dump_renumbered.md` names every
 node and the cluster differently and must hold; `dump_content_differs.md` writes `:io/print` where
 the program reaches `:io/println` and must fail, because only numbers are renamed;
 `dump_number_reused.md` writes one number on two nodes and must fail, because the renaming is

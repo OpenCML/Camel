@@ -257,8 +257,8 @@ void Builder::declareModule(const module_ptr_t &module, GCT::Tree &tree, diagnos
             }
         }
         // The body-less declarations are exported as the operator groups of their names once
-        // all of them have been read: the group of a name is its set of overloads (handover
-        // step 1). A module written in Camel otherwise exports through the program's
+        // all of them have been read: the group of a name is its set of overloads (design
+        // principles 10.2). A module written in Camel otherwise exports through the program's
         // table; an operator group is the module's own, as it is for a C++ module. The export
         // list is read first: a declaration the module does not export is a private operator of
         // the module.

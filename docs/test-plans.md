@@ -534,8 +534,7 @@ Every `[[tests]]` entry may use these common fields:
   process tree, read by `test/tools/child-cpu.mjs`, which the runner runs the command under. A test
   that declares it is judged on that figure and not on the wall clock: `timeout_ms` then states the
   liveness bound (a hang, not a slow run), the `TIMEOUT_MARGIN` rule above is not applied to it, and
-  a reading that cannot be made is a failure, never a pass. The unit comes from the author's ruling
-  of 2026-10-23 (`docs/handover/reviews/questions-2026-10-23.md`, "declaration-cost-gate" (a)): the
+  a reading that cannot be made is a failure, never a pass. The unit is CPU time: the
   wall clock on this shared host drifts with who else is running, while a process's own CPU time
   barely moves, so a crossed CPU budget is the test's work growing and never "the host was busy". The
   budget is declared together with a timeout (the runner refuses `cpu_budget_ms` without
@@ -1022,7 +1021,7 @@ measurement has one manual entry point:
 
 Three of those plans are also in the release gate's slow layer, where a plan file is named one by
 one: `perf.para_speedup`, whose guard is a property of one run rather than a stored number, and the
-count guards `perf.step_counts` and `perf.reduce_layout_counts`, which a 2026-10-25 ruling split out
+count guards `perf.step_counts` and `perf.reduce_layout_counts`, which a rule split out
 of `perf.step_budget` and `perf.reduce_layout`. What those three assert is a count or a property --
 the operator calls one round of the step issues, the blocks `sum_to` allocates -- and never a
 duration, which is what lets them ride a shared host; the measured halves of the two split plans
@@ -1065,7 +1064,7 @@ the host whose numbers it records; a baseline from another machine is not compar
 performance notes have the cost of each plan and the evidence for the
 split. The plans left out keep the measurement they already have: `perf.startup` carries its own
 CPU-time ceilings and `declaration.cost`'s per-declaration ceiling, absolute CPU total and
-structural assertion (the 30% compile-work share retired with the 2026-10-23 ruling), `perf.gc`
+structural assertion (the 30% compile-work share retired with the rule), `perf.gc`
 asserts what must not grow with the length of the run, the showcases compare against PyTorch, and
 `docs/performance/graph-store-baseline.md` is a separate manual baseline of the graph store.
 
@@ -1088,9 +1087,7 @@ wall clock is the host's, not the test's: `modules.autodiff/benchmark_gradients_
 - the built-in `${camel}` variable: the compiler of the build under test
   (`out/<tag>/bin/camel[.exe]`, the path the runner prints and records in `summary.json`). A test
   whose program starts a compiler names the install with `--camel ${camel}`: an explicitly named
-  install travels as a command-line argument, never as an environment switch (the author's ruling of
-  2026-10-25, `docs/handover/reviews/questions-2026-10-24-evening.md`,
-  "stdlib-declaration-check-measures-a-foreign-install"); `CAMEL_HOME` is the install location's
+  install travels as a command-line argument, never as an environment switch; `CAMEL_HOME` is the install location's
   convention and stays
 
 Rules:

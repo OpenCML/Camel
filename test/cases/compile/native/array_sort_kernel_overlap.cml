@@ -1,7 +1,7 @@
 /**
  * The spelling the sorting family must not be written in, refused where the second declaration is
- * written (design principles 4.3, 4.4, 5.1; the rule on the
- * declaration arms, `docs/handover/reviews/questions-2026-10-23.md`): two same-named body-less
+ * written (design principles 4.3, 4.4,
+ * 5.1): two same-named body-less
  * declarations whose `when` conditions are not mutually exclusive.
  *
  * `is_integer::<T>()` holds for `i32` and `int`, and `is_ordered::<T>()` holds for those and for
@@ -14,8 +14,8 @@
  * and takes that element type in the signature (`(xs: i32[]) => i32[]`), because a `when` on a
  * body-less declaration is checked for overlap but is not what a call is resolved by: the operator
  * group takes the first rule whose parameter types accept the arguments, `when` or not
- * (src/core/operator_group: resolveForCall; probe in
- * docs/handover/reviews/questions-2026-10-23.md §sorts-per-element-type).
+ * (src/core/operator_group: resolveForCall; the sort arm of each element type is what
+ * the declarations above state).
  */
 module array_sort_kernel_overlap
 

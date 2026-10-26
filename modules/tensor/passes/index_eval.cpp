@@ -970,7 +970,7 @@ Generator sumToCases() {
         const StaticShape like = rng.chance(20) ? g : broadcastFrom(rng, g);
         // `sum_to` (and `broadcast_like`) are ::<T>(g: T[..], like: T[..]) (gradient_ops.cpp):
         // the two operands are one element type, and a generator that writes two is the mixed
-        // caller the ruling says to fix rather than a call the operator accepts. `like`'s
+        // caller the rule says to fix rather than a call the operator accepts. `like`'s
         // elements are not read, so only its element type has to agree.
         const TypeCode t = pickDtype(rng);
         return Case{Arg::tensor(randomData(rng, t, g)), Arg::tensor(randomData(rng, t, like))};
