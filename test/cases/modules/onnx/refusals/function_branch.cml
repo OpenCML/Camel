@@ -25,5 +25,5 @@ func model(x: float[..]): float[..] {
 
 func main(): void! sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
-    export_model((x: float[..]): float[..] => model(x), x, 'tmp/test/onnx/refusal_function_branch.onnx')
+    export_model<out: 'tmp/test/onnx/refusal_function_branch.onnx'>((x: float[..]): float[..] => model(x), x)
 }

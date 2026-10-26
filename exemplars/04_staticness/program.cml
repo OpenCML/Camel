@@ -45,19 +45,19 @@ func settle(t: f32[..]): f32[..] {
 }
 
 func export_static(x: f32[..]): void! sync {
-    let _ = export_model(forward, x, get_env('ONNX_OUT'))
+    let _ = export_model<out: get_env('ONNX_OUT')>(forward, x)
     println('exported forward')
     return null
 }
 
 func export_dynamic(x: f32[..]): void! sync {
-    let _ = export_model(shrink, x, get_env('ONNX_OUT'))
+    let _ = export_model<out: get_env('ONNX_OUT')>(shrink, x)
     println('exported shrink')
     return null
 }
 
 func export_linear(x: f32[..]): void! sync {
-    let _ = export_model(pile, x, get_env('ONNX_OUT'))
+    let _ = export_model<out: get_env('ONNX_OUT')>(pile, x)
     println('exported pile')
     return null
 }
@@ -66,7 +66,7 @@ func export_linear(x: f32[..]): void! sync {
 /// handles it, so writing the call as the result of the body carries it to the
 /// exit of `main` (design principles 3.9).
 func export_nontail(x: f32[..]): void! sync {
-    return export_model(settle, x, get_env('ONNX_OUT'))
+    return export_model<out: get_env('ONNX_OUT')>(settle, x)
 }
 
 /// No mode was asked for: nothing is exported and the result is not an error.

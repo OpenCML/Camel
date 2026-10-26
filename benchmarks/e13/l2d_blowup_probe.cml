@@ -77,7 +77,7 @@ func load(): Gru {
 func main(): int sync {
     let m = load()
     let x = if get_env('STEPS') == '6' then zeros([2, 6, 2]) else zeros([2, 4, 2])
-    export_model(fwd, (m, x), get_env('ONNX_OUT'))
+    let _ = export_model<out: get_env('ONNX_OUT')>(fwd, (m, x))
     println('exported fwd steps=' + get_env('STEPS'))
     return 0
 }

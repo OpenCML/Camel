@@ -36,7 +36,7 @@ func main(): int sync {
         b2: reshape([0.2] as f32[], [1])
     }
     let x = reshape([1.0, 2.0, -1.0, 0.5, 0.25, -0.75, 1.5, 0.5] as f32[], [4, 2])
-    export_model(step, (m, x), get_env('ONNX_OUT'), [0])
+    let _ = export_model<out: get_env('ONNX_OUT'), dynamic_axes: [0]>(step, (m, x))
     println('exported')
     return 0
 }

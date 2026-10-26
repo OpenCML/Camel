@@ -22,7 +22,7 @@ func spin(n: int): int sync {
 }
 
 func main(): int sync {
-    export_model(double, reshape([1.0, 2.0], [2]), 'tmp/test/onnx/compute_node_size_at_limit.onnx')
+    let _ = export_model<out: 'tmp/test/onnx/compute_node_size_at_limit.onnx'>(double, reshape([1.0, 2.0], [2]))
     let x = int(get_env('H434_STEPS'))
     println(x)
     println(x)

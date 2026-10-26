@@ -41,7 +41,7 @@ func load(): Mlp {
 }
 
 func do_export(m: Mlp): int sync {
-    export_model(step, (m, reshape([1.0, 2.0, -1.0, 0.5], [2, 2])), get_env('ONNX_OUT'))
+    let _ = export_model<out: get_env('ONNX_OUT')>(step, (m, reshape([1.0, 2.0, -1.0, 0.5], [2, 2])))
     println('exported')
     return 0
 }

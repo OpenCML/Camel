@@ -21,7 +21,7 @@ func countdown(remaining: int): int sync {
 }
 
 func main(): int sync {
-    export_model(double, reshape([1.0, 2.0], [2]), 'tmp/test/onnx/refusal_reaches_loop.onnx')
+    let _ = export_model<out: 'tmp/test/onnx/refusal_reaches_loop.onnx'>(double, reshape([1.0, 2.0], [2]))
     let first = get_env('P7_FIRST')
     let second = get_env('P7_SECOND')
     println(first)

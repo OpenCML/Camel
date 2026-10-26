@@ -8,6 +8,6 @@ import { reshape } from tensor
 import { export_model } from onnx
 
 func main(): int sync {
-    export_model((t: float[..]): float[..] => t * 2.0, reshape([1.0, 2.0], [2]), 'tmp/test/onnx/refusal_target.onnx', [0], 'no_such_target')
+    let _ = export_model<out: 'tmp/test/onnx/refusal_target.onnx', dynamic_axes: [0], target: 'no_such_target'>((t: float[..]): float[..] => t * 2.0, reshape([1.0, 2.0], [2]))
     return 0
 }

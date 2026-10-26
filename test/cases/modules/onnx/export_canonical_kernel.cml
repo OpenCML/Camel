@@ -17,5 +17,5 @@ func net(x: f32[..]): f32[..] {
 func main(): void! sync {
     let x = reshape([1.0, -2.0, 3.0, 0.5, -1.5, 2.5] as f32[], [2, 3])
     println(sum(net(x)))
-    export_model((x: f32[..]): f32[..] => net(x), x, get_env('ONNX_OUT'))
+    export_model<out: get_env('ONNX_OUT')>((x: f32[..]): f32[..] => net(x), x)
 }

@@ -34,7 +34,7 @@ func noisy(x: f32[..]): f32[..] {
 }
 
 func export_step(m: Mlp, x: f32[..]): void! sync {
-    let _ = export_model(step, (m, x), get_env('ONNX_OUT'))
+    let _ = export_model<out: get_env('ONNX_OUT')>(step, (m, x))
     println('exported step')
     return null
 }
@@ -43,7 +43,7 @@ func export_step(m: Mlp, x: f32[..]): void! sync {
 /// is this function's result: nothing handles it, so it reaches the exit of
 /// `main` (design principles 3.9).
 func export_noisy(x: f32[..]): void! sync {
-    return export_model(noisy, x, get_env('ONNX_OUT'))
+    return export_model<out: get_env('ONNX_OUT')>(noisy, x)
 }
 
 func main(): void! sync {

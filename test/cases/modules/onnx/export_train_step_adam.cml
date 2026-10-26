@@ -38,7 +38,7 @@ func main(): int sync {
     }
     let st = adam_state(m)
     let x = reshape([1.0, 2.0, -1.0, 0.5] as f32[], [2, 2])
-    export_model(step, (m, st, x), get_env('ONNX_OUT'))
+    let _ = export_model<out: get_env('ONNX_OUT')>(step, (m, st, x))
     println('exported')
     return 0
 }

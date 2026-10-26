@@ -91,11 +91,11 @@ func do_run(m: Mlp): int sync {
 func do_export(m: Mlp): int sync {
     let out = get_env('ONNX_OUT')
     return if get_env('WHAT') == 'fwd' then sync {
-        export_model(fwd, (m, input_a()), out)
+        let _ = export_model<out: out>(fwd, (m, input_a()))
         println('exported fwd')
         return 0
     } else sync {
-        export_model(step, (m, input_a()), out)
+        let _ = export_model<out: out>(step, (m, input_a()))
         println('exported step')
         return 0
     }

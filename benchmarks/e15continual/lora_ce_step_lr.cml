@@ -83,10 +83,9 @@ func do_export_ce(m: LoraMlp): int sync {
     let x = load_npy::<f32>(dir + '/batch_0.npy')
     let t = load_npy::<f32>(dir + '/target_0.npy')
     let lr = ce_lr()
-    export_model(
+    let _ = export_model<out: get_env('CAMEL_BENCH_EXPORT')>(
         (mm: LoraMlp, xx: f32[..], tt: f32[..]): (float, LoraMlp) => step_ce(mm, xx, tt, lr),
-        (m, x, t),
-        get_env('CAMEL_BENCH_EXPORT')
+        (m, x, t)
     )
     return 0
 }

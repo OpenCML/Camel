@@ -4,29 +4,51 @@
 /**
  * Computed signatures of the `onnx` module (C++ operators, modules/onnx).
  *
- * `supported_operators` has one fixed signature and is declared in stdlib/onnx.cml. The one entry
- * here is the operator whose signature a declaration cannot write:
+ * `supported_operators` has one fixed signature and is declared in stdlib/onnx.cml. The three
+ * entries here are the operator whose signature a declaration cannot write:
  *   - `export_model` takes a function of any parameter list and result (`(...) => R`), which no
  *     declaration can name (the arbitrary-function-type gap);
  *   - its `example` parameter is a tensor, a tuple or a struct, and every leaf of it must be the
  *     parameter tree of the function — a predicate on a type variable, which a declaration
  *     cannot state either;
- *   - its `dynamic_axes` and `target` parameters are optional, so the arity is three to five.
- * The `DynamicFuncTypeResolver` of modules/onnx is the one source of this signature. The entry
- * below writes one instance of the calls it accepts, not a declaration: a declaration that wrote
- * this instance would drop the other function shapes and the three-to-five arity.
+ *   - its `out`, `dynamic_axes` and `target` parameters carry runtime values and are therefore
+ *     `with` arguments: one rule per number of them (one to three), because a rule that cannot
+ *     place a name refuses every call that gives one by name (design principles 6.4).
+ * The `DynamicFuncTypeResolver` of modules/onnx is the one source of these signatures. The entries
+ * below write one instance of the calls each rule accepts, not a declaration: a declaration that
+ * wrote this instance would drop the other function shapes.
  *
  * For reference only: these declarations are not compiled. They are checked against the operators
  * the module registers, and docs/stdlib-reference.md is generated from them.
  */
 
-/// Writes the ONNX model of `fn` applied to arguments like `example` to the file `path`, at the
+/// Writes the ONNX model of `fn` applied to arguments like `example` to the file `out`, at the
 /// backend's default opset. `example` is one argument of a one-parameter `fn`, or a tuple with
 /// one example per parameter; the function's graph is translated after the generic passes, and a
-/// node the backend cannot lower is refused. The optional `dynamic_axes` leaves those axes of the
-/// tensor inputs unknown, and `target` names the runtime whose capability data the model is
-/// checked against.
+/// node the backend cannot lower is refused. The path is a `with` argument because it is a
+/// runtime value: a literal, a name composed from the environment, or a parameter of the pass.
 /// @effect writes a file and reads the function's graph
 /// @fails error value `ExportUnsupported` when the graph cannot be translated (a call that remains, an operator without an ONNX lowering, a dtype or shape the exporter cannot name), or when the target runtime rejects a node; error value `IOError` when the model cannot be written
-/// @example export_model(fn, example, "/tmp/model.onnx")
-export func export_model(fn: (x: f32[..]) => void, example: f32[..], path: string): void!
+/// @example export_model<out: "/tmp/model.onnx">(fn, example)
+#op('onnx:export_model')
+with <out: string>
+export func export_model(fn: (x: f32[..]) => void, example: f32[..]): void!
+
+/// The same, with `dynamic_axes`: those axes of the tensor inputs are left unknown in the model,
+/// which is what lets one model run at several shapes (`[0]` is the batch axis).
+/// @effect writes a file and reads the function's graph
+/// @fails error value `ExportUnsupported` when the graph cannot be translated or the target runtime rejects a node, and when an axis is out of range; error value `IOError` when the model cannot be written
+/// @example export_model<out: "/tmp/model.onnx", dynamic_axes: [0]>(fn, example)
+#op('onnx:export_model')
+with <out: string, dynamic_axes: int[]>
+export func export_model(fn: (x: f32[..]) => void, example: f32[..]): void!
+
+/// The same, with `target`: the runtime whose capability data decides whether a node this
+/// backend lowers is one that runtime has (`'onnxruntime-cpu'`; `'none'` switches the check off,
+/// and a name that is none of them is refused).
+/// @effect writes a file and reads the function's graph
+/// @fails error value `ExportUnsupported` when the graph cannot be translated, when an axis is out of range, or when `target` names a runtime that has no kernel for a node; error value `IOError` when the model cannot be written
+/// @example export_model<out: "/tmp/model.onnx", dynamic_axes: [0], target: "onnxruntime-cpu">(fn, example)
+#op('onnx:export_model')
+with <out: string, dynamic_axes: int[], target: string>
+export func export_model(fn: (x: f32[..]) => void, example: f32[..]): void!
