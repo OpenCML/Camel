@@ -27,7 +27,7 @@ using namespace camel::core::error;
 
 // ---- min, max and abs over bf16 and f16 ------------------------------------------------------
 //
-// the rule the rule asks for these three (item 2: "`math::min`
+// The rule asks for these three (item 2: "`math::min`
 // /`max`/`abs` 等补 bf16/f16"), and design principles 7.3 states how a scalar operation of one of
 // the two types is computed: in f32, on operands widened to f32, rounded once into the element
 // type — the same one arithmetic path the tensor kernels use (modules/tensor/dtype.h).

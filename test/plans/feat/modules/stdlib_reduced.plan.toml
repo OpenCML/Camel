@@ -86,7 +86,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "reduced_arithmetic_refused"
-desc = "A `%` over two bf16 values has no candidate -- `__mod__` is registered for the integer types only, as it is for f32 -- so the call is refused as SemanticDiag::ReducedPrecisionUnsupported, naming `operator %` and the element type bf16 rather than listing overloads that could never match. `+` over the same values is no longer refused: it is the rule's item (b), and reduced_scalar pins what it computes. The case used to write `+`; the rule's item (b) is what re-points it at `%`."
+desc = "A `%` over two bf16 values has no candidate -- `__mod__` is registered for the integer types only, as it is for f32 -- so the call is refused as SemanticDiag::ReducedPrecisionUnsupported, naming `operator %` and the element type bf16 rather than listing overloads that could never match. `+` over the same values is no longer refused: a bf16 value has the scalar operations of any other float, and reduced_scalar pins what it computes. The case used to write `+`; that change is what re-points it at `%`."
 kind = "negative"
 case = "../../../cases/modules/stdlib/reduced_arithmetic_refused.cml"
 args = ["${case}"]
@@ -100,7 +100,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "reduced_narrowing_as_refused"
-desc = "`x as bf16` on an f32 is refused with SemanticDiag::DynamicCastForbidden: the conversion rounds, so a cast that says nothing about that is the wrong form for it, exactly as `x as i32` on an f32 is refused. `bf16(x)` is the written conversion of the rule's item (c) and needs no permission; `b as f32` widens and is accepted, which reduced_scalar writes."
+desc = "`x as bf16` on an f32 is refused with SemanticDiag::DynamicCastForbidden: the conversion rounds, so a cast that says nothing about that is the wrong form for it, exactly as `x as i32` on an f32 is refused. `bf16(x)` is the written conversion and needs no permission; `b as f32` widens and is accepted, which reduced_scalar writes."
 kind = "negative"
 case = "../../../cases/modules/stdlib/reduced_narrowing_as_refused.cml"
 args = ["${case}"]

@@ -9,7 +9,7 @@ desc = "A floating-point reduction returns the element type and accumulates in f
 
 [[tests]]
 name = "array_sum_rounding"
-desc = "`array::sum` over an f32 array of 2^24 followed by 1025 ones answers 16778240 (0x4B800200, bytes [0, 2, 128, 75]): the f64 sum 16778241 rounded once, ties to even. A fold with an f32 accumulator answers 16777216 (bytes [0, 0, 128, 75]) — 2^24 + 1 rounds back to 2^24 at every step — so `sum == f32(f64 reference)` and `sum != the per-step fold` are both informative, and the tensor sum over the same elements has the array path's bytes. The 4096-element mixed-magnitude vector agrees the same way (16780288 against the fold's 16777216 and the exact 16780287). Before item (d), `array::sum` answered the per-step fold (16777216 and 16777216) while the tensor path answered 16778240 and 16780288, so these two properties and the byte comparison were red."
+desc = "`array::sum` over an f32 array of 2^24 followed by 1025 ones answers 16778240 (0x4B800200, bytes [0, 2, 128, 75]): the f64 sum 16778241 rounded once, ties to even. A fold with an f32 accumulator answers 16777216 (bytes [0, 0, 128, 75]) — 2^24 + 1 rounds back to 2^24 at every step — so `sum == f32(f64 reference)` and `sum != the per-step fold` are both informative, and the tensor sum over the same elements has the array path's bytes. The 4096-element mixed-magnitude vector agrees the same way (16780288 against the fold's 16777216 and the exact 16780287). Before the f64 accumulator, `array::sum` answered the per-step fold (16777216 and 16777216) while the tensor path answered 16778240 and 16780288, so these two properties and the byte comparison were red."
 kind = "behavior"
 case = "../../../cases/modules/stdlib/array_sum_rounding.cml"
 args = ["${case}", "${backend}"]

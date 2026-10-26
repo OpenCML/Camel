@@ -7801,7 +7801,8 @@ The name of a generic function stands for no one function until a position fixes
 // principles 5.5), and nothing here does: the composition stands in a `let` with no declared
 // type, so neither the operand nor the whole expression has a function type to take the instance
 // from. The refusal is the composition's own, and it says what the operand is and both ways to
-// settle it.
+// settle it (design principles 5.5: a name of a generic function is an instance only
+// where a position fixes its type arguments).
 module h428_comp_operand_generic
 
 func ident::<T>(x: T): T {
@@ -9005,8 +9006,9 @@ Check the shapes of all operands involved in the operation and ensure they are c
 **Example** (`test/cases/loops/fault_tensor_rank0.cml`, run as `camel -E short test/cases/loops/fault_tensor_rank0.cml ${backend}`)
 
 ```camel
-// Reshaping a tensor to no dimension makes it the one element it holds — the rule,
-// the rule — so another element count
+// Reshaping a tensor to no dimension makes it the one element it holds,
+// so another element count
+// has no value to become, and the count is checked when the shape runs (the shape arrives through a
 // has no value to become, and the count is checked when the shape runs (the shape arrives through a
 // parameter). The loop below is never reached: `for` over a value with no dimension is refused
 // where it is written (loops.err_tensor_rank0), and rank 0 is decided at the instantiation, so the

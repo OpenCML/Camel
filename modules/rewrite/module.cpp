@@ -1641,8 +1641,7 @@ double elementOfBytes(TypeCode dtype, const uint8_t *at) {
 }
 
 /// The text of one element of a bf16 or an f16 tensor sample: the element type's own shortest
-/// text (camel/core/rtdata/half.h, `halfText`), never the f32 text of the value it widens to
-///
+/// text (camel/core/rtdata/half.h, `halfText`), never the f32 text of the value it widens to.
 std::string halfTextOf(const TensorSample &t, size_t at) {
     uint16_t bits = 0;
     std::memcpy(&bits, t.bytes.data() + at * 2, sizeof(bits));
@@ -3630,8 +3629,7 @@ void checkGenericRule(
         const GenericRuleInstance &instance = current->instances[place];
         const std::string instanceName = std::format("{}<{}>", name, instance.typeText);
         const auto *lhsType = instance.lhs->funcType();
-        // The seed follows the instance's identity, not its place in the array the caller passed
-        //
+        // The seed follows the instance's identity, not its place in the array the caller passed.
         const uint64_t stream = sampleStreamOf(seed, instanceName);
         Sampler probe(stream, live()->needs());
         std::string cannot;

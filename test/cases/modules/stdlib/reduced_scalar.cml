@@ -1,6 +1,6 @@
 /**
- * `bf16` and `f16` are floating types of the language, on par with `f32` (design principles 7.3;
- * rule the rule items (a) and (b)): a literal has one, the
+ * `bf16` and `f16` are floating types of the language, on par with `f32`
+ * (design principles 7.3, items (a) and (b)): a literal has one, the
  * nearest value rounds to nearest with ties to even once, `bf16(x)` / `f16(x)` are written
  * conversions and need no numeric permission, the scalar arithmetic and comparison compute in
  * f32 and round once into the element type, and reading such a value as a wider number is exact.

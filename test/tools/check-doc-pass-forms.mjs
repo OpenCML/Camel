@@ -202,7 +202,7 @@ const PROBE_REFUSED = new RegExp(`Pass <${PROBE}> not found`)
 // Not pages: a release log states the release it belongs to, and the handover directory quotes the
 // old spelling to say what happened. The list is asserted, not assumed: an entry that is not in
 // the tree any more is reported, so a class cannot keep excusing pages it no longer describes.
-// 
+// (`docs/reviews/` was a third entry until the directory was removed with the ledgers it held.)
 const NOT_A_PAGE = ['changes.log', 'docs/handover/']
 // Written by a script, never by hand: their text comes from the pages and the sources scanned
 // here, so a hit in them is fixed where it is written.

@@ -1128,8 +1128,7 @@ std::optional<Builder::CalleeSet> Builder::declarationsOfCallee(node_handle_t ca
     // declaration). A name with none is reported at the call like any other unresolved name. The
     // set path fills no default -- with one declaration it could, but the rule that a default is
     // written by one declaration is the very reason the two paths differ -- so a group with one
-    // rule keeps the signature path too, and what a name reaches there is what that path can read
-    //
+    // rule keeps the signature path too, and what a name reaches there is what that path can read.
     if (set.declarations.size() < 2) {
         return std::nullopt;
     }
