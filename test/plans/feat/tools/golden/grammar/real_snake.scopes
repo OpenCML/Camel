@@ -183,12 +183,13 @@
 #                   ^^^^ meta.block.camel entity.name.function.call.camel
 #                       ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
 #                             ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
->    let new_head = match dir {
+>    let new_head: Point = match dir {
 #    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
 #        ^^^^^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
-#                 ^ meta.block.camel keyword.operator.assignment.camel
-#                   ^^^^^ meta.block.camel keyword.control.conditional.camel
-#                             ^ meta.block.camel meta.block.camel punctuation.section.block.begin.camel
+#                ^ meta.block.camel punctuation.separator.colon.camel
+#                        ^ meta.block.camel keyword.operator.assignment.camel
+#                          ^^^^^ meta.block.camel keyword.control.conditional.camel
+#                                    ^ meta.block.camel meta.block.camel punctuation.section.block.begin.camel
 >        case 'w' => { x: now_head.x, y: now_head.y - 1 }  // Up
 #        ^^^^ meta.block.camel meta.block.camel keyword.control.conditional.camel
 #             ^ meta.block.camel meta.block.camel string.quoted.single.camel punctuation.definition.string.begin.camel
