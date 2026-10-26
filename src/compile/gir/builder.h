@@ -1214,6 +1214,9 @@ class Builder {
     // through a callee, the next round of the measurement.
     std::unordered_map<DraftGraphBuilder *, camel::core::sem::ResourceSignature>
         inferredResources_;
+    // Why a body was read conservatively: the uses its measurement could not place. Said by the
+    // report of a clause the body does not keep.
+    std::unordered_map<DraftGraphBuilder *, std::vector<std::string>> unplacedResources_;
     node_handle_t lastSyncedNode_{};
     size_t syntheticRefIndex_ = 0;
 
@@ -2039,7 +2042,14 @@ class Builder {
     // as touching nothing: a body is never measured as pure because the measurement gave up.
     // `nullopt` when something in the body cannot be determined at all -- a resource the walk
     // cannot place.
-    std::optional<camel::core::sem::ResourceSignature> footprintOf(DraftGraphBuilder *graph) const;
+    // `Early` wants a complete answer or none: a body that reaches something it cannot place is not
+    // measured. `Settled` is the fixed point's: the callees are the measurements so far (a body
+    // calling itself sees its own), and a use that cannot be placed is read as touching any class
+    // a clause has no name for, with the reason appended to `unplaced`.
+    enum class FootprintMode { Early, Settled };
+    std::optional<camel::core::sem::ResourceSignature> footprintOf(
+        DraftGraphBuilder *graph, FootprintMode mode = FootprintMode::Early,
+        std::vector<std::string> *unplaced = nullptr) const;
     // Once every body is built: measures each one and settles the measurements against each other
     // (a callee may be written after its caller, in another module). This reports nothing: it runs
     // before the module-by-module reporting begins.

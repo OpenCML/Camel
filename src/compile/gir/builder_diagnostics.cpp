@@ -343,6 +343,14 @@ void Builder::reportResourceViolation(
     if (measured.external && !promised.external) {
         unnamed.push_back("an effect outside the program");
     }
+    // A use the measurement could not place is read as touching any class a clause has no name
+    // for, and said here, so that the clause is refused for a reason the writer can look at.
+    if (const auto reasons = unplacedResources_.find(graph.get());
+        reasons != unplacedResources_.end()) {
+        for (const std::string &reason : reasons->second) {
+            unnamed.push_back("what the compiler cannot determine (" + reason + ")");
+        }
+    }
     // The first use the clause does not name, which is what the writer has to look at: the
     // declaration says what a caller may assume, and this is where the body stopped matching it.
     camel::source::origin_id_t noteOrigin = 0;
