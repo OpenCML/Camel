@@ -7,9 +7,9 @@ module bytes
 
 import { encode } from bytes
 
-export func size(content: Bytes): int
+export func to_array(content: Bytes): int[]
 
 func main(): int sync {
-    println(size(encode('abc')))
+    println(to_array(encode('abc')))
     return 0
 }

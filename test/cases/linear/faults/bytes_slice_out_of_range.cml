@@ -1,0 +1,11 @@
+// A Bytes slice that leaves the Bytes is the same fault as a string's, naming the length.
+
+import { encode } from bytes
+
+func main(): int sync {
+    let b = encode('hello')
+    let n = len(b) + 4
+    println(len(b[1:n]))
+    println('not reached')
+    return 0
+}

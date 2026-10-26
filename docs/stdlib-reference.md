@@ -591,6 +591,18 @@ string. `'中文字'[1:3]` and `slice('中文字', 0, 1, 3)` are both `'文字'`
 - Pure.
 - Example: `slice('hello', 0, 1, 4)` gives `'ell'`
 
+#### `slice`
+
+```camel
+slice: (b: Bytes, axis: int, start: int, end: int, step: int = 1, written: int = 3) => Bytes
+```
+
+The same slice of a `Bytes`, by byte: it has the one axis 0, and the result is a `Bytes`.
+`b[1:3]` and `slice(b, 0, 1, 3)` are the same bytes.
+
+- Pure.
+- Example: `slice(encode('hello'), 0, 1, 4)` gives `the bytes of 'ell'`
+
 #### `concat`
 
 ```camel
@@ -1175,13 +1187,20 @@ s without the ASCII white space at both ends. Other white space, such as U+00A0,
 
 ## `bytes`: immutable binary values and UTF-8 conversion
 
+Binary data. `Bytes` is an immutable value of the core; a string is text and never holds
+arbitrary bytes, so the only crossing between the two is `encode` and `decode`.
+
+Length (`len`), concatenation (`a + b`) and cutting (`b[a:b]`) are the core's, as they are for
+a string. What is here converts, and is native: a `Bytes` is a data block, and reading or
+building one needs the layout control the language does not show (design principles 10.4).
+
 #### `encode`
 
 ```camel
 encode: (text: string) => Bytes
 ```
 
-Encodes valid UTF-8 text as an immutable Bytes value.
+The UTF-8 bytes of text.
 
 - Pure.
 - Example: `encode('hello')`
@@ -1192,11 +1211,12 @@ Encodes valid UTF-8 text as an immutable Bytes value.
 decode: (content: Bytes) => string!
 ```
 
-Decodes UTF-8, returning an EncodingError value for malformed input.
+The text the bytes spell. Bytes that are not valid UTF-8 are an error value, not a fault: they
+come from the outside world.
 
 - Pure.
-- Failure: error value `EncodingError` when the bytes are not valid UTF-8 or the text is larger than a string.
-- Example: `decode(encode('中文')) !! ''`
+- Failure: error `EncodingError` when the bytes are not valid UTF-8 or the text is larger than a string can be.
+- Example: `decode(encode('中文')) !! ''` gives `'中文'`
 
 #### `from_array`
 
@@ -1204,10 +1224,10 @@ Decodes UTF-8, returning an EncodingError value for malformed input.
 from_array: (values: int[]) => Bytes
 ```
 
-Copies integers in the inclusive range 0..255 into a binary value.
+The bytes with the given values.
 
 - Pure.
-- Failure: fault `InvalidArgument` for an element outside 0..255.
+- Failure: fault `InvalidArgument` when an element is outside 0..255.
 - Example: `from_array([0, 128, 255])`
 
 #### `to_array`
@@ -1216,32 +1236,10 @@ Copies integers in the inclusive range 0..255 into a binary value.
 to_array: (content: Bytes) => int[]
 ```
 
-Copies each byte into an integer array.
+The values of the bytes, each in 0..255.
 
 - Pure.
 - Example: `to_array(encode('AB'))` gives `[65, 66]`
-
-#### `size`
-
-```camel
-size: (content: Bytes) => int
-```
-
-The number of bytes in the binary value.
-
-- Pure.
-- Example: `size(encode('abc'))` gives `3`
-
-#### `concat`
-
-```camel
-concat: (left: Bytes, right: Bytes) => Bytes
-```
-
-Concatenates two binary values without decoding either one.
-
-- Pure.
-- Example: `concat(encode('header'), from_array([0, 255]))`
 
 <a id="ckpt"></a>
 
