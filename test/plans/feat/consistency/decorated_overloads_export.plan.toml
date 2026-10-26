@@ -54,7 +54,7 @@ assert(out === "2.5", `unexpected output: ${out}`)
 
 [[tests]]
 name = "decorated_overloads_export.no_function_value"
-desc = "A name that stands for two functions has no function value, in the importing module as in the declaring one: `->map<lib::bump>` is refused, naming both functions."
+desc = "A name that stands for two functions has no function value, in the importing module as in the declaring one: `->map<lib::bump>` is refused, naming both functions. Each is listed by the type it has, and neither overload writes a resource clause, so each carries what its body was measured to reach: `pure`."
 kind = "negative"
 case = "../../../cases/consistency/decorated_overloads_export/err_no_function_value.cml"
 args = ["-E", "short", "${case}"]
@@ -62,5 +62,5 @@ backends = ["nvm"]
 backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
-expect_output_contains = ["name=SemanticDiag::FunctionNameAsValue", "err_no_function_value.cml:11:29:", "names 2 functions of that name [(x: int) => int; (x: float) => float]"]
+expect_output_contains = ["name=SemanticDiag::FunctionNameAsValue", "err_no_function_value.cml:11:29:", "names 2 functions of that name [(x: int) => int pure; (x: float) => float pure]"]
 timeout_ms = 20000

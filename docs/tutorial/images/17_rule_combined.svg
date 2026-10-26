@@ -12,7 +12,7 @@
 <text text-anchor="middle" x="124" y="-457.79" font-family="Times,serif" font-size="14.00">标准库的定律：x * 3 + x * 5 剩下一乘</text>
 <g id="clust1" class="cluster">
 <title>cluster_F05</title>
-<g id="a_clust1"><a xlink:title="(x: int) =&gt; int">
+<g id="a_clust1"><a xlink:title="(x: int) =&gt; int pure">
 <polygon fill="none" stroke="black" points="67,-8 67,-441.99 181,-441.99 181,-8 67,-8"/>
 <text text-anchor="middle" x="124" y="-426.79" font-family="Times,serif" font-size="14.00">combined</text>
 </a>

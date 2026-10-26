@@ -1087,6 +1087,21 @@ void Builder::buildFuncBody(
         }
         bodyStates_[graph.get()] = BodyState::Built;
         unit_->builtBodies.push_back(graph);
+        // A function that wrote no clause about resources promises what its body reaches
+        // (design principles 3.3, effects plan 5). What it reaches is measured here, while the
+        // body is in hand, and written onto its own signature -- the open one, which no other
+        // function shares and which every value of this function is made from, so that a value
+        // passed to a position that asks for resources is judged against the same set the
+        // declaration is. A measured set that cannot be written as a clause (`anyOf`: a class
+        // the clause has no name for, the conservative reading of a call through a value that
+        // writes no clause) leaves the signature as it is rather than promising too little.
+        if (graph->funcType() != nullptr &&
+            graph->funcType()->resources().mode == camel::core::sem::ResourceSignature::Mode::Generic) {
+            if (const auto measured = footprintOf(graph.get());
+                measured.has_value() && measured->anyOf.empty()) {
+                graph->setResources(*measured);
+            }
+        }
         if (recorder_) {
             recorder_->functionBuilt(gct->origin(), name, graph->graphId(), funcType);
         }
