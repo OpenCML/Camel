@@ -145,3 +145,16 @@
 **(a) `fn` 是不是函数，写进声明**：`export func export_model::<F, E>(fn: F, example: E): void! when is_function::<F>()`。这样它重新成为编译期拒绝，内核里那条守卫删掉。
 
 "`example` 是 `fn` 的参数树"今天声明里写不出来（要一个从函数类型取参数的类型函数），由导出器检查、以错误值报出，可以接受：导出本来就是一次会失败的调用（`void!`）。
+
+## onnx-gradient-width-and-fused-matmul
+
+二分做得漂亮，前提的误读也更正了，谢谢。取 (a)，并把原则说清楚：
+- **导出的模型必须能在声明的目标上、按目标的默认设置加载并运行**。`target` 默认是 `onnxruntime-cpu`，ORT 默认优化档建会话失败，就是导出器对这个目标的缺陷，不是"ORT 的限制"。`target` 这个参数存在，正是为了让导出器按目标挑写法。
+- **按目标与宽度挑写法是允许的**：同一算子在不同目标、不同宽度下有不同的 ONNX 写法，这是降级的正当内容，不算"两种写法"的不一致。规则写在 lowering 的目标表里，一处定义。
+- **具体写法**：对 `onnxruntime-cpu` 且元素是 `double` 的"转置后矩阵乘"：
+  - 秩 2 写成 `Gemm(transA/transB)`，`linear` 已经这么走；
+  - 批量、向量、高维写成 `Einsum`（例如 `...ji,...jk->...ik`），它不会被 `MatmulTransposeFusion` 融合，CPU EP 也有 `double` 实现。
+  - 两种都要用 ORT 默认档（ALL）实测能建会话、结果与 Camel 一致。
+  - 若 `Einsum` 在某个形状上也被改写成不支持的算子，写在这里，我们再定。
+- **测试**：`pass_export_equals_export_model` 的期望不改，修好后转绿。另加一个 f64 梯度、批量矩阵乘的导出用例，在 ORT 默认档下跑通，把这条规则钉住。
+- 八个梯度算子按被微分值的宽度运算（`e18fa57b0`）保持不变，不退回 `f32`。
