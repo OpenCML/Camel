@@ -63,7 +63,7 @@ digraph GraphIR {
         N15 -> N17 [label="0|0", type="CTRL"];
     }
     O00 [label="EXIT", type="EXIT"];
-    N18 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="18:0-22:1", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", value_type="() => int"];
+    N18 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="18:0-22:1", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", value_type="() => int uses stdout"];
     N19 [label="CALL", type="CALL", value_type="int"];
     N19 -> O00 [label="0", type="EXIT"];
     N18 -> N19 [label="0|0", type="WITH"];
