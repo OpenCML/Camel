@@ -1619,3 +1619,30 @@ Linux 包在 manylinux 里构建，用 auditwheel 修正标签，并在构建时
 4. **故障**：`isIsolatableFault` 是手写白名单，默认"不能隔离"，新的故障种类会静默逃出 `attempt`。改成默认可以隔离，只把确实不能隔离的（比如内存耗尽）列出来。并行 `map` 出故障后下标更小的元素是否还执行，是设计原则第 15 节里列着的待定问题，先补一条用例钉住现在的行为，四个后端一致，语义等负责人定。
 5. **死代码和过时说明**：`loop_driver.h` 的 `driveLoopRounds` 和它的宿主协议没有调用者，删掉，头注释按现在的结构改；`taskflow.h` 描述了一个 `gen.cpp` 说并不存在的 GC 窗口，改正；**代码里还有 23 处 `DESIGN-QUESTION` 标记**：把它们逐条列进一个问题页给我，答完就删掉标记，代码里不留悬而未决的问题。
 6. 其余照报告：GC 停顿时持锁最长 500 ms；JIT 里复制粘贴来的 `LDIV` 标志（先写用例确认）；大函数拆分；8 条缺失的一致性用例。
+
+## 代码审查：前端、Python 互操作、命令行与工具（返工）
+
+三份完整报告：`docs/handover/reports/code-review-frontend.md`、`code-review-python.md`、`code-review-tools.md`。要点：
+
+**前端**
+1. **一元运算符的优先级**：原则 4.2 与语言参考 6.12 按裁定是"一元 `-`、`!`、`~` 比 `->`、`^` 松"，解析器还是紧的（`!xs->f` 读成 `(!xs)->f`）。改解析器，配用例。`02_lexical.md:14` 的续行记号表里还有已不存在的 `?..`、`is`、`\`，删掉。
+2. **词法**：未闭合的字符串（含 f-string）会一直吞到文件里最后一个转义引号（`lexer.cpp:704-741`），改成在行尾或文件尾报未闭合；`007.5` 被接受而 `007` 被拒，统一成"不允许前导零"。
+3. 写得出、到后面才报"不支持"的写法：`t[a:b, c]`（下标那一项在实现）、带类型参数的 `fact`、`yield`（生成器车道）、`{ ...` 结构体字面量（文法里删掉）。
+4. 诊断措辞：`Throw*` 的消息和五条 `?->` 的帮助随错误系统一起改；`InvalidAnnotation` 提到已删除的 `@name(args)`，删掉；注册表注释里的"以前"叙述删掉。报告末尾有删除 `throw`、`?->`、`module` 时要改的文件逐行清单，照它做。
+5. `report.cpp` 按记号文本重新诊断、376 行，语句起始表里还有 `module`、缺几个真的语句起始符；块级 `recover` 在 `import`、`module` 处停下会连锁报错。诊断容器的 `add()` 是平方级，警告不去重，`discarded_` 在锁释放后按引用返回，`stage` 读进程全局变量。都按报告改。格式化器没有改变语义的规则；补一个"格式化后再编译、图相同"的批量检查。
+
+**Python 互操作**
+1. **DLPack 导入在确认成功之前就把胶囊改名为 `used_dltensor`**，导入失败（f16、CUDA 张量、带步长的视图）就泄漏生产者的内存，还吞掉真正的 `__dlpack__` 错误。成功后再改名，错误原样报。
+2. **C++ 异常会穿出 `sessionCall`**（`Context::create`、`libraryFunction`、分配失败），让解释器终止。边界上全部转换成 Python 异常。
+3. **返回的数组是 Camel 内存的可写视图**，Python 能改坏模块常量：设 DLPack 只读标志和 `writeable=False`（与内存审查第 4 条同一件事）。
+4. 只有一个共享的 Context，之后的 `load()` 搜索路径被忽略，失败的查找一直缓存。
+5. **按 §10.7 补齐**：泛型导出函数被拒，要按宿主实参类型实例化；调用 Camel 期间不释放 GIL，要释放。
+6. **没有稳定 ABI**：扩展按每个 CPython 版本编（Linux cp311、Windows cp310、macOS 没有），3.12、3.13 的用户 `import camel` 失败。按交接说明 5.37 做成 abi3，配齐三个平台。冒烟测试加 `--no-index`，Windows 的冒烟要真调用一个函数。
+7. `modules/python`：`pyToCamel` 外层的 `catch (...)` 把所有具体错误换成"转换失败"；`py::cast` 静默把 `5` 当 `true`、`bytes` 当 `string`、`1e300` 当 f32 的 `inf`（违反不做隐式转换，改成拒绝）；site-packages 路径拼成了不存在的 `lib/python/site-packages`；Python 异常丢了类别，也没有 `T!` 结果（按错误种类表映射）；`python_rules.cml` 还在用 `throw`。CLI 与 API 的行为差异（API 不跑遍流水线、`CAMEL_HOME` 优先级不同）统一。
+
+**命令行与工具**
+1. **不起作用的选项**：`-n/--no-cache`、`-S/--scheduler`、`inspect -p`、`check -c/-e/-o`、`-d/--docs`（打印 "Not implemented yet" 后退出 0）没有读取方，`-P/--profile` 在 release 下什么都不写。实现或删掉，不留空选项（`-d` 这种"未实现"直接删）。`--cache-dir` 按 GPU 设计稿的磁盘缓存实现时再加。
+2. **环境变量开关**（项目规定不用环境变量切换行为）：`CAMEL_TENSOR_ISA`、`CAMEL_ONNX_*`、`CAMEL_TIME_PHASES`、`CAMEL_COLL_*`、产品代码里的 `CAMEL_TILES_TEST_INVALIDATION`、"legacy" 别名 `CAMEL_MODULE_PATH`：改成命令行选项或删掉。深度上限在 CLI 校验过又在 `limits.cpp`、`standalone/core.h` 再读一遍，只留一处。8 个测试计划设置了不再读取的 `CAMEL_GC_ENABLE_YOUNG_COPYING=0`，删掉。
+3. **退出码**：用法错误统一为 2；`parseArgs` 里九处 `std::exit(1)` 跳过了运行时清理，改成返回；`runCommand`（670 行）里 `catch (Diagnostic &d)` 之后没有 `return`，一个 persisted 诊断会什么都不打印就退出 0。
+4. **语言服务器**：`parametersIn`（`queries.cpp:1244`）把 `=>` 的 `>` 当成括号，`map`、`filter`、`sort_by` 的签名提示坏掉；内建类型表缺 `bf16`、`f16`；取消打断不了 `analyze`；`catch (...) {}` 静默吞错；`--dump-model` 没给文件时开始读标准输入，改成报错。
+5. 测试运行器 2877 行（约 400 行是时间槽记账）拆开；`known_fail` 没有使用者，删掉；指向仓库外脚本的错误信息改正；`tools/debugger/` 的 5 个 `DESIGN-QUESTION` 并进上一节要求的问题页。
