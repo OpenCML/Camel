@@ -2,7 +2,7 @@ id = "compile.when"
 order = 328
 tier = "fast"
 tags = ["feat", "compile", "generics", "overloads"]
-desc = "Applicability conditions: `when` after a function signature (design principles 5.13). The condition is a compile-time predicate over the declaration's type parameters and `with` parameters, evaluated at instantiation; a false condition makes the overload inapplicable, not erroneous, and the call site lists the unmet conditions."
+desc = "Applicability conditions: `when` after a function signature (design principles 4.4). The condition is a compile-time predicate over the declaration's type parameters and `with` parameters, evaluated at instantiation; a false condition makes the overload inapplicable, not erroneous, and the call site lists the unmet conditions."
 
 # Each case states what it pins. A condition that does not hold must not become a declaration
 # error, and a condition that cannot be evaluated must not be taken for `true`; the call-site

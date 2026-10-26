@@ -1,5 +1,5 @@
 /**
- * A tuple may hold a stream (design principles 5.4; the ruling's `tee` hands one out as a
+ * A tuple may hold a stream (design principles 5.4; the rule's `tee` hands one out as a
  * tuple): the item is written and passed on like any other, and building such a tuple is what
  * `tee` and a loop that carries a stream beside its state both need.
  */

@@ -27,7 +27,7 @@ using namespace camel::core::error;
 
 // ---- min, max and abs over bf16 and f16 ------------------------------------------------------
 //
-// The ruling docs/handover/reviews/reduced-precision.md asks for these three (item 2: "`math::min`
+// the rule the rule asks for these three (item 2: "`math::min`
 // /`max`/`abs` 等补 bf16/f16"), and design principles 7.3 states how a scalar operation of one of
 // the two types is computed: in f32, on operands widened to f32, rounded once into the element
 // type — the same one arithmetic path the tensor kernels use (modules/tensor/dtype.h).
@@ -299,7 +299,7 @@ std::unordered_map<std::string, operator_t> getMathOpsMap() {
     ops.merge(std::unordered_map<std::string, operator_t>{
         {"abs_i", __math_abs__},     {"abs_l", __math_abs__},     {"abs_f", __math_abs__},
         {"abs_d", __math_abs__},     {"abs_c", __math_abs__},     {"abs_z", __math_abs__},
-        // `abs` over the two reduced-precision floating types (ruling item 2): the sign cleared
+        // `abs` over the two reduced-precision floating types: the sign cleared
         // on the value the operand widens to, stored back once (an exact operation; numeric.cpp).
         {"abs_bf", __math_abs_bf__}, {"abs_f6", __math_abs_f6__},
         {"exp_f", __math_exp__},     {"exp_d", __math_exp__},     {"exp_c", __math_exp__},

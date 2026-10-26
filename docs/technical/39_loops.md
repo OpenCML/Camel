@@ -122,8 +122,7 @@ iteration code of its own, and `std::cpp` handles the string conversion (`rt::ch
 stay untranslated types there.
 
 A numeric array used to ask the tensor module for its elements (`tensor:iter`, one row a round);
-the author's ruling of 2026-10-24 (`docs/handover/reviews/questions-2026-10-24-evening.md`
-section `loop-domain-through-the-tensor-iterator`) moved that rule into the core, for every
+the rule of 2026-10-24  moved that rule into the core, for every
 array, because a `for` over an array is core semantics and the operator in between hid a constant
 array's row count from `core.loopDomain` (`docs/technical/40_graph_facts.md`, the fact is
 `shape[0]`). The module's `iter` goes away with the P4 alias (one thing, one spelling).
@@ -165,7 +164,7 @@ the array types and the body's exit to be the state types followed by their elem
 ### 3.2 The tape of a differentiated loop
 
 autodiff (`modules/autodiff/pullback.cpp`) uses the collection slots as its tape
-(`handover note ⟨77e9e83⟩ (H4)`, "H4d 第二步"). The rewrite decodes the loop's body graph and
+(``, "H4d 第二步"). The rewrite decodes the loop's body graph and
 differentiates it as a function of the captures and the state, as it differentiates any other
 graph, keeping the values its pullback reads as *residual ports*: the operands of every rule, and
 for a call inside the body the callee's pullback closure. The body of the loop node becomes that
@@ -344,7 +343,7 @@ which the call-count threshold used to leave interpreted. The compiled round is 
 8.4 ns for the same work as a compiled tail recursion; the difference is the two helper calls and
 the frame traffic of every round. The target 0.155 s is therefore still 2.3 times away.
 
-H56 (`handover/H56-fvm-loop-round`) took the interpreter's own round down, without changing the
+H56  took the interpreter's own round down, without changing the
 bytecode or the plan: the state bindings (`bindLoopState`) are copied in place and inline for the
 shapes a loop actually has — the components of a multi-value state (`ExecLoop::stateComponents`),
 and the one value that is the state itself — instead of running every component through
@@ -378,7 +377,7 @@ What is left, and why the targets of H43 are not met yet:
   fast as the same work written as a recursion over parameters, both being interpreted. Reaching
   24.5 ns needs fewer round trips through the dispatch loop: a compiled loop (next item), or a
   superinstruction that runs a round inside one bytecode. After H56 the round is 28.4–30.2 ns
-  against a 31 ns tail recursion — the ruling's bar (no slower than the tail recursion of the same
+  against a 31 ns tail recursion — the rule's bar (no slower than the tail recursion of the same
   work) is met; 24.5 ns still needs the round as one instruction, which is the next step.
 - `std::jit` now runs the rounds of the loop in compiled code (21.6 ns a round against 35.0 in the
   interpreter after H56; measured 36.3 in the interpreter when H43 wrote this), but each round is

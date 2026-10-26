@@ -43,8 +43,7 @@ const Array *asFloat(const Array *t, mm::IAllocator &allocator) {
 /// The element type of `asFloat`'s argument (f32 or f64): what the gradient is written at, what
 /// its additions are done at and what one rounding stores back. The accumulator is the input's
 /// element type, so an f32 sum keeps every bit it has today (f32 additions, f32 answer) and an
-/// f64 sum adds f64s and rounds once into f64 (design principles 7.3; the ruling
-/// docs/handover/reviews/reduced-precision.md (d): a float reduction returns its input's element
+/// f64 sum adds f64s and rounds once into f64 (design principles 7.3: a float reduction returns its input's element
 /// type and accumulates in f64). A bf16 or f16 arm would accumulate in f64 and would need the
 /// half types' own store, so it is not added here.
 template <TypeCode Code>
@@ -262,8 +261,7 @@ Array *sumToArm(const Array *src, std::span<const int64_t> shape, mm::IAllocator
 /// Accumulation type: the input's element type, and one arm per admitted type (f32 and f64). An
 /// f32 gradient is added as f32 from +0 and answers f32, exactly as before; an f64 gradient is
 /// added as f64 from +0 and answers f64 in one rounding. The accumulator is never narrower than
-/// the values it adds (design principles 7.3; the ruling docs/handover/reviews/reduced-precision.md
-/// (d) states the one-rounding rule for the reductions that return their input's element type, and
+/// the values it adds (design principles 7.3; the rule states the one-rounding rule for the reductions that return their input's element type, and
 /// this is one of them), and the width is named by the declaration rather than read at run time:
 /// `sumToArm<Float32>` is instantiated as the f32 arm and `sumToArm<Float64>` as the f64 arm, and
 /// no code inside either one asks what the element type is.

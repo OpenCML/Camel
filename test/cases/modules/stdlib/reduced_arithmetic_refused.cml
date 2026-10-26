@@ -9,7 +9,7 @@
  * run time.
  *
  * The arithmetic and comparison a bf16 value does have -- `+`, `-`, `*`, `/`, `**`, `==`, `<`, ...
- * (the rule docs/handover/reviews/reduced-precision.md item (b)) -- are not refused, and
+ * (the rule the rule item (b)) -- are not refused, and
  * test/cases/modules/stdlib/reduced_scalar.cml pins what they compute. This case used to assert
  * the refusal of `+`, which was true before that item; it is re-pointed at the operation that is
  * genuinely refused rather than deleted, so the diagnostic keeps a case that exercises it.

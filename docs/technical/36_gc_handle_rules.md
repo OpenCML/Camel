@@ -3,7 +3,7 @@
 This is the contract between the collector and every piece of C++ that touches run-time values:
 operators of the modules under `modules/`, the built-in operators, the schedulers, the macro
 evaluator and the passes. It will become part of the documentation of the public module
-interface. It implements the ruling of `docs/design-principles.cn.md` 10.5: Camel-native objects
+interface. It implements the rule of `docs/design-principles.cn.md` 10.5: Camel-native objects
 may be managed by a generational collector and may move; foreign memory is owned by a
 Camel-native object and stays outside the movable heap; **a module does not keep a raw pointer
 to a Camel object across calls.**
@@ -217,7 +217,7 @@ root tracers), and nothing read before a call is used after it.
   takes the second way: one `RuntimeGraphDraftSession` rewrites graph after graph, a `when`
   condition is Camel code and so a safepoint, and `RuntimeGraphDraftSession::RootScope` keeps the
   static values of every draft the session has opened relocatable until the commit reads them
-  (`modules/rewrite/module.cpp`; the defect and its reproducer are in `handover note ⟨b2dbdd6⟩ (H74)`). A
+  (`modules/rewrite/module.cpp`; the defect and its reproducer are in ``). A
   transaction opens one too, for its whole lifetime: its value may stay reachable across
   safepoints while the drafts are open (`modules/graph/txn.cpp`).
 - **The invariant is checked, not remembered.** A Debug build checks it at the start of every

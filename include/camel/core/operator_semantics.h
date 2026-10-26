@@ -277,7 +277,7 @@ struct RewriteErrorBound {
  * were measured with (1.2e-7 and 2.3e-16, one full ulp of the type where this is the half of it,
  * rounded to two digits). Changing those halves every f32 bound and moves readings this lane is
  * required to leave alone, so it is a numeric-contract change of its own and is filed as a
- * question (`docs/handover/questions/`), not made here.
+ * question for the language author, not made here.
  */
 double elementEpsilon(type::TypeCode element);
 

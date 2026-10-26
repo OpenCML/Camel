@@ -2,7 +2,7 @@ id = "parse.rules"
 order = 303
 tier = "fast"
 tags = ["feat", "parse", "rules"]
-desc = "Rule declarations (rewrite design 2): `rule name(params) when condition { left => right }`, `<=>`, `const` parameters. The condition is part of the signature, so it is written before the body it guards (design principles 4.4; the ruling of 2026-10-24). The grammar reads them and the formatter writes them; the compiler makes the pair of functions and the value of type Rule (module rewrite)."
+desc = "Rule declarations (rewrite design 2) (design principles 4.4): `rule name(params) when condition { left => right }`, `<=>`, `const` parameters. The condition is part of the signature, so it is written before the body it guards. The grammar reads them and the formatter writes them; the compiler makes the pair of functions and the value of type Rule (module rewrite)."
 
 [[tests]]
 name = "rules.ast"
@@ -17,7 +17,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "rules.generic_head"
-desc = "A rule declares its type parameters after its name, like a function: `rule keep::<T>(x: T, y: T)` parses into the same pair of functions, `keep__lhs` and `keep__rhs`. The type parameters are visible at the head, and the head changes the maker: the pair is not passed as two function values -- a generic function has no value (design principles 5.5) -- but named to `__rule_generic`, which registers their templates and gives the rule value the id it keeps. The `Rule` a generic head makes is a value the rewrite engine instantiates where it matches (the ruling of 2026-10-23 on `generic-rule-instantiation`)."
+desc = "A rule declares its type parameters after its name, like a function: `rule keep::<T>(x: T, y: T)` parses into the same pair of functions, `keep__lhs` and `keep__rhs`. The type parameters are visible at the head, and the head changes the maker: the pair is not passed as two function values -- a generic function has no value (design principles 5.5) -- but named to `__rule_generic`, which registers their templates and gives the rule value the id it keeps. The `Rule` a generic head makes is a value the rewrite engine instantiates where it matches ."
 kind = "behavior"
 case = "../../../cases/parse/rules/generic_head.cml"
 args = ["${inspect_ast}", "${case}"]
@@ -76,7 +76,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "rules.when_after_the_body"
-desc = "A `when` written after the body of a rule is refused by name: the condition of a declaration is written before the body it guards (design principles 4.4; the ruling of 2026-10-24 on the `when` placement), and the diagnostic says where it belongs instead of only that a token did not fit."
+desc = "A `when` written after the body of a rule is refused by name (design principles 4.4): the condition of a declaration is written before the body it guards, and the diagnostic says where it belongs instead of only that a token did not fit."
 kind = "behavior"
 case = "../../../cases/parse/rules/when_after_body.cml"
 args = ["-E", "short", "${case}"]
@@ -89,7 +89,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "rules.format_snapshot"
-desc = "camel-format writes the rule declarations on one line each, the condition between the parameters and the body (design principles 4.4; the ruling of 2026-10-24)."
+desc = "camel-format writes the rule declarations on one line each, the condition between the parameters and the body (design principles 4.4)."
 kind = "snapshot"
 tool = "camel-format"
 case = "../../../cases/parse/rules/declared.cml"

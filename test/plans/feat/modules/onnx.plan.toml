@@ -533,7 +533,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "export_gated_gru_forward"
-desc = "E13/T5: a data-dependent branch inside a statically unrolled recurrence (GRU cell update gated on mean(|x_t|), T = 3) exports as standard If operators. The gate at step t+1 depends only on the model input, so the export has always had a choice between copying the continuation into both arms of every branch (2^3 - 1 = 7 Ifs) and deciding each gate after the previous branch joined (one If per gate, 4 with the last cell nested in an arm). H44c's cache that does not own its graphs made the second shape the one the exporter emits: with the optimizer's specialization no longer pinned in the program, the export specializes the continuation once more and hoists the next gate out of the arms. The two shapes compute the same function; the loss the model returns was checked with onnxruntime against the interpreter for the case's input (0.0632271543) and for an all-ones input (0.0852279197), and the count of Ifs and the top-level op list are asserted so a change of shape is noticed. The reading after the specialization fixed point (the ruling of 2026-10-24 evening, item 3, which removed the eight-copy bound) shapes the next gate in the second arm with a `Slice` and a `Reshape` and no `Concat` between them -- an all-constant length folds to one `int64s` initializer -- with the count of Ifs unchanged at 4. (The earlier reading of this same case had a `Concat` there; it came from the parts of a constant literal being concatenated, which the exporter no longer does.)"
+desc = "E13/T5: a data-dependent branch inside a statically unrolled recurrence (GRU cell update gated on mean(|x_t|), T = 3) exports as standard If operators. The gate at step t+1 depends only on the model input, so the export has always had a choice between copying the continuation into both arms of every branch (2^3 - 1 = 7 Ifs) and deciding each gate after the previous branch joined (one If per gate, 4 with the last cell nested in an arm). H44c's cache that does not own its graphs made the second shape the one the exporter emits: with the optimizer's specialization no longer pinned in the program, the export specializes the continuation once more and hoists the next gate out of the arms. The two shapes compute the same function; the loss the model returns was checked with onnxruntime against the interpreter for the case's input (0.0632271543) and for an all-ones input (0.0852279197), and the count of Ifs and the top-level op list are asserted so a change of shape is noticed. The reading after the specialization fixed point  shapes the next gate in the second arm with a `Slice` and a `Reshape` and no `Concat` between them -- an all-constant length folds to one `int64s` initializer -- with the count of Ifs unchanged at 4. (The earlier reading of this same case had a `Concat` there; it came from the parts of a constant literal being concatenated, which the exporter no longer does.)"
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_gated_gru_forward.cml"
 args = ["${case}"]
@@ -670,8 +670,7 @@ expect_exit = 0
 expect_stdout_contains = ["onnx.checker ok", "onnx training-step check: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # The cost bound is this case's own CPU time (user + system) and the timeout is its liveness bound,
-# by the rule (docs/handover/reviews/questions-2026-10-23.md,
-# "declaration-cost-gate" (a)), quoted in full on resnet_gradient_smooth_vs_torch64 in
+# by the rule, quoted in full on resnet_gradient_smooth_vs_torch64 in
 # test/plans/feat/modules/autodiff.plan.toml. The case is Python driving 123 ONNX Runtime runs, so
 # the reading sums ~5.8 threads and the test's own CPU exceeds its wall clock -- the shape
 # test/tools/run-tests.mjs names when it says such a test "states its cost as a `cpu_budget_ms` if
@@ -1963,7 +1962,7 @@ timeout_ms = 240000
 
 [[tests]]
 name = "export_loop_values_array"
-desc = "A tail recursion whose depth depends on the model input returns, next to its state, an int array built from the counter (`[k, k + 1]`, two elements on every round), so the export succeeds and the model keeps both outputs: whether a Loop can hand a value out is the same fact as for its state — the shape does not change from one round to the next (the ruling of 2026-10-24-evening, growable-array-vs-tensor-in-the-onnx-exporter) — not what the type prints. The case reads `ks[1]` out of the returned array at run time (7 at k = 6), and the export lowers that read to a Gather; the trip count is a constant here (`k >= 6`), so the recursion is unrolled rather than emitted as a Loop."
+desc = "A tail recursion whose depth depends on the model input returns, next to its state, an int array built from the counter (`[k, k + 1]`, two elements on every round), so the export succeeds and the model keeps both outputs: whether a Loop can hand a value out is the same fact as for its state — the shape does not change from one round to the next  — not what the type prints. The case reads `ks[1]` out of the returned array at run time (7 at k = 6), and the export lowers that read to a Gather; the trip count is a constant here (`k >= 6`), so the recursion is unrolled rather than emitted as a Loop."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_loop_values_array.cml"
 args = ["${case}"]
@@ -2013,7 +2012,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "export_loop_carried_array"
-desc = "A tail recursion whose depth depends on the model input carries an int array whose length is the same on every call (`[k]` is one element each round), so the export succeeds: whether a Loop can keep a value is a fact about the loop body — the shape of the carried state does not change from one round to the next — not what its type prints (the ruling of 2026-10-24-evening, growable-array-vs-tensor-in-the-onnx-exporter). The type printer's `[]` spelling used to refuse this case. The trip count is a constant here (`k >= 3`), so the export unrolls the recursion and the model keeps the input-dependent If; the case locks that the array spelling no longer refuses it."
+desc = "A tail recursion whose depth depends on the model input carries an int array whose length is the same on every call (`[k]` is one element each round), so the export succeeds: whether a Loop can keep a value is a fact about the loop body — the shape of the carried state does not change from one round to the next — not what its type prints. The type printer's `[]` spelling used to refuse this case. The trip count is a constant here (`k >= 3`), so the export unrolls the recursion and the model keeps the input-dependent If; the case locks that the array spelling no longer refuses it."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_loop_carried_array.cml"
 args = ["${case}"]
@@ -2038,7 +2037,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "export_loop_carried_array_field"
-desc = "A tail recursion whose depth depends on the model input and whose carried state is a struct with an int[] field the body appends to is refused by export_model at the recursive call: a Loop's state input has one shape for every round, so the criterion is the fact the ruling of 2026-10-24-evening asks for — the body appends to this value, so its length changes from one round to the next (growable-array-vs-tensor-in-the-onnx-exporter). The diagnostic names the array field and the fact, and no model file is written. (The refusal used to be justified by what the type printer spelled, not by the fact.)"
+desc = "A tail recursion whose depth depends on the model input and whose carried state is a struct with an int[] field the body appends to is refused by export_model at the recursive call: a Loop's state input has one shape for every round, so the criterion is the fact the rule asks for — the body appends to this value, so its length changes from one round to the next (growable-array-vs-tensor-in-the-onnx-exporter). The diagnostic names the array field and the fact, and no model file is written. (The refusal used to be justified by what the type printer spelled, not by the fact.)"
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_loop_carried_array_field.cml"
 args = ["${case}"]

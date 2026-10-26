@@ -1020,9 +1020,9 @@ class ModelBuilder {
             // built, so a module a text imports but never calls is not `loaded()`: ask for
             // them, as `camel inspect --ops` does before it reads a module's entities and as
             // `ProgramExports::importedEntity` does before it resolves an imported name.
-            // Requiring `loaded` here was the hole of handover a migrated module
-            // registers no signature in C++ (`exportEntity` is gone for every declared name),
-            // so completion after `math::` was empty.
+            // Requiring `loaded` here was a hole: a migrated module registers no signature in C++
+            // (`exportEntity` is gone for every declared name), so completion after `math::` was
+            // empty.
             if (!mod->loaded()) {
                 try {
                     mod->declareEntities();

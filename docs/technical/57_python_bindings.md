@@ -185,7 +185,7 @@ Successfully installed camel-lang-0.2.30
 
 - **只有非泛型的 `export func`**：`libraryFunction` 不接受泛型函数（它自己就拒绝），所以
   `python_rules.cml` 里的函数都写成具体类型。泛型函数如何从 Python 传类型实参，是**未定的语义**，
-  已记进 `docs/handover/questions/`。
+
 - **只有 CPU、连续、单 lane 的数值数组**：`fromDLPack` 对非 `kDLCPU`、`strides != nullptr`、
   `byte_offset != 0`、非 1 lane、未知 dtype 直接抛 `std::invalid_argument`，绑定把这些原样报给
   Python。这不是限制参数，是运行时的既有契约。

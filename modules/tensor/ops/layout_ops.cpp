@@ -87,9 +87,7 @@ slot_t reshapeKernel(ArgsView &, ArgsView &norm, context::Context &) {
         const std::vector<int64_t> target = parseIntArray(norm.get<::Array *>(1), norm.type(1));
         Array *t = tensorArg(norm, 0, true);
         if (target.empty()) {
-            // No dimension at all: the value with no dimension is the element it holds (the
-            // rank-zero ruling, docs/handover/reviews/questions-2026-10-23.md section
-            // rank-zero-tensor), and `resolveReshape` refuses a value that is not one element.
+            // No dimension at all: the value with no dimension is the element it holds, and `resolveReshape` refuses a value that is not one element.
             (void)k::resolveReshape(t->shapeSpan(), target);
             return t->getSlot(0);
         }
@@ -339,13 +337,9 @@ std::vector<int64_t> intListArg(ArgsView &args, size_t index, std::string_view o
 
 // The slice of the first axis on a tensor, a view sharing the block, was this module's own
 // subscript kernel and type rule (`t[a:b]`); both are gone, because a subscript is answered by the
-// core's one slice operator and its one adjoint rule for any rank and any element type (the
-// author's ruling of 2026-10-25, section discrete-gradient-and-rank-one-slice-ownership, point 2:
-// 两种 `[]` 都只由核心回答; `docs/design/arrays-memory/plan.cn.md` 5.1a: 模块副本与按类型分派的那段一起删掉). The function
+// core's one slice operator and its one adjoint rule for any rank and any element type. The function
 // form below stays: it answers any axis and any rank, and its reading of its arguments -- a
-// negative bound counts from the end, an axis is normalized -- is not the core's yet (see
-// docs/handover/reviews/questions-2026-10-24-evening.md, section
-// slice-function-form-and-what-the-core-answers).
+// negative bound counts from the end, an axis is normalized -- is not the core's yet.
 
 // take(t, indices): rows along the first axis, in the order the indices give.
 slot_t takeKernel(ArgsView &, ArgsView &norm, context::Context &) {
@@ -601,8 +595,7 @@ void concatVjp(VjpBuilder &b, const VjpCall &call) {
     // 3 (`src/compile/gct/builder.cpp`: `intConstant((written[1] ? 1 : 0) | (written[0] ? 2 : 0))`
     // over the start and the end) and the step is the constant 1. The adjoint slices dy out with
     // the one core operator, the same node the subscript builds, so concat's adjoint no longer
-    // means a slice of the module's own (the author's ruling of 2026-10-25: every call is the
-    // core's).
+    // means a slice of the module's own.
     if (lhsTensor) {
         b.accumulateGradient(
             lhs,

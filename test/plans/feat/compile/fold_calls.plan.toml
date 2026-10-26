@@ -2,7 +2,7 @@ id = "compile.fold_calls"
 order = 344
 tier = "fast"
 tags = ["feat", "compile", "constants", "folding"]
-desc = "Build-time folding of a call to a pure function with constant arguments (design principles 5.1, 6.5, handover H271): the same evaluator a `when` condition uses reads the body, so a function that computes a field name, an extent or a depth can be called where a compile-time constant is required. A call that does not reduce to one is refused by its own name. Folding happens where a constant is required (a static-access key, a `constas` value); a call in an ordinary value position keeps the ordinary build, so a later pass still sees the program as written."
+desc = "Build-time folding of a call to a pure function with constant arguments (design principles 5.1, 6.5): the same evaluator a `when` condition uses reads the body, so a function that computes a field name, an extent or a depth can be called where a compile-time constant is required. A call that does not reduce to one is refused by its own name. Folding happens where a constant is required (a static-access key, a `constas` value); a call in an ordinary value position keeps the ordinary build, so a later pass still sees the program as written."
 
 # The four refusals are separate cases because each names the call and says what stands in the
 # way: an argument that is not a constant, a declaration with effects, a recursion the evaluator

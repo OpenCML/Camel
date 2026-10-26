@@ -11,8 +11,7 @@
  *
  * This is the one statement of that comparison in C++, and every consumer calls it:
  *
- *   - `numeric.cpp` for f32 and f64, `operators.cpp` for bf16 and f16 (the ruling
- *     docs/handover/reviews/reduced-precision.md item 2: "`math::min`/`max`/`abs` 等补 bf16/f16"),
+ *   - `numeric.cpp` for f32 and f64, `operators.cpp` for bf16 and f16,
  *     which is why the reduced-precision overloads are the same operation on the value each
  *     operand widens to rather than a second copy that could drift;
  *   - the `array` module's `sum`, `min` and `max` kernels (builtin/operators/array_reduce.cpp):

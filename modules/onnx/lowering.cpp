@@ -411,7 +411,7 @@ Value lowerConcat(const LowerContext &ctx) {
 
 /**
  * `:op/slice_sub`: the core's one slice -- the node both `t[a:b:s]` and `slice(t, axis, a, b, s)`
- * build, for any rank and any axis (the author's ruling of 2026-10-25, design principles 5.4).
+ * build, for any rank and any axis (design principles 5.4).
  * Its words are the value, the axis, the two bounds, the step and the mask that says which
  * bounds the source wrote (`src/compile/gct/builder.cpp` fills it; the subscript's lowering
  * always writes 3, the function form leaves it out when the caller did). The mask is the core's

@@ -359,7 +359,7 @@ timeout_ms = 6000
 
 [[tests]]
 name = "unknown_pass_of_known_module"
-desc = "A C++ module that exists but contributes no pass of that name: still an unknown pass (the module is loaded, the name stays unknown), and the program does not run. (`onnx` was the example until H179 and `hash` until H163; both are declaration modules now, so their missing pass gets the H130 module-specific diagnostic, tested in feat/modules/pass_not_found. `ckpt` is the C++ module with no declaration file, so it is the subject here.)"
+desc = "A C++ module that exists but contributes no pass of that name: still an unknown pass (the module is loaded, the name stays unknown), and the program does not run. (`onnx` and `hash` are declaration modules now, so their missing pass gets the module-specific diagnostic, tested in feat/modules/pass_not_found. `ckpt` is the C++ module with no declaration file, so it is the subject here.)"
 kind = "behavior"
 case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["--output-format", "json", "${case}", "std::nvm", "ckpt::nosuchpass"]

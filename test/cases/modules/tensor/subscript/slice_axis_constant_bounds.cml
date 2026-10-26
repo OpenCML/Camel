@@ -1,8 +1,7 @@
 /**
  * A slice along an axis that is not the first, with constant bounds: the result's type keeps the
  * length of every axis the slice does not cut and states the length the bounds and the step give
- * the axis it cuts (design principles 5.4; the author's ruling of 2026-10-25, point A -- the
- * inference the module already had, which the core took over and must not lose). `m` is an
+ * the axis it cuts (design principles 5.4). `m` is an
  * `f32[3, 4]`, and `slice(m, 1, 1, 3)` cuts axis 1 into two positions, so the value is an
  * `f32[3, 2]`: `row`'s parameter states exactly that, and the call needs no conversion. A type
  * that stated neither extent (`f32[?, ?]`) would be refused here with `ArgumentNeedsConversion`.

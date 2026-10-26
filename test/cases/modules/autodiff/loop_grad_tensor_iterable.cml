@@ -1,9 +1,8 @@
 /**
  * Verifies the adjoint of a loop over a tensor's first axis, against finite differences: a numeric
- * array is a tensor, `for row in w` takes the row an index names (design principles 5.4, and the
- * author's ruling of 2026-10-24 that a `for` over any array takes its first dimension in the core),
+ * array is a tensor, `for row in w` takes the row an index names (design principles 5.4),
  * and the reverse pass scatters that round's row gradient back into the array's gradient at that
- * round's index -- the scatter-add the author's ruling of 2026-10-25 asks for beside JAX's `scan`,
+ * round's index -- the scatter-add the rule of 2026-10-25 asks for beside JAX's `scan`,
  * where a `scan` over an array's leading axis carries the per-round gradients back along it.
  *
  * The scatter is the tensor's own (`tensor:row_add_at`, `TangentSpace::scatterUri`): a row of the
@@ -12,7 +11,7 @@
  * a different pair of garbage floats on every run, with `shape(d)` = `[2]` while the value is
  * `[2, 3]` -- because an array's tangent was built from its element's tangent and came out one rank
  * short (`src/core/derivative.cpp`, the Array case of `computeTangent`; `f32[2, 3]` came back as
- * `f32[]`). The author's ruling of 2026-10-25 refuses a program that runs and gives a wrong value;
+ * `f32[]`). The author's rule refuses a program that runs and gives a wrong value;
  * `loop_grad_refuse_slice_iterable` pinned the refusal that stood in for the missing scatter, and
  * this case is that case turned back into the positive one it had to build: the readings below are
  * the adjoint itself (`d` has a 1 at every position, its own shape [2, 3]) and a finite difference

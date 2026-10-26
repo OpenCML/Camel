@@ -5,9 +5,7 @@
  * when ONNX_OUT is set, exports the model selected by MODEL.
  *
  * `gate` reads one number out of its argument, so it is written at the type that says which
- * numbers the argument holds: `f32[..]`, the generic spelling of `f32[..]` (the flip's
- * terminal spelling; the ruling of 2026-10-23 rewrites the cases rather than refusing the
- * construct). The input is loaded at that same type, because reading an element of an array
+ * numbers the argument holds: `f32[..]`, the generic spelling of `f32[..]`. The input is loaded at that same type, because reading an element of an array
  * whose element type nobody wrote is what a parameter with no element type cannot state.
  */
 module ort_models

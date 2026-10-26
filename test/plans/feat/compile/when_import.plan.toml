@@ -2,7 +2,7 @@ id = "compile.when_import"
 order = 329
 tier = "fast"
 tags = ["feat", "compile", "generics", "overloads", "modules", "import"]
-desc = "A `when` condition resolves a predicate call where its declaration is written (design principles 5.13, 10.2): the module's own names, then what its imports bring (a module prefix, a selective import, an alias), then the prelude. An imported predicate is instantiated and constant-folded exactly as a local one; a name that is not a predicate, two imports of one name, and a predicate in a module that is not imported each have their own report."
+desc = "A `when` condition resolves a predicate call where its declaration is written (design principles 4.4, 10.2): the module's own names, then what its imports bring (a module prefix, a selective import, an alias), then the prelude. An imported predicate is instantiated and constant-folded exactly as a local one; a name that is not a predicate, two imports of one name, and a predicate in a module that is not imported each have their own report."
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

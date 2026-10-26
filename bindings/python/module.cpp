@@ -31,7 +31,7 @@
  *
  * What it does not do. Only a non-generic exported function is callable (`libraryFunction`
  * refuses a generic one, which has no single graph); passing a type argument for one is a
- * question for the language author, not a choice for this file (docs/handover/questions).
+ * question for the language author, not a choice for this file.
  * Only the numeric element types DLPack names cross, and only host memory, contiguous, one lane
  * (the limits of fromDLPack/toDLPack in src/core/array/dlpack.cpp).
  */

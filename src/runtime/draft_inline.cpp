@@ -86,13 +86,12 @@ bool refinesType(camel::core::type::Type *actual, camel::core::type::Type *forma
 /// declaration leaves undetermined kept as declared. An extent that is not a constant asks
 /// nothing at a call (5.4), so an argument's exact length is a property of the value and never
 /// part of the instance — which is what lets a recursion that writes `int[]`, `T[?]` or a
-/// `Tensor` reach a fixed point instead of taking a new copy at every level (the ruling of
-/// 2026-10-24 evening, model-dependent-recursion-unrolls-after-the-flip, item 1).
+/// `Tensor` reach a fixed point instead of taking a new copy at every level.
 ///
 /// A dimension name the declaration writes (`T[n]`) is bound from the argument. `relaxNames`
 /// widens it to an unknown extent instead of binding it, which is how a recursion that carries
 /// one name to a different value at every level (polymorphic recursion) stops making new
-/// instances (the same ruling, item 2).
+/// instances.
 ///
 /// A non-array type is returned as `actual`: what a declaration says about a tuple, a struct or
 /// a scalar is not a dimension, and refining those is what this helper must not change.
@@ -1025,7 +1024,7 @@ bool specializeDirectFuncInDraft(
 
     // Type-only specialization on a call cycle has no shape bound any more. A call inside an
     // instance of the function it names reuses that instance (above), and a call whose key
-    // differs is the polymorphic case the ruling widens to `?`; what is left here is a runaway
+    // differs is the polymorphic case, which widens to `?`; what is left here is a runaway
     // guard, and passing it means the specialization did not reach a fixed point. That is a
     // compiler error naming the function: the eight-copy count this replaces used to keep the
     // current callee instead, which silently truncated the shape.

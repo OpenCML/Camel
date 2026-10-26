@@ -10,7 +10,7 @@
  * optional axis that defaults to the last one.
  *
  * Where the accumulation happens, per form (reduction and rounding are one rule,
- * design principles 7.3 and ruling reduced-precision.md (d)):
+ * design principles 7.3):
  *
  *   - `sum(t)`, `mean(t)`: accumulate exactly as the axis forms do — f64 for a floating
  *     element type (kernels/reduce.h `sumAll`), the exact int64 accumulator for an int64

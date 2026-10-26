@@ -482,8 +482,8 @@ Type *substituteExtentValues(Type *type, const ExtentValues &values, const Exten
         // where such a name lives now that `[]` is the core array type: replace them as the type
         // arguments of a module type are replaced, so the parameter of a call becomes the concrete
         // one (`f32[3]`) and an argument of another extent is refused (design principles 5.4 gives
-        // the shape check to the core; ruling 2026-10-24 evening, `print-form-flip-2026-10-25`
-        // item 1). While the name stayed in the type, an array with a named extent accepts every
+        // the shape check to the core). While the name stayed in the type, an array with a named extent
+        // accepts every
         // extent, so `total(3, ones([4]))` with `x: f32[n]` was taken as it was.
         if (const Type *named = array->withExtentValues(values, packs); named != nullptr) {
             array = const_cast<ArrayType *>(static_cast<const ArrayType *>(named));

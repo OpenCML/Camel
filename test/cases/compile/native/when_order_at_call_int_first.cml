@@ -1,9 +1,7 @@
 /**
  * The twin of `when_order_at_call_i32_first.cml`: the same program, with the two declarations of
  * `arms_kernel` written in the other order. The order of two same-named declarations whose `when`
- * conditions exclude each other says nothing about which one a call means (design principles 4.4;
- * the rule on `impl-declaration-arms`,
- * `docs/handover/reviews/questions-2026-10-23.md`), so this file must print exactly what its twin
+ * conditions exclude each other says nothing about which one a call means (design principles 4.4), so this file must print exactly what its twin
  * prints: the `i32` call is the subtraction and the `int` call is the addition.
  */
 module when_order_at_call_int_first

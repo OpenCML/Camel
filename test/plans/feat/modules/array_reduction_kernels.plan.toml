@@ -2,7 +2,7 @@ id = "modules.array_reduction_kernels"
 order = 378
 tier = "fast"
 tags = ["feat", "modules", "stdlib", "precision", "profile"]
-desc = "`array::sum`, `min` and `max` have native kernels of the `array` executor (design principles 10.4; the ruling docs/handover/reviews/questions-2026-10-23.md, section \"array-kernel-executors\": 「`array:sum`/`min`/`max` 是数组归约的实现原子」). Each kernel answers what the Camel body beside it says, and a floating-point reduction still accumulates in f64 and rounds once into the element type (7.3). The kernel is one body-less declaration per element type, each naming its own element type's operator (`array:sum_i` for `i32`, `array:sum_d` for `float`, ...) and admitting exactly that element type with its own `when`, so the element type is known where the executor is chosen and no run-time switch on it is left; an element type no declaration admits (a complex one) keeps the body."
+desc = "`array::sum`, `min` and `max` have native kernels of the `array` executor (design principles 10.4). Each kernel answers what the Camel body beside it says, and a floating-point reduction still accumulates in f64 and rounds once into the element type (7.3). The kernel is one body-less declaration per element type, each naming its own element type's operator (`array:sum_i` for `i32`, `array:sum_d` for `float`, ...) and admitting exactly that element type with its own `when`, so the element type is known where the executor is chosen and no run-time switch on it is left; an element type no declaration admits (a complex one) keeps the body."
 
 # The values, on vectors whose per-step f32 fold, f64 accumulation and one rounding are told apart,
 # over every element type the kernels have an executor for, with the two non-numeric ordered types
@@ -61,7 +61,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "array_reduction_arms"
-desc = "The ruling's own case, over the module: `sum` over an `i32[]` is answered by the declaration for `is_elem_i32` (`array:sum_i`, 6), `sum` over a `float[]` by the declaration for `is_elem_f64` (`array:sum_d`, 4.0), and `sum` over a `c64[]` — which no declaration admits — by the body, whose complex arm gives (1 + 2i) + (3 + 4i) = 4 + 6i. A compiler that gave the complex instance an executor prints a number instead, and one that answered `i32` and `float` from a single declaration cannot produce both."
+desc = "The rule's own case, over the module: `sum` over an `i32[]` is answered by the declaration for `is_elem_i32` (`array:sum_i`, 6), `sum` over a `float[]` by the declaration for `is_elem_f64` (`array:sum_d`, 4.0), and `sum` over a `c64[]` — which no declaration admits — by the body, whose complex arm gives (1 + 2i) + (3 + 4i) = 4 + 6i. A compiler that gave the complex instance an executor prints a number instead, and one that answered `i32` and `float` from a single declaration cannot produce both."
 kind = "behavior"
 case = "../../../cases/modules/stdlib/array_reduction_arms.cml"
 args = ["${case}", "${backend}"]

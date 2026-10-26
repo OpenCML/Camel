@@ -1,5 +1,5 @@
 /**
- * Handover, item 2: a text where an int is declared is a type mismatch, not text that is not
+ * a text where an int is declared is a type mismatch, not text that is not
  * a number. There is no implicit text-to-number conversion (design principles 5.1); the message
  * says so and points at `int(s)` / `parse_int(s)`.
  */

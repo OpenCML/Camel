@@ -2,7 +2,7 @@ id = "modules.array_sum_rounding"
 order = 377
 tier = "fast"
 tags = ["feat", "modules", "stdlib", "types", "precision"]
-desc = "A floating-point reduction returns the element type and accumulates in f64, rounding once at the end (design principles 7.3; ruling docs/handover/reviews/reduced-precision.md item (d)). `array::sum` over an f32 array used to accumulate in f32 and round after every addition, so it disagreed with the tensor sum over the same elements, which accumulates in double and rounds once; the two paths now answer the same bits."
+desc = "A floating-point reduction returns the element type and accumulates in f64, rounding once at the end (design principles 7.3). `array::sum` over an f32 array used to accumulate in f32 and round after every addition, so it disagreed with the tensor sum over the same elements, which accumulates in double and rounds once; the two paths now answer the same bits."
 
 # The property, on two vectors whose per-step f32 fold and one-rounding f64 sum differ, with the
 # tensor path over the same elements pinned beside them.

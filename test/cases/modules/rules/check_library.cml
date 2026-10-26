@@ -13,9 +13,7 @@
  * Every floating instance is checked, the two reduced-precision ones included: the sampler draws a
  * `bf16` and an `f16` as it draws an f32 -- the drawn value is rounded once into the element type,
  * a tensor of either type is two bytes per element -- and the comparison uses the element epsilon
- * of the type the instance is at (the rule on
- * `docs/handover/reviews/questions-2026-10-23.md`, §check-generic-instance-space, 3, which opened
- * this lane; `check_reduced_element_type.cml` is the case that reads those rows one by one). The 39
+ * of the type the instance is at. The 39
  * rules of this list are 70 instances of generic laws (13 integer laws x 2 types, 11 floating laws
  * x 4 types -- the two accuracy laws are not in this list) besides the 15 rules of it that are not
  * generic, so the report is 85 lines: 70 instances with a verdict and the 15 rules that are not

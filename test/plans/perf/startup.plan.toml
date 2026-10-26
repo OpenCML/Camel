@@ -94,7 +94,7 @@ expect_exit = 0
 expect_stdout_contains = ["startup.cost metric=cpu_user_plus_system", "startup.cost version", "startup.cost imports_nothing", "startup.cost inspect_ops", "startup.cost imports_all", "declaration.cost declarations=", "per_declaration_us=", "total_ms=", "duplicates=0"]
 # The runner judges this entry on its own CPU time for the same reason the tool inside it
 # already reads its four ceilings that way (see the header above), by the rule of
-# 2026-10-23 (docs/handover/reviews/questions-2026-10-23.md, "declaration-cost-gate" (a)):
+# 2026-10-23 (the rule (a)):
 #
 #   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移 ... 进程的 CPU 时间（用户态 + 内核态）基本
 #    不随负载变"

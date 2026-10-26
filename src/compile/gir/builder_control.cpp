@@ -1235,8 +1235,8 @@ node_handle_t Builder::adaptExitValue(const GCT::node_ptr_t &gct, node_handle_t 
     // 5.1, 5.2), so a named type is never erased to its shape. Applying the position's type
     // unless the value already has it is the same rule checkValue applies everywhere else;
     // a value that fits neither way is left alone for checkDeclaredReturn to report. In a
-    // branch arm the position is the arm's (a `return` there is not the function's return,
-    // handover).
+    // branch arm the position is the arm's (design principles 5.1: a `return` there is not the
+    // function's return).
     Type *position = expectedExitTypeHere();
     if (position != nullptr && !position->equals(valueType)) {
         if (node_handle_t entered = coerceTo(value, position, gct->at(0))) {
@@ -2633,8 +2633,7 @@ void Builder::mergeArmVariables(
 node_handle_t Builder::intervalSequenceValue(
     node_handle_t from, node_handle_t to, const GCT::node_ptr_t &expr) {
     // The interval in the sequence position of a loop is the pair of its two bounds, not the
-    // array of its elements (design principles 4.2; the rule on
-    // ` -generator-and-composition`): the pair stands where any other sequence stands — Norm
+    // array of its elements (design principles 4.2): the pair stands where any other sequence stands — Norm
     // input 0 of the LOOP node, one value — and a back end takes the element of the round from
     // the bounds and the round number, so nothing of the interval's size is ever made. The
     // interval is the `int[]` of `intervalValue` in every other position.
@@ -2794,10 +2793,9 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     // (ArrayType::firstDimensionElement). The tensor module used to declare `__iter__` for a
     // numeric array (`tensor:iter`, sub-arrays along the first dimension), and asking it here
     // made the iterable position an OPER node: that is what hid a constant array's row count
-    // from `core.loopDomain` (runtime/core_facts.cpp, constantLength). The author's ruling of
-    // 2026-10-24 (docs/handover/reviews/questions-2026-10-24-evening.md section
-    // loop-domain-through-the-tensor-iterator) states it once, in the core, for every array;
-    // the module's `iter` went with the P4 alias (one thing, one spelling).
+    // from `core.loopDomain` (runtime/core_facts.cpp, constantLength). Design principles 5.4
+    // states it once, in the core, for every array; the module's `iter` went with the P4 alias
+    // (one thing, one spelling).
     //
     // `__iter__` reaches a compilation unit only if it imports the module that declares it, and
     // the standard library's own array code compiles without it.
@@ -2838,8 +2836,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         }
         return tt::as_ptr<ArrayType>(type)->firstDimensionElement();
     };
-    // `for i in a..b` (design principles 4.2; the rule on
-    // ` -generator-and-composition`: "`for i in 0..n` is fused by the compiler, without
+    // `for i in a..b` (design principles 4.2: "`for i in 0..n` is fused by the compiler, without
     // materialising an array"). The interval in the sequence position of a loop is the loop's own
     // form: its two bounds are the loop's iterable, and a round takes `from + round`
     // (camel::core::LoopIterableForm::Interval). In every other position `a..b` is still the
@@ -3880,7 +3877,7 @@ node_handle_t Builder::visitBodyNode(const GCT::node_ptr_t &gct) {
     const node_handle_t outerLast = std::exchange(lastSyncedNode_, {});
     // The last statement of a body is the value the body hands on: a branch there (`if c then
     // … else …` as a function's whole body) stands in the position of that value, and so do
-    // the `return`s written in its arms (handover an arm's `return` takes the type of the
+    // the `return`s written in its arms (design principles 5.1: an arm's `return` takes the type of
     // position the arm is at, never the declared type of the function around it). The position
     // is passed to visitExecNode, which builds that statement through the same expected-type
     // channel every other position uses.

@@ -1,6 +1,5 @@
 /**
- * A function value made from a declaration carries no defaults (design principles 4.4,
- * handover): the default belongs to the declaration, not to the value, so calling the
+ * A function value made from a declaration carries no defaults (design principles 4.4): the default belongs to the declaration, not to the value, so calling the
  * value with one argument is a call that leaves a parameter without a value.
  */
 module param_default_no_value

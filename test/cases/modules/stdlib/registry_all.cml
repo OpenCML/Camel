@@ -38,15 +38,14 @@ import autodiff
 import tiles
 // `pyplot` and `python` need no display, no external Python installation, no GPU — and now no
 // interpreter at all to be listed: `import` creates nothing and the embedded CPython is created at
-// the first operator call (design principles 3.1; handover). Their operators' declarations are
+// the first operator call (design principles 3.1). Their operators' declarations are
 // checked against the registered ones.
 import pyplot
 // `python` is the same interpreter, with the declarations of its six fixed operators; the
 // remaining five are computed signatures.
 import python
 // `rewrite` is the native half of the rules library: its eight callable operators are declared
-// in `stdlib/rewrite.cml` (the three reserved groups the `rule`/`fact` declarations compile
-// to have no callable name and stay exported by C++; handover). Its only undeclared purity,
+// in `stdlib/rewrite.cml`. Its only undeclared purity,
 // `fact`, is declared effectful; before that this probe never listed it, so no check saw it
 // 
 import rewrite

@@ -45,8 +45,7 @@ bool ParserImpl::atRuleDecl(uint32_t n) const {
 /// where a function writes its own, before `export` (design principles 4.4, 5.5): the rule's
 /// context parameters, with the same defaults a function's have.
 /// The condition is part of the signature, so it is written between the parameters and the body,
-/// in the one position the parser reads it in (design principles 4.4; 
-/// `docs/handover/reviews/questions-2026-10-23.md`, 「复核：泛型规则族落地」): a `when` after
+/// in the one position the parser reads it in (design principles 4.4): a `when` after
 /// the closing brace is not kept as a second spelling of the same thing, and is reported by name
 /// (`SyntaxDiag::WhenAfterBody`) rather than as a token that did not fit.
 void ParserImpl::parseRuleDecl() {

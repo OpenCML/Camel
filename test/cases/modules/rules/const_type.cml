@@ -1,7 +1,5 @@
 /**
- * The matcher checks the declared type of a `const` parameter (rewrite design 2, second version,
- * 1: "形参的类型由匹配器检查：`const c: T` 只匹配类型为 `T` 的常量"; reviews/stdlib-rules.md item 2:
- * "`isI32` 一类的辅助函数随之删除"). A coefficient is where this shows: it is a literal beside the
+ * The matcher checks the declared type of a `const` parameter. A coefficient is where this shows: it is a literal beside the
  * value it multiplies, so it takes that value's type (design principles 5.1) - an f32 constant
  * under a `f32[3]`, an f64 one under a `float` - and only the rule declared for that
  * type reads it.

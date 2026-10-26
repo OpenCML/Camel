@@ -1,8 +1,7 @@
 // One operand is written with its type arguments and one is not: the instance of the written one
 // is the function `ident::<int>`, while the bare `ident` on the right still says no instance, and
 // nothing in the position does either. The refusal names the operand that is generic - the right
-// one here (the rule is docs/handover/reviews/questions-2026-10-23.md, section
-// generic-operands-of-composition).
+// one here.
 module h428_comp_operand_generic_mixed
 
 func ident::<T>(x: T): T {

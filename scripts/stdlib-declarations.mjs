@@ -73,7 +73,7 @@
 // OperatorNotOverloadable), and the compiler negates a *Camel* overload of `==`, not a native
 // one, so a module whose types have their own `==` keeps the `__neq__` group in C++. Rewrite's
 // `__rule`, `__rule_when`, `__rule_generic` and `__analysis` are the compiled form of the
-// language's `rule` and `analysis` declarations, so they are exported by C++ as well (handover
+// language's `rule` and `analysis` declarations, so they are exported by C++ as well.
 // None of them has a Camel name: neither the declaration file nor the reference page
 // carries it, and `--verify-ops` filters reserved names out. Every other reserved group stays
 // checked.

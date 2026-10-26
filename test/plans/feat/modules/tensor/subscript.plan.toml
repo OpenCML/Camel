@@ -39,7 +39,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "slice_rank2"
-desc = "A subscript slice of the first dimension of a tensor of rank 2 or more is the core's one slice (the author's ruling of 2026-10-25: every `slice(...)` call is the core's): the rows the range names, every element of the other dimensions taken at the coordinate it has. A step of 1 along the first dimension of a compact array is a run of the block, so the slice is a view sharing it (design principles 5.4); it no longer waits for H17."
+desc = "A subscript slice of the first dimension of a tensor of rank 2 or more is the core's one slice (the rule of 2026-10-25: every `slice(...)` call is the core's): the rows the range names, every element of the other dimensions taken at the coordinate it has. A step of 1 along the first dimension of a compact array is a run of the block, so the slice is a view sharing it (design principles 5.4); it no longer waits for H17."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/subscript/slice_rank2.cml"
 args = ["${case}"]
@@ -62,7 +62,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "slice_step"
-desc = "A step other than 1 is the core's slice too (the author's ruling of 2026-10-25: any non-zero step is accepted, and only the constant 0 is refused where it is written): the positions the step names, as a copy that does not share the parent's block -- the deviation the flip line records for a stepped slice, the view with strides waiting for H17."
+desc = "A step other than 1 is the core's slice too: the positions the step names, as a copy that does not share the parent's block -- the deviation the flip line records for a stepped slice, the view with strides waiting for H17."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/subscript/slice_step.cml"
 args = ["${case}"]
@@ -73,7 +73,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "core_slice_adjoint"
-desc = "The core's slice answers `a[1:4]` on a rank-1 tensor whose length is stated (`reshape(x, [6])`), and its adjoint hands back a value of the element type the forward value has: `sum(a[1:4])` is 9.0 and the gradient sums to 3.0 instead of refusing with `sum: Unsupported Tensor dtype` (the author's ruling of 2026-10-25, point 2)."
+desc = "The core's slice answers `a[1:4]` on a rank-1 tensor whose length is stated (`reshape(x, [6])`), and its adjoint hands back a value of the element type the forward value has: `sum(a[1:4])` is 9.0 and the gradient sums to 3.0 instead of refusing with `sum: Unsupported Tensor dtype` ."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/subscript/core_slice_adjoint.cml"
 args = ["${case}"]
@@ -188,7 +188,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "slice_step_zero"
-desc = "The constant 0 step is refused where it is written, with the catalog's own diagnostic (the ruling of 2026-10-25: any non-zero step is accepted, and only the constant 0 is refused): 0 names no position, so the subscript that writes it is the compile-time `SemanticDiag::SliceStepZero` and the program after it does not run."
+desc = "The constant 0 step is refused where it is written, with the catalog's own diagnostic: 0 names no position, so the subscript that writes it is the compile-time `SemanticDiag::SliceStepZero` and the program after it does not run."
 kind = "negative"
 case = "../../../../cases/modules/tensor/subscript/slice_step_zero.cml"
 args = ["${case}"]
@@ -209,7 +209,7 @@ timeout_ms = 10000
 # is unchanged).
 [[tests]]
 name = "slice_axis_constant_bounds"
-desc = "A slice of `m: f32[3, 4]` along axis 1 with the constant bounds 1 and 3 is an `f32[3, 2]`: the axis the slice does not cut keeps its stated length and the axis it cuts states the two positions the bounds and the step give it, so `row(a: f32[3, 2])` takes it with no conversion (the author's ruling of 2026-10-25, point A)."
+desc = "A slice of `m: f32[3, 4]` along axis 1 with the constant bounds 1 and 3 is an `f32[3, 2]`: the axis the slice does not cut keeps its stated length and the axis it cuts states the two positions the bounds and the step give it, so `row(a: f32[3, 2])` takes it with no conversion ."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/subscript/slice_axis_constant_bounds.cml"
 args = ["${case}"]

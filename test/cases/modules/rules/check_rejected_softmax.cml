@@ -9,8 +9,7 @@
  * probability has error 4.98e-8 and the stable form's 1.91e-6, so `check` refuses the rewrite.
  *
  * The rule is local: a candidate that fails the check is not exported by the library. The
- * full mechanism and the two options for the reviewer are in
- * `docs/handover/reports/accuracy-softmax-trade.md`.
+ * full mechanism and the two options for the reviewer are written down with the rule.
  */
 module check_rejected_softmax
 

@@ -3,7 +3,7 @@
  * half of the array it was given at every level, so the value the name would take is a different
  * one at every level of the call cycle.
  *
- * The ruling of 2026-10-24 evening (recursion-specialization-fixed-point-followups, items 1 and 2)
+ * The rule evening (recursion-specialization-fixed-point-followups, items 1 and 2)
  * is what this case pins. The call the entry makes asks for an instance the call cycle does not
  * hold yet, and gets one: `walk$spec0`, declared `(n: int, xs: f32[n]) => f32` - the declaration
  * itself, with the extent the declaration leaves to the name still unbound and never the eight the

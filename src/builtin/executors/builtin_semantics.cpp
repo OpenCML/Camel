@@ -335,7 +335,7 @@ void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
         ResourceSpec{.accesses = {cell(AccessMode::ReadModifyWrite)}, .result = alias(0)});
     // The assignments: `=` stores its second operand into the cell, and a compound assignment
     // reads the cell, combines and stores. What either gives is the version of the variable --
-    // the cell itself (the ruling on the var version node: a write produces this version's cell,
+    // the cell itself (design principles 2.1: a write produces this version's cell,
     // and the value it wrote is its second operand, where a position that wants the value takes
     // it) -- so the result names operand 0, the cell, and never the value written or an object
     // that value holds. The cell is the resource: two writes of one variable are one resource

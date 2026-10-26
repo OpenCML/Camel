@@ -1,6 +1,5 @@
 /**
- * `math::min`, `math::max` and `math::abs` over `bf16` and `f16` (rule
- * docs/handover/reviews/reduced-precision.md item 2: "`math::min`/`max`/`abs` 等补 bf16/f16"), and
+ * `math::min`, `math::max` and `math::abs` over `bf16` and `f16`, and
  * `array::min` / `array::max` over an array of either, which could not compute before: the fold
  * `xs->reduce<math::min, xs[0]>` had no overload to take, so the call site reported
  * `'math::min' is used as a value here, but it names an operator with 6 signatures`, a message

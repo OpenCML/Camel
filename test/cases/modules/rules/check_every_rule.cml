@@ -15,11 +15,7 @@
  *     folding lane measured that it was the one exported rule no `check` reached (68 of the
  *     library's 69 rules before the fold, and no test named it after), in one call of 300 samples;
  *   * `float_log1p` and `float_expm1` in a call of their own: they ask for `refine_accuracy`, and
- *     this case keeps the arrangement its verdicts were measured at rather than re-deriving it (the
- *     seed of a rule now follows the rule's identity, its name and its instance's type tuple, not
- *      its place in the array -- the rule on `accuracy-check-sampling`, 1, landed by
- *      the slice S0 and measured in the rule on `verification-report-surface-s0`,
- *     in `docs/handover/reviews/questions-2026-10-23.md`);
+ *     this case keeps the arrangement its verdicts were measured at rather than re-deriving it;
  *   * `tensor_log_softmax_of_softmax` in a call of its own, over the 100 samples and the seed its
  *     verdict was measured at (`worst error ratio 1`, which the new 7.2 definition accepts: the
  *      right side is never worse and the bound holds -- the rule on

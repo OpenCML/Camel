@@ -14,9 +14,7 @@
 //       (`src/passes/opt/generic/rewrite.cpp`), so the operation, its constant and both of its edges
 //       are still there. The rule engine rewrites the matched node and **moves the anchor onto the
 //        replacement**: this is
-//       (docs/handover/reviews/questions-2026-10-23.md, `rule-conditions-and-policy` item 3 --
-//       when a rule replaces the node the graph returns, the engine moves the anchor onto the
-//       replacement, as the C++ pass's `replaceFoldResult` does), and it is not a rule condition,
+//, and it is not a rule condition,
 //       so `DraftWritings::rewrite` does it in one place for every law. Here the replacement the
 //       rule's right side wrote is the port itself (`x + 0 => x`), so the graph's exit is the port,
 //       the operation and its constant are gone, and what a comparison sees is one node and no
@@ -29,7 +27,7 @@
 //       `x * 0` law, so the product over the print stands there; the library's `int_mul_zero` is
 //       still there too, and the engine refuses its match, because the part the right side drops is
 //        the print and not a pure computation. The same rule
-//       (docs/handover/reviews/questions-2026-10-23.md, `rule-drops-effect`) decrees the check
+//        decrees the check
 //       rather than withdrawing the rule: before a rule is applied, the subgraph the pattern
 //       variables that its right-hand side does not use bound is examined, and an effect node -- or
 //       a node carrying a sync or order edge -- there refuses the application. Design principles 9.7
@@ -98,7 +96,7 @@ for (const name of GRAPHS) {
         // The engine's form: the rule fired on that same node and the anchor was moved onto what its
         // right side wrote, which for `x + 0 => x` is the port. The operation, its constant and both
         // of its edges are gone and the graph exits at the port. This is the rule's own sentence
-        // about the handover (`rule-conditions-and-policy` item 3), and the `rules` lane holds the
+        // about the rule, and the `rules` lane holds the
         // same rewriting of a graph's return expression (`coefficients` and `chain` fold there).
         assert(lib.nodes.length === 1 && lib.edges.length === 0, `'${name}' on the library side is ${lib.nodes.length} nodes and ${lib.edges.length} edges, not the recorded sole port`)
         const libExit = lib.nodes.find((n) => n.id === lib.exit)

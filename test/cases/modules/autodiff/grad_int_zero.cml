@@ -1,9 +1,7 @@
 /**
  * An `int` parameter is differentiable, and its gradient is the zero of its own type: `with <n:
  * int>` asks for the derivative with respect to `n`, and the gradient of a parameter is a value of
- * the parameter's own gradient type -- for a number, itself, at zero (the author's ruling of
- * 2026-10-25 on discrete-tuple-tangent-space-and-machinery-aggregates: the public "gradient type of
- * a parameter `P`" has "a number and a boolean be themselves, at zero"). `let g: int = ...` pins
+ * the parameter's own gradient type -- for a number, itself, at zero. `let g: int = ...` pins
  * that: the call's result type is `int`, not a refusal.
  *
  * Nothing depends on `n` here either -- the loss is `float(n) · 2 · x` -- so the printed gradient is

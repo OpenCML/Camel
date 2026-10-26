@@ -8,7 +8,7 @@ is ended, its output is flushed and its external resources are released.
 
 Choices the design principles do not make are collected in section 9 as questions for the
 language author. Each is implemented the way section 9 recommends and marked in the code and
-in the tests with `DESIGN-QUESTION(<label>)`, so that a ruling can be applied in one place.
+in the tests with `DESIGN-QUESTION(<label>)`, so that a rule can be applied in one place.
 
 The name `attempt` is settled (design principles 3.9). In the C++ sources it is written in exactly one place,
 `camel::execute::kFaultIsolationName` (`include/camel/execute/fault_isolation.h`); everything

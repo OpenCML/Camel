@@ -1,7 +1,7 @@
 /**
  * A floating-point reduction returns the element type and accumulates in f64, rounding once at
  * the end (design principles 7.3: "浮点数组的归约在 f64 中累加、舍入一次，返回元素类型（与张量归约
- *  一致）"; rule docs/handover/reviews/reduced-precision.md item (d)). For an f32 array the
+ *  一致）"; rule the rule item (d)). For an f32 array the
  * additions happen in f64 and the result is rounded into f32 exactly once — not after every step,
  * and not in f32. The tensor sum over an axis follows the same rule (modules/tensor/kernels/
  * reduce.cpp: double accumulator, one rounding when the element is stored), so the array path and

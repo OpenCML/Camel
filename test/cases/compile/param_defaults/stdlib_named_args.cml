@@ -4,10 +4,7 @@
  * `items`' is `m` in the map and set rules, `json.get`'s with-parameter is `key` in all eight of
  * its declarations, and `json.as_int`'s ordinary one is `j`. Whether a call can give an argument
  * by name does not depend on whether the callee is a Camel declaration or a group of rules C++
- * registered (the rule is docs/handover/reviews/questions-2026-10-23.md,
- * named-arguments-at-operator-groups; the names themselves come from
- * stdlib-overload-parameter-names, 选 1: `json.get` 的 `index` → `key`、`len` 的 `c` → `x`、
- * `items` 的 `s` → `m`).
+ * registered.
  *
  * The name is written in the list that holds the parameter: an ordinary one in the parentheses,
  * a `with` one in the angle brackets (`j->get<key: 'a'>`, design principles 4.4).

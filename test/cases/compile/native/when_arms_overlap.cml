@@ -1,8 +1,6 @@
 /**
  * Two declarations of one kernel name whose `when` conditions are not mutually exclusive, refused
- * where the second one is written (design principles 4.3, 4.4, 5.1; the rule of
- * 2026-10-24 on `impl-declaration-arms`,
- * `docs/handover/reviews/questions-2026-10-23.md`): "对已登记的类型逐个求两条 `when`，有类型同时
+ * where the second one is written (design principles 4.3, 4.4, 5.1): "对已登记的类型逐个求两条 `when`，有类型同时
  * 满足两条即报重叠（诊断指出那个类型与两条声明）".
  *
  * `is_small_int` covers `i32`; `is_number` covers `int`, `i32`, `float` and `f32`. The pair is

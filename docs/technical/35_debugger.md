@@ -1,7 +1,7 @@
 # The Debugger: Source View, Graph View and the Debug Adapter Protocol
 
 This note is the design of source-level debugging in `camel-db` (`tools/debugger`), of its
-Debug Adapter Protocol (DAP) front end and of its REPL. It follows the rulings of
+Debug Adapter Protocol (DAP) front end and of its REPL. It follows the rules of
 [design principles](../design-principles.cn.md) 12.1: *the debugger has a source-line view and a
 graph-node view, and it steps by line and by node*; 12.1: *the arms of a branch are folded into
 the frame of their function by default, and can be shown as the real subgraphs; a line step
@@ -12,7 +12,7 @@ module left out when that is not ambiguous.* Positions and origins are those of
 [32](32_semantic_query_layer.md); faults are those of [33](33_fault_isolation.md). The guide
 for users is [Debugging Camel Programs](../debugging.en.md).
 
-Section 9 says what is implemented and verified, and what is not. Points that need a ruling of
+Section 9 says what is implemented and verified, and what is not. Points that need a rule of
 the language author are marked `DESIGN-QUESTION(<tag>)` here and in the code, and collected in
 section 8.
 
@@ -212,7 +212,7 @@ A tail call replaces the frame (section 5.2): the callee takes the place of S at
 depth. Step in (F11) stops at its first executable source location with the new arguments.
 Step over (F10) and step out run until the chain returns to the real caller; a breakpoint,
 fault or explicit pause can still interrupt them. This also applies to node-granularity
-step over. The source author's ruling on 2026-10-16 resolves `step-over-tail-call` this way.
+step over. the rule resolves `step-over-tail-call` this way.
 
 The top frame in `camel/stopped` includes its `activation`, `functionId`, `entry` flag and
 bounded `arguments` snapshots (name, type, value, evaluated). These are immutable display
@@ -624,7 +624,7 @@ has ruled since, which say so.
    a shadow record of replaced callers for display.
 5. `inlined-frames`: one frame marked as inlined code, stepping by source function
    (recommended), or have `std::opt::inline` record call sites so that virtual frames can be shown.
-   (Ruling 12.1 folds arms into the frame of their function; whether a function inlined into
+   (Rule 12.1 folds arms into the frame of their function; whether a function inlined into
    another should then be shown as a frame of its own has not been ruled.)
 6. `parallel-debugging`: run on the sequential `std::fvm` with a notice (implemented), refuse
    to debug, or stop-the-world with one current node per worker.

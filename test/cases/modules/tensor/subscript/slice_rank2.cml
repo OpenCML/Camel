@@ -1,9 +1,9 @@
 /**
  * `t[a:b]` on the first dimension of a tensor of rank 2 or more is the core's one slice (the
- * author's ruling of 2026-10-25: every `slice(...)` call is the core's). The range names the rows
+ * author's rule: every `slice(...)` call is the core's). The range names the rows
  * and every element of the other dimensions is taken at the coordinate it has. A step of 1 along
  * the first dimension of a compact array is a run of the block, so the slice is a view sharing it
- * (design principles 5.4): it no longer waits for H17, and an empty range is the empty view.
+ * (design principles 5.4): an empty range is the empty view.
  */
 module subscript_slice_rank2
 import { reshape, shape, sum } from tensor

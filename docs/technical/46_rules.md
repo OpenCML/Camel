@@ -46,7 +46,7 @@ arithmetic on the value and needs neither `constant(node, sample)` nor the `matc
 layers around a read. The engine passes that value where it passed a node, and the parameter bit
 the rule carries is what tells it which parameters are which.
 
-Reaching the *node* of a `const` parameter is `node_of(c)` (the ruling of 2026-10-23 on
+Reaching the *node* of a `const` parameter is `node_of(c)` (the rule on
 `rule_when_const_node`: "条件函数按 `const` 形参追加隐藏的节点形参，构建期把 `node_of(c)` 换成它；
 不引入新类型"). The condition takes one hidden node parameter per `const` parameter, appended after
 the rule's own, in the same order:
@@ -311,7 +311,7 @@ them.
 ## 6. The rest of the engine (H38)
 
 The rule declaration, the engines and the check are the first step; `when` is implemented (H38
-item 1), the rest is planned in the H38 report (`handover note ⟨50954d0⟩ (H38)`, section 1). In
+item 1), the rest is planned in the H38 report (``, section 1). In
 short:
 
 **`when` (implemented).** `rule … when expr { lhs => rhs }` compiles to a third function

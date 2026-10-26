@@ -1140,7 +1140,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     // A condition is a fourth function of the same parameters: `func name__when(params) => expr`.
     // A parameter that is not `const` is a node of the draft being rewritten (`graph::Node`); a
     // `const` one is the constant's value, of the type it was declared with (rewrite design 2
-    // (second version) 1, reviews/stdlib-rules.md item 5), so the guard is written on the value
+    // (second version) 1), so the guard is written on the value
     // and needs neither `constant(node, sample)` nor the `match … case null` layers around it.
     node_ptr_t whenFunc;
     if (when) {
@@ -3334,7 +3334,7 @@ Value Builder::visitCtrlExpr(syn::Node context) {
     default:
         // Every kind `visitExpr` sends here has a case above. `try`/`catch`/`finally` are not
         // part of the language (design principles 3.9) and are not tokens any more, so the
-        // parser never builds a node for them (handover 5.00 "语法层收口" item 5).
+        // parser never builds a node for them.
         throw std::runtime_error("Invalid control expression");
     }
     LEAVE("CtrlExpr");

@@ -1,6 +1,5 @@
 /**
- * `%` over numeric arrays of a reduced element type (design principles 7.3; the ruling in
- * docs/handover/reviews/questions-2026-10-24-evening.md): bf16 and f16 are floating types on par
+ * `%` over numeric arrays of a reduced element type (design principles 7.3): bf16 and f16 are floating types on par
  * with f32, so the remainder of two of their arrays is their element type's own operator applied
  * elementwise, computed in f32 and rounded once into the element type when it is stored. It is not
  * a case of reduced precision: `SemanticDiag::ReducedPrecisionUnsupported` is what the same call

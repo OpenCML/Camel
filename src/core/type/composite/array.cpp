@@ -257,9 +257,7 @@ ArrayType *ArrayType::withElementType(Type *elemType) const {
 
 Type *ArrayType::firstDimensionElement() const {
     // One dimension fewer: the extents after the first, which is what `t[i]` takes for every
-    // rank (design principles 5.4) and what the tensor module's `iterInfer` stated while a `for`
-    // over a numeric array went through its `iter` (the ruling of 2026-10-24 makes it the core's
-    // for every array, so the rule lives here, in one place).
+    // rank (design principles 5.4), for every array: the rule lives here, in one place.
     const std::span<const ExtentForm> extents(extents_);
     const std::span<const ExtentForm> rest = extents.empty() ? extents : extents.subspan(1);
     if (anyRank_) {
@@ -269,7 +267,7 @@ Type *ArrayType::firstDimensionElement() const {
     }
     if (rest.empty()) {
         // Rank 1: the first dimension's elements are the elements themselves — a scalar is not a
-        // rank-0 array, it is the element type (questions-2026-10-23.md, rank-zero-tensor). A
+        // rank-0 array, it is the element type. A
         // nested array's `T[][]` is one dimension of `T[]`.
         return elemType_;
     }

@@ -65,8 +65,7 @@
  *   * `changes.log` and the record directories are history: an entry states the release it
  *     belongs to, and `docs/handover/` quotes the old spelling to say what happened. They are not
  *     scanned, and every entry of that list is asserted to still be in the tree, so a class cannot
- *     keep excusing pages it no longer describes. (`docs/reviews/` was an entry until the
- *     directory was removed with the ledgers it held; the assertion found it.)
+ *     keep excusing pages it no longer describes.
  *
  * A line the guard would report is excused when it says why it is not a defect: the removed form
  * is written there in order to be called removed. The exceptions are listed in EXCUSED with their
@@ -203,7 +202,7 @@ const PROBE_REFUSED = new RegExp(`Pass <${PROBE}> not found`)
 // Not pages: a release log states the release it belongs to, and the handover directory quotes the
 // old spelling to say what happened. The list is asserted, not assumed: an entry that is not in
 // the tree any more is reported, so a class cannot keep excusing pages it no longer describes.
-// (`docs/reviews/` was a third entry until the directory was removed with the ledgers it held.)
+// 
 const NOT_A_PAGE = ['changes.log', 'docs/handover/']
 // Written by a script, never by hand: their text comes from the pages and the sources scanned
 // here, so a hit in them is fixed where it is written.

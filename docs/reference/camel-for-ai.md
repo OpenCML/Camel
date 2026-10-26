@@ -561,7 +561,7 @@ writes must be `sync`, or its call is `SemanticDiag::EffectNotExecuted` (§12.1)
 
 `T..` (a stream of `T`), `yield`, and `tee` are how a graph consumes data that does not fit in
 memory: the push/pull boundary is written as a function the stream calls, and the design is
-`docs/design/io-concurrency-streams/` (design principles 4.2 names the ruling). A pipeline can also
+`docs/design/io-concurrency-streams/` (design principles 4.2 names the rule). A pipeline can also
 be expressed with `1..n` and the `map`/`filter`/`reduce` operators, and a file read with
 `fs::read_text` or the `io` module. A function whose body writes `yield` produces a stream, and its
 return type is written as a stream type in the head:
