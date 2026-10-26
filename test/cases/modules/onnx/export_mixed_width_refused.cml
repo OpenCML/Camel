@@ -1,0 +1,21 @@
+/**
+ * The exporter cannot accept what execution refuses. The exported function below adds `randn`'s
+ * f32 to an f64 parameter, which is the mixed pair a tensor operator refuses (design principles
+ * 5.1), so the program is refused when it is compiled and no export pass ever sees the node: the
+ * lowering of that operator asks the same question as its declaration
+ * (tensor::ops::refuseMixedFloatWidths), so a model cannot state a promotion the arithmetic does
+ * not make. Red when the pair is accepted - the model would then carry a width the runtime does
+ * not name.
+ */
+module export_mixed_width_refused
+
+import { reshape, randn } from tensor
+import { export_model } from onnx
+import { get_env } from env
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
+    export_model((t: float[..]): float[..] => t + randn([2, 2]), x, get_env('ONNX_OUT'))
+    println('unreachable')
+    return 0
+}

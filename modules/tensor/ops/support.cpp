@@ -214,6 +214,24 @@ std::optional<TypeCode> promote(std::optional<TypeCode> lhs, std::optional<TypeC
     return promoteTensorTypes(*lhs, *rhs);
 }
 
+void refuseMixedFloatWidths(std::optional<TypeCode> lhs, std::optional<TypeCode> rhs) {
+    if (!lhs || !rhs || *lhs == *rhs) {
+        return;
+    }
+    const auto statedWidth = [](TypeCode code) {
+        return code == TypeCode::Float32 || code == TypeCode::Float64;
+    };
+    if (!statedWidth(*lhs) || !statedWidth(*rhs)) {
+        return;
+    }
+    throw std::invalid_argument(
+        "the two tensor operands have different element types ('" + typeCodeToString(*lhs) +
+        "' and '" + typeCodeToString(*rhs) +
+        "'): a tensor operator computes in one element type, and there is no implicit conversion "
+        "between numeric types (write the conversion, cast(value, \"" + typeCodeToString(*lhs) +
+        "\") or cast(value, \"" + typeCodeToString(*rhs) + "\"))");
+}
+
 std::optional<StaticShape>
 broadcast(const std::optional<StaticShape> &lhs, const std::optional<StaticShape> &rhs) {
     if (!lhs || !rhs) {

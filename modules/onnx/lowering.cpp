@@ -219,6 +219,11 @@ std::optional<TypeCode> operandDtype(const LowerContext &ctx) {
         }
         return TypeCode::Float32;
     }
+    // The operator this lowers refuses the two float widths before it answers a type
+    // (elementwise_ops.cpp, refuseMixedFloatWidths), so the lowering refuses them too: a model
+    // must not state a promotion the arithmetic does not make. An integer or bool operand is read
+    // at the float tensor's element type here as it is there.
+    tensor::ops::refuseMixedFloatWidths(left.dtype, right.dtype);
     if (auto promoted = tensor::ops::promote(left.dtype, right.dtype)) {
         return promoted;
     }

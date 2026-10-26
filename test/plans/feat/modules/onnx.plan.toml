@@ -93,6 +93,19 @@ assert(!text.includes('unreachable'), 'export must fail before the next statemen
 timeout_ms = 10000
 
 [[tests]]
+name = "export_mixed_width_refused"
+desc = "The exporter cannot accept what execution refuses: an exported function adding randn's f32 to an f64 parameter is the mixed pair a tensor operator refuses, so the compile refuses it before any export pass, and the lowering of that operator asks the same question as its declaration."
+kind = "negative"
+case = "../../../cases/modules/onnx/export_mixed_width_refused.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=${test_tmp}/export_mixed_width_refused.onnx"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["Invalid call to '__add__'", "(float[..], f32[2, 2])", "the two tensor operands have different element types ('float' and 'f32')"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
 name = "export_branch"
 desc = "A branch on a condition computed from the input (t[0] > 0.5) exports as Gather -> Greater -> If."
 kind = "behavior"

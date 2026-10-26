@@ -107,26 +107,15 @@ TypeCode computedElementType(TypeCode element, TypeCode scalar) {
 /// is the one its type carries, whatever the facts pin down about its shape, so two of them that
 /// state the two widths of the same number are the mixed call to refuse - `f32[..] * f64[..]`
 /// matches no arm whether the extents are known or open, and the report names the conversion to
-/// write. What promotion still covers is what it covers for a scalar: an integer or bool operand is
+/// write (refuseMixedFloatWidths, which the exporter's lowering of the same operator calls too).
+/// What promotion still covers is what it covers for a scalar: an integer or bool operand is
 /// read at the float tensor's element type (bool arithmetic has always been f32), and two integers
 /// widen exactly. A reduced-precision type meeting a wider float is `promoteTensorTypes`' own rule.
 /// Unknown when an operand's element type is unknown.
 std::optional<TypeCode>
 operandType(const InferContext &ctx, const TensorFacts &lhs, const TensorFacts &rhs) {
     if (isTensorArg(ctx, 0) == isTensorArg(ctx, 1)) {
-        const auto statedWidth = [](TypeCode code) {
-            return code == TypeCode::Float32 || code == TypeCode::Float64;
-        };
-        if (lhs.dtype && rhs.dtype && *lhs.dtype != *rhs.dtype && statedWidth(*lhs.dtype) &&
-            statedWidth(*rhs.dtype)) {
-            throw std::invalid_argument(
-                "the two tensor operands have different element types ('" +
-                typeCodeToString(*lhs.dtype) + "' and '" + typeCodeToString(*rhs.dtype) +
-                "'): a tensor operator computes in one element type, and there is no implicit "
-                "conversion between numeric types (write the conversion, cast(value, \"" +
-                typeCodeToString(*lhs.dtype) + "\") or cast(value, \"" +
-                typeCodeToString(*rhs.dtype) + "\"))");
-        }
+        refuseMixedFloatWidths(lhs.dtype, rhs.dtype);
         return promote(lhs.dtype, rhs.dtype);
     }
     const bool tensorFirst = isTensorArg(ctx, 0);

@@ -87,6 +87,15 @@ type::Type *tensorOf(std::optional<type::TypeCode> dtype, std::optional<StaticSh
 std::optional<type::TypeCode>
 promote(std::optional<type::TypeCode> lhs, std::optional<type::TypeCode> rhs);
 
+/// Refuses two tensor operands that state the two widths of the same number, with the reason the
+/// call gets: a tensor operator computes in one element type, and there is no implicit conversion
+/// between numeric types, so an f32 tensor beside an f64 one is written with the conversion that
+/// says which width it computes in (design principles 5.1). An integer or bool operand is not one
+/// of the two widths - it is read at the float tensor's element type - and an element type the
+/// facts do not pin down proves nothing. Both readers of two operands call this, so the operator's
+/// declaration and the exporter's lowering of it cannot part ways.
+void refuseMixedFloatWidths(std::optional<type::TypeCode> lhs, std::optional<type::TypeCode> rhs);
+
 /// Broadcast on possibly unknown shapes. Throws ShapeError on a certain conflict.
 std::optional<StaticShape>
 broadcast(const std::optional<StaticShape> &lhs, const std::optional<StaticShape> &rhs);

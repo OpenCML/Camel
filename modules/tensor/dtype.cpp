@@ -89,6 +89,14 @@ TypeCode promoteTensorTypes(TypeCode lhs, TypeCode rhs) {
     }
     // Widening only: the result is one of the two element types, so promotion never
     // replaces an operand's type with a third one. f64 > f32 > i64 > i32 > bool.
+    //
+    // The two float widths are the one pair this ladder would widen silently, so the declaration
+    // that takes two tensors refuses them first (refuseMixedFloatWidths): a tensor operator
+    // computes in its element type, and an f32 tensor beside an f64 one is written with the
+    // conversion that says which width it computes in (design principles 5.1). An integer or bool
+    // operand is read at the float tensor's element type, here as everywhere (a bool's arithmetic
+    // has always been f32, and two integers widen exactly), and a reduced-precision type meeting a
+    // wider float is the rule above.
     const auto rank = [](TypeCode code) {
         switch (code) {
         case TypeCode::Float64:
