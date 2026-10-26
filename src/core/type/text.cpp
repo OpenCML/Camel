@@ -421,6 +421,14 @@ std::vector<TextItem> typeParts(const Type *type, bool mangle) {
                 typeItem(array->elemType()),
                 literal("_" + array->shapeMangle())};
         }
+        // An array whose element type nobody stated is the empty literal `[]`, printed as the
+        // program wrote it: the dimensions it left open are not a shape to print, and `void` is
+        // the "no value" marker rather than the element type (design principles 5.1, 5.2). The
+        // position the literal stands in is what states an element type, so this spelling is
+        // what a reader of a message is given to write.
+        if (array->elemType() != nullptr && array->elemType()->code() == TypeCode::Void) {
+            return {literal("[]")};
+        }
         return {typeItem(array->elemType()), literal(array->shapeText())};
     }
     case TypeCode::Tuple:

@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-284 diagnostics: 267 errors, 17 warnings. 15 carry a machine-applicable edit, 269 say why they carry none.
+285 diagnostics: 268 errors, 17 warnings. 15 carry a machine-applicable edit, 270 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -250,6 +250,7 @@ prints one entry.
 | `0x030001F3` | [SemanticDiag::EnumWrittenWhereATypeIsExpected](#enumwrittenwhereatypeisexpected) | Error | no |
 | `0x030001F4` | [SemanticDiag::StructComprehensionWithoutFields](#structcomprehensionwithoutfields) | Error | no |
 | `0x030001F5` | [SemanticDiag::IdentifierPatternNeedsNullableOrErrorType](#identifierpatternneedsnullableorerrortype) | Error | no |
+| `0x030001F6` | [SemanticDiag::FunctionTypeArgumentNotInferred](#functiontypeargumentnotinferred) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -8381,6 +8382,39 @@ func f(n: int): int {
 func main(): int sync {
     println('never printed')
     println(f(1))
+    return 0
+}
+```
+
+### FunctionTypeArgumentNotInferred
+
+`0x030001F6` · Error · `SemanticDiag::FunctionTypeArgumentNotInferred`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+Cannot infer the type argument '{0}' of '{1}': the empty literal '[]' states no element type.
+```
+
+**Help**
+
+```text
+A variable takes its type from where it stands, and an empty literal states no element type, so the position '[]' is written in is the only thing that can fix the variable - and a generic parameter states none (design principles 5.1, 5.2). Write the type argument ('show::<f32>([])'), or give the literal a position whose type it can take ('let e: f32[] = []').
+```
+
+**Example** (`test/cases/compile/native/tensor_show_empty_array.cml`, run as `camel test/cases/compile/native/tensor_show_empty_array.cml`)
+
+```camel
+module tensor_show_empty_array
+
+import { show } from tensor
+
+func main(): int sync {
+    show([])
     return 0
 }
 ```

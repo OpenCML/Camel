@@ -135,8 +135,11 @@ enum class SemanticDiag : uint32_t {
     // 0x137 and 0x138 reported the retired forms `A | B` and `T ? U`; the parser no longer reads
     // either, so they are gone and their codes are not reused.
     EnumTypeArgumentNotInferred = 0x000139,
-    EnumFieldTypeMismatch       = 0x00013A,
-    EnumConstructionMismatch    = 0x00013B,
+    /// A type variable that a call's arguments leave without a type, because the only argument that
+    /// mentions it is an empty literal, which states no element type.
+    FunctionTypeArgumentNotInferred = 0x0001F6,
+    EnumFieldTypeMismatch           = 0x00013A,
+    EnumConstructionMismatch        = 0x00013B,
     // Named dimensions of type extents (design principles 5.4): 0x140 and up.
     ConstasNotAllowed         = 0x000140,
     DimensionNameNotBound     = 0x000141,

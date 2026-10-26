@@ -1411,8 +1411,21 @@ compile_graph_ptr_t Builder::instantiateForCall(
     std::vector<std::string> names, open;
     collectTypeVars(signature, names);
     for (const std::string &name : names) {
-        if (findTypeBinding(bindings, name) == nullptr) {
+        Type *bound = findTypeBinding(bindings, name);
+        if (bound == nullptr) {
             open.push_back(name);
+            continue;
+        }
+        // A variable the arguments bound to a type that states no element type is not inferred:
+        // the only argument that mentions it was an empty literal, which says no element type and
+        // leaves the position to say one, and a generic parameter states none (design principles
+        // 5.1, 5.2). `void` is the "no value" marker, not an element type, so the binding is not
+        // a type the call can be made at.
+        if (isElementTypeUnstated(bound)) {
+            diags_->of(SemanticDiag::FunctionTypeArgumentNotInferred)
+                .atOrigin(call->origin())
+                .commit(name, tmpl->name);
+            throw BuildAbortException();
         }
     }
     const std::string openText = strutil::join(open, ", ", [](const std::string &n) { return n; });
