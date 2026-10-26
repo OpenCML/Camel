@@ -18,7 +18,7 @@ import { get_env } from env
 type P = { w: f32[4], x: f32[4] }
 
 with <m: P>
-func loss(): float {
+func loss(): f32 {
     return sum(m.w[1:3] * m.x[1:3])
 }
 
