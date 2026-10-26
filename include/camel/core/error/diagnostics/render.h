@@ -49,9 +49,14 @@ struct RenderOptions {
     size_t wrapWidth = 0;
 };
 
-/// Sets the process-wide text format and colour policy of diagnostics.
-void setDiagnosticRenderConfig(DiagFormat format, ColorMode color);
+/// Sets the process-wide text format, colour policy and diagnostic document format of diagnostics.
+/// `json` is what the command line's `--output-format json` asks for; the reports that are not a
+/// `Diagnostics` dump read it (`camel/execute/entry_args.h` for the value an entry graph returns,
+/// the pass driver for the error value a pass ends with).
+void setDiagnosticRenderConfig(DiagFormat format, ColorMode color, bool json = false);
 DiagFormat diagnosticFormat();
+/// Whether diagnostics are written as JSON documents rather than text.
+bool diagnosticJson();
 
 /// The options for text written to `os`: the process-wide format, and colours according to the
 /// colour policy (under Auto, only std::cout / std::cerr attached to a terminal get colours).

@@ -8,6 +8,8 @@
 #include "camel/core/mm/gen.h"
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/func.h"
+#include "camel/core/rtdata/tagged.h"
+#include "camel/core/source/manager.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/runtime/control_regions.h"
@@ -19,6 +21,7 @@
 #include "tiles/internal/placement.h"
 #include "tiles/internal/regions.h"
 #include <algorithm>
+#include <format>
 #include <mutex>
 #include <set>
 #include <span>
@@ -31,6 +34,31 @@
 
 namespace camel::tiles {
 namespace {
+/// `file:line:column` for an origin, with the file name and not its directory: an error value
+/// must not differ with where the program is stored (the same reading `Builder::sourceLocationOf`
+/// gives a literal; the report that prints it, `reportUnhandledError`, reads it back).
+std::string sourceLocationOf(core::context::Context &context, camel::source::origin_id_t origin) {
+    const auto *sourceContext = context.sourceContext().get();
+    const auto *record        = sourceContext ? sourceContext->origin(origin) : nullptr;
+    const auto *span          = record ? sourceContext->span(record->primarySpan) : nullptr;
+    const auto *file = span && span->valid() ? sourceContext->sourceFile(span->fileId) : nullptr;
+    if (file == nullptr || span->startOffset > file->content.size())
+        return {};
+    size_t line = 1, lineStart = 0;
+    for (size_t i = 0; i < span->startOffset; ++i) {
+        if (file->content[i] == '\n') {
+            ++line;
+            lineStart = i + 1;
+        }
+    }
+    const size_t slash = file->path.find_last_of("/\\");
+    return std::format(
+        "{}:{}:{}",
+        slash == std::string::npos ? file->path : file->path.substr(slash + 1),
+        line,
+        span->startOffset - lineStart + 1);
+}
+
 // Transfers are leaf operations. Preserve the source aggregate's structure in
 // graph values instead of inventing a Device<tuple> or flattening field order.
 runtime::gc_node_ref_t transferAggregate(
@@ -75,7 +103,7 @@ runtime::gc_node_ref_t transferAggregate(
 const runtime::Program *outlineRegions(
     core::context::Context &context, const runtime::Program *program, runtime::GCGraph *root,
     operator_t run, const std::string &uri, size_t &count, const SegmentDeviceOps *device,
-    bool refuseGpuScopes) {
+    bool refuseGpuScopes, slot_t *error) {
     namespace rt = runtime;
     if (device &&
         (!device->upload || !device->execute || !device->download || run != device->execute))
@@ -120,23 +148,27 @@ const runtime::Program *outlineRegions(
         return false;
     };
     if (refuseGpuScopes) {
-        // One diagnostic per scope and code, naming every operator it cannot run and why each one
-        // cannot (GPU design 2.4). Reporting per node would stop at the first: a scope is one
-        // promise, and the compiler answers for it once.
+        // One answer per scope, naming every operator it cannot run and why each one cannot (GPU
+        // design 2.4). Reporting per node would stop at the first: a scope is one promise, and the
+        // compiler answers for it once. The answer is the pass's error value
+        // (`GpuScopeUnsupported`), because a pass is `(f: F) => F!` (design principles 9.1).
         //
-        // The two codes stay apart, because they are two defects: an operator no module lowers
-        // for the device at all (`GpuScopeUnsupported`), and an operator that has a device
-        // implementation the device compiler still refuses at this use (`GpuScopeNoDeviceProgram`).
+        // Two reasons survive from the two diagnostics this replaced, and both are the same
+        // refusal of the same promise: an operator no module lowers for the device at all, and an
+        // operator that has a device implementation the device compiler still refuses at this use.
+        // Each one's own wording is kept (see `list`), so an operator that has no device program
+        // of its own still reads as it read before.
         struct Refusal {
-            std::string name;   // The operator's URI, as the diagnostic writes it.
+            std::string name;   // The operator's URI, as the message writes it.
             std::string reason; // Why this use cannot run on the device.
             camel::source::origin_id_t origin = camel::source::kInvalidOriginId;
         };
         struct ScopeRefusals {
-            std::vector<Refusal> unsupported;
-            std::vector<Refusal> noProgram;
+            std::vector<Refusal> unsupported; // No device implementation for it at all.
+            std::vector<Refusal> noProgram;   // A device program exists, but not for this use.
             // A macro operator (`grad`, `with_grad`) no pass expanded: the defect is the pipeline,
-            // and its repair is a pass, so it is its own group and its own diagnostic.
+            // and its repair is a pass, so it is its own group and its own diagnostic
+            // (design principles 9.2).
             std::vector<Refusal> notExpanded;
         };
         std::vector<std::pair<rt::GCGraph *, ScopeRefusals>> refusals;
@@ -216,9 +248,10 @@ const runtime::Program *outlineRegions(
             }
         }
         const auto list = [](const std::vector<Refusal> &entries, bool predicateInName) {
-            // `GpuScopeUnsupported` writes "operator 'x' cannot run on the device ({2})" and takes
-            // the operator as its {1}; `GpuScopeNoDeviceProgram` takes the whole predicate, so the
-            // one-operator wording is the one the diagnostic has always had.
+            // The first group is written "operator 'x' cannot run on the device ({reason})", as the
+            // refusal has always read, and takes the operator as its subject; the second carries the
+            // whole predicate in its name ("operator 'x' has no device program") because that is what
+            // the reason says, so the one-operator wording is the one it has always had too.
             std::string names;
             if (entries.size() == 1) {
                 names = "operator '" + entries[0].name + "'";
@@ -249,23 +282,11 @@ const runtime::Program *outlineRegions(
             return std::pair{names, reasons};
         };
         for (auto &[graph, scope] : refusals) {
-            const auto report = [&](const std::vector<Refusal> &entries,
-                                    core::error::RuntimeDiag code,
-                                    bool predicateInName) {
-                if (entries.empty())
-                    return;
-                auto diag         = context.rtmDiags()->of(code);
-                const auto origin = entries.front().origin;
-                if (origin != camel::source::kInvalidOriginId)
-                    diag.atOrigin(origin);
-                const auto text = list(entries, predicateInName);
-                diag.commit(scopeNameOf(*graph), text.first, text.second);
-            };
-            report(scope.unsupported, core::error::RuntimeDiag::GpuScopeUnsupported, false);
-            report(scope.noProgram, core::error::RuntimeDiag::GpuScopeNoDeviceProgram, true);
             if (!scope.notExpanded.empty()) {
-                // The repair is a pass, so the message names it. Reported last: it is about the
-                // pipeline, and the operators the device refuses are about the program.
+                // The repair is a pass, so the message names it (design principles 9.2: a library
+                // checks its own preconditions and diagnoses the pass that is missing). This is the
+                // one refusal that stays a diagnostic: the promise is not kept because the pipeline
+                // is incomplete, and the compiler can say so before anything is asked of the device.
                 auto diag = context.rtmDiags()->of(
                     core::error::RuntimeDiag::GpuScopeMacroNotExpanded);
                 const auto origin = scope.notExpanded.front().origin;
@@ -274,6 +295,34 @@ const runtime::Program *outlineRegions(
                 diag.commit(
                     scopeNameOf(*graph), list(scope.notExpanded, false).first, "std::macro");
             }
+        }
+        // Everything else a scope cannot run is one error value, not a diagnostic (design
+        // principles 9.1): `tiles::compile` is `(f: F) => F!`, and what a scope can run is only
+        // known once the pass has looked at the graph. The message names the scope and every
+        // operator it cannot run, with the reason each one gives, so a scope that fails is answered
+        // once (GPU design 2.4) and the value carries the first operator's position.
+        std::string refusalsText;
+        camel::source::origin_id_t refusalsOrigin = camel::source::kInvalidOriginId;
+        for (auto &[graph, scope] : refusals) {
+            const std::string scopeName = scopeNameOf(*graph);
+            const auto add = [&](const std::vector<Refusal> &entries, bool predicateInName,
+                                 const char *tail) {
+                if (entries.empty())
+                    return;
+                if (!refusalsText.empty())
+                    refusalsText += "; ";
+                const auto text = list(entries, predicateInName);
+                refusalsText +=
+                    "`#gpu` scope '" + scopeName + "': " + text.first + tail + " (" + text.second + ")";
+                if (refusalsOrigin == camel::source::kInvalidOriginId)
+                    refusalsOrigin = entries.front().origin;
+            };
+            add(scope.unsupported, false, " cannot run on the device");
+            add(scope.noProgram, true, "");
+        }
+        if (!refusalsText.empty() && error != nullptr) {
+            *error = core::rtdata::makeError(
+                "GpuScopeUnsupported", refusalsText, sourceLocationOf(context, refusalsOrigin));
         }
         if (!refusals.empty())
             return program;
@@ -357,21 +406,26 @@ const runtime::Program *outlineRegions(
                     // may still run the region, which is what the pass did before.
                     if (!regionInScope(*graph, region))
                         continue;
-                    auto diag =
-                        context.rtmDiags()->of(core::error::RuntimeDiag::GpuScopeNoDeviceProgram);
                     const auto origin =
                         graph->nodeOrigin(static_cast<rt::gc_node_ref_t>(region.members.front()));
-                    if (origin != camel::source::kInvalidOriginId)
-                        diag.atOrigin(origin);
                     const bool shape =
                         e.oper().empty() || e.reason() == UnsupportedComputation::Reason::Shape;
                     const std::string who = e.oper().empty() ? std::string("<region>") : e.oper();
-                    diag.commit(
-                        scopeNameOf(*graph),
-                        // The message takes the whole predicate, as the grouped report does.
-                        "operator '" + who + "' has no device program",
-                        shape ? "no device program for this shape"
-                              : "no device program for this operator");
+                    // The pass cannot keep the scope's promise for this region, so it fails with
+                    // the same error value the grouped refusal makes (design principles 9.1): what
+                    // a scope can run is only known once the pass has looked at the graph. The
+                    // message takes the whole predicate, as the grouped report does.
+                    if (error != nullptr) {
+                        *error = core::rtdata::makeError(
+                            "GpuScopeUnsupported",
+                            std::format(
+                                "`#gpu` scope '{}': operator '{}' has no device program ({})",
+                                scopeNameOf(*graph),
+                                who,
+                                shape ? "no device program for this shape"
+                                      : "no device program for this operator"),
+                            sourceLocationOf(context, origin));
+                    }
                     regionRefused = true;
                     break;
                 }

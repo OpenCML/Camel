@@ -653,13 +653,16 @@ name = "gpu_scope.unsupported_operator_is_a_compile_error"
 kind = "negative"
 case = "../../../cases/modules/tiles/gpu_scope_refusal.cml"
 # `tanh` is pure, but the device back end does not lower it. A `#gpu` scope promises the device
-# runs everything written in it, so the pass refuses instead of falling back silently: the
-# report names the scope and the operator, and no CUDA device is needed to produce it.
+# runs everything written in it, so the pass fails instead of falling back silently: `compile` is
+# `(f: F) => F!` (design principles 9.1), and its failure is the error value `GpuScopeUnsupported`,
+# which names the scope and the operator. It reaches the exit unhandled, so it is reported on
+# standard error, and no CUDA device is needed to produce it.
 args = ["${case}", "tiles::compile", "std::nvm"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::GpuScopeUnsupported"
-expect_output_contains = ["`#gpu` scope 'activate'", "operator 'tensor:tanh'", "no device implementation"]
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_stderr_contains = ["GpuScopeUnsupported", "`#gpu` scope 'activate'", "operator 'tensor:tanh'", "no device implementation"]
+expect_stdout_not_contains = ["`#gpu` scope 'activate'"]
 timeout_ms = 30000
 
 [[tests]]
@@ -1097,8 +1100,8 @@ case = "../../../cases/gpu/nofallback/grad_dynamic.cml"
 args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::GpuScopeUnsupported"
-expect_output_contains = ["`#gpu` scope 'step'", "operator 'autodiff:with_grad'", "needs a function known at compile time"]
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_stderr_contains = ["GpuScopeUnsupported", "`#gpu` scope 'step'", "operator 'autodiff:with_grad'", "needs a function known at compile time"]
 expect_output_not_contains = ["is a macro operator no pass has expanded"]
 timeout_ms = 30000
 

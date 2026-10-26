@@ -1241,11 +1241,12 @@ name = "nofallback.operator_without_a_program_is_a_compile_error"
 kind = "negative"
 case = "../../cases/gpu/nofallback/refused_operator.cml"
 # `tanh` is written in a function the scope calls, and the scope covers what it calls. No device
-# needs to exist for the refusal: it is the compiler's, and it names the scope and the operator.
+# needs to exist for the refusal: it is the pass's, so it is the error value `GpuScopeUnsupported`,
+# which names the scope and the operator, and it reaches the exit unhandled.
 args = ["${case}", "tiles::compile", "std::nvm"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::GpuScopeNoDeviceProgram"
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
 expect_output_contains = ["`#gpu` scope 'step'", "operator 'tensor:tanh'", "the module provides none"]
 timeout_ms = 30000
 
@@ -1258,7 +1259,7 @@ case = "../../cases/gpu/nofallback/refused_shape.cml"
 args = ["${case}", "tiles::compile", "std::nvm"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::GpuScopeNoDeviceProgram"
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
 expect_output_contains = ["`#gpu` scope 'product'", "operator 'tensor:matmul'", "no device program for this shape"]
 timeout_ms = 30000
 
@@ -1450,12 +1451,13 @@ name = "nofallback.one_diagnostic_lists_every_refused_operator"
 kind = "negative"
 case = "../../cases/gpu/nofallback/two_refusals.cml"
 # Two operators the scope cannot run, for two different reasons: `tanh` has no device
-# implementation in any module, and `a @ b` has one that refuses this rank. One diagnostic names
-# both and says why each one cannot run (GPU design 2.4), instead of stopping at the first.
+# implementation in any module, and `a @ b` has one that refuses this rank. One answer names
+# both and says why each one cannot run (GPU design 2.4), instead of stopping at the first: the
+# pass fails with one error value, and it reaches the exit unhandled.
 args = ["${case}", "tiles::compile", "std::nvm"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::GpuScopeNoDeviceProgram"
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
 expect_output_contains = ["`#gpu` scope 'step'", "'tensor:tanh'", "'tensor:matmul'"]
 verify_script = """
 ({ input, assert }) => {
@@ -1539,7 +1541,7 @@ case = "../../cases/gpu/nofallback/grad_expand.cml"
 args = ["--devices", "cpu", "${case}", "std::macro", "tiles::compile", "std::nvm"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::GpuScopeUnsupported"
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
 verify_script = """
 ({ input, assert }) => {
 const NL = String.fromCharCode(10)
@@ -1564,14 +1566,14 @@ kind = "negative"
 case = "../../cases/gpu/nofallback/grad_dynamic.cml"
 # The function is a parameter, so no pass can build the derived graph while compiling, and the
 # scope cannot run the operator either. The refusal names the operator and the call site: the
-# diagnostic is at the `with_grad(body)` call in the scope (line 35, column 14).
+# error value is reported at the `with_grad(body)` call in the scope (line 35, column 14).
 args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::GpuScopeUnsupported"
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
 expect_diagnostic_line = 35
 expect_diagnostic_column = 14
-expect_output_contains = ["`#gpu` scope 'step'", "operator 'autodiff:with_grad'", "needs a function known at compile time"]
+expect_stderr_contains = ["GpuScopeUnsupported", "`#gpu` scope 'step'", "operator 'autodiff:with_grad'", "needs a function known at compile time"]
 timeout_ms = 30000
 
 [[tests]]

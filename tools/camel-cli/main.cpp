@@ -679,6 +679,13 @@ int runCommand(int argc, char *argv[]) {
                         nullptr);
                     auto result = applyPassesDetailed(program, Run::resolvedPassList, ctx, os);
                     program     = result.program;
+                    if (result.errored()) {
+                        // The pass ended with an error value: the pipeline stopped there, and the
+                        // error is reported the way an error value nobody handled is (design
+                        // principles 9.1, 3.9) -- standard error, and a non-zero exit code.
+                        return camel::execute::reportPassErrorValue(
+                            ctx, result.errorValue, useJsonFormat);
+                    }
                     if (result.failed()) {
                         const auto &diags = ctx->runtimeDiagSink();
                         if (diags->hasErrors()) {
@@ -693,6 +700,10 @@ int runCommand(int argc, char *argv[]) {
                         auto fallbackResult =
                             applyPassesDetailed(program, Run::fallbackPasses, ctx, os);
                         program = fallbackResult.program;
+                        if (fallbackResult.errored()) {
+                            return camel::execute::reportPassErrorValue(
+                                ctx, fallbackResult.errorValue, useJsonFormat);
+                        }
                         if (fallbackResult.failed()) {
                             const auto &diags = ctx->runtimeDiagSink();
                             if (diags->hasErrors()) {
