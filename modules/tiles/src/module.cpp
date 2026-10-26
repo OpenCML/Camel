@@ -647,7 +647,7 @@ std::optional<Type *> resolve(const type_vec_t &with, const type_vec_t &norm, bo
 }
 
 // The operator groups whose signature the module computes from an argument; a declaration cannot
-// write any of them (standard library conventions 1-2; handover H156). `upload` and `download` map
+// write any of them (standard library conventions 1-2). `upload` and `download` map
 // every leaf of their argument into or out of the `Device<...>` handle; the resident/query groups
 // take the function's parameter list as their ordinary parameter; `regions` accepts any function
 // value. `stdlib/signatures/tiles.cml` records their reference entries, and the two fixed
@@ -775,7 +775,7 @@ class TilesModule final : public BuiltinModule {
                 camel::core::type::Type::create(camel::core::type::TypeCode::Float32))));
         // `#gpu` is a standard tag of the core (design principles 13.4); `tiles::compile` reads
         // it and refuses a scope the device cannot run (GPU design 6.1).
-        // `available` and `device` are declared in stdlib/tiles.cml (handover H156): their
+        // `available` and `device` are declared in stdlib/tiles.cml: their
         // signatures are fixed, so the declaration is their one source and C++ exports no group
         // for them. The seven groups behind `getOperatorGroups()` compute their signature from an
         // argument and remain the module's own; the reference entries are in
@@ -786,9 +786,10 @@ class TilesModule final : public BuiltinModule {
     bool load() override {
         if (loaded_)
             return true;
-        // The one device probe of the process, reported here because the device sources are built
-        // without libcamel as well (see capability.h). The H117 plan counts this line: however
-        // many calls prefer a device, there must be one.
+        // The one device probe of the process, reported here because the device sources are
+        // built without libcamel as well (see capability.h). `gpu_probe.once_per_process`
+        // (test/plans/feat/modules/tiles.plan.toml) counts this line: however many calls
+        // prefer a device, there must be one.
         deviceProbeStarted = [] {
             CAMEL_LOG_INFO_S("tiles", "probe: constructing the CUDA backend");
         };

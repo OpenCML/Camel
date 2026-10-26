@@ -54,7 +54,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "in_range"
-desc = "Slices and indexes inside the extent, including a negative start, are unaffected."
+desc = "Slices and indexes inside the extent are unaffected, and every bound is a positive position: slice(b, 0, 1, 3) takes the tail from position 1 and slice(b, 0, 2, 3) the last element."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/bounds/in_range.cml"
 args = ["${case}"]
@@ -76,12 +76,12 @@ timeout_ms = 10000
 
 [[tests]]
 name = "slice_runtime"
-desc = "With an unknown extent, a slice bound outside the axis is a located run-time fault, SliceOutOfRange, as for an array (design principles 3.9; the kernel used to clamp). A negative bound still counts from the end, and an end before the start is the empty range (3.9): slice(b, 0, -2, 0) is shape [0]."
+desc = "With an unknown extent, a slice bound outside the axis is a located run-time fault, SliceOutOfRange, as for an array (design principles 3.9; the kernel used to clamp). An end before the start is the empty range (3.9): slice(b, 0, 1, 0) is shape [0]."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/bounds/slice_runtime.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["ran", "[0]", "SliceOutOfRange", "The range 8 to 9 is out of range for axis 0 of a tensor of length 3", "slice_runtime.cml:7:"]
+expect_output_contains = ["ran", "[0]", "SliceOutOfRange", "The range 8 to 9 is out of range for an array of length 3", "slice_runtime.cml:7:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 

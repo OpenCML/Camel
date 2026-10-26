@@ -26,12 +26,12 @@ timeout_ms = 10000
 
 [[tests]]
 name = "reads_of_one_graph"
-desc = "The nodes, inputs, users, purity and printed form of a small graph."
+desc = "The nodes, inputs, users, purity and printed form of a small graph. Every node has a position, a parameter's port included: the port stands for the parameter, so it carries the position the parameter is written at."
 kind = "behavior"
 case = "../../../cases/modules/graph_read.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "[%0 Port : int, %1 Data : int, %2 Oper :op/mul_l : int, %3 Data : int, %4 Oper :op/add_l : int]\n[0, 0, 2, 0, 2]\n[1, 1, 1, 1, 0]\n[false, false, true, false, true]\n[none, none, :op/mul_l, none, :op/add_l]\n[int, int, int, int, int]\n[, , , , ]\n[null, 2, null, 1, null]\n[false, true, true, true, true]\n[none, compute]\n"
+expect_stdout_exact = "[%0 Port : int, %1 Data : int, %2 Oper :op/mul_l : int, %3 Data : int, %4 Oper :op/add_l : int]\n[0, 0, 2, 0, 2]\n[1, 1, 1, 1, 0]\n[false, false, true, false, true]\n[none, none, :op/mul_l, none, :op/add_l]\n[int, int, int, int, int]\n[, , , , ]\n[null, 2, null, 1, null]\n[true, true, true, true, true]\n[none, compute]\n"
 timeout_ms = 10000
 
 # A pass written in Camel is a function (p: Program) => Program! exported by a module; it runs

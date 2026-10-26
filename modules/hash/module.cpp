@@ -7,7 +7,7 @@
  * hexadecimal text a number of times.
  *
  * The signatures are written once, in the declaration module `stdlib/hash.cml` (design principles
- * 6.4; handover H19, step 10; H163). What is left here is what only C++ knows: the kernels in
+ * 6.4). What is left here is what only C++ knows: the kernels in
  * operators.cpp, the executor that runs them, and the purity declared at load. The three
  * operators are pure: they read no clock, no file and no generator.
  */

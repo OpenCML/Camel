@@ -47,7 +47,7 @@ class TensorExecutor : public Executor {
         : Executor(std::move(ctx), std::move(ops)) {}
 };
 
-/// The operators whose signatures `stdlib/tensor.cml` declares (handover H19, H151, H175). The C++
+/// The operators whose signatures `stdlib/tensor.cml` declares. The C++
 /// side keeps their kernels, executors, traits, resources and folds; the declaration is the
 /// module's signature, so their groups are not exported here. Every operator, declared or
 /// computed, is also exported under the type namespace (`Tensor.shape`): a declaration cannot
@@ -56,7 +56,7 @@ class TensorExecutor : public Executor {
 /// `load_npy` is not among them: the element type of its result is the one the call declares
 /// (`load_npy::<f32>(p)`), and a declaration's parameters cannot mention a type variable that is
 /// the result's element type, so its signature is computed (`loadNpyOperatorGroup`, recorded in
-/// `stdlib/signatures/tensor.cml`, handover H466).
+/// `stdlib/signatures/tensor.cml`).
 constexpr std::string_view kDeclaredOperators[] = {
     "dim",
     "gemm_backend",

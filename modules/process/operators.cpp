@@ -22,8 +22,7 @@ using namespace camel::core::rtdata;
 
 #ifdef _WIN32
 // `windows.h` first: `Lmcons.h` and `tlhelp32.h` use HANDLE, BOOL, DWORD, SIZE_T and ULONG_PTR
-// without declaring them, and no header this file includes before them reaches windows.h -- the
-// Windows legs stopped compiling when the tlhelp32.h include was added above it (H407).
+// without declaring them, and no header this file includes before them reaches windows.h.
 #include <windows.h>
 #include <Lmcons.h>
 #include <tlhelp32.h>

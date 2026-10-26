@@ -18,7 +18,7 @@ SimModule::SimModule(context_ptr_t ctx) : BuiltinModule("sim", ctx) {
     for (const char *uri : {"sim:pi_hits", "sim:asian_call_price"}) {
         camel::core::OperatorTable::instance().set(uri, {.pure = true, .elementwise = false});
     }
-    // Both signatures are fixed and are declared in stdlib/sim.cml (handover H179); the C++ side
+    // Both signatures are fixed and are declared in stdlib/sim.cml; the C++ side
     // keeps the kernels and the executor, and exports no operator group of its own.
 }
 

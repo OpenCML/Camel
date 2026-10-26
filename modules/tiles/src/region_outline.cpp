@@ -209,7 +209,7 @@ const runtime::Program *outlineRegions(
                 }
                 // A lowering exists; the use may still have no program (a shape or element type
                 // the back end refuses). An unresolved type or index instance is not a refusal:
-                // the run specializes it from the actual arguments before it decides (h251).
+                // the run specializes it from the actual arguments before it decides.
                 const char *reason = gpuRefusal(*graph, analysis, id);
                 if (reason && *reason)
                     groupOf(*graph).noProgram.push_back({name, reason, origin});

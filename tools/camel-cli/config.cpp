@@ -851,7 +851,7 @@ bool parseArgs(int argc, char *argv[]) {
         }
         if (!Run::timeitSpec.empty()) {
             if (!parseTimeitSpecValue(Run::timeitSpec, Run::timeitPass, Run::timeitIterations)) {
-                // A usage error is not a successful run (H181): the value was refused above.
+                // A usage error is not a successful run: the value was refused above.
                 exitCode = 1;
                 return false;
             }

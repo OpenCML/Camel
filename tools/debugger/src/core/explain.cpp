@@ -13,7 +13,7 @@
  *
  * Nothing here lets a nested run of the module (the `when` function `why_not` may run) be taken
  * for the program being debugged: the observation hooks are paused for the duration of the call,
- * as they are for a compiler pass (H150).
+ * as they are for a compiler pass.
  */
 
 #include "debug_core.h"
@@ -72,7 +72,7 @@ class SlotArgs final : public ArgsView {
 };
 
 /// A nested run is not the program: while it runs, the observer must not index its graphs or
-/// present its frames, exactly as for a compiler pass (H150).
+/// present its frames, exactly as for a compiler pass.
 class ObservationPause {
   public:
     explicit ObservationPause(bool &observing) : observing_(observing), saved_(observing) {

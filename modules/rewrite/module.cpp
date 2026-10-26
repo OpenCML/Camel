@@ -10,7 +10,7 @@
  * the import of this module itself. The engines, `rewrite`, `run`, `saturate` and `extract`, take
  * the rules as an array.
  *
- * The callable operators are declared in `stdlib/rewrite.cml` (handover H183; `run`, H226); this
+ * The callable operators (`run` among them) are declared in `stdlib/rewrite.cml`; this
  * file keeps their kernels, the executor and their purity. The reserved groups the language's
  * `rule` and `fact` declarations compile to (`__rule`, `__rule_when`, `__rule_generic`,
  * `__fact`) have no callable Camel name, so they stay exported from here.
@@ -788,10 +788,11 @@ bool ProofType::assignableFrom(Type *source) const { return is(source); }
 
 OtherType *ProofType::cloneWithParams(std::span<Type *const>) const { return get(); }
 
-/// `CheckReport`, the type of what `check` answers (H247, slice S0). A report is a table of rows
-/// (checkreport.h), not a string: the fixed rendering of the table is its `print`, so a reader
-/// keeps the fields and gets the text, and no caller has to parse the text back into fields. The
-/// type holds text and no reference into any GC space, so it is an ordinary other type.
+/// `CheckReport`, the type of what `check` answers (docs/design/rewrite/plan-verification.cn.md,
+/// S0). A report is a table of rows (checkreport.h), not a string: the fixed rendering of the
+/// table is its `print`, so a reader keeps the fields and gets the text, and no caller has to
+/// parse the text back into fields. The type holds text and no reference into any GC space, so
+/// it is an ordinary other type.
 class CheckReportType final : public OtherType {
   public:
     static CheckReportType *get();
@@ -971,8 +972,8 @@ slot_t rewriteKernel(ArgsView &, ArgsView &norm, Context &ctx) {
 }
 
 /// `run<rules, rounds: 16, strict: false, explain: false>(p)`: one application of the rules, with
-/// what it cost (H226). The configuration is the declaration's `with` parameters (handover H235),
-/// which is why the kernel reads them from `with` and the program from `norm`. It answers the
+/// what it cost. The configuration is the declaration's `with` parameters, which is why the
+/// kernel reads them from `with` and the program from `norm`. It answers the
 /// `Run<Program>` that `stdlib/rewrite.cml` declares: a struct with the program, the rewrites
 /// applied, the rounds, the nodes visited, the nodes erased, whether the last round reached a
 /// fixpoint, the wall time in seconds, and the proof when the attribution was recorded. The fields
@@ -3121,8 +3122,9 @@ uint64_t constMaskOf(const camel::runtime::RuleSource &source) {
 /// reported. `stream` picks the samples; the caller derives it from the rule's identity, not from
 /// its place in the array (the ruling of 2026-10-24 on `accuracy-check-sampling`, 1).
 ///
-/// The rows this appends are the verdict table `check` answers (H247, slice S0): the verdict, what
-/// it is about, and the evidence or the reason it is what it is. With no solver in the build a rule
+/// The rows this appends are the verdict table `check` answers
+/// (docs/design/rewrite/plan-verification.cn.md, S0): the verdict, what it is about, and the
+/// evidence or the reason it is what it is. With no solver in the build a rule
 /// whose two sides agree on every sample is `sampled`, never `proved`: the check compared samples,
 /// and `proved` is reserved for a licence's proposition being established (the ruling of
 /// 2026-10-24 on `verification-licence-to-precondition`).
@@ -3141,8 +3143,9 @@ void checkOneRule(
     const std::string proposition              = propositionOf(source.needs);
     const bool conditional                       = source.when != nullptr;
     const camel::core::sem::PermissionMask needs = source.needs;
-    // What the translation layer made of this rule's two sides (H247, slice S1). The sides are read
-    // once, here: the same two sides are the rule's own graphs, whatever the instance. A rule the
+    // What the translation layer made of this rule's two sides
+    // (docs/design/rewrite/plan-verification.cn.md, S1). The sides are read once, here: the same
+    // two sides are the rule's own graphs, whatever the instance. A rule the
     // layer cannot translate is `sampled` with the reason written in the coverage column (the ruling
     // of 2026-10-24 on `verification-verdict-surface`, 3).
     const std::string coverage = camel::verify::translate(source).column();
@@ -3696,11 +3699,12 @@ void checkGenericRule(
 /// groups registered (the ruling of 2026-10-24 on
 /// `generic-rule-check-surface-and-multi-parameter-instances`).
 ///
-/// It answers a `CheckReport` (H247, slice S0): the verdict table, one row per rule or per instance
-/// of a generic law, each row carrying the rule, the instance, the verdict, what the verdict is
-/// about and the evidence or the reason (the ruling of 2026-10-24 on
-/// `verification-verdict-surface`, 2: the verdict is published by `check` and the text output is
-/// the fixed rendering of that table, which is what a reader -- and the acceptance -- reads).
+/// It answers a `CheckReport` (docs/design/rewrite/plan-verification.cn.md, S0): the verdict
+/// table, one row per rule or per instance of a generic law, each row carrying the rule, the
+/// instance, the verdict, what the verdict is about and the evidence or the reason (the ruling
+/// of 2026-10-24 on `verification-verdict-surface`, 2: the verdict is published by `check` and
+/// the text output is the fixed rendering of that table, which is what a reader -- and the
+/// acceptance -- reads).
 slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     const int64_t samples = std::max<int64_t>(1, norm.get<Int64>(1));
     const uint64_t seed   = static_cast<uint64_t>(norm.get<Int64>(2));
@@ -3823,8 +3827,9 @@ slot_t checkReasonKernel(ArgsView &, ArgsView &norm, Context &) {
     return rowColumnKernel(norm, "<rewrite::check_reason>", &CheckRow::reason);
 }
 
-/// What the translation layer made of one row's rule (H247, slice S1): the proposition it read out
-/// of the two sides, or `beyond translation coverage` with the reason it refused. A rule outside
+/// What the translation layer made of one row's rule
+/// (docs/design/rewrite/plan-verification.cn.md, S1): the proposition read out of the two sides,
+/// or `beyond translation coverage` with the reason it refused. A rule outside
 /// the coverage is `sampled` and this is where the reason is written (the ruling of 2026-10-24 on
 /// `verification-verdict-surface`, 3).
 slot_t checkCoverageKernel(ArgsView &, ArgsView &norm, Context &) {
@@ -4022,7 +4027,7 @@ class RewriteModule final : public BuiltinModule {
                       })}}));
         // The callable operators (`rewrite`, `saturate`, `extract`, `check`, `run` and the four
         // rule readers) are declared in `stdlib/rewrite.cml`; the declarations are the one source
-        // of their signatures, so the module exports none of them itself (handover H183).
+        // of their signatures, so the module exports none of them itself.
     }
 
     bool load() override {

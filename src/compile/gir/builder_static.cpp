@@ -973,20 +973,16 @@ Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
     // step the program wrote -- the same path as `a..b`, read by the same reader and counted by
     // the same walk, because `range` is what the interval lowers to (`intervalValue`) and the
     // array it builds elsewhere is what these rounds are the elements of. The step has to be
-    // written -- a step of one is `a..b`, one thing one spelling -- so the two-argument call is
-    // refused here as it is where the call stands (`RangeTwoArgumentsRemoved`, which the call
-    // path reports after overload resolution), and a step of zero, which names no sequence at
+    // written -- a step of one is `a..b`, one thing one spelling -- so a two-argument call is
+    // not read here at all: it is left to the call path, which reports the ordinary no-match
+    // against the group's one signature (three parameters), as it does for any other call the
+    // set has no overload for. A step of zero, which names no sequence at
     // all, is `RangeStepZero` here as it is there (design principles 4.2; the rules of
     //  2026-10-24 on ` -generator-and-composition` and on ` -interval-step-form`).
     if (subject->type() == GCT::NodeKind::LINK && subject->size() >= 1) {
         const GCT::node_ptr_t &callee = subject->at(0);
         const bool namedRange = callee != nullptr && callee->type() == GCT::NodeKind::DREF &&
                                 callee->name() == "range";
-        if (namedRange && subject->size() - 1 == 2) {
-            const auto where = callee->origin() != 0 ? callee->origin() : subject->origin();
-            diags_->of(SemanticDiag::RangeTwoArgumentsRemoved).atOrigin(where).commit();
-            throw BuildAbortException();
-        }
         if (namedRange && subject->size() - 1 == 3) {
             const GCT::node_ptr_t &stepNode = subject->at(subject->size() - 1);
             const std::optional<int64_t> step = intBoundOf(stepNode);
@@ -1015,6 +1011,14 @@ Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
                 ofArrayData(constantValueOrNull(subject))) {
             return sequence;
         }
+    }
+    // The read found no sequence, so the caller is about to report one it cannot work out. A call
+    // in sequence position is handed to the call path before that: a spelling the overload set
+    // refuses is answered there the way it is answered anywhere else, one fault one answer. The
+    // read above built nothing, so the call path builds this subject once, here; every other
+    // unknown sequence still leaves the caller its own diagnostic.
+    if (subject->type() == GCT::NodeKind::LINK) {
+        (void)visitLinkNode(subject);
     }
     return std::nullopt;
 }

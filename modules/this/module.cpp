@@ -12,7 +12,7 @@ using namespace camel::core::module;
 
 /*
  * The Zen of Camel, as a string value. Its signature is written once, in the declaration module
- * `stdlib/this.cml` (design principles 6.4; handover H19, step 10); what is left here is the
+ * `stdlib/this.cml` (design principles 6.4); what is left here is the
  * kernel in operators.cpp, the executor that runs it, and the purity declared at load.
  */
 

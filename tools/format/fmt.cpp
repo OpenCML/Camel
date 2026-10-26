@@ -694,7 +694,7 @@ any Formatter::visitFuncDecl(cst::FuncDecl context) {
 
     if (!stmtBlock) {
         // A body-less declaration of a C++ operator: the signature is the whole of it (design
-        // principles 6.4; handover H19, step 1).
+        // principles 6.4).
         return result;
     }
     return result + " " + any_cast<string>(visitStmtBlock(stmtBlock));
@@ -1405,7 +1405,7 @@ string Formatter::formatStaticHeadNames(syn::Node head) {
 }
 
 /// A `(` at the head of a type after `fields` / `match type` opens a tuple or a parenthesised
-/// type, not a parameter list (H79 ruling 1), so a function type written there needs one more
+/// type, not a parameter list, so a function type written there needs one more
 /// pair of parentheses: `fields ((x: int) => int)`. Every other type is printed as it is.
 string Formatter::formatTypeInTypePosition(syn::Node type) {
     const string text = any_cast<string>(visitType(type));
@@ -1695,7 +1695,7 @@ any Formatter::visitMemberAccess(cst::MemberAccess context) {
 /*
 structData
     : '{' (pairedValues ','?)? '}' // no list comprehension because the struct is immutable
-    | '{' staticForExpr '}'        // a struct comprehension (H51 step 4)
+    | '{' staticForExpr '}'        // a struct comprehension
     ;
 */
 any Formatter::visitStructData(cst::StructData context) {
@@ -1747,7 +1747,7 @@ any Formatter::visitArrayData(cst::ArrayData context) {
 /*
 tupleData
     : '(' dataList? ','? ')'
-    | '(' staticForExpr ')'        // a tuple comprehension (H51 step 4)
+    | '(' staticForExpr ')'        // a tuple comprehension
     ;
 */
 any Formatter::visitTupleData(cst::TupleData context) {

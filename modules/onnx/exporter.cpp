@@ -1357,8 +1357,9 @@ Value placeholderLike(const Value &like, std::string name) {
     return Value::symbolic(std::move(name), facts.dtype, facts.shape);
 }
 
-/// The values a Loop carries for one argument (H44's outline, H71 item 3): the value itself when
-/// it is a tensor or a scalar, and the leaves of a struct or tuple in the order `flattenValue`
+/// The values a Loop carries for one argument
+/// (docs/technical/25_tensor_stack_and_onnx_export.md 3.6): the value itself when it is a tensor
+/// or a scalar, and the leaves of a struct or tuple in the order `flattenValue`
 /// gives them. False when there is nothing to carry (no leaf, or a leaf that a Loop cannot
 /// carry: an array, a string, a function). The leaf order is the type's declaration order, so
 /// the rebuilt value has the layout the program wrote.
@@ -1721,9 +1722,10 @@ Evaluator::BodyOutcome Evaluator::mergeOutcomes(
             out.next[k] = a.next[k];
             continue;
         }
-        // A carried struct or tuple changes leaf by leaf: each leaf that differs is one output of
-        // the If, and the aggregate is rebuilt from the leaves (H44's outline, as for the result
-        // below). A leaf that is the same on both paths keeps its value.
+        // A carried struct or tuple changes leaf by leaf: each leaf that differs is one output
+        // of the If, and the aggregate is rebuilt from the leaves
+        // (docs/technical/25_tensor_stack_and_onnx_export.md 3.6; as for the result below). A leaf
+        // that is the same on both paths keeps its value.
         std::vector<Value> la, lb;
         flattenValue(a.next[k], la);
         flattenValue(b.next[k], lb);
@@ -1921,8 +1923,8 @@ Evaluator::evalLoopBody(Activation &act, gc_node_ref_t ref, LoopFrame &loop) {
     }
     case GCNodeKind::Cast: {
         // A cast is not a decision: the branch under it decides whether the recursion goes on,
-        // and the conversion is applied to the value the path returns. (H5 puts a struct
-        // conversion between a returned branch and the function's exit; without this the
+        // and the conversion is applied to the value the path returns. (A struct conversion sits
+        // between a returned branch and the function's exit; without this the
         // branch is hidden from the loop translation and its recursive call is taken for a
         // call in value position.)
         BodyOutcome out = evalLoopBody(act, g->normInputsOf(ref).front(), loop);
@@ -2154,8 +2156,9 @@ Value Evaluator::translateLoop(Activation &act, GCGraph *fn, std::vector<Value> 
                 continue;
             }
             // A struct or tuple argument is carried leaf by leaf, in the order of its fields
-            // (H44's outline): the Loop state holds the leaves, and the body rebuilt from them
-            // is the struct the program wrote. Every leaf must keep its dtype and shape.
+            // (docs/technical/25_tensor_stack_and_onnx_export.md 3.6): the Loop state holds the
+            // leaves, and the body rebuilt from them is the struct the program wrote. Every leaf
+            // must keep its dtype and shape.
             std::vector<Value> inLeaves, outLeaves;
             carriableLeaves(inputs[k], inLeaves);
             flattenValue(outcome.next[k], outLeaves);
@@ -2292,8 +2295,9 @@ std::vector<Value> Evaluator::emitLoop(
     }
     emitter_.pushScope("loop_body");
     std::vector<ValueInfo> inputs, outputs;
-    // One Loop state input per leaf (H44's outline): a struct or tuple carried value is flattened
-    // in the order of its fields, and the leaves are what the Loop keeps between calls.
+    // One Loop state input per leaf (docs/technical/25_tensor_stack_and_onnx_export.md 3.6): a
+    // struct or tuple carried value is flattened in the order of its fields, and the leaves are
+    // what the Loop keeps between calls.
     std::vector<std::vector<Value>> initLeaves(init.size());
     std::vector<size_t> leafArgument;
     try {

@@ -388,7 +388,7 @@ function packageWheelBundle({
     // are dead on the user's machine -- the install is `$ORIGIN`-relative, and `auditwheel
     // lddtree` shows the only library anything in the wheel needs from outside itself is the
     // system's -- and the build tree's entry is what `auditwheel repair` follows to find
-    // libcamel.so, which is how the wheel ended up carrying a second copy of it (H604). Dropped
+    // libcamel.so, which is how the wheel ended up carrying a second copy of it. Dropped
     // from the copy the wheel is packed from, so the build tree itself is untouched and stays
     // runnable: on Linux only, because this edits the ELF dynamic string table, and the other
     // platforms have no such entry (Windows has no RUNPATH; a macOS Mach-O is rewritten by

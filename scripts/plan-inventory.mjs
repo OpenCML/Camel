@@ -111,7 +111,7 @@ export const FORBIDDEN = [
     { file: 'test/plans/feat/modules/autodiff.plan.toml', reason: 'its 5 milestone tests compare against PyTorch (`*_vs_torch64`)' },
     {
         file: 'test/plans/feat/modules/onnx.plan.toml',
-        reason: 'its 4 milestone tests: 2 PyTorch comparisons + 2 that cannot be selected apart from them (H154 §2)',
+        reason: 'its 4 milestone tests: 2 PyTorch comparisons + 2 that cannot be selected apart from them',
     },
     { file: 'test/plans/feat/linear/jit_framed.plan.toml', reason: 'its 2 milestone tests are GC stress (`CAMEL_GC_STRESS_SAFEPOINT` + `CAMEL_GC_VERIFY`)' },
 ]
@@ -152,7 +152,7 @@ export function planInventoryProblems() {
     }
     const planFiles = walkPlans('test/plans') ?? []
     if (planFiles.length === 0) {
-        problems.push('test/plans holds no *.plan.toml: the inventory examined nothing, which is not a pass (H185)')
+        problems.push('test/plans holds no *.plan.toml: the inventory examined nothing, which is not a pass')
         return problems
     }
     const slowSet = new Set(SLOW_PLANS)

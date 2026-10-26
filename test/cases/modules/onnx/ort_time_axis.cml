@@ -6,7 +6,7 @@
  * loops must take a step only when the recursion goes on. Run by ort_time_axis.py with STEPS.
  */
 module ort_time_axis
-import { ones, reshape, slice, sum, shape, tanh, zeros } from tensor
+import { ones, reshape, sum, shape, tanh, zeros } from tensor
 import { export_model } from onnx
 import { get_env } from env
 

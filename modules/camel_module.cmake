@@ -25,7 +25,7 @@ function(add_camel_module)
   # The .cmo files this configure builds, for the manifest written at the end of the top-level
   # CMakeLists.txt. scripts/common.js installs exactly these files: a .cmo that a module left in
   # the build tree before it was renamed or removed must not be copied into stdlib/ or the
-  # install (H138).
+  # install.
   set_property(GLOBAL APPEND PROPERTY CAMEL_CMO_TARGETS ${_target})
 
   if(ARG_SOURCES)
@@ -37,7 +37,7 @@ function(add_camel_module)
 
   # The sources are compiled as an OBJECT library and the .cmo is linked from those objects.
   # Compiling a module needs only the headers, so this target's objects exist before libcamel
-  # links; their undefined symbols are what decides libcamel's export list (H36). Linking the
+  # links; their undefined symbols are what decides libcamel's export list. Linking the
   # .cmo against libcamel would be the cycle otherwise.
   set(_objects ${_target}_objects)
   add_library(${_objects} OBJECT ${_sources})
