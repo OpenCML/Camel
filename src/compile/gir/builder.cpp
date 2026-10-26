@@ -1298,6 +1298,10 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
     };
     bool failed                     = false;
     const GCT::Node *outerStatement = unusedStatement_;
+    // The statements of this block that a `fail` written in it leaves behind, by the entry they
+    // belong to in statementsAfterFail_ (nothing when the block has met no `fail` yet, or the
+    // entry the last one opened).
+    std::optional<size_t> afterFailEntry;
     // A block that is itself a statement whose value nothing takes drops the value of its last
     // statement too.
     const bool valueDropped = gct == unusedStatement_ || droppedBodies_.contains(gct);
@@ -1344,6 +1348,22 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
             }
             if (unused && result.has_value() && result.type() == typeid(node_handle_t)) {
                 rejectUnusedPureResult(child, any_cast<node_handle_t>(result));
+            }
+            // A statement written after a `fail` in the same block (design principles 3.9; the
+            // author's ruling of 2026-10-26): the `fail` never returns, so where it is executed
+            // nothing written after it in the block is reached. Recorded here and reported when
+            // the body is complete, because whether the `fail` runs at all is a fact about the
+            // whole body: a `fail` whose value nothing wants does not run, and the statements
+            // after it are reached then (FailNotExecuted says so).
+            if (!gct->operands() && result.has_value() && result.type() == typeid(node_handle_t)) {
+                if (afterFailEntry.has_value()) {
+                    statementsAfterFail_[*afterFailEntry].statements.push_back(child->origin());
+                }
+                node_handle_t built = any_cast<node_handle_t>(result);
+                if (isFailCall(built)) {
+                    afterFailEntry = statementsAfterFail_.size();
+                    statementsAfterFail_.push_back({currGraph_, built, {}});
+                }
             }
             if (result.has_value() && result.type() == typeid(node_handle_t)) {
                 res = any_cast<node_handle_t>(result);

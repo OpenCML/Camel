@@ -2626,6 +2626,43 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         }
     }
 
+    // A call with an argument of type `never` never runs (design principles 3.9; the author's
+    // ruling of 2026-10-26): an argument is evaluated before the call it is written in, and this
+    // one never gives a value, so the call itself is typed `never` and no overload is chosen for
+    // it. The reading stands before the resolution -- a set of overloads that fits is not the
+    // question for a call that never runs, and a call that never runs says nothing about a
+    // signature either. The call is not built: what the expression gives is the argument's own
+    // node, which is the value that ends the program. One warning per call, naming the argument
+    // that causes it.
+    for (size_t i = 0; i < normInputs.size() && i < normInputTypes.size(); ++i) {
+        if (normInputTypes[i] == nullptr || normInputs[i].node == nullptr ||
+            valueTypeOf(normInputTypes[i])->code() != TypeCode::Never) {
+            continue;
+        }
+        // Which argument the program wrote: the name it gave the argument, or its position among
+        // the arguments as written (the binding put them in the declaration's order, so the
+        // position is looked up in the call itself).
+        std::string written;
+        if (normInputs[i].name.has_value()) {
+            written = std::format("the argument '{}'", *normInputs[i].name);
+        } else {
+            size_t position = i + 1;
+            for (size_t j = 1; j < gct->size(); ++j) {
+                if (normInputs[i].expr != nullptr && gct->at(j) == normInputs[i].expr) {
+                    position = j;
+                    break;
+                }
+            }
+            written = std::format("argument {}", position);
+        }
+        diags_->of(SemanticDiag::NeverArgumentCall)
+            .atOrigin(normInputs[i].expr != nullptr ? normInputs[i].expr->origin() : gct->origin())
+            .commit(written);
+        node_handle_t given = normInputs[i].node;
+        LEAVE("LINK");
+        return given;
+    }
+
     // An operator with overloads of the program: one of them, or the built-in group below.
     // `a != b` by an overload of `==` is the negation of that call (`negateResult`).
     compile_graph_ptr_t operatorOverload = nullptr;

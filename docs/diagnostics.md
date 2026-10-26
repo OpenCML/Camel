@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-289 diagnostics: 272 errors, 17 warnings. 15 carry a machine-applicable edit, 274 say why they carry none.
+292 diagnostics: 272 errors, 20 warnings. 15 carry a machine-applicable edit, 277 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -269,6 +269,9 @@ prints one entry.
 | `0x03100160` | [SemanticDiag::TagHasNoReader](#taghasnoreader) | Warn | no |
 | `0x03100161` | [SemanticDiag::DimensionNameUsedOnce](#dimensionnameusedonce) | Warn | no |
 | `0x031001A5` | [SemanticDiag::TypeVariableUnused](#typevariableunused) | Warn | no |
+| `0x031001C0` | [SemanticDiag::NeverArgumentCall](#neverargumentcall) | Warn | no |
+| `0x031001C1` | [SemanticDiag::FailNotExecuted](#failnotexecuted) | Warn | no |
+| `0x031001C2` | [SemanticDiag::StatementAfterFail](#statementafterfail) | Warn | no |
 | `0x04000000` | [RuntimeDiag::RuntimeError](#runtimeerror) | Error | no |
 | `0x04000001` | [RuntimeDiag::DivisionByZero](#divisionbyzero) | Error | no |
 | `0x04000002` | [RuntimeDiag::IndexOutOfRange](#indexoutofrange) | Error | no |
@@ -9141,6 +9144,111 @@ func show::<T>(x: int): string {
 
 func main(): int sync {
     println(show(1))
+    return 0
+}
+```
+
+### NeverArgumentCall
+
+`0x031001C0` · Warn · `SemanticDiag::NeverArgumentCall`
+
+**Fix**
+
+None: choice: the call cannot run while that argument never gives a value, and whether the call is meant at all is the writer's decision
+
+**Message**
+
+```text
+This call never runs: {0} has type 'never', and an argument is evaluated before the call it is written in.
+```
+
+**Help**
+
+```text
+A value of type 'never' is never handed out: what gives it -- a fault, 'fail', or 'exit' -- ends the program before the call. The call is typed 'never' for that reason and no overload is chosen for it. If the call is meant to run, the argument it is written with is what to look at.
+```
+
+**Example** (`test/cases/consistency/fail_never/never_argument.cml`, run as `camel check -O short test/cases/consistency/fail_never/never_argument.cml`)
+
+```camel
+module never_argument
+
+func double(x: int): int { return x + x }
+
+func stop(m: string): never {
+    return fail<'Stopped'>(m)
+}
+
+func main(): int[] sync {
+    return double(stop('no value to double'))
+}
+```
+
+### FailNotExecuted
+
+`0x031001C1` · Warn · `SemanticDiag::FailNotExecuted`
+
+**Fix**
+
+None: context: the 'fail' belongs on a sync chain or on the path the data takes, and where belongs to the design
+
+**Message**
+
+```text
+This 'fail' is not executed: {0}.
+```
+
+**Help**
+
+```text
+A 'fail' raises its fault where its value is wanted, and it is no effect of its own: nothing else runs it. Put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or write it where the data passes, so that the value it gives is the one that is needed.
+```
+
+**Example** (`test/cases/consistency/fail_never/fail_not_executed.cml`, run as `camel test/cases/consistency/fail_never/fail_not_executed.cml std::nvm`)
+
+```camel
+module fail_not_executed
+
+func f(x: int): int {
+    fail<'NoPremise'>('f was called with an x it cannot take')
+    return x + 1
+}
+
+func main(): int sync {
+    println(f(1))
+    return 0
+}
+```
+
+### StatementAfterFail
+
+`0x031001C2` · Warn · `SemanticDiag::StatementAfterFail`
+
+**Fix**
+
+None: choice: whether the statements after the 'fail' are meant at all is the writer's decision
+
+**Message**
+
+```text
+This statement cannot run: the 'fail' written before it never returns.
+```
+
+**Help**
+
+```text
+A 'fail' raises its fault and gives no value, so the statements written after it in the same block are never reached. Move them before the 'fail', or delete them.
+```
+
+**Example** (`test/cases/consistency/fail_never/statement_after_fail.cml`, run as `camel test/cases/consistency/fail_never/statement_after_fail.cml std::nvm`)
+
+```camel
+module statement_after_fail
+
+func main(): int sync {
+    println('before')
+    fail<'NoPremise'>('the premise of this program does not hold')
+    println('after')
     return 0
 }
 ```

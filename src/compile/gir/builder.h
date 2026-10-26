@@ -2952,6 +2952,19 @@ class Builder {
         bodyValueStatement_;
     /// The last statement of the block visitExecNode finished most recently, and its node.
     std::pair<GCT::node_ptr_t, node_handle_t> lastBlockStatement_{};
+    /// A `fail` written in a block with statements after it, and those statements (design
+    /// principles 3.9; the author's ruling of 2026-10-26): a `fail` never returns, so where it is
+    /// executed nothing after it in the block is reached. Whether it is executed is decided when
+    /// the body is complete, not where the block is built: a `fail` whose value nothing wants
+    /// does not run, and the statements after it are reached then (FailNotExecuted and the walk
+    /// over `needed` in reportDroppedEffects answer that question). Recorded per graph so that
+    /// the decision reads the same walk.
+    struct StatementsAfterFail {
+        compile_graph_ptr_t graph;
+        node_handle_t fail = nullptr;
+        std::vector<camel::source::origin_id_t> statements;
+    };
+    std::vector<StatementsAfterFail> statementsAfterFail_;
     /// UnusedPureResult at the last statement of the body of `graph` when it is a call of a
     /// pure operator: the body's value is dropped where `graph` is used (see above).
     void rejectDiscardedValue(const void *body);
