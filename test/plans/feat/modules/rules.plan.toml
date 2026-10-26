@@ -569,6 +569,37 @@ expect_stdout_contains = ["sum 3 mixed 2 one 1 two 1\nsum 3 mixed 2 one 0 two 1\
 timeout_ms = 20000
 
 [[tests]]
+name = "rules.fact_reads_a_fact_at_the_type_argument_it_is_given"
+desc = "A fact whose head declares a type parameter is one declaration and one fact per type argument (rewrite design 7.5). A rule's parameter is declared `y: T`, so the node its condition hands the query has the value type `T` and `depth(y)` is read at the type argument the declaration gives, the way any generic call infers one from its arguments (design principles 5.9); the fact body's own `x` is a case node, which states no value type, so the query there writes `depth::<T>(x)`. `drop_deep` rewrites `x + y` to `x` only where `depth(y) > 1`, so `target` (`a + (b + 1)`) loses its outer addition and `keep` (`a + b`) keeps its one: `keep`'s second operand is one addition deep, which is not more than one, while `target`'s second operand is two deep, so the rule drops the whole outer addition of `target` and leaves `a`. The two reports are `target 5 keep 1` (3 + 2 additions deep, then 1) and `target 0 keep 1`, and `target(3, 4)` is 3 where it was 8."
+kind = "behavior"
+case = "../../../cases/modules/rules/fact_at_type_argument_target.cml"
+args = ["${case}", "fact_at_type_argument::report", "fact_at_type_argument::apply", "fact_at_type_argument::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["target 5 keep 1\ntarget 0 keep 1\n3 7\n"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.a_nodes_value_type_is_a_type_a_program_writes"
+desc = "A node's value type is a type a program writes (language reference 9, design principles 5.9): `depthOfWritten(n: Node<int>)` is given a node whose value type is stated, so `depth(n)` infers the fact's type argument from it, the way any generic call infers one from its arguments; a node a pass read out of a graph states no value type, so `depthOfBare(n: Node)` writes `depth::<int>(n)`. Both read the same fact of the two additions of `target` (`a + (b + 1)`, depths 2 and 3), so the report is `written 5 bare 5` and the value is `8`."
+kind = "behavior"
+case = "../../../cases/modules/rules/fact_value_type_target.cml"
+args = ["${case}", "fact_value_type::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["written 5 bare 5\n8\n"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.a_query_given_a_value_names_the_node_type_it_takes"
+desc = "A fact is asked about a node, so a query handed a value is refused with the type its parameter takes and the type the argument has (language reference 9, design principles 5.9): `depth(a)` in a function whose parameter is an `int` names the query's parameter as a node of a value type -- `Node<T>` -- against the `int` value given, which is not the `NoMatchingFunction` of a call no declaration takes."
+kind = "negative"
+case = "../../../cases/modules/rules/fact_query_value.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["GenericArgumentsMismatch", "argument 1 has type 'int', but its parameter 'v: Node<"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
 name = "rules.fact_takes_the_parts_of_a_compound"
 desc = "A declaration with parameters (`fact mul_by_one(a: Node, b: Node): bool`) is a multi-parameter query: a rule's condition hands it the parts of the compound, and the fact is the one of the value whose parts they are (rewrite design 4.1-4.2). `mul_one_by_parts` rewrites `x * 1` to `x` because `mul_by_one(x, node_of(c))` reads `sign(y) == 1` through the `x * y` case; `x * 2` keeps its product because the query answers false. The coefficient is a `const` parameter, so its node is reached with `node_of(c)` (rule-language design v2, section 1: `const c` is the constant's value in a condition, and `node_of(c)` is the node), and the two parts are a factor and a node rather than two values pinned by shape. The first report prints one product in each function, the second only in `two`, and the values are unchanged."
 kind = "behavior"
