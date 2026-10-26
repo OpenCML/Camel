@@ -725,7 +725,7 @@ function readDeclarations(file, module, options = {}) {
         continue
     }
     if (trimmed.startsWith(keyword + ' ') ||
-        (options.kernels === true && module.kind === 'camel' && /^func\s+\S/.test(trimmed))) {
+        (options.kernels === true && /^func\s+\S/.test(trimmed))) {
             const isKernel = !trimmed.startsWith(keyword + ' ')
             const rest = trimmed.slice(isKernel ? 'func'.length + 1 : keyword.length + 1)
             const name = rest.slice(0, rest.indexOf('(')).replace(/::<.*>$/, '')
@@ -842,12 +842,17 @@ function parseDeclarations(module) {
     return entries
 }
 
-// The private operators of a module written in Camel: the kernels its `#impl` functions run. They
-// are body-less declarations the module does not export, so the reference page does not list them
-// (a private name is not the module's interface) and `--verify-ops` checks them against the
-// operators the module registers, marked private in the listing.
+// The private operators of a module: the kernels its `#impl` functions run. They are body-less
+// declarations the module does not export, so the reference page does not list them (a private name
+// is not the module's interface) and `--verify-ops` checks them against the operators the module
+// registers, marked private in the listing.
+//
+// The module's own file is read whichever language implements the module: `str`, `re` and `hash`
+// are compiled by C++ and still declare their kernels in Camel, with the `#op` tag that names the
+// operator they answer. A signature file declares no private kernel at all (it writes `#op(...)`
+// and exported prototypes only), so reading every module's source collects exactly the kernels
+// that exist. The kind of the module says what compiles it, not what its declaration file is.
 function parseKernels(module) {
-    if (module.kind !== 'camel') return []
     return readDeclarations(sourceOf(module), module, { kernels: true }).kernels
 }
 
