@@ -509,14 +509,20 @@ std::vector<gc_node_ref_t> externalInputsOf(const GraphDraft &draft, uint32_t re
     return externals;
 }
 
-/// Whether anything `node` runs after is ordered by a control edge (code with effects).
+/// Whether anything `node` runs after is ordered (code with effects): the control input a
+/// statement carries, or the sync edge of its block's chain.
 bool hasOrdering(const GraphDraft &draft, gc_node_ref_t node) {
     std::unordered_set<gc_node_ref_t> seen{node};
     std::vector<gc_node_ref_t> work{node};
     while (!work.empty()) {
         const gc_node_ref_t current = work.back();
         work.pop_back();
-        if (!draft.ctrlInputsOf(current).empty()) {
+        // The order is written in two kinds while the move onto the sync edge is in progress, and
+        // both are the wait a statement carries (docs/design/effects/edges.cn.md 1.5, 4.5). Reading
+        // only the control kind would answer "no order" for a statement its block's chain holds,
+        // and the GATE that keeps a gradient behind the function's own effects would not be built
+        // at all (below, where the gradient's result is waited on).
+        if (!draft.ctrlInputsOf(current).empty() || !draft.syncInputsOf(current).empty()) {
             return true;
         }
         for (auto inputs : {draft.normInputsOf(current), draft.withInputsOf(current)}) {

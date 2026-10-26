@@ -1198,17 +1198,18 @@ timeout_ms = 8000
 
 [[tests]]
 name = "null_then_plain_left"
-desc = "`??` over a plain `int`, at the operator. (It used to be reported as not implemented.)"
-kind = "negative"
+desc = "`??` over a plain `int`: allowed, with the warning that its null case is never taken (KnownNotNull), at the operator; design principles 3.8."
+kind = "behavior"
 case = "../../../cases/compile/tagged/err_plain_left.cml"
 args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::TaggedOperandMismatch"
-expect_diagnostic_code = "0x03000075"
+expect_exit = 0
+expect_stdout_exact = "1\n"
+expect_diagnostic_name = "SemanticDiag::KnownNotNull"
+expect_diagnostic_code = "0x03100111"
 expect_diagnostic_line = 9
 expect_diagnostic_column = 15
-expect_output_contains = ["'??' cannot be applied here: its left side has type 'int', which is not a 'T?'."]
-expect_output_not_contains = ["never printed", "UnknownInternalError"]
+expect_output_contains = ["is known not to be null here (it has type 'int'): the null case of '??' is never taken."]
+expect_output_not_contains = ["TaggedOperandMismatch", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -1240,6 +1241,22 @@ expect_diagnostic_code = "0x03000075"
 expect_diagnostic_line = 9
 expect_diagnostic_column = 15
 expect_output_contains = ["'??' cannot be applied here: its right side has type 'string', but the left side holds a 'int'."]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "null_then_null_literal_left"
+desc = "`??` over `null`: `null` has type `void`, so there is no value to put back into a `T?` and the operator is refused at its own position. A value that cannot be null is allowed there with a warning (KnownNotNull); `void` is not a value."
+kind = "negative"
+case = "../../../cases/compile/tagged/err_null_left.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TaggedOperandMismatch"
+expect_diagnostic_code = "0x03000075"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 18
+expect_output_contains = ["'??' cannot be applied here: its left side has type 'void', which is not a 'T?'."]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
