@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * The process and the machine it runs on: waiting, ending, who runs it and how many threads it has
- * and can have. Durations are seconds as a `float`, like `time::now` and the timeouts of the
+ * The process and the machine it runs on: waiting, ending, who runs it and how many threads it can have. Durations are seconds as a `float`, like `time::now` and the timeouts of the
  * network functions. The terminal is `io`'s, the environment `env`'s.
  */
 
@@ -16,7 +15,7 @@ export func sleep(seconds: float): void uses clock
 /// Ends the program with the given exit code, after the buffered output is written and the
 /// external resources are released. Nothing that is written after the call runs.
 /// @example exit(2)
-export func exit(code: int): void uses process
+export func exit(code: int): never uses process
 
 /// The name of the user the process runs as.
 /// @fails error value `NotFound` when the system has no name for the user
@@ -26,9 +25,3 @@ export func user_name(): string! uses env
 /// The number of hardware threads, at least 1.
 /// @example cpu_count()    // 8
 export func cpu_count(): int uses env
-
-/// The number of threads this process has, the caller included: the count the operating system
-/// reports for the process, not the number of processors. A test reads it to pin how many worker
-/// threads a run creates.
-/// @example thread_count()    // 1 at -t 1
-export func thread_count(): int uses process

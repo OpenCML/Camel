@@ -1,0 +1,67 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * Camel calling Python: run code in an embedded interpreter, import modules, read attributes and
+ * call what they hold. A `PyObject` is a handle into the interpreter, not a value of the program;
+ * it is released when nothing refers to it any more, so there is nothing to dispose of by hand.
+ * Values cross the boundary by copy or, for arrays, by DLPack without a copy (`to_py`, `from_py`
+ * in `stdlib/signatures/python.cml`): a numeric array handed to NumPy or PyTorch is the same
+ * memory on both sides, and a Python array that comes back is read in place.
+ *
+ * Python code can do anything, including write files and print, and the interpreter holds state
+ * between calls. So no function here names a resource of its own: each is a use of everything, in
+ * the written order, never folded, merged or dropped, and it runs when its result is needed or it
+ * is in a `sync` block. Whatever Python itself refuses -- an exception, a missing module, a missing
+ * attribute -- is an error value of kind `PythonError` whose message is the exception, its text and
+ * its traceback, never a fault of Camel's.
+ *
+ * The interpreter is started the first time a function here runs, through the stable ABI of
+ * Python 3, so one build of Camel works with the Python 3 the machine has.
+ * The other direction, Python calling Camel, is the package `camel` (`pip install camel-lang`).
+ */
+
+/// Runs Python statements in the interpreter. Definitions and assignments stay visible to later
+/// calls, as in a Python session.
+/// @fails error value `PythonError` when the code raises
+/// @example-fragment runs Python code when it runs, and the example only has the `void!` result to show
+/// @example exec('x = 1')
+export func exec(code: string): void!
+
+/// Evaluates a Python expression and gives its value.
+/// @fails error value `PythonError` when the expression raises
+/// @example eval('1 + 2 * 3')->to_string !! ''    // '7'
+export func eval(expression: string): PyObject!
+
+/// Runs the Python script at the path.
+/// @fails error value `PythonError` when the file cannot be read or the script raises
+/// @example-fragment runs Python code when it runs, and the example only has the `void!` result to show
+/// @example 'scripts/hello.py'->run_file
+export func run_file(path: string): void!
+
+/// Imports a Python module (`'math'`, `'numpy'`, `'matplotlib.pyplot'`) and gives it. Importing runs
+/// the body of the module and records it in `sys.modules`.
+/// @fails error value `PythonError` when the import raises
+/// @example import_module('math') !-> attr<'pi'> !-> to_string !! ''    // '3.141592653589793'
+export func import_module(name: string): PyObject!
+
+/// The attribute of a Python object; a dotted name walks the chain. Asking may run a property or
+/// a descriptor, so it can raise.
+/// @fails error value `PythonError` when the attribute does not exist or its getter raises
+/// @example import_module('math') !-> attr<'pi'>
+with <name: string>
+export func attr(obj: PyObject): PyObject!
+
+/// Calls a Python callable with the arguments the array holds, in order, and the keyword arguments
+/// the callable was bound with. `call<fn>` is a function from an array of arguments to a result, so
+/// it can be bound once and applied again.
+/// @fails error value `PythonError` when the call raises
+/// @example-fragment the arguments are Python objects made with `to_py`, which the page does not show
+/// @example [to_py(2.0)]->call<sqrt>
+with <fn: PyObject, kwargs: Map<string, PyObject>? = null>
+export func call(args: PyObject[]): PyObject!
+
+/// The `str()` of a Python object, as text.
+/// @fails error value `PythonError` when `__str__` raises
+/// @example eval('[1, 2]')->to_string !! ''    // '[1, 2]'
+export func to_string(obj: PyObject): string!

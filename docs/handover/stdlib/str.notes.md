@@ -60,3 +60,7 @@
 
 - `[s for i in 0..count]` 中 `i` 未使用，若有"未使用变量"警告需要换写法。
 - `loop … do if … then (…) else (…)` 的换行写法（`then`/`else` 在行首续行）。
+
+## 修订（批次 3，决策者 2026-10-26）
+
+- 字符串切片除了下标 `s[a:b]`，还有核心的函数形式 `with <axis, start, end, step> slice(x)`（同一个节点，也作用于数组与 `Bytes`），所以管道里可以写 `s->slice<0, a, b>`。`str::slice` 与 `substr` 仍删除：它们被核心的 `slice` 取代，`str` 不另提供。迁移 `substr<a, n>` 时，`s[a:a + n]` 与 `s->slice<0, a, a + n>` 皆可。

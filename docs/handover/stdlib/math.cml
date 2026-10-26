@@ -23,7 +23,7 @@
  *   number, and the bit operations of an integer width.
  */
 
-import { is_complex, is_float, is_integer, is_numeric, is_ordered, is_same } from types
+import { is_complex, is_float, is_integer, is_ordered, is_real, is_same } from types
 
 // ---- constants ----
 
@@ -282,14 +282,14 @@ export func max::<T>(a: T, b: T): T when is_ordered::<T>() {
 /// x held between lo and hi: lo when x is below, hi when above. A NaN x stays NaN.
 /// @fails fault `InvalidArgument` when lo is above hi, or a bound is NaN
 /// @example clamp(15, 0, 10)    // 10
-export func clamp::<T>(x: T, lo: T, hi: T): T when is_integer::<T>() || is_float::<T>() {
+export func clamp::<T>(x: T, lo: T, hi: T): T when is_real::<T>() {
     return if !(lo <= hi) then fail<'InvalidArgument'>('clamp needs lo <= hi') else min(max(x, lo), hi)
 }
 
 /// The absolute value of an integer or a float. The sign of a zero is cleared, a NaN stays a NaN,
 /// and the smallest integer is its own absolute value (negation wraps, as it does in `-x`).
 /// @example abs(-3)    // 3
-export func abs::<T>(x: T): T when is_integer::<T>() || is_float::<T>() {
+export func abs::<T>(x: T): T when is_real::<T>() {
     return max(x, -x)
 }
 
@@ -307,7 +307,7 @@ export func abs(z: c128): float {
 
 /// -1, 0 or 1 by the sign of x, in the type of x. A zero and a NaN are returned as they are.
 /// @example sign(-2.5)    // -1
-export func sign::<T>(x: T): T when is_integer::<T>() || is_float::<T>() {
+export func sign::<T>(x: T): T when is_real::<T>() {
     return if x > 0 then 1 else if x < 0 then -1 else x
 }
 
@@ -558,13 +558,13 @@ export func trunc::<T>(x: T[..]): T[..] when is_float::<T>() {
 
 /// `abs` of every element, in an array of the same shape.
 /// @example [-1.5, 2.0]->abs
-export func abs::<T>(x: T[..]): T[..] when is_integer::<T>() || is_float::<T>() {
+export func abs::<T>(x: T[..]): T[..] when is_real::<T>() {
     return x->map<abs>
 }
 
 /// `sign` of every element, in an array of the same shape.
 /// @example [-1.5, 2.0]->sign
-export func sign::<T>(x: T[..]): T[..] when is_integer::<T>() || is_float::<T>() {
+export func sign::<T>(x: T[..]): T[..] when is_real::<T>() {
     return x->map<sign>
 }
 
