@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-287 diagnostics: 270 errors, 17 warnings. 15 carry a machine-applicable edit, 272 say why they carry none.
+286 diagnostics: 269 errors, 17 warnings. 15 carry a machine-applicable edit, 271 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -283,7 +283,6 @@ prints one entry.
 | `0x04000032` | [RuntimeDiag::OperandTypeUnsupported](#operandtypeunsupported) | Error | no |
 | `0x04000033` | [RuntimeDiag::FieldNotFound](#fieldnotfound) | Error | no |
 | `0x04000034` | [RuntimeDiag::InvalidArgument](#invalidargument) | Error | no |
-| `0x04000035` | [RuntimeDiag::FileOpenFailed](#fileopenfailed) | Error | no |
 | `0x04000036` | [RuntimeDiag::FileSystemError](#filesystemerror) | Error | no |
 | `0x04000039` | [RuntimeDiag::RegexInvalid](#regexinvalid) | Error | no |
 | `0x0400003A` | [RuntimeDiag::TimeFormatFailed](#timeformatfailed) | Error | no |
@@ -5167,11 +5166,11 @@ A module declares only the operators it implements: a body-less declaration stan
 
 ```camel
 import bytes
-import { size } from bytes_tag
+import { to_array } from bytes_tag
 
 func main(): int sync {
     let b = bytes::encode('abc')
-    println(size(b))
+    println(to_array(b))
     return 0
 }
 ```
@@ -9672,28 +9671,6 @@ func main(): int sync {
     return 0
 }
 ```
-
-### FileOpenFailed
-
-`0x04000035` · Error · `RuntimeDiag::FileOpenFailed`
-
-**Fix**
-
-None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
-
-**Message**
-
-```text
-'{0}' cannot open the file '{1}': {2}.
-```
-
-**Help**
-
-```text
-Check that the path exists and that the program may access it; a relative path is taken from the directory the program is run in. Where a missing file is expected, fs.try_read_text returns an error value instead of ending the program.
-```
-
-*No example: no test small enough to show raises it.*
 
 ### FileSystemError
 

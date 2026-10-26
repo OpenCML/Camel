@@ -7,15 +7,15 @@ module bytes
 
 import { from_array } from bytes
 
-#op('bytes:size')
-export func size(content: Bytes): int
+#op('bytes:to_array')
+export func to_array(content: Bytes): int[]
 
 type Box = { a: int }
 
 func probe::<T>(x: T): int {
     return match type T {
         case struct => 0
-        case _ => size(from_array([0]))
+        case _ => len(to_array(from_array([0])))
     }
 }
 

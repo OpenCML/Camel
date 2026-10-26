@@ -79,17 +79,6 @@ slot_t toArrayKernel(ArgsView &, ArgsView &norm, Context &) {
         out->set<int64_t>(i, static_cast<unsigned char>(bytes[i]));
     return toSlot(out);
 }
-slot_t sizeKernel(ArgsView &, ArgsView &norm, Context &) {
-    const auto size = norm.get<BytesObject *>(0)->size();
-    if (size > INT64_MAX)
-        throwRuntimeFault(RuntimeDiag::InvalidArgument, "bytes.size", "length exceeds int range");
-    return toSlot(static_cast<int64_t>(size));
-}
-slot_t concatKernel(ArgsView &, ArgsView &norm, Context &) {
-    std::string bytes(norm.get<BytesObject *>(0)->view());
-    bytes.append(norm.get<BytesObject *>(1)->view());
-    return toSlot(BytesObject::from(bytes, mm::autoSpace()));
-}
 class BytesExecutor final : public Executor {
   public:
     explicit BytesExecutor(context_ptr_t ctx)
@@ -97,9 +86,7 @@ class BytesExecutor final : public Executor {
               std::move(ctx), {{"encode", encodeKernel},
                                {"decode", decodeKernel},
                                {"from_array", fromArrayKernel},
-                               {"to_array", toArrayKernel},
-                               {"size", sizeKernel},
-                               {"concat", concatKernel}}) {}
+                               {"to_array", toArrayKernel}}) {}
 };
 class BytesModule final : public BuiltinModule {
   public:
@@ -120,9 +107,7 @@ class BytesModule final : public BuiltinModule {
             {{"encode", true},
              {"decode", true},
              {"from_array", true},
-             {"to_array", true},
-             {"size", true},
-             {"concat", true}});
+             {"to_array", true}});
         loaded_ = true;
         return true;
     }

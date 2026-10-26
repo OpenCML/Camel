@@ -77,7 +77,7 @@ kind = "negative"
 case = "../../../cases/compile/native/bytes_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "bytes_arity.cml:10:23", "(Bytes, Bytes)", "<bytes:size>: (content: Bytes) => int"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "bytes_arity.cml:10:28", "(Bytes, Bytes)", "<bytes:to_array>: (content: Bytes) => int[]"]
 
 [[tests]]
 name = "native.wrong_type"
@@ -86,7 +86,7 @@ kind = "negative"
 case = "../../../cases/compile/native/bytes_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "bytes_type.cml:8:23", "argument types: <> (int)", "<bytes:size>: (content: Bytes) => int"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "bytes_type.cml:8:28", "argument types: <> (int)", "<bytes:to_array>: (content: Bytes) => int[]"]
 
 #  ---- The declarations of `str`: what an importer sees (step 10) ----
 
@@ -388,25 +388,25 @@ expect_output_contains = ["private_import.cml:8", "Reference 'at'"]
 
 [[tests]]
 name = "native.entry_uri_prefix"
-desc = "A declaration in the entry module uses the `module` declaration's name as its URI prefix (`bytes:size`), not the runtime name `main`: the declaration is loaded, the call reaches the operator."
+desc = "A declaration in the entry module uses the `module` declaration's name as its URI prefix (`bytes:to_array`), not the runtime name `main`: the declaration is loaded, the call reaches the operator."
 kind = "behavior"
 case = "../../../cases/compile/native/entry_uri.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_exact = "3\n"
+expect_stdout_exact = "[97, 98, 99]\n"
 
 #  ---- A declaration may name only its own module's operator ----
 
 [[tests]]
 name = "native.foreign_operator_refused"
-desc = "`#op('bytes:size')` in a module other than `bytes` names another module's operator: refused at the declaration, in the file that wrote it, before any call."
+desc = "`#op('bytes:to_array')` in a module other than `bytes` names another module's operator: refused at the declaration, in the file that wrote it, before any call."
 kind = "negative"
 case = "../../../cases/compile/native/foreign_operator.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::NativeDeclarationForeignOperator"
 expect_diagnostic_code = "0x03000181"
-expect_output_contains = ["bytes_tag.cml:11", "'size'", "bytes:size"]
+expect_output_contains = ["bytes_tag.cml:11", "'to_array'", "bytes:to_array"]
 
 [[tests]]
 name = "native.declaration_qualified"
@@ -638,7 +638,7 @@ expect_stdout_exact = "0\n"
 
 [[tests]]
 name = "native.re_declaration_import"
-desc = "`re`'s declaration is the module's signature: an importer calls `test` with two strings and reads its bool result from `stdlib/re.cml`, and every call reaches the C++ operator."
+desc = "`re`'s declaration is the module's signature: an importer calls `has_match<pattern>` with a string and reads its bool result from `stdlib/re.cml`, and every call reaches the C++ operator."
 kind = "behavior"
 case = "../../../cases/compile/native/re_declaration_import.cml"
 args = ["${case}"]
@@ -647,21 +647,21 @@ expect_stdout_exact = "true\ntrue\nfalse\n"
 
 [[tests]]
 name = "native.re_wrong_arity"
-desc = "`re:test` is declared with two ordinary arguments: a single one is refused at the call, and the overload the message lists is the declaration's, parameter names included."
+desc = "`re::has_match` is declared with one ordinary argument and a with-argument: two ordinary ones are refused at the call, and the overload the message lists is the declaration's, parameter names included."
 kind = "negative"
 case = "../../../cases/compile/native/re_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "re_arity.cml:10:17", "(string)", "<re:test>: (pattern: string, text: string) => bool"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "re_arity.cml:10:27", "argument types: <string> (string, string)", "<re:test>: <pattern: string> (text: string) => bool"]
 
 [[tests]]
 name = "native.re_wrong_type"
-desc = "An `int` where the declaration says `string`: refused at the call, and the signature in the message has the parameter names the declaration gave it — `stdlib/re.cml`, not the C++, is the source."
+desc = "An `int` where the declaration says `string`: refused at the call, and the signature in the message has the parameter names the declaration gave it (with-parameter included) — `stdlib/re.cml`, not the C++, is the source."
 kind = "negative"
 case = "../../../cases/compile/native/re_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "re_type.cml:11:17", "argument types: <> (int, string)", "<re:test>: (pattern: string, text: string) => bool"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "re_type.cml:11:29", "argument types: <string> (int)", "<re:test>: <pattern: string> (text: string) => bool"]
 
 #  ---- The declarations of `time`: the clock and its text forms ----
 

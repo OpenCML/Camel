@@ -1,10 +1,10 @@
 // Reads a log file and works on its lines: `split`, `trim` and `index_of` of `str` and string slices cut
 // a line into fields and select lines by a substring, `count` of `array` counts per level,
-// and `re.test` is used where a pattern is needed.
+// and `re::has_match` is used where a pattern is needed.
 // Run: camel examples/text/log_filter.cml
 module log_filter
 
-import { test } from re
+import { has_match } from re
 import { split, trim, index_of } from str
 import { count } from array
 import { mkdirs, write_text, read_text } from fs
@@ -64,6 +64,6 @@ func main(): int sync {
         ->foreach<(e: Entry) => sync { println('  ' + e.time + ' ' + e.message) }>
 
     println('lines that mention cache.db:', lines->count<(l: string): bool => has(l, 'cache.db')>)
-    println('lines with a number followed by a unit:', lines->count<(l: string): bool => test('[0-9]+(%|s)', l)>)
+    println('lines with a number followed by a unit:', lines->count<(l: string): bool => l->has_match<'[0-9]+(%|s)'>>)
     return 0
 }

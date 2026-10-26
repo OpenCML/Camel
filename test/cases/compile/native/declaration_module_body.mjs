@@ -33,10 +33,10 @@ fs.writeFileSync(
     path.join(SCRATCH, 'bytes.cml'),
     declarations +
         `
-/// Twice the number of bytes in the binary value, written in Camel over the operator this same
-/// file declares, size, which the C++ module implements.
+/// Twice the number of bytes in the binary value, written in Camel over an operator this same
+/// file declares, to_array, which the C++ module implements.
 export func twice(content: Bytes): int {
-    return size(content) + size(content)
+    return len(to_array(content)) + len(to_array(content))
 }
 `,
 )

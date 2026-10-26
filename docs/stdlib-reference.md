@@ -568,6 +568,18 @@ string. `'中文字'[1:3]` and `slice('中文字', 0, 1, 3)` are both `'文字'`
 - Pure.
 - Example: `slice('hello', 0, 1, 4)` gives `'ell'`
 
+#### `slice`
+
+```camel
+slice: (b: Bytes, axis: int, start: int, end: int, step: int = 1, written: int = 3) => Bytes
+```
+
+The same slice of a `Bytes`, by byte: it has the one axis 0, and the result is a `Bytes`.
+`b[1:3]` and `slice(b, 0, 1, 3)` are the same bytes.
+
+- Pure.
+- Example: `slice(encode('hello'), 0, 1, 4)` gives `the bytes of 'ell'`
+
 #### `concat`
 
 ```camel
@@ -987,11 +999,14 @@ The string made of the given code points.
 to_upper: (s: string) => string
 ```
 
-s with every letter in upper case, by the Unicode simple (one code point to one code point)
-case mapping; a letter without one is kept as it is.
+s with every letter in upper case, by the Unicode case mapping that does not depend on a
+language or on the context: a letter may become several (`'ß'` is `'SS'`), and a letter
+without a mapping, such as a CJK character or an emoji, is kept. The language-specific rules
+are not applied: `'i'` is `'I'` and a dotless `'ı'` is also `'I'`, and Greek `'Σ'` is always `'σ'` in lower case,
+even at the end of a word.
 
 - Pure.
-- Example: `to_upper('héllo')` gives `'HÉLLO'`
+- Example: `to_upper('straße')` gives `'STRASSE'`
 
 #### `to_lower`
 
@@ -999,10 +1014,11 @@ case mapping; a letter without one is kept as it is.
 to_lower: (s: string) => string
 ```
 
-s with every letter in lower case, by the Unicode simple case mapping.
+s with every letter in lower case, by the same mapping as `to_upper`: `'İ'` is `'i'` followed
+by a combining dot above, and `'I'` is `'i'`.
 
 - Pure.
-- Example: `to_lower('HeLLo')` gives `'hello'`
+- Example: `to_lower('ÀÉÎ Привет')` gives `'àéî привет'`
 
 ### Searching
 
@@ -1152,13 +1168,20 @@ s without the ASCII white space at both ends. Other white space, such as U+00A0,
 
 ## `bytes`: immutable binary values and UTF-8 conversion
 
+Binary data. `Bytes` is an immutable value of the core; a string is text and never holds
+arbitrary bytes, so the only crossing between the two is `encode` and `decode`.
+
+Length (`len`), concatenation (`a + b`) and cutting (`b[a:b]`) are the core's, as they are for
+a string. What is here converts, and is native: a `Bytes` is a data block, and reading or
+building one needs the layout control the language does not show (design principles 10.4).
+
 #### `encode`
 
 ```camel
 encode: (text: string) => Bytes
 ```
 
-Encodes valid UTF-8 text as an immutable Bytes value.
+The UTF-8 bytes of text.
 
 - Pure.
 - Example: `encode('hello')`
@@ -1169,11 +1192,12 @@ Encodes valid UTF-8 text as an immutable Bytes value.
 decode: (content: Bytes) => string!
 ```
 
-Decodes UTF-8, returning an EncodingError value for malformed input.
+The text the bytes spell. Bytes that are not valid UTF-8 are an error value, not a fault: they
+come from the outside world.
 
 - Pure.
-- Failure: error value `EncodingError` when the bytes are not valid UTF-8 or the text is larger than a string.
-- Example: `decode(encode('中文')) !! ''`
+- Failure: error `EncodingError` when the bytes are not valid UTF-8 or the text is larger than a string can be.
+- Example: `decode(encode('中文')) !! ''` gives `'中文'`
 
 #### `from_array`
 
@@ -1181,10 +1205,10 @@ Decodes UTF-8, returning an EncodingError value for malformed input.
 from_array: (values: int[]) => Bytes
 ```
 
-Copies integers in the inclusive range 0..255 into a binary value.
+The bytes with the given values.
 
 - Pure.
-- Failure: fault `InvalidArgument` for an element outside 0..255.
+- Failure: fault `InvalidArgument` when an element is outside 0..255.
 - Example: `from_array([0, 128, 255])`
 
 #### `to_array`
@@ -1193,32 +1217,10 @@ Copies integers in the inclusive range 0..255 into a binary value.
 to_array: (content: Bytes) => int[]
 ```
 
-Copies each byte into an integer array.
+The values of the bytes, each in 0..255.
 
 - Pure.
 - Example: `to_array(encode('AB'))` gives `[65, 66]`
-
-#### `size`
-
-```camel
-size: (content: Bytes) => int
-```
-
-The number of bytes in the binary value.
-
-- Pure.
-- Example: `size(encode('abc'))` gives `3`
-
-#### `concat`
-
-```camel
-concat: (left: Bytes, right: Bytes) => Bytes
-```
-
-Concatenates two binary values without decoding either one.
-
-- Pure.
-- Example: `concat(encode('header'), from_array([0, 255]))`
 
 <a id="ckpt"></a>
 
@@ -4332,17 +4334,108 @@ The SHA-256 digest of the UTF-8 bytes of a text, as 64 lower-case hexadecimal di
 
 ## `re`: regular expressions
 
-#### `test`
+Regular expressions (ECMAScript syntax) over strings. A position is an index in code points,
+as everywhere in a string, so `text[m.start, m.end>` is `m.text`.
+
+- The text a function works on is its ordinary argument; the pattern is a with-argument (it
+  decides which function this is), so calls chain: `line->find_all<'[0-9]+'>`.
+- A pattern that is not a regular expression is a fault of the call that meets it, as a wrong
+  index is. A pattern that comes from the outside world goes through `validate` first.
+- The only native pieces are the search itself (`find`), a test for a match
+  (`has_match_kernel`) and the check of a pattern; the rest is written here on top of them.
+
+### Native primitives
+
+#### `validate`
 
 ```camel
-test: (pattern: string, text: string) => bool
+validate: (pattern: string) => string!
 ```
 
-Whether the regular expression (ECMAScript syntax) matches somewhere in text.
+The pattern itself when it is a regular expression.
+
+- Pure.
+- Failure: error `RegexInvalid` when pattern is not a regular expression.
+- Example: `validate('[0-9]+') !! ''` gives `'[0-9]+'`
+
+### Matching
+
+#### `find`
+
+```camel
+find: <pattern: string, start: int = 0> (text: string) => Match?
+```
+
+The first match of pattern in text that starts at or after start, or null. Native: the kernel
+builds the `Match`, compiling each pattern once per run.
 
 - Pure.
 - Failure: fault `RegexInvalid` when pattern is not a regular expression.
-- Example: `test('[0-9]+', 'room 42')` gives `true`
+- Example: `'room 42'->find<'[0-9]+', 6> != null` gives `true`
+
+#### `has_match`
+
+```camel
+has_match: <pattern: string> (text: string) => bool
+```
+
+Whether pattern matches somewhere in text.
+
+- With effects: not pure.
+- Failure: fault `RegexInvalid` when pattern is not a regular expression.
+- Example: `'room 42'->has_match<'[0-9]+'>` gives `true`
+
+#### `find_all`
+
+```camel
+find_all: <pattern: string> (text: string) => Match[]
+```
+
+Every match of pattern in text, left to right, without overlap. After an empty match the
+search goes on one code point further.
+
+- With effects: not pure.
+- Failure: fault `RegexInvalid` when pattern is not a regular expression.
+- Example: `'a1b22'->find_all<'[0-9]+'>->map<(m: Match): string => m.text>` gives `['1', '22']`
+
+### Rewriting
+
+#### `replace_with`
+
+```camel
+replace_with: <pattern: string, by: (m: Match) => string> (text: string) => string
+```
+
+text with every match of pattern replaced by what by makes of it.
+
+- With effects: not pure.
+- Failure: fault `RegexInvalid` when pattern is not a regular expression.
+- Example: `'a1b22'->replace_with<'[0-9]+', (m: Match): string => '<' + m.text + '>'>` gives `'a<1>b<22>'`
+
+#### `replace`
+
+```camel
+replace: <pattern: string, new: string> (text: string) => string
+```
+
+text with every match of pattern replaced by the text new, which is taken literally.
+
+- With effects: not pure.
+- Failure: fault `RegexInvalid` when pattern is not a regular expression.
+- Example: `'a1b22'->replace<'[0-9]+', '#'>` gives `'a#b#'`
+
+#### `split`
+
+```camel
+split: <pattern: string> (text: string) => string[]
+```
+
+The pieces of text between the matches of pattern; one piece, the whole text, when there is
+no match.
+
+- With effects: not pure.
+- Failure: fault `RegexInvalid` when pattern is not a regular expression.
+- Example: `'a1b22c'->split<'[0-9]+'>` gives `['a', 'b', 'c']`
 
 <a id="para"></a>
 
@@ -5424,26 +5517,27 @@ Five operators stay in C++ and are recorded as computed signatures in
 #### `py_call`
 
 ```camel
-py_call: (fn: string | PyObject, ...args: PyObject[]) => PyObject
+py_call: (fn: string | PyObject, ...args: PyObject[]) => PyObject!
 ```
 
 Calls the Python callable `fn` -- a `PyObject`, or a dotted name such as `"math.sqrt"` -- with
 the `PyObject` arguments `args`, and returns its result. Any number of arguments is accepted.
 
 - With effects: runs arbitrary Python code.
-- Failure: fault `RuntimeError` when the call raises.
+- Failure: error `PythonError` when the call raises; the message starts with the exception class.
 - Example: `py_call("math.sqrt", py_wrap(2.0))`
 
 #### `py_call`
 
 ```camel
-py_call: (fn: string | PyObject, args?: (...PyObject) | PyObject[], kwargs?: Struct<...PyObject>) => PyObject
+py_call: (fn: string | PyObject, args?: (...PyObject) | PyObject[], kwargs?: Struct<...PyObject>) => PyObject!
 ```
 
 Calls `fn` with a tuple (or an array) of positional arguments and a struct of keyword
 arguments. Both collections are optional; every element is a `PyObject`.
 
 - With effects: not pure.
+- Failure: error `PythonError` when the call raises; the message starts with the exception class.
 - Example: `py_call(fn, (py_wrap(2.0),), {x: py_wrap(1)})`
 
 #### `py_print`
@@ -5468,7 +5562,7 @@ Writes the printed form of every `PyObject` argument and a newline, as `py_print
 returns the last argument (or `void` when there is none).
 
 - With effects: writes the interpreter's standard output.
-- Example: `py_println(py_eval("1 + 1"))`
+- Example: `py_eval("1 + 1") ?-> (o: PyObject): PyObject? => py_println(o)`
 
 #### `py_wrap`
 
@@ -5485,76 +5579,80 @@ Wraps the value `x` in a new Python object, keeping its Camel type as the type a
 #### `py_unwrap`
 
 ```camel
-py_unwrap: (obj: PyObject<T>) => T
+py_unwrap: (obj: PyObject<T>) => T!
 ```
 
-Unwraps a Python object wrapped from a value of type `T` and returns that value. An object
-that did not come from `py_wrap` has no type argument and is refused when the call is compiled.
+Unwraps a Python object into a value of type `T`. An object that did not come from `py_wrap`
+has no type argument and is refused when the call is compiled. The object must be of the kind
+`T` names: a `bool` takes a bool only (not `5`), an `int` an int that fits (not a bool or a
+float), a `float` a float or an int, a `string` a str (not bytes), `Bytes` bytes, an array a
+list, a tuple a tuple or list of its length, a struct a dict with its fields.
 
 - With effects: reads an interpreter object.
-- Example: `py_unwrap(py_wrap(2.0))` gives `2.0`
+- Failure: error `PythonTypeError` when the object is not of the kind `T` names; the message gives the path and what was found.
+- Example: `py_unwrap(py_wrap(2.0)) !! 0.0` gives `2.0`
 
 #### `py_exec`
 
 ```camel
-py_exec: (code: string) => PyObject
+py_exec: (code: string) => PyObject!
 ```
 
 Runs Python statements `code` in the interpreter and returns its `None`. Definitions and
 assignments stay visible to later calls, as in a Python session.
 
 - With effects: runs arbitrary Python code.
-- Failure: fault `RuntimeError` when the code raises.
+- Failure: error `PythonError` when the code raises; the message starts with the exception class.
 - Example: `py_exec("x = 1")`
 
 #### `py_eval`
 
 ```camel
-py_eval: (expr: string) => PyObject
+py_eval: (expr: string) => PyObject!
 ```
 
 Evaluates the Python expression `expr` and returns its value as a `PyObject`.
 
 - With effects: runs arbitrary Python code.
-- Failure: fault `RuntimeError` when the expression raises.
+- Failure: error `PythonError` when the expression raises; the message starts with the exception class.
 - Example: `py_eval("1 + 2 * 3")` gives `7`
 
 #### `py_run`
 
 ```camel
-py_run: (file_path: string) => PyObject
+py_run: (file_path: string) => PyObject!
 ```
 
 Runs the Python script at `file_path` and returns its `None`.
 
 - With effects: runs arbitrary Python code.
-- Failure: fault `RuntimeError` when the file cannot be read or the script raises.
+- Failure: error `PythonError` when the file cannot be read or the script raises; the message starts with the exception class.
 - Example: `py_run("scripts/hello.py")`
 
 #### `py_attr`
 
 ```camel
-py_attr: (obj: PyObject, attr: string) => PyObject
+py_attr: (obj: PyObject, attr: string) => PyObject!
 ```
 
 The attribute `attr` of the Python object `obj`; a dotted `attr` walks the chain. Asking may
 run a property or a descriptor, so the read is an effect.
 
 - With effects: reads interpreter state and may run Python code.
-- Failure: fault `RuntimeError` when the attribute does not exist.
-- Example: `py_attr(py_import("math"), "sqrt")`
+- Failure: error `PythonError` when the attribute does not exist; the message starts with the exception class.
+- Example: `py_import("math") ?-> (m: PyObject): PyObject! => py_attr(m, "sqrt")`
 
 #### `py_import`
 
 ```camel
-py_import: (module_name: string) => PyObject
+py_import: (module_name: string) => PyObject!
 ```
 
 Imports the Python module `module_name` and returns it. Importing runs the module body and
 records the module in `sys.modules`.
 
 - With effects: imports a module and runs its body.
-- Failure: fault `RuntimeError` when the import raises.
+- Failure: error `PythonError` when the import raises; the message starts with the exception class.
 - Example: `py_import("math")`
 
 #### `py_dispose`
@@ -5566,7 +5664,7 @@ py_dispose: (obj: PyObject) => void
 Drops this program's reference to the Python object `obj`.
 
 - With effects: advances the interpreter's reference counts.
-- Example: `py_dispose(py_import("math"))`
+- Example: `py_import("math") ?-> py_dispose`
 
 <a id="nn"></a>
 

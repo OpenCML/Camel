@@ -1,0 +1,74 @@
+/**
+ * What goes wrong on the Python side is an error value, not a fault of the program: a Python
+ * exception is `PythonError` and its message starts with the exception class, and an object that
+ * is not the kind `py_unwrap` was asked for is `PythonTypeError` with the path and what was found.
+ * Nothing converts silently: `5` is not a `bool`, `bytes` is not a `string`, `1e300` is not an f32.
+ */
+module errors
+
+import { py_exec, py_eval, py_import, py_attr, py_call, py_wrap, py_unwrap, PyObject } from python
+import { split } from str
+
+func first_line(text: string): string {
+    let lines = text->split<'\n'>
+    return lines[0]
+}
+
+func class_of(text: string): string {
+    let parts = first_line(text)->split<':'>
+    return parts[0]
+}
+
+func class_name(r: PyObject!): string {
+    return match r {
+        case error e => format<e.kind, class_of(e.message)>('{}: {}')
+        case v => 'ok'
+    }
+}
+
+func shown(r: PyObject!): string {
+    return match r {
+        case error e => format<e.kind, first_line(e.message)>('{}: {}')
+        case v => 'ok'
+    }
+}
+
+func expr(code: string): PyObject {
+    return py_eval(code) !! py_wrap('python failed')
+}
+
+func outcome::<T>(r: T!): string {
+    return match r {
+        case error e => format<e.kind, e.message>('{}: {}')
+        case v => format<v>('ok {}')
+    }
+}
+
+func main(): int sync {
+    // an exception is an error value that keeps its class
+    println(shown(py_exec('raise KeyError("missing")')))
+    println(shown(py_import('no_such_module_zzz')))
+    println(shown(py_attr(expr('1'), 'nope')))
+    println(shown(py_call('int', py_wrap('x'))))
+    println(shown(py_call('math.nope')))
+    println(class_name(py_eval('1 +')))
+    println(shown(py_eval('1 + 1')))
+
+    // what converts, and what is refused with the path and the kind found
+    println(outcome(py_unwrap(expr('5') as PyObject<int>)))
+    println(outcome(py_unwrap(expr('2') as PyObject<float>)))
+    println(outcome(py_unwrap(expr('1.5') as PyObject<f32>)))
+    println(outcome(py_unwrap(expr('"text"') as PyObject<string>)))
+    println(outcome(py_unwrap(expr('5') as PyObject<bool>)))
+    println(outcome(py_unwrap(expr('True') as PyObject<bool>)))
+    println(outcome(py_unwrap(expr('b"x"') as PyObject<string>)))
+    println(outcome(py_unwrap(expr('1e300') as PyObject<f32>)))
+    println(outcome(py_unwrap(expr('True') as PyObject<int>)))
+    println(outcome(py_unwrap(expr('1.5') as PyObject<int>)))
+    println(outcome(py_unwrap(expr('2 ** 40') as PyObject<i32>)))
+    println(outcome(py_unwrap(expr('[1, "a"]') as PyObject<int[]>)))
+    println(outcome(py_unwrap(expr('(1, 2, 3)') as PyObject<(int, int)>)))
+    println(outcome(py_unwrap(expr('{"a": 1}') as PyObject<{ a: int, b: int }>)))
+    println(outcome(py_unwrap(expr('[1, 2, 3]') as PyObject<int[]>)))
+    return 0
+}

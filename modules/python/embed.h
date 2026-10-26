@@ -158,22 +158,21 @@ inline bool isVenvVersionCompatible(const std::string &venvPath) {
     return parsed.major == expected.major && parsed.minor == expected.minor;
 }
 
+// Where the active environments keep their packages: `<env>/lib/python<major>.<minor>/site-packages`
+// (`<env>\Lib\site-packages` on Windows), for the Python this binary was built against. An
+// environment built for another minor version is left out, as its packages would not load.
 inline std::vector<std::string> activeEnvSitePackagePaths() {
     std::vector<std::string> out;
-    std::string venv = getEnv("VIRTUAL_ENV");
-    if (!venv.empty()) {
+    for (const char *variable : {"VIRTUAL_ENV", "CONDA_PREFIX"}) {
+        const std::string env = getEnv(variable);
+        if (env.empty() || !isVenvVersionCompatible(env))
+            continue;
 #ifdef _WIN32
-        out.push_back(venv + "\\Lib\\site-packages");
+        out.push_back(env + "\\Lib\\site-packages");
 #else
-        out.push_back(venv + "/lib/python/site-packages");
-#endif
-    }
-    std::string conda = getEnv("CONDA_PREFIX");
-    if (!conda.empty()) {
-#ifdef _WIN32
-        out.push_back(conda + "\\Lib\\site-packages");
-#else
-        out.push_back(conda + "/lib/python/site-packages");
+        out.push_back(
+            env + "/lib/python" + std::to_string(PY_MAJOR_VERSION) + "." +
+            std::to_string(PY_MINOR_VERSION) + "/site-packages");
 #endif
     }
     return out;
@@ -235,51 +234,6 @@ inline void prepend_path_if_missing(py::list &path, py::object &normalize, const
             return;
     }
     path.attr("insert")(0, dirStr);
-}
-
-// Ensures the venv's site-packages is in sys.path after initialisation.
-inline void ensure_site_packages_in_path() {
-    if (!Py_IsInitialized())
-        return;
-    auto venv = activeVenvPath();
-    if (!venv.has_value())
-        return;
-    if (!isVenvVersionCompatible(venv.value()))
-        // Prevent hard-to-debug cross-minor contamination (e.g. SRE module mismatch).
-        return;
-    const std::string &venv_path = venv.value();
-    std::string site_packages_path;
-#ifdef _WIN32
-    site_packages_path = venv_path + "\\Lib\\site-packages";
-#else
-    site_packages_path = venv_path + "/lib/python";
-    try {
-        py::module_ sys = py::module_::import("sys");
-        std::string ver = py::str(sys.attr("version_info").attr("major")).cast<std::string>() +
-                          "." + py::str(sys.attr("version_info").attr("minor")).cast<std::string>();
-        site_packages_path += ver + "/site-packages";
-    } catch (...) {
-        site_packages_path += "3.11/site-packages"; // fallback
-    }
-#endif
-    try {
-        py::module_ sys = py::module_::import("sys");
-        py::module_ os  = py::module_::import("os");
-        py::list path   = sys.attr("path");
-        if (!os.attr("path").attr("exists")(site_packages_path).cast<bool>())
-            return;
-        std::string norm_p = os.attr("path").attr("normpath")(site_packages_path).cast<std::string>();
-        for (size_t j = 0; j < path.size(); ++j) {
-            std::string path_str = py::str(path[j]).cast<std::string>();
-            std::string norm_j =
-                os.attr("path").attr("normpath")(path_str).cast<std::string>();
-            if (norm_p == norm_j || site_packages_path == path_str)
-                return;
-        }
-        path.attr("insert")(0, site_packages_path);
-    } catch (...) {
-        // Failing to add a path does not block the interpreter.
-    }
 }
 
 inline void ensure_extra_python_paths_in_path() {
@@ -384,7 +338,6 @@ inline void ensureInitialized() {
         detail::set_python_home_from_venv();
         py::initialize_interpreter();
         detail::keepPythonOutputInOrder();
-        detail::ensure_site_packages_in_path();
         detail::ensure_extra_python_paths_in_path();
         // The creating thread gives the GIL up: operators of either module take it for their own
         // duration, and a thread that never held it has no Python thread state at all.

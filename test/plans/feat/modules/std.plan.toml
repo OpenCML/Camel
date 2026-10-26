@@ -183,6 +183,17 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "python.errors"
+desc = "A Python exception is an error value of kind PythonError whose message starts with the exception class (a missing module, a missing attribute, a bad call, a syntax error), and py_unwrap refuses with PythonTypeError and a path when the object is not the kind asked for: 5 is not a bool, bytes is not a string, 1e300 is not an f32, True is not an int, 1.5 is not an int, and a list, tuple or dict must have the right elements."
+kind = "behavior"
+case = "../../../cases/modules/std/python/errors.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "PythonError: KeyError: 'missing'\nPythonError: ModuleNotFoundError: No module named 'no_such_module_zzz'\nPythonError: AttributeError: 'int' object has no attribute 'nope'\nPythonError: ValueError: invalid literal for int() with base 10: 'x'\nPythonError: AttributeError: module 'math' has no attribute 'nope'\nPythonError: SyntaxError\nok\nok 5\nok 2.0\nok 1.5\nok text\nPythonTypeError: value: expected a bool, found int\nok true\nPythonTypeError: value: expected a str, found bytes\nPythonTypeError: value: the number 1e+300 does not fit an f32\nPythonTypeError: value: expected an int, found bool\nPythonTypeError: value: expected an int, found float\nPythonTypeError: value: the int 1099511627776 does not fit an i32\nPythonTypeError: value[1]: expected an int, found str\nPythonTypeError: value: expected a tuple of 2 element(s), found 3\nPythonTypeError: value: missing field 'b'\nok [1, 2, 3]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
 name = "random.basic"
 desc = "Exercises seeded random generation APIs so deterministic behavior can be observed."
 kind = "behavior"
@@ -278,3 +289,25 @@ expect_exit = 0
 expect_stdout_exact = "86400.0\n1000000000.0\n1970-01-02 00:00\n2001-09-09T01:46:40\n-1.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
+
+[[tests]]
+name = "re.match"
+desc = "`find` returns the first `Match` or null with positions in code points (text outside ASCII and above the BMP) and null for a group that took no part; `find_all`, `replace`, `replace_with`, `split`, `validate` and `has_match` are written on it."
+kind = "behavior"
+case = "../../../cases/modules/std/re/match.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "5-7:42 none\n12-13:7 2-2:\n4-6:42 1-3:本語\n2-3:1\n[key, val, null]\n[1, 22]\n[0, 1, 2, 3]\na+b+c a!b 日・本\na<1>b<22>\n[a, b, c] 1\n[0-9]+ bad\ntrue true\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "re.find_start_out_of_range"
+desc = "A search that starts after the end of the text is the fault InvalidArgument, naming the start and the length."
+kind = "negative"
+case = "../../../cases/modules/std/re/invalid_start.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["start 9 is outside 0..3"]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

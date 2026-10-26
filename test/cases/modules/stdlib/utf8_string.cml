@@ -5,9 +5,9 @@
 module utf8_string
 
 import { split, trim, replace, index_of, starts_with, repeat, codepoints, to_upper } from str
-import { encode, decode, from_array, size } from bytes
+import { encode, decode, from_array } from bytes
 import { sha256 } from hash
-import { test } from re
+import { has_match } from re
 
 func main(): int sync {
     let s = '中文x😀'
@@ -24,12 +24,12 @@ func main(): int sync {
 
     // the bytes of a string, and back: `bytes::encode` and `bytes::decode` are the one conversion
     let b = encode(s)
-    println(size(b), size(encode(s)), decode(b) !! 'bad')
+    println(len(b), len(encode(s)), decode(b) !! 'bad')
     println(decode(encode('héllo')) !! 'bad', len(decode(from_array([228, 184, 173])) !! 'bad'))
     println(codepoints(s))
     println(sha256('abc') == sha256(encode('abc')), sha256('中') == sha256(encode('中')))
 
     // regular expressions: `.` is one character
-    println(test('^.$', '中'), test('^.{2}$', '中文'), test('^.$', 'ab'), test('文', 'a文b'))
+    println('中'->has_match<'^.$'>, '中文'->has_match<'^.{2}$'>, 'ab'->has_match<'^.$'>, 'a文b'->has_match<'文'>)
     return 0
 }

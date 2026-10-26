@@ -1,6 +1,6 @@
 error[RuntimeDiag::RegexInvalid]: 're.test': '(unclosed' is not a valid regular expression: Mismatched '(' and ')' in regular expression.
-  --> <ROOT>/test/cases/compile/diag_render/runtime_regex.cml:6:13
+  --> <ROOT>/test/cases/compile/diag_render/runtime_regex.cml:6:29
    |
- 6 |     println(test('(unclosed', 'abc'))
-   |             ^^^^
+ 6 |     println('abc'->has_match<'(unclosed'>)
+   |                             ^^^^^^^^^^^^^
 help: Patterns use the ECMAScript syntax. A character with a special meaning is matched literally when it is written with a backslash.

@@ -6,11 +6,11 @@
 module str_chars
 
 import { codepoints, from_codepoints } from str
-import { encode, decode, from_array, size } from bytes
+import { encode, decode, from_array } from bytes
 
 func main(): int sync {
     let s = 'h€😀é'        // 1 + 3 + 4 + 2 bytes, 4 characters
-    println(len(s), size(encode(s)))
+    println(len(s), len(encode(s)))
     println(codepoints(s))
     println(codepoints(''), len(''))
     println(from_codepoints([104, 8364, 128512, 233]) !! 'bad')
