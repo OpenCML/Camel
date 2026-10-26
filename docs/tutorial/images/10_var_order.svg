@@ -12,7 +12,7 @@
 <text text-anchor="middle" x="187" y="-1008.88" font-family="Times,serif" font-size="14.00">twice 的子图：格子和两次写之间的同步边</text>
 <g id="clust1" class="cluster">
 <title>cluster_F02</title>
-<g id="a_clust1"><a xlink:title="() =&gt; int">
+<g id="a_clust1"><a xlink:title="() =&gt; int pure">
 <polygon fill="none" stroke="black" points="8,-8 8,-993.08 366,-993.08 366,-8 8,-8"/>
 <text text-anchor="middle" x="187" y="-977.88" font-family="Times,serif" font-size="14.00">twice</text>
 </a>
