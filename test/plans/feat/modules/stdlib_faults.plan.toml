@@ -225,7 +225,7 @@ name = "stdlib.fault.zip_with"
 desc = "zip_with on arrays of different lengths: the fault of zip, located in the library. The line is \"return zip(xs, ys)->map<...>\" in stdlib/array.cml. It moved once: the reduction kernels took the place of the blank lines above three doc comments without moving it (each `#impl` tag stood for a blank line), and the sorting family's declarations grew from five generic ones to one per element type and algorithm, which stands above it and moved it from 254 to 300."
 case = "../../../cases/modules/stdlib/fault_zip_with.cml"
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 300
+expect_diagnostic_line = 304
 
 [[tests]]
 name = "stdlib.fault.zip_with.opt"
@@ -234,4 +234,4 @@ case = "../../../cases/modules/stdlib/fault_zip_with.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 300
+expect_diagnostic_line = 304

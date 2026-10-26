@@ -128,6 +128,16 @@ void Builder::resolveGenericTemplateNames(const generic_template_ptr_t &tmpl) {
     // read here; only the names are.
     locals.emplace_back();
     insertParameterNames(tmpl->func, tmpl->funcType, locals.back());
+    // The type parameters of the head are names of the body too: `T(x)` converts to the type `T`
+    // is bound to at each instance (resolveDRefNode).
+    for (const std::string &param : tmpl->headParams) {
+        locals.back().insert(param);
+    }
+    std::vector<std::string> variables;
+    camel::core::type::collectTypeVars(tmpl->funcType, variables);
+    for (const std::string &variable : variables) {
+        locals.back().insert(variable);
+    }
     walkStaticBodyNames(tmpl->func->at(1), locals, true);
     // A `when` clause is not a body: it belongs to the condition evaluator, which already answers
     // the declaration-site half of it for a function that is not generic, where it is written

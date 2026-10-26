@@ -14,6 +14,7 @@ f0eabb47cb834d3d ok test/cases/parse/constructs/tags.cml
 919ca45d4db912c3 ok test/cases/parse/constructs/type_arguments.cml
 2fe3134d6fc3e87e no test/cases/parse/numbers/bad_octal_digit.cml
 2fe3134d6fc3e87e no test/cases/parse/numbers/leading_zero.cml
+e60bb840f65ee066 no test/cases/parse/numbers/leading_zero_real.cml
 bb3a3b0b4dee2801 no test/cases/parse/numbers/member_index_exponent.cml
 f25d7a4731924b3a ok test/cases/parse/numbers/tokens.cml
 f2402763cee2b802 ok test/cases/parse/rules/declared.cml

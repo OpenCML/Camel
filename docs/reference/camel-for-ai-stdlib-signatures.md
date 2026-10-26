@@ -291,13 +291,15 @@ is_bool: () => bool
 is_plain: () => bool
 ```
 
-**`array`** — import { ... } from array — 23 name(s)
+**`array`** — import { ... } from array — 39 name(s)
 
 ```text
 argsort: (keys: i32[]) => int[]
 argsort: (keys: int[]) => int[]
 argsort: (keys: f32[]) => int[]
 argsort: (keys: float[]) => int[]
+argsort: (keys: bf16[]) => int[]
+argsort: (keys: f16[]) => int[]
 argsort: (keys: bool[]) => int[]
 argsort: (keys: string[]) => int[]
 sort: (xs: i32[]) => i32[]
@@ -337,6 +339,22 @@ max: (xs: T[]) => T? when is_ordered::<T>()
 flat_map: <f: (x: T) => U[]> (xs: T[]) => U[]
 sort_by: <key: (x: T) => K> (xs: T[]) => T[]
 zip_with: <f: (a: T, b: U) => V> (xs: T[], ys: U[]) => V[]
+sum: <axis: int> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
+sum: <axis: int, keepdims: bool> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
+mean: <axis: int> (xs: T[..]) => T[..] when is_float::<T>()
+mean: <axis: int, keepdims: bool> (xs: T[..]) => T[..] when is_float::<T>()
+min: <axis: int> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
+min: <axis: int, keepdims: bool> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
+max: <axis: int> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
+max: <axis: int, keepdims: bool> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
+argmax: <axis: int> (xs: T[..]) => int[..] when is_integer::<T>() || is_float::<T>()
+argmax: <axis: int, keepdims: bool> (xs: T[..]) => int[..] when is_integer::<T>() || is_float::<T>()
+argmin: <axis: int> (xs: T[..]) => int[..] when is_integer::<T>() || is_float::<T>()
+argmin: <axis: int, keepdims: bool> (xs: T[..]) => int[..] when is_integer::<T>() || is_float::<T>()
+shape: (xs: T[..]) => int[]
+numel: (xs: T[..]) => int
+dim: <axis: int> (xs: T[..]) => int
+to_bytes: (xs: T[..]) => Bytes when is_plain::<T>()
 ```
 
 **`stream`** — import { ... } from stream — 2 name(s)

@@ -225,7 +225,7 @@ timeout_ms = 8000
 
 # One number grammar for the command line and the source: an entry argument is one whole
 # number token of the language, read by the same parser a literal is. The integer tokens are
-# decimal, `0x` hexadecimal, `0b` binary and octal with a leading `0`; an integer token in a
+# decimal, `0x` hexadecimal, `0b` binary and `0o` octal; an integer token in a
 # float parameter is converted to that width, as a source literal in a float position is.
 
 [[tests]]
@@ -241,14 +241,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
-name = "entry_args.integer_leading_zero_is_decimal"
-desc = "A leading-zero decimal is data text: `--arg n=077` is 77, not the octal 63 a source literal would spell `0o77`, and a float parameter reads the same 77.0 (reference 2.5.2)."
-kind = "behavior"
+name = "entry_args.integer_leading_zero_refused"
+desc = "A leading zero before another digit is no number token at the entry, as in source: `--arg n=077` is refused (octal is `0o77`), as is `077.5` for a float parameter (reference 2.5.2)."
+kind = "negative"
 case = "../../../cases/compile/entry_args/scalars.cml"
-args = ["${case}", "--arg", "n=077", "--arg", "rate=077", "--arg", "name=hi", "--arg", "loud=true"]
-expect_exit = 78
-expect_stdout_contains = ["hi 77 77.0 true"]
-expect_output_not_contains = ["63"]
+args = ["${case}", "--arg", "n=077", "--arg", "rate=0.5", "--arg", "name=hi", "--arg", "loud=true"]
+expect_exit = 1
+expect_output_contains = ["077"]
+expect_output_not_contains = ["hi 77", "63"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -277,15 +277,15 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
-name = "entry_args.leading_zero_decimal_is_data_text"
-desc = "`09` is data text, not a source literal: the entry reader reads it as the decimal 9, while the source lexer refuses `09` as one run (the two readers differ only in the two supplements of reference 2.5.2)."
-kind = "behavior"
+name = "entry_args.leading_zero_decimal_refused"
+desc = "`09` is no number token at the entry, as in source: it is refused, not read as the decimal 9."
+kind = "negative"
 case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "--arg", "n=09", "--arg", "rate=0.5", "--arg", "name=hi", "--arg", "loud=true"]
-expect_exit = 10
-expect_stdout_contains = ["hi 9 0.5 true"]
-expect_output_not_contains = ["Error"]
-normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
+expect_exit = 1
+expect_output_contains = ["09"]
+expect_output_not_contains = ["hi 9"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
