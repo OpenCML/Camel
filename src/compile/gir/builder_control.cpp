@@ -128,8 +128,6 @@ bool isEmptyArrayLiteral(node_handle_t node) {
 
 /// The type of the untyped empty array literal `[]`: an array whose element type nobody wrote.
 /// Its element type is the only thing it leaves open, so every position it stands in fixes it.
-/// (An array whose element type nobody stated is not one of these when its rank is open;
-/// isElementTypeOpenArray tells them apart.)
 bool isEmptyArrayLiteralType(const Type *type) { return isUntypedArrayType(type); }
 
 /// Whether a value of this type is a struct or tuple whose parts can be the components of a

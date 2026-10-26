@@ -726,7 +726,7 @@ Array *where(Operand cond, Operand lhs, Operand rhs, mm::IAllocator &allocator) 
 
 Array *cast(const Array *input, TypeCode dtype, mm::IAllocator &allocator) {
     if (!isSupportedTensorScalar(dtype)) {
-        throw std::invalid_argument("Unsupported Tensor element type");
+        throw std::invalid_argument("Unsupported array element type");
     }
     Array *out = createTensor(dtype, input->shapeSpan(), allocator);
     if (dtype == input->dtype()) {
