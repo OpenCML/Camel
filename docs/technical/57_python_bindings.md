@@ -125,7 +125,7 @@ memory:        8 results of a 4 MiB pass-through hold 4.0 MiB, 8 results of a 4 
 ```
 error value:   camel.FaultError name=RangeError at python_rules.cml:36:15
                message=the factor must not be negative
-diagnostic:    camel.DiagnosticError name=SemanticDiag::UnresolvedReference code=0x0300000B at /home/zjwei/camel-work/h424-python-bindings/test/cases/feat/bindings/python_broken.cml:9:12
+diagnostic:    camel.DiagnosticError name=SemanticDiag::UnresolvedReference code=0x0300000B at <work>/test/cases/feat/bindings/python_broken.cml:9:12
                message=Unresolved reference: 'missing_name'.
 absent name:   camel.DiagnosticError name=NoSuchExport: 'python_rules' exports no 'not_declared'
 ```

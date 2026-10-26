@@ -52,7 +52,7 @@ node test/tools/learnability/run.mjs --solver replay --archive <archive-dir> --r
 The compiler's path is site-specific. `tasks.json` names the build this evaluation ran against on this
 host; if that worktree has been removed, pass `--camel-bin` with any build of the recorded revision
 and say so in the report: the runs made after 23:00 on 2026-10-24 used
-`/home/zjwei/camel-work/h435-learnability/out/latest/bin/camel` (revision `4ba74c183`, whose
+`$HOME/camel-work/h435-learnability/out/latest/bin/camel` (revision `4ba74c183`, whose
 compiler sources are byte-identical to `2e6438492` — that branch changes documentation and this
 tooling only). `report.json` records the binary that was actually used under `camel_bin`.
 
