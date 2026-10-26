@@ -494,6 +494,36 @@ std::any Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     return resolved;
 }
 
+namespace {
+
+/// The name of the conversion function of a scalar type, or null for a type that has none.
+const char *conversionNameOf(const Type *type) {
+    switch (type->code()) {
+    case TypeCode::Int32:
+        return "i32";
+    case TypeCode::Int64:
+        return "int";
+    case TypeCode::Float32:
+        return "f32";
+    case TypeCode::Float64:
+        return "float";
+    case TypeCode::BFloat16:
+        return "bf16";
+    case TypeCode::Float16:
+        return "f16";
+    case TypeCode::Complex64:
+        return "c64";
+    case TypeCode::Complex128:
+        return "c128";
+    case TypeCode::String:
+        return "string";
+    default:
+        return nullptr;
+    }
+}
+
+} // namespace
+
 std::any Builder::resolveDRefNode(const GCT::node_ptr_t &gct) {
     if (const auto oper = tree_->operRefOf(gct); oper.has_value()) {
         // A DREF the compiler made for an operator it knows by id: the group is the built-in
@@ -559,7 +589,18 @@ std::any Builder::resolveDRefNode(const GCT::node_ptr_t &gct) {
     }
     // The name as written, and the name of the module it stands for when it is one (from the
     // innermost namespace out; design principles 10.2, layers 1 and 2).
-    const string written = gct->name();
+    string written = gct->name();
+    // A type variable of the instance being built, written as a function (`T(x)` in `sum::<T>`),
+    // is the conversion of the type it is bound to: `f32(x)` where `T = f32`. One rule with the
+    // names of the types themselves, so it converts an array elementwise where they do (design
+    // principles 5.1). A local name of that spelling shadows it.
+    if (!nodeAt(moduleLevelName(written)).has_value()) {
+        if (Type *bound = camel::core::type::findTypeBinding(typeBindings_, written)) {
+            if (const char *conversion = conversionNameOf(bound)) {
+                written = conversion;
+            }
+        }
+    }
     if (written.find("::") != std::string::npos) {
         // `Shape::Empty`, a variant without fields: the value itself (design principles 5.3).
         EnumType *enumType = nullptr;
