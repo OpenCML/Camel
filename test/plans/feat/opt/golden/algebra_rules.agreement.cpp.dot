@@ -5,7 +5,7 @@ digraph GraphIR {
             label="add_zero";
             F02 [label="ARGS", type="ARGS"];
             O02 [label="EXIT", type="EXIT"];
-            N00 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int", origin=<ORIGIN>, span="20:14-20:15", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml"];
+            N00 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int", origin=<ORIGIN>, span="19:14-19:20", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml"];
             N01 [label=":io/println", type="OPER", origin=<ORIGIN>, span="21:4-21:11", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml", value_type="int"];
             N02 [label="0", type="DATA", origin=<ORIGIN>, span="22:11-22:12", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml", value_type="int"];
             N03 [label="GATE", type="GATE", value_type="int"];
@@ -19,7 +19,7 @@ digraph GraphIR {
             label="zero_add";
             F03 [label="ARGS", type="ARGS"];
             O03 [label="EXIT", type="EXIT"];
-            N04 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int", origin=<ORIGIN>, span="26:14-26:15", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml"];
+            N04 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int", origin=<ORIGIN>, span="25:14-25:20", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml"];
             N05 [label=":io/println", type="OPER", origin=<ORIGIN>, span="27:4-27:11", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml", value_type="int"];
             N06 [label="0", type="DATA", origin=<ORIGIN>, span="28:11-28:12", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml", value_type="int"];
             N07 [label="GATE", type="GATE", value_type="int"];
@@ -33,7 +33,7 @@ digraph GraphIR {
             label="sub_zero";
             F04 [label="ARGS", type="ARGS"];
             O04 [label="EXIT", type="EXIT"];
-            N08 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int", origin=<ORIGIN>, span="32:14-32:15", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml"];
+            N08 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int", origin=<ORIGIN>, span="31:14-31:20", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml"];
             N09 [label=":io/println", type="OPER", origin=<ORIGIN>, span="33:4-33:11", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml", value_type="int"];
             N0A [label="0", type="DATA", origin=<ORIGIN>, span="34:11-34:12", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml", value_type="int"];
             N0B [label="GATE", type="GATE", value_type="int"];
@@ -47,7 +47,7 @@ digraph GraphIR {
             label="mul_one";
             F05 [label="ARGS", type="ARGS"];
             O05 [label="EXIT", type="EXIT"];
-            N0C [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int", origin=<ORIGIN>, span="38:14-38:15", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml"];
+            N0C [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int", origin=<ORIGIN>, span="37:13-37:19", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml"];
             N0D [label=":io/println", type="OPER", origin=<ORIGIN>, span="39:4-39:11", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml", value_type="int"];
             N0E [label="0", type="DATA", origin=<ORIGIN>, span="40:11-40:12", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml", value_type="int"];
             N0F [label="GATE", type="GATE", value_type="int"];
@@ -61,7 +61,7 @@ digraph GraphIR {
             label="one_mul";
             F06 [label="ARGS", type="ARGS"];
             O06 [label="EXIT", type="EXIT"];
-            N10 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int", origin=<ORIGIN>, span="44:14-44:15", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml"];
+            N10 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int", origin=<ORIGIN>, span="43:13-43:19", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml"];
             N11 [label=":io/println", type="OPER", origin=<ORIGIN>, span="45:4-45:11", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml", value_type="int"];
             N12 [label="0", type="DATA", origin=<ORIGIN>, span="46:11-46:12", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml", value_type="int"];
             N13 [label="GATE", type="GATE", value_type="int"];
@@ -75,7 +75,7 @@ digraph GraphIR {
             label="add_zero32";
             F07 [label="ARGS", type="ARGS"];
             O07 [label="EXIT", type="EXIT"];
-            N14 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="i32", origin=<ORIGIN>, span="50:14-50:15", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml"];
+            N14 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="i32", origin=<ORIGIN>, span="49:16-49:22", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml"];
             N15 [label=":io/println", type="OPER", origin=<ORIGIN>, span="51:4-51:11", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml", value_type="i32"];
             N16 [label="0", type="DATA", origin=<ORIGIN>, span="52:11-52:12", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml", value_type="i32"];
             N17 [label="GATE", type="GATE", value_type="i32"];
@@ -89,7 +89,7 @@ digraph GraphIR {
             label="zero_add32";
             F08 [label="ARGS", type="ARGS"];
             O08 [label="EXIT", type="EXIT"];
-            N18 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="i32", origin=<ORIGIN>, span="56:14-56:15", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml"];
+            N18 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="i32", origin=<ORIGIN>, span="55:16-55:22", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml"];
             N19 [label=":io/println", type="OPER", origin=<ORIGIN>, span="57:4-57:11", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml", value_type="i32"];
             N1A [label="0", type="DATA", origin=<ORIGIN>, span="58:11-58:12", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml", value_type="i32"];
             N1B [label="GATE", type="GATE", value_type="i32"];
@@ -103,7 +103,7 @@ digraph GraphIR {
             label="sub_zero32";
             F09 [label="ARGS", type="ARGS"];
             O09 [label="EXIT", type="EXIT"];
-            N1C [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="i32", origin=<ORIGIN>, span="62:14-62:15", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml"];
+            N1C [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="i32", origin=<ORIGIN>, span="61:16-61:22", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml"];
             N1D [label=":io/println", type="OPER", origin=<ORIGIN>, span="63:4-63:11", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml", value_type="i32"];
             N1E [label="0", type="DATA", origin=<ORIGIN>, span="64:11-64:12", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml", value_type="i32"];
             N1F [label="GATE", type="GATE", value_type="i32"];
@@ -117,7 +117,7 @@ digraph GraphIR {
             label="mul_one32";
             F0A [label="ARGS", type="ARGS"];
             O0A [label="EXIT", type="EXIT"];
-            N20 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="i32", origin=<ORIGIN>, span="68:14-68:15", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml"];
+            N20 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="i32", origin=<ORIGIN>, span="67:15-67:21", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml"];
             N21 [label=":io/println", type="OPER", origin=<ORIGIN>, span="69:4-69:11", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml", value_type="i32"];
             N22 [label="0", type="DATA", origin=<ORIGIN>, span="70:11-70:12", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml", value_type="i32"];
             N23 [label="GATE", type="GATE", value_type="i32"];
@@ -131,7 +131,7 @@ digraph GraphIR {
             label="one_mul32";
             F0B [label="ARGS", type="ARGS"];
             O0B [label="EXIT", type="EXIT"];
-            N24 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="i32", origin=<ORIGIN>, span="74:14-74:15", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml"];
+            N24 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="i32", origin=<ORIGIN>, span="73:15-73:21", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml"];
             N25 [label=":io/println", type="OPER", origin=<ORIGIN>, span="75:4-75:11", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml", value_type="i32"];
             N26 [label="0", type="DATA", origin=<ORIGIN>, span="76:11-76:12", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml", value_type="i32"];
             N27 [label="GATE", type="GATE", value_type="i32"];
