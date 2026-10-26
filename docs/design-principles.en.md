@@ -742,7 +742,7 @@ Design motivation: the dynamism of the Python language itself determines its fle
 - `json.decode` returns the self-describing `Json` type, and `decode_as::<T>` is provided (for explicit type arguments see 5.9).
 - For bad JSON text, `decode` returns the error value of `Json!`, not a fault.
 - The accessors of `Json` accept `Json?` and `Json!`, for chained access (access can be chained even when parsing failed); `as_float` accepts integers; `get<index>` out of range gives `null`.
-- **When `Json` accessors take a `Json!`, the error passes through unchanged**: `decode(text)->get<'a'>` has type `Json!?`, handled with `!!` or `??`. A document that is too deep reports `JsonTooDeep` (distinct from malformed text); the default depth limit is 10000, to become an optional parameter of `decode`.
+- **When `Json` accessors take a `Json!`, the error passes through unchanged**: `decode(text)->get<'a'>` has type `Json?!`: the propagation of `->` wraps the error outermost (first whether it failed, then whether there is a value), so `!!` handles the error first and `??` the absence after it. A document that is too deep reports `JsonTooDeep` (distinct from malformed text); the default depth limit is 10000, to become an optional parameter of `decode`.
 
 ### 11.3 Collections and sorting
 
