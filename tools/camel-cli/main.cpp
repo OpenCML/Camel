@@ -335,7 +335,7 @@ int runCommand(int argc, char *argv[]) {
         if (selectedCommand == Command::Run && pipelineNamesProfile(Run::resolvedPassList)) {
             phase::enableRecording();
         }
-        std::optional<phase::Scope> parsePhase(std::in_place, "parse", "main");
+        std::optional<phase::Scope> parsePhase(std::in_place, "parse", entryModuleName);
         const bool parsedOk = parser->parse(*input);
         parsePhase.reset();
         if (!parsedOk) {
@@ -418,7 +418,7 @@ int runCommand(int argc, char *argv[]) {
                 return 1;
             }
         } else {
-            phase::Scope phaseScope("compile", "main");
+            phase::Scope phaseScope("compile", entryModuleName);
             mainModule->compile(CompileStage::Done);
         }
 
