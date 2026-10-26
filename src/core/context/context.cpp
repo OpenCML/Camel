@@ -15,6 +15,7 @@
 
 #include "camel/core/global_config.h"
 #include "camel/core/mm.h"
+#include "camel/core/mm/deferred.h"
 #include "camel/core/module/builtin.h"
 #include "camel/core/module/dynamic.h"
 #include "camel/core/module/introspect.h"
@@ -110,6 +111,11 @@ Context::~Context() {
         camel::core::mm::autoSpace().unregisterGraphSweeper(this);
     }
     runtimeGraphMgr_.reset();
+    // The deferred-release queue is drained here, as the last step: the blocks the last collection
+    // found dead carry release callbacks (a DLPack producer's deleter, a Python buffer's release)
+    // that no later collection will run when this is the end of the runtime, and the destruction
+    // above has just queued everything the modules' own teardown finalized (C24, ME/8).
+    camel::core::mm::runDeferredReleases();
 }
 
 camel::core::module::ProgramExports &Context::programExports() {
