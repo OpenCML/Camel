@@ -869,7 +869,7 @@ funcDecl   :
 */
 /*
 ruleDecl : frontMatter? ('with' angledParams)? 'export'? IDENTIFIER identDef typeParams?
-           ruleContext? parentParams whenClause? '{' ruleBody '}' ;
+           parentParams whenClause? '{' ruleBody '}' ;
 ruleBody : dataExpr ('=>' | '<=>') dataExpr ;
 
 A rule is the shorthand of a pair of functions with the same parameters, the left one the pattern
@@ -904,11 +904,6 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     const Reference ref    = qualifyRef(Reference(name));
     if (context->has(TK::KwExport)) {
         export_->addRef(ref);
-    }
-    if (context->get<cst::RuleContext>()) {
-        diags_->of(SemanticDiag::ConstructNotSupported)
-            .at(rangeOf(context->get<cst::RuleContext>()->firstToken()))
-            .commit("rule<...>", "a rule over functions is not implemented");
     }
     const auto body   = context->get<cst::RuleBody>();
     const auto sides  = body->exprs();
@@ -2838,7 +2833,8 @@ Value Builder::visitPattern(cst::Pattern context) {
         // value taken out of a `T?` / `T!`, `error e` binds the error of a failed `T!`. Both
         // are a reference node; `error e` carries the bound name as its child. Whether the
         // scrutinee has such a type is known to the graph builder only, which reports an
-        // identifier pattern over any other type as not implemented. The parser reads the second
+        // identifier pattern over any other type by the rule itself: only the two marks `T?` and
+        // `T!` can be taken apart (design principles 3.8). The parser reads the second
         // word of a pattern only after `error` (`parsePattern`), so the name here is the error's.
         if (context->get<cst::EnumTuplePattern>() || context->get<cst::EnumStructPattern>() ||
             context->get<cst::IdentRef>()->text().find("::") != std::string::npos) {

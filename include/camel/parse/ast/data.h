@@ -334,11 +334,6 @@ class MatchCaseLoad : public DataLoad {
     MatchCaseLoad() : DataLoad(DataType::MatchCase) {}
 
     const std::string toString() const override { return "MatchCase"; }
-    const std::string geneCode() const override {
-        throw camel::core::error::DiagnosticBuilder::of(
-            camel::core::error::InternalDiag::UnknownInternalError)
-            .commit("MatchCaseLoad::geneCode() not implemented");
-    }
 };
 
 /// loop S1 = INIT1, ..., Sk = INITk (for BINDER in SEQUENCE)? (while CONDITION)? do BODY

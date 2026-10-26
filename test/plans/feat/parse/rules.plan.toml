@@ -27,13 +27,13 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
 [[tests]]
-name = "rules.pending_parts"
-desc = "A condition is compiled since H38; the context of a rule (`rule fuse<f, g>`) is read but not compiled yet: a located ConstructNotSupported."
+name = "rules.no_context_form"
+desc = "The head `rule fuse<f, g>` is not part of the language: a rule declares what it is parameterized over after its name, the way `rule keep::<T>(x: T, y: T)` does (design principles 5.5), so names written directly after the rule's name are an ordinary syntax error that names the '(' the head needs."
 kind = "behavior"
-case = "../../../cases/parse/rules/declared.cml"
+case = "../../../cases/parse/rules/no_context.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
+expect_diagnostic_name = "SyntaxDiag::MissingToken"
 expect_diagnostic_line = 7
 expect_diagnostic_column = 10
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

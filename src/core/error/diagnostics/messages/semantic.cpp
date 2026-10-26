@@ -321,7 +321,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "GenericFunctionUnsupported",
                 "The generic function '{0}' cannot be {1}.",
-                "This use of a generic function is not supported.",
+                "A decorator is applied where the declaration is: '@d func f' is 'let f = d(f0)', and d takes the function as its value (design principles 6.1). A function that declares type parameters is instantiated where a call fixes them (design principles 5.5); a decorated declaration fixes none, so the decorator has no instance to take.",
             },
         },
         {
@@ -1570,6 +1570,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "StreamInContainer",
                 "'{0}' cannot be the element of {1}: a stream is consumed once, while the elements of a container are read more than once.",
                 "A stream is read one element at a time and is done when it ends. Write the stream where it is consumed once: a parameter or the result of a function, an item of a tuple, or the subject of an operator that reads it to its end. What needs the elements of a container to be readable again takes an array filled from the stream.",
+            },
+        },
+        {
+            SemanticDiag::StreamConsumedTwice,
+            {
+                "StreamConsumedTwice",
+                "'{0}' is consumed twice: a stream is read once on each execution path.",
+                "A stream is read one element at a time and is done when it ends, so on each execution path its value has one consumer (design principles 5.4). The second consumer is here and the first is here. To read one stream from two places, write `tee(s, n)`: it gives two streams, each read once, and both see the same elements.",
             },
         },
         {

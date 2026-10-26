@@ -227,7 +227,6 @@ class ParserImpl {
     void parseRuleDecl();
     /// ruleDecl after the tag uses that may precede it; `m` marks where they began.
     void parseRuleDeclRest(size_t m);
-    void parseRuleContext();
     void parseRuleBody();
     /// At the name `fact` (offset `n`, after the `with` parameters and an `export` when they are
     /// written) that starts a fact declaration.

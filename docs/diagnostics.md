@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-283 diagnostics: 266 errors, 17 warnings. 15 carry a machine-applicable edit, 268 say why they carry none.
+284 diagnostics: 267 errors, 17 warnings. 15 carry a machine-applicable edit, 269 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -235,6 +235,7 @@ prints one entry.
 | `0x030001E2` | [SemanticDiag::CompOperandNotUnary](#compoperandnotunary) | Error | no |
 | `0x030001E3` | [SemanticDiag::StreamInContainer](#streamincontainer) | Error | no |
 | `0x030001E4` | [SemanticDiag::CompOperandGenericWithoutType](#compoperandgenericwithouttype) | Error | no |
+| `0x030001E5` | [SemanticDiag::StreamConsumedTwice](#streamconsumedtwice) | Error | no |
 | `0x030001E6` | [SemanticDiag::RangeStepZero](#rangestepzero) | Error | no |
 | `0x030001E7` | [SemanticDiag::StaticLoopSequenceNotKnown](#staticloopsequencenotknown) | Error | no |
 | `0x030001E8` | [SemanticDiag::RuleConstParamNotMatched](#ruleconstparamnotmatched) | Error | no |
@@ -2508,7 +2509,7 @@ The generic function '{0}' cannot be {1}.
 **Help**
 
 ```text
-This use of a generic function is not supported.
+A decorator is applied where the declaration is: '@d func f' is 'let f = d(f0)', and d takes the function as its value (design principles 6.1). A function that declares type parameters is instantiated where a call fixes them (design principles 5.5); a decorated declaration fixes none, so the decorator has no instance to take.
 ```
 
 **Example** (`test/cases/compile/generics/err_decorated.cml`, run as `camel test/cases/compile/generics/err_decorated.cml`)
@@ -7813,6 +7814,56 @@ func main(): int sync {
     let composed = ident..ident
     println(composed(4))
     return 0
+}
+```
+
+### StreamConsumedTwice
+
+`0x030001E5` · Error · `SemanticDiag::StreamConsumedTwice`
+
+**Fix**
+
+None: choice: a stream has one consumer on each path, so which place reads it and where the streams of tee go are the writer's to write
+
+**Message**
+
+```text
+'{0}' is consumed twice: a stream is read once on each execution path.
+```
+
+**Help**
+
+```text
+A stream is read one element at a time and is done when it ends, so on each execution path its value has one consumer (design principles 5.4). The second consumer is here and the first is here. To read one stream from two places, write `tee(s, n)`: it gives two streams, each read once, and both see the same elements.
+```
+
+**Example** (`test/cases/compile/stream/consumed_twice.cml`, run as `camel test/cases/compile/stream/consumed_twice.cml`)
+
+```camel
+module stream_consumed_twice
+
+func count(n: int): int.. {
+    return step(n)
+}
+
+func step(n: int): () => (int, int..)? {
+    return () => if n > 0 then (n, step(n - 1)) else null
+}
+
+func firstOf(p: (int, int..)?): int {
+    return match p {
+        case null => 0
+        case v => v.0
+    }
+}
+
+func twice(s: int..): int {
+    let first = loop acc = 0 for x in s do acc + x
+    return first + firstOf(s())
+}
+
+func main(): int sync {
+    return twice(count(3))
 }
 ```
 
