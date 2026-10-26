@@ -3051,7 +3051,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             // call that stops at five words wrote no mask, so it is read as "both bounds", 3). A
             // step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument,
             // and a tensor's own slice checks its step with the shape facts it holds).
-            if ((targetOperator->uri() == ":op/slice_sub" || targetOperator->uri() == ":op/slice_str") &&
+            if ((targetOperator->uri() == ":op/slice_sub" || targetOperator->uri() == ":op/slice_str" ||
+                 targetOperator->uri() == ":op/slice_bytes") &&
                 normInputs.size() >= 5 &&
                 normInputs.size() <= 6 && withInputs.empty() && gct->size() >= 1 &&
                 gct->at(0)->type() == GCT::NodeKind::DREF) {

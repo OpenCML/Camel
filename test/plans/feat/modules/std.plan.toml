@@ -255,3 +255,25 @@ expect_stdout_contains = ["1890 results and one large program, 0 wrong", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
+
+[[tests]]
+name = "re.match"
+desc = "`find` returns the first `Match` or null with positions in code points (text outside ASCII and above the BMP) and null for a group that took no part; `find_all`, `replace`, `replace_with`, `split`, `validate` and `has_match` are written on it."
+kind = "behavior"
+case = "../../../cases/modules/std/re/match.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "5-7:42 none\n12-13:7 2-2:\n4-6:42 1-3:本語\n2-3:1\n[key, val, null]\n[1, 22]\n[0, 1, 2, 3]\na+b+c a!b 日・本\na<1>b<22>\n[a, b, c] 1\n[0-9]+ bad\ntrue true\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "re.find_start_out_of_range"
+desc = "A search that starts after the end of the text is the fault InvalidArgument, naming the start and the length."
+kind = "negative"
+case = "../../../cases/modules/std/re/invalid_start.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["start 9 is outside 0..3"]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
