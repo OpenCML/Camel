@@ -253,9 +253,11 @@ def ex(n: N, ind: int, top: bool = False) -> str:
         lines.append(IND * ind + "}")
         return wrap("\n".join(lines))
     if k == "lam":
+        # A lambda carries no `sync` prefix: order comes from the `sync { }` of its body, which
+        # `block` writes (design principles 3.3). The prefix was retired with the one on a
+        # declaration, and the parser no longer knows either spelling.
         ret = "" if n.a["ret"] is None else ": " + type_src(n.a["ret"])
-        mod = "sync " if n.a.get("syncfn") else ""
-        return wrap(f"{mod}({params_src(n.a['params'])}){ret} => {arm(n.c[0], ind)}")
+        return wrap(f"({params_src(n.a['params'])}){ret} => {arm(n.c[0], ind)}")
     if k in ("map", "filter", "foreach"):
         return wrap(f"{post(n.c[0])}->{k}<{arg(n.c[1])}>")
     if k == "reduce":
@@ -272,8 +274,14 @@ def ex(n: N, ind: int, top: bool = False) -> str:
         # The interval of the integers `a` to `b - 1` is written `a..b` and nothing else (design
         # principles 4.2): the two-parameter `range(a, b)` is gone. `..` binds tighter than every
         # binary operator and looser than the postfix forms, so a bound is written as the receiver
-        # of a postfix form is.
-        return f"{post(n.c[0])}..{post(n.c[1])}"
+        # of a postfix form is -- and a bound written with a prefix operator takes parentheses:
+        # `..` is looser than the prefix forms, so `-2..0` reads as `-(2..0)` and a bare `-1` in
+        # the right bound is not an expression at all. The interval from -2 to -1 is `(-2)..(-1)`.
+        def bound(x):
+            s = post(x)
+            return s if not s.startswith("-") else "(" + s + ")"
+
+        return f"{bound(n.c[0])}..{bound(n.c[1])}"
     if k in ("zip", "concat"):
         return f"{k}({arg(n.c[0])}, {arg(n.c[1])})"
     if k == "println":
@@ -330,7 +338,10 @@ def st(n: N, ind: int) -> list:
 
 def func_src(n: N, ind: int) -> list:
     pad = IND * ind
-    mods = ("#macro " if n.a.get("macro") else "") + ("sync " if n.a.get("syncfn") else "")
+    # No `sync` prefix on a declaration: it was retired with `wait` (design principles 3.3), and
+    # order comes from the `sync { }` of the body, which `block` writes. `syncfn` still says what
+    # the model knows about the function; it is no longer a spelling.
+    mods = "#macro " if n.a.get("macro") else ""
     head = f"{pad}{mods}func {n.a['name']}({params_src(n.a['params'])}): {type_src(n.a['ret'])} "
     lines = [head + block(n.c[0], ind)]
     if n.a.get("with"):
