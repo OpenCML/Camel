@@ -143,11 +143,10 @@ bool namesOfList(const std::string &text, std::vector<std::string> &names) {
 }
 
 /// The declared signature as an operator's type: closed, with its parameter names, var marks
-/// and modifiers kept.
+/// kept.
 FunctionType *closedSignature(FunctionType *declared) {
     ASSERT(declared->hasExitType(), "A declared operator has a result type");
     FunctionTypeFactory factory;
-    factory.setModifiers(declared->modifiers());
     for (size_t i = 0; i < declared->withTypesCount(); ++i) {
         factory.addWithArg(
             std::string(declared->argNameAt(i)), declared->withTypeAt(i),
@@ -399,5 +398,5 @@ std::optional<FunctionType *> DynamicFuncTypeResolver::resolveWith(
     }
     // The same call shape resolves to the same signature object: a program resolves the same
     // few operator signatures at every call, and the permanent space never frees.
-    return FunctionType::create(withParams, normParams, *optResType, modifiers);
+    return FunctionType::create(withParams, normParams, *optResType);
 }

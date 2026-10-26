@@ -2702,9 +2702,9 @@ std::make_shared<StaticCheckedResolver>(
         // `xs->append<v>` where the compiler proved the old array invisible: one state of a
         // loop body, with that state bound only to this call and its first value a fresh
         // literal (Builder::markLoopStateInPlace, per state). The append may then write into
-        // the state's own Block (Array::canWriteInPlace) instead of copying the array; when
-        // the array is not compact (an element that holds references) or the block is shared,
-        // it behaves exactly as `append`. Not a name a program can reach for on its own.
+        // the state's own storage (Array::writableInPlace) instead of copying the array; when
+        // the storage is shared or is not this value's, it behaves exactly as `append`. Not a
+        // name a program can reach for on its own.
         OperatorGroup::create(
             "__append_owned__",
             {

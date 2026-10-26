@@ -355,6 +355,13 @@ bool isVariableOperator(std::string_view uri) {
     return uri.starts_with(":var/") || uri.starts_with(":op/assn");
 }
 
+/// How many nodes the escape walk visits before it gives up, and how many steps the order walk
+/// takes before it does. Both limits bound compile time; neither is a licence to answer
+/// "proved" -- a walk that stopped early has not shown anything, and the answer that is true of
+/// every graph it did not finish is the conservative one.
+constexpr size_t kEscapeWalkLimit = 256;
+constexpr size_t kOrderWalkLimit  = 4096;
+
 /// Whether the value in the cell `cell` may be seen by something the graph does not show: the cell
 /// escapes when a user other than the variable's own operators touches it. GATEs are transparent
 /// (they forward and order; they do not keep a value).
@@ -367,7 +374,7 @@ bool cellEscapes(
     bool escapes = false;
     std::vector<gc_node_ref_t> pending{cell};
     std::unordered_set<gc_node_ref_t> seen;
-    while (!pending.empty() && seen.size() < 256) {
+    while (!pending.empty() && seen.size() < kEscapeWalkLimit) {
         const gc_node_ref_t at = pending.back();
         pending.pop_back();
         if (!seen.insert(at).second) {
@@ -396,10 +403,67 @@ bool cellEscapes(
             break;
         }
     }
+    if (!pending.empty()) {
+        // The walk stopped at the limit rather than at the end of the users: whatever lies beyond
+        // it may see the value, and one node is enough. A graph with more than the limit nodes
+        // between a cell and what escapes it is not a graph this walk can settle, so it answers
+        // what is true of all of them (design principles 10.5: uniqueness is proved, not assumed).
+        escapes = true;
+    }
     if (cell < cache.size()) {
         cache[cell] = escapes ? 2 : 1;
     }
     return escapes;
+}
+
+/// Whether the update at `update` reaches every later user of `cell` along the graph's own edges.
+/// The proof above is a linear one: it reads `plan.topo` as the order the nodes run in. Only the
+/// graph's edges order two of its nodes -- a back end may run anything else in any order, and
+/// `std::prl` does -- so a user of the cell the walk placed after the update counts only when the
+/// update reaches it. One it does not reach may run first, read the value the update is about to
+/// write into and keep it, and then "reuses the input's storage" is a claim no one can make.
+bool laterUsersAreOrderedAfter(
+    const std::vector<std::vector<gc_node_ref_t>> &successors,
+    const std::vector<std::vector<gc_node_ref_t>> &users, const std::vector<size_t> &position,
+    gc_node_ref_t cell, gc_node_ref_t update) {
+    if (cell >= users.size()) {
+        return false;
+    }
+    bool anything = false;
+    for (const gc_node_ref_t user : users[cell]) {
+        // The update's own `:var/take` is an input of the update and is ordered by it, and a
+        // `:var/new` or assignment the walk does not reach leaves the cell's own answer in
+        // charge; only a user that runs later in the plan's linear order is at issue here.
+        if (user < position.size() && position[user] > position[update]) {
+            anything = true;
+            break;
+        }
+    }
+    if (!anything) {
+        return true;
+    }
+    std::unordered_set<gc_node_ref_t> reached;
+    std::vector<gc_node_ref_t> pending{update};
+    size_t steps = 0;
+    while (!pending.empty()) {
+        if (++steps > kOrderWalkLimit) {
+            return false; // did not finish: the order is not established, so it is not claimed
+        }
+        const gc_node_ref_t at = pending.back();
+        pending.pop_back();
+        if (!reached.insert(at).second || at >= successors.size()) {
+            continue;
+        }
+        for (const gc_node_ref_t next : successors[at]) {
+            pending.push_back(next);
+        }
+    }
+    for (const gc_node_ref_t user : users[cell]) {
+        if (user < position.size() && position[user] > position[update] && !reached.contains(user)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 /// The cell a node reads or writes, when it is one of the variable's own operators.
@@ -478,7 +542,9 @@ bool cellValueMayBeKept(
 ///     asks the array itself at run time (StorageReuse::ByArrayCount);
 ///   * a read that keeps the value (`:var/get`), or a plain store (`:op/assn`), ends the proof:
 ///     the update copies (StorageReuse::Copy) and runs the plain form of the operator;
-///   * otherwise the update reuses the input's storage (StorageReuse::Input).
+///   * otherwise the update reuses the input's storage (StorageReuse::Input) -- but only where
+///     the graph's own edges order every later user of the cell after the update, because the
+///     walk itself is linear and the back ends are not (laterUsersAreOrderedAfter).
 ///
 /// A loop's state comes round to the next round (the LOOP node takes the value of the body), so
 /// the walk runs twice: the second time, each loop's body starts from the state its end reached.
@@ -488,18 +554,43 @@ void planStorageReuse(const GCGraph &graph, ExecPlan &plan) {
     const auto &table            = camel::core::OperatorTable::instance();
     const size_t nodeCount       = graph.nodeCount();
     std::vector<std::vector<gc_node_ref_t>> users(nodeCount);
+    // The graph's own edges, the way a back end follows them: a node runs after its data, `with`
+    // and control inputs, after the statement a sync edge writes before it, and after what an
+    // order edge orders before it. Anything else the graph leaves unordered, and `std::prl` runs
+    // it in any order (see laterUsersAreOrderedAfter).
+    std::vector<std::vector<gc_node_ref_t>> successors(nodeCount);
+    const auto noteSuccessor = [&](gc_node_ref_t from, gc_node_ref_t to) {
+        if (from < successors.size()) {
+            successors[from].push_back(to);
+        }
+    };
+    std::vector<size_t> position(nodeCount, count);
     for (size_t idx = 0; idx < count; ++idx) {
         const gc_node_ref_t at = plan.topo[idx];
+        if (at < position.size()) {
+            position[at] = idx;
+        }
         for (const gc_node_ref_t in : graph.normInputsOf(at)) {
             if (in < users.size()) {
                 users[in].push_back(at);
             }
+            noteSuccessor(in, at);
         }
         for (const gc_node_ref_t in : graph.withInputsOf(at)) {
             if (in < users.size()) {
                 users[in].push_back(at);
             }
+            noteSuccessor(in, at);
         }
+        for (const gc_node_ref_t in : graph.ctrlInputsOf(at)) {
+            noteSuccessor(in, at);
+        }
+    }
+    for (const camel::runtime::GCGraphSyncEdge &edge : graph.syncEdges()) {
+        noteSuccessor(edge.pred, edge.user);
+    }
+    for (const camel::runtime::GCGraphOrderEdge &edge : graph.orderEdges()) {
+        noteSuccessor(edge.pred, edge.user);
     }
     std::vector<uint8_t> escapeCache(nodeCount, 0);
     std::vector<uint8_t> owned(nodeCount, 0);
@@ -564,7 +655,14 @@ void planStorageReuse(const GCGraph &graph, ExecPlan &plan) {
                             } else if (escapes) {
                                 decision = StorageReuse::Copy;
                             } else if (cell < owned.size() && owned[cell] != 0) {
-                                decision = StorageReuse::Input;
+                                // The proof holds in the plan's linear order; it holds under the
+                                // partial order a parallel back end runs in only when the graph's
+                                // own edges order every later user of the cell after this update.
+                                // Where they do not, the array's count answers instead.
+                                decision =
+                                    laterUsersAreOrderedAfter(successors, users, position, cell, at)
+                                        ? StorageReuse::Input
+                                        : StorageReuse::ByArrayCount;
                             }
                         }
                         if (final) {

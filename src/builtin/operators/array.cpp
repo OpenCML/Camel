@@ -29,7 +29,6 @@
 #include "camel/core/rtdata/string.h"
 #include "camel/core/type.h"
 #include "camel/core/type/composite/array.h"
-#include "camel/profile/profile.h"
 #include "camel/utils/type.h"
 
 #include <algorithm>
@@ -278,14 +277,11 @@ void mergeSortSlots(T *vals, size_t n, Compare comp, T *tmp) {
 // guess: an element type no declaration names never reaches an executor at all.
 template <SortAlgo Algo, typename T> Array *__doSortSlots__(Array *arr, const ArrayType *arrType, bool inPlace) {
     size_t n = arr->size();
-    // The in-place form is only taken when the block is unshared and writable; a view or an
+    // The in-place form is only taken when the storage is this value's alone; a view or an
     // imported (external) buffer means someone else sees the old order. Where the memory plan
     // could not prove the old value has no other observer, this is the answer of the array
     // itself (docs/design/arrays-memory/README.cn.md 4.3.1).
-    const bool ownStorage = inPlace && arr->canWriteInPlace();
-    if (camel::profile::enabledInline() && inPlace) {
-        camel::profile::arrayCountAnswer(ownStorage);
-    }
+    const bool ownStorage = inPlace && arr->writableInPlace();
     Array *target = ownStorage ? arr : static_cast<Array *>(arr->clone(mm::autoSpace(), arrType));
     if (n <= 1) {
         return target;

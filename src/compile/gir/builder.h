@@ -2053,6 +2053,9 @@ class Builder {
     struct BodyReach {
         camel::core::sem::ResourceSignature reach;
         std::unordered_map<draft_node_ref_t, size_t> ports;
+        // Values the function captured from the one around it: a `with` port its type does not
+        // count, and the closure nodes. Their resources are that function's, not a parameter's.
+        std::unordered_set<draft_node_ref_t> captured;
         bool unplaceable = false;
     };
     // The walk of one body, in the named steps it is made of: the body's ports, the uses one node

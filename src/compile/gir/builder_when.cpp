@@ -1810,11 +1810,6 @@ Builder::FoldedCall Builder::evaluateCallAtBuildTime(
     // declaration that says nothing (the default) is evaluated, and the evaluation refuses the
     // effectful constructs it meets (`println`, a `var`), so a body whose effects come from an
     // untaken branch is folded and one whose effects are on the path is not.
-    if (signature->modifiers().sync()) {
-        result.refusal = FoldRefusal::HasEffects;
-        result.reason  = "it is a 'sync' function";
-        return result;
-    }
     const size_t withCount = signature->withTypesCount();
     for (size_t i = 0; i < withCount; ++i) {
         if (signature->withIsVarAt(i)) {

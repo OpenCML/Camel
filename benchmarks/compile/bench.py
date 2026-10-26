@@ -284,19 +284,11 @@ def self_costs(report: dict) -> Dict[str, Dict[str, float]]:
     return out
 
 
-def declared_module_name(path: Path) -> Optional[str]:
-    """The name a module declares for itself (`module <name>`), or None if it declares none."""
-    try:
-        text = path.read_text(encoding="utf-8")
-    except OSError:
-        return None
-    match = re.search(r"^\s*module\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\s*$",
-                      text, re.MULTILINE)
-    return match.group(1) if match else None
-
-
 def stdlib_declaration(name: str) -> Optional[Path]:
     """The standard-library file that declares module `name`, if there is one.
+
+    The file is the module and its name is the file's name: a `.cml` beside the `.cmo` of the same
+    name is that module's declaration module, and it is read by its name.
 
     This is what "library module" means here: the module is named by its own declaration, in the
     library, not by a tuple in this file. A migration that adds a declaration module (`graph` or
@@ -304,7 +296,7 @@ def stdlib_declaration(name: str) -> Optional[Path]:
     module and its cost instead of failing on a list that was true last week.
     """
     path = STDLIB.joinpath(*name.split(".")).with_suffix(".cml")
-    if path.is_file() and declared_module_name(path) == name:
+    if path.is_file():
         return path
     return None
 

@@ -367,10 +367,6 @@ std::vector<TextItem> functionParts(const FunctionType *fn, bool mangle) {
         }
         return parts;
     }
-    const std::string modifiers = static_cast<std::string>(fn->modifiers());
-    if (!modifiers.empty()) {
-        parts.push_back(literal(modifiers + " "));
-    }
     if (withCount > 0) {
         parts.push_back(literal("<"));
         for (size_t i = 0; i < withCount; ++i) {
@@ -703,7 +699,11 @@ bool sameTypeWith(const Type *a, const Type *b, ResourceMatch resources) {
                 return false;
             }
             for (size_t i = 0; i < lhs->withTypesCount(); ++i) {
-                if (lhs->withIsVarAt(i) != rhs->withIsVarAt(i)) {
+                // A `with` parameter whose argument must be a value the compiler computes is a
+                // different signature from one that takes any argument (the interning key says
+                // the same).
+                if (lhs->withIsVarAt(i) != rhs->withIsVarAt(i) ||
+                    lhs->withNeedsValueAt(i) != rhs->withNeedsValueAt(i)) {
                     return false;
                 }
                 pending.emplace_back(lhs->withTypeAt(i), rhs->withTypeAt(i));

@@ -1271,7 +1271,10 @@ bool Builder::resolveAmbientResource(
                 if (decl->members.empty()) {
                     // A resource of a module is named with the module, as an operator of one is
                     // (design principles 10.2): `fs::handle` is one thing, wherever it is used.
-                    // A resource of this module keeps the name it was declared with.
+                    // A name shown for a resource of this module leaves the module out, since
+                    // there is nothing to tell it apart from; the module the resource is declared
+                    // in is half of its identity, and that is what the operator's own declaration
+                    // and this clause are compared as (see resourceIdentities).
                     out.push_back(
                         in.get() == module_.get() ? written : in->name() + "::" + written);
                     return true;
@@ -3021,7 +3024,19 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         if (dataNode->type() == NodeKind::DATA && !containsTypeVar(dstType) &&
             asTagged(dstType) == nullptr && !intoCollection) {
             const auto &data = dataNode->data();
-            if (dstType->castSafetyFrom(data->type()) != CastSafety::Safe) {
+            const CastSafety safety = dstType->castSafetyFrom(data->type());
+            if (safety == CastSafety::Forbidden && data->type()->isPrimitive() &&
+                dstType->isPrimitive()) {
+                // The one table of `as` (Type::castSafetyFrom) refuses a literal as it refuses a
+                // variable: `5 as float` and `n as float` are the same answer (design principles
+                // 5.1). A literal takes the type of its position; a number of another type is made
+                // by the conversion function.
+                diags_->of(SemanticDiag::DynamicCastForbidden)
+                    .at(ast->load()->tokenRange())
+                    .commit(data->type()->toString(), dstType->toString());
+                throw BuildAbortException();
+            }
+            if (safety != CastSafety::Safe) {
                 reportLiteralCastFailure(
                     diags_,
                     ast->load()->tokenRange(),
@@ -5598,7 +5613,6 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
 
     FunctionTypeFactory factory;
 
-    factory.setModifiers(typeLoad->modifiers());
 
     std::unordered_set<string> paramNames;
 

@@ -1,0 +1,8 @@
+// A literal is not converted by `as` either: it takes the type of its position, and a number of
+// another type is made by the conversion function. `5 as float` and `n as float` are the same
+// answer (design principles 5.1).
+func main(): int sync {
+    let a = 5 as float
+    println(a)
+    return 0
+}

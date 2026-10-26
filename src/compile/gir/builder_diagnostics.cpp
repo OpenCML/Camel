@@ -182,9 +182,6 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
                !func->resources().pure();
     };
     const auto shapeSaysEffect = [](const FunctionType *func) {
-        if (func->modifiers().sync()) {
-            return true;
-        }
         for (size_t i = 0; i < func->normTypesCount(); ++i) {
             if (func->normIsVarAt(i)) {
                 return true;
@@ -1780,7 +1777,7 @@ void Builder::checkDeclaredReturn(
         declared->code() == TypeCode::Ref || resultType->code() == TypeCode::Ref) {
         return;
     }
-    if (declared->assignableFrom(resultType)) {
+    if (acceptsAsResult(declared, resultType)) {
         return;
     }
     std::vector<ConversionGap> gaps;

@@ -185,7 +185,7 @@ load_tree: (dir: string, dataset_manifest_sha256?: string) => T!
 **`tree`** — import { ... } from tree — 4 name(s)
 
 ```text
-tree_paths: (t: T) => ?
+tree_paths: (t: T, here: string = '') => ?
 tree_map: <f: F> (t: T, ..ts) => ?
 tree_reduce: <f: (acc: R, leaf: A) => R> (t: T, init: R) => R
 tree_unzip: (r: R, s: S) => ?
@@ -268,13 +268,15 @@ seed: (seed: int) => void
 seed: (seed: i32) => void
 ```
 
-**`types`** — import { ... } from types — 9 name(s)
+**`types`** — import { ... } from types — 11 name(s)
 
 ```text
+is_same: () => bool
 is_integer: () => bool
 is_float: () => bool
 is_complex: () => bool
 is_numeric: () => bool
+is_real: () => bool
 is_ordered: () => bool
 is_function: () => bool
 is_string: () => bool
@@ -623,12 +625,18 @@ replace: <pattern: string, new: string> (text: string) => string
 split: <pattern: string> (text: string) => string[]
 ```
 
-**`para`** — import { ... } from para — 3 name(s)
+**`para`** — import { ... } from para — 2 name(s)
 
 ```text
-rendezvous: (parties: int, timeout_ms: int) => int
-unordered_foreach: <f: (item: T) => R> (xs: T[]) => void
+unordered_foreach: <f: (item: T) => void> (xs: T[]) => void
 unordered_reduce: <f: (acc: T, item: T) => T, initial: T> (xs: T[]) => T
+```
+
+**`test_support`** — import { ... } from test_support — 2 name(s)
+
+```text
+rendezvous: (parties: int, timeout: float) => int uses rendezvous_point
+thread_count: () => int uses process
 ```
 
 **`this`** — import { ... } from this — 1 name(s)
@@ -728,15 +736,15 @@ rule_consts: (r: Rule) => int
 **`tiles`** — import { ... } from tiles — 9 name(s)
 
 ```text
-upload: (value: f32[..]) => Device<f32[..]>
-download: (value: Device<f32[..]>) => f32[..]
-run_preferred_resident: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => Device<f32>
-source: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string
-inspect: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string
-benchmark: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string
-regions: <fn: (a: f32, b: f32) => f32> () => string
-available: () => bool
-device: () => string
+upload: (value: f32[..]) => Device<f32[..]> uses driver
+download: (value: Device<f32[..]>) => f32[..] uses driver
+run_preferred_resident: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => Device<f32> uses driver
+source: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
+inspect: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
+benchmark: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
+regions: <fn: (a: f32, b: f32) => f32> () => string uses driver
+available: () => bool uses driver
+device: () => string! uses driver
 ```
 
 **`pyplot`** — import { ... } from pyplot — 1 name(s)

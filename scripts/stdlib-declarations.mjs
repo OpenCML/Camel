@@ -512,9 +512,8 @@ function declarationModules() {
         const dir = cppModuleDir(name)
         if (!dir) continue
         const source = path.join(STDLIB_DIR, file)
-        // A file is a module and its name is the file name (design principles 10.2).
-        const header = read(source).match(/^\s*module\s+([A-Za-z_]\w*)\s*$/m)
-        if (header && header[1] !== name) continue
+        // The file is the module and its name is the file's name: a `.cml` beside the `.cmo`
+        // of the same name is that module's declaration module, and it is read by its name.
         modules.push({ name, cppDir: dir, source })
     }
     return modules

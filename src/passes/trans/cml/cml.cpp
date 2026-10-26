@@ -1771,9 +1771,6 @@ class CmlPrinter {
         const Body body          = buildBody(0, tail, outerIndent, false);
 
         std::string text;
-        if (type->hasModifier(Modifier::Sync)) {
-            text += "sync ";
-        }
         text += "(";
         for (size_t i = 0; i < type->normTypesCount(); ++i) {
             std::string name(type->argNameAt(i));
