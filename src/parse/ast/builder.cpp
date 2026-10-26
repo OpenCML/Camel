@@ -183,6 +183,33 @@ inline camel::source::SemanticPart semanticPart(
         .label  = label};
 }
 
+/// Appends one `Parameter` part per parameter written in a function type load (`with` parameters
+/// first, then the ordinary ones; each with its slot in the signature and the position it is
+/// written at). A port of the function's graph stands for one parameter, so that what is said
+/// about a parameter -- the refusal of a function value that came in through it -- points at the
+/// parameter itself. The list keeps its own `params` part as well, for what reads the parameter
+/// list as one place.
+inline void appendParameterParts(
+    std::vector<camel::source::SemanticPart> &parts, const node_ptr_t &funcTypeNode) {
+    if (!funcTypeNode || funcTypeNode->size() < 2) {
+        return;
+    }
+    const auto add = [&](const node_ptr_t &params, size_t firstSlot) {
+        if (!params) {
+            return;
+        }
+        for (size_t i = 0; i < params->size(); ++i) {
+            parts.push_back(semanticPart(
+                camel::source::SemanticRole::Parameter,
+                nodeOrigin(params->at(i)),
+                static_cast<int32_t>(firstSlot + i),
+                "param"));
+        }
+    };
+    add(funcTypeNode->at(0), 0);
+    add(funcTypeNode->at(1), funcTypeNode->at(0)->size());
+}
+
 inline void registerAstSemanticBundle(
     const node_ptr_t &node, std::vector<camel::source::SemanticPart> parts = {},
     std::vector<camel::source::origin_id_t> mergedInputs = {}, bool synthetic = false,
@@ -740,31 +767,34 @@ Value Builder::visitFuncData(cst::FuncData context) {
     setNodeTokenRangeByContext(funcNode, context);
     *funcNode << funcTypeNode;
     *funcNode << blockNode;
-    registerAstSemanticBundle(
-        funcNode,
-        {
-            semanticPart(
-                camel::source::SemanticRole::GenericParameter,
-                nodeOrigin(funcTypeNode->at(0)),
-                -1,
-                "withParams"),
-            semanticPart(
-                camel::source::SemanticRole::Parameter,
-                nodeOrigin(funcTypeNode->at(1)),
-                -1,
-                "params"),
-            semanticPart(
-                camel::source::SemanticRole::ReturnType,
-                typeOptNode->empty() ? camel::source::kInvalidOriginId
-                                     : nodeOrigin(typeOptNode->front()),
-                -1,
-                "returnType"),
-            semanticPart(
-                camel::source::SemanticRole::ValueProducer,
-                nodeOrigin(blockNode),
-                -1,
-                "body"),
-        });
+    std::vector<camel::source::SemanticPart> semanticParts{
+        semanticPart(
+            camel::source::SemanticRole::GenericParameter,
+            nodeOrigin(funcTypeNode->at(0)),
+            -1,
+            "withParams"),
+        semanticPart(
+            camel::source::SemanticRole::Parameter,
+            nodeOrigin(funcTypeNode->at(1)),
+            -1,
+            "params"),
+        semanticPart(
+            camel::source::SemanticRole::ReturnType,
+            typeOptNode->empty() ? camel::source::kInvalidOriginId
+                                 : nodeOrigin(typeOptNode->front()),
+            -1,
+            "returnType"),
+        semanticPart(
+            camel::source::SemanticRole::ValueProducer,
+            nodeOrigin(blockNode),
+            -1,
+            "body"),
+    };
+    // Each parameter as written, with its own position and its slot in the signature: a port of
+    // the function's graph stands for one parameter, and what is said about a parameter points at
+    // where it is written.
+    appendParameterParts(semanticParts, funcTypeNode);
+    registerAstSemanticBundle(funcNode, std::move(semanticParts));
 
     LEAVE("FuncData");
     return funcNode;
@@ -2103,30 +2133,11 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
     unwrapNodeAs<FuncDataLoad>(funcNode)->setWhenText(std::move(whenText));
     *funcNode << funcTypeNode;
     *funcNode << blockNode;
-
-    node_ptr_t funcDeclNode = createNodeAs<FuncDeclLoad>(ref);
-    unwrapNodeAs<FuncDeclLoad>(funcDeclNode)->setDoc(docOf(context));
-    unwrapNodeAs<FuncDeclLoad>(funcDeclNode)->setOperatorSymbol(operatorSymbol);
-    if (!operatorSymbol.empty()) {
-        unwrapNodeAs<FuncDeclLoad>(funcDeclNode)->setDeclaredIn(namespaceStack_);
-    }
-    if (annoListNode) {
-        *funcDeclNode << annoListNode;
-    }
-    // The tag uses written before the function, after the decorators. They are read when the
-    // function is compiled: a tag declared `on func` belongs to the declaration, one declared
-    // `on nodes` to the nodes of its body (design principles 6.2).
-    addTagUses(funcDeclNode, context);
-    *funcDeclNode << funcNode;
-    setNodeTokenRangeByContext(funcDeclNode, context);
-    registerAstSemanticBundle(
-        funcDeclNode,
-        {
-            semanticPart(
-                camel::source::SemanticRole::FuncName,
-                deriveAstAnchorOrigin(funcDeclNode, nameNode, "ast.func.name"),
-                -1,
-                ref.toString()),
+    // The signature as the node the function is built from knows it: the same parts the body of a
+    // lambda registers (`visitFuncData`), so that the graph of a declared function reads its
+    // parameters from where its body is built, whichever of the two nodes it is entered from.
+    {
+        std::vector<camel::source::SemanticPart> funcParts{
             semanticPart(
                 camel::source::SemanticRole::GenericParameter,
                 nodeOrigin(funcTypeNode->at(0)),
@@ -2148,7 +2159,59 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
                 blockNode ? nodeOrigin(blockNode) : camel::source::kInvalidOriginId,
                 -1,
                 "body"),
-        });
+        };
+        appendParameterParts(funcParts, funcTypeNode);
+        registerAstSemanticBundle(funcNode, std::move(funcParts));
+    }
+
+    node_ptr_t funcDeclNode = createNodeAs<FuncDeclLoad>(ref);
+    unwrapNodeAs<FuncDeclLoad>(funcDeclNode)->setDoc(docOf(context));
+    unwrapNodeAs<FuncDeclLoad>(funcDeclNode)->setOperatorSymbol(operatorSymbol);
+    if (!operatorSymbol.empty()) {
+        unwrapNodeAs<FuncDeclLoad>(funcDeclNode)->setDeclaredIn(namespaceStack_);
+    }
+    if (annoListNode) {
+        *funcDeclNode << annoListNode;
+    }
+    // The tag uses written before the function, after the decorators. They are read when the
+    // function is compiled: a tag declared `on func` belongs to the declaration, one declared
+    // `on nodes` to the nodes of its body (design principles 6.2).
+    addTagUses(funcDeclNode, context);
+    *funcDeclNode << funcNode;
+    setNodeTokenRangeByContext(funcDeclNode, context);
+    std::vector<camel::source::SemanticPart> declSemanticParts{
+        semanticPart(
+            camel::source::SemanticRole::FuncName,
+            deriveAstAnchorOrigin(funcDeclNode, nameNode, "ast.func.name"),
+            -1,
+            ref.toString()),
+        semanticPart(
+            camel::source::SemanticRole::GenericParameter,
+            nodeOrigin(funcTypeNode->at(0)),
+            -1,
+            "withParams"),
+        semanticPart(
+            camel::source::SemanticRole::Parameter,
+            nodeOrigin(funcTypeNode->at(1)),
+            -1,
+            "params"),
+        semanticPart(
+            camel::source::SemanticRole::ReturnType,
+            typeOptNode->empty() ? camel::source::kInvalidOriginId
+                                 : nodeOrigin(typeOptNode->front()),
+            -1,
+            "returnType"),
+        semanticPart(
+            camel::source::SemanticRole::ValueProducer,
+            blockNode ? nodeOrigin(blockNode) : camel::source::kInvalidOriginId,
+            -1,
+            "body"),
+    };
+    // Each parameter as written, with its own position and its slot in the signature: the
+    // declaration's own node is where the parameter list is read as one place, and where the
+    // parameters of a declaration without a body are the whole of it.
+    appendParameterParts(declSemanticParts, funcTypeNode);
+    registerAstSemanticBundle(funcDeclNode, std::move(declSemanticParts));
 
     LEAVE("FuncDecl");
     return funcDeclNode;
