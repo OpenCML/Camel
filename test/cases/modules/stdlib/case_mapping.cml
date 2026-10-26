@@ -1,0 +1,24 @@
+/**
+ * Upper and lower case follow the Unicode case mapping that does not depend on a language or on
+ * the context (design principles 11.1): a letter may become several, and what has no case is kept.
+ */
+module case_mapping
+
+import { to_upper, to_lower, codepoints } from str
+
+func main(): int sync {
+    // Latin with diacritics, Cyrillic, Greek
+    println('héllo wörld àéîõü'->to_upper, 'ÀÉÎÕÜ HÉLLO'->to_lower)
+    println('привет мир'->to_upper, 'ПРИВЕТ МИР'->to_lower)
+    println('οδός'->to_upper, 'ΟΔΟΣ'->to_lower)
+    // a letter that becomes several, and a title case letter
+    println('straße'->to_upper, len('straße'->to_upper), 'ŉ'->to_upper->codepoints)
+    println('ǅ'->to_upper, 'ǅ'->to_lower, 'ǆ'->to_upper)
+    // the default rules: no Turkish, no Lithuanian
+    println('iı'->to_upper, 'Iİ'->to_lower->codepoints)
+    // no case: kept
+    println('中文'->to_upper, '中文'->to_lower, '😀'->to_upper, '😀a'->to_upper, '123 !?'->to_upper)
+    // ASCII, and the empty string
+    println('Hello, World 123'->to_upper, 'Hello, World 123'->to_lower, ''->to_upper == '')
+    return 0
+}

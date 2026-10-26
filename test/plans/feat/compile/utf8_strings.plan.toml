@@ -50,3 +50,14 @@ expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
 expect_output_contains = ["format string '{:d}'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
+
+[[tests]]
+name = "case_mapping"
+desc = "to_upper and to_lower follow the Unicode case mapping that does not depend on a language or on the context: Latin with diacritics, Cyrillic, Greek (no final sigma), 'ß' to 'SS', title case letters, the default rules for the Turkish i, and CJK and emoji unchanged, on every back end."
+kind = "behavior"
+case = "../../../cases/modules/stdlib/case_mapping.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+expect_exit = 0
+expect_stdout_exact = "HÉLLO WÖRLD ÀÉÎÕÜ àéîõü héllo\nПРИВЕТ МИР привет мир\nΟΔΌΣ οδοσ\nSTRASSE 7 [700, 78]\nǄ ǆ Ǆ\nII [105, 105, 775]\n中文 中文 😀 😀A 123 !?\nHELLO, WORLD 123 hello, world 123 true\n"
+timeout_ms = 10000
