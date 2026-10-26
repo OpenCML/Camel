@@ -217,7 +217,7 @@ root tracers), and nothing read before a call is used after it.
   takes the second way: one `RuntimeGraphDraftSession` rewrites graph after graph, a `when`
   condition is Camel code and so a safepoint, and `RuntimeGraphDraftSession::RootScope` keeps the
   static values of every draft the session has opened relocatable until the commit reads them
-  (`modules/rewrite/module.cpp`; the defect and its reproducer are in ``). A
+  (`modules/rewrite/module.cpp`; the defect and its reproducer are recorded). A
   transaction opens one too, for its whole lifetime: its value may stay reachable across
   safepoints while the drafts are open (`modules/graph/txn.cpp`).
 - **The invariant is checked, not remembered.** A Debug build checks it at the start of every

@@ -653,7 +653,7 @@ println(after - before);             // 期望 0
 4. **中间红线（P4 之后、P5 之前）**：批复要求"超了先修再继续第 5 步"。用同一份 A 与 P4 后的构建 B′，只跑三个红线程序的 `nvm,fvm,jit`（`--pairs 3`），阈值同 8.4；超了就在开 P5 之前修 P2–P4。P7 的最终测量仍用 P6 后的完整 B，写进文档。
 5. **空载**：同一时段、无其它构建与测试并行；先跑 `fib.deep` 一次确认噪声底 < 3%，否则换时段重跑。作废受干扰的整轮（H17c 的做法），不挑单个数字。
 6. **不跨构建单次比较**：任何执行时间只在同一次 `ab.py` 调用内比较；`docs/performance/graph-store-baseline.md` 已有的"执行时间不跨构建单次比较"一节继续有效（H17c 第 3 条已写）。
-7. **认真记录**：结果表（程序、模式、A、B、B/A、噪声底、峰值 A/B）写进 `docs/performance/graph-store-baseline.md` 新增一节"H17 前后"与 ``。A 的提交、B 的提交、机器、时间、`--pairs/--rounds` 全部写明。
+7. **认真记录**：结果表（程序、模式、A、B、B/A、噪声底、峰值 A/B）写进 `docs/performance/graph-store-baseline.md` 新增一节"H17 前后"。A 的提交、B 的提交、机器、时间、`--pairs/--rounds` 全部写明。
 
 ### 8.4 通过标准
 
@@ -663,7 +663,7 @@ println(after - before);             // 期望 0
 
 ### 8.5 P7 的文件与门禁
 
-改：`test/tools/perfbaseline/baseline.py`（PROGRAMS）、`test/cases/perf/tensor/*.cml`、`docs/performance/graph-store-baseline.md`、``。不改被测代码。
+改：`test/tools/perfbaseline/baseline.py`（PROGRAMS）、`test/cases/perf/tensor/*.cml`、`docs/performance/graph-store-baseline.md`。不改被测代码。
 
 门禁：`python3 test/tools/perfbaseline/ab.py ...` 的两组调用；`feat/perf` 只保证程序能编译与运行。P7 完成后，`docs/performance` 的表格是评审依据。
 
@@ -848,7 +848,7 @@ P4 是一个提交。如果评审或实施中发现它无法在合理时间内�
 | `docs/language/03_data_model.md`、`docs/language/08_top_level_and_grammar.md`（+`en/`）、`docs/diagnostics.md`、`docs/stdlib-reference.md`、`docs/performance/graph-store-baseline.md` | 文档 |
 | `test/tools/perfbaseline/baseline.py` | 张量程序 |
 | `test/plan-selection.json` | 新计划规则 |
-| 本计划路径、`` | 指向本计划 |
+| 本计划路径 | 指向本计划 |
 
 ### 删除
 

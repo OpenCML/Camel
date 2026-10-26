@@ -164,7 +164,7 @@ the array types and the body's exit to be the state types followed by their elem
 ### 3.2 The tape of a differentiated loop
 
 autodiff (`modules/autodiff/pullback.cpp`) uses the collection slots as its tape
-(``, "H4d 第二步"). The rewrite decodes the loop's body graph and
+(the second step of H4d). The rewrite decodes the loop's body graph and
 differentiates it as a function of the captures and the state, as it differentiates any other
 graph, keeping the values its pullback reads as *residual ports*: the operands of every rule, and
 for a call inside the body the callee's pullback closure. The body of the loop node becomes that

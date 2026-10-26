@@ -1,6 +1,6 @@
 # H247 规则的形式化验证 —— 实施计划
 
-依据：任务书第 5.27 节；规则语言第二版设计稿 `docs/design/rewrite/v2.cn.md` 第 8 节与第 8.1 节（`check` 的覆盖、采样对照、SMT 证明的分工）；数值契约 `docs/design-principles.cn.md` 第 7.2–7.4 节；与 H232 的衔接见 the rule 的 `generic-rule-instantiation` 与 `generic-rule-instantiation-set-and-predicate` 两条裁定。体例照 `docs/design/graph-store/plan.cn.md`。
+依据：任务书第 5.27 节；规则语言第二版设计稿 `docs/design/rewrite/v2.cn.md` 第 8 节与第 8.1 节（`check` 的覆盖、采样对照、SMT 证明的分工）；数值契约 `docs/design-principles.cn.md` 第 7.2–7.4 节；与 H232 的衔接已有定论：泛型规则的实例化，以及它的集合与谓词。体例照 `docs/design/graph-store/plan.cn.md`。
 
 **只读调研，没有改代码。** 所有读数用 `origin/develop`（`18c98b856`）在 Linux 主机 `88zjwei` 上的构建实测：计划形式跑 `test/plans/feat/modules/rules.plan.toml`（全绿，121 通过 0 失败，`RUN_EXIT=0`，构建 51.0 s、计划 4.0 s），单条规则的一次性读数用仓库外的探针（`/tmp`，不进仓库）。
 
@@ -26,7 +26,7 @@
 6. **`stdlib/rules.cml` 今天是 69 条规则**：`int` 13、`i32` 13、`float` 16、`f32` 14、张量 15——也就是**标量 54 条、张量 15 条**；带许可的 21 条（`reassociate` 族 16、`refine_accuracy` 5），其中**那 16 条同时带 `when` 守卫**，所以今天一次值比较都没做（§1.1 末尾）。按任务书"先整数与浮点的标量算子"，第一步的翻译覆盖正好是那 54 条。
 7. **`check` 今天只跑到 68 条，不是 69 条**：`check_library.cml` 列了 63 条、`check_accuracy_library.cml` 列了 5 条，第 69 条 `tensor_sigmoid_chain` 从未传给 `check`。任务书的验收是"**每条**规则都有标注"，所以 `69/69` 要在一开始就当硬要求（G17、S0）。
 8. **七片**：S0 判定词汇与报告类型（无求解器）∥ S1 整数标量翻译器；S1 之后 S2 反例、S3 浮点与许可、S4 `when`/`fact` 前提、S5 泛型逐实例**四路并行**；S6 报告落地与 CI 收口。每一片都有一条今天就能跑、今天失败的红前用例（§3）。缺口清单 18 条（§2）。
-9. **两个问题文件**交给作者：the rule（§verification-licence-to-precondition）`（三种许可今天读法不同，哪一种算 `proved`）与 the rule（§verification-verdict-surface）`（标注写在哪、谁发布判定、覆盖不到的怎么标）。
+9. **两个问题**交给作者：许可到前提的读法（三种许可今天读法不同，哪一种算 `proved`）与判定落在哪个面上（标注写在哪、谁发布判定、覆盖不到的怎么标）。
 
 ## 1. 现状：逐条证据
 
@@ -74,7 +74,7 @@ ok wide_mul_div: 200 samples agree, fired 8 of 8
 FAIL narrow_mul_div: the two sides differ at (-2147483648): 0 and -2147483648
 ```
 
-**读法**：`ok` 覆盖了三种很不一样的处境——真的证不了但采样一致（`plain`）、许可放宽了容差后采样一致（`finite`）、条件规则压根没比较（`guarded`）；`unchecked` 是第四个字，只在两种情形出现（带许可但无界、泛型规则）。任务书要的三个字里，`proved` 与 `sampled` 今天都没有对应物，`refuted` 的对应物是 `FAIL`，而 `FAIL` 今天把"采样撞上反例"与"许可允许的不等"混在一起（`reassoc` 就是后者：它是一条**不带 `when` 守卫**的 `reassociate` 规则，所以走到了值路径，而 `reassociate` 一个位都不含 `no_infs`，样本里就有 `-inf`；标准库的 16 条 `reassociate` 规则都带守卫，走的是"条件选择实例"那一行，见 §1.1 末尾）。这一处冲突见 the rule §verification-licence-to-precondition 问题 1。
+**读法**：`ok` 覆盖了三种很不一样的处境——真的证不了但采样一致（`plain`）、许可放宽了容差后采样一致（`finite`）、条件规则压根没比较（`guarded`）；`unchecked` 是第四个字，只在两种情形出现（带许可但无界、泛型规则）。任务书要的三个字里，`proved` 与 `sampled` 今天都没有对应物，`refuted` 的对应物是 `FAIL`，而 `FAIL` 今天把"采样撞上反例"与"许可允许的不等"混在一起（`reassoc` 就是后者：它是一条**不带 `when` 守卫**的 `reassociate` 规则，所以走到了值路径，而 `reassociate` 一个位都不含 `no_infs`，样本里就有 `-inf`；标准库的 16 条 `reassociate` 规则都带守卫，走的是"条件选择实例"那一行，见 §1.1 末尾）。这一处冲突是交给作者的第一个问题。
 
 ### 1.3 今天有没有求解器接入
 
@@ -280,7 +280,7 @@ FAIL narrow_mul_div: the two sides differ at (-2147483648): 0 and -2147483648
 ### S6 报告落地、69 条规则的标注、CI 收口
 
 - **产物**：
-  - `stdlib/rules.cml` 69 条规则的判定报告（生成物；`--check` 模式核实"69 条一条不少、`refuted` 计数为 0"）。张量 15 条标 `sampled` 且原因 `out of coverage`（不在第一步的翻译覆盖内，见 the rule §verification-verdict-surface 问题 3）。
+  - `stdlib/rules.cml` 69 条规则的判定报告（生成物；`--check` 模式核实"69 条一条不少、`refuted` 计数为 0"）。张量 15 条标 `sampled` 且原因 `out of coverage`（不在第一步的翻译覆盖内，见交给作者的第二个问题）。
   - `test/plan-selection.json` 加一条规则（`modules/verify/` → 新的计划）。
   - CI：快速层的一条"无求解器时的诚实降级"断言（69 条全 `sampled`，原因 `solver unavailable`）；求解器那条走可选 job + 慢层（§4）。
 - **红前用例**：今天没有这份报告。计划断言报告覆盖 `69/69`——今天红。
@@ -351,8 +351,8 @@ S1 ──┬─► S2 ───────────────────�
 
 ## 6. 作者问题（编号，正文在两个问题文件里）
 
-1. **许可到前提的三种读法**：`reassociate`/`contract` 证"实数上相等"还是"按位相等"；`refine_accuracy` 的误差界成真时叫不叫 `proved`；`nondeterministic` 与今天的第四个字 `unchecked` 怎么合并。见 the rule（§verification-licence-to-precondition）`。
-2. **判定落在哪个面上**：任务书说"`stdlib/rules.cml` 每条规则都有标注"，标注写进规则语言、写成生成物、还是只在运行时报告里出现；`CheckReport` 每行带什么；覆盖不到的规则标什么、CI 要不要把 `refuted` 当硬失败。见 the rule（§verification-verdict-surface）`。
+1. **许可到前提的三种读法**：`reassociate`/`contract` 证"实数上相等"还是"按位相等"；`refine_accuracy` 的误差界成真时叫不叫 `proved`；`nondeterministic` 与今天的第四个字 `unchecked` 怎么合并。这留给作者。
+2. **判定落在哪个面上**：任务书说"`stdlib/rules.cml` 每条规则都有标注"，标注写进规则语言、写成生成物、还是只在运行时报告里出现；`CheckReport` 每行带什么；覆盖不到的规则标什么、CI 要不要把 `refuted` 当硬失败。这留给作者。
 3. **`approx_math` 作为许可的前提是什么**：`src/core/operator_semantics.cpp#rewriteErrorBound` 里没有这个位，8.1 也没说。今天的处置是"它不影响容差"，所以带 `#requires(approx_math)` 的规则按 `kNoPermissions` 的按位比较路径处理——这是不是作者要的，需要确认。出处：`include/camel/core/operator_semantics.h#Permission` 有这个位、`src/core/operator_semantics.cpp#rewriteErrorBound` 没有这个分支、`src/core/operator_semantics.cpp#parsePermission` 认这个名字。**本计划不裁定，按今天的读法落地并在报告里写明。**
 4. **一个 `refuted` 的规则应当怎样退出标准库**：8.1 说"不得入库"，但今天的库是 69 条手写的规则，没有自动化的入/出库流程。是加一个 `refuted ⇒ 移除该规则` 的闸门，还是只让 CI 红、由人来改？出处：8.1 的报告那一条；`test/plan-selection.json` 把 `stdlib/rules.cml` 映到 5 个计划。
 

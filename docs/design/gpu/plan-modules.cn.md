@@ -1,6 +1,6 @@
 # G1–G3 的 `modules/` 与 Tiles、CUDA 施工顺序
 
-状态：计划，随本分支合入（the change，基线 `origin/develop` `e0446c76e`）。本文只排**施工顺序**：
+状态：计划，随本分支合入（基线 `origin/develop` `e0446c76e`）。本文只排**施工顺序**：
 改什么、改哪个文件、拿什么证据、依赖谁、哪一步今天还是红的。设计与编号（G1–G7、S1–S10、§2.6 的
 `autodiff::expand`、§10 五问）仍以 [GPU 设计稿](README.cn.md) 与 [G1–G3 设计计划](plan.cn.md) 为准；本文不
 改那两个文件，冲突时以它们为准。

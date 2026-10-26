@@ -311,7 +311,7 @@ them.
 ## 6. The rest of the engine (H38)
 
 The rule declaration, the engines and the check are the first step; `when` is implemented (H38
-item 1), the rest is planned in the H38 report (``, section 1). In
+item 1), the rest is planned in the H38 report (section 1). In
 short:
 
 **`when` (implemented).** `rule … when expr { lhs => rhs }` compiles to a third function
