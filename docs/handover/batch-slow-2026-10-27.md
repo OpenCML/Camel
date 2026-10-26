@@ -11,7 +11,8 @@ cases since.
 The same 24 rows and no new family, which is the useful reading: nothing this line merged since `e7a8b906d` adds a
 red. The fast layer at this revision is green (`6931 / 6925 / 0 / 2 / 4`), so every row below sits outside the fast
 layer by the tier it declares. Two rows moved the other way: of the four `small` entries, C6 (15 s) and D5 (17 s)
-are green here, which is the load-sensitivity the 10-26 record warns about showing itself.
+are green here, which is the load-sensitivity the 10-26 record warns about showing itself - those two compare numbers
+against their PyTorch counterparts, and the second-look reading below puts no other row in this table in that class.
 
 ## The reds
 
@@ -54,10 +55,40 @@ that arm, now with its cause named. The call passes a struct whose fields are co
 against a declaration writing `f32[..]`-style shapes, so this is a type-resolution defect and not a load artifact;
 it is red in both records and still unattributed.
 
+## What each row actually says (second-look reading of the same revision)
+
+Each row was then re-run on its own plan with the failure text kept, because a row that shows only a time is a row that
+can hide. What follows moves all but one of them out of the "the host was loaded" explanation.
+
+- `progen_check` / `progen_fixed`: `expected exit 0, got 1`, `stdout does not contain '0 wrong'` / `'PASS'` - the progen
+  check itself fails (the 10-24 record counts 82 wrong cells), which is a defect and not a budget.
+- `benchmark_gradients_vs_torch`: `expected exit 0, got 1`, missing `'== transformer_big (camel_opt_nvm)'` and
+  `'gradient check: PASS'` - the gradient check fails; its 758.15 s cpu is under half the budget and beside the point.
+- `pass_export_equals_export_model`: `expected exit 0, got 1`, missing `'onnx::export equiv: PASS'` - the same failure
+  the row was taken out of the perf family for.
+- `gc.runtime_graph_constants.moving.nvm` / `.fvm`: exit 0, but the pinned numbers are not printed
+  (`loss=0.3579342999437358 gqw=0.19846567139029503 gkw=0.0764192040078342` and the `loss2` / `gqw2` / `gkw2` line) -
+  a value difference, not a time one.
+- `gc.macro_round_lifetime.moving_stress.*`: `expected exit 0, got 1`, missing `'-12.0 -12.0 24.0'` and
+  `'[2, 3, 2] 12.0 120.0'`.
+- `stream.tee_report` / `stream.tee_report_element_size_unknown`: exit 0, but the report lines are not printed
+  (`STREAM_TEE {"tee":1,"elem":"int","elements":20,"peak":20,...}` and the `"elem":"string"` one) - a report-shape
+  difference.
+- `perf/training_steps`' four rows: `NoMatchingFunction` at the optimizer step, in the section above.
+- `curve`: `expected exit 0, got 1` and `verification output: Error: expected 84 points (6 thread counts x 7 shapes x 2
+  paths), got 0` - the benchmark produced no points at all.
+- `shapes`: `expected exit 0, got 1` and `verification output: Error: expected 3 reference rounds, got 0`.
+- `reduce_layout.ops` / `.count`: `expected exit 0, got 1`, missing `'reduce layout ops: PASS'`, `'sum_to'`, `'ns/call'`,
+  and `'reduce layout counts: PASS'`.
+- `perf/showcase_c1` / `perf/showcase_c2` `small`: `expected exit 0, got 1`, missing `'c1 compare: PASS'` /
+  `'c2 compare: PASS'` - the case's own comparison bound, with its CPU reading (5.27 s of 23 s, 1.14 s of 13 s) inside
+  the plan's budget.
+- `device_parameter_tree_training`: `expected exit 0, got 1`, pre-existing and red on plain `develop` per the tiles lane.
+- `startup.cost` is the one row that reads as a bound: `expected exit 0, got 1` with no missing string, so the case's
+  own cost check is what failed, and the 10-26 record's CPU-time-margin caveat belongs to it alone.
+
 ## What this run does not establish
 
-- Attribution for the rows still marked unattributed, which needs the treatment the 10-24 record gave its rows
-  (a quiet-host re-run, then a bisect against `origin/develop`). This run re-measured them and named their plans;
-  the plan identities are in `docs/handover/batch-slow-2026-10-26.md`, "Plan identities".
-- Whether the two rows the 10-26 record calls load-sensitive (`startup.cost`, the `small` margins) are only that:
-  they are under budget in both runs and red by the margin rule in both.
+- Which commit introduced each symptom. The reading above says what each row fails on and rules the loaded host out for
+  all but `startup.cost` (and, in a different sense, the two `small` rows, whose bound is a numeric comparison against
+  the PyTorch counterpart); dating them still needs a bisect against `origin/develop`.
