@@ -1,0 +1,8 @@
+/// `import thing` when the directory holds `thing.txt` and no `thing.cml`: only `.cml` and `.cmo`
+/// name a module file.
+import { value } from thing
+
+func main(): int sync {
+    println(value)
+    return 0
+}

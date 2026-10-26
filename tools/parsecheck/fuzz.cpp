@@ -30,6 +30,7 @@
 #include "camel/parse/parse.h"
 #include "camel/parse/syntax/lexer.h"
 #include "camel/parse/syntax/parser.h"
+#include "camel/utils/path.h"
 
 #include <algorithm>
 #include <chrono>
@@ -258,8 +259,8 @@ int runBench(const std::string &path, size_t rounds) {
         cst.push_back(microseconds([&] { nodes = Parser::parse(text).nodeCount(); }));
         ast.push_back(microseconds([&] {
             auto sourceContext = std::make_shared<camel::source::SourceContext>();
-            auto diagnostics =
-                std::make_shared<camel::core::error::Diagnostics>("main", path, sourceContext);
+            auto diagnostics = std::make_shared<camel::core::error::Diagnostics>(
+                camel::utils::moduleNameOfFile(path), path, sourceContext);
             camel::parse::CamelParser parser(diagnostics);
             parser.setSourceContext(sourceContext);
             std::istringstream input(text);

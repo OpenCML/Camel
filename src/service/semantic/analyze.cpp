@@ -509,7 +509,11 @@ class ModelBuilder {
 
         std::istringstream input(options_.text);
         auto parser     = std::make_shared<camel::parse::CamelParser>(diagnostics);
-        auto mainModule = std::make_shared<UserDefinedModule>("main", path, ctx, parser);
+        // The entry module is named by its file, as in a run (design principles 10.2): the
+        // semantic service of an editor and the command line must resolve `counts::twice` in
+        // `counts.cml` the same way, or the editor reports references the compiler accepts.
+        auto mainModule = std::make_shared<UserDefinedModule>(
+            camel::utils::moduleNameOfFile(path), path, ctx, parser);
         ctx->setMainModule(mainModule);
         bool parsed   = false;
         bool compiled = false;

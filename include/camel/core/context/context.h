@@ -5,6 +5,7 @@
 
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/runtime.h"
+#include "camel/core/context/module_resolver.h"
 #include "camel/runtime/graph_id.h"
 #include "camel/core/slot.h"
 #include "camel/core/source/manager.h"
@@ -145,13 +146,11 @@ class Context : public std::enable_shared_from_this<Context> {
     std::shared_ptr<void> graphBuildSession_;
     /// See genericRuleTemplates.
     std::shared_ptr<void> genericRuleTemplates_;
-    /// The regular files of each directory a module was looked up in (getModulePathAndKind),
-    /// by their names without the extension, and the names that have a `.cmo`.
-    struct DirectoryListing {
-        std::unordered_map<std::string, std::string> byStem;
-        std::unordered_set<std::string> cmo;
-    };
-    std::unordered_map<std::string, DirectoryListing> directoryListings_;
+    /// The lookup of a module name: the one order it is searched in, what counts as a module file,
+    /// and the directory listings that answer it (include/camel/core/context/module_resolver.h).
+    /// It is built from the entry directory and the module roots of this context, and re-rooting a
+    /// context drops its listings.
+    ModuleResolver resolver_;
 
     std::optional<module_ptr_t> getBuiltinModule(const std::string &name);
     /// The module names an import spelling stands for, in the order they are looked up. The
@@ -169,25 +168,12 @@ class Context : public std::enable_shared_from_this<Context> {
     /// `problem` set when it drops more components than `currentModule` has.
     std::string resolveRelativeModuleName(
         const std::string &currentModule, const std::string &importName, std::string &problem);
-    /** Look up the file for a module. Any suffix other than .cmo is treated as source code; .cmo is
-     * treated as a dynamic library. An empty first value means not found. This searches the
-     * module roots only; the importing module's own directory comes first in `resolveModulePath`.
-     */
-    std::pair<std::string, bool> getModulePathAndKind(const std::string &moduleName);
-    /// Resolve a module name in the order of design principles 10.2: the importing module's own
-    /// directory, then the module roots (`-I` in the order given, `CAMEL_PACKAGES`, the legacy
-    /// `CAMEL_MODULE_PATH`), then the standard library. An empty `importerDir` means the entry
+    /// Resolve a module name in the order of design principles 10.2, through the one lookup: the
+    /// importing module's own directory, then the module roots (`-I` in the order given,
+    /// `CAMEL_PACKAGES`), then the standard library. An empty `importerDir` means the entry
     /// program, whose own directory is `entryDir`.
     std::pair<std::string, bool>
     resolveModulePath(const std::string &moduleName, const std::string &importerDir);
-    /** `findModuleUnder` for one search root: `base/<name>.cmo` or `base/<name>.*`, then the
-     * same inside `base/<name>/`. Used for the directory of the importing module, before the
-     * global search paths. `moduleName` is a resolved module name (`IDENT ('.' IDENT)*`),
-     * not an import spelling and not a path: a spelling with an empty component (the relative
-     * prefix of `..lib`) names no file here, because dots become separators and a leading dot
-     * would mean the filesystem root. */
-    std::pair<std::string, bool>
-    findModuleUnder(const std::string &baseDir, const std::string &moduleName);
     /// The directory of the importing module: the directory of the file it was loaded from, or
     /// the entry file's directory for the entry program and for a program-level import (a pass
     /// library, a definition).
@@ -206,12 +192,6 @@ class Context : public std::enable_shared_from_this<Context> {
     /// other file as source). Kept apart from the lookup so a caller can name the directory the
     /// path was found in.
     module_ptr_t loadModuleFrom(const std::string &moduleName, const std::string &path, bool isCmo);
-    /** Collect lookup attempts for a missing module so error messages can report them. */
-    std::vector<std::string>
-    getModuleSearchDiagnostics(const std::string &moduleName, const std::string &importerDir) const;
-    /** Return the base search paths that were actually consulted; for .cmo load failures we only
-     * list paths. */
-    std::vector<std::string> getSearchPathBases(const std::string &importerDir) const;
 
     Context(const EntryConfig &entryConf, const error::DiagsConfig &diagConf);
 
@@ -233,6 +213,13 @@ class Context : public std::enable_shared_from_this<Context> {
     /// The roots a module is looked for under, in order. A pass declaration is a module
     /// declaration, so the pipeline finds `std.cml`, `onnx.cml`, ... here.
     const std::vector<std::string> &searchPaths() const { return entryConfig_.searchPaths; }
+    /// Replace the module roots, and drop what the lookup remembered about the directories of the
+    /// old ones: a directory listing answers a question about one root list, so a context that is
+    /// re-rooted cannot be answered out of a listing another root list produced. A host that
+    /// serves more than one program from one context (the Python binding's `load`, which adds a
+    /// directory per call) re-roots it here rather than keeping a context whose roots are the ones
+    /// of its first call.
+    void setModuleSearchPaths(std::vector<std::string> roots);
     size_t maxThreads() const { return entryConfig_.maxThreads; }
     /// The threads the run may use: `maxThreads()` when `-t` gave one, else the hardware
     /// concurrency. The value of record for every pool of the run.
