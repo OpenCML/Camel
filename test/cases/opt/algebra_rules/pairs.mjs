@@ -14,7 +14,9 @@
 //       (`src/passes/opt/generic/rewrite.cpp`), so the operation, its constant and both of its edges
 //       are still there. The rule engine rewrites the matched node and **moves the anchor onto the
 //        replacement**: this is
-//, and it is not a rule condition,
+//       (the engine moves the anchor onto the node the rule's right side wrote, as the C++
+//       pass's `replaceFoldResult` does), and it is not a rule
+//       condition,
 //       so `DraftWritings::rewrite` does it in one place for every law. Here the replacement the
 //       rule's right side wrote is the port itself (`x + 0 => x`), so the graph's exit is the port,
 //       the operation and its constant are gone, and what a comparison sees is one node and no

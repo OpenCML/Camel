@@ -1,7 +1,8 @@
 // `for` over a tensor takes its elements along the first dimension: a rank-2 tensor gives the
 // rank-1 sub-tensor of each row (a view of the same data), and a rank-1 tensor gives its
 // elements, which are values of the element type — a value with no dimension is the element it
-// holds, not a rank-0 array. `len(shape(row))` is the rank of the element the body sees; a scalar
+// holds, not a rank-0 array. `len(shape(row))` is
+// the rank of the element the body sees; a scalar
 // has no `shape` to ask, so the body uses the element itself.
 module tensor_iterate
 

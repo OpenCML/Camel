@@ -38,7 +38,8 @@ import autodiff
 import tiles
 // `pyplot` and `python` need no display, no external Python installation, no GPU — and now no
 // interpreter at all to be listed: `import` creates nothing and the embedded CPython is created at
-// the first operator call (design principles 3.1). Their operators' declarations are
+// the first operator call (design principles
+// 3.1). Their operators' declarations are
 // checked against the registered ones.
 import pyplot
 // `python` is the same interpreter, with the declarations of its six fixed operators; the

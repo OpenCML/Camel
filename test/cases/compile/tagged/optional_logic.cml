@@ -1,5 +1,6 @@
 /**
- * A position's expected type is applied to the value built there, once (design principles 5.1): it is not the type of the operands of `&&` / `||` (both are `bool`, 4.2), not
+ * A position's expected type is applied to the value built there, once (design principles
+ * 5.1): it is not the type of the operands of `&&` / `||` (both are `bool`, 4.2), not
  * the type of the parts of `??` / `!!` (the left side is a `T?`, the right side a `T` or a `T?`,
  * 3.8), and not the type of a statement whose value nothing takes. The `T?` declarations below
  * still apply to the whole expression: that is what makes each value nullable.

@@ -9,7 +9,8 @@
  * rule gives.
  *
  * The text of one of these values is the shortest that reads back as the same element of its own
- * type (design principles 7.7), so the last section asserts that of every value it prints by reading
+ * type (design principles 7.7), so the last section
+ * asserts that of every value it prints by reading
  * the text back through `bf16(s)` / `f16(s)` rather than by pinning the digits a second time.
  *
  *   exact          bf16    f16     why
@@ -161,7 +162,8 @@ func main(): int sync {
     //
     // Design principles 7.7: a float becomes text as the shortest text that reads back as the
     // same value. A bf16 or an f16 is a value of its own type, so "the same value" is an element
-    // of that type, and the text is the shortest that reads back as it. Each value below
+    // of that type, and the text is the shortest
+    // that reads back as it. Each value below
     // is printed and read back by the language's own conversion, whose result is compared with
     // the value itself, so the property lines pin no digit count and no spelling: they assert
     // that the text names the element it came from, for every value of either type, which is what

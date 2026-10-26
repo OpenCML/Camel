@@ -1,5 +1,7 @@
 /**
- * The overlap check asks about the shapes a value can have, not only about the scalar types: "对已登记的类型逐个求两条 `when`". `always`
+ * The overlap check asks about
+ * the shapes a value can have, not
+ * only about the scalar types: "对已登记的类型逐个求两条 `when`". `always`
  * holds for every type and `is_callable` only for a function type, so the two conditions hold
  * together for exactly one of the types the compiler registers -- the function shape -- and that
  * is the type the report names. A check that asked about the scalar types alone would find no

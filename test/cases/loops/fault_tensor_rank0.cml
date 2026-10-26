@@ -1,4 +1,5 @@
-// Reshaping a tensor to no dimension makes it the one element it holds — the rule,
+// Reshaping a tensor to no dimension makes
+// it the one element it holds — the rule,
 // the rule — so another element count
 // has no value to become, and the count is checked when the shape runs (the shape arrives through a
 // parameter). The loop below is never reached: `for` over a value with no dimension is refused

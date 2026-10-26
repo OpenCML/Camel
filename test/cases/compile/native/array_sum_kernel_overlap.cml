@@ -1,6 +1,7 @@
 /**
  * The spelling the array reductions must not be written in, refused where the second declaration is
- * written (design principles 4.3, 4.4, 5.1): two same-named body-less
+ * written (design principles 4.3, 4.4,
+ * 5.1): two same-named body-less
  * declarations whose `when` conditions are not mutually exclusive.
  *
  * `is_integer::<T>()` holds for `i32` and `int`, and `is_numeric::<T>()` holds for those and for

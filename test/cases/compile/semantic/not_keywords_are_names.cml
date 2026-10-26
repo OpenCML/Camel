@@ -1,6 +1,7 @@
 /**
  * `is`, `of`, `keyof`, `try`, `catch` and `finally` are not part of the language and are not
- * keywords any more: they are ordinary names, as `raise` already was (design principles 3.9). A program may bind them, and a construct written with one
+ * keywords any more: they are ordinary names, as `raise` already was (design
+ * principles 3.9). A program may bind them, and a construct written with one
  * is an ordinary syntax error rather than a dedicated diagnostic.
  */
 module not_keywords_are_names

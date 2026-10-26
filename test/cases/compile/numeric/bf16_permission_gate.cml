@@ -1,6 +1,8 @@
 /**
  * `change_precision` governs a computation the compiler moves to a lower precision, and that is
- * still gated after the rule (design principles 7.2-7.3): the tiles scheduler takes the cuBLAS BF16 matrix product for
+ * still gated after the rule
+ * (design principles 7.2-7.3): the
+ * tiles scheduler takes the cuBLAS BF16 matrix product for
  * an f32 matmul only where the node carries `reassociate`, `change_precision` and `finite_math`
  * together (modules/tiles/src/schedule.cpp), and `#strict` revokes every permission, that one
  * included (7.4).

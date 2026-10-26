@@ -1,5 +1,6 @@
 /**
- * A step other than 1 is the core's slice too. The positions are the
+ * A step other than 1 is the core's
+ * slice too. The positions are the
  * ones the step names; the result is a copy -- the elements are the same and the program does not
  * have to know, but it does not share the parent's block. That is the deviation the flip line
  * records for a stepped slice.

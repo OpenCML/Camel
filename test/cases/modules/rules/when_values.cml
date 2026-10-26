@@ -1,5 +1,6 @@
 /**
- * A `const` parameter of a rule is the constant's value inside `when`: the
+ * A `const` parameter of a rule is the
+ * constant's value inside `when`: the
  * condition is a function of the value, typed by the parameter's declared type, so it needs
  * neither `constant(node, sample)` nor the two `match … case null` layers around it. A parameter
  * that is not `const` stays a node of the draft.

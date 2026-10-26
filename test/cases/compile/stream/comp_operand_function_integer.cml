@@ -1,6 +1,8 @@
 // `..` has two readings - two functions, or two integers - and a function with an integer is
 // neither, so the construct is refused with the reading it does not have as its own diagnostic:
-// the operands are named by their types, and neither of them is generic or unsettled.
+// the operands are named
+// by their types, and
+// neither of them is generic or unsettled.
 module h428_comp_operand_function_integer
 
 func inc(x: int): int {

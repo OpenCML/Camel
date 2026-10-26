@@ -1,6 +1,7 @@
 /**
  * `math:sqrt` is declared with a number: a string is refused at the call, and the message names
- * the declarations' parameter (`x`) — `stdlib/math.cml`, not the C++, is the source.
+ * the declarations' parameter (`x`) —
+ * `stdlib/math.cml`, not the C++, is the source.
  */
 module math_sqrt_type
 

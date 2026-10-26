@@ -1,5 +1,6 @@
 /**
- * The constant 0 step is refused where it is written: a step is any non-zero value (the rule), and 0 names no position, so the subscript that writes it is the compile-time
+ * The constant 0 step is refused where it is written: a step is any non-zero value (the
+ * rule), and 0 names no position, so the subscript that writes it is the compile-time
  * `SemanticDiag::SliceStepZero` and the program after it does not run (design principles 3.9).
  */
 module subscript_slice_step_zero

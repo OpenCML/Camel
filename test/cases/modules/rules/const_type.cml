@@ -1,5 +1,7 @@
 /**
- * The matcher checks the declared type of a `const` parameter. A coefficient is where this shows: it is a literal beside the
+ * The matcher checks the declared type of a `const` parameter.
+ * A coefficient is where this
+ * shows: it is a literal beside the
  * value it multiplies, so it takes that value's type (design principles 5.1) - an f32 constant
  * under a `f32[3]`, an f64 one under a `float` - and only the rule declared for that
  * type reads it.

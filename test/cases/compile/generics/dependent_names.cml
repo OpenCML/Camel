@@ -1,7 +1,9 @@
 /**
  * Names in a generic body that only the instantiation can resolve are not asked about where the
  * declaration is written: an operator on a type parameter, a field of a parameter, whether a call
- * fits. The names that are names of the declaration's own scope are resolved there  -- including the awkward ones, which this program
+ * fits. The names that are names of
+ * the declaration's own scope are
+ * resolved there  -- including the awkward ones, which this program
  * is made of:
  *
  * - a `with` parameter, and a generic function calling one that is declared after it;

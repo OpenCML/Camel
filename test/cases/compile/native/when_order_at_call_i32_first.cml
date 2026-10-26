@@ -1,9 +1,10 @@
 /**
  * Which operator a call of a body-less declaration reaches is decided by the call's argument
  * types and the declaration's `when`, never by the order the declarations are written in
- * (design principles 4.4: a `when` condition is evaluated at instantiation, an overload whose
- * condition does not hold does not apply, and a call no candidate applies to is reported with each
- * candidate's unmet condition).
+ * (design principles 4.4: a `when` condition is evaluated at instantiation; an overload whose
+ * condition does not hold does not apply, and overload selection tries the other candidates of
+ * the same name; when none applies the call is reported at the call, with the condition each
+ * candidate failed).
  *
  * Two declarations of one name, one generic signature, conditions that exclude each other: the
  * `i32` rule is the subtraction and the `int` rule is the addition, so the two results say which

@@ -1,5 +1,7 @@
 /**
- * Two declarations of one kernel name whose `when` conditions exclude each other: "同名声明按 `when` 互斥分臂就是重载" -- two
+ * Two declarations of one kernel
+ * name whose `when` conditions
+ * exclude each other: "同名声明按 `when` 互斥分臂就是重载" -- two
  * same-named declarations split by mutually exclusive conditions are overloads, each the executor
  * of its own family of instances (: one operator, per-type executors).
  *

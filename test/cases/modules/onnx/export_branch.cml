@@ -5,7 +5,8 @@
  *
  * `gate` reads one number out of its argument, so it is written at the type that says which
  * numbers the argument holds: `f32[..]`, the generic spelling of `f32[..]`, and the read
- * `t[0]` then has the element type the comparison needs.
+ * `t[0]` then has the element
+ * type the comparison needs.
  */
 module export_branch
 

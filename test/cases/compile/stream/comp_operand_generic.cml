@@ -2,7 +2,8 @@
 // principles 5.5), and nothing here does: the composition stands in a `let` with no declared
 // type, so neither the operand nor the whole expression has a function type to take the instance
 // from. The refusal is the composition's own, and it says what the operand is and both ways to
-// settle it.
+// settle it (design principles 5.5: a name of a generic function is an instance only
+// where a position fixes its type arguments).
 module h428_comp_operand_generic
 
 func ident::<T>(x: T): T {

@@ -1,5 +1,6 @@
 // The element type the call declares must be the file's: an array of another element type is a
-// fault reported where the call stands (design principles 5.1, 5.5), never a conversion. The file holds int64 (the tree's only non-f32 `.npy`) and the call declares f32, so the
+// fault reported where the call stands (design principles 5.1, 5.5), never a conversion.
+// The file holds int64 (the tree's only non-f32 `.npy`) and the call declares f32, so the
 // load faults before the value exists.
 module tensor_dtype_npy_dtype_mismatch
 

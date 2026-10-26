@@ -2,7 +2,8 @@
  * The twin of `when_both_hold_i32_first.cml`: the same program with the two declarations of
  * `dual_kernel` written in the other order. Both conditions hold for the call
  * `dual_kernel(x, y)` (`T` is `i32`, `U` is `int`), so the call is ambiguous and which
- * declaration is written first cannot decide it. This file must
+ * declaration is written first
+ * cannot decide it. This file must
  * therefore report exactly the diagnostic its twin reports.
  */
 module when_both_hold_int_first
