@@ -2142,9 +2142,12 @@ case = "../../../cases/modules/onnx/export_loop_carried_array_field.cml"
 args = ["${case}"]
 envs = ["ONNX_OUT=${test_tmp}/export_loop_carried_array_field.onnx"]
 expect_exit = 1
+# The exporter locates a refusal about the recursion as a whole at the call that entered it
+# (exporter.cpp, `located`): the entry call `walk(x, { xs: [0], k: 0 })` in the closure body.
 expect_diagnostic_name = "RuntimeDiag::UnhandledError"
 expect_diagnostic_code = "0x04000051"
-expect_diagnostic_line = 17
+expect_diagnostic_line = 23
+expect_diagnostic_column = 47
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 async ({ input, assert }) => {
