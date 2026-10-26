@@ -447,6 +447,18 @@ enum class SemanticDiag : uint32_t {
     /// An identifier pattern, or `error e`, over a type that is neither 'T?' nor 'T!'.
     IdentifierPatternNeedsNullableOrErrorType = 0x0001F5,
 
+    // The fact declaration (rewrite design 7.5), where the rule itself can be said: the clause that
+    // merges the facts of two writings of one value, the type of a constant a `const` case matches, and
+    // the variables a case reads the value's parts by. A declaration that writes no type of its own, or
+    // a body that writes no case, is refused by the parser where the ':' and the 'case' belong -- an
+    // ordinary syntax error, before the builder reads the declaration.
+    /// A fact declaration without the `join` that merges the facts of two writings of one value.
+    FactJoinRequired = 0x0001F9,
+    /// A `const` case whose constant has no type to take.
+    FactConstCaseTypeRequired = 0x0001F7,
+    /// A case whose pattern names no variable.
+    FactCaseBindsNoVariable = 0x0001F8,
+
     // Warnings
     IgnoredSideEffect = 0x100002,
     EffectNotExecuted = 0x100004,
