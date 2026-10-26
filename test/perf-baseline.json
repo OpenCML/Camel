@@ -1,6 +1,6 @@
 {
   "schema": "camel-perf-gate/1",
-  "description": "Medians and spreads of the commands of the gateable perf plans, measured on the host named below. `node scripts/perf-gate.mjs` compares against this file; `--update` rewrites it from a run on the same kind of host. A baseline from another machine is not comparable (docs/test-plans.md, \"Performance measurement\"; H167).",
+  "description": "Medians and spreads of the commands of the gateable perf plans, measured on the host named below. `node scripts/perf-gate.mjs` compares against this file; `--update` rewrites it from a run on the same kind of host. A baseline from another machine is not comparable (docs/test-plans.md, \"Performance measurement\").",
   "written_at": "2026-10-22T02:48:35.429Z",
   "written_by": "node scripts/perf-gate.mjs --update",
   "plans": [

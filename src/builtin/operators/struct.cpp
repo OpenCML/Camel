@@ -340,7 +340,7 @@ void scatterSliceGradient(
 // axis of a compact array is a run of the block, so it is a view sharing it (5.4). A slice of
 // another axis, or a stepped one, has no such run: it is a copy whose elements are the same, which
 // is the deviation the flip line records for a stepped slice and records here for another axis
-// (that a slice shares the block is what the multidimensional array representation of H17 will
+// (that a slice shares the block is what the multidimensional array representation will
 // make true of every slice).
 slot_t __slice_sub__(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)with;

@@ -34,7 +34,7 @@ namespace {
 
 // The venv check the module has always made before creating the interpreter. It is made at the
 // module's first use now, not at `import` (design principles 3.1; the language author's ruling of
-// 2026-10-22; handover H221), so a program that imports `python` and never calls one of its
+// 2026-10-22), so a program that imports `python` and never calls one of its
 // operators does not read the environment at all.
 void checkActiveVenvVersion() {
     if (camel::pyembed::activeVenvMatchesBuild())
@@ -52,8 +52,8 @@ void checkActiveVenvVersion() {
 
 namespace {
 
-// The operators whose signature C++ computes stay here (design principles 6.4; handover H19,
-// step 10; H166). `py_call` (two URIs), `py_print` and `py_println` are variadic, and
+// The operators whose signature C++ computes stay here (design principles 6.4).
+// `py_call` (two URIs), `py_print` and `py_println` are variadic, and
 // `py_wrap`/`py_unwrap` move a type through the module type `PyObject<T>`; neither can be
 // written as a body-less declaration. The other six are declared in stdlib/python.cml.
 const std::vector<oper_group_ptr_t> &getOperatorGroups() {
@@ -244,7 +244,7 @@ bool PythonModule::load() {
     if (loaded_)
         return true;
     // `import` executes no code (design principles 3.1; the language author's ruling of
-    // 2026-10-22; handover H221): loading registers the executor and the purity of the operators,
+    // 2026-10-22): loading registers the executor and the purity of the operators,
     // which the declaration loader needs, and nothing that touches CPython. The interpreter is
     // created by the first operator call (`ensurePythonInterpreter`), or attached to when
     // `pyplot` created it first.
@@ -252,8 +252,8 @@ bool PythonModule::load() {
     context_->registerExecutorFactory("python", [ctx]() { return createPythonExecutor(ctx); });
     // The purity of every operator of the module (design principles 3.3), which the declaration
     // loader requires before it accepts a body-less declaration (`Builder::declareNativeOperator`,
-    // src/compile/gir/builder_modules.cpp#declareNativeOperator; H157, H166). All twelve are effectful: each one
-    // observes or advances the interpreter, which no argument names. `py_call`, `py_exec`,
+    // src/compile/gir/builder_modules.cpp#declareNativeOperator). All twelve are effectful:
+    // each one observes or advances the interpreter, which no argument names. `py_call`, `py_exec`,
     // `py_eval` and `py_run` execute arbitrary Python; `py_attr` may run a descriptor or a
     // property; `py_import` runs a module body and writes `sys.modules`; `py_print`/`py_println`
     // write the interpreter's standard output; `py_wrap` creates an object whose identity and

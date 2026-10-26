@@ -26,8 +26,8 @@
 //     `match type` case (`typeCasePattern`); they are listed in the reserved table, not here;
 //   * `yield` was listed as a contextual keyword by handover 5.00 item 7, and the author corrected
 //     that (`questions-2026-10-24-evening.md`, 「2026-10-26-yield-keyword-or-context-keyword」): it
-//     is an ordinary keyword, in the Control row with `return` and `throw`. Its lexical half belongs
-//     to the H248 generator lane and is not on develop (no `KwYield` in token_kinds.def).
+//     is an ordinary keyword, in the Control row with `return` and `throw`. Its lexical half is not
+//     on develop (no `KwYield` in token_kinds.def).
 
 export const CONTEXT_KEYWORD_GROUPS = [
     { id: 'declaration', zh: '声明头', en: 'Declaration heads' },

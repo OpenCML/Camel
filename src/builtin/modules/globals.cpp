@@ -181,12 +181,11 @@ resolver_ptr_t namedStaticSignature(const char *name, Type *param, Type *exit) {
  * The same static extent makes the slice a view sharing the block (5.4), so its first dimension
  * must be the only one and its step the constant 1: a slice of a rank-2 or deeper array, and a
  * step other than 1, are views with strides, which need the multidimensional array representation
- * of H17, and are refused at the call rather than lowered to a copy that would not share the
+ * and are refused at the call rather than lowered to a copy that would not share the
  * block. Where the extent is not in the type the operator is left to its kernel, which reads a
- * stepped slice as a copy — the H17 deviation `feat.linear.subscript`'s `subscript.step` records.
+ * stepped slice as a copy — the deviation `feat.linear.subscript`'s `subscript.step` records.
  *
- * These are the checks the tensor module's `indexInfer` and `sliceSubInfer` made for `t[i]` and
- * `t[a:b]` before `Tensor` became an array (H419): a `Tensor` is an array now, so the built-in
+ * These are the checks `t[i]` and `t[a:b]` need: a `Tensor` is an array, so the built-in
  * `[]` operators are the ones its subscripts reach, and the rule has to be here or it is nowhere.
  */
 
@@ -2501,18 +2500,16 @@ std::make_shared<StaticCheckedResolver>(
                 {
                     ":struct/range",
                     DynamicFuncTypeResolver::create(
-                        {{0, {}}, {-1, {}}},
+                        {{0, {}}, {3, {false, false, false}}},
                         "(start: int, end: int, step: int) => int[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
-                            // `range(a, b)` is the interval of the integers from `a` to `b - 1`
-                            // and `range(a, b, step)` is the same sequence with a step, as the
-                            // language's `a..b` is the one without one (design principles 4.2;
-                            // One rule for the two spellings:
-                            // a second rule of the same URI would leave the table (which holds
-                            // one resolver per URI) with the last one only, so every re-typing of
-                            // the call would read the other spelling's arity.
-                            if (norm.size() != 2 && norm.size() != 3) {
+                            // `range(a, b, step)` is the integers `a`, `a + step`, ... below `b`; the interval
+                            // `a..b` is the step-1 case of it and lowers to exactly this call, `range(a, b, 1)`
+                            // (design principles 4.2). The two-argument spelling is gone, and the count below is
+                            // exactly three, so `range(a, b)` -- and any other arity -- is an ordinary no-match;
+                            // the interval keeps writing the step out so that this stays the only rule of the URI.
+                            if (norm.size() != 3) {
                                 return nullopt;
                             }
                             for (Type *type : norm) {

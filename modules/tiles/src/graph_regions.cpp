@@ -215,9 +215,9 @@ gpuRefusal(const rt::GCGraph &graph, const SegmentAnalysis &analysis, rt::gc_nod
         // arguments cannot change a static one.
         return "no device program for this shape";
     }
-    // Unresolved types and index instances are not refusals (h251 retries with the actual
-    // shapes); structural host code (`node_kind`, `control_edge`, `inside_loop`) is not an
-    // operator's business.
+    // Unresolved types and index instances are not refusals: the run retries with the actual
+    // shapes and decides then; structural host code (`node_kind`, `control_edge`, `inside_loop`)
+    // is not an operator's business.
     return "";
 }
 // The reading the residency conclusion is fed with: the graph's placements, and the blocks its

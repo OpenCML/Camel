@@ -219,7 +219,7 @@ void noteGemmLibraryThreads(int threads) {
  * as the large 2-D products of a training step are). That made a second pool beside the tensor
  * pool, and on a loaded host the two pools compete for the same cores: the curve in
  * `docs/technical/25_tensor_stack_and_onnx_export.md` has the uncapped library losing to the
- * canonical kernel from four threads up (H288), while one library thread beats the canonical
+ * canonical kernel from four threads up, while one library thread beats the canonical
  * kernel at `-t 1` (3921 against 7260 ms on the 1024^3 cell). So the budget stays with the tensor
  * pool and the library runs one thread per call: a whole-work product splits its output rows over
  * the pool (one library call per chunk), and a batched product gives the pool the budget and each
@@ -227,7 +227,7 @@ void noteGemmLibraryThreads(int threads) {
  *
  * The library's initial count is one before it loads as well: OpenBLAS creates its worker pool in
  * a constructor, at the machine's count, and a setting applied later leaves those threads alive
- * and unused (H303, measured with `strace`: 31 threads at `-t 1` without the seed). The seed is
+ * and unused (measured with `strace`: 31 threads at `-t 1` without the seed). The seed is
  * `camel::initialize()`; see the note there.
  */
 class LibraryThreads {
@@ -374,9 +374,9 @@ std::string_view libraryGemmName() {
 
 void setGemmThreads(int threads) {
     // The run's budget is the tensor pool's: `-t`, whatever it is. The library's own pool does not
-    // take a share of it: one thread per library call, so the process has one pool, not two
-    // (H303). The parameter is the caller's budget and is deliberately not applied to the library;
-    // it stays in the signature because `setNumThreads` is the one caller and the declaration is
+    // take a share of it: one thread per library call, so the process has one pool, not two.
+    // The parameter is the caller's budget and is deliberately not applied to the library; it
+    // stays in the signature because `setNumThreads` is the one caller and the declaration is
     // the module's. The library's own count is 1; `gemm_threads()` reports the pool chunks that
     // split a whole-work product, and `gemm_library_threads()` reports this one.
     (void)threads;
@@ -428,7 +428,7 @@ Array *matmul(
     const int64_t aSize = plan.M * plan.K, bSize = plan.K * plan.N, cSize = plan.M * plan.N;
     // One pool: the tensor pool spends the run's budget for a batched product, and a library call
     // is one thread whether the product is the whole work or one chunk of the batch. The library's
-    // own pool was the second one (H303); `LibraryThreads` keeps it at one for these calls.
+    // own pool was the second one; `LibraryThreads` keeps it at one for these calls.
     std::optional<LibraryThreads> libraryThreads;
     if (compute == TypeCode::Float32 && library) {
         libraryThreads.emplace();

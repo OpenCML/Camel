@@ -3,8 +3,8 @@
 
 /*
  * The statistics module: descriptive functions over an array of numbers. Design principles 6.4:
- * the signature is written once, in the declaration module `stdlib/statistics.cml` (handover
- * H19, step 10). What is left here is what only C++ knows: the kernels in operators.cpp, the
+ * the signature is written once, in the declaration module `stdlib/statistics.cml`. What is left
+ * here is what only C++ knows: the kernels in operators.cpp, the
  * executor that runs them, and the operator trait declared at load.
  */
 

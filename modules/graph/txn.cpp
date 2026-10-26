@@ -467,7 +467,7 @@ slot_t addConstantKernel(ArgsView &, ArgsView &norm, Context &) {
 }
 
 // The fixed operators of a transaction: their signature is in stdlib/graph.cml, so the table
-// carries the kernel of each name and nothing else (handover H141).
+// carries the kernel of each name and nothing else.
 struct TxnOp {
     const char *name;
     operator_t kernel;

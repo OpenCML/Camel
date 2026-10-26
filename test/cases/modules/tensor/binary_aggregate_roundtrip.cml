@@ -1,0 +1,24 @@
+module binary_aggregate_roundtrip
+import { from_bytes, to_bytes } from tensor
+import { from_array } from bytes
+
+// The payload `to_bytes` writes is the one `from_bytes` reads, element by element: each field's
+// bytes go back to its own offset in the compact layout, and the padding the layout keeps is not
+// read. A shape of another rank reads the same run as that shape.
+type P = { x: int, y: f32 }
+
+func main(): int sync {
+    let ps: P[] = [{ x: 1, y: 2.0 }, { x: 258, y: 3.0 }]
+    let back = from_bytes::<P>(to_bytes(ps), [2])
+    println(back[0].x)
+    println(back[0].y)
+    println(back[1].x)
+    println(back[1].y)
+    // Bytes written by hand, so the reader is checked against the layout and not only against the
+    // writer: one element, x = -1 and y = -2.5.
+    let written = from_bytes::<P>(
+        from_array([255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 32, 192, 0, 0, 0, 0]), [1])
+    println(written[0].x)
+    println(written[0].y)
+    return 0
+}

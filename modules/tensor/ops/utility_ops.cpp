@@ -16,6 +16,7 @@
 #include "camel/core/rtdata/bytes.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/type/bytes.h"
+#include "camel/core/type/pure.h"
 #include "camel/utils/path.h"
 #include "catalog.h"
 #include "support.h"
@@ -30,6 +31,19 @@ using namespace camel::core::type;
 namespace k = camel::tensor::kernels;
 
 namespace {
+
+/// True for an array whose element type is a compact aggregate of pure data (a struct or a tuple
+/// laid out field by field, binary.cpp): the elements a tensor's own storage does not describe,
+/// and the ones `tensorArg` converts and refuses. The predicate is the type's layout, so it
+/// answers for the same element types the payload writer walks.
+bool isAggregateElementArray(const Type *type) {
+    const ArrayType *array = asArrayType(type);
+    if (array == nullptr) {
+        return false;
+    }
+    const DataLayout *layout = pureDataLayout(array->elemType());
+    return layout != nullptr && layout->aggregate;
+}
 
 slot_t idxKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("idx", [&] {
@@ -153,7 +167,7 @@ ArrayType *npyTensorType(TypeCode dtype) {
  * The element type of a `load_npy` call's result: the explicit type argument the call writes
  * (`load_npy::<f32>(p)`) or the element type of the position the call stands in (`f32[3]`, `f32[..]`). The result is the concrete element type as an array (`f32[..]`), the concrete element type, so every position
  * that takes a tensor takes the load; the kernel checks the file's own element type against it
- * and a mismatch is a fault at the call (design principles 5.5; handover H466). One resolver per
+ * and a mismatch is a fault at the call (design principles 5.5). One resolver per
  * element type a `.npy` file can hold, and none of them accepts a call that names no element type
  * and stands where none is expected.
  */
@@ -206,7 +220,7 @@ slot_t loadNpyKernel(ArgsView &, ArgsView &norm, context::Context &) {
 // The element type the call declares (`load_npy::<f32>(p)`, or the element type of the
         // position the call stands in): the file's dtype must be that one. The scheduler puts the
         // call's own type here, so a load inside a generic function checks the instance's type,
-        // not the declaration's `T` (design principles 5.5; handover H466). The value carries the
+        // not the declaration's `T` (design principles 5.5). The value carries the
         // declared type too, which is what `wrap` puts on it (the element type follows the value).
         const TensorFacts declared = tensorFactsOf(norm.resultType());
         return wrap(
@@ -226,7 +240,14 @@ slot_t saveNpyKernel(ArgsView &, ArgsView &norm, context::Context &) {
 
 slot_t toBytesKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("to_bytes", [&] {
-        const auto bytes = tensorToLittleEndian(tensorArg(norm, 0, true));
+        // A tensor's own storage is its payload: the elements are a compact run of one scalar's
+        // bits in row-major order, so its bytes are the payload once each element is
+        // little-endian. An aggregate element type is the same run with each element laid out
+        // field by field (binary.cpp), and the tensor conversion refuses it (it has no scalar to
+        // flatten to), so the array's own bytes are what the writer walks.
+        const auto bytes = isAggregateElementArray(norm.type(0))
+                               ? plainSequenceToLittleEndian(norm.get<Array *>(0))
+                               : tensorToLittleEndian(tensorArg(norm, 0, true));
         return camel::core::rtdata::toSlot(
             camel::core::rtdata::BytesObject::from(bytes, resultAllocator()));
     });
@@ -309,7 +330,7 @@ std::vector<OpDef> utilityOps() {
     // the call declares, and no parameter can mention a type variable that is the *result's*
     // element type, so the signature is computed rather than declared: the entry in
     // `stdlib/signatures/tensor.cml` is the reference, `LoadNpyResolver` is the source, and the
-    // group below is what a call resolves against (handover H466; design principles 6.4).
+    // group below is what a call resolves against (design principles 6.4).
     for (const auto &[dtype, name] : kNpyElementTypes) {
         defs.push_back(
             OpDef{

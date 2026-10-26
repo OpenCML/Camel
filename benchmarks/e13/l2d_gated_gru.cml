@@ -18,7 +18,7 @@
  */
 module e13_l2d_gated_gru
 
-import { sigmoid, tanh, slice, reshape, shape, zeros, mean, abs, save_npy } from tensor
+import { sigmoid, tanh, reshape, shape, zeros, mean, abs, save_npy } from tensor
 import { with_grad } from autodiff
 import { sgd, save_params } from nn
 import { get_env } from env

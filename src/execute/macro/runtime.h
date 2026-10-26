@@ -13,6 +13,7 @@
 #pragma once
 
 #include "camel/core/context/frame.h"
+#include "camel/core/error/runtime.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/source/ids.h"
 #include "camel/core/type/base.h"
@@ -70,13 +71,19 @@ class MacroEvaluator {
         uint64_t origin = 0;
         std::string callee;
         std::string reason;
+        /// Places the report is about beside the one it stands at (see CarriedReport): a fault of
+        /// autodiff that refused several calls carries one report per call, and the place the
+        /// refused value was chosen goes to the diagnostic as related information.
+        std::vector<camel::core::error::DiagLabel> related;
     };
     std::vector<Failure> failures_;
     /// `origin`, when valid, is the place the failure is about (a fault that names one): the
-    /// error is reported there, and its text says where the macro call is.
+    /// error is reported there, and its text says where the macro call is. `related` are the
+    /// places that report is about beside its own.
     void noteFailure(
         const MacroCandidate &candidate, std::string reason,
-        camel::source::origin_id_t origin = camel::source::kInvalidOriginId);
+        camel::source::origin_id_t origin = camel::source::kInvalidOriginId,
+        std::vector<camel::core::error::DiagLabel> related = {});
     /// The normal reason a macro call is not evaluated: an argument that is not a constant.
     /// Logged at warn level (visible with -v), naming the argument.
     void noteNotStatic(

@@ -3,7 +3,7 @@
 
 /*
  * Shape and data-movement operators: shape, reshape, flatten, unsqueeze,
- * transpose, permute, concat, slice.
+ * transpose, permute, concat.
  *
  * Static inference computes result shapes with the same helpers the kernels
  * use (layout.h) whenever every input fact is known, and degrades to unknown
@@ -283,72 +283,6 @@ std::optional<Type *> concatInfer(const InferContext &ctx) {
     return tensorOf(dtype, out);
 }
 
-// slice(t, axis, start, end, step = 1): the function form of the slice, which takes any axis and
-// copies the slice out of it. The subscript spelling `t[a:b]` is the core's own slice node, for any
-// rank and any element type, and no longer reaches this module (the ruling of 2026-10-25, point 2).
-slot_t sliceFunctionKernel(ArgsView &, ArgsView &norm, context::Context &) {
-    // Bounds outside the axis are a located fault, as for an array's slice (design principles
-    // 3.9); checked before the kernel so the diagnostic is SliceOutOfRange, not a kernel error.
-    // A malformed axis or step is left to the kernel.
-    const Array *input = tensorArg(norm, 0);
-    const int64_t axisArg     = intArg(norm, 1);
-    const int64_t start = intArg(norm, 2), end = intArg(norm, 3);
-    const auto rank     = static_cast<int64_t>(input->rank());
-    const int64_t axis  = axisArg < 0 ? axisArg + rank : axisArg;
-    if (axis >= 0 && axis < rank) {
-        const int64_t extent = input->dim(static_cast<size_t>(axis));
-        if (!k::normalizeSliceBounds(extent, start, end)) {
-            throwRuntimeFault(
-                RuntimeDiag::SliceOutOfRange,
-                start,
-                end,
-                std::format("axis {} of a tensor", axis),
-                extent);
-        }
-    }
-    return runKernel("slice", [&] {
-        const int64_t step = hasArg(norm, 4) ? intArg(norm, 4) : 1;
-        return wrap(
-            norm.resultType(),
-            k::slice(input, axisArg, start, end, step, resultAllocator()));
-    });
-}
-
-std::optional<Type *> sliceFunctionInfer(const InferContext &ctx) {
-    TensorFacts in  = ctx.facts(0);
-    const auto axis = ctx.constInt(1);
-    if (!in.shape) {
-        return tensorOf(in);
-    }
-    if (!axis) {
-        return tensorOf(in.dtype, StaticShape(in.shape->size(), std::nullopt));
-    }
-    const auto a     = static_cast<size_t>(normalizeAxisOrThrow(*axis, in.shape->size()));
-    const auto start = ctx.constInt(2), end = ctx.constInt(3);
-    const auto step   = ctx.has(4) ? ctx.constInt(4) : std::optional<int64_t>(1);
-    const std::optional<int64_t> ext = (*in.shape)[a];
-    if (!ext || !start || !end || !step || *step <= 0) {
-        (*in.shape)[a] = std::nullopt;
-        return tensorOf(in);
-    }
-    // Extent and bounds are known at compile time: an interval that leaves the axis is an
-    // error here (design principles 3.9). With an unknown extent or bounds the operator checks
-    // at run time and faults with SliceOutOfRange (3.9).
-    const auto range = k::normalizeSliceBounds(*ext, *start, *end);
-    if (!range) {
-        throw ShapeError(
-            std::format(
-                "slice bounds {}..{} are outside axis {} of extent {}",
-                *start,
-                *end,
-                a,
-                *ext));
-    }
-    const int64_t s = range->start, e = range->end;
-    (*in.shape)[a]  = e > s ? (e - s + *step - 1) / *step : 0;
-    return tensorOf(in);
-}
-
 // ---------------------------------------------------------------- take / one_hot
 
 bool isIntegerCode(const std::optional<TypeCode> &code) {
@@ -372,7 +306,7 @@ std::vector<int64_t> intListArg(ArgsView &args, size_t index, std::string_view o
     Type *type = args.type(index);
     if (type->code() == TypeCode::Array) {
         ::Array *array = args.get<::Array *>(index);
-        // An empty literal `[]` has no element type to infer from (H15 literal context typing is
+        // An empty literal `[]` has no element type to infer from (literal context typing is
         // not here yet); there are no elements to convert, so it is the empty integer list.
         if (array->size() == 0) {
             return {};
@@ -403,15 +337,10 @@ std::vector<int64_t> intListArg(ArgsView &args, size_t index, std::string_view o
     return values;
 }
 
-// The slice of the first axis on a tensor, a view sharing the block, was this module's own
-// subscript kernel and type rule (`t[a:b]`); both are gone, because a subscript is answered by the
-// core's one slice operator and its one adjoint rule for any rank and any element type (the
-// author's ruling of 2026-10-25, section discrete-gradient-and-rank-one-slice-ownership, point 2:
-// 两种 `[]` 都只由核心回答; `docs/design/arrays-memory/plan.cn.md` 5.1a: 模块副本与按类型分派的那段一起删掉). The function
-// form below stays: it answers any axis and any rank, and its reading of its arguments -- a
-// negative bound counts from the end, an axis is normalized -- is not the core's yet (see
-// docs/handover/reviews/questions-2026-10-24-evening.md, section
-// slice-function-form-and-what-the-core-answers).
+// The slice has one owner: the core's own node `:op/slice_sub`, which answers `t[a:b:s]` and the
+// function form `slice(t, axis, a, b, s)` alike, for any rank and any element type, with one
+// adjoint rule. This module's own slice kernel and type rule are gone with it (design principles
+// 5.4).
 
 // take(t, indices): rows along the first axis, in the order the indices give.
 slot_t takeKernel(ArgsView &, ArgsView &norm, context::Context &) {
@@ -689,28 +618,6 @@ void concatVjp(VjpBuilder &b, const VjpCall &call) {
     }
 }
 
-// The adjoint rule of the function form of the slice. A slice is a selection of indices along its
-// axis, so its adjoint
-// is the zero-padded scatter of dy back into the parent's shape at those same indices --
-// `tensor:slice_grad` is that scatter. The value handed back has the parent's own type:
-// `addTensorOperFor` types the gradient node from the primal's tangent, so a `f32[..]` parent gets
-// a gradient of its own element type and shape, never a value of another width.
-// `slice(t, axis, start, end, step?)`, the function form only: every argument the caller wrote is
-// the adjoint's argument too. The subscript spelling `t[a:b]` is the core's node and its adjoint is
-// the core's (`:op/slice_sub` -> `:tangent/scatter_slice_arr`), so the two-word mask branch this
-// rule had is gone with the module's subscript copy (the ruling of 2026-10-25, point 2).
-void sliceVjp(VjpBuilder &b, const VjpCall &call) {
-    requireVjpInputs(call, 4, 5);
-    auto dy = b.gradientOf(call.output);
-    if (!dy) {
-        return;
-    }
-    std::vector<vjp_node_t> inputs{*dy};
-    inputs.insert(inputs.end(), call.inputs.begin(), call.inputs.end());
-    b.accumulateGradient(
-        call.inputs[0], addTensorOperFor(b, call.inputs[0], "tensor:slice_grad", inputs));
-}
-
 // take(t, indices): rows are selected with repetition, so the reverse scatters dy back and
 // sums where an index repeats. The indices take no gradient.
 void takeVjp(VjpBuilder &b, const VjpCall &call) {
@@ -797,22 +704,6 @@ std::vector<OpDef> layoutOps() {
         .infer     = concatInfer,
         .kernel    = &concatKernel,
         .traits    = {}});
-    // The function form only: `slice(t, axis, start, end, step?)`. The subscript spelling
-    // (`t[a:b]`) is the core's operator and never reaches this module (the ruling of 2026-10-25,
-    // point 2, and `docs/design/arrays-memory/plan.cn.md` 5.1a; the module's own subscript kernel and type rule are deleted).
-    defs.push_back(OpDef{
-        .name    = "slice",
-        .exports = {"slice"},
-        .params =
-            {{"t", ParamKind::Tensor},
-             {"axis", ParamKind::Int},
-             {"start", ParamKind::Int},
-             {"end", ParamKind::Int},
-             {"step", ParamKind::Int, true}},
-        .resultDoc = "float[..]",
-        .infer     = sliceFunctionInfer,
-        .kernel    = &sliceFunctionKernel,
-        .traits    = {}});
     defs.push_back(OpDef{
         .name      = "take",
         .exports   = {"take"},
@@ -821,10 +712,9 @@ std::vector<OpDef> layoutOps() {
         .infer     = takeInfer,
         .kernel    = &takeKernel,
         .traits    = {}});
-    // The subscript forms of design principles 5.4: `t[a:b]` and `t[idx]` on a tensor. They
-    // merge into the built-in module's `__slice__` and `__idx__` groups as overloads. `t[a:b]`
-    // is the `slice` operator above, exported under `__slice__` as well; only the index form
-    // needs an operator of its own.
+    // The subscript forms of design principles 5.4: `t[a:b]` and `t[idx]` on a tensor. Both are
+    // the core's own operators (`t[a:b]` is `:op/slice_sub`), so only the index form needs a
+    // declaration of its own.
     defs.push_back(OpDef{
         .name      = "idx_take",
         .exports   = {"__idx__"},
@@ -865,9 +755,6 @@ std::vector<OpDef> layoutOps() {
     setVjp(defs, "unsqueeze", &reshapeLikeVjp);
     setVjp(defs, "permute", &permuteVjp);
     setVjp(defs, "concat", &concatVjp);
-    // `t[a:b]` and `slice(t, 0, a, b)` are the same node and share this one adjoint rule; the
-    // `slice_sub` rule that used to answer the subscript beside it is gone with the operator.
-    setVjp(defs, "slice", &sliceVjp);
     setVjp(defs, "take", &takeVjp);
     setVjp(defs, "shape", &camel::core::noGradient);
     // The subscript forms are differentiated by the same rule as the calls they name: the

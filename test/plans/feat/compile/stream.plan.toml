@@ -356,29 +356,29 @@ timeout_ms = 20000
 
 [[tests]]
 name = "stream.interval_own_range"
-desc = "The deletion is the built-in, not the identifier: a module's own `range(a, b)` keeps its name and is called as it declares (the tensor module's `range` is the standard case), so the diagnostic cannot misfire on one."
+desc = "The deletion is the built-in, not the identifier: a module's own `range(a, b)` keeps its name and is called as it declares (the tensor module's `range` is the standard case), so the ordinary no-match the built-in's two-argument spelling gets cannot misfire on one."
 kind = "behavior"
 case = "../../../cases/compile/stream/interval_own_range.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
 expect_stdout_starts_with = "[3, 0]\n"
-expect_output_not_contains = ["RangeTwoArgumentsRemoved", "UnknownInternalError", "[Error]"]
+expect_output_not_contains = ["No matching function found", "UnknownInternalError", "[Error]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
 
 [[tests]]
 name = "stream.range_two_arguments"
-desc = "The two-parameter `range(a, b)` is deleted: `a..b` is the one spelling, so the call is refused where it stands, under the name the program wrote, with the interval to write instead."
+desc = "The two-parameter `range(a, b)` is deleted: `a..b` is the one spelling, and the built-in group has one signature -- three parameters -- so the call is refused where it stands, under the name the program wrote, as any other call the overload set has no match for."
 kind = "negative"
 case = "../../../cases/compile/stream/range_two_arguments.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::RangeTwoArgumentsRemoved"
-expect_diagnostic_code = "0x030001E5"
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+expect_diagnostic_code = "0x0300000F"
 expect_diagnostic_line = 7
-expect_diagnostic_column = 14
-expect_output_contains = ["The two-parameter 'range(a, b)' is gone; write the interval 'a..b'."]
+expect_diagnostic_column = 19
+expect_output_contains = ["No matching function found for argument types"]
 expect_output_not_contains = ["UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -480,16 +480,16 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.range_two_arguments_builtin"
-desc = "A named import does not take the built-in out of the language: where the imported `range` has no rule for two arguments, the built-in still answers, and the two-parameter spelling is still the one that is gone (SemanticDiag::RangeTwoArgumentsRemoved), refused under the name the program wrote."
+desc = "A named import does not take the built-in out of the language: where the imported `range` has no rule for two arguments, the built-in still answers, and the two-parameter spelling is still the one that is gone (the ordinary no-match against the group's one signature, three parameters), refused under the name the program wrote."
 kind = "negative"
 case = "../../../cases/compile/stream/range_two_arguments_builtin.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::RangeTwoArgumentsRemoved"
-expect_diagnostic_code = "0x030001E5"
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+expect_diagnostic_code = "0x0300000F"
 expect_diagnostic_line = 8
-expect_diagnostic_column = 13
-expect_output_contains = ["The two-parameter 'range(a, b)' is gone; write the interval 'a..b'."]
+expect_diagnostic_column = 18
+expect_output_contains = ["No matching function found for argument types"]
 expect_output_not_contains = ["UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -738,5 +738,25 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["6"]
 expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+[[tests]]
+name = "stream.while_effects"
+desc = "When the condition `c` of `for x in s while c` is asked, and how often: the condition prints the state it is asked with, so the exact output is the reading. The stream and the array read the same -- four asks for three elements, one for an empty one -- because the condition is judged first and the step function is called only where it holds."
+kind = "behavior"
+case = "../../../cases/compile/stream/while_effects.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "stream-drain\nc 0\nc 3\nc 5\nc 6\n6\narray-drain\nc 0\nc 1\nc 3\nc 6\n6\nstream-empty\nc 0\n0\narray-empty\nc 0\n0\ndone\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+[[tests]]
+name = "stream.pull_order"
+desc = "The order of a round is the array`s: `c` is judged first and the step function is called only where it holds. The step prints on every call, so the reading counts calls: a condition that accepts ten rounds reads ten elements and not eleven, and the plain `for` reads one per round plus the call that answers the stream is over."
+kind = "behavior"
+case = "../../../cases/compile/stream/pull_order.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "ten\nread 10\nread 9\nread 8\nread 7\nread 6\nread 5\nread 4\nread 3\nread 2\nread 1\n10\ntwo\nread 3\nread 2\n2\ntotal\nread 3\nread 2\nread 1\nread 0\n6\ndone\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000

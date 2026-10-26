@@ -1,5 +1,5 @@
 module shape_inference_row_loop
-import { reshape, slice, concat, zeros, sum, dim } from tensor
+import { reshape, concat, zeros, sum, dim } from tensor
 // A loop written as a recursion carries a [3] accumulator over the rows of a [?, 3] input: the
 // carried shape is invariant, and every type on the way is inferred.
 func spin(i: int, n: int, acc: f32[3], x: f32[?, 3]): f32[3] {

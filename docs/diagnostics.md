@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-284 diagnostics: 267 errors, 17 warnings. 15 carry a machine-applicable edit, 269 say why they carry none.
+283 diagnostics: 266 errors, 17 warnings. 15 carry a machine-applicable edit, 268 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -235,7 +235,6 @@ prints one entry.
 | `0x030001E2` | [SemanticDiag::CompOperandNotUnary](#compoperandnotunary) | Error | no |
 | `0x030001E3` | [SemanticDiag::StreamInContainer](#streamincontainer) | Error | no |
 | `0x030001E4` | [SemanticDiag::CompOperandGenericWithoutType](#compoperandgenericwithouttype) | Error | no |
-| `0x030001E5` | [SemanticDiag::RangeTwoArgumentsRemoved](#rangetwoargumentsremoved) | Error | no |
 | `0x030001E6` | [SemanticDiag::RangeStepZero](#rangestepzero) | Error | no |
 | `0x030001E7` | [SemanticDiag::StaticLoopSequenceNotKnown](#staticloopsequencenotknown) | Error | no |
 | `0x030001E8` | [SemanticDiag::RuleConstParamNotMatched](#ruleconstparamnotmatched) | Error | no |
@@ -2059,14 +2058,14 @@ None: context: the construct is not built here, so the program has to be restruc
 The grammar accepts this construct, but the compiler does not implement it. Remove it; nothing in the language replaces it yet.
 ```
 
-**Example** (`test/cases/modules/tensor/subscript/slice_multidim.cml`, run as `camel test/cases/modules/tensor/subscript/slice_multidim.cml`)
+**Example** (`test/cases/modules/tensor/subscript/index_other_dimension.cml`, run as `camel test/cases/modules/tensor/subscript/index_other_dimension.cml`)
 
 ```camel
-module subscript_multidim
+module subscript_index_other_dimension
 import { reshape, shape } from tensor
 
 func main(): int sync {
-    println('ran')
+    println('reached')
     let m = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3])
     let column = m[:, 0]
     println(shape(column))
@@ -5892,7 +5891,7 @@ std::cml cannot print {0}: {1}.
 **Help**
 
 ```text
-This version prints expressions, `let` and `var`, branches, loops, closures, `with` and `var` parameters, and `sync` blocks (handover H240). Tags, named types, generic instances and the other region kinds are refused.
+This version prints expressions, `let` and `var`, branches, loops, closures, `with` and `var` parameters, and `sync` blocks. Tags, named types, generic instances and the other region kinds are refused.
 ```
 
 *No example: no test small enough to show raises it.*
@@ -7305,7 +7304,7 @@ The call of '{0}' cannot take a value of the reduced-precision element type '{1}
 **Help**
 
 ```text
-bf16 and f16 are floating types of the language: a literal has one, bf16(x) and f16(x) are written conversions, and the scalar arithmetic and comparison compute in f32 and round once into the element type (design principles 7.3, H238). This call asks for an operation one of them has no overload for - an operation the same type refuses on f32, such as %, or a function that takes a fixed set of types. Write the operation on a type that has it, or read the value as f32 (or f64) first, which is exact: f32(x).
+bf16 and f16 are floating types of the language: a literal has one, bf16(x) and f16(x) are written conversions, and the scalar arithmetic and comparison compute in f32 and round once into the element type (design principles 7.3). This call asks for an operation one of them has no overload for - an operation the same type refuses on f32, such as %, or a function that takes a fixed set of types. Write the operation on a type that has it, or read the value as f32 (or f64) first, which is exact: f32(x).
 ```
 
 **Example** (`test/cases/modules/stdlib/reduced_sort_refused.cml`, run as `camel test/cases/modules/stdlib/reduced_sort_refused.cml`)
@@ -7814,40 +7813,6 @@ func main(): int sync {
     let composed = ident..ident
     println(composed(4))
     return 0
-}
-```
-
-### RangeTwoArgumentsRemoved
-
-`0x030001E5` · Error · `SemanticDiag::RangeTwoArgumentsRemoved`
-
-**Fix**
-
-None: internal: the interval this refusal asks for is a text the compiler could write itself, and it does not offer that edit yet
-
-**Message**
-
-```text
-The two-parameter 'range(a, b)' is gone; write the interval 'a..b'.
-```
-
-**Help**
-
-```text
-The language has one spelling for the integers from 'a' to 'b - 1' (design principles 4.2; the author's ruling of 2026-10-24 on `h248-generator-and-composition`): the interval 'a..b', left closed and right open, as the slice 't[a:b]' is, and the array of them. 'range(0, 10)' becomes '0..10'. A 'for' over an interval is fused by the compiler, so 'for i in 0..n' builds no array. The two-parameter 'range' is the only spelling deleted: a module's own interval-like function (a tensor's, say) is that module's own, reached by its qualified name or at another arity, while an unqualified two-argument 'range(a, b)' is this built-in.
-```
-
-**Example** (`test/cases/compile/static_expansion/static_loop_sequence_range_two.cml`, run as `camel test/cases/compile/static_expansion/static_loop_sequence_range_two.cml`)
-
-```camel
-module static_loop_sequence_range_two
-
-func sum(): int {
-    return static loop acc = 0 for i in range(0, 3) do acc + i
-}
-
-func main(): int {
-    return sum()
 }
 ```
 
