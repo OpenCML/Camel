@@ -17,6 +17,7 @@ namespace camel::core::error {
 
 enum class SemanticDiag : uint32_t {
     // Errors
+    // 0x0001E5 vacant
     Redeclaration               = 0x000001,
     ModuleNotFound              = 0x000002,
     ReservedIdentifier          = 0x000003,
@@ -379,7 +380,6 @@ enum class SemanticDiag : uint32_t {
     CompOperandGenericWithoutType = 0x0001E4,
     /// The interval of two integers is written `a..b` and nothing else: the two-parameter `range(a, b)`
     /// the language used to have is gone (design principles 4.2).
-    RangeTwoArgumentsRemoved = 0x0001E5,
     /// `range(a, b, 0)` is no sequence at all: the step never moves (design principles 4.2; the
     /// rule on ` -interval-step-form`, which makes a step of 0 a fault
     /// and a constant one a compile-time error).

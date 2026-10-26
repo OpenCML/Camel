@@ -120,8 +120,8 @@ class WorkerPool {
         }
         // Wake only as many workers as there are chunks to hand out. Waking the whole pool made
         // every other worker wake up, find the chunks taken, and spin again; on a shared host
-        // that cost several hundred microseconds per region, more than the region itself (H54:
-        // a three-chunk product took 950 us at load 62 against 50 us on one thread). A worker
+        // that cost several hundred microseconds per region, more than the region itself (a
+        // three-chunk product took 950 us at load 62 against 50 us on one thread). A worker
         // that is spinning rather than waiting sees the new generation on its own.
         for (int64_t i = 1; i < chunks; ++i) {
             wake_.notify_one();
@@ -283,7 +283,7 @@ void setNumThreads(int threads) {
         created->resize(threads);
     }
     // The run's thread budget is the tensor pool's. The library GEMM's own pool is one thread
-    // whatever this number is (gemm.cpp, H303): a second pool beside this one competed for the
+    // whatever this number is (gemm.cpp): a second pool beside this one competed for the
     // same cores, and one library thread is what the measured cells support. setGemmThreads is a
     // no-op without a library.
     setGemmThreads(threads);

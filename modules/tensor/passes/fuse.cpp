@@ -273,7 +273,7 @@ void registerTensorPasses() {
     };
     registerModulePass("tensor::fuse", std::move(descriptor));
     // The declaration evaluator is a test (index_eval.h): it is reachable by name and in no default
-    // pipeline, which is the whole switch (H81 removed the environment variable that gated it).
+    // pipeline, which is the whole switch.
     registerModulePass("tensor::test_index_eval", [](const core::context::context_ptr_t &ctx) {
         return std::make_unique<IndexEvalTestPass>(ctx);
     });

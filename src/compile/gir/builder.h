@@ -1786,8 +1786,12 @@ class Builder {
 
     // Enters the scope of the function `name` whose declared type is the object `funcType`,
     // creating its graph the first time. Functions of one name in one block are overloads;
-    // the declared type object identifies which one is meant.
-    compile_graph_ptr_t enterScope(FunctionType *funcType, const std::string &name = "");
+    // the declared type object identifies which one is meant. `parameterOrigins` are the
+    // positions the parameters are written at, `with` ones first, by slot: the ports of the new
+    // graph carry them.
+    compile_graph_ptr_t enterScope(
+        FunctionType *funcType, const std::string &name = "",
+        const std::vector<camel::source::origin_id_t> &parameterOrigins = {});
     // A second function of this name with the same parameter types in the same block, or an
     // ordinary declaration under a generic function of the name (`plain`): reports
     // Redeclaration at `gct` and abandons the declaration.

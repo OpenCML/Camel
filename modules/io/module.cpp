@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The terminal module (H19 step 4: `io` is the terminal until `Stream` exists). Its operators are
+ * The terminal module: `io` is the terminal until `Stream` exists. Its operators are
  * the readers of stdin and the writers of the terminal's mode and buffer; the standard streams and
  * `print`/`println`/`input`/`eprintln` are the prelude's.
  *
  * The signatures are written once, in the declaration module `stdlib/io.cml` (design principles
- * 6.4; handover H19, step 10). What is left here is what only C++ knows: the kernels in
+ * 6.4). What is left here is what only C++ knows: the kernels in
  * operators.cpp, the executor that runs them, and the operator traits declared at load.
  */
 
@@ -42,9 +42,8 @@ bool IOModule::load() {
     // What each touches (docs/design/op-semantics 8): raw mode writes the terminal, the readers
     // read or read-modify-write stdin, so that they stay ordered against `:io/input`.
     //
-    // All five operators name the one `stdin` resource (design principles 3.3; the author's
-    // ruling on H134 question 1: terminal mode and reading input must order each other, so
-    // raw mode is not a resource of its own).
+    // All five operators name the one `stdin` resource (design principles 3.3: terminal mode
+    // and reading input must order each other, so raw mode is not a resource of its own).
     {
         using camel::core::sem::AccessMode;
         using camel::core::sem::externalAmbient;

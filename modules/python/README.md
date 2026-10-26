@@ -8,7 +8,7 @@
 
 ## 使用
 
-`python` 为标准库模块，随 Camel 发布，直接 `import python` 即可。若自编译或需单独部署，可将 `python.cmo` 放置在 Camel 能访问的模块搜索路径下。`import` 不执行代码（设计原则 3.1）：导入只注册执行器与算子，Python 解释器在第一次调用任一 `py_*` 算子时创建；若 `pyplot` 已经创建了它，这里只附着，不会新建第二个（handover H221）。
+`python` 为标准库模块，随 Camel 发布，直接 `import python` 即可。若自编译或需单独部署，可将 `python.cmo` 放置在 Camel 能访问的模块搜索路径下。`import` 不执行代码（设计原则 3.1）：导入只注册执行器与算子，Python 解释器在第一次调用任一 `py_*` 算子时创建；若 `pyplot` 已经创建了它，这里只附着，不会新建第二个。
 
 ### 运行时环境兼容
 

@@ -26,8 +26,7 @@
  *                            library target Q4 of docs/design/op-semantics names for the bounded
  *                            functions it discusses (tanh, sigmoid, gelu, erf), and the measured
  *                            worst case of the platform's functions over the inputs this module
- *                            accepts is below it (see handover note ⟨77e9e83⟩ (H4) for the
- *                            measurement).
+ *                            accepts is below it.
  *
  * The float32 declarations describe the `_f` overload (compute = f32); the `_d` overload has its
  * own record with compute = f64. `math:sqrt` is one URI for all four numeric types: its record

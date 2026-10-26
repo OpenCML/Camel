@@ -9,7 +9,7 @@ class RandomModule : public camel::core::module::BuiltinModule {
     ~RandomModule() override = default;
     bool load() override;
     /// The operators of this module are named `rand:...`, not `random:...`, so the declaration
-    /// module `stdlib/random.cml` may name them with a `#op` tag (handover H94, ruling 6, H202).
+    /// module `stdlib/random.cml` may name them with a `#op` tag.
     std::vector<std::string> operatorProtocols() const override { return {"rand"}; }
     static camel::core::module::module_ptr_t create(camel::core::context::context_ptr_t ctx);
 };

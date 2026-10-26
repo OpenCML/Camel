@@ -751,7 +751,7 @@ class Formatter {
     std::any visitMatchTypeExpr(cst::MatchTypeExpr context);
 
     /// The type after `fields` / `match type`, where the parser reads a `(` as the start of a
-    /// type (H79 ruling 1): a function type, whose text starts with `(`, is written with one
+    /// type: a function type, whose text starts with `(`, is written with one
     /// more pair of parentheses so that the output parses back to the same tree.
     std::string formatTypeInTypePosition(syn::Node type);
 
@@ -762,7 +762,7 @@ class Formatter {
     std::any visitStaticLoopExpr(cst::StaticLoopExpr context);
 
     /// The names of a `static for` / `static loop` head, in the order written and comma-separated.
-    /// How many a head writes follows the element it walks (the ruling of 2026-10-25, H475): the
+    /// How many a head writes follows the element it walks (the ruling of 2026-10-25): the
     /// element of `fields T` is the triple (name, type, tags), every other element is one thing,
     /// so `for n, F, tags in fields T`, `for n in fields T` and `for j in indices ts` are all
     /// heads. Every name written is printed -- reading a fixed second name there printed nothing

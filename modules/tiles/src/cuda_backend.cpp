@@ -418,7 +418,8 @@ ProbeOutcome probeBackend() {
                          "device";
         return outcome;
     }
-    // One line per actual probe: the H117 test asserts there is exactly one for the process.
+    // One line per actual probe, and exactly one for the process:
+    // `gpu_probe.once_per_process` (test/plans/feat/modules/tiles.plan.toml) asserts it.
     if (deviceProbeStarted)
         deviceProbeStarted();
     try {

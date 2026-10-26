@@ -103,7 +103,7 @@ ELEMENTWISE_URIS = ("tensor:multiply", "tensor:add", "tensor:neg", "tensor:divid
 REDUCE_URIS = ("tensor:sum_to", "tensor:mean_axis", "tensor:sum", "tensor:sum_axis")
 LAYOUT_URIS = ("tensor:expand_axis", "tensor:permute", "tensor:permute_inverse",
                "tensor:transpose", "tensor:reshape", "tensor:broadcast_like", "tensor:one_hot",
-               "tensor:shape", "tensor:dim", "tensor:numel", "tensor:slice", "tensor:argmax_axis")
+               "tensor:shape", "tensor:dim", "tensor:numel", ":op/slice_sub", "tensor:argmax_axis")
 CATEGORY_MEMBERS = {
     "matmul": MATMUL_URIS,
     "elementwise": ELEMENTWISE_URIS,

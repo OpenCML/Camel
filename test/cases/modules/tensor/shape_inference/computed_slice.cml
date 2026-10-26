@@ -1,5 +1,5 @@
 module shape_inference_computed_slice
-import { slice, reshape, sum } from tensor
+import { reshape, sum } from tensor
 // A slice with computed bounds has an extent only the run knows.
 func row(a: f32[1, 3]): float {
     return float(sum(a))

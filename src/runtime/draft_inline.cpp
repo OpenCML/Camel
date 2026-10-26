@@ -597,7 +597,7 @@ std::vector<DraftFormalBinding> collectDirectFuncSpecializations(
     // lap of a recursion: a dimension name it states binds no further value from there on.
     // The lap that unrolls a recursion is the recursive call *inside* an instance: it names the
     // function itself again with arguments of the instance's own types, and a new instance made
-    // from there is one level of that recursion per rewriting pass (H463). Both laps count as
+    // from there is one level of that recursion per rewriting pass. Both laps count as
     // past the first.
     const GraphId calleeRoot = calleeGraph->typeSpecializationRoot();
     const GraphId callerRoot = draft.typeSpecializationRoot();
@@ -999,11 +999,8 @@ bool specializeDirectFuncInDraft(
     }
 
     // The recursive call inside a type instance of the function it names asks for an instance
-    // whose parameters are the ones that instance already states: the one it is in. Making a new
-    // copy there is what unrolled the recursion one level per rewriting pass — the same key again
-    // and again, because every rewrite of a call inside the base invalidates the entry that names
-    // the copy — until a count bound stopped it, and an export found no loop in the result (H463).
-    // Nothing is bound by the copy, so the types the instance states have to accept the arguments;
+    // whose parameters are the ones that instance already states: the one it is in. Nothing is
+    // bound by the copy, so the types the instance states have to accept the arguments;
     // when they do not, the call still specializes.
     const GraphId instanceRoot = draft.typeSpecializationRoot();
     if (std::ranges::none_of(

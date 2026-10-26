@@ -260,12 +260,10 @@ void manyReaders() {
     check(draft.normUsersOf(producer).empty(), "a reader was left behind");
 }
 /// The queries that ask what orders a node read the chain of a `sync` block. Its wait is the sync
-/// edge the block wrote (docs/design/effects/edges.cn.md 1.5; H242), so a gate whose only wait is
+/// edge the block wrote (docs/design/effects/edges.cn.md 1.5), so a gate whose only wait is
 /// that edge still carries the program's order, and a walk that follows a node's orderings follows
 /// the chain through a node that carries none. Both are what the generic rewrite pass asks before
-/// it replaces a node (src/passes/opt/generic/rewrite.cpp, `carriesOrdering` and `orderedSources`);
-/// until H242 the control edge named the same pair, and a query that read only control inputs
-/// stopped seeing the chain.
+/// it replaces a node (src/passes/opt/generic/rewrite.cpp, `carriesOrdering` and `orderedSources`).
 void syncChainOrdering() {
     // A gate whose only wait is the chain's tail: one data port, one sync predecessor and no
     // control input at all (5.3).
