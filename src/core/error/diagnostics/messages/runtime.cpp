@@ -37,6 +37,14 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
+            RuntimeDiag::ProgramFault,
+            {
+                "ProgramFault",
+                "{0}",
+                "The fault was raised by the program itself, and its message says which premise it states.",
+            },
+        },
+        {
             RuntimeDiag::MaxRecursionDepthExceeded,
             {
                 "MaxRecursionDepthExceeded",

@@ -155,8 +155,8 @@ class TupleType : public CompositeType {
     virtual bool equals(Type *type) const override;
     virtual CastSafety castSafetyFrom(Type *sourceType) const override;
     /// Puts a value into a tagged form (`T -> T?`, `T -> T!`, `Error -> T!`, `U! -> T!` for a
-    /// failed value): the CAST node of `v as T?`, of `return v` under a declared `T!`, and
-    /// of `throw e`.
+    /// failed value): the CAST node of `v as T?`, of `return v` under a declared `T!`, and of a
+    /// `return` whose value is an error.
     virtual slot_t castSlotFrom(slot_t value, Type *sourceType) const override;
     virtual bool assignableFrom(Type *sourceType) const override;
     /// Widens every element type, so `var` bindings never hold refined aggregates (mutation

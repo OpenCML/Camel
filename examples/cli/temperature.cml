@@ -8,7 +8,7 @@ import { trim, to_upper } from str
 func convert(value: float, unit: string): float! {
     return if unit == 'C' then { return value * 9.0 / 5.0 + 32.0 }
         else if unit == 'F' then { return (value - 32.0) * 5.0 / 9.0 }
-        else { throw error('UnknownUnit', 'unit must be C or F, got ' + unit) }
+        else { return error('UnknownUnit', 'unit must be C or F, got ' + unit) }
 }
 
 func other(unit: string): string {

@@ -1,0 +1,28 @@
+/**
+ * The bottom type `never` (design principles 3.9): a signature may write it, a value of it may
+ * stand where any type is expected, and an arm that gives no value joins with the arm that does,
+ * so the branch is that value's type. The failing arm is never taken here.
+ */
+module never_join
+
+// A function that gives no value back at all.
+func stop(m: string): never {
+    fail<'Stopped'>(m)
+}
+
+// One arm gives an int, the other gives no value: the branch is an int.
+func pick(c: bool): int {
+    return if c then 1 else fail<'NoValue'>('c was false')
+}
+
+// A `never` value stands where an int is expected.
+func labelled(m: string): int {
+    let v: int = stop(m)
+    return v
+}
+
+func main(): int sync {
+    println(pick(true))
+    println('end')
+    return 0
+}

@@ -478,7 +478,7 @@ Each is implemented as recommended.
 - **`attempt-name`.** Ruled on (design principles 3.9): the name is `attempt`.
 - **`attempt-fallible-target`.** `attempt(f)` with `f: () => U!`.
   ```camel
-  func checked(x: int): int! { ... throw error('Negative', ...) ... return 100 / x }
+func checked(x: int): int! { ... return error('Negative', ...) ... return 100 / x }
   attempt(checked)(0)      // int!: error DivisionByZero;  attempt(checked)(-4): error Negative
   ```
   Implemented: the type is `U!`; errors of `f` pass unchanged. Alternatives: reject such an

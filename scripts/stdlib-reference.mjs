@@ -1013,7 +1013,7 @@ out.push('Not in this reference: the profiler (`perf`).')
     return out.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd() + '\n'
 }
 
-const STATEMENT_STARTS = /^(let|var|if|for|while|return|sync|match|throw)\b/
+const STATEMENT_STARTS = /^(let|var|if|for|while|return|sync|match)\b/
 const BUILTIN_TYPES = new Set([
     'int', 'i8', 'i16', 'i32', 'i64', 'u8', 'u16', 'u32', 'u64', 'usize',
     'float', 'f32', 'f64', 'bool', 'string', 'char', 'void', 'null', 'any', 'never',
@@ -1102,7 +1102,7 @@ const NAME = /^[A-Za-z_]\w*$/
 // A keyword is not a name: `set_terminal_raw_mode(true)` must not make `true` a parameter.
 const RESERVED = new Set([
     'true', 'false', 'null', 'func', 'let', 'var', 'if', 'else', 'for', 'while', 'match', 'return',
-    'throw', 'sync', 'with', 'type', 'struct', 'enum', 'rule', 'export', 'module', 'import', 'as', 'is',
+    'sync', 'with', 'type', 'struct', 'enum', 'rule', 'export', 'module', 'import', 'as', 'is',
 ])
 
 function bindArguments(entry, code) {
@@ -1232,7 +1232,9 @@ async function exampleSource(module, entries, entry, code, asStatement = false) 
     }
     for (const [name, owner] of types) lines.push(`import { ${name} } from ${owner}`)
     const params = bindings.map((binding) => `${binding.name}: ${binding.type}`).join(', ')
-    const fallible = /^throw\b/.test(code.trim())
+    // An example that returns an error value leaves a function declared to return a `T!`, so it
+    // compiles in a fallible body.
+    const fallible = /^return\s+error\(/.test(code.trim())
     lines.push(`func __doc_example(${params}): ${fallible ? 'int!' : 'void'} {`)
     // A call of a `void` function has no value to bind, so it is a statement, not an expression.
     if (asStatement || entry.result === 'void' || STATEMENT_STARTS.test(code.trim())) {

@@ -1363,7 +1363,11 @@ class Builder {
     // its signature never writes (a predicate such as `is_plain::<T>()` matched in its body),
     // and those are bound by an explicit `::<...>` at the call all the same.
     bool isGenericHere(Type *type, const GCT::node_ptr_t &node) const {
-        if (node != nullptr && node->ruleBinding()) {
+        // The mark is one a FUNC carries (Node::ruleBinding asserts the kind, and a DECL of the
+        // same name is what the module makes of it). A declaration is never a rule's binding
+        // function, so the kind is asked first: asking a DECL for a FUNC's mark was an
+        // assertion failure in a debug build.
+        if (node != nullptr && node->type() == GCT::NodeKind::FUNC && node->ruleBinding()) {
             // The function a rule with `with` parameters is written as is not a template, even when
             // the declaration's head writes type parameters: those belong to the rule's sides, and
             // what the name stands for is the `Rule` calling it with values makes (design
@@ -2620,6 +2624,14 @@ class Builder {
     void setArmResult(ArmBuild &arm, node_handle_t result);
     /// The arm enters the form `target` at its end (the `CAST` is part of the arm).
     void coerceArmExit(const arm_ptr_t &arm, Type *target, const GCT::node_ptr_t &origin);
+    /// Whether the branch `gct` stands where nothing takes its value: the statement whose value
+    /// its block drops (visitExecNode), or a position written `void` (the value of a `return` in
+    /// a function that returns nothing, the tail of such a body). A `let` without a type has no
+    /// expected type either and does take the value, so a missing type is not this position.
+    bool branchTakesNoValue(const GCT::node_ptr_t &gct) const;
+    /// An arm whose value is a cell gives the value the cell holds instead: a cell is not a
+    /// value, and its type never reaches the join. The read is made in the arm's own region.
+    void readArmCellValue(const arm_ptr_t &arm);
     /// The nodes of each arm that read nothing the arm computes wait for the BRCH.
     void linkArmEntries(const std::vector<arm_ptr_t> &arms, node_handle_t brchNode);
     /// After the JOIN is there: the variables the arms changed are changed by the branch.

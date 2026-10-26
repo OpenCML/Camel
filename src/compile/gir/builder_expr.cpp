@@ -1256,6 +1256,13 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     }
     ASSERT(valueNode != nullptr, "Cast node value is null.");
     Type *sourceType = nodeTypeOf(valueNode);
+    if (valueTypeOf(sourceType)->code() == TypeCode::Never && asTagged(targetType) == nullptr) {
+        // A value of `never` never exists (design principles 3.9): the position takes the node as
+        // it stands, because there is nothing to convert -- and nothing that could fail to be
+        // what the position asks for. A tagged position still enters its tag below.
+        LEAVE("CAST");
+        return valueNode;
+    }
     if (gct->annotation() && asTagged(targetType) == nullptr) {
         // The type a declaration is written with (`let x: T = e`; GCT Builder::declaredValue):
         // `e` must already have it. A value of that very type passes as it is (converting a

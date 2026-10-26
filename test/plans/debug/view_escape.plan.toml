@@ -11,7 +11,18 @@ store the node VM's reduce operator calls). That is the escape the guard catches
 in a later round, so a view there names the element the round just visited.
 
 In a Debug build `CAMEL_ASSERT_NOT_VIEW` aborts with "A compact element view escaped into the
-reduce accumulator", and this plan requires that abort: a non-zero exit and the assertion text.
+reduce accumulator", and this plan requires that abort: the process ends by the abort, with the
+assertion report (its message and the position it names) on stderr.
+
+The abort carries no exit code to pin. `std::abort()` raises SIGABRT on this host, so the runner
+records `signal = SIGABRT` and `exitCode = null`; the expectation `expect_exit = 3` was MSVC's
+abort, where `abort()` ends the process with status 3, and it can never hold on the Linux gate --
+which is why these two tests were red for it while the assertion text already matched. No plan
+field expresses "ended by a signal" (the schema has no `expect_signal`, and `expect_exit` compares
+`result.exitCode`, which a signal leaves null), so each test asserts the abort from the runner's
+verify payload, which carries `input.signal` and `input.exit_code`, and both platforms are
+covered: POSIX ends by SIGABRT with no exit code, MSVC ends with status 3 and no signal.
+
 The test is positive because it fails in every other way -- if the assertion is missing (a Release
 binary, or a Debug build where the guard was compiled out) the pass prints `VIEW_ESCAPE
 not-caught`, the exit code is 0 and the test fails. The plan is `tier = "debug"`, which no
@@ -24,9 +35,22 @@ desc = "The view reaches the accumulator store and the process aborts with the g
 kind = "behavior"
 case = "../../cases/feat/mm/blocks.cml"
 args = ["${case}", "std::gc::views_escape", "std::nvm"]
-expect_exit = 3
 expect_stderr_contains = ["Camel Debug Assertion Failed:", "A compact element view escaped into the reduce accumulator"]
 expect_output_not_contains = ["VIEW_ESCAPE not-caught"]
+# No `expect_exit`: the guard's behaviour is `std::abort()`, and no plan field can say so -- the
+# schema has no `expect_signal`, and `expect_exit` compares `result.exitCode`, which a signal
+# leaves null. The abort is asserted from the runner's verify payload instead, which carries
+# `input.signal` and `input.exit_code` (docs/test-plans.md, "verify_script").
+verify_script = """
+// The abort, not a plain failure: POSIX ends the process by SIGABRT and records no exit code,
+// MSVC turns `abort()` into exit status 3 and records no signal. Any other end is rejected.
+if (input.signal !== null) {
+    assert(input.signal === 'SIGABRT', `ended by signal ${input.signal}, not the abort`)
+    assert(input.exit_code === null, `a signal and an exit code together: ${input.exit_code}`)
+} else {
+    assert(input.exit_code === 3, `ended with exit ${input.exit_code}, not the abort`)
+}
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
 
@@ -36,8 +60,21 @@ desc = "The same escape through the short alias of the pass."
 kind = "behavior"
 case = "../../cases/feat/mm/blocks.cml"
 args = ["${case}", "std::gcviews_escape", "std::nvm"]
-expect_exit = 3
 expect_stderr_contains = ["Camel Debug Assertion Failed:", "A compact element view escaped into the reduce accumulator"]
 expect_output_not_contains = ["VIEW_ESCAPE not-caught"]
+# No `expect_exit`: the guard's behaviour is `std::abort()`, and no plan field can say so -- the
+# schema has no `expect_signal`, and `expect_exit` compares `result.exitCode`, which a signal
+# leaves null. The abort is asserted from the runner's verify payload instead, which carries
+# `input.signal` and `input.exit_code` (docs/test-plans.md, "verify_script").
+verify_script = """
+// The abort, not a plain failure: POSIX ends the process by SIGABRT and records no exit code,
+// MSVC turns `abort()` into exit status 3 and records no signal. Any other end is rejected.
+if (input.signal !== null) {
+    assert(input.signal === 'SIGABRT', `ended by signal ${input.signal}, not the abort`)
+    assert(input.exit_code === null, `a signal and an exit code together: ${input.exit_code}`)
+} else {
+    assert(input.exit_code === 3, `ended with exit ${input.exit_code}, not the abort`)
+}
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000

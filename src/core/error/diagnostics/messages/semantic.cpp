@@ -333,22 +333,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::ThrowOutsideFallible,
-            {
-                "ThrowOutsideFallible",
-                "'throw' needs a function declared to return 'T!': {0}.",
-                "'throw e' returns an error value, as 'return' returns a value, so the function it stands in must declare a fallible return type, for example 'func f(): int! {{ ... }}'. It does not unwind to a caller.",
-            },
-        },
-        {
-            SemanticDiag::ThrowNotAnError,
-            {
-                "ThrowNotAnError",
-                "'throw' takes an error value, not a value of type '{0}'.",
-                "Make one with 'error(kind, message)', for example 'throw error(\"ParseError\", \"not a number\")', or hand on the one a 'case error e' bound.",
-            },
-        },
-        {
             SemanticDiag::TaggedTypeNesting,
             {
                 "TaggedTypeNesting",

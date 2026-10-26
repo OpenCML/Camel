@@ -62,12 +62,12 @@ null
 [`examples/07_errors.cml`](examples/07_errors.cml)：
 
 ```cml
-// A function that may fail returns T!; `throw` returns an error value.
+// A function that may fail returns T!: an error value is handed out by `return`.
 // Run: camel docs/tutorial/examples/07_errors.cml
 
 func safe_div(a: int, b: int): int! {
     return if b == 0 then {
-        throw error('DivByZero', 'the divisor is zero')
+        return error('DivByZero', 'the divisor is zero')
     } else {
         return a / b
     }
@@ -106,7 +106,7 @@ DivByZero: the divisor is zero
 error DivByZero: the divisor is zero
 ```
 
-- **`throw e` 是返回一个错误值**，与 `return` 是同一种结构：它不展开调用栈，调用方拿到的是一个 `int!`。
+- **交出一个错误值用 `return e`**：它不展开调用栈，调用方拿到的是一个 `int!`。
   错误值有三个字段：`e.kind`、`e.message`、`e.location`。
 - 拆开的三种写法：`a !! b`（出错取 `b`）、`x -> f`（出错就把错误原样传下去，否则调用 `f`，可以连成一串）、
   `match` 的 `case error e` 与 `case v`。
@@ -194,4 +194,4 @@ camel docs/tutorial/examples/07_exercise.cml
 
 - [语言参考 3.4 可能为空 `T?` 与可能出错 `T!`](../language/03_data_model.md#34-可能为空-t-与可能出错-t)
 - [语言参考 6.6 空值与错误的运算符](../language/06_expressions.md#66-空值与错误的运算符)
-- [语言参考 7.3 `return` 与 `throw`](../language/07_statements.md#73-return-与-throw)
+- [语言参考 7.3 `return`](../language/07_statements.md#73-return)

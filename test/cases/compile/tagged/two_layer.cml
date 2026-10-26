@@ -6,7 +6,7 @@
 module two_layer
 
 func failing(): int! {
-    throw error('Boom', 'no value')
+    return error('Boom', 'no value')
 }
 
 func seven(): int!? {

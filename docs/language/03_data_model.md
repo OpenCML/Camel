@@ -26,6 +26,7 @@
 | 映射、集合 | `Map<K, V>`、`Set<T>` | 见 3.6 |
 | 枚举 | `Shape`，`Option<int>` | 见 3.5 |
 | 无值 | `void` | 没有返回值的函数的返回类型；它唯一的值打印为 `null` |
+| 底类型 | `never` | 没有值的类型：`fail<'Kind'>(message)` 与 `exit(code)` 的类型是它，可以用在任何位置（赋给别的类型、进入分支的合并、被泛型推断），但没有表达式给出它的值 |
 | 模块类型 | 由模块引入的类型名（如 `Json`）；数值数组类型不是模块类型（过渡期的 `Tensor` 名字已删除，写它是未知名字） | 由该模块引入；名字与尖括号里的实参由该类型自己解释，表示由该模块定义 |
 
 没有 `any` 类型：编译之后每个值都有确定的类型（设计原则 5.10）。在任何类型位置写 `any`，与写别的未知类型名一样，是编译期错误 `SemanticDiag::UnresolvedTypeReference`；接受多种类型的形参用类型参数（见 [7.5](07_statements.md#75-泛型函数)），不同类型的值并排放用元组或结构体。
@@ -226,7 +227,7 @@ func positive(x: int): int? {
 }
 
 func safe_div(a: int, b: int): int! {
-    return if b == 0 then { throw error('DivByZero', 'the divisor is zero') } else a / b
+    return if b == 0 then { return error('DivByZero', 'the divisor is zero') } else a / b
 }
 
 func main(): int sync {
@@ -253,7 +254,7 @@ error DivByZero: the divisor is zero
   - 带类型的声明 `let x: T? = v`；
   - 数组的元素：`let xs: (int?)[] = [1, null, 3]`；没有写类型时，元素里有 `null` 的数组字面量是 `T?` 的数组（`[1, null, 3]` 是 `(int?)[]`）；
   - 分支的两条臂：一条臂是 `T`、另一条是 `null` 或 `T?` 时，分支是 `T?`（`if c then 1 else null` 是 `int?`）；`T` 与 `T!` 同理。一条臂根本没有值（`void`：调用了不返回值的函数、空块）时按 `null` 算：分支是 `T?`，那条臂给出 `null`；
-  - 返回类型声明为 `T?`/`T!` 的函数里的 `return v`（`throw e` 给出错误）。
+  - 返回类型声明为 `T?`/`T!` 的函数里的 `return v`（`return e` 交出一个错误值）。
 
   也可以显式写 `v as T?`。可以一次进入多层：`let x: int?! = 5`。图上每装入一层是一个转换节点（`CAST`），自动装入就是由编译器补上这个节点，与手写 `as` 得到的图相同。
 - **反方向永不自动。** `T?`、`T!` 要当 `T` 用，必须拆开；`int?` 也不会变成 `float?`，数值之间仍不做隐式转换。内建算子（`append`、`println` 等）的实参不在此列：它们的形参类型由 C++ 的类型规则从实参算出，没有可供装入的目标类型，需要时写 `as`。
@@ -264,6 +265,8 @@ error DivByZero: the divisor is zero
 - 内建的可能出错的函数：`parse_int(s)`、`parse_float(s)`，`fs` 模块的 `read_text(path)`、`remove(path)`、`remove_dir(path)`，`json` 模块的 `decode`、`decode_as`。`error(kind, message)` 构造错误值并记下调用处的位置。
 
 **错误与故障是两回事。** 只有声明为返回 `T!` 的操作才产生错误值。除零、下标越界、递归过深是故障：程序带位置终止，`!!` 接不住它（见 [4.6](04_execution_model.md#46-故障退出与资源上限)）。
+
+要在函数体里主动产生一个故障，写 `fail<'Kind'>('消息')`：它是类型 `never` 的表达式（没有值），故障的种类由尖括号里的名字给出，`attempt` 能把它隔离成错误值。
 
 **当前实现的行为，尚待确定**：`match` 对这两种值恰好两个分支；它们可以打印，但除了 `T?` 与 `null` 比较之外不能用 `==` 比较。
 

@@ -1,0 +1,24 @@
+/**
+ * A fault `fail` raises is isolatable: `attempt` turns it into an error value whose kind is the
+ * one the program wrote, and the program runs on (design principles 3.9). Where the call
+ * succeeds the value is the call's own.
+ */
+module fail_isolated
+
+func limit(q: float): float {
+    return if q > 0.0 then q else fail<'BadLimit'>('the limit must be positive')
+}
+
+func kind(r: float!): string {
+    return match r {
+        case error e => e.kind
+        case v => format<v>('{}')
+    }
+}
+
+func main(): int sync {
+    println(kind(attempt(limit)(-1.0)))
+    println((attempt(limit)(2.0) !! -1.0) == 2.0)
+    println('end')
+    return 0
+}

@@ -85,7 +85,7 @@ await runTest(async (t) => {
         // ---- an error value is not a fault; unhandled at the exit of main it is reported ----
         {
             const dap = await t.dap()
-            const throwLine = lineOf(UNHANDLED, 'mark:throw')
+            const throwLine = lineOf(UNHANDLED, 'mark:error')
             await dap.launch(UNHANDLED, { passes: [backend] }, { [UNHANDLED]: [throwLine] })
             const stop = await dap.waitStop()
             checkEq(`${stop?.reason}:${stop?.line}`, `breakpoint:${throwLine}`, on('a breakpoint where the error value is made'))

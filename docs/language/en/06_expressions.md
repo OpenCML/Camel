@@ -136,7 +136,7 @@ For `T?` and `T!` see [3.4](03_data_model.md#34-may-be-null-t-and-may-fail-t). O
 
 ```cml
 func half(x: int): int! {
-    return if x % 2 == 0 then x / 2 else { throw error('Odd', 'not even') }
+    return if x % 2 == 0 then x / 2 else { return error('Odd', 'not even') }
 }
 
 func main(): int sync {
@@ -282,7 +282,7 @@ func sign(x: int): string {
 
 > **A `return` in a block gives the value of that block; it does not leave the function.**
 >
-> Each arm of a branch is a subgraph of its own. A `return v` in an arm ends that arm, and `v` becomes the value of the `if` (or `match`); the same goes for `throw e`. If the `if` is only a statement and its value is not used, then the `return` in the arm has done nothing, and the function goes on to execute the statements that follow.
+> Each arm of a branch is a subgraph of its own. A `return v` in an arm ends that arm, and `v` becomes the value of the `if` (or `match`); the same goes for a `return e` that hands out an error value. If the `if` is only a statement and its value is not used, then the `return` in the arm has done nothing, and the function goes on to execute the statements that follow.
 
 ```cml
 // wrong: the if is a statement whose value nobody uses, and neither return has any effect
