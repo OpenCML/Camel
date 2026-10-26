@@ -13,7 +13,7 @@ Writes DIR/list.txt, one source path per line:
     with --scope repository, every .cml file of the repository (tests, benchmarks, exemplars,
     examples, the standard library, the tutorial), the syntax-negative cases included. The
     snapshot that check.py compares (test/plans/feat/parse/golden/ast_hashes.txt) is the parse
-    corpus: a snapshot of the parser's tests, not of the repository (H188). The repository scope
+    corpus: a snapshot of the parser's tests, not of the repository. The repository scope
     is what check.py's format and fuzz checks traverse;
   * every ```cml block of the Markdown documents, extracted to DIR/docs/;
   * N programs of the random generator test/tools/progen (seeds 1..N) and M at --size 4,
@@ -48,7 +48,7 @@ def walk(root: Path, suffix: str):
 
 def parse_cases():
     """The parse corpus: every .cml case under test/cases/parse/. The AST snapshot hashes these
-    and the probes: the snapshot is a snapshot of the tests that own the parser (H188)."""
+    and the probes: the snapshot is a snapshot of the tests that own the parser."""
     return walk(PARSE_ROOT, ".cml")
 
 

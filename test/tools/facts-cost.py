@@ -4,9 +4,9 @@
 
 """Measure a Camel pipeline's wall time and its own CPU time, interleaved between cases.
 
-H158: the cost of invalidating graph facts by the declaration epoch is a difference between two
+The cost of invalidating graph facts by the declaration epoch is a difference between two
 pipelines that differ only in *when* a module is loaded. Wall time alone cannot resolve that on a
-shared host (H142), so this tool:
+shared host, so this tool:
 
   * runs the cases in an interleaved, randomly ordered round per repetition, so the machine's load
     drift hits every case the same way;

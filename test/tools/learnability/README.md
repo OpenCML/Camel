@@ -1,4 +1,4 @@
-# The AI learnability evaluation (H254)
+# The AI learnability evaluation
 
 Does a model that has never seen Camel write correct Camel from one file —
 `docs/reference/camel-for-ai.md` — alone? This directory is the measurement: a task set with
@@ -49,7 +49,7 @@ node test/tools/learnability/run.mjs --solver cmd \
 node test/tools/learnability/run.mjs --solver replay --archive <archive-dir> --rounds 3
 ```
 
-The compiler's path is site-specific. `tasks.json` names the build the H251 lane produced on this
+The compiler's path is site-specific. `tasks.json` names the build this evaluation ran against on this
 host; if that worktree has been removed, pass `--camel-bin` with any build of the recorded revision
 and say so in the report: the runs made after 23:00 on 2026-10-24 used
 `/home/zjwei/camel-work/h435-learnability/out/latest/bin/camel` (revision `4ba74c183`, whose
@@ -80,7 +80,7 @@ shown to differ in the reference and not in anything else.
 
 ## The task set
 
-`tasks.json` holds one entry per task: `id`, `area` (the five areas H254 names — values and types,
+`tasks.json` holds one entry per task: `id`, `area` (the five areas this evaluation names — values and types,
 effects and sync, streams, rules, training), the `prompt` handed to the subject, and `acceptance`.
 The prompt states only observable behaviour — never a Camel spelling — so a task cannot be made
 easier by knowing the language, and the measurement stays honest.

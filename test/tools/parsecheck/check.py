@@ -13,11 +13,11 @@ snapshot  Every .cml case of the parse corpus (test/cases/parse) and every probe
           parsed; a hash of the normalized AST of each (or of its diagnostics' code and place,
           when it is rejected) is compared with test/plans/feat/parse/golden/ast_hashes.txt. The
           diagnostics are recorded by code and position and never by their wording, so rewording
-          a message, a help text or a note leaves this file alone (H252). The golden list
+          a message, a help text or a note leaves this file alone. The golden list
           was recorded when the hand-written parser was last compared, tree for tree, with the
           ANTLR parser it replaced; a line that changes means the parser reads that file
           differently. The snapshot is a snapshot of the parser's own tests, not of the
-          repository (H188): a .cml file outside test/cases/parse is checked by the plan that
+          repository: a .cml file outside test/cases/parse is checked by the plan that
           owns it, and editing one does not move this file.
           --update merges into the recorded list: the selected lines are re-hashed and replaced,
           a file the list does not hold yet is hashed and added, every other line whose file
@@ -25,7 +25,7 @@ snapshot  Every .cml case of the parse corpus (test/cases/parse) and every probe
           cover every case corpus.parse_cases() selects and every probe, or the update refuses
           and names the gaps. It merges rather than refusing a partial update because recording
           one changed case should not depend on re-reading the other 273; the filter can then
-          never shrink the record (H199).
+          never shrink the record.
           --only GLOB restricts what is re-hashed, not what the record must cover; without it
           the whole corpus is refreshed.
 format    Formatting every accepted file of the repository gives a text with the same AST, keeps
@@ -80,7 +80,7 @@ def run(args):
 
 def repository_files():
     """Every .cml file of the repository: the input of the format and fuzz checks, which are not
-    snapshots and gain from the breadth (H188 kept them as they were)."""
+    snapshots and gain from the breadth."""
     os.chdir(ROOT)
     return [str(p).replace("\\", "/") for p in corpus.walk(Path("."), ".cml")]
 
