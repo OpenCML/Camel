@@ -23,7 +23,7 @@
 
 | 问题 | 决定 | 图上的后果 |
 |---|---|---|
-| 1. 标签与作用域 | `#gpu`/`#cpu` 写**同一个属性键** `tiles.placement`（Symbol 值 `gpu`/`cpu`，combine=inner）；作用域 = 区域：函数体（region 0）、带标签的块（`GCRegionKind::Block`）、Arm、LoopBody；边界 = 区域边界；一个节点恰好一个放置，内层胜出；嵌套由解析规则消掉、部分作用域结构上不存在，不是"静默地为错的设备编译"；派生图用 `autodiff::expand` 在编译期建出并继承放置（§2.6）；不支持的算子、主机效果 → `GpuScopeUnsupported 0x000071`（H218） | 被标记的节点带属性；函数体区域 0 带属性；作用域内每个段在图上是一个 `OPER :tiles/exec` 调用，跨作用域边上是显式 upload/download 节点；分支的 BRCH/JOIN 留主机侧，每个臂一个段；`grad(f)` 的调用点换成持有派生图的函数常量 |
+| 1. 标签与作用域 | `#gpu`/`#cpu` 写**同一个属性键** `tiles.placement`（Symbol 值 `gpu`/`cpu`，combine=inner）；作用域 = 区域：函数体（region 0）、带标签的块（`GCRegionKind::Block`）、Arm、LoopBody；边界 = 区域边界；一个节点恰好一个放置，内层胜出；嵌套由解析规则消掉、部分作用域结构上不存在，不是"静默地为错的设备编译"；派生图用 `autodiff::expand` 在编译期建出并继承放置（§2.6）；不支持的算子、主机效果 → `GpuScopeUnsupported 0x000071` | 被标记的节点带属性；函数体区域 0 带属性；作用域内每个段在图上是一个 `OPER :tiles/exec` 调用，跨作用域边上是显式 upload/download 节点；分支的 BRCH/JOIN 留主机侧，每个臂一个段；`grad(f)` 的调用点换成持有派生图的函数常量 |
 | 2. 设备数据块 | **就是普通数组值**：`mm::Block::device_` 填 DLPack 的 device；**没有第二个类型、没有第二个用户可见的名字**："同一值两种放置"是同一个值在两个用途上的放置事实，拷贝是编译器的实现（普通的值写入），不是第二个值；`Device<T>` 若保留只是签名上的放置断言（问题 2） | 传输与拷贝由遍插成节点（`:tiles/upload`/`:tiles/download`），不是隐藏同步；块的引用计数与原地写不变；优化器每步 0 分配 |
 | 3. 驻留与异步提交 | 驻留**推断**：整图（含循环、调用、with 参数）上的 owner 表；传输只在放置变化处由遍插成节点；调度器只决定**就绪**，提交发生在 `tiles:exec` 算子内部；异步 = 调用返回带完成令牌的设备值，主机观察时等待；无新语言原语 | 段的 exec 节点返回 pending 设备值；完成令牌记在设备块的 owner 记录上；数据边 + 资源边给出顺序，没有隐藏同步；故障在 exec 节点按 source origin 报出 |
 | 4. 整段编译与缓存 | 编译单元 = **（作用域图, 放置）**，含传递闭包里同一放置的被调图；一个作用域一次 `compile`，段是入口；符号维（`constas n`）编一次，形状签名只决定特化参数；`?` 按具体形状入有界队列；缓存键 = 图规范编码 + 声明键与语义版本 + 目标身份（arch/NVRTC/代码生成 schema/策略）+ 放置，**不用源哈希**；stamp = 图修订 + 声明纪元 + 目标哈希 | 作用域图带目标事实 `tiles.compiled_scope`（`tiles.compiled_region` 的扩展）；段的 exec 节点各带自己的函数常量，共享同一份编译产物；第二次调用命中，不再编译 |
@@ -47,7 +47,7 @@
 
 **不改变行为**：未带标签的程序的行为、区域抽取对未带标签图形的现有结果、`--devices cpu` 的现有机型、公共 `upload`/`download`/`run_device` 的同步语义（保留它们作为显式路径）、`std::profile` 的既有字段。
 
-**不在本项**：支持面（bf16/Tensor Core、张量核、融合、优化器多张量融合、CUDA 图）——那是 H50；多卡 `#shard`——G7；分支与循环**在设备上执行**——G4（本计划只把它们的**段**放到设备上，BRCH/JOIN/LOOP 留主机）；`std::prl` 的并行放置。
+**不在本项**：支持面（bf16/Tensor Core、张量核、融合、优化器多张量融合、CUDA 图）——那是支持面那一项；多卡 `#shard`——G7；分支与循环**在设备上执行**——G4（本计划只把它们的**段**放到设备上，BRCH/JOIN/LOOP 留主机）；`std::prl` 的并行放置。
 
 ---
 
@@ -396,7 +396,7 @@ N12 :tiles/download (B4) [host]          → 等 event 17，拷贝到主机块
 
 - **目标**：设备上的张量就是普通数组值——`TensorType` 与源码里的名字都不变，`mm::Block::device_` 填 DLPack 的 `device_type`/`device_id`（`include/camel/core/array/dlpack.h` 已带这两个字段）；设备块的 owner（流、事件、大小、释放回调）由 Tiles 的设备层持有，块用 `adoptExternal(..., release)` 释放它；`refCount() == 1` ∧ 输出类型与形状同输入 ∧ 算子允许原地 → 写同一块，否则新块。"同一个值两种放置"是同一个值在两个用途上的放置事实，**不是第二个值、不是第二个类型身份**。
 - **与 P4 的接口（元素类型、秩、驻留）**：元素类型与秩来自值自己的类型（今天的 `TensorType` 的 extents 与元素类型；P4 把 `Tensor` 并进数组之后是数组值的 dtype 与 shape），块只加 `device_` 这一处事实；驻留**不是类型的一部分**。`Device<T>` 保留为签名上的放置断言（`modules/tiles/include/tiles/device.h` 的 `DeviceType`），普通值传给 `Device<T>` 形参时由遍插 `tiles:upload` 节点，图上看得见；P4 合入前不引入第二套 dtype/秩，也不用 `TensorType::Default()` 兜底。
-- **边界**：不改公共 `upload`/`download`/`run_preferred_resident` 的同步语义；不把"同一值多种写法"提升成图上的写法等价（`writings.h` 不进这一条）；不做 DLPack 零拷贝导出（H50）。
+- **边界**：不改公共 `upload`/`download`/`run_preferred_resident` 的同步语义；不把"同一值多种写法"提升成图上的写法等价（`writings.h` 不进这一条）；不做 DLPack 零拷贝导出（留给支持面）。
 - **依赖**：G1（标签与段）；`include/camel/core/mm/block.h` 与数组值的所有者（`src/runtime/**`）要对齐接口；P4 合入后重跑本步的接口读数（元素类型与秩）。
 - **验收读数**：新用例 `test/cases/modules/tiles/device_block_identity.cml`——`upload` 之后原值仍可读、类型与名字不变、两个块各自的 `device()`（主机块 0；设备块的字段取值与"0 是主机"这条现有语义怎么对齐，见问题页第 7 条）；`device_inplace.cml`——计数为 1 时原地写，读数取 `std::profile json=` 的 `allocations.calls`（优化器多轮下不随步数增长）与 `inplace_updates.*` 两个计数，二者都要有；`device_tree.cml` 的 DLPack 段加设备字段断言。今天的读数是 `mm::Block::device()` 恒为 0（守卫先红，见上表）。设备无关的那一半现在就能取：`camel --devices cpu <用例> std::gir` 里 `tiles:upload`/`tiles:download` 是普通 `OPER` 节点，`TILES_RESIDENCY` 的 `blocks` 已经把两类值分开数。
 - **未决点**：问题页第 1 条（owner 与释放归属）、第 7 条（P4 合入后元素类型与秩的接口）。
@@ -492,7 +492,7 @@ Draft §1 记下的缺口是"设备 64 MiB / 32 项"：训练规模下每步的�
 #### G3-1 整段编译：单元 =（作用域图, 放置）
 
 - **目标**：一个 `#gpu` 函数/块，加上它传递闭包里**同放置**的被调图，一起编成**一个** `Program`，段是它的入口；作用域图上记目标事实 `tiles.compiled_scope`（`tiles.compiled_region` 的扩展）。同一作用域两次调用只编译一次；同一个函数被两处调用而放置不同 → 两份单元。
-- **边界**：不改 `tiles::compile` 的入口写法（仍是 `RuntimeGraphRewritePass`）；本条不做落盘；支持面（bf16/Tensor Core、融合、优化器多张量融合）是 H50。
+- **边界**：不改 `tiles::compile` 的入口写法（仍是 `RuntimeGraphRewritePass`）；本条不做落盘；支持面（bf16/Tensor Core、融合、优化器多张量融合）是另一项工作。
 - **依赖**：G1（段）、G2-3（提交在段算子内部）；P4 决定单元入口的值类型与形状从哪里读（问题页第 7 条）。
 - **验收读数**：`inspect<f>(x)` 的计划 JSON（段表 `stages[].members[]`，既有计划条目 `gpu_scope.inspect_segments`）里一个作用域一份产物、段是入口；`std::profile json=` 的 `device_work.compiles` 在同一作用域被调两次之后仍是 1；新用例 `test/cases/modules/tiles/placement_callee.cml`（无标签 helper 从 `#gpu` 与主机两处调用 → 两份单元，段表里两份 helper 图）。
 - **未决点**：问题页第 6 条（`tiles.compiled_scope` 与 `tiles.compiled_region` 的键怎么接）。
@@ -610,8 +610,8 @@ Draft §1 记下的缺口是"设备 64 MiB / 32 项"：训练规模下每步的�
 | 程序用到的算子 | 今天 | 谁补 |
 |---|---|---|
 | `matmul`、`add`、`multiply`、`sum_axis`/`mean`、`relu`、`exp`、`log`、`maximum` | 在表里 | — |
-| `permute`/`transpose`/`reshape`、`softmax`、`gelu`、`layer_norm`、`mean`、`cross_entropy` | 不在表里 | H50（视图与逐元素/归约组合） |
-| `cast`（f32↔f32 以外）、`sgd`/`adam` 的逐元素更新 | 部分 | H50（元素类型与原地契约） |
+| `permute`/`transpose`/`reshape`、`softmax`、`gelu`、`layer_norm`、`mean`、`cross_entropy` | 不在表里 | 支持面（视图与逐元素/归约组合） |
+| `cast`（f32↔f32 以外）、`sgd`/`adam` 的逐元素更新 | 部分 | 支持面（元素类型与原地契约） |
 | `with_grad`/`grad` | 构图机制，不进设备表；今天在运行期建派生图 | G1（§2.6 的 `autodiff::expand`） |
 
 本计划交付时，"每个算子都在 GPU 上"的闸门按支持面内的算子全绿；表外算子逐条列在上表里，支持面补齐后同一脚本零缺口。这就是两段的分界：**前者让"放上去"成为可测的、正确的事，后者让"放上去的算子足够多"**。

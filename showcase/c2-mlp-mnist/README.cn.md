@@ -1,6 +1,6 @@
 # C2：MLP 训练 MNIST
 
-官方示例第一批（H13）的第一个示例。同一个任务写两遍：一遍是 Camel（`train.cml`），
+官方示例第一批的第一个示例。同一个任务写两遍：一遍是 Camel（`train.cml`），
 一遍是社区惯用写法的 PyTorch（`baseline/train_torch.py`）。两边读同一份数据、同一份
 初始权重，训练同样的 784 → 128 → 10 的 MLP（ReLU、Adam、softmax 交叉熵），在同样的
 验证集上评估，并用同一套容差比较结果。所有数字由 `compare.py` 生成，见
@@ -151,7 +151,7 @@ python showcase\c2-mlp-mnist\baseline\train_torch.py `
    的 `train_x[order[offset : offset + batch]]` 只能写成
    `take(train_x, slice(order, 0, offset, offset + batch))`。能跑，但读者要把设计里当作
    下标的东西翻译回函数调用。
-   **问**：H21 的下标语法在队列里；落地之前官方示例用函数形式可以接受吗，落地后是否应当
+   **问**：下标语法在队列里；落地之前官方示例用函数形式可以接受吗，落地后是否应当
    改回 `t[...]`？
 2. **从文件读出的张量没有静态元素类型，选不中按标签分派的那条重载。**
    `nn.softmax_cross_entropy` 按目标的类型重载：浮点张量表示 one-hot 行，整数张量表示类别
@@ -172,7 +172,7 @@ python showcase\c2-mlp-mnist\baseline\train_torch.py `
    `range(...)->filter<...>->foreach<sync ...>`，为一个 Python 里 `for` + `print` 的动作
    写六行和一个 `sync` 闭包。不是阻塞问题，记下来因为它正是示例要暴露的仪式感。
 5. **`take` 拷贝行。** 打乱后的采样器需要 gather；连续的批本可以是 `slice` 视图。拷贝是每步
-   的成本，不是峰值的来源：**更正（H40b）** 本示例原先写“标准配置的内存比用连续切片时高”，
+   的成本，不是峰值的来源：**更正** 本示例原先写“标准配置的内存比用连续切片时高”，
    复核查明那一轮 262 MiB 的峰值来自回收的节奏（数据块释放后取基线的顺序），与 `take` 无关；
    修正后 `take` 与连续切片 `slice` 的峰值相同（复核第 3 节），standard 运行的峰值内存是
    74.7 MiB（`RESULTS.md`）。这是 `take` 的既定语义（5.4），不是缺陷，随其他数字一并报出。

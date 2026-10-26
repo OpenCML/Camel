@@ -187,7 +187,7 @@ export let simplify = [mul_one, add_assoc, fuse_map]
 
 ### 5.3 不用字符串
 
-- 节点种类是 `enum`（依赖交接任务 H1）。
+- 节点种类是 `enum`。
 - 算子用它的声明来指：`graph::op(n) == matmul`，比较身份，不比较 URI 字符串。
 - 常量用泛型取：`graph::constant::<f32>(n): f32?`。
 - 被分析的程序里的类型，在写遍的代码中是 `graph::TypeRef` 值，与写遍程序自己的类型分开；`graph::type_of::<T>()` 取得 `T` 对应的 `TypeRef`。

@@ -138,7 +138,7 @@ Release 构建，主机 `88zjwei`。墙钟用 `process.hrtime.bigint()` 包住�
 - `CAMEL_PYTHON_INHERIT_HOST_ENV=1` + `PYTHONHOME=<空目录>`：CPython 在这个环境下根本起不来（它自己打印
   `Python path configuration`，pybind11 抛异常）。此时**只导入** `pyplot` / `python` 的程序必须 exit 0
   且什么都不打印；把初始化放回 `load()` 会让它们 exit 1——正是最先量到的可观察量。
-- 同一环境 `inspect --ops` 必须 exit 0 并列出 `pyplot:plot`（H203：exit 1、不列算子）。
+- 同一环境 `inspect --ops` 必须 exit 0 并列出 `pyplot:plot`（此前 exit 1、不列算子）。
 - 同一环境一次 `plot` / 一次 `py_exec` 必须 exit 1，诊断是 `RuntimeDiag::RuntimeError`、位置指向调用、
   消息写明 first use，并带上 CPython 自己的原因：失败是搬了家，没有消失。
 - 健康环境下两种顺序（`python`→`pyplot`、`pyplot`→`python`）都能跑；`plot` 两次夹一次 Python 调用也是

@@ -267,7 +267,7 @@ FAIL narrow_mul_div: the two sides differ at (-2147483648): 0 and -2147483648
   期望含 `proved guarded: under when, class equality`，且它引用的 `when` 文本出现在报告里（读者要能看见假设是什么）。
 - **可并行**：与 S2、S3、S5 并行。
 
-### S5 泛型规则逐实例证明（接 H232）
+### S5 泛型规则逐实例证明
 
 - **产物**：`check` 那一侧的桥。对每条泛型规则：按裁定的类型集合枚举类型元组，逐个用 `include/camel/compile/gir/rule_templates.h#genericRuleInstance` 取实例，对**实例自己的** `lhs`/`rhs`/`when` 分别判定；报告每行带元组（`proved add_zero<int>`、`proved add_zero<i32>`）。一个元组 `refuted` ⇒ 那一行 `refuted`，规则整体**不**报 `proved`。实例没做出来（`GenericRuleInstance::made == false`）⇒ 该元组 `sampled`，原因写 `GenericRuleInstance::why`。
 - **红前用例**：泛型规则今天逐字 `unchecked generic_add_zero: a generic rule, whose instances are not checked here`。计划断言输出里同时有 `proved generic_add_zero<int>` 与 `proved generic_add_zero<i32>` 两行（`test/cases/modules/rules/generic_law.cml` 的 `add_zero::<T>` 就是这条规则的写法，它今天在改写路径上是绿的，见 `rules.generic_law_is_instantiated_per_type_tuple`）——今天红。

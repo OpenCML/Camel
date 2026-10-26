@@ -1,6 +1,6 @@
 # FastVM JIT 架构文档
 
-> **适用范围（2026-10-21）**：JIT 把图编译成两种代码之一。**无帧代码**（frameless）是"自足"的图——字节码里只有算术、比较、`BRCH`/`JOIN`/`JUMP`/`RETN`，以及目标是**本图自身**的 `FUNC`/`TAIL`；它不调用任何 C++，自调用是原生调用，自尾调用是跳转。第 1 至 16 节描述的是它。**有帧代码**（framed）是其余所有的图（含 `OPER`、`CAST`、`COPY`、`FILL`、`ACCS`、`CALL`、`SCHD`、`match`、循环的 `LBEG`/`LTST`/`LEND`，或调用其他图）：算子等经 C++ 辅助函数执行，循环的三个事件也在辅助函数里跑，调用 Camel 函数的字节码交回驱动循环执行，见第 17 节。哪一种由 `collectRuntimeConstructs` 一处决定，`-vv` 日志写明（`compiled & cached graph 'f' as framed code`）。最早只在 Linux x86-64 上构建和运行过；有帧代码新增编码的 Win64 分支（`CallHelper`、`ExitToDriver`、包装器的续点分支）此后在 Windows x64（clang++）上构建并运行过（H43a，含循环的图），第 8 节的汇编包装器仍没有被用到。
+> **适用范围（2026-10-21）**：JIT 把图编译成两种代码之一。**无帧代码**（frameless）是"自足"的图——字节码里只有算术、比较、`BRCH`/`JOIN`/`JUMP`/`RETN`，以及目标是**本图自身**的 `FUNC`/`TAIL`；它不调用任何 C++，自调用是原生调用，自尾调用是跳转。第 1 至 16 节描述的是它。**有帧代码**（framed）是其余所有的图（含 `OPER`、`CAST`、`COPY`、`FILL`、`ACCS`、`CALL`、`SCHD`、`match`、循环的 `LBEG`/`LTST`/`LEND`，或调用其他图）：算子等经 C++ 辅助函数执行，循环的三个事件也在辅助函数里跑，调用 Camel 函数的字节码交回驱动循环执行，见第 17 节。哪一种由 `collectRuntimeConstructs` 一处决定，`-vv` 日志写明（`compiled & cached graph 'f' as framed code`）。最早只在 Linux x86-64 上构建和运行过；有帧代码新增编码的 Win64 分支（`CallHelper`、`ExitToDriver`、包装器的续点分支）此后在 Windows x64（clang++）上构建并运行过（含循环的图），第 8 节的汇编包装器仍没有被用到。
 
 本文档描述 Camel FastVM 的 **JIT 编译 pipeline**：从字节码到 x86-64 机器码的完整流程，涵盖双入口函数布局、JIT 内部调用约定、Frame 池管理、frameless 栈分配优化、近期引入的 MIR 定向代码生成优化，以及与解释器/trampoline 的协同工作机制。
 
