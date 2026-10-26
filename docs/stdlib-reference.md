@@ -579,6 +579,18 @@ written where it used to count from the end.
 - Pure.
 - Example: `[1, 2, 3, 4]->slice(0, 1, 3)` gives `[2, 3]`
 
+#### `slice`
+
+```camel
+slice: (s: string, axis: int, start: int, end: int, step: int = 1, written: int = 3) => string
+```
+
+The same slice of a string, by code point: a string has the one axis 0, and the result is a
+string. `'中文字'[1:3]` and `slice('中文字', 0, 1, 3)` are both `'文字'`.
+
+- Pure.
+- Example: `slice('hello', 0, 1, 4)` gives `'ell'`
+
 #### `concat`
 
 ```camel
@@ -954,153 +966,20 @@ prints what it recorded (`STREAM_TEE`).
 
 ## `str`: strings
 
-A string is always valid UTF-8, and its length and indices count Unicode code points:
+Text functions. A string is always valid UTF-8, and its length and indices count code points:
 `len('中文')` is 2 and `'中文'[0]` is `'中'`. Binary data is `Bytes`; `bytes::encode` and
 `bytes::decode` are the one place where a string becomes UTF-8 bytes and back.
-The string a function works on is its ordinary argument; everything else is a with-argument,
-so calls chain: `s->trim->split<','>`.
 
-#### `split`
+- The string a function works on is its ordinary argument; everything that configures the
+  call is a with-argument, so calls chain: `s->trim->split<','>`.
+- Every function returns a new string; none changes its argument.
+- A result that may not exist is `T?` (`index_of`, `strip_prefix`). A number that is not a
+  code point is an error value (`from_codepoints`). An index outside the string is a fault.
+- Only what Camel cannot say about a string is native: code points as numbers and
+  letter case (cutting by code point is the subscript `s[a:b]` of the core). The rest is
+  written here; `index_of` and `split` carry a native kernel under `#impl` for speed, with the same result as their bodies.
 
-```camel
-split: <sep: string> (s: string) => string[]
-```
-
-The pieces of s between occurrences of sep. An empty s gives one empty piece; a separator
-at the start or the end gives an empty piece there.
-
-- Pure.
-- Failure: fault `InvalidArgument` when sep is empty.
-- Example: `'a,b,,c'->split<','>` gives `['a', 'b', '', 'c']`
-
-#### `trim`
-
-```camel
-trim: (s: string) => string
-```
-
-s without the ASCII white space (space, tab, line feed, carriage return, vertical tab, form
-feed) at both ends. Other white space, such as U+00A0, is kept.
-
-- Pure.
-- Example: `trim('  hi \n')` gives `'hi'`
-
-#### `trim_start`
-
-```camel
-trim_start: (s: string) => string
-```
-
-s without the ASCII white space at its start.
-
-- Pure.
-- Example: `trim_start('  hi  ')` gives `'hi  '`
-
-#### `trim_end`
-
-```camel
-trim_end: (s: string) => string
-```
-
-s without the ASCII white space at its end.
-
-- Pure.
-- Example: `trim_end('  hi  ')` gives `'  hi'`
-
-#### `to_upper`
-
-```camel
-to_upper: (s: string) => string
-```
-
-s with the ASCII letters a-z in upper case. Every other character is kept as it is, so letters
-outside ASCII do not change: to_upper('é') is 'é'.
-
-- Pure.
-- Example: `to_upper('héllo')` gives `'HéLLO'`
-
-#### `to_lower`
-
-```camel
-to_lower: (s: string) => string
-```
-
-s with the ASCII letters A-Z in lower case. Every other character is kept as it is.
-
-- Pure.
-- Example: `to_lower('HeLLo')` gives `'hello'`
-
-#### `replace`
-
-```camel
-replace: <from_: string, to: string> (s: string) => string
-```
-
-s with every occurrence of from_ replaced by to, found from left to right without overlap.
-
-- Pure.
-- Failure: fault `InvalidArgument` when from_ is empty.
-- Example: `'a-b-c'->replace<'-', '+'>` gives `'a+b+c'`
-
-#### `find`
-
-```camel
-find: <sub: string> (s: string) => int?
-```
-
-The index (in code points) of the first occurrence of sub in s, or null when there is none. An empty
-sub is found at 0.
-
-- Pure.
-- Example: `'hello'->find<'l'> ?? -1` gives `2`
-
-#### `substr`
-
-```camel
-substr: <start: int, length: int> (s: string) => string
-```
-
-The length characters of s that start at character start.
-
-- Pure.
-- Failure: fault `IndexOutOfRange` when start or start + length lies outside the string; fault `InvalidArgument` when length is negative.
-- Example: `'hello'->substr<1, 3>` gives `'ell'`
-
-#### `starts_with`
-
-```camel
-starts_with: <prefix: string> (s: string) => bool
-```
-
-Whether s begins with prefix. Every string begins with the empty string.
-
-- Pure.
-- Example: `'hello'->starts_with<'he'>` gives `true`
-
-#### `ends_with`
-
-```camel
-ends_with: <suffix: string> (s: string) => bool
-```
-
-Whether s ends with suffix.
-
-- Pure.
-- Example: `'hello'->ends_with<'lo'>` gives `true`
-
-#### `repeat`
-
-```camel
-repeat: <count: int> (s: string) => string
-```
-
-s written count times in a row.
-
-- Pure.
-- Failure: fault `InvalidArgument` when count is negative or the result would be longer than a string can be (4 GiB of UTF-8).
-- Example: `'ab'->repeat<3>` gives `'ababab'`
-
-### Code points as numbers
+### Native primitives
 
 #### `codepoints`
 
@@ -1108,7 +987,7 @@ s written count times in a row.
 codepoints: (s: string) => int[]
 ```
 
-The code points of s.
+The code points of s, as numbers.
 
 - Pure.
 - Example: `codepoints('h€')` gives `[104, 8364]`
@@ -1124,6 +1003,173 @@ The string made of the given code points.
 - Pure.
 - Failure: error `EncodingError` when an element is not a code point (negative, above 0x10FFFF, or a surrogate).
 - Example: `from_codepoints([104, 8364]) !! ''` gives `'h€'`
+
+#### `to_upper`
+
+```camel
+to_upper: (s: string) => string
+```
+
+s with every letter in upper case, by the Unicode simple (one code point to one code point)
+case mapping; a letter without one is kept as it is.
+
+- Pure.
+- Example: `to_upper('héllo')` gives `'HÉLLO'`
+
+#### `to_lower`
+
+```camel
+to_lower: (s: string) => string
+```
+
+s with every letter in lower case, by the Unicode simple case mapping.
+
+- Pure.
+- Example: `to_lower('HeLLo')` gives `'hello'`
+
+### Searching
+
+#### `index_of`
+
+```camel
+index_of: <sub: string> (s: string) => int?
+```
+
+The index (in code points) of the first occurrence of sub in s, or null when there is none.
+An empty sub is found at 0.
+
+- With effects: not pure.
+- Example: `'hello'->index_of<'l'>` gives `2`
+
+#### `starts_with`
+
+```camel
+starts_with: <prefix: string> (s: string) => bool
+```
+
+Whether s begins with prefix. Every string begins with the empty string.
+
+- With effects: not pure.
+- Example: `'hello'->starts_with<'he'>` gives `true`
+
+#### `ends_with`
+
+```camel
+ends_with: <suffix: string> (s: string) => bool
+```
+
+Whether s ends with suffix. Every string ends with the empty string.
+
+- With effects: not pure.
+- Example: `'hello'->ends_with<'lo'>` gives `true`
+
+#### `strip_prefix`
+
+```camel
+strip_prefix: <prefix: string> (s: string) => string?
+```
+
+s without the prefix at its start, or null when s does not begin with it.
+
+- With effects: not pure.
+- Example: `'v1.2'->strip_prefix<'v'>` gives `'1.2'`
+
+#### `strip_suffix`
+
+```camel
+strip_suffix: <suffix: string> (s: string) => string?
+```
+
+s without the suffix at its end, or null when s does not end with it.
+
+- With effects: not pure.
+- Example: `'a.cml'->strip_suffix<'.cml'>` gives `'a'`
+
+### Cutting and joining
+
+#### `split`
+
+```camel
+split: <sep: string> (s: string) => string[]
+```
+
+The pieces of s between occurrences of sep. An empty s gives one empty piece; a separator at
+the start or the end gives an empty piece there. An empty sep cuts s into its code points
+(no pieces for an empty s).
+
+- With effects: not pure.
+- Example: `'a,b,,c'->split<','>` gives `['a', 'b', '', 'c']`
+
+#### `lines`
+
+```camel
+lines: (s: string) => string[]
+```
+
+The lines of s, cut at a line feed or a carriage return followed by a line feed. A line
+feed at the very end does not start another line.
+
+- With effects: not pure.
+- Example: `'a\r\nb\n'->lines` gives `['a', 'b']`
+
+#### `replace`
+
+```camel
+replace: <old: string, new: string> (s: string) => string
+```
+
+s with every occurrence of old replaced by new, found from left to right without overlap.
+An empty old puts new between the code points of s.
+
+- With effects: not pure.
+- Example: `'a-b-c'->replace<'-', '+'>` gives `'a+b+c'`
+
+#### `repeat`
+
+```camel
+repeat: <count: int> (s: string) => string
+```
+
+s written count times in a row; the empty string when count is not positive.
+
+- With effects: not pure.
+- Example: `'ab'->repeat<3>` gives `'ababab'`
+
+### White space
+
+#### `trim_start`
+
+```camel
+trim_start: (s: string) => string
+```
+
+s without the ASCII white space (space, tab, line feed, carriage return, vertical tab, form
+feed) at its start.
+
+- With effects: not pure.
+- Example: `trim_start('  hi  ')` gives `'hi  '`
+
+#### `trim_end`
+
+```camel
+trim_end: (s: string) => string
+```
+
+s without the ASCII white space at its end.
+
+- With effects: not pure.
+- Example: `trim_end('  hi  ')` gives `'  hi'`
+
+#### `trim`
+
+```camel
+trim: (s: string) => string
+```
+
+s without the ASCII white space at both ends. Other white space, such as U+00A0, is kept.
+
+- With effects: not pure.
+- Example: `trim('  hi \n')` gives `'hi'`
 
 <a id="bytes"></a>
 

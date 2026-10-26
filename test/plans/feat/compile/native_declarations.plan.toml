@@ -106,7 +106,7 @@ kind = "negative"
 case = "../../../cases/compile/native/str_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "str_arity.cml:10:17", "(string, string)", "<str:trim>: (s: string) => string"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "str_arity.cml:10:21", "(string, string)", "<str:to_upper>: (s: string) => string"]
 
 [[tests]]
 name = "native.str_wrong_type"
@@ -115,7 +115,7 @@ kind = "negative"
 case = "../../../cases/compile/native/str_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "str_type.cml:11:17", "argument types: <> (int)", "<str:trim>: (s: string) => string"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "str_type.cml:11:21", "argument types: <> (int)", "<str:to_upper>: (s: string) => string"]
 
 #  ---- The declarations of `io`: the terminal's signatures (steps 4 and 10) ----
 

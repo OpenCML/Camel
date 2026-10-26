@@ -393,6 +393,13 @@ export func slice(xs: T[]): T[]
 #op(':op/slice_sub')
 export func slice(t: T[], axis: int, start: int, end: int, step: int = 1, written: int = 3): T[]
 
+/// The same slice of a string, by code point: a string has the one axis 0, and the result is a
+/// string. `'中文字'[1:3]` and `slice('中文字', 0, 1, 3)` are both `'文字'`.
+/// @pure
+/// @example slice('hello', 0, 1, 4)    // 'ell'
+#op(':op/slice_str')
+export func slice(s: string, axis: int, start: int, end: int, step: int = 1, written: int = 3): string
+
 /// The elements of xs followed by those of ys, as a new array.
 /// @pure
 /// @example concat([1], [2, 3])    // [1, 2, 3]

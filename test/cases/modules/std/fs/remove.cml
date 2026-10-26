@@ -9,7 +9,7 @@ module fs_remove
 
 import { exists, mkdirs, write_text, remove, remove_dir } from fs
 import { get_env } from env
-import { find } from str
+import { index_of } from str
 
 /// The kind and location of a `void!`, or ok.
 func report(r: void!) {
@@ -24,11 +24,11 @@ func report(r: void!) {
 func reason(r: void!) {
     return match r {
         case error e =>
-            if (e.message->find<'not empty'> ?? -1) >= 0 then 'not empty'
-            else if (e.message->find<'is a directory'> ?? -1) >= 0 then 'is a directory'
-            else if (e.message->find<'not a directory'> ?? -1) >= 0 then 'not a directory'
-            else if (e.message->find<'no such file'> ?? -1) >= 0 then 'missing'
-            else if (e.message->find<'denied'> ?? -1) >= 0 then 'denied'
+            if (e.message->index_of<'not empty'> ?? -1) >= 0 then 'not empty'
+            else if (e.message->index_of<'is a directory'> ?? -1) >= 0 then 'is a directory'
+            else if (e.message->index_of<'not a directory'> ?? -1) >= 0 then 'not a directory'
+            else if (e.message->index_of<'no such file'> ?? -1) >= 0 then 'missing'
+            else if (e.message->index_of<'denied'> ?? -1) >= 0 then 'denied'
             else 'io'
         case _ => '-'
     }

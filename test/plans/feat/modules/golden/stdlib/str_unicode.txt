@@ -28,18 +28,21 @@ replace non-ascii [hello] 5
 2 3 -1
 0 0 -1
 2 -1
-substr [ell] 3
-substr all [hello] 5
-substr empty at end [] 0
-substr empty [] 0
-substr one char of é [2] 1
-substr non-ascii [€l] 2
-substr 4-byte [a😀] 2
+slice [ell] 3
+slice all [hello] 5
+slice empty at end [] 0
+slice empty [] 0
+slice one char of é [2] 1
+slice non-ascii [€l] 2
+slice 4-byte [a😀] 2
 true true false true
 true true false false
 repeat [ababab] 6
 repeat zero [] 0
 repeat empty [] 0
+repeat negative [] 0
+replace empty old [a-b] 3
+split empty sep [h, é, y]
 [104, 195, 169] [] 3
 decode [hi] 2
 decode empty [] 0

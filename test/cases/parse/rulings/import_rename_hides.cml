@@ -1,7 +1,7 @@
-// After `find as str_find` the name `find` is not declared in this module.
-import { find as str_find } from str
+// After `index_of as str_find` the name `index_of` is not declared in this module.
+import { index_of as str_find } from str
 
 func main(): int sync {
-    println('hello'->find<'l'> ?? -1)
+    println('hello'->index_of<'l'> ?? -1)
     return 0
 }

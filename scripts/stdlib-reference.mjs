@@ -690,6 +690,9 @@ function readDeclarations(file, module) {
             const tagged = trimmed.match(/^#\[?op\(['"]([^'"]+)['"]\)/)
             if (tagged) {
                 pendingUri = tagged[1]
+            } else if (/^#impl\(/.test(trimmed)) {
+                // `#impl(kernel)`: a Camel definition that carries a native kernel for speed. The
+                // definition is what the page documents; the kernel is private to the module.
             } else if (module.kind === 'cpp') {
                 // A signature file writes `#op(...)` and nothing else: another tag there is a typo,
                 // not a declaration.
@@ -738,7 +741,7 @@ function readDeclarations(file, module) {
                 // A body-less `export func` in a library module written in Camel declares one of
                 // the module's native operators (`array`'s sorts and primitives): there is no
                 // subgraph, and the kernel is the operator's.
-                native: module.kind === 'camel' && !declarationBody(after, lines, i),
+                native: !declarationBody(after, lines, i),
                 doc: [],
                 purity: null,
                 effect: '',
@@ -758,7 +761,7 @@ function readDeclarations(file, module) {
                 else entry.doc.push(text)
             }
             // A native entry names its operator like a C++ module's declaration does.
-            if (module.kind === 'cpp' || entry.native) {
+            if (entry.native) {
                 // `module:function`, or what the `#op` tag above says.
                 entry.uri = pendingUri || `${module.name}:${name}`
             }
@@ -1573,11 +1576,11 @@ function verifyOps() {
             problems.push(`${file}: the module '${registeredName}' registers no operator (is it imported by ${path.relative(REPO_ROOT, PROBE)}?)`)
             continue
         }
-        // Values are not operators: inspect --ops does not list them. A module written in Camel
-        // is verified only for its native declarations: its Camel functions are bodies, not
-        // operators.
+        // Values are not operators: inspect --ops does not list them. Only the body-less
+        // declarations are verified, whichever language the module is written in: a function
+        // with a body is a Camel function, not an operator.
         const entries = parseDeclarations(module).filter(
-            (e) => !e.value && (module.kind === 'cpp' || e.native),
+            (e) => !e.value && e.native,
         )
         const declaredNames = new Set(entries.filter((e) => e.file === file).map((e) => e.name))
         // A module may publish an operator under a type namespace too (`Tensor.shape`). That
