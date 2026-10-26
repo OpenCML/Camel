@@ -1389,11 +1389,16 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
         ExpectedValueScope subjectScope(expectedValueType_, nullptr);
         subject = valueNodeOf(visit(gct->at(0)));
     }
-    if (onNull && asTagged(valueTypeOf(nodeTypeOf(subject))) == nullptr &&
-        isNarrowedName(gct->at(0))) {
-        // `x ?? d` where an `if` around it already narrowed `x` to a `T` (design principles
-        // 3.8): allowed, with a warning.
-        subject = reopenNarrowedName(gct->at(0), subject, gct, "??");
+    // `a ?? d` where `a` cannot be null is allowed, with a warning (design principles 3.8): a
+    // plain value has no null case at all, and a name an `if` around it already narrowed to a
+    // `T` is that same case one step later, so both are put back into `T?` and built as an
+    // ordinary `??`. A `void` left side is not a value and a `T!` carries the other mark:
+    // both keep the refusal below.
+    Type *unopened    = valueTypeOf(nodeTypeOf(subject));
+    const bool noTag  = asTagged(unopened) == nullptr;
+    const bool valued = unopened != nullptr && unopened->code() != TypeCode::Void;
+    if (onNull && noTag && valued) {
+        subject = reopenKnownNotNull(gct->at(0), subject, gct, "??");
     }
     Type *subjectType = valueTypeOf(nodeTypeOf(subject));
     TupleType *tagged = asTagged(subjectType);
@@ -1791,17 +1796,23 @@ bool Builder::isNarrowedName(const GCT::node_ptr_t &expr) {
     return bound.has_value() && narrowedValues_.contains(*bound);
 }
 
-node_handle_t Builder::reopenNarrowedName(
+node_handle_t Builder::reopenKnownNotNull(
     const GCT::node_ptr_t &expr, node_handle_t subject, const GCT::node_ptr_t &at,
     const char *construct) {
-    // Design principles 3.8: the construct is still allowed on the name; it is applied to the
-    // value put back into `T?`, so that it is checked and built exactly as on the name before
-    // narrowing (the right side of `??` still has to fit, the cases of the `match` still have
-    // to be its fixed patterns), and only its null arm can never be taken.
+    // Design principles 3.8: the construct is still allowed on a left side that cannot be
+    // null; it is applied to the value put back into `T?`, so that it is checked and built
+    // exactly as on a `T?` (the right side of `??` still has to fit, the cases of the `match`
+    // still have to be its fixed patterns), and only its null arm can never be taken.
     Type *type = valueTypeOf(nodeTypeOf(subject));
+    // A name is named as it is written; anything else (`a + 1`, `f()`) is named by the text
+    // that produced it, so the reader is told which value cannot be null.
+    std::string who = expr->type() == GCT::NodeKind::DREF ? expr->name() : sourceTextOf(expr);
+    if (who.empty()) {
+        who = "This value";
+    }
     diags_->of(SemanticDiag::KnownNotNull)
         .atOrigin(at->origin())
-        .commit(expr->name(), type->toString(), construct);
+        .commit(who, type->toString(), construct);
     node_handle_t reopened = coerceTo(subject, TupleType::nullable(type), at);
     ASSERT(reopened != nullptr, "A value always enters the nullable form of its own type.");
     return reopened;
@@ -2020,6 +2031,10 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
         condNode = valueNodeOf(visit(gct->at(0)));
     }
     node_handle_t node{};
+    // A `match` on a value that cannot be null is left to the plain match below: only the
+    // narrowed name is put back into `T?` here, so that `case null` over it is still checked
+    // as it is over a `T?` (`??` treats every value that cannot be null the same way, see
+    // visitTaggedBrchNode).
     if (asTagged(valueTypeOf(nodeTypeOf(condNode))) == nullptr && isNarrowedName(gct->at(0))) {
         // `match x { case null => ...  case v => ... }` where an `if` around it already
         // narrowed `x` to a `T` (design principles 3.8): allowed, with a warning. A match
@@ -2028,7 +2043,7 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
             return c->caseType() == GCT::CaseType::Value && isNullLiteral(c->at(0));
         });
         if (nullCase) {
-            condNode = reopenNarrowedName(gct->at(0), condNode, gct, "match");
+            condNode = reopenKnownNotNull(gct->at(0), condNode, gct, "match");
         }
     }
     if (TupleType *tagged = asTagged(valueTypeOf(nodeTypeOf(condNode)))) {
