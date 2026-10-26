@@ -655,6 +655,10 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
     }
     if (ok) {
         settleEffectfulGraphs();
+        // A stream is read once on each execution path (design principles 5.4), which is a property
+        // of the built graphs: this runs while every body is in hand and every read is a data edge
+        // of the graph it was written in, before the graphs are encoded.
+        settleStreamLinearity();
         // A declaration's clause is a promise; the bodies measure what it actually touches, and
         // the declaration is held to the promise (design effects plan, step 5). The measurement
         // runs here, while the bodies are still in hand; the report runs per module below, with
@@ -666,6 +670,9 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
         for (ModuleUnit *unit : order) {
             UnitContext context(*this, *unit);
             try {
+                // A stream is read once on each execution path (design principles 5.4): the check
+                // measured the built graphs above, and what it found is named here, with the rest.
+                reportStreamLinearity();
                 reportIgnoredCapturedWrites();
                 // Before the bodies are let go by reportDroppedEffectsOfBodies.
                 reportUnusedFallibleValues();

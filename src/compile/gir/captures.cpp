@@ -95,6 +95,27 @@ node_handle_t Builder::captureInto(
     graph->addCaptureName(shown);
     capturedValues_[graph.get()].push_back({origin, port, shown});
     captureOriginOf_[port] = origin;
+    // A stream a closure captures is refused where the closure is built (design principles 5.4):
+    // the body of a closure runs after the path that made it has finished, so the read such a
+    // capture would make is not that path's one read. It is refused here, at the one place a
+    // capture is made, and not by the pass that counts reads: inside the closure the capture port
+    // and what it captured are one value, so counting edges would see one read where the program
+    // wrote two names. A cell is not the value -- a captured `var` is a resource the closure
+    // shares, and the reads of it are judged where they stand (the standard library's `tee` holds
+    // its source that way). What the rule refuses is the read the capture would make, so what the
+    // closure makes of the port is settled with the pass, once its body is built: a closure that
+    // only hands the value on -- into a cell, into a report, into the captures of a call -- reads
+    // nothing, and the standard library's `tee` holds its source that way to key its report.
+    if (!isVar && camel::compile::gir::streamReadOnce(nodeTypeOf(origin))) {
+        StreamViolation violation;
+        violation.kind   = StreamViolation::Kind::Captured;
+        violation.graph  = graph.get();
+        violation.port   = port;
+        violation.origin = nodeDraftOf(origin)->nodeOrigin(nodeIdOf(origin));
+        Type *valueType  = valueTypeOf(nodeTypeOf(origin));
+        violation.what   = valueType != nullptr ? valueType->toString() : std::string("a stream");
+        streamViolations_.push_back(std::move(violation));
+    }
     if (isVar) {
         variables_.insert(port);
         captures_[graph.get()].variables.push_back(origin);
@@ -102,6 +123,11 @@ node_handle_t Builder::captureInto(
         escapingVariables_.insert(origin);
     }
     return port;
+}
+
+void Builder::noteMachinePortOrigin(node_handle_t port, node_handle_t origin) {
+    ASSERT(port != nullptr && origin != nullptr, "A port stands for a value.");
+    machinePortOrigin_[port] = origin;
 }
 
 void Builder::addCaptureSite(node_handle_t call, const compile_graph_ptr_t &callee) {
