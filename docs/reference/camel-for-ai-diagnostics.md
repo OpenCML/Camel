@@ -273,7 +273,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `FactConstCaseTypeRequired` | The 'const' case '{0}' of the fact '{1}' writes no type. |
 | `FactCaseBindsNoVariable` | This case of the fact '{0}' names no variable. |
 
-**Semantic — warnings** (`SemanticDiag`) — 12
+**Semantic — warnings** (`SemanticDiag`) — 15
 
 | `IgnoredSideEffect` | {0} is not in a sync block, and {1}. |
 | `EffectNotExecuted` | {0} has side effects but is never executed: {1}. |
@@ -287,6 +287,9 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `TagHasNoReader` | The tag '{0}' is written, but none of the passes it names ({1}) is in the pipeline. |
 | `DimensionNameUsedOnce` | The dimension name '{0}' is written once in this signature, so it relates nothing. |
 | `TypeVariableUnused` | The type parameter '{0}' is declared at the head but never written in the signature. |
+| `NeverArgumentCall` | This call never runs: {0} has type 'never', and an argument is evaluated before the call it is written in. |
+| `FailNotExecuted` | This 'fail' is not executed: {0}. |
+| `StatementAfterFail` | This statement cannot run: the 'fail' written before it never returns. |
 
 **Run time and passes — errors** (`RuntimeDiag`) — 36
 

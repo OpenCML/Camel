@@ -110,3 +110,92 @@ expect_exit = 0
 expect_stdout_contains = ["42", "BadInput", "end"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
+
+# The author's ruling of 2026-10-26 on the bottom type `never` and on `fail` (design principles
+# 3.9): an argument of type `never` makes the call itself `never` (the call never runs, so no
+# overload is chosen for it and the warning names the argument); a `fail` on a line of its own is
+# no effect, so in a body that is not `sync` it does not run and the statements after it do; and
+# where it does run, the statements written after it in the same block are never reached. Each of
+# the three warnings is locked with the code the catalogue gives it, and each test asserts the
+# whole set of diagnostics, so a warning that should not be there is red too.
+
+[[tests]]
+name = "never.argument"
+desc = "A call with an argument of type never never runs: it is typed never and no overload is chosen for it, so its result stands where the declared type is, and the warning names the argument."
+kind = "behavior"
+case = "../../../cases/consistency/fail_never/never_argument.cml"
+args = ["check", "-O", "short", "${case}"]
+expect_exit = 0
+verify_script = """
+assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
+assert(input.diagnostics[0].name === 'SemanticDiag::NeverArgumentCall', input.diagnostics[0].name)
+assert(input.diagnostics[0].code === '0x031001C0', input.diagnostics[0].code)
+assert(input.diagnostics[0].line === 17, input.diagnostics[0].line)
+assert(input.diagnostics[0].column === 23, input.diagnostics[0].column)
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "never.argument_overload"
+desc = "A never argument is not allowed to make two overloads fit: the call never runs, so no overload is chosen, no ambiguity is reported, and the report is the warning such a call gets."
+kind = "behavior"
+case = "../../../cases/consistency/fail_never/never_argument_overload.cml"
+args = ["check", "-O", "short", "${case}"]
+expect_exit = 0
+expect_output_not_contains = ["AmbiguousCall"]
+verify_script = """
+assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
+assert(input.diagnostics[0].name === 'SemanticDiag::NeverArgumentCall', input.diagnostics[0].name)
+assert(input.diagnostics[0].code === '0x031001C0', input.diagnostics[0].code)
+assert(input.diagnostics[0].line === 18, input.diagnostics[0].line)
+assert(input.diagnostics[0].column === 21, input.diagnostics[0].column)
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "fail.not_executed"
+desc = "A fail on a line of its own in a body that is not sync is no effect: nothing needs it, so it does not run and the statements after it do; the warning says to put it in a sync block or on the path the data takes, and it is the only diagnostic."
+kind = "behavior"
+case = "../../../cases/consistency/fail_never/fail_not_executed.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_starts_with = "2\n"
+verify_script = """
+assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
+assert(input.diagnostics[0].name === 'SemanticDiag::FailNotExecuted', input.diagnostics[0].name)
+assert(input.diagnostics[0].code === '0x031001C1', input.diagnostics[0].code)
+assert(input.diagnostics[0].line === 11, input.diagnostics[0].line)
+assert(input.diagnostics[0].column === 9, input.diagnostics[0].column)
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "fail.statement_after"
+desc = "A fail in a sync block runs where it stands: the fault is raised, and the statements written after it in the same block are never reached -- each of them is warned, and what was printed before the fail stays."
+kind = "negative"
+case = "../../../cases/consistency/fail_never/statement_after_fail.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_stdout_starts_with = "before\n"
+verify_script = """
+// The name is built from two pieces, the way fail.located's assertion is: the kind a program
+// writes is the program's own word, so the literal `RuntimeDiag::<Kind>` is not a code the
+// registry declares and must not read as a citation of one.
+const faults = input.diagnostics.filter((d) => d.name === 'RuntimeDiag::' + 'NoPremise')
+const unreachable = input.diagnostics.filter((d) => d.name === 'SemanticDiag::StatementAfterFail')
+assert(faults.length === 1 && faults[0].line === 11, JSON.stringify(input.diagnostics))
+assert(unreachable.length === 2, JSON.stringify(input.diagnostics))
+assert(unreachable[0].line === 12 && unreachable[1].line === 13, JSON.stringify(unreachable))
+assert(unreachable[0].code === '0x031001C2', unreachable[0].code)
+assert(input.diagnostics.length === 3, JSON.stringify(input.diagnostics))
+// The fault is raised at the `fail`, so the statement written after it never prints: the program
+// stops there. The line is checked whole, because the case's own name is in every diagnostic the
+// run writes and would match a plain search for it.
+const printed = input.normalized.stdout.split('\\n').map((line) => line.trim())
+assert(!printed.includes('after'), JSON.stringify(printed))
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
