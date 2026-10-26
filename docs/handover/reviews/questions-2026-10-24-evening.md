@@ -1767,3 +1767,5 @@ C4、C22 已合入（`8fa694785`）：`as` 在基本类型之间只把一个类�
 
 **甲：加形状词 `case array`**，与 `struct`、`tuple`、`func`、`#leaf` 并列，匹配任何数组类型（任意元素类型、任意形状）。于是 `is_array::<T>()` 用 Camel 写得出来，`is_sliceable::<T>()` 由 `is_array`、`is_string`、`is_same::<T, Bytes>` 合成，用户也能自己写。设计原则 5.5 的形状词列表补上 `func` 与 `array`（现在只写了三个）。
 - **缺陷单独先修**：不认识的形状词在 Release 里静默当成 `case _`，在 Debug 里中止。改成一条带位置的具名诊断（"未知的形状词，可用的是 `struct`、`tuple`、`func`、`array`、`#leaf`"），`builder_static.cpp` 里那份名字表与解析器共用一处。这正是 `agents/refactor.md` 里"拒绝必须说出来"那一条。
+
+C9 已合入（`22d03dd80` 经 `a503f6130`），`thread_count` 只在 `test_support`、`process` 导出 `process` 资源（`200db1a65`）。注意：`4df0af3ca` 到 `37991ffb7` 之间的 fsh-dev 编不过（C22 删了 `FunctionTypeFactory::setModifiers`，develop 的原地规则与 `json` 模块还在用），已在 `200db1a65` 修好；从这段中间状态拉过 fsh-dev 的车道请重新拉。索引里的 **C24（进程级状态按主人登记、按主人注销：GC 根集合、清扫器、导数注册）也由决策者这边做**，施工方不做这一组。
