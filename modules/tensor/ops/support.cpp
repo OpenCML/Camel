@@ -207,21 +207,17 @@ type::Type *tensorOf(std::optional<TypeCode> dtype, std::optional<StaticShape> s
     return tensorOf(TensorFacts{dtype, std::move(shape)});
 }
 
-std::optional<TypeCode> promote(std::optional<TypeCode> lhs, std::optional<TypeCode> rhs) {
+std::optional<TypeCode> commonElementType(std::optional<TypeCode> lhs, std::optional<TypeCode> rhs) {
     if (!lhs || !rhs) {
         return std::nullopt;
     }
-    return promoteTensorTypes(*lhs, *rhs);
+    // One element type, or none: the two operands state the type the operation computes in, and
+    // there is no widening from one to another (design principles 5.1).
+    return *lhs == *rhs ? lhs : std::nullopt;
 }
 
-void refuseMixedFloatWidths(std::optional<TypeCode> lhs, std::optional<TypeCode> rhs) {
+void refuseMixedElementTypes(std::optional<TypeCode> lhs, std::optional<TypeCode> rhs) {
     if (!lhs || !rhs || *lhs == *rhs) {
-        return;
-    }
-    const auto statedWidth = [](TypeCode code) {
-        return code == TypeCode::Float32 || code == TypeCode::Float64;
-    };
-    if (!statedWidth(*lhs) || !statedWidth(*rhs)) {
         return;
     }
     throw std::invalid_argument(

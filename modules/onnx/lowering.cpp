@@ -5,9 +5,10 @@
  * The ONNX lowering table for the tensor and nn operators (see lowering.h).
  *
  * Conventions shared by the entries:
- *   - Arithmetic operands are converted to the inferred result dtype, which
- *     reproduces Camel's promotion rules (ONNX requires equal input types).
- *   - Comparisons convert operands to their promoted dtype and yield bool.
+ *   - Arithmetic operands are emitted in the one element type the node computes in, the same
+ *     answer the operator's own inference gives (ONNX requires equal input types and Camel has
+ *     no implicit conversion between numeric types).
+ *   - Comparisons read their operands by that same rule and yield bool.
  *   - Hyper-parameters (axes, strides, shapes) must be export-time constants;
  *     they become node attributes or constant int64 initializers.
  */
@@ -166,10 +167,12 @@ std::string reduceAxes(
     Emitter &e, const std::string &op, const std::string &x, std::vector<int64_t> axes,
     bool keepDims);
 
-/// The element type an elementwise operator computes in, mirroring the kernels' `operandType`:
-/// one scalar takes the tensor's element type (a float scalar meeting an integer tensor computes
-/// in f32), and two tensors promote by widening. A bare `Tensor` operand has no facts and takes
-/// the graph's element type. The whole node is emitted in this one type, so ONNX never sees a
+/// The element type an elementwise operator computes in, the same answer the operator's own
+/// inference gives (elementwise_ops.cpp): one scalar operand is read at the tensor's element type
+/// (a float scalar beside an integer tensor computes in f32), and two data operands state the one
+/// element type the node computes in. Two of them that state different element types are the pair
+/// the arithmetic refuses, and the export refuses it here rather than emitting the conversion
+/// execution would not make. The whole node is emitted in this one type, so ONNX never sees a
 /// double constant beside a float tensor.
 std::optional<TypeCode> operandDtype(const LowerContext &ctx);
 
@@ -219,14 +222,11 @@ std::optional<TypeCode> operandDtype(const LowerContext &ctx) {
         }
         return TypeCode::Float32;
     }
-    // The operator this lowers refuses the two float widths before it answers a type
-    // (elementwise_ops.cpp). The lowering does not: a pass can build a node the declaration never
-    // saw - the train-step exports do, with an f32 weight beside an f64 value - and the runtime
-    // executes that node by promotion, so the lowering keeps answering the same promotion instead
-    // of refusing what execution would run. Making the two readers agree here turns those exports
-    // red, so the divergence is reported rather than forced.
-    if (auto promoted = tensor::ops::promote(left.dtype, right.dtype)) {
-        return promoted;
+    // Two data operands: the same refusal the operator's inference makes, so a node the arithmetic
+    // would refuse is refused here too instead of being exported as a conversion.
+    tensor::ops::refuseMixedElementTypes(left.dtype, right.dtype);
+    if (auto common = tensor::ops::commonElementType(left.dtype, right.dtype)) {
+        return common;
     }
     return ctx.elementDtype();
 }
@@ -1023,10 +1023,29 @@ LowerFn scalarOp(std::string opType, size_t operands) {
     };
 }
 
-/// Scalar comparisons: operands converted to their promoted dtype, bool result.
+/// The element type a scalar comparison reads its two operands in. A literal has no element type
+/// of its own: it takes the one the value it is compared with states (design principles 5.1, the
+/// literal rule), so `t[0] > 0.5` is a comparison in the tensor's element type. Two values that
+/// each state their own element type meet in no operator, and the export refuses that pair the
+/// way the operator's own inference does.
+std::optional<TypeCode> comparisonDtype(const LowerContext &ctx) {
+    const std::optional<TypeCode> left = ctx.facts(0).dtype, right = ctx.facts(1).dtype;
+    const bool leftLiteral  = ctx.arg(0).isConstant();
+    const bool rightLiteral = ctx.arg(1).isConstant();
+    if (leftLiteral != rightLiteral) {
+        return leftLiteral ? right : left;
+    }
+    tensor::ops::refuseMixedElementTypes(left, right);
+    if (auto common = tensor::ops::commonElementType(left, right)) {
+        return common;
+    }
+    return left ? left : right;
+}
+
+/// Scalar comparisons: the two operands are read in that one element type and the result is bool.
 LowerFn scalarCompare(std::string opType, bool negate) {
     return [opType = std::move(opType), negate](const LowerContext &ctx) {
-        auto dtype = tensor::ops::promote(ctx.facts(0).dtype, ctx.facts(1).dtype);
+        const std::optional<TypeCode> dtype = comparisonDtype(ctx);
         std::vector<std::string> inputs{ctx.input(0, dtype), ctx.input(1, dtype)};
         if (!negate) {
             return ctx.emitScalar(opType, std::move(inputs));

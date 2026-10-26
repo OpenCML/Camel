@@ -3,7 +3,7 @@
  * f32 to an f64 parameter, which is the mixed pair a tensor operator refuses (design principles
  * 5.1), so the program is refused when it is compiled and no export pass ever sees the node: the
  * lowering of that operator asks the same question as its declaration
- * (tensor::ops::refuseMixedFloatWidths), so a model cannot state a promotion the arithmetic does
+ * (tensor::ops::refuseMixedElementTypes), so a model cannot state a conversion the arithmetic does
  * not make. Red when the pair is accepted - the model would then carry a width the runtime does
  * not name.
  */
