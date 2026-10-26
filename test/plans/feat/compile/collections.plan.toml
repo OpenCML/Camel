@@ -1194,7 +1194,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::CollectionKeyNotAllowed"
 expect_diagnostic_line = 8
 expect_diagnostic_column = 36
-expect_output_contains = ["The type 'Boxed' cannot be a key of 'Map': its field 0 of variant 'Weight' of type 'float' cannot be a key", "[field 0 of variant 'Weight' is declared here at 7:35]", "tuples of those, and an enum every field of which is one of those"]
+expect_output_contains = ["The type 'Boxed' cannot be a key of 'Map': its field 0 of variant 'Weight' of type 'float' cannot be a key", "[field 0 of variant 'Weight' is declared here at 5:35]", "tuples of those, and an enum every field of which is one of those"]
 expect_output_not_contains = ["never printed"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 
@@ -1208,7 +1208,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::CollectionKeyNotAllowed"
 expect_diagnostic_line = 9
 expect_diagnostic_column = 27
-expect_output_contains = ["The type 'Rec' cannot be a key of 'Set': its field 0 of variant 'Point' of type 'Pair' cannot be a key: a struct is not a key type", "[field 0 of variant 'Point' is declared here at 8:30]"]
+expect_output_contains = ["The type 'Rec' cannot be a key of 'Set': its field 0 of variant 'Point' of type 'Pair' cannot be a key: a struct is not a key type", "[field 0 of variant 'Point' is declared here at 6:30]"]
 expect_output_not_contains = ["never printed"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 
@@ -1222,7 +1222,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::CollectionKeyNotAllowed"
 expect_diagnostic_line = 12
 expect_diagnostic_column = 19
-expect_output_contains = ["The type 'Boxed' cannot be a key of 'Set<Boxed>'", "[field 0 of variant 'Weight' is declared here at 7:35]"]
+expect_output_contains = ["The type 'Boxed' cannot be a key of 'Set<Boxed>'", "[field 0 of variant 'Weight' is declared here at 5:35]"]
 expect_output_not_contains = ["never printed"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 

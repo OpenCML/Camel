@@ -18,7 +18,7 @@ args = ["-E", "short", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stderr_contains = ["[Warn]: This 'throw' gives the value of the 'if' it is in, and nothing uses that value: it does not leave the function. [the value of this 'if' is not used at 12:5]", "This 'return' gives the value of the 'match' it is in", "[the value of this 'match' is not used at 24:5]", "name=SemanticDiag::ExitInUnusedBranch, code=0x03100090"]
+expect_stderr_contains = ["[Warn]: This 'throw' gives the value of the 'if' it is in, and nothing uses that value: it does not leave the function. [the value of this 'if' is not used at 11:5]", "This 'return' gives the value of the 'match' it is in", "[the value of this 'match' is not used at 23:5]", "name=SemanticDiag::ExitInUnusedBranch, code=0x03100090"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 verify_script = """
 ({ input, assert }) => {

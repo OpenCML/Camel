@@ -838,7 +838,7 @@ kind = "negative"
 case = "../../../cases/compile/generics/err_body.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "err_body.cml:2:16:", "in the instance 'double<int[]>' of the generic function 'double' with T = int[]", "instantiated by the call at 10:19"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "err_body.cml:2:16:", "in the instance 'double<int[]>' of the generic function 'double' with T = int[]", "instantiated by the call at 8:19"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
@@ -852,7 +852,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
 expect_diagnostic_line = 2
 expect_diagnostic_column = 5
-expect_output_contains = ["cannot be represented as type 'int': the value would be truncated", "in the instance 'zero_of<int>'", "instantiated by the call at 9:20"]
+expect_output_contains = ["cannot be represented as type 'int': the value would be truncated", "in the instance 'zero_of<int>'", "instantiated by the call at 7:20"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
