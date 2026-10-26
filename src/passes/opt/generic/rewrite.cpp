@@ -106,7 +106,7 @@ namespace {
 
 /// True for nodes that run in order with effects: calls, branches, effectful operators, and gates
 /// or joins that wait on something -- on a control input, or on the sync edge the chain of a `sync`
-/// block is written as (docs/design/effects/edges.cn.md 5.3; H242). The rule is the one
+/// block is written as (docs/design/effects/edges.cn.md 5.3). The rule is the one
 /// `src/runtime/writings.cpp` keeps for the rewrite engine, which asks the same question of a node
 /// it is about to replace.
 bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t id) {
@@ -152,7 +152,7 @@ std::vector<gc_node_ref_t> orderedSources(const GraphDraft &draft, gc_node_ref_t
         }
         // A pure node on a chain (a statement after an effect) runs after what its chain
         // predecessor runs after as well: the control inputs of the chain as it was written, and
-        // the sync predecessor of the chain of a `sync` block (H242).
+        // the sync predecessor of the chain of a `sync` block.
         for (auto inputs :
              {draft.normInputsOf(n), draft.withInputsOf(n), draft.ctrlInputsOf(n),
               draft.syncInputsOf(n)}) {

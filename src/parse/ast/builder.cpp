@@ -2619,8 +2619,8 @@ Value Builder::visitIndexValues(cst::IndexValues context) {
 
 /*
 pairedValues : keyValuePair (',' keyValuePair)* ;
-In a call's parentheses the list may also hold a positional argument written after a named one
-(handover H276): it is a StrayPositional, and the call refuses it. The named arguments are all
+In a call's parentheses the list may also hold a positional argument written after a named one:
+it is a StrayPositional, and the call refuses it. The named arguments are all
 this function returns.
 */
 Value Builder::visitPairedValues(cst::PairedValues context) {
@@ -2976,7 +2976,7 @@ staticForExpr
 staticForHeader
     : FOR '(' identDef (',' identDef)* ')' IN ('fields' typeExpr | 'indices' dataExpr)
     ;
-`indices` (H51 step 6) walks the positions of a tuple value; its operand is child 0 as an
+`indices` walks the positions of a tuple value; its operand is child 0 as an
 ordinary expression, where `fields` has a type there. The head may name up to three things --
 `fields`'s element is the triple (name, type, tags), every other element is one thing -- and
 whether the count fits is read from the element (`SemanticDiag::StaticHeadNameCount`).
@@ -3029,7 +3029,7 @@ staticLoopExpr
     ;
 The children of the node are described at StaticLoopLoad: a Repeated Data of the first values,
 the walked shape (a type for `fields`, a value for `indices` and for a sequence), and the body.
-The head's own production (H462) is `staticLoopHeader`: `for i in <序列>`, without the
+The head's own production is `staticLoopHeader`: `for i in <序列>`, without the
 parentheses `static for` still has.
 */
 Value Builder::visitStaticLoopExpr(cst::StaticLoopExpr context) {
@@ -4357,7 +4357,7 @@ node_ptr_t Builder::makeStaticAccess(
 /*
 structData
     : '{' (pairedValues ','?)? '}' // no list comprehension because the struct is immutable
-    | '{' staticForExpr '}'        // a struct comprehension (H51 step 4)
+    | '{' staticForExpr '}'        // a struct comprehension
     ;
 */
 Value Builder::visitStructData(cst::StructData context) {
@@ -4432,7 +4432,7 @@ Value Builder::visitArrayData(cst::ArrayData context) {
 /*
 tupleData
     : '(' dataList? ','? ')'
-    | '(' staticForExpr ')'        // a tuple comprehension (H51 step 4)
+    | '(' staticForExpr ')'        // a tuple comprehension
     ;
 */
 Value Builder::visitTupleData(cst::TupleData context) {

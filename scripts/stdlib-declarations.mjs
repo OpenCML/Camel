@@ -840,7 +840,7 @@ function staticChecks() {
             problems.push(
                 `${where.file}:${where.line}: the computed signature '${name}' of '${module.name}' is recorded inline as ` +
                     `'// dynamic func'${also ? ` and in ${also.file}:${also.line}` : ''}; a computed name has exactly one ` +
-                    `place: stdlib/signatures/${module.name}.cml, named by the MODULES entry's computed: field (handover H180)`,
+                    `place: stdlib/signatures/${module.name}.cml, named by the MODULES entry's computed: field`,
             )
         }
         // The pointer must agree with the file: a module whose MODULES entry names a computed
@@ -944,7 +944,7 @@ function staticChecks() {
                     problems.push(
                         `${loop.file}:${loop.line}: the loop over the operator registry does not export the ` +
                             `type-qualified alias of a name; a module that publishes 'Type.name' must publish it ` +
-                            `for every operator (handover H151)`,
+                            `for every operator`,
                     )
                 }
                 if (!loop.skipsDeclared) {

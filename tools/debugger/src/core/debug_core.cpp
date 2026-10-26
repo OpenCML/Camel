@@ -476,7 +476,7 @@ void DebugCore::passStarting(bool schedules, GCGraph *) {
     // A rewrite or translation pass may run graphs of its own for its work (the rules library
     // behind `std::opt`, the function of a macro). Those are the compiler's, not the program's
     // run: while one is in progress no frame is kept and the run is not indexed, so breakpoints
-    // are still resolved against the program the pipeline is about to run (H150). A scheduling
+    // are still resolved against the program the pipeline is about to run. A scheduling
     // pass is the run itself: the first frame it reports indexes the program it was given.
     observingRun_ = schedules;
     if (schedules) {
@@ -544,7 +544,7 @@ void DebugCore::beforeNode(
     // A pass may run graphs of its own for its work (`std::opt`'s rules library, the function of
     // a macro). The program being debugged runs only in a scheduling pass; indexing or keeping
     // a frame of that other execution would describe the session as that program and report
-    // every breakpoint of the user's file as gone (H150).
+    // every breakpoint of the user's file as gone.
     if (!observingRun_) {
         return;
     }
@@ -817,7 +817,7 @@ json DebugCore::fusionDetails(
 
 void DebugCore::faultRaised(const camel::core::error::RuntimeFault &fault, bool isolated) {
     // A condition `why_not` runs, or any other nested graph of an evaluation, is not the program:
-    // its fault is reported by the call that made it, not as a stop of the session (H150).
+    // its fault is reported by the call that made it, not as a stop of the session.
     if (!observingRun_) {
         return;
     }

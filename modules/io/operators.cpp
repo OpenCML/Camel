@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The terminal, which is what `io` is for until `Stream` exists (H19 question 5): what it has
+ * The terminal, which is what `io` is for until `Stream` exists: what it has
  * waiting to be read, the keys themselves, and raw mode. The standard streams and
  * `print`/`println`/`input`/`eprintln` are the prelude's operators, not this module's.
  */

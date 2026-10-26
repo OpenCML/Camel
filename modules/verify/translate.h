@@ -3,8 +3,8 @@
 
 /**
  * @file translate.h
- * @brief The translation layer of the rule verifier (H247, slice S1): a rule's two sides as logic
- * terms, and the declaration of what it covers.
+ * @brief The translation layer of the rule verifier (docs/design/rewrite/plan-verification.cn.md,
+ * S1): a rule's two sides as logic terms, and the declaration of what it covers.
  *
  * Rewrite design 8.1 splits the field in two: what a translation covers, and what it does not. A
  * rule the layer cannot translate is refused **with a reason** -- the layer never guesses and never

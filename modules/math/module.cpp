@@ -49,8 +49,8 @@ void sqrtVjp(camel::core::VjpBuilder &builder, const camel::core::VjpCall &call)
 
 MathModule::MathModule(context_ptr_t ctx) : BuiltinModule("math", ctx) {
     // Every signature is a declaration of `stdlib/math.cml`: the fixed ones and the ones whose
-    // result type C++ computed before (`sqrt`, `shl`, `shr`, written out per spelling; handover
-    // H202). The C++ side keeps the kernels, the executor, the operator traits, the numeric
+    // result type C++ computed before (`sqrt`, `shl`, `shr`, written out per spelling). The C++
+    // side keeps the kernels, the executor, the operator traits, the numeric
     // semantics and the values.
     // The constants are values (design principles 10.1): `math::pi`, written without
     // parentheses, is the constant itself where it is used. (They were functions of no
