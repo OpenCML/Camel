@@ -3,7 +3,7 @@
 24c01e4ed5e664d0 ok test/cases/parse/constructs/constas.cml
 f8fbb115949675ad ok test/cases/parse/constructs/constas_param.cml
 a92cd5d813f4a125 ok test/cases/parse/constructs/enum.cml
-c8b0fd90f4375e2e ok test/cases/parse/constructs/fact.cml
+923c38ebe821fa17 ok test/cases/parse/constructs/fact.cml
 fdacf4c225920fb2 ok test/cases/parse/constructs/fstring.cml
 1d77ce0fdbb60066 ok test/cases/parse/constructs/literals.cml
 7197f493107101b4 ok test/cases/parse/constructs/match_guard.cml
@@ -16,12 +16,12 @@ f0eabb47cb834d3d ok test/cases/parse/constructs/tags.cml
 2fe3134d6fc3e87e no test/cases/parse/numbers/leading_zero.cml
 bb3a3b0b4dee2801 no test/cases/parse/numbers/member_index_exponent.cml
 f25d7a4731924b3a ok test/cases/parse/numbers/tokens.cml
-17b0db88fe157ccb ok test/cases/parse/rules/declared.cml
+f2402763cee2b802 ok test/cases/parse/rules/declared.cml
 f08458d0aadece4e ok test/cases/parse/rules/generic_head.cml
 986de2c0389836aa ok test/cases/parse/rules/names.cml
 8d4b9fdeddebfcfd no test/cases/parse/rules/no_arrow.cml
 0d00884ee897eb3b no test/cases/parse/rules/no_context.cml
-32d4415bba3e4a8c ok test/cases/parse/rules/values.cml
+286337e9858a3f63 ok test/cases/parse/rules/values.cml
 fb04505767c1cb83 no test/cases/parse/rules/when_after_body.cml
 05dc986d26c5c8b2 ok test/cases/parse/rulings/doc_comment.cml
 40ed85c8acdca49e ok test/cases/parse/rulings/eager_logic.cml
