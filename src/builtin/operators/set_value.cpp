@@ -68,7 +68,7 @@ class SetFieldTypeResolver final : public FuncTypeResolver {
   private:
     std::optional<FunctionType *> decide(
         const type_vec_t &with, const type_vec_t &norm, static_args_t statics,
-        const ModifierSet &modifiers) const {
+        const ModifierSet &) const {
         if (!with.empty() || norm.size() != 3 || norm[0] == nullptr || norm[1] == nullptr ||
             norm[1]->code() != TypeCode::Int64) {
             return std::nullopt;
@@ -97,7 +97,8 @@ class SetFieldTypeResolver final : public FuncTypeResolver {
             return std::nullopt;
         }
         FunctionTypeFactory factory;
-        factory.setModifiers(modifiers);
+        // A type carries no modifiers (`sync`, `macro`): one identity per type, so the signature
+        // built here has none, and the call's own node keeps what it was written with.
         factory.setExitType(result);
         for (size_t i = 0; i < norm.size(); ++i) {
             factory.addNormArg(std::format("__n{}", i), norm[i], false);
