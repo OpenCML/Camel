@@ -82,6 +82,35 @@ args = ["-E", "short", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "3\n"
 
+# The same rule where it was seen first, on the Python boundary: a package's `python_boundary.py`
+# beside `python_boundary.cml` was read as the Camel module `python_boundary`, and the run reported
+# a syntax error from the Python file's own copyright line rather than running the program
+# (`python_boundary.py:2:17 error[SyntaxDiag::UnexpectedToken]: Unexpected 'the'; expected 'func'`,
+# from the Python binding's `load`, which resolves the module name in the file's directory). A `.py`
+# file with a `.cml`'s stem is the extreme case of "any same-stem file": it is not merely a wrong
+# module, it is a file of another language.
+
+[[tests]]
+name = "python_file_beside_the_cml_is_not_the_module"
+desc = "`thing.cml` (3) and `thing.py` beside the program: the `.cml` is the module `thing`, so the program prints 3. Which file the name resolves to does not depend on the order the directory lists it in, and a Python file is never read as Camel source."
+kind = "behavior"
+case = "../../../cases/modules/module_resolution/only_cml_and_cmo/py_beside_cml/main.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_exact = "3\n"
+expect_output_not_contains = ["SyntaxDiag::UnexpectedToken", "thing.py"]
+
+[[tests]]
+name = "python_file_alone_is_not_a_module_file"
+desc = "`thing.py` and no `thing.cml`: only `.cml` and `.cmo` name a module file, so the import is ModuleNotFound and the reason names the two file names. The Python file is not read as source: a lookup that accepted it reported a syntax error inside it instead."
+kind = "negative"
+case = "../../../cases/modules/module_resolution/only_cml_and_cmo/py_only/main.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_stdout_exact = ""
+expect_output_contains = ["Module 'thing' not found", "name=SemanticDiag::ModuleNotFound", "no file 'thing.cml' or 'thing.cmo'"]
+expect_output_not_contains = ["SyntaxDiag::UnexpectedToken", "thing.py"]
+
 # The other half of the pair: `.cmo` and `.cml` of one name, and the `.cmo` is what the name
 # stands for (the `.cml` beside it is its declaration module, design principles 6.4).
 
