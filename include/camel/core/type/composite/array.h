@@ -113,12 +113,6 @@ class ArrayType : public CompositeType {
     /// spelling a bare `..` produces).
     static ArrayType *openRank(Type *elemType, std::span<const ExtentForm> prefix = {});
 
-    /// The object a name that still has to be given an element type is bound to (`Tensor`, before
-    /// its arguments are applied): the open-rank array whose element type nobody stated. It
-    /// denotes no value — the element type of a value is always in its type — and `applyArguments`
-    /// is what turns it into one (docs/design/arrays-memory/plan.cn.md section 5.1a).
-    static ArrayType *elementTypeOpen();
-
     /// create() with the factory's element type.
     static ArrayType *fromFactory(ArrayTypeFactory &factory);
 
@@ -156,11 +150,6 @@ class ArrayType : public CompositeType {
     std::string shapeMangle() const;
 
     virtual Type *resolve(const type_vec_t &typeList) const override;
-    /// `f32[..]`, `f32[2, 3]`, `T[n, 784]`: the array a name that requires
-    /// an element type is applied to (docs/design/arrays-memory/plan.cn.md section 5.1a), so the
-    /// two spellings of one type are one type and `Name<args...>` needs no second path.
-    virtual const Type *
-    applyArguments(std::span<const TypeArgument> arguments, std::string &error) const override;
     virtual bool resolved() const override;
     virtual std::string toString() const override;
     virtual std::string mangle() const override;
@@ -214,10 +203,12 @@ bool isNumericArrayType(const Type *type);
 /// principles 5.1, 5.2).
 bool isUntypedArrayType(const Type *type);
 
-/// True for the object a name that requires an element type is bound to (`ArrayType::elementTypeOpen()`):
-/// the open-rank array whose element type nobody stated. It is the one untyped array that is not
-/// the literal's (the literal states one unknown dimension, not an open rank), so it is what a
-/// spelling that leaves the element type out holds.
-bool isElementTypeOpenArray(const Type *type);
+/// True for an open-rank array whose element type nobody stated: `Void[..]`. A program writes an
+/// open rank only with an element type (`f32[..]`), and the empty literal leaves one unknown
+/// dimension rather than an open rank, so this type arises where a type variable is bound to
+/// `Void` (`func f::<T>(x: T[..])` at a call whose argument is the empty literal). No value has
+/// it — the element type of a value is always in its type — so nothing is assignable to it and
+/// nothing converts into it.
+bool isElementTypeUnstatedOpenArray(const Type *type);
 
 } // namespace camel::core::type
