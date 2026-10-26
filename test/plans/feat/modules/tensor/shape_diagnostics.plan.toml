@@ -246,15 +246,15 @@ timeout_ms = 10000
 
 [[tests]]
 name = "slice"
-desc = "A static shape conflict in `slice` fails compilation at the call, naming both shapes."
+desc = "An axis a rank-2 tensor does not have fails the call: the core's slice node refuses the axis with the range the value has."
 kind = "negative"
 case = "../../../../cases/modules/tensor/shape_diagnostics/slice.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
 expect_diagnostic_line = 10
-expect_diagnostic_column = 18
-expect_output_contains = ["axis 3 is out of range for a rank-2 tensor"]
+expect_diagnostic_column = 13
+expect_output_contains = ["a slice axis must be between 0 and 1, not 3"]
 expect_output_not_contains = ["unreachable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000

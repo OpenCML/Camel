@@ -144,7 +144,7 @@ ELEMENTWISE = {"tensor:multiply", "tensor:divide", "tensor:add", "tensor:neg", "
 REDUCE = {"tensor:sum_to", "tensor:mean_axis", "tensor:sum", "tensor:sum_axis"}
 LAYOUT = {"tensor:expand_axis", "tensor:permute", "tensor:permute_inverse", "tensor:transpose",
           "tensor:reshape", "tensor:broadcast_like", "tensor:one_hot", "tensor:shape",
-          "tensor:dim", "tensor:numel", "tensor:slice", "tensor:argmax_axis"}
+          "tensor:dim", "tensor:numel", ":op/slice_sub", "tensor:argmax_axis"}
 MATMUL_URIS = {"tensor:matmul", "tensor:matmul_grad_lhs", "tensor:matmul_grad_rhs"}
 
 # The products one step issues, by shape, with how many of each; the keys are the probe's names

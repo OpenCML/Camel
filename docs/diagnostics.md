@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-284 diagnostics: 267 errors, 17 warnings. 15 carry a machine-applicable edit, 269 say why they carry none.
+283 diagnostics: 266 errors, 17 warnings. 15 carry a machine-applicable edit, 268 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -235,7 +235,6 @@ prints one entry.
 | `0x030001E2` | [SemanticDiag::CompOperandNotUnary](#compoperandnotunary) | Error | no |
 | `0x030001E3` | [SemanticDiag::StreamInContainer](#streamincontainer) | Error | no |
 | `0x030001E4` | [SemanticDiag::CompOperandGenericWithoutType](#compoperandgenericwithouttype) | Error | no |
-| `0x030001E5` | [SemanticDiag::RangeTwoArgumentsRemoved](#rangetwoargumentsremoved) | Error | no |
 | `0x030001E6` | [SemanticDiag::RangeStepZero](#rangestepzero) | Error | no |
 | `0x030001E7` | [SemanticDiag::StaticLoopSequenceNotKnown](#staticloopsequencenotknown) | Error | no |
 | `0x030001E8` | [SemanticDiag::RuleConstParamNotMatched](#ruleconstparamnotmatched) | Error | no |
@@ -7814,40 +7813,6 @@ func main(): int sync {
     let composed = ident..ident
     println(composed(4))
     return 0
-}
-```
-
-### RangeTwoArgumentsRemoved
-
-`0x030001E5` · Error · `SemanticDiag::RangeTwoArgumentsRemoved`
-
-**Fix**
-
-None: internal: the interval this refusal asks for is a text the compiler could write itself, and it does not offer that edit yet
-
-**Message**
-
-```text
-The two-parameter 'range(a, b)' is gone; write the interval 'a..b'.
-```
-
-**Help**
-
-```text
-The language has one spelling for the integers from 'a' to 'b - 1' (design principles 4.2; the author's ruling of 2026-10-24 on `h248-generator-and-composition`): the interval 'a..b', left closed and right open, as the slice 't[a:b]' is, and the array of them. 'range(0, 10)' becomes '0..10'. A 'for' over an interval is fused by the compiler, so 'for i in 0..n' builds no array. The two-parameter 'range' is the only spelling deleted: a module's own interval-like function (a tensor's, say) is that module's own, reached by its qualified name or at another arity, while an unqualified two-argument 'range(a, b)' is this built-in.
-```
-
-**Example** (`test/cases/compile/static_expansion/static_loop_sequence_range_two.cml`, run as `camel test/cases/compile/static_expansion/static_loop_sequence_range_two.cml`)
-
-```camel
-module static_loop_sequence_range_two
-
-func sum(): int {
-    return static loop acc = 0 for i in range(0, 3) do acc + i
-}
-
-func main(): int {
-    return sum()
 }
 ```
 

@@ -2501,18 +2501,16 @@ std::make_shared<StaticCheckedResolver>(
                 {
                     ":struct/range",
                     DynamicFuncTypeResolver::create(
-                        {{0, {}}, {-1, {}}},
+                        {{0, {}}, {3, {false, false, false}}},
                         "(start: int, end: int, step: int) => int[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
-                            // `range(a, b)` is the interval of the integers from `a` to `b - 1`
-                            // and `range(a, b, step)` is the same sequence with a step, as the
-                            // language's `a..b` is the one without one (design principles 4.2;
-                            // One rule for the two spellings:
-                            // a second rule of the same URI would leave the table (which holds
-                            // one resolver per URI) with the last one only, so every re-typing of
-                            // the call would read the other spelling's arity.
-                            if (norm.size() != 2 && norm.size() != 3) {
+                            // `range(a, b, step)` is the integers `a`, `a + step`, ... below `b`; the interval
+                            // `a..b` is the step-1 case of it and lowers to exactly this call, `range(a, b, 1)`
+                            // (design principles 4.2). The two-argument spelling is gone, and the count below is
+                            // exactly three, so `range(a, b)` -- and any other arity -- is an ordinary no-match;
+                            // the interval keeps writing the step out so that this stays the only rule of the URI.
+                            if (norm.size() != 3) {
                                 return nullopt;
                             }
                             for (Type *type : norm) {

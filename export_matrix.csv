@@ -4,6 +4,7 @@ operator,forward_lowering_min_opset,gradient_lowering_min_opset
 :op/not,1,
 :op/or,1,
 :op/slice_sub,10,
+:tangent/scatter_slice_arr,10,
 autodiff:stop_gradient,,1
 math:sqrt,1,
 nn:adam,,7
@@ -99,7 +100,6 @@ tensor:set_num_threads,,
 tensor:shape,1,
 tensor:show,,
 tensor:sigmoid,1,
-tensor:slice,10,
 tensor:slice_grad,,11
 tensor:softmax,13,
 tensor:softmax_grad,,13

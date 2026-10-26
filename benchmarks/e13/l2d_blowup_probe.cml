@@ -13,7 +13,7 @@
  */
 module e13_l2d_blowup_probe
 
-import { sigmoid, tanh, slice, reshape, shape, zeros, mean, abs } from tensor
+import { sigmoid, tanh, reshape, shape, zeros, mean, abs } from tensor
 import { get_env } from env
 import { export_model } from onnx
 

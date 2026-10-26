@@ -1501,14 +1501,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::RangeTwoArgumentsRemoved,
-            {
-                "RangeTwoArgumentsRemoved",
-                "The two-parameter 'range(a, b)' is gone; write the interval 'a..b'.",
-                "The language has one spelling for the integers from 'a' to 'b - 1' (design principles 4.2; the author's ruling of 2026-10-24 on `h248-generator-and-composition`): the interval 'a..b', left closed and right open, as the slice 't[a:b]' is, and the array of them. 'range(0, 10)' becomes '0..10'. A 'for' over an interval is fused by the compiler, so 'for i in 0..n' builds no array. The two-parameter 'range' is the only spelling deleted: a module's own interval-like function (a tensor's, say) is that module's own, reached by its qualified name or at another arity, while an unqualified two-argument 'range(a, b)' is this built-in.",
-            },
-        },
-        {
             SemanticDiag::RangeStepZero,
             {
                 "RangeStepZero",
