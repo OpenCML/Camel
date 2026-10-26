@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-283 diagnostics: 266 errors, 17 warnings. 15 carry a machine-applicable edit, 268 say why they carry none.
+284 diagnostics: 267 errors, 17 warnings. 15 carry a machine-applicable edit, 269 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -235,6 +235,7 @@ prints one entry.
 | `0x030001E2` | [SemanticDiag::CompOperandNotUnary](#compoperandnotunary) | Error | no |
 | `0x030001E3` | [SemanticDiag::StreamInContainer](#streamincontainer) | Error | no |
 | `0x030001E4` | [SemanticDiag::CompOperandGenericWithoutType](#compoperandgenericwithouttype) | Error | no |
+| `0x030001E5` | [SemanticDiag::StreamConsumedTwice](#streamconsumedtwice) | Error | no |
 | `0x030001E6` | [SemanticDiag::RangeStepZero](#rangestepzero) | Error | no |
 | `0x030001E7` | [SemanticDiag::StaticLoopSequenceNotKnown](#staticloopsequencenotknown) | Error | no |
 | `0x030001E8` | [SemanticDiag::RuleConstParamNotMatched](#ruleconstparamnotmatched) | Error | no |
@@ -7815,6 +7816,28 @@ func main(): int sync {
     return 0
 }
 ```
+
+### StreamConsumedTwice
+
+`0x030001E5` · Error · `SemanticDiag::StreamConsumedTwice`
+
+**Fix**
+
+None: choice: a stream has one consumer on each path, so which place reads it and where the streams of tee go are the writer's to write
+
+**Message**
+
+```text
+'{0}' is consumed twice: a stream is read once on each execution path.
+```
+
+**Help**
+
+```text
+A stream is read one element at a time and is done when it ends, so on each execution path its value has one consumer (design principles 5.4). The second consumer is here and the first is here. To read one stream from two places, write `tee(s, n)`: it gives two streams, each read once, and both see the same elements.
+```
+
+*No example: no test small enough to show raises it.*
 
 ### RangeStepZero
 

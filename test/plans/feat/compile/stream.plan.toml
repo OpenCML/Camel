@@ -760,3 +760,29 @@ expect_exit = 0
 expect_stdout_exact = "ten\nread 10\nread 9\nread 8\nread 7\nread 6\nread 5\nread 4\nread 3\nread 2\nread 1\n10\ntwo\nread 3\nread 2\n2\ntotal\nread 3\nread 2\nread 1\nread 0\n6\ndone\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
+[[tests]]
+name = "stream.consumed_twice"
+desc = "A stream is read once on each execution path (design principles 5.4). A `for` over `s` is one consumer and a pull of `s` is another, so the pull is refused with the two places named and `tee(s, n)` written out as the way to read one stream from two places."
+kind = "negative"
+case = "../../../cases/compile/stream/consumed_twice.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StreamConsumedTwice"
+expect_diagnostic_code = "0x030001E5"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 29
+expect_output_contains = ["consumed twice", "the stream is consumed here first", "tee(s, n)"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.arms_consume_once"
+desc = "Two arms of one branch each consume the same stream once: only one arm runs on a path, so this is one consumer and compiles (design principles 5.4). Covers both ways a stream is consumed, a pull and a `for`."
+kind = "behavior"
+case = "../../../cases/compile/stream/arms_consume_once.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "3\n3\n3\n3\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000

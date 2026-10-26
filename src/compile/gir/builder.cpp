@@ -377,6 +377,11 @@ void Builder::enterGraphScope(const compile_graph_ptr_t &graph, const std::strin
 }
 
 void Builder::leaveScope() {
+    // A stream is read once on each execution path (design principles 5.4). The arms of this graph
+    // are complete here, so its consumers of one stream can be told apart from one another.
+    if (currGraph_ != nullptr) {
+        checkStreamConsumption(currGraph_.get());
+    }
     // The body of this graph is complete, so its captures and its calls are known: a `var` of it
     // that no closure captured, no call was handed and that is not its own parameter becomes SSA
     // here (collapseNonEscapingVariableReads).

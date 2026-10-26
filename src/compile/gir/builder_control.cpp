@@ -2501,6 +2501,9 @@ node_handle_t Builder::buildBranch(
 
     linkNodes(LinkType::Norm, brchNode, joinNode);
     linkArmEntries(armList, brchNode);
+    // The arms of this branch exclude each other: a stream consumed in one of them is not
+    // consumed twice by a use in another (design principles 5.4).
+    noteArmGroup(armList);
 
     // The branch is the user of the variables its arms used, and the writer of those they
     // wrote. It begins at BRCH and is complete at JOIN.
@@ -3493,6 +3496,9 @@ node_handle_t Builder::buildStreamLoop(
     FunctionType *stepType = stream->stepType();
     Type *pullType         = stepType->exitType();
     Type *elementType      = stream->elemType();
+    // A `for` over a stream is one consumer of it (design principles 5.4: a stream is read once on
+    // each execution path).
+    consumeStream(sequence, gct);
 
     // The names of the machine's parts. They are no names a program writes -- the names of the
     // head are the states and the element -- and the parts read the round through them.
@@ -3796,6 +3802,80 @@ node_handle_t Builder::buildStreamLoop(
         registerNodeOrigin(context_, loopValue, gct, "gir.loop.value");
     }
     return loopValue;
+}
+
+void Builder::noteArmGroup(const std::vector<arm_ptr_t> &arms) {
+    // One arm excludes nothing: an `if` without `else` has a path where no arm ran and the value
+    // passed on, so only two arms or more say which uses cannot both happen.
+    if (arms.size() < 2 || currGraph_ == nullptr) {
+        return;
+    }
+    std::vector<uint32_t> regions;
+    regions.reserve(arms.size());
+    for (const arm_ptr_t &arm : arms) {
+        regions.push_back(arm->region);
+    }
+    armGroups_.emplace_back(currGraph_.get(), std::move(regions));
+}
+
+void Builder::consumeStream(node_handle_t value, const GCT::node_ptr_t &at) {
+    if (value == nullptr || currGraph_ == nullptr || at == nullptr) {
+        return;
+    }
+    std::vector<uint32_t> arms;
+    arms.reserve(armStack_.size());
+    for (ArmBuild *arm : armStack_) {
+        arms.push_back(arm->region);
+    }
+    streamConsumptions_.push_back({currGraph_.get(), value, std::move(arms), at->origin()});
+}
+
+void Builder::checkStreamConsumption(DraftGraphBuilder *graph) {
+    // Two uses of one stream are one consumer when one of them stands in an arm the other does
+    // not: only one arm of a branch runs, so the two uses cannot both happen on one path. The arms
+    // of a branch are complete only once it is, and the uses stand in the arms while those are
+    // built, so this runs where the graph is complete.
+    const auto apart = [&](const StreamConsumption &left, const StreamConsumption &right) {
+        for (const auto &group : armGroups_) {
+            if (group.first != graph) {
+                continue;
+            }
+            const auto regionOf = [&](const std::vector<uint32_t> &use) -> uint32_t {
+                for (uint32_t region : use) {
+                    if (std::find(group.second.begin(), group.second.end(), region) !=
+                        group.second.end()) {
+                        return region;
+                    }
+                }
+                return 0;
+            };
+            const uint32_t mine   = regionOf(left.arms);
+            const uint32_t theirs = regionOf(right.arms);
+            if (mine != 0 && theirs != 0 && mine != theirs) {
+                return true;
+            }
+        }
+        return false;
+    };
+    for (size_t i = 0; i < streamConsumptions_.size(); ++i) {
+        const StreamConsumption &first = streamConsumptions_[i];
+        if (first.graph != graph) {
+            continue;
+        }
+        for (size_t j = i + 1; j < streamConsumptions_.size(); ++j) {
+            const StreamConsumption &second = streamConsumptions_[j];
+            if (second.graph != graph || second.value != first.value || apart(first, second)) {
+                continue;
+            }
+            // The later use is the second consumer, and the first is where the stream was read.
+            Type *valueType = valueTypeOf(nodeTypeOf(second.value));
+            diags_->of(SemanticDiag::StreamConsumedTwice)
+                .atOrigin(second.origin)
+                .relatedOrigin(first.origin, "the stream is consumed here first")
+                .commit(valueType != nullptr ? valueType->toString() : std::string("a stream"));
+            throw BuildAbortException();
+        }
+    }
 }
 
 node_handle_t Builder::visitAnnoNode(const GCT::node_ptr_t &gct) {
