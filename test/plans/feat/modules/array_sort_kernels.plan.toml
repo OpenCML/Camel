@@ -78,7 +78,7 @@ expect_exit = 1
 # The name and the code are asserted as text, as the other `NoMatchingFunction` tests do: the
 # message carries the overload list, so the one-line form the diagnostic assertions parse is not
 # the line the annotation lands on.
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "array_sort_no_declaration.cml:19:17", "(bool[])", "<array:sort_i>: (xs: i32[]) => i32[]", "<array:sort_l>: (xs: int[]) => int[]", "<array:sort_f>: (xs: f32[]) => f32[]", "<array:sort_d>: (xs: float[]) => float[]"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "array_sort_no_declaration.cml:18:17", "(bool[])", "<array:sort_i>: (xs: i32[]) => i32[]", "<array:sort_l>: (xs: int[]) => int[]", "<array:sort_f>: (xs: f32[]) => f32[]", "<array:sort_d>: (xs: float[]) => float[]"]
 timeout_ms = 20000
 
 # ---- the spellings the family does not use are refused by name ----
@@ -92,7 +92,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::WhenDeclarationOverlap"
 expect_diagnostic_code = "0x030001E0"
-expect_output_contains = ["array_sort_kernel_overlap.cml:27:1", "Two declarations of 'sort_kernel' both apply to the type 'int'", "(xs: T[]) => T[] — when is_integer::<T>()", "(xs: T[]) => T[] — when is_ordered::<T>()"]
+expect_output_contains = ["array_sort_kernel_overlap.cml:26:1", "Two declarations of 'sort_kernel' both apply to the type 'int'", "(xs: T[]) => T[] — when is_integer::<T>()", "(xs: T[]) => T[] — when is_ordered::<T>()"]
 timeout_ms = 20000
 
 [[tests]]
@@ -104,5 +104,5 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::Redeclaration"
 expect_diagnostic_code = "0x03000001"
-expect_output_contains = ["array_sort_redeclaration.cml:15:1", "Redeclaration of reference: 'dup_sort'"]
+expect_output_contains = ["array_sort_redeclaration.cml:14:1", "Redeclaration of reference: 'dup_sort'"]
 timeout_ms = 20000

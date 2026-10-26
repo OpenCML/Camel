@@ -147,7 +147,7 @@ kind = "negative"
 case = "../../../cases/compile/numeric/invalid.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["The annotation '@kernelish' is not accepted", "invalid.cml:8:1", "The annotation '@numeric' is not accepted", "invalid.cml:11:1", "#[reassociate]"]
+expect_output_contains = ["The annotation '@kernelish' is not accepted", "invalid.cml:7:1", "The annotation '@numeric' is not accepted", "invalid.cml:10:1", "#[reassociate]"]
 
 [[tests]]
 name = "library_gemm"

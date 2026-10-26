@@ -39,7 +39,7 @@ kind = "negative"
 case = "../../../cases/modules/std/json/err_decode_as_shape.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["err_decode_as_shape.cml:7:28: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "<json:decode_as>: <shape: T> (text: string | Json) => T!"]
+expect_output_contains = ["err_decode_as_shape.cml:5:28: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "<json:decode_as>: <shape: T> (text: string | Json) => T!"]
 expect_output_not_contains = ["never printed"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
