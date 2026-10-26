@@ -283,7 +283,7 @@ camel docs/tutorial/examples/10_same_resource.cml
 
 ```cml
 // What a call touches: a resource of the module, a group of them, a handle type and `uses` on a
-// parameter. The bodies touch nothing -- a clause is a promise the compiler checks where it can.
+// parameter. The bodies touch nothing, so every clause here names exactly what its body reaches.
 // Run: camel docs/tutorial/examples/10_resources.cml
 
 resource db
@@ -354,6 +354,58 @@ camel docs/tutorial/examples/10_resources.cml
   算子的全部签名，资源也在里面。
 - 函数体超出了它自己的 `pure`/`uses` 承诺：`SemanticDiag::UsesPromiseViolated`——`uses` 是上界，`pure` 是空集，
   报在声明处，帮助指向第一个超出的使用点（`pure` 带 `var` 形参也在这里报：`var` 形参本身就是资源）。
+
+[`examples/10_uses_beyond.cml`](examples/10_uses_beyond.cml) 就是这样一处：子句写了 `db`，函数体却往标准输出打印。
+
+<!-- camel-snippet: counter-example: 这个程序故意不编译：函数体超出了子句，下面的 text 块是诊断，不是输出 -->
+
+```cml
+// A counter-example: `stamp` promises `db`, and its body writes the standard output, which the
+// clause does not name. The declaration is refused where it is written, and the resource it left
+// out is named.
+// Run: camel docs/tutorial/examples/10_uses_beyond.cml
+
+resource db
+
+func stamp(): int uses db sync {
+    println('x')
+    return 1
+}
+
+func main(): int sync {
+    println(stamp())
+    return 0
+}
+```
+
+```bash
+camel docs/tutorial/examples/10_uses_beyond.cml
+```
+
+```text
+error[SemanticDiag::UsesPromiseViolated]: '() => int uses db' does not keep its resource promise: an effect outside the program, stdout.
+   --> docs/tutorial/examples/10_uses_beyond.cml:8:1
+    |
+  8 | func stamp(): int uses db sync {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  9 |     println('x')
+    |     ^^^^^^^^^^^^
+ 10 |     return 1
+    | ^^^^^^^^
+ 11 | }
+    | ^
+note: the body reaches past the promise from here on: this is the first use the signature does not name
+   --> docs/tutorial/examples/10_uses_beyond.cml:9:5
+    |
+  9 |     println('x')
+    |     -------
+help: A signature is a promise the compiler checks against the resources the function uses. 'uses' is an upper bound, so every resource the body uses must be named there, and 'pure' promises the empty set; a 'var' parameter is a resource by itself, and so is a capture. Change the body so that it no longer reaches for it, or change the signature to name it. When the use is a call through a parameter of function type, what the call reaches is the instantiation's: write 'pure' on the parameter to promise the empty set, or write there the resources the values it takes reach.
+
+camel: 1 error
+```
+
+诊断说清三件事：**哪一个承诺**（`'() => int uses db'`）、**函数体多碰了什么**（`stdout`）、**是哪一次使用越过去的**
+（`note` 指向第一个子句没写到的使用点）。改法两种：让函数体不再碰它，或者把子句改到写得下它。
 
 ## `pure`：一个资源都不碰
 

@@ -301,7 +301,7 @@ records it in the function type it displays. This program puts the forms side by
 
 ```cml
 // What a call touches: a resource of the module, a group of them, a handle type and `uses` on a
-// parameter. The bodies touch nothing -- a clause is a promise the compiler checks where it can.
+// parameter. The bodies touch nothing, so every clause here names exactly what its body reaches.
 // Run: camel docs/tutorial/examples/10_resources.cml
 
 resource db
@@ -377,6 +377,60 @@ What a wrong clause looks like (all compile errors):
   and `pure` is the empty set; the error is at the declaration and the note points at the first use the signature does
   not promise (a `pure` signature with a `var` parameter is reported here too: a `var` parameter is a resource by
   itself).
+
+[`examples/10_uses_beyond.cml`](examples/10_uses_beyond.cml) is one such place: the clause writes `db` and the body
+writes the standard output.
+
+<!-- camel-snippet: counter-example: this program is meant not to compile: the body goes beyond the clause, so the text block below is the diagnostic, not output -->
+
+```cml
+// A counter-example: `stamp` promises `db`, and its body writes the standard output, which the
+// clause does not name. The declaration is refused where it is written, and the resource it left
+// out is named.
+// Run: camel docs/tutorial/examples/10_uses_beyond.cml
+
+resource db
+
+func stamp(): int uses db sync {
+    println('x')
+    return 1
+}
+
+func main(): int sync {
+    println(stamp())
+    return 0
+}
+```
+
+```bash
+camel docs/tutorial/examples/10_uses_beyond.cml
+```
+
+```text
+error[SemanticDiag::UsesPromiseViolated]: '() => int uses db' does not keep its resource promise: an effect outside the program, stdout.
+   --> docs/tutorial/examples/10_uses_beyond.cml:8:1
+    |
+  8 | func stamp(): int uses db sync {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  9 |     println('x')
+    |     ^^^^^^^^^^^^
+ 10 |     return 1
+    | ^^^^^^^^
+ 11 | }
+    | ^
+note: the body reaches past the promise from here on: this is the first use the signature does not name
+   --> docs/tutorial/examples/10_uses_beyond.cml:9:5
+    |
+  9 |     println('x')
+    |     -------
+help: A signature is a promise the compiler checks against the resources the function uses. 'uses' is an upper bound, so every resource the body uses must be named there, and 'pure' promises the empty set; a 'var' parameter is a resource by itself, and so is a capture. Change the body so that it no longer reaches for it, or change the signature to name it. When the use is a call through a parameter of function type, what the call reaches is the instantiation's: write 'pure' on the parameter to promise the empty set, or write there the resources the values it takes reach.
+
+camel: 1 error
+```
+
+The diagnostic says three things: **which promise** (`'() => int uses db'`), **what the body reached past it**
+(`stdout`), and **which use crossed it** (the `note` points at the first use the signature does not name). There are
+two repairs: the body stops reaching for it, or the clause is widened to name it.
 
 ## `pure`: touching no resource at all
 
