@@ -6547,23 +6547,14 @@ The 'with' argument '{0}' is given by name, and the signature of '{1}' is not kn
 Name the one function the binding is for, or give the 'with' arguments positionally.
 ```
 
-**Example** (`test/cases/compile/with_defaults/overload_default_hole.cml`, run as `camel test/cases/compile/with_defaults/overload_default_hole.cml`)
+**Example** (`test/cases/compile/with_defaults/callee_unknown.cml`, run as `camel test/cases/compile/with_defaults/callee_unknown.cml`)
 
 ```camel
-module with_overload_default_hole
-
-with <rounds: int = 8, label: string = 'x'>
-func show(a: int): int {
-    return a * rounds
-}
-
-with <rounds: int = 8, label: string = 'x'>
-func show(a: string): int {
-    return rounds
-}
+module with_defaults_callee_unknown
 
 func main(): int sync {
-    return show<label: 'p'>(3)
+    'a{}'->format<x: 1>->println
+    return 0
 }
 ```
 
