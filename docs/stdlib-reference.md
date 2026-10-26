@@ -2269,7 +2269,7 @@ instead of listing the types again, so a new integer width is added in one place
 `bf16` and `f16` are floating-point types (design principles 7.3): a tensor
 stores an element in one of them, every kernel computes in f32 and rounds once, and the
 language itself gives them what it gives `f32`: literals, a written conversion (`bf16(x)`,
-`f16(x)`, `x as bf16`), scalar arithmetic and comparison, and arrays of them. They belong to
+`f16(x)`), scalar arithmetic and comparison, and arrays of them. They belong to
 `is_float` and inherit `is_numeric` and `is_ordered` from it.
 
 #### `is_integer`

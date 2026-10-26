@@ -471,7 +471,6 @@ node_handle_t Builder::partialApplicationOf(
 
     // The function: the `with` parameters that are left, then the ordinary parameters.
     FunctionTypeFactory factory;
-    factory.setModifiers(calleeType->modifiers());
     factory.setExitType(calleeType->exitType());
     const size_t withCount = calleeType->withTypesCount();
     const auto nameAt      = [&](size_t argIndex, const char *prefix, size_t i) {
@@ -720,7 +719,6 @@ compile_graph_ptr_t Builder::forwardingGraphOf(const compile_graph_ptr_t &target
     // Its own type object (a graph completes its function type in place): the declared
     // parameters and result of the target, and no captures yet.
     FunctionTypeFactory factory;
-    factory.setModifiers(targetType->modifiers());
     factory.setExitType(targetType->exitType());
     const auto nameAt = [&](size_t argIndex, const char *prefix, size_t i) {
         return argIndex < targetType->argNamesCount() ? std::string(targetType->argNameAt(argIndex))

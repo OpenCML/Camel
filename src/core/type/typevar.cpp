@@ -183,7 +183,6 @@ FunctionTypeFactory rebuildFunctionType(
     FunctionType *func, const type_bindings_t &bindings, const ExtentValues *extents,
     bool dropConstas, bool &changed) {
     FunctionTypeFactory factory;
-    factory.setModifiers(func->modifiers());
     factory.setHasCompileInfo(func->hasArgNames());
     const auto replaced = [&](Type *type) {
         Type *result = substituteTypeVars(type, bindings);

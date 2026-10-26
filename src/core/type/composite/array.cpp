@@ -457,9 +457,9 @@ slot_t ArrayType::castSlotFrom(slot_t value, Type *sourceType) const {
     return value;
 }
 
-// Arrays have no element mutation, so they accept arrays of assignable element types
-// (e.g. `int[]` where `f64[]` is expected when an int is assignable to an f64) whose shape this
-// type permits.
+// Arrays have no element mutation, so they accept arrays of assignable element types (a refined
+// module type where its general form is expected; a number of one type is never assignable to
+// another, design principles 5.1) whose shape this type permits.
 bool ArrayType::assignableFrom(Type *sourceType) const {
     if (this == sourceType) {
         return true;

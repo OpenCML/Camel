@@ -98,7 +98,6 @@ class SetFieldTypeResolver final : public FuncTypeResolver {
             return std::nullopt;
         }
         FunctionTypeFactory factory;
-        factory.setModifiers(modifiers);
         factory.setExitType(result);
         for (size_t i = 0; i < norm.size(); ++i) {
             factory.addNormArg(std::format("__n{}", i), norm[i], false);

@@ -306,9 +306,11 @@ CastSafety TupleType::castSafetyFrom(Type *sourceType) const {
             return CastSafety::Safe;
         }
         if (TupleType *source = asTagged(sourceType)) {
-            // Retyping a failed `U!` as `T!` is the error arm of `?->` and the last step of
-            // `throw`: sound only where the compiler knows the value has failed, so it is
-            // not a conversion a program may write.
+            // The compiler retypes a value it knows has failed as another `T!` where an error
+            // is passed on (the error arm of a `match`, an error returned from a function): sound
+            // only there, so it is Unsafe, which the builder takes from the compiler's own casts
+            // and never from an `as` a program writes (builder_expr: only a module type or an
+            // array may be entered by an Unsafe conversion).
             return source->tag_ == tag_ && isFallible() ? CastSafety::Unsafe
                                                         : CastSafety::Forbidden;
         }
@@ -360,6 +362,43 @@ bool TupleType::assignableFrom(Type *sourceType) const {
         }
     }
     return true;
+}
+
+// Least common type at a branch join: tuples of the same form and size whose members have a
+// common type each are a tuple of those (`([1, 2], 0)` and `([1, 2, 3], 0)` are `(int[], int)`);
+// two `T?` give the nullable of their payloads' common type, two `T!` the fallible one. A
+// nullable and a fallible, a cell and a value, and tuples of other sizes have none.
+Type *TupleType::unify(Type *other) const {
+    if (other == nullptr || other->code() != TypeCode::Tuple) {
+        return nullptr;
+    }
+    const auto *rhs = static_cast<const TupleType *>(other);
+    if (size_ != rhs->size_ || cell_ != rhs->cell_ || tag_ != rhs->tag_) {
+        return nullptr;
+    }
+    if (equals(other)) {
+        return const_cast<TupleType *>(this);
+    }
+    if (cell_) {
+        // A cell is read and written through every reference: only the same content type.
+        return nullptr;
+    }
+    std::vector<Type *> members;
+    members.reserve(size_);
+    for (size_t i = 0; i < size_; ++i) {
+        if (typesPtr_[i] == nullptr || rhs->typesPtr_[i] == nullptr) {
+            return nullptr;
+        }
+        Type *member = typesPtr_[i]->unify(rhs->typesPtr_[i]);
+        if (member == nullptr) {
+            return nullptr;
+        }
+        members.push_back(member);
+    }
+    if (isTagged()) {
+        return isNullable() ? nullable(members[0]) : fallible(members[0]);
+    }
+    return create(members);
 }
 
 Type *TupleType::widened() const {

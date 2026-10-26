@@ -1210,8 +1210,7 @@ GCGraph *liftClosureGraph(RuntimeGraphDraftSession &session, GCGraph *base, size
         camel::core::type::FunctionType::create(
             withTypes,
             normTypes,
-            type->exitType(),
-            type->modifiers()));
+            type->exitType()));
     draft->setClosureType(nullptr);
     GCGraph *lifted = encodeSpecializedGraph(session, *draft, base, "lift", nonce);
     session.rememberSpecialization(std::move(key), lifted);
