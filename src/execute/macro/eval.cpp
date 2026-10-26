@@ -976,6 +976,20 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
                         runtimeNodeIndex);
                 },
                 false);
+            // What the call hands on: the result alone, or the tuple of it and the new version of
+            // each captured variable the callee wrote (its With inputs; GCFuncRef::reserved names
+            // them), which is what the ACCS nodes of the call read.
+            const uint32_t written = camel::runtime::funcWriteMaskOf(*runtimeGraph, runtimeNodeIndex);
+            if (written != 0) {
+                std::vector<slot_t> withValues;
+                const auto withInputs = runtimeGraph->withInputsOf(runtimeNodeIndex);
+                withValues.reserve(withInputs.size());
+                for (gc_node_ref_t input : withInputs) {
+                    withValues.push_back(frame->get<slot_t>(dataIndexOf(runtimeGraph, input)));
+                }
+                result = camel::execute::runtimeFuncValue(
+                    node->dataType(), calleeRuntimeGraph, written, withValues, result);
+            }
             frame->set(node->dataIndex, result);
         } break;
 
