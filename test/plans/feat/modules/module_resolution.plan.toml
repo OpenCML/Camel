@@ -1,0 +1,109 @@
+id = "modules.module_resolution"
+order = 379
+tier = "fast"
+tags = ["feat", "modules", "import", "resolution", "diagnostics"]
+desc = "One lookup for a module name: only `.cml` and `.cmo` are a module file, a file that was found is what the name stands for (a `.cmo` the loader refuses ends the import instead of the lookup going on to another candidate name), and the entry module is named by its file."
+
+# The lookup of a module name has one order (design principles 10.2): the importing module's own
+# directory, then the module roots (`-I` in the order given, `CAMEL_PACKAGES`), then the standard
+# library. What counts as a module file, and what a hit means, is asked once and not again per
+# candidate:
+#
+#   * only `.cml` and `.cmo` name a module file. Any same-stem file used to be taken as source
+#     (`D/xx.*`, in the order the directory listed them), so a `foo.md`, a `foo.txt` or an
+#     editor's leftover could be compiled as the module `foo`, or shadow the real `foo.cml`.
+#   * a `.cmo` that was found and refused by the loader (ABI mismatch, missing symbol, a missing
+#     dependency, or a file that is not a library at all) is a module that is there and cannot be
+#     used: the import fails with the loader's reason. The lookup used to `continue` to the next
+#     candidate name, so a program could silently get a module of another name, or a working file
+#     of the same name from a root further down.
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The `.cmo` fixtures stay text (a compiled object would quietly make the refused-load cases pass
+# on a real module): this runs before them and says so.
+
+[[tests]]
+name = "broken_cmo_fixtures_are_text"
+desc = "The two `.cmo` fixtures hold no NUL byte and are valid UTF-8: they are text the loader refuses, not a compiled module that happens to be there."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/modules/module_resolution/broken_cmo_is_text.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["cmo_hit_stops/level/foo.cmo is text", "only_cml_and_cmo/cmo_beside_cml/thing.cmo is text"]
+timeout_ms = 20000
+
+# `import foo` in `level/helper.cml` finds `level/foo.cmo` in the library's own directory and the
+# loader refuses it. The `-I` root holds `level/helper/foo.cml`, which is the candidate name
+# `level.helper.foo` (the importing module's name prefixed to the import). The import must fail at
+# the refused `.cmo`; a lookup that keeps going prints 7, the value of that other module.
+
+[[tests]]
+name = "cmo_hit_ends_the_import"
+desc = "A `.cmo` found in the importing module's own directory and refused by the loader ends the import: ModuleNotFound carries the loader's reason and the `.cmo` path, the candidate `level.helper.foo` (a working module under the `-I` root) is not tried, and the program does not run."
+kind = "negative"
+case = "../../../cases/modules/module_resolution/cmo_hit_stops/main.cml"
+args = ["-E", "short", "-I", "roots/one", "${case}"]
+expect_exit = 1
+expect_stdout_exact = ""
+expect_output_contains = ["Module 'foo' not found", "name=SemanticDiag::ModuleNotFound", "Found .cmo but load failed", "level/foo.cmo", "name=SemanticDiag::ImportedModuleHasErrors"]
+
+# `thing.md` and no `thing.cml`: a Markdown document is not a module file, whatever it holds.
+
+[[tests]]
+name = "markdown_is_not_a_module_file"
+desc = "`import thing` with `thing.md` beside the program and no `thing.cml`: ModuleNotFound, and the reason says which two file names name a module. The Markdown file is valid Camel text, so a lookup that accepted it would print 7."
+kind = "negative"
+case = "../../../cases/modules/module_resolution/only_cml_and_cmo/markdown_only/main.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_stdout_exact = ""
+expect_output_contains = ["Module 'thing' not found", "name=SemanticDiag::ModuleNotFound", "no file 'thing.cml' or 'thing.cmo'"]
+
+[[tests]]
+name = "text_file_is_not_a_module_file"
+desc = "The same for `thing.txt`: the extension is not `.cml` or `.cmo`, so the file is not the module and the program does not run."
+kind = "negative"
+case = "../../../cases/modules/module_resolution/only_cml_and_cmo/txt_only/main.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_stdout_exact = ""
+expect_output_contains = ["Module 'thing' not found", "no file 'thing.cml' or 'thing.cmo'"]
+
+[[tests]]
+name = "cml_wins_over_another_extension"
+desc = "`thing.cml` (3) and `thing.md` (300) beside the program: the `.cml` is the module, so the value does not depend on the order the directory is listed in."
+kind = "behavior"
+case = "../../../cases/modules/module_resolution/only_cml_and_cmo/md_and_cml/main.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_exact = "3\n"
+
+# The other half of the pair: `.cmo` and `.cml` of one name, and the `.cmo` is what the name
+# stands for (the `.cml` beside it is its declaration module, design principles 6.4).
+
+[[tests]]
+name = "cmo_beside_cml_is_the_module"
+desc = "`thing.cmo` (a file the loader refuses) and `thing.cml` (3) beside the program: the name resolves to the `.cmo`, so the import fails with the loader's reason and the `.cml` is not used instead."
+kind = "negative"
+case = "../../../cases/modules/module_resolution/only_cml_and_cmo/cmo_beside_cml/main.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_stdout_exact = ""
+expect_output_contains = ["Module 'thing' not found", "Found .cmo but load failed", "thing.cmo"]
+
+# A file is a module and the module's name is the file's name, for the entry file too (design
+# principles 10.2): `counts.cml` is the module `counts`, so `counts::twice` is that module's own
+# function. With the placeholder name `main` the qualified reference resolved to nothing.
+
+[[tests]]
+name = "entry_module_is_named_by_its_file"
+desc = "`counts.cml` writes `counts::twice(21)` and prints 42: the entry module's name is its file's name, so the module can qualify its own function, with no `module` declaration and no placeholder name."
+kind = "behavior"
+case = "../../../cases/modules/module_resolution/entry_name_is_file_name/counts.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_exact = "42\n"
