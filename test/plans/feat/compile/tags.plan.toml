@@ -30,19 +30,19 @@ verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
 for (const line of [
-  'main::kernel on nodes',
-  'main::fast on func, nodes',
-  'main::readable on func read_by std::opt',
-  'main::shape on type, field',
-  'main::width on type, field<w: int>',
-  'main::pure on  = [fast, readable]',
-  'main::finite on  = [kernel, fast]',
-  'Bits : main::width=32',
-  'Bits.0 : main::width=8',
-  'Square : main::shape',
-  'both : main::fast',
-  'grouped : main::fast, main::readable',
-  'stacked : main::fast',
+  'decl::kernel on nodes',
+  'decl::fast on func, nodes',
+  'decl::readable on func read_by std::opt',
+  'decl::shape on type, field',
+  'decl::width on type, field<w: int>',
+  'decl::pure on  = [fast, readable]',
+  'decl::finite on  = [kernel, fast]',
+  'Bits : decl::width=32',
+  'Bits.0 : decl::width=8',
+  'Square : decl::shape',
+  'both : decl::fast',
+  'grouped : decl::fast, decl::readable',
+  'stacked : decl::fast',
 ]) {
   assert(out.includes(line), `missing '${line}' in:\\n${out}`)
 }
@@ -68,12 +68,12 @@ const only = (line, value) => {
   assert(found.length > 0, `no OPER at line ${line}`)
   for (const l of found) assert(attrs(l) === value, `line ${line}: attrs="${attrs(l)}", expected "${value}": ${l}`)
 }
-only(10, 'main::scale=2')           // doubled: the tag before the function
-only(15, 'main::heavy')             // weighed: the nodes half of `on func, nodes`
-only(20, 'main::scale=3')           // main: the tag before the function
-only(23, 'main::plain, main::scale=3') // the block adds plain to the enclosing scale
-only(27, 'main::scale=5')           // the inner same-name tag wins
-assert(at(27).every((l) => !attrs(l).includes('main::plain')), 'the inner block does not carry the outer block')
+only(10, 'graph::scale=2')           // doubled: the tag before the function
+only(15, 'graph::heavy')             // weighed: the nodes half of `on func, nodes`
+only(20, 'graph::scale=3')           // main: the tag before the function
+only(23, 'graph::plain, graph::scale=3') // the block adds plain to the enclosing scale
+only(27, 'graph::scale=5')           // the inner same-name tag wins
+assert(at(27).every((l) => !attrs(l).includes('graph::plain')), 'the inner block does not carry the outer block')
 }
 """
 
@@ -95,7 +95,7 @@ kind = "behavior"
 case = "../../../cases/compile/tags/decl.cml"
 args = ["${case}"]
 expect_exit = 7
-expect_output_contains = ["SemanticDiag::TagHasNoReader", "The tag 'main::readable' is written, but none of the passes it names (std::opt) is in the pipeline."]
+expect_output_contains = ["SemanticDiag::TagHasNoReader", "The tag 'decl::readable' is written, but none of the passes it names (std::opt) is in the pipeline."]
 
 [[tests]]
 name = "read_by.present"
@@ -165,9 +165,9 @@ verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
 for (const line of [
-  'main::ratio on type, field<r: float>',
-  'T : main::ratio=1.5',
-  'U : main::ratio=0.25',
+  'float::ratio on type, field<r: float>',
+  'T : float::ratio=1.5',
+  'U : float::ratio=0.25',
 ]) {
   assert(out.includes(line), `missing '${line}' in:\\n${out}`)
 }
@@ -262,7 +262,7 @@ verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
 for (const line of [
-  'main::cost on func',
+  'reads::cost on func',
   'first : reads=("reassociate", "contract")',
   'second : reads=("cost")',
 ]) {

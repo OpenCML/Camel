@@ -76,13 +76,198 @@ int deriveProcessExitCode(camel::runtime::GCGraph *graph, slot_t result, bool de
 
 } // namespace
 
+// ---- the module lookup (camel/core/context/module_resolver.h) -------------------------------
+//
+// One walk, used by the lookup and by the reason a `ModuleNotFound` carries: the same roots in the
+// same order, the same idea of what a module file is. Nothing here reads the environment or the
+// command line; the roots arrive as text (design principles 10.2).
+
+bool isModuleName(const std::string &name) {
+    if (name.empty())
+        return false;
+    size_t start = 0;
+    for (;;) {
+        const size_t dot = name.find('.', start);
+        const size_t end = dot == std::string::npos ? name.size() : dot;
+        if (end == start)
+            return false; // an empty component: a leading dot, or two dots in a row
+        for (size_t i = start; i < end; ++i) {
+            if (name[i] == '/' || name[i] == '\\')
+                return false; // a path separator has no place in a name
+        }
+        if (dot == std::string::npos)
+            return true;
+        start = dot + 1;
+    }
+}
+
+ModuleResolver::ModuleResolver(std::string entryDir, std::vector<std::string> moduleRoots)
+    : entryDir_(std::move(entryDir)), moduleRoots_(std::move(moduleRoots)) {}
+
+void ModuleResolver::setModuleRoots(std::vector<std::string> roots) {
+    moduleRoots_ = std::move(roots);
+    invalidateListings();
+}
+
+void ModuleResolver::invalidateListings() {
+    listings_.clear();
+}
+
+void ModuleResolver::splitLookup(
+    const std::string &moduleName, std::string &dirPart, std::string &stem) {
+    dirPart = moduleName;
+    std::replace(dirPart.begin(), dirPart.end(), '.', '/');
+    const size_t slash = dirPart.rfind('/');
+    stem               = slash == std::string::npos ? dirPart : dirPart.substr(slash + 1);
+    dirPart            = slash == std::string::npos ? std::string() : dirPart.substr(0, slash);
+}
+
+std::vector<std::string> ModuleResolver::searchRoots(const std::string &importerDir) const {
+    std::vector<std::string> out;
+    std::unordered_set<std::string> seen;
+    const auto add = [&](const std::string &dir) {
+        if (dir.empty())
+            return;
+        fs::path path = camel::utils::pathFromUtf8(dir);
+        if (!path.is_absolute()) {
+            // A root written relative is relative to the entry file's directory: the command line
+            // means `-I ../shared` the same way wherever the process was started from.
+            path = camel::utils::pathFromUtf8(entryDir_) / path;
+        }
+        const std::string key = camel::utils::pathToUtf8(fs::absolute(path).lexically_normal());
+        if (seen.insert(key).second)
+            out.push_back(key);
+    };
+    // The importing module's own directory comes first; the entry program's own directory is
+    // `entryDir_` and never a root for another module (design principles 10.2).
+    add(importerDir);
+    for (const std::string &root : moduleRoots_)
+        add(root);
+    return out;
+}
+
+const ModuleResolver::DirectoryListing &
+ModuleResolver::listingFor(const std::string &directory) {
+    auto listing = listings_.find(directory);
+    if (listing != listings_.end())
+        return listing->second;
+
+    DirectoryListing files;
+    std::error_code ec;
+    const fs::path dir = camel::utils::pathFromUtf8(directory);
+    if (fs::is_directory(dir, ec)) {
+        for (const auto &entry : fs::directory_iterator(dir, ec)) {
+            if (!entry.is_regular_file(ec))
+                continue;
+            const fs::path file = entry.path();
+            // Only `.cml` and `.cmo` name a module file. A same-stem file of any other extension
+            // (a Markdown document, an editor's leftover) is not a module, and a `.cmo` of the name
+            // is what the name stands for.
+            const std::string extension = camel::utils::pathToUtf8(file.extension());
+            if (extension != ".cml" && extension != ".cmo")
+                continue;
+            const std::string stem = camel::utils::pathToUtf8(file.stem());
+            if (extension == ".cmo") {
+                files.cmo.insert(stem);
+            } else {
+                files.source.try_emplace(stem, camel::utils::pathToUtf8(file));
+            }
+        }
+    }
+    return listings_.emplace(directory, std::move(files)).first->second;
+}
+
+ModuleFile ModuleResolver::findUnder(const std::string &baseDir, const std::string &moduleName) {
+    // A lookup key is a resolved module name, never an import spelling or a path: the relative
+    // prefix is resolved against the importing module's name before this, and a leading dot here
+    // would turn into a leading '/' below and search the filesystem root.
+    if (!isModuleName(moduleName))
+        return {};
+    std::string dirPart;
+    std::string stem;
+    splitLookup(moduleName, dirPart, stem);
+
+    const fs::path base = camel::utils::pathFromUtf8(baseDir);
+    const fs::path dir  = dirPart.empty() ? base : base / camel::utils::pathFromUtf8(dirPart);
+
+    // Within one directory: `D/xx.cmo`, then `D/xx.cml`; and, when `D/xx` is a directory itself,
+    // the same two forms inside it (`D/xx/xx.cmo`, `D/xx/xx.cml`).
+    const auto findIn = [&](const fs::path &directory) -> ModuleFile {
+        const DirectoryListing &files =
+            listingFor(camel::utils::pathToUtf8(directory.lexically_normal()));
+        if (files.cmo.contains(stem))
+            return {camel::utils::pathToUtf8(directory / (stem + ".cmo")), true};
+        if (auto found = files.source.find(stem); found != files.source.end())
+            return {found->second, false};
+        return {};
+    };
+    ModuleFile found = findIn(dir);
+    if (found.found())
+        return found;
+    return findIn(dir / camel::utils::pathFromUtf8(stem));
+}
+
+ModuleFile
+ModuleResolver::resolve(const std::string &moduleName, const std::string &importerDir) {
+    camel::utils::phase::Scope phaseScope("resolve", moduleName);
+    for (const std::string &root : searchRoots(importerDir)) {
+        ModuleFile found = findUnder(root, moduleName);
+        if (found.found())
+            return found;
+    }
+    return {};
+}
+
+std::string
+ModuleResolver::directoryReason(const std::string &directory, const std::string &stem) {
+    const fs::path dir = camel::utils::pathFromUtf8(directory);
+    std::error_code ec;
+    if (!fs::exists(dir, ec))
+        return "path does not exist";
+    if (!fs::is_directory(dir, ec))
+        return "not a directory";
+    const DirectoryListing &files = listingFor(camel::utils::pathToUtf8(dir.lexically_normal()));
+    if (files.cmo.contains(stem) || files.source.contains(stem))
+        return ""; // found: what happened to the file is the caller's to say
+    return "no file '" + stem + ".cml' or '" + stem + ".cmo' in directory";
+}
+
+std::vector<std::string> ModuleResolver::searchReport(
+    const std::string &moduleName, const std::string &importerDir) {
+    // Only a resolved module name can name the files to report on; a relative spelling names
+    // nothing and is never turned into a path.
+    if (!isModuleName(moduleName))
+        return {};
+    std::string dirPart;
+    std::string stem;
+    splitLookup(moduleName, dirPart, stem);
+
+    std::vector<std::string> out;
+    std::unordered_set<std::string> seen;
+    for (const std::string &root : searchRoots(importerDir)) {
+        const fs::path base = camel::utils::pathFromUtf8(root);
+        const fs::path dir  = dirPart.empty() ? base : base / camel::utils::pathFromUtf8(dirPart);
+        for (const fs::path &directory :
+             {dir.lexically_normal(), (dir / camel::utils::pathFromUtf8(stem)).lexically_normal()}) {
+            const std::string key = camel::utils::pathToUtf8(fs::absolute(directory));
+            if (!seen.insert(key).second)
+                continue;
+            const std::string reason = directoryReason(key, stem);
+            if (!reason.empty())
+                out.push_back(key + ": " + reason);
+        }
+    }
+    return out;
+}
+
 size_t hardwareThreadCount() {
     const unsigned hardware = std::thread::hardware_concurrency();
     return hardware == 0 ? 1 : static_cast<size_t>(hardware);
 }
 
 Context::Context(const EntryConfig &entryConf, const DiagsConfig &diagConf)
-    : entryConfig_(entryConf), diagConfig_(diagConf) {}
+    : entryConfig_(entryConf), diagConfig_(diagConf),
+      resolver_(entryConf.entryDir, entryConf.searchPaths) {}
 
 size_t Context::threadLimit() const {
     return entryConfig_.maxThreads != 0 ? entryConfig_.maxThreads : hardwareThreadCount();
@@ -176,30 +361,9 @@ std::string canonicalPathKey(const std::string &path) {
     return camel::utils::pathToUtf8(camel::utils::pathFromUtf8(path).lexically_normal());
 }
 
-/// True when `name` is a module name a file may be looked up under: a dotted list of non-empty
-/// components, `IDENT ('.' IDENT)*`. The grammar's relative spelling (`..lib`, one to three
-/// leading dots: docs/language/08_top_level_and_grammar.md) is resolved against the importing
-/// module's name before any lookup, so the lookup never receives a leading dot; if one reached it,
-/// reading the name as a path would turn that dot into a separator and search the filesystem root
-/// (`..lib` -> `//lib` -> `/lib`). An import names a module, not a path (design principles 10.2).
-bool isModuleName(const std::string &name) {
-    if (name.empty())
-        return false;
-    size_t start = 0;
-    for (;;) {
-        const size_t dot = name.find('.', start);
-        const size_t end = dot == std::string::npos ? name.size() : dot;
-        if (end == start)
-            return false; // an empty component: a leading dot, or two dots in a row
-        for (size_t i = start; i < end; ++i) {
-            if (name[i] == '/' || name[i] == '\\')
-                return false; // a path separator has no place in a name
-        }
-        if (dot == std::string::npos)
-            return true;
-        start = dot + 1;
-    }
-}
+/// True when `name` is a module name a file may be looked up under: see
+/// `isModuleName` in camel/core/context/module_resolver.h, which is the one definition the lookup
+/// and the semantic analysis both use.
 
 std::optional<module_ptr_t> Context::getBuiltinModule(const std::string &name) {
     EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S("Context", "Looking for built-in module: <{}>", name));
@@ -457,9 +621,12 @@ Context::importModule(const std::string &rawModuleName, const module::Module *im
             if (auto accepted = acceptModule(std::move(module), path, name)) {
                 return accepted;
             }
-            // A `.cmo` that was found but would not load: the next candidate name is tried, and
-            // the failure is the diagnostic's reason (as before).
-            continue;
+            // The file was found and it is not a usable module (a `.cmo` the loader refused: an
+            // ABI mismatch, a missing symbol, a missing dependency, a file that is not a library at
+            // all). The name stands for that file, and a module that is there and cannot be used is
+            // an error: no other candidate name is tried, and no built-in module takes its place
+            // (the import ends below with `lastCmoLoadError_` as the reason).
+            break;
         }
 
         auto builtin = getBuiltinModule(name);
@@ -478,15 +645,14 @@ Context::importModule(const std::string &rawModuleName, const module::Module *im
     if (hadCmoLoadError) {
         reason << "Found .cmo but load failed: " << lastCmoLoadError_;
         lastCmoLoadError_.clear();
-        std::vector<std::string> pathBases = getSearchPathBases(importerDir);
+        std::vector<std::string> pathBases = resolver_.searchRoots(importerDir);
         if (!pathBases.empty()) {
             reason << " Search paths tried:";
             for (const auto &p : pathBases)
                 reason << "\n  " << p;
         }
     } else {
-        std::vector<std::string> diagLines =
-            getModuleSearchDiagnostics(firstCandidate, importerDir);
+        std::vector<std::string> diagLines = resolver_.searchReport(firstCandidate, importerDir);
         if (!diagLines.empty()) {
             reason << "Search attempts:";
             for (const auto &line : diagLines)
@@ -646,180 +812,21 @@ std::string Context::resolveRelativeModuleName(
     return join(base, ".");
 }
 
-std::pair<std::string, bool>
-Context::findModuleUnder(const std::string &baseDir, const std::string &moduleName) {
-    // A lookup key is a resolved module name, never an import spelling or a path: the
-    // relative prefix is resolved against the importing module's name before this, and a leading
-    // dot here would turn into a leading '/' below and search the filesystem root.
-    if (!isModuleName(moduleName))
-        return {"", false};
-    std::string relativePath = moduleName;
-    std::replace(relativePath.begin(), relativePath.end(), '.', '/');
-    fs::path relPath = camel::utils::pathFromUtf8(relativePath);
-    fs::path dir     = camel::utils::pathFromUtf8(baseDir) / relPath.parent_path();
-    std::string stem = camel::utils::pathToUtf8(relPath.filename());
-    if (stem.empty())
-        stem = camel::utils::pathToUtf8(relPath);
-
-    /// Lookup order within directory D: 1) D/xx.cmo  2) D/xx.* (any text/source file with the
-    /// same name)
-    /// If D/xx is a directory, also search: 3) D/xx/xx.cmo  4) D/xx/xx.*
-    // A directory is listed once per context (docs/technical/53_import_cost_audit.md, 53.3.2):
-    // looking every module up by listing its directory again made N modules in one directory O(N^2).
-    auto findIn = [&](const fs::path &directory) -> std::pair<std::string, bool> {
-        const std::string key = camel::utils::pathToUtf8(directory.lexically_normal());
-        auto listing          = directoryListings_.find(key);
-        if (listing == directoryListings_.end()) {
-            DirectoryListing files;
-            std::error_code ec;
-            if (fs::is_directory(directory, ec)) {
-                for (const auto &entry : fs::directory_iterator(directory, ec)) {
-                    if (!entry.is_regular_file(ec)) {
-                        continue;
-                    }
-                    const fs::path p = entry.path();
-                    // The first file of a name in the order the directory lists them, as
-                    // before; a `.cmo` of the name comes first whatever the order.
-                    files.byStem.try_emplace(
-                        camel::utils::pathToUtf8(p.stem()), camel::utils::pathToUtf8(p));
-                    if (p.extension() == ".cmo") {
-                        files.cmo.insert(camel::utils::pathToUtf8(p.stem()));
-                    }
-                }
-            }
-            listing = directoryListings_.emplace(key, std::move(files)).first;
-        }
-        const DirectoryListing &files = listing->second;
-        if (files.cmo.contains(stem)) {
-            return {camel::utils::pathToUtf8(directory / (stem + ".cmo")), true};
-        }
-        if (auto found = files.byStem.find(stem); found != files.byStem.end()) {
-            return {found->second, camel::utils::pathFromUtf8(found->second).extension() == ".cmo"};
-        }
-        return {"", false};
-    };
-
-    auto [path, isCmo] = findIn(dir);
-    if (!path.empty())
-        return {path, isCmo};
-    return findIn(dir / stem);
+void Context::setModuleSearchPaths(std::vector<std::string> roots) {
+    // The roots of record and the roots the lookup uses are one list, changed in one place: a
+    // caller cannot leave the two disagreeing, and the lookup cannot answer the new list out of
+    // the old list's directory listings (ModuleResolver::setModuleRoots drops them).
+    entryConfig_.searchPaths = std::move(roots);
+    resolver_.setModuleRoots(entryConfig_.searchPaths);
 }
 
 std::pair<std::string, bool> Context::resolveModulePath(
     const std::string &moduleName, const std::string &importerDir) {
-    camel::utils::phase::Scope phaseScope("resolve", moduleName);
-    // The importing module's own directory comes first (design principles 10.2).
-    if (!importerDir.empty()) {
-        auto found = findModuleUnder(importerDir, moduleName);
-        if (!found.first.empty())
-            return found;
-    }
-    return getModulePathAndKind(moduleName);
-}
-
-std::pair<std::string, bool> Context::getModulePathAndKind(const std::string &moduleName) {
-    // The module roots: `-I` in the order given, `CAMEL_PACKAGES`, the legacy `CAMEL_MODULE_PATH`,
-    // then the standard library. The entry file's directory is not one of them; the
-    // importing module's own directory is searched by `resolveModulePath` before this.
-    for (const auto &dir : entryConfig_.searchPaths) {
-        if (dir.empty())
-            continue;
-        fs::path basePath = camel::utils::pathFromUtf8(dir);
-        if (!basePath.is_absolute())
-            basePath = camel::utils::pathFromUtf8(entryConfig_.entryDir) / basePath;
-        auto found = findModuleUnder(camel::utils::pathToUtf8(basePath), moduleName);
-        if (!found.first.empty())
-            return found;
-    }
-
-    return {"", false};
-}
-
-std::vector<std::string> Context::getModuleSearchDiagnostics(
-    const std::string &moduleName, const std::string &importerDir) const {
-    // Only a resolved module name can name the files to report on; a relative spelling names
-    // nothing and is never turned into a path.
-    if (!isModuleName(moduleName))
-        return {};
-    std::string relativePath = moduleName;
-    std::replace(relativePath.begin(), relativePath.end(), '.', '/');
-    fs::path relPath = camel::utils::pathFromUtf8(relativePath);
-    fs::path parentDir = relPath.parent_path();
-    std::string stem   = camel::utils::pathToUtf8(relPath.filename());
-    if (stem.empty())
-        stem = camel::utils::pathToUtf8(relPath);
-
-    std::vector<std::string> out;
-    std::unordered_set<std::string> seen;
-
-    auto reasonInDir = [&](const fs::path &dir) -> std::string {
-        if (!fs::exists(dir))
-            return "path does not exist";
-        if (!fs::is_directory(dir))
-            return "not a directory";
-        fs::path cmoPath = dir / (stem + ".cmo");
-        if (fileExists(cmoPath))
-            return ""; // found, caller should not use this for failed attempt
-        for (const auto &entry : fs::directory_iterator(dir)) {
-            if (!entry.is_regular_file())
-                continue;
-            fs::path p = entry.path();
-            if (p.stem() == stem)
-                return ""; // found
-        }
-        return "no file '" + stem + ".cmo' or '" + stem + ".*' in directory";
-    };
-
-    auto tryDirAndRecord = [&](const fs::path &base) {
-        fs::path dir       = base / parentDir;
-        std::string reason = reasonInDir(dir);
-        const std::string key = camel::utils::pathToUtf8(fs::absolute(dir));
-        if (!reason.empty() && seen.insert(key).second)
-            out.push_back(key + ": " + reason);
-        fs::path subdir       = dir / stem;
-        std::string subReason = reasonInDir(subdir);
-        const std::string subKey = camel::utils::pathToUtf8(fs::absolute(subdir));
-        if (!subReason.empty() && seen.insert(subKey).second)
-            out.push_back(subKey + ": " + subReason);
-    };
-
-    // The order the import actually tried, so the diagnostic repeats what the code does: the
-    // importing module's own directory first, then the module roots (design principles 10.2).
-    if (!importerDir.empty()) {
-        tryDirAndRecord(camel::utils::pathFromUtf8(importerDir));
-    }
-    for (const auto &dir : entryConfig_.searchPaths) {
-        if (dir.empty())
-            continue;
-        fs::path basePath = camel::utils::pathFromUtf8(dir);
-        if (!basePath.is_absolute())
-            basePath = camel::utils::pathFromUtf8(entryConfig_.entryDir) / basePath;
-        tryDirAndRecord(basePath);
-    }
-
-    return out;
-}
-
-std::vector<std::string> Context::getSearchPathBases(const std::string &importerDir) const {
-    std::vector<std::string> out;
-    std::unordered_set<std::string> seen;
-    const auto add = [&](const fs::path &base) {
-        const std::string key = camel::utils::pathToUtf8(fs::absolute(base));
-        if (seen.insert(key).second)
-            out.push_back(key);
-    };
-    if (!importerDir.empty()) {
-        add(camel::utils::pathFromUtf8(importerDir));
-    }
-    for (const auto &dir : entryConfig_.searchPaths) {
-        if (dir.empty())
-            continue;
-        fs::path basePath = camel::utils::pathFromUtf8(dir);
-        if (!basePath.is_absolute())
-            basePath = camel::utils::pathFromUtf8(entryConfig_.entryDir) / basePath;
-        add(basePath);
-    }
-    return out;
+    // The one lookup: the importing module's own directory, then the module roots, in the order
+    // `ModuleResolver::searchRoots` gives (design principles 10.2). A hit is what the name stands
+    // for, and only `.cml` and `.cmo` name a module file.
+    ModuleFile found = resolver_.resolve(moduleName, importerDir);
+    return {found.path, found.isCmo};
 }
 
 std::string Context::getModulePath(const std::string &moduleName) {

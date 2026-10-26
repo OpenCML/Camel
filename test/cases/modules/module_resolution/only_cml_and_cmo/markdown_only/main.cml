@@ -1,0 +1,8 @@
+/// `import thing` when the directory holds `thing.md` and no `thing.cml`: a Markdown file is not
+/// a module, however its name is spelled.
+import { value } from thing
+
+func main(): int sync {
+    println(value)
+    return 0
+}

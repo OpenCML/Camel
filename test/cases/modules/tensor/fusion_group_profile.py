@@ -66,6 +66,12 @@ GOLDEN_JSON = HERE / "fusion_group_none.profile.golden.json"
 # each. That is the whole diff: the operator calls per step rise from 15 to 17 (55 to 61 in all),
 # the two new rows take their place in the time-sorted table, and the `w` the program prints is an
 # f32 reading. No other row, count, hint, loop or phase line moved.
+#
+# Re-recorded on 2026-10-26: the entry module is named by its file (design principles 10.2), so the
+# phase rows of the program itself name `fusion_group_none` where they named `main` -- `parse`,
+# `compile`, `gct`, `declare` and `gir`, five labels, the same durations and the same order. The
+# graph name a report prints is the entry function's (`main`), not the module's, so the hint line
+# reads `(main)` as it did. That is the whole diff.
 
 # The measured numbers a report prints: durations, shares and byte counts. Everything else in the
 # report is a count or a name, and must not change.

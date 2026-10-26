@@ -1,0 +1,10 @@
+/// `thing.cml` and `thing.py` both exist: the `.cml` is the module `thing`, and the Python file
+/// beside it is not a Camel module at all, whatever it holds. A package's own `thing.py` with the
+/// same stem as `thing.cml` used to be compiled as the module `thing`, which reports a syntax
+/// error from inside a file the run was never asked to read.
+import { value } from thing
+
+func main(): int sync {
+    println(value)
+    return 0
+}
