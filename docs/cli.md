@@ -218,8 +218,13 @@ with <
 export func opt::<F>(f: F): F! when is_function::<F>()
 ```
 
-The type is `bool`, `int`, `float` or `string`; a parameter written without a default is required;
-a parameter with no default may not follow one that has a default. **A default is a constant
+The type is `bool`, `int`, `float`, `string` or `int[]`, written `T?` where the declaration makes
+the parameter nullable (`string?`, `int[]?`). The declared type decides how a value is read, not the
+text of the word: a `bool`, `int`, `float` or `int[]` parameter takes a Camel constant expression of
+that type (`safe_fp=!false`, `growth_budget=2*8`, `axes=[0,1]`), a `string` parameter takes the word
+as written, and a nullable one takes `null` as well as a value of its type; a nullable parameter
+whose default is `null` may be left out, and leaving it out is `null`. A parameter written without a
+default is required; a parameter with no default may not follow one that has a default. **A default is a constant
 expression evaluated once, where the declaration is**, not at each call: the help listing shows the
 value (`top: int = 24`, not `top=8*3`), and every call that leaves the parameter out copies that
 one value. The `when` clause is the pass's applicability: `is_function::<F>()` is what the pipeline
@@ -271,7 +276,7 @@ The `std::` prefix belongs to the passes of the core. A pass of a module is name
 
 A module's passes run only where the pipeline writes them: the pipeline is composed explicitly, so importing a module never adds a pass. A library whose pass is needed (autodiff needs `std::macro` before it) diagnoses the missing pass and says which one to add, and a tag whose reading pass is absent draws a warning. The parameters of a module's pass are its declaration's `with` list, checked like the core's.
 
-A pass written in Camel (`<module>::<function>`, `src/execute/camel_pass.cpp`) declares its parameters as the `with` parameters of that function: `with <label: string, n: int> export func report(p: Program): Program!` is run as `mymod::report label="x" n=21`. The names, order and types of the `with` parameters are the pass's parameters (design principles 4.4 and 9.3); bool, int, float and string are the types a pass parameter may have. A `with` parameter has no default in source, so each one is required: leaving one out is `SemanticDiag::ParamArgumentMissing` at the call in the pipeline, and the message names the parameter.
+A pass written in Camel (`<module>::<function>`, `src/execute/camel_pass.cpp`) declares its parameters as the `with` parameters of that function: `with <label: string, n: int> export func report(p: Program): Program!` is run as `mymod::report label="x" n=21`. The names, order and types of the `with` parameters are the pass's parameters (design principles 4.4 and 9.3). A `with` parameter has no default in source, so each one is required: leaving one out is `SemanticDiag::ParamArgumentMissing` at the call in the pipeline, and the message names the parameter. A parameter of such a pass is a `bool`, an `int`, a `float` or a `string`: an `int[]` or a nullable `T?` parameter needs a default (`null` for the omittable case), and a default belongs to the declaration in the module's `.cml`, which is where the pass's parameters are read from.
 
 ### Common Passes
 
