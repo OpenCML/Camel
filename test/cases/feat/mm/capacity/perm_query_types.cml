@@ -52,7 +52,7 @@ func e16(var c17: int[]): float sync {
     (if true then {
         let n18 = r5(2, 1.5, 2.0);
         return [3, 1, 12, 4];
-    } else [4, 4, 3])->foreach<sync (p19: int) => sync {
+    } else [4, 4, 3])->foreach<(p19: int) => sync {
         c17 = concat(c17, [f13([10, p19], (p20: bool, p21: float): float => r1(6, p21))]);
     }>;
     func g22(a23: int, a24: bool): int sync {

@@ -12,12 +12,12 @@
  */
 module export_capability_exemplar
 
-import { reshape, relu, cast } from tensor
+import { reshape, relu } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
 func counts(t: f32[..]): i64[..] {
-    return relu(cast(t, 'int64') - 2)
+    return relu(int(t) - 2)
 }
 
 func main(): void! sync {

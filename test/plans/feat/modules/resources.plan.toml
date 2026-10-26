@@ -83,7 +83,7 @@ for (const l of [
 // The pair of that write and that read is `ordered by data` for the same reason: the data edge
 // already gives the order, and a pair ordered by data takes no control edge
 // (docs/design/effects/plan.cn.md 5.5) -- the control edge this clause retires.
-// The closure `let inc = sync () => { c += 1 }` is an anonymous graph, and its name is the number
+// The closure `let inc = () => sync { c += 1 }` is an anonymous graph, and its name is the number
 // the compilation had reached when it was built -- how many graphs were created before it, the
 // imported modules' and the speculative instantiations' included -- not a fact about the program
 // (it was `__g_5__` while the `array` module was smaller and is `__g_125__` with one declaration

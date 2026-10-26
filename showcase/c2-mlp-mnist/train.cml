@@ -19,7 +19,7 @@
 module c2_mlp_mnist
 
 // == imports ==
-import { abs, argmax, cast, load_npy, numel, relu, set_num_threads, shape, sum, take } from tensor
+import { abs, argmax, load_npy, numel, relu, set_num_threads, shape, sum, take } from tensor
 import { with_grad } from autodiff
 import { adam, adam_state, softmax_cross_entropy } from nn
 import { load_tree, save_tree } from ckpt
@@ -51,7 +51,7 @@ func logits(x: f32[..]): f32[..] {
 // the cast says so to the overload, since a tensor loaded from a file has no static dtype.
 with <m: Mlp>
 func loss(x: f32[..], labels: f32[..]): float {
-    return softmax_cross_entropy(logits<m>(x), cast(labels, 'int64'))
+    return softmax_cross_entropy(logits<m>(x), int(labels))
 }
 
 // == data ==
@@ -70,7 +70,7 @@ func load_model(data: string): Mlp {
 // Validation: the loss over all rows at once and the fraction classified correctly.
 func evaluate(m: Mlp, x: f32[..], labels: f32[..]): (float, float) {
     let value = logits<m>(x)
-    let class_ids = cast(labels, 'int64')
+    let class_ids = int(labels)
     let correct = float(sum(argmax(value, 1) === class_ids))
     return (softmax_cross_entropy(value, class_ids), float(correct) / float(shape(x)[0]))
 }
@@ -79,7 +79,7 @@ func evaluate(m: Mlp, x: f32[..], labels: f32[..]): (float, float) {
 // The loop collects the loss of every step; the curve is printed afterwards, outside the
 // timed region, in the order the steps produced it.
 func report(losses: float[], steps: int, log_every: int) {
-    0..steps->filter<(i: int): bool => i % log_every == 0>->foreach<sync (i: int) => sync {
+    0..steps->filter<(i: int): bool => i % log_every == 0>->foreach<(i: int) => sync {
         `c2 step=${i} loss=${losses[i]:.9f}`->println
         return null
     }>

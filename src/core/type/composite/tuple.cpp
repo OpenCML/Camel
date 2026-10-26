@@ -558,6 +558,17 @@ Type *camel::core::type::joinTypes(Type *a, Type *b) {
         Type *value = a->code() == TypeCode::Void ? b : a;
         return asNullable(value) != nullptr ? value : TupleType::nullable(value);
     }
+    // A named struct and an unnamed one with its fields: the named type, whichever arm comes
+    // first (design principles 5.2, the unnamed value enters the named type).
+    if (a->code() == TypeCode::Struct && b->code() == TypeCode::Struct) {
+        const bool aNamed = static_cast<const StructType *>(a)->named();
+        const bool bNamed = static_cast<const StructType *>(b)->named();
+        if (aNamed != bNamed) {
+            Type *named = aNamed ? a : b;
+            Type *other = aNamed ? b : a;
+            return entersImplicitly(named, other) ? named : nullptr;
+        }
+    }
     if (entersImplicitly(a, b)) {
         return a;
     }

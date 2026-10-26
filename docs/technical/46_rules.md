@@ -172,7 +172,7 @@ parameters, so they are written in the angle brackets of the call:
 Each answers a `Run<Program>`: `result` is the program, and `rewrites`, `rounds`, `visited`,
 `erased`, `fixpoint` and `seconds` are what the schedule cost, summed over the stages (`fixpoint`
 is the last application's; `proof` is described in section 3.2). The functions are written with
-`loop ... for ... while` and `?->`; no
+`loop ... for ... while` and `->`; no
 helper carries an index or an accumulator. A combinator never reorders a stage's rules and never
 drops a match: a stage that applies nothing leaves the count at zero.
 

@@ -1,0 +1,41 @@
+id = "compile.struct_join"
+order = 927
+tier = "fast"
+tags = ["feat", "compile", "structs", "types"]
+desc = "A named struct and an unnamed one with its fields join, concatenate and compare as the named type, in either order (design principles 5.2)"
+
+[[tests]]
+name = "compile.struct_join.arms"
+desc = "A branch with a named struct arm and an unnamed one with its fields is the named type in either arm order and in a match, so the three values join an array of `Point` (sum 40) and concat with one (2 2, 2)."
+kind = "behavior"
+case = "../../../cases/compile/struct_join/join_arms.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "40\n2 2\n2\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "compile.struct_join.concat_and_equality"
+desc = "`concat` of unnamed-struct and `Point` arrays, and `==` between an unnamed struct and a `Point`, hold the unnamed value to the named type by the relation `append` and `contains` use."
+kind = "behavior"
+case = "../../../cases/compile/struct_join/concat_and_equality.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "2 3 2\ntrue true false\ntrue\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "compile.struct_join.snake_checks"
+desc = "examples/tty/snake.cml, whose `concat` of a branch-joined unnamed struct array and a `Point` array did not compile, checks without an error."
+kind = "behavior"
+case = "../../../../examples/tty/snake.cml"
+args = ["check", "-O", "short", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

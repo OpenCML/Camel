@@ -1,0 +1,8 @@
+module pipe_propagation_err_not_tagged
+
+func inc(x: int): int { return x + 1 }
+
+func main(): int sync {
+    println('a'->inc)
+    return 0
+}

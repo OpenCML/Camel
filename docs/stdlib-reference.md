@@ -26,7 +26,7 @@ How to read an entry:
   principles 3.1). Every operator of these modules declares which it is.
 - **Failure**: a *fault* stops the program with a located diagnostic (an index out of range, an
   argument outside what the operator defines). An *error* is a value: the function returns
-  `T!` and the program handles it with `!!`, `?->` or `match`. A result that may not exist is
+  `T!` and the program handles it with `!!`, `->` or `match`. A result that may not exist is
   `T?`, handled with `??`. An entry without a failure line does not fail.
 - **Named arguments**: a call may give a parameter by name (`f(x: 1)`, `len(x: xs)`) when
   the name gives that position the same name in every form the callee has, whether the callee is
@@ -2061,24 +2061,93 @@ A tensor of ones shaped and typed like t.
 
 ### Conversion and display
 
-#### `cast`
+#### `i32`
 
 ```camel
-cast: (t: float[..] | number[], dtype: string) => int64[..]
+i32: (t: float[..] | number[]) => i32[..]
 ```
 
-t converted to the element type the name gives: "float32", "float", "double" or "float64"
-for `f32`; "bfloat16" or "bf16" for `bf16`; "float16", "half" or "f16" for `f16`; "int64",
-"int", "long" or "int32" for `int64`; "bool" for `bool`. The extents do not change.
-
-A conversion into `bf16` or `f16` rounds (to nearest, ties to even). Writing the conversion
-asks for that precision, so it needs no numeric permission: `change_precision` governs a
-computation the compiler moves to lower precision (design principles 7.2-7.3). Reading a
-`bf16` or `f16` tensor into a wider type is exact for every stored value.
+The conversion `i32` applied to every element of an array: the result has the input's extents and element type `i32`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
 
 - Pure.
-- Failure: fault `RuntimeError` when the name is not one of those.
-- Example: `cast(new([1.0, 2.0]), 'int64')` gives `[1, 2]`
+- Example: `i32(new([1.0, 2.0]))`
+
+#### `i64`
+
+```camel
+i64: (t: float[..] | number[]) => int64[..]
+```
+
+The conversion `i64` applied to every element of an array: the result has the input's extents and element type `int64`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
+
+- Pure.
+- Example: `i64(new([1.0, 2.0]))`
+
+#### `int`
+
+```camel
+int: (t: float[..] | number[]) => int64[..]
+```
+
+The conversion `int` applied to every element of an array: the result has the input's extents and element type `int64`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
+
+- Pure.
+- Example: `int(new([1.0, 2.0]))`
+
+#### `f32`
+
+```camel
+f32: (t: float[..] | number[]) => f32[..]
+```
+
+The conversion `f32` applied to every element of an array: the result has the input's extents and element type `f32`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
+
+- Pure.
+- Example: `f32(new([1.0, 2.0]))`
+
+#### `f64`
+
+```camel
+f64: (t: float[..] | number[]) => f64[..]
+```
+
+The conversion `f64` applied to every element of an array: the result has the input's extents and element type `f64`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
+
+- Pure.
+- Example: `f64(new([1.0, 2.0]))`
+
+#### `float`
+
+```camel
+float: (t: float[..] | number[]) => f64[..]
+```
+
+The conversion `float` applied to every element of an array: the result has the input's extents and element type `f64`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
+
+- Pure.
+- Example: `float(new([1.0, 2.0]))`
+
+#### `bf16`
+
+```camel
+bf16: (t: float[..] | number[]) => bf16[..]
+```
+
+The conversion `bf16` applied to every element of an array: the result has the input's extents and element type `bf16`. A conversion into `bf16` or `f16` rounds (to nearest, ties to even); writing it asks for that precision, so it needs no numeric permission (`change_precision` governs a computation the compiler moves to lower precision, design principles 7.2-7.3). Reading a `bf16` or `f16` tensor into a wider type is exact. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
+
+- Pure.
+- Example: `bf16(new([1.0, 2.0]))`
+
+#### `f16`
+
+```camel
+f16: (t: float[..] | number[]) => f16[..]
+```
+
+The conversion `f16` applied to every element of an array: the result has the input's extents and element type `f16`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
+
+- Pure.
+- Example: `f16(new([1.0, 2.0]))`
 
 #### `load_npy`
 
@@ -4172,7 +4241,7 @@ kind: (j: Json) => string
 The kind of a Json: 'null', 'bool', 'int', 'float', 'string', 'array' or 'object'.
 
 - Pure.
-- Example: `decode('[1]') ?-> kind !! ''` gives `'array'`
+- Example: `decode('[1]') -> kind !! ''` gives `'array'`
 
 #### `is_null`
 
@@ -4182,7 +4251,7 @@ is_null: (j: Json) => bool
 
 Whether a Json is the JSON null.
 
-- Example: `decode('null') ?-> is_null !! false` gives `true`
+- Example: `decode('null') -> is_null !! false` gives `true`
 
 #### `get`
 
@@ -5580,7 +5649,7 @@ Writes the printed form of every `PyObject` argument and a newline, as `py_print
 returns the last argument (or `void` when there is none).
 
 - With effects: writes the interpreter's standard output.
-- Example: `py_eval("1 + 1") ?-> (o: PyObject): PyObject? => py_println(o)`
+- Example: `py_eval("1 + 1") -> (o: PyObject): PyObject? => py_println(o)`
 
 #### `py_wrap`
 
@@ -5658,7 +5727,7 @@ run a property or a descriptor, so the read is an effect.
 
 - With effects: reads interpreter state and may run Python code.
 - Failure: error `PythonError` when the attribute does not exist; the message starts with the exception class.
-- Example: `py_import("math") ?-> (m: PyObject): PyObject! => py_attr(m, "sqrt")`
+- Example: `py_import("math") -> (m: PyObject): PyObject! => py_attr(m, "sqrt")`
 
 #### `py_import`
 
@@ -5682,7 +5751,7 @@ py_dispose: (obj: PyObject) => void
 Drops this program's reference to the Python object `obj`.
 
 - With effects: advances the interpreter's reference counts.
-- Example: `py_import("math") ?-> py_dispose`
+- Example: `py_import("math") -> py_dispose`
 
 <a id="nn"></a>
 

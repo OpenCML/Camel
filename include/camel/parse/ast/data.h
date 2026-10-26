@@ -50,7 +50,8 @@ enum class TypeCaseKind : uint8_t {
     Leaf     = 2,
     Wildcard = 3,
     Func     = 4,
-    Identity = 5
+    Identity = 5,
+    Array    = 6
 };
 
 std::string to_string(TypeCaseKind kind);
@@ -93,7 +94,6 @@ enum class BinaryDataOp {
 enum class ReservedDataOp {
     NullThen,
     ErrorThen,
-    NotNullThen,
     Access,
     Call,
     Bind,
@@ -175,8 +175,14 @@ class ReservedExprLoad : public DataLoad {
         return positionalAfterNamed_;
     }
 
+    /// A call written with the pipe `x -> f` (design principles 3.9): when `x` is a `T?` or a `T!`
+    /// that no overload of `f` takes as it is, the call takes the value out of it.
+    void setPipe(bool pipe) { pipe_ = pipe; }
+    bool pipe() const { return pipe_; }
+
   private:
     ReservedDataOp op_;
+    bool pipe_                                       = false;
     camel::source::origin_id_t positionalAfterNamed_ = camel::source::kInvalidOriginId;
 };
 

@@ -11,18 +11,18 @@
  */
 module tensor_dtype_bf16_cast_no_permission
 
-import { new, cast, to_bytes } from tensor
+import { new, to_bytes } from tensor
 import { to_array } from bytes
 
 func shrink(x: f32[..]): bf16[..] {
-    return cast(x, 'bf16')
+    return bf16(x)
 }
 
 func main(): int sync {
     let values: f32[] = [0.1]
     let narrowed = shrink(new(values))
     println(to_array(to_bytes(narrowed)))
-    let wide: f32[..] = cast(narrowed, 'f32')
+    let wide: f32[..] = f32(narrowed)
     println(to_array(to_bytes(wide)))
     return 0
 }

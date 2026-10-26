@@ -13,18 +13,18 @@
  */
 module gc_training_peak
 
-import { cast, ones, zeros } from tensor
+import { ones, zeros } from tensor
 import { softmax_cross_entropy, sgd } from nn
 import { grad } from autodiff
 
 with <w: f32[?, 4]>
 func loss(X: f32[?, ?], labels: int[?]): float {
-    return softmax_cross_entropy(X @ w, cast(labels, 'int64'))
+    return softmax_cross_entropy(X @ w, int(labels))
 }
 
 func main(steps: int, batch: int, width: int): int sync {
     let X = ones([batch, width])
-    let labels = cast(zeros([batch]), 'int64')
+    let labels = int(zeros([batch]))
     let w = zeros([width, 4])
     let loss_grad = grad(loss)
     let start = std::mem::blocks()

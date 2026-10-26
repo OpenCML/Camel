@@ -273,7 +273,7 @@ A function is a subgraph; a frame is one activation of a function.
   *one* frame however long it has been running, labelled with the number of frames it
   replaced: `spin (tail call, 2 frames replaced)`. No frames are invented.
 - **The arms of a branch are part of their function's frame.** `if c then f(x) else g(x)`
-  (and `match`, `&&`, `||`, `??`, `!!`, `?->`) compiles to a branch node and a small graph per
+  (and `match`, `&&`, `||`, `??`, `!!`, `->`) compiles to a branch node and a small graph per
   arm, but an arm is code of the function it is written in, and the stack shows it so: a stop in
   an arm is in the frame of `pick`, a line step goes from the function into the arm and back as
   through any other lines, the names declared in the arm are among the function's while the arm

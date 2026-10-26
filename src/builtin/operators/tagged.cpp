@@ -118,7 +118,7 @@ const std::vector<oper_group_ptr_t> &getTaggedOperatorGroups() {
             });
     };
     static const std::vector<oper_group_ptr_t> groups = {
-        // ======= Lowering targets of ??, !!, ?->, throw and the match patterns =======
+        // ======= Lowering targets of ??, !!, ->, throw and the match patterns =======
         OperatorGroup::create(
             "__is_null__",
             {{":op/tag_is_null",

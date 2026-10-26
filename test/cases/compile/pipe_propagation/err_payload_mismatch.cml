@@ -1,0 +1,9 @@
+module pipe_propagation_err_payload_mismatch
+
+func inc(x: int): int { return x + 1 }
+
+func main(): int sync {
+    let s: string? = 'a'
+    println(s->inc ?? 0)
+    return 0
+}

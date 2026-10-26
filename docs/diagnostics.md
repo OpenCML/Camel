@@ -392,17 +392,21 @@ Invalid number format: '{0}'.
 **Help**
 
 ```text
-A number is decimal digits without a leading zero, or '0x', '0b' or '0o' followed by digits of that base: octal 63 is '0o77', not '077'; '09' and '077' are not number tokens. In an entry argument and a conversion text a leading zero is decimal ('077' is 77).
+A number is decimal digits without a leading zero in its whole part (an integer or a real: '0.5' is a number, '007' and '007.5' are not), or '0x', '0b' or '0o' followed by digits of that base: octal 63 is '0o77', not '077'; '09' and '077' are not number tokens. In an entry argument and a conversion text a leading zero is decimal ('077' is 77).
 ```
 
-**Example** (`test/cases/parse/numbers/leading_zero.cml`, run as `camel -E short test/cases/parse/numbers/leading_zero.cml`)
+**Example** (`test/cases/compile/literals/real_leading_zero.cml`, run as `camel test/cases/compile/literals/real_leading_zero.cml`)
 
 ```camel
-module parse_numbers_leading_zero
-
+// A real has no leading zero in its whole part, as an integer has none: `077.5` is refused like
+// `007.5` (compile.precedence.leading_zero_real) and like `077`. The point does not make the
+// leading zero unambiguous, and the token is not read as an octal number either: octal is `0o77`.
+// `0.5` is a number.
 func main(): int sync {
-    let a = 077
-    return a
+    let a = 0.5
+    let b = 077.5
+    println(a + b)
+    return 0
 }
 ```
 
@@ -426,7 +430,18 @@ This string literal is not closed.
 A string ends with the quote character it starts with ({0}). Add the closing quote; to put a quote character inside the string, write it with a backslash.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/precedence/unterminated_string.cml`, run as `camel test/cases/compile/precedence/unterminated_string.cml`)
+
+```camel
+// A string no quote closes is an error on the line it opened on; it does not run on to the last
+// escaped quote of the file.
+func main(): int sync {
+    let s = 'abc
+    println(s)
+    let t = "it\'s"
+    return 0
+}
+```
 
 ### UnterminatedComment
 
@@ -2700,7 +2715,7 @@ A value of type '{0}' cannot be used here: {1}.
 **Help**
 
 ```text
-A value that may be null ('T?') or may have failed ('T!') is opened only by '??', '!!', '?->' and by 'match' with 'case null' / 'case error e'.
+A value that may be null ('T?') or may have failed ('T!') is opened only by '??', '!!', '->' (which passes a null or an error on) and by 'match' with 'case null' / 'case error e'.
 ```
 
 **Example** (`test/cases/compile/tagged/err_member.cml`, run as `camel test/cases/compile/tagged/err_member.cml`)
@@ -2733,7 +2748,7 @@ None: choice: the operands carry tags that do not meet; the repair is in what is
 **Help**
 
 ```text
-'a ?? b' needs 'a' of type 'T?' and 'b' of type 'T' (the result is a 'T') or 'T?' (the result is a 'T?', so that 'a ?? b ?? c' tries each in turn). 'a !! b' needs 'a' of type 'T!' and 'b' of type 'T' or 'T!'. 'x ?-> f' needs 'x' of type 'T!' and a function 'f' that takes a 'T'.
+'a ?? b' needs 'a' of type 'T?' and 'b' of type 'T' (the result is a 'T') or 'T?' (the result is a 'T?', so that 'a ?? b ?? c' tries each in turn). 'a !! b' needs 'a' of type 'T!' and 'b' of type 'T' or 'T!'.
 ```
 
 **Example** (`test/cases/compile/tagged/err_wrong_form.cml`, run as `camel test/cases/compile/tagged/err_wrong_form.cml`)
@@ -3250,7 +3265,7 @@ func check(a: Json): int sync {
 }
 
 func main(): int sync {
-    return decode('true') ?-> check !! 1
+    return decode('true') -> check !! 1
 }
 ```
 
@@ -3342,7 +3357,7 @@ None: context: the operator cannot be overloaded at all, so the expression has t
 **Help**
 
 ```text
-The operators that can be overloaded are the binary '+', '-', '*', '/', '%', '^', '@', '==', '<', '<=', '>', '>=', '&', '|', indexing '[]', and the unary '-', '!', '~'; '!=' follows '=='. '&&', '||', '??', '!!', '->', '?->', '..', 'as', assignment and compound assignment are constructs of the language.
+The operators that can be overloaded are the binary '+', '-', '*', '/', '%', '^', '@', '==', '<', '<=', '>', '>=', '&', '|', indexing '[]', and the unary '-', '!', '~'; '!=' follows '=='. '&&', '||', '??', '!!', '->', '..', 'as', assignment and compound assignment are constructs of the language.
 ```
 
 **Example** (`test/cases/consistency/operator_overloads/not_overloadable_logical.cml`, run as `camel test/cases/consistency/operator_overloads/not_overloadable_logical.cml`)
@@ -6718,20 +6733,21 @@ The identity pattern '{0}' cannot select a type here: {1}.
 An identity pattern is exact: it selects only the type it names, after the declaration's type variables are bound. Name a concrete type, do not write the same type twice in one case, and put a pattern an earlier case already selects before that case or remove it.
 ```
 
-**Example** (`test/cases/compile/static_expansion/type_identity_duplicate.cml`, run as `camel test/cases/compile/static_expansion/type_identity_duplicate.cml`)
+**Example** (`test/cases/compile/match_type/err_unreachable_array.cml`, run as `camel test/cases/compile/match_type/err_unreachable_array.cml`)
 
 ```camel
-module type_identity_duplicate
+module match_type_err_unreachable_array
 
-func twice::<T>(t: T): int {
+func kind::<T>(): string {
     return match type T {
-        case int | int => 1
-        case _ => 0
+        case array => 'array'
+        case int[] => 'ints'
+        case _ => 'other'
     }
 }
 
 func main(): int sync {
-    println(twice(1))
+    println(kind::<int[]>())
     return 0
 }
 ```
@@ -8839,7 +8855,7 @@ This value has type '{0}' and nothing uses it: an error it holds is lost{1}.
 **Help**
 
 ```text
-A function that returns a 'T!' reports its failure through that value. Take the value apart with '!!', '?->' or 'match', return it from a function that declares a 'T!', or drop it on purpose with 'let _ = ...'.
+A function that returns a 'T!' reports its failure through that value. Take the value apart with '!!', '->' or 'match', return it from a function that declares a 'T!', or drop it on purpose with 'let _ = ...'.
 ```
 
 **Example** (`test/cases/consistency/unused_fallible/main_undeclared.cml`, run as `camel -E short test/cases/consistency/unused_fallible/main_undeclared.cml`)
@@ -9999,7 +10015,7 @@ An error value reached the exit of 'main' without being handled: {0}: {1}.
 **Help**
 
 ```text
-A value of type T! that has failed must be opened before the program ends: give a replacement with '!!', pass it on with '?->', or take it apart with 'match ... case error e'. The position is where the error was made (the definition of 'main' when the error records none).
+A value of type T! that has failed must be opened before the program ends: give a replacement with '!!', pass it on with '->', or take it apart with 'match ... case error e'. The position is where the error was made (the definition of 'main' when the error records none).
 ```
 
 **Example** (`test/cases/consistency/entry/error_thrown.cml`, run as `camel test/cases/consistency/entry/error_thrown.cml ${backend}`)

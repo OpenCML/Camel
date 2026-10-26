@@ -318,7 +318,7 @@ if (cond) {
 
 ### 7.2 错误值与 `attempt`
 
-错误值（`T!` 的错误一侧，3.9）是 `rt::Error`：种类名、消息、位置。`throw error('Kind', 'message')` 构造它，位置是转译时已知的 site。`??`、`!!`、`?->` 与 `match` 的固定模式在图上是分支（2.1 对应表），按 6.2 译出，条件是 `rt::Opt::has_value()` 或 `rt::Fallible::failed()`。
+错误值（`T!` 的错误一侧，3.9）是 `rt::Error`：种类名、消息、位置。`throw error('Kind', 'message')` 构造它，位置是转译时已知的 site。`??`、`!!`、`->` 与 `match` 的固定模式在图上是分支（2.1 对应表），按 6.2 译出，条件是 `rt::Opt::has_value()` 或 `rt::Fallible::failed()`。
 
 `attempt(f, x)`（`:mark/isolate`）是一次带标记的调用（设计原则 2.1 对应表）：
 

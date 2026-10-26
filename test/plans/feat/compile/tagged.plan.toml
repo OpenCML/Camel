@@ -2,7 +2,7 @@ id = "compile.tagged"
 order = 324
 tier = "fast"
 tags = ["feat", "compile", "nullable", "fallible", "types"]
-desc = "The tagged forms `T?` and `T!`, the operators `??`, `!!`, `?->`, the fixed `match` patterns and `throw` (design principles 3.9; docs/technical/29_nullable_and_fallible_values.md)."
+desc = "The tagged forms `T?` and `T!`, the operators `??`, `!!`, `->`, the fixed `match` patterns and `throw` (design principles 3.9; docs/technical/29_nullable_and_fallible_values.md)."
 
 [[tests]]
 name = "nullable"
@@ -40,7 +40,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "fallible"
-desc = "`T!`: `throw error(kind, message)` with the position of the call, `return` under a declared `T!`, `!!`, `?->` (one step and chained, with a callee that returns `U` or `U!`), `match` with `case error e`, rethrowing a caught error."
+desc = "`T!`: `throw error(kind, message)` with the position of the call, `return` under a declared `T!`, `!!`, `->` (one step and chained, with a callee that returns `U` or `U!`), `match` with `case error e`, rethrowing a caught error."
 kind = "behavior"
 case = "../../../cases/compile/tagged/fallible.cml"
 args = ["${case}"]
@@ -1035,7 +1035,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "graph.throw_and_pass"
-desc = "`throw e` is the exit of its graph (OPER, CAST, EXIT, no branch); `x ?-> f` is one BRCH/JOIN."
+desc = "`throw e` is the exit of its graph (OPER, CAST, EXIT, no branch); `x -> f` is one BRCH/JOIN."
 kind = "behavior"
 case = "../../../cases/compile/tagged/graph_throw_pass.cml"
 args = ["${case}", "std::gir"]
@@ -1051,7 +1051,7 @@ const idOf = (text) => {
   assert(line, 'a node ' + text)
   return line.trim().split(' ')[0]
 }
-assert(count('type="BRCH"') === 1 && count('type="JOIN"') === 1, 'one branch: the one of ?->')
+assert(count('type="BRCH"') === 1 && count('type="JOIN"') === 1, 'one branch: the one of ->')
 assert(count('label=":op/tag_throw"') === 1, 'one throw')
 assert(count('label=":op/tag_is_error"') === 1, 'one tag read')
 assert(count('label=":op/tag_error_value"') === 1, 'one value read')
@@ -1241,22 +1241,6 @@ expect_diagnostic_code = "0x03000075"
 expect_diagnostic_line = 9
 expect_diagnostic_column = 15
 expect_output_contains = ["'??' cannot be applied here: its right side has type 'string', but the left side holds a 'int'."]
-expect_output_not_contains = ["never printed", "UnknownInternalError"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 8000
-
-[[tests]]
-name = "pass_over_nullable"
-desc = "`?->` hands on errors only: over a `T?` it is rejected, at the start of the expression."
-kind = "negative"
-case = "../../../cases/compile/tagged/err_pass_nullable.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::TaggedOperandMismatch"
-expect_diagnostic_code = "0x03000075"
-expect_diagnostic_line = 11
-expect_diagnostic_column = 13
-expect_output_contains = ["'?->' cannot be applied here: its left side has type 'int?', which is not a 'T!'."]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

@@ -4,7 +4,7 @@
  * (artifacts: b2/probes/check_slice_loop.py).
  */
 module export_slice_loop
-import { cast, reshape, sum, shape, tanh, zeros } from tensor
+import { reshape, sum, shape, tanh, zeros } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
@@ -16,7 +16,7 @@ func scan(t: int, steps: int, x: float[..], h: float[..]): float[..] {
 
 func forward(x: float[..]): float[..] {
     // `zeros` gives an f32 array, so its element type is written to the one this state has.
-    let h0 = cast(zeros([shape(x)[0], shape(x)[2]]), 'float64')
+    let h0 = float(zeros([shape(x)[0], shape(x)[2]]))
     return scan(0, shape(x)[1], x, h0)
 }
 

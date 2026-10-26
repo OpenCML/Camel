@@ -11,7 +11,7 @@ desc = "Every hand-written source file carries the two-line header of docs/desig
 #
 # Membership is a path allow/deny list in the script, with a reason on every rule: C/C++ under
 # src/, include/, tools/, modules/ and stdlib/*/native/; the standard library's .cml; and
-# .js/.mjs/.ts/.py/.cmake scripts, except the denied trees (third_party/, docs/, examples/,
+# .js/.mjs/.cjs/.ts/.tsx/.css/.py/.cmake scripts, except the denied trees (third_party/, docs/, examples/,
 # showcase/, test/cases/, test/plans/). A source file whose extension no rule covers is reported
 # as undecided rather than skipped, which is why the fixture carries a .rs file.
 #

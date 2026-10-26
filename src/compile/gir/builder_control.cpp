@@ -1391,7 +1391,7 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
     using Kind         = GCT::BranchKind;
     const Kind kind    = gct->branchKind();
     const bool onNull  = kind == Kind::NullThen;
-    const char *symbol = onNull ? "??" : kind == Kind::ErrorThen ? "!!" : "?->";
+    const char *symbol = onNull ? "??" : "!!";
 
     // The left side is a `T?` (`T!`) as the name it is, and the right side is a `T` or the
     // same `T?` (design principles 3.8): neither is in the position the whole expression
@@ -1417,7 +1417,6 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
     Type *subjectType = valueTypeOf(nodeTypeOf(subject));
     TupleType *tagged = asTagged(subjectType);
     if (tagged == nullptr || tagged->isNullable() != onNull) {
-        // DESIGN-QUESTION(nullable-error) Q6: `?->` is defined for errors only.
         diags_->of(SemanticDiag::TaggedOperandMismatch)
             .atOrigin(gct->origin())
             .commit(
@@ -1437,76 +1436,100 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
     const GCT::node_ptr_t exec = gct->at(1)->at(0);
     std::vector<arm_ptr_t> arms(2);
 
-    if (kind != Kind::ErrorPass) {
-        // Arm 0 is the right-hand side, a subgraph of its own: it is entered, and so
-        // evaluated, only when the tag selects it. Arm 1 takes the value out. The right
-        // side's position is the payload type: a plain `T` is what it is, and a `T?` is what
-        // the chained form hands on (a value of another form is left as it is, and the test
-        // below names it).
-        {
-            ExpectedValueScope fallbackScope(expectedValueType_, payload);
-            arms[0] = buildArm(exec);
-        }
-        // Design principles 3.8: the right-hand side is a `T`, and the result is a `T`; or
-        // it is itself a `T?` (`T!` for `!!`), and the result is that: `a ?? b ?? 9` tries
-        // `a`, then `b`, then gives the default. Arm 1 then hands on `a` as it is instead of
-        // taking the value out. Either way it is one branch.
-        Type *fallback   = arms[0]->exitType();
-        const bool plain = fallback != nullptr && (payload->unify(fallback) != nullptr ||
-                                                   entersImplicitly(payload, fallback));
-        const bool chained =
-            !plain && fallback != nullptr && entersImplicitly(subjectType, fallback);
-        if (plain) {
-            if (payload->unify(fallback) == nullptr) {
-                coerceArmExit(arms[0], payload, gct);
-            }
-            arms[1] = buildArm(exec, [&] { return applyTagOperator(valueOp, name, gct); });
-        } else if (chained) {
-            coerceArmExit(arms[0], subjectType, gct);
-            arms[1] = buildArm(exec, [&] {
-                const GCT::node_ptr_t dref = tree_->makeDRef(name);
-                dref->setOrigin(gct->origin());
-                return valueNodeOf(visitDRefNode(dref));
-            });
-        } else {
-            diags_->of(SemanticDiag::TaggedOperandMismatch)
-                .atOrigin(gct->origin())
-                .commit(
-                    symbol,
-                    "its right side has type '" +
-                        (fallback ? fallback->toString() : std::string("void")) +
-                        "', but the left side holds a '" + payload->toString() + "'");
-            throw BuildAbortException();
-        }
-        return buildBranch(gct, tagNode, &arms);
+    // Arm 0 is the right-hand side, a subgraph of its own: it is entered, and so
+    // evaluated, only when the tag selects it. Arm 1 takes the value out. The right
+    // side's position is the payload type: a plain `T` is what it is, and a `T?` is what
+    // the chained form hands on (a value of another form is left as it is, and the test
+    // below names it).
+    {
+        ExpectedValueScope fallbackScope(expectedValueType_, payload);
+        arms[0] = buildArm(exec);
     }
+    // Design principles 3.8: the right-hand side is a `T`, and the result is a `T`; or
+    // it is itself a `T?` (`T!` for `!!`), and the result is that: `a ?? b ?? 9` tries
+    // `a`, then `b`, then gives the default. Arm 1 then hands on `a` as it is instead of
+    // taking the value out. Either way it is one branch.
+    Type *fallback   = arms[0]->exitType();
+    const bool plain = fallback != nullptr && (payload->unify(fallback) != nullptr ||
+                                               entersImplicitly(payload, fallback));
+    const bool chained =
+        !plain && fallback != nullptr && entersImplicitly(subjectType, fallback);
+    if (plain) {
+        if (payload->unify(fallback) == nullptr) {
+            coerceArmExit(arms[0], payload, gct);
+        }
+        arms[1] = buildArm(exec, [&] { return applyTagOperator(valueOp, name, gct); });
+    } else if (chained) {
+        coerceArmExit(arms[0], subjectType, gct);
+        arms[1] = buildArm(exec, [&] {
+            const GCT::node_ptr_t dref = tree_->makeDRef(name);
+            dref->setOrigin(gct->origin());
+            return valueNodeOf(visitDRefNode(dref));
+        });
+    } else {
+        diags_->of(SemanticDiag::TaggedOperandMismatch)
+            .atOrigin(gct->origin())
+            .commit(
+                symbol,
+                "its right side has type '" +
+                    (fallback ? fallback->toString() : std::string("void")) +
+                    "', but the left side holds a '" + payload->toString() + "'");
+        throw BuildAbortException();
+    }
+    return buildBranch(gct, tagNode, &arms);
+}
 
-    // `x ?-> f`: arm 1 calls `f` with the value and yields a `U!` (put into that form when
-    // `f` returns a plain `U`); arm 0 hands the failed `x` on as that `U!`. Arm 1 is built
-    // first because it is what determines `U`.
+// `x -> f` where `x` is a `T?` or a `T!` and no overload of `f` takes it as it is (design
+// principles 3.9): a branch on the tag of `x`. The arm taken when `x` is null (has failed) hands it
+// on as the result; the other arm calls `f` with the value taken out, and gives a `U?` (`U!`; a
+// `U` that is already of that form is kept). The value taken out may itself be tagged (`T?!`), in
+// which case the call there takes it apart again.
+node_handle_t Builder::peelPipeReceiver(const GCT::node_ptr_t &call, node_handle_t receiver) {
+    Type *subjectType = valueTypeOf(nodeTypeOf(receiver));
+    TupleType *tagged = asTagged(subjectType);
+    ASSERT(tagged != nullptr, "A pipe takes a receiver apart only when it is tagged.");
+    const bool onNull      = tagged->isNullable();
+    const std::string name = bindTemporary(receiver);
+    node_handle_t tagNode  = applyTagOperator(
+        onNull ? camel::core::oper::TagIsNull : camel::core::oper::TagIsError,
+        name,
+        call);
+    const camel::core::OperId valueOp =
+        onNull ? camel::core::oper::TagNullValue : camel::core::oper::TagErrorValue;
+    GCT::node_ptr_t passed = tree_->makeDRef(GCT::kPassedValueName);
+    passed->setOrigin(call->at(1)->origin());
+
+    std::vector<arm_ptr_t> arms(2);
     Type *resultType = nullptr;
-    arms[1]          = buildArm(exec, [&] {
-        insertNode(GCT::kPassedValueName, applyTagOperator(valueOp, name, gct));
-        node_handle_t result = visitBodyNode(exec);
-        ASSERT(result != nullptr, "The call of '?->' produced no node.");
+    arms[1]          = buildArm(call, [&] {
+        insertNode(GCT::kPassedValueName, applyTagOperator(valueOp, name, call));
+        ExpectedValueScope noPosition(expectedValueType_, nullptr);
+        node_handle_t result = visitPipeLink(call, passed);
         if (nodeIsKind(result, runtime::GCNodeKind::Gate) && !normInputsOf(result).empty()) {
             result = nodeDraftOf(result)->ref(normInputsOf(result).front());
         }
         Type *type = valueTypeOf(nodeTypeOf(result));
-        if (asFallible(type) != nullptr) {
-            resultType = type;
-            return result;
+        if (onNull) {
+            resultType = type->code() == TypeCode::Void || asNullable(type) != nullptr
+                             ? type
+                             : TupleType::nullable(type);
+        } else {
+            resultType = asFallible(type) != nullptr ? type : TupleType::fallible(type);
         }
-        resultType = TupleType::fallible(type);
-        return castNodeTo(result, resultType, gct);
+        return resultType == type ? result : castNodeTo(result, resultType, call);
     });
-    arms[0]          = buildArm(exec, [&] {
+    arms[0]          = buildArm(call, [&] {
+        if (onNull) {
+            node_handle_t none = currGraph_->addStaticDataNode(Data::null());
+            registerNodeOrigin(context_, none, call, "gir.data");
+            return resultType->code() == TypeCode::Void ? none : castNodeTo(none, resultType, call);
+        }
         const GCT::node_ptr_t dref = tree_->makeDRef(name);
-        dref->setOrigin(gct->origin());
+        dref->setOrigin(call->origin());
         node_handle_t failed = valueNodeOf(visitDRefNode(dref));
-        return resultType->equals(subjectType) ? failed : castNodeTo(failed, resultType, gct);
+        return resultType->equals(subjectType) ? failed : castNodeTo(failed, resultType, call);
     });
-    return buildBranch(gct, tagNode, &arms);
+    return buildBranch(call, tagNode, &arms);
 }
 
 node_handle_t
@@ -2020,8 +2043,7 @@ node_handle_t Builder::visitConditionBrchNode(const GCT::node_ptr_t &gct) {
 node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
     ENTER("BRCH");
     const auto kind = gct->branchKind();
-    if (kind == GCT::BranchKind::NullThen || kind == GCT::BranchKind::ErrorThen ||
-        kind == GCT::BranchKind::ErrorPass) {
+    if (kind == GCT::BranchKind::NullThen || kind == GCT::BranchKind::ErrorThen) {
         node_handle_t node = visitTaggedBrchNode(gct);
         LEAVE("BRCH");
         return node;

@@ -13,5 +13,5 @@ func show(a: Json): int sync {
 }
 
 func main(): int sync {
-    return decode('12345') ?-> show !! 1
+    return decode('12345') -> show !! 1
 }

@@ -289,6 +289,11 @@ class Tree {
     void setArgumentNames(const Node *call, std::vector<std::optional<std::string>> names);
     const std::vector<std::optional<std::string>> *argumentNamesOf(const Node *call) const;
 
+    /// A call written with the pipe `x -> f` (design principles 3.9): its receiver, when it is a
+    /// `T?` or a `T!` no overload takes as it is, is taken apart by the call.
+    void markPipe(const Node *call) { pipeCalls_.insert(call); }
+    bool isPipe(const Node *call) const { return pipeCalls_.contains(call); }
+
 
     /// The number of nodes made so far, attached to the root or not.
     size_t nodeCount() const { return nodeCount_; }
@@ -354,6 +359,7 @@ class Tree {
     std::unordered_map<const Node *, std::vector<std::string>> headTypeParams_;
     std::unordered_map<const Node *, ParameterDefaults> parameterDefaults_;
     std::unordered_map<const Node *, std::vector<std::optional<std::string>>> argumentNames_;
+    std::unordered_set<const Node *> pipeCalls_;
 
     // Keyed by the data object: a composite literal's elements are converted from it, and a
     // nested literal keeps its own entry.

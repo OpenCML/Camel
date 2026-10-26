@@ -46,7 +46,7 @@ golden = "golden/attempt_nested.txt"
 
 [[tests]]
 name = "attempt.forms"
-desc = "The result with `!!`, `?->`, `match ... case error e` and println; a callee that returns `U!` gives `U!` and its own errors pass unchanged (DESIGN-QUESTION(attempt-fallible-target)); a callee that returns `U?` gives `U?!`."
+desc = "The result with `!!`, `->`, `match ... case error e` and println; a callee that returns `U!` gives `U!` and its own errors pass unchanged (DESIGN-QUESTION(attempt-fallible-target)); a callee that returns `U?` gives `U?!`."
 case = "../../../cases/consistency/attempt/forms.cml"
 golden = "golden/attempt_forms.txt"
 

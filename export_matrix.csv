@@ -33,7 +33,6 @@ tensor:abs,1,
 tensor:add,1,
 tensor:argmax_axis,12,
 tensor:broadcast_like,,8
-tensor:cast,1,
 tensor:cast_like,,1
 tensor:concat,1,
 tensor:dim,1,

@@ -35,7 +35,7 @@ golden = "golden/surface_member_chain.txt"
 
 [[tests]]
 name = "surface.lambda_call"
-desc = "A lambda called where it is written: `((x: int): int => x + 1)(3)`, `3->(x: int): int => x + 1`, `v ?-> (x: int): int => x * 2`. Each ended in the bare text `bad any_cast`."
+desc = "A lambda called where it is written: `((x: int): int => x + 1)(3)`, `3->(x: int): int => x + 1`, `v -> (x: int): int => x * 2`. Each ended in the bare text `bad any_cast`."
 case = "../../../cases/consistency/surface/lambda_call.cml"
 golden = "golden/surface_lambda_call.txt"
 

@@ -1,7 +1,7 @@
 /**
  * The forms of the operator and of its result: a function that already returns `U!` gives `U!`
  * (its own errors are handed on unchanged, a fault becomes an error of the same type); a
- * function that returns `U?` gives `U?!`. The result is handled with `!!`, `?->` and
+ * function that returns `U?` gives `U?!`. The result is handled with `!!`, `->` and
  * `match ... case error e`, and can be stored, passed and printed like any `T!`.
  *
  * DESIGN-QUESTION(attempt-fallible-target): `attempt` of a function that returns `U!` has the
@@ -37,9 +37,9 @@ func main(): int sync {
     // !!
     println(attempt(half)(4) !! -1)
     println(attempt(half)(0) !! -1)
-    // ?->
-    println(describe(attempt(half)(4) ?-> plus_one))
-    println(describe(attempt(half)(0) ?-> plus_one))
+    // ->
+    println(describe(attempt(half)(4) -> plus_one))
+    println(describe(attempt(half)(0) -> plus_one))
     // match
     println(describe(attempt(half)(0)))
     // printing an error value
