@@ -406,6 +406,7 @@ enum class SemanticDiag : uint32_t {
     // is not a container in that sense - its items are taken apart once - and a function signature
     // may take and give a stream.
     StreamInContainer   = 0x0001E3,
+    StreamConsumedTwice = 0x0001E5,
     NodeOfNotAParameter = 0x0001DE,
     // The element type of a value is in its type (design principles 5.1), so an array type writes one:
     // a shape with no element type in front of it asks a question the type of a value answers. A

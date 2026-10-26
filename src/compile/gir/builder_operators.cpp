@@ -3210,6 +3210,9 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         // the signature the stream type gives it, and nothing is converted -- the value already
         // is that function value -- so no arguments are taken and `s()` is the form.
         if (dataType != nullptr && dataType->code() == TypeCode::Stream) {
+            // A pull is one consumer of the stream (design principles 5.4: a stream is read once on
+            // each execution path), the other being a `for` over it.
+            consumeStream(targetNode, gct);
             dataType = tt::as_ptr<StreamType>(dataType)->stepType();
         }
         ASSERT(

@@ -1573,6 +1573,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::StreamConsumedTwice,
+            {
+                "StreamConsumedTwice",
+                "'{0}' is consumed twice: a stream is read once on each execution path.",
+                "A stream is read one element at a time and is done when it ends, so on each execution path its value has one consumer (design principles 5.4). The second consumer is here and the first is here. To read one stream from two places, write `tee(s, n)`: it gives two streams, each read once, and both see the same elements.",
+            },
+        },
+        {
             SemanticDiag::NodeOfNotAParameter,
             {
                 "NodeOfNotAParameter",
