@@ -6,18 +6,23 @@ module main
 // 最简 python 模块测试
 import { py_eval, py_call, py_wrap, py_unwrap, py_dispose, PyObject } from python
 
+// A Python call is an error value; these programs expect every call to succeed.
+func must(r: PyObject!): PyObject {
+    return r !! py_wrap('python failed')
+}
+
 func main(): int sync {
     println("=== Python Module Basic Tests ===")
 
     println("\n[1] py_call('print', py_wrap('hello'))")
-    py_call("print", py_wrap("hello"))
+    let _ = py_call("print", py_wrap("hello"))
 
     println("\n[2] py_eval('1 + 2') -> py_unwrap as int")
-    let r = py_unwrap(py_eval("1 + 2") as PyObject<int>)
+    let r = py_unwrap(must(py_eval("1 + 2")) as PyObject<int>) !! -1
     '  1 + 2 = {}'->format<r>->println
 
     println("\n[3] py_dispose releases a PyObject explicitly and is idempotent")
-    let obj = py_eval("'dispose-me'")
+    let obj = must(py_eval("'dispose-me'"))
     py_dispose(obj)
     py_dispose(obj)
     println("  disposed PyObject twice")
