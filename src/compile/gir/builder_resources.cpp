@@ -61,9 +61,11 @@ ResourceSignature unplaceableReach() {
 // widens the same way, and the parameter and ambient uses keep the wider access.
 ResourceSignature uniteReach(const ResourceSignature &a, const ResourceSignature &b) {
     ResourceSignature united = a;
-    const auto uniteMode      = [](AccessMode left, AccessMode right) {
-        return sem::writes(left) || sem::writes(right) ? AccessMode::ReadModifyWrite
-                                                       : AccessMode::Read;
+    // Two uses of one resource amount to the wider access: the same access stays itself, and Read
+    // with Write is covered by no single access but ReadModifyWrite. Widening two writes into a
+    // read-modify-write would make a measured set harder to cover than the uses it stands for.
+    const auto uniteMode = [](AccessMode left, AccessMode right) {
+        return left == right ? left : AccessMode::ReadModifyWrite;
     };
     for (const auto &use : b.params) {
         const auto found = std::find_if(united.params.begin(), united.params.end(),
@@ -120,9 +122,8 @@ Builder::footprintOf(DraftGraphBuilder *graph, std::optional<draft_node_ref_t> o
     }
     ResourceSignature out;
     out.mode = ResourceSignature::Mode::Concrete;
-    const auto uniteMode = [](sem::AccessMode a, sem::AccessMode b) {
-        return sem::writes(a) || sem::writes(b) ? sem::AccessMode::ReadModifyWrite
-                                                : sem::AccessMode::Read;
+    const auto uniteMode = [](sem::AccessMode left, sem::AccessMode right) {
+        return left == right ? left : sem::AccessMode::ReadModifyWrite;
     };
     bool unplaceable = false;
     const auto addParam = [&](size_t index, sem::ResourceClass cls, const std::string &name,
