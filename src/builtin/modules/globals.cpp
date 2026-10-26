@@ -37,6 +37,14 @@ using namespace camel::core::rtdata;
 using namespace camel::core::type;
 
 namespace {
+// Both sides of `==` are one type; an unnamed struct value is the named type it has the fields
+// of, read as it is (design principles 5.2), so the two compare by their fields.
+bool sameOrEnteringStruct(Type *a, Type *b) {
+    if (a->equals(b))
+        return true;
+    return a->code() == TypeCode::Struct && b->code() == TypeCode::Struct &&
+           (a->assignableFrom(b) || b->assignableFrom(a));
+}
 
 /// Whether a value of type `type` exists at run time, so that an operator taking a value of
 /// every type (`string(x)`) may take it: not `void`, not a type the compiler uses on its own
@@ -1576,7 +1584,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                                     !tt::as_ptr<TupleType>(norm[0])->isTagged());
                             // An enum compares by its variant and then its fields.
                             const bool comparable = composite || asEnumType(norm[0]) != nullptr;
-                            if (!comparable || !norm[0]->equals(norm[1]) ||
+                            if (!comparable || !sameOrEnteringStruct(norm[0], norm[1]) ||
                                 !isContentComparable(norm[0])) {
                                 return nullopt;
                             }
@@ -1671,7 +1679,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                                     !tt::as_ptr<TupleType>(norm[0])->isTagged());
                             // An enum compares by its variant and then its fields.
                             const bool comparable = composite || asEnumType(norm[0]) != nullptr;
-                            if (!comparable || !norm[0]->equals(norm[1]) ||
+                            if (!comparable || !sameOrEnteringStruct(norm[0], norm[1]) ||
                                 !isContentComparable(norm[0])) {
                                 return nullopt;
                             }
@@ -2644,9 +2652,22 @@ std::make_shared<StaticCheckedResolver>(
                                 return nullopt;
                             const auto &arrType      = tt::as_ptr<ArrayType>(norm[0]);
                             const auto &otherArrType = tt::as_ptr<ArrayType>(norm[1]);
-                            if (!arrType->elemType()->equals(otherArrType->elemType()))
+                            // The same relation as `append` and `contains` hold their values
+                            // to (design principles 5.2): an unnamed struct element enters the
+                            // named element type of the other array, which is the result's.
+                            Type *left  = arrType->elemType();
+                            Type *right = otherArrType->elemType();
+                            if (left->equals(right))
+                                return ArrayType::create(left);
+                            // Elements are copied slot by slot, so only a value that is read as
+                            // the type without moving anything qualifies (assignableFrom).
+                            if (left == Type::Void() || right == Type::Void())
                                 return nullopt;
-                            return ArrayType::create(arrType->elemType());
+                            if (left->assignableFrom(right))
+                                return ArrayType::create(left);
+                            if (right->assignableFrom(left))
+                                return ArrayType::create(right);
+                            return nullopt;
                         }),
                 },
             }),
