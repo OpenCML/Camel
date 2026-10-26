@@ -19,76 +19,20 @@ Source: `docs/stdlib-reference.md`, generated from the declarations in `stdlib/*
 `node scripts/stdlib-reference.mjs --write`.
 
 <!-- camel-for-ai region: stdlib-signatures (generated from docs/stdlib-reference.md; node scripts/camel-for-ai.mjs --write) -->
-**`Built-in functions`** — no import — 61 name(s)
+**`Built-in functions`** — no import — 55 name(s)
 
 ```text
 std::mem::blocks: () => { allocs: int, frees: int, live: int, bytes: int }
-int: (x: i32) => int
-int: (x: int) => int
-int: (x: f32) => int
-int: (x: float) => int
-int: (x: string) => int
-int: (x: bf16) => int
-int: (x: f16) => int
-i64: (x: i32) => int
-i64: (x: int) => int
-i64: (x: f32) => int
-i64: (x: float) => int
-i64: (x: string) => int
-i64: (x: bf16) => int
-i64: (x: f16) => int
-i32: (x: i32) => i32
-i32: (x: int) => i32
-i32: (x: f32) => i32
-i32: (x: float) => i32
-i32: (x: string) => i32
-i32: (x: bf16) => i32
-i32: (x: f16) => i32
-float: (x: i32) => float
-float: (x: int) => float
-float: (x: f32) => float
-float: (x: float) => float
-float: (x: string) => float
-float: (x: bf16) => float
-float: (x: f16) => float
-f64: (x: i32) => float
-f64: (x: int) => float
-f64: (x: f32) => float
-f64: (x: float) => float
-f64: (x: string) => float
-f64: (x: bf16) => float
-f64: (x: f16) => float
-f32: (x: i32) => f32
-f32: (x: int) => f32
-f32: (x: f32) => f32
-f32: (x: float) => f32
-f32: (x: string) => f32
-f32: (x: bf16) => f32
-f32: (x: f16) => f32
-bf16: (x: i32) => bf16
-bf16: (x: int) => bf16
-bf16: (x: f32) => bf16
-bf16: (x: float) => bf16
-bf16: (x: bf16) => bf16
-bf16: (x: string) => bf16
-f16: (x: i32) => f16
-f16: (x: int) => f16
-f16: (x: f32) => f16
-f16: (x: float) => f16
-f16: (x: f16) => f16
-f16: (x: string) => f16
-c64: (x: i32) => c64
-c64: (x: int) => c64
-c64: (x: f32) => c64
-c64: (x: float) => c64
-c64: (x: c64) => c64
-c64: (x: c128) => c64
-c128: (x: i32) => c128
-c128: (x: int) => c128
-c128: (x: f32) => c128
-c128: (x: float) => c128
-c128: (x: c64) => c128
-c128: (x: c128) => c128
+int: (x: S) => int when is_real::<S>() || is_string::<S>()
+i64: (x: S) => int when is_real::<S>() || is_string::<S>()
+i32: (x: S) => i32 when is_real::<S>() || is_string::<S>()
+float: (x: S) => float when is_real::<S>() || is_string::<S>()
+f64: (x: S) => float when is_real::<S>() || is_string::<S>()
+f32: (x: S) => f32 when is_real::<S>() || is_string::<S>()
+bf16: (x: S) => bf16 when is_real::<S>() || is_string::<S>()
+f16: (x: S) => f16 when is_real::<S>() || is_string::<S>()
+c64: (x: S) => c64 when is_real::<S>() || is_complex::<S>()
+c128: (x: S) => c128 when is_real::<S>() || is_complex::<S>()
 string: (x: T) => string
 parse_int: (text: string) => int!
 parse_float: (text: string) => float!
@@ -96,30 +40,25 @@ error: (kind: string, message: string) => Error
 print: (x: T, ...rest: U...) => T
 println: (x: T, ...rest: U...) => T
 eprintln: (x: T, ...rest: U...) => T
-input: (prompt: string) => string
 format: <...args: T...> (fmt: string) => string
 join: <sep: string> (xs: string[]) => string
 len: (x: string) => int
 len: (x: T[..]) => int
+len: (x: Bytes) => int
 range: (start: int, end: int, step?: int) => int[]
-head: (xs: T[]) => T
 last: (xs: T[]) => T
-tail: (xs: T[]) => T[]
-slice: <start: int, end: int> (xs: T[]) => T[]
-slice: (t: T[], axis: int, start: int, end: int, step: int = 1, written: int = 3) => T[]
-slice: (s: string, axis: int, start: int, end: int, step: int = 1, written: int = 3) => string
-slice: (b: Bytes, axis: int, start: int, end: int, step: int = 1, written: int = 3) => Bytes
+slice: <axis: int, start: int, end: int, step: int = 1> (x: T[]) => T[]
+slice: <axis: int, start: int, end: int, step: int = 1> (x: string) => string
+slice: <axis: int, start: int, end: int, step: int = 1> (x: Bytes) => Bytes
 concat: (xs: T[], ys: T[]) => T[]
 contains: <value: T> (xs: T[]) => bool
 contains: <sub: string> (s: string) => bool
 zip: (xs: T[], ys: U[]) => (T, U)[]
 append: <value: T> (xs: T[]) => T[]
-extend: <other: T[]> (xs: T[]) => T[]
 map: <f: (item: T) => U> (xs: T[]) => U[]
 filter: <f: (item: T) => bool> (xs: T[]) => T[]
 reduce: <f: (acc: U, item: T) => U, initial: U> (xs: T[]) => U
 foreach: <f: (item: T) => void> (xs: T[]) => void
-apply: <f: (item: T) => T> (xs: T[]) => T[]
 fail: <Kind: string> (message: string) => never
 attempt: (f: (...args: A) => T) => (...args: A) => T!
 len: (x: Map<K, V>) => int
@@ -130,7 +69,6 @@ put: <key: K, value: V> (m: Map<K, V>) => Map<K, V>
 remove: <key: K> (c: Map<K, V>) => Map<K, V>
 remove: (c: Set<K>) => Set<K>
 has: <key: K> (c: Map<K, V>) => bool
-has: (c: Set<K>) => bool
 keys: (m: Map<K, V>) => K[]
 values: (m: Map<K, V>) => V[]
 items: (m: Map<K, V>) => (K, V)[]
@@ -555,10 +493,11 @@ remove: (path: string) => void!
 remove_dir: (path: string) => void!
 ```
 
-**`io`** — import { ... } from io — 5 name(s)
+**`io`** — import { ... } from io — 6 name(s)
 
 ```text
 set_terminal_raw_mode: (enabled: bool) => void!
+input: (prompt: string) => string
 has_input: () => bool
 get_chars: (max: int) => string
 get_char: () => string?

@@ -352,6 +352,12 @@ GrowthBudget growthBudgetOf(const PassArgs &args, std::string passName) {
     return budget;
 }
 
+// A file a pass writes to is a `string?` parameter: null (left out) writes none, which the passes
+// read as the empty path.
+std::string pathArgument(const PassArgs &args, const std::string &name) {
+    return args.isNull(name) ? std::string() : args.getString(name);
+}
+
 PassMaker makeGraphVizPass(GraphVizDumpConfig config) {
     return [config](const context_ptr_t &ctx, const PassArgs &) {
         return std::make_unique<GraphVizDumpPass>(ctx, config);
@@ -469,17 +475,17 @@ PassMaker profilePass() {
         return std::make_unique<ProfilePass>(
             ctx,
             options,
-            args.getString("json"),
+            pathArgument(args, "json"),
             gcStats < 0 ? 0 : static_cast<int>(gcStats),
             args.getBool("type_stats"),
-            args.getString("effect_trace"));
+            pathArgument(args, "effect_trace"));
     };
 }
 
 PassMaker fastVmPass(bool jit) {
     return [jit](const context_ptr_t &ctx, const PassArgs &args) {
         FastVMConfig config = jit ? makeDefaultFastVmJitConfig() : FastVMConfig{};
-        config.statsPath    = args.getString("stats");
+        config.statsPath    = pathArgument(args, "stats");
         if (jit) {
             const int64_t threshold = args.getInt("hot_threshold");
             config.jitHotThreshold  = threshold < 0 ? 0 : static_cast<size_t>(threshold);

@@ -13,7 +13,7 @@
 let xs = 1..11        // [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 ```
 
-数组是**值**，不是可以被别人改掉的容器：`concat(xs, [11])`、`xs->slice<0, 3>` 都返回新数组，`xs` 不变
+数组是**值**，不是可以被别人改掉的容器：`concat(xs, [11])`、`xs[0:3]` 都返回新数组，`xs` 不变
 （第 2 章）。索引越界是故障，程序带位置终止（第 7 章）。
 
 ## 高阶算子
@@ -36,8 +36,8 @@ func main(): int sync {
     println(total)
 
     // Arrays are values: slice and concat return new arrays.
-    let ys = concat(xs->slice<0, 3>, [99])
-    println(ys, len(ys), head(ys))
+    let ys = concat(xs[0:3], [99])
+    println(ys, len(ys), ys[0])
 
     // foreach runs its function for each element, in order.
     ['a', 'b', 'c']->foreach<(s: string) => sync { println('item', s) }>
@@ -135,7 +135,7 @@ func main(): int sync {
 
     seed(42)
     // reduce runs in element order on every back end.
-    let ordered = 0..8->reduce<(acc: int[], i: int): int[] => concat(acc, [randint(0, 99)]), [0]->slice<0, 0>>
+    let ordered = 0..8->reduce<(acc: int[], i: int): int[] => concat(acc, [randint(0, 99)]), [0][0:0]>
     println(ordered)
     return 0
 }
@@ -169,7 +169,7 @@ func main(): int sync {
 
     seed(42)
     // reduce runs in element order on every back end.
-    let ordered = 0..8->reduce<(acc: int[], i: int): int[] => concat(acc, [randint(0, 99)]), [0]->slice<0, 0>>
+    let ordered = 0..8->reduce<(acc: int[], i: int): int[] => concat(acc, [randint(0, 99)]), [0][0:0]>
     println(ordered)
     return 0
 }

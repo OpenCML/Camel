@@ -5,7 +5,7 @@ module main
 func main(): int sync {
     let s = [3, 1, 2, 3, 1] as Set<int>
     println(s, len(s))
-    println(s->contains<2>, s->contains<9>, s->has<3>, s->has<0>)
+    println(s->contains<2>, s->contains<9>, s->contains<3>, s->contains<0>)
     println(s->add<0>, s->add<2> == s, s->remove<3>, s->remove<7> == s)
     println(s)
     let t = [2, 3, 4] as Set<int>

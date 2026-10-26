@@ -8,7 +8,7 @@
  * its argument.
  *
  * - The array a function works on is its ordinary argument; a function or a value that
- *   configures it is a with-argument, as for the built-in `map<f>(xs)` and `slice<a, b>(xs)`,
+ *   configures it is a with-argument, as for the built-in `map<f>(xs)` and `filter<f>(xs)`,
  *   so calls chain: `xs->filter<p>->sort_by<key>->take<3>`.
  * - A result that may not exist is `T?` (`find`, `index_of`, `min`, `max`). Nothing here
  *   returns an error value, and a wrong argument is a fault of the operator that meets it.
