@@ -24,7 +24,6 @@ namespace camel::autodiff {
 namespace {
 
 namespace mm = camel::core::mm;
-using ::ModifierSet;
 using camel::core::context::Context;
 using camel::core::error::RuntimeDiag;
 using camel::core::error::SemanticDiag;
@@ -41,9 +40,7 @@ class GradResolver final : public type::FuncTypeResolver {
     explicit GradResolver(bool withValue) : withValue_(withValue) {}
 
     std::optional<FunctionType *> resolve(
-        const type_vec_t &with, const type_vec_t &norm,
-        const ModifierSet &modifiers) const override {
-        (void)modifiers;
+        const type_vec_t &with, const type_vec_t &norm) const override {
         const auto gradient = signatureOf(with, norm);
         if (!gradient) {
             return std::nullopt;
@@ -52,10 +49,8 @@ class GradResolver final : public type::FuncTypeResolver {
     }
 
     std::optional<std::string> explainRejection(
-        const type_vec_t &with, const type_vec_t &norm, type::static_args_t normStatics,
-        const ModifierSet &modifiers) const override {
+        const type_vec_t &with, const type_vec_t &norm, type::static_args_t normStatics) const override {
         (void)normStatics;
-        (void)modifiers;
         if (!with.empty() || norm.size() != 1 || norm[0]->code() != TypeCode::Function) {
             return std::nullopt;
         }

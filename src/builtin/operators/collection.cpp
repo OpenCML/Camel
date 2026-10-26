@@ -160,8 +160,7 @@ const std::vector<oper_group_ptr_t> &getCollectionOperatorGroups() {
             signature,
             [fn = std::move(fn)](
                 const type_vec_t &with,
-                const type_vec_t &norm,
-                const ModifierSet &) -> optional<Type *> { return fn(with, norm); });
+                const type_vec_t &norm) -> optional<Type *> { return fn(with, norm); });
     };
     // An operation on one collection configured by `count` arguments: the collection is the
     // ordinary argument and what configures the operation is written in angle brackets,
@@ -174,8 +173,7 @@ const std::vector<oper_group_ptr_t> &getCollectionOperatorGroups() {
             signature,
             [count, fn = std::move(fn)](
                 const type_vec_t &with,
-                const type_vec_t &norm,
-                const ModifierSet &) -> optional<Type *> {
+                const type_vec_t &norm) -> optional<Type *> {
                 if (with.size() == count && norm.size() == 1) {
                     return fn(norm[0], with);
                 }

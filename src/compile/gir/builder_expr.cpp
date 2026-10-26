@@ -1164,7 +1164,7 @@ GCT::node_ptr_t Builder::internalOperatorDref(camel::core::OperId oper) {
 node_handle_t Builder::variableOperator(camel::core::OperId oper, node_handle_t input) {
     const auto group = internalOperatorGroup(oper);
     const std::vector<StaticArg> statics(1);
-    const auto op = group->resolve({}, {nodeTypeOf(input)}, statics, Modifier::None);
+    const auto op = group->resolve({}, {nodeTypeOf(input)}, statics);
     ASSERT(op.has_value(), "Variable operator rejected its operand.");
     node_handle_t node = currGraph_->addOperNode(*op, 0);
     stampPermissions(node);

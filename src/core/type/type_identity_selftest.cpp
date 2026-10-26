@@ -4,15 +4,19 @@
 #include "camel/core/type/type_identity_selftest.h"
 
 #include "camel/core/type/base.h"
+#include "camel/core/derivative.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/stream.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/core/type/extent.h"
 #include "camel/core/type/intern.h"
+#include "camel/core/type/pure.h"
 #include "camel/core/type/text.h"
 
 #include <format>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -37,6 +41,16 @@ Type *arrayOf(Type *elem, std::initializer_list<int64_t> extents) {
     const std::vector<int64_t> shape(extents);
     return ArrayType::create(elem, std::span<const int64_t>(shape));
 }
+
+using Terms = std::vector<std::pair<std::string, int64_t>>;
+
+/// `elem[forms...]` over linear extents: each entry is a constant and the names it multiplies.
+Type *linearArray(Type *elem, std::initializer_list<ExtentForm> forms) {
+    const std::vector<ExtentForm> list(forms);
+    return ArrayType::create(elem, std::span<const ExtentForm>(list), {});
+}
+
+ExtentForm dim(int64_t constant, Terms terms) { return ExtentForm::linear(constant, std::move(terms)); }
 
 Type *structOf(std::initializer_list<std::pair<const char *, Type *>> fields) {
     StructTypeFactory factory;
@@ -86,6 +100,13 @@ std::vector<Type *> corpus() {
         functionOf({i}, i), functionOf({i}, f), functionOf({i, i}, i), functionOf({}, i),
         functionOf({i}, Type::Void()), functionOf({i}, arrayOf(i, {2})), functionOf({i}, arrayOf(i, {3})),
         functionOf({i}, i, {i}), functionOf({i}, i, {i}, true),
+        linearArray(f, {dim(0, {{"n", 1}})}), linearArray(f, {dim(0, {{"m", 1}})}),
+        linearArray(f, {dim(1, {{"n", 1}})}), linearArray(f, {dim(0, {{"n", 2}})}),
+        linearArray(f, {dim(0, {{"n", 1}}), dim(0, {{"n", 1}})}),
+        linearArray(f, {dim(0, {{"n", 1}}), dim(0, {{"m", 1}})}),
+        linearArray(f, {dim(0, {{"m", 1}}), dim(0, {{"n", 1}})}),
+        linearArray(f, {dim(0, {{"n", 1}, {"m", 1}})}), linearArray(f, {dim(0, {{"a", 1}, {"b", 1}})}),
+        linearArray(f, {dim(0, {{"n", 1}}), ExtentForm::constant(4)}),
     };
     return out;
 }
@@ -168,6 +189,40 @@ std::string debugRunTypeIdentitySelfTest() {
     Type *f = Type::Float64();
     Type *s = Type::String();
 
+    const auto expectJoin = [&](Type *a, Type *b, Type *expected) {
+        Type *joined = a->unify(b);
+        require(
+            joined != nullptr && joined->equals(expected),
+            "unify(" + show(a) + ", " + show(b) + ") = " + show(joined) + ", not " + show(expected));
+    };
+
+    // an extent is a linear form over names, and its equality is decidable: the same form up to
+    // the names (design principles 5.4). Dimensions that relate differently are different types.
+    const auto n  = linearArray(f, {dim(0, {{"n", 1}})});
+    const auto m  = linearArray(f, {dim(0, {{"m", 1}})});
+    const auto n1 = linearArray(f, {dim(1, {{"n", 1}})});
+    const auto n2 = linearArray(f, {dim(0, {{"n", 2}})});
+    require(n->equals(m) && sameCanonicalType(n, m), "f32[n] and f32[m] are not one type");
+    require(!n->equals(n1) && !sameCanonicalType(n, n1), "f32[n] and f32[n + 1] are one type");
+    require(!n->equals(n2) && !n1->equals(n2), "f32[n], f32[n + 1] and f32[2 * n] are not three types");
+    require(!n->equals(ArrayType::create(f)), "f32[n] and f32[?] are one type");
+    require(
+        linearArray(f, {dim(0, {{"n", 1}}), dim(0, {{"m", 1}})})
+            ->equals(linearArray(f, {dim(0, {{"m", 1}}), dim(0, {{"n", 1}})})),
+        "f32[n, m] and f32[m, n] are not one type");
+    require(
+        !linearArray(f, {dim(0, {{"n", 1}}), dim(0, {{"n", 1}})})
+             ->equals(linearArray(f, {dim(0, {{"n", 1}}), dim(0, {{"m", 1}})})),
+        "f32[n, n] and f32[n, m] are one type");
+    require(
+        linearArray(f, {dim(0, {{"n", 1}, {"m", 1}})})
+            ->equals(linearArray(f, {dim(0, {{"a", 1}, {"b", 1}})})),
+        "f32[n + m] and f32[a + b] are not one type");
+    require(n->mangle() != n1->mangle() && n->mangle() == m->mangle(), "the mangled name does not follow the identity");
+    expectJoin(n, n, n);
+    expectJoin(n, n1, ArrayType::create(f));
+    require(n->assignableFrom(n1) && n1->assignableFrom(n), "a named extent asks for nothing at the type level");
+
     // `void` discards in the result of a function and nowhere else
     require(
         !TupleType::create(std::vector<Type *>{Type::Void(), i})
@@ -196,12 +251,6 @@ std::string debugRunTypeIdentitySelfTest() {
         "functions that differ in a recorded with parameter share a canonical id");
 
     // the least common type of two branch arms (design principles 5.1, 5.4)
-    const auto expectJoin = [&](Type *a, Type *b, Type *expected) {
-        Type *joined = a->unify(b);
-        require(
-            joined != nullptr && joined->equals(expected),
-            "unify(" + show(a) + ", " + show(b) + ") = " + show(joined) + ", not " + show(expected));
-    };
     expectJoin(
         TupleType::create(std::vector<Type *>{arrayOf(i, {2}), i}),
         TupleType::create(std::vector<Type *>{arrayOf(i, {3}), i}),
@@ -253,6 +302,37 @@ std::string debugRunTypeIdentitySelfTest() {
                     "`" + show(from) + " as " + show(to) + "` is allowed");
             }
         }
+    }
+
+    // What is cached about a type is never computed from something still being defined: a struct
+    // asked about while its declaration is being read is not "not pure" for good.
+    {
+        StructDecl *decl  = StructDecl::create("IdentitySelfTestPoint", {});
+        StructType *point = StructType::declare(decl, {}, {"a", "b"});
+        require(!isPureDataType(point), "a struct with no field types yet is pure");
+        require(pureDataLayout(point) == nullptr, "a struct with no field types yet has a layout");
+        decl->define({{"a", i}, {"b", f}});
+        point->completeFields({{"a", i}, {"b", f}});
+        require(
+            isPureDataType(point),
+            "a struct asked about while it was declared stays not pure once it is complete");
+        require(pureDataLayout(point) != nullptr, "the complete struct has no layout");
+        // what is cached about a type is keyed by its canonical id: one entry, one answer, for two
+    // spellings of one type
+    {
+        Type *named  = linearArray(f, {dim(0, {{"n", 1}})});
+        Type *other  = linearArray(f, {dim(0, {{"m", 1}})});
+        Type *tangent = camel::core::gradientTypeOf(named);
+        require(tangent != nullptr, "an array of floats has no gradient type");
+        require(
+            tangent == camel::core::gradientTypeOf(other),
+            "f64[n] and f64[m] have two gradient types");
+    }
+
+    // and two spellings of one type share the answer (the cache is keyed by canonical id)
+        Type *pair  = structOf({{"x", i}, {"y", f}});
+        Type *again = structOf({{"x", i}, {"y", f}});
+        require(isPureDataType(pair) && pureDataLayout(pair) == pureDataLayout(again), "a pure struct has two layouts");
     }
 
     return std::format("{} types, {} pairs", types.size(), pairs);

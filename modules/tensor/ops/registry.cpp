@@ -101,14 +101,12 @@ class OpDefResolver final : public FuncTypeResolver {
         : def_(std::move(def)), signature_(def_->signature()) {}
 
     std::optional<FunctionType *> resolve(
-        const type_vec_t &with, const type_vec_t &norm,
-        const ModifierSet &modifiers) const override {
-        return resolveWith(with, norm, {}, modifiers);
+        const type_vec_t &with, const type_vec_t &norm) const override {
+        return resolveWith(with, norm, {});
     }
 
     std::optional<FunctionType *> resolveWith(
-        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics,
-        const ModifierSet &modifiers) const override {
+        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics) const override {
         if (!argumentsFit(*def_, with, norm)) {
             return std::nullopt;
         }
@@ -129,8 +127,7 @@ class OpDefResolver final : public FuncTypeResolver {
     }
 
     std::optional<std::string> explainRejection(
-        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics,
-        const ModifierSet &) const override {
+        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics) const override {
         if (!argumentsFit(*def_, with, norm)) {
             return std::nullopt;
         }

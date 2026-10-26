@@ -1138,7 +1138,7 @@ void Builder::markNonRetainingReads() {
             continue;
         }
         node_handle_t cell = draft->ref(normInputsOf(read).front());
-        const auto peek    = peekGroup->resolve({}, {nodeTypeOf(cell)}, statics, Modifier::None);
+        const auto peek    = peekGroup->resolve({}, {nodeTypeOf(cell)}, statics);
         ASSERT(peek.has_value(), "__var_peek__ rejected a variable.");
         nodeGraphOf(read)->retargetOperNode(read, *peek);
     }

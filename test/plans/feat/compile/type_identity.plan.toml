@@ -88,3 +88,13 @@ desc = "The conversion functions convert numbers (`float(n)`, `int(x)`, `i32(n)`
 case = "../../../cases/compile/casts/conversion_functions.cml"
 args = ["${case}"]
 expect_stdout_exact = "5.0 2 5 1.5 2.75\n5 2.75 1.5\n5 null\n"
+
+[[tests]]
+name = "type_identity.sync_in_type"
+desc = "`sync` in a type position is a syntax error: it is a property of a block, and a function type has no modifiers."
+kind = "negative"
+case = "../../../cases/compile/type_identity/sync_in_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_output_contains = ["Unexpected 'sync'"]

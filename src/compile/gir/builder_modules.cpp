@@ -862,7 +862,7 @@ void Builder::adoptImplKernel(
         if (executor != nullptr) {
             continue;
         }
-        if (resolver->resolve(withTypes, normTypes, Modifier::None).has_value() &&
+        if (resolver->resolve(withTypes, normTypes).has_value() &&
             declaredRuleApplies(resolver, kernel.name, withTypes, normTypes)) {
             uri      = ruleUri;
             executor = resolver;

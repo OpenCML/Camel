@@ -20,7 +20,7 @@ export const SPELLINGS = [
     // arrays of everything
     '(int, string)[]', '(int,)[]', '{ a: int }[]', 'Point[]', 'Color[]', 'Box<int>[]', 'Set<int>[]',
     '(int?)[]', '(int?)[3]', '(int!)[]', '(int!)[2, 2]', '(int?!)[]',
-    '((a: int) => int)[]', '((a: int) => int)[3]', '(sync (a: int) => int)[]',
+    '((a: int) => int)[]', '((a: int) => int)[3]', 
     '((a: int) => int pure)[]', '((a: int) => int?)[]', '(((a: int) => int)?)[]',
     
     // tuples
@@ -33,7 +33,7 @@ export const SPELLINGS = [
     // nullable and fallible
     'int?', 'int!', 'int?!', 'int!?', 'int[]?', 'int[3]!', '(int, string)?',
     '{ a: int }?', 'Point?', 'Color!', 'Box<int>?', '((a: int) => int)?', '((a: int) => int)!',
-    '(sync (a: int) => int)?', '((a: int) => int?)?', '(int..)?', '((int?)..)!', 'Bytes?', 'string!',
+    '((a: int) => int?)?', '(int..)?', '((int?)..)!', 'Bytes?', 'string!',
     // streams
     'int..', 'string..', 'int[]..', '(int?)..', '(int!)..', '(int, string)..', '{ a: int }..',
     '((a: int) => int)..', 'int..?', 'int..!', 'int[3]..', 'Box<int>..',
@@ -43,13 +43,12 @@ export const SPELLINGS = [
     '(a: int) => (int,)', '(a: int) => ()', '(a: int) => { b: int }', '(a: int) => (b: int) => int',
     '(a: int) => ((b: int) => int)?', '(f: (x: int) => int) => int', '(f: (x: int) => int, g: (y: int) => int) => int',
     '(a: Box<int>) => Box<int>', '(a: int?) => int?', '(a: (int?)[]) => (int!)[3]',
-    '(var a: int) => int', 'sync (a: int) => int', '() => ()',
+    '(var a: int) => int', '() => ()',
     '<w: int> (a: int) => int', '<w: int, v: string> (a: int) => int', '<w: int> () => int',
     '<var w: int> (a: int) => int', '<w: int[]> (a: int[]) => int',
     '(a: int) => int pure', '() => int pure', '(a: int[]) => int[] pure', '((a: int) => int uses a)',
     '((a: int, b: int) => int uses a)', '((a: int, b: int) => int uses a, b)', '((a: int) => int uses stdout)',
     '((a: int) => int uses fs)', '((a: int) => int uses stdout, a)',
-    'sync (a: int) => int pure', '(sync (a: int) => int uses stdout)',
     '<w: int> (a: int) => int pure', '(<w: int> (a: int) => int uses a)',
     // collections
     'Map<string, int>', 'Map<int, string[]>', 'Map<string, (int?)>', 'Map<string, Map<string, int>>',

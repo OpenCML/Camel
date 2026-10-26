@@ -3994,7 +3994,7 @@ class RewriteModule final : public BuiltinModule {
                       {{0, {}}, {6, {false, false, false, false, false, false}}},
                       "(name: string, two_way: bool, needs: int, consts: int, lhs: F, rhs: F) => "
                       "Rule",
-                      [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                      [](const type_vec_t &, const type_vec_t &norm)
                           -> std::optional<Type *> {
                           if (norm[0]->code() != TypeCode::String ||
                               norm[1]->code() != TypeCode::Bool ||
@@ -4014,7 +4014,7 @@ class RewriteModule final : public BuiltinModule {
                       {{0, {}}, {7, {false, false, false, false, false, false, false}}},
                       "(name: string, two_way: bool, needs: int, consts: int, lhs: F, rhs: F, "
                       "when: F) => Rule",
-                      [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                      [](const type_vec_t &, const type_vec_t &norm)
                           -> std::optional<Type *> {
                           if (norm[0]->code() != TypeCode::String ||
                               norm[1]->code() != TypeCode::Bool ||
@@ -4043,7 +4043,7 @@ class RewriteModule final : public BuiltinModule {
                   DynamicFuncTypeResolver::create(
                       {{0, {}}, {-1, {}}},
                       "(name: string, two_way: bool, needs: int, consts: int, id: int, ...) => Rule",
-                      [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                      [](const type_vec_t &, const type_vec_t &norm)
                           -> std::optional<Type *> {
                           if (norm.size() < 5 || norm[0]->code() != TypeCode::String ||
                               norm[1]->code() != TypeCode::Bool ||
@@ -4085,7 +4085,7 @@ class RewriteModule final : public BuiltinModule {
                       {{0, {}}, {-1, {}}},
                       "(name: string, types: string, initial: F, join: F, meet: F, widen: F, "
                       "narrow: F, withCount: int, ...) => T",
-                      [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                      [](const type_vec_t &, const type_vec_t &norm)
                           -> std::optional<Type *> {
                           if (norm.size() < 9 || norm[0]->code() != TypeCode::String ||
                               norm[1]->code() != TypeCode::String) {
