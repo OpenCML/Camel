@@ -1655,3 +1655,5 @@ Linux 包在 manylinux 里构建，用 auditwheel 修正标签，并在构建时
 3. **折叠没有大小和时间上限**：`'ab'->repeat<1000000000>`、巨大的 `zeros` 在编译期算出来、塞进图里。结果超过一个阈值就不折叠，留到运行时。
 4. **静默截断**：内联 256 次、32 个会话、16 轮的上限只写日志；特化保护在 4096 个实例后抛没有位置的 `runtime_error`（违反 5.11）。达到上限时给一条带位置的警告。`ASSERT` 在 release 下是空的，却守着 `graph.cpp:976` 的越界写，改成真正的检查。另加一个检查：遍做完之后，效应节点和可能故障的节点都还在（除非证明了不会执行）。
 5. 平方级算法（CSE 的 `reaches` 每个候选都分配、DCE 按死链的每一层重扫、`upstreamOf` 每个调用者都跑一遍、递归的 SCC 深搜、特化候选里的 `insideBranchArm`/`onCallCycle`）、`applyRuntimeOptimizeRewrite` 约 360 行、过时与讲历史的注释，照报告改。
+
+**标准库接入的分工更新**：`json`、`fs`、`io`、`env`、`process`、`time`、`hash` 也由决策者这边接入（和 `str`、`bytes`、`re` 一样），施工方不接这七个。`array`、`statistics` 和第二、三批仍由施工方接入，它们依赖的核心改动（`with` 参与重载、逐元素类型转换、`fail`/`never`）在施工方那边。
