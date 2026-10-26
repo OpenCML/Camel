@@ -36,10 +36,12 @@ using sem::ResourceClass;
 using sem::ResourceSignature;
 
 // The bottom of a measurement: a body recorded as reaching nothing. Every body starts here, and no
-// body is ever below it.
+// body is ever below it. What a call answers about its result stays the conservative one: the walk
+// says which resources a body reaches, not what its result aliases.
 ResourceSignature emptyReach() {
     ResourceSignature reach;
-    reach.mode = ResourceSignature::Mode::Concrete;
+    reach.mode   = ResourceSignature::Mode::Concrete;
+    reach.result = sem::ResultAlias{.kind = sem::ResultAlias::Kind::Unknown};
     return reach;
 }
 
@@ -122,6 +124,10 @@ Builder::footprintOf(DraftGraphBuilder *graph, std::optional<draft_node_ref_t> o
     }
     ResourceSignature out;
     out.mode = ResourceSignature::Mode::Concrete;
+    // The result part is the conservative answer, not the default a `Fresh` result would claim:
+    // the runtime reads this on the type once the measurement is published there, and a body that
+    // returns the caller's cell is not a body whose result nothing else refers to.
+    out.result = sem::ResultAlias{.kind = sem::ResultAlias::Kind::Unknown};
     const auto uniteMode = [](sem::AccessMode left, sem::AccessMode right) {
         return left == right ? left : sem::AccessMode::ReadModifyWrite;
     };
