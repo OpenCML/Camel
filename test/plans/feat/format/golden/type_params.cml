@@ -1,4 +1,3 @@
-module type_params
 
 type Pair<T> = (T, T)
 type Entry<K, V> = { key: K, value: V }

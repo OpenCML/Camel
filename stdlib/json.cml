@@ -19,7 +19,6 @@
 // from the most specific to the widest (`Json` first), so that a call takes the narrowest one
 // that accepts it.
 
-module json
 
 /// The value a JSON text describes, as a `Json`: a value of a definite type whose content is
 /// known only when the program runs; an error value when the text is not JSON or nests deeper

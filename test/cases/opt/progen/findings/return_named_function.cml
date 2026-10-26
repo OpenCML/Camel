@@ -5,7 +5,6 @@
  * pipeline. Returning a lambda that calls `f1` works, and passing `f1` as an argument works.
  * Expected output: true
  */
-module return_named_function
 
 func f1(a: int): bool {
     return a > 0

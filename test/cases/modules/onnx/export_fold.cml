@@ -4,7 +4,6 @@
  * recursion are evaluated at export time (three unrolled steps), and only the
  * tensor computation on the input is emitted.
  */
-module export_fold
 
 import { reshape, relu, shape } from tensor
 import { export_model } from onnx

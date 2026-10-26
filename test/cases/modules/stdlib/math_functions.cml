@@ -4,7 +4,6 @@
  * A constant is a value the module exports, written without parentheses: `pi` (design
  * principles 10.1).
  */
-module math_functions
 
 import { sin, cos, tan, asin, acos, atan, atan2, sinh, cosh, tanh, log, log2, log10, log1p, exp, expm1, pow, trunc, hypot, sqrt, is_nan, is_inf, pi, e, inf, nan } from math
 

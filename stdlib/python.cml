@@ -20,7 +20,6 @@
  *     (`SemanticDiag::InvalidTypeArgument`).
  */
 
-module python
 
 /// Runs Python statements `code` in the interpreter and returns its `None`. Definitions and
 /// assignments stay visible to later calls, as in a Python session.

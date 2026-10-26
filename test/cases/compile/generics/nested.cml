@@ -2,7 +2,6 @@
  * Type variables bound at nested positions: the element of an array of arrays, the elements
  * of a tuple, the fields of a struct, the parameter and the result of a function type.
  */
-module nested
 
 func flat_first::<T>(xss: T[][]): T {
     return xss[0][0]

@@ -1,7 +1,6 @@
 /**
  * A file written before exit(5) is complete on disk; what follows the exit is not written.
  */
-module file_written_before_exit
 
 import { write_text, read_text, mkdirs } from fs
 import { get_env } from env

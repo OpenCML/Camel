@@ -1,4 +1,3 @@
-module sem_failed_function
 
 func f(a: int) { return a + nope }
 

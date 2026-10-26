@@ -4,7 +4,6 @@
  * The subject is the ordinary argument, the rest are with-arguments
  * (DESIGN-QUESTION(param-style)).
  */
-module str_unicode
 
 import { split, trim, trim_start, trim_end, to_upper, to_lower, replace, find, substr, starts_with, ends_with, repeat } from str
 import { encode, decode, from_array, size, to_array } from bytes

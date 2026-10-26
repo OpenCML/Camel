@@ -3,7 +3,6 @@
  * the parameter replaced; a function can use one in its signature and declare the type
  * parameter it passes at its head.
  */
-module type_func
 
 type Pair<T> = (T, T)
 type Entry<K, V> = { key: K, value: V }

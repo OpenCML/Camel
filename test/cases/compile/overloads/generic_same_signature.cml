@@ -2,7 +2,6 @@
  * Two generic functions of one name whose parameter types cannot be told apart are one signature:
  * the second is a redeclaration, reported where it is declared, as for two ordinary functions.
  */
-module generic_same_signature
 
 func g::<T>(x: T): string {
     return 'first'

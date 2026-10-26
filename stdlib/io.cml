@@ -12,7 +12,6 @@
 // keeps the kernels, the executor and the operator traits. A declaration names
 // `io:<function>` by convention, so no `#op` tag is needed.
 
-module io
 
 /// Switches the terminal to raw mode (keys arrive one by one, unechoed) or back.
 /// @effect changes the terminal

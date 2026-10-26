@@ -4,7 +4,6 @@
  * the products of `twice` stay two; flags merge to their intersection, so `relaxed` keeps one
  * product, with the flags both have.
  */
-module cse
 import { mark, flags } from test_attrs
 
 func twice(a: float, b: float): float {

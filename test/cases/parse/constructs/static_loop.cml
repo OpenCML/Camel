@@ -4,7 +4,6 @@
  * is the arity, so a `T` that comes from an enclosing generic counts only at instantiation. The
  * value is the last state, and two states are a tuple.
  */
-module parse_constructs_static_loop
 
 func sum_of::<T>(t: T): int {
     return static loop acc = 0 for n, F in fields T do acc + t.[n]

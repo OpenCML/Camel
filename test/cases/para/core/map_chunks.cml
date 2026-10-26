@@ -6,7 +6,6 @@
  * them, element i of a result comes from element i of the input, every element runs exactly
  * once, and an empty and a one-element array work.
  */
-module map_chunks
 
 import { sqrt } from math
 import { unordered_foreach } from para

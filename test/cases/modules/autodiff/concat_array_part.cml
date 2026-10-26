@@ -12,7 +12,6 @@
  * for both parts (`:op/slice_sub` of the upstream gradient). The distance to [1, 1] is 0.0 only
  * for that adjoint, and its sum, 2.0, is not the dropped zero.
  */
-module concat_array_part
 
 import { concat, reshape, sum } from tensor
 import { grad } from autodiff

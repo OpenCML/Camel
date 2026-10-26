@@ -14,7 +14,6 @@
  * resident value, and a resident value carries no gradient channel - the same answer the run gives
  * with the pass absent from the pipeline.
  */
-module gpu_grad_expand_plain
 
 import { abs, reshape, sum } from tensor
 import { with_grad } from autodiff

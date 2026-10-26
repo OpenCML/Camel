@@ -3,7 +3,6 @@
  * own bodies call it, and an importer cannot
  * see the name, not even as `module::name`.
  */
-module native_private
 
 #op(':op/idx_arr')
 func at::<T>(xs: T[], i: int): T

@@ -4,7 +4,6 @@
  * accepted whatever it was and answered with the `adam` state's shape, which is the fallback this
  * rewrite deleted; there is no other optimizer to fall back to.
  */
-module optim_unknown_optimizer
 
 import { full } from tensor
 import { init } from optim

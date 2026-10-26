@@ -3,7 +3,6 @@
  * body's last statement `out->append<i>` is the error UnusedPureResult (block body and
  * expression body).
  */
-module dropped_foreach_lambda
 
 func main(): int sync {
     var out: int[] = []

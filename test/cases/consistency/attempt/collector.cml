@@ -5,7 +5,6 @@
  * (docs/technical/24_gc_verification_guide.md): what the boundary dropped must be collectable,
  * and what is used after it must have survived.
  */
-module collector
 
 import { get_env } from env
 

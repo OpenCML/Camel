@@ -3,7 +3,6 @@
  * parameters are one value, every step of the one chain is the same value as the step of the
  * other (test::writings).
  */
-module chains
 
 func chains(a: int, b: int): int {
     let x0 = a + 1

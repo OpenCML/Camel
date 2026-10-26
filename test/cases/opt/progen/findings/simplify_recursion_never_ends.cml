@@ -8,7 +8,6 @@
  *   when evaluating graph '__g_10__'.
  * Reduced by test/tools/progen from seed 1833 (generator version 1, all features).
  */
-module simplify_recursion_never_ends
 
 import { get_env } from env
 

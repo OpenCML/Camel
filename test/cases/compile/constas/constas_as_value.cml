@@ -1,4 +1,3 @@
-module constas_as_value
 import { ones, sum } from tensor
 
 func total(constas n: int, x: f32[n]): float {

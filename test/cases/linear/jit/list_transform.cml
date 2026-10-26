@@ -1,7 +1,6 @@
 /**
  * Verifies JIT execution of chained list map/slice/concat transforms that previously regressed in the language pipeline.
  */
-module jit_list_transform
 
 func main(): int sync {
     let xs = 0..8

@@ -6,7 +6,6 @@
  * Actual: (nothing)
  * Reduced by test/tools/progen (an early batch, before the seed stream was versioned).
  */
-module inline_unused_branch_effect_lost
 
 func f1(a2: bool): bool {
     let n5 = if true then if a2 then '' else '' else {

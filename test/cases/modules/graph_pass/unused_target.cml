@@ -1,4 +1,3 @@
-module unused_target
 
 func waste(x: int, y: int): int {
     let a = x * y

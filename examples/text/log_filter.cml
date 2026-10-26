@@ -2,7 +2,6 @@
 // a line into fields and select lines by a substring, `count` of `array` counts per level,
 // and `re.test` is used where a pattern is needed.
 // Run: camel examples/text/log_filter.cml
-module log_filter
 
 import { test } from re
 import { split, trim, find, substr } from str

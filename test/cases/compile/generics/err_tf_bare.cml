@@ -1,4 +1,3 @@
-module err_tf_bare
 
 type Pair<T> = (T, T)
 

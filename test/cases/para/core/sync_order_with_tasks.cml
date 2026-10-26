@@ -5,7 +5,6 @@
  * also has two independent calls (they do run concurrently: they meet at a rendezvous), and for
  * a variable written by ordered calls.
  */
-module sync_order_with_tasks
 
 import { sleep } from process
 import { rendezvous } from para

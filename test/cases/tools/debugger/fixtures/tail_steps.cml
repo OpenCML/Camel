@@ -1,4 +1,3 @@
-module tail_steps
 
 func timed(remaining: int, ticks: int): int {
     return if remaining <= 0 then ticks else sync {

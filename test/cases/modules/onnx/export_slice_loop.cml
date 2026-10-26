@@ -3,7 +3,6 @@
  * depend on the model input. Checked on ONNX Runtime against NumPy for 1, 2 and 4 steps
  * (artifacts: b2/probes/check_slice_loop.py).
  */
-module export_slice_loop
 import { cast, reshape, sum, shape, tanh, zeros } from tensor
 import { export_model } from onnx
 import { get_env } from env

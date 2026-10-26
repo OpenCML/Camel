@@ -4,7 +4,6 @@
  * blocks 64->128->256->512 (stride-2 first convs with 1x1 shortcuts), global average
  * pool (two chained axis means), linear 512->10. x[16,3,32,32].
  */
-module resnet
 
 import { relu, mean, flatten } from tensor
 import { grad, with_grad } from autodiff

@@ -1,7 +1,6 @@
 // Functions as values: returning a closure, composing functions, a table of operations,
 // `with` parameters, and a counter that keeps its own state.
 // Run: camel examples/functions/closures.cml
-module closures
 
 type IntFn = (x: int) => int
 

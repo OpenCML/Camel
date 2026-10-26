@@ -3,7 +3,6 @@
  * 7.2): `tag fast = [reassociate, contract]` is a tag like any other, and `#requires(fast)` is
  * the union of what its members grant. The rule is applied where the node grants any of them.
  */
-module requires_group
 import { Program } from graph
 import { rewrite } from rewrite
 

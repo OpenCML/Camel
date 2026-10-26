@@ -7,7 +7,6 @@
  * `add` is call it directly: a direct cross-module call is the kernel operator, so no node
  * reachable from `main` names this graph.
  */
-module impl_cross_module_lib
 
 #op(':op/add_l')
 func add_kernel(a: int, b: int): int

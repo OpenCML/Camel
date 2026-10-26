@@ -6,7 +6,6 @@
  * With no fault the library call gives its value; with one, the `attempt` gives the error
  * value and the next call of the same library function works.
  */
-module library
 
 import { find, any, all, count, flat_map, sort_by, zip_with, sum, take } from array
 

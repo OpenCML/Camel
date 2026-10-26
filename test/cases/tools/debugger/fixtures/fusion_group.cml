@@ -1,7 +1,6 @@
 // A private `x / w` chain: the division's VJP emits divide -> multiply -> neg as one
 // `vjp_div_neg` group, and std::nvm runs it at the tail. A node step must not stop at the members
 // (they do not execute) and must stop at the tail, where the group runs (35_debugger.md, 2).
-module fusion_group_fixture
 
 import { sum, zeros } from tensor
 import { with_grad } from autodiff

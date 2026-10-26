@@ -1,4 +1,3 @@
-module err_body
 
 func double::<T>(x: T): T {
     return x + x

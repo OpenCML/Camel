@@ -73,7 +73,6 @@ func main(): int sync {
 
 ```cml
 // shapes.cml
-module shapes
 
 import { sqrt } from math
 
@@ -113,7 +112,6 @@ func main(): int sync {
 
 ```cml
 // counter.cml
-module counter
 var cnt = 0
 let step = 2
 export func bump(): int sync { cnt += step; return cnt }
@@ -141,7 +139,6 @@ func main(): int sync {
 
 ```cml
 // geometry.cml
-module geometry
 export let pi = 3.14159
 export let tau = pi * 2.0
 ```

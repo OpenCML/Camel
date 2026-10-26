@@ -1,4 +1,3 @@
-module shapes
 
 export type Shape = enum {
     Circle(float),

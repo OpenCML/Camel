@@ -2,7 +2,6 @@
 // `inner`, `outer`, `atomic`, `shared`, `is`, `of`, `keyof`, `try`, `catch` and `finally` are
 // not keywords: they are ordinary names, so they appear
 // below as values.
-module keywords
 
 import { now } from time
 import os

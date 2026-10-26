@@ -1,4 +1,3 @@
-module doc_comment
 
 /// The square of a number.
 /// Negative numbers are fine.

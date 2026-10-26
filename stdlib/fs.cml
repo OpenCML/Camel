@@ -15,7 +15,6 @@
 // kernels, the executor, the operator traits and the resources. A declaration names
 // `fs:<function>` by convention, so no `#op` tag is needed.
 
-module fs
 
 /// The whole content of the file.
 /// @effect reads a file

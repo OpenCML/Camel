@@ -3,7 +3,6 @@
  * fallible result (`from_codepoints`) are read from `stdlib/str.cml`, and the calls reach the
  * operators the C++ module runs (step 10).
  */
-module str_declaration_import
 
 import { split, find, from_codepoints } from str
 

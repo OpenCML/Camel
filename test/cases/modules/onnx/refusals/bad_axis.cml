@@ -2,7 +2,6 @@
  * A dynamic axis out of range is an error about the request, not about a node of the
  * function: onnx::export reports it at the export_model call (line 11).
  */
-module bad_axis
 
 import { reshape } from tensor
 import { export_model } from onnx

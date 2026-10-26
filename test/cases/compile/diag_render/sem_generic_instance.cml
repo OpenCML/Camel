@@ -1,4 +1,3 @@
-module sem_generic_instance
 
 func twice::<T>(x: T): T {
     let n = x + x

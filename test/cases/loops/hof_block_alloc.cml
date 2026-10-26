@@ -1,4 +1,3 @@
-module hof_block_alloc
 
 func main(): int sync {
     let n  = 10000

@@ -1,4 +1,3 @@
-module err_slice_ordinary
 
 func main(): int sync {
     let xs = [1, 2, 3]

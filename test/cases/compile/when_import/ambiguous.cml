@@ -2,7 +2,6 @@
  * Two selective imports bring a predicate of the same name. The condition does not silently
  * take the first: the report says the name is ambiguous and lists the modules.
  */
-module when_import_ambiguous
 
 import { is_compound } from predicates
 import { is_compound } from predicates_other

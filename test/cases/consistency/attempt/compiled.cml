@@ -7,7 +7,6 @@
  * compiled code runs again afterwards, and the graph that contains the `attempt` (an OPER) is
  * itself never compiled.
  */
-module compiled
 
 func quot(a: int, b: int): int { return (a * 3 + 1) / (b - 2) }
 func depth(n: int): int { return if n == 0 then 0 else 1 + depth(n - 1) }

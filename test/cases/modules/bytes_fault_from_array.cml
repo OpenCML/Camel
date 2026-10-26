@@ -1,4 +1,3 @@
-module bytes_fault_from_array
 
 import { from_array } from bytes
 

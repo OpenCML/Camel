@@ -16,7 +16,6 @@
 // Run (with the data prepared by make_data.py; compare.py does all of this):
 //   camel train.cml --arg data=artifacts/small --arg steps=200 --arg batch=50 \
 //         --arg lr=0.001 --arg log_every=20 --arg threads=1 std::macro std::nvm
-module c2_mlp_mnist
 
 // == imports ==
 import { abs, argmax, cast, load_npy, numel, relu, set_num_threads, shape, sum, take } from tensor

@@ -18,7 +18,6 @@
 // shows. The callback's result is therefore a type variable too (the head parameter `R`), not
 // `void`: the declaration reproduces the old C++ resolver's accept set.
 
-module para
 
 /// Blocks until `parties` calls are waiting at the one meeting point of the process, or until
 /// timeout_ms milliseconds have passed; returns how many calls met (after a timeout, how many

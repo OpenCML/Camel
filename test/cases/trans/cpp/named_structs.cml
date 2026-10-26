@@ -3,7 +3,6 @@
 /// two named types of one layout convert by `as` without moving; a type whose fields are in
 /// another order is copied into the declaration order; an array of named elements takes
 /// anonymous literals; and `append` takes an anonymous literal of the element type.
-module named_structs
 
 type Point = { x: int, y: int }
 type Spot = { x: int, y: int }

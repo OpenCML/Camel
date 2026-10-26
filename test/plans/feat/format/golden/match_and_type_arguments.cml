@@ -1,4 +1,3 @@
-module match_and_type_arguments
 
 // The subject of a match is an expression, and an arm may be a literal or an enum pattern;
 // the type arguments of a call are positional or named. Both used to make camel-format fail.

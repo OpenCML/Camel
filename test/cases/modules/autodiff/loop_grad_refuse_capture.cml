@@ -4,7 +4,6 @@
  * reverse of the read scatters the round's element gradient back into the capture. f(w) is
  * `ys[0] + ys[0]` with ys = [w, 2.0], so the gradient is 2.
  */
-module loop_grad_refuse_capture
 
 import { grad } from autodiff
 

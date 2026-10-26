@@ -4,7 +4,6 @@
  * none of them; Chinese is only in some). Each line is printed bare, so that
  * test/cases/tools/unicode/unicode_paths.test.mjs compares the exact UTF-8 text.
  */
-module env_paths
 
 import { get_env, get_cwd } from env
 import { write_text, read_text, exists, file_size } from fs

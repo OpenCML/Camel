@@ -3,7 +3,6 @@
  * answers nothing, and `whoami` and `cpu_count` take nothing and answer the declared `string`
  * and `int`. Every call reaches the C++ operator.
  */
-module process_declaration_import
 
 import { sleep, whoami, cpu_count } from process
 

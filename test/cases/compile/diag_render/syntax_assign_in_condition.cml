@@ -1,4 +1,3 @@
-module syntax_assign_in_condition
 
 func main(): int sync {
     let x = 1

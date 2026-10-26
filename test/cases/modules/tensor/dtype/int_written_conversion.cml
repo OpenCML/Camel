@@ -3,7 +3,6 @@
  * the promotion used to do silently, and the values are the ones the program asked for
  * (design principles 5.1).
  */
-module int_written_conversion
 
 import { reshape, cast, sum } from tensor
 

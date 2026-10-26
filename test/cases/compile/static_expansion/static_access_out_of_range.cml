@@ -1,4 +1,3 @@
-module static_access_out_of_range
 
 func element(t: (int, int)): int {
     return t.[2]

@@ -5,7 +5,6 @@
  * Loops. Numbers are checked by ort_loop_values.py and ort_grad_loop_values.py; this program is
  * the one both export entries are compared on (pass_export.py equiv).
  */
-module export_loop_values
 import { reshape, sum, tanh } from tensor
 import { with_grad } from autodiff
 import { export_model } from onnx

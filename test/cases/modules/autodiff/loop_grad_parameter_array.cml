@@ -5,7 +5,6 @@
  * prints after `std::macro` as `:tangent/zeros_arr` and `:tangent/scatter_add_arr` (design
  * principles 9.9). f(w) is w + w * (w + 2w + 3w), so the gradient at 2 is 25.
  */
-module loop_grad_parameter_array
 
 import { grad } from autodiff
 

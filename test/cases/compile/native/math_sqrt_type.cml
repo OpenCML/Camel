@@ -3,7 +3,6 @@
  * the declarations' parameter (`x`) —
  * `stdlib/math.cml`, not the C++, is the source.
  */
-module math_sqrt_type
 
 import { sqrt } from math
 

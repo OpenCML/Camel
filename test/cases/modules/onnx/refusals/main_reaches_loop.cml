@@ -5,7 +5,6 @@
  * sees no request. std::opt did run: the refusal, at `main` (line 22), says why the
  * call was left instead of asking for the pass.
  */
-module main_reaches_loop
 
 import { reshape } from tensor
 import { export_model } from onnx

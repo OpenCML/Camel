@@ -1,7 +1,6 @@
 /// The module random in a compiled program: seeded, it draws the numbers the interpreter draws
 /// (both use camel/utils/random.h on one std::mt19937_64), and its faults are reported alike;
 /// statistics.mean and stdev over what it drew.
-module draws
 
 import { seed, rand, randn, randint, choice, sample, shuffle } from random
 import { mean, stdev } from statistics

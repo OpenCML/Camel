@@ -4,7 +4,6 @@
  * order to the target's kernel, so the model could not keep that promise. The export refuses at
  * the recorded attribute and writes no model, instead of dropping the choice.
  */
-module export_canonical_kernel
 import { reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env

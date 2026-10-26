@@ -14,7 +14,6 @@
 // kernels, the executor and the operator traits. A declaration names `str:<function>` by
 // convention, so no `#op` tag is needed.
 
-module str
 
 /// The pieces of s between occurrences of sep. An empty s gives one empty piece; a separator
 /// at the start or the end gives an empty piece there.

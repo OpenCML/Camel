@@ -1,4 +1,3 @@
-module tiles_arithmetic_bits
 import { load_npy, save_npy, sqrt } from tensor
 import { run_preferred_resident, download } from tiles
 import { get_env } from env

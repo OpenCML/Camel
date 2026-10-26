@@ -1,4 +1,3 @@
-module constas_no_type
 
 // A `constas` parameter writes its type; only `int` is supported.
 func bad(constas n): int {

@@ -5,7 +5,6 @@
  * 3.8), and not the type of a statement whose value nothing takes. The `T?` declarations below
  * still apply to the whole expression: that is what makes each value nullable.
  */
-module optional_logic
 
 func maybe(x: int): int! { return x }
 

@@ -5,7 +5,6 @@
  * expression are bit-identical (every matmul runs the canonical algorithm, 7.4); in default mode
  * two runs of the same program are bit-identical (7.6).
  */
-module fuse_bits
 
 import { reshape, relu, to_bytes, sum } from tensor
 import { to_array } from bytes

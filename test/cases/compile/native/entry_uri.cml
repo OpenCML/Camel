@@ -3,7 +3,6 @@
  * its URI's prefix is the declared name `bytes`, not the runtime name `main` the entry file has
  * (design principles 10.1).
  */
-module bytes
 
 import { encode } from bytes
 

@@ -6,7 +6,6 @@
 // one dimension fewer, which shares the element's data. `sum(v)` therefore reads the element
 // itself; `v` is not a scalar here, and the scalar reading of this round is a compile-time type
 // error (open_rank_round_scalar_read.cml).
-module open_rank_round_rank1
 
 import { sum } from tensor
 

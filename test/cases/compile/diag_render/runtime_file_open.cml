@@ -1,4 +1,3 @@
-module runtime_file_open
 
 import { read_text } from fs
 

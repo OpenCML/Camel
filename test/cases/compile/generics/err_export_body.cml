@@ -1,4 +1,3 @@
-module err_export_body
 
 import { bad } from export_lib
 

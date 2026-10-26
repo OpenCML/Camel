@@ -1,7 +1,6 @@
 /**
  * Negative case: incompatible broadcast reports TensorDimensionMismatch.
  */
-module shape_error
 
 import { ones, sum } from tensor
 

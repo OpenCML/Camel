@@ -1,5 +1,4 @@
 // Module declarations, imports, exports, namespaces and qualified names.
-module geometry
 
 import time
 import ..sibling

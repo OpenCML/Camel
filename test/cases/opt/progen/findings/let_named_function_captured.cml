@@ -5,7 +5,6 @@
  * argument types: <> (i64)". Without any pass; a located compile-time error for a valid program.
  * Expected output: [2]
  */
-module let_named_function_captured
 
 func f1(a: int): int {
     return a + 1

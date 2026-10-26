@@ -7,7 +7,6 @@
  * make_data.py), prints `CAMEL_BENCH step=<i> loss=<v>`, and dumps the updated
  * parameters to CAMEL_FT_DUMP/step_<i>/ for the three-way alignment.
  */
-module native_train_transformer
 
 import { layer_norm, softmax, gelu, reshape, permute, transpose, shape, mean, load_npy } from tensor
 import { with_grad } from autodiff

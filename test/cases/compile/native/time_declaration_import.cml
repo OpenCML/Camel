@@ -3,7 +3,6 @@
  * timestamp and a format and gives a string, `strptime` takes two strings and gives a float.
  * Every call reaches the C++ operator (step 10).
  */
-module time_declaration_import
 
 import { now, strftime, strptime } from time
 

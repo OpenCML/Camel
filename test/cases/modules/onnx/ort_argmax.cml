@@ -6,7 +6,6 @@
  * same three from an int64 input (no NaN, no -0: a direct ArgMax). Checked on ONNX Runtime by
  * ort_argmax.py.
  */
-module ort_argmax
 import { reshape, argmax } from tensor
 import { is_numeric } from types
 import { export_model } from onnx

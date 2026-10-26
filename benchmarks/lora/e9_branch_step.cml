@@ -8,7 +8,6 @@
  * MODE=run    : native check of loss and updated weights for both branch arms
  * MODE=export : export the training step to ONNX
  */
-module e9_branch_step
 
 import { relu, mean, reshape, new } from tensor
 import { with_grad } from autodiff

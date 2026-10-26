@@ -5,7 +5,6 @@
  * (leaky), a recursive call not merged into its arm (power), and, when the
  * function only arrives as a parameter (of_param), every function.
  */
-module grad_unexpanded_inline
 
 import { grad } from autodiff
 

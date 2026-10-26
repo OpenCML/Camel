@@ -3,7 +3,6 @@
  * the message prints the declaration's own parameter name (`max`) — the one source is
  * `stdlib/io.cml`, not the C++ module (steps 4 and 10).
  */
-module io_type
 
 import { get_chars } from io
 

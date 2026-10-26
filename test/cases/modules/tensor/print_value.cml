@@ -7,7 +7,6 @@
  * rank-2 value prints nested and complete, one bracket level per dimension; a rank-2 value whose
  * declaration names the element type does not collapse to its first extent either.
  */
-module tensor_print_value
 
 import { ones, zeros, shape, numel, reshape, argmin, tanh, new, sum } from tensor
 import { is_numeric } from types

@@ -18,7 +18,6 @@
  * definitions.h). The functions take f32 tensors: an operator applied to another element type
  * is not expanded. This file imports modules written in C++ only.
  */
-module tensor_definitions
 
 import { max, sum, exp, log, maximum, numel, cast } from tensor
 

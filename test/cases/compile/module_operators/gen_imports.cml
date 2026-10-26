@@ -3,7 +3,6 @@
  * for the type): the overload is found through the import and through the type's declaration.
  * It must stay one candidate, not two (design principles 5.7).
  */
-module gen_imports
 
 import { Box } from models
 

@@ -4,7 +4,6 @@
  * graph for them (a chain of one task per step is the same order at the price of a task each).
  * The test reads the number of task graphs from the scheduler's statistics: 0.
  */
-module ordered_operators_inline
 
 func main(): int sync {
     let total = 0..2000->reduce<(acc: int, cur: int): int => (acc * 31 + cur) % 1000003, 7>

@@ -1,4 +1,3 @@
-module main
 
 func main(): int sync {
     println(missing_name)

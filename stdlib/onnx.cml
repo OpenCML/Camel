@@ -23,7 +23,6 @@
 // `supported_operators` is registered with effects until someone has checked that it is not
 // effectful; the declaration keeps that purity (a declaration carries types, not effects).
 
-module onnx
 
 /// Lists the operator URIs the ONNX backend can lower at its default opset, in the order the
 /// lowering table reports them. A capability report only: it reads the table compiled into the

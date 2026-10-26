@@ -3,7 +3,6 @@
  * are read from `stdlib/re.cml`, and the calls
  * reach the operator the C++ module runs.
  */
-module re_declaration_import
 
 import { test } from re
 

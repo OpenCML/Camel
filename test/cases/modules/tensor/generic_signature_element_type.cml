@@ -12,7 +12,6 @@
 /// rank. (A rank-2 native array has no producer yet — the module type a tensor operator returns
 /// is not the array alias until P4, and a nested literal is refused — so this case stays at the
 /// ranks a program can make today.)
-module tensor_generic_signature_element_type
 
 import { ones, shape, numel, dim, to_bytes } from tensor
 import { is_numeric } from types

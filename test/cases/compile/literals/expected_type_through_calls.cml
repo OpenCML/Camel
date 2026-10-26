@@ -7,7 +7,6 @@
  * solved variable takes the solved type. The value written just above the f32 midpoint prints
  * 1.00000012, so an element is converted once from the value written.
  */
-module expected_type_through_calls
 
 func keep::<T>(xs: T[], n: int): T[] { return xs }
 func pair::<A, B>(a: A, b: B): (A, B) { return (a, b) }

@@ -3,7 +3,6 @@
  * refused at the call, and the overload the message lists is the declaration from
  * `stdlib/python.cml`.
  */
-module python_arity
 
 import { py_exec } from python
 

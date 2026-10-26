@@ -2,7 +2,6 @@
  * permutation with a negative length is a located InvalidArgument (design principles 3.9); the
  * length is a run-time value here, so the fault happens at the call.
  */
-module permutation_negative
 
 import { key, permutation } from random
 

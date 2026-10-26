@@ -1,4 +1,3 @@
-module main
 
 // The condition and the body of a loop are subgraphs; the debugger folds them into the frame of
 // the function the loop is written in, as it folds the arms of a branch (design principles 12.1).

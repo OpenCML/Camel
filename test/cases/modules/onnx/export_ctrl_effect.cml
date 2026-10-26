@@ -4,7 +4,6 @@
  * An ONNX model cannot print, so the export is refused at the println (it must
  * not write a model that silently lacks it).
  */
-module export_ctrl_effect
 
 import { reshape, relu } from tensor
 import { export_model } from onnx

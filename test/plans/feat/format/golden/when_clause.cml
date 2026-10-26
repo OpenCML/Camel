@@ -1,4 +1,3 @@
-module when_clause_format
 
 func pick::<T>(x: T): T when is_ordered::<T>() {
     return x

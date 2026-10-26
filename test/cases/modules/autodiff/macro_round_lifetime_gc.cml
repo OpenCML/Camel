@@ -1,7 +1,6 @@
 // Several custom VJP expansions retain function-valued macro results across rewrite rounds.
 // Every rule is used; the regression requires safepoint stress, without importing Tiles.
 // The differentiated tensor is the first `with` parameter of every loss.
-module autodiff_macro_round_lifetime_gc
 import { reshape, shape, sum, zeros } from tensor
 import { grad } from autodiff
 

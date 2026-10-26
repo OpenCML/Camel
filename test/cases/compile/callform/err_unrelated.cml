@@ -1,4 +1,3 @@
-module err_unrelated
 
 func main(): int sync {
     let m = [('a', 1)] as Map<string, int>

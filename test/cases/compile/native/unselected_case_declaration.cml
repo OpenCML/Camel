@@ -3,7 +3,6 @@
  * does: here the leaf case calls a body-less declaration of the same module and is discarded for
  * a struct subject. It must not be reported as an unresolved reference.
  */
-module bytes
 
 import { from_array } from bytes
 

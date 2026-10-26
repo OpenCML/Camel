@@ -1,4 +1,3 @@
-module agreement
 
 // The corpus of the measurement: the rewrites the legacy C++ algebraic pass performs and the
 // rule library can perform, one form per function, so a difference is one line of the table and one

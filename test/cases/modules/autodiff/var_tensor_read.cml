@@ -6,7 +6,6 @@
  *   plain call: value 1 sum(acc) 3
  *   with_grad: value 4 sum(acc) 4.5 grad 3
  */
-module var_tensor_read
 import { reshape, sum } from tensor
 import { with_grad } from autodiff
 

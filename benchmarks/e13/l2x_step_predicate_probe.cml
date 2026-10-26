@@ -11,7 +11,6 @@
  * MODE=export WHAT=step : export the training step (the dissected case)
  * MODE=export WHAT=fwd  : export the loss (expected good, like all forwards)
  */
-module e13_l2x_predicate_probe
 
 import { relu, mean, abs, reshape } from tensor
 import { with_grad } from autodiff

@@ -10,7 +10,6 @@
  * input is loaded at that same type, because reading an element of an array
  * whose element type nobody wrote is what a parameter with no element type cannot state.
  */
-module ort_models
 
 import { reshape, relu, zeros, shape, load_npy, save_npy } from tensor
 import { export_model } from onnx

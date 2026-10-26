@@ -5,7 +5,6 @@
  * `attempt` calls, and one whose result is not used. The boundary must stay where it is: the
  * output is the same with and without the passes.
  */
-module pipelines
 
 func risky(d: int): int { return 100 / d }
 func twice(d: int): int { return risky(d) + risky(d) }

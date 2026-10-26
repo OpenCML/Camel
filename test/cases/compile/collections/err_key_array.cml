@@ -1,4 +1,3 @@
-module main
 
 // An array is not an element type of a set: it can be changed in place.
 

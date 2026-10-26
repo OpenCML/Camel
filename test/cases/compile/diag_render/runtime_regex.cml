@@ -1,4 +1,3 @@
-module runtime_regex
 
 import { test } from re
 

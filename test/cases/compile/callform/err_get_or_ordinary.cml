@@ -1,4 +1,3 @@
-module err_get_or_ordinary
 
 func lookup(m: Map<string, int>, key: string): int {
     return get_or(m, key, 0 - 1)

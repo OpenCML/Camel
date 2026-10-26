@@ -4,7 +4,6 @@
  * ("missing ')' at ','", progen finding F30): the parser took `a < 2, ...>` for angled
  * arguments while choosing between the two forms.
  */
-module tuple_and_parenthesis
 
 func main(): int sync {
     let a = 1

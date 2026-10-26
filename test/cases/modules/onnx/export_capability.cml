@@ -5,7 +5,6 @@
  * producing a model that ONNX Runtime refuses to load. With the check
  * disabled (target 'none') the same model is written.
  */
-module export_capability
 
 import { reshape, relu, cast } from tensor
 import { export_model } from onnx

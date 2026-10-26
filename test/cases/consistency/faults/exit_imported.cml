@@ -1,7 +1,6 @@
 /**
  * exit(3) with the os module imported, in a function, after output.
  */
-module exit_imported
 
 import { exit } from process
 

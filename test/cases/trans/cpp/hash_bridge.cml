@@ -1,5 +1,4 @@
 /// std::cpp has no standalone translation of a hash operator: the program links the runtime.
-module cpp_hash_bridge
 
 import hash
 

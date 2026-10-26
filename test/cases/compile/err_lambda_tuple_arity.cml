@@ -1,4 +1,3 @@
-module lambda_tuple_arity
 
 // More names than the tuple has elements is refused, not read past the end.
 with <f: (p: (int, int)) => int>

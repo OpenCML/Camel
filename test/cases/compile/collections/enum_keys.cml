@@ -1,4 +1,3 @@
-module main
 
 // An enum as a map key and as a set element (design principles 11.3): allowed when every
 // field of every variant is a key type. The order is the variants' declaration order, then

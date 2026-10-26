@@ -2,7 +2,6 @@
  * The arguments of `attempt` are nodes of the enclosing graph: a fault raised while one of them
  * is evaluated is outside the boundary and ends the program.
  */
-module fault_in_argument
 
 func risky(d: int): int { return 100 / d }
 

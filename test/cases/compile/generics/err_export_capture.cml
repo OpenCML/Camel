@@ -1,4 +1,3 @@
-module err_export_capture
 
 import { biased } from export_lib
 

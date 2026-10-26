@@ -2,7 +2,6 @@
  * A negative bound of a slice, computed at run time: a fault, as a negative index is (it used
  * to count from the end).
  */
-module slice_negative_bound
 
 func last_two(xs: int[], n: int): int[] { return xs->slice<n, len(xs)> }
 

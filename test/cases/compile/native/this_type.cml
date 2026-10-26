@@ -5,7 +5,6 @@
  * With no value parameter there is no wrong-type case distinct from the wrong count; this
  * is the closest one, and it still shows the declared type being applied.
  */
-module this_type
 
 import { zen } from this
 

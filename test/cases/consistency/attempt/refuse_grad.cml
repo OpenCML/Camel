@@ -3,7 +3,6 @@
  * the boundary: `grad` refuses and names the operator. The differentiated value is the first
  * `with` parameter.
  */
-module refuse_grad
 
 import { grad } from autodiff
 

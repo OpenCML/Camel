@@ -1,4 +1,3 @@
-module snake
 
 import { set_terminal_raw_mode, has_input, get_char, clear_input_buffer } from io
 

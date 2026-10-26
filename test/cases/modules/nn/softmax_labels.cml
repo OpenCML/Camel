@@ -2,7 +2,6 @@
  * The integer-label form of softmax_cross_entropy and its gradient agree with the one-hot form,
  * for labels as int[] and as a rank-1 int64 or int32 tensor.
  */
-module softmax_labels
 
 import { reshape, one_hot, cast, sum, abs } from tensor
 import { softmax_cross_entropy, softmax_cross_entropy_grad } from nn

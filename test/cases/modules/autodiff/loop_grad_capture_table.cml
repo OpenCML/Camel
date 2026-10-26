@@ -3,7 +3,6 @@
  * body reads an element of it, which is a value with no cotangent, so the gradient stops at the
  * read and continues through the parameter the body multiplies by.
  */
-module loop_grad_capture_table
 
 import { grad, with_grad } from autodiff
 

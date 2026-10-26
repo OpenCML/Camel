@@ -2,7 +2,6 @@
  * A dropped call is reported whether its callee is written before or after the caller:
  * `later` and `earlier_dropped` follow `caller` in the file.
  */
-module dropped_effects_forward
 
 func caller(x: int): int {
     later(x)

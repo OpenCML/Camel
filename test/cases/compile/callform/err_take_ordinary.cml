@@ -1,4 +1,3 @@
-module err_take_ordinary
 
 import { take } from array
 

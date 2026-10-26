@@ -7,7 +7,6 @@
  * lifts the captures to trailing parameters, producing one If for the branch
  * value and one for the pullback result.
  */
-module export_train_step_branch_tensor
 
 import { relu, mean, reshape } from tensor
 import { with_grad } from autodiff

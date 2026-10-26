@@ -4,7 +4,6 @@
  * `CAMEL_TIMEIT_COUNTER`; the third one divides by zero. The failure is what the iteration field
  * of the `--timeit` report must name.
  */
-module timeit_failure
 
 import { get_env } from env
 import { try_read_text, write_text } from fs

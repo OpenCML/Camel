@@ -2,7 +2,6 @@
  * The program the scheduling passes rewrite: one function with one `x + 0`, so every count the
  * passes print is a count of one site rewritten.
  */
-module schedule_target
 
 func order(x: int): int {
     return x + 0

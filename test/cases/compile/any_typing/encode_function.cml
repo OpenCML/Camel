@@ -1,4 +1,3 @@
-module encode_function
 
 import { encode } from json
 

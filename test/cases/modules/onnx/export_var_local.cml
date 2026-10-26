@@ -1,7 +1,6 @@
 /**
  * A variable declared, assigned and read directly in the exported function is only a name for a sequence of values: the export contains Mul, Add, Relu and no state.
  */
-module export_var_local
 import { reshape, relu } from tensor
 import { export_model } from onnx
 import { get_env } from env

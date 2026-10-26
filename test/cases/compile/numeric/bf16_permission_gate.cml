@@ -15,7 +15,6 @@
  * A conversion the program writes is a different thing and is not gated at all: see
  * test/cases/modules/tensor/dtype/bf16_cast_no_permission.cml.
  */
-module compile_bf16_permission_gate
 
 import { ones } from tensor
 import { inspect } from tiles

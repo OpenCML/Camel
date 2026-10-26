@@ -6,7 +6,6 @@
  * Expected output: 7.5, 17.25, 10.75 (three lines)
  * Actual: 0.5, -1.75, 7.75 (node VM; the second line differs between schedulers)
  */
-module opt_cast_argument_value
 
 func f(x: float): float { return x + 0.5 }
 

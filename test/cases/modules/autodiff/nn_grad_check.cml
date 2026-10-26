@@ -2,7 +2,6 @@
  * Checks the derivative rules of the nn operators against finite differences (see
  * tensor_grad_check.cml for the method).
  */
-module nn_grad_check
 
 import { grad } from autodiff
 import { new, random, seed, sum, reshape, tanh, cast } from tensor

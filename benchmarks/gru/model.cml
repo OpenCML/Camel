@@ -4,7 +4,6 @@
  * recurrence with PyTorch gate equations, h0 = 0, then Linear(128,10) on the
  * final hidden state.
  */
-module gru
 
 import { sigmoid, tanh, reshape, shape, zeros, mean } from tensor
 import { grad, with_grad } from autodiff

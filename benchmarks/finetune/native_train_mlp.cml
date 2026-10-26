@@ -7,7 +7,6 @@
  * `CAMEL_BENCH step=<i> loss=<v>`, and dumps the updated parameters to
  * CAMEL_FT_DUMP/step_<i>/ for the three-way alignment.
  */
-module native_train_mlp
 
 import { relu, mean, load_npy } from tensor
 import { with_grad } from autodiff

@@ -1,4 +1,3 @@
-module control_chain
 
 func echo(x: int): int sync {
     return println(x)

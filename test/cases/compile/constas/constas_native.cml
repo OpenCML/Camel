@@ -1,4 +1,3 @@
-module constas_native
 import tensor
 
 // A body-less declaration names a C++ operator whose signature does not carry a compile-time

@@ -4,7 +4,6 @@
  * accepted whatever it was and ran the `adam` update with its default constants, which is the
  * fallback this rewrite deleted; there is no other optimizer to fall back to.
  */
-module optim_unknown_optimizer_update
 
 import { full } from tensor
 import { adam, constant, init, update } from optim

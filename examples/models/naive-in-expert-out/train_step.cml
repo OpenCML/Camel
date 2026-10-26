@@ -21,7 +21,6 @@
 // `init_dir` writes the initial model and the data there, and `final_dir` writes the trained
 // model there (an empty string writes nothing).  The thread count is the command line's `-t 1`;
 // the program itself reads no environment variable.
-module naive_in_expert_out
 
 import { argmax, exp, gelu, log, mean, one_hot, permute, randn, reshape, seed, shape, sqrt as tensor_sqrt, sum, transpose } from tensor
 import { sqrt as scalar_sqrt } from math

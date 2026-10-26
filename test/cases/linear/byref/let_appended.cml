@@ -4,7 +4,6 @@
  * error (UnusedPureResult). It used to be refused because `append` changed its argument in
  * place and `xs` is not a `var` (3.5).
  */
-module let_appended
 
 func main(): int sync {
     let xs = [1, 2]

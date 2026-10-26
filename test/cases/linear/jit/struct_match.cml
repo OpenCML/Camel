@@ -1,7 +1,6 @@
 /**
  * Verifies match-driven struct reconstruction on JIT, including field reads and rebuilt record values.
  */
-module jit_struct_match
 
 type Point = {
     x: int,

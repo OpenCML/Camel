@@ -3,7 +3,6 @@
  * column 14) as an ordinary syntax error. It was a `ConstructNotSupported` while the form was
  * still in the grammar; the parser read the nesting so that the compiler could say so.
  */
-module syntax_no_struct_pattern
 
 func main(): int sync {
     let s = { x: 1 }

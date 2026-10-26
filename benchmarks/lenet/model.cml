@@ -3,7 +3,6 @@
  * Conv(1->6,k5,pad2) -> ReLU -> MaxPool(2) -> Conv(6->16,k5) -> ReLU -> MaxPool(2)
  * -> Flatten -> Linear(400,120) -> ReLU -> Linear(120,84) -> ReLU -> Linear(84,10).
  */
-module lenet
 
 import { relu, flatten, mean } from tensor
 import { grad, with_grad } from autodiff

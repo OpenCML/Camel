@@ -4,7 +4,6 @@
  * the real `:op/sub_l` kernel. The tag checks the signature, not the semantics, so the builder
  * accepts it; only a differential comparison can see that the two paths differ.
  */
-module impl_cross_module_disagreement_lib
 
 #op(':op/sub_l')
 func sub_kernel(a: int, b: int): int

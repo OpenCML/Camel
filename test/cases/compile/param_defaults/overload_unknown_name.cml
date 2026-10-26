@@ -2,7 +2,6 @@
  * A name the call writes has to be a parameter of the declarations it may reach: `z` is a
  * parameter of neither declaration of `f`, so it names nothing there (design principles 4.4).
  */
-module param_overload_unknown_name
 
 func f(a: int): int {
     return a

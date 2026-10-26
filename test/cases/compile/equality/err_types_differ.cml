@@ -1,4 +1,3 @@
-module err_types_differ
 
 func main(): int sync {
     println([1, 2] == [1.0, 2.0])

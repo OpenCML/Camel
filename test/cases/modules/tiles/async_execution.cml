@@ -1,5 +1,4 @@
 // Public device operations return completed values, including identities and empty views.
-module tiles_async_execution
 import { load_npy, save_npy, zeros } from tensor
 import { Device, upload, download, run_preferred_resident } from tiles
 import { get_env } from env

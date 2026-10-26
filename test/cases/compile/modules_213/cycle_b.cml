@@ -1,4 +1,3 @@
-module cycle_b
 
 import { A } from cycle_a
 

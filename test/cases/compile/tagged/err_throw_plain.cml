@@ -1,7 +1,6 @@
 /**
  * `throw` in a function that does not declare a `T!`: ThrowOutsideFallible at the statement.
  */
-module err_throw_plain
 
 func check(x: int): int {
     if x > 0 then { return x } else {

@@ -1,4 +1,3 @@
-module no_params
 
 func main(): int sync {
     println('ran')

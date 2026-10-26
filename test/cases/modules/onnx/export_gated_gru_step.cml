@@ -7,7 +7,6 @@
  * ort_gated_gru_step.py runs the model on ONNX Runtime for every gate pattern and compares it
  * with the native run of the same step (ort_gated_gru_step.cml holds the same functions).
  */
-module export_gated_gru_step
 
 import { sigmoid, tanh, reshape, shape, zeros, mean, abs } from tensor
 import { with_grad } from autodiff

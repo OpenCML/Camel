@@ -1,4 +1,3 @@
-module bytes_text_reject
 import { from_array } from bytes
 import { write_bytes, read_text } from fs
 import { get_env } from env

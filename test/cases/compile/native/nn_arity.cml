@@ -3,7 +3,6 @@
  * and the overload the message lists is the declaration's — `stdlib/nn.cml`, not the C++ module
  * (step 10).
  */
-module nn_arity
 
 import { save_params } from nn
 

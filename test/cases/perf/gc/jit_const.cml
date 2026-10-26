@@ -4,7 +4,6 @@
  * one graph; std::jit compiles it with mark-sweep and leaves it to the interpreter when objects
  * move, because compiled code would contain the address of the constant. No allocation.
  */
-module jit_const
 
 func pick(n: int, a: string): string {
     return if n < 2 then 'leaf' else pick(n - 1, pick(n - 2, a))

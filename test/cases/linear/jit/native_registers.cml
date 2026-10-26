@@ -5,7 +5,6 @@
  * and r8-r10 somewhere, the destination is often the register of an operand, and `mix`
  * needs the second lowering (no values kept in registers across bytecodes).
  */
-module native_registers
 
 func mix(a: int, b: int, c: int, d: int, e: int, n: int): int {
     return if n <= 0 then a * b + c * d - e * a + (b - c) * (d - e) + a / 3 + (e * d) / 7

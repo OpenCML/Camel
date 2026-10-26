@@ -2,7 +2,6 @@
  * The first case that matches is taken: nothing after the wildcard is reachable. The case
  * after it used to be entered for every value that matched no pattern.
  */
-module match_wildcard_first
 
 func f(s: string): int {
     return match s {

@@ -7,7 +7,6 @@
  * the spelling of the type
  * used to refuse this case.
  */
-module export_loop_carried_array
 import { reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env

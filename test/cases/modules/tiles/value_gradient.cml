@@ -1,4 +1,3 @@
-module tiles_value_gradient
 import { reshape, sum, mean, abs, zeros } from tensor
 import { with_grad } from autodiff
 import { inspect, benchmark, run_preferred_resident, download } from tiles

@@ -5,7 +5,6 @@
 // only int64 `.npy` through `read_as::<i64>`, each with the file's own extents. Nothing is
 // converted -- a mismatch would be a fault at the call, as `npy_generic_wrapper_mismatch` pins
 // (design principles 5.1, 5.2, 5.5).
-module tensor_dtype_npy_generic_wrapper
 
 import { load_npy, numel } from tensor
 

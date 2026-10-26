@@ -183,7 +183,6 @@ G5/G7/G8 + GPU/H246 ── G11 ── G12
   - 红前用例（附录 A 的 t10，**反例**：今天编译失败，这正是本片要改掉的现状）
     <!-- camel-snippet: counter-example: 反例：今天的 `?..` 报 ConstructNotSupported，逐字诊断见附录 A 的 t10 -->
     ```camel
-    module optional_comp
     func inc(x: int): int { return x + 1 }
     func dbl(x: int): int { return x * 2 }
     func main(): int sync {
@@ -205,7 +204,6 @@ G5/G7/G8 + GPU/H246 ── G11 ── G12
   - 红前用例（附录 A 的 t4，**反例**：今天编译失败）
     <!-- camel-snippet: counter-example: 反例：今天的 `f..g` 报 ConstructNotSupported，逐字诊断见附录 A 的 t4 -->
     ```camel
-    module h248_t4_comp
     func inc(x: int): int { return x + 1 }
     func dbl(x: int): int { return x * 2 }
     func main(): int sync {
@@ -234,7 +232,6 @@ G5/G7/G8 + GPU/H246 ── G11 ── G12
 - 红前用例（附录 A 的 t1、t2，**两个反例**：今天都是语法错误）
   <!-- camel-snippet: counter-example: 反例：类型位置的 `T..` 今天报 SyntaxDiag::UnexpectedToken，逐字诊断见附录 A 的 t1 -->
   ```camel
-  module h248_t1_stream_type
   func main(): int sync {
       let s: int.. = [1, 2, 3]
       println(0)
@@ -243,7 +240,6 @@ G5/G7/G8 + GPU/H246 ── G11 ── G12
   ```
   <!-- camel-snippet: counter-example: 反例：表达式里的 `as T..` 今天同样报 SyntaxDiag::UnexpectedToken，逐字诊断见附录 A 的 t2 -->
   ```camel
-  module h248_t2_as_stream
   func main(): int sync {
       let xs = [1, 2, 3]
       let s = xs as int..
@@ -286,7 +282,6 @@ G5/G7/G8 + GPU/H246 ── G11 ── G12
 - 红前用例（附录 A 的 t3、t9）：
   ```camel
   // t3：头部写流类型 + yield
-  module h248_t3_yield
   func pairs(n: int): (int, int).. {
       var i = 0
       loop while i < n do
@@ -301,7 +296,6 @@ G5/G7/G8 + GPU/H246 ── G11 ── G12
   <!-- camel-snippet: counter-example: 语法收口之后 `yield` 是关键字，这条程序是片 E 的负向验收：它必须是语法错误 -->
   ```camel
   // t9：反例——`yield` 成为关键字之后，这条程序必须是语法错误
-  module h248_t9_yield_only
   func main(): int sync {
       let yield = 1
       println(yield)
@@ -319,7 +313,6 @@ G5/G7/G8 + GPU/H246 ── G11 ── G12
 - 红前用例（附录 A 的 t5，**反例**：今天编译失败）
   <!-- camel-snippet: counter-example: 反例：`for x in <int>` 今天报 LoopSequenceNotIterable，逐字诊断见附录 A 的 t5 -->
   ```camel
-  module h248_t5_for_stream
   func main(): int sync {
       let n = 3
       let a = loop acc = 0 for x in n do acc + x
@@ -339,7 +332,6 @@ G5/G7/G8 + GPU/H246 ── G11 ── G12
 - 红前用例（附录 A 的 t6，**反例**：今天编译失败）
   <!-- camel-snippet: counter-example: 反例：今天的 `tee` 报 UnresolvedReference，逐字诊断见附录 A 的 t6 -->
   ```camel
-  module h248_t6_tee
   func main(): int sync {
       let s = [1, 2, 3]
       let (a, b) = tee(s, 8)
@@ -381,7 +373,6 @@ G5/G7/G8 + GPU/H246 ── G11 ── G12
 - 红前用例（附录 A 的 t8、t12）：
   ```camel
   // t8：规则的形参写不出函数类型
-  module h248_t8_rule_comp
   export rule h248_map_comp(xs: int[], f: (int) => int, g: (int) => int) {
       map(map(xs, f), g) => map(xs, f..g)
   }

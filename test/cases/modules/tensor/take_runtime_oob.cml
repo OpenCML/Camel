@@ -2,7 +2,6 @@
  * A row index that is only known at run time is a located IndexOutOfRange (design principles 3.9,
  * 5.4): no wrap-around for a negative index.
  */
-module take_runtime_oob
 
 import { reshape, range, cast, take } from tensor
 

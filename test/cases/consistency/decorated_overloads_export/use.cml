@@ -8,7 +8,6 @@
  * as `bump(4)` does; a position that needs one function of the name has none and says so, which
  * is what the declaring module says of the same name.
  */
-module use
 
 import lib
 

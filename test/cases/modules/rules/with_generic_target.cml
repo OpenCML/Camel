@@ -7,7 +7,6 @@
  * fires once, and the same rule bound to 0 matches `x * 0` and is refused by its condition -- the
  * value is read in the pattern and in the condition, and the two bindings differ by the value.
  */
-module with_generic_target
 
 /// x * 2: matched by the pattern `x * tile` when the rule is bound to 2, at the first of two sites.
 func wide(x: int): int { return x * 2 }

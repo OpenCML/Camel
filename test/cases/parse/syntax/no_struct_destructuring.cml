@@ -4,7 +4,6 @@
  * form was still in the grammar; before that it was a warning, and the function that used it was
  * dropped while the rest of the program ran.
  */
-module syntax_no_struct_destructuring
 
 func helper(): int {
     let p = { x: 1, y: 2 }

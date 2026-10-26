@@ -1,4 +1,3 @@
-module lexical_unclosed_string
 
 func main(): int sync {
     println('hello)

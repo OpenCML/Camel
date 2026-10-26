@@ -5,7 +5,6 @@
  * (`1->pick(2)`), and through `?->`; `1->inc()` is `inc(1)`, and the receiver enters the
  * first call of a chain (`1->add(2)->add(3)`).
  */
-module pipeline_arguments
 
 func add(a: int, b: int): int { return a + b }
 func inc(a: int): int { return a + 1 }

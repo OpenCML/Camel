@@ -2,7 +2,6 @@
  * The result of `attempt` returned by `main` as it is: the fault that was isolated is an error
  * nobody handled, reported at the place of the fault.
  */
-module error_from_attempt
 
 func half(x: int): int { return 100 / x }
 

@@ -1,4 +1,3 @@
-module tiles_source
 import { reshape } from tensor
 import { source } from tiles
 func add(a: f32[..], b: f32[..]): f32[..] { return a + b }

@@ -5,7 +5,6 @@
  * asked only adds time, so a slow or loaded runner cannot pass a serialized run, and a run with
  * as few as two workers (four rounds, 0.8 s) keeps 0.6 s for its overhead.
  */
-module unordered_foreach_timing
 
 import { now } from time
 import { sleep } from process

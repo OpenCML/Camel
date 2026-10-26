@@ -4,7 +4,6 @@
  * operator (step 10). `available` runs here; `device` is only type-checked,
  * because asking for a device without one is a fault and this case has to run without a GPU.
  */
-module tiles_declaration_import
 
 import { available, device } from tiles
 

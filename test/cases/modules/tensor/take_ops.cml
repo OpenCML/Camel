@@ -3,7 +3,6 @@
  * two softmax cross-entropy forms agreeing in value and gradient. The differentiated value is
  * the first `with` parameter.
  */
-module take_ops
 
 import { reshape, range, take, one_hot, shape, sum, abs, cast } from tensor
 import { softmax_cross_entropy, softmax_cross_entropy_grad } from nn

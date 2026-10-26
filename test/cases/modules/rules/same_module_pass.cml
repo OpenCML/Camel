@@ -1,4 +1,3 @@
-module same_module_pass
 
 import { Program } from graph
 import { rewrite } from rewrite

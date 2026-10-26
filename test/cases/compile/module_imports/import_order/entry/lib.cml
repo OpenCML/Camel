@@ -2,7 +2,6 @@
 /// more: a library in another directory does not find this file by looking for `lib` (design
 /// principles 10.2 — the entry program follows the same rule as a library module, so its
 /// directory is not a module root).
-module lib
 
 export func name(): string {
     return 'root'

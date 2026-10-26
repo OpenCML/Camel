@@ -23,7 +23,6 @@
  * the same type is refused, docs/technical/optim.md), and its two leaves are checked first: a
  * tangent has the element type of the parameter it belongs to.
  */
-module optim_native_dtype_exact
 
 import { numel, new, sum, to_bytes } from tensor
 import { size, to_array } from bytes

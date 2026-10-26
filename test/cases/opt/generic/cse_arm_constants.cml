@@ -10,7 +10,6 @@
  * gives a condition std::opt cannot fold; the output does not depend
  * on the clock.
  */
-module cse_arm_constants
 
 import { now } from time
 

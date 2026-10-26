@@ -7,7 +7,6 @@
  * Execute with an input (binding --arg may specialize the entry graph):
  *   camel collapse_runtime.cml --arg x=2 std::macro std::opt std::nvm
  */
-module collapse_runtime
 
 import { grad } from autodiff
 

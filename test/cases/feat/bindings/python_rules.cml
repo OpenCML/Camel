@@ -11,7 +11,6 @@
  * Nothing here imports a standard library module: the functions a Python project calls are the
  * ones it wrote, and a test of the binding should not also be a test of the module search path.
  */
-module python_rules
 
 /// The array it was given. The block is the caller's: nothing is allocated and nothing is copied,
 /// which is what the caller asserts by comparing the two data pointers.

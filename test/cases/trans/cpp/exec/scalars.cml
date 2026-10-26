@@ -1,6 +1,5 @@
 /// Scalars in the program std::cpp writes: integer arithmetic that wraps around, division and
 /// remainder of negative numbers, i32, floats and their text, conversions, comparisons.
-module scalars
 
 import { sqrt, abs, floor } from math
 

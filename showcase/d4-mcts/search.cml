@@ -20,7 +20,6 @@
 // Run:
 //   camel showcase/d4-mcts/search.cml --arg seed=42 --arg playouts=20000 --arg position=.........
 //         std::nvm      (std::fvm, std::jit and std::prl run the same program)
-module d4_mcts
 
 // == imports ==
 import { count } from array

@@ -2,7 +2,6 @@
  * The model cannot be written (a component of the path, package.json, is a file): the refusal is reported at the
  * export_model call (line 11).
  */
-module bad_path
 
 import { reshape } from tensor
 import { export_model } from onnx

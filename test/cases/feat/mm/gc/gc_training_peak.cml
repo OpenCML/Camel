@@ -11,7 +11,6 @@
  * gradient function answers with the tangent type of `w` -- `f32[?, 4]` -- and `sgd` reads the
  * result as the gradient of the model it is handed.
  */
-module gc_training_peak
 
 import { cast, ones, zeros } from tensor
 import { softmax_cross_entropy, sgd } from nn

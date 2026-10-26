@@ -4,7 +4,6 @@
  *   WHAT=nobranch : export the training step with the branch removed (baseline)
  *   WHAT=step  : export the full branched training step (the failing case)
  */
-module e9_branch_probe
 
 import { relu, mean, reshape } from tensor
 import { with_grad } from autodiff

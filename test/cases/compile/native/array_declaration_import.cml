@@ -5,7 +5,6 @@
  * `unique` are generic declarations of `stdlib/array.cml`. Every call reaches the built-in
  * operator (step 10).
  */
-module array_declaration_import
 
 import { sort, insert_sort, quick_sort, merge_sort, argsort, merge_sorted_arrays, flatten, unique } from array
 

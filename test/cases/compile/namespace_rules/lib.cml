@@ -1,4 +1,3 @@
-module lib
 
 export func root(): int { return 4 }
 

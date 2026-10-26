@@ -1,4 +1,3 @@
-module libt1
 
 namespace Shapes {
     export type P = { x: int }

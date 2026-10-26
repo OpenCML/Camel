@@ -1,7 +1,6 @@
 /**
  * Batched matmul with broadcasting, linear, layer_norm, permute, slice, flatten, unsqueeze.
  */
-module linalg_layout
 
 import {
     reshape, range, cast, ones, zeros, matmul, linear, layer_norm,

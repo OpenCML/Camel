@@ -1,7 +1,6 @@
 /**
  * `??` needs a `T?` on its left: TaggedOperandMismatch at the operator.
  */
-module err_plain_left
 
 func main(): int sync {
     println('never printed')

@@ -6,7 +6,6 @@
  * Actual: L2 0 0 0 0
  * Reduced by test/tools/progen from seed 1659 (generator version 1, all features).
  */
-module opt_untaken_arm_effect
 
 type P = { x: int, y: int }
 

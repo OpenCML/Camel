@@ -1,4 +1,3 @@
-module tiles_vector_add
 import { reshape, sum } from tensor
 import { device, run_preferred_resident, download } from tiles
 

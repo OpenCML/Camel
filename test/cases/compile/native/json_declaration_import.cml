@@ -4,7 +4,6 @@
  * (the two-layer `Json!?` for a document that had failed); every call reaches the C++ operator
  * (step 10).
  */
-module json_declaration_import
 
 import { Json, decode, kind, get, as_int, as_string, as_array } from json
 

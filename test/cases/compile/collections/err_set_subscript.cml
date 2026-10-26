@@ -1,4 +1,3 @@
-module main
 
 // A set has no subscript; membership is `contains`.
 

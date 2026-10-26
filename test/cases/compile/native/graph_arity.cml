@@ -2,7 +2,6 @@
  * The declaration of `graph:root` takes one ordinary argument: a call with none is refused at
  * the call, and the overload the message lists is the declaration's (step 10).
  */
-module graph_arity
 
 import { root } from graph
 

@@ -2,7 +2,6 @@
 // `sort_by`, add up with `sum`, group totals in a Map. Fields cannot be assigned, so a
 // changed record is a new value.
 // Run: camel examples/data/records.cml
-module records
 
 import { sort_by, take, sum } from array
 

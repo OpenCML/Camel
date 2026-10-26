@@ -3,7 +3,6 @@
  * The rounds give the field values; `T` gives their names and whether the result is a struct or
  * a tuple. One branch therefore covers both kinds, which `{ ... }` and `( ... )` could not.
  */
-module same_shape_comprehension
 
 type Pair = {a: int, b: (int, int)}
 

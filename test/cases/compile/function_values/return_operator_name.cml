@@ -3,7 +3,6 @@
  * returning it is rejected at the `return` (it used to be an internal error without a
  * position).
  */
-module return_operator_name
 
 func pick() {
     return println

@@ -4,7 +4,6 @@
  * evaluates both sides). The type operators the grammar reserved left the language in the item-5
  * clearance.
  */
-module no_type_inter
 
 func f(x: int): int {
     let a: A & B = x

@@ -15,7 +15,6 @@
  * so it needs no numeric permission (design principles 7.2-7.3); the tags below are kept to show
  * that carrying `change_precision` changes nothing here.
  */
-module tensor_dtype_bf16_storage
 
 import { new, cast, sum, multiply, to_bytes } from tensor
 import { to_array, size } from bytes

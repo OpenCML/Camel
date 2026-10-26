@@ -4,7 +4,6 @@
  * its siblings isolate at the same time (each `attempt` is a fault domain of its own). The
  * result is the same on every back end.
  */
-module concurrent
 
 func inv(x: int): int { return 60 / (x - 3) }
 

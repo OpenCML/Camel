@@ -30,7 +30,6 @@
  * or f16 value is two bytes in the low half of its slot, and the kernel was reading those bytes
  * as an f32 (`-0.0` and `7.3e-40` for the two lines below).
  */
-module tensor_dtype_bf16_modulo
 
 import { new, to_bytes } from tensor
 import { to_array, size } from bytes

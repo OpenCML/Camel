@@ -4,7 +4,6 @@
  * that calls `g`, and `g` passed as a value to `map`. Without `h` the program prints [1].
  * Expected output: [1]
  */
-module nested_function_value_crash
 
 func main(): int sync {
     let b = 1

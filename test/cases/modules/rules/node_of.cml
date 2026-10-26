@@ -23,7 +23,6 @@
  * `negative_coefficient`, which no condition reaches. The values are the same before and after,
  * because each rule replaces the product by its factor.
  */
-module node_of
 
 import { Program, Node, Graph, graphs, nodes, op, op_name, name, type_of, type_name, is_constant } from graph
 import { rewrite } from rewrite

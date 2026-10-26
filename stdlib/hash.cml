@@ -10,7 +10,6 @@
 // declarations carries the `#op` tag that names its operator. No signature of this module
 // is computed from an argument, so the module needs no `stdlib/signatures/hash.cml`.
 
-module hash
 
 /// The SHA-256 digest of the bytes of s, as 64 lower-case hexadecimal digits.
 /// @pure

@@ -2,7 +2,6 @@
  * A named argument names a parameter of the
  * callee: `z` is not one (design principles 4.4).
  */
-module param_argument_unknown
 
 func f(a: int, b: int = 0): int {
     return a + b

@@ -6,7 +6,6 @@
  * a shared scope resolved `opt` of the second instance to the first instance's node of the other
  * type.
  */
-module generic_overloads_shared_param_name
 
 type Sgd = { rate: float }
 type Adam = { beta1: float, beta2: float }

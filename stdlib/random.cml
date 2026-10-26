@@ -23,7 +23,6 @@
 // `choice`, `sample` and `shuffle` take the element type of their array
 // argument, which `func choice::<T>(xs: T[])` states exactly.
 
-module random
 
 /// Sets the state of the generator: the same seed gives the same sequence.
 /// @effect sets the generator

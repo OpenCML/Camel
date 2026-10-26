@@ -2,7 +2,6 @@
 // stands for are written in the same two positions - a declared value and the argument of a
 // function whose parameter names the function type - and both give the same numbers. A
 // distribution that reached only one of those positions would show here.
-module h428_comp_lambda_equivalence
 
 func ident::<T>(x: T): T {
     return x

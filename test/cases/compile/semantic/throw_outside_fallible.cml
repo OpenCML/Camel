@@ -2,7 +2,6 @@
  * `throw e` returns an error value (design principles 3.9), so the function around it must
  * declare a `T!`. Here it returns `int`: a compile-time error at the statement (line 10).
  */
-module throw_outside_fallible
 
 func check(x: int): int {
     return if x > 0 then x else {

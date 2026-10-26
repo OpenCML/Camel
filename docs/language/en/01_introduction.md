@@ -25,7 +25,6 @@ Camel is a graph-native general-purpose programming language; AI is its primary 
 The smallest program:
 
 ```cml
-module hello
 
 func main(): int sync {
     println('Hello, Camel!')

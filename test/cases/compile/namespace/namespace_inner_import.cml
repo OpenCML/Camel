@@ -1,7 +1,6 @@
 /**
  * Checks import declarations are accepted inside namespace blocks.
  */
-module namespace_inner_import
 
 namespace Local {
     import namespace_lib

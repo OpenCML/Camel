@@ -1,4 +1,3 @@
-module main
 
 // A program that declares its own `Set`, `Map`, `keys` or `put` keeps its meaning: its
 // declarations come before the built-in names.

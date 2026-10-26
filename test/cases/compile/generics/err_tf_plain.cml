@@ -1,4 +1,3 @@
-module err_tf_plain
 
 type Point = (int, int)
 

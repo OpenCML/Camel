@@ -2,7 +2,6 @@
  * A real-valued tag argument: the parameter is declared `float`, the value is written as a real
  * and carried as a real attribute (`camel inspect --tags` prints it as written).
  */
-module float_arg
 
 export tag ratio(r: float) on type, field
 

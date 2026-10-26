@@ -3,7 +3,6 @@
  * The naive softmax and naive log-softmax are not in the library: the check rejects the first on
  * an f32 sample, so only the accepted log-of-softmax and scalar rules are here.
  */
-module accuracy_schedule
 
 import { Program } from graph
 import { Rule, Run, run } from rewrite

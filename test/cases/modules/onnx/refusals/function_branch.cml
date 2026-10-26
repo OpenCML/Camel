@@ -5,7 +5,6 @@
  * dtype of 'arm_out' is not known statically".
  *
  */
-module function_branch
 
 import { reshape, sum } from tensor
 import { export_model } from onnx

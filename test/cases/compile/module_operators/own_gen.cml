@@ -3,7 +3,6 @@
  * other modules offer `+` for `Box` too, but only in the caller's imports: they are not
  * candidates here (design principles 5.7), so the module's own operator is the one.
  */
-module own_gen
 
 import { Box } from two_models
 

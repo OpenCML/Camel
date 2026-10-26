@@ -1,4 +1,3 @@
-module runtime_time_format
 
 import { strptime } from time
 

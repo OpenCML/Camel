@@ -3,7 +3,6 @@
  * with_grad of the loss gives an AttentionModel-shaped gradient, one sgd step lowers the
  * loss, and a recursive train loop repeats the step.
  */
-module tiny_attention
 
 import { grad, with_grad } from autodiff
 import { reshape, shape, softmax, sum, transpose } from tensor

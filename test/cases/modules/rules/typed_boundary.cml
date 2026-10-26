@@ -3,7 +3,6 @@
  * the tempting wrong law would have produced; the two differ, so a rewrite that fired would
  * collapse the pair.
  */
-module typed_boundary
 
 func i32_mul_div(x: i32): i32 { return (x * 2) / 2 }
 func f32_add_stable(x: f32): f32 { return (x + 1.0e30) - 1.0e30 }

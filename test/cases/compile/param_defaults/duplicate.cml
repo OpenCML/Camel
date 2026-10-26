@@ -2,7 +2,6 @@
  * A parameter is given once: `a` here is given by position and again by name (design principles
  *  4.4).
  */
-module param_argument_duplicate
 
 func f(a: int, b: int = 0): int {
     return a + b

@@ -4,7 +4,6 @@
  * takes any struct; an overload for exactly `V` takes `V` only, so it is the one called. An
  * overload of `==` gives `!=`: `a != b` is `!(a == b)` with that overload.
  */
-module struct_equality
 
 type V = { x: float, y: float }
 

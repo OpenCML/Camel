@@ -1,4 +1,3 @@
-module syntax_missing_paren
 
 func main(): int sync {
     println((1 + 2)

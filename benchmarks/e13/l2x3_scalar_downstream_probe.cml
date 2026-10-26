@@ -3,7 +3,6 @@
  * (not returned directly as the loss). Companion to X1 (scalar arms returned
  * directly, exports fine) and X2 (tensor arms, fails).
  */
-module e13_l2x3_scalar_downstream
 
 import { relu, mean, reshape } from tensor
 import { with_grad } from autodiff

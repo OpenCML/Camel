@@ -2,7 +2,6 @@
  * The result of an exported function must be a tensor or a number. A function returning a
  * string is refused at the export_model call (line 11).
  */
-module bad_output
 
 import { reshape } from tensor
 import { export_model } from onnx

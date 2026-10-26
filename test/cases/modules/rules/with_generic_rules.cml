@@ -11,7 +11,6 @@
  * shape-carrying parameter types of the draft's `T[m, k]` come from the tensor module and are not
  * written here; what the case pins is the channel.
  */
-module with_generic_rules
 
 import { Graph, Node, Program, graphs, name, nodes, op, op_name } from graph
 import { Run, check, explain_all, rule_name, run } from rewrite

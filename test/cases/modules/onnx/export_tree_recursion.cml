@@ -3,7 +3,6 @@
  * depends on the model input. Unrolling doubles the graph with every level; the export says so
  * at the second recursive call instead of failing with an allocation error.
  */
-module export_tree_recursion
 import { reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env

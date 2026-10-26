@@ -1,4 +1,3 @@
-module checkpoint_roundtrip
 import { new, zeros, to_bytes, sqrt } from tensor
 import { from_array, to_array } from bytes
 import { save_tree, load_tree, tree_leaves } from ckpt

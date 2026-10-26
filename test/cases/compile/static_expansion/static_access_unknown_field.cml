@@ -1,4 +1,3 @@
-module static_access_unknown_field
 
 func field(t: {a: int, b: int}): int {
     return t.["c"]

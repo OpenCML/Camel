@@ -2,7 +2,6 @@
  * The statistics module: variance (the square of stdev: divisor n - 1), median and quantile
  * (linear interpolation; null for an empty array).
  */
-module stats_quantiles
 
 import { mean, stdev, variance, median, quantile } from statistics
 import { nan, is_nan } from math

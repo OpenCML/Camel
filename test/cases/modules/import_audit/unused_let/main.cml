@@ -10,7 +10,6 @@
  * The dependent direction is `../use_let/main.cml`; the two together separate "import runs
  * nothing" from "depend, and it runs" (design principles 3.1: 被依赖才求值).
  */
-module unused_let_main
 
 import { get_env } from env
 import { exists } from fs

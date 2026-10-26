@@ -4,7 +4,6 @@
  * counter against a bound computed from the data, with an argument that never changes).
  * Checked on ONNX Runtime against NumPy for depths 0 to 6 (artifacts: b2/probes/check_loop.py).
  */
-module export_loop
 import { reshape, sum, tanh } from tensor
 import { export_model } from onnx
 import { get_env } from env

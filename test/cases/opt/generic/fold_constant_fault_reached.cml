@@ -4,7 +4,6 @@
  * after "before" was printed, exactly as without passes. std::opt::fold and std::opt
  * add one warning at the same position before the run.
  */
-module fold_constant_fault_reached
 
 func main(): int sync {
     println('before')

@@ -9,7 +9,6 @@
  * different element type cannot be instantiated into infinitely many concrete types and is
  * reported as a compile error (design principles 5.5).
  */
-module specialize_element_type_nest
 
 import { get_env } from env
 

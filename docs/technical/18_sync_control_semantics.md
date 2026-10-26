@@ -140,7 +140,6 @@ func g(): int sync {
 ## 附：代码示例（sync 与函数体）
 
 ```camel
-module sync_body_demo
 
 // 修改 var 形参。函数体是同步块：修改与读取按书写顺序执行。
 func bump(var x: int): void sync {
@@ -165,7 +164,6 @@ func main(): int sync {
 ```
 
 ```camel
-module order_demo
 
 func bump(var x: int): void sync {
     x += 1

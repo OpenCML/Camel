@@ -1,4 +1,3 @@
-module simplify_growth_budget
 
 // Constant arguments let std::opt unroll a recursion one level per round: each call is
 // specialized, its condition folds, the surviving arm is inlined. fib(18) would become its whole

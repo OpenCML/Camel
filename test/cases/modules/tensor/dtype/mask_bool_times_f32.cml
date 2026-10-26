@@ -6,7 +6,6 @@
  * The refusal names the conversion to write, and it is the same answer for every pair of element
  * types: this one is not about the two widths of a float.
  */
-module mask_bool_times_f32
 
 import { reshape, multiply, sum } from tensor
 

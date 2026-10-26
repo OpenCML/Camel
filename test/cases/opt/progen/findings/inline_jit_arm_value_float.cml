@@ -8,7 +8,6 @@
  * Actual: L8 1.5 (the unreduced program printed `L8 -nan` where `L8 -2` is expected)
  * Reduced by test/tools/progen from seed 944 (generator version 1, all features).
  */
-module inline_jit_arm_value_float
 
 func r6(a7: int, a8: float, a9: string): float {
     return if (0 <= 0) then 1.0 + 1.0 else r6(0, 1.5, '');

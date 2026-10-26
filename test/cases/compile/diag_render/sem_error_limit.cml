@@ -1,4 +1,3 @@
-module sem_error_limit
 
 func main(): int sync {
     println(u0)

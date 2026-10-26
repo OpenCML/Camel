@@ -4,7 +4,6 @@
  *   scalar: f(x) = x^3, f'(x) = 3x^2, f''(x) = 6x          -> f''(2) = 12
  *   tensor: g(x) = sum(x^3), h(x) = sum(grad(g)(x)) = sum(3x^2), grad(h)(x) = 6x
  */
-module second_order
 
 import { reshape, sum } from tensor
 import { grad } from autodiff

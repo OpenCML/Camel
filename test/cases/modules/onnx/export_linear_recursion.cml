@@ -4,7 +4,6 @@
  * arguments of the last call and the number of calls) and a Loop that applies what is done with
  * the result in reverse order. None of them comes from autodiff.
  */
-module export_linear_recursion
 import { reshape, sum, tanh } from tensor
 import { export_model } from onnx
 import { get_env } from env

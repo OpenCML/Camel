@@ -6,7 +6,6 @@
  * bind the variable: `::<T>` and the expected type never reach a declaration's resolver
  * 
  */
-module tensor
 import tensor
 
 import { from_array } from bytes

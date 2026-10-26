@@ -1,4 +1,3 @@
-module main
 
 func twice::<T>(x: T): (T, T) {
     let both = (x, x)                // mark:generic

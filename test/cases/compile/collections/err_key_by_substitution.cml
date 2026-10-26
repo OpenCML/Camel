@@ -1,4 +1,3 @@
-module main
 
 // `Set<T>` is checked again when `T` is replaced: with a float it is rejected at the call.
 

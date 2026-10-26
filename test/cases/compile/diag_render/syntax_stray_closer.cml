@@ -1,4 +1,3 @@
-module syntax_stray_closer
 
 func main(): int sync {
     let x = 1 + )

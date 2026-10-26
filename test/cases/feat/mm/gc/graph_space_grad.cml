@@ -4,7 +4,6 @@
  * a time (the collector sweeps it) instead of all.
  * Run: camel graph_space_grad.cml std::nvm   (no std::macro: grad is built when it is called)
  */
-module graph_space_grad
 
 import { grad } from autodiff
 

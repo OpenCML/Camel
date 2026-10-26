@@ -1,7 +1,6 @@
 /**
  * Smallest pyplot smoke case for a single plot call and output artifact generation.
  */
-module main
 
 import { plot } from pyplot
 import { get_env } from env

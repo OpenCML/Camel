@@ -2,7 +2,6 @@
  * A body-less declaration that carries the same resources the C++ operator declares: `fs:exists`
  * reads the file system (`uses fs`), and the declaration is accepted as its signature.
  */
-module fs
 
 import { read_text } from fs
 

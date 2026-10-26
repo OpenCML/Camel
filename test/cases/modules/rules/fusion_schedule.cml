@@ -3,7 +3,6 @@
  * cost line before it and after it is what shows four kernels becoming one; the values on either
  * side are the same bits.
  */
-module fusion_schedule
 
 import { Program } from graph
 import { Run, run } from rewrite

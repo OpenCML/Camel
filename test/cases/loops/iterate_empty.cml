@@ -1,7 +1,6 @@
 // A loop with no round keeps its first state: an empty string, an empty map, a tensor whose
 // first extent is 0, an empty array; and `for ... while` whose condition is false at once
 // takes no element.
-module tensor_empty
 
 import { zeros } from tensor
 

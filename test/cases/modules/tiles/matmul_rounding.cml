@@ -1,4 +1,3 @@
-module tiles_matmul_rounding
 import { reshape, sum } from tensor
 import { run_preferred_resident, download } from tiles
 

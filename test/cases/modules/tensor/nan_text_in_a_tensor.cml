@@ -5,7 +5,6 @@
  * (camel/utils/number_text.h, `withoutNaNSign`; src/core/rtdata/array.cpp). The same value must
  * write `nan` as a scalar, in a plain array, and in a tensor of f64 and of f32.
  */
-module nan_text_in_a_tensor
 
 import { cast } from tensor
 

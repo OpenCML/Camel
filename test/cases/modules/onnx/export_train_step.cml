@@ -4,7 +4,6 @@
  * straight-line gradient code, and the loss and the SGD-updated parameters
  * become graph outputs.
  */
-module export_train_step
 
 import { relu, mean, reshape } from tensor
 import { with_grad } from autodiff

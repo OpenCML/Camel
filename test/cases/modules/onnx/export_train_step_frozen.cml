@@ -5,7 +5,6 @@
  * graph has one MatMul fewer (the dW1 product is gone) while still listing
  * every parameter as an input and an (identity-updated) output.
  */
-module export_train_step_frozen
 
 import { relu, mean, reshape } from tensor
 import { with_grad, stop_gradient } from autodiff

@@ -5,7 +5,6 @@
 // `modules/bytes` (`bytes:encode` and so on, module:function by convention); this file is the one
 // source of their signatures (design principles 6.4).
 
-module bytes
 
 /// Encodes valid UTF-8 text as an immutable Bytes value.
 /// @pure

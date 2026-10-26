@@ -11,7 +11,6 @@
  * or the unlocated "Runtime draft encoding failed to allocate ... bytes"). The onnx plan keeps
  * this program as the record of that change.
  */
-module unended_unrolling
 
 import { reshape, sum, tanh } from tensor
 import { export_model } from onnx

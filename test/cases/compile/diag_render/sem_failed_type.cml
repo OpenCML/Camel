@@ -1,4 +1,3 @@
-module sem_failed_type
 
 type T = Unknown
 

@@ -17,7 +17,6 @@
  * the program, and `alternate` alternates two stages until a full pair changes nothing. Each
  * answers the program and what the application cost.
  */
-module rules
 import { Program } from graph
 import { abs, exp as math_exp, expm1, log as math_log, log1p, trunc } from math
 import { Proof, Rule, Run, rewrite, saturate, extract, run } from rewrite

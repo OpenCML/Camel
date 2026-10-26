@@ -20,7 +20,6 @@
  * there, and stored back at the element type the leaf has, so a trajectory written here is the
  * trajectory `modules/tensor/kernels/update.h` defines, bit for bit.
  */
-module optim
 
 import math
 import { cast, sqrt, zeros_like } from tensor

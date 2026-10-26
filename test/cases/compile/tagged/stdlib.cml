@@ -1,7 +1,6 @@
 /**
  * Library operators that can fail return a `T!`: parse_int, parse_float, fs::try_read_text.
  */
-module stdlib
 
 import { try_read_text } from fs
 

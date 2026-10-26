@@ -2,7 +2,6 @@
  * `let a, b = 1, 2` binds every name to its value (only the last name used to be bound, the
  * others were unresolved references).
  */
-module let_multi_binding
 
 func main(): int sync {
     let a, b = 1, 2

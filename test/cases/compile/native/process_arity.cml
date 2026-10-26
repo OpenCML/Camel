@@ -2,7 +2,6 @@
  * The declaration of `process:sleep` takes one ordinary argument: none is refused at the call,
  * and the overload the message lists is the declaration's.
  */
-module process_arity
 
 import { sleep } from process
 

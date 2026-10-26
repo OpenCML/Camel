@@ -1,3 +1,2 @@
-module lib_plain
 
 export func bump(x: float): float { return x + 0.5 }

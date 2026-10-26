@@ -13,7 +13,6 @@
  * count is 0 and the agreement is 0. Beside `y = [1, 1, 1, 1]`, `y > 0.5` is all true: the two
  * agree at two of the four positions, so the count is 2 and the agreement is 0.5.
  */
-module array_mask_elementwise
 
 import { cast, mean, reshape, sum, where } from tensor
 

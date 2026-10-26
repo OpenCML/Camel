@@ -6,7 +6,6 @@
  * call of `twisted` runs the body `a + b` and prints 42 — a kernel that was bound by name alone
  * would print -4. The call through the function value is the body either way, and the two agree.
  */
-module impl_kernel_arms_plain
 
 #op(':op/sub_l')
 func sub_kernel(a: int, b: int): int when false

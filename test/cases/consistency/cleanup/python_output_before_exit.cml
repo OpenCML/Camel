@@ -1,7 +1,6 @@
 /**
  * Output printed by Python before exit(6).
  */
-module python_output_before_exit
 
 import { py_call, py_wrap } from python
 

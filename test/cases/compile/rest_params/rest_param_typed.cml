@@ -1,4 +1,3 @@
-module rest_param_typed
 
 func bad(..ts: int): int {
     return 0

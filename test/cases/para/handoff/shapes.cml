@@ -8,7 +8,6 @@
  *   - `main`, `inner_sum`, `drive`, `sum_to`: not serial (a higher-order operator in them or below
  *     them).
  */
-module shapes
 
 import { sqrt } from math
 

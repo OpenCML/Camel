@@ -1,7 +1,6 @@
 /**
  * The same program without the fault, as the reference for where Python's output appears.
  */
-module python_output_normal
 
 import { py_call, py_wrap, py_eval, py_unwrap, PyObject } from python
 

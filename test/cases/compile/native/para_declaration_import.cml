@@ -4,7 +4,6 @@
  * result type is free, `unordered_reduce` a callback from the element to itself). Every call
  * reaches the operator the module runs (step 10).
  */
-module para_declaration_import
 
 import { rendezvous, unordered_foreach, unordered_reduce } from para
 

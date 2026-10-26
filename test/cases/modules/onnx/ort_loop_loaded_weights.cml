@@ -10,7 +10,6 @@
  * Reads w.npy and x.npy from the working directory, writes the native results next to them,
  * and exports when ONNX_OUT is set.
  */
-module ort_loop_loaded_weights
 
 import { load_npy, reshape, save_npy, sum, tanh } from tensor
 import { with_grad } from autodiff

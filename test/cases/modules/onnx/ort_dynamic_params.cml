@@ -8,7 +8,6 @@
  * MODE=run:    loads W, B and X and saves the value and the two gradients to OUT0, OUT1, OUT2.
  * Driven by ort_dynamic_params.py.
  */
-module ort_dynamic_params
 
 import { load_npy, save_npy, reshape, sum, mean, tanh, transpose } from tensor
 import { with_grad } from autodiff

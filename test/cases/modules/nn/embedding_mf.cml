@@ -3,7 +3,6 @@
  * embedding pullback scatters into an EmbeddingMf-shaped gradient, one sgd step lowers the
  * loss, and a recursive train loop repeats the step.
  */
-module embedding_mf
 
 import { grad, with_grad } from autodiff
 import { full, reshape, sum } from tensor

@@ -5,7 +5,6 @@
  * export_train_step_branch (predicate is the returned loss value); together
  * they bracket the scalar-arm region of the Level-2 map.
  */
-module export_train_step_branch_scalar
 
 import { relu, mean, abs, reshape } from tensor
 import { with_grad } from autodiff

@@ -3,7 +3,6 @@
  * as closures) collapses into straight-line code once the calls are inlined, the closure calls
  * devirtualized and the tuples folded away. h'(x) = 2x + 6(x + 1).
  */
-module collapse
 
 import { grad } from autodiff
 import { get_env } from env

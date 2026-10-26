@@ -3,7 +3,6 @@
  * `a = a + b` does not hold and `a += b` is not this type's compound assignment — the compound
  * assignment is reported, not the assignment hiding behind it (design principles 4.2).
  */
-module add_assign_result_type
 
 type A = { v: int }
 type B = { v: int }

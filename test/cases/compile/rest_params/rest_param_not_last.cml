@@ -1,4 +1,3 @@
-module rest_param_not_last
 
 func bad(..ts, x: int): int {
     return x

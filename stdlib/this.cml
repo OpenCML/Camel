@@ -6,7 +6,6 @@
 // kernel and the executor. A declaration names `this:<function>` by convention, so no `#op` tag
 // is needed.
 
-module this
 
 /// The Zen of Camel, the text of the file ZEN.
 /// @pure

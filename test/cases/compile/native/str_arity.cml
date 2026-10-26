@@ -2,7 +2,6 @@
  * The declaration of `str:trim` takes one ordinary argument: a second one is refused at the
  * call, and the overload the message lists is the declaration's (step 10).
  */
-module str_arity
 
 import { trim } from str
 

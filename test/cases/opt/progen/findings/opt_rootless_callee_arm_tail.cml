@@ -10,7 +10,6 @@
  *   at size 4) never returned on the node VM and the parallel scheduler.
  * Reduced by test/tools/progen from seed 108 at size 4 (generator version 2, all features).
  */
-module opt_rootless_callee_arm_tail
 
 func f1(a2: (a0: int) => string, a3: (a0: bool) => string, a4: (a0: int, a1: float) => int): int {
     return 2;

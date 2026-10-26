@@ -1,7 +1,6 @@
 /**
  * Conversion of a float to an int: truncation toward zero inside the range.
  */
-module float_to_int
 
 func conv(x: float): int { return int(x) }
 

@@ -3,7 +3,6 @@
  * constant is required it is refused by name (FoldCallTooDeep), with the depth the evaluation
  * follows, rather than looping until the build runs out of stack.
  */
-module fold_call_depth_limit
 
 func spin(n: int): int {
     return spin(n + 1)

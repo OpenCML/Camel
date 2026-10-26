@@ -5,7 +5,6 @@
  * an array, and a loop whose body calls a function that is not a tail call. None of them may
  * use the machine stack or the recursion limit per round: N is far above both.
  */
-module jit_framed_loops
 
 import { get_env } from env
 

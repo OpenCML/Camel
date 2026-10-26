@@ -4,7 +4,6 @@
  * diagnostic, as other state is (export_var_parameter); it must not crash or translate the
  * appends as something else.
  */
-module export_var_append
 import { reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env

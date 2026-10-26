@@ -1,6 +1,5 @@
 /// `T?`, `T!` and error values: `??`, `!!`, `?->`, `match` on them, `throw`, `parse_int`, and
 /// `attempt`, which makes a fault inside a call an error value (design principles 3.9).
-module tagged
 
 func find(xs: int[], v: int): int? {
     return if len(xs) == 0 then null else if xs[0] == v then 0 else null

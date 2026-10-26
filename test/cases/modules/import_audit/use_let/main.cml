@@ -9,7 +9,6 @@
  * The module it imports is `../lazy_let/lazy_let_writer.cml`; a copy named for this case keeps the
  * two programs independent.
  */
-module use_let_main
 
 import { get_env } from env
 import { exists } from fs

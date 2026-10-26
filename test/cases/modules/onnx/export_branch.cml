@@ -8,7 +8,6 @@
  * `t[0]` then has the element
  * type the comparison needs.
  */
-module export_branch
 
 import { reshape, relu } from tensor
 import { export_model } from onnx

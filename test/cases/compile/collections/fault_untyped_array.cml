@@ -1,4 +1,3 @@
-module main
 
 // An array without an element type (`[]`) converts only while it is empty: this one was
 // appended to, so the conversion is a fault with its position, on every back end.

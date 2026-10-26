@@ -9,7 +9,6 @@
  *   plain  no variable: compiled.
  * Output: 0, 7, 7.
  */
-module var_param_jit
 
 func down(var acc: int, n: int): int {
     return if n <= 0 then 0 else down(acc, n - 1)

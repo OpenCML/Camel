@@ -2,7 +2,6 @@
 /// scope covers the functions it calls (GPU design 2.3), so `tanh` here is inside it; `tanh` has
 /// no device implementation, and the compiler refuses the program instead of running it on the
 /// host. `test/cases/gpu/nofallback/host.cml` is the same program without the tag.
-module gpu_nofallback_refused_operator
 
 import { tanh, reshape } from tensor
 

@@ -1,6 +1,5 @@
 /// placement_hash_gpu.cml with the other placement label: same nodes, names and edges, a
 /// different block-region fact. See placement_hash_gpu.cml.
-module tiles_placement_hash
 
 func other(): int {
     return 5

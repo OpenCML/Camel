@@ -21,7 +21,6 @@
  *     indices, being discrete, receive exactly 0.0.
  *   zero=1.0 when the four zero gradients are exactly 0.0 (a NaN would print nan, not 0.0).
  */
-module discrete_zero
 
 import { argmax, cast, one_hot, reshape, sum, where } from tensor
 import { with_grad } from autodiff

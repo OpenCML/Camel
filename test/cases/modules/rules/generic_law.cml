@@ -9,7 +9,6 @@
  * Camel code of its own declaration's scope, so `is_integer` is imported here and not by the
  * program the rule is applied to.
  */
-module generic_law
 
 import { Graph, Node, NodeKind, Program, graphs, kind, name, nodes } from graph
 import { Run, explain_all, rule_name, run, why_not } from rewrite

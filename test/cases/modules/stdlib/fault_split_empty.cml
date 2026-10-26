@@ -1,4 +1,3 @@
-module fault_split_empty
 
 import { split } from str
 

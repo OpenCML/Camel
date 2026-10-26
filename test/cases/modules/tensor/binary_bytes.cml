@@ -1,4 +1,3 @@
-module binary_bytes
 import { new, reshape, to_bytes, zeros } from tensor
 import { to_array, size } from bytes
 

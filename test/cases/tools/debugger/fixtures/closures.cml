@@ -1,4 +1,3 @@
-module main
 
 func make_adder(k: int): (v: int) => int {
     return (v: int): int => v + k    // mark:lambda

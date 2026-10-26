@@ -5,7 +5,6 @@
  * path to compile it surfaces that refusal. When step 5 adds bool/int64 storage, this
  * expectation must move to the device conversion that lands there.
  */
-module tiles_cast_dtype
 import { reshape, cast } from tensor
 import { inspect } from tiles
 func ints(x: f32[..]): int[..] { return cast(x, "int64") }

@@ -5,7 +5,6 @@
  * to exercise (a variable read or assigned outside the function that declares it) is still
  * covered by `var_outer.cml`, whose lambda reads a variable of the enclosing function.
  */
-module var_param
 import { reshape } from tensor
 import { export_model } from onnx
 import { get_env } from env

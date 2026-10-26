@@ -2,7 +2,6 @@
  * Refused: the recursive call is not in tail position and the recursion is not linear in the
  * exportable sense, because two branches decide whether the function calls itself.
  */
-module export_nontail_recursion
 import { reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env

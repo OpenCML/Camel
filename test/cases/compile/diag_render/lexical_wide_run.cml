@@ -1,4 +1,3 @@
-module lexical_wide_run
 
 func main(): int sync {
     let 名字 = 1

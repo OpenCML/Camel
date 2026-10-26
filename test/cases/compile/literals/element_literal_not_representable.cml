@@ -2,7 +2,6 @@
 /// `x * 0.5` with an `int` tensor is a literal the element type cannot hold: an error at the
 /// expression, not an f32 product that the declared return type then contradicts. The value is
 /// not out of the integer's range, it is not an integer: "the value would be truncated".
-module element_literal_not_representable
 
 import { reshape, cast, sum } from tensor
 

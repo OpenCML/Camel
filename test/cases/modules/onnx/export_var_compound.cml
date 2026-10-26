@@ -7,7 +7,6 @@
  * type where it meets it -- `f32(s)`, `f32(k)` -- and the graph carries the Cast for it (P4: the
  * conversion is written, not assumed).
  */
-module export_var_compound
 import { reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env

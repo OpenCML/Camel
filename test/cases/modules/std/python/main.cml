@@ -1,7 +1,6 @@
 /**
  * Broader Python integration case covering calls, imports, attributes, code execution, scripts, and keyword arguments.
  */
-module main
 
 import {
     py_call,

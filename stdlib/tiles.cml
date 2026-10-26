@@ -28,7 +28,6 @@
 // are fixed. Device-dependent types are the `Device<...>` results of the computed operators, and
 // their host type — a tensor's static shape included — comes from the argument.
 
-module tiles
 
 /// Whether this machine can run a program on a CUDA device: false when the driver, the toolkit or
 /// a visible device is missing. A capability question only — a device the run names with

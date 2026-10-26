@@ -1,4 +1,3 @@
-module broken_graph
 
 // Used with the test-only pass test::drop_call_argument, which removes the argument of the call
 // below and commits the broken program. Structural validation at commit must reject it before

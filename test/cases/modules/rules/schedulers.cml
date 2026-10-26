@@ -8,7 +8,6 @@
  * program is `.result`. The pass hands the run to `reported`, which prints the three counts and
  * answers the program; `?->` carries an error on unchanged.
  */
-module schedulers
 
 import { Program } from graph
 import { Rule, Run, rule_name, rewrite } from rewrite

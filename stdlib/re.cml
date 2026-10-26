@@ -6,7 +6,6 @@
 // the kernel, the executor and the operator traits. A declaration names `re:<function>` by
 // convention, so no `#op` tag is needed.
 
-module re
 
 /// Whether the regular expression (ECMAScript syntax) matches somewhere in text.
 /// @pure

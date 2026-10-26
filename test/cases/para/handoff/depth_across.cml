@@ -14,7 +14,6 @@
  * so A + B + 3 calls: the program runs when A + B + 3 <= limit and stops with
  * MaxRecursionDepthExceeded at the recursive call of `depth` when it is one more.
  */
-module depth_across
 
 import { get_env } from env
 

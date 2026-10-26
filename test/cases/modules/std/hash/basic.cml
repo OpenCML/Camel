@@ -1,7 +1,6 @@
 /**
  * Exercises the hashing APIs of the hash module, focusing on determinism and the difference between single-round and repeated hashing.
  */
-module main
 
 import { sha256, sha256_rounds } from hash
 

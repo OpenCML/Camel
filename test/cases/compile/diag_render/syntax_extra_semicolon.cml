@@ -1,4 +1,3 @@
-module syntax_extra_semicolon
 
 func main(): int sync {
     let x = 1;;

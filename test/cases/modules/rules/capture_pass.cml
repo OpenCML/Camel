@@ -3,7 +3,6 @@
  * is a value of that module, and the value is one it captured where it was written. The pass also
  * takes a `with` parameter, which is bound from the command line.
  */
-module capture_pass
 
 import { Program } from graph
 

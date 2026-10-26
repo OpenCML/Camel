@@ -1,4 +1,3 @@
-module alpha
 
 export func value(): int {
     return 100

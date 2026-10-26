@@ -1,7 +1,6 @@
 // Mean's pullback queries numel; specialize that query from the invocation shape.
 // The differentiated tensor is the first `with` parameter; the derivative wrapper keeps the
 // ordinary signature that tiles::source and tiles::run specialize on.
-module tiles_mean_grad
 import { reshape, mean, abs, sum } from tensor
 import { grad } from autodiff
 import { source, run_preferred_resident, download } from tiles

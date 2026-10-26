@@ -3,7 +3,6 @@
  * outside every boundary ends the program with its located diagnostic as always, and it is the
  * only diagnostic of the run: the isolated fault left none behind.
  */
-module fault_outside
 
 func risky(d: int): int { return 100 / d }
 

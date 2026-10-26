@@ -3,7 +3,6 @@
  * call is compiled, so `..t` is refused. Only a rest parameter's `ts`, a tuple comprehension or
  * a tuple literal can be spread.
  */
-module static_tuple_runtime_tuple
 
 func sum3(a: int, b: int, c: int): int {
     return a + b + c

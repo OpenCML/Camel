@@ -1,4 +1,3 @@
-module neutral_var_target
 
 func main(): int sync {
     var a = 5

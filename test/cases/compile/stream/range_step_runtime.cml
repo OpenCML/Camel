@@ -2,7 +2,6 @@
 // a step of 0 is the fault the array form raises there (RuntimeDiag::InvalidArgument), because the
 // refusal of a constant step cannot see it (design principles 4.2). A step that is not 0 is the
 // sequence it names.
-module h426_range_step_runtime
 
 func counted(k: int): int[] { return range(0, 10, k) }
 

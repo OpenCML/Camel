@@ -5,7 +5,6 @@
  * error to report), and the export refuses at the conversion (line 16) with what the
  * conversion itself says.
  */
-module as_constant_fails
 
 import { reshape } from tensor
 import { export_model } from onnx

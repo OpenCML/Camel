@@ -4,7 +4,6 @@
  * one parameter per position and reaches the two-parameter declaration, and the names may be
  * written in any order (design principles 4.4).
  */
-module param_named_across_overloads
 
 func f(x: int): int {
     return x

@@ -4,7 +4,6 @@
  * because the native stack of the thread is nearly full) depends on the back end and the limit;
  * either way it ends at the boundary, and the function runs again afterwards.
  */
-module depth_isolated
 
 import { get_env } from env
 

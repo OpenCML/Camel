@@ -25,7 +25,6 @@ Camel 是图原生的通用编程语言，AI 是它首要的应用领域。
 最小的程序：
 
 ```cml
-module hello
 
 func main(): int sync {
     println('Hello, Camel!')

@@ -4,7 +4,6 @@
  * inherit them. Permissions only allow other results; the CPU back ends compute the canonical
  * results with or without them, so this program prints the same with every back end.
  */
-module permissions
 
 /// No permissions: called from annotated code, it keeps none.
 func plain(a: float, b: float): float {

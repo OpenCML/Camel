@@ -3,7 +3,6 @@
  * gives a TinyRnn-shaped gradient (weights shared across both time steps accumulate), one sgd
  * step lowers the loss, and a recursive train loop repeats the step.
  */
-module tiny_rnn
 
 import { grad, with_grad } from autodiff
 import { full, shape, sum, tanh, zeros } from tensor

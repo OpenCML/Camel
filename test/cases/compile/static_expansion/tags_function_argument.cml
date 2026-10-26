@@ -5,7 +5,6 @@
  * is refused here, rather than handed that number as a string; the tags of the other fields of
  * the same type are read as usual.
  */
-module tags_function_argument
 
 tag rule::<F>(f: F) on field when is_function::<F>()
 tag width(w: int) on field

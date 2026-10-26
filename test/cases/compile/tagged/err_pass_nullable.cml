@@ -1,7 +1,6 @@
 /**
  * `?->` hands on an error; over a `T?` it is TaggedOperandMismatch.
  */
-module err_pass_nullable
 
 func inc(x: int): int { return x + 1 }
 

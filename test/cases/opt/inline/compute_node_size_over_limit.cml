@@ -5,7 +5,6 @@
  * which does not fold the `reshape` of the example away). The refusal of an export that hides
  * its request behind that call reports the number and the reason (see the onnx plan).
  */
-module compute_node_size_over_limit
 
 import { reshape } from tensor
 import { export_model } from onnx

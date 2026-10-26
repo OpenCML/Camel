@@ -4,7 +4,6 @@
  * `log_softmax(x, -1)`. The gap `[-300, 0]` is the interesting one: the probability of the first
  * lane rounds to zero, so the naive log is -inf while the log-softmax value is -300.
  */
-module accuracy_logsoftmax_target
 
 import { reshape, log, log_softmax, softmax, sum } from tensor
 

@@ -7,7 +7,6 @@
  * not make. Red when the pair is accepted - the model would then carry a width the runtime does
  * not name.
  */
-module export_mixed_width_refused
 
 import { reshape, randn } from tensor
 import { export_model } from onnx

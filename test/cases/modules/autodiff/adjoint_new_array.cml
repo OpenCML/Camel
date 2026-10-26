@@ -13,7 +13,6 @@
  * Both gradients are printed with `{}`, so each is compared with its adjoint element by element
  * and the text carries every digit of it.
  */
-module adjoint_new_array
 
 import { new, reshape, sum } from tensor
 import { grad } from autodiff

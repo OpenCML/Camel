@@ -5,7 +5,6 @@
  * does not fold there. Run by ort_loop_values_dynamic.py: x.npy is read from the working
  * directory, the native results are saved there, and the model is exported when ONNX_OUT is set.
  */
-module ort_loop_values_dynamic
 import { load_npy, reshape, save_npy, sum, tanh } from tensor
 import { with_grad } from autodiff
 import { export_model } from onnx

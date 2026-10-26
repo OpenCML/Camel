@@ -1,4 +1,3 @@
-module bytes_invalid_utf8
 
 import { decode, from_array } from bytes
 

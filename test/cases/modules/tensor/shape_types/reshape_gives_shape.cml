@@ -1,4 +1,3 @@
-module shape_reshape_gives_shape
 import { reshape, sum, load_npy } from tensor
 import { get_env } from env
 func f(b: f32[3]): float {

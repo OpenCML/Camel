@@ -4,7 +4,6 @@
  * generated program prints the same two lines as the interpreters and stops with the same
  * located MaxRecursionDepthExceeded report.
  */
-module site_message
 
 func add(a: int, b: int): int { a + b }
 

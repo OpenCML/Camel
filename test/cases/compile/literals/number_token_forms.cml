@@ -5,7 +5,6 @@
  * converts it to its width, as a command-line argument of that type is read. A leading-zero
  * decimal integer (`077`) is no longer a source token: octal is `0o77`.
  */
-module number_token_forms
 
 func main(): int sync {
     let h: float = 0xFF

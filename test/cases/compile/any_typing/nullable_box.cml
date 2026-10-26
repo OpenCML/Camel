@@ -1,4 +1,3 @@
-module nullable_box
 
 import { Json, decode, get } from json
 

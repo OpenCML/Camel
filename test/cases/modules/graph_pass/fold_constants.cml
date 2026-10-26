@@ -1,4 +1,3 @@
-module fold_constants
 import { flat_map } from array
 import { any } from array
 import { starts_with } from str

@@ -5,7 +5,6 @@
  * elements. Run under collection stress with both collectors (std::gc::verify), the output must
  * be that of an undisturbed run.
  */
-module rebinding_loop
 
 type Box = { label: string, values: int[] }
 

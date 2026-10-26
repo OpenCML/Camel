@@ -1,4 +1,3 @@
-module graph_facts
 import { reshape } from tensor
 import { Node, Graph, current, graphs, name, nodes, effects, shape, permissions } from graph
 

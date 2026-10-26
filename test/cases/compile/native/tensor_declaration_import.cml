@@ -5,7 +5,6 @@
  * shape follows its argument; `from_bytes` and `load_npy`, whose element type is a type argument
  * or the result's position) stays in C++ and is imported the same way.
  */
-module tensor_declaration_import
 
 import { new, reshape, shape, numel, dim, to_bytes, from_bytes, load_npy, save_npy, seed, set_num_threads, num_threads } from tensor
 

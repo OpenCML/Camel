@@ -18,7 +18,6 @@
  *   element; the rest a pull hands out is what threads the stream, and the consumer passes it on.
  *   One stream value has one consumer per execution path (design principles 5.4).
  */
-module stream
 
 // ---- producing ----
 

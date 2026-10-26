@@ -1,5 +1,4 @@
 // Type declarations and type expressions.
-module types
 
 type Point = {
     x: int,

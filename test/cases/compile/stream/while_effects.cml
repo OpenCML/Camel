@@ -9,7 +9,6 @@
  * and the value it saw, not a belief: four asks for a three-element stream (`c 6` is the ask of the
  * round that finds the end) and one for an empty one, exactly as for an array.
  */
-module stream_while_effects
 
 func count(n: int): int.. {
     return step(n)

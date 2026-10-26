@@ -1,7 +1,6 @@
 /**
  * Checks bare built-in module imports expose symbols through module:: references.
  */
-module module_import_builtins
 
 import tensor
 import nn

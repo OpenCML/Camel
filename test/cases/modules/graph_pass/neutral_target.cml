@@ -1,4 +1,3 @@
-module neutral_target
 
 func chain(x: int, y: int): int {
     return (((x + 0) * 1 + 0) - 0) + (0 + y) * 1

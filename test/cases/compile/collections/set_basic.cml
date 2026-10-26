@@ -1,4 +1,3 @@
-module main
 
 // Set<T>: construction (duplicates are dropped), membership, and the set operations.
 

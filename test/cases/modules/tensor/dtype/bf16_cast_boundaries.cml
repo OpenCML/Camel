@@ -27,7 +27,6 @@
  * flushed an overflowing value to the largest finite value would store 0x7F7F and 0x7BFF; one
  * that stored f32 bits would print four bytes.
  */
-module tensor_dtype_bf16_cast_boundaries
 
 import { new, cast, to_bytes } from tensor
 import { to_array } from bytes

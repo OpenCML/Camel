@@ -14,7 +14,6 @@
  *
  * Checked by ort_slice_start.py.
  */
-module ort_slice_start
 import { reshape, shape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env

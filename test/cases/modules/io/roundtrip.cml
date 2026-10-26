@@ -3,7 +3,6 @@
  * and written back out. `roundtrip.mjs` supplies the input through a pipe (not a terminal) and
  * checks what comes back, so the case needs no interactive terminal.
  */
-module main
 
 import { set_terminal_raw_mode, has_input, get_char, get_chars } from io
 

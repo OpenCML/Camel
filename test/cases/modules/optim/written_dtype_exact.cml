@@ -17,7 +17,6 @@
  * and the counts printed with every check say how many leaves and elements it looked at, so a walk
  * that examined nothing cannot pass.
  */
-module optim_written_dtype_exact
 
 import { full, numel, sum, to_bytes } from tensor
 import { size, to_array } from bytes

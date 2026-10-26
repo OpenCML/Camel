@@ -2,7 +2,6 @@
  * exit(0) from a nested call: a successful end, with what was printed before it and nothing
  * after it, whatever main would have returned.
  */
-module exit_zero
 
 func deep(n: int): int sync {
     if n == 0 then sync { exit(0) }

@@ -3,7 +3,6 @@
  * gives an AutoEncoder-shaped gradient, one sgd step lowers the loss, and a recursive train
  * loop repeats the step.
  */
-module autoencoder
 
 import { grad, with_grad } from autodiff
 import { full, shape, sigmoid, sum, zeros } from tensor

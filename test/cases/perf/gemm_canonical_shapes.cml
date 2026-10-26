@@ -16,7 +16,6 @@
  *
  *   camel -t 1 --arg rounds=3 --arg reps=1 test/cases/perf/gemm_canonical_shapes.cml tensor::fuse std::jit
  */
-module gemm_canonical_shapes
 
 import { seed, sum, unsqueeze, zeros, set_num_threads } from tensor
 import { now } from time

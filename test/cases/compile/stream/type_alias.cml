@@ -10,7 +10,6 @@
  * three overloads of `pick` are three different signatures (and the next case shows that two
  * spellings of one stream type are one).
  */
-module stream_type_alias
 
 type Ints = int..
 

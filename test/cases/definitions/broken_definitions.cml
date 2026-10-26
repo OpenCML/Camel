@@ -1,5 +1,4 @@
 // A library that does not compile (test::definitions): its definitions are refused.
-module broken_definitions
 import tensor
 
 

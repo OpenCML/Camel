@@ -1,4 +1,3 @@
-module main
 
 // Full names in the debugger (design principles 10.2): functions of other modules are shown
 // as `module::path::name`, the entry module's own without the module.

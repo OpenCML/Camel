@@ -1,4 +1,3 @@
-module main
 
 // Collection constants large enough to be trees: under std::macro the result of a macro
 // function is stored in the static area of the calling graph, and a map of several hundred

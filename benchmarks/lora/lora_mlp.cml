@@ -18,7 +18,6 @@
  *                the same with the in-graph Adam optimizer (T3): the exported
  *                graph carries the moments and the step count as extra I/O
  */
-module lora_mlp
 
 import { relu, mean, sum, neg, log_softmax, load_npy } from tensor
 import { with_grad, stop_gradient } from autodiff

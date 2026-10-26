@@ -5,7 +5,6 @@
  * against central finite differences in float64 (grad_function_values_reference.py, suite
  * "effects"), and every print must still happen once, in order, before the gradient is printed.
  */
-module grad_function_values_effects
 import { reshape, sum, tanh } from tensor
 import { grad } from autodiff
 

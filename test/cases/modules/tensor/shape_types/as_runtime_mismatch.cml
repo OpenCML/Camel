@@ -1,4 +1,3 @@
-module shape_as_runtime_mismatch
 import { ones, sum, load_npy } from tensor
 func f(b: f32[4]): float {
     return float(sum(b))

@@ -4,7 +4,6 @@
  * float inside the range truncates toward zero. A float too large for f32 becomes an infinity
  * (IEEE rounding, not a fault). The faults are shown through `attempt`.
  */
-module number_fit
 
 func f2i(x: float): int { return int(x) }
 func f2i32(x: float): i32 { return i32(x) }

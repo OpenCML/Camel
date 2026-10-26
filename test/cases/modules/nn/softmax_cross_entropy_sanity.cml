@@ -1,7 +1,6 @@
 /**
  * Operator-level sanity check for fused softmax cross entropy and its logits gradient.
  */
-module softmax_cross_entropy_sanity
 
 import {
     cast, reshape, sum

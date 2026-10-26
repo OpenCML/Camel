@@ -6,7 +6,6 @@
  * decision tree over the T gate predicates (2^T - 1 = 7 Ifs, counting the
  * nested subgraphs). All operators are ai.onnx standard domain.
  */
-module export_gated_gru_forward
 
 import { sigmoid, tanh, reshape, shape, zeros, mean, abs } from tensor
 import { export_model } from onnx

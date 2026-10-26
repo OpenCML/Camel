@@ -8,7 +8,6 @@
  * birth space is born in the elder space, which grows, and is reclaimed once the sleeper is
  * back.
  */
-module gc_prl_blocked_worker
 
 import { sleep } from process
 

@@ -7,7 +7,6 @@
  * column reader answers an error value naming the count -- an empty string would read like a row
  * whose reason is empty, which is a row that exists.
  */
-module verify_report_row
 
 import { check, check_row_count, check_verdict } from rewrite
 

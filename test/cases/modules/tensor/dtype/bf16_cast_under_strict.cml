@@ -9,7 +9,6 @@
  * revokes `change_precision` where the compiler would introduce low precision; there is nothing
  * for it to revoke in a conversion written here.
  */
-module tensor_dtype_bf16_cast_under_strict
 
 import { new, cast, to_bytes } from tensor
 import { to_array } from bytes

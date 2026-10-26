@@ -1,6 +1,5 @@
 // The old name `value_and_grad` was deleted outright when it became `with_grad`: it is an
 // ordinary unresolved reference, not an alias and not a "retired, use with_grad" diagnostic.
-module with_grad_old_name
 import { grad } from autodiff
 
 func main(): int sync {

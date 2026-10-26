@@ -1,4 +1,3 @@
-module tiles_resident_fallback_fault
 import { upload, download, run_preferred_resident } from tiles
 func cpu(x: float): float sync {
     println("cpu fault once")

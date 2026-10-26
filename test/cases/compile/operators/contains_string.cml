@@ -2,7 +2,6 @@
  * Rejected when compiled, at the operator: `contains` takes what is looked for in angle
  * brackets, `'abc'->contains<'b'>`; the diagnostic says so.
  */
-module contains_string
 
 func main(): int sync {
     println(contains('abc', 'b'))

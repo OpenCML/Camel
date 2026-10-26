@@ -3,7 +3,6 @@
  * operands: the exact one is more specific and is called (design principles 4.3). Operands
  * the exact one does not take go to the generic one.
  */
-module generic_and_exact
 
 func operator +::<T>(a: T[], b: T): T[] { return a->append<b> }
 func operator +(a: string[], b: string): string[] { return [b] }

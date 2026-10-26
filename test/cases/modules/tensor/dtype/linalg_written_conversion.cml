@@ -4,7 +4,6 @@
  * rather than beside it (design principles 5.1). Both answer the numbers the same call answered when
  * the widths were silently widened, and the result type is the one the operands state.
  */
-module linalg_written_conversion
 
 import { reshape, cast, matmul, linear, sum } from tensor
 

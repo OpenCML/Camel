@@ -4,7 +4,6 @@
  * of the second used to be built into the graph of the first, and its calls then found no
  * match.
  */
-module overloads
 
 func f(x: int): string {
     return 'int'

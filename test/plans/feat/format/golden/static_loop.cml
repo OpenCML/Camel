@@ -1,4 +1,3 @@
-module static_loop_format
 
 func total(t: { a: int, b: int }): int {
     return static loop acc = 0, best = 0 for n, F in fields { a: int, b: int } do {

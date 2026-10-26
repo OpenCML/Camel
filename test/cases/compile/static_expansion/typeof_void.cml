@@ -1,5 +1,4 @@
 /** `typeof nothing()` is `void`: there is no value whose type could be taken. */
-module typeof_void
 
 func nothing(): void {
 }

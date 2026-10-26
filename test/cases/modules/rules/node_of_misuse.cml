@@ -9,7 +9,6 @@
  * The program below asks for the node of `x`, which the rule declares without `const`: the
  * declaration is refused, and the message names both the argument and the rule.
  */
-module node_of_misuse
 
 import { Program, Node } from graph
 import { rewrite } from rewrite

@@ -1,4 +1,3 @@
-module lens
 
 export func len(xs: int[]): int {
     return 100

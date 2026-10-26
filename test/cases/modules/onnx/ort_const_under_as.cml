@@ -13,7 +13,6 @@
  *
  * The models are written next to the working directory (literal paths: the pass reads them).
  */
-module ort_const_under_as
 
 import { reshape, sum, tanh } from tensor
 import { with_grad } from autodiff

@@ -5,7 +5,6 @@
  * sorted array, so no shared state orders the calls. (The leaves use `merge_sort`; `sort`,
  * which merge_sort.cml uses, does not sort at the time of writing.)
  */
-module merge_sort_small
 
 import { seed, shuffle } from random
 import { merge_sort, merge_sorted_arrays } from array

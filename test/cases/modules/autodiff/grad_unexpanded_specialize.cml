@@ -6,7 +6,6 @@
  * grad will transform as `run` itself, so its branch arms must stay calls;
  * they were inlined, and grad failed at run time after the first effect.
  */
-module grad_unexpanded_specialize
 
 import { grad, with_grad } from autodiff
 import { get_env } from env

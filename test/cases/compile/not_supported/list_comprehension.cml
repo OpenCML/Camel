@@ -2,7 +2,6 @@
  * A list comprehension is `filter` then `map` (design principles 4.2). It used to be refused
  * as not implemented, and before that compiled as the empty array.
  */
-module list_comprehension
 
 func main(): int sync {
     let xs = [1, 2, 3]

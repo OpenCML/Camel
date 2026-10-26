@@ -4,7 +4,6 @@
  * branch must keep running after that effect; it used to be dropped silently under
  * std::opt (both "side 2" lines were missing, exit 0).
  */
-module pruned_branch_keeps_condition_effect
 
 func side(n: int): bool sync {
     println('side {}'->format<n>)

@@ -21,7 +21,6 @@
  * `is_float` and inherit `is_numeric` and `is_ordered` from it.
  */
 
-module types
 
 /// True when `T` is an integer type (`int` is 64-bit, `i32` is 32-bit).
 /// @example is_integer::<int>()    // true

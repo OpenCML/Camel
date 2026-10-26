@@ -3,7 +3,6 @@
  * function whose body reads a module-level `var`, so its value only exists once the program
  * runs and the declaration is reported, never taken as true (design principles 4.4).
  */
-module when_not_constant
 
 var counter = 0
 

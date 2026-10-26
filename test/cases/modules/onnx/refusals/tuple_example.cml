@@ -5,7 +5,6 @@
  * bind the tuple to the parameter and fail at the first operator that used it ("an array
  * value that depends on the model input is used where a tensor is expected").
  */
-module tuple_example
 
 import { reshape } from tensor
 import { export_model } from onnx

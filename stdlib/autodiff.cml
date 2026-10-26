@@ -21,7 +21,6 @@
 // No operator of this module needs PyTorch or a GPU: `stop_gradient` is the identity on its
 // argument, and the declarations here describe C++ operators of the core tensor stack.
 
-module autodiff
 
 /// Returns its argument unchanged, and cuts the gradient at this point: a value passed through
 /// `stop_gradient` is a constant to `grad`. Any value is accepted, and the result has the

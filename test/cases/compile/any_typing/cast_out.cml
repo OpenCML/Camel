@@ -1,4 +1,3 @@
-module cast_out
 
 import { Json, decode } from json
 

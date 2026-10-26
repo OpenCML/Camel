@@ -4,7 +4,6 @@
  * ( a decoded value used to sit in a slot typed `any` that no
  * collector traced). `n` strings are allocated between decoding and reading.
  */
-module json_gc
 
 import { Json, decode, get, as_string, as_array } from json
 

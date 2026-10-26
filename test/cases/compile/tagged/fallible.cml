@@ -3,7 +3,6 @@
  * form, `a !! b` gives a fallback, `x ?-> f` hands an error on and calls `f` otherwise, and
  * `match` with `case error e` reads the error.
  */
-module fallible
 
 func safe_div(a: int, b: int): int! {
     if b == 0 then {

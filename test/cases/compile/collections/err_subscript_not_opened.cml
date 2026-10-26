@@ -1,4 +1,3 @@
-module main
 
 // `m[k]` is a `V?`, not a `V`: it is opened with `??` before it is used as an int.
 

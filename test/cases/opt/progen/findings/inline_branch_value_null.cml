@@ -6,7 +6,6 @@
  * Actual: L4 null 0
  * Reduced by test/tools/progen from seed 728 (generator version 1, all features).
  */
-module inline_branch_value_null
 
 func f1(a2: int, a3: float): bool {
     return ([0]->filter<(p5: int): bool => false>)->contains<0 % 5>;

@@ -2,7 +2,6 @@
  * Output printed by Python through the bridge before a fault of the program: Python buffers
  * its standard output, and the interpreter must be shut down (and flush it) on the way out.
  */
-module python_output_before_fault
 
 import { py_call, py_wrap, py_eval, py_unwrap, PyObject } from python
 

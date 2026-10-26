@@ -12,7 +12,6 @@
  * `when_order_at_call_int_first.cml` writes the other one first; the two files hold the same
  * program and must print the same two lines.
  */
-module when_order_at_call_i32_first
 
 /// The element type of the first arm: `i32` alone.
 func is_arm_i32::<T>(): bool {

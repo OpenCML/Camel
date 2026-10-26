@@ -1,4 +1,3 @@
-module err_export_value
 
 import { rev } from export_lib
 

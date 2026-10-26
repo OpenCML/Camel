@@ -9,7 +9,6 @@
 // Run:
 //   camel train.cml --arg data=artifacts/small --arg steps=200 --arg batch=32 \
 //         --arg lr=0.005 --arg log_every=20 --arg threads=1 std::macro std::nvm
-module c6_vae
 
 // == imports ==
 import { exp, load_npy, mean, numel, relu, set_num_threads, shape, sum } from tensor

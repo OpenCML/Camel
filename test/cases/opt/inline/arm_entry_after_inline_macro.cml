@@ -1,4 +1,3 @@
-module arm_entry_after_inline_macro
 
 // The macro evaluator runs branch arms the way the schedulers do. `train` is evaluated ahead of
 // time by std::macro; after std::opt::inline its recursive arm holds the helper's nodes before the

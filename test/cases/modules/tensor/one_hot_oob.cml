@@ -2,7 +2,6 @@
  * A class label outside [0, classes) is a located IndexOutOfRange at the call (design principles
  * 3.9, 5.4): a negative label does not wrap around to the last class.
  */
-module one_hot_oob
 
 import { one_hot, cast } from tensor
 

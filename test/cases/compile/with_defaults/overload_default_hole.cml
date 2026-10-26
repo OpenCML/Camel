@@ -4,7 +4,6 @@
  * declaration, and `show<label: 'p'>` does not
  * say which one it means (design principles 4.4).
  */
-module with_overload_default_hole
 
 with <rounds: int = 8, label: string = 'x'>
 func show(a: int): int {

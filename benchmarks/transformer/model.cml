@@ -4,7 +4,6 @@
  * feed-forward network of width 512:
  *   h = x + MHA(LN1(x));  y = h + FFN(LN2(h)).
  */
-module transformer
 
 import { layer_norm, softmax, gelu, reshape, permute, transpose, shape, mean } from tensor
 import { sqrt } from math

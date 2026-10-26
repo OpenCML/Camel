@@ -48,7 +48,6 @@
  * type's own range (`let x: f16 = 65520.0` is an error, not an infinity: the rounding that
  * overflows is the store rounding of a computed value, which the arithmetic lines pin).
  */
-module stdlib_reduced_scalar
 
 import { sum } from array
 import { new, cast, to_bytes } from tensor

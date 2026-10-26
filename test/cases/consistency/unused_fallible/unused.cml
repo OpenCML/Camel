@@ -2,7 +2,6 @@
  * A `T!` that is evaluated in a sync block and that nothing uses is a warning (design
  * principles 3.9): the error it may hold is lost. `let _ = ...` drops it on purpose.
  */
-module unused
 
 func parse(s: string): int! {
     return parse_int(s)

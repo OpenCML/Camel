@@ -8,7 +8,6 @@
  *   camel mlp_step.cml --arg steps=50 --arg batch=32 --arg lr=0.001 std::profile std::nvm
  */
 
-module perf_mlp_step
 
 import { cast, numel, relu, sum, zeros } from tensor
 import { with_grad } from autodiff

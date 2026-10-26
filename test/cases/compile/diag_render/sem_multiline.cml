@@ -1,4 +1,3 @@
-module sem_multiline
 
 func main(): int sync {
     let x = 5

@@ -3,7 +3,6 @@
  * and the run dies with a segmentation fault (no diagnostic), without any pass.
  * Expected output: true
  */
-module string_of_bool_crash
 
 func main(): int sync {
     println(string(true))

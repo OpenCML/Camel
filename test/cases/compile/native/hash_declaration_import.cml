@@ -3,7 +3,6 @@
  * value (two operators, `hash:sha256_str` and `hash:sha256_bytes`), and `sha256_rounds` takes the
  * declared `string` and `int`. Every call reaches the C++ operator.
  */
-module hash_declaration_import
 
 import { sha256, sha256_rounds } from hash
 import { encode } from bytes

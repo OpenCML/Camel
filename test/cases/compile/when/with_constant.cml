@@ -2,7 +2,6 @@
  * A `when` that reads a `with` parameter is answered when the call gives a compile-time
  * constant: the declaration applies.
  */
-module when_with_constant
 
 with <on: bool>
 func add(x: int): int when on {

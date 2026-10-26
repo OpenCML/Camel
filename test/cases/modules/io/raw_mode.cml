@@ -4,7 +4,6 @@
  * process a pipe or the null device). The failure is a `RuntimeError` fault value at the call,
  * not an exit from the program.
  */
-module main
 
 import { set_terminal_raw_mode } from io
 

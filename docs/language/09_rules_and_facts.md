@@ -25,7 +25,6 @@ rule 名字(形参) { 左边 <=> 右边 }
 一条 `rule` 声明的是一个 `Rule` 值（像 `let` 声明的常量，不是函数）：它可以被传进函数、放进数组、按条件过滤。**规则集就是普通的 `Rule[]`**，调度也是普通的 Camel 函数（[规则语言第二版 8.5](../design/rewrite/v2.cn.md)）。
 
 ```cml
-module law
 
 import { Program } from graph
 import { rewrite } from rewrite
@@ -98,7 +97,6 @@ rule 名字::<T>(形参...) when 条件? { 左边 => 右边 }
 `with` 参数的文法与函数的 `with` 参数相同（[7.4.2](07_statements.md#742-with-形参)）：可以写默认值，可以按名字给。**绑定写在用它的地方**，与函数的部分应用同一种写法：
 
 ```cml
-module tiled
 
 import { Program } from graph
 import { rewrite } from rewrite
@@ -131,7 +129,6 @@ export func apply(p: Program): Program! {
 
 ```cml
 // counts.cml
-module counts
 
 import { abs } from math
 import { Program } from graph
@@ -200,7 +197,6 @@ fact 名字(参数...): 事实类型 match 被匹配的值或元组 {
 `join`、`meet`、`widen`、`narrow` 接的是一个**函数**，所以这里写库里真有的名字（`max` 一类）或 lambda。**`or`/`and` 不是标准库里的函数**，也不会新加：布尔的"或"就是 `|`（两边都求值、可重载的普通逻辑运算，[设计原则 4.2](../design-principles.cn.md)），所以布尔事实的合并写成 `join (lhs: bool, rhs: bool) => lhs | rhs`。`||` 是"转成分支"的保留运算，不是能传出去的函数值，不能写在这里。
 
 ```cml
-module bounds
 
 import { max, min } from math
 
@@ -245,7 +241,6 @@ error[SemanticDiag::FactCaseDefaultMissing]: The fact 'sign' has no 'case _', so
 **参数。** 事实可以有参数，查询时把它们当实参传进去。参数是值的**那几个部分**（节点）：`fact mul_by_one(a: Node, b: Node): bool match (a, b) { ... }` 由规则的条件用 `mul_by_one(x, node_of(c))` 查询。没有参数时是单值形式 `range(v)`。类型参数写在名字后（`fact range::<T>(v: T): Interval`），与规则的写法相同——见 [9.3](#93-类型参数与-with-参数)。
 
 ```cml
-module parts
 
 import { max } from math
 import { Node, Program } from graph
@@ -272,7 +267,6 @@ export func apply(p: Program): Program! {
 **`with` 实参。** 事实可以有 `with` 参数：加宽阈值、精度、截断深度、容差一类的调节项。声明与函数、规则相同；查询时像调用函数那样写出实参，有默认值时可以省略。
 
 ```cml
-module capped_fact
 
 import { max } from math
 import { Program } from graph
@@ -324,7 +318,6 @@ error[SemanticDiag::FactArgumentNotConstant]: The argument 'cap' of a fact is no
 - `check(rules, samples, seed)` 抽查规则：随机造实例，把两边都算一遍再比较，给出一张判定表。它只抽样：给出反例说明规则错了，不报错只说明这一次没抽到反例。标准库的规则入库前都要过 `check`。
 
 ```cml
-module checked
 
 import { check } from rewrite
 
@@ -356,7 +349,6 @@ sampled fold_scales: proposition equality, evidence samples 100, fired 8 of 8, c
 
 ```cml
 // fired.cml
-module fired
 
 import { abs } from math
 import { Program } from graph

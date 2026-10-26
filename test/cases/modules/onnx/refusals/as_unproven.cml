@@ -4,7 +4,6 @@
  * model is exported, and an ONNX model checks nothing when it runs: the export is refused at
  * the conversion (line 13) instead of leaving the check out.
  */
-module as_unproven
 
 import { reshape, tanh } from tensor
 import { export_model } from onnx

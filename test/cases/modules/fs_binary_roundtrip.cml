@@ -1,5 +1,4 @@
 // Embedded NUL and high bytes must survive the binary-mode file APIs.
-module fs_binary_roundtrip
 import { write_bytes, read_bytes, read_chunk, file_size } from fs
 import { to_array, from_array } from bytes
 import { get_env } from env

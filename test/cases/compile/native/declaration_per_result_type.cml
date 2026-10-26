@@ -4,7 +4,6 @@
  * a redeclaration: one name has one signature, and a declaration names one operator URI
  * 
  */
-module tensor
 import tensor
 
 

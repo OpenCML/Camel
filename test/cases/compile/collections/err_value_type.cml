@@ -1,4 +1,3 @@
-module main
 
 // Nothing is converted implicitly: an int is not the float the map holds.
 

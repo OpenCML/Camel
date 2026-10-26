@@ -5,7 +5,6 @@
  * parameter by the constant 1 and `two` by 2: the rule `mul_one` reads `sign` of the constant and
  * rewrites only `x * 1`.
  */
-module fact_target
 import fact_lib
 
 func sum(a: int, b: int): int {

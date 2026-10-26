@@ -1,4 +1,3 @@
-module neutral_identities
 
 // The five integer neutral elements of std::opt::algebra neutral_only=true: x + 0, 0 + x,
 // x - 0, x * 1, 1 * x, on both integer types and both operand orders. No expression here is the

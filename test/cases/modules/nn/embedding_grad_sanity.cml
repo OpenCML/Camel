@@ -1,7 +1,6 @@
 /**
  * Operator-level sanity check for embedding repeated-index table gradients.
  */
-module embedding_grad_sanity
 
 import {
     cast, reshape, sum

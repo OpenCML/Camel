@@ -4,7 +4,6 @@
  * with n = 2 (xs = [w, 2w], f = 3w) and n = 4 (xs = [w, 2w, 3w, 4w], f = 10w) differentiates to 3
  * and 10. Nothing about either call is in the type: only `float[]` is.
  */
-module loop_grad_iterable_length
 
 import { grad } from autodiff
 

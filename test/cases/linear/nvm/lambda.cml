@@ -1,7 +1,6 @@
 /**
  * Verifies lambdas can capture outer constants and drive collection filtering inside a larger render pipeline.
  */
-module lambda
 
 type Point = { x: int, y: int }
 
