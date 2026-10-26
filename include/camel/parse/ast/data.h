@@ -94,7 +94,6 @@ enum class BinaryDataOp {
 enum class ReservedDataOp {
     NullThen,
     ErrorThen,
-    NotNullThen,
     Access,
     Call,
     Bind,

@@ -26,7 +26,7 @@ How to read an entry:
   principles 3.1). Every operator of these modules declares which it is.
 - **Failure**: a *fault* stops the program with a located diagnostic (an index out of range, an
   argument outside what the operator defines). An *error* is a value: the function returns
-  `T!` and the program handles it with `!!`, `?->` or `match`. A result that may not exist is
+  `T!` and the program handles it with `!!`, `->` or `match`. A result that may not exist is
   `T?`, handled with `??`. An entry without a failure line does not fail.
 - **Named arguments**: a call may give a parameter by name (`f(x: 1)`, `len(x: xs)`) when
   the name gives that position the same name in every form the callee has, whether the callee is
@@ -4255,7 +4255,7 @@ kind: (j: Json) => string
 The kind of a Json: 'null', 'bool', 'int', 'float', 'string', 'array' or 'object'.
 
 - Pure.
-- Example: `decode('[1]') ?-> kind !! ''` gives `'array'`
+- Example: `decode('[1]') -> kind !! ''` gives `'array'`
 
 #### `is_null`
 
@@ -4265,7 +4265,7 @@ is_null: (j: Json) => bool
 
 Whether a Json is the JSON null.
 
-- Example: `decode('null') ?-> is_null !! false` gives `true`
+- Example: `decode('null') -> is_null !! false` gives `true`
 
 #### `get`
 
@@ -5663,7 +5663,7 @@ Writes the printed form of every `PyObject` argument and a newline, as `py_print
 returns the last argument (or `void` when there is none).
 
 - With effects: writes the interpreter's standard output.
-- Example: `py_eval("1 + 1") ?-> (o: PyObject): PyObject? => py_println(o)`
+- Example: `py_eval("1 + 1") -> (o: PyObject): PyObject? => py_println(o)`
 
 #### `py_wrap`
 
@@ -5741,7 +5741,7 @@ run a property or a descriptor, so the read is an effect.
 
 - With effects: reads interpreter state and may run Python code.
 - Failure: error `PythonError` when the attribute does not exist; the message starts with the exception class.
-- Example: `py_import("math") ?-> (m: PyObject): PyObject! => py_attr(m, "sqrt")`
+- Example: `py_import("math") -> (m: PyObject): PyObject! => py_attr(m, "sqrt")`
 
 #### `py_import`
 
@@ -5765,7 +5765,7 @@ py_dispose: (obj: PyObject) => void
 Drops this program's reference to the Python object `obj`.
 
 - With effects: advances the interpreter's reference counts.
-- Example: `py_import("math") ?-> py_dispose`
+- Example: `py_import("math") -> py_dispose`
 
 <a id="nn"></a>
 

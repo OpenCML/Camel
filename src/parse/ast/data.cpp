@@ -172,8 +172,6 @@ std::string to_string(ReservedDataOp op) {
         return "??";
     case ReservedDataOp::ErrorThen:
         return "!!";
-    case ReservedDataOp::NotNullThen:
-        return "?";
     case ReservedDataOp::Access:
         return ".";
     case ReservedDataOp::Call:

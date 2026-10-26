@@ -19,7 +19,7 @@
  *   powerExpr       ^                                           right
  *   nullableExpr    ??  !!           right operand: a whole dataExpr
  *   unaryExpr       prefix !  ~      (operand: linkExpr);  postfix `as T`, `is T`
- *   linkExpr        ->  ?->                                     left
+ *   linkExpr        ->                                          left
  *   negExpr         prefix -         tighter than `->`, looser than `^`:
  *                                    `-x->f` is `(-x)->f`, `-x ^ 2` is `-(x ^ 2)`
  *   compExpr        ..                                          left
@@ -326,12 +326,12 @@ void ParserImpl::parseUnary() {
     }
 }
 
-/// linkExpr : negExpr (('->' | '?->') compExpr)*
+/// linkExpr : negExpr ('->' compExpr)*
 void ParserImpl::parseLink() {
     const size_t m = mark();
     parseNeg(false);
     bool any = false;
-    while ((cur_ == TK::Arrow || cur_ == TK::QuestionArrow) && !panic_) {
+    while (cur_ == TK::Arrow && !panic_) {
         bump();
         parseComp();
         any = true;

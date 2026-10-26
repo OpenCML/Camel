@@ -645,8 +645,8 @@ func describe(r: int!): string {
 func main(): int sync {
     println(safe_div(9, 3) !! -1)            // 3
     println(safe_div(9, 0) !! -1)            // -1: the substitute
-    println(describe(safe_div(8, 2) ?-> inc))
-    println(describe(safe_div(8, 0) ?-> inc))
+    println(describe(safe_div(8, 2) -> inc))
+    println(describe(safe_div(8, 0) -> inc))
     println(parse_int('12') !! 0, parse_int('twelve') !! 0)
     println(safe_div(1, 0))
     return 0
@@ -665,7 +665,7 @@ error DivByZero: the divisor is zero
 - **`throw e` returns an error value**; it is the same kind of construct as `return`. It does not unwind the call stack; what the caller gets is simply a value of type `int!`.
 - An `int!` cannot be used as an `int`; it must be unwrapped first:
   - `a !! b`: takes `b` on an error, otherwise the value inside;
-  - `x ?-> f`: on an error passes the error on unchanged, otherwise calls `f`; these can be chained;
+  - `x -> f`: on an error passes the error on unchanged, otherwise calls `f`; these can be chained;
   - `match` with `case error e` (`e.kind`, `e.message`, `e.location`) and `case v`.
 - In the graph, all three forms are a branch whose condition is a one-bit tag on the value; it is the same kind of structure as `if`.
 

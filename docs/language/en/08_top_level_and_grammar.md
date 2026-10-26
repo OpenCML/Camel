@@ -58,7 +58,7 @@ nullable   : unary (('??' | '!!') dataExpr)?
 unary      : neg (as type)?
 neg        : ('-' | '!' | '~') negPower | link
 negPower   : ('-' | '!' | '~') negPower | link ('^' negPower)?
-link       : comp (('->' | '?->') comp)*
+link       : comp (('->' | '->') comp)*
 comp       : anno ('..' anno)*
 anno       : primary ( '.'field | '[' subscript ']' | '(' arguments ')' | '<' with arguments '>' )*
 primary    : name | literal | '[' element, ... ']' | '{' key: value, ... '}' | '(' expression, ... ')' | lambda
@@ -167,7 +167,7 @@ multiplicativeExpr : powerExpr (('*' | '/' | '@' | '%') powerExpr)*
 powerExpr          : nullableExpr ('^' powerExpr)?
 nullableExpr       : unaryExpr (('??' | '!!') dataExpr)?
 unaryExpr          : linkExpr ('as' typeExpr)?
-linkExpr           : negExpr (('->' | '?->') compExpr)*
+linkExpr           : negExpr ('->' compExpr)*
 negExpr            : ('-' | '!' | '~') negPower | compExpr
 negPower           : ('-' | '!' | '~') negPower | compExpr ('^' negPower)?
 compExpr           : annoExpr ('..' annoExpr)*
@@ -206,7 +206,7 @@ staticForHeader    : 'for' (identDef | '_') (',' (identDef | '_'))* 'in'
 staticLoopExpr     : 'static' 'loop' loopState (',' loopState)* staticLoopHeader 'do' blockExpr
 staticLoopHeader   : 'for' (identDef | '_') (',' (identDef | '_'))* 'in'
                      ('fields' typeExpr | 'indices' dataExpr | dataExpr)
-typeCasePattern    : 'struct' | 'tuple' | 'array' | 'func' | '#' 'leaf' | '_' | typeExpr
+typeCasePattern    : 'struct' | 'tuple' | 'func' | '#' 'leaf' | '_' | typeExpr
 matchCase          : 'case' pattern ('|' pattern)* whenClause? '=>' blockExpr
 pattern            : 'error' identDef
                      | identRef (enumTuplePattern | enumStructPattern)?

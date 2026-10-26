@@ -50,7 +50,7 @@ expect_output_not_contains = ["UnusedFallibleValue"]
 
 [[tests]]
 name = "unused_fallible.used"
-desc = "`!!`, `?->`, `match`, an argument and a return use the value: no warning."
+desc = "`!!`, `->`, `match`, an argument and a return use the value: no warning."
 kind = "behavior"
 case = "../../../cases/consistency/unused_fallible/used.cml"
 args = ["${case}"]

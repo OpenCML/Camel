@@ -711,8 +711,6 @@ std::string Node::toString() const {
             return "BRCH: ??";
         case BranchKind::ErrorThen:
             return "BRCH: !!";
-        case BranchKind::ErrorPass:
-            return "BRCH: ?->";
         case BranchKind::LogicalAnd:
             return "BRCH: &&";
         case BranchKind::LogicalOr:

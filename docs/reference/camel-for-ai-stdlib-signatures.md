@@ -8,7 +8,7 @@ up rather than read.
 `name: <with-parameters> (parameters) => result`: the ordinary parameters are the data the function
 works on, the `with` parameters are what configures it, and a call chains them —
 `s->trim->split<','>`, `xs->filter<p>->sort_by<key>`. `int` is the 64-bit integer and `float` the
-64-bit float. A result `T!` is an error to be handled (`!!`, `?->`, `match`), `T?` a value that may
+64-bit float. A result `T!` is an error to be handled (`!!`, `->`, `match`), `T?` a value that may
 be absent (`??`). A signature whose declaration carries type parameters is printed without them:
 `is_numeric: () => bool` is declared `is_numeric::<T>()` and is written with its type argument when
 the arguments do not fix it. `Tensor` is the `tensor` module's type name (the page, §12.2).

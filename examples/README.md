@@ -45,7 +45,7 @@ signatures and examples in the [standard library reference](../docs/stdlib-refer
 |------|------|------|
 | [`records.cml`](data/records.cml) | An array of struct records: filter, derived records, `sort_by` and `sum`, totals grouped in a `Map` | `camel examples/data/records.cml` |
 | [`json_roundtrip.cml`](data/json_roundtrip.cml) | JSON encoding and decoding into a typed value; malformed text gives an error value | `camel examples/data/json_roundtrip.cml` |
-| [`validate_input.cml`](data/validate_input.cml) | Functions that may fail return `T!`; `?->`, `!!` and `match ... case error e` | `camel examples/data/validate_input.cml` |
+| [`validate_input.cml`](data/validate_input.cml) | Functions that may fail return `T!`; `->`, `!!` and `match ... case error e` | `camel examples/data/validate_input.cml` |
 | [`nullable_lookup.cml`](data/nullable_lookup.cml) | Lookups that may find nothing return `T?` (`find` and `index_of` of `array`, a `Map` lookup); `??` and `match ... case null` | `camel examples/data/nullable_lookup.cml` |
 | [`dedup_sets.cml`](data/dedup_sets.cml) | Removing duplicates with `unique` or a `Set<T>`; union, intersection, difference | `camel examples/data/dedup_sets.cml` |
 

@@ -2679,7 +2679,6 @@ enum ReservedDataOp {
     NullThen,
     NullThen,
     ErrorThen,
-    NotNullThen,
     Call, // Data obj, Data* args, NamedData* kwargs
     Bind, // Data obj, Data* args, NamedData* kwargs
     Comp, // Data lhs, Data rhs
@@ -2727,13 +2726,6 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         *caseNode << execNode;
         *res << lhsNode << caseNode;
     } break;
-    case AST::ReservedDataOp::NotNullThen: {
-        // The marked receiver of `x ?-> f` is taken apart where the call is lowered (Call,
-        // below); it does not occur anywhere else.
-        ASSERT(false, "The receiver of '?->' is lowered with its call.");
-        res = visitData(lhsASTNode);
-    } break;
-
     case AST::ReservedDataOp::Call: {
         // Handle the "Call" operator
         const auto &argsNode   = ast->atAs<AST::RepeatedLoad>(1);
@@ -2791,11 +2783,6 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         };
         std::vector<camel::source::origin_id_t> mergedInputs = {nodeOrigin(calleeNode)};
         int32_t argSlot                                      = 0;
-        // `x ?-> f`: the receiver is marked (NotNullThen). The call becomes the arm of a
-        // branch on the tag of `x`, taken when `x` has not failed, and receives the value
-        // taken out of `x` under a reserved name (design principles 3.8).
-        node_ptr_t passedNode        = nullptr;
-        AST::node_ptr_t passOperator = nullptr;
         // The name of each argument, aligned with the arguments in the order written: empty for
         // a positional one. The name is not a child of the LINK; the call checks it against the
         // callee when the call is resolved (design principles 4.4).
@@ -2831,23 +2818,7 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
                 }
                 continue;
             }
-            node_ptr_t gctArg   = nullptr;
-            const auto &argData = argNode->loadAs<AST::DataLoad>();
-            if (argData->dataType() == AST::DataType::ReservedExpr &&
-                argNode->loadAs<AST::ReservedExprLoad>()->op() ==
-                    AST::ReservedDataOp::NotNullThen) {
-                passedNode   = visitData(argNode->atAs<AST::DataLoad>(0));
-                passOperator = argNode;
-                gctArg       = tree_->makeDRef(kPassedValueName);
-                setOriginFromOrigin(
-                    context_,
-                    gctArg,
-                    nodeOrigin(passedNode),
-                    camel::source::OriginKind::GctNode,
-                    "gct.tagged.passed");
-            } else {
-                gctArg = visitData(argNode);
-            }
+            node_ptr_t gctArg = visitData(argNode);
             appendArgument(gctArg);
         }
         for (const auto &argNode : *kwargsNode) {
@@ -2868,28 +2839,6 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         tree_->setArgumentNames(res, std::move(argNames));
         setOriginFromAst(context_, res, ast, camel::source::OriginKind::GctNode, "gct.call");
         registerGctSemantic(context_, res, ast, std::move(parts), std::move(mergedInputs));
-        if (passedNode != nullptr) {
-            node_ptr_t execNode = makeExec();
-            setOriginFromAst(
-                context_,
-                execNode,
-                ast,
-                camel::source::OriginKind::GctNode,
-                "gct.tagged.call");
-            *execNode << res;
-            node_ptr_t caseNode = tree_->makeCase(CaseType::Else);
-            *caseNode << execNode;
-            node_ptr_t brchNode = tree_->makeBrch(BranchKind::ErrorPass);
-            // Located at the operator, as the marked receiver is.
-            setOriginFromAst(
-                context_,
-                brchNode,
-                passOperator,
-                camel::source::OriginKind::GctNode,
-                "gct.tagged.branch");
-            *brchNode << passedNode << caseNode;
-            res = brchNode;
-        }
     } break;
 
     case AST::ReservedDataOp::Instantiate: {

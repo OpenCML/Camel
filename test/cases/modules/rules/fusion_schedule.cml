@@ -16,5 +16,5 @@ func reported(label: string, r: Run<Program>): Program sync {
 
 export func only_sigmoid(p: Program): Program! sync {
     return p->run<[tensor_sigmoid_chain], rounds: 16, strict: false>
-        ?-> sync (r: Run<Program>) => reported('only_sigmoid', r)
+        -> sync (r: Run<Program>) => reported('only_sigmoid', r)
 }

@@ -919,11 +919,7 @@ TokenBuffer Lexer::tokenizeImpl(std::string source, size_t from, size_t to) {
                 }
                 break;
             case '?':
-                if (c1 == '-' && c2 == '>') {
-                    three(TokenKind::QuestionArrow);
-                } else {
-                    c1 == '?' ? two(TokenKind::QuestionQuestion) : one(TokenKind::Question);
-                }
+                c1 == '?' ? two(TokenKind::QuestionQuestion) : one(TokenKind::Question);
                 break;
             default:
                 break;

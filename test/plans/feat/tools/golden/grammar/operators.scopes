@@ -238,12 +238,12 @@
 #          ^ meta.block.camel keyword.operator.assignment.camel
 #              ^^ meta.block.camel keyword.operator.fallback.camel
 #                 ^ meta.block.camel constant.numeric.integer.decimal.camel
->    let c = r ?-> double
+>    let c = r -> double
 #    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
 #        ^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
 #          ^ meta.block.camel keyword.operator.assignment.camel
-#              ^^^ meta.block.camel keyword.operator.pipe.camel
-#                  ^^^^^^ meta.block.camel entity.name.function.call.camel
+#              ^^ meta.block.camel keyword.operator.pipe.camel
+#                 ^^^^^^ meta.block.camel entity.name.function.call.camel
 >    let d = o ?? 1
 #    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
 #        ^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel

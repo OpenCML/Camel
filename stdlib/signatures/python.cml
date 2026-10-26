@@ -44,7 +44,7 @@ export func py_print(...objs: PyObject[]): PyObject?
 /// Writes the printed form of every `PyObject` argument and a newline, as `py_print` does, and
 /// returns the last argument (or `void` when there is none).
 /// @effect writes the interpreter's standard output
-/// @example py_eval("1 + 1") ?-> (o: PyObject): PyObject? => py_println(o)
+/// @example py_eval("1 + 1") -> (o: PyObject): PyObject? => py_println(o)
 export func py_println(...objs: PyObject[]): PyObject?
 
 /// Wraps the value `x` in a new Python object, keeping its Camel type as the type argument of

@@ -8,7 +8,7 @@ Almost everything in Camel is an expression: `if`, `match`, blocks and assignmen
 
 ## 6.1 Evaluation
 
-An expression is a node on the graph, and its operands are its input edges. Whether and when an expression is evaluated is decided by dependencies ([4.2](04_execution_model.md#42-evaluation-by-dependency)); operator precedence and associativity decide only the shape of the graph ([6.12](#612-operator-precedence)). `&&`, `||`, `??`, `!!`, `?->` and `if`, `match` are branches: the side that is not selected is not evaluated.
+An expression is a node on the graph, and its operands are its input edges. Whether and when an expression is evaluated is decided by dependencies ([4.2](04_execution_model.md#42-evaluation-by-dependency)); operator precedence and associativity decide only the shape of the graph ([6.12](#612-operator-precedence)). `&&`, `||`, `??`, `!!`, `->` and `if`, `match` are branches: the side that is not selected is not evaluated.
 
 ## 6.2 Literals and construction
 
@@ -100,7 +100,7 @@ func main(): int sync {
   - A name that stands for more than one function has no function value: an overloaded built-in operator (such as `len`, which has three signatures) is one, and the refusal is `SemanticDiag::FunctionNameAsValue`. Write the call in a lambda there.
 - Arguments may be given by name (`f(x: 1)`): positional arguments first, named ones after; a name the callee does not declare as a parameter is `SemanticDiag::ParamArgumentUnknown`.
 - Two calls with angle brackets in one argument list (`f<a>(x), g<b>(y)`) are read as comparisons; a call with angle brackets followed by a pipe with angle brackets (`f<a>(x)->g<b>`) may be too. Write them as two statements.
-- A lambda written in parentheses can be called directly: `((x: int): int => x + 1)(3)`; it can also be written on the right of `->` and `?->`: `3->(x: int): int => x + 1`, `parse_int(s) ?-> (x: int): int => x * 2`.
+- A lambda written in parentheses can be called directly: `((x: int): int => x + 1)(3)`; it can also be written on the right of `->`: `3->(x: int): int => x + 1`, `parse_int(s) -> (x: int): int => x * 2`.
 
 ## 6.5 Pipes
 
@@ -121,7 +121,7 @@ func main(): int sync {
 total = 35
 ```
 
-- For `x ?-> f` see [6.6](#66-operators-for-null-and-errors).
+- A pipe `x -> f` over a `T?` or a `T!` carries a null or an error along, see [6.6](#66-operators-for-null-and-errors).
 - `f..g` is function composition: `(f..g)(x)` is `g(f(x))`, the same direction as the pipeline `x->f->g`; with integers on both sides `a..b` is the half-open interval, giving `int[]`, and a step is written `range(a, b, step)`. `for i in 0..n` is fused by the compiler and materialises no array. `..` binds tighter than `->`: `x->f..g` reads as `x->(f..g)`.
 
 ## 6.6 Operators for null and errors
@@ -132,7 +132,7 @@ For `T?` and `T!` see [3.4](03_data_model.md#34-may-be-null-t-and-may-fail-t). O
 |---|---|---|---|
 | `a ?? b` | `T?` | `T` | `b` when `a` is null, otherwise the value inside `a` |
 | `a !! b` | `T!` | `T` | `b` when `a` is an error, otherwise the value inside `a` |
-| `x ?-> f` | `T!` | A function that accepts `T` | When `x` is an error the error is passed on unchanged, otherwise `f` is called; the result is `U!` (`f` may return either `U` or `U!`) |
+| `x -> f` | `T?` or `T!` | A function that does not accept the `T?` / `T!` itself | A null `x` gives null and an error is passed on unchanged, otherwise `f` is called with the value; the result is `U?` or `U!` (`f` may return either `U` or a value already of that form) |
 
 ```cml
 func half(x: int): int! {
@@ -141,8 +141,8 @@ func half(x: int): int! {
 
 func main(): int sync {
     println(parse_int('12') !! 0, parse_int('twelve') !! 0)
-    println(parse_int('12') ?-> half ?-> half !! -1)
-    println(parse_int('10') ?-> half ?-> half !! -1)
+    println(parse_int('12') -> half -> half !! -1)
+    println(parse_int('10') -> half -> half !! -1)
     return 0
 }
 ```
@@ -155,8 +155,9 @@ func main(): int sync {
 
 - The right side is evaluated only when it is selected.
 - **The right-hand side may be nullable.** In `a ?? b`, when `b` is a `T` the result is a `T`; when `b` is a `T?` the result is a `T?`. So `a ?? b ?? 9` tries `a`, then `b`, then gives the default, and the result is the same however it is parenthesized. Likewise `!!` (when `b` is a `T!` the result is a `T!`). On the graph each `??` is still one branch. A right-hand side `[]` takes the element type of the left-hand side.
+- **`->` asks the overloads of `f` first, with the value as it is.** `f` is looked for among the functions of that name by the type of `x` itself (`T?` or `T!`), their `when` conditions included: one that takes it (a parameter of type `T?`, or a generic `T` its condition allows to be a `T?`) is called with `x` whole. Only when none does, the call takes `x` apart: a null `x` gives null, a failed `x` gives its error as it is, and anything else calls `f` with the value inside. The other arguments of the call belong to the call that is taken and are evaluated only then. A value that is tagged twice (`T?!`) is taken apart one tag at a time, the same way.
 - The right side of `??` and `!!` extends to the end of the expression: `x ?? 0 + 1` is `x ?? (0 + 1)`. To take the value first and then compute, add parentheses: `(x ?? 0) + 1`.
-- A left side that is not of the required form (`??` on a plain `int`, `!!` or `?->` on a `T?`), or a right side of the wrong type, is `SemanticDiag::TaggedOperandMismatch`.
+- A left side that is not of the required form (`??` on a plain `int`, `!!` on a `T?`), or a right side of the wrong type, is `SemanticDiag::TaggedOperandMismatch`.
 
 ## 6.7 Other operators
 
@@ -389,7 +390,7 @@ A missing case, an extra case or a literal case mixed in is `SemanticDiag::Tagge
 
 Tuple patterns and struct patterns are not in the language: `case (...)` and `case {...}` are ordinary syntax errors. An identifier pattern on a value of an ordinary type (`case n => ...`), and `error e` over an ordinary type, report `SemanticDiag::IdentifierPatternNeedsNullableOrErrorType`: only the two marks `T?` and `T!` can be taken apart (3.8), so to read the value or to catch the error write `??`, `!!`, or a `match` with a literal pattern and `_`. Tuple and struct patterns of enum variants are implemented, but a field position takes only a name or `_`.
 
-`try`/`catch`/`finally` is not part of Camel (it has no stable mapping onto the graph), and none of the three is a keyword: they are ordinary names, so a `try { ... }` written with them is an ordinary syntax error. An operation that may fail returns `T!`, handled with `!!`, `?->` and `case error e`.
+`try`/`catch`/`finally` is not part of Camel (it has no stable mapping onto the graph), and none of the three is a keyword: they are ordinary names, so a `try { ... }` written with them is an ordinary syntax error. An operation that may fail returns `T!`, handled with `!!`, `->` and `case error e`.
 
 ### 6.8.3 `match type`
 
@@ -736,7 +737,7 @@ From lowest to highest:
 | 9 | `??` `!!` | The right side is a complete expression |
 | 10 | `as` | |
 | 10a | Unary `-` `!` `~` | Looser than `->` and `^`: `!xs->is_empty()` is `!(xs->is_empty())`, `-a->f` is `-(a->f)`, `-a ^ 2` is `-(a ^ 2)`; a literal and a name read alike (`-1->abs` is `-(1->abs)`; to negate first write `(-1)->abs`) |
-| 11 | `->` `?->` | Left-associative |
+| 11 | `->` | Left-associative |
 | 12 | `..` | Range (between numbers) and function composition (between functions) |
 | 13 | Postfix: `.field`, `[subscript]`, `(arguments)`, `<with arguments>` | Must directly follow |
 

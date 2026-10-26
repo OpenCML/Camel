@@ -209,7 +209,7 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             {
                 "UnhandledError",
                 "An error value reached the exit of 'main' without being handled: {0}: {1}.",
-                "A value of type T! that has failed must be opened before the program ends: give a replacement with '!!', pass it on with '?->', or take it apart with 'match ... case error e'. The position is where the error was made (the definition of 'main' when the error records none).",
+                "A value of type T! that has failed must be opened before the program ends: give a replacement with '!!', pass it on with '->', or take it apart with 'match ... case error e'. The position is where the error was made (the definition of 'main' when the error records none).",
             },
         },
         {

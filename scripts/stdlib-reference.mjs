@@ -878,7 +878,7 @@ function renderDoc() {
     out.push('  principles 3.1). Every operator of these modules declares which it is.')
     out.push('- **Failure**: a *fault* stops the program with a located diagnostic (an index out of range, an')
     out.push('  argument outside what the operator defines). An *error* is a value: the function returns')
-    out.push('  `T!` and the program handles it with `!!`, `?->` or `match`. A result that may not exist is')
+    out.push('  `T!` and the program handles it with `!!`, `->` or `match`. A result that may not exist is')
     out.push('  `T?`, handled with `??`. An entry without a failure line does not fail.')
     out.push("- **Named arguments**: a call may give a parameter by name (`f(x: 1)`, `len(x: xs)`) when")
     out.push('  the name gives that position the same name in every form the callee has, whether the callee is')

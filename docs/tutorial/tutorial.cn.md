@@ -645,8 +645,8 @@ func describe(r: int!): string {
 func main(): int sync {
     println(safe_div(9, 3) !! -1)            // 3
     println(safe_div(9, 0) !! -1)            // -1: the substitute
-    println(describe(safe_div(8, 2) ?-> inc))
-    println(describe(safe_div(8, 0) ?-> inc))
+    println(describe(safe_div(8, 2) -> inc))
+    println(describe(safe_div(8, 0) -> inc))
     println(parse_int('12') !! 0, parse_int('twelve') !! 0)
     println(safe_div(1, 0))
     return 0
@@ -665,7 +665,7 @@ error DivByZero: the divisor is zero
 - **`throw e` 是返回一个错误值**，与 `return` 是同一种结构。它不展开调用栈；调用方拿到的就是一个 `int!` 的值。
 - `int!` 不能当 `int` 用，必须先拆开：
   - `a !! b`：出错取 `b`，否则取里面的值；
-  - `x ?-> f`：出错就把错误原样传下去，否则调用 `f`，可以连成一串；
+  - `x -> f`：出错就把错误原样传下去，否则调用 `f`，可以连成一串；
   - `match` 的 `case error e`（`e.kind`、`e.message`、`e.location`）与 `case v`。
 - 在图上，这三种写法都是一个分支，条件是值上的一位标记，与 `if` 是同一种结构。
 

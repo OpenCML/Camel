@@ -1785,7 +1785,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     withArgsOfCall_                = outerWithArgsOfCall;
     genericCalleeAllowed_          = false;
     // The callee may be a lambda written in place (`((x: int): int => x + 1)(3)`,
-    // `v ?-> (x: int): int => x * 2`): visiting it gives its graph, and what is called is the
+    // `v -> (x: int): int => x * 2`): visiting it gives its graph, and what is called is the
     // function value of that graph. (The graph was cast to a node: `bad any_cast`, bare.)
     node_handle_t targetNode = valueNodeOf(targetNodeRes);
 

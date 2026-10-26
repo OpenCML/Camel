@@ -2537,7 +2537,7 @@ class Builder {
     // ---- The tagged forms `T?` and `T!` (design principles 3.8;
     // docs/technical/29_nullable_and_fallible_values.md). Each construct below is a branch on
     // the one-bit tag of a value; nothing here adds a node kind. ----
-    /// `a ?? b`, `a !! b`, `x ?-> f`.
+    /// `a ?? b`, `a !! b`.
     node_handle_t visitTaggedBrchNode(const GCT::node_ptr_t &gct);
     /// The pipe `x -> f` (design principles 3.9). The call is built with `x` as it is, and the
     /// overloads of `f` (their `when` conditions included) are asked first; when none takes it and
