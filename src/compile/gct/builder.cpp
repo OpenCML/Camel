@@ -4113,6 +4113,16 @@ Type *taggedElementTarget(Type *type) {
     return asTagged(elem) != nullptr || taggedElementTarget(elem) != nullptr ? elem : nullptr;
 }
 
+/// Whether the node at `ast` is a list comprehension (`[e for x in s]`, `[e for x in s if c]`)
+/// rather than an array literal. Both are `ArrayDataLoad` nodes and a comprehension writes no
+/// element list either, so `[]` and `[e for x in s]` are told apart by the children after that
+/// list: the element, the name, the source and the optional condition are one node each
+/// (AST::Builder::visitArrayData, which reads a comprehension by the same count).
+bool isArrayComprehension(const AST::node_ptr_t &ast) {
+    return ast != nullptr && ast->type() == AST::LoadType::Data &&
+           ast->loadAs<AST::DataLoad>()->dataType() == AST::DataType::Array && ast->size() > 1;
+}
+
 } // namespace
 
 namespace {
@@ -4355,6 +4365,14 @@ bool isConstantLiteral(const AST::node_ptr_t &ast) {
 node_ptr_t Builder::visitDataInto(const AST::node_ptr_t &ast, Type *type, bool &entered) {
     entered        = false;
     Type *elemType = taggedElementTarget(type);
+    // A comprehension is not a literal, whatever the position written around it states: it is
+    // built as a value of its own, and the expected type reaches it the way it reaches any other
+    // value (the declaration's annotation CAST). Handled as a literal it was written as the empty
+    // one -- its element list is empty too -- so `let xs: f32[] = [f32(i) for i in 0..n]` bound
+    // `[]` and every round was dropped, without a word.
+    if (isArrayComprehension(ast)) {
+        return visitData(ast);
+    }
     if (type != nullptr && elemType == nullptr && !containsTypeVar(type) &&
         asTagged(type) == nullptr && ast->type() == AST::LoadType::Data) {
         // Design principles 5.1: the elements of an array literal and the fields of a struct
