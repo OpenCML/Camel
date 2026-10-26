@@ -170,7 +170,9 @@ slot_t __builtin__set_index_in_place__(ArgsView &with, ArgsView &norm, Context &
     const slot_t val      = norm.slot(2);
     checkElementIndex(array, raw);
     const size_t index = static_cast<size_t>(raw);
-    const bool ownStorage = array->isSlots() || array->canWriteInPlace();
+    // A slot array is handed to a second name as it is (Array::shareForSecondName), so writing it
+    // here would be seen through that name: only the array's own answer says the write is unseen.
+    const bool ownStorage = array->canWriteInPlace();
     if (camel::profile::enabledInline()) {
         camel::profile::arrayCountAnswer(ownStorage);
     }

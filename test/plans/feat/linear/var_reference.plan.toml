@@ -3911,3 +3911,14 @@ expect_exit = 0
 expect_stdout = "kept[0] = 1  v[0] = 9\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
+
+[[tests]]
+name = "var_param_slot_array"
+desc = "An array whose elements are stored as slots (`string[]`) is handed to a second name as it is, so a write through a `var` parameter or a `var` copy must not be done in place: the `let` that holds the same array keeps its value (design principles 3.5), on every back end."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_param_slot_array.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+expect_exit = 0
+expect_stdout_exact = "[a, b, c] [x, b, c]\n[a, b, c] [changed, b, c]\n"
+timeout_ms = 10000
