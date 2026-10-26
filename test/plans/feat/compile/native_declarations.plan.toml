@@ -652,7 +652,7 @@ kind = "negative"
 case = "../../../cases/compile/native/re_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "re_arity.cml:10:27", "argument types: <string> (string, string)", "<re:test>: <pattern: string> (text: string) => bool"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "re_arity.cml:10:27", "argument types: <string> (string, string)", "has_match: <pattern: string> (text: string) => bool"]
 
 [[tests]]
 name = "native.re_wrong_type"
@@ -661,7 +661,7 @@ kind = "negative"
 case = "../../../cases/compile/native/re_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "re_type.cml:11:29", "argument types: <string> (int)", "<re:test>: <pattern: string> (text: string) => bool"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "re_type.cml:11:29", "argument types: <string> (int)", "has_match: <pattern: string> (text: string) => bool"]
 
 #  ---- The declarations of `time`: the clock and its text forms ----
 

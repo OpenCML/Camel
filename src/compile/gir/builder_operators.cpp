@@ -2984,7 +2984,11 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                             normStatics.begin(),
                             normStatics.begin() + static_cast<std::ptrdiff_t>(normCount));
                         if (ops->resolve(asWith, asNorm, statics, Modifier::None).has_value()) {
-                            argTypesStr += withArgumentsHint(ops->name(), normInputs, normCount);
+                            // A call of a function with an `#impl` kernel resolves in the
+                            // kernel's group: the hint names the declaration, not the kernel.
+                            const std::string declared = declaredNameOfKernelGroup(ops);
+                            argTypesStr += withArgumentsHint(
+                                declared.empty() ? ops->name() : declared, normInputs, normCount);
                             break;
                         }
                     }
@@ -2994,8 +2998,12 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     strutil::join(
                         ops->resolvers(),
                         "\n    ",
-                        [](const std::pair<std::string, resolver_ptr_t> &p) {
-                            return "<" + p.first + ">: " + p.second->signature();
+                        [this](const std::pair<std::string, resolver_ptr_t> &p) {
+                            const auto declared = implDeclaredNames_.find(p.first);
+                            return (declared != implDeclaredNames_.end()
+                                        ? declared->second
+                                        : "<" + p.first + ">") +
+                                   ": " + p.second->signature();
                         }) +
                     "\n";
                 // The overloads of the program are part of the set (design principles 10.2).

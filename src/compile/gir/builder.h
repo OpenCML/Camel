@@ -422,6 +422,11 @@ class Builder {
     // principles 10.4): a direct call of the function is a call of the kernel instead; the
     // graph is kept for what asks to look inside (autodiff, fusion, export, a rule).
     std::unordered_map<DraftGraphBuilder *, ImplKernel> implKernels_;
+    // The name the function of an `#impl` kernel is declared under, by the URI of the kernel
+    // operator (`str:split` -> `split`): a message about a call that resolves in the kernel says
+    // the declaration's name, because the kernel is private to the module that writes it (design
+    // principles 10.4).
+    std::unordered_map<std::string, std::string> implDeclaredNames_;
     // The kernel a generic `#impl` function declares, by its template (rule impl-kernel-site;
     // design principles 10.4, one operator, per-type executors). A generic function's
     // instances have signatures of their own, so which rule of the kernel's declaration is the
@@ -1660,6 +1665,10 @@ class Builder {
     /// The kernel of the one graph `graph`, when it is an `#impl` body an executor was found
     /// for (a generic function's instance, adoptImplKernel).
     std::optional<ImplKernel> implKernelOfGraph(const compile_graph_ptr_t &graph) const;
+    /// The name the function of the `#impl` kernel group `ops` is declared under, or an empty
+    /// string when `ops` is not such a group: what a message about a call that resolves in the
+    /// kernel says, in place of the kernel's own name (design principles 10.4).
+    std::string declaredNameOfKernelGroup(const oper_group_ptr_t &ops) const;
     /// Whether the graph being built is an `#impl` body or nested in one (a lambda in the
     /// body). A call written there stays a call of the function's semantic graph, so that the
     /// body the expansion reads is the body without the tag; the kernel is for callers.
