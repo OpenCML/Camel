@@ -622,14 +622,13 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
                 // (design principles 9.3), and for a function with a body the record is where the
                 // condition of the declaration is read while the declarations of one name are
                 // compared -- two of them whose conditions exclude each other are overloads and
-                // may stand side by side (design principles 4.4; the rule on
-                // `impl-declaration-arms`, docs/handover/reviews/questions-2026-10-23.md).
+                // may stand side by side (design principles 4.4).
                 if (const auto *when = tree_->whenOf(node); when != nullptr) {
                     tree_->setWhen(declNode, *when);
                 }
                 if (node->nativeDeclaration()) {
                     // The declaration keeps what makes it one: no body, so the graph builder
-                    // makes an operator rule of it instead of a graph (handover step 1),
+                    // makes an operator rule of it instead of a graph (design principles 10.4),
                     // and its tag uses go with it (`#op('module:function')`; design principles
                     // 6.2).
                     declNode->setNativeDeclaration();
@@ -1346,7 +1345,7 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
         // reads and writes that cell wherever the body is written, and no body can bring the set
         // back to empty. So a signature that writes `pure` and gives a parameter `var` is refused
         // where it is written, and the note points at the parameter that breaks the promise (the
-        // author's ruling: the error is at the declaration's clause, the note at the first use the
+        // error is at the declaration's clause, and the note at the first use the
         // signature does not promise).
         const auto varRangeOf =
             [&](const std::string &name) -> std::optional<camel::core::error::TokenRange> {
@@ -2042,11 +2041,10 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
         // The syntax reads `yield` (design principles 5.4: a function whose body writes it
         // produces a stream, and its head writes the stream type). What produces that stream is
         // the generator state machine of docs/design/io-concurrency-streams/plan.cn.md slice E,
-        // which is not built yet; the ruling on what it means is
-        // docs/handover/reviews/questions-2026-10-23.md:394 (several `yield`s a round, any
-        // nesting, `match` arms and `sync` blocks, per-element faults, linear values). Refusing
-        // it by name here is what keeps a `yield` from running as a `return`: a wrong value
-        // would be worse than a named gap.
+        // which is not built yet: several `yield`s in one round, any nesting, `match` arms and
+        // `sync` blocks, per-element faults and linear values are all things that machine has to
+        // produce. Refusing it by name here is what keeps a `yield` from running as a `return`:
+        // a wrong value would be worse than a named gap.
         diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("generators");
         throw BuildAbortException();
     }
@@ -2447,19 +2445,39 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
 
     // A dimension of a subscript that slices is not an element index (design principles 5.4):
     // `t[a:b]` calls the slice operator, `t[i]` the index operator. The dimensions are counted
-    // because a slice of a dimension other than the first is a view with strides, which needs
-    // the multidimensional array representation that is not there yet.
+    // because the slice operator names one axis and keeps the other dimensions as they are, so a
+    // subscript that writes bounds on one dimension and `:` for every other one is that one slice,
+    // whichever dimension it slices; a subscript that selects on more than one dimension has no
+    // single node to be.
     AST::node_ptr_t sliceDimension = nullptr;
-    size_t subscriptDimensions     = 0;
+    AST::node_ptr_t writtenSlice   = nullptr;
+    size_t dimension               = 0;
+    size_t sliceDimensionIndex     = 0;
+    size_t writtenSlices           = 0;
+    size_t indexDimensions         = 0;
     if (binaryExpr->op() == AST::BinaryDataOp::Index) {
         for (const auto &item : *ast->atAs<AST::RepeatedLoad>(1)) {
-            ++subscriptDimensions;
+            const size_t at = dimension++;
             if (item->type() == AST::LoadType::Data &&
                 item->loadAs<AST::DataLoad>()->dataType() == AST::DataType::Slice) {
                 sliceDimension = item;
+                bool namesRange = false;
+                for (size_t part = 0; part < 3; ++part) {
+                    namesRange = namesRange || item->at(part)->type() != AST::LoadType::Null;
+                }
+                if (namesRange) {
+                    writtenSlice        = item;
+                    sliceDimensionIndex = at;
+                    ++writtenSlices;
+                }
+            } else {
+                ++indexDimensions;
             }
         }
     }
+    // The dimension the slice runs along: the one the subscript wrote bounds on, and the first
+    // dimension when it wrote none (`t[:]`, `t[:, :]`: every dimension taken whole).
+    const size_t sliceAxis = writtenSlice != nullptr ? sliceDimensionIndex : 0;
 
     // Determine the binary operator and create the corresponding node
     switch (binaryExpr->op()) {
@@ -2518,33 +2536,32 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
     if (binaryExpr->op() == AST::BinaryDataOp::Index) {
         auto indices = ast->atAs<AST::RepeatedLoad>(1);
         if (sliceDimension != nullptr) {
-            if (subscriptDimensions > 1) {
-                // `t[:, 0]`, `t[a:b, c]`: the result takes every element of the dimension that
-                // is not sliced at the coordinate the index gives, so it is a view with
-                // strides (design principles 5.4). That needs the multidimensional array
-                // representation that is not there yet; until then the form is a located error rather
-                // than a copy that would read like the view but not share its block.
+            if (writtenSlices > 1 || indexDimensions > 0) {
+                // `t[a:b, c]`, `t[a:b, c:d]`: the subscript selects on more than one dimension.
+                // The slice operator names one axis and keeps the other dimensions as they are,
+                // and the index operator drops the dimension it names, so the two together are
+                // not one node. Refused here rather than read as a slice of the wrong axis.
                 diags_->of(SemanticDiag::ConstructNotSupported)
                     .at(indices->load()->tokenRange())
                     .commit(
-                        "a subscript that slices a dimension other than the first",
-                        "it is a view with strides, which needs the multidimensional array "
-                        "representation of H17; until then take the rows with the function "
-                        "'take', or index one dimension at a time");
+                        "a subscript that names a range or a position on more than one dimension",
+                        "the slice operator takes one axis, and the index operator takes the "
+                        "first dimension");
                 throw BuildAbortException();
             }
-            // `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]`: the slice of the first dimension a
-            // subscript writes (design principles 5.4). The call is the slice node itself: the
-            // value, the axis (the constant 0 -- a subscript slices the first dimension), the
-            // two bounds, the step, and a two-bit mask (bit 0 end, bit 1 start) saying which of
-            // the start and the end the program wrote: `t[a:]` and `t[:b]` differ, and a
-            // negative step needs to know whether the start was given. A part that was not
+            // `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]`: the slice of the axis a subscript
+            // writes (design principles 5.4). The call is the slice node itself: the value, the
+            // axis (the dimension the bounds are written on, so `t[:, a:b]` is the same node with
+            // the axis 1), the two bounds, the step, and a two-bit mask (bit 0 end, bit 1 start)
+            // saying which of the start and the end the program wrote: `t[a:]` and `t[:b]` differ,
+            // and a negative step needs to know whether the start was given. A part that was not
             // written is passed as the value it stands for, 0 for the start and 1 for the step;
             // the end is read only when written.
+            const AST::node_ptr_t boundsOf = writtenSlice != nullptr ? writtenSlice : sliceDimension;
             node_ptr_t bound[3] = {nullptr, nullptr, nullptr};
             bool written[3]     = {false, false, false};
             for (size_t i = 0; i < 3; ++i) {
-                const auto &part = sliceDimension->at(i);
+                const auto &part = boundsOf->at(i);
                 written[i]       = part->type() != AST::LoadType::Null;
                 if (written[i]) {
                     bound[i] = visitData(part);
@@ -2557,9 +2574,9 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
             bound[1]                  = written[1] ? bound[1] : intConstant(0);
             bound[2]                  = written[2] ? bound[2] : intConstant(1);
             node_ptr_t endWrittenNode = intConstant((written[1] ? 1 : 0) | (written[0] ? 2 : 0));
-            // The axis: a subscript slices the first dimension, so the slice node's second
-            // argument is the constant 0 (the function form writes the axis itself).
-            *res << intConstant(0);
+            // The axis: the dimension the subscript wrote the bounds on (the function form writes
+            // the axis itself, and an all-`:` subscript takes the first dimension whole).
+            *res << intConstant(static_cast<int64_t>(sliceAxis));
             for (size_t i = 0; i < 3; ++i) {
                 *res << bound[i];
                 if (written[i]) {
@@ -2933,7 +2950,7 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
     case AST::ReservedDataOp::Comp: {
         const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);
         // `a..b` has two readings, and the types of its two operands tell them apart (design
-        // principles 4.2; the rule on ` -generator-and-composition`):
+        // principles 4.2):
         // between two functions it is the composition `f..g`, the lambda `(x) => g(f(x))`, and
         // between two integers it is the interval `[a, b)`. GCT has no types, so the construct
         // is handed on as one call of the compiler's own name for it, which the GIR builder
@@ -3353,7 +3370,7 @@ node_ptr_t Builder::visitMatchExpr(const AST::node_ptr_t &ast) {
         // The guard of the case, when it has one. `case p when c => ...` is taken only when the
         // pattern matches *and* `c` holds, so the graph builder evaluates the guard in the arm
         // this case becomes and sends the value on to the cases written after it when it does
-        // not hold (review 「when-placement-and-match-guards」). The guard is kept beside the
+        // not hold. The guard is kept beside the
         // CASE rather than among its children: the arm's body is the last child every reader of
         // that node takes, and the guard is read in the arm's scope, where the names the
         // pattern binds are in force.
@@ -5091,7 +5108,7 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     }
     node_ptr_t typeNode = tree_->makeType(funcType);
     // The applicability condition is built in the scope of the signature: it sees the type
-    // parameters declared at the head and the `with` parameters (design principles 5.13). It is
+    // parameters declared at the head and the `with` parameters (design principles 4.4). It is
     // not evaluated here -- instantiation is where its type parameters have types -- so it is
     // kept on the FUNC, beside the type, for the graph builder.
     node_ptr_t whenNode = nullptr;

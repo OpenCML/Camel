@@ -178,9 +178,9 @@ def fastest(run, calls):
     of calls does follow it, and unequally: one descheduling inside a round lifts a round of short
     calls far more than a round of long ones. That is what this guard used to read -- across 23
     read tables on this host the 1 MiB cell of the copy read 135.0-1199.3 us (the copy itself is
-    ~0.1 ms there), and the ratio of the two means fell to 3.83 under load, in this test
-    (docs/handover/reviews/questions-2026-10-24-evening.md, the
-    2026-10-25-python-binding-host-copy-bandwidth-guard answer).
+    ~0.1 ms there), and the ratio of the two means fell to 3.83 under load.
+    The guard reads the host's own CPU time, so what else the host runs cannot lift
+    it; a wall-clock guard could.
     """
     best = float("inf")
     for _ in range(calls):

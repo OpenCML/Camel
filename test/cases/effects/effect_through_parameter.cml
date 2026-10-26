@@ -1,0 +1,39 @@
+/**
+ * What carries the effect of a call is the resource set of the value's type, not a `sync`
+ * modifier on the type: the value `add<t>` writes the cell it bound, so its type says so, and a
+ * function-typed parameter that writes no clause is resource-generic and takes the resources of
+ * the value it is instantiated with (design principles 3.3, effects plan 5). A call through the
+ * parameter is therefore an effectful call: outside a sync block, a result nothing depends on
+ * does not run it and is reported as `EffectNotExecuted`, exactly as calling the value directly
+ * is; in a sync block it runs and the write lands.
+ */
+module effect_through_parameter
+
+with <var total: int>
+func add(x: int): int sync {
+    total = total + x
+    return total
+}
+
+/// Not a sync block, and nothing depends on the call through the parameter: it does not run, and
+/// it is reported (the same warning the direct call of the value would get).
+func dropped(f: (x: int) => int): int {
+    f(1)
+    return 0
+}
+
+/// A sync block: the call through the parameter runs, so the write lands.
+func guarded(f: (x: int) => int): int sync {
+    return f(1)
+}
+
+func main(): int sync {
+    var t = 0
+    let g = add<t>
+    let dropped_ = dropped(g)
+    let afterDropped = t
+    let afterGuarded = guarded(g)
+    let direct = g(1)
+    println(dropped_, afterDropped, afterGuarded, direct)
+    return 0
+}

@@ -2,7 +2,7 @@ id = "modules.import_audit"
 order = 372
 tier = "fast"
 tags = ["feat", "modules", "import", "cost"]
-desc = "`import` executes no code (design principles 3.1, ruling of 2026-10-22): every module's import declares names and nothing else, the module-level `let` probes show the root graph running only when depended on, and the modules that still work at import time are named with their class and price (H222)."
+desc = "`import` executes no code (design principles 3.1): every module's import declares names and nothing else, the module-level `let` probes show the root graph running only when depended on, and the modules that still work at import time are named with their class and price (H222)."
 
 # The audit of, one probe per module of the standard library: a program that imports the
 # module and does nothing else must exit 0, print nothing and create no file. The tool also scans

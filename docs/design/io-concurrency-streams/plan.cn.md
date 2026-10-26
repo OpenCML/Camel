@@ -1,6 +1,6 @@
 # H248 流 `T..`、`yield`、函数组合 —— 实施计划
 
-依据：任务书 5.28（`docs/handover/README.cn.md`）、设计原则 5.4 与 4.2（`docs/design-principles.cn.md`）、`docs/design/io-concurrency-streams/README.cn.md` 第 3 节。体例照 `docs/design/graph-store/plan.cn.md`。
+依据：任务书 5.28、设计原则 5.4 与 4.2（`docs/design-principles.cn.md`）、`docs/design/io-concurrency-streams/README.cn.md` 第 3 节。体例照 `docs/design/graph-store/plan.cn.md`。
 
 **本轮只交计划，没有改语言表面。** 所有「现状」条目都在主机上实测（见 1.1 与附录 A、附录 B），逐字输出抄在附录 A；计划里引用的符号在提交前由 `node scripts/check-doc-links.mjs --citations` 校验为 0 unverified。
 
@@ -17,7 +17,7 @@
 7. **规则引擎今天表达不了 `map` 融合，有两道各自独立的门**：（a）**项读取器**只接受算子、常量、参数，并且**明确拒绝带上下文（`with`）参数的算子**（`src/runtime/rules.cpp#SideReader::term`：「has an operator with a context argument or an order dependency」），而 `map` 的 `f` 正是 `with` 参数——实测 `std::gir` 里两个 map 节点各有一条 `type="WITH"` 的入边（`Function(graph=dbl, tupleSlots=0) -> N0A`）；（b）**规则的形参表写不出函数类型**：`rule h248_map_comp(xs: int[], f: (int) => int, g: (int) => int)` 在 `)` 处报 `SyntaxDiag::MissingComma`。另外规则体里必须写 `map<inc>(xs)` 而不是 `map(xs, inc)`（实测 `SemanticDiag::NoMatchingFunction` 给了这句话），所以融合规则的**左式拼写**已经定死为尖括号形式（H232 的泛型规则写法也在同一层）。
 8. **`for x in s` 今天只认数组、字符串、映射、张量**：`src/compile/gir/builder_control.cpp#LoopSequenceNotIterable` 的消息把四类逐一列出，**没有流**。扩展点是现成的：`src/builtin/modules/globals.cpp#__iter__` 是一个「每种可遍历类型一个重载」的算子组，张量模块与映射已经各加了一个。
 9. **切片按可并行度分 5 组**：**第 1 组（互不依赖，可同时开工）** A（`f..g` + 删 `?..`）、B（`T..` 类型与两种读法）；**第 2 组（B 之后，四片可并行）** C（纯算子）、D（来源与去处）、E（`yield` 状态机）、F（`for` 遍历流）；**第 3 组** G（线性检查与 `tee`，等 B、C）；**第 4 组** H（两种调度与无限流 `take`，等 C/E/F 与 GPU·H246）；**第 5 组** I（规则融合，等 A、C 与 H232）。
-10. **要问作者的语义空白已单独成文**（不给结论；2026-10-24 已全部裁定，见 `docs/handover/reviews/questions-2026-10-23.md` 的"2026-10-24 一批"）：`docs/handover/reviews/questions-2026-10-23.md`、`h248-linearity-and-tee` 一节、`h248-generator-and-composition` 一节。其中**必须先裁一条**：`docs/design/io-concurrency-streams/README.cn.md` 第 6 节第 5 条仍写「`Stream<T>` 是标准库类型（不是核心类型）」、且「拉取是这个流自己的资源上的副作用」，与设计原则 5.4 和同稿第 3.1 节（流是值、只有来源与去处是效应）**直接冲突**；设计原则优先，但稿子第 6 节没有随 3.1 一起改（见 1.10）。
+10. **要问作者的语义空白已单独成文**（不给结论）。其中**必须先裁一条**：`docs/design/io-concurrency-streams/README.cn.md` 第 6 节第 5 条仍写「`Stream<T>` 是标准库类型（不是核心类型）」、且「拉取是这个流自己的资源上的副作用」，与设计原则 5.4 和同稿第 3.1 节（流是值、只有来源与去处是效应）**直接冲突**；设计原则优先，但稿子第 6 节没有随 3.1 一起改（见 1.10）。
 
 ---
 
@@ -298,7 +298,6 @@ G5/G7/G8 + GPU/H246 ── G11 ── G12
   'yield'.`（`SemanticDiag::UnresolvedReference`，`0x0300000B`）；语法收口之后、片 E 落地之前，同一个位置上是
   `FeatureNotSupported: 'generators'`（`0x03000040`，`test/plans/feat/compile/stream.plan.toml` 的
   `stream.yield_lowering_refused`）。片 E 要做的正是把这个按名字的拒绝换成状态机。
-  （逐字读数见 `docs/handover/reviews/questions-2026-10-24-evening.md` 的 `2026-10-26-generator-state-machine-what-is-missing` 一节与其中的探针表。）
   <!-- camel-snippet: counter-example: 语法收口之后 `yield` 是关键字，这条程序是片 E 的负向验收：它必须是语法错误 -->
   ```camel
   // t9：反例——`yield` 成为关键字之后，这条程序必须是语法错误
@@ -315,7 +314,7 @@ G5/G7/G8 + GPU/H246 ── G11 ── G12
 
 #### 片 F：`for x in s`
 
-- **落地方式已改（2026-10-26 的裁定，[评审文件](../../handover/reviews/questions-2026-10-24-evening.md)）**：流的消费不走 `__iter__` 的新重载，而在图上展开成已有的 `while`——`for x in s` 的每一轮是一次拉取，循环的状态是那次拉取加上程序写的状态，元素从这次拉取里取出、下一轮的拉取在本轮体末。这条与下一段「`__iter__` 加一个流的重载」是同一个功能的另一条路，已被裁定取代；`LoopSequenceNotIterable` 的消息确实把「流」补进了那几类（见 `diagnostics/registry.tsv`）。
+- **落地方式已改**：流的消费不走 `__iter__` 的新重载，而在图上展开成已有的 `while`——`for x in s` 的每一轮是一次拉取，循环的状态是流加上程序写的状态，每一轮**先判断条件、再取元素**（和数组同一个顺序）：`c` 成立才调用步进函数，拉到空就结束，所以 `for line in read_lines(f) while n < 10` 不会读第 11 行。这条与下一段「`__iter__` 加一个流的重载」是同一个功能的另一条路，已被取代；`LoopSequenceNotIterable` 的消息确实把「流」补进了那几类（见 `diagnostics/registry.tsv`）。
 - `src/builtin/modules/globals.cpp#__iter__` 加一个流的重载；`LoopSequenceNotIterable` 的消息文本要把「流」补进那四类里（今天的原文只列数组、字符串、映射、张量）。
 - 红前用例（附录 A 的 t5，**反例**：今天编译失败）
   <!-- camel-snippet: counter-example: 反例：`for x in <int>` 今天报 LoopSequenceNotIterable，逐字诊断见附录 A 的 t5 -->
@@ -472,9 +471,9 @@ H246 是「遍即函数」，与流的关系是两点：
 
 按项目既有体例单独成文，**不在这里给结论**：
 
-1. `docs/handover/reviews/questions-2026-10-23.md` —— `T..` 的表面：与既有开秩数组 `T[..]` 的共存、`T?..` 的拆分、`as T..` 两种读法的判定、以及**流是核心类型还是标准库类型**（第 6 节第 5 条与 5.4 的冲突）。
-2. `docs/handover/reviews/questions-2026-10-23.md §h248-linearity-and-tee` —— 线性的判据（循环体、`match` 的多臂、`tee` 的结果是否也线性）、`tee(s, n)` 的 `n` 默认值与非法值、缓冲峰值报告的**格式与阈值**、「两种调度结果逐字相同」的比较范围与 `take` 的计算次数怎么观测。
-3. `docs/handover/reviews/questions-2026-10-23.md §h248-generator-and-composition` —— `yield` 状态机的边界（故障路径、嵌套、委托、生成器里的效应顺序）、生成器值是否也线性、`f..g` 的类型规则（参数个数、`with` 参数、泛型、重载函数值、能否进 `map<>` 的尖括号）、以及区间读法（闭/半开、与 `range(start, end)` 的关系）。
+1. 流类型 —— `T..` 的表面：与既有开秩数组 `T[..]` 的共存、`T?..` 的拆分、`as T..` 两种读法的判定、以及**流是核心类型还是标准库类型**（第 6 节第 5 条与 5.4 的冲突）。
+2. 线性 —— 判据（循环体、`match` 的多臂、`tee` 的结果是否也线性）、`tee(s, n)` 的 `n` 默认值与非法值、缓冲峰值报告的**格式与阈值**、「两种调度结果逐字相同」的比较范围与 `take` 的计算次数怎么观测。
+3. 生成器 —— `yield` 状态机的边界（故障路径、嵌套、委托、生成器里的效应顺序）、生成器值是否也线性、`f..g` 的类型规则（参数个数、`with` 参数、泛型、重载函数值、能否进 `map<>` 的尖括号）、以及区间读法（闭/半开、与 `range(start, end)` 的关系）。
 
 ---
 

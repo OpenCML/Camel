@@ -321,7 +321,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "GenericFunctionUnsupported",
                 "The generic function '{0}' cannot be {1}.",
-                "This use of a generic function is not supported.",
+                "A decorator is applied where the declaration is: '@d func f' is 'let f = d(f0)', and d takes the function as its value (design principles 6.1). A function that declares type parameters is instantiated where a call fixes them (design principles 5.5); a decorated declaration fixes none, so the decorator has no instance to take.",
             },
         },
         {
@@ -658,6 +658,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "EnumTypeArgumentNotInferred",
                 "Cannot infer the type argument '{0}' of enum '{1}' from the fields of '{2}'.",
                 "The fields of the variant do not say what the argument is; where the value is used the expected type does: 'let x: Option<int> = Option::None'.",
+            },
+        },
+        {
+            SemanticDiag::FunctionTypeArgumentNotInferred,
+            {
+                "FunctionTypeArgumentNotInferred",
+                "Cannot infer the type argument '{0}' of '{1}': the empty literal '[]' states no element type.",
+                "A variable takes its type from where it stands, and an empty literal states no element type, so the position '[]' is written in is the only thing that can fix the variable - and a generic parameter states none (design principles 5.1, 5.2). Write the type argument ('show::<f32>([])'), or give the literal a position whose type it can take ('let e: f32[] = []').",
             },
         },
         {
@@ -1505,7 +1513,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "RangeStepZero",
                 "The range 'range({0}, {1}, 0)' has a step of 0, so it is no sequence of integers.",
-                "The integers of `range(a, b, step)` are `a`, `a + step`, ... below `b`, so the step decides which integers the range holds: a step that does not move names no one sequence, whatever the bounds are (design principles 4.2; the author's ruling of 2026-10-24 on `h426-interval-step-form`). The step is a constant here, so the call can never be right and the refusal is at the call, where the step is written. Give a non-zero step, or write the interval `a..b` when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).",
+                "The integers of `range(a, b, step)` are `a`, `a + step`, ... below `b`, so the step decides which integers the range holds: a step that does not move names no one sequence, whatever the bounds are (design principles 4.2). The step is a constant here, so the call can never be right and the refusal is at the call, where the step is written. Give a non-zero step, or write the interval `a..b` when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).",
             },
         },
         {
@@ -1573,6 +1581,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::StreamConsumedTwice,
+            {
+                "StreamConsumedTwice",
+                "'{0}' is consumed twice: a stream is read once on each execution path.",
+                "A stream is read one element at a time and is done when it ends, so on each execution path its value has one consumer (design principles 5.4). The second consumer is here and the first is here. To read one stream from two places, write `tee(s, n)`: it gives two streams, each read once, and both see the same elements.",
+            },
+        },
+        {
             SemanticDiag::NodeOfNotAParameter,
             {
                 "NodeOfNotAParameter",
@@ -1617,7 +1633,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "UsesPromiseViolated",
                 "'{0}' does not keep its resource promise: {1}.",
-                "A signature is a promise the compiler checks against the resources the function uses. 'uses' is an upper bound, so every resource the body uses must be named there, and 'pure' promises the empty set; a 'var' parameter is a resource by itself, and so is a capture. Change the body so that it no longer reaches for it, or change the signature to name it.",
+                "A signature is a promise the compiler checks against the resources the function uses. 'uses' is an upper bound, so every resource the body uses must be named there, and 'pure' promises the empty set; a 'var' parameter is a resource by itself, and so is a capture. Change the body so that it no longer reaches for it, or change the signature to name it. When the use is a call through a parameter of function type, what the call reaches is the instantiation's: write 'pure' on the parameter to promise the empty set, or write there the resources the values it takes reach.",
             },
         },
         {

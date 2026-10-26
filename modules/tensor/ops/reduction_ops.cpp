@@ -10,7 +10,7 @@
  * optional axis that defaults to the last one.
  *
  * Where the accumulation happens, per form (reduction and rounding are one rule,
- * design principles 7.3 and ruling reduced-precision.md (d)):
+ * design principles 7.3):
  *
  *   - `sum(t)`, `mean(t)`: accumulate exactly as the axis forms do — f64 for a floating
  *     element type (kernels/reduce.h `sumAll`), the exact int64 accumulator for an int64
@@ -374,15 +374,20 @@ void meanAxisVjp(VjpBuilder &b, const VjpCall &call) {
     }
 }
 
-// max / min over an axis: the gradient goes to the elements equal to the extremum.
+// max / min over an axis: the gradient goes to the elements equal to the extremum. The selection
+// is a bool mask and a mask is not a number (design principles 5.1): the conversion the
+// multiplication needs is written, and `cast_like` puts the mask at the gradient's element type,
+// which is what the rule can name - it serves f32 and f64 models alike.
 void extremumAxisVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 2, 3);
     if (auto dy = b.gradientOf(call.output)) {
+        const vjp_node_t expanded = expandReduced(b, call, *dy);
         const vjp_node_t selected = addTensorOper(
             b, "tensor:strict_eq", {call.inputs[0], expandReduced(b, call, call.output)});
+        const vjp_node_t share =
+            addTensorOperFor(b, expanded, "tensor:cast_like", {selected, expanded});
         b.accumulateGradient(
-            call.inputs[0],
-            addTensorOper(b, "tensor:multiply", {expandReduced(b, call, *dy), selected}));
+            call.inputs[0], addTensorOper(b, "tensor:multiply", {share, expanded}));
     }
 }
 

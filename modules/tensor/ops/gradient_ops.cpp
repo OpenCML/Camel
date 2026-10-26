@@ -131,20 +131,6 @@ slot_t layerNormGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     });
 }
 
-// slice_grad(dy, like, axis, start, end, step?)
-slot_t sliceGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
-    return runKernel("slice_grad", [&] {
-        return wrap(norm.resultType(), k::sliceGrad(
-            tensorArg(norm, 0),
-            likeArg(norm, 1)->shapeSpan(),
-            intArg(norm, 2),
-            intArg(norm, 3),
-            intArg(norm, 4),
-            hasArg(norm, 5) ? intArg(norm, 5) : 1,
-            resultAllocator()));
-    });
-}
-
 template <bool Lhs> slot_t matmulGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     const bool useLibrary = usesLibraryGemm(norm.attrs());
     return runKernel(Lhs ? "matmul_grad_lhs" : "matmul_grad_rhs", [&] {
@@ -188,8 +174,8 @@ std::optional<Type *> sameAsFirst(const InferContext &ctx) { return tensorOf(ctx
 
 std::optional<Type *> intScalar(const InferContext &) { return Type::Int64(); }
 
-/// The signature of `sum_to`, `broadcast_like`, `expand_axis`, `gelu_grad`, `erf_grad`,
-/// `slice_grad` and the two matmul gradients: `::<T>(g: T[..], like: T[..])`. The result is
+/// The signature of `sum_to`, `broadcast_like`, `expand_axis`, `gelu_grad`, `erf_grad` and the
+/// two matmul gradients: `::<T>(g: T[..], like: T[..])`. The result is
 /// argument `index`'s shape and element type, and the other argument is that same element type. A
 /// gradient is read at the width of the value it is the gradient of (design principles 9.9): an
 /// f32 fill read as f64 is 0.0078125, not the derivative.
@@ -335,23 +321,6 @@ void permuteInverseVjp(VjpBuilder &b, const VjpCall &call) {
     }
 }
 
-/// slice_grad(dy, like, axis, start, end, step) pads dy into place; its gradient slices it out.
-/// The cut is the core's own slice node, the one `t[a:b:s]` and `slice(t, axis, a, b, s)` both
-/// build: a slice is a selection of positions along its axis, and cutting the padded value with
-/// the same bounds takes exactly the part the forward pass padded.
-void sliceGradVjp(VjpBuilder &b, const VjpCall &call) {
-    requireVjpInputs(call, 5, 6);
-    if (auto g = b.gradientOf(call.output)) {
-        const vjp_node_t step = call.inputs.size() > 5 ? call.inputs[5] : staticInt(b, 1);
-        b.accumulateGradient(
-            call.inputs[0],
-            addTensorOper(
-                b,
-                ":op/slice_sub",
-                {*g, call.inputs[2], call.inputs[3], call.inputs[4], step}));
-    }
-}
-
 } // namespace
 
 std::vector<OpDef> gradientOps() {
@@ -419,8 +388,12 @@ std::vector<OpDef> gradientOps() {
 
     // sum_to(g, like) is `::<T>(g: T[..], like: T[..])`: two tensors of one element type, and its
     // arms are the widths its kernel carries -- f32 and f64 (indexing.cpp says which, and design
-    // principles 5.1: no conversion to reach an arm). A number on the `g` side is read at `like`'s
-    // width (gradientLikeTyped above), which is what a broadcast's gradient passes.
+    // principles 5.1: no conversion to reach an arm). A value that carries an element type of its
+    // own is that type, so two sides that state different ones match no arm whatever is known about
+    // their shapes. The `g` side also takes a plain number, which is what a broadcast's gradient
+    // passes for an axis that has no extent of its own: a literal takes its element type from the
+    // context it is written in, so reading it at the width `like` states is that rule and not an
+    // allowance of this operator.
     defs.push_back(internal(
         "sum_to",
         {{"g", ParamKind::Tensor}, {"like", ParamKind::Tensor}},
@@ -459,16 +432,6 @@ std::vector<OpDef> gradientOps() {
         layerNormGradInfer,
         &layerNormGradKernel));
     defs.push_back(internal(
-        "slice_grad",
-        {{"dy", ParamKind::Tensor},
-         {"like", ParamKind::Tensor},
-         {"axis", ParamKind::Int},
-         {"start", ParamKind::Int},
-         {"end", ParamKind::Int},
-         {"step", ParamKind::Int, true}},
-        gradientLikeTyped(1),
-        &sliceGradKernel));
-    defs.push_back(internal(
         "matmul_grad_lhs",
         {{"dy", ParamKind::Tensor}, {"lhs", ParamKind::Tensor}, {"rhs", ParamKind::Tensor}},
         gradientLikeTyped(1),
@@ -493,7 +456,6 @@ std::vector<OpDef> gradientOps() {
     setVjp(defs, "expand_axis", &expandAxisVjp);
     setVjp(defs, "cast_like", &castLikeVjp);
     setVjp(defs, "permute_inverse", &permuteInverseVjp);
-    setVjp(defs, "slice_grad", &sliceGradVjp);
     setVjp(defs, "zeros_like", &camel::core::noGradient);
     setVjp(defs, "ones_like", &camel::core::noGradient);
     // numel and dim answer with an integer, and a discrete value's derivative is zero by

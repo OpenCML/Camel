@@ -66,7 +66,7 @@ assert(node.roles.includes('effect'), `io:get_chars roles: ${JSON.stringify(node
 
 [[tests]]
 name = "declared_resources"
-desc = "`inspect --ops` reports the resources the module registered: all five operators touch the one `stdin` resource (read, read-modify-write or, for raw mode, write), all external. The terminal mode shares `stdin` (the author's ruling on H134 question 1), so raw mode and a read must order each other."
+desc = "`inspect --ops` reports the resources the module registered: all five operators touch the one `stdin` resource (read, read-modify-write or, for raw mode, write), all external. The terminal mode shares `stdin`, so raw mode and a read must order each other."
 kind = "behavior"
 case = "../../../cases/modules/io/resources.cml"
 args = ["inspect", "--ops", "${case}"]

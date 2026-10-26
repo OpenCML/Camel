@@ -16,10 +16,11 @@ f0eabb47cb834d3d ok test/cases/parse/constructs/tags.cml
 2fe3134d6fc3e87e no test/cases/parse/numbers/leading_zero.cml
 bb3a3b0b4dee2801 no test/cases/parse/numbers/member_index_exponent.cml
 f25d7a4731924b3a ok test/cases/parse/numbers/tokens.cml
-f455edf98cd3b734 no test/cases/parse/rules/declared.cml
+17b0db88fe157ccb ok test/cases/parse/rules/declared.cml
 f08458d0aadece4e ok test/cases/parse/rules/generic_head.cml
 986de2c0389836aa ok test/cases/parse/rules/names.cml
 8d4b9fdeddebfcfd no test/cases/parse/rules/no_arrow.cml
+0d00884ee897eb3b no test/cases/parse/rules/no_context.cml
 32d4415bba3e4a8c ok test/cases/parse/rules/values.cml
 fb04505767c1cb83 no test/cases/parse/rules/when_after_body.cml
 05dc986d26c5c8b2 ok test/cases/parse/rulings/doc_comment.cml
@@ -42,7 +43,7 @@ fd67753d7a033ebd ok test/cases/parse/rulings/not_by_precedence.cml
 1276920132c1fd21 ok test/cases/parse/rulings/static_for_head_names.cml
 0e0ccb8d174fba41 no test/cases/parse/rulings/stream_type_as_interval.cml
 471d4b4632e2306c ok test/cases/parse/rulings/stream_type_in_array.cml
-c00a38be2ad7662d ok test/cases/parse/rulings/stream_type_marks.cml
+edc65762c3d78e3f ok test/cases/parse/rulings/stream_type_marks.cml
 962a669c18ee284e no test/cases/parse/syntax/angle_close_after_space.cml
 c42f5dc2baf3810c no test/cases/parse/syntax/comparison_needs_space.cml
 45e62d38219be21e no test/cases/parse/syntax/ident_list_open.cml
@@ -64,7 +65,7 @@ d05588513c014af1 no test/cases/parse/syntax/no_type_inter.cml
 d05588513c014af1 no test/cases/parse/syntax/no_type_key_ops.cml
 389bce0a77712851 ok test/cases/parse/syntax/postfix_access.cml
 8d7af975de6654fa no test/cases/parse/syntax/resource_group_open.cml
-d652ef46b235d7af ok test/cases/parse/syntax/subscript_forms.cml
+91c81770b0edd11a ok test/cases/parse/syntax/subscript_forms.cml
 77b5ab2e96c17452 no test/cases/parse/syntax/tag_group_open.cml
 778ca6e6ba9b8f5a ok test/cases/parse/syntax/tuple_and_parenthesis.cml
 c121f2b964fd5cf8 no test/cases/parse/syntax/type_arguments_missing_name.cml

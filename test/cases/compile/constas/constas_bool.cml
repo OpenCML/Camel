@@ -1,5 +1,5 @@
 /**
- * A `constas` value may be a `bool` (rule, 2026-10-22), read by the body in a condition.
+ * A `constas` value may be a `bool`, read by the body in a condition.
  * `signed(true, 3)` and `signed(false, 3)` are two instances.
  */
 module constas_bool

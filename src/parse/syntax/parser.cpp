@@ -967,7 +967,7 @@ void ParserImpl::parseTagRef() {
 
 /// whenClause : IDENTIFIER logicalOrExpr
 /// The IDENTIFIER is the name `when`, read here only: a declaration's applicability condition,
-/// after its signature (design principles 5.13). It is evaluated when the declaration is
+/// after its signature (design principles 4.4). It is evaluated when the declaration is
 /// instantiated, not when it is parsed, and a false condition makes the declaration
 /// inapplicable rather than erroneous. It follows the return type and the resource clause and
 /// precedes the body, so a body-less native declaration may carry one too.

@@ -1,7 +1,7 @@
 /**
  * A `when` that reads a run-time value is not a compile-time predicate: the condition calls a
  * function whose body reads a module-level `var`, so its value only exists once the program
- * runs and the declaration is reported, never taken as true (design principles 5.13).
+ * runs and the declaration is reported, never taken as true (design principles 4.4).
  */
 module when_not_constant
 

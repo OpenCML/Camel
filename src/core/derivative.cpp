@@ -123,9 +123,8 @@ using type::TypeCode;
 namespace {
 
 /// Who the answer is for. This -- and not the aggregate's shape -- is what the two questions
-/// differ by (the author's ruling of 2026-10-25 on
-/// discrete-tuple-tangent-space-and-machinery-aggregates: "the distinction is who it is for, not
-/// struct or tuple"). `User` is the gradient of a parameter the user differentiates;
+/// differ by: "the distinction is who it is for, not struct or tuple". `User` is the gradient of
+/// a parameter the user differentiates;
 /// `Machinery` is a value the transform carries itself, which the user never sees.
 enum class Audience { User, Machinery };
 

@@ -2,8 +2,8 @@
 // is the type that lambda would have: it gives the composition's input and its output, and it
 // instantiates a generic operand where that operand stands, as the lambda's calls do
 // (`ident(ident(x))` with `x: int` is `ident::<int>`).
-// `let h: (x: int) => int = (x) => ident(ident(x))` passes, so this must too (the rule is
-// docs/handover/reviews/questions-2026-10-23.md, section generic-operands-of-composition).
+// `let h: (x: int) => int = (x) =>
+// ident(ident(x))` passes, so this must too.
 module h428_comp_expected_type
 
 func ident::<T>(x: T): T {

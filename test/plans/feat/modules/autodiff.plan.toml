@@ -2400,8 +2400,7 @@ expect_exit = 0
 expect_stdout_contains = ["== transformer_big (camel_opt_nvm)", "gradient check: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # The cost bound is this check's own CPU time (user + system), and the timeout is its liveness
-# bound, by the rule (docs/handover/reviews/questions-2026-10-23.md,
-# "declaration-cost-gate" (a)):
+# bound, by the rule:
 #
 #   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移，这正是 40/45/100/90 ms 在负载 106–130
 #     下报红的原因；进程的 CPU 时间（用户态 + 内核态）基本不随负载变（该判定已经用 CPU 中位数）。
@@ -2444,8 +2443,7 @@ expect_exit = 0
 expect_stdout_contains = ["verdict resnet seed=benchmark activation=tanh: PASS (", "gradient referee: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # The cost bound is this referee's own CPU time (user + system), and the timeout is its liveness
-# bound, by the rule (docs/handover/reviews/questions-2026-10-23.md,
-# "declaration-cost-gate" (a)):
+# bound, by the rule:
 #
 #   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移 ... 进程的 CPU 时间（用户态 + 内核态）基本
 #    不随负载变"
@@ -2622,7 +2620,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "grad_int_zero"
-desc = "An `int` parameter is differentiable and its gradient is the zero of its own type: `let g: int = grad(twice)<3>(2.0)` gives the int `0`, and the printed line is the only value in it. The gradient type of a parameter is a question of its own, asked for the user -- a number is its own gradient type, at zero -- and `string`/function parameters are still refused (`grad_refuse_string`, `grad_refuse_function`), because they have no gradient type at all (the author's ruling of 2026-10-25 on discrete-tuple-tangent-space-and-machinery-aggregates). The machinery's own question about the same int is still answered `no` (it carries no gradient through the tape)."
+desc = "An `int` parameter is differentiable and its gradient is the zero of its own type: `let g: int = grad(twice)<3>(2.0)` gives the int `0`, and the printed line is the only value in it. The gradient type of a parameter is a question of its own, asked for the user -- a number is its own gradient type, at zero -- and `string`/function parameters are still refused (`grad_refuse_string`, `grad_refuse_function`), because they have no gradient type at all. The machinery's own question about the same int is still answered `no` (it carries no gradient through the tape)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_int_zero.cml"
 args = ["${case}", "std::macro", "${backend}"]
@@ -2671,7 +2669,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "grad_refuse_tuple"
-desc = "Refused at compile time with NotDifferentiable: the first `with` parameter is a tuple with a member that has no gradient, and the refusal names that member by its position (`element 1`, a `string`) rather than saying only that the tuple has none. A tuple answers by the same rule as a struct -- a member without a gradient makes the whole parameter have none (the author's ruling of 2026-10-25 on discrete-tuple-tangent-space-and-machinery-aggregates)."
+desc = "Refused at compile time with NotDifferentiable: the first `with` parameter is a tuple with a member that has no gradient, and the refusal names that member by its position (`element 1`, a `string`) rather than saying only that the tuple has none. A tuple answers by the same rule as a struct -- a member without a gradient makes the whole parameter have none ."
 kind = "negative"
 case = "../../../cases/modules/autodiff/grad_refuse_tuple.cml"
 args = ["${case}", "std::macro"]
@@ -2683,7 +2681,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "grad_struct_all_discrete"
-desc = "A model whose every field is discrete is differentiable: the tangent space of a struct is taken field by field, and an integer and a boolean each have one -- their own type, with the value zero -- so the gradient is the model's own type, all zeros. There is no \"at least one trainable field\" exception (the author's ruling of 2026-10-25 on discrete-gradient-and-rank-one-slice-ownership)."
+desc = "A model whose every field is discrete is differentiable: the tangent space of a struct is taken field by field, and an integer and a boolean each have one -- their own type, with the value zero -- so the gradient is the model's own type, all zeros. There is no \"at least one trainable field\" exception ."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_struct_all_discrete.cml"
 args = ["${case}", "std::macro", "${backend}"]
@@ -2696,7 +2694,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "grad_tuple_discrete_member"
-desc = "A tuple model keeps its discrete member in the gradient: `with <m: (f32[..], int)>` gets `(f32[..], int)` back, with the `int` at zero, and `let g: (f32[..], int) = gradient` pins that the gradient is the model's own type. What decides is who reads the answer -- the user's `grad`/`with_grad` gradient against the machinery's own aggregates -- not whether the parameter is a struct or a tuple (the author's ruling of 2026-10-25 on discrete-tuple-tangent-space-and-machinery-aggregates)."
+desc = "A tuple model keeps its discrete member in the gradient: `with <m: (f32[..], int)>` gets `(f32[..], int)` back, with the `int` at zero, and `let g: (f32[..], int) = gradient` pins that the gradient is the model's own type. What decides is who reads the answer -- the user's `grad`/`with_grad` gradient against the machinery's own aggregates -- not whether the parameter is a struct or a tuple ."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_tuple_discrete_member.cml"
 args = ["${case}", "std::macro", "${backend}"]
@@ -2962,7 +2960,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "array_slice_grad.runtime.nvm"
-desc = "A slice of an array takes a range of positions, so its adjoint is the upstream gradient placed back in that range of the parent's zeros: the range scatter tangent/scatter_slice_arr, the array counterpart of the tensor's slice_grad. Checked against adjoints written out by hand for a subscript slice ([0,2,3,0,0]), the same slice through the function form, a slice of a slice (the direct adjoint again), a sliced-backwards `xs[4:1:-1]` ([0,0,5,3,2]) and a stepped `xs[0:5:2]` ([2,0,3,0,5]); the printed raw gradients are pinned too. `nonzero` is the summed squared distance to the zero array — 115.0 from the tree — so a rule that returned zeros prints 0.0 and fails. (grad built at run time)"
+desc = "A slice of an array takes a range of positions, so its adjoint is the upstream gradient placed back in that range of the parent's zeros: the range scatter tangent/scatter_slice_arr, the array's own adjoint of a slice. Checked against adjoints written out by hand for a subscript slice ([0,2,3,0,0]), the same slice through the function form, a slice of a slice (the direct adjoint again), a sliced-backwards `xs[4:1:-1]` ([0,0,5,3,2]) and a stepped `xs[0:5:2]` ([2,0,3,0,5]); the printed raw gradients are pinned too. `nonzero` is the summed squared distance to the zero array — 115.0 from the tree — so a rule that returned zeros prints 0.0 and fails. (grad built at run time)"
 kind = "behavior"
 case = "../../../cases/modules/autodiff/array_slice_grad.cml"
 args = ["${case}", "${run_nvm}"]

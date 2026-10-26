@@ -6,9 +6,7 @@
  * (stdlib/array.cml declares them with `#op`, and each is the executor of the Camel function
  * beside it, which stays the semantics).
  *
- * The rule docs/handover/reviews/questions-2026-10-23.md, section
- * "array-kernel-executors（`array::sum`/`min`/`max` 的执行器）", chose exactly this and says what it
- * is: "`array:sum`/`min`/`max` 是数组归约的实现原子，与 `math:min_bf` 一类标量二元运算不是同一个
+ * The rule is: "`array:sum`/`min`/`max` 是数组归约的实现原子，与 `math:min_bf` 一类标量二元运算不是同一个
  * 东西——后者算两个数，前者沿一个数组做一遍归约（含 f64 累加、舍入一次，设计原则 7.7）。数组模块
  * 自己的归约内核放在 `array` 的执行器组里，是 10.4 说的"热点定义带 `#impl` 内核"的标准形态，不是
  * 重复。" A reduction sweeps the array and accumulates; a scalar binary combines two values. They

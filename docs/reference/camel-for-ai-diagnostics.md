@@ -59,7 +59,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 208
+**Semantic — errors** (`SemanticDiag`) — 210
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -142,6 +142,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `EnumMatchNotExhaustive` | The match over '{0}' has no case for {1}, and no 'case _'. |
 | `EnumFieldAccess` | '{0}' is a value of enum '{1}': its fields are not read by name or index. |
 | `EnumTypeArgumentNotInferred` | Cannot infer the type argument '{0}' of enum '{1}' from the fields of '{2}'. |
+| `FunctionTypeArgumentNotInferred` | Cannot infer the type argument '{0}' of '{1}': the empty literal '[]' states no element type. |
 | `EnumFieldTypeMismatch` | Field {0} of variant '{1}' has type '{2}', but the value given has type '{3}'. |
 | `EnumConstructionMismatch` | Variant '{0}' of enum '{1}' cannot be built from this value: {2}. |
 | `ConstasNotAllowed` | The dimension name '{0}' is bound here, but only a parameter type can bind one. |
@@ -256,6 +257,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ImplSignatureMismatch` | The kernel '{0}' of the '#impl' function '{1}' has the signature {2}, but the function has {3}. |
 | `ImplKernelNotBodyless` | The '#impl' tag of '{0}' names '{1}', which has a body. |
 | `StreamInContainer` | '{0}' cannot be the element of {1}: a stream is consumed once, while the elements of a container are read more than once. |
+| `StreamConsumedTwice` | '{0}' is consumed twice: a stream is read once on each execution path. |
 | `NodeOfNotAParameter` | '{0}' is not a const parameter of the rule '{1}', so node_of({0}) names no node. |
 | `BranchElementTypeMismatch` | The two arms of the branch have different element types: '{0}' and '{1}'. An array's element type is part of its type, and a number of one element type does not become a number of another by itself. |
 | `RuleConstParamNotMatched` | '{0}' is a `const` parameter of the rule '{1}', and the left side matches no constant for it. |

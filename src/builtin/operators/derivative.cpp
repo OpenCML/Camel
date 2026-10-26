@@ -261,7 +261,7 @@ void extendArrayVjp(VjpBuilder &b, const VjpCall &call) {
 // and the call `slice(xs, axis, a, b, s)` (`:op/slice_sub`, one node whichever spelling wrote it)
 // — takes a range of positions along one axis, so its adjoint is an array of the parent's shape
 // with the upstream gradient at those positions and the zero tangent everywhere else. That is
-// `:tangent/scatter_slice_arr`, the array counterpart of `tensor:slice_grad`. The axis, the
+// `:tangent/scatter_slice_arr`, the scatter that places a slice's gradient. The axis, the
 // bounds, the step and the mask are passed through unchanged, so the reverse reads them with the
 // same code as the forward, a negative step included: it walks the positions backwards and its
 // gradient is placed in that same order. The tangent of an array is the array of its elements'
@@ -312,8 +312,8 @@ void sliceArrayVjp(VjpBuilder &b, const VjpCall &call) {
 }
 
 // `xs[a:b:s]` and `slice(xs, axis, a, b, s)`: the value, the axis, the two bounds, the step and
-// the mask, in that order -- the one parameter table both spellings write (design principles 5.4;
-// the author's ruling of 2026-10-25: both spellings are one node with one adjoint rule). The axis
+// the mask, in that order -- the one parameter table both spellings write (design principles 5.4:
+// both spellings are one node with one adjoint rule). The axis
 // travels with the rest, so the adjoint scatters along the axis the forward took the elements
 // from, whatever the rank.
 //

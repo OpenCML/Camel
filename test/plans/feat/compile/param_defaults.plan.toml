@@ -2,7 +2,7 @@ id = "compile.param_defaults"
 order = 344
 tier = "fast"
 tags = ["feat", "compile", "params", "defaults", "named"]
-desc = "Defaults of ordinary parameters and ordinary arguments given by name (design principles 4.4, handover H276): one rule with the `with` parameters — a default is a compile-time constant evaluated where the declaration is, and a call gives the parameters by position, or by name after the positional ones, in the declaration's order. A callee that is several declarations names the parameter at each position the same way in all of them, and a name then means one position there (handover H376); a call of such a callee fills no default, since a default is written by one declaration."
+desc = "Defaults of ordinary parameters and ordinary arguments given by name (design principles 4.4): one rule with the `with` parameters — a default is a compile-time constant evaluated where the declaration is, and a call gives the parameters by position, or by name after the positional ones, in the declaration's order. A callee that is several declarations names the parameter at each position the same way in all of them, and a name then means one position there; a call of such a callee fills no default, since a default is written by one declaration."
 
 # The rule the `with` parameters got in is the rule for every parameter. A default is the
 # declaration's node, not something the call evaluates, so `2 + 3` is one constant, two calls
@@ -130,8 +130,7 @@ timeout_ms = 30000
 # them, so a named argument binds there as well: the name marks the position and the type of the
 # argument picks the rule, exactly as at a call of several declarations. `len` gives its one
 # parameter the same name in all three of its rules, `items` its one in both, and `json.get` its
-# with-parameter `key` in all eight of its declarations (handover: named arguments at operator
-# groups). The name is written in the list that holds the parameter: a `with` name in the angle
+# with-parameter `key` in all eight of its declarations. The name is written in the list that holds the parameter: a `with` name in the angle
 # brackets, not in the parentheses, and the two cases below pin what that leaves refused.
 [[tests]]
 name = "param_defaults.stdlib_named_args"
@@ -270,7 +269,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentsMismatch"
 expect_diagnostic_line = 14
-expect_output_contains = ["'(a: int, b: int) => int' cannot be called with argument types"]
+expect_output_contains = ["'(a: int, b: int) => int pure' cannot be called with argument types"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -289,7 +288,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "param_defaults.nullable_default"
-desc = "A `T?` parameter takes `null` as its default: `null` is a compile-time constant of the nullable type it stands in (design principles 4.4, 5.1, the ruling of 2026-10-24 on `check-program-parameter`), so the declaration is accepted and a call that leaves the parameter out reads the declaration's one null, while a call that gives a value overrides it -- including a parameter after the defaulted one, given by name."
+desc = "A `T?` parameter takes `null` as its default (design principles 4.4, 5.1): `null` is a compile-time constant of the nullable type it stands in, so the declaration is accepted and a call that leaves the parameter out reads the declaration's one null, while a call that gives a value overrides it -- including a parameter after the defaulted one, given by name."
 kind = "behavior"
 case = "../../../cases/compile/param_defaults/default_nullable.cml"
 args = ["${case}"]

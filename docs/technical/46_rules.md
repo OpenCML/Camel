@@ -46,7 +46,7 @@ arithmetic on the value and needs neither `constant(node, sample)` nor the `matc
 layers around a read. The engine passes that value where it passed a node, and the parameter bit
 the rule carries is what tells it which parameters are which.
 
-Reaching the *node* of a `const` parameter is `node_of(c)` (the ruling of 2026-10-23 on
+Reaching the *node* of a `const` parameter is `node_of(c)` (the rule on
 `rule_when_const_node`: "条件函数按 `const` 形参追加隐藏的节点形参，构建期把 `node_of(c)` 换成它；
 不引入新类型"). The condition takes one hidden node parameter per `const` parameter, appended after
 the rule's own, in the same order:
@@ -311,7 +311,7 @@ them.
 ## 6. The rest of the engine (H38)
 
 The rule declaration, the engines and the check are the first step; `when` is implemented (H38
-item 1), the rest is planned in the H38 report (`handover note ⟨50954d0⟩ (H38)`, section 1). In
+item 1), the rest is planned in the H38 report (section 1). In
 short:
 
 **`when` (implemented).** `rule … when expr { lhs => rhs }` compiles to a third function
@@ -346,7 +346,7 @@ the fact type is restricted to trivial data, and the fact becomes one `user.fact
 (Derived, scope Node, Anchors dependency). The facts are propagated in post-order, merged at JOIN
 nodes and across the writings of a value, cached per graph revision and per draft revision. Which
 of a case's variables are values and which are facts was the open question the design's example
-left ambiguous; they are `Node`s, as the review of H38 decided.
+left ambiguous; they are `Node`s.
 
 **`fact` with parameters (H61).** `fact pair(a: Node, b: Node): bool match (a, b) { … }` is the same
 declaration with a parameter list: the parameters are pattern variables, so a rule's condition
@@ -357,25 +357,7 @@ reads with exactly these parts as its operands and one of the cases matches, cas
 and values in node order. A declaration without parameters keeps the one-value form `range(n)`.
 There is no syntax that names the whole match.
 
-**`fact` with type parameters (rewrite design 7.5; design principles 5.9).** `fact range::<T>(v: T):
-Interval` is one declaration and one fact per type argument. Every function the declaration becomes
-is generic over the head's type parameters, so the query is a template: it is instantiated like any
-generic function, at the type arguments written at the query (`range::<int>(n)`), and a query that
-fixes none of them is reported with `SemanticDiag::GenericArgumentsMismatch`, which asks for them
--- a query is asked about a node, and a node determines no type parameter
-(`Type::determinesTypeParameters`: it stands for the value it is the node of). `__fact` is then
-built by the GIR maker (`Builder::settleGenericFactMaker`): that is where the fact's functions are
-instantiated at those types and where the types are written into the call, which is what the key
-reads -- `user.fact.range<int>`,
-or `user.fact.range<int, 5>` with `with` arguments -- so two instances at two types are two facts,
-each computed and cached apart, and the fact kind of each is its own. The query's parameters are
-nodes, as they always were: what its type arguments have to agree with is the type the declaration
-writes (`v: T`), which is what a fact about the values of a type means. What is not in place is the
-last step of the maker: the instances of the fact's functions are built inside the instance of the
-query, which today leaves them generic and reports `SemanticDiag::GenericFunctionAsValue` (the
-section "forms that are not implemented" of 09 chapter records it).
-
-**`fact` with `with` parameters (rewrite design 7.5).** A fact may also
+**`fact` with `with` parameters (rewrite design 7.5).** `fact range::<T>(v: T): Interval` may also
 declare `with` parameters -- `fact range<limit: int = 5>(v: int): int` -- which the query writes out
 (`range<3>(x)`), each defaulting to the declaration's default. The arguments are part of what the
 fact is: they must be compile-time constants (a non-constant argument is a compile error), and the
@@ -385,10 +367,7 @@ its own. Every function the declaration generates -- `range__initial`, the `rang
 optional siblings, and each case's pattern and fact function -- carries the declaration's `with`
 parameters, so a clause or a case names one and reads the value the query wrote out
 (`join Interval::widen_after<widen_after>`), and the engine passes the query's arguments to them
-as the `with` arguments of the call. The call is
-`__fact('range', '<the type arguments>', <functions>, withCount, <the `with` arguments>, <the
-queried nodes>, <a case triple per case>)`: 8 + w + k + 3n arguments, the type arguments empty for
-a fact whose head declares none.
+as the `with` arguments of the call.
 
 **`#requires` (implemented, H2b).** `#requires(reassociate, finite_math)` before a rule resolves the
 names to `sem::PermissionMask` -- `finite_math` expands to its four bits -- and fills the `needs`
@@ -431,10 +410,7 @@ libcamel function the module calls is exported without a hand edit; `rewrite` li
   `x + (a * b)` the parameter `a` is the multiplication's operand, not the multiplication node.
   A fact about a compound is read by declaring a `fact` over its parts (H61): `pair(x, y)`
   answers the fact of the value those parts belong to.
-- `fact`: are a case's variables values or nodes? They are `Node`s (the review of H38;
-  implemented in H38b).
-- `fact`: the fact type must be a scalar (`int`, `float` or `bool`); the design's own example, a
-  fact about an `Interval`, has no engine value for its type yet.
+- `fact`: are a case's variables values or nodes? They are `Node`s (implemented in H38b).
 
 
 

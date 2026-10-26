@@ -137,8 +137,7 @@ class ArrayType : public CompositeType {
     /// One dimension fewer: the element itself for a rank-1 array, `T[d1, ...]` for `T[d0, d1,
     /// ...]`, the element type for a nested array (`T[]` of `T[][]`), and the same open-rank
     /// array when the rank is open. `for x in xs` takes these for every array of every rank, and
-    /// the core owns the rule (the ruling of 2026-10-24, docs/handover/reviews/questions-2026-10-24-evening.md
-    /// section loop-domain-through-the-tensor-iterator): the builder states the element port with
+    /// the core owns the rule (design principles 5.4): the builder states the element port with
     /// it, the loop interface checks the port against it, and the executors take one of these a
     /// round.
     Type *firstDimensionElement() const;
@@ -203,12 +202,11 @@ bool isNumericArrayType(const Type *type);
 /// principles 5.1, 5.2).
 bool isUntypedArrayType(const Type *type);
 
-/// True for an open-rank array whose element type nobody stated: `Void[..]`. A program writes an
-/// open rank only with an element type (`f32[..]`), and the empty literal leaves one unknown
-/// dimension rather than an open rank, so this type arises where a type variable is bound to
-/// `Void` (`func f::<T>(x: T[..])` at a call whose argument is the empty literal). No value has
-/// it — the element type of a value is always in its type — so nothing is assignable to it and
-/// nothing converts into it.
-bool isElementTypeUnstatedOpenArray(const Type *type);
+/// True for `Void` itself and for an array whose element type nobody wrote (`Void[]`, `Void[..]`
+/// and the further dimensions of one): what a type is left with where an element type is not
+/// stated. `Void` is the "no value" marker rather than an element type, so a type variable takes
+/// no such type: the empty literal `[]` is one, states no element type, and leaves the position it
+/// stands in to state one — and a generic parameter states none (design principles 5.1, 5.2).
+bool isElementTypeUnstated(const Type *type);
 
 } // namespace camel::core::type

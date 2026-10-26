@@ -86,10 +86,23 @@ verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
 assert(text.includes("impure operator 'tensor:randn' cannot be exported"), 'missing impure-operator detail')
-assert(/at [^ ]*export_impure[.]cml:13:51[)]/.test(text), 'missing source position of the impure call')
+assert(/at [^ ]*export_impure[.]cml:13:56[)]/.test(text), 'missing source position of the impure call')
 assert(!text.includes('unreachable'), 'export must fail before the next statement')
 }
 """
+timeout_ms = 10000
+
+[[tests]]
+name = "export_mixed_width_refused"
+desc = "The exporter cannot accept what execution refuses: an exported function adding randn's f32 to an f64 parameter is the mixed pair a tensor operator refuses, so the compile refuses it before any export pass, and the lowering of that operator asks the same question as its declaration."
+kind = "negative"
+case = "../../../cases/modules/onnx/export_mixed_width_refused.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=${test_tmp}/export_mixed_width_refused.onnx"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["Invalid call to '__add__'", "(float[..], f32[2, 2])", "the two tensor operands have different element types ('float' and 'f32')"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
 [[tests]]
@@ -533,7 +546,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "export_gated_gru_forward"
-desc = "E13/T5: a data-dependent branch inside a statically unrolled recurrence (GRU cell update gated on mean(|x_t|), T = 3) exports as standard If operators. The gate at step t+1 depends only on the model input, so the export has always had a choice between copying the continuation into both arms of every branch (2^3 - 1 = 7 Ifs) and deciding each gate after the previous branch joined (one If per gate, 4 with the last cell nested in an arm). H44c's cache that does not own its graphs made the second shape the one the exporter emits: with the optimizer's specialization no longer pinned in the program, the export specializes the continuation once more and hoists the next gate out of the arms. The two shapes compute the same function; the loss the model returns was checked with onnxruntime against the interpreter for the case's input (0.0632271543) and for an all-ones input (0.0852279197), and the count of Ifs and the top-level op list are asserted so a change of shape is noticed. The reading after the specialization fixed point (the ruling of 2026-10-24 evening, item 3, which removed the eight-copy bound) shapes the next gate in the second arm with a `Slice` and a `Reshape` and no `Concat` between them -- an all-constant length folds to one `int64s` initializer -- with the count of Ifs unchanged at 4. (The earlier reading of this same case had a `Concat` there; it came from the parts of a constant literal being concatenated, which the exporter no longer does.)"
+desc = "E13/T5: a data-dependent branch inside a statically unrolled recurrence (GRU cell update gated on mean(|x_t|), T = 3) exports as standard If operators. The gate at step t+1 depends only on the model input, so the export has always had a choice between copying the continuation into both arms of every branch (2^3 - 1 = 7 Ifs) and deciding each gate after the previous branch joined (one If per gate, 4 with the last cell nested in an arm). H44c's cache that does not own its graphs made the second shape the one the exporter emits: with the optimizer's specialization no longer pinned in the program, the export specializes the continuation once more and hoists the next gate out of the arms. The two shapes compute the same function; the loss the model returns was checked with onnxruntime against the interpreter for the case's input (0.0632271543) and for an all-ones input (0.0852279197), and the count of Ifs and the top-level op list are asserted so a change of shape is noticed. The reading after the specialization fixed point  shapes the next gate in the second arm with a `Slice` and a `Reshape` and no `Concat` between them -- an all-constant length folds to one `int64s` initializer -- with the count of Ifs unchanged at 4. (The earlier reading of this same case had a `Concat` there; it came from the parts of a constant literal being concatenated, which the exporter no longer does.)"
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_gated_gru_forward.cml"
 args = ["${case}"]
@@ -670,8 +683,7 @@ expect_exit = 0
 expect_stdout_contains = ["onnx.checker ok", "onnx training-step check: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # The cost bound is this case's own CPU time (user + system) and the timeout is its liveness bound,
-# by the rule (docs/handover/reviews/questions-2026-10-23.md,
-# "declaration-cost-gate" (a)), quoted in full on resnet_gradient_smooth_vs_torch64 in
+# by the rule, quoted in full on resnet_gradient_smooth_vs_torch64 in
 # test/plans/feat/modules/autodiff.plan.toml. The case is Python driving 123 ONNX Runtime runs, so
 # the reading sums ~5.8 threads and the test's own CPU exceeds its wall clock -- the shape
 # test/tools/run-tests.mjs names when it says such a test "states its cost as a `cpu_budget_ms` if
@@ -1811,14 +1823,30 @@ timeout_ms = 120000
 
 [[tests]]
 name = "export_core_slice_grad"
-desc = "The reverse of the core's own slice exports too: `:tangent/scatter_slice_arr`, the adjoint the backward pass builds beside `:op/slice_sub`, is lowered as the zeros of the value's shape with the slice's positions written, so a training step whose loss slices exports whole -- the slice's own gradient used to be the only part of that path with no ONNX form."
+desc = "The reverse of the core's own slice exports too: `:tangent/scatter_slice_arr`, the adjoint the backward pass builds beside `:op/slice_sub`, is lowered as the zeros of the value's shape with the slice's positions written by a ScatterND, so a training step whose loss slices exports whole -- the slice's own gradient used to be the only part of that path with no ONNX form."
 kind = "behavior"
 case = "../../../cases/modules/onnx/ort_core_slice_grad.cml"
 args = ["${case}"]
 envs = ["ONNX_OUT=${test_tmp}/export_core_slice_grad.onnx"]
 expect_exit = 0
-expect_stdout_contains = ["exported"]
+# The values the program's own backward pass prints are pinned: the adjoint of a slice of step 1
+# writes the same numbers it wrote before this scatter replaced the padded range.
+expect_stdout_contains = ["exported", "[-2.5]", "[0.0, 0.25, -1.0, 0.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.test_tmp, 'export_core_slice_grad.onnx'))
+const count = (op) => model.ops.filter((o) => o === op).length
+// One scatter per gradient the step returns (`d loss / d x` and `d loss / d w`), and no padded
+// range: the positions a step names are not a range ONNX Pad can write.
+assert(count('ScatterND') === 2, `expected the two gradients as scatters, got ${model.ops}`)
+assert(count('Pad') === 0, `the adjoint writes positions, not a padded range: ${model.ops}`)
+}
+"""
 timeout_ms = 8000
 
 [[tests]]
@@ -1831,6 +1859,48 @@ args = ["${case}"]
 skip_unless = ["${python}", "-c", "import numpy, onnx, onnxruntime"]
 expect_exit = 0
 expect_stdout_contains = ["ort core slice grad: 0 failing", "PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "export_slice_grad_stride"
+desc = "The adjoint of a slice whose step is not 1 exports too: the positions a step names are the ones the scatter writes, computed from the start and the step, and the model's graph carries one ScatterND per slice its backward pass took and no Pad. The loss slices with a step of 2, with a negative step of 2 and along the second axis of a rank-2 value with a negative step whose start the source left out."
+kind = "behavior"
+case = "../../../cases/modules/onnx/ort_slice_grad_stride.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=${test_tmp}/export_slice_grad_stride.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.test_tmp, 'export_slice_grad_stride.onnx'))
+const count = (op) => model.ops.filter((o) => o === op).length
+// Six scatters and no padded range: the program slices six times (both operands of each of the
+// three products, the two rank-1 pairs and the rank-2 one), and the backward pass writes each
+// slice's gradient back at the positions that slice took.
+assert(count('ScatterND') === 6, `expected six scatters, got ${model.ops}`)
+assert(count('Pad') === 0, `the adjoint writes positions, not a padded range: ${model.ops}`)
+assert(model.ops.includes('Range'), `the positions are the ones the step names: ${model.ops}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "ort_slice_grad_stride"
+desc = "A slice whose step is not 1 on ONNX Runtime: the model of ort_slice_grad_stride.cml is run for three (w, x, a, b) sets and its three outputs (the loss, `d loss / d x` and `d loss / d b`) are compared with the analytic values -- `w` at the five positions the two rank-1 slices take and zero at the position they do not, `a` at the two columns the rank-2 slice takes -- within 1e-6, so the comparison does not go through Camel's own backward pass. The node count, the ScatterND count and the output shapes are printed too."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/onnx/ort_slice_grad_stride.py"
+args = ["${case}"]
+skip_unless = ["${python}", "-c", "import numpy, onnx, onnxruntime"]
+expect_exit = 0
+expect_stdout_contains = ["ort slice grad stride: 0 failing", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
@@ -1963,7 +2033,7 @@ timeout_ms = 240000
 
 [[tests]]
 name = "export_loop_values_array"
-desc = "A tail recursion whose depth depends on the model input returns, next to its state, an int array built from the counter (`[k, k + 1]`, two elements on every round), so the export succeeds and the model keeps both outputs: whether a Loop can hand a value out is the same fact as for its state — the shape does not change from one round to the next (the ruling of 2026-10-24-evening, growable-array-vs-tensor-in-the-onnx-exporter) — not what the type prints. The case reads `ks[1]` out of the returned array at run time (7 at k = 6), and the export lowers that read to a Gather; the trip count is a constant here (`k >= 6`), so the recursion is unrolled rather than emitted as a Loop."
+desc = "A tail recursion whose depth depends on the model input returns, next to its state, an int array built from the counter (`[k, k + 1]`, two elements on every round), so the export succeeds and the model keeps both outputs: whether a Loop can hand a value out is the same fact as for its state — the shape does not change from one round to the next  — not what the type prints. The case reads `ks[1]` out of the returned array at run time (7 at k = 6), and the export lowers that read to a Gather; the trip count is a constant here (`k >= 6`), so the recursion is unrolled rather than emitted as a Loop."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_loop_values_array.cml"
 args = ["${case}"]
@@ -2013,7 +2083,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "export_loop_carried_array"
-desc = "A tail recursion whose depth depends on the model input carries an int array whose length is the same on every call (`[k]` is one element each round), so the export succeeds: whether a Loop can keep a value is a fact about the loop body — the shape of the carried state does not change from one round to the next — not what its type prints (the ruling of 2026-10-24-evening, growable-array-vs-tensor-in-the-onnx-exporter). The type printer's `[]` spelling used to refuse this case. The trip count is a constant here (`k >= 3`), so the export unrolls the recursion and the model keeps the input-dependent If; the case locks that the array spelling no longer refuses it."
+desc = "A tail recursion whose depth depends on the model input carries an int array whose length is the same on every call (`[k]` is one element each round), so the export succeeds: whether a Loop can keep a value is a fact about the loop body — the shape of the carried state does not change from one round to the next — not what its type prints. The type printer's `[]` spelling used to refuse this case. The trip count is a constant here (`k >= 3`), so the export unrolls the recursion and the model keeps the input-dependent If; the case locks that the array spelling no longer refuses it."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_loop_carried_array.cml"
 args = ["${case}"]
@@ -2038,7 +2108,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "export_loop_carried_array_field"
-desc = "A tail recursion whose depth depends on the model input and whose carried state is a struct with an int[] field the body appends to is refused by export_model at the recursive call: a Loop's state input has one shape for every round, so the criterion is the fact the ruling of 2026-10-24-evening asks for — the body appends to this value, so its length changes from one round to the next (growable-array-vs-tensor-in-the-onnx-exporter). The diagnostic names the array field and the fact, and no model file is written. (The refusal used to be justified by what the type printer spelled, not by the fact.)"
+desc = "A tail recursion whose depth depends on the model input and whose carried state is a struct with an int[] field the body appends to is refused by export_model at the recursive call: a Loop's state input has one shape for every round, so the criterion is the fact the rule asks for — the body appends to this value, so its length changes from one round to the next (growable-array-vs-tensor-in-the-onnx-exporter). The diagnostic names the array field and the fact, and no model file is written. (The refusal used to be justified by what the type printer spelled, not by the fact.)"
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_loop_carried_array_field.cml"
 args = ["${case}"]
@@ -2502,7 +2572,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "pass_export_refusal_located.main_reaches_loop"
-desc = "The request is in a `main` that also runs a loop of run-time depth and is not small: the inliner leaves the call of `main` for that reason, not for the budget. The refusal, at `main`, says so (the function reaches a recursion and is inlined only while it is small, with the size of the function being inlined in the compute nodes the review of 2026-10-24 fixed the measure to) and what to change; it does not ask for std::opt, which ran, and does not mention the budget, which was not exhausted. std::opt folds one of the four additions of the body away (`first + second` and `second + first` are the same computation), so the function the inliner measures holds 16 of its 17 written compute nodes."
+desc = "The request is in a `main` that also runs a loop of run-time depth and is not small: the inliner leaves the call of `main` for that reason, not for the budget. The refusal, at `main`, says so (the function reaches a recursion and is inlined only while it is small, with the size of the function being inlined in the compute nodes the measure is fixed to) and what to change; it does not ask for std::opt, which ran, and does not mention the budget, which was not exhausted. std::opt folds one of the four additions of the body away (`first + second` and `second + first` are the same computation), so the function the inliner measures holds 16 of its 17 written compute nodes."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/main_reaches_loop.cml"
 args = ["${case}", "std::macro", "std::opt", "onnx::export"]
@@ -2518,7 +2588,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "pass_export_refusal_located.compute_nodes_two_shapes.spliced_after"
-desc = "The size a refusal reports is the function's own compute nodes, so it does not change with the splice. Here std::opt checks the call of `main` before the inliner has spliced its helper `combine` into it. The same program under the pipeline below reports the same number; before the review of 2026-10-24 they reported 11 and 15, because the copy of `combine` (two OPERs in its own inline region) and the three GATEs the splice adds for its arguments were counted."
+desc = "The size a refusal reports is the function's own compute nodes, so it does not change with the splice. Here std::opt checks the call of `main` before the inliner has spliced its helper `combine` into it. The same program under the pipeline below reports the same number; before this rule they reported 11 and 15, because the copy of `combine` (two OPERs in its own inline region) and the three GATEs the splice adds for its arguments were counted."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/compute_nodes_two_shapes.cml"
 args = ["${case}", "std::macro", "std::opt", "onnx::export"]
@@ -2571,7 +2641,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "pass_export_refusal_located.request_in_arm_and_target"
-desc = "The request is in a run-time arm and its example is not a graph constant: both reasons are reported, the branch (the program's structure) first, then the unreadable argument (review of H8: user-written structure before target capability, both when both hold)."
+desc = "The request is in a run-time arm and its example is not a graph constant: both reasons are reported, the branch (the program's structure) first, then the unreadable argument (user-written structure before target capability, both when both hold)."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/request_in_arm_and_target.cml"
 args = ["${case}", "std::macro", "std::opt", "onnx::export"]
@@ -2847,7 +2917,7 @@ expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
 expect_diagnostic_line = 14
 expect_diagnostic_column = 12
-expect_output_contains = ["a branch on a condition that depends on the model input chooses between functions (its value is a '(x: float[..]) => float[..]')", "a model has no function values"]
+expect_output_contains = ["a branch on a condition that depends on the model input chooses between functions (its value is a '(x: float[..]) => float[..] pure')", "a model has no function values"]
 expect_output_not_contains = ["onnx::export: wrote", ":?:?:", "arm_out"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 60000
@@ -2860,7 +2930,7 @@ case = "../../../cases/modules/onnx/refusals/function_branch.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_output_contains = ["a branch on a condition that depends on the model input chooses between functions (its value is a '(x: float[..]) => float[..]')", "function_branch.cml:14:12"]
+expect_output_contains = ["a branch on a condition that depends on the model input chooses between functions (its value is a '(x: float[..]) => float[..] pure')", "function_branch.cml:14:12"]
 expect_output_not_contains = ["arm_out"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 60000

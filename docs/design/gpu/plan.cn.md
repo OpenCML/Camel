@@ -1,17 +1,17 @@
 # H49 实施计划：G1–G3 —— 放置标签、设备上的数组值、驻留与异步、整段编译与缓存
 
-状态：**计划，待协调者批复**。本分支（`handover/h49-gpu-plan`）只改文档：不含任何实现，不改变任何被观察到的行为。基线 `9e71310ab`（2026-10-22，`origin/develop`）。
+状态：**计划，待协调者批复**。本分支只改文档：不含任何实现，不改变任何被观察到的行为。基线 `9e71310ab`（2026-10-22，`origin/develop`）。
 
 依据：
 
 - [GPU 设计稿](README.cn.md) §1（缺口表）、§2（放置与作用域）、§3（设备上的数组值）、§4（整段编译与缓存）、§6（三条决定）、§7（G0–G7 的顺序与编号）；
 - [设计原则](../../design-principles.cn.md) 3.1（按依赖求值）、3.6（由声明的性质并行）、3.10（循环）、6.2（标签只声明事实）、9.4（标签的读者与无效果警告）、9.6（优化保持算子身份）、10.5（库的边界与数据块）、13.3（`Device<T>` 与异步不在语义里）、13.4（分布式与放置）；
-- [H24–H26 检查意见](../../handover/reviews/H24-H25-H26.md) 对 H47/H48 的三条硬要求：动态形状必须能编译、反向图必须带同元素类型与形状、设备不可用必须启动时报错；
-- [H77–H140 检查意见](../../handover/reviews/H77-H140.md)（H85 `#independent`、H102 融合记在图的分组属性上）；[H141–H213 检查意见](../../handover/reviews/H141-H213.md) 的 Q5（删除 `@gpu`/`run`/`run_device`，由 H49 执行）与 Q6（只有 `--devices`，没有 `tiles::compile(device=)`；源码里的设备是放置标签，永远不是遍参数）；
+- [H24–H26 检查意见] 对 H47/H48 的三条硬要求：动态形状必须能编译、反向图必须带同元素类型与形状、设备不可用必须启动时报错；
+- [H77–H140 检查意见]（H85 `#independent`、H102 融合记在图的分组属性上）；[H141–H213 检查意见] 的 Q5（删除 `@gpu`/`run`/`run_device`，由 H49 执行）与 Q6（只有 `--devices`，没有 `tiles::compile(device=)`；源码里的设备是放置标签，永远不是遍参数）；
 - [模块缓存与失效面](模块缓存的成本账（原技术页 52，已删除）)：源哈希不能证明接口未变，这是缓存键的界线；
 - [Tiles 路线的区域与传输](../tiles-route/README.cn.md) §3.2–§3.6（区域 → `OPER :tiles/exec`、显式 upload/download、符号形状编一次、键是语义指纹、故障记在调用点）；
 - [索引化计算](../indexed-computation/README.md) §6.3（异步：完成事件、依赖保证完成与可见性、没有隐式同步）；
-- 在途的 H218（`handover/H218-GPU-REMOVAL`）：删除 `@gpu`/`run`/`run_device` 与旧分派，落 `tiles.gpu` 与 `RuntimeDiag::GpuScopeUnsupported = 0x000071`。本计划按它合入后的树写，第 7 节说明它未合入时的顺序。
+- 在途的 GPU 拆除工作：删除 `@gpu`/`run`/`run_device` 与旧分派，落 `tiles.gpu` 与 `RuntimeDiag::GpuScopeUnsupported = 0x000071`。本计划按它合入后的树写，第 7 节说明它未合入时的顺序。
 
 本文的每个结论都对应到文件与类型；读它不需要读代码。第 11 节是会被触碰的文件的完整清单，第 10 节是给作者的少数几个问题。文中的 GIR 是压缩草图（节点、算子 URI、属性、区域与段），不是 `std::gir` 的原样输出。
 
@@ -197,7 +197,7 @@ graph train_step [body placement=gpu]
 - 传递闭包里的**每个**被调图（不只是作用域自己的图）；
 - 作用域里**无法确定放置**的节点（老代码/第三方建图没有盖章）。落地上这一条的形态要说清：`stampNode` 让**每一种**节点创建时都写 `currentAttrs_`，作用域对被调图又是传递闭包（§2.3），所以"节点没有自己的事实"一律由作用域回答（设备），不存在第三种"不知道"的状态；一个作用域**给不出去处**的节点，就是既没有放置事实、也没有设备程序的那一个，它以 `GpuScopeNoDeviceProgram`（闭包里的模块不提供设备程序）报出。
 
-**主机效果不是拒绝，是作用域边界**（第 3 问的裁定，取代本文初稿的"一律拒绝"）：`print`/`println`、文件写、`save_npy` 这类效果算子**不参与设备段**，它们放在**主机**上，观察点由遍插一个**显式的 `download`** 节点，`std::profile` 的 `syncs` 把它数出来。理由：作用域承诺的是"这一段计算在哪跑"，不是"这一段程序没有主机观察"；效果算子没有设备实现，但它也不需要设备实现——它是段与主机之间的那一次传输。所以：
+**主机效果不是拒绝，是作用域边界**（取代本文初稿的"一律拒绝"）：`print`/`println`、文件写、`save_npy` 这类效果算子**不参与设备段**，它们放在**主机**上，观察点由遍插一个**显式的 `download`** 节点，`std::profile` 的 `syncs` 把它数出来。理由：作用域承诺的是"这一段计算在哪跑"，不是"这一段程序没有主机观察"；效果算子没有设备实现，但它也不需要设备实现——它是段与主机之间的那一次传输。所以：
 
 | 作用域里的节点 | 处置 |
 |---|---|
@@ -301,7 +301,7 @@ N31 :call  (N30, m) (x)                          [placement=gpu]
 
 - **目标**：`#gpu`/`#cpu` 的合法落点是**函数、块与命名空间块**；命名空间块里的每个函数都带上这个事实，函数自己写的是内层、胜出。`Positions` 的 `Module` 位、解析器与 AST/GCT/GIR 里读 `module` 前标签的部分、格式化器的对应处理、`gpu_scope_module.cml` 一并删掉，用例改成命名空间块。
 - **边界**：不动"一个键、两个标签"与放置解析的四步顺序；不动 Tiles 的读写点；本条**不在本车道重复施工**。
-- **依赖**：`handover/h554-no-module-decl`（工作树 `D:\Projects\Camel-wt\h554-no-module-decl` 已从 `origin/develop` 开出，改动未提交，尚未落到分支）——G1-1 是它的交付，本计划只引用它的状态。G1-2 与它无依赖关系。
+- **依赖**：无模块声明分支（工作树 `D:\Projects\Camel-wt\h554-no-module-decl` 已从 `origin/develop` 开出，改动未提交，尚未落到分支）——G1-1 是它的交付，本计划只引用它的状态。G1-2 与它无依赖关系。
 - **验收读数**：新用例（命名空间块的标签传播，替换今天的 `test/cases/modules/tiles/gpu_scope_module.cml`；计划条目沿用 `gpu_scope.*` 前缀，名字由 G1-1 的车道定）：命令 `camel --devices cpu <用例> tiles::compile std::nvm`，`TILES_PLACEMENT` 里命名空间块里的函数 `body_fact` 是 `gpu`，块里自己写 `#cpu` 的那个函数是 `host`；`camel inspect --tags <用例>` 里 `#gpu`/`#cpu` 的 `on` 不再列模块位置；负例：标签写在 `module` 前报解析/语义诊断（该用例随 G1-1 一起删）。
 - **未决点**：问题页第 8 条（命名空间块用现成的 `Nodes` 位，还是新增 `Namespace` 位）。
 
@@ -309,7 +309,7 @@ N31 :call  (N30, m) (x)                          [placement=gpu]
 
 - **目标**：`#gpu` 函数体（或块）里写的 `println`/文件写/`save_npy` 照常执行，位置在主机；遍在值的边界处插一个显式 `tiles:download`，`std::profile` 把那次等待数进 `device_work.syncs`。一个观察点一次：`#gpu` 体里一次 `println` 的读数是 `syncs: 1`。
 - **边界**：不改"效果不是拒绝"这一半（已落地）；不改 `--devices cpu` 下"不写任何传输"的行为；不做设备上的效果（没有这种算子）。
-- **依赖**：`handover/h556-gpu-effect` 与它的返工（`handover/h567-gpu-effect-rework`）已落地——修在**切分**（`modules/tiles/src/region_outline.cpp`：段的成员语句换成段调用时，把被替换语句的同步输入、顺序输入与它排序过的节点原样交给调用），执行计划不把效果当根（见 §2.4 的落地状态）；机制上依赖 §3.6 的 G2-2 的观察点定义（本条是那一步的第一个用例）。
+- **依赖**：无模块声明分支与它的返工已落地——修在**切分**（`modules/tiles/src/region_outline.cpp`：段的成员语句换成段调用时，把被替换语句的同步输入、顺序输入与它排序过的节点原样交给调用），执行计划不把效果当根（见 §2.4 的落地状态）；机制上依赖 §3.6 的 G2-2 的观察点定义（本条是那一步的第一个用例）。
 - **验收读数**：`test/cases/modules/tiles/gpu_scope_host_effect.cml` 在 `tiles::compile` 下体内 `println` 有输出（改之前没有输出、`TILES_RESIDENCY` 记 `"downloads":0`）；有卡时计划条目 `gpu_scope.host_effect_synchronises` 读 `std::profile json=` 的 `device_work.syncs`（一块卡一条流：3，改之前 2）与 `to_host_bytes`（20，改之前 12）。设备无关的那一半：`camel --devices cpu <用例> tiles::compile std::nvm` 的 stdout 里有 `println` 的内容，计划条目 `gpu_scope.host_effect_is_the_boundary` 钉住它。防回退两条（计划条目 `gpu_scope.unused_effect_outside_a_sync_block_does_not_run`、`gpu_scope.unused_effect_stays_dropped_through_the_pass`、`gpu_scope.arm_effect_runs_only_in_the_arm_taken`）：同步块之外没人用的 `println` 加不加 `tiles::compile` 都不执行、都报 `EffectNotExecuted`；分支没选中的臂里的 `println` 不执行。
 - **未决点**：问题页第 2 条（观察点与 `syncs` 的计数口径）。
 

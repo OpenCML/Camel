@@ -4,7 +4,7 @@
 
 /**
  * The `algo` module is gone: its algorithms are `array`'s, and the module that only loaded their
- * kernels was deleted (docs/handover/reviews/stdlib-array.md, item 2). This guard is what keeps
+ * kernels was deleted. This guard is what keeps
  * it gone:
  *
  *   * no `stdlib/algo.cml` and no `modules/algo/` may reappear;

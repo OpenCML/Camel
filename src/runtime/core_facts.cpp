@@ -228,9 +228,8 @@ std::optional<EffectSummary> decodeEffects(std::string_view text) {
 
 /// The number of elements a `for` takes along the first dimension of the array `node` holds as a
 /// constant: `shape[0]`, which is the element count of a rank-1 array and the row count of a
-/// higher-rank one (design principles 5.4: `t[i]` takes the i-th along the first dimension). The
-/// author's ruling of 2026-10-24 (docs/handover/reviews/questions-2026-10-24-evening.md section
-/// loop-domain-through-the-tensor-iterator) states it once: "`core.loopDomain`'s `extent` is
+/// higher-rank one (design principles 5.4: `t[i]` takes the i-th along the first dimension).
+/// The extent is stated once: "`core.loopDomain`'s `extent` is
 /// `shape[0]`, the rows of a constant array and the element count at rank 1, and every reader
 /// shares that one fact". A numeric array is the tensor kind and the `for` takes its elements
 /// itself, so the iterable of a loop over an array is the array, and its length is read where the

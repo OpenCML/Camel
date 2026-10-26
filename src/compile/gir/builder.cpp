@@ -314,10 +314,9 @@ void Builder::rejectRedeclaredFunction(
             // Two declarations of one name with the same parameters are told apart by their
             // conditions, if they write any: `when` is the applicability condition of an
             // overload (design principles 4.4), so two whose conditions exclude each other cover
-            // one family of argument types each and are overloads (
-            // of 2026-10-24 on `impl-declaration-arms`,
-            // docs/handover/reviews/questions-2026-10-23.md: the same check applies to every
-            // same-named overload that has `when`, ordinary functions with bodies included).
+            // one family of argument types each and are overloads (design principles 4.4: the same
+            // check applies to every same-named overload that has `when`, ordinary functions with
+            // bodies included).
             if (const auto *ownWhen = GCT::Tree::of(gct)->whenOf(gct)) {
                 const auto other = whenClauses_.find(graph.get());
                 if (other != whenClauses_.end()) {
@@ -377,6 +376,11 @@ void Builder::enterGraphScope(const compile_graph_ptr_t &graph, const std::strin
 }
 
 void Builder::leaveScope() {
+    // A stream is read once on each execution path (design principles 5.4). The arms of this graph
+    // are complete here, so its consumers of one stream can be told apart from one another.
+    if (currGraph_ != nullptr) {
+        checkStreamConsumption(currGraph_.get());
+    }
     // The body of this graph is complete, so its captures and its calls are known: a `var` of it
     // that no closure captured, no call was handed and that is not its own parameter becomes SSA
     // here (collapseNonEscapingVariableReads).
@@ -779,7 +783,7 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     if (const auto *when = GCT::Tree::of(gct)->whenOf(gct)) {
         // The condition belongs to the function, not to its instance: it is evaluated when
         // this graph is selected by a call, where the types and the `with` arguments of the
-        // call are known (design principles 5.13).
+        // call are known (design principles 4.4).
         whenClauses_[graph.get()] = *when;
         // A condition that is malformed -- not a bool, a name the declaration does not make
         // visible, a query an open type cannot answer -- is a declaration-site error, and is
@@ -1087,6 +1091,21 @@ void Builder::buildFuncBody(
         }
         bodyStates_[graph.get()] = BodyState::Built;
         unit_->builtBodies.push_back(graph);
+        // A function that wrote no clause about resources promises what its body reaches
+        // (design principles 3.3, effects plan 5). What it reaches is measured here, while the
+        // body is in hand, and written onto its own signature -- the open one, which no other
+        // function shares and which every value of this function is made from, so that a value
+        // passed to a position that asks for resources is judged against the same set the
+        // declaration is. A measured set that cannot be written as a clause (`anyOf`: a class
+        // the clause has no name for, the conservative reading of a call through a value that
+        // writes no clause) leaves the signature as it is rather than promising too little.
+        if (graph->funcType() != nullptr &&
+            graph->funcType()->resources().mode == camel::core::sem::ResourceSignature::Mode::Generic) {
+            if (const auto measured = footprintOf(graph.get());
+                measured.has_value() && measured->anyOf.empty()) {
+                graph->setResources(*measured);
+            }
+        }
         if (recorder_) {
             recorder_->functionBuilt(gct->origin(), name, graph->graphId(), funcType);
         }

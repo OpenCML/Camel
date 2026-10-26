@@ -213,31 +213,6 @@ Value lowerSoftmaxGrad(const LowerContext &ctx) {
     return ctx.emit("Mul", {y, e.node("Sub", {dy, dot})});
 }
 
-// slice_grad(dy, like, axis, start, end, step = 1): dy padded with zeros back to like's shape.
-Value lowerSliceGrad(const LowerContext &ctx) {
-    const auto likeShape = staticShape(ctx.facts(1), ctx.uri());
-    const auto rank      = static_cast<int64_t>(likeShape.size());
-    int64_t axis         = ctx.constInt(2);
-    axis                 = axis < 0 ? axis + rank : axis;
-    if (ctx.constInt(5, 1) != 1) {
-        throw ExportError("tensor:slice_grad: only unit steps can be exported");
-    }
-    const std::optional<int64_t> extentOpt = likeShape[static_cast<size_t>(axis)];
-    if (!extentOpt) {
-        throw ExportError("tensor:slice_grad: the sliced axis must have a static extent");
-    }
-    const int64_t extent = *extentOpt;
-    const auto clamp = [&](int64_t v) {
-        v = v < 0 ? v + extent : v;
-        return std::clamp<int64_t>(v, 0, extent);
-    };
-    const int64_t start = clamp(ctx.constInt(3)), end = clamp(ctx.constInt(4));
-    std::vector<int64_t> pads(static_cast<size_t>(2 * rank), 0);
-    pads[static_cast<size_t>(axis)]        = start;
-    pads[static_cast<size_t>(rank + axis)] = extent - end;
-    return ctx.emit("Pad", {ctx.input(0, ctx.result().dtype), ctx.emitter().int64s(pads)});
-}
-
 /// The last two axes of `x` swapped.
 std::string swapLast(Emitter &e, const std::string &x, size_t rank) {
     std::vector<int64_t> perm;
@@ -724,7 +699,6 @@ void addGradientLowerings(const std::function<void(std::string, LowerFn, int64_t
     add("tensor:gelu_grad", lowerGeluGrad, 1);
     add("tensor:erf_grad", lowerErfGrad, 1);
     add("tensor:layer_norm_grad", lowerLayerNormGrad, 13);
-    add("tensor:slice_grad", lowerSliceGrad, 11);
     add("tensor:softmax_grad", lowerSoftmaxGrad, 13);
     add("tensor:matmul_grad_lhs", lowerMatmulGrad<true>, 13);
     add("tensor:matmul_grad_rhs", lowerMatmulGrad<false>, 13);

@@ -20,8 +20,7 @@
  * without a syntax naming the whole match (`node_of` is how it names the node of a `const`
  * parameter).
  *
- * A declaration's `with` arguments are part of what a fact is (rewrite design 7.5, ruling of
- * 2026-10-25): the argument written at the query is read here, and the description, the fact kind
+ * A declaration's `with` arguments are part of what a fact is (rewrite design 7.5): the argument written at the query is read here, and the description, the fact kind
  * and the stored value are all keyed by "the name and the arguments" (`user.fact.range<5>`), so
  * `range<3>(x)` and `range<5>(x)` are two facts, each computed and kept on its own.
  *
@@ -32,8 +31,7 @@
  * is read in the order the program wrote, as the matcher reads it.
  *
  * A query that finds no value with these parts throws `FactQueryNoValue`, which is not a fault of
- * the program: a condition is the test of whether a rule applies here, so the ruling of 2026-10-23
- * on `rule_when_const_node` makes it false ("条件里的事实查询找不到时，条件为假（这条规则在此不适用），
+ * the program: a condition is the test of whether a rule applies here, so the rule makes it false ("条件里的事实查询找不到时，条件为假（这条规则在此不适用），
  * 而不是遍失败——条件本来就是"适用与否"的判断"), and whoever evaluates the condition catches it.
  */
 
@@ -496,8 +494,7 @@ bool matchesParts(
 /// answer does not depend on the order of a user list.
 ///
 /// Naming parts that no value has is not an error of the program: a condition is the test of
-/// whether a rule applies here (the ruling of 2026-10-23 on `rule_when_const_node`: "条件本来就是
-/// "适用与否"的判断"), so the query says so by throwing `FactQueryNoValue`, which whoever evaluates
+/// whether a rule applies here, so the query says so by throwing `FactQueryNoValue`, which whoever evaluates
 /// the condition reads as `false`. A pass that let it through failed the whole rewrite over one
 /// rule that simply does not apply.
 slot_t evaluateQuery(

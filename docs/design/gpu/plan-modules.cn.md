@@ -1,6 +1,6 @@
 # G1–G3 的 `modules/` 与 Tiles、CUDA 施工顺序
 
-状态：计划，随本分支合入（`handover/h365-h49-gpu-plan`，基线 `origin/develop` `e0446c76e`）。本文只排**施工顺序**：
+状态：计划，随本分支合入（基线 `origin/develop` `e0446c76e`）。本文只排**施工顺序**：
 改什么、改哪个文件、拿什么证据、依赖谁、哪一步今天还是红的。设计与编号（G1–G7、S1–S10、§2.6 的
 `autodiff::expand`、§10 五问）仍以 [GPU 设计稿](README.cn.md) 与 [G1–G3 设计计划](plan.cn.md) 为准；本文不
 改那两个文件，冲突时以它们为准。
@@ -25,14 +25,14 @@
 | 区域/树传输合批 | `cf4285443` | note ⟨cf42854⟩；`tiles_regions.plan.toml` 的 `resident_graph_transfers` |
 | 循环按图内区域读 | `graph_regions.cpp::analyzeRegions` 用 `LoopView::regionNodes` 把条件与循环体归给 LOOP 节点 | `tiles.plan.toml` 的 `static_loop_device`、`multi_state_loop_device` |
 
-看板 `docs/handover/README.cn.md` 第 229、491 行仍写「S2 放置属性在跑」「API 面仍是旧的 `@gpu` 偏好」——与树不符：
+看板第 229、491 行仍写「S2 放置属性在跑」「API 面仍是旧的 `@gpu` 偏好」——与树不符：
 S1–S4 与 H218 的删除都已在 `origin/develop` 上。**按树，不按看板。**
 
 ### 1.1 本日实测（设备无关，探针不随分支提交）
 
 | 事实 | 怎么得到的 | 对下面步骤的影响 |
 |---|---|---|
-| 静态形状的 `#gpu` 函数里 `x * 2.0` **编译期被拒**（`GpuScopeNoDeviceProgram` `0x040001A7`，点名 `tensor:multiply`，"no device program for this shape"）；原因是区域分析给该节点的理由 `scalar_tensor_operand`（操作数是 f64 字面量）。开放形状 `Tensor<f32>` 不拒（先撞 `unresolved_type`，留给运行期按实参重试）。 | `--devices cpu` + `CUDA_VISIBLE_DEVICES=-1`，`tiles::compile` | **新增 M0**（挡在验收前面）；已裁定：`docs/handover/reviews/questions-2026-10-23.md` 的 `gpu-scalar-operand`——字面量按设计原则 5.1 取另一操作数的**元素类型**，f64 操作数在图上不再存在，设备侧不必补 f64 标量 |
+| 静态形状的 `#gpu` 函数里 `x * 2.0` **编译期被拒**（`GpuScopeNoDeviceProgram` `0x040001A7`，点名 `tensor:multiply`，"no device program for this shape"）；原因是区域分析给该节点的理由 `scalar_tensor_operand`（操作数是 f64 字面量）。开放形状 `Tensor<f32>` 不拒（先撞 `unresolved_type`，留给运行期按实参重试）。 | `--devices cpu` + `CUDA_VISIBLE_DEVICES=-1`，`tiles::compile` | **新增 M0**（挡在验收前面）；已定：字面量按设计原则 5.1 取另一操作数的**元素类型**，f64 操作数在图上不再存在，设备侧不必补 f64 标量 |
 | 一条 `#gpu` 作用域里两个算子都留不住时，**只打出一条诊断**（只报 `tensor:tanh`，`tensor:multiply` 那条没出现），而 `plan.cn.md` §2.4 要的是"一条诊断列全部"；`NoDeviceProgram` 的消息里 "operator" 出现两次（`operator 'operator 'tensor:multiply''`）。 | 同上，一个作用域里同时写 `tanh(x)` 与 `x * 2.0` | 加一步 M10（诊断），小且设备无关 |
 | 分支里的算子**不是"被混进跨分支的段"，而是根本不成为段**：`choose` 的段表是 `regions:[{members:[2]}]`，else 臂的 `add` 以 `control_edge` 排除。也就是说，`#gpu` 作用域里**写在条件里的纯张量算子在主机上静默执行**，`gpuRefusal` 对结构原因（`control_edge`）明确不报。 | `regions<choose>()` 的输出 + `TILES_PLACEMENT` | **改写 M1**：不是"禁止跨控制区域收缩"，而是"臂与循环体要各自成为段" |
 | 分支程序（`x*x`，无字面量）在 `--devices cpu` 下给出正确结果（91.0），段表里身体的 `multiply` 成段、有 upload/download。 | 同上 | M1 的守卫可以设备无关：断言"臂里的算子成为自己的段" |
@@ -58,7 +58,7 @@ runner 自测（`not_contains_fails`，`test/tools/**` 属他人），与本项�
 - **证据**：新 `test/cases/gpu/nofallback/scalar_operand.cml`：静态形状的 `#gpu` 函数里 `x * 2.0`、`y + 1.0`、
   `1.0 - y`；`tiles::compile` 退出 0，`--devices cpu` 下数值与去掉 `#gpu` 的同一程序逐位相同，且段表里该算子成段；
   设备可见时 `std::profile` 的 `operator_rows[].device` 是 `cuda`（主机恢复后补测）。守卫**先红**：今天的现象见 §1.1。
-- **依赖**：`docs/handover/reviews/questions-2026-10-23.md` 的 `gpu-scalar-operand` 裁定——张量算子位置的字面量按 5.1 取另一操作数的元素类型（`x * 2.0` 的 `2.0` 是 f32），图上因此没有 f64 操作数，`scalar_tensor_operand` 的拒绝自然消失；已取型的 `float`（f64）标量与张量相乘是类型错误，提示写 `f32(a)`，与标量 `f32 * f64` 同一条规则。
+- **依赖**：张量算子位置的字面量按设计原则 5.1 取另一操作数的元素类型（`x * 2.0` 的 `2.0` 是 f32），图上因此没有 f64 操作数，`scalar_tensor_operand` 的拒绝自然消失；已取型的 `float`（f64）标量与张量相乘是类型错误，提示写 `f32(a)`，与标量 `f32 * f64` 同一条规则。
 
 ### M1 段边界：臂与循环体各自成为段，`BRCH`/`JOIN`/`LOOP` 留主机
 - **改什么**（按 §1.1 的实测改写）：臂与循环体里的纯张量算子今天被 `control_edge` 排除，**既不成段也不报**——

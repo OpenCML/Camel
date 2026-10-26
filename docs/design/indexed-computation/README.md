@@ -1,6 +1,6 @@
 # Indexed Computation, Schedules, and Resource Graphs
 
-Status: proposed target architecture, not a semantic ruling. The initial
+Status: proposed target architecture, not a semantic rule. The initial
 [`tiles` module](../../../modules/tiles/README.md) implements a small executable
 subset; the schedule/resource model described here remains proposed.
 Date: 2026-10-15. Working branch: `wzj-dev`.
@@ -225,7 +225,7 @@ The standard pipeline distinguishes removal of an unused pure computation (where
 the existing pass contract permits it) from speculating a faulting operation on a
 path that previously did not execute. Preserve laziness unless non-faulting
 speculation is proven or explicitly allowed by that operation's contract.
-Parallel fault winner selection follows the eventual language-author ruling;
+Parallel fault winner selection follows the eventual rule;
 this design does not resolve the open parallel-map fault question. Device passes
 must reject unsupported observable fault policies rather than silently invent one.
 

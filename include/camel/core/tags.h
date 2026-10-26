@@ -20,7 +20,7 @@
  *   - On declarations: an attribute set kept by the module that declares the function, type
  *     or field (module::Module::declarationTags). A C++ module reads it with
  *     ofDeclaration/ofField; reading it from Camel code (`match type`, `fields`) comes with
- *     the first stage of generics, as the handover says.
+ *     the first stage of generics.
  *
  * A parameterized tag's value is its arguments: one argument is the value itself (an integer,
  * a symbol, a graph reference); several make a tuple. A tag without parameters has the unit

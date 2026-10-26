@@ -63,7 +63,7 @@ args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::FunctionNameAsValue"
 expect_diagnostic_line = 6
-expect_output_contains = ["2 functions of that name [(x: int) => int; (x: float) => float]"]
+expect_output_contains = ["2 functions of that name [(x: int) => int pure; (x: float) => float pure]"]
 
 [[tests]]
 name = "surface.if_without_else"
@@ -115,7 +115,7 @@ expect_output_not_contains = ["Error", "Segmentation fault", "internal error"]
 
 [[tests]]
 name = "surface.composition"
-desc = "`f..g` is the composition `(x) => g(f(x))` (the ruling of 2026-10-24), a function value like any other. It used to be ConstructNotSupported at the operator, before the meaning was decided."
+desc = "`f..g` is the composition `(x) => g(f(x))`, a function value like any other. It used to be ConstructNotSupported at the operator, before the meaning was decided."
 kind = "behavior"
 case = "../../../cases/compile/surface/composition.cml"
 args = ["-E", "short", "${case}"]

@@ -1,5 +1,5 @@
 /**
- * Handover: an element of an array literal argument is reported at its own position and
+ * an element of an array literal argument is reported at its own position and
  * quoted as it is written (`1e40`, not the canonical `1e+40`), exactly as in a declared
  * position (design principles 5.1). The GCT keeps each element's source position beside its
  * exact value; the conversion of the element uses it.
