@@ -3,7 +3,7 @@ order = 424
 tier = "milestone"
 tags = ["perf", "training", "budget"]
 
-# The measured half of the plan. The 2026-10-25 rule on the eight perf plans that no layer
+# The measured half of the plan. The rule on the eight perf plans that no layer
 # reached split the plan in two: the guards (`step.count` and `step.elementwise`, which assert
 # counts and properties and no duration) are `perf.step_counts`, in the release gate's slow layer,
 # and this file keeps the budget and is in that gate's FORBIDDEN list -- it runs before a release.

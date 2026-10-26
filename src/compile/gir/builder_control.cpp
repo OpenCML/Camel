@@ -1503,7 +1503,7 @@ Builder::visitTaggedMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, T
     // DESIGN-QUESTION(nullable-error) Q4: exactly the tagged case and one other.
     // A case with a guard is taken only where its guard holds, so it is not the case that
     // opens the value: each side needs one case without a guard, and the cases written before
-    // it may carry guards (review 「when-placement-and-match-guards」).
+    // it may carry guards.
     std::vector<GCT::node_ptr_t> taggedSide, restSide;
     for (size_t i = 1; i < gct->size(); ++i) {
         const auto &caseNode = gct->at(i);
@@ -2079,8 +2079,7 @@ void Builder::requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scru
         }
         anyCase = true;
         if (caseNode->guardedCase()) {
-            // A guarded case covers nothing on its own (review 「when-placement-and-match-
-            // guards」, and Rust the same): the value a false guard refuses is matched by the
+            // A guarded case covers nothing on its own (and Rust the same): the value a false guard refuses is matched by the
             // cases written after it, so it counts for neither `case _` nor a bool's values.
             continue;
         }

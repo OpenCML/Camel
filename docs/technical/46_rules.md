@@ -346,7 +346,7 @@ the fact type is restricted to trivial data, and the fact becomes one `user.fact
 (Derived, scope Node, Anchors dependency). The facts are propagated in post-order, merged at JOIN
 nodes and across the writings of a value, cached per graph revision and per draft revision. Which
 of a case's variables are values and which are facts was the open question the design's example
-left ambiguous; they are `Node`s, as the review of H38 decided.
+left ambiguous; they are `Node`s.
 
 **`fact` with parameters (H61).** `fact pair(a: Node, b: Node): bool match (a, b) { … }` is the same
 declaration with a parameter list: the parameters are pattern variables, so a rule's condition
@@ -410,8 +410,7 @@ libcamel function the module calls is exported without a hand edit; `rewrite` li
   `x + (a * b)` the parameter `a` is the multiplication's operand, not the multiplication node.
   A fact about a compound is read by declaring a `fact` over its parts (H61): `pair(x, y)`
   answers the fact of the value those parts belong to.
-- `fact`: are a case's variables values or nodes? They are `Node`s (the review of H38;
-  implemented in H38b).
+- `fact`: are a case's variables values or nodes? They are `Node`s (implemented in H38b).
 
 
 

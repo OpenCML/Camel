@@ -52,7 +52,7 @@ tags = ["perf", "para"]
 #
 # `monte_carlo_pi.min_cores_refused` is the same tool asked for more cores than any host has: it
 # must refuse (exit 2) and say that it examined nothing, because a check that examined nothing is not
-# a pass (the same 2026-10-23 review, "declaration-cost-gate" (b), and). The real host
+# a pass (the same gate reading (b)). The real host
 # requirement is `--min-cores 4` inside the tool, and a host below it makes the guard's `skip_unless`
 # report `[SKIP]` with the reason printed -- never a pass.
 

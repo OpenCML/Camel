@@ -3,7 +3,7 @@ order = 425
 tier = "milestone"
 tags = ["perf", "training", "reduction", "layout"]
 
-# The measured half of the plan. The 2026-10-25 rule on the eight perf plans that no layer
+# The measured half of the plan. The rule on the eight perf plans that no layer
 # reached split the plan in two: the count guard (`reduce_layout.count`, which asserts counts and
 # properties and no duration) is `perf.reduce_layout_counts`, in the release gate's slow layer, and
 # this file keeps the measurement and is in that gate's FORBIDDEN list -- it runs before a release.

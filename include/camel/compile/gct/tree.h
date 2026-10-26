@@ -249,7 +249,7 @@ class Tree {
     /// The guard of a `match` case (`case p when c => ...`), for the case that has one. The
     /// guard is not a child of the CASE: the graph builder evaluates it in the arm the case
     /// becomes, after the names the pattern binds are taken out, and it decides whether that arm
-    /// is taken at all (review 「when-placement-and-match-guards」). Null when the case has none.
+    /// is taken at all. Null when the case has none.
     void setCaseGuard(const Node *caseNode, node_ptr_t guard);
     node_ptr_t caseGuardOf(const Node *caseNode) const;
 

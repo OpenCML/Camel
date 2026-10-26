@@ -2501,7 +2501,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "pass_export_refusal_located.main_reaches_loop"
-desc = "The request is in a `main` that also runs a loop of run-time depth and is not small: the inliner leaves the call of `main` for that reason, not for the budget. The refusal, at `main`, says so (the function reaches a recursion and is inlined only while it is small, with the size of the function being inlined in the compute nodes the review of 2026-10-24 fixed the measure to) and what to change; it does not ask for std::opt, which ran, and does not mention the budget, which was not exhausted. std::opt folds one of the four additions of the body away (`first + second` and `second + first` are the same computation), so the function the inliner measures holds 16 of its 17 written compute nodes."
+desc = "The request is in a `main` that also runs a loop of run-time depth and is not small: the inliner leaves the call of `main` for that reason, not for the budget. The refusal, at `main`, says so (the function reaches a recursion and is inlined only while it is small, with the size of the function being inlined in the compute nodes the measure is fixed to) and what to change; it does not ask for std::opt, which ran, and does not mention the budget, which was not exhausted. std::opt folds one of the four additions of the body away (`first + second` and `second + first` are the same computation), so the function the inliner measures holds 16 of its 17 written compute nodes."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/main_reaches_loop.cml"
 args = ["${case}", "std::macro", "std::opt", "onnx::export"]
@@ -2517,7 +2517,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "pass_export_refusal_located.compute_nodes_two_shapes.spliced_after"
-desc = "The size a refusal reports is the function's own compute nodes, so it does not change with the splice. Here std::opt checks the call of `main` before the inliner has spliced its helper `combine` into it. The same program under the pipeline below reports the same number; before the review of 2026-10-24 they reported 11 and 15, because the copy of `combine` (two OPERs in its own inline region) and the three GATEs the splice adds for its arguments were counted."
+desc = "The size a refusal reports is the function's own compute nodes, so it does not change with the splice. Here std::opt checks the call of `main` before the inliner has spliced its helper `combine` into it. The same program under the pipeline below reports the same number; before this rule they reported 11 and 15, because the copy of `combine` (two OPERs in its own inline region) and the three GATEs the splice adds for its arguments were counted."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/compute_nodes_two_shapes.cml"
 args = ["${case}", "std::macro", "std::opt", "onnx::export"]
@@ -2570,7 +2570,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "pass_export_refusal_located.request_in_arm_and_target"
-desc = "The request is in a run-time arm and its example is not a graph constant: both reasons are reported, the branch (the program's structure) first, then the unreadable argument (review of H8: user-written structure before target capability, both when both hold)."
+desc = "The request is in a run-time arm and its example is not a graph constant: both reasons are reported, the branch (the program's structure) first, then the unreadable argument (user-written structure before target capability, both when both hold)."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/request_in_arm_and_target.cml"
 args = ["${case}", "std::macro", "std::opt", "onnx::export"]

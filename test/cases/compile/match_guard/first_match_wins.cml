@@ -1,12 +1,12 @@
 /**
  * The guard of a `match` case: `case p when c => ...` is taken only when the pattern matches
  * *and* `c` holds, and a guard that does not hold leaves the value to the cases written after
- * it (review 「when-placement-and-match-guards」).
+ * it.
  *
  * Before this change `when` was not part of a match case at all: the parser read it as the
  * second word of the pattern (`case v when ...` was one identifier pattern, then `=>` was
  * expected where `when` stood), so every program here failed with a syntax error. Each answer
- * below is what the review fixes for that value.
+ * below is what the rule fixes for that value.
  */
 module match_guard
 

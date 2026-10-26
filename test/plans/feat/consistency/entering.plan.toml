@@ -319,7 +319,7 @@ expect_stdout_starts_with = "1.0 7 2.5 null\n1.0 7 2.5 -\n"
 
 [[tests]]
 name = "entering.void_arm_and_reversed_slice"
-desc = "Rulings of 2026-10-13 confirmed: an arm without a value and an arm of type T make the branch a T? (the arm without a value gives null); `slice<2, 1>` is the empty array, not a fault. Alike on the four back ends."
+desc = "An arm without a value and an arm of type T make the branch a T? (the arm without a value gives null); `slice<2, 1>` is the empty array, not a fault. Alike on the four back ends."
 kind = "behavior"
 case = "../../../cases/consistency/entering/void_arm.cml"
 args = ["${case}", "${backend}"]

@@ -37,7 +37,7 @@
 - 原生路径与上表逐行对应：叶子写下的元素类型经 `leafElementType` 决定执行支与输出缓冲（`leafTensor` 不再铸造，`newLike` 与 `zerosLeaf` 用叶子自己的元素类型），f64 叶子走 `modules/tensor/kernels/update.h` 的 `adaptiveUpdate64`（逐元素走同一个 `adaptiveUpdateOne`，值不经过任何 float），f32 叶子仍旧是 `adaptiveUpdate`，字节与轨迹都没变。守卫用例：`test/cases/modules/optim/native_dtype_exact.cml`（`optim.native_tensor_leaf_keeps_its_element_type`，四个后端，按字节比较）。
 - `adam` 的偏差修正与原生一样用 `pow`：`correct1 = 1 - beta1^step`、`correct2 = 1 - beta2^step`（`math::pow`），`step` 从 1 数起。
 - 逐元素算子的每一遍各自舍入一次，与融合内核“每元素三次正确舍入的双精度除法与一次双精度平方根”的结果相同，前提是编译不把乘加合成 FMA（项目构建用 `-ffp-contract=off`，设计原则的数值许可默认不做重结合）。这条依赖由测试兜住：三个用例都在 `std::nvm` / `std::fvm` / `std::jit` / `std::prl` 四个后端上跑，并且要求四个后端的标准输出逐字相同。
-- 融合内核的位置（性能）属于 H51 第 5 项：原生路径一趟遍历完成，本模块一张量一算子（5 至 7 遍）。`#impl` 的接法已裁定（设计原则 10.4：声明模块可以有函数体、泛型函数可以带 `#impl`），规则同时写明 Adam 的内核要等 `optim` 落地之后接上，所以本模块只标注位置：`adam_number` 与 `adam_wide` 就是那个接口。
+- 融合内核的位置（性能）属于 H51 第 5 项：原生路径一趟遍历完成，本模块一张量一算子（5 至 7 遍）。`#impl` 的接法（设计原则 10.4：声明模块可以有函数体、泛型函数可以带 `#impl`），规则同时写明 Adam 的内核要等 `optim` 落地之后接上，所以本模块只标注位置：`adam_number` 与 `adam_wide` 就是那个接口。
 
 ## 缺口即任务
 
@@ -51,7 +51,7 @@
 | `walkArray` 逐元素进入数组，数组元素是叶子（设计原则 9.9） | R3 把数组当叶子，`match type` 不能静态展开数组元素；`ckpt:tree_leaves` 缺的也是同一件事（`stdlib/tree.cml` 的模块注释写了原因：值元组不能拼接） | `examples/models/naive-in-expert-out/train_step.cml` 的 `blocks: Block[]` 写不出来：数组叶子既没有 `zeros_like`，也没有逐元素的减法 |
 | 一个「元素类型没写在类型里」的叶子，它的元素类型只能在运行时从**值**里读 | 一个能在运行时说出张量元素类型的算子（或 `cast_like`）：类型层说不出（`Tensor` 的元素类型是**缺省**，不是某个默认值），算子层也没有 | `adam` 的 `case _` 支因此按值的宽度判元素类型（`size(to_bytes(p)) == numel(p) * 8`），代价是每个这样的叶子、每步复制一次数据；`cast` 的结果类型由 dtype 字面量静态决定，所以 `if` 的两支要用 `unstated`（把元素类型抹掉的接缝）合并。（选 A，两侧一起，本模块的 `case _` 支不转换参数） |
 | —— | 一个模块只声明一个 `init` / `update`（不能按优化器重载），Optax 那种“每个优化器一个状态类型”因此写不出来 | 三个优化器共用一个状态类型 `{ m: P, v: P, step: int }`：`sgd` 多带两棵零树，白占内存；要按优化器分状态，语言得先有重载或和类型 |
-| 一次遍历完成一整棵树的更新（融合内核） | 一个把逐元素更新融成一趟的内核，以及 `#impl` 的落地（`impl-kernel-site` 裁定明确排在 `optim` 之后） | 每一步是 5 至 7 遍逐元素算子：正确，但比原生慢。性能属于 H51 第 5 项（H64 的 Adam 基线），本项不作门槛 |
+| 一次遍历完成一整棵树的更新（融合内核） | 一个把逐元素更新融成一趟的内核，以及 `#impl` 的落地（明确排在 `optim` 之后） | 每一步是 5 至 7 遍逐元素算子：正确，但比原生慢。性能属于 H51 第 5 项（H64 的 Adam 基线），本项不作门槛 |
 
 ## 对照与测试
 

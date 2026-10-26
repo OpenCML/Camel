@@ -3,7 +3,7 @@ order = 428
 tier = "slow"
 tags = ["perf", "training", "reduction", "layout", "counts"]
 
-# The guard half of `perf.reduce_layout`, split out by the 2026-10-25 rule on the eight perf plans
+# The guard half of `perf.reduce_layout`, split out by the rule on the eight perf plans
 # that no layer reached: a plan that only asserts counts and properties stays gate-able, and the half
 # that measures runs before a release. Nothing here is asserted on a duration; `perf.reduce_layout`
 # keeps the measurement (`reduce_layout.ops`) and is in the release gate's FORBIDDEN list.

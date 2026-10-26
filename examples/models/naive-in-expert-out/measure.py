@@ -23,7 +23,7 @@ thread count, the versions, the load that was running and the Camel build's fing
 recorded per cell because a time without them is not a measurement.
 
 The sweep holds the program fixed and varies one model width at a time.  `d_model` 64, 256 and
-1024 are the sizes the review asks for; `batch` and `sequence` grow with the width by the same
+1024 are the sizes the sweep asks for; `batch` and `sequence` grow with the width by the same
 factor as each other (x2 per 4x width), so the token count of a step grows with the width and
 neither axis alone carries the scale-up.  See README.md, "The sweep", for why that is the honest
 choice and what it does not cover.
@@ -187,7 +187,7 @@ def shape_for(d_model: int) -> dict:
     batch and sequence scale by the same factor as each other, and the token count grows with the
     width: a wider model is trained on proportionally more tokens per step.  The step's arithmetic
     therefore grows as the cube of the width (x64 per 4x), which is what lets the fixed per-operator
-    overhead stop dominating inside the range the review asked for.  Scaling both axes by the full
+    overhead stop dominating inside the range the sweep asks for.  Scaling both axes by the full
     width ratio would make the largest cell 65,536x the smallest step and would time a data center,
     not this question; the README states the choice.
     """

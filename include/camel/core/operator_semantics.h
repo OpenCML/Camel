@@ -114,8 +114,8 @@ enum Permission : uint16_t {
                                 //                   Default not granted; #strict revokes it.
 };
 
-/// A set of permissions: 0 when none is granted. Two bytes since `nondeterministic` (review of
-/// the mask grows; there is no second column).
+/// A set of permissions: 0 when none is granted. Two bytes: the mask grows with
+/// `nondeterministic`, and there is no second column.
 using PermissionMask = uint16_t;
 
 inline constexpr PermissionMask kNoPermissions = 0;

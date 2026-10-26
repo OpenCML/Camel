@@ -87,8 +87,8 @@ under `std::opt::inline std::jit` (`L8 -nan` where `L8 -2` is expected; the othe
 ## Fixed in the JIT (branch `lane/jit-fixes`)
 
 The JIT compiles a graph made of arithmetic, branches and calls to itself, which is what
-`std::opt::inline` leaves of a small recursive function. Its findings had two causes, and the review
-of the encoder found more defects of the second kind than the findings showed:
+`std::opt::inline` leaves of a small recursive function. Its findings had two causes, and the encoder turned out to have more defects of the second kind
+than the findings showed:
 
 - **J-A: the JOIN of a fused compare-branch took the wrong arm (F17, F37, and seeds 5254,
   47 and 187 of the larger batches).** `cmp` + `jcc` replaces the comparison and its BRCH, and

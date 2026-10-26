@@ -2311,7 +2311,7 @@ class Builder {
     /// where the test of its pattern holds and, when it has one, its guard holds as well; the
     /// guard of a case whose pattern matched decides whether that case is taken at all, and the
     /// cases written after it are the `else` of its step, so a guard that does not hold leaves
-    /// the value to them (review 「when-placement-and-match-guards」). The last step is the case
+    /// the value to them. The last step is the case
     /// that ends the list: it has no test of its own.
     node_handle_t buildCaseChain(std::vector<CaseStep> &steps, const GCT::node_ptr_t &origin);
     /// The general `match` `gct`, when its cases carry guards. It cannot be dispatched by case

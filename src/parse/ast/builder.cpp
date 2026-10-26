@@ -3251,7 +3251,7 @@ Value Builder::visitCtrlExpr(syn::Node context) {
             // The first case that matches is taken, so nothing after the wildcard can be. A
             // guarded wildcard is not a wildcard: `case _ when c` is not taken when `c` is
             // false, so the cases written after it are still reached (and the guarded case
-            // does not cover the match by itself, review `when-placement-and-match-guards`).
+            // does not cover the match by itself).
             if (casesNode->size() > 0) {
                 const node_ptr_t &lastCase = casesNode->at(casesNode->size() - 1);
                 if (lastCase->front()->type() == LoadType::Null && lastCase->size() <= 2) {

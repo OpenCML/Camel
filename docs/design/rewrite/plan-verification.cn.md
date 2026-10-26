@@ -354,7 +354,7 @@ S1 ──┬─► S2 ───────────────────�
 
 1. **许可到前提的三种读法**：`reassociate`/`contract` 证"实数上相等"还是"按位相等"；`refine_accuracy` 的误差界成真时叫不叫 `proved`；`nondeterministic` 与今天的第四个字 `unchecked` 怎么合并。这留给作者。
 2. **判定落在哪个面上**：任务书说"`stdlib/rules.cml` 每条规则都有标注"，标注写进规则语言、写成生成物、还是只在运行时报告里出现；`CheckReport` 每行带什么；覆盖不到的规则标什么、CI 要不要把 `refuted` 当硬失败。这留给作者。
-3. **`approx_math` 作为许可的前提是什么**：`src/core/operator_semantics.cpp#rewriteErrorBound` 里没有这个位，8.1 也没说。今天的处置是"它不影响容差"，所以带 `#requires(approx_math)` 的规则按 `kNoPermissions` 的按位比较路径处理——这是不是作者要的，需要确认。出处：`include/camel/core/operator_semantics.h#Permission` 有这个位、`src/core/operator_semantics.cpp#rewriteErrorBound` 没有这个分支、`src/core/operator_semantics.cpp#parsePermission` 认这个名字。**本计划不裁定，按今天的读法落地并在报告里写明。**
+3. **`approx_math` 作为许可的前提是什么**：`src/core/operator_semantics.cpp#rewriteErrorBound` 里没有这个位，8.1 也没说。今天的处置是"它不影响容差"，所以带 `#requires(approx_math)` 的规则按 `kNoPermissions` 的按位比较路径处理——这是不是作者要的，需要确认。出处：`include/camel/core/operator_semantics.h#Permission` 有这个位、`src/core/operator_semantics.cpp#rewriteErrorBound` 没有这个分支、`src/core/operator_semantics.cpp#parsePermission` 认这个名字。**本计划不定下，按今天的读法落地并在报告里写明。**
 4. **一个 `refuted` 的规则应当怎样退出标准库**：8.1 说"不得入库"，但今天的库是 69 条手写的规则，没有自动化的入/出库流程。是加一个 `refuted ⇒ 移除该规则` 的闸门，还是只让 CI 红、由人来改？出处：8.1 的报告那一条；`test/plan-selection.json` 把 `stdlib/rules.cml` 映到 5 个计划。
 
 ## 附录 A：测量命令与逐字输出

@@ -3,8 +3,7 @@
 H20-2 and H20-3. This note records what the new operators do, the representation each one chose,
 the reverse rule and the export mapping, the keyed random algorithm, and the points left open. The
 authoritative semantic statements are in [design principles](../design-principles.cn.md) 5.4 and
-13.5; the review that ordered the work is
-[H13-H14].
+13.5.
 
 ## 1. `take`: rows along the first dimension
 

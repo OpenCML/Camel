@@ -8,7 +8,7 @@ tags = ["feat", "linear", "runtime", "effects", "gir"]
 #
 # Each entry below states one clause of the design. They are marked `known_fail` against H242, the
 # integration of the edge model, which the decision-maker put ahead of new small
-# tasks on 2026-10-24 evening. The layer that holds all four is the graph's construction and its
+# tasks. The layer that holds all four is the graph's construction and its
 # consumers, not this plan, and the code is what disagrees with the design: the code still has a
 # `GCNodeKind::Sync`, its ordering between effect statements is a `CTRL` edge (which carries "used"
 # *and* orders, so no pass can treat it as either), and its `GATE` still takes a control input.
@@ -37,7 +37,7 @@ tags = ["feat", "linear", "runtime", "effects", "gir"]
 # fixes the clause. No criterion here is relaxed: each entry asserts its clause of
 # docs/design-principles.cn.md 3.1 (normative: an edge only orders does not pass "used"; the edges
 # of a graph are three; the kind "control edge" does not exist) and of
-# docs/design/effects/edges.cn.md (已定, 负责人 2026-10-23).
+# docs/design/effects/edges.cn.md.
 #
 # What the code does today, verbatim (the values these entries are red against), from
 # `effects_model_edges.cml std::gir`:

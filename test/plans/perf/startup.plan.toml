@@ -42,8 +42,7 @@
 # `--time-phases` report of the declaration modules, added up and divided by their declarations, read
 # in the CPU time that report writes per phase. The process clock cannot resolve that work (the four
 # ceilings above are tens of milliseconds), so this is the measurement that moves when the declaration
-# path changes. Its two readings and its structural assertion are the two the author chose on
-# 2026-10-23 ("declaration-cost-gate" (b)):
+# path changes. Its two readings and its structural assertion are the two halves of that gate:
 #
 #   "选 3 + 2：结构断言"每个（阶段, 模块）每轮恰好出现一次"管重复编译；绝对的 CPU 总量管整体变慢；
 #    30% 共享率这条线退休。"
