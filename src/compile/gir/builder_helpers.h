@@ -471,18 +471,15 @@ inline bool nodeTakesAnOrder(node_handle_t node) {
         return false;
     }
     const runtime::GCNodeKind kind = nodeKindOf(node);
-    camel::core::OperId oper      = camel::core::kNoOper;
     if (kind == runtime::GCNodeKind::Oper) {
+        // The operator of a node being built is named by its target, not yet by a payload.
         const auto &op = nodeGraphOf(node)->operTarget(node);
         const auto id  = op == nullptr
                              ? std::optional<camel::core::OperId>{}
                              : camel::core::OperatorTable::instance().lookup(op->uri());
-        if (!id.has_value()) {
-            return false;
-        }
-        oper = *id;
+        return id.has_value() && !camel::runtime::nodeIsFreelySchedulable(kind, *id);
     }
-    return !camel::runtime::nodeIsFreelySchedulable(kind, oper);
+    return !camel::runtime::nodeIsFreelySchedulable(*nodeDraftOf(node), nodeIdOf(node));
 }
 
 inline bool shouldAddSyncCtrlLink(node_handle_t from, node_handle_t to) {

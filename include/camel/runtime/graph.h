@@ -176,18 +176,34 @@ enum GCNodeFlag : uint8_t {
     kGCNodeFlagSyncStatement = 1 << 2,
 };
 
-/// Whether a node of `kind` that carries operator `oper` computes its value from its inputs alone
-/// (design principles 3.3): the kinds that own no resource, and the operators the table declares
-/// `pure`. This is the classification `checkOrderEdges` reads: nothing orders a pure node
-/// (docs/design/effects/edges.cn.md 4.6). `oper` is `kNoOper` for every kind but OPER.
-bool nodeIsPure(GCNodeKind kind, camel::core::OperId oper);
+/// Whether converting a value of type `source` to `target` when a CAST runs can fail: every
+/// conversion the type does not call safe checks the value (an array's shape, a number's range).
+bool castMayFault(const camel::core::type::Type *target, const camel::core::type::Type *source);
 
-/// Pure *and* unable to fault: the computation the model lets a pass arrange anywhere -- off the
-/// sync chain, out of a loop body or an arm, away when a rewrite drops it (design principles 3.4),
-/// and without an order edge after an inline (docs/design/effects/edges.cn.md 5.7). An operator
-/// that may fault is not free: what it does when it fails is observable, so its place is kept. An
-/// operator nobody declared is not known never to fault, so it is not free either.
-bool nodeIsFreelySchedulable(GCNodeKind kind, camel::core::OperId oper);
+/// The one question a pass asks before it drops, moves, merges or reorders a node, or before it
+/// decides that a node needs an order edge: is the node pure *and* unable to fault? Such a node
+/// can be arranged anywhere -- off the sync chain, out of a loop body or an arm, away when a rewrite
+/// drops it (design principles 3.4), and without an order edge after an inline (docs/design/effects/
+/// edges.cn.md 5.7). An operator that may fault is not free: what it does when it fails is
+/// observable, so its place is kept. An operator nobody declared is not known never to fault, so it
+/// is not free either; neither is an operator that must run where the program writes it
+/// (`OperatorTable::mayBeRecomputed`). A CAST is free when its conversion cannot fail
+/// (`castMayFault`), and is asked with the types it converts between: without them it is not free.
+/// `oper` is `kNoOper` for every kind but OPER. An elementwise operator (tensor arithmetic) fails
+/// only when its operands' shapes do not broadcast: asked with `fixedShapes` (every operand and
+/// the result have shapes the type states in full, `shapesAreFixed`) it cannot.
+bool nodeIsFreelySchedulable(
+    GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget = nullptr,
+    const camel::core::type::Type *castSource = nullptr, bool fixedShapes = false);
+
+/// Whether a type states its shape in full: not an array, or an array of fixed rank whose
+/// extents are all constants.
+bool shapesAreFixed(const camel::core::type::Type *type);
+
+class GCGraph;
+/// The same question of a node of a graph; a CAST is asked with its result type and the type of
+/// its input.
+bool nodeIsFreelySchedulable(const GCGraph &graph, gc_node_ref_t ref);
 
 /// Properties a graph has besides its nodes (GCGraph::flags).
 enum GCGraphFlag : uint8_t {

@@ -41,19 +41,55 @@
 
 namespace camel::runtime {
 
-bool nodeIsPure(GCNodeKind kind, camel::core::OperId oper) {
+bool castMayFault(const camel::core::type::Type *target, const camel::core::type::Type *source) {
+    if (target == nullptr || source == nullptr) {
+        return true;
+    }
+    return target->castSafetyFrom(const_cast<camel::core::type::Type *>(source)) !=
+           camel::core::type::CastSafety::Safe;
+}
+
+bool shapesAreFixed(const camel::core::type::Type *type) {
+    if (type == nullptr) {
+        return false;
+    }
+    const auto *array = dynamic_cast<const camel::core::type::ArrayType *>(type);
+    if (array == nullptr) {
+        return true;
+    }
+    if (array->openRank()) {
+        return false;
+    }
+    for (const auto &extent : array->extents()) {
+        if (!extent.isConstant()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool nodeIsFreelySchedulable(
+    GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget,
+    const camel::core::type::Type *castSource, bool fixedShapes) {
     switch (kind) {
     case GCNodeKind::Data:
     case GCNodeKind::Port:
-    case GCNodeKind::Cast:
     case GCNodeKind::Copy:
     case GCNodeKind::Fill:
-    case GCNodeKind::Accs:
+    case GCNodeKind::Accs: // reads a field of a value whose type has it: nothing to fail
     case GCNodeKind::Brch:
     case GCNodeKind::Join:
         return true;
-    case GCNodeKind::Oper:
-        return camel::core::OperatorTable::instance().isPure(oper);
+    case GCNodeKind::Cast:
+        return !castMayFault(castTarget, castSource);
+    case GCNodeKind::Oper: {
+        const auto &table = camel::core::OperatorTable::instance();
+        const std::optional<camel::core::OperatorTraits> traits = table.find(oper);
+        if (!table.mayBeRecomputed(oper) || !traits.has_value()) {
+            return false;
+        }
+        return !traits->mayFault || (traits->elementwise && fixedShapes);
+    }
     default:
         // A call, a function, a gate, a loop: an anchor that may be an effect, and nothing
         // refuses an order on it (docs/design/effects/edges.cn.md 4.6).
@@ -61,17 +97,27 @@ bool nodeIsPure(GCNodeKind kind, camel::core::OperId oper) {
     }
 }
 
-bool nodeIsFreelySchedulable(GCNodeKind kind, camel::core::OperId oper) {
-    if (!nodeIsPure(kind, oper)) {
+bool nodeIsFreelySchedulable(const GCGraph &graph, gc_node_ref_t ref) {
+    const GCNode *node = graph.node(ref);
+    if (node == nullptr) {
         return false;
     }
-    if (kind != GCNodeKind::Oper) {
-        // The kinds above own no resource and raise nothing.
-        return true;
+    switch (node->kind) {
+    case GCNodeKind::Oper: {
+        return nodeIsFreelySchedulable(node->kind, graph.nodeBodyAs<GCOperBody>(ref)->oper);
     }
-    const std::optional<camel::core::OperatorTraits> traits =
-        camel::core::OperatorTable::instance().find(oper);
-    return traits.has_value() && !traits->mayFault;
+    case GCNodeKind::Cast: {
+        const auto inputs = graph.normInputsOf(ref);
+        const GCNode *source = inputs.size() == 1 ? graph.node(inputs[0]) : nullptr;
+        return nodeIsFreelySchedulable(
+            node->kind,
+            camel::core::kNoOper,
+            node->dataType(),
+            source != nullptr ? source->dataType() : nullptr);
+    }
+    default:
+        return nodeIsFreelySchedulable(node->kind, camel::core::kNoOper);
+    }
 }
 
 using camel::core::rtdata::fromSlot;
@@ -1084,6 +1130,68 @@ void emitDraftPayload(
 
 std::vector<gc_node_ref_t> draftRuntimeNodeRefs(const GraphDraft &draft) {
     return planDraftPayload(draft).runtimeRefsByDraftId;
+}
+
+bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byShape) {
+    const DraftNodeHeader *header = draft.header(id);
+    if (header == nullptr || !draft.alive(id)) {
+        return false;
+    }
+    switch (header->kind) {
+    case GCNodeKind::Oper: {
+        const std::span<const std::byte> payload = draft.payloadOf(id);
+        bool fixed = byShape && shapesAreFixed(header->dataType);
+        for (gc_node_ref_t input : draft.normInputsOf(id)) {
+            const DraftNodeHeader *in = draft.header(input);
+            fixed = fixed && in != nullptr && shapesAreFixed(in->dataType);
+        }
+        return payload.size() >= sizeof(GCOperBody) &&
+               nodeIsFreelySchedulable(
+                   header->kind,
+                   reinterpret_cast<const GCOperBody *>(payload.data())->oper,
+                   nullptr,
+                   nullptr,
+                   fixed);
+    }
+    case GCNodeKind::Cast: {
+        const auto inputs = draft.normInputsOf(id);
+        const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
+        return nodeIsFreelySchedulable(
+            header->kind,
+            camel::core::kNoOper,
+            header->dataType,
+            source != nullptr ? source->dataType : nullptr);
+    }
+    default:
+        return nodeIsFreelySchedulable(header->kind, camel::core::kNoOper);
+    }
+}
+
+bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node, bool byShape) {
+    const DraftNodeHeader *header = draft.header(node);
+    if (header == nullptr) {
+        return false;
+    }
+    switch (header->kind) {
+    case GCNodeKind::Func:
+    case GCNodeKind::Call:
+    case GCNodeKind::Join:
+    case GCNodeKind::Brch:
+    case GCNodeKind::Sync:
+    case GCNodeKind::Loop:
+        return true;
+    case GCNodeKind::Gate:
+        // Either kind of wait is what makes a gate more than plain forwarding: the sync edge is
+        // what the chain of a `sync` block writes, and the control input is the other kind of wait
+        // such a gate was written with.
+        return !draft.ctrlInputsOf(node).empty() || !draft.syncInputsOf(node).empty();
+    case GCNodeKind::Dead:
+    case GCNodeKind::Bind:
+    case GCNodeKind::Dref:
+        return false; // not nodes of a graph a pass works on
+    default:
+        return !nodeIsFreelySchedulable(draft, node, byShape);
+    }
 }
 
 void collectStaticGraphRefsRecursive(

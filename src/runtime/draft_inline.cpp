@@ -1303,11 +1303,7 @@ bool splicedBodyNeedsOrder(const GraphDraft &draft, gc_node_ref_t id) {
         nodeOwnsRegions(header->kind)) {
         return false;
     }
-    const camel::core::OperId oper =
-        header->kind == GCNodeKind::Oper
-            ? reinterpret_cast<const GCOperBody *>(draft.payloadOf(id).data())->oper
-            : camel::core::kNoOper;
-    return !nodeIsFreelySchedulable(header->kind, oper);
+    return !nodeIsFreelySchedulable(draft, id);
 }
 
 /// The innermost control region a region lies in (or is): an arm of a branch, a part of a loop.

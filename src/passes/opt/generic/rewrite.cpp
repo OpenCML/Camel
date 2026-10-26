@@ -69,12 +69,28 @@ bool isValueOnly(const GraphDraft &draft, gc_node_ref_t id) {
     case GCNodeKind::Copy:
     case GCNodeKind::Accs:
     case GCNodeKind::Fill:
-        return true;
     case GCNodeKind::Oper:
-        return isPureOper(draft, id);
+        return camel::runtime::nodeIsFreelySchedulable(draft, id);
     default:
         return false;
     }
+}
+
+bool isDeadWhenUnread(const GraphDraft &draft, gc_node_ref_t id) {
+    if (isValueOnly(draft, id)) {
+        return true;
+    }
+    const auto *h = draft.header(id);
+    if (!h || (h->kind != GCNodeKind::Oper && h->kind != GCNodeKind::Cast)) {
+        return false;
+    }
+    if (h->kind == GCNodeKind::Oper && !isPureOper(draft, id)) {
+        return false;
+    }
+    const auto anyOf = [&](auto... groups) { return (!groups.empty() || ...); };
+    return !anyOf(
+        draft.ctrlInputsOf(id), draft.orderInputsOf(id), draft.syncInputsOf(id),
+        draft.ctrlUsersOf(id), draft.orderUsersOf(id), draft.syncUsersOf(id));
 }
 
 bool isReplaceable(const GraphDraft &draft, gc_node_ref_t id) {
@@ -101,33 +117,6 @@ bool reaches(const GraphDraft &draft, gc_node_ref_t from, gc_node_ref_t to) {
         }
     }
     return false;
-}
-
-/// True for nodes that run in order with effects: calls, branches, effectful operators, and gates
-/// or joins that wait on something -- on a control input, or on the sync edge the chain of a `sync`
-/// block is written as (docs/design/effects/edges.cn.md 5.3). The rule is the one
-/// `src/runtime/writings.cpp` keeps for the rewrite engine, which asks the same question of a node
-/// it is about to replace.
-bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t id) {
-    const auto *h = draft.header(id);
-    if (!h) {
-        return false;
-    }
-    switch (h->kind) {
-    case camel::runtime::GCNodeKind::Func:
-    case camel::runtime::GCNodeKind::Call:
-    case camel::runtime::GCNodeKind::Join:
-    case camel::runtime::GCNodeKind::Brch:
-    case camel::runtime::GCNodeKind::Sync:
-    case camel::runtime::GCNodeKind::Loop: // runs its graphs, which may have effects
-        return true;
-    case camel::runtime::GCNodeKind::Gate:
-        return !draft.ctrlInputsOf(id).empty() || !draft.syncInputsOf(id).empty();
-    case camel::runtime::GCNodeKind::Oper:
-        return !isPureOper(draft, id);
-    default:
-        return false;
-    }
 }
 
 bool readsNoWrittenSlot(const GraphDraft &draft, gc_node_ref_t id) {

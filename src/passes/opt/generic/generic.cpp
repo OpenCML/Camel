@@ -912,7 +912,7 @@ size_t dceDraft(GraphDraft &draft, bool valuesOnly = false) {
             const bool isDeadGate =
                 !valuesOnly && h && h->kind == GCNodeKind::Gate &&
                 (!draft.ctrlUsersOf(id).empty() || gateInputsSurvive(draft, id));
-            if ((isValueOnly(draft, id) || isJoin || isDeadGate) && draft.normUsersOf(id).empty() &&
+            if ((isDeadWhenUnread(draft, id) || isJoin || isDeadGate) && draft.normUsersOf(id).empty() &&
                 draft.withUsersOf(id).empty() && isReplaceable(draft, id)) {
                 replaceNode(draft, id, kInvalidNodeRef);
                 ++removed;

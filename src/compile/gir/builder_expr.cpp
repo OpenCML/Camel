@@ -1129,6 +1129,15 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     node_handle_t castNode = currGraph_->addCastNode(targetType);
     linkNodes(LinkType::Norm, valueNode, castNode);
     registerNodeOrigin(context_, castNode, gct, "gir.cast");
+    // A conversion that can fail is a statement of a `sync` block like a call: it runs where it
+    // is written, in the chain, with or without a reader of its value (design principles 3.4).
+    if (synced_ && camel::runtime::castMayFault(targetType, sourceType)) {
+        if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, castNode)) {
+            linkNodes(LinkType::Ctrl, lastSyncedNode_, castNode);
+        }
+        lastSyncedNode_ = castNode;
+        chainedNodes_.insert(castNode);
+    }
     LEAVE("CAST");
     return castNode;
 }
