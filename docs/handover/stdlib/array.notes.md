@@ -191,3 +191,24 @@ export func is_same::<T, U>(): bool {
 - `tensor::take(t, indices)` 与核心下标 `xs[idx]` 同义，且与 `array::take<n>` 同名异义：删除 `tensor::take`。
 - `tensor::flatten(t, axis?)` 是重塑，`array::flatten` 是元素的行主序视图/拼接：同名异义。建议 `tensor::flatten` 并入 `reshape`（或改名），`array::flatten` 保留。
 - `tensor::sum::<T>(t)`、`tensor::mean::<T>(t)` 整体形式删除（R3）；`max/min/argmax/argmin(t, axis, keepdims)` 轴形式留 tensor，之后随 tensor 重写移动。
+
+---
+
+# 第三轮修订（tensor 批次带来的改动）
+
+## S1. 并入 `array` 的东西
+
+- **沿轴的归约**：`sum`、`mean`、`min`、`max`、`argmax`、`argmin` 各有第二个形式 `with <axis: int, keepdims: bool = false>`，结果是 `T[..]`（`argmax/argmin` 是 `int[..]`）。与整体形式同名，一个名字一个来源；`tensor` 里的轴形式删除。每个形式是一个 Camel 包装函数，底下一个私有原子：`array:sum_axis`、`mean_axis`、`min_axis`、`max_axis`、`argmax_axis`、`argmin_axis`（C++ 的 `tensor:sum_axis` 等改前缀并入 `array` 的执行器，VJP、融合、`index_eval` 里的 URI 同改）。原子的元素类型条件在包装函数的 `when`：`sum/min/max/argmax/argmin` 整数与浮点，`mean` 浮点；`bool` 不再是这些归约的元素类型。空的轴与越界的轴是故障 `InvalidArgument`（旧 `RuntimeError`/`DivisionByZero`）。
+- **`shape`、`numel`、`dim<axis>`**：从 `tensor` 搬来，无体声明，`dim` 的轴改为尖括号。任意元素类型（不再限 `is_numeric`）。C++ 折叠（`shape`、`numel`、`dim` 在类型已定时折成常量）随之改到 `array` 的执行器前缀。
+- **`to_bytes`**（`when is_plain`）与 **`from_bytes`**（计算签名，在新文件 `array.signatures.cml`；形状改为尖括号：`b->from_bytes::<f32><shape: [2]>`）：从 `tensor` 搬来，`fromBytesOperatorGroup` 改注册在 `array` 下。
+
+## S2. 记入“核心事项”的三条
+
+1. **重载选择把 `with` 参数算进去**（决策者裁定）：`with` 参数的个数与名字和普通参数一样参与选择，所以 `xs->sum` 取整体形式、`xs->sum<0>` 取沿轴形式。设计原则 4.4 与约定 4 里“尖括号里的参数不参与重载选择”改为：参与选择的是 `with` 形参的**个数与名字**，不是它们的值。
+2. **类型名作用于数组是逐元素转换**（已裁定，同 `math`、`nn`）：`f32(xs)`、`T(xs)`、`float(xs)`；因此没有 `cast`。`array` 的函数体里原来写 `reduce` 把每个元素 `float(x)` 的地方，`sum64` 可以改成对 `float(es)` 求和，行为相同。
+3. **`fail<'Kind'>(…)`** 仍待语言作者批准；使用位置不变，另外 `tensor.cml` 的 `one_hot` 用一处（`IndexOutOfRange`）。
+
+## S3. 已知的遗留
+
+- 沿轴的包装函数声明结果是 `T[..]`，丢掉 C++ 推理器原来给出的静态各维（常量轴时结果的秩与各维是知道的）。后续：在核心里给“沿轴归约”一个类型函数（`ReducedShape<S, axis, keepdims>`），包装函数的返回类型改用它，原子的类型规则留在 C++。
+- `precedes` 仍是语义定义；`argmax/argmin` 的 `#impl` 内核待补。

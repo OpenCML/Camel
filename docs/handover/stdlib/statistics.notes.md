@@ -89,3 +89,7 @@ C++（整个模块删除）：
 - 调用点：去掉所有 `?? 默认值`；`mean` 改从 `array` 导入（`import { mean } from array`），其余仍从 `statistics`。`stdlib/perf.cml:31,32` 写回 `mean(results) * 1000.0`，空样本即故障。
 - 行为变化表：空数组 `mean` 和不足两个元素的 `variance`/`stdev` 由 `0` 变成故障；`quantile` 越界仍是 `InvalidArgument`；其余（整数被拒、结果类型为元素类型）同上文。
 - `tensor` 的整体 `mean` 删除后，规范式 `mean::<T>(x: T[..]): T = T(sum(float(x)) / float(numel(x)))` 的唯一来源是 `array::mean`。
+
+## 第三轮修订
+
+- 数组的元素类型转换就是类型名作用于数组（`float(xs)`，核心规则，逐元素），不再有 `cast`：私有的 `wide` 删除，函数里直接写 `float(xs)`；整数数组的修法是 `float(xs)`，不再提 `tensor::cast`（上文提到 `cast(xs, f64)` 的各处以此为准）。

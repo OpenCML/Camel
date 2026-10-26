@@ -1,0 +1,110 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// To be merged into `nn.cml` by its owner: the activations and layers that were in `tensor`, each
+// with its canonical definition (what used to be `tensor_definitions.cml`). Imports to add to
+// `nn.cml`: `import { exp, log, sqrt, tanh } from math`, `import { max, mean, sum } from array`,
+// `import { numel, shape } from array`, `import { matmul, maximum, reshape } from tensor`. The
+// calls to `tensor::relu` in `nn.cml` become `relu`.
+//
+// Every definition is written once for every float element type `T`, and every step is a step in
+// `T`. A kernel is the same function run by a native executor (design principles 10.4) and must
+// agree with the body bit for bit, except that a bounded function (exp, log, tanh) is within its
+// declared bound. The kernels are the C++ operators `modules/tensor` had under these names; they
+// move to `modules/nn` and are adopted through `#impl`.
+
+/// max(x, +0) per element (IEEE maximum: a NaN gives NaN, -0 gives +0; design principles 7.7).
+/// @example relu([-1.0, 2.0] as float[2])    // [0.0, 2.0]
+#impl(relu_kernel)
+export func relu::<T>(x: T[..]): T[..] when is_float::<T>() {
+    return maximum(x, 0)
+}
+
+/// 1 / (1 + exp(-x)) per element, each step in the element type.
+/// @example sigmoid([0.0] as float[1])    // [0.5]
+#impl(sigmoid_kernel)
+export func sigmoid::<T>(x: T[..]): T[..] when is_float::<T>() {
+    return 1 / (1 + exp(-x))
+}
+
+/// The GELU activation per element, by its tanh approximation:
+/// 0.5 x (1 + tanh(sqrt(2 / pi) (x + 0.044715 x^3))).
+/// @example gelu([0.0] as float[1])    // [0.0]
+#impl(gelu_kernel)
+export func gelu::<T>(x: T[..]): T[..] when is_float::<T>() {
+    return 0.5 * x * (1 + tanh(0.7978845608028654 * (x + 0.044715 * x * x * x)))
+}
+
+/// The softmax along an axis (the last by default), made stable by subtracting the maximum:
+/// m = max over the axis (IEEE maximum: a NaN gives NaN), e = exp(x - m), s = sum of e over the
+/// axis (from +0 in f64, rounded to the element type once), and e / s (a division, not a
+/// multiplication by 1 / s). An array without elements is its own result.
+/// @fails fault `InvalidArgument` when the axis is outside the rank
+/// @example [[1.0, 1.0]] as float[1, 2]->softmax    // [[0.5, 0.5]]
+#impl(softmax_kernel)
+with <axis: int = -1>
+export func softmax::<T>(x: T[..]): T[..] when is_float::<T>() {
+    return if numel(x) == 0 then x else {
+        let e = exp(x - x->max<axis, keepdims: true>)
+        e / e->sum<axis, keepdims: true>
+    }
+}
+
+/// The logarithm of the softmax along an axis (the last by default): (x - m) - log(s) with m the
+/// maximum and s the sum of exp(x - m) as in `softmax`. An array without elements is its own
+/// result.
+/// @fails fault `InvalidArgument` when the axis is outside the rank
+/// @example [[1.0, 1.0]] as float[1, 2]->log_softmax    // [[-0.6931472, -0.6931472]]
+#impl(log_softmax_kernel)
+with <axis: int = -1>
+export func log_softmax::<T>(x: T[..]): T[..] when is_float::<T>() {
+    return if numel(x) == 0 then x else {
+        let d = x - x->max<axis, keepdims: true>
+        d - log(exp(d)->sum<axis, keepdims: true>)
+    }
+}
+
+/// Layer normalization of x over its trailing axes, as many as gamma has: the mean and the
+/// variance (divisor n) of those axes, (x - mean) / sqrt(variance + eps), times gamma, plus beta.
+/// gamma and beta have the trailing extents of x.
+/// @fails fault `TensorDimensionMismatch` when gamma or beta does not match the trailing extents of x
+/// @example-fragment x, gamma and beta are arrays of the surrounding model
+/// @example x->layer_norm<gamma, beta>
+#impl(layer_norm_kernel)
+with <gamma: T[..], beta: T[..], eps: T = 1e-5>
+export func layer_norm::<T>(x: T[..]): T[..] when is_float::<T>() {
+    let n = numel(gamma)
+    let rows = x->reshape<[-1, n]>
+    let d = rows - rows->mean<1, keepdims: true>
+    let y = d / sqrt((d * d)->mean<1, keepdims: true> + eps) * gamma->reshape<[1, n]> + beta->reshape<[1, n]>
+    return y->reshape<shape(x)>
+}
+
+/// The affine transform of x by a weight matrix [in, out] whose rows are the features of x, plus
+/// a bias [out] when one is given: `matmul(x, weight) + bias`.
+/// @fails fault `TensorDimensionMismatch` when the features of x are not the rows of weight, or bias is not of the output extent
+/// @example [[1.0, 2.0]]->linear<[[1.0], [1.0]], [0.5]>    // [[3.5]]
+with <weight: T[..], bias: T[..]? = null>
+export func linear::<T>(x: T[..]): T[..] when is_float::<T>() {
+    let y = matmul(x, weight)
+    return if bias != null then y + bias else y
+}
+
+// The kernels: the C++ operators of `modules/tensor` under these names, moved to `modules/nn`.
+// Each runs for the element types its executor serves (the executors read the element type of the
+// array they get; a follow-up makes it one executor per type, design principles 10.4).
+#op('nn:relu')
+func relu_kernel::<T>(x: T[..]): T[..] when is_float::<T>()
+#op('nn:sigmoid')
+func sigmoid_kernel::<T>(x: T[..]): T[..] when is_float::<T>()
+#op('nn:gelu')
+func gelu_kernel::<T>(x: T[..]): T[..] when is_float::<T>()
+#op('nn:softmax')
+with <axis: int = -1>
+func softmax_kernel::<T>(x: T[..]): T[..] when is_float::<T>()
+#op('nn:log_softmax')
+with <axis: int = -1>
+func log_softmax_kernel::<T>(x: T[..]): T[..] when is_float::<T>()
+#op('nn:layer_norm')
+with <gamma: T[..], beta: T[..], eps: T = 1e-5>
+func layer_norm_kernel::<T>(x: T[..]): T[..] when is_float::<T>()
