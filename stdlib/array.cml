@@ -401,26 +401,32 @@ func is_elem_f16::<T>(): bool {
 // the only place that says what summing complex numbers means.
 
 /// The kernel of `sum` for an `i32[]`: the accumulator is `i32`, wrapping on overflow.
+/// @pure
 #op('array:sum_i')
 func sum_kernel::<T>(xs: T[]): T when is_elem_i32::<T>()
 
 /// The kernel of `sum` for an `int[]`: the accumulator is `int`, wrapping on overflow.
+/// @pure
 #op('array:sum_l')
 func sum_kernel::<T>(xs: T[]): T when is_elem_int::<T>()
 
 /// The kernel of `sum` for an `f32[]`: an f64 accumulator, rounded once into `f32`.
+/// @pure
 #op('array:sum_f')
 func sum_kernel::<T>(xs: T[]): T when is_elem_f32::<T>()
 
 /// The kernel of `sum` for a `float[]`: an f64 accumulator, rounded once into `float`.
+/// @pure
 #op('array:sum_d')
 func sum_kernel::<T>(xs: T[]): T when is_elem_f64::<T>()
 
 /// The kernel of `sum` for a `bf16[]`: an f64 accumulator, rounded once into `bf16`.
+/// @pure
 #op('array:sum_bf')
 func sum_kernel::<T>(xs: T[]): T when is_elem_bf16::<T>()
 
 /// The kernel of `sum` for an `f16[]`: an f64 accumulator, rounded once into `f16`.
+/// @pure
 #op('array:sum_f6')
 func sum_kernel::<T>(xs: T[]): T when is_elem_f16::<T>()
 
@@ -431,65 +437,81 @@ func sum_kernel::<T>(xs: T[]): T when is_elem_f16::<T>()
 // null. The two reduced-precision element types carry the winning element's own 16-bit pattern.
 
 /// The kernel of `min` for an `i32[]`.
+/// @pure
 #op('array:min_i')
 func min_kernel::<T>(xs: T[]): T? when is_elem_i32::<T>()
 
 /// The kernel of `min` for an `int[]`.
+/// @pure
 #op('array:min_l')
 func min_kernel::<T>(xs: T[]): T? when is_elem_int::<T>()
 
 /// The kernel of `min` for an `f32[]`.
+/// @pure
 #op('array:min_f')
 func min_kernel::<T>(xs: T[]): T? when is_elem_f32::<T>()
 
 /// The kernel of `min` for a `float[]`.
+/// @pure
 #op('array:min_d')
 func min_kernel::<T>(xs: T[]): T? when is_elem_f64::<T>()
 
 /// The kernel of `min` for a `bf16[]`.
+/// @pure
 #op('array:min_bf')
 func min_kernel::<T>(xs: T[]): T? when is_elem_bf16::<T>()
 
 /// The kernel of `min` for an `f16[]`.
+/// @pure
 #op('array:min_f6')
 func min_kernel::<T>(xs: T[]): T? when is_elem_f16::<T>()
 
 /// The kernel of `min` for a `bool[]`: `false` is below `true`.
+/// @pure
 #op('array:min_b')
 func min_kernel::<T>(xs: T[]): T? when is_bool::<T>()
 
 /// The kernel of `min` for a `string[]`: the comparison is on the bytes of the two values.
+/// @pure
 #op('array:min_s')
 func min_kernel::<T>(xs: T[]): T? when is_string::<T>()
 
 /// The kernel of `max` for an `i32[]`.
+/// @pure
 #op('array:max_i')
 func max_kernel::<T>(xs: T[]): T? when is_elem_i32::<T>()
 
 /// The kernel of `max` for an `int[]`.
+/// @pure
 #op('array:max_l')
 func max_kernel::<T>(xs: T[]): T? when is_elem_int::<T>()
 
 /// The kernel of `max` for an `f32[]`.
+/// @pure
 #op('array:max_f')
 func max_kernel::<T>(xs: T[]): T? when is_elem_f32::<T>()
 
 /// The kernel of `max` for a `float[]`.
+/// @pure
 #op('array:max_d')
 func max_kernel::<T>(xs: T[]): T? when is_elem_f64::<T>()
 
 /// The kernel of `max` for a `bf16[]`.
+/// @pure
 #op('array:max_bf')
 func max_kernel::<T>(xs: T[]): T? when is_elem_bf16::<T>()
 
 /// The kernel of `max` for an `f16[]`.
+/// @pure
 #op('array:max_f6')
 func max_kernel::<T>(xs: T[]): T? when is_elem_f16::<T>()
 
 /// The kernel of `max` for a `bool[]`: `false` is below `true`.
+/// @pure
 #op('array:max_b')
 func max_kernel::<T>(xs: T[]): T? when is_bool::<T>()
 
 /// The kernel of `max` for a `string[]`: the comparison is on the bytes of the two values.
+/// @pure
 #op('array:max_s')
 func max_kernel::<T>(xs: T[]): T? when is_string::<T>()
