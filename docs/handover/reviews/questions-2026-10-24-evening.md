@@ -1594,3 +1594,11 @@ Linux 包在 manylinux 里构建，用 auditwheel 修正标签，并在构建时
 6. 其余照报告：`check` 用 `std::shuffle`（各家标准库结果不同，换成自己的确定性洗牌）；一条坏规则让整份报告中止；任何 `std::invalid_argument` 都报成 `RuleTwoWay`；条件抛异常没被接住；`greedy_` 不复位；`rewrite` 不报告是否到了不动点；`saturate` 预算用尽和正常完成看起来一样；`carriesOrdering`、`declaredCommutative` 和三个匹配器重复；`module.cpp` 4179 行要拆。
 
 **内存审查第 1 条已由决策者修复**（`set_value.cpp`，原地写只看数组自己的回答；用例 `linear.var_param_slot_array`，四个后端）。之后槽数组也要按实际引用计数判断能否原地写（现在一律复制，正确但慢），随第 3 条一起做。
+
+## AI 必读页合入：上一节要补的三样还没补
+
+合入的页面（`docs/reference/camel-for-ai.md`，18,765 字符）是分支原样，"AI 参考页撞车"那一节要求补的三样都还没有：页面还教 `?->`（4 处）和 `throw`（1 处），没有 `fail`、`attempt(f)`，常见错误仍是 4 条，生成的优先级表也还在页里。照那一节补上：
+- 错误系统按原则 3.9 写：`->` 自动传递，没有 `?->`；没有 `throw`，`return error(...)` 给出所在块的值；有 `fail`、`never`、`attempt(f)`。这些写法还没落地，用到它们的例子按"文档按目标写"进待验证清单（`scripts/check-doc-snippets.mjs`），页面不改回旧写法。
+- "一层网络就是绑定了权重的函数"，以及 `x->linear<w, b>->relu`。
+- 常见错误补到十条左右（见那一节的清单）。
+- 优先级表移到单独的查阅文件。
