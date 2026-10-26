@@ -381,6 +381,11 @@
             "plans": ["feat/mm/graph_space.plan.toml"]
         },
         {
+            "comment": "The process-state cases: the directory rule above keeps the slow GC plan off them, and this is the fast plan that runs them.",
+            "paths": ["test/cases/feat/mm/gc/contexts.cml", "test/cases/feat/mm/gc/gc_prl_blocked_worker.cml"],
+            "plans": ["feat/mm/process_state.plan.toml"]
+        },
+        {
             "comment": "The smoke cases: test/plans/smoke is outside the feat/ tree, so no directory rule can mirror test/cases/smoke.",
             "paths": ["test/cases/smoke/"],
             "plans": ["smoke"]
