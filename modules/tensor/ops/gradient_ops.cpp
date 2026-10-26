@@ -388,8 +388,12 @@ std::vector<OpDef> gradientOps() {
 
     // sum_to(g, like) is `::<T>(g: T[..], like: T[..])`: two tensors of one element type, and its
     // arms are the widths its kernel carries -- f32 and f64 (indexing.cpp says which, and design
-    // principles 5.1: no conversion to reach an arm). A number on the `g` side is read at `like`'s
-    // width (gradientLikeTyped above), which is what a broadcast's gradient passes.
+    // principles 5.1: no conversion to reach an arm). A value that carries an element type of its
+    // own is that type, so two sides that state different ones match no arm whatever is known about
+    // their shapes. The `g` side also takes a plain number, which is what a broadcast's gradient
+    // passes for an axis that has no extent of its own: a literal takes its element type from the
+    // context it is written in, so reading it at the width `like` states is that rule and not an
+    // allowance of this operator.
     defs.push_back(internal(
         "sum_to",
         {{"g", ParamKind::Tensor}, {"like", ParamKind::Tensor}},
