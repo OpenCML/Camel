@@ -395,14 +395,16 @@ Invalid number format: '{0}'.
 A number is decimal digits without a leading zero in its whole part (an integer or a real: '0.5' is a number, '007' and '007.5' are not), or '0x', '0b' or '0o' followed by digits of that base: octal 63 is '0o77', not '077'; '09' and '077' are not number tokens. An entry argument is read by the same rule; a conversion text is data, and reads '077' as 77.
 ```
 
-**Example** (`test/cases/compile/precedence/leading_zero_real.cml`, run as `camel test/cases/compile/precedence/leading_zero_real.cml`)
+**Example** (`test/cases/compile/literals/real_leading_zero.cml`, run as `camel test/cases/compile/literals/real_leading_zero.cml`)
 
 ```camel
-// A real has no leading zero in its whole part, as an integer has none: `007.5` is refused like
-// `007`; `0.5` is a number.
+// A real has no leading zero in its whole part, as an integer has none: `077.5` is refused like
+// `007.5` (compile.precedence.leading_zero_real) and like `077`. The point does not make the
+// leading zero unambiguous, and the token is not read as an octal number either: octal is `0o77`.
+// `0.5` is a number.
 func main(): int sync {
     let a = 0.5
-    let b = 007.5
+    let b = 077.5
     println(a + b)
     return 0
 }
