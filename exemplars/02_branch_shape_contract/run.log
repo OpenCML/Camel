@@ -67,7 +67,7 @@ digraph GraphIR {
         N14 -> N16 [label="0|0", type="CTRL"];
     }
     O00 [label="EXIT", type="EXIT"];
-    N17 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="16:0-20:1", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="() => int"];
+    N17 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="16:0-20:1", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="() => int uses env, stdout"];
     N18 [label="CALL", type="CALL", value_type="int"];
     N18 -> O00 [label="0", type="EXIT"];
     N17 -> N18 [label="0|0", type="WITH"];
