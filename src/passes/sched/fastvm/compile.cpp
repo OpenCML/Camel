@@ -457,7 +457,7 @@ static bytecode_vec_t compileRuntimeGraph(
             break;
 
         case camel::runtime::GCNodeKind::Func: {
-            bool isTail = plan.directCallTailEligible[i] != 0;
+            bool isTail            = plan.directCallTailEligible[i] != 0;
             auto *targetRuntimeGraph = program.calleeOf(*graph, runtimeNodeIndex);
             ASSERT(
                 targetRuntimeGraph != nullptr,
@@ -477,7 +477,7 @@ static bytecode_vec_t compileRuntimeGraph(
                     graph->name(),
                     normOps.size(),
                     dstSlots.size()));
-            appendBytecode(
+            Bytecode *callBc = appendBytecode(
                 bytecodes,
                 (opt.enableTailCallDetection && isTail) ? OpCode::TAIL : OpCode::FUNC,
                 record->dataIndex,
@@ -486,12 +486,12 @@ static bytecode_vec_t compileRuntimeGraph(
                 dstSlots,
                 true,
                 {.runtimeGraph = targetRuntimeGraph},
-#if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
-                3
-#else
-                2
-#endif
-            );
+                BytecodeHeader::directCallExtraWordCount());
+            // Which captured variables the callee writes, which is what the call hands on the new
+            // version of beside the return value (GCFuncRef::reserved); 0 when none, and then the
+            // call's value is the result alone.
+            setFuncExtraWriteMask(
+                callBc, camel::runtime::funcWriteMaskOf(*graph, runtimeNodeIndex));
             break;
         }
 

@@ -3503,6 +3503,34 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
     if (targetGraph) {
         captured = capturedUsesOf(targetGraph);
     }
+    // What the call hands on beside its return value: the new version of each captured variable
+    // it writes, in the callee's capture order. The mask was decided when the node was made and
+    // is in its payload; here it says which of the call's With inputs are those versions, and
+    // each is recorded against the variable it is of, so a read of that variable after the call
+    // takes the access node of the part (Builder::valueVersionOf) instead of the cell and a
+    // control input.
+    uint32_t writtenMask = 0;
+    if (targetGraph) {
+        if (auto mask = callWriteMasks_.find(targetNode); mask != callWriteMasks_.end()) {
+            writtenMask = mask->second;
+        }
+    }
+    const bool callReturnsValue =
+        targetFuncType != nullptr && targetFuncType->hasExitType() &&
+        !isVoidGraphExitType(targetFuncType->exitType());
+    if (writtenMask != 0) {
+        CallValue value;
+        value.hasReturn = callReturnsValue;
+        const auto table = capturedValues_.find(targetGraph.get());
+        for (size_t k = 0; table != capturedValues_.end() && k < table->second.size(); ++k) {
+            if ((writtenMask & (uint32_t{1} << k)) == 0) {
+                continue;
+            }
+            value.variables.push_back(
+                captureInto(currGraph_, table->second[k].origin, table->second[k].name));
+        }
+        callValues_[targetNode] = std::move(value);
+    }
     std::vector<node_handle_t> capturedWrites;
     for (const CapturedUse &use : captured) {
         orderAfterLastWriter(use.variable, targetNode);
@@ -3616,6 +3644,29 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
         return gate;
     }
     LEAVE("LINK");
+    if (writtenMask != 0 && callReturnsValue && valueWanted) {
+        // The value the position takes is the call's return value, the first part of what the
+        // call hands on. A call whose value nothing wants builds no access node for it.
+        return callValuePartOf(targetNode, 0);
+    }
+    if (writtenMask != 0 && !valueWanted && !unusedStatement && expectedResult != nullptr &&
+        isVoidGraphExitType(expectedResult)) {
+        // A position that expects `void` takes no value, and a branch joins the value that
+        // stands here with the values of its other arms: what the call hands on beside its
+        // return value is the new version of each captured variable it writes, and a version is
+        // a `var` cell -- a place, not a value a position takes. It is taken only where a
+        // reader takes it, through the access node of the call (Builder::valueVersionOf). What
+        // stands here is the callee's own value -- nothing -- after the call, so an arm joining
+        // this call with a `void` one stays `void` and not a `var T?` (design principles 190,
+        // 189: the join of such arms takes no value). The value is handed on behind a gate whose
+        // other input is the call, which is what the position does (`setArmResult`).
+        node_handle_t empty = currGraph_->addStaticDataNode(Data::null());
+        node_handle_t gate  = currGraph_->addGateNode(nodeTypeOf(empty));
+        linkNodes(LinkType::Norm, empty, gate);
+        linkNodes(LinkType::Ctrl, targetNode, gate);
+        LEAVE("LINK");
+        return gate;
+    }
     return targetNode;
 }
 

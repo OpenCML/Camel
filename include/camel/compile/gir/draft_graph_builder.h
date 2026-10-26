@@ -112,6 +112,13 @@ class DraftGraphBuilder {
     runtime::DraftNodeRef
     addCallNode(camel::core::type::Type *type, const runtime::GCCallBody &body = {});
     runtime::DraftNodeRef addFuncNode(const FuncTarget &target, runtime::gc_slot_idx_t dataIndex);
+    /// A direct call whose value carries the new version of the captured variables the callee
+    /// writes: `type` is what the call hands on (Builder::callValueTypeOf) and
+    /// `writtenCaptures` the mask of the callee's capture table it packs
+    /// (camel::runtime::GCFuncRef::reserved).
+    runtime::DraftNodeRef addFuncNode(
+        const FuncTarget &target, camel::core::type::Type *type, uint32_t writtenCaptures,
+        runtime::gc_slot_idx_t dataIndex = 0);
     runtime::DraftNodeRef addOperNode(const oper_idx_ptr_t &op, runtime::gc_slot_idx_t dataIndex);
     /// A LOOP node of form `kind` (camel/runtime/loop.h) whose condition and body are regions of
     /// this graph; its value has type `type`.

@@ -267,10 +267,10 @@ gc_node_ref_t GraphDraft::addCallNode(
 
 gc_node_ref_t GraphDraft::addFuncNode(
     GraphId calleeGraph, camel::core::type::Type *type, uint8_t runtimeFlags,
-    gc_slot_idx_t dataIndex) {
+    gc_slot_idx_t dataIndex, uint32_t writtenCaptures) {
     ++mutations_;
     dataIndex = ensureValueSlot(*this, type, dataIndex);
-    GCFuncRef body{.ref = payloadGraphIndexOf(calleeGraph)};
+    GCFuncRef body{.ref = payloadGraphIndexOf(calleeGraph), .reserved = writtenCaptures};
     const auto payload = bytesForStruct(body);
     return addNode(
         DraftNodeInit{
@@ -280,6 +280,23 @@ gc_node_ref_t GraphDraft::addFuncNode(
             .runtimeFlags = runtimeFlags,
             .payload      = payload,
         });
+}
+
+uint32_t GraphDraft::funcWriteMaskOf(gc_node_ref_t id) const {
+    const DraftNode *draftNode = node(id);
+    if (draftNode == nullptr || draftNode->header.kind != GCNodeKind::Func) {
+        return 0;
+    }
+    return DraftNodeView::payloadAs<GCFuncRef>(draftNode)->reserved;
+}
+
+void GraphDraft::setFuncWriteMask(gc_node_ref_t id, uint32_t writtenCaptures) {
+    requireOneWriting("setFuncWriteMask");
+    ++mutations_;
+    DraftNode *draftNode = node(id);
+    ASSERT(draftNode != nullptr && draftNode->header.kind == GCNodeKind::Func, "Not a FUNC node.");
+    touchRefs();
+    DraftNodeView::payloadAs<GCFuncRef>(draftNode)->reserved = writtenCaptures;
 }
 
 gc_node_ref_t GraphDraft::addLoopNode(

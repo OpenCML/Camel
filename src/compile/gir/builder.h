@@ -774,6 +774,10 @@ class Builder {
         node_handle_t call;
         compile_graph_ptr_t callee;
         std::vector<node_handle_t> values;
+        // The new version each capture has as of the call, when its last write produced one of
+        // its own valueVersionOf; null otherwise. A variable capture is always in `values` (a
+        // late one is refused), so the version a call hands on is the one recorded here.
+        std::vector<node_handle_t> versions;
         // How many of the callee's captures are linked already.
         size_t linked = 0;
     };
@@ -937,6 +941,18 @@ class Builder {
     std::unordered_map<node_handle_t, VariableRead> variableReadSource_;
     std::unordered_set<node_handle_t> knownCellUsers_;
     std::unordered_set<node_handle_t> escapingVariables_;
+    // What each direct call hands on beside its return value (callValueTypeOf): the mask of the
+    // callee's capture table that says which variables it writes, and, per call, the variable
+    // each version is of and the access node of each part made so far. Part 0 is the return
+    // value, which only a call that writes something has; `parts[0]` is null for one that does
+    // not, and such a call's value stays the node itself.
+    std::unordered_map<node_handle_t, uint32_t> callWriteMasks_;
+    struct CallValue {
+        std::vector<node_handle_t> variables;
+        std::vector<node_handle_t> parts;
+        bool hasReturn = true;
+    };
+    std::unordered_map<node_handle_t, CallValue> callValues_;
     void collapseNonEscapingVariableReads();
     // What the compiler knows about a node's value beyond static data, for operators whose
     // result type follows constant arguments (StaticArg). `typeFoldedValues_`: the value of an
@@ -1963,6 +1979,10 @@ class Builder {
     // CALL of its value when its value was made before).
     node_handle_t createFuncDataNode(
         const compile_graph_ptr_t &graph, bool callableAsResult, bool allowParameterization);
+    // The FUNC node of a direct call of `callee` in the current graph: its type is the value
+    // the call hands on (callValueTypeOf, from the mask of captured variables the callee
+    // writes), which is also what the run time packs it from (GCFuncRef::reserved).
+    node_handle_t addCallNodeOf(const compile_graph_ptr_t &callee);
     // The value node of a visited expression: a node as is, or a function literal (a graph) as
     // its callable function value.
     node_handle_t valueNodeOf(const std::any &res);
@@ -2132,6 +2152,24 @@ class Builder {
     // The captured variables of `callee` as nodes of the current graph, which becomes a
     // caller of `callee`.
     std::vector<CapturedUse> capturedUsesOf(const compile_graph_ptr_t &callee);
+    // What a direct call of `callee` hands on: the callee's return value, then the new version
+    // of each captured variable the callee writes, in the callee's capture order. `written` is
+    // the mask of that table: bit k of the callee's k-th capture, which is where
+    // linkCaptureSites puts its With input, after the declared `with` arguments. A call that
+    // writes nothing hands on its return value alone, exactly as before; a `void` callee that
+    // writes exactly one variable hands on that variable's version itself, not a tuple of one
+    // element. The mask is recorded in the FUNC node's payload (GCFuncRef::reserved), which is
+    // what the run time packs the tuple from, so the two are decided together.
+    uint32_t captureWriteMaskOf(const compile_graph_ptr_t &callee) const;
+    camel::core::type::Type *callValueTypeOf(
+        const compile_graph_ptr_t &callee, uint32_t written) const;
+    // The access node of part `part` of the value a call hands on: part 0 is the callee's
+    // return value, part k the version of the k-th variable the call writes (CallValue).
+    node_handle_t callValuePartOf(node_handle_t call, uint32_t part);
+    // The node a read of `variable` takes its value from: the value the last write produced, or
+    // the access node of the part of a call that wrote it; nullptr when the write produced no
+    // value of its own, and the read is ordered after the write with a control input instead.
+    node_handle_t valueVersionOf(node_handle_t variable);
     // Reports the writes of captured variables that turned out to be real.
     void reportIgnoredCapturedWrites();
     // Whether running `node` of `graph` is an effect: an operator that is neither pure nor

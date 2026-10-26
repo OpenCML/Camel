@@ -325,7 +325,10 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         currFrame                = lastFrame;
 
         Bytecode &lbc = bytecodes_[pc];
-        fastFrameSetSlot(currFrame, lbc.result, result);
+        fastFrameSetSlot(
+            currFrame,
+            lbc.result,
+            camel::passes::sched::fastvm::funcValueForCall(&lbc, currFrame, result));
 
         NEXT();
     }
@@ -604,7 +607,10 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             (void)pop();
             JIT_RESTORE_PC_BC();
             if (bc->result != 0) {
-                currFrame->set(bc->result, result);
+                fastFrameSetSlot(
+                    currFrame,
+                    bc->result,
+                    camel::passes::sched::fastvm::funcValueForCall(bc, currFrame, result));
             }
             NEXT();
         }
