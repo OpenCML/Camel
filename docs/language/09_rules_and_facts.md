@@ -317,7 +317,7 @@ rule reads_constant(x: int, y: int) when capped<y>(x) > 0 { x * y => x }
 error[SemanticDiag::FactArgumentNotConstant]: The argument 'cap' of a fact is not a compile-time constant of type 'int'.
 ```
 
-**`with` 参数的可见范围与实例化通道。** `with` 参数对事实的**所有**片段可见：子句（`case`、`join`/`meet`/`widen`/`narrow`）与别处读到的都是同一组实参——生成出来的这些函数各自声明同样的 `with` 参数，与函数的 `with` 参数是同一个机制。事实与规则**共用同一条实例化通道**：实例的键 = 类型实参 + `with` 实参，所以带类型参数的事实头（`fact range::<T>(v: T): Interval`）与带 `with` 参数的事实写在一条声明里也是同一件事，与 [9.3](#93-类型参数与-with-参数) 里规则的目标形态一致。
+**`with` 参数的可见范围与实例化通道。** `with` 参数对事实的**所有**片段可见：子句（`case`、`join`/`meet`/`widen`/`narrow`）与别处读到的都是同一组实参——生成出来的这些函数各自声明同样的 `with` 参数，与函数的 `with` 参数是同一个机制。查询写出别的实参就是另一项事实：引擎按"事实 + 实参"分开计算与缓存。事实与规则**共用同一条实例化通道**：实例的键 = 类型实参 + `with` 实参。带类型参数的事实头（`fact range::<T>(v: T): Interval`）语法读得下，编译还没有（[9.8](#98-尚未实现的形态)）。
 
 ## 9.7 检查、解释与"哪个规则开火了"
 
@@ -407,8 +407,7 @@ camel fired.cml fired::simplify std::gir
 
 | 形态 | 今天 |
 |---|---|
-| 规则的右边读 `with` 参数 | `SemanticDiag::RuleWithParameterOnASide`，消息里写着"not implemented yet" |
-| 类型参数与 `with` 参数同时写在一条规则上 | `SemanticDiag::RuleWithParameterGenericHead` |
+| 带类型参数的事实头（`fact range::<T>(v: T): Interval`） | `SemanticDiag::ConstructNotSupported`：引擎拿到的是构成这项事实的那些函数，带类型参数的函数不是一个值它拿得住 |
 | 命令行 `std::opt rules=[law::negate]`，源码 `f->std::opt<rules: [negate]>` | `SemanticDiag::ParamArgumentUnknown`；源码里的 `std::opt` 这个名字今天还解析不到 |
 
 ## 相关文档

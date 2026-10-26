@@ -317,7 +317,7 @@ rule reads_constant(x: int, y: int) when capped<y>(x) > 0 { x * y => x }
 error[SemanticDiag::FactArgumentNotConstant]: The argument 'cap' of a fact is not a compile-time constant of type 'int'.
 ```
 
-**Where a `with` parameter is visible, and the instantiation channel.** A `with` parameter is visible to **every** part of the fact: the clauses (`case`, `join`/`meet`/`widen`/`narrow`) read the same arguments as everything else — the functions generated for them declare the same `with` parameters, which is the mechanism a function's `with` parameters use. Facts and rules **share one instantiation channel**: the key of an instance is the type arguments plus the `with` arguments, so a fact head with type parameters (`fact range::<T>(v: T): Interval`) and a fact with `with` parameters on one declaration are the same thing, exactly as the target form of a rule in [9.3](#93-type-parameters-and-with-parameters).
+**Where a `with` parameter is visible, and the instantiation channel.** A `with` parameter is visible to **every** part of the fact: the clauses (`case`, `join`/`meet`/`widen`/`narrow`) read the same arguments as everything else — the functions generated for them declare the same `with` parameters, which is the mechanism a function's `with` parameters use. A query written with other arguments is another fact: the engine computes and caches one fact per argument. Facts and rules **share one instantiation channel**: the key of an instance is the type arguments plus the `with` arguments. A fact head with type parameters (`fact range::<T>(v: T): Interval`) is read by the grammar and not compiled yet ([9.8](#98-forms-that-are-not-implemented)).
 
 ## 9.7 Checking, explaining, and "which rule fired"
 
@@ -410,8 +410,7 @@ These forms are all ruled ([rules language v2](../../design/rewrite/v2.cn.md), s
 
 | Form | Today |
 |---|---|
-| the right side of a rule reading a `with` parameter | `SemanticDiag::RuleWithParameterOnASide`, whose message says "not implemented yet" |
-| type parameters and `with` parameters on one rule | `SemanticDiag::RuleWithParameterGenericHead` |
+| a fact head with type parameters (`fact range::<T>(v: T): Interval`) | `SemanticDiag::ConstructNotSupported`: the engine is given the functions the fact is made of, and a function with type parameters is not a value it can hold |
 | `std::opt rules=[law::negate]` on the command line, `f->std::opt<rules: [negate]>` in source | `SemanticDiag::ParamArgumentUnknown`; the name `std::opt` does not resolve in source today either |
 
 ## Related documents
