@@ -1,7 +1,7 @@
 error[RuntimeDiag::InvalidPassParameter]: Invalid pass specification 'unparsable_pass::run': its library 'unparsable_pass' does not compile.
 note: SyntaxDiag::MissingClosingDelimiter: Expected ')' before 'return', to close the '('.
-  --> <ROOT>/test/cases/modules/graph_pass/unparsable_pass.cml:8:5
+  --> <ROOT>/test/cases/modules/graph_pass/unparsable_pass.cml:7:5
    |
- 8 |     return p
+ 7 |     return p
    |     ------
 help: The module 'unparsable_pass' itself did not load, so none of its passes can be named: its library 'unparsable_pass' does not compile. Nothing on this command line is a parameter problem. Fix what the loader reported about the module first — its file, its build, or the runtime libraries it needs — and run the pipeline again.

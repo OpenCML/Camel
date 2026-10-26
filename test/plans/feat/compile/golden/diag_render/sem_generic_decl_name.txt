@@ -1,7 +1,7 @@
 error[SemanticDiag::UnresolvedReference]: Unresolved reference: 'undefined_in_body'.
-  --> <ROOT>/test/cases/compile/diag_render/sem_generic_decl_name.cml:4:17
+  --> <ROOT>/test/cases/compile/diag_render/sem_generic_decl_name.cml:2:17
    |
- 4 |     let n = x + undefined_in_body
+ 2 |     let n = x + undefined_in_body
    |                 ^^^^^^^^^^^^^^^^^
 help: Make sure the name is declared and in scope.
 

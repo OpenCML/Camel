@@ -1,11 +1,11 @@
 error[RuntimeDiag::UnhandledError]: An error value reached the exit of 'main' without being handled: JsonParseError: the text is not valid JSON (parse error at line 1, column 2: syntax error while parsing object key - invalid literal; last read: '{b'; expected string literal); the text begins: '{bad json'.
-  --> <ROOT>/test/cases/compile/diag_render/runtime_json.cml:7:1
+  --> <ROOT>/test/cases/compile/diag_render/runtime_json.cml:5:1
    |
- 7 | func main(): Json! sync {
+ 5 | func main(): Json! sync {
    | ^^^^^^^^^^^^^^^^^^^^^^^^^
- 8 |     return decode('{bad json')
+ 6 |     return decode('{bad json')
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
- 9 | }
+ 7 | }
    | ^
 note: the error was made by <json::decode>, which records no position
 help: A value of type T! that has failed must be opened before the program ends: give a replacement with '!!', pass it on with '?->', or take it apart with 'match ... case error e'. The position is where the error was made (the definition of 'main' when the error records none).

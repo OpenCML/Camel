@@ -1,6 +1,6 @@
 error[RuntimeDiag::TimeFormatFailed]: 'time.strptime' failed: the text 'not a date' does not match the format '%Y-%m-%d'.
-  --> <ROOT>/test/cases/compile/diag_render/runtime_time_format.cml:6:13
+  --> <ROOT>/test/cases/compile/diag_render/runtime_time_format.cml:4:13
    |
- 6 |     println(strptime('not a date', '%Y-%m-%d'))
+ 4 |     println(strptime('not a date', '%Y-%m-%d'))
    |             ^^^^^^^^
 help: Check the format string against the strftime conversion specifiers (%Y, %m, %d, %H, %M, %S, ...).

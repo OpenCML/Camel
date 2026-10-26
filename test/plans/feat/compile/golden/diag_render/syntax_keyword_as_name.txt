@@ -1,14 +1,14 @@
 error[SyntaxDiag::KeywordAsIdentifier]: 'func' is a keyword and cannot be used as a name.
-  --> <ROOT>/test/cases/compile/diag_render/syntax_keyword_as_name.cml:4:9
+  --> <ROOT>/test/cases/compile/diag_render/syntax_keyword_as_name.cml:2:9
    |
- 4 |     let func = 1
+ 2 |     let func = 1
    |         ^^^^
 help: Choose another name, for example 'func_'.
 
 error[SyntaxDiag::UnexpectedToken]: Unexpected 'func'; expected an expression.
-  --> <ROOT>/test/cases/compile/diag_render/syntax_keyword_as_name.cml:5:12
+  --> <ROOT>/test/cases/compile/diag_render/syntax_keyword_as_name.cml:3:12
    |
- 5 |     return func
+ 3 |     return func
    |            ^^^^
 help: The token fits nothing that can stand where it is. What the parser expected instead follows the semicolon above: a list whose items have no ',' between them, a bracket that is not closed and a reserved word where a name belongs are the usual causes.
 

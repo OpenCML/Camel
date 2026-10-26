@@ -1,12 +1,12 @@
 error[LexicalDiag::UnclosedStringLiteral]: This string literal is not closed.
-  --> <ROOT>/test/cases/compile/diag_render/lexical_unclosed_string.cml:4:13
+  --> <ROOT>/test/cases/compile/diag_render/lexical_unclosed_string.cml:2:13
    |
- 4 |     println('hello)
+ 2 |     println('hello)
    |             ^
 help: A string ends with the quote character it starts with ('). Add the closing quote; to put a quote character inside the string, write it with a backslash.
 help: close the string at the end of the line
    |
- 4 |     println('hello)'
+ 2 |     println('hello)'
    |                    +
 
 camel: 1 error
