@@ -364,3 +364,49 @@ expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
 expect_output_contains = ["the scalar operand has type 'float', but the tensor's element type is 'f32'", "no implicit conversion between numeric types"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+[[tests]]
+name = "mixed_width_known_shapes"
+desc = "Two tensor operands of different element types are refused: the element type of each is the one its type carries, so `float[2] * f32[2]` matches no arm rather than being widened into one, and the report names the conversion to write (design principles 5.1)."
+kind = "negative"
+case = "../../../../cases/modules/tensor/dtype/mixed_width_known_shapes.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["Invalid call to '__mul__'", "(float[2], f32[2])", "the two tensor operands have different element types ('float' and 'f32')", "cast(value, \"float\") or cast(value, \"f32\")"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "mixed_width_open_shapes"
+desc = "The same refusal with open shapes: `float[..] * f32[..]` is refused for its element types whether or not the extents are known, since a shape no fact pins down is not a number and not an open element type."
+kind = "negative"
+case = "../../../../cases/modules/tensor/dtype/mixed_width_open_shapes.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["(float[..], f32[..])", "the two tensor operands have different element types ('float' and 'f32')"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "mixed_width_scalar_value"
+desc = "A scalar whose type is its own is refused beside a tensor of another element type, and a conversion is such a value: `f32(2)` beside an f64 array is the mixed call. Only a literal takes its element type from the context it is written in."
+kind = "negative"
+case = "../../../../cases/modules/tensor/dtype/mixed_width_scalar_value.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["the scalar operand has type 'f32', but the tensor's element type is 'float'", "write the conversion, float(value)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "one_width_arithmetic"
+desc = "The positive control of the mixed refusal: `f32 * f32` and `f64 * f64` compute as before, and a literal takes the element type of the context it is written in, so `x * 2.0` beside a tensor of either width needs no conversion."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/dtype/one_width_arithmetic.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout = "17.0\n17.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
