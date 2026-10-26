@@ -34,10 +34,10 @@ let x = load_npy::<f32>(get_env('X') ?? '')
     save_npy(y, get_env('Y') ?? '')
     let out = get_env('ONNX_OUT') ?? ''
     return if out == '' then 0 else if isGate then sync {
-        export_model(gate, x, out)
+        let _ = export_model<out: out>(gate, x)
         return 0
     } else sync {
-        export_model((t: f32[..]): f32[..] => forward(t, w), x, out, [0])
+        let _ = export_model<out: out, dynamic_axes: [0]>((t: f32[..]): f32[..] => forward(t, w), x)
         return 0
     }
 }

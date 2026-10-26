@@ -34,11 +34,10 @@ func fold2(v: f32[..], w: f32[..]): f32[..] {
 func main(): int sync {
     let w = reshape([0.5, -0.25, 0.1, 0.3] as f32[], [2, 2])
     let x = reshape([1.0, 2.0, 0.5, -1.0] as f32[], [2, 2])
-    export_model(
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(
         (x: f32[..], w: f32[..]): (f32[..], f32[..], f32[..]) =>
             (pile(x), fold(0, int(float(sum(x * x)) * 0.5), x, w), fold2(x, w)),
-        (x, w),
-        get_env('ONNX_OUT') ?? ''
+        (x, w)
     )
     println('exported')
     return 0

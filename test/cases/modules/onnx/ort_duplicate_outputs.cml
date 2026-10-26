@@ -39,10 +39,10 @@ func computed(h: f32[..]): (float, float) {
 
 func main(): int sync {
     let ex = reshape([1.0, -2.0, 0.5, 1.5] as f32[], [2, 2])
-    export_model((x: f32[..]): (f32[..], f32[..]) => twice(x), ex, 'twice.onnx')
-    export_model((x: f32[..]): (Run, Run) => repeated(x, 2), ex, 'repeated.onnx')
-    export_model((x: f32[..]): (float, float) => constants(x), ex, 'constants.onnx')
-    export_model((x: f32[..]): (float, float) => computed(x), ex, 'computed.onnx')
+    let _ = export_model<out: 'twice.onnx'>((x: f32[..]): (f32[..], f32[..]) => twice(x), ex)
+    let _ = export_model<out: 'repeated.onnx'>((x: f32[..]): (Run, Run) => repeated(x, 2), ex)
+    let _ = export_model<out: 'constants.onnx'>((x: f32[..]): (float, float) => constants(x), ex)
+    let _ = export_model<out: 'computed.onnx'>((x: f32[..]): (float, float) => computed(x), ex)
     println('exported')
     return 0
 }

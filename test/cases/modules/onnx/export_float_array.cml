@@ -15,7 +15,7 @@ func pack(x: f32[..]): float[..] {
 func main(): int sync {
     let x = reshape([1.0, -2.0, 3.0, 4.0] as f32[], [2, 2])
     println(pack(x))
-    export_model((x: f32[..]): float[..] => pack(x), x, get_env('ONNX_OUT') ?? '')
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((x: f32[..]): float[..] => pack(x), x)
     println('exported')
     return 0
 }

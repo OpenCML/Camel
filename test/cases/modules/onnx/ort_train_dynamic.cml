@@ -38,8 +38,12 @@ func main(): int sync {
     'CAMEL loss={}'->format<vg.0>->println
     save_params(vg.1, get_env('DUMP') ?? '')
     let out = get_env('ONNX_OUT') ?? ''
-    if out != '' then
-        if (get_env('DYN') ?? '') == '1' then export_model(step, (m, x), out, [0])
-        else export_model(step, (m, x), out)
+    if out != '' then {
+        if (get_env('DYN') ?? '') == '1' then {
+            let _ = export_model<out: out, dynamic_axes: [0]>(step, (m, x))
+        } else {
+            let _ = export_model<out: out>(step, (m, x))
+        }
+    }
     return 0
 }

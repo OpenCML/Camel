@@ -16,10 +16,8 @@ func forward(x: float[..]): float[..] sync {
     return reshape(parts, [len(parts)])
 }
 
-func main(): int sync {
+func main(): void! sync {
     let x = reshape([1.0, -2.0, 3.0, 4.0], [2, 2])
     println(forward(x))
-    export_model((x: float[..]): float[..] => forward(x), x, get_env('ONNX_OUT') ?? '')
-    println('exported')
-    return 0
+    export_model<out: get_env('ONNX_OUT') ?? ''>((x: float[..]): float[..] => forward(x), x)
 }

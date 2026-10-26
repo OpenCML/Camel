@@ -38,6 +38,6 @@ func model(x: f32[..]): f32[..] {
 func main(): int sync {
     let xs: f32[] = [1.0, 2.0, 3.0, 4.0]
     let x = reshape(xs, [2, 2])
-    export_model(model, x, 'tmp/test/onnx/refusal_unended_unrolling.onnx')
+    let _ = export_model<out: 'tmp/test/onnx/refusal_unended_unrolling.onnx'>(model, x)
     return 0
 }
