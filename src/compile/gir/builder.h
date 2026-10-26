@@ -721,6 +721,10 @@ class Builder {
         node_handle_t node;
         GCT::node_ptr_t expr               = nullptr;
         std::optional<std::string> name;
+        /// A position a call leaves out between arguments it names (`<out: p, target: 'cpu'>`
+        /// with a defaulted parameter between them): it has no node, and the declaration the
+        /// call turns out to mean gives it its default (completeWithFor).
+        bool left = false;
     };
 
     using node_modifier_map_t = std::unordered_map<draft_node_ref_t, draft_node_ref_t>;
@@ -909,6 +913,16 @@ class Builder {
     void bindArguments(
         std::vector<Argument> &inputs, node_handle_t callee, const GCT::node_ptr_t &call,
         FunctionType *signature, bool isWith);
+    /// The `with` arguments of a call completed for one declaration of a set of overloads: the
+    /// ones written, and the default the declaration registers for every parameter the call left
+    /// out, at the end or between named ones. False when the declaration takes fewer parameters
+    /// than the call writes, or has no default for a position the call leaves out: the declaration
+    /// is then not one the call can mean (design principles 4.4: a parameter with a default may be
+    /// left out). `types` is rebuilt from the completed arguments. `owner` is the declaration's
+    /// graph or template, `uri` the name of a native one.
+    bool completeWithFor(
+        const void *owner, const std::string &uri, FunctionType *signature,
+        std::vector<Argument> &inputs, camel::core::type::type_vec_t &types);
     /// Binds the named arguments of a call whose callee is several declarations, where no single
     /// signature answers for which parameter a name is (design principles 4.4). The parameter at a
     /// position carries the same name in every declaration of the set, so a name the call writes

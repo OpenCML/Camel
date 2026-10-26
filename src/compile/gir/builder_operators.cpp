@@ -2534,6 +2534,14 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             withInputTypes,
             normInputTypes,
             gct);
+        if (chosenTemplate != nullptr &&
+            (withInputs.size() < chosenTemplate->funcType->withTypesCount() ||
+             std::any_of(withInputs.begin(), withInputs.end(), [](const Argument &a) {
+                 return a.left;
+             }))) {
+            completeWithFor(
+                chosenTemplate.get(), "", chosenTemplate->funcType, withInputs, withInputTypes);
+        }
         targetGraph = resolveGenericCall(
             chosenTemplate,
             withInputs,
@@ -2626,6 +2634,20 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
             const std::string argumentTypes =
                 strutil::join(argumentTypeTexts, ", ", [](const std::string &s) { return s; });
+            // A declaration takes every count of `with` arguments from its required ones to its
+            // full arity (design principles 4.4): the call is completed for each declaration with
+            // the defaults that declaration registers, and the arguments of the one chosen are
+            // the completed ones.
+            const std::vector<Argument> writtenWith = withInputs;
+            const type_vec_t writtenWithTypes       = withInputTypes;
+            std::unordered_map<const void *, std::pair<std::vector<Argument>, type_vec_t>>
+                completedWith;
+            const auto leavesOut = [&](FunctionType *funcType) {
+                return writtenWith.size() < funcType->withTypesCount() ||
+                       std::any_of(writtenWith.begin(), writtenWith.end(), [](const Argument &a) {
+                           return a.left;
+                       });
+            };
             for (const bool entering : {false, true}) {
                 if (targetGraph || chosenDecorated) {
                     break;
@@ -2633,9 +2655,16 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 std::vector<compile_graph_ptr_t> fitted;
                 for (const auto &g : *graphs) {
                     FunctionType *funcType = signatureOf(g);
+                    withInputs             = writtenWith;
+                    withInputTypes         = writtenWithTypes;
+                    if (leavesOut(funcType) &&
+                        !completeWithFor(g.get(), "", funcType, withInputs, withInputTypes)) {
+                        continue;
+                    }
                     if (!accepts(funcType, entering)) {
                         continue;
                     }
+                    completedWith[g.get()] = {withInputs, withInputTypes};
                     // A function of the top level not built yet is built now: its return type
                     // may come from its body, its decorated form exists once it is built (step
                     // two of loading builds on demand).
@@ -2700,6 +2729,15 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     throw BuildAbortException();
                 }
                 targetGraph = g;
+            }
+            withInputs     = writtenWith;
+            withInputTypes = writtenWithTypes;
+            if (targetGraph) {
+                if (const auto done = completedWith.find(targetGraph.get());
+                    done != completedWith.end()) {
+                    withInputs     = done->second.first;
+                    withInputTypes = done->second.second;
+                }
             }
             if (!targetGraph && !chosenDecorated) {
                 yieldToPipe(gct);
