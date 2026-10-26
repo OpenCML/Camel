@@ -3883,21 +3883,24 @@ delete; a file or a symbolic link is an error too.
 
 ## `io`: terminal input
 
-The terminal: what it has waiting to be read, the keys themselves, and raw mode. The standard
-streams and `print`/`println`/`input`/`eprintln` are the prelude's; `Stream` and a `stdin` value
-are later work.
+The terminal as a keyboard: what has been typed and not yet read, the keys themselves, and raw
+mode. Reading is a use of the resource `stdin`, so reads and the changes of mode keep their
+written order. Writing to the terminal and reading a whole line are the prelude's
+(`print`, `println`, `eprintln`, `input`).
 
 #### `set_terminal_raw_mode`
 
 ```camel
-set_terminal_raw_mode: (enabled: bool) => void
+set_terminal_raw_mode: (enabled: bool) => void!
 ```
 
-Switches the terminal to raw mode (keys arrive one by one, unechoed) or back.
+Switches the terminal to raw mode (keys arrive one by one, unechoed) or back. Turning raw mode
+off always succeeds. Raw mode is left again when the program ends.
 
 - With effects: changes the terminal.
-- Failure: fault `RuntimeError` when the terminal refuses.
-- Example: `set_terminal_raw_mode(true)`
+- Failure: error value `NotATerminal` when raw mode is asked for and standard input is not a terminal (a pipe, a file); error value `IOError` when the terminal refuses.
+- Example (a fragment, not compiled): `set_terminal_raw_mode(true)`
+- Why it is not compiled: changes the terminal when it runs, and the example only has the `void!` result to show
 
 #### `has_input`
 
@@ -3910,27 +3913,29 @@ Whether a key press is waiting to be read.
 - With effects: reads the terminal.
 - Example: `has_input()` gives `true or false`
 
-#### `get_char`
-
-```camel
-get_char: () => string
-```
-
-One character of pending terminal input.
-
-- With effects: reads the terminal.
-- Example: `get_char()` gives `'w'`
-
 #### `get_chars`
 
 ```camel
 get_chars: (max: int) => string
 ```
 
-Up to max characters of pending terminal input.
+Up to max characters of the input that is waiting, as text; the empty text when none is. A
+character is read whole, so max counts code points, not bytes.
 
 - With effects: reads the terminal.
+- Failure: fault `InvalidArgument` when max is negative.
 - Example: `get_chars(3)` gives `at most three characters`
+
+#### `get_char`
+
+```camel
+get_char: () => string?
+```
+
+The next character of the input that is waiting; null when none is.
+
+- With effects: not pure.
+- Example: `get_char() ?? ''` gives `'w'`
 
 #### `clear_input_buffer`
 
@@ -3938,7 +3943,7 @@ Up to max characters of pending terminal input.
 clear_input_buffer: () => void
 ```
 
-Discards the terminal input that is waiting.
+Discards the input that is waiting.
 
 - With effects: reads the terminal.
 - Example: `clear_input_buffer()`

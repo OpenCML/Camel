@@ -536,10 +536,10 @@ remove_dir: (path: string) => void!
 **`io`** — import { ... } from io — 5 name(s)
 
 ```text
-set_terminal_raw_mode: (enabled: bool) => void
+set_terminal_raw_mode: (enabled: bool) => void!
 has_input: () => bool
-get_char: () => string
 get_chars: (max: int) => string
+get_char: () => string?
 clear_input_buffer: () => void
 ```
 

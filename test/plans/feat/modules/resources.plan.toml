@@ -288,7 +288,6 @@ const expect = {
   ':io/eprintln': 'write ambient stderr; external',
   ':io/input': 'rmw ambient stdin; external',
   'io:has_input': 'read ambient stdin; external',
-  'io:get_char': 'rmw ambient stdin; external',
   'io:set_terminal_raw_mode': 'write ambient stdin; external',
   'fs:read_text': 'read ambient fs; external',
   'fs:write_text': 'rmw ambient fs; external',

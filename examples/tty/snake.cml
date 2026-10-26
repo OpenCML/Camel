@@ -58,7 +58,7 @@ func game_loop(snake: Point[], dir: string, steps: int): void sync {
         sleep(0.3)  // Delay for visual effect
         // Recursive call for next frame
         let d = if has_input() then sync {
-            let ch = get_char()
+            let ch = get_char() ?? ''
             clear_input_buffer()
             return if ['w', 'a', 's', 'd']->contains<ch> then ch else dir
         } else dir
@@ -68,7 +68,7 @@ func game_loop(snake: Point[], dir: string, steps: int): void sync {
 
 // Entry point
 func main(): int sync {
-    set_terminal_raw_mode(true)
+    let _ = set_terminal_raw_mode(true)
     let initial_snake = [{ x: 5, y: 5 }, { x: 4, y: 5 }, { x: 3, y: 5 }]
     game_loop(initial_snake, 'w', 0)
     return 0

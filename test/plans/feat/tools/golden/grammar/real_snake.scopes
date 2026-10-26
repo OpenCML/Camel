@@ -435,13 +435,16 @@
 #                               ^^^^ meta.block.camel meta.block.camel keyword.control.conditional.camel
 #                                    ^^^^ meta.block.camel meta.block.camel storage.modifier.sync.camel
 #                                         ^ meta.block.camel meta.block.camel meta.block.camel punctuation.section.block.begin.camel
->            let ch = get_char()
+>            let ch = get_char() ?? ''
 #            ^^^ meta.block.camel meta.block.camel meta.block.camel meta.declaration.let.camel storage.type.let.camel
 #                ^^ meta.block.camel meta.block.camel meta.block.camel meta.declaration.let.camel variable.other.constant.camel
 #                   ^ meta.block.camel meta.block.camel meta.block.camel keyword.operator.assignment.camel
 #                     ^^^^^^^^ meta.block.camel meta.block.camel meta.block.camel entity.name.function.call.camel
 #                             ^ meta.block.camel meta.block.camel meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
 #                              ^ meta.block.camel meta.block.camel meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+#                                ^^ meta.block.camel meta.block.camel meta.block.camel keyword.operator.fallback.camel
+#                                   ^ meta.block.camel meta.block.camel meta.block.camel string.quoted.single.camel punctuation.definition.string.begin.camel
+#                                    ^ meta.block.camel meta.block.camel meta.block.camel string.quoted.single.camel punctuation.definition.string.end.camel
 >            clear_input_buffer()
 #            ^^^^^^^^^^^^^^^^^^ meta.block.camel meta.block.camel meta.block.camel entity.name.function.call.camel
 #                              ^ meta.block.camel meta.block.camel meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
@@ -500,11 +503,14 @@
 #             ^^^ support.type.primitive.camel
 #                 ^^^^ storage.modifier.sync.camel
 #                      ^ meta.block.camel punctuation.section.block.begin.camel
->    set_terminal_raw_mode(true)
-#    ^^^^^^^^^^^^^^^^^^^^^ meta.block.camel entity.name.function.call.camel
-#                         ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
-#                          ^^^^ meta.block.camel meta.parens.camel constant.language.boolean.camel
-#                              ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+>    let _ = set_terminal_raw_mode(true)
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#          ^ meta.block.camel keyword.operator.assignment.camel
+#            ^^^^^^^^^^^^^^^^^^^^^ meta.block.camel entity.name.function.call.camel
+#                                 ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                                  ^^^^ meta.block.camel meta.parens.camel constant.language.boolean.camel
+#                                      ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
 >    let initial_snake = [{ x: 5, y: 5 }, { x: 4, y: 5 }, { x: 3, y: 5 }]
 #    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
 #        ^^^^^^^^^^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
