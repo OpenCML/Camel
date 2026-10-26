@@ -1552,3 +1552,15 @@ Linux 包在 manylinux 里构建，用 auditwheel 修正标签，并在构建时
 4. **拒绝变成崩溃**：运行时特化的不动点保护对一个优化抛 `std::runtime_error`（`draft_inline.cpp:1038-1056`），改成不再特化、照常执行。`isPassDeclaration` 靠匹配 `when` 的文本来判断一个声明是不是遍（`builder.cpp:562`），用 `when is_function::<F>()` 写的普通原生算子会被静默丢掉；按声明的结构判断，不读文本。
 5. **缓存的键**：编译期实例的键随调用方有没有传 `outerBindings` 而不同，嵌套的局部泛型会出重复实例；运行时特化的键里有 GC 指针的原始位，可能漏命中或错命中，换成类型的规范 id。`onCallCycle` 每个调用节点都把被调者的整张可达图走一遍，编译时间是平方级，改成一次计算、按图缓存。
 6. `bindTypeVars` 与 `unifyTypeVars` 几乎是同一份代码，其中一个还会修改已有的绑定，合成一个；`instantiateForCall`（413 行）、`instantiateGeneric`（347 行）按步骤拆开；讲历史的注释改成只写规则。
+
+## `str` 接入完成，以及接入暴露的工具问题（施工方任务）
+
+`str` 已按定稿接入（`d527ee44f`），相关计划全绿。草稿本身只改了一处：`repeat` 也带上 `#impl` 核函数，因为纯 Camel 的函数体会先分配 count 个元素的数组，超长时在内存耗尽之前报不出故障；核函数先检查长度，结果和函数体相同。接入其余模块时请注意下面几件事：
+
+1. **"资源在签名里写、不写 `@pure` 注释"要先迁工具**（标准库约定已写，但工具还按旧规则）：
+   - 现在没有函数体的原生声明，资源以 C++ 的 `OperatorTable::declare` 为准，`.cml` 里写的子句必须和它一致（`NativeResourceMismatch`）；`--verify-ops` 又要求每个原生声明写 `@pure`/`@effect` 注释。按"一个事实只写一处"，改成以声明为唯一来源：签名里写 `pure`/`uses`，C++ 的纯度由声明推出，`declare` 里的纯度表删掉；`--verify-ops` 读签名里的子句，`@pure`/`@effect` 注释的读法删掉，各模块的注释随之删掉。这一步做完之前，原生声明照旧写 `@pure`，`str` 里的四个就是这样。
+   - `camel inspect --ops` 只列导出的算子，模块私有的原生核函数（`str` 的 `split_kernel` 等）没被列出，纯度核对就漏了它们。私有的也列出来，标明私有。
+2. **工具已经跟上的部分**（随 `str` 一起改了）：参考页脚本认识 `#impl`；`--verify-ops` 只核对没有函数体的声明，不管模块是用哪种语言写的；`stdlib-declarations.mjs` 用文件名当模块名，不再要求 `module` 行。
+3. **大小写转换**：`to_upper`、`to_lower` 的文档按完整 Unicode 写，实现还只转 ASCII 字母。补上 Unicode 的大小写表（C++）。在此之前，这两个函数的文档例子只用 ASCII。
+4. **草稿文件是 CRLF 换行**，换进 `stdlib/` 时转成 LF。
+5. 编译输出里有几处未使用变量的警告：`enum.cpp:140`、`builder_generics.cpp:801`、`graphviz.cpp:711/748`。清掉。
