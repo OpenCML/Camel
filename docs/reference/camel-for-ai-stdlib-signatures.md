@@ -268,13 +268,15 @@ seed: (seed: int) => void
 seed: (seed: i32) => void
 ```
 
-**`types`** — import { ... } from types — 9 name(s)
+**`types`** — import { ... } from types — 11 name(s)
 
 ```text
+is_same: () => bool
 is_integer: () => bool
 is_float: () => bool
 is_complex: () => bool
 is_numeric: () => bool
+is_real: () => bool
 is_ordered: () => bool
 is_function: () => bool
 is_string: () => bool
