@@ -157,7 +157,7 @@ expect_output_contains = ["name=SemanticDiag::AmbiguousCall", "err_ambiguous.cml
 
 [[tests]]
 name = "partial_application.err_entering_ambiguous"
-desc = "A context literal that enters two parameter types does not choose either: `scale<2>` with `with <k: f32>` and `with <k: float>` is refused with the same ambiguity diagnostic and candidate list as an ordinary call (design principles 5.1, H27e)."
+desc = "A context literal that enters two parameter types does not choose either: `scale<2>` with `with <k: f32>` and `with <k: float>` is refused with the same ambiguity diagnostic and candidate list as an ordinary call (design principles 5.1)."
 kind = "negative"
 case = "../../../cases/consistency/partial_application/err_entering_ambiguous.cml"
 args = ["-E", "short", "${case}"]

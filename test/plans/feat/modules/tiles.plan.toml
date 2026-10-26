@@ -822,7 +822,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "literal.tensor_element_type_gpu_scope_compiles"
-desc = "The `#gpu` scopes of the same program compile: no device program is refused, `tiles::compile` accepts every tagged function as a device unit, and the host still computes the values (no CUDA device here). Before H371 the run stopped at `#gpu` scope 'scale' with `operator 'tensor:multiply' has no device program`."
+desc = "The `#gpu` scopes of the same program compile: no device program is refused, `tiles::compile` accepts every tagged function as a device unit, and the host still computes the values (no CUDA device here). The run used to stop at `#gpu` scope 'scale' with `operator 'tensor:multiply' has no device program`."
 kind = "behavior"
 case = "../../../cases/gpu/nofallback/scalar_literal.cml"
 args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]

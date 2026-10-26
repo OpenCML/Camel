@@ -7,7 +7,7 @@ A deliberate escape, and a positive test that the guard catches it.
 
 `std::gc::views_escape` reads a compact `(int, int)` element through the reused thread-local view
 cell and hands it to the store that keeps a reduce's accumulator (`storeReduceAccumulator`, the
-store the node VM's reduce operator calls). That is the H29 escape: the accumulator is read again
+store the node VM's reduce operator calls). That is the escape the guard catches: the accumulator is read again
 in a later round, so a view there names the element the round just visited.
 
 In a Debug build `CAMEL_ASSERT_NOT_VIEW` aborts with "A compact element view escaped into the

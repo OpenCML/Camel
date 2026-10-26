@@ -18,7 +18,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "frontend.ast_snapshot"
-desc = "Every case of the parse corpus (test/cases/parse) and every probe of the grammar's decisions (test/tools/parsecheck/probes.py) gives the AST, node for node with token ranges and origins, that was recorded when the parser was compared with the ANTLR parser it replaced. The snapshot is of the parser's tests, not of the repository: a .cml file under examples/, stdlib/, benchmarks/ or another plan's cases is checked by the plan that owns it (H188)."
+desc = "Every case of the parse corpus (test/cases/parse) and every probe of the grammar's decisions (test/tools/parsecheck/probes.py) gives the AST, node for node with token ranges and origins, that was recorded when the parser was compared with the ANTLR parser it replaced. The snapshot is of the parser's tests, not of the repository: a .cml file under examples/, stdlib/, benchmarks/ or another plan's cases is checked by the plan that owns it."
 kind = "behavior"
 tool = "python"
 case = "../../../tools/parsecheck/check.py"
@@ -57,7 +57,7 @@ timeout_ms = 300000
 
 [[tests]]
 name = "syntax.resource_group_open"
-desc = "`resource a =` with the text ending right after the `=`. The group of a resource is written in brackets and the bracket is asked for: it is reported where the text ends instead of the token that stands there being read as it. Read as it, the terminal token stood in the tree twice - once as the `[` and once as the end of the Program - and `camel-parsecheck fuzz` reported \"the leaves of the tree are not the tokens of the text\" (H417). This is that input, written down instead of drawn from a seed."
+desc = "`resource a =` with the text ending right after the `=`. The group of a resource is written in brackets and the bracket is asked for: it is reported where the text ends instead of the token that stands there being read as it. Read as it, the terminal token stood in the tree twice - once as the `[` and once as the end of the Program - and `camel-parsecheck fuzz` reported \"the leaves of the tree are not the tokens of the text\". This is that input, written down instead of drawn from a seed."
 kind = "negative"
 case = "../../../cases/parse/syntax/resource_group_open.cml"
 args = ["${case}"]
@@ -72,7 +72,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "syntax.tag_group_open"
-desc = "`tag finite =` with the text ending right after the `=`: the group of a tag is written in brackets like the group of a resource, and the bracket is reported rather than the token that stands there being read as it (H417)."
+desc = "`tag finite =` with the text ending right after the `=`: the group of a tag is written in brackets like the group of a resource, and the bracket is reported rather than the token that stands there being read as it."
 kind = "negative"
 case = "../../../cases/parse/syntax/tag_group_open.cml"
 args = ["${case}"]
@@ -87,7 +87,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "syntax.ident_list_open"
-desc = "`resource a = [b,` with the text ending after the comma: the name that the comma promises is asked for and reported, the list closes without one, and the `]` that is missing is named by the diagnostic that says which `[` it belongs to. The terminal token is left to the Program node, so the tree is lossless (H417)."
+desc = "`resource a = [b,` with the text ending after the comma: the name that the comma promises is asked for and reported, the list closes without one, and the `]` that is missing is named by the diagnostic that says which `[` it belongs to. The terminal token is left to the Program node, so the tree is lossless."
 kind = "negative"
 case = "../../../cases/parse/syntax/ident_list_open.cml"
 args = ["${case}"]
@@ -102,7 +102,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "syntax.type_params_open"
-desc = "`func f::<` with the text ending right after the `<`: the first type parameter's name is required and reported, and the declaration closes without one. Reading the token that stands there put the terminal token in the tree twice and made `camel-parsecheck fuzz` report \"the leaves of the tree are not the tokens of the text\" (H417)."
+desc = "`func f::<` with the text ending right after the `<`: the first type parameter's name is required and reported, and the declaration closes without one. Reading the token that stands there put the terminal token in the tree twice and made `camel-parsecheck fuzz` report \"the leaves of the tree are not the tokens of the text\"."
 kind = "negative"
 case = "../../../cases/parse/syntax/type_params_open.cml"
 args = ["${case}"]

@@ -1,0 +1,27 @@
+/**
+ * `n` is a hint at the width of the buffer the two streams of a `tee` share, and the executor
+ * grows that buffer rather than make a side wait -- but no buffer holds fewer than the one element
+ * being handed over, so a constant width below 1 is refused where it is written (design principles
+ * 5.4). The width here is 0, which is the one thing the hint cannot be; a width that is not
+ * constant is the executor's to clamp and grow, and never faults.
+ */
+module stream_tee_hint_not_positive
+
+import stream
+
+func count(n: int): int.. {
+    return step(n)
+}
+
+func step(n: int): () => (int, int..)? {
+    return () => if n > 0 then (n, step(n - 1)) else null
+}
+
+func total(s: int..): int {
+    return loop acc = 0 for x in s do acc + x
+}
+
+func main(): int sync {
+    let (left, right) = stream::tee(count(3), 0)
+    return total(left) + total(right)
+}

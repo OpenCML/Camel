@@ -18,7 +18,7 @@ set -e
 
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../../.." && pwd)
-cxx=${CXX:-/home/zjwei/camel-work/bin/clang++}
+cxx=${CXX:-$HOME/camel-work/bin/clang++}
 out=${OUT:-/tmp/gemm_probe/gemm_probe}
 
 mkdir -p "$(dirname "$out")"

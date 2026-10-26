@@ -50,7 +50,7 @@ Reading a value:
 - a number text is read by the language's whole-token grammar (`camel/utils/number_text.h`) at
   the width the parameter is declared with: an `i32` is an int32 and an `f32` a float all the
   way, so a value the declared type cannot hold is refused rather than read wider and narrowed
-  (H15g). Text that is not a number is `RuntimeDiag::InvalidNumberText`, and a number the
+ . Text that is not a number is `RuntimeDiag::InvalidNumberText`, and a number the
   declared type cannot hold (overflow or underflow) is `ConversionOutOfRange`, whose reason
   names the declared type and gives its range; a complex text is two such numbers read at the
   width of its parts (a c64's parts are floats) and the reason names the part. The refusal is

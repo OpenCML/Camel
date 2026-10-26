@@ -1,0 +1,39 @@
+/**
+ * What a profile session reports about a `tee` (design principles 5.4): one `STREAM_TEE` line per
+ * tee, counting elements. A side that reads to its end before the other has read anything leaves
+ * every element in the buffer, so the width the call asked for (2) is only what the executor was
+ * told to expect and not what it needed; a width wider than the implementation honours is clamped
+ * to its cap; and a `tee` called with no width takes the default.
+ */
+module stream_tee_report
+
+import stream
+
+func count(n: int): int.. {
+    return step(n)
+}
+
+func step(n: int): () => (int, int..)? {
+    return () => if n > 0 then (n, step(n - 1)) else null
+}
+
+func total(s: int..): int {
+    return loop acc = 0 for x in s do acc + x
+}
+
+func main(): int sync {
+    // A hint of 2, and one side reads all 20 elements before the other reads any: the buffer holds
+    // 20, which is what the report shows as the peak.
+    let (wide, lazy) = stream::tee(count(20), 2)
+    println(total(wide))
+    println(total(lazy))
+    // A hint wider than the implementation honours: clamped to the cap, and not a fault.
+    let (capped, other) = stream::tee(count(3), 1000000)
+    println(total(capped))
+    println(total(other))
+    // And with no width at all, the default.
+    let (defaulted, tail) = stream::tee(count(3))
+    println(total(defaulted))
+    println(total(tail))
+    return 0
+}

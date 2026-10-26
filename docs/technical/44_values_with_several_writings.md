@@ -43,8 +43,8 @@ classes of the inputs) are one value. Merging two values repairs the users of th
 until nothing merges (egg's `rebuild`). Only a pure function of its inputs takes part: constants
 (bit for bit, so `0.0` is not `-0.0`; not GC-traced), conversions, accesses, pure operators; not
 a node written in place, not one reading a variable. A control input takes no part in this
-question: it orders the node, it does not make the value different (design principles 3.3, 3.4;
-H95), so a pure node that waits for something takes part like any other writing of its value and
+question: it orders the node, it does not make the value different (design principles 3.3, 3.4),
+, so a pure node that waits for something takes part like any other writing of its value and
 may be an inner node of a rule's left side (section 4). Extraction gives the writing that stays
 the control inputs of every writing of its value (section 5). Every other node is alone in its
 class. Nodes of different permissions or regions are never merged.
@@ -68,7 +68,7 @@ operators, computed constants). `DraftWritings::saturate(rules, Budget)`:
 
 **Control inputs.** A pure node that waits for something (a `sync` function's sum waits for the
 `println` before it) takes part in matching like any other writing: a law over data inputs is
-sound whatever the node is ordered after, so the control input does not keep it out (H110). What
+sound whatever the node is ordered after, so the control input does not keep it out. What
 the engine must not do is move the computation across the control edge's ordering, so a rule
 match collects the control inputs of every operator term the law stops reading (the root
 included), and the writing the rule builds waits for all of them. A rule whose right side is an
@@ -82,7 +82,7 @@ of each round).
 declared per operator and per element type in `sem::OperatorSemantics::binary`
 (`BinaryLaw.commutative`; op-semantics 7.4). The matcher reads a binary term in the order the
 program wrote first, and tries the two inputs exchanged only when that order gives no accepted
-match (H118). So `x + 0 -> x` fires on `0 + x` when `+` declares commutativity for that element
+match. So `x + 0 -> x` fires on `0 + x` when `+` declares commutativity for that element
 type, while a law that writes its operands in a particular order still sees them there whenever
 the program matches that order. The fallback is for a law that wrote only one order: a `<=>` rule
 already states both directions, and a saturation applies its reverse as a rule of its own, so the
@@ -175,7 +175,7 @@ every existing dump is byte for byte what it was.
 
 ## 7. Open points
 
-- **The retention boundary** (fixed, H63). Section 5 used to describe a boundary the code did not
+- **The retention boundary** (fixed). Section 5 used to describe a boundary the code did not
   implement: `DraftWritings::extract` kept every node with `!multi[node] && !takesPart(node)`,
   which also selected pure nodes that do not take part and kinds `shapeTakesPart` does not cover,
   notably a GC-traced constant. A pure node that nothing reached
@@ -186,13 +186,13 @@ every existing dump is byte for byte what it was.
   `s + 'y'` four rounds and checks that the extraction removes the 15 dead constants the added
   writings wrote; `writings.extract` and the other plans cover that effects, orders and written
   variables still stay.
-- **Control inputs in matching** (fixed, H110). Section 4 used to say a pure node that waits can
+- **Control inputs in matching** (fixed). Section 4 used to say a pure node that waits can
   be a rule root but never an inner term, and the code expressed that as a third shape
   (`shapeOf` returned 3) so congruence would not merge it. The guard was about ordering, not
   about shape or law soundness: `rewrite` only transferred the *root's* control inputs, so a
   rewritten inner term would have been moved across the effect's ordering. It now transfers the
   waits of every operator term the law stops reading, and the shape is gone: a control input
-  neither keeps a node out of its class nor out of a term (H95).
+  neither keeps a node out of its class nor out of a term.
 - Matching tries each rule at every node with its head operator each round, rebuilding that index
   every round; an index kept up to date between rounds would only matter for graphs where most
   nodes are new each round.

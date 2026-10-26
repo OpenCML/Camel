@@ -939,7 +939,7 @@ struct Stamp {
 
 ## 11. `LOOP` 的消费接口
 
-> **实施状态（2026-10-15，`lane/loop`；2026-10-21 H43 更新）**：`LOOP` 节点、11.1 的访问器（`include/camel/runtime/loop.h`，`camel::runtime::LoopView`、`LoopDraftView`、`effectSummaryOf`）、11.2 的 I18、I19（每次提交，`validateRuntimeLoopInterface`）都已实现；条件与循环体是图里的两个控制区域，11.4 的尾递归降级已删除。与下文的差别：命名空间是 `camel::runtime` 而不是 `camel::core`；`GraphId` 是 `GCGraph *`、`NodeId` 是 `gc_node_ref_t`、`TypeId` 是 `Type *`（图模型第 5 步之后换）；`condRegion()` 在 `For` 时为 0（没有条件区域）；`EffectSummary` 是四个布尔量（外部效应、写变量、可能故障、可能不终止），每次询问时由区域算出，所以 I20 不需要另外比对；11.3 的 `core.loopDomain` 事实已随事实库（3b）实现（第 10 节开头）。**2026-10-20 补：收集输出（11.6）已实现**，节点载荷带收集槽计数，`LoopView` 有对应的访问器，四个执行器都按 11.6 收集；自动微分把它当磁带（11.6，H4d 第二步）。给 Tiles 的读法见 11.5。
+> **实施状态（2026-10-15，`lane/loop`；2026-10-21 更新）**：`LOOP` 节点、11.1 的访问器（`include/camel/runtime/loop.h`，`camel::runtime::LoopView`、`LoopDraftView`、`effectSummaryOf`）、11.2 的 I18、I19（每次提交，`validateRuntimeLoopInterface`）都已实现；条件与循环体是图里的两个控制区域，11.4 的尾递归降级已删除。与下文的差别：命名空间是 `camel::runtime` 而不是 `camel::core`；`GraphId` 是 `GCGraph *`、`NodeId` 是 `gc_node_ref_t`、`TypeId` 是 `Type *`（图模型第 5 步之后换）；`condRegion()` 在 `For` 时为 0（没有条件区域）；`EffectSummary` 是四个布尔量（外部效应、写变量、可能故障、可能不终止），每次询问时由区域算出，所以 I20 不需要另外比对；11.3 的 `core.loopDomain` 事实已随事实库（3b）实现（第 10 节开头）。**2026-10-20 补：收集输出（11.6）已实现**，节点载荷带收集槽计数，`LoopView` 有对应的访问器，四个执行器都按 11.6 收集；自动微分把它当磁带（11.6，循环重写第二步）。给 Tiles 的读法见 11.5。
 
 `LOOP` 节点本身（语法、建图、编码、校验、打印、降级）是图模型第 10 步与循环设计稿第 7 节的工作（实施情况见图模型第 7 节）。本节规定的是消费者看到的接口，按图模型 3.5 的卡片与 3.10 的裁定（条件图与循环体图共用一份捕获表；`for … while` 是同一种节点的第三种形式；多个状态时循环体返回元组，循环的值也是这个元组；`do` 式的写法）。
 
@@ -1063,15 +1063,15 @@ for (rt::gc_node_ref_t ref = 0; ref < g->nodeCount(); ++ref) {
 
 ### 11.6 收集输出（`s > 0`）
 
-循环可以在每轮交出一个值，由执行器收进数组：这是 `s` 个**收集槽**，节点载荷里的 `collectionCount`。它是 H4d 的第一步，为自动微分的磁带、以及将来 ONNX `Loop` 的 scan output 准备；源码语法尚未定义如何写收集槽，测试用一个只读遍给循环加槽。
+循环可以在每轮交出一个值，由执行器收进数组：这是 `s` 个**收集槽**，节点载荷里的 `collectionCount`。它是循环重写的第一步，为自动微分的磁带、以及将来 ONNX `Loop` 的 scan output 准备；源码语法尚未定义如何写收集槽，测试用一个只读遍给循环加槽。
 
 - **节点的值与循环体的返回值**：`k + s` 元组。值的前 k 个分量是状态（与无收集槽时相同，所以忽略磁带的消费者读到状态的位置不变），后 s 个是 `Tc[]`；循环体返回 `(s1' … sk', v1 … vs)`，`vc` 的类型是 `Tc`。`s = 0` 时节点形状与 11.1 完全一样。
 - **计数为什么必须在节点里**：`k = 2` 时值 `(状态, 数组)` 与“两个状态、第二个恰是数组”在类型上无法区分；类型本身不能说明有收集槽。
 - **执行**：每个执行器（NodeVM、FastVM 原生循环、宏求值器）为每个槽建一个空数组，把它与状态放在同一个工作元组里（节点的槽位、后端的帧里，因而被 GC 追踪），每轮把 `vc` **原地追加**到对应数组。数组由这次循环独占（循环体看不到它们），追加是 O(1) 摊还、总计 O(n)；没有轮数上限，内存耗尽按 `RuntimeDiag::MemoryExhausted` 在循环的源位置报出。
 - **收集槽在区域里**：循环体区域的结果的末尾 s 个分量是收集值；执行器每轮把 `vc` 原地追加到对应数组，不需要另建算子。
 - **消费**：`LoopView` 的 `collectionCount`、`valueIsTuple`、`valueComponentCount`、`stateValueIndex`、`collectionValueIndex`、`collectionArrayType`、`collectionElemType`、`nextStateIsTuple`、`bodyResultType`、`bodyStateResultIndex`、`bodyCollectionResultIndex`、`nextCollectionComponent` 以及自由函数 `loopValueComponent`、`loopStateValue`、`loopCollectedValue`；自动微分不必自己重新推导布局。改写一个还没编码的循环（自动微分给自己建的两个循环）用同一组访问器的 `LoopDraftView`（`camel/runtime/loop.h`，读的是 `GraphDraft` 里的节点）。
-- **自动微分**（H4d 第二步，2026-10-20）：磁带就是这些收集槽。残差是循环体回传真正读到的值（每条导数规则的入运算；循环体里一次调用的回传闭包整个作为一个 `Function` 值收进去，数组元素可以是函数，GC 追踪），所以一次循环的磁带是 `s` 个数组、每轮原地追加，没有复制。反向是一个 `While` 型 `LOOP`（`collectionCount = 0`）：状态是轮次下标加各状态与各捕获的梯度（只给能承载梯度的类型留位置），循环体用 `:op/idx_arr` 读这一轮的残差、调循环体的回传、接状态梯度、累加捕获梯度；零轮时状态梯度为种子、捕获梯度为零。循环体回传不读残差时仍收一个常量 `1`，反向循环靠它知道轮数。循环迭代或捕获的数组若依赖被微分的参数，按设计原则 9.9 在循环处拒绝并指出数组位置；不依赖的可以读，梯度在读处停住。
-- **导出**：残差是普通值（数组），不是闭包，所以 ONNX 与 `std::cpp` 都能表示：磁带是前向 `Loop` 的 scan output、反向 `Loop` 的输入。导出本身仍未做；"H4d 第二步"列了它需要什么（其中循环体里一次调用的回传闭包不能作为 ONNX 的值，要按捕获的叶子展开）。
+- **自动微分**（循环重写第二步，2026-10-20）：磁带就是这些收集槽。残差是循环体回传真正读到的值（每条导数规则的入运算；循环体里一次调用的回传闭包整个作为一个 `Function` 值收进去，数组元素可以是函数，GC 追踪），所以一次循环的磁带是 `s` 个数组、每轮原地追加，没有复制。反向是一个 `While` 型 `LOOP`（`collectionCount = 0`）：状态是轮次下标加各状态与各捕获的梯度（只给能承载梯度的类型留位置），循环体用 `:op/idx_arr` 读这一轮的残差、调循环体的回传、接状态梯度、累加捕获梯度；零轮时状态梯度为种子、捕获梯度为零。循环体回传不读残差时仍收一个常量 `1`，反向循环靠它知道轮数。循环迭代或捕获的数组若依赖被微分的参数，按设计原则 9.9 在循环处拒绝并指出数组位置；不依赖的可以读，梯度在读处停住。
+- **导出**：残差是普通值（数组），不是闭包，所以 ONNX 与 `std::cpp` 都能表示：磁带是前向 `Loop` 的 scan output、反向 `Loop` 的输入。导出本身仍未做；"循环重写第二步"列了它需要什么（其中循环体里一次调用的回传闭包不能作为 ONNX 的值，要按捕获的叶子展开）。
 
 ---
 
@@ -1132,7 +1132,7 @@ for (rt::gc_node_ref_t ref = 0; ref < g->nodeCount(); ++ref) {
 
 - `max`/`min`（逐元素的 `maximum`/`minimum`、`max_axis`/`min_axis`）是 IEEE 754-2019 的 `maximum`/`minimum`：任一边是 NaN 得**规范的 quiet NaN**（`0x7fc00000`，符号位为 0，无载荷；与输入是哪个 NaN 无关，所以任意次序、任意分块逐位相同），`-0 < +0`。Tiles 的 `max_axis` 今天保留"首个 NaN 与 ±0 的平局规则"并带下标比较，要改为这条规则，带下标的并行比较可以去掉（6.9 第 6 条）。CUDA 的 `fmaxf` 不是它：用"两边有 NaN 则规范 NaN，否则相等时按位与（取 `+0`）、不等时取大"的比较序列。
 - `relu(x) = maximum(x, +0)`：NaN 得规范 NaN，`-0` 得 `+0`。Tiles 今天的 `a<0.0f?0.0f:a` 对 NaN 给原 NaN、对 `-0` 给 `-0`，两处都要改（6.9 第 3 条）。
-- `matmul` 的规范算法是按 k 递增的 FMA 链，从 `+0` 开始（Q7 取乙）：Tiles 现有的 `fmaf` 累加符合；K 尾部"排除而不是补 0"仍是必要的。CPU 的 GEMM 已改为同一算法（以前每 256 个 k 一块分别从 0 累加再相加），`linear` 先算完链再加偏置。库实现（CBLAS）只改累加的顺序与分组，是节点属性 `tensor.kernel` 上的选择，算子是 `matmul`（9.6；H102）。
+- `matmul` 的规范算法是按 k 递增的 FMA 链，从 `+0` 开始（Q7 取乙）：Tiles 现有的 `fmaf` 累加符合；K 尾部"排除而不是补 0"仍是必要的。CPU 的 GEMM 已改为同一算法（以前每 256 个 k 一块分别从 0 累加再相加），`linear` 先算完链再加偏置。库实现（CBLAS）只改累加的顺序与分组，是节点属性 `tensor.kernel` 上的选择，算子是 `matmul`（9.6）。
 - `softmax` 的 CPU 内核与定义 `exp(x - m) / sum(exp(x - m))` 逐位一致（除法，不是乘倒数；和在 f64 里累加、最后舍入为 f32）。Tiles 把 softmax 写成组合，逐位比较时以定义为准。
 
 **查询一个算子的数值语义：**
@@ -1167,7 +1167,7 @@ bool any        = graph->hasNodePermissions();
 ```
 
 - 许可只由程序写 `@numeric(...)` 授予（函数或块，词法上嵌在其中的臂、循环体、lambda 一起），被调用的函数不继承；没有模块级默认、没有命令行开关，**`tiles.run` 等入口不接受许可**。
-- 许可在 OPER 节点上；内联与克隆后各节点带自己的许可；`std::opt::cse` 不把许可不同的节点合并。`tensor::fuse` 不合并节点：它把融合组与库实现的选择记成节点属性（`tensor.fusion`、`tensor.kernel`），图上保留原算子，各节点仍带自己的许可（9.6，H102）。Tiles 自己融合时同样按 6.4 的表：收缩 `a * b + c` 要两个节点都有 `contract`，重新加括号要链上每个节点都有 `reassociate`。
+- 许可在 OPER 节点上；内联与克隆后各节点带自己的许可；`std::opt::cse` 不把许可不同的节点合并。`tensor::fuse` 不合并节点：它把融合组与库实现的选择记成节点属性（`tensor.fusion`、`tensor.kernel`），图上保留原算子，各节点仍带自己的许可（9.6）。Tiles 自己融合时同样按 6.4 的表：收缩 `a * b + c` 要两个节点都有 `contract`，重新加括号要链上每个节点都有 `reassociate`。
 - 编译缓存的键要包含用到的每个 `OperatorKey` 与每个节点的许可（10.6 的 (iii)）。
 - 许可只允许、不要求：没有许可时必须给规范结果；有许可时给规范结果也总是对的。
 

@@ -38,7 +38,7 @@ C++ 模块不再重复写签名与纯度、资源：没有函数体的声明就�
 - 声明只能命名**本模块自己的算子**：`#op` 用于算子名不是 Camel 标识符、或本模块算子的 URI 前缀不叫模块名（`random` 的 `rand:`）的情况。写另一个模块的算子（在 `bytes_tag` 里写 `#op('bytes:size')`）在声明处报错，不静默替换那个模块的签名。
 - 没有 `export` 的声明是本模块**私有**的算子：模块自己的函数可以调用它（通常就是包裹原生算子的那层），导入方看不到这个名字，`module::name` 也到不了。带 `export` 的才是模块的实体。
 - 有类型参数（`::<T>`）的声明是一个函数族：调用时按实参实例化，URI 仍是一个，图上是一个 OPER 而不是 CALL。
-- 声明的 URI 必须对应一个已注册的执行器与一条已登记的算子性质；`#op` 的 `*` 通配因此只出现在不编译的签名文件里，声明模块里写确切 URI（H113）。
+- 声明的 URI 必须对应一个已注册的执行器与一条已登记的算子性质；`#op` 的 `*` 通配因此只出现在不编译的签名文件里，声明模块里写确切 URI。
 - 签名文本保留参数名：`export func to_array(content: Bytes): int[]` 的签名读作 `(content: Bytes) => int[]`，诊断与 `docs/stdlib-reference.md` 都照这样打印。参数名是给读者的，选择只看类型。
 - 与 `.cmo` 同名的 `.cml` 不是 C++ 模块的影子，就是**那个模块**：C++ 导出的类型与常量在同一份 `.cml` 里不导入就能写；`.cml` 的 `export type`、`export let`、`export func` 写进同一个模块实体，导入这个名字的程序读到的是同一套名字。C++ 模块导出同名算子组而 `.cml` 又声明了它时，以声明为准（声明是签名的唯一来源），不并存两份。
 - 作为声明模块的 `.cml` 顶层的函数全部没有函数体；写了函数体要报诊断，而不是静默丢掉。没有同名 `.cmo` 的 `.cml` 是普通模块，可以混写普通函数与声明（声明绑定到已有的算子）。
@@ -135,7 +135,7 @@ C++ 模块不再重复写签名与纯度、资源：没有函数体的声明就�
 | 用 Camel 写的模块 | `stdlib/<模块>.cml` |
 | C++ 实现的模块 | `modules/<模块>/`（执行器、算子表、资源、语义），签名在 `stdlib/<模块>.cml` |
 | 尚未声明化的 C++ 模块（过渡） | `stdlib/signatures/<模块>.cml`，只作参考、不参与编译；每搬一个模块删一个文件 |
-| 已声明化模块里算不出来的签名 | 只在 `stdlib/signatures/<模块>.cml`，由模块条目的 `computed` 字段指名；只作参考、不参与编译，其余声明在 `stdlib/<模块>.cml`，两处由 `--verify-ops` 一起对账。声明文件里不写 `// dynamic func`，一个名字不能两处都有（H180；`math`、`graph`、`json`、`random` 都这样） |
+| 已声明化模块里算不出来的签名 | 只在 `stdlib/signatures/<模块>.cml`，由模块条目的 `computed` 字段指名；只作参考、不参与编译，其余声明在 `stdlib/<模块>.cml`，两处由 `--verify-ops` 一起对账。声明文件里不写 `// dynamic func`，一个名字不能两处都有（`math`、`graph`、`json`、`random` 都这样） |
 | 测试用例 | `test/cases/`，计划在 `test/plans/` |
 
 模块名就是导入名，也是算子 URI 的前缀。新模块按分层放：前奏（内置，只放几乎每个程序都要的：转换、输出、序列与映射的基本操作、错误与故障；`input` 在 `io`，`sleep`、`exit` 在 `process`）／基础（`str`、`bytes`、`array`、`math`、`random`、`stats`、`time`、`re`、`json`、`hash`）／系统（`fs`、`io`、`env`、`process`）／数值（`tensor` 栈）／工具（`test_support`、`bench`、`profiler`）。

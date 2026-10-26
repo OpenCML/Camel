@@ -3,7 +3,7 @@
 [English](README.md) | 中文简体
 
 一家小店的定价规则住在 [`rules.cml`](rules.cml) 里，包着它的项目是 Python：读订单、用 NumPy 存、
-打印报表。这就是 H253 想走的采用路径——"在 Python 项目里用一部分 Camel"，不是把项目搬过去。
+打印报表。这就是 Python 绑定要走的采用路径——"在 Python 项目里用一部分 Camel"，不是把项目搬过去。
 
 ```sh
 pip install camel-lang

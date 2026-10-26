@@ -499,9 +499,9 @@ that rounds a `1` away.  `accuracy.cml` repeats the f32 measurements in Camel.
 
 ## Gaps found (Camel side)
 
-- **H238 (priority): tensors still keep one storage type.** The public tensor element types are
+- **Priority gap: tensors still keep one storage type.** The public tensor element types are
   effectively f32, i64 and bool; f64 is normalised to f32 by `normalizeTensorDType` on creation
-  and cast, and i32 to i64.  This paragraph is provisional: when **H238** lands, delete it and add an
+  and cast, and i32 to i64.  This paragraph is provisional: when tensor element types are separated, delete it and add an
   f64 column to the table if f64 then works.  Until then bf16 overflow and the fp64 error of the
   step cannot be measured in Camel; its f32 thresholds match PyTorch's f32 thresholds exactly.
 - **The two blocks are now one `Block[]`, and the forward pass is the plain

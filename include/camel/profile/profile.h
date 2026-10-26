@@ -100,6 +100,32 @@ void fusionGroup(
     std::string_view key, std::string_view name,
     std::span<const std::string_view> members, uint64_t ns);
 
+/// One `tee` of the run (design principles 5.4). `tee(s, n)` reads `s` once and gives two streams
+/// over the same elements, each read once; a side that runs ahead of the other buffers what the
+/// other has not read yet, so `n` is a hint -- the buffer is unbounded in meaning and the executor
+/// grows it rather than make the leading side wait -- and the implementation clamps it to `cap`.
+/// Every count is elements; `bytes` is the same peak in bytes, and is left out when one element is
+/// not a fixed number of them (a string, an array, a tuple).
+struct StreamTee {
+    /// The hint the tee took: what the call gave, clamped to `cap`.
+    uint64_t hint = 0;
+    /// The widest hint the implementation honours; a call that asks for more is clamped to it.
+    uint64_t cap = 0;
+    /// The elements the tee pulled from its source.
+    uint64_t elements = 0;
+    /// The most elements that were buffered at once: how far the two sides ran apart.
+    uint64_t peak = 0;
+    /// The element type as a program writes it ("int"), empty when the tee did not report one.
+    std::string elem;
+    /// The bytes one element takes, 0 when its values are not a fixed number of bytes.
+    uint64_t elemBytes = 0;
+};
+/// Records one tee's numbers. `stream` is the stream value the tee reads, and it arrives unchanged
+/// on every pull of that tee: it is what tells the tees of a run apart, and the number a report
+/// prints for a tee is the order the run first heard of it. Called by the tee itself, once per
+/// element it pulls, so a run with no tee records nothing and the report prints no tee line.
+void streamTee(const void *stream, const StreamTee &record);
+
 /// The marks of one execution plan, when it is built: how many update nodes it decided reuse the
 /// storage of the value they are given (layer 1), how many it left to the array's own count
 /// (layer 2), and how many it decided copy (layer 3) (docs/design/arrays-memory/README.cn.md

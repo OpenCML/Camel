@@ -30,8 +30,8 @@ What is measured, and how:
     library opens a `library` phase, and the modules that library imports are compiled inside its
     `gct` phase. Each such module is a *library module* only if it declares itself in the standard
     library (`stdlib/<name>.cml` says `module <name>`); the tables give the parse/gct/declare/
-    body time of each. No list of names is kept in this file: H141 (`graph`) and H151 (`tensor`)
-    each added a declaration module after H144 had pinned two names, and a third copy goes stale
+    body time of each. No list of names is kept in this file: `graph` and `tensor` were added as
+    declaration modules after a tuple had pinned two names, and a third copy goes stale
     the same way.
 
 Method. Every (input, pipeline) is run `--rounds` times, pinned with `taskset -c K` when
@@ -107,7 +107,7 @@ SLOW_CASE_MS, SLOW_CASE_ROUNDS = 5000.0, 2  # a run longer than this is repeated
 # pass loaded it as its tool program, and it names itself in the standard library
 # (`stdlib/<name>.cml` says `module <name>`). The compiler marks the first fact with a `library`
 # phase; see pass_loaded_modules. The second is the module's own declaration; see
-# stdlib_declaration. H144 pinned two names, then H141 added `graph` and H151 added `tensor`, so
+# stdlib_declaration. A tuple pinned two names, then `graph` and `tensor` were added, so
 # the tuple went stale twice in one day. Neither number may disappear: the benchmark reports the
 # set and what each module costs, and the check derives the set from these two facts instead of
 # carrying a third copy of it.
@@ -299,8 +299,8 @@ def stdlib_declaration(name: str) -> Optional[Path]:
     """The standard-library file that declares module `name`, if there is one.
 
     This is what "library module" means here: the module is named by its own declaration, in the
-    library, not by a tuple in this file. A migration that adds a declaration module (H141's
-    `graph`, H151's `tensor`) changes the set with the source, and the benchmark reports the new
+    library, not by a tuple in this file. A migration that adds a declaration module (`graph` or
+    `tensor`, for instance) changes the set with the source, and the benchmark reports the new
     module and its cost instead of failing on a list that was true last week.
     """
     path = STDLIB.joinpath(*name.split(".")).with_suffix(".cml")
@@ -372,8 +372,8 @@ def module_names(report: dict) -> List[str]:
     available without a counter of its own. It is exactly what `counters.modules` counts — and
     that count includes library modules a pass compiles on demand: the algebra step of `std::opt`
     compiles stdlib/rules.cml, and `rules` imports `graph`, `math` and `tensor`, whose own
-    declaration modules (stdlib/<name>.cml) are written in Camel and compiled too (H100, H112,
-    H121, H141, H151). The count alone cannot tell the program's own modules from the libraries
+    declaration modules (stdlib/<name>.cml) are written in Camel and compiled too (`graph`,
+    `math`, `tensor` and the rest). The count alone cannot tell the program's own modules from the libraries
     it caused to be loaded; the names can, and those are two different cost numbers.
     """
     names: List[str] = []

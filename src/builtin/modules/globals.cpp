@@ -2929,6 +2929,36 @@ std::make_shared<StaticCheckedResolver>(
                         }),
                 },
             }),
+        // The bookkeeping of `tee` (operators/stream.h, design principles 5.4): the tee written in
+        // Camel hands each pull of its source to it, and the report of the profile session keeps
+        // the numbers. Its operands are the tee's own -- the hint, the cap and the two running
+        // counts -- and the stream it reads, whose value tells the tee from another and whose type
+        // the operator reports.
+        OperatorGroup::create(
+            "tee_note",
+            {
+                {
+                    ":stream/tee_note",
+                    DynamicFuncTypeResolver::create(
+                        {{0, {}}, {5, {false, false, false, false, false}}},
+                        "(hint: int, cap: int, elements: int, peak: int, s: T..) => void",
+                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            -> optional<Type *> {
+                            if (norm.size() != 5) {
+                                return nullopt;
+                            }
+                            if (norm[4] == nullptr || norm[4]->code() != TypeCode::Stream) {
+                                return nullopt;
+                            }
+                            for (size_t i = 0; i < 4; ++i) {
+                                if (norm[i] == nullptr || norm[i]->code() != TypeCode::Int64) {
+                                    return nullopt;
+                                }
+                            }
+                            return Type::Void();
+                        }),
+                },
+            }),
     };
     return groups;
 }

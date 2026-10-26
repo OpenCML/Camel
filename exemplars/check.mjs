@@ -115,7 +115,7 @@ function runOne(dir, run, update, log) {
                 )
             }
             // An origin id is a compiler-internal identifier, renumbered whenever another file is
-            // parsed first (H139): the comparison above normalizes it, but a golden that still
+            // parsed first: the comparison above normalizes it, but a golden that still
             // records the number advertises a pin that will break the next time the tree shifts.
             // Re-record with --update; it writes origin=<ORIGIN>, which still asserts a node has
             // one. This is the guard that makes the class of failure visible, not just this file.
