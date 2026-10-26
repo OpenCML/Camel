@@ -1685,6 +1685,30 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::FactJoinRequired,
+            {
+                "FactJoinRequired",
+                "The fact '{0}' writes no 'join'.",
+                "`join` is the clause that is required: it says how the facts of two writings of one value are merged, and it is the least upper bound of the two (rewrite design 7.5). Write it after the cases, naming one binary function or a lambda: `}} join max`, `}} join (lhs: int, rhs: int) => lhs | rhs`. Without it a value the program wrote two ways has no fact the engine can settle on.",
+            },
+        },
+        {
+            SemanticDiag::FactConstCaseTypeRequired,
+            {
+                "FactConstCaseTypeRequired",
+                "The 'const' case '{0}' of the fact '{1}' writes no type.",
+                "A `const` case matches one constant, and the fact function is given the value itself, so the type of that constant is written somewhere (rewrite design 7.5): in the case (`case const c: int => c`), or in the head of a fact that declares the value it is about with a type (`fact sign(v: int): int`), whose first parameter's type the case then takes.",
+            },
+        },
+        {
+            SemanticDiag::FactCaseBindsNoVariable,
+            {
+                "FactCaseBindsNoVariable",
+                "This case of the fact '{0}' names no variable.",
+                "The cases read how a value was built, and the parts they read are the variables their patterns name: `case x + y` binds the two operands, and the fact function is computed from them (rewrite design 7.5). A pattern that names no variable leaves the case with nothing to read, so the fact says nothing about the values it matches; bind a part with a name, or write `case _`, which is the last case and says what the fact is for a value no other case matched.",
+            },
+        },
+        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",

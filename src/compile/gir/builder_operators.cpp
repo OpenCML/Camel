@@ -2710,6 +2710,13 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 // 2026-10-23 on generic-rule-instantiation).
                 settleGenericRuleMaker(normInputs, normInputTypes, gct);
             }
+            if (ops->name() == "__fact") {
+                // The maker of a fact whose head declares type parameters: the functions it is made
+                // of are generic, and this call is the instance of its query, so the type arguments
+                // they are made at are the ones that instance was resolved with (rewrite design
+                // 7.5; design principles 5.9).
+                settleGenericFactMaker(normInputs, normInputTypes, gct);
+            }
             settleGenericOperatorArguments(
                 ops,
                 withInputs,

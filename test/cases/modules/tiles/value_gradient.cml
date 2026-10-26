@@ -26,6 +26,8 @@ module tiles_value_gradient
 import { reshape, sum, mean, abs, zeros } from tensor
 import { with_grad } from autodiff
 import { inspect, benchmark, run_preferred_resident, download } from tiles
+// A whole-tensor reduction answers the operand's element type (design principles 7.3): the f64
+// reading this case compares against is the conversion each call site writes.
 with <x: f32[..]>
 func loss(): float { return float(sum(x * x)) }
 func total(x: f32[..]): float { return float(sum(x)) }
