@@ -1,7 +1,7 @@
-# H7 计划：资源与效应（`uses`、`pure`、资源推断、句柄类型）
+# 资源与效应（`uses`、`pure`、资源推断、句柄类型）
 
 - 状态：**计划，未实现**
-- 分支：`handover/H226-effects-plan`（基于 `origin/develop` 的 `f54822a5`）
+- 分支：`handover/effects-plan`（基于 `origin/develop` 的 `f54822a5`）
 - 任务来源：设计原则 3.3
 - 交付：本文件。不写实现，不改语义，不建新工作树，不加看板行。
 - 一句话结论：H7 的四项（`uses`、`pure`、资源推断、句柄类型）都能落到现有模型上，**不需要任何 3.3 之外的新原语**；图上新增的东西只有**控制边**，调度器不用改。3.3 的其余条目（`var`、无序资源、并发、取消）各自的归属见 1.1 与第 9 节。
@@ -152,7 +152,7 @@ anyOf   : 资源类列表；非空表示"说不出是哪个值"，即保守的�
 
 调用者写 `pump(s, s)` 时，被调用者里两个形参都是 Port，`mayAlias` 为真（`resources.cpp#mayAlias`），于是被调用者内部两次 `next` 之间连控制边——**正确**：它们不是"不同句柄"。
 
-调用者写 `pump(s, open("b"))` 时，被调用者内部仍然只能说"两个 Port 可能是一个对象"，仍然串行。这是 3.3 允许的保守（"最多少优化，不会算错"）。要并发，必须在**同一个函数体内**写两个可证明不同的句柄（各自 Fresh，见 3.3），或者把操作展开在调用者里。计划不为 H7 引入调用点特化/别名分派。
+调用者写 `pump(s, open("b"))` 时，被调用者内部仍然只能说"两个 Port 可能是一个对象"，仍然串行。这是 3.3 允许的保守（"最多少优化，不会算错"）。要并发，必须在**同一个函数体内**写两个可证明不同的句柄（各自 Fresh，见 3.3），或者把操作展开在调用者里。计划不为此引入调用点特化/别名分派。
 
 反向的发现（"两个 handle 是不是一个对象"）不需要新分析：`originOf`/`mayAlias` 已经区分 `Fresh`（两次 `open` 的结果不同）、`Port`（可能同一个）、`Unknown`（一律可能），`FootprintWalk` 已经用它在函数边界上丢弃/保留（`resources.cpp#originOf`）。
 
@@ -196,7 +196,7 @@ export type Stream<T> = {
 
 ### 3.4 `Stream` 的第一个落地
 
-`docs/design/io-concurrency-streams/README.cn.md` 第 3.1 节已经定了 `Stream<T>` 与 `next(s)` 的写法（`next` 写 `uses s`），第 7 节定了句柄决议闭环。H7 只做语言与图这一层：`Stream` 声明加 `#resource`，`next` 写 `uses s`；运行期内核（文件/网络）按该设计稿另行落地。测试用一个最小的内存流（`open`/`next`/`close` 三个算子或一个 C++ 测试模块）就能锁住顺序与并发，不依赖真实 I/O。
+`docs/design/io-concurrency-streams/README.cn.md` 第 3.1 节已经定了 `Stream<T>` 与 `next(s)` 的写法（`next` 写 `uses s`），第 7 节定了句柄决议闭环。本计划只做语言与图这一层：`Stream` 声明加 `#resource`，`next` 写 `uses s`；运行期内核（文件/网络）按该设计稿另行落地。测试用一个最小的内存流（`open`/`next`/`close` 三个算子或一个 C++ 测试模块）就能锁住顺序与并发，不依赖真实 I/O。
 
 ---
 
@@ -246,14 +246,14 @@ export type Stream<T> = {
 - `core.effects` 与 `core.resources` 是按需计算的**事实**（`core_facts.cpp#registerCoreKinds`、`core_facts.cpp#core_facts`），不是存的边或属性；`std::agir` 把非纯 OPER 标成 `role=effect`（`node_roles.cpp#node_roles`）。
 - `std::prl` 的任务图只由 norm/with/ctrl 边生成（`src/execute/pass.cpp#std::prl` 起；`src/passes/sched/taskflow/`）。**没有 ctrl 路径的两个节点就是可并发的任务。**
 
-所以"3.3 的执行顺序是图的属性"这句话今天只对 `sync` 成立；H7 要让它对**每个资源**成立。
+所以"3.3 的执行顺序是图的属性"这句话今天只对 `sync` 成立；本计划要让它对**每个资源**成立。
 
 按规则看图上到底变了什么（没有新节点种类、没有新边种类、没有新属性种类）：
 
 | 规则 | 节点 | 边 | 属性/事实 |
 |---|---|---|---|
 | `uses` 写在签名上 | 不变（还是 CALL/FUNC/OPER） | 句柄/变量本来就是普通输入边；**新增**同资源的 ctrl | `core.resources` 的事实里多出"类 + 名字 + 绑定到哪个输入" |
-| `pure` | 不变 | **不加** ctrl；无 access | 该节点不碰资源，后续优化可 CSE/折叠（H91 的限制不变） |
+| `pure` | 不变 | **不加** ctrl；无 access | 该节点不碰资源，后续优化可 CSE/折叠（那条限制不变） |
 | 句柄类型 | 不变 | 句柄的值边（已有）就是身份；ctrl 按值键 | 资源类 `Handle` + 声明限定名；无资源 id 属性 |
 | 无序资源 | 不变 | **不因它加** ctrl（`sync` 块内仍由块链加） | 声明上的 `unordered` 标志 |
 | `sync` 块 | 块的值经 GATE（已有） | 既有的块内 ctrl 链，一行不改 | 无 |
@@ -308,7 +308,7 @@ func pump(s: Stream, t: Stream): unit { next(s); next(t) }
 
 func twice(x: int): int pure { return x + x }
     n3 CALL twice   （无 access、无 ctrl；可被后续优化 CSE/折叠——
-                      但 H91 规定 build 阶段不折叠全常量纯节点，H7 不改它）
+                      但 build 阶段不折叠全常量纯节点，本计划不改它）
 ```
 
 ```
@@ -316,7 +316,7 @@ pump(s, s)           调用者图里一个 CALL；被调用者内部已串行，
 pump(s, open("b"))   同上：被调用者不知道 s 与新句柄不同，仍串行（少优化，不算错）。
 ```
 
-这条是 H7 必须写进文档的"保守边界"：**跨函数不重排**（3.3 原文），所以被调用者内部的串行不能被调用者撤销。
+这条是必须写进文档的"保守边界"：**跨函数不重排**（3.3 原文），所以被调用者内部的串行不能被调用者撤销。
 
 ### 5.5 控制边怎么加、调度器为什么不用改
 
@@ -419,7 +419,7 @@ pump(s, open("b"))   同上：被调用者不知道 s 与新句柄不同，仍�
 
 - `UndeclaredOperatorEffect` Hint；`--verify-ops` 已在发布门禁，迁移后必须仍绿；每个新码至少一个用例（`diagnostics-catalog --coverage` 对新码无输出；存量未覆盖的码不在本任务范围）。
 - 验收矩阵：1.1 的每一行 → 本计划的步骤 → 测试；全部绿才算完成。
-- 文档：本计划、`docs/design/io-concurrency-streams/README.cn.md` 的 H7 接口、`docs/design/op-semantics` 的资源声明一节（把 C++ 声明与 `.cml` 声明的关系写清）。
+- 文档：本计划、`docs/design/io-concurrency-streams/README.cn.md` 的效应接口、`docs/design/op-semantics` 的资源声明一节（把 C++ 声明与 `.cml` 声明的关系写清）。
 
 ---
 
@@ -454,7 +454,7 @@ pump(s, open("b"))   同上：被调用者不知道 s 与新句柄不同，仍�
 
 ## 9. 不做什么，以及完成判据
 
-**不做**：效应处理器；Koka 式行多态；`async`/`await`；`cancellable`/取消（3.3 有，但不属于 H7 的四项，留给取消任务）；调用点别名特化；调度器改动；新的节点或边种类；`#fresh` 之类的新标签。
+**不做**：效应处理器；Koka 式行多态；`async`/`await`；`cancellable`/取消（3.3 有，但不属于本计划的四项，留给取消任务）；调用点别名特化；调度器改动；新的节点或边种类；`#fresh` 之类的新标签。
 
 **完成判据**：
 

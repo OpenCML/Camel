@@ -1,6 +1,6 @@
-# H247 规则的形式化验证 —— 实施计划
+# 规则的形式化验证 —— 实施计划
 
-依据：任务书第 5.27 节；规则语言第二版设计稿 `docs/design/rewrite/v2.cn.md` 第 8 节与第 8.1 节（`check` 的覆盖、采样对照、SMT 证明的分工）；数值契约 `docs/design-principles.cn.md` 第 7.2–7.4 节；与 H232 的衔接已有定论：泛型规则的实例化，以及它的集合与谓词。体例照 `docs/design/graph-store/plan.cn.md`。
+依据：任务书第 5.27 节；规则语言第二版设计稿 `docs/design/rewrite/v2.cn.md` 第 8 节与第 8.1 节（`check` 的覆盖、采样对照、SMT 证明的分工）；数值契约 `docs/design-principles.cn.md` 第 7.2–7.4 节；与规则语言的衔接已有定论：泛型规则的实例化，以及它的集合与谓词。体例照 `docs/design/graph-store/plan.cn.md`。
 
 **只读调研，没有改代码。** 所有读数用 `origin/develop`（`18c98b856`）在 Linux 主机 `88zjwei` 上的构建实测：计划形式跑 `test/plans/feat/modules/rules.plan.toml`（全绿，121 通过 0 失败，`RUN_EXIT=0`，构建 51.0 s、计划 4.0 s），单条规则的一次性读数用仓库外的探针（`/tmp`，不进仓库）。
 
@@ -22,7 +22,7 @@
    unchecked generic_add_zero: a generic rule, whose instances are not checked here
    ```
 
-   而 H232 的实例化机制已经落地（`test/plans/feat/modules/rules.plan.toml` 的 `rules.generic_law_is_instantiated_per_type_tuple` 等 6 条今天全绿），所以"每个实例分别证明"缺的只是 `check` 那一侧的桥，不是实例化本身。
+   而泛型规则的实例化机制已经落地（`test/plans/feat/modules/rules.plan.toml` 的 `rules.generic_law_is_instantiated_per_type_tuple` 等 6 条今天全绿），所以"每个实例分别证明"缺的只是 `check` 那一侧的桥，不是实例化本身。
 6. **`stdlib/rules.cml` 今天是 69 条规则**：`int` 13、`i32` 13、`float` 16、`f32` 14、张量 15——也就是**标量 54 条、张量 15 条**；带许可的 21 条（`reassociate` 族 16、`refine_accuracy` 5），其中**那 16 条同时带 `when` 守卫**，所以今天一次值比较都没做（§1.1 末尾）。按任务书"先整数与浮点的标量算子"，第一步的翻译覆盖正好是那 54 条。
 7. **`check` 今天只跑到 68 条，不是 69 条**：`check_library.cml` 列了 63 条、`check_accuracy_library.cml` 列了 5 条，第 69 条 `tensor_sigmoid_chain` 从未传给 `check`。任务书的验收是"**每条**规则都有标注"，所以 `69/69` 要在一开始就当硬要求（G17、S0）。
 8. **七片**：S0 判定词汇与报告类型（无求解器）∥ S1 整数标量翻译器；S1 之后 S2 反例、S3 浮点与许可、S4 `when`/`fact` 前提、S5 泛型逐实例**四路并行**；S6 报告落地与 CI 收口。每一片都有一条今天就能跑、今天失败的红前用例（§3）。缺口清单 18 条（§2）。
@@ -122,7 +122,7 @@ FAIL narrow_mul_div: the two sides differ at (-2147483648): 0 and -2147483648
 
 **与形式化验证的关系**：8.1 要的反例（`refuted` 附反例）与 8.7 的 `why_not` 是**两个面**——`why_not` 回答"这条规则为什么没在这里触发"，是**运行后**的事实；反例回答"存在这样的输入使两侧不等"，是**对所有输入**的命题的否定见证。两者都必须给，但**不能互相冒充**：今天 `why_not` 已经有报告实例类型的能力（`whyNotKernel` 里对 `rule->name() + "<"` 的分支，`rules.generic_law_instance_is_read_out_by_why_not` 今天绿），所以泛型逐实例的**报告**有一半已经在手上，缺的是**判定**。
 
-### 1.7 泛型规则今天的实例化（H232 的接口）
+### 1.7 泛型规则今天的实例化（接口）
 
 | 位置 | 事实 |
 |---|---|
@@ -131,9 +131,9 @@ FAIL narrow_mul_div: the two sides differ at (-2147483648): 0 and -2147483648
 | `include/camel/compile/gir/rule_templates.h#genericRuleInstance` | 取某个元组的实例，按元组缓存 |
 | `modules/rewrite/module.cpp`（`genericRuleInstance` 的两处调用） | 匹配处（改写路径）与 `why_not` 的读出处 |
 
-**今天 `check` 与它的唯一交互是**：`checkKernel` 看到 `RuleObject::ruleId() != 0` 就直接 `continue`，输出 `unchecked <name>: a generic rule, whose instances are not checked here`，注释里写着这条路"是这座桥的下一步"。所以 H232 的衔接点非常小：`check` 那一侧要调 `genericRuleInstance` 枚举元组，并对每个**实例**（`GenericRuleInstance::lhs` / `rhs` / `when`）分别判定。类型集合按规则：算子组注册过的类型里满足 `when` 的每一个，给了 `program` 就并上程序里出现的类型；多个类型参数时取笛卡尔积，积过大按种子抽样并在报告里写明抽了哪些。
+**今天 `check` 与它的唯一交互是**：`checkKernel` 看到 `RuleObject::ruleId() != 0` 就直接 `continue`，输出 `unchecked <name>: a generic rule, whose instances are not checked here`，注释里写着这条路"是这座桥的下一步"。所以衔接点非常小：`check` 那一侧要调 `genericRuleInstance` 枚举元组，并对每个**实例**（`GenericRuleInstance::lhs` / `rhs` / `when`）分别判定。类型集合按规则：算子组注册过的类型里满足 `when` 的每一个，给了 `program` 就并上程序里出现的类型；多个类型参数时取笛卡尔积，积过大按种子抽样并在报告里写明抽了哪些。
 
-**今天词表里没有的东西**：`stdlib/rules.cml` 的 69 条里**一条泛型规则都没有**（`rule <名字>::<` 零命中）。所以"泛型规则对每个实例分别证明"的验收要用 `test/cases/modules/rules/generic_law.cml` 那一类用例（或 H232 折叠后的新库）来做，不能拿今天的库直接做。
+**今天词表里没有的东西**：`stdlib/rules.cml` 的 69 条里**一条泛型规则都没有**（`rule <名字>::<` 零命中）。所以"泛型规则对每个实例分别证明"的验收要用 `test/cases/modules/rules/generic_law.cml` 那一类用例（或规则语言折叠后的新库）来做，不能拿今天的库直接做。
 
 ### 1.8 `stdlib/rules.cml` 今天的规模与分布
 
@@ -375,7 +375,7 @@ RUN_EXIT=0
 
 仓库外探针（不进仓库、不改任何树；主机上用已构建的 `out/latest`）：
 
-<!-- camel-snippet: fragment: H247 的仓库外探针（跑在 /tmp，逐字记录当时的判定输出；它演示的是"今天"的判定面，不是页面示例） -->
+<!-- camel-snippet: fragment: 仓库外探针（跑在 /tmp，逐字记录当时的判定输出；它演示的是"今天"的判定面，不是页面示例） -->
 ```camel
 // /tmp/h247_probe.cml
 module h247_probe
@@ -394,7 +394,7 @@ func main(): int sync {
 }
 ```
 
-<!-- camel-snippet: fragment: H247 的仓库外探针（跑在 /tmp，逐字记录当时的判定输出；它演示的是"今天"的判定面，不是页面示例） -->
+<!-- camel-snippet: fragment: 仓库外探针（跑在 /tmp，逐字记录当时的判定输出；它演示的是"今天"的判定面，不是页面示例） -->
 ```camel
 // /tmp/h247_probe2.cml（许可面）
 module h247_probe2
