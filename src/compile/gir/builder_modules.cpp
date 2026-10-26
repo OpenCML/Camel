@@ -660,7 +660,10 @@ void Builder::exportNativeOperators(const GCT::node_ptr_t &exportList) {
         const Reference ref(group.name);
         // A declaration the module does not export is a private operator of the module: its own
         // bodies call it, an importer cannot. Either way it is the
-        // module's own group, kept here and not in the program's export table.
+        // module's own group, kept here and not in the program's export table. It is still an
+        // operator of the module, so it is registered as a private entity: `inspect --ops` lists
+        // it marked private and the reference checker verifies its signature and its purity
+        // against this registration, which is what a kernel nobody exported used to escape.
         const bool isExported = exported.contains(group.name);
         std::optional<camel::core::module::entity> existing;
         if (isExported) {
@@ -686,6 +689,7 @@ void Builder::exportNativeOperators(const GCT::node_ptr_t &exportList) {
             OperatorGroup::create(group.name, std::move(group.rules));
         unit_->nativeOperatorGroups[group.name] = ops;
         if (!isExported) {
+            unit_->module->declarePrivateEntity(ref, ops);
             group.rules.clear();
             continue;
         }
