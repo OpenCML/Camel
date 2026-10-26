@@ -2519,6 +2519,8 @@ argsort: (keys: i32[]) => int[]
 argsort: (keys: int[]) => int[]
 argsort: (keys: f32[]) => int[]
 argsort: (keys: float[]) => int[]
+argsort: (keys: bf16[]) => int[]
+argsort: (keys: f16[]) => int[]
 argsort: (keys: bool[]) => int[]
 argsort: (keys: string[]) => int[]
 ```
@@ -2819,6 +2821,137 @@ f(xs[i], ys[i]) for every i.
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Failure: fault `InvalidArgument` (of zip) when the two arrays differ in length.
 - Example: `zip_with<(a: int, b: int) => a + b>([1, 2], [10, 20])` gives `[11, 22]`
+
+### Reducing along an axis
+
+#### `sum`
+
+```camel
+sum: <axis: int, keepdims: bool = false> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
+```
+
+The sum along an axis (0 along an axis of extent 0), with the rule of the whole sum: a float element type is added in f64
+from +0 in ascending order and rounded once, an integer one wraps around.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Failure: fault `InvalidArgument` when the axis is outside the rank.
+- Example: `([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->sum<0>` gives `[4.0, 6.0]`
+- Example: `([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->sum<1, true>` gives `[[3.0], [7.0]]`
+
+#### `mean`
+
+```camel
+mean: <axis: int, keepdims: bool = false> (xs: T[..]) => T[..] when is_float::<T>()
+```
+
+The mean along an axis: the sum and the division both in f64, rounded once into the element
+type.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Failure: fault `InvalidArgument` when the axis is outside the rank or its extent is 0.
+- Example: `([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->mean<1>` gives `[1.5, 3.5]`
+
+#### `min`
+
+```camel
+min: <axis: int, keepdims: bool = false> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
+```
+
+The smallest element along an axis, compared as `min` of the whole array compares.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Failure: fault `InvalidArgument` when the axis is outside the rank or its extent is 0.
+- Example: `([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->min<1>` gives `[1.0, 3.0]`
+
+#### `max`
+
+```camel
+max: <axis: int, keepdims: bool = false> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
+```
+
+The largest element along an axis, compared as `max` of the whole array compares.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Failure: fault `InvalidArgument` when the axis is outside the rank or its extent is 0.
+- Example: `([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->max<0>` gives `[3.0, 4.0]`
+
+#### `argmax`
+
+```camel
+argmax: <axis: int, keepdims: bool = false> (xs: T[..]) => int[..] when is_integer::<T>() || is_float::<T>()
+```
+
+The position along an axis of the first largest element, ordered as `argmax` of the whole
+array orders.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Failure: fault `InvalidArgument` when the axis is outside the rank or its extent is 0.
+- Example: `([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->argmax<1>` gives `[1, 1]`
+
+#### `argmin`
+
+```camel
+argmin: <axis: int, keepdims: bool = false> (xs: T[..]) => int[..] when is_integer::<T>() || is_float::<T>()
+```
+
+The position along an axis of the first smallest element, ordered as `argmin` of the whole
+array orders.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Failure: fault `InvalidArgument` when the axis is outside the rank or its extent is 0.
+- Example: `([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->argmin<0>` gives `[0, 0]`
+
+### Shape
+
+#### `shape`
+
+```camel
+shape: (xs: T[..]) => int[]
+```
+
+The extents of an array, in order.
+
+- A native operator of this module: an opaque node, pure.
+- Example: `shape([[1.0, 2.0], [3.0, 4.0]] as f32[2, 2])` gives `[2, 2]`
+
+#### `numel`
+
+```camel
+numel: (xs: T[..]) => int
+```
+
+The number of elements of an array: the product of its extents.
+
+- A native operator of this module: an opaque node, pure.
+- Example: `numel([[1.0, 2.0], [3.0, 4.0]] as f32[2, 2])` gives `4`
+
+#### `dim`
+
+```camel
+dim: <axis: int> (xs: T[..]) => int
+```
+
+The extent of one axis; a negative axis counts from the last one.
+
+- A native operator of this module: an opaque node, pure.
+- Failure: fault `InvalidArgument` when the axis is outside the rank.
+- Example: `([[1.0, 2.0, 3.0]] as f32[1, 3])->dim<1>` gives `3`
+
+### Binary form
+
+#### `to_bytes`
+
+```camel
+to_bytes: (xs: T[..]) => Bytes when is_plain::<T>()
+```
+
+The elements of an array as little-endian bytes, in row-major order: the payload `from_bytes`
+reads back. The elements are the array's own bytes, so every pure-data element type has them:
+one byte an element for a `bool` array, four for an `i32` or `f32` one and eight for an `f64` or `c64`
+one.
+
+- A native operator of this module: an opaque node, pure.
+- Example: `([[1, 2]] as int[1, 2])->to_bytes` gives `[1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0]`
 
 <a id="stream"></a>
 
@@ -4561,6 +4694,29 @@ reports for the process, not the number of processors. A test reads it to pin ho
 threads a run creates.
 
 - Example: `thread_count()` gives `1 at -t 1`
+
+#### `with_probe`
+
+```camel
+with_probe: <base: int, step: int = 10, mode: int = 0> (x: T) => int
+```
+
+`base * 10000 + step * 100 + mode`: the three `with` values the call ended with, the defaults of
+the parameters it left out among them. A native operator with a generic declaration, for the
+tests that pin where the names and the defaults of a call come from.
+
+- Example: `with_probe<1>(0)` gives `11000`
+
+#### `with_probe`
+
+```camel
+with_probe: <base: int, step: int = 10, mode: int = 0> (xs: int[]) => int
+```
+
+The same for an array: the number plus the length of the array, so a test reads which of the two
+declarations of the name a call reached.
+
+- Example: `with_probe<1>([5, 6])` gives `11002`
 
 <a id="this"></a>
 

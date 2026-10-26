@@ -148,7 +148,7 @@ export func check_text(r: CheckReport): string
 /// beyond translation coverage, and that a rule's condition is not a premise yet (rewrite design
 /// 8.1). The boundary is a value a reader can read and a test can pin.
 /// @example coverage_table    // 'the coverage of the integer scalar translation\n...'
-// value coverage_table: string
+export let coverage_table: string
 
 // ---- reading a run ----
 

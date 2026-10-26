@@ -431,7 +431,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "number_token_forms"
-desc = "The number tokens a literal and an entry argument share: hexadecimal, binary and `0o` octal integer tokens take a float position (`0xFF` is 255.0, `0b1010` 10.0, `0o77` 63.0). A leading-zero decimal integer (`077`) is a lexical error in source, while an entry argument reads it as 77 (entry_args.integer_leading_zero_is_decimal). The translated program is compared with camel on all of them (test/tools/cppexec/expect.txt)."
+desc = "The number tokens a literal and an entry argument share: hexadecimal, binary and `0o` octal integer tokens take a float position (`0xFF` is 255.0, `0b1010` 10.0, `0o77` 63.0). A leading zero before another digit (`077`, `077.5`) is a lexical error in source and is refused at the entry too (entry_args.integer_leading_zero_refused). The translated program is compared with camel on all of them (test/tools/cppexec/expect.txt)."
 kind = "behavior"
 case = "../../../cases/compile/literals/number_token_forms.cml"
 args = ["${case}", "${backend}"]

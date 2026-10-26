@@ -343,6 +343,12 @@ NumberTextStatus realValue(std::string_view body, bool negative, T &out) {
     return NumberTextStatus::Ok;
 }
 
+/// A digit run that starts with `0` and goes on with another digit (`077`, `09`, `007.5`): the
+/// lexer refuses it in source, and an entry argument refuses it the same way.
+inline bool hasLeadingZero(std::string_view text) {
+    return text.size() >= 2 && text[0] == '0' && text[1] >= '0' && text[1] <= '9';
+}
+
 } // namespace number_text_detail
 
 /// Reads `text` as one integer of type T for a conversion function: an optional sign ('-' or
@@ -402,11 +408,13 @@ template <std::floating_point T> NumberTextStatus parseWholeFloat(std::string_vi
 /// digits after it, and/or an exponent), and nothing else. A real token too small to tell from
 /// zero is Underflow and one too large is OutOfRange; neither is a value. For an integer
 /// T only an integer token fits (`12`, `0x10`, `0o77`; `1.5` and `1e3` do not). A leading zero
-/// is decimal (`077` is 77): the lexer keeps such a run out of a source literal, but an entry
-/// argument and a conversion text read it, as data text (2.5.2).
+/// before another digit (`077`, `077.5`) is no token, here as in source (2.5.2).
 template <std::signed_integral T> NumberTextStatus parseNumberToken(std::string_view text, T &out) {
     bool negative = false;
     if (!number_text_detail::splitNumberSign(text, negative)) {
+        return NumberTextStatus::NotANumber;
+    }
+    if (number_text_detail::hasLeadingZero(text)) {
         return NumberTextStatus::NotANumber;
     }
     number_text_detail::IntegerParts parts;
@@ -432,9 +440,12 @@ template <std::floating_point T> NumberTextStatus parseNumberToken(std::string_v
         out = std::numeric_limits<T>::quiet_NaN();
         return NumberTextStatus::Ok;
     }
-    // An integer token first: `0o77` is octal 63, and `0xFF` is 255. A source literal is written
-    // that way; a leading zero (`077`, `09`) is plain decimal data text, which the lexer refuses
-    // in source but an entry argument and a conversion text read (reference 2.5.2).
+    // A leading zero before another digit (`077`, `077.5`, `077e2`) is no number token, as it is
+    // none in source (reference 2.5.2): octal is `0o77`.
+    if (number_text_detail::hasLeadingZero(text)) {
+        return NumberTextStatus::NotANumber;
+    }
+    // An integer token first: `0o77` is octal 63, and `0xFF` is 255.
     number_text_detail::IntegerParts integer;
     if (number_text_detail::integerParts(text, integer)) {
         int64_t value = 0;
@@ -451,9 +462,7 @@ template <std::floating_point T> NumberTextStatus parseNumberToken(std::string_v
         }
         return NumberTextStatus::Ok;
     }
-    // Then a real token: digits, an optional point, an optional exponent. A leading-zero digit
-    // run with an exponent (`077e2`) is decimal data text, like `077`; the lexer refuses it in
-    // source before a literal can be built from it.
+    // Then a real token: digits, an optional point, an optional exponent.
     number_text_detail::RealParts real;
     if (!number_text_detail::realParts(text, real)) {
         return NumberTextStatus::NotANumber;

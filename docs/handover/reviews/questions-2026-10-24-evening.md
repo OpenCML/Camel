@@ -1824,3 +1824,49 @@ C9 已合入（`22d03dd80` 经 `a503f6130`），`thread_count` 只在 `test_supp
 - 设计按 2026-10-26 的裁定落地（在图上检查、每条路径读一次、捕获的流跟着原值走），收下。
 - **流程问题**：`ecc480f77 wip: ...`（临时计数器和探针）进了 develop 的历史。过渡状态不进 develop：车道上的 wip 提交在合并前压掉，或者干脆不提交。
 - **小改**：`registerBuiltBody` 按指针去重，用的是对 `builtBodies` 的线性扫描，程序大时是平方级。旁边配一个 `unordered_set` 判重。
+
+## 返工：写捕获变量的调用（5f047699b 一组）
+
+解释器、节点虚拟机、taskflow 三处的打包都已落地，测试齐全，收下。两处不能这样留着：
+1. **`std::cpp` 的拒绝信息写着 "does not translate their new versions yet"**，这是"尚未实现"式的诊断，规则不允许。
+   - 写捕获变量是普通的语言能力（循环里改外层变量就会用到），C++ 导出必须支持。
+   - 被调函数的结果和新版本，在 C++ 里就是一个结构体返回值，取部件节点即成员访问。
+   - 补上翻译，删掉这条拒绝，并加 cppexec 一致性用例。
+2. **JIT 遇到写捕获的调用就把整张图留在解释器**：作为过渡可以接受，但要排进主线。
+   - 编译出的调用方按同一个元组布局取部件即可，不需要解释器。
+   - 补上之后删掉这条回退原因。
+
+## 2026-10-26-four-declaration-cases-pin-a-retired-mechanism
+
+`module` 声明已经退役，不留测旧机制的用例（不考虑兼容）。按每条测的是什么分开处理：
+- **`entry_uri_prefix`、`unselected_case_sees_declaration`**：测的就是"用 `module` 声明的名字做 URI 前缀"这件事本身，删掉。删除的理由写进提交信息：所测的机制已不存在，而模块只能声明自己实现的算子，这条规则另有用例。
+- **`declaration_type_argument`、`declaration_per_result_type`**：测的诊断（`NoMatchingFunction` 的候选列表、`Redeclaration`）仍然有效，换正当的路径重写。
+  - 前者调用真实的 `tensor` 声明，给错类型参数。
+  - 后者在用例自己的模块里，写两个同名、同签名的 Camel 函数。
+
+## 2026-10-26-onnx-draft-asks-what-the-core-cannot-do
+
+1. **不注册三条规则**：那是为了绕开核心的缺口，而声明模块才是签名的唯一来源（原则 6.4）。
+   - `onnx:export_model` 的 `with <out, dynamic_axes: int[]? = null, target: string? = null>` 写在 `stdlib/onnx.cml` 的声明里，名字与默认值从声明来。
+   - 跳过中间一个、只给 `target` 的写法要成立。
+   - 核心若对"有声明的原生算子"仍走计算签名、读不到名字和默认值，就修核心：有声明时以声明为准，计算签名只用于没有声明的算子组。
+   - `registry.overload_position_names_agree` 的"至少两条规则"不是特性，是这个缺口的表现，随之改掉。
+2. **遍参数选 (A)，(B) 排进主线**：遍的形式暂时只声明 `out`。遍与调用形式的 `with` 参数应当是同一组，所以 (B) 要做：
+   - 命令行遍参数按声明的类型读，包括 `int[]`、`T?` 和 `null` 默认值；
+   - 接到入口导出；
+   - `docs/cli.cn.md` 的相应限制随之删掉。
+   这是新功能，另开车道。期间遍不声明它读不了的参数，不出"尚未支持"的诊断。
+
+## 2026-10-26-onnx-migration-three-measured-differences
+
+1. 18 个，收下。
+2. **`let _ = export_model<out: path>(f, x)` 是对的**：`void!` 被忽略要警告，有意丢弃就这么写。只关心导出成功的用例，更好的写法是把它作为 `main(): void!` 的结果，或用 `!!` 处理；只有确实不关心结果的才用 `let _ =`。
+3. **`checkExamples` 补上位置**：两种形式要报同一处，这是同一条"错误值带着被拒绝节点的位置"规则。
+
+## 2026-10-26-our-mechanical-rename-left-two-false-sentences
+
+fsh-dev 上这两句已经是对的：原则 214 行写的是"没有单独的 `?->`"；`06_expressions.md` 里没有"`->`、`->`"，`?->` 退役那条车道合入时取的是正确的文本。你们那条分支合并时以 fsh-dev 的文本为准即可，不用另改。
+
+**ONNX 签名一项由决策者这边做**：`with` 参数的默认值参与重载（可以省略，命名实参可以跳过中间有默认值的参数），有声明的原生算子从声明取名字与默认值。`array` 的核心改动也撞上了同一个缺口。施工方的 `onnx` 迁移等这一项合入后，直接写一条声明。
+
+**`with` 默认值已合入（`264fa733c`）**：有默认值的 `with` 参数可以省略，命名实参可以跳过中间的默认参数；有声明的原生算子从声明取名字与默认值。`onnx:export_model` 可以直接写一条声明 `with <out: string, dynamic_axes: int[]? = null, target: string? = null>`，不用注册三条规则。

@@ -214,6 +214,9 @@ const NOT_SOURCE = new Set([
     '.jpeg',
     '.gif',
     '.svg',
+    // A page shell: the promo's renderer page (promo/poc/index.html) is markup that loads the
+    // script, a document format like .svg rather than source in a language this policy names.
+    '.html',
     '.ico',
     // Brand assets in a moving-image format: a video is not source in any language this policy
     // names, and it is the one such file the repository carries.

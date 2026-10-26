@@ -1138,8 +1138,20 @@ generic_template_ptr_t Builder::chooseGenericOverload(
     // they are declared in.
     const auto binds = [&](const generic_template_ptr_t &tmpl) {
         FunctionType *signature = tmpl->funcType;
-        if (signature->hasRest() || signature->withTypesCount() != withTypes.size()) {
+        if (signature->hasRest() || withTypes.size() > signature->withTypesCount()) {
             return false;
+        }
+        // A `with` parameter the call leaves out needs a default of this declaration.
+        const auto registered = defaults_.find(tmpl.get());
+        for (size_t i = 0; i < signature->withTypesCount(); ++i) {
+            const bool written = i < withInputs.size() && !withInputs[i].left;
+            if (written) {
+                continue;
+            }
+            if (registered == defaults_.end() || i >= registered->second.with.size() ||
+                !registered->second.with[i].has_value()) {
+                return false;
+            }
         }
         const size_t params = signature->normTypesCount() - signature->constasCount();
         if (params != normTypes.size()) {
