@@ -2447,19 +2447,39 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
 
     // A dimension of a subscript that slices is not an element index (design principles 5.4):
     // `t[a:b]` calls the slice operator, `t[i]` the index operator. The dimensions are counted
-    // because a slice of a dimension other than the first is a view with strides, which needs
-    // the multidimensional array representation that is not there yet.
+    // because the slice operator names one axis and keeps the other dimensions as they are, so a
+    // subscript that writes bounds on one dimension and `:` for every other one is that one slice,
+    // whichever dimension it slices; a subscript that selects on more than one dimension has no
+    // single node to be.
     AST::node_ptr_t sliceDimension = nullptr;
-    size_t subscriptDimensions     = 0;
+    AST::node_ptr_t writtenSlice   = nullptr;
+    size_t dimension               = 0;
+    size_t sliceDimensionIndex     = 0;
+    size_t writtenSlices           = 0;
+    size_t indexDimensions         = 0;
     if (binaryExpr->op() == AST::BinaryDataOp::Index) {
         for (const auto &item : *ast->atAs<AST::RepeatedLoad>(1)) {
-            ++subscriptDimensions;
+            const size_t at = dimension++;
             if (item->type() == AST::LoadType::Data &&
                 item->loadAs<AST::DataLoad>()->dataType() == AST::DataType::Slice) {
                 sliceDimension = item;
+                bool namesRange = false;
+                for (size_t part = 0; part < 3; ++part) {
+                    namesRange = namesRange || item->at(part)->type() != AST::LoadType::Null;
+                }
+                if (namesRange) {
+                    writtenSlice        = item;
+                    sliceDimensionIndex = at;
+                    ++writtenSlices;
+                }
+            } else {
+                ++indexDimensions;
             }
         }
     }
+    // The dimension the slice runs along: the one the subscript wrote bounds on, and the first
+    // dimension when it wrote none (`t[:]`, `t[:, :]`: every dimension taken whole).
+    const size_t sliceAxis = writtenSlice != nullptr ? sliceDimensionIndex : 0;
 
     // Determine the binary operator and create the corresponding node
     switch (binaryExpr->op()) {
@@ -2518,33 +2538,32 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
     if (binaryExpr->op() == AST::BinaryDataOp::Index) {
         auto indices = ast->atAs<AST::RepeatedLoad>(1);
         if (sliceDimension != nullptr) {
-            if (subscriptDimensions > 1) {
-                // `t[:, 0]`, `t[a:b, c]`: the result takes every element of the dimension that
-                // is not sliced at the coordinate the index gives, so it is a view with
-                // strides (design principles 5.4). That needs the multidimensional array
-                // representation that is not there yet; until then the form is a located error rather
-                // than a copy that would read like the view but not share its block.
+            if (writtenSlices > 1 || indexDimensions > 0) {
+                // `t[a:b, c]`, `t[a:b, c:d]`: the subscript selects on more than one dimension.
+                // The slice operator names one axis and keeps the other dimensions as they are,
+                // and the index operator drops the dimension it names, so the two together are
+                // not one node. Refused here rather than read as a slice of the wrong axis.
                 diags_->of(SemanticDiag::ConstructNotSupported)
                     .at(indices->load()->tokenRange())
                     .commit(
-                        "a subscript that slices a dimension other than the first",
-                        "it is a view with strides, which needs the multidimensional array "
-                        "representation of H17; until then take the rows with the function "
-                        "'take', or index one dimension at a time");
+                        "a subscript that names a range or a position on more than one dimension",
+                        "the slice operator takes one axis, and the index operator takes the "
+                        "first dimension");
                 throw BuildAbortException();
             }
-            // `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]`: the slice of the first dimension a
-            // subscript writes (design principles 5.4). The call is the slice node itself: the
-            // value, the axis (the constant 0 -- a subscript slices the first dimension), the
-            // two bounds, the step, and a two-bit mask (bit 0 end, bit 1 start) saying which of
-            // the start and the end the program wrote: `t[a:]` and `t[:b]` differ, and a
-            // negative step needs to know whether the start was given. A part that was not
+            // `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]`: the slice of the axis a subscript
+            // writes (design principles 5.4). The call is the slice node itself: the value, the
+            // axis (the dimension the bounds are written on, so `t[:, a:b]` is the same node with
+            // the axis 1), the two bounds, the step, and a two-bit mask (bit 0 end, bit 1 start)
+            // saying which of the start and the end the program wrote: `t[a:]` and `t[:b]` differ,
+            // and a negative step needs to know whether the start was given. A part that was not
             // written is passed as the value it stands for, 0 for the start and 1 for the step;
             // the end is read only when written.
+            const AST::node_ptr_t boundsOf = writtenSlice != nullptr ? writtenSlice : sliceDimension;
             node_ptr_t bound[3] = {nullptr, nullptr, nullptr};
             bool written[3]     = {false, false, false};
             for (size_t i = 0; i < 3; ++i) {
-                const auto &part = sliceDimension->at(i);
+                const auto &part = boundsOf->at(i);
                 written[i]       = part->type() != AST::LoadType::Null;
                 if (written[i]) {
                     bound[i] = visitData(part);
@@ -2557,9 +2576,9 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
             bound[1]                  = written[1] ? bound[1] : intConstant(0);
             bound[2]                  = written[2] ? bound[2] : intConstant(1);
             node_ptr_t endWrittenNode = intConstant((written[1] ? 1 : 0) | (written[0] ? 2 : 0));
-            // The axis: a subscript slices the first dimension, so the slice node's second
-            // argument is the constant 0 (the function form writes the axis itself).
-            *res << intConstant(0);
+            // The axis: the dimension the subscript wrote the bounds on (the function form writes
+            // the axis itself, and an all-`:` subscript takes the first dimension whole).
+            *res << intConstant(static_cast<int64_t>(sliceAxis));
             for (size_t i = 0; i < 3; ++i) {
                 *res << bound[i];
                 if (written[i]) {
