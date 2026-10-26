@@ -4,8 +4,10 @@
  * principles 3.5 and F3), and the call runs where a sync block orders it.
  *
  * Outside a sync block the call of the value is not needed and does not run, so the read still
- * sees the value `t` had. The value is an effect either way; what a sync block adds is that the
- * effects written in it happen.
+ * sees the value `t` had, and the call is reported as `EffectNotExecuted`: what carries its
+ * effect is the resource set its type infers (it writes the cell it captured), not a flag on the
+ * type. The value is an effect either way; what a sync block adds is that the effects written in
+ * it happen.
  */
 module partial_application_var_parameter_effect
 

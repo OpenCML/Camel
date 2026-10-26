@@ -18,7 +18,7 @@ namespace camel::graphmod {
 bool constantType(const camel::core::type::Type *type);
 
 /// The kernels of the operators that read a Program. Every one is pure and every signature is a
-/// declaration of `stdlib/graph.cml` (`constant` per sample type; handover H202).
+/// declaration of `stdlib/graph.cml` (`constant` per sample type).
 const std::unordered_map<std::string, operator_t> &readKernels();
 
 } // namespace camel::graphmod

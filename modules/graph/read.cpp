@@ -628,7 +628,7 @@ slot_t showKernel(ArgsView &, ArgsView &norm, Context &) {
 // ---- the tables ----
 
 // Every read but `constant`: its signature is in stdlib/graph.cml, so the table carries the
-// kernel of each name and nothing else (handover H141).
+// kernel of each name and nothing else.
 struct ReadOp {
     const char *name;
     operator_t kernel;

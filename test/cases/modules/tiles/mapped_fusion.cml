@@ -1,5 +1,5 @@
 module tiles_mapped_fusion
-import { random, seed, sum, abs, transpose, slice, reshape } from tensor
+import { random, seed, sum, abs, transpose, reshape } from tensor
 import { inspect, benchmark, run_preferred_resident, download } from tiles
 
 func pipeline(a: f32[..], b: f32[..]): f32[..] {

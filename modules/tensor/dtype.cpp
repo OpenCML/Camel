@@ -4,9 +4,10 @@
 /*
  * Element type helpers shared by kernels, type inference, and serialization.
  *
- * There is no normalization here (design/arrays-memory plan 5.2): a tensor's
- * element type is the one the program wrote, so `f64[..]` is f64 and
- * `i32[..]` is i32. Promotion only picks one of the two operand types.
+ * There is no normalization here (design/arrays-memory plan 5.2) and no promotion between
+ * element types: a tensor's element type is the one the program wrote, so `f64[..]` is f64 and
+ * `i32[..]` is i32, and two operands that state different element types are written with the
+ * conversion that says which one they compute in (design principles 5.1).
  */
 
 #include "dtype.h"
@@ -53,57 +54,6 @@ std::string elementTypeSpelling(TypeCode code) {
     default:
         return type::typeCodeToString(code);
     }
-}
-
-TypeCode promoteTensorTypes(TypeCode lhs, TypeCode rhs) {
-    if (!isSupportedTensorScalar(lhs)) {
-        throw std::invalid_argument("Unsupported array element type");
-    }
-    if (!isSupportedTensorScalar(rhs)) {
-        throw std::invalid_argument("Unsupported array element type");
-    }
-    // A reduced-precision type meets the wider float it is a subset of, or its own type. It
-    // never meets the other reduced type or an integer: neither type holds every value of the
-    // other (bf16 has f32's range with 8 significand bits, f16 has 11; an i64 has 63), so a
-    // promotion would have to invent a result type or narrow silently. The program casts one
-    // operand; that written conversion is the precision it asked for, so no numeric permission is
-    // involved (design principles 7.2-7.3).
-    if (isReducedFloatTensorType(lhs) || isReducedFloatTensorType(rhs)) {
-        if (lhs == rhs) {
-            return lhs;
-        }
-        const auto widerFloat = [](TypeCode reduced, TypeCode other) {
-            return isReducedFloatTensorType(reduced) &&
-                   (other == TypeCode::Float32 || other == TypeCode::Float64);
-        };
-        if (widerFloat(lhs, rhs)) {
-            return rhs;
-        }
-        if (widerFloat(rhs, lhs)) {
-            return lhs;
-        }
-        throw std::invalid_argument(
-            "cannot mix '" + elementTypeSpelling(lhs) + "' and '" + elementTypeSpelling(rhs) +
-            "' elements: neither type holds every value of the other. Cast one of them to the "
-            "element type the result should have");
-    }
-    // Widening only: the result is one of the two element types, so promotion never
-    // replaces an operand's type with a third one. f64 > f32 > i64 > i32 > bool.
-    const auto rank = [](TypeCode code) {
-        switch (code) {
-        case TypeCode::Float64:
-            return 4;
-        case TypeCode::Float32:
-            return 3;
-        case TypeCode::Int64:
-            return 2;
-        case TypeCode::Int32:
-            return 1;
-        default:
-            return 0;
-        }
-    };
-    return rank(lhs) >= rank(rhs) ? lhs : rhs;
 }
 
 std::string_view dtypeName(TypeCode dtype) {

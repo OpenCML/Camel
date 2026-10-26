@@ -88,28 +88,40 @@ TypeCode computedElementType(TypeCode element, TypeCode scalar) {
     return isFloatingTensorType(scalar) ? TypeCode::Float32 : element;
 }
 
-/// The element type a binary operator's two operands are computed in: a scalar operand has the
-/// tensor's element type, and two tensors promote only by widening (design principles 5.1). A
-/// scalar of another type is refused, not converted: a value whose type is its own (`a: float`)
-/// is an error, the same rule as `f32 * f64` between two scalars, and the report names the
-/// conversion to write. A literal takes the element type before the operator is resolved -
-/// `x * 2.0` and `add(x, 2.0)` alike - so what is left at a call the program wrote is a value. A
-/// constant that still arrives with a type of its own is one the literal rule could not reach:
-/// a literal the element type holds no form of (a `bool` tensor's arithmetic is f32) or one
-/// written inside a generic function, whose element type is open where the literal is typed and
-/// fixed only at instantiation. The operator then keeps the answer it always gave, and the
-/// kernel reads the constant in the element type - the narrowing is a defect the literal rule
-/// does not yet cover, not a value to report. A pass that reads the graph again infers without
-/// `sourceLevel` and keeps that tolerance for every operand alike, because the program was
-/// compiled under it (a generic body is inferred with open element types).
-/// Unknown when an operand's element type is unknown.
+/// The element type a binary operator's two operands are computed in: one element type, because a
+/// tensor operator computes in its element type and there is no implicit conversion between
+/// numeric types (design principles 5.1). A scalar operand has the tensor's element type, and a
+/// scalar of another type is refused, not converted: a value whose type is its own (`a: float`) is
+/// an error, the same rule as `f32 * f64` between two scalars, and the report names the conversion
+/// to write. A literal takes the element type before the operator is resolved - `x * 2.0` and
+/// `add(x, 2.0)` alike - so what is left at a call the program wrote is a value. A constant that
+/// still arrives with a type of its own is one the literal rule could not reach: a literal the
+/// element type holds no form of (a `bool` tensor's arithmetic is f32) or one written inside a
+/// generic function, whose element type is open where the literal is typed and fixed only at
+/// instantiation. The operator then keeps the answer it always gave, and the kernel reads the
+/// constant in the element type - the narrowing is a defect the literal rule does not yet cover,
+/// not a value to report. A pass that reads the graph again infers without `sourceLevel` and keeps
+/// that tolerance for every operand alike, because the program was compiled under it (a generic
+/// body is inferred with open element types).
+/// Two tensor operands state the element type they compute in, and the pair is refused when the
+/// two differ - `f32[..] * f64[..]` and `f32[..] * bool[..]` alike match no arm whether the
+/// extents are known or open, and the report names the conversion to write
+/// (refuseMixedElementTypes). An integer or a bool is an element type like any other: a number
+/// becoming one is a conversion the program writes, so a mask is written `where(mask, x, 0.0)` or
+/// `cast(mask, "f32")`.
+///
+/// The two operands the rule reads are named by index: an operator's operands are not always its
+/// first two, and `where` reads its condition first and the two values it chooses between after
+/// it.
 std::optional<TypeCode>
-operandType(const InferContext &ctx, const TensorFacts &lhs, const TensorFacts &rhs) {
-    if (isTensorArg(ctx, 0) == isTensorArg(ctx, 1)) {
-        return promote(lhs.dtype, rhs.dtype);
+operandType(const InferContext &ctx, size_t lhsIndex, size_t rhsIndex) {
+    const TensorFacts lhs = ctx.facts(lhsIndex), rhs = ctx.facts(rhsIndex);
+    if (isTensorArg(ctx, lhsIndex) == isTensorArg(ctx, rhsIndex)) {
+        refuseMixedElementTypes(lhs.dtype, rhs.dtype);
+        return commonElementType(lhs.dtype, rhs.dtype);
     }
-    const bool tensorFirst = isTensorArg(ctx, 0);
-    const size_t scalarIndex = tensorFirst ? 1 : 0;
+    const bool tensorFirst = isTensorArg(ctx, lhsIndex);
+    const size_t scalarIndex = tensorFirst ? rhsIndex : lhsIndex;
     const TensorFacts &tensor = tensorFirst ? lhs : rhs;
     Type *scalar = ctx.type(scalarIndex);
     if (!tensor.dtype || scalar == nullptr) {
@@ -143,7 +155,7 @@ InferFn binaryInfer(bool producesFloat) {
             return std::nullopt;
         }
         const TensorFacts lhs = ctx.facts(0), rhs = ctx.facts(1);
-        std::optional<TypeCode> dtype = operandType(ctx, lhs, rhs);
+        std::optional<TypeCode> dtype = operandType(ctx, 0, 1);
         if (producesFloat && dtype && !isReducedFloatTensorType(*dtype)) {
             // Div and Pow produce a float: f64 when a tensor operand is f64, f32 otherwise. A
             // bf16 or f16 operand keeps its element type: the quotient is computed in f32 and
@@ -155,11 +167,19 @@ InferFn binaryInfer(bool producesFloat) {
     };
 }
 
+/// A comparison of two numeric arrays compares elements of one element type: the two operands are
+/// read by the same rule as the arithmetic around them (`operandType`), so an f64 array beside an
+/// f32 one is refused (refuseMixedElementTypes) rather than compared element by element at a width
+/// the program did not write, and a scalar operand - a literal above all - is read at the tensor's
+/// element type. The element type that rule answers with is not the comparison's: the result is a
+/// `bool` array of the broadcast shape.
 std::optional<Type *> compareInfer(const InferContext &ctx) {
     if (!anyTensorLike(ctx, 2)) {
         return std::nullopt;
     }
-    return tensorOf(TypeCode::Bool, broadcast(ctx.facts(0).shape, ctx.facts(1).shape));
+    const TensorFacts lhs = ctx.facts(0), rhs = ctx.facts(1);
+    operandType(ctx, 0, 1);
+    return tensorOf(TypeCode::Bool, broadcast(lhs.shape, rhs.shape));
 }
 
 InferFn unaryInfer(bool producesFloat) {
@@ -238,10 +258,11 @@ slot_t whereKernel(ArgsView &, ArgsView &norm, context::Context &) {
     });
 }
 
+/// The condition selects between the two values and is not one of them: the element type is the
+/// one the two values state (argument 1 and 2), and the mask is bool whatever that type is.
 std::optional<Type *> whereInfer(const InferContext &ctx) {
     const TensorFacts c = ctx.facts(0), a = ctx.facts(1), b = ctx.facts(2);
-    return tensorOf(
-        operandType(ctx, a, b), broadcast(c.shape, broadcast(a.shape, b.shape)));
+    return tensorOf(operandType(ctx, 1, 2), broadcast(c.shape, broadcast(a.shape, b.shape)));
 }
 
 /// Element type named by a cast target string. The names follow the language: `float` is f64

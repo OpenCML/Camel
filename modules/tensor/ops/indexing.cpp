@@ -10,8 +10,10 @@
  *
  *   elementwise   add subtract multiply divide maximum minimum, neg abs exp log sqrt rsqrt
  *                 relu: one Parallel dim per result axis, every operand broadcast to it
- *   layout        transpose permute slice reshape flatten unsqueeze broadcast_like
- *                 expand_axis: a Unique write, each result element read from one element
+ *   layout        transpose permute reshape flatten unsqueeze broadcast_like expand_axis: a
+ *                 Unique write, each result element read from one element; and the core's own
+ *                 slice node (`:op/slice_sub`), whose declaration this module publishes because
+ *                 the read is a tensor's
  *   reductions    sum mean (to a number), sum_axis mean_axis max_axis min_axis, sum_to:
  *                 Reduction dims and a combining write, by a law per element type
  *   matmul        (batch..., m, n, k), k the reduction, NumPy's rank-1 and batch rules
@@ -22,10 +24,13 @@
 #include "../kernels/layout.h"
 #include "support.h"
 
+#include "camel/core/operator_table.h"
+
 #include <algorithm>
 #include <bit>
 #include <format>
 #include <limits>
+#include <stdexcept>
 #include <unordered_map>
 
 namespace camel::tensor::ops {
@@ -329,26 +334,33 @@ std::optional<IndexedInstance> permuteIndexing(const InferContext &ctx) {
 }
 
 /**
- * slice(x, axis, start, stop, step = 1), step > 0, with the bounds normalized as the kernel
- * does (a negative bound counts from the end). A bound still outside [0, n] is a fault (design
- * principles 3.9): the call then has no instance. A stop before the start is the empty range
- * (3.9):
+ * slice(t, axis, start, end, step = 1, written = 3): the core's own slice node -- `:op/slice_sub`
+ * -- the one node both `t[a:b:s]` and `slice(t, axis, a, b, s)` build (design principles 5.4),
+ * for any rank and any axis. The last two words are the step and the mask saying which of the
+ * two bounds the source wrote; a call that leaves them out stands for step 1 and both bounds
+ * written, the values the kernel defaults them to (sliceRange, src/builtin/operators/struct.cpp).
+ * The mask is the core's bookkeeping about the source text rather than part of the slice, so it
+ * is read here only for the positions a bound the program did not write stands for.
  *
- *   params   n = extent(0, axis); axis and step (Static); start/stop (a Derived normalized
- *            value, known when the bound is a constant and the extent is known); the raw
- *            constant or Runtime value it came from; len (Derived)
+ * A bound is a position from 0 to the axis' length, a negative one is a fault, and the end is
+ * one past the last position taken (3.9): there is nothing to normalize, and the value of a
+ * written bound is the coordinate itself. A step may be negative, running backwards; the start
+ * then stands for the last position of the axis and the end, left out, for the position before
+ * the first.
+ *
+ *   params   n = extent(0, axis); axis and step (Static); a written start/end (Static, or
+ *            Runtime when only the run knows it); len (Derived, known when the bounds and n are)
  *   domain   one dim per axis; on `axis` d < len
  *   norm 0   (..., start + step*d_axis, ...)        within [0, n) by construction (Unreachable)
- *   where    0 <= start, start <= n, 0 <= stop, stop <= n, 1 <= step, 0 <= len
- *   check    a raw start/stop whose normalized value is not known at compile time: [-n, n], the
- *            bounds a slice accepts (a negative one counts from the end); outside it the
- *            operator faults with SliceOutOfRange before it reads anything
+ *   where    the interval each written bound was accepted in: [0, n], and [0, n - 1] for a
+ *            backward start, which must be a position the axis has; 0 <= len
+ *   check    a written bound whose value is not known at compile time: the same interval, else
+ *            the operator faults with SliceOutOfRange before it reads anything
  *
- * A constant bound is normalized now when the extent is known; one outside [-extent, extent]
- * is the fault the operator raises, so the call has no instance. With the extent unknown a
- * constant bound is checked like a run-time one (whether it is in range depends on the extent).
- * A step that is not constant gives no instance (the operator faults on a non-positive step,
- * which the map cannot state).
+ * A constant bound outside its interval is that fault when the extent is known, so the call has
+ * no instance; with the extent unknown a constant bound is checked like a run-time one (whether
+ * it is a position depends on the extent). A step that is not constant gives no instance: its
+ * sign says which positions unwritten bounds stand for and which way the map runs.
  */
 std::optional<IndexedInstance> sliceIndexing(const InferContext &ctx) {
     const auto in   = shapeOf(ctx, 0);
@@ -362,78 +374,104 @@ std::optional<IndexedInstance> sliceIndexing(const InferContext &ctx) {
     }
     const bool stepGiven = ctx.has(4);
     const auto step      = stepGiven ? ctx.constInt(4) : std::optional<int64_t>(1);
-    if (!step || *step <= 0) {
+    if (!step || *step == 0) {
         return std::nullopt;
     }
-    const std::optional<int64_t> extent = (*in)[*a];
-    const auto startRaw  = ctx.constInt(2);
-    const auto stopRaw   = ctx.constInt(3);
-    // The normalized value of a bound when it is fixed: a constant bound with a known extent.
-    std::optional<int64_t> startNorm, stopNorm;
-    if (extent.has_value()) {
-        for (const auto &[raw, normalized] :
-             {std::pair{startRaw, &startNorm}, std::pair{stopRaw, &stopNorm}}) {
-            if (!raw) {
-                continue;
-            }
-            const auto value = kernels::normalizeSliceBound(*extent, *raw);
-            if (!value) {
-                return std::nullopt; // the operator faults with SliceOutOfRange
-            }
-            *normalized = *value;
-        }
+    const bool maskGiven = ctx.has(5);
+    const auto written   = maskGiven ? ctx.constInt(5) : std::optional<int64_t>(3);
+    if (!written) {
+        return std::nullopt;
     }
+    const bool wroteStart = (*written & 2) != 0;
+    const bool wroteEnd   = (*written & 1) != 0;
+    const bool backwards  = *step < 0;
+    const std::optional<int64_t> extent = (*in)[*a];
 
     IndexBuilder b;
     b.constant("axis", 1, static_cast<int64_t>(*a));
     const ExprId stepP = stepGiven ? b.constant("step", 4, *step) : b.x().constant(1);
     const ExprId nP    = b.extent(0, *a, extent);
-    // The value the access uses: the normalized bound, known only when the extent is. Normalizing
-    // a negative bound is not quasi-affine (it branches on the sign), so the parameter states
-    // its value or its range, not a definition.
-    const ExprId startP = b.derived("start", startNorm, kNoExpr);
-    const ExprId stopP  = b.derived("stop", stopNorm, kNoExpr);
+    const ExprId zero  = b.x().constant(0);
+    // The upper end of the interval a written bound is accepted in: the axis' positions, and for
+    // the end also the position one past the last (the end is one past the last taken). A
+    // backward start must be a position the axis has.
+    const ExprId startUpper = backwards ? b.x().sub(nP, b.x().constant(1)) : nP;
 
-    // A bound whose normalized value is not known goes through the check on entry: a slice
-    // accepts exactly [-n, n], the values a negative bound counted from the end turns into
-    // [0, n].
-    const ExprId low = b.x().scale(-1, nP);
-    const auto checkBound = [&](size_t operand, const char *name, std::optional<int64_t> raw,
-                                std::optional<int64_t> normalized) {
-        if (normalized) {
-            return;
-        }
-        const ExprId param = raw ? b.constant(name, operand, *raw) : b.runtime(name, operand);
-        b.check(operand, param, low, nP);
+    struct Bound {
+        ExprId expr = kNoExpr;
+        std::optional<int64_t> value;
     };
-    checkBound(2, "start_raw", startRaw, startNorm);
-    checkBound(3, "stop_raw", stopRaw, stopNorm);
+    // One bound: the value the program wrote, or the position the node's own reading stands for
+    // when it wrote none. `limit` is that interval's upper end where the extent fixes it.
+    const auto bound = [&](size_t index, const char *name, bool wrote, const Bound &unwritten,
+                           const ExprId upper, const std::optional<int64_t> &limit)
+        -> std::optional<Bound> {
+        if (!wrote) {
+            return unwritten;
+        }
+        const auto raw = ctx.constInt(index);
+        if (raw && *raw < 0) {
+            return std::nullopt; // a bound is a position of the axis: a negative one is the fault
+        }
+        if (raw && limit && *raw > *limit) {
+            return std::nullopt; // the fault the kernel raises (SliceOutOfRange)
+        }
+        if (raw && limit) {
+            return Bound{b.constant(name, index, *raw), *raw};
+        }
+        const ExprId param = raw ? b.constant(name, index, *raw) : b.runtime(name, index);
+        b.check(index, param, zero, upper);
+        return Bound{param, raw};
+    };
+    const auto start = bound(
+        2,
+        "start",
+        wroteStart,
+        backwards ? Bound{b.x().sub(nP, b.x().constant(1)),
+                          extent ? std::optional(*extent - 1) : std::nullopt}
+                  : Bound{zero, 0},
+        startUpper,
+        extent ? std::optional(*extent - (backwards ? 1 : 0)) : std::nullopt);
+    const auto end = bound(
+        3,
+        "end",
+        wroteEnd,
+        backwards ? Bound{b.x().constant(-1), -1} : Bound{nP, extent},
+        nP,
+        extent ? std::optional(*extent) : std::nullopt);
+    if (!start || !end) {
+        return std::nullopt;
+    }
 
+    // The positions taken: the kernel's own count (sliceRange), fixed by the bounds and the step
+    // alone -- an unwritten bound is the one that depends on the axis.
     std::optional<int64_t> len;
-    if (startNorm && stopNorm) {
-        len = *stopNorm > *startNorm ? (*stopNorm - *startNorm + *step - 1) / *step : 0;
+    if (start->value && end->value) {
+        const int64_t from = *start->value, to = *end->value;
+        len = backwards ? (from > to ? (from - to - *step - 1) / (-*step) : 0)
+                        : (from < to ? (to - from + *step - 1) / *step : 0);
     }
     const ExprId lenP = b.derived("len", len, kNoExpr);
     std::vector<ExprId> coords;
     for (size_t k = 0; k < in->size(); ++k) {
         if (k == *a) {
-            const ExprId d = b.dim(lenP);
-            coords.push_back(b.x().add(startP, b.x().mul(stepP, d)));
+            coords.push_back(
+                b.x().add(start->expr, b.x().mul(stepP, b.dim(lenP))));
         } else {
             coords.push_back(b.dim(b.extent(0, k, (*in)[k])));
         }
     }
-    for (const ExprId bound : {startP, stopP}) {
-        b.require(b.x().constant(0), Rel::Le, bound);
-        b.require(bound, Rel::Le, nP);
+    if (wroteStart) {
+        b.require(zero, Rel::Le, start->expr);
+        b.require(start->expr, Rel::Le, startUpper);
     }
-    b.require(b.x().constant(0), Rel::Le, lenP);
-    if (stepGiven) {
-        b.require(b.x().constant(1), Rel::Le, stepP);
+    if (wroteEnd) {
+        b.require(zero, Rel::Le, end->expr);
+        b.require(end->expr, Rel::Le, nP);
     }
-    b.instance.norm = {IndexBuilder::affine(std::move(coords)), IndexBuilder::none(),
-                       IndexBuilder::none(), IndexBuilder::none()};
-    if (stepGiven) {
+    b.require(zero, Rel::Le, lenP);
+    b.instance.norm = {IndexBuilder::affine(std::move(coords))};
+    for (size_t i = 1; i < ctx.size(); ++i) {
         b.instance.norm.push_back(IndexBuilder::none());
     }
     return b.finish(allDims(b));
@@ -929,7 +967,6 @@ const std::unordered_map<std::string_view, Indexing> &indexings() {
         }
         t.emplace("transpose", Indexing{transposeIndexing, {}});
         t.emplace("permute", Indexing{permuteIndexing, {}});
-        t.emplace("slice", Indexing{sliceIndexing, {}});
         t.emplace("reshape", Indexing{reshapeIndexing, {}});
         t.emplace("flatten", Indexing{flattenIndexing, {}});
         t.emplace("unsqueeze", Indexing{unsqueezeIndexing, {}});
@@ -1004,9 +1041,9 @@ const std::unordered_map<std::string_view, Indexing> &indexings() {
         // the tensors it is given: f32 accumulating from +0, and f64 accumulating from +0 as well.
         // An f64 gradient through a broadcast is an f64 result (questions-2026-10-23.md, section
         // f64-tensor-leaf: the element type of a value is always determined), so refusing it is a
-        // missing arm and not a rule -- H238's direction is to support f64 too, and design
-        // principles 5.1 forbids narrowing it to f32 to make the call go through. An int64 or bool
-        // tensor is still refused by the kernel, which says so at the call.
+        // missing arm and not a rule -- design principles 5.1 forbids narrowing it to f32 to
+        // make the call go through. An int64 or bool tensor is still refused by the kernel,
+        // which says so at the call.
         t.emplace(
             "sum_to",
             Indexing{sumToIndexing, {sumLaw("sum_to_f32", f32, f32, f32), sumLaw("sum_to_f64", f64, f64, f64)}});
@@ -1069,6 +1106,36 @@ std::optional<IndexedInstance> instantiate(const OpDef &def, const InferContext 
         return std::nullopt;
     }
     return instance;
+}
+
+void registerCoreSliceIndexing() {
+    // The core's own slice node -- `:op/slice_sub`, the one node `t[a:b:s]` and
+    // `slice(t, axis, a, b, s)` both build (design principles 5.4) -- has a tensor's read, and
+    // so does a tensor's shape; the declaration is written here, beside the other instantiation
+    // functions of this module, and published in the core's table, where the core's own
+    // declarations live (the shape builtin_semantics.cpp uses for the operators the core
+    // answers itself). A record declared before keeps its facts: the indexing joins that same
+    // record, one minor version up (facts added to what the version declares, design 4.1).
+    auto &table                       = camel::core::OperatorTable::instance();
+    const auto id                     = table.lookup(":op/slice_sub");
+    const OperatorSemantics *declared = id ? table.semantics(*id) : nullptr;
+    if (declared != nullptr && declared->indexing) {
+        return; // published already: this runs where the module's operators are registered
+    }
+    OperatorSemantics record;
+    if (declared != nullptr) {
+        record = *declared;
+    } else {
+        record.key = OperatorKey::of(":op/slice_sub");
+    }
+    record.key.minor = std::max<uint16_t>(record.key.minor, 1);
+    record.indexing  = indexingFrom(sliceIndexing);
+    try {
+        table.declareSemantics(":op/slice_sub", std::move(record));
+    } catch (const std::invalid_argument &e) {
+        // A rejected declaration is a defect of this module: say so with the module's name.
+        throw std::logic_error("module tensor: " + std::string(e.what()));
+    }
 }
 
 } // namespace camel::tensor::ops

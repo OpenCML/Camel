@@ -9,8 +9,8 @@ add_camel_module(
 # Native contract tests build with the standard build, without needing a CUDA device.
 #
 # The sources are an OBJECT library and the executable links from it, so the check target's
-# undefined symbols are visible to the libcamel export-list generation before libcamel links
-# (H36): tiles-plan-check is the target that imported OperatorTable::key and caught the gap.
+# undefined symbols are visible to the libcamel export-list generation before libcamel links:
+# tiles-plan-check is the target that imported OperatorTable::key and caught the gap.
 # kernel_ir_check.cpp exercises the boundary decision itself, so that decision and the placement
 # query it reads are compiled into this target; the rest of what they need comes from libcamel.
 add_library(tiles-plan-check_objects OBJECT src/resident_storage.cpp src/residency.cpp src/placement.cpp ../../test/cases/modules/tiles/plan_check.cpp ../../test/cases/modules/tiles/kernel_ir_check.cpp ../../test/cases/modules/tiles/reduction_domain_check.cpp ../../test/cases/modules/tiles/core_views_check.cpp src/row_kernel.cpp src/row_body.cpp src/codegen.cpp src/codegen_cache.cpp src/schedule.cpp src/scalar_expr.cpp src/index_expr.cpp src/access.cpp src/kernel_ir.cpp src/matmul_kernel.cpp src/serial_kernel.cpp src/pointwise_kernel.cpp src/reduction_kernel.cpp src/regions.cpp src/scalar_kernel.cpp src/loop_kernel.cpp src/parallel_kernel.cpp)

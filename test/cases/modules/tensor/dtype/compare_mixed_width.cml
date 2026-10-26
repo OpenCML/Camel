@@ -1,0 +1,20 @@
+/**
+ * A comparison reads its two operands at one element type, the same rule as the arithmetic around
+ * it (design principles 4.2 and 5.1): `f64[..] === f32[..]` states two element types and matches no
+ * arm, so the elementwise comparison is refused rather than answered at a width the program did not
+ * write. The whole comparison of the same pair is the same refusal, since it reduces this one.
+ */
+module compare_mixed_width
+
+import { reshape } from tensor
+
+func same(x: f64[2], y: f32[2]): bool {
+    return (x === y)[0]
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0] as f64[], [2])
+    let y = reshape([1.0, 2.0] as f32[], [2])
+    println(same(x, y))
+    return 0
+}

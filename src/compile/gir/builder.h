@@ -1008,6 +1008,26 @@ class Builder {
     using arm_ptr_t = std::shared_ptr<ArmBuild>;
     /// The arms being built, outermost first.
     std::vector<ArmBuild *> armStack_;
+    /// One place a stream value is consumed: which value, the arms the use stands in (outermost
+    /// first), and where it was written. A stream is read once on each execution path (design
+    /// principles 5.4), so two uses of one value are refused unless they stand in different arms
+    /// of one branch.
+    struct StreamConsumption {
+        DraftGraphBuilder *graph         = nullptr;
+        node_handle_t value              = 0;
+        std::vector<uint32_t> arms;
+        camel::source::origin_id_t origin = camel::source::kInvalidOriginId;
+    };
+    std::vector<StreamConsumption> streamConsumptions_;
+    /// The arms of one branch, with the graph they belong to: a use in one of them excludes a use
+    /// in another, which is what makes `if c then s() else s()` one consumer rather than two.
+    std::vector<std::pair<DraftGraphBuilder *, std::vector<uint32_t>>> armGroups_;
+    /// Remembers the arms of one branch, so a later use can tell exclusion from a second consumer.
+    void noteArmGroup(const std::vector<arm_ptr_t> &arms);
+    /// Records that `value` is consumed at `at`, and refuses the second consumer of one path.
+    void consumeStream(node_handle_t value, const GCT::node_ptr_t &at);
+    /// Refuses two consumers of one stream on one execution path, once the graph's arms are known.
+    void checkStreamConsumption(DraftGraphBuilder *graph);
     /// The `match type` arm being built: its cases are not regions (only one is selected),
     /// but a `return` written in the selected body still gives the value of the match, not of
     /// the function around it.
@@ -1787,8 +1807,12 @@ class Builder {
 
     // Enters the scope of the function `name` whose declared type is the object `funcType`,
     // creating its graph the first time. Functions of one name in one block are overloads;
-    // the declared type object identifies which one is meant.
-    compile_graph_ptr_t enterScope(FunctionType *funcType, const std::string &name = "");
+    // the declared type object identifies which one is meant. `parameterOrigins` are the
+    // positions the parameters are written at, `with` ones first, by slot: the ports of the new
+    // graph carry them.
+    compile_graph_ptr_t enterScope(
+        FunctionType *funcType, const std::string &name = "",
+        const std::vector<camel::source::origin_id_t> &parameterOrigins = {});
     // A second function of this name with the same parameter types in the same block, or an
     // ordinary declaration under a generic function of the name (`plain`): reports
     // Redeclaration at `gct` and abandons the declaration.
@@ -1991,9 +2015,11 @@ class Builder {
     void settleEffectfulGraphs();
     // The resources a body touches, from what its nodes already publish: an operator's own
     // signature, a callee's, and the signature of the function value a call goes through. Empty
-    // when the body touches nothing. `nullopt` when something in it cannot be determined -- a
-    // call through a signature that promises nothing, a resource the walk cannot place -- so a
-    // body is never measured as pure because the measurement gave up.
+    // when the body touches nothing. A call through a value that writes no clause promises
+    // nothing, so the call is read conservatively (any class, any ambient resource) rather than
+    // as touching nothing: a body is never measured as pure because the measurement gave up.
+    // `nullopt` when something in the body cannot be determined at all -- a resource the walk
+    // cannot place.
     std::optional<camel::core::sem::ResourceSignature> footprintOf(DraftGraphBuilder *graph) const;
     // Once every body is built: measures each one and settles the measurements against each other
     // (a callee may be written after its caller, in another module). This reports nothing: it runs

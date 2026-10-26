@@ -60,7 +60,7 @@ void adaptiveUpdate(
     float *nextMoment2) {
     // One pointer is captured rather than eight: a range that splits turns the body into a
     // std::function for the pool, and a capture that fits its small buffer does not allocate
-    // (the per-call allocation H54 removed from the inline path, here on the split path only).
+    // (the per-call allocation the inline path avoids, here on the split path only).
     struct Streams {
         detail::AdaptiveUpdateFn run;
         const AdaptiveUpdateRates *rates;

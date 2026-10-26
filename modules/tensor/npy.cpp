@@ -179,7 +179,7 @@ Array *loadNpy(
         // type becomes known: a `.npy` file's dtype is decided by whoever wrote it, so the one
         // thing that cannot be decided when the program is compiled is checked when it runs, at
         // the call (the fault carries its position), and never repaired by a conversion
-        // (design principles 5.5: the runtime has no type information; handover H466).
+        // (design principles 5.5: the runtime has no type information).
         const TypeCode declared = *declaredElement;
         if (!isSupportedTensorScalar(declared)) {
             fail(

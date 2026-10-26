@@ -114,7 +114,7 @@ pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 `
 
 ### 1.9 `for x in s` 今天
 
-- 判据在 `src/compile/gir/builder_control.cpp#LoopSequenceNotIterable`：类型不是数组时，去 `src/builtin/modules/globals.cpp#__iter__` 这个算子组里按类型求一个重载；求不到就报错。消息把四类列全：数组、字符串（码点，每个是一个字符的字符串）、映射（按键序的 `(key, value)`）、张量（沿第一维的子张量），并主动提示 `range(a, b)`。**流不在其中。**
+- 判据在 `src/compile/gir/builder_control.cpp#LoopSequenceNotIterable`：类型不是数组时，去 `src/builtin/modules/globals.cpp#__iter__` 这个算子组里按类型求一个重载；求不到就报错。消息把三类列全：数组、字符串（码点，每个是一个字符的字符串）、映射（按键序的 `(key, value)`），并主动提示区间写法 `a..b`。**流不在其中。**
 - 扩展点是现成的：`__iter__` 的注释原文 *"A map adds its own overload (collection.cpp), and the tensor module adds one for tensors."*——流只要再加一个重载。
 - 循环本身是**区域形式**（`include/camel/runtime/loop.h#LoopView`：条件与体是同一张图的两个控制区域，共帧）：`Loop` 的 Norm 输入是 `xs`，体区域第一个形参是元素。所以「遍历流」在 IR 层不是新结点，是 `__iter__` 的一个新重载 + 「流结束后循环结束」的语义。
 - 收集槽（`collectionCount`）已经有模型与文档，但**没有源码形式**（`include/camel/runtime/loop.h#LoopView` 的注释：*"no source syntax exists for this yet; the H4d design"*）。任务书 3 说 `yield` 是「现有循环收集槽的惰性版本」——**这是 `yield` 状态机最接近的既有物**，但它是图生产者才能给的，源码写不出来。
@@ -315,7 +315,7 @@ G5/G7/G8 + GPU/H246 ── G11 ── G12
 
 #### 片 F：`for x in s`
 
-- **落地方式已改（2026-10-26 的裁定，[评审文件](../../handover/reviews/questions-2026-10-24-evening.md)）**：流的消费不走 `__iter__` 的新重载，而在图上展开成已有的 `while`——`for x in s` 的每一轮是一次拉取，循环的状态是那次拉取加上程序写的状态，元素从这次拉取里取出、下一轮的拉取在本轮体末。这条与下一段「`__iter__` 加一个流的重载」是同一个功能的另一条路，已被裁定取代；`LoopSequenceNotIterable` 的消息确实把「流」补进了那几类（见 `diagnostics/registry.tsv`）。
+- **落地方式已改（2026-10-26 的裁定，[评审文件](../../handover/reviews/questions-2026-10-24-evening.md)）**：流的消费不走 `__iter__` 的新重载，而在图上展开成已有的 `while`——`for x in s` 的每一轮是一次拉取，循环的状态是流加上程序写的状态，每一轮**先判断条件、再取元素**（和数组同一个顺序，作者 2026-10-26 又裁了一次）：`c` 成立才调用步进函数，拉到空就结束，所以 `for line in read_lines(f) while n < 10` 不会读第 11 行。这条与下一段「`__iter__` 加一个流的重载」是同一个功能的另一条路，已被裁定取代；`LoopSequenceNotIterable` 的消息确实把「流」补进了那几类（见 `diagnostics/registry.tsv`）。
 - `src/builtin/modules/globals.cpp#__iter__` 加一个流的重载；`LoopSequenceNotIterable` 的消息文本要把「流」补进那四类里（今天的原文只列数组、字符串、映射、张量）。
 - 红前用例（附录 A 的 t5，**反例**：今天编译失败）
   <!-- camel-snippet: counter-example: 反例：`for x in <int>` 今天报 LoopSequenceNotIterable，逐字诊断见附录 A 的 t5 -->
@@ -328,7 +328,7 @@ G5/G7/G8 + GPU/H246 ── G11 ── G12
       return 0
   }
   ```
-  今天：`...:9:35: [Error]: 'for' takes the elements of an array, a string, a map, a tensor or a stream; 'n' has type 'int'. ... (name=SemanticDiag::LoopSequenceNotIterable, code=0x03000120)`，`RUN_EXIT=1`。
+今天：`...:9:35: [Error]: 'for' takes the elements of an array, a string, a map, a tensor or a stream; 'n' has type 'int'. ... (name=SemanticDiag::LoopSequenceNotIterable, code=0x03000120)`，`RUN_EXIT=1`。
 - 验收：`for x in s` 遍历流；**流结束时循环结束**；无限流上的 `for` 靠 `while` 条件停（`docs/design/io-concurrency-streams/README.cn.md` 3.2）；诊断文本新增「流」并有用例固定。
 
 ### 第 3 组（等 B、C）

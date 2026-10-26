@@ -105,7 +105,7 @@ class BytesModule final : public BuiltinModule {
   public:
     explicit BytesModule(context_ptr_t ctx) : BuiltinModule("bytes", std::move(ctx)) {
         // The signatures of the operators are written once, in the declaration module
-        // `stdlib/bytes.cml` (design principles 6.4; handover H19, step 1). What is left here is
+        // `stdlib/bytes.cml` (design principles 6.4). What is left here is
         // what only C++ knows: the kernels below, the executor that runs them, and the operator
         // traits declared when the module loads.
     }

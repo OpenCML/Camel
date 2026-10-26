@@ -267,8 +267,8 @@ class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
 } // namespace
 void registerRegionTestPasses(
     operator_t run, SegmentDeviceOps device, SegmentDeviceOps host, SegmentDeviceOps preferred) {
-    // Test-only passes: named by a test's pipeline and by nothing else. No environment variable
-    // gates them (H81).
+    // Test-only passes: named by a test's pipeline and by nothing else. No environment
+    // variable gates them.
     core::OperatorTable::instance().set(
         "tiles:test_compiled_call",
         {.pure = false, .callsGraphs = true, .readsGraphs = true});

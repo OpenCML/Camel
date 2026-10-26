@@ -1,6 +1,6 @@
 // The gradient of a slice of an array: a slice takes a range of positions, so its adjoint is the
 // upstream gradient placed back in that range of the parent's zeros — the range scatter
-// `tangent/scatter_slice_arr`, the array counterpart of the tensor's `slice_grad`. Every
+// `tangent/scatter_slice_arr`, the array's own adjoint of a slice. Every
 // expected adjoint below is written out by hand from the forward expression, and `nonzero` is
 // the summed squared distance between the five gradients and the zero array: it is 115.0 from
 // the tree, so a rule that returned zeros would print 0.0 and the case would fail.

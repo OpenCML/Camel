@@ -1,11 +1,13 @@
 /**
- * A slice whose start depends on the model input: Camel normalizes a negative start from the
- * end of the axis and faults when the start leaves [-n, n] (design principles 3.9), where the
- * ONNX Slice would clamp it. The exporter reads the interval from the operator's index
- * semantics declaration and guards it, so MODE=start must fail on ONNX Runtime exactly where
- * Camel faults, including both edges (-n and n) and both sides just outside them. MODE=constant
- * exports a slice with constant bounds on a known extent: the declaration proves them in range
- * and the raw bounds go to the ONNX Slice, which normalizes the negative one itself.
+ * A slice whose start depends on the model input: a bound is a position of the axis, so the
+ * accepted values are 0 to n (n is the end and takes nothing) and a negative one is a fault
+ * rather than a count from the end (design principles 3.9, the core's reading of its own slice
+ * node), where the ONNX Slice would clamp it. The exporter reads the interval from the
+ * operator's index semantics declaration and guards it, so MODE=start must fail on ONNX Runtime
+ * exactly where Camel faults, including both edges (0 and n) and both sides just outside them
+ * (a negative one included). MODE=constant exports a slice with constant bounds on a known
+ * extent: the declaration proves them in range and the bounds go to the ONNX Slice as they were
+ * written.
  * MODE=dynamic exports a slice with constant bounds on an axis whose extent is only known at run
  * time (a reshape to a data-dependent shape): the declaration states the bounds' legal interval
  * and the exporter guards the constants, so a run where the axis is shorter fails as Camel does.
@@ -13,7 +15,7 @@
  * Checked by ort_slice_start.py.
  */
 module ort_slice_start
-import { reshape, shape, slice, sum } from tensor
+import { reshape, shape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
@@ -22,7 +24,7 @@ func head(x: f32[..]): f32[..] {
 }
 
 func constants(x: f32[..]): f32[..] {
-    return slice(x, 0, -2, 3)
+    return slice(x, 0, 1, 3)
 }
 
 /// The axis extent is int(sum(x)), known only when the program runs; 12 divides by construction

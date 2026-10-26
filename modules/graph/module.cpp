@@ -109,12 +109,12 @@ class GraphModule final : public BuiltinModule {
         exportType(Reference("NodeKind"), nodeKindType());
         exportType(Reference("RegionKind"), regionKindType());
         // The type of the value `effects` gives: a structural type has no name of its own, and
-        // the declaration of `effects` names its result (handover H141).
+        // the declaration of `effects` names its result.
         exportType(Reference("Effects"), effectsType());
         // The signatures C++ computes (standard library conventions 2): the four operators of a
         // function value take the type of an argument, so a declaration cannot express them.
-        // Everything else is declared in stdlib/graph.cml, `constant` and `add_constant` per
-        // sample type included (handover H202).
+        // Everything else is declared in stdlib/graph.cml, including the per-sample-type
+        // `constant` and `add_constant`.
         for (const auto &group : txnGroups()) {
             exportEntity(group->name(), group);
         }

@@ -1,10 +1,10 @@
 /**
- * Shape diagnostic of `slice`: statically known shapes conflict, so compilation fails at the
- * call with both shapes in the reason.
+ * The axis of `slice`: the call names axis 3 of a rank-2 tensor, which the value does not have, so
+ * the run faults with the core's own wording, naming the axes it does have (design principles 5.4).
  */
 module shape_diag_slice
 
-import { zeros, slice } from tensor
+import { zeros } from tensor
 
 func main(): int sync {
     let r = slice(zeros([2, 3]), 3, 0, 1)

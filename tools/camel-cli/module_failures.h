@@ -23,7 +23,7 @@ enum class ModuleScope {
     ProgramDependencies,
     /// Every user module in the context. A command that lists or dumps modules of the whole
     /// context asks this: `inspect --ops` is the inventory every imported module fills, so a
-    /// module that failed to compile makes the listing incomplete wherever it sits (H172).
+    /// module that failed to compile makes the listing incomplete wherever it sits.
     AllUserModules,
 };
 
@@ -35,14 +35,14 @@ enum class ModuleScope {
 /// (`inspect --gct` lowers the construction tree and nothing after it), and every failure the
 /// front end has is stored in a module's diagnostics. The declaration-module list is what turns
 /// "a diagnostic somewhere" into "this declaration file did not load": the operator inventory
-/// is what such a file fills, and a shortened inventory that exits 0 is H166/H172's silence.
+/// is what such a file fills, and a shortened inventory that exits 0 is silence.
 struct ModuleFailures {
     /// At least one user module *in the requested scope* carries an error.
     bool any = false;
     /// The modules that carry an error *in the requested scope*, in the order
     /// `Context::allUserModules()` returns them. This is what `reportModuleFailures` prints: a
     /// module outside the scope is a pass library or another module the command loaded but did
-    /// not ask about, and its diagnostics would otherwise answer a question nobody asked (H210).
+    /// not ask about, and its diagnostics would otherwise answer a question nobody asked.
     std::vector<camel::core::module::module_ptr_t> modules;
     /// The declaration modules (`math.cml` beside `math.cmo`) that carry an error, in the order
     /// `Context::allUserModules()` returns them.
@@ -59,7 +59,7 @@ ModuleFailures findModuleFailures(
 /// Dump the diagnostics of the failed modules in `failures` (`Context::dumpModuleDiagnostics`),
 /// never of every module that happens to carry an error: `findModuleFailures` already decided
 /// which ones this command asked about. When `declarationFilesOut` is not null it also receives
-/// one line per failed declaration module, naming the module and its file (H172's `--ops`
+/// one line per failed declaration module, naming the module and its file (the `--ops`
 /// contract: the channel that carries the listing stays clean).
 void reportModuleFailures(
     const camel::core::context::context_ptr_t &ctx,

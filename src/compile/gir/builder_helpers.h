@@ -240,7 +240,7 @@ inline bool collectConversionGaps(
         // the whole value: one `as` reaches it, whatever is left open inside it. Without this
         // branch a call like `f(t)` with `t: Tensor` and `b: f32[3]` was refused as
         // "no matching function" with the overload list, which says less than the conversion to
-        // write (ruling 2026-10-24 evening, h450 item 2).
+        // write (ruling 2026-10-24 evening, item 2).
         if (want->castSafetyFrom(have) != CastSafety::Unsafe) {
             return false;
         }
@@ -389,7 +389,8 @@ inline void setNodeMacro(node_handle_t node, bool enabled) {
 
 inline compile_graph_ptr_t createCompileGraph(
     runtime::GraphId id, FunctionType *funcType, const compile_graph_ptr_t &outer,
-    std::string name = "") {
+    std::string name = "",
+    const std::vector<camel::source::origin_id_t> &parameterOrigins = {}) {
     auto graph = std::make_shared<DraftGraphBuilder>(funcType ? funcType : FunctionType::create());
     graph->draft().setId(id);
     if (name.empty()) {
@@ -400,6 +401,16 @@ inline compile_graph_ptr_t createCompileGraph(
         graph->setOuterGraph(outer);
         outer->addSubGraph(graph);
     }
+    // A port stands for the parameter it is made for, and carries that parameter's own position:
+    // what is said about the parameter -- the refusal of a function value that came in through it
+    // -- then has somewhere to point. The slot is the parameter's in the signature, `with`
+    // parameters first and the ordinary ones after them, which is the order the ports are made in.
+    const auto stampPortOrigin = [&](node_handle_t port, size_t slot) {
+        if (slot < parameterOrigins.size() &&
+            parameterOrigins[slot] != camel::source::kInvalidOriginId) {
+            nodeDraftOf(port)->setNodeOrigin(nodeIdOf(port), parameterOrigins[slot]);
+        }
+    };
     if (funcType) {
         for (size_t i = 0; i < funcType->withTypesCount(); ++i) {
             const std::string portName = i < funcType->argNamesCount()
@@ -407,7 +418,9 @@ inline compile_graph_ptr_t createCompileGraph(
                                              : std::format("__w{}", i);
             const bool isVar           = funcType->withIsVarAt(i);
             Type *type                 = funcType->withTypeAt(i);
-            graph->addPortNode(isVar ? TupleType::cell(type) : type, portName, true);
+            const node_handle_t port =
+                graph->addPortNode(isVar ? TupleType::cell(type) : type, portName, true);
+            stampPortOrigin(port, i);
         }
         for (size_t i = 0; i < funcType->normTypesCount(); ++i) {
             const size_t argIndex      = funcType->withTypesCount() + i;
@@ -416,7 +429,9 @@ inline compile_graph_ptr_t createCompileGraph(
                                              : std::format("__n{}", i);
             const bool isVar           = funcType->normIsVarAt(i);
             Type *type                 = funcType->normTypeAt(i);
-            graph->addPortNode(isVar ? TupleType::cell(type) : type, portName, false);
+            const node_handle_t port =
+                graph->addPortNode(isVar ? TupleType::cell(type) : type, portName, false);
+            stampPortOrigin(port, argIndex);
         }
     }
     return graph;

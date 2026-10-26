@@ -178,7 +178,7 @@ struct OperatorKey {
 } // namespace camel::core::sem
 ```
 
-- **主版本**变：结果、故障、访问、效应的任何一项改变（例如 `max` 的 NaN 规则按 Q5 改了，`tensor:max_axis` 从 1.x 变成 2.0）。**次版本**变：只是多声明了事实，旧版本声明的都仍然成立（例如给 `tensor:slice` 补上下标映射）。
+- **主版本**变：结果、故障、访问、效应的任何一项改变（例如 `max` 的 NaN 规则按 Q5 改了，`tensor:max_axis` 从 1.x 变成 2.0）。**次版本**变：只是多声明了事实，旧版本声明的都仍然成立（例如给 `tensor:reshape` 补上访问映射）。
 - 依赖算子语义的持久化结果（`.cmc` 里的事实节区、Tiles 的编译缓存）记下它用到的每个算子的 `OperatorKey`；装载时按 `protocol:name` 重新驻留得到本进程的 `OperId`，**主版本不同即失效，本进程的次版本低于记下的也失效**（记下的结果可能用了本进程没有的事实）。这是图模型 4.5 的 `OPRS` 节区加一个版本字段（10.7）。
 - `OperId` 的含义不变：进程内编号，热路径上比较它。`OperatorKey` 只在跨进程的边界上用。
 
@@ -1175,7 +1175,7 @@ bool any        = graph->hasNodePermissions();
 
 **CPU 的结果、图的转储、程序的输出都没有变**；只增加了声明与查询。已声明下标语义的张量算子的键升为 `@1.1`（次版本：只多了事实，4.1）；内建 `:op/` 仍是 `@1.0`；新声明的 `nn:max_pool2d`、`nn:avg_pool2d`、`:mark/unordered_reduce_arr` 是 `@1.0`。
 
-**已声明的实例**（`camel inspect --ops` 里 `"indexing": true` 的算子）：逐元素的 `add`、`subtract`、`multiply`、`divide`、`maximum`、`minimum`（广播，数作为 0 维操作数）、`neg`、`abs`、`exp`、`log`、`sqrt`、`rsqrt`、`relu`；`transpose`、`permute`、`slice`（正步长；负的起止点从末尾数，之后仍在 [0, n] 之外是故障 `SliceOutOfRange`、没有实例，与数组的 `slice` 一致，设计原则 3.9；起点在终点之后是空的范围，3.9）、`reshape`、`flatten`、`unsqueeze`、`broadcast_like`、`expand_axis`；`sum`、`mean`（全量）、`sum_axis`、`mean_axis`、`max_axis`、`min_axis`、`argmax_axis`、`argmin_axis`（律 `ArgMax`/`ArgMin`：按 IEEE `maximum`/`minimum` 的第一个最值的位置，有 NaN 时第一个 NaN，+0 大于 -0，设计原则 7.7）、`sum_to`；`matmul`（NumPy 的一维与批维广播规则，k 是归约维）；`nn:max_pool2d`、`nn:avg_pool2d`（第 5.2 节例 4 的窗口：越界的元素 `max` 排除、`avg` 读 +0）；`:mark/unordered_reduce_arr`。每个实例由声明求值器（`tensor::test_index_eval`）在 2780 个随机调用上与 CPU 内核逐位比较过（第 12 节）。
+**已声明的实例**（`camel inspect --ops` 里 `"indexing": true` 的算子）：逐元素的 `add`、`subtract`、`multiply`、`divide`、`maximum`、`minimum`（广播，数作为 0 维操作数）、`neg`、`abs`、`exp`、`log`、`sqrt`、`rsqrt`、`relu`；`transpose`、`permute`、`reshape`、`flatten`、`unsqueeze`、`broadcast_like`、`expand_axis`；`sum`、`mean`（全量）、`sum_axis`、`mean_axis`、`max_axis`、`min_axis`、`argmax_axis`、`argmin_axis`（律 `ArgMax`/`ArgMin`：按 IEEE `maximum`/`minimum` 的第一个最值的位置，有 NaN 时第一个 NaN，+0 大于 -0，设计原则 7.7）、`sum_to`；`matmul`（NumPy 的一维与批维广播规则，k 是归约维）；`nn:max_pool2d`、`nn:avg_pool2d`（第 5.2 节例 4 的窗口：越界的元素 `max` 排除、`avg` 读 +0）；`:mark/unordered_reduce_arr`。核心自己的切片节点 `:op/slice_sub`（`t[a:b:s]` 与 `slice(t, axis, a, b, s)` 同为这一个节点）也在其中：它的声明由张量模块发布（切片要读张量的形状事实），界是 0 到那一维长度之间的位置（长度本身是末端，取空），负数或越界是故障 `SliceOutOfRange`、没有实例，与数组的 `slice` 一致（设计原则 3.9）；步长可以是负数，掩码字说明哪两个界是写出来的，起点在终点之后是空的范围（3.9）。每个实例由声明求值器（`tensor::test_index_eval`）在 2500 个以上随机调用上与 CPU 内核逐位比较过（第 12 节，下界钉在 `test/plans/feat/modules/index_semantics.plan.toml`），切片本身的一致性由核心自己的用例 `test/cases/linear/subscript/slice_positions.cml` 与 `slice_declaration.py` 对照（声明说的位置与内核取的位置逐位相同）。
 
 **取得一个实例：**
 

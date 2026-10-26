@@ -27,7 +27,7 @@ namespace camel::tensor {
 /// declared for this load (`load_npy::<f32>(p)`, or the element type of the position the call
 /// stands in): the file's own element type must be that one, and any other is reported as a fault
 /// naming both rather than converted (design principles 5.1: no implicit conversion between
-/// numeric types; handover H466). A declared type no `.npy` file can hold is refused the same way.
+/// numeric types). A declared type no `.npy` file can hold is refused the same way.
 /// Without it the file's element type is the tensor's, as it always was.
 Array *loadNpy(
     const std::filesystem::path &path, mm::IAllocator &allocator,

@@ -65,14 +65,6 @@ bool isReducedFloatTensorType(type::TypeCode code);
 /// (`type::typeCodeToString`).
 std::string elementTypeSpelling(type::TypeCode code);
 
-/// NumPy-style promotion of two tensor element types, exact. Among the scalar types the order
-/// is bool < i32 < i64 < f32 < f64; a bf16 or f16 promotes with f32 and f64 (to the wider one)
-/// and with itself, but not with the other reduced type or an integer: there is no type that
-/// holds every value of both, so the call is refused and the program casts one operand to the
-/// element type the result should have. The result of a promotion that succeeds is one of the
-/// two operand types; neither operand is first replaced by a third.
-type::TypeCode promoteTensorTypes(type::TypeCode lhs, type::TypeCode rhs);
-
 /// Human-readable element type name ("float32", "float64", "bfloat16", "float16", "int32",
 /// "int64", "bool"): the storage name the tensor print and the intern key use.
 std::string_view dtypeName(type::TypeCode dtype);

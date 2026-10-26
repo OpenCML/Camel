@@ -20,7 +20,7 @@
 </g>
 <g id="clust2" class="cluster">
 <title>cluster_F03</title>
-<g id="a_clust2"><a xlink:title="(n: int) =&gt; int">
+<g id="a_clust2"><a xlink:title="(n: int) =&gt; int pure">
 <polygon fill="none" stroke="black" points="315,-127.55 315,-574.99 429,-574.99 429,-127.55 315,-127.55"/>
 <text text-anchor="middle" x="372" y="-559.79" font-family="Times,serif" font-size="14.00">price</text>
 </a>
@@ -28,7 +28,7 @@
 </g>
 <g id="clust3" class="cluster">
 <title>cluster_F04</title>
-<g id="a_clust3"><a xlink:title="(n: int) =&gt; int">
+<g id="a_clust3"><a xlink:title="(n: int) =&gt; int pure">
 <polygon fill="none" stroke="black" points="199,-127.55 199,-574.99 307,-574.99 307,-127.55 199,-127.55"/>
 <text text-anchor="middle" x="253" y="-559.79" font-family="Times,serif" font-size="14.00">tax</text>
 </a>
