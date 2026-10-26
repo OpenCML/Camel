@@ -6983,8 +6983,8 @@ The body of a folded call is read from the same constructs a 'when' condition re
 module fold_call_not_evaluable
 
 func first_of_list(): int {
-    let xs = [1, 2, 3]
-    return xs.[0]
+    let step = (n: int): int => n + 1
+    return step(1)
 }
 
 func main(): int {

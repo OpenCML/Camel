@@ -200,7 +200,7 @@ func main(): int sync {
 
 ```text
 [a, b, c]
-HéLLO 5 é e
+HÉLLO 5 é e
 ```
 
 The result of `s[i]` is a one-character string, not a number; use `str::codepoints` for the numbers. In a string literal the escape `\xHH` can only build valid UTF-8 (`'\xE4\xB8\xAD'` is `'中'`; `'\xE4'` alone is a compile-time error); `\u{4E2D}` writes a code point directly.

@@ -204,7 +204,7 @@ func main(): int sync {
 
 ```text
 [a, b, c]
-HéLLO 5 é e
+HÉLLO 5 é e
 ```
 
 `s[i]` 的结果是单字符的字符串，不是数值；取码点的数值用 `str::codepoints`。字符串字面量里的转义 `\xHH` 只能拼出合法的 UTF-8（`'\xE4\xB8\xAD'` 是 `'中'`，单独的 `'\xE4'` 是编译错误）；`\u{4E2D}` 直接写码点。

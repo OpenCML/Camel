@@ -41,13 +41,13 @@ namespace {
 class DecodeAsResolver final : public FuncTypeResolver {
   public:
     std::optional<FunctionType *>
-    resolve(const type_vec_t &, const type_vec_t &, const ModifierSet &) const override {
+    resolve(const type_vec_t &, const type_vec_t &) const override {
         return std::nullopt;
     }
 
     std::optional<FunctionType *> resolveForCall(
         const type_vec_t &types, Type *expected, const type_vec_t &with, const type_vec_t &norm,
-        static_args_t, const ModifierSet &modifiers) const override {
+        static_args_t) const override {
         if (!with.empty() || norm.size() != 1 ||
             (norm[0]->code() != TypeCode::String && !isJsonType(norm[0]))) {
             return std::nullopt;
@@ -86,7 +86,7 @@ JsonModule::JsonModule(context_ptr_t ctx) : BuiltinModule("json", ctx) {
     // encode takes a value of every type that has a JSON form, a Json among them (a type
     // rule, not a parameter of type `any`), and an indent that may be absent or null. A function
     // or a tensor is refused when the call is compiled.
-    const auto encodable = [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+    const auto encodable = [](const type_vec_t &with, const type_vec_t &norm)
         -> std::optional<Type *> {
         if (!jsonTypeEncodable(norm[0]) ||
             (with.size() == 1 &&
