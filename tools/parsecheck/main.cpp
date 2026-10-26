@@ -82,7 +82,7 @@ ParseOutcome parseText(const std::string &path, const std::string &text) {
     outcome.diagnostics = diagText.str();
     // What the snapshot records about a rejected file: the code and the place of every diagnostic,
     // never its wording. A message, a help text or a note is prose and prose is edited; an edit to
-    // one must not move test/plans/feat/parse/golden/ast_hashes.txt (H252).
+    // one must not move test/plans/feat/parse/golden/ast_hashes.txt.
     std::ostringstream identity;
     parser.diagnostics()->dumpIdentity(identity);
     outcome.dump = dumpParse(outcome.accepted, parser.ast(), sourceContext, identity.str());

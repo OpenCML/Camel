@@ -93,7 +93,7 @@ inline void dumpAstNode(
 /// The whole result of a parse as text: "ACCEPT" and the tree, or "REJECT"; then `identity`, the
 /// code and the place of every diagnostic (Diagnostics::dumpIdentity) and none of their wording.
 /// The wording is left out on purpose: a snapshot hashed over this text is a snapshot of what the
-/// front end made of the file, and rewording a message or a help text must not move it (H252).
+/// front end made of the file, and rewording a message or a help text must not move it.
 inline std::string dumpParse(
     bool accepted, const AST::node_ptr_t &ast, const camel::source::source_context_ptr_t &sc,
     const std::string &identity) {
