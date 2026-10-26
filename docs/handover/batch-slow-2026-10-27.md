@@ -16,6 +16,9 @@ against their PyTorch counterparts, and the second-look reading below puts no ot
 
 ## The reds
 
+The `attribution` column's "unattributed" entries are settled family by family at the end of this record, by dating the
+symptom against the history rather than against the host.
+
 | test (plan) | measured | attribution |
 |---|---|---|
 | `feat/opt/progen` `progen_check` | 32.95 s cpu of 150.00 s budget, 25.89 s wall | pre-existing: the 10-24 record has it red (82 wrong cells), and red at `07e81237f` |
@@ -87,8 +90,41 @@ can hide. What follows moves all but one of them out of the "the host was loaded
 - `startup.cost` is the one row that reads as a bound: `expected exit 0, got 1` with no missing string, so the case's
   own cost check is what failed, and the 10-26 record's CPU-time-margin caveat belongs to it alone.
 
+## Per-family bisect: the symptom, the introducing commit, the owner
+
+Each family was dated against the history rather than against the clock. The window opens at `bd20f2200` (the 10-24
+batch point) and closes at `e7a8b906d` (the 10-26 record), and the two records bracket every family: each one below is
+outside the 10-24 record's red list and inside the 10-26 record's, except where a cell says otherwise. The introducing
+commit is then named by pickaxe (`git log -S` over `test/plans`, plus the path history of the case and of the engine
+files the symptom runs through), so each answer is a commit and not a range.
+
+| family | symptom, verbatim | introduced by | owner |
+|---|---|---|---|
+| ① `progen_check` / `progen_fixed` | `expected exit 0, got 1`, `stdout does not contain '0 wrong'` / `'PASS'`, and 82 wrong cells of 1025, each `FRONTEND: No matching function found` | **earlier than the window**: `progen_check` is red at `07e81237f` (2026-10-23 23:57), the 10-24 record's own baseline. `progen_fixed`'s entry predates `bd20f2200` and is not in that record's short list, so it turned red inside `bd20f2200..e7a8b906d` | 待派 - a front-end resolution defect, older than every merge this line made |
+| ② `benchmark_gradients_vs_torch` | `expected exit 0, got 1`, missing `'== transformer_big (camel_opt_nvm)'` and `'gradient check: PASS'`; the run stops in `benchmarks/train.py`, and the program's own text is `model.cml:45:48: [Error]: Invalid call to '__mul__' with argument types <> (f32[..], float): the scalar operand has type 'float', but the tensor's element type is 'f32'` | `f0cfc58cd` "State the element type in the benchmark models and probes" (10-2x), the benchmark member of the same spelling wave; the entry predates `bd20f2200` and the gradient check itself was green there | 作者侧 |
+| ③ `pass_export_equals_export_model` | `expected exit 0, got 1`, missing `'onnx::export equiv: PASS'`; `onnxruntime` fails to build a session for a model `checker full_check` calls ok (`test/cases/modules/onnx/pass_export.py:111`) | the case is **untouched** since `bd20f2200` (0 lines of diff), so the model the pass emits changed under it; the exporter's own history in the window is the author's `with`-arity and declaration work (`42eb50c99`, `487ad3ea9`, `b8c0090b1`, `7b8021245`, `0fdf2049c`, and the `wip:` `08d1e5377` beside them) | 作者侧 |
+| ④ `gc.runtime_graph_constants.moving.nvm` / `.fvm` | exit 0, but `loss=0.3579342999437358 gqw=0.19846567139029503 gkw=0.0764192040078342` and its `loss2` line are not printed | the cases were rewritten line for line (23 insertions, 23 deletions) in the element-type spelling wave: `e0c28d887` (10-25), `1757fe3dd` (10-26), `3602386ea` (10-26), while the plans' expectations did not move | 作者侧 |
+| ⑤ `stream.tee_report` / `_element_size_unknown` | the three `STREAM_TEE {"tee":1,...}` lines are absent while the session's own `PROFILE camel` and its `streams - one line per tee` header print | `f1fa2bd23` (2026-10-26, the tee feature and its report) with `b10442bc2` (its case expectations); the tee engine files' history in the window has no later commit and no merge | 作者侧 |
+| ⑥ `curve` / `shapes` | `expected exit 0, got 1` with `verification output: Error: expected 84 points (6 thread counts x 7 shapes x 2 paths), got 0` and `Error: expected 3 reference rounds, got 0`; `NoMatchingFunction` for `<tensor:add>: (lhs: float[..] \| number, rhs: float[..] \| number) => float[..]` | the two cases were rewritten by `1fadc2f9b` (10-25) and `3602386ea` (10-26) and by nothing else | 作者侧 |
+| ⑦ `reduce_layout.ops` / `.count` | `expected exit 0, got 1`, the generated probe failing `Return type 'f32' does not match the function's declared return type 'float'` at `probe_sum_to_leading_profile_2048.cml:11:5` | `test/cases/perf/reduce_layout.py` was rewritten by exactly one commit, `3602386ea` (10-26) | 作者侧 |
+| ⑧ `perf/showcase_c1` / `c2` `small` | `expected exit 0, got 1`, missing `'c1 compare: PASS'` / `'c2 compare: PASS'`; `train.cml:38:5 Return type 'f32' does not match ... 'float'` and `NoMatchingFunction ... (Mlp, f32[..], int[..])` | the element-type spelling in the four showcase training programs came from one commit, `ccd38065c` (2026-10-25) | 作者侧 |
+| ⑨ `startup.cost` | `expected exit 0, got 1` with **no** missing string, while the case's own report reads `declaration.cost declarations=371 per_declaration_us=41.3 ... total_ms=15.3 total_ceiling=12 ms result=FAIL` at `host load=83.7/71.3/72.5` | **no introducing commit**: the check, its ceiling and its string all predate `bd20f2200`, and the window holds no commit that touches `declaration.cost` or `total_ceiling`. It is a bound row: 371 declarations at 41.3 us each, against a 12 ms total ceiling and a 60 us per-declaration ceiling it passes | 待派 - needs a quiet host, and the declaration count joined the perf-gate lane |
+
+Four families - ④⑥⑦⑧ - are one root, and ② is its benchmark member: the element-type spelling wave of 10-24/26 turned
+`Tensor`, and the scalar type in a return position, into spellings the engine no longer accepts (`f32` where the
+declaration says `float`, or a `float` scalar against an `f32[..]` tensor), across the autodiff cases, the two perf
+cases, the reduce-layout generator, the four showcase training programs and the benchmark models. Every one of those
+rewrites is the author's own, they agree with the 10-24 record's `f32`/`float` note on `device_parameter_tree_training`,
+and no engine change is needed to explain them.
+
+Not one of the nine families is reachable below the full layer: each entry declares `milestone` or is a `poison` probe,
+which is why no lane's gate - all of them fast - could see any of them land. The run that settles this record's tier
+question was `-Tier slow` over `feat/mm`, `feat/compile` and `feat/modules/autodiff` at `62d9be3b9`: `total 266,
+pass 265, fail 1`, and the single red is ②, because the milestone entries are not collected at all by that tier. That
+is the structural reading of this record, and it is what the `poison` and `slow` bookkeeping should be read against.
+
 ## What this run does not establish
 
-- Which commit introduced each symptom. The reading above says what each row fails on and rules the loaded host out for
-  all but `startup.cost` (and, in a different sense, the two `small` rows, whose bound is a numeric comparison against
-  the PyTorch counterpart); dating them still needs a bisect against `origin/develop`.
+- How the host's load interacts with the nine rows other than `startup.cost`; the second-look reading above rules the
+  loaded host out for the other eight, and `startup.cost`'s own numbers are printed here so that a quiet-host re-run can
+  be compared against them.
