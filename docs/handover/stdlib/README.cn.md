@@ -12,7 +12,7 @@
    - `len(Bytes)` 并进核心的 `len`，`Bytes + Bytes` 是拼接；
    - `sleep`、`exit` 只在 `process`，前奏里的两份删掉；
    - `sum`、`mean`、`min`、`max`、`argmax`、`argmin` 作用于 `T[..]`，归 `array`，`tensor` 的整体形式删掉；
-   - 空归约是故障（设计原则 7.7），`sum` 也是；
+   - 空数组、空轴上的 `sum` 是 0（单位元，乘积是 1）；`mean`、`min`、`max`、`argmax`、`argmin` 是故障（设计原则 7.7）；
    - `time` 只有 UTC，C++ 里写死的 8 小时偏移是缺陷，随之删掉。
 6. 文本组三个小问题已定：正则方言 ECMAScript；`replace` 的替换文本不展开 `$1`（用 `replace_with`）；`bytes` 暂不加十六进制函数。
 
