@@ -3500,6 +3500,34 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     if (targetGraph) {
         captured = capturedUsesOf(targetGraph);
     }
+    // What the call hands on beside its return value: the new version of each captured variable
+    // it writes, in the callee's capture order. The mask was decided when the node was made and
+    // is in its payload; here it says which of the call's With inputs are those versions, and
+    // each is recorded against the variable it is of, so a read of that variable after the call
+    // takes the access node of the part (Builder::valueVersionOf) instead of the cell and a
+    // control input.
+    uint32_t writtenMask = 0;
+    if (targetGraph) {
+        if (auto mask = callWriteMasks_.find(targetNode); mask != callWriteMasks_.end()) {
+            writtenMask = mask->second;
+        }
+    }
+    const bool callReturnsValue =
+        targetFuncType != nullptr && targetFuncType->hasExitType() &&
+        !isVoidGraphExitType(targetFuncType->exitType());
+    if (writtenMask != 0) {
+        CallValue value;
+        value.hasReturn = callReturnsValue;
+        const auto table = capturedValues_.find(targetGraph.get());
+        for (size_t k = 0; table != capturedValues_.end() && k < table->second.size(); ++k) {
+            if ((writtenMask & (uint32_t{1} << k)) == 0) {
+                continue;
+            }
+            value.variables.push_back(
+                captureInto(currGraph_, table->second[k].origin, table->second[k].name));
+        }
+        callValues_[targetNode] = std::move(value);
+    }
     std::vector<node_handle_t> capturedWrites;
     for (const CapturedUse &use : captured) {
         orderAfterLastWriter(use.variable, targetNode);
@@ -3613,6 +3641,11 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         return gate;
     }
     LEAVE("LINK");
+    if (writtenMask != 0 && callReturnsValue && valueWanted) {
+        // The value the position takes is the call's return value, the first part of what the
+        // call hands on. A call whose value nothing wants builds no access node for it.
+        return callValuePartOf(targetNode, 0);
+    }
     return targetNode;
 }
 
