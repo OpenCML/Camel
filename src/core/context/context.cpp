@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
 #include <filesystem>
 #include <format>
@@ -41,6 +42,26 @@ using namespace camel::core::module;
 using namespace camel::core::type;
 
 namespace camel::core::context {
+
+namespace {
+
+/// The `Context` objects alive right now, for liveContextCount(): a reading that builds a context
+/// in a scope reads it on both sides of that scope to see whether the context was destroyed.
+std::atomic<size_t> gLiveContexts{0};
+
+} // namespace
+
+size_t liveContextCount() noexcept {
+    return gLiveContexts.load(std::memory_order_acquire);
+}
+
+context_ptr_t Context::handle() const {
+    // A control block of this object's own with a deleter that does nothing: the handle never
+    // keeps the context alive and never frees it, and it is not the control block of the owning
+    // pointer, so taking one changes no reference count and the context keeps whatever lifetime
+    // its owner gave it (see the declaration in context.h).
+    return context_ptr_t(const_cast<Context *>(this), [](Context *) noexcept {});
+}
 
 namespace {
 
@@ -268,13 +289,16 @@ size_t hardwareThreadCount() {
 
 Context::Context(const EntryConfig &entryConf, const DiagsConfig &diagConf)
     : entryConfig_(entryConf), diagConfig_(diagConf),
-      resolver_(entryConf.entryDir, entryConf.searchPaths) {}
+      resolver_(entryConf.entryDir, entryConf.searchPaths) {
+    gLiveContexts.fetch_add(1, std::memory_order_acq_rel);
+}
 
 size_t Context::threadLimit() const {
     return entryConfig_.maxThreads != 0 ? entryConfig_.maxThreads : hardwareThreadCount();
 }
 
 Context::~Context() {
+    gLiveContexts.fetch_sub(1, std::memory_order_acq_rel);
     // Runtime function objects stored inside modules may consult GCGraph-backed
     // closure metadata during teardown. Release module-owned runtime data before
     // dropping the graph closure so those metadata pointers stay valid for the
@@ -296,10 +320,13 @@ Context::~Context() {
         camel::core::mm::autoSpace().unregisterGraphSweeper(this);
     }
     runtimeGraphMgr_.reset();
-    // The deferred-release queue is drained here, as the last step: the blocks the last collection
-    // found dead carry release callbacks (a DLPack producer's deleter, a Python buffer's release)
-    // that no later collection will run when this is the end of the runtime, and the destruction
-    // above has just queued everything the modules' own teardown finalized (C24, ME/8).
+// The deferred-release queue is drained here, as the last step. The queue is one per process,
+    // and the blocks the last collection found dead carry release callbacks (a DLPack producer's
+    // deleter, a Python buffer's release) that no later collection will run when this is the end of
+    // the runtime; the destruction above has just queued everything the modules' and the graph
+    // manager's own teardown finalized. A context that is not the last one of the process needs
+    // this as much as the last one does: a context whose destructor never runs leaves its releases
+    // to whoever drains next (mm/deferred.h).
     camel::core::mm::runDeferredReleases();
 }
 

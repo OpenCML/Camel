@@ -67,10 +67,10 @@ ContextsTestPass::apply(const camel::runtime::Program *program, std::ostream &os
     {
         context_ptr_t other = Context::create(EntryConfig{}, camel::core::error::DiagsConfig{});
         second              = countRootSets(kContextRootSetPrefix);
-        // How many owners the second context has while this scope holds one of them. More than
-        // one means something else keeps it alive: the context owns its modules and a module
-        // keeps its context, so the destructor of a context a program built -- the one that
-        // gives its registration back -- never runs (C24, reported, not fixed here).
+        // How many owners the second context has while this scope holds one of them. One means
+        // this scope is its only owner, so it is destroyed when the scope ends and gives its own
+        // registration back; more than one means something else keeps it alive, and then the
+        // destructor -- the one that gives the registration back -- never runs.
         held = other.use_count();
         // A full collection while the second context is alive: it marks through every registered
         // root set, so this run's graphs and the static data they reach stay alive and current.

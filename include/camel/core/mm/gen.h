@@ -336,7 +336,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
         const void *owner, std::string name, std::vector<rtdata::Object *> *rootSet);
     void unregisterObjectRootSet(const void *owner);
     /// Called by a major collection once it has marked what it reaches, before the spaces are
-    /// swept: the graph space holds Programs and graphs, which it frees when unmarked. One per
+/// swept: the graph space holds Programs and graphs, which it frees when unmarked. One per
     /// owner, for the same reason as the root sets: a second context's sweeper must not replace
     /// the first's, or a graph the first is running is freed as unreachable.
     void registerGraphSweeper(const void *owner, std::string name, std::function<void()> sweeper);
