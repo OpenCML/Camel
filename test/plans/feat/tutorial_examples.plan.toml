@@ -279,7 +279,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_not_contains = []
 expect_diagnostic_name = "SemanticDiag::EntryModuleMissingMain"
-expect_output_contains = ["Entry module 'main' must define a resolvable 'main'"]
+expect_output_contains = ["Entry module 'shapes' must define a resolvable 'main'"]
 
 # ---- Entries for the other command lines the headers and the pages give ----------------------
 
@@ -653,4 +653,4 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_not_contains = []
 expect_diagnostic_name = "SemanticDiag::EntryModuleMissingMain"
-expect_output_contains = ["Entry module 'main' must define a resolvable 'main'"]
+expect_output_contains = ["Entry module 'geometry' must define a resolvable 'main'"]
