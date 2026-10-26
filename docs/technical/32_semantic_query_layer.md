@@ -51,6 +51,10 @@ range. A fact that matches nothing is dropped: the model then says less, never s
 wrong. The result (`SemanticModel`) holds only texts, ranges and strings; the compilation is
 gone when `analyze()` returns.
 
+The entry module takes its name from the source filename, just as command-line compilation
+does. When editing a native declaration module, its sibling `.cmo` supplies the implementation
+and exports while the editor buffer supplies the declarations to validate.
+
 Where the compiler said something, that is the answer. Where it did not, the scoping rules
 give one, marked as such (`RefFacts::resolved` is false). Rename, which must not guess, uses
 the difference (section 4).
