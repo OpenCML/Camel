@@ -295,6 +295,8 @@ enum class SemanticDiag : uint32_t {
     //  6.4, step 1). 0x17B and up.
     NativeDeclarationIncomplete = 0x00017B,
     NativeDeclarationNotLoaded  = 0x00017C,
+    NativeValueNotLoaded        = 0x0001FB,
+    NativeValueMismatch         = 0x0001FC,
     // Body-less declarations: 0x17E and up.
     /// Two generic declarations of one name can take the same call (rule 2).
     NativeDeclarationOverlap = 0x000180,

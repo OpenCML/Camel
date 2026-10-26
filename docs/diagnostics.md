@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-288 diagnostics: 271 errors, 17 warnings. 15 carry a machine-applicable edit, 273 say why they carry none.
+290 diagnostics: 273 errors, 17 warnings. 15 carry a machine-applicable edit, 275 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -257,6 +257,8 @@ prints one entry.
 | `0x030001F8` | [SemanticDiag::FactCaseBindsNoVariable](#factcasebindsnovariable) | Error | no |
 | `0x030001F9` | [SemanticDiag::FactJoinRequired](#factjoinrequired) | Error | no |
 | `0x030001FA` | [SemanticDiag::StreamCaptured](#streamcaptured) | Error | no |
+| `0x030001FB` | [SemanticDiag::NativeValueNotLoaded](#nativevaluenotloaded) | Error | no |
+| `0x030001FC` | [SemanticDiag::NativeValueMismatch](#nativevaluemismatch) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -8694,6 +8696,70 @@ func read(): () => int {
 func main(): int sync {
     let take = read()
     println(take())
+    return 0
+}
+```
+
+### NativeValueNotLoaded
+
+`0x030001FB` · Error · `SemanticDiag::NativeValueNotLoaded`
+
+**Fix**
+
+None: context: the native module that supplies it was not loaded, or the name is not the one it registers; the repair is not in this text
+
+**Message**
+
+```text
+The declaration '{0}' has no right side, and no loaded module registers a value of that name.
+```
+
+**Help**
+
+```text
+A value declared without a right side (`export let inf: float`) is supplied by the C++ module of the declaration, registered under the same name; import the module and check the name. A value written in Camel has its right side.
+```
+
+**Example** (`test/cases/modules/math_kernels/err_value_missing/math.cml`, run as `camel test/cases/modules/math_kernels/err_value_missing/math.cml`)
+
+```camel
+import { pi } from math
+
+export let tau: float
+
+func main(): int sync {
+    return 0
+}
+```
+
+### NativeValueMismatch
+
+`0x030001FC` · Error · `SemanticDiag::NativeValueMismatch`
+
+**Fix**
+
+None: choice: the type is the writer's to settle against the module
+
+**Message**
+
+```text
+The declaration '{0}' says '{1}', but the module registers a value of type '{2}'.
+```
+
+**Help**
+
+```text
+A value declared without a right side is the one the C++ module registers: write the type it registers, as a body-less function writes the signature of its operator.
+```
+
+**Example** (`test/cases/modules/math_kernels/err_value_type/math.cml`, run as `camel test/cases/modules/math_kernels/err_value_type/math.cml`)
+
+```camel
+import { pi } from math
+
+export let inf: int
+
+func main(): int sync {
     return 0
 }
 ```

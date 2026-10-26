@@ -1277,6 +1277,22 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::NativeValueNotLoaded,
+            {
+                "NativeValueNotLoaded",
+                "The declaration '{0}' has no right side, and no loaded module registers a value of that name.",
+                "A value declared without a right side (`export let inf: float`) is supplied by the C++ module of the declaration, registered under the same name; import the module and check the name. A value written in Camel has its right side.",
+            },
+        },
+        {
+            SemanticDiag::NativeValueMismatch,
+            {
+                "NativeValueMismatch",
+                "The declaration '{0}' says '{1}', but the module registers a value of type '{2}'.",
+                "A value declared without a right side is the one the C++ module registers: write the type it registers, as a body-less function writes the signature of its operator.",
+            },
+        },
+        {
             SemanticDiag::NativeDeclarationOverlap,
             {
                 "NativeDeclarationOverlap",

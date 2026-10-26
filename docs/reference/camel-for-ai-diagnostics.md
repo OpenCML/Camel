@@ -59,7 +59,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 213
+**Semantic — errors** (`SemanticDiag`) — 215
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -219,6 +219,8 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `WhenPredicateAmbiguous` | The 'when' condition of '{0}' calls '{1}', and that name is ambiguous: it is imported from {2}. |
 | `NativeDeclarationIncomplete` | The body-less declaration '{0}' is incomplete: it has no result type. |
 | `NativeDeclarationNotLoaded` | The declaration '{0}' names the operator '{1}', which no loaded module implements. |
+| `NativeValueNotLoaded` | The declaration '{0}' has no right side, and no loaded module registers a value of that name. |
+| `NativeValueMismatch` | The declaration '{0}' says '{1}', but the module registers a value of type '{2}'. |
 | `NativeDeclarationOverlap` | Two declarations of '{0}' can take the same call: '{1}' and '{2}'. |
 | `WhenDeclarationOverlap` | Two declarations of '{0}' both apply to the type '{1}': '{2}' and '{3}'. |
 | `NativeDeclarationForeignOperator` | The declaration '{0}' names the operator '{1}', which another module declares. |

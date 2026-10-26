@@ -14,9 +14,8 @@
 // Every operator is declared here and no computed signature is left: `sqrt` and
 // the two shifts, whose result type C++ computes from the argument, are written out per spelling
 // (`i32`/`int` for `sqrt`, both integer types for a shift count), which is the whole accept set
-// of the old resolvers. One entry is not a declaration:
-//   - `// value` records a constant the C++ module exports; a value has no declaration to write,
-//     and the C++ module remains the one source of the value itself.
+// of the old resolvers. A constant the C++ module registers is declared with no right side
+// (`export let inf: float`), as a function with no body stands for its operator.
 
 module math
 
@@ -25,19 +24,19 @@ module math
 
 /// The ratio of a circle's circumference to its diameter.
 /// @example pi    // 3.14159...
-// value pi: float
+export let pi: float
 
 /// The base of the natural logarithm.
 /// @example log(e)    // 1
-// value e: float
+export let e: float
 
 /// Positive infinity; negative infinity is -inf.
 /// @example is_inf(-inf)    // true
-// value inf: float
+export let inf: float
 
 /// A NaN. It equals nothing, itself included: test with is_nan.
 /// @example is_nan(nan)    // true
-// value nan: float
+export let nan: float
 
 // ---- elementary functions ----
 

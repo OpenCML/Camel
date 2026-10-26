@@ -2635,6 +2635,8 @@ class Builder {
     // the one-bit tag of a value; nothing here adds a node kind. ----
     /// `a ?? b`, `a !! b`.
     node_handle_t visitTaggedBrchNode(const GCT::node_ptr_t &gct);
+    /// The value a declaration without a right side stands for: the C++ module's registered value.
+    node_handle_t nativeValueNode(const GCT::node_ptr_t &gct, Type *declared);
     /// The pipe `x -> f` (design principles 3.9). The call is built with `x` as it is, and the
     /// overloads of `f` (their `when` conditions included) are asked first; when none takes it and
     /// `x` is a `T?` or a `T!`, the call takes the value out of `x` (peelPipeReceiver).
