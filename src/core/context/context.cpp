@@ -161,8 +161,8 @@ ModuleResolver::listingFor(const std::string &directory) {
                 continue;
             const fs::path file = entry.path();
             // Only `.cml` and `.cmo` name a module file. A same-stem file of any other extension
-            // (a `foo.md`, an editor's leftover) is not a module, and a `.cmo` of the name is what
-            // the name stands for.
+            // (a Markdown document, an editor's leftover) is not a module, and a `.cmo` of the name
+            // is what the name stands for.
             const std::string extension = camel::utils::pathToUtf8(file.extension());
             if (extension != ".cml" && extension != ".cmo")
                 continue;

@@ -43,8 +43,8 @@ struct ModuleFile {
 /// The lookup of a module name.
 ///
 /// Only `.cml` and `.cmo` name a module file: a same-stem file of any other extension is not a
-/// module, so `foo.md` beside `main.cml` cannot be compiled as `foo`, and which file a name
-/// resolves to does not depend on the order the directory lists its files in.
+/// module, so a Markdown document beside `foo.cml` cannot be compiled as `foo`, and which file a
+/// name resolves to does not depend on the order the directory lists its files in.
 ///
 /// The directories of one lookup are listed once and the listing is remembered. A listing answers
 /// a question about one set of module roots, so `setModuleRoots` drops every listing: a context

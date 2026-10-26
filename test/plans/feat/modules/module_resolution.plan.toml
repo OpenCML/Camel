@@ -10,7 +10,7 @@ desc = "One lookup for a module name: only `.cml` and `.cmo` are a module file, 
 # candidate:
 #
 #   * only `.cml` and `.cmo` name a module file. Any same-stem file used to be taken as source
-#     (`D/xx.*`, in the order the directory listed them), so a `foo.md`, a `foo.txt` or an
+#     (`D/xx.*`, in the order the directory listed them), so a Markdown document, a text file or an
 #     editor's leftover could be compiled as the module `foo`, or shadow the real `foo.cml`.
 #   * a `.cmo` that was found and refused by the loader (ABI mismatch, missing symbol, a missing
 #     dependency, or a file that is not a library at all) is a module that is there and cannot be
@@ -50,7 +50,8 @@ args = ["-E", "short", "-I", "roots/one", "${case}"]
 expect_exit = 1
 expect_output_contains = ["Module 'foo' not found", "name=SemanticDiag::ModuleNotFound", "Found .cmo but load failed", "foo.cmo"]
 
-# `thing.md` and no `thing.cml`: a Markdown document is not a module file, whatever it holds.
+# A Markdown document named after the module, and no `thing.cml`: a document is not a module file,
+# whatever it holds.
 
 [[tests]]
 name = "markdown_is_not_a_module_file"
