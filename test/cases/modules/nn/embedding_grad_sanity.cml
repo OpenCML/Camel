@@ -4,7 +4,7 @@
 module embedding_grad_sanity
 
 import {
-    reshape, sum
+    cast, reshape, sum
 } from tensor
 
 import {
@@ -19,9 +19,11 @@ func main(): int sync {
     let gathered = embedding(table, indices)
     let grad = embedding_table_grad(table, indices, dy)
     let gathered_sum = sum(gathered)
-    let row0 = sum(grad * reshape([1.0, 1.0, 0.0, 0.0, 0.0, 0.0], [3, 2]))
-    let row1 = sum(grad * reshape([0.0, 0.0, 1.0, 1.0, 0.0, 0.0], [3, 2]))
-    let row2 = sum(grad * reshape([0.0, 0.0, 0.0, 0.0, 1.0, 1.0], [3, 2]))
+    // The mask is an untyped literal array and the gradient is f32: the widening is written, since
+    // a pair of two element types matches no arm (design principles 5.1).
+    let row0 = sum(cast(grad, "f64") * reshape([1.0, 1.0, 0.0, 0.0, 0.0, 0.0], [3, 2]))
+    let row1 = sum(cast(grad, "f64") * reshape([0.0, 0.0, 1.0, 1.0, 0.0, 0.0], [3, 2]))
+    let row2 = sum(cast(grad, "f64") * reshape([0.0, 0.0, 0.0, 0.0, 1.0, 1.0], [3, 2]))
 
     'embedding_grad_sanity gathered_sum={} row0={} row1={} row2={}'->format<gathered_sum, row0, row1, row2>->println
     return 0
