@@ -5,9 +5,15 @@ import { get_env } from env
 // Used with the test-only passes test::leak_branch_arm and test::share_branch_arm, which break
 // the branch below (a node between the BRCH and the JOIN that belongs to no arm, or to two) and
 // commit the program. The branch-arm check at commit must reject it before anything runs.
+// The environment read has a branch of its own (`??`); it is kept out of `main`, whose first
+// branch is the one the test passes break.
+func opaque(): int {
+    return len(get_env('BROKEN_BRANCH') ?? '')
+}
+
 func main(): int sync {
     println('main start')
-    let n = len(get_env('BROKEN_BRANCH'))
+    let n = opaque()
     let r = if n > 3 then n + 1 else n - 1
     println(r)
     return 0

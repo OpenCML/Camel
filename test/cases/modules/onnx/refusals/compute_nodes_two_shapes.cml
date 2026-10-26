@@ -12,7 +12,7 @@ module compute_nodes_two_shapes
 
 import { reshape } from tensor
 import { export_model } from onnx
-import { get_env } from env
+import { cpu_count } from process
 
 func double(t: float[..]): float[..] {
     return t * 2.0
@@ -29,7 +29,8 @@ func spin(n: int): int sync {
 
 func main(): int sync {
     export_model(double, reshape([1.0, 2.0], [2]), 'tmp/test/onnx/compute_nodes_two_shapes.onnx')
-    let x = int(get_env('H434_A'))
+    let x = cpu_count()
+    println(x)
     println('before')
     let v = combine(x, x, x)
     println(v)

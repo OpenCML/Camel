@@ -55,7 +55,7 @@ func input_a(): float[..] {
 }
 
 func do_run(m: Mlp): int sync {
-    let dump = get_env('DUMP')
+    let dump = get_env('DUMP') ?? ''
     let xa = input_a()
     let xb = reshape([0.1, -0.1, 0.05, 0.0], [2, 2])
     let x0 = zeros([2, 2])
@@ -77,8 +77,8 @@ func do_run(m: Mlp): int sync {
 }
 
 func do_export(m: Mlp): int sync {
-    let out = get_env('ONNX_OUT')
-    return if get_env('WHAT') == 'fwd' then sync {
+    let out = get_env('ONNX_OUT') ?? ''
+    return if (get_env('WHAT') ?? '') == 'fwd' then sync {
         export_model(fwd, (m, input_a()), out)
         println('exported fwd')
         return 0
@@ -91,5 +91,5 @@ func do_export(m: Mlp): int sync {
 
 func main(): int sync {
     let m = load()
-    return if get_env('MODE') == 'export' then do_export(m) else do_run(m)
+    return if (get_env('MODE') ?? '') == 'export' then do_export(m) else do_run(m)
 }

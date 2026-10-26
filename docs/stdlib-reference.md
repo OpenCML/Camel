@@ -421,29 +421,6 @@ Writes prompt and reads one line from standard input.
 - With effects: reads standard input.
 - Example: `input('name: ')` gives `what the user typed`
 
-#### `sleep`
-
-```camel
-sleep: (milliseconds: int) => void
-```
-
-Suspends the program for the given number of milliseconds.
-
-- With effects: waits.
-- Failure: fault `InvalidArgument` when the duration is negative.
-- Example: `sleep(100)`
-
-#### `exit`
-
-```camel
-exit: (code: int) => void
-```
-
-Ends the program with the given exit code, after writing buffered output.
-
-- With effects: ends the program.
-- Example: `exit(2)`
-
 ### Strings
 
 #### `format`
@@ -1022,11 +999,14 @@ The string made of the given code points.
 to_upper: (s: string) => string
 ```
 
-s with every letter in upper case, by the Unicode simple (one code point to one code point)
-case mapping; a letter without one is kept as it is.
+s with every letter in upper case, by the Unicode case mapping that does not depend on a
+language or on the context: a letter may become several (`'ß'` is `'SS'`), and a letter
+without a mapping, such as a CJK character or an emoji, is kept. The language-specific rules
+are not applied: `'i'` is `'I'` and a dotless `'ı'` is also `'I'`, and Greek `'Σ'` is always `'σ'` in lower case,
+even at the end of a word.
 
 - Pure.
-- Example: `to_upper('héllo')` gives `'HÉLLO'`
+- Example: `to_upper('straße')` gives `'STRASSE'`
 
 #### `to_lower`
 
@@ -1034,10 +1014,11 @@ case mapping; a letter without one is kept as it is.
 to_lower: (s: string) => string
 ```
 
-s with every letter in lower case, by the Unicode simple case mapping.
+s with every letter in lower case, by the same mapping as `to_upper`: `'İ'` is `'i'` followed
+by a combining dot above, and `'I'` is `'i'`.
 
 - Pure.
-- Example: `to_lower('HeLLo')` gives `'hello'`
+- Example: `to_lower('ÀÉÎ Привет')` gives `'àéî привет'`
 
 ### Searching
 
@@ -3674,8 +3655,9 @@ and does not change key; n = 0 gives [] and n = 1 gives [0].
 
 ## `time`
 
-All three are declared with effects: `now` reads the clock, and `strptime` reads the time zone
-of the process. `strftime` formats in UTC and is kept with them.
+A moment is a `float`: seconds since 1970-01-01 00:00 UTC, with a fraction. Reading the clock is
+an effect (`now`); turning a moment into text and back is pure and always in UTC, so the same
+moment gives the same text on every machine.
 
 #### `now`
 
@@ -3683,7 +3665,7 @@ of the process. `strftime` formats in UTC and is kept with them.
 now: () => float
 ```
 
-The current time in seconds since 1970-01-01 00:00 UTC, with a fraction.
+The current time, in seconds since the epoch.
 
 - With effects: reads the clock.
 - Example: `now()` gives `1791806400.25`
@@ -3691,119 +3673,145 @@ The current time in seconds since 1970-01-01 00:00 UTC, with a fraction.
 #### `strftime`
 
 ```camel
-strftime: (timestamp: float, format: string) => string
+strftime: <format: string> (timestamp: float) => string
 ```
 
-The time `timestamp` (seconds since the epoch) written with a strftime format, in UTC.
+The moment written with a strftime format, in UTC.
 
-- With effects: declared with effects together with the rest of the module.
-- Failure: fault `TimeFormatFailed` when the time or the format cannot be used.
-- Example: `strftime(0.0, '%Y-%m-%d')` gives `'1970-01-01'`
+- Pure.
+- Failure: fault `TimeFormatFailed` when the moment is outside the range of calendar time, or the format gives no text.
+- Example: `0.0->strftime<'%Y-%m-%d'>` gives `'1970-01-01'`
 
 #### `strptime`
 
 ```camel
-strptime: (text: string, format: string) => float
+strptime: <format: string> (text: string) => float!
 ```
 
-The time, in seconds since the epoch, that text gives when read with a strptime format; the
-fields are taken as local time.
+The moment a text gives when read with a strptime format; the fields are taken as UTC.
 
-- With effects: reads the time zone.
-- Failure: fault `TimeFormatFailed` when text does not have the format.
-- Example: `strptime('1970-01-02', '%Y-%m-%d')` gives `86400 in UTC`
+- Pure.
+- Failure: error value `ParseError` when the text does not have the format, or gives a moment outside the range of calendar time.
+- Example: `'1970-01-02'->strptime<'%Y-%m-%d'> !! 0.0` gives `86400.0`
 
 <a id="fs"></a>
 
 ## `fs`: files
 
-The file system: the content of a file, writing and atomically replacing it, the few questions
-about a path, and the two removals. Every operator of the module touches the file system, which
-the program cannot see from its arguments, so every one has an effect and a call runs only when
-it is reachable from a sync block; no pass folds or merges one. A declaration carries a
-signature, not an effect: the resource facts stay in the C++ module (`modules/fs`), where only
-C++ knows them.
+The file system. A file is read and written either as text (`string`, always UTF-8) or as
+`Bytes`; the two sets of functions are separate and meet only in `bytes::encode` and
+`bytes::decode`, so a text file is never half-read as binary and the bytes written for a text are
+the same on every platform. What the file system can refuse -- a missing file, a permission, a
+full disk -- is an error value (`T!`) whose kind says which; a wrong argument, such as a negative
+size, is a fault.
+
+Every function here uses the resource `fs`: a call runs only when its result is needed or it is
+written in a `sync` block, and calls on the file system keep their written order. A path is the
+data a reader works on (`'notes.txt'->read_text`) and the destination a writer is configured with
+(`text->write_text<'out/log.txt'>`), so `write_text<'out/log.txt'>` is itself the function that
+writes that file. Relative paths start at the working directory (`env::get_cwd`).
+
+### Reading
 
 #### `read_text`
 
 ```camel
-read_text: (path: string) => string
+read_text: (path: string) => string!
 ```
 
-The whole content of the file.
+The whole content of a file, as text.
 
-- With effects: reads a file.
-- Failure: fault `FileOpenFailed` when the file cannot be opened; fault `InvalidArgument` for malformed UTF-8; use read_bytes for binary files.
-- Example: `read_text('notes.txt')` gives `the text of the file`
-
-#### `try_read_text`
-
-```camel
-try_read_text: (path: string) => string!
-```
-
-The whole content of the file, or an error value.
-
-- With effects: reads a file.
-- Failure: error `IOError` when the path is a directory, or the file cannot be opened or read; error `EncodingError` for malformed UTF-8.
-- Example: `try_read_text('notes.txt') !! ''` gives `the text, or '' when it cannot be read`
-
-#### `read_chunk`
-
-```camel
-read_chunk: (path: string, offset: int, size: int) => Bytes
-```
-
-Up to size bytes of the file starting at byte offset; fewer at the end of the file.
-
-- With effects: reads a file.
-- Failure: fault `InvalidArgument` when offset or size is negative; fault `FileOpenFailed` or `FileSystemError` when the file cannot be opened or read.
-- Example: `read_chunk('notes.txt', 0, 16)` gives `the first 16 bytes`
+- With effects: not pure.
+- Failure: error value `NotFound` when nothing exists at the path; error value `PermissionDenied` when the file system refuses the read; error value `IOError` when the path is a directory or the read fails for another reason; error value `EncodingError` when the content is not valid UTF-8.
+- Example: `'notes.txt'->read_text !! ''` gives `the text of the file, or '' when it cannot be read`
 
 #### `read_bytes`
 
 ```camel
-read_bytes: (path: string) => Bytes
+read_bytes: (path: string) => Bytes!
 ```
 
-The complete binary content, preserving every byte.
+The whole content of a file, every byte preserved.
 
 - With effects: reads a file.
-- Example: `read_bytes('pixels.bin')`
+- Failure: error value `NotFound` when nothing exists at the path; error value `PermissionDenied` when the file system refuses the read; error value `IOError` when the path is a directory or the read fails for another reason.
+- Example (a fragment, not compiled): `'pixels.bin'->read_bytes !! encode('')` gives `the bytes of the file`
+- Why it is not compiled: the example builds its default `Bytes` with `encode` from the `bytes` module, which this page does not import
 
-#### `write_bytes`
-
-```camel
-write_bytes: (path: string, content: Bytes) => void
-```
-
-Writes binary content, creating parent directories when needed.
-
-- With effects: writes a file.
-- Example: `write_bytes('pixels.bin', payload)`
-
-#### `replace`
+#### `read_chunk`
 
 ```camel
-replace: (path: string, content: Bytes) => void
+read_chunk: <offset: int, size: int> (path: string) => Bytes!
 ```
 
-Flushes a temporary in the same directory and atomically replaces the destination.
+Up to size bytes of a file from byte offset on; fewer at the end of the file, none at or past
+it. Reading a large file piece by piece is `read_chunk` with a growing offset.
 
-- With effects: writes and replaces a file.
-- Example: `replace('checkpoint.bin', payload)`
+- With effects: reads a file.
+- Failure: fault `InvalidArgument` when offset or size is negative; error value `NotFound`, `PermissionDenied` or `IOError` as for `read_bytes`.
+- Example (a fragment, not compiled): `'notes.txt'->read_chunk<0, 16> !! encode('')` gives `the first 16 bytes`
+- Why it is not compiled: the example builds its default `Bytes` with `encode` from the `bytes` module, which this page does not import
+
+### Writing
 
 #### `write_text`
 
 ```camel
-write_text: (path: string, content: string) => void
+write_text: <path: string, atomic: bool = false> (content: string) => void!
 ```
 
-Replaces the content of the file, creating it and its parent directories when needed.
+Replaces the content of the file at path with a text, creating the file and its parent
+directories when they are not there. With atomic the content is first written to a temporary
+file in the same directory and then renamed over the destination, so a reader sees the old
+content or the new, never half of it.
+
+- With effects: not pure.
+- Failure: error value `PermissionDenied` when the file system refuses the write; error value `IOError` when the path is a directory or the write fails for another reason (no space left included).
+- Example (a fragment, not compiled): `'done'->write_text<'out/log.txt'>`
+- Why it is not compiled: writes the file system when it runs, and the example only has the `void!` result to show
+
+#### `write_bytes`
+
+```camel
+write_bytes: <path: string, atomic: bool = false> (content: Bytes) => void!
+```
+
+Replaces the content of the file at path with bytes; creating, atomic and errors as for
+`write_text`.
 
 - With effects: writes a file.
-- Failure: fault `FileSystemError` when a directory cannot be created; fault `FileOpenFailed` when the file cannot be opened.
-- Example: `write_text('out/log.txt', 'done')`
+- Failure: error value `PermissionDenied` when the file system refuses the write; error value `IOError` when the path is a directory or the write fails for another reason (no space left included).
+- Example (a fragment, not compiled): `encode('abc')->write_bytes<'payload.bin', atomic: true>`
+- Why it is not compiled: writes the file system when it runs, and the example only has the `void!` result to show
+
+#### `append_text`
+
+```camel
+append_text: <path: string> (content: string) => void!
+```
+
+Adds a text to the end of the file at path, creating the file and its parent directories when
+they are not there.
+
+- With effects: not pure.
+- Failure: error value `PermissionDenied` when the file system refuses the write; error value `IOError` when the path is a directory or the write fails for another reason.
+- Example (a fragment, not compiled): `'one more line\n'->append_text<'out/log.txt'>`
+- Why it is not compiled: writes the file system when it runs, and the example only has the `void!` result to show
+
+#### `append_bytes`
+
+```camel
+append_bytes: <path: string> (content: Bytes) => void!
+```
+
+Adds bytes to the end of the file at path; creating and errors as for `append_text`.
+
+- With effects: writes a file.
+- Failure: error value `PermissionDenied` when the file system refuses the write; error value `IOError` when the path is a directory or the write fails for another reason.
+- Example (a fragment, not compiled): `encode('abc')->append_bytes<'payload.bin'>`
+- Why it is not compiled: writes the file system when it runs, and the example only has the `void!` result to show
+
+### Questions about a path
 
 #### `exists`
 
@@ -3811,10 +3819,11 @@ Replaces the content of the file, creating it and its parent directories when ne
 exists: (path: string) => bool
 ```
 
-Whether something exists at the path.
+Whether anything exists at the path. A path that cannot be looked at (a directory that may not
+be searched) is reported as not existing.
 
 - With effects: reads the file system.
-- Example: `exists('notes.txt')` gives `true or false`
+- Example: `'notes.txt'->exists` gives `true or false`
 
 #### `is_file`
 
@@ -3825,7 +3834,7 @@ is_file: (path: string) => bool
 Whether the path names a regular file.
 
 - With effects: reads the file system.
-- Example: `is_file('notes.txt')` gives `true or false`
+- Example: `'notes.txt'->is_file` gives `true or false`
 
 #### `is_dir`
 
@@ -3836,43 +3845,61 @@ is_dir: (path: string) => bool
 Whether the path names a directory.
 
 - With effects: reads the file system.
-- Example: `is_dir('out')` gives `true or false`
+- Example: `'out'->is_dir` gives `true or false`
 
 #### `file_size`
 
 ```camel
-file_size: (path: string) => int
+file_size: (path: string) => int!
 ```
 
-The size of the file in bytes.
+The size of a file in bytes.
 
 - With effects: reads the file system.
-- Failure: fault `FileSystemError` when the size cannot be read (no such file).
-- Example: `file_size('notes.txt')` gives `1024`
+- Failure: error value `NotFound` when nothing exists at the path; error value `PermissionDenied` when the file system refuses the question; error value `IOError` otherwise.
+- Example: `'notes.txt'->file_size !! 0` gives `1024`
+
+#### `list_dir`
+
+```camel
+list_dir: (path: string) => string[]!
+```
+
+The names of what a directory holds, without the path in front of them, in the byte order of
+the names (so the order is the same on every platform). `.` and `..` are not listed.
+
+- With effects: reads the file system.
+- Failure: error value `NotFound` when nothing exists at the path; error value `PermissionDenied` when the file system refuses the listing; error value `IOError` when the path is not a directory.
+- Example: `'out'->list_dir !! []` gives `['log.txt', 'today']`
+
+### Creating and removing
 
 #### `mkdir`
 
 ```camel
-mkdir: (path: string) => bool
+mkdir: (path: string) => void!
 ```
 
-Creates one directory; false when it already exists.
+Creates one directory. The parent directory must exist, and the directory must not.
 
 - With effects: changes the file system.
-- Failure: fault `FileSystemError` when it cannot be created (no parent directory).
-- Example: `mkdir('out')` gives `true`
+- Failure: error value `AlreadyExists` when something exists at the path; error value `NotFound` when the parent directory does not exist; error value `PermissionDenied` when the file system refuses; error value `IOError` otherwise.
+- Example (a fragment, not compiled): `'out'->mkdir`
+- Why it is not compiled: creates a directory when it runs, and the example only has the `void!` result to show
 
 #### `mkdirs`
 
 ```camel
-mkdirs: (path: string) => bool
+mkdirs: (path: string) => void!
 ```
 
-Creates a directory and every missing parent; false when it already exists.
+Creates a directory and every missing parent. A directory that is already there is not an
+error, so the call can be repeated.
 
 - With effects: changes the file system.
-- Failure: fault `FileSystemError` when it cannot be created.
-- Example: `mkdirs('out/logs/today')` gives `true`
+- Failure: error value `AlreadyExists` when a file, not a directory, exists at the path; error value `PermissionDenied` when the file system refuses; error value `IOError` otherwise.
+- Example (a fragment, not compiled): `'out/logs/today'->mkdirs`
+- Why it is not compiled: creates a directory when it runs, and the example only has the `void!` result to show
 
 #### `remove`
 
@@ -3881,11 +3908,12 @@ remove: (path: string) => void!
 ```
 
 Removes a file or a symbolic link; a directory, even an empty one, is an error (use
-`remove_dir`). Removing a path that is not there is an error value, not a silent success.
+`remove_dir`). Removing a path that is not there is an error, not a silent success.
 
 - With effects: removes a file.
-- Failure: error `NotFound` when nothing exists at the path; error `PermissionDenied` when the file system refuses the removal; error `IOError` when the path is a directory or the removal fails for another reason.
-- Example: `remove('notes.txt')`
+- Failure: error value `NotFound` when nothing exists at the path; error value `PermissionDenied` when the file system refuses the removal; error value `IOError` when the path is a directory or the removal fails for another reason.
+- Example (a fragment, not compiled): `'notes.txt'->remove`
+- Why it is not compiled: removes a file when it runs, and the example only has the `void!` result to show
 
 #### `remove_dir`
 
@@ -3897,28 +3925,32 @@ Removes one empty directory. A directory that is not empty is an error, not a re
 delete; a file or a symbolic link is an error too.
 
 - With effects: removes a directory.
-- Failure: error `NotFound` when nothing exists at the path; error `PermissionDenied` when the file system refuses the removal; error `IOError` when the path is a file, a symbolic link, or a directory that is not empty.
-- Example: `remove_dir('out/old')`
+- Failure: error value `NotFound` when nothing exists at the path; error value `PermissionDenied` when the file system refuses the removal; error value `IOError` when the path is a file, a symbolic link, or a directory that is not empty.
+- Example (a fragment, not compiled): `'out/old'->remove_dir`
+- Why it is not compiled: removes a directory when it runs, and the example only has the `void!` result to show
 
 <a id="io"></a>
 
 ## `io`: terminal input
 
-The terminal: what it has waiting to be read, the keys themselves, and raw mode. The standard
-streams and `print`/`println`/`input`/`eprintln` are the prelude's; `Stream` and a `stdin` value
-are later work.
+The terminal as a keyboard: what has been typed and not yet read, the keys themselves, and raw
+mode. Reading is a use of the resource `stdin`, so reads and the changes of mode keep their
+written order. Writing to the terminal and reading a whole line are the prelude's
+(`print`, `println`, `eprintln`, `input`).
 
 #### `set_terminal_raw_mode`
 
 ```camel
-set_terminal_raw_mode: (enabled: bool) => void
+set_terminal_raw_mode: (enabled: bool) => void!
 ```
 
-Switches the terminal to raw mode (keys arrive one by one, unechoed) or back.
+Switches the terminal to raw mode (keys arrive one by one, unechoed) or back. Turning raw mode
+off always succeeds. Raw mode is left again when the program ends.
 
 - With effects: changes the terminal.
-- Failure: fault `RuntimeError` when the terminal refuses.
-- Example: `set_terminal_raw_mode(true)`
+- Failure: error value `NotATerminal` when raw mode is asked for and standard input is not a terminal (a pipe, a file); error value `IOError` when the terminal refuses.
+- Example (a fragment, not compiled): `set_terminal_raw_mode(true)`
+- Why it is not compiled: changes the terminal when it runs, and the example only has the `void!` result to show
 
 #### `has_input`
 
@@ -3931,27 +3963,29 @@ Whether a key press is waiting to be read.
 - With effects: reads the terminal.
 - Example: `has_input()` gives `true or false`
 
-#### `get_char`
-
-```camel
-get_char: () => string
-```
-
-One character of pending terminal input.
-
-- With effects: reads the terminal.
-- Example: `get_char()` gives `'w'`
-
 #### `get_chars`
 
 ```camel
 get_chars: (max: int) => string
 ```
 
-Up to max characters of pending terminal input.
+Up to max characters of the input that is waiting, as text; the empty text when none is. A
+character is read whole, so max counts code points, not bytes.
 
 - With effects: reads the terminal.
+- Failure: fault `InvalidArgument` when max is negative.
 - Example: `get_chars(3)` gives `at most three characters`
+
+#### `get_char`
+
+```camel
+get_char: () => string?
+```
+
+The next character of the input that is waiting; null when none is.
+
+- With effects: not pure.
+- Example: `get_char() ?? ''` gives `'w'`
 
 #### `clear_input_buffer`
 
@@ -3959,7 +3993,7 @@ Up to max characters of pending terminal input.
 clear_input_buffer: () => void
 ```
 
-Discards the terminal input that is waiting.
+Discards the input that is waiting.
 
 - With effects: reads the terminal.
 - Example: `clear_input_buffer()`
@@ -3968,32 +4002,46 @@ Discards the terminal input that is waiting.
 
 ## `process`: the process and the machine
 
-Every function touches the process or the machine and is declared with effects. `sleep` and
-`exit` are also built in: they need no import. The terminal is `io`'s.
+The process and the machine it runs on: waiting, ending, who runs it and how many threads it can
+have. Durations are seconds as a `float`, like `time::now`. The terminal is `io`'s, the
+environment `env`'s.
 
 #### `sleep`
 
 ```camel
-sleep: (milliseconds: int) => void
+sleep: (seconds: float) => void
 ```
 
-Suspends the program for the given number of milliseconds.
+Suspends the program for the given number of seconds. The wait is on the clock, so a call is
+never folded away and the work of other ready nodes goes on meanwhile.
 
 - With effects: waits.
-- Failure: fault `InvalidArgument` when the duration is negative.
-- Example: `sleep(100)`
+- Failure: fault `InvalidArgument` when seconds is negative or not a number.
+- Example: `sleep(0.1)`
 
-#### `whoami`
+#### `exit`
 
 ```camel
-whoami: () => string
+exit: (code: int) => void
+```
+
+Ends the program with the given exit code, after the buffered output is written and the
+external resources are released. Nothing that is written after the call runs.
+
+- With effects: ends the program.
+- Example: `exit(2)`
+
+#### `user_name`
+
+```camel
+user_name: () => string!
 ```
 
 The name of the user the process runs as.
 
 - With effects: reads the environment.
-- Failure: fault `RuntimeError` when the name cannot be found.
-- Example: `whoami()` gives `'alice'`
+- Failure: error value `NotFound` when the system has no name for the user.
+- Example: `user_name() !! 'unknown'` gives `'alice'`
 
 #### `cpu_count`
 
@@ -4023,80 +4071,82 @@ threads a run creates.
 
 ## `env`: environment
 
-Both functions read the environment of the process and are declared with effects.
+What the environment tells the process: its variables and its working directory. Both read the
+resource `env`, so a call is never folded or merged with another, and what a variable holds is
+whatever it holds when the call runs.
 
 #### `get_env`
 
 ```camel
-get_env: (name: string) => string
+get_env: (name: string) => string?
 ```
 
-The value of an environment variable, or the empty string when it is not set.
+The value of an environment variable; null when it is not set. A variable that is set to the
+empty text gives the empty text, not null.
 
 - With effects: reads the environment.
-- Example: `get_env('HOME')` gives `'/home/alice'`
+- Example: `'HOME'->get_env ?? ''` gives `'/home/alice'`
 
 #### `get_cwd`
 
 ```camel
-get_cwd: () => string
+get_cwd: () => string!
 ```
 
-The current working directory.
+The current working directory, the directory relative paths start at.
 
 - With effects: reads the environment.
-- Example: `get_cwd()` gives `'/home/alice/project'`
+- Failure: error value `NotFound` when the working directory has been removed; error value `PermissionDenied` when it cannot be read.
+- Example: `get_cwd() !! ''` gives `'/home/alice/project'`
 
 <a id="json"></a>
 
 ## `json`
 
-A Json is a JSON value whose shape is known only when the program runs: `decode` reads a
-text, or gives an error value when the text is not JSON, and the accessors below look into
-it, each giving a value of a definite type. `encode` writes the JSON text of a value, and
-`decode_as` decodes to the type of a shape; both are computed signatures that a declaration
-cannot express, so they are not declared here (see `stdlib/signatures/json.cml`).
+A Json is a JSON value whose shape is known only when the program runs: `decode` reads a text,
+or gives an error value when the text is not JSON, and the accessors look into it, each giving
+a value of a definite type. To read a part whose shape is known, `decode_as::<T>` decodes
+straight to the type T, and `encode` writes the JSON text of a value; both have a result type
+that a declaration cannot express, so they are not declared here (see
+`stdlib/signatures/json.cml`). Everything here is pure.
+
+The data an accessor works on is its ordinary argument; the key or the index is its
+with-argument, so calls chain: `decode(text)->get<key: 'port'>->as_int`. An accessor has one
+declaration for each tagged form of its argument -- `Json`, `Json?`, `Json!` and `Json!?` --
+written from the most specific to the widest, which give the result `R?`, `R?`, `R!?` and
+`R!?`: an absent part is the null, and the error of a text that failed to decode is passed on
+unchanged, so one `!!` or `??` at the end of a chain settles it.
 
 #### `encode`
 
 ```camel
 encode: (value: T) => string
+encode: <indent: int?> (value: T) => string
 ```
 
-The JSON text of a value, on one line. The type of the value must have a JSON form:
-numbers, bool, string, null, and arrays, tuples, structs, sets and maps with string keys
-of those; a function or a tensor is refused when the call is compiled.
+The JSON text of a value, on one line. The type of the value must have a JSON form: numbers,
+bool, string, null, a Json, and arrays, tuples, structs, sets and maps with string keys of
+those; a function or a tensor is refused when the call is compiled. A map is written with its
+keys in order, a struct with its fields in the order of its type, so the same value gives the
+same text.
 
 - Pure.
-- Example: `encode([1, 2])` gives `'[1,2]'`
-
-#### `encode`
-
-```camel
-encode: (value: T, indent: int) => string
-```
-
-The JSON text of a value, indented by indent spaces per level; a negative indent gives one
-line.
-
-- Pure.
-- Example: `encode([1, 2], 2)` gives `'[\n  1,\n  2\n]'`
+- Example: `[1, 2]->encode` gives `'[1,2]'`
 
 #### `decode_as`
 
 ```camel
-decode_as: <shape: T> (text: string) => T!
-decode_as: <shape: T> (text: Json) => T!
+decode_as: (source: string) => T!
+decode_as: (source: Json) => T!
 ```
 
-The value a JSON text (or a Json decoded before) describes, decoded to the type of shape;
-the value of shape is not read. The result is an error value when the JSON does not have
-that type, or when the text nests deeper than the limit. A part of the shape typed `Json`
-takes whatever is there.
+The value a JSON text (or a Json decoded before) describes, decoded to the type T. A part of
+T typed `Json` takes whatever is there. T is given where the call is written or taken from
+where the result goes (`let cfg: Config! = text->decode_as`).
 
 - Pure.
 - Failure: error value `JsonTypeError` when the text is JSON of another type (the message gives the path of the mismatch); error value `JsonParseError` when the text is not JSON; error value `JsonTooDeep` when the document nests deeper than the limit.
-- Example: `decode_as<[] as Map<string, int>>('{"a": 1}')` gives `{a: 1}`
+- Example: `decode_as::<Map<string, int>>('{"a": 1}')` gives `{a: 1}`
 
 #### `decode`
 
@@ -4105,16 +4155,12 @@ decode: (text: string) => Json!
 ```
 
 The value a JSON text describes, as a `Json`: a value of a definite type whose content is
-known only when the program runs; an error value when the text is not JSON or nests deeper
-than the limit (design principles 11.2). Look into a Json with get, as_int, as_array and the
-other operators below, each of which gives a value of a definite type and takes a `Json?`, a
-`Json!` or a `Json!?` as well, so that calls chain (a `Json!` gives the two-layer result and
-its error is passed on unchanged); read a part whose shape is known with decode_as. Prints as
-its JSON text. In the examples below, `j` is a Json decoded so.
+known only when the program runs. Look into it with `get`, `as_int`, `as_array` and the other
+accessors below.
 
 - Pure.
 - Failure: error value `JsonParseError` when the text is not JSON (the message gives the position in the text and its beginning); error value `JsonTooDeep` when the document nests deeper than the limit (10000 levels; the message gives the line and column of the bracket that goes too deep).
-- Example: `decode('{"port": 80}') ?-> ((j: Json): int => j->get<'port'>->as_int ?? 0) !! -1` gives `80`
+- Example: `(decode('{"port": 80}')->get<key: 'port'>->as_int ?? 0) !! -1` gives `80`
 
 #### `kind`
 
@@ -4125,7 +4171,7 @@ kind: (j: Json) => string
 The kind of a Json: 'null', 'bool', 'int', 'float', 'string', 'array' or 'object'.
 
 - Pure.
-- Example: `kind(j)` gives `'array', for j of '[1]'`
+- Example: `decode('[1]') ?-> kind !! ''` gives `'array'`
 
 #### `is_null`
 
@@ -4135,8 +4181,8 @@ is_null: (j: Json) => bool
 
 Whether a Json is the JSON null.
 
-- Pure.
-- Example: `is_null(j)` gives `true, for j of 'null'`
+- With effects: not pure.
+- Example: `decode('null') ?-> is_null !! false` gives `true`
 
 #### `get`
 
@@ -4148,11 +4194,10 @@ get: <key: string> (j: Json!?) => Json!?
 ```
 
 The member key of an object; null when j is not an object, has no such member, or is null
-itself (so that calls chain: j->get<'a'>->get<'b'>). A `Json!` gives a `Json!?`: the null is
-the nullable layer, and the error of a document that had failed is passed on unchanged.
+itself (so that calls chain: `j->get<key: 'a'>->get<key: 'b'>`).
 
 - Pure.
-- Example: `j->get<'a'>` gives `1, a Json?, for j of '{"a": 1}'`
+- Example: `(decode('{"a": 1}')->get<key: 'a'>->as_int ?? 0) !! -1` gives `1`
 
 #### `get`
 
@@ -4163,15 +4208,12 @@ get: <key: int> (j: Json!) => Json!?
 get: <key: int> (j: Json!?) => Json!?
 ```
 
-The element index of an array; null when j is not an array, the index is out of range, or j
-is null itself. The with-parameter is `key`, the name the member-key declarations above use:
-the position means which member of the Json to take, and the argument's type says whether it
-is written as a string or as an integer, so `get<key: 'a'>` and `get<key: 0>` name the same
-position of every declaration of `get`. A `Json!` gives a `Json!?`, as the member-key form
-does.
+The element key of an array; null when j is not an array, the index is out of range, or j is
+null itself. The with-parameter is called `key` as in the member form above: which member of
+the Json to take is written as a string or as an integer, and the argument's type says which.
 
 - Pure.
-- Example: `j->get<1>->as_int ?? 0` gives `6, for j of '[5, 6]'`
+- Example: `(decode('[5, 6]')->get<key: 1>->as_int ?? 0) !! -1` gives `6`
 
 #### `as_bool`
 
@@ -4182,11 +4224,10 @@ as_bool: (j: Json!) => bool!?
 as_bool: (j: Json!?) => bool!?
 ```
 
-The bool a Json holds; null for any other kind (and a `Json!` gives a `bool!?`, the error of
-the document passed on unchanged).
+The bool a Json holds; null for any other kind.
 
 - Pure.
-- Example: `j->as_bool ?? false` gives `true, for j of 'true'`
+- Example: `(decode('true')->as_bool ?? false) !! false` gives `true`
 
 #### `as_int`
 
@@ -4197,11 +4238,10 @@ as_int: (j: Json!) => int!?
 as_int: (j: Json!?) => int!?
 ```
 
-The integer a Json holds; null for any other kind (a number with a fraction is not an int),
-and a `Json!` gives an `int!?` with the error of the document passed on unchanged.
+The integer a Json holds; null for any other kind (a number with a fraction is not an int).
 
 - Pure.
-- Example: `j->as_int ?? 0` gives `42, for j of '42'`
+- Example: `(decode('42')->as_int ?? 0) !! 0` gives `42`
 
 #### `as_float`
 
@@ -4212,11 +4252,10 @@ as_float: (j: Json!) => float!?
 as_float: (j: Json!?) => float!?
 ```
 
-The number a Json holds, an integer included; null for any other kind, and a `Json!` gives a
-`float!?` with the error of the document passed on unchanged.
+The number a Json holds, an integer included; null for any other kind.
 
 - Pure.
-- Example: `j->as_float ?? 0.0` gives `2.0, for j of '2'`
+- Example: `(decode('2')->as_float ?? 0.0) !! 0.0` gives `2.0`
 
 #### `as_string`
 
@@ -4227,11 +4266,10 @@ as_string: (j: Json!) => string!?
 as_string: (j: Json!?) => string!?
 ```
 
-The string a Json holds; null for any other kind, and a `Json!` gives a `string!?` with the
-error of the document passed on unchanged.
+The string a Json holds; null for any other kind.
 
 - Pure.
-- Example: `j->as_string ?? ''` gives `'hi', for j of '"hi"'`
+- Example: `(decode('"hi"')->as_string ?? '') !! ''` gives `'hi'`
 
 #### `as_array`
 
@@ -4242,11 +4280,10 @@ as_array: (j: Json!) => Json[]!?
 as_array: (j: Json!?) => Json[]!?
 ```
 
-The elements of a JSON array; null for any other kind, and a `Json!` gives a `Json[]!?` with
-the error of the document passed on unchanged.
+The elements of a JSON array; null for any other kind.
 
 - Pure.
-- Example: `len(j->as_array ?? [])` gives `2, for j of '[1, "a"]'`
+- Example: `len((decode('[1, "a"]')->as_array ?? []) !! [])` gives `2`
 
 #### `as_object`
 
@@ -4257,52 +4294,41 @@ as_object: (j: Json!) => Map<string, Json>!?
 as_object: (j: Json!?) => Map<string, Json>!?
 ```
 
-The members of a JSON object, by name; null for any other kind, and a `Json!` gives a
-`Map<string, Json>!?` with the error of the document passed on unchanged.
+The members of a JSON object, by name; null for any other kind.
 
 - Pure.
-- Example: `keys(j->as_object ?? ([] as Map<string, Json>))` gives `['a', 'b'], for j of '{"b": 1, "a": 2}'`
+- Example: `len((decode('{"b": 1, "a": 2}')->as_object ?? ([] as Map<string, Json>)) !! ([] as Map<string, Json>))` gives `2`
 
 <a id="hash"></a>
 
 ## `hash`
 
+Digests. A digest is computed over bytes: the digest of a text is the digest of its UTF-8
+bytes (`bytes::encode`), so a text and its encoding have the same digest on every platform.
+Every function here is pure; the digest is written as lower-case hexadecimal text.
+
 #### `sha256`
 
 ```camel
-sha256: (s: string) => string
+sha256: (data: Bytes) => string
 ```
 
-The SHA-256 digest of the bytes of s, as 64 lower-case hexadecimal digits.
+The SHA-256 digest of a `Bytes` value, as 64 lower-case hexadecimal digits.
 
-- Pure.
+- With effects: not pure.
+- Example (a fragment, not compiled): `sha256(encode('abc'))` gives `'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'`
+- Why it is not compiled: the example builds its `Bytes` value with `encode` from the `bytes` module, which this page does not import
+
+#### `sha256`
+
+```camel
+sha256: (text: string) => string
+```
+
+The SHA-256 digest of the UTF-8 bytes of a text, as 64 lower-case hexadecimal digits.
+
+- With effects: not pure.
 - Example: `sha256('abc')` gives `'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'`
-
-#### `sha256`
-
-```camel
-sha256: (s: Bytes) => string
-```
-
-The SHA-256 digest of a `Bytes` value, as 64 lower-case hexadecimal digits. The two overloads are
-two operators (`hash:sha256_str`, `hash:sha256_bytes`); the one is chosen when the program is
-compiled.
-
-- Pure.
-- Example: `sha256(encode('abc')) == sha256('abc')` gives `true`
-
-#### `sha256_rounds`
-
-```camel
-sha256_rounds: (s: string, rounds: int) => string
-```
-
-SHA-256 applied rounds times, each round to the hexadecimal text of the one before;
-0 rounds gives s itself.
-
-- Pure.
-- Failure: fault `InvalidArgument` when rounds is negative.
-- Example: `sha256_rounds('abc', 1) == sha256('abc')` gives `true`
 
 <a id="re"></a>
 
@@ -5491,26 +5517,27 @@ Five operators stay in C++ and are recorded as computed signatures in
 #### `py_call`
 
 ```camel
-py_call: (fn: string | PyObject, ...args: PyObject[]) => PyObject
+py_call: (fn: string | PyObject, ...args: PyObject[]) => PyObject!
 ```
 
 Calls the Python callable `fn` -- a `PyObject`, or a dotted name such as `"math.sqrt"` -- with
 the `PyObject` arguments `args`, and returns its result. Any number of arguments is accepted.
 
 - With effects: runs arbitrary Python code.
-- Failure: fault `RuntimeError` when the call raises.
+- Failure: error `PythonError` when the call raises; the message starts with the exception class.
 - Example: `py_call("math.sqrt", py_wrap(2.0))`
 
 #### `py_call`
 
 ```camel
-py_call: (fn: string | PyObject, args?: (...PyObject) | PyObject[], kwargs?: Struct<...PyObject>) => PyObject
+py_call: (fn: string | PyObject, args?: (...PyObject) | PyObject[], kwargs?: Struct<...PyObject>) => PyObject!
 ```
 
 Calls `fn` with a tuple (or an array) of positional arguments and a struct of keyword
 arguments. Both collections are optional; every element is a `PyObject`.
 
 - With effects: not pure.
+- Failure: error `PythonError` when the call raises; the message starts with the exception class.
 - Example: `py_call(fn, (py_wrap(2.0),), {x: py_wrap(1)})`
 
 #### `py_print`
@@ -5535,7 +5562,7 @@ Writes the printed form of every `PyObject` argument and a newline, as `py_print
 returns the last argument (or `void` when there is none).
 
 - With effects: writes the interpreter's standard output.
-- Example: `py_println(py_eval("1 + 1"))`
+- Example: `py_eval("1 + 1") ?-> (o: PyObject): PyObject? => py_println(o)`
 
 #### `py_wrap`
 
@@ -5552,76 +5579,80 @@ Wraps the value `x` in a new Python object, keeping its Camel type as the type a
 #### `py_unwrap`
 
 ```camel
-py_unwrap: (obj: PyObject<T>) => T
+py_unwrap: (obj: PyObject<T>) => T!
 ```
 
-Unwraps a Python object wrapped from a value of type `T` and returns that value. An object
-that did not come from `py_wrap` has no type argument and is refused when the call is compiled.
+Unwraps a Python object into a value of type `T`. An object that did not come from `py_wrap`
+has no type argument and is refused when the call is compiled. The object must be of the kind
+`T` names: a `bool` takes a bool only (not `5`), an `int` an int that fits (not a bool or a
+float), a `float` a float or an int, a `string` a str (not bytes), `Bytes` bytes, an array a
+list, a tuple a tuple or list of its length, a struct a dict with its fields.
 
 - With effects: reads an interpreter object.
-- Example: `py_unwrap(py_wrap(2.0))` gives `2.0`
+- Failure: error `PythonTypeError` when the object is not of the kind `T` names; the message gives the path and what was found.
+- Example: `py_unwrap(py_wrap(2.0)) !! 0.0` gives `2.0`
 
 #### `py_exec`
 
 ```camel
-py_exec: (code: string) => PyObject
+py_exec: (code: string) => PyObject!
 ```
 
 Runs Python statements `code` in the interpreter and returns its `None`. Definitions and
 assignments stay visible to later calls, as in a Python session.
 
 - With effects: runs arbitrary Python code.
-- Failure: fault `RuntimeError` when the code raises.
+- Failure: error `PythonError` when the code raises; the message starts with the exception class.
 - Example: `py_exec("x = 1")`
 
 #### `py_eval`
 
 ```camel
-py_eval: (expr: string) => PyObject
+py_eval: (expr: string) => PyObject!
 ```
 
 Evaluates the Python expression `expr` and returns its value as a `PyObject`.
 
 - With effects: runs arbitrary Python code.
-- Failure: fault `RuntimeError` when the expression raises.
+- Failure: error `PythonError` when the expression raises; the message starts with the exception class.
 - Example: `py_eval("1 + 2 * 3")` gives `7`
 
 #### `py_run`
 
 ```camel
-py_run: (file_path: string) => PyObject
+py_run: (file_path: string) => PyObject!
 ```
 
 Runs the Python script at `file_path` and returns its `None`.
 
 - With effects: runs arbitrary Python code.
-- Failure: fault `RuntimeError` when the file cannot be read or the script raises.
+- Failure: error `PythonError` when the file cannot be read or the script raises; the message starts with the exception class.
 - Example: `py_run("scripts/hello.py")`
 
 #### `py_attr`
 
 ```camel
-py_attr: (obj: PyObject, attr: string) => PyObject
+py_attr: (obj: PyObject, attr: string) => PyObject!
 ```
 
 The attribute `attr` of the Python object `obj`; a dotted `attr` walks the chain. Asking may
 run a property or a descriptor, so the read is an effect.
 
 - With effects: reads interpreter state and may run Python code.
-- Failure: fault `RuntimeError` when the attribute does not exist.
-- Example: `py_attr(py_import("math"), "sqrt")`
+- Failure: error `PythonError` when the attribute does not exist; the message starts with the exception class.
+- Example: `py_import("math") ?-> (m: PyObject): PyObject! => py_attr(m, "sqrt")`
 
 #### `py_import`
 
 ```camel
-py_import: (module_name: string) => PyObject
+py_import: (module_name: string) => PyObject!
 ```
 
 Imports the Python module `module_name` and returns it. Importing runs the module body and
 records the module in `sys.modules`.
 
 - With effects: imports a module and runs its body.
-- Failure: fault `RuntimeError` when the import raises.
+- Failure: error `PythonError` when the import raises; the message starts with the exception class.
 - Example: `py_import("math")`
 
 #### `py_dispose`
@@ -5633,7 +5664,7 @@ py_dispose: (obj: PyObject) => void
 Drops this program's reference to the Python object `obj`.
 
 - With effects: advances the interpreter's reference counts.
-- Example: `py_dispose(py_import("math"))`
+- Example: `py_import("math") ?-> py_dispose`
 
 <a id="nn"></a>
 

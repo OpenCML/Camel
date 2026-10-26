@@ -29,7 +29,7 @@ Every expression has a definite type at compile time; the graph contains only co
 | Module types | A type name introduced by a module (e.g. `Json`); a numeric array is not a module type of its own (the transitional `Tensor` name is deleted, and writing it is an unknown name) | Introduced by a module; the name and the arguments in angle brackets are interpreted by the type itself, and the representation is the module's |
 There is no type `any`: after compilation every value has a definite type (design principles 5.10). Writing `any` in any type position is, like any other unknown type name, the compile-time error `SemanticDiag::UnresolvedTypeReference`; a parameter that takes several types uses a type parameter (see [7.5](07_statements.md#75-generic-functions)), and values of different types side by side go in a tuple or a struct.
 
-Reading JSON: for a known shape use `json::decode_as(text, shape)`, whose result is a `T!`; for an unknown shape use `json::decode(text)`, which gives a `Json!`: an error value `JsonParseError` when the text is not JSON, and `JsonTooDeep` when the document nests deeper than the limit (neither is a fault, design principles 11.2; the limit is 10000), otherwise a `Json`, whose type is definite and whose content is known only at run time; take parts out with `get`, `as_int`, `as_array` and the like, each of which gives a value of a definite type (null when there is none) and also takes a `Json?`, `Json!` or `Json!?` so that calls chain, as in `j->get<'server'>->get<'port'>->as_int ?? 8080`; an accessor of a `Json!` gives the two-layer result (`Json!?` and the like) with the error of the document passed on unchanged, taken apart with `??` and `!!`; `as_float` takes an integer too, and `get<index>` out of range gives `null` (the accessor design settled in 11.2).
+Reading JSON: for a known shape use `json::decode_as::<T>(text)`, whose result is a `T!`; for an unknown shape use `json::decode(text)`, which gives a `Json!`: an error value `JsonParseError` when the text is not JSON, and `JsonTooDeep` when the document nests deeper than the limit (neither is a fault, design principles 11.2; the limit is 10000), otherwise a `Json`, whose type is definite and whose content is known only at run time; take parts out with `get`, `as_int`, `as_array` and the like, each of which gives a value of a definite type (null when there is none) and also takes a `Json?`, `Json!` or `Json!?` so that calls chain, as in `j->get<'server'>->get<'port'>->as_int ?? 8080`; an accessor of a `Json!` gives the two-layer result (`Json!?` and the like) with the error of the document passed on unchanged, taken apart with `??` and `!!`; `as_float` takes an integer too, and `get<index>` out of range gives `null` (the accessor design settled in 11.2).
 
 The `T` and `U...` in the signatures of the standard library (as in `println: (x: T, ...rest: U...) => T`) are a notation of the reference only: these operators check their arguments with type rules, and the graph holds concrete types only.
 
@@ -257,7 +257,7 @@ Rules:
 - The two tags can be combined: `T?!`, `T!?`. The marks are written from the innermost outwards: `T?!` is fallible(nullable(T)) and `T!?` is nullable(fallible(T)); a `match` opens the outer form only. The same one cannot be repeated. Positions such as array elements need parentheses: `(int?)[]`.
 - With generics: after `T` is declared at the head, a `T?` parameter binds `T` from a nullable argument ([7.5](07_statements.md#75-generic-functions)).
 - In `let x: int! = v` there must be a space between `!` and `=`.
-- Built-in fallible functions: `parse_int(s)`, `parse_float(s)`, `try_read_text(path)`, `remove(path)` and `remove_dir(path)` of the `fs` module, `decode` and `decode_as` of the `json` module. `error(kind, message)` constructs an error value and records the location of the call.
+- Built-in fallible functions: `parse_int(s)`, `parse_float(s)`, `read_text(path)`, `remove(path)` and `remove_dir(path)` of the `fs` module, `decode` and `decode_as` of the `json` module. `error(kind, message)` constructs an error value and records the location of the call.
 
 **Errors and faults are two different things.** Only an operation declared to return `T!` produces an error value. Division by zero, an out-of-range subscript and too deep a recursion are faults: the program terminates with a location, and `!!` cannot catch it (see [4.6](04_execution_model.md#46-faults-exit-and-resource-limits)).
 
@@ -384,7 +384,7 @@ func main(): int sync {
 - The order is sorted by key (integers by value, `false` before `true`, strings by byte, tuples element by element); `keys`, `values`, `items` and printing all follow this order.
 - When an array known only at run time contains duplicate keys, later entries overwrite earlier ones.
 - When the value type is itself nullable (`Map<string, int?>`), the type of `m[k]` is just `int?`: a missing key and a `null` value cannot be told apart; use `has` where needed.
-- The coexistence of the three call forms; the print format; `json::decode_as` using the type of a value to specify the target type of decoding.
+- The coexistence of the three call forms; the print format; `json::decode_as` using a type argument to specify the target type of decoding.
 
 For the implementation and trade-offs see [technical document 31](../../technical/31_map_and_set.md).
 

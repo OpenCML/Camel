@@ -286,19 +286,6 @@ export func eprintln(x: T, ...rest: U...): T
 #op(':io/input')
 export func input(prompt: string): string
 
-/// Suspends the program for the given number of milliseconds.
-/// @effect waits
-/// @fails fault `InvalidArgument` when the duration is negative
-/// @example sleep(100)
-#op('process:sleep')
-export func sleep(milliseconds: int): void
-
-/// Ends the program with the given exit code, after writing buffered output.
-/// @effect ends the program
-/// @example exit(2)
-#op('process:exit')
-export func exit(code: int): void
-
 // ---- strings ----
 
 /// The text fmt with each `{}` placeholder replaced by the next argument; placeholders take

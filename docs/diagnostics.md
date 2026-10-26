@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-290 diagnostics: 273 errors, 17 warnings. 15 carry a machine-applicable edit, 275 say why they carry none.
+289 diagnostics: 272 errors, 17 warnings. 15 carry a machine-applicable edit, 274 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -286,7 +286,6 @@ prints one entry.
 | `0x04000032` | [RuntimeDiag::OperandTypeUnsupported](#operandtypeunsupported) | Error | no |
 | `0x04000033` | [RuntimeDiag::FieldNotFound](#fieldnotfound) | Error | no |
 | `0x04000034` | [RuntimeDiag::InvalidArgument](#invalidargument) | Error | no |
-| `0x04000035` | [RuntimeDiag::FileOpenFailed](#fileopenfailed) | Error | no |
 | `0x04000036` | [RuntimeDiag::FileSystemError](#filesystemerror) | Error | no |
 | `0x04000039` | [RuntimeDiag::RegexInvalid](#regexinvalid) | Error | no |
 | `0x0400003A` | [RuntimeDiag::TimeFormatFailed](#timeformatfailed) | Error | no |
@@ -9266,7 +9265,7 @@ func depth(n: int): int {
 }
 
 func main(): int sync {
-    let n = int(get_env('N'))
+    let n = int(get_env('N') ?? '')
     println('start')
     println(depth(n))
     println('done')
@@ -9783,28 +9782,6 @@ func main(): int sync {
     return 0
 }
 ```
-
-### FileOpenFailed
-
-`0x04000035` · Error · `RuntimeDiag::FileOpenFailed`
-
-**Fix**
-
-None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
-
-**Message**
-
-```text
-'{0}' cannot open the file '{1}': {2}.
-```
-
-**Help**
-
-```text
-Check that the path exists and that the program may access it; a relative path is taken from the directory the program is run in. Where a missing file is expected, fs.try_read_text returns an error value instead of ending the program.
-```
-
-*No example: no test small enough to show raises it.*
 
 ### FileSystemError
 
@@ -10584,16 +10561,16 @@ std::cpp has no standalone translation of {0}: the program it writes calls the C
 Every other operator is translated into C++ that needs only the standard library (docs/cpp_export_build.md). The comment at the top of the C++ file gives the command that builds it with the runtime.
 ```
 
-**Example** (`test/cases/trans/cpp/hash_bridge.cml`, run as `camel test/cases/trans/cpp/hash_bridge.cml std::cpp`)
+**Example** (`test/cases/trans/cpp/runtime_bridge.cml`, run as `camel test/cases/trans/cpp/runtime_bridge.cml std::cpp`)
 
 ```camel
-/// std::cpp has no standalone translation of a hash operator: the program links the runtime.
-module cpp_hash_bridge
+/// std::cpp has no standalone translation of a string operator: the program links the runtime.
+module cpp_runtime_bridge
 
-import hash
+import str
 
 func main(): int sync {
-    println(hash::sha256('a'))
+    println(str::to_upper('a'))
     return 0
 }
 ```

@@ -1012,7 +1012,8 @@ const out = input.normalized.stdout.trim()
 const stats = JSON.parse(out.match(/GRAPH_STATS (\{.*\})/)[1])
 assert(stats.specializations === 0, `unexpected specialization count: ${stats.specializations}`)
 assert(stats.graphs === 3, `unexpected graph count: ${stats.graphs}`)
-assert(stats.branches === 1, `the recursion's branch is gone: ${stats.branches}`)
+// The recursion's branch and the `??` of the environment read.
+assert(stats.branches === 2, `the recursion's branch is gone: ${stats.branches}`)
 assert(out.endsWith('5.0'), `unexpected output: ${out}`)
 }
 """

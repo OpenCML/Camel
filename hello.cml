@@ -1,9 +1,9 @@
 module main
 
-import { whoami } from process
+import { user_name } from process
 
 func main() sync {
-    let i = whoami()
+    let i = user_name() !! 'stranger'
     println(format<i>('Hello, {}!'))
     return 0
 }

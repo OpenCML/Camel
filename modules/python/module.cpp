@@ -64,7 +64,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     "python:py_call",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {-1, {}}},
-                        "(fn: string | PyObject, ...args: PyObject[]) => PyObject",
+                        "(fn: string | PyObject, ...args: PyObject[]) => PyObject!",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> std::optional<Type *> {
                             if (norm.size() < 1)
@@ -75,7 +75,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                             for (size_t i = 1; i < norm.size(); ++i)
                                 if (!norm[i] || norm[i]->code() != PyObjectType::typeCode())
                                     return std::nullopt;
-                            return getPyObjectType();
+                            return TupleType::fallible(getPyObjectType());
                         }),
                 },
                 {
@@ -83,7 +83,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {-1, {}}},
                         "(fn: string | PyObject, args?: (...PyObject) | PyObject[], kwargs?: "
-                        "Struct<...PyObject>) => PyObject",
+                        "Struct<...PyObject>) => PyObject!",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> std::optional<Type *> {
                             if (norm.size() < 1 || norm.size() > 3)
@@ -116,7 +116,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                                         st->typeAt(i)->code() != PyObjectType::typeCode())
                                         return std::nullopt;
                             }
-                            return getPyObjectType();
+                            return TupleType::fallible(getPyObjectType());
                         }),
                 },
             }),
@@ -176,7 +176,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     "python:py_unwrap",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
-                        "(obj: PyObject<T>) => T",
+                        "(obj: PyObject<T>) => T!",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> std::optional<Type *> {
                             Type *t = norm[0];
@@ -185,7 +185,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                             auto *o = static_cast<OtherType *>(t);
                             if (o->paramCount() == 0)
                                 return std::nullopt;
-                            return o->params()[0];
+                            return TupleType::fallible(o->params()[0]);
                         }),
                 },
             }),

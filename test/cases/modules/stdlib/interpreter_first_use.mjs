@@ -68,7 +68,7 @@ func main(): int sync {
 import { py_exec } from python
 
 func main(): int sync {
-    py_exec("x = 1")
+    let _ = py_exec("x = 1")
     return 0
 }
 `,
@@ -77,9 +77,12 @@ import { py_import } from python
 import { plot } from pyplot
 
 func main(): int sync {
-    py_import("_ssl")
+    let failed = match py_import("_ssl") {
+        case error e => 1
+        case v => 0
+    }
     plot([1.0, 2.0, 3.0], "${SCRATCH}/python-then-plot.svg")
-    return 0
+    return failed
 }
 `,
     plot_then_python: `module plot_then_python
@@ -88,8 +91,11 @@ import { py_import } from python
 
 func main(): int sync {
     plot([1.0, 2.0, 3.0], "${SCRATCH}/plot-then-python.svg")
-    py_import("_ssl")
-    return 0
+    let failed = match py_import("_ssl") {
+        case error e => 1
+        case v => 0
+    }
+    return failed
 }
 `,
     twice: `module twice
@@ -98,7 +104,7 @@ import { py_exec } from python
 
 func main(): int sync {
     plot([1.0, 2.0, 3.0], "${SCRATCH}/twice-1.svg")
-    py_exec("x = 1")
+    let _ = py_exec("x = 1")
     plot([3.0, 2.0, 1.0], "${SCRATCH}/twice-2.svg")
     return 0
 }

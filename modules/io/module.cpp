@@ -35,7 +35,6 @@ bool IOModule::load() {
         {
             {"set_terminal_raw_mode", false},
             {"has_input", false},
-            {"get_char", false},
             {"get_chars", false},
             {"clear_input_buffer", false},
         });
@@ -52,7 +51,6 @@ bool IOModule::load() {
             {
                 {"set_terminal_raw_mode", externalAmbient("stdin", AccessMode::Write)},
                 {"has_input", externalAmbient("stdin", AccessMode::Read)},
-                {"get_char", externalAmbient("stdin", AccessMode::ReadModifyWrite)},
                 {"get_chars", externalAmbient("stdin", AccessMode::ReadModifyWrite)},
                 {"clear_input_buffer", externalAmbient("stdin", AccessMode::ReadModifyWrite)},
             });
