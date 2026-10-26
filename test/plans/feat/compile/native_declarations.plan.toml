@@ -869,13 +869,13 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F",
 
 [[tests]]
 name = "native.tiles_declaration_import"
-desc = "`tiles:available` and `tiles:device` are declared with no parameters, a `bool` and a `string` result; the importer reads both from `stdlib/tiles.cml`, `available` reaches the C++ operator, and `device` type-checks as `() => string` without being called."
+desc = "`tiles:available` and `tiles:device` are declared with no parameters, a `bool` and a `string!` result; the importer reads both from `stdlib/tiles.cml`, and both reach the C++ operator: `available` answers `false` and `device` type-checks as `() => string!`, whose error value of kind `DeviceUnavailable` a run without a device carries and `!!` stands for."
 kind = "behavior"
 case = "../../../cases/compile/native/tiles_declaration_import.cml"
 args = ["${case}"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 0
-expect_stdout_exact = "false\n"
+expect_stdout_exact = "false\nno device\n"
 
 [[tests]]
 name = "native.tiles_wrong_arity"

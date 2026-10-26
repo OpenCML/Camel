@@ -729,15 +729,15 @@ rule_consts: (r: Rule) => int
 **`tiles`** — import { ... } from tiles — 9 name(s)
 
 ```text
-upload: (value: f32[..]) => Device<f32[..]>
-download: (value: Device<f32[..]>) => f32[..]
-run_preferred_resident: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => Device<f32>
-source: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string
-inspect: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string
-benchmark: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string
-regions: <fn: (a: f32, b: f32) => f32> () => string
-available: () => bool
-device: () => string
+upload: (value: f32[..]) => Device<f32[..]> uses driver
+download: (value: Device<f32[..]>) => f32[..] uses driver
+run_preferred_resident: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => Device<f32> uses driver
+source: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
+inspect: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
+benchmark: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
+regions: <fn: (a: f32, b: f32) => f32> () => string uses driver
+available: () => bool uses driver
+device: () => string! uses driver
 ```
 
 **`pyplot`** — import { ... } from pyplot — 1 name(s)

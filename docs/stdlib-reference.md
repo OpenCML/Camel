@@ -5221,125 +5221,130 @@ How many constants the rule `r` adds to the program.
 
 ## `tiles`: programs on a CUDA device
 
-Programs on a CUDA device: a function value is compiled to device code, its inputs are uploaded,
-the device computes, and the results come back to the host. `tiles::compile` outlines the regions
-the device can run, `source`/`inspect`/`benchmark` show what would run, and `upload`/`download`
-move a value by hand. Placement is asked for in the source with the `#gpu` label (design
-principles 13.4), which `tiles::compile` reads; the card is chosen at run time with `--devices`.
-The device holds a foreign resource (`tiles:device`) and the driver is ambient state
-(`tiles:driver`), so every operator of this module has effects and none is folded or dropped.
+Programs on a CUDA device. Where a computation runs is asked for in the source with the tag
+`#gpu`, written on a function, a block or a namespace block (design principles 13.4), and the
+card is chosen when the program runs, with `--devices`. The pass `tiles::compile` reads
+the tags, outlines the regions the device can run, compiles them and runs the program: an
+operator the device cannot run inside a `#gpu` scope is a compile error that names the operator
+and the scope, never a quiet fall back to the host. An array on the device is an ordinary array
+value whose data block lives there; the host reading it (printing, writing a file, turning it
+into a host number) downloads it, and the reports of a run list every such transfer.
+
+What a program does by hand is small: ask whether a device is there (`available`, `device`), move
+a value (`upload`, `download`), and look at what would run (`source`, `inspect`, `benchmark`,
+`regions`). The device and the driver are one resource, `driver`, so every call here keeps its
+written order against the others and is never folded, merged or dropped. The functions to look
+at are the `with` argument and the data is the example input, as for `map`:
+`inputs->inspect<fn>`.
+
+The functions that compute their type from an argument (`upload`, `download`, `source`,
+`inspect`, `benchmark`, `regions`, and `run_preferred_resident`, the entry `tiles::compile` and
+the tests use) are in `stdlib/signatures/tiles.cml`.
 
 #### `upload`
 
 ```camel
-upload: (value: f32[..]) => Device<f32[..]>
+upload: (value: f32[..]) => Device<f32[..]> uses driver
 ```
 
-Uploads every leaf of the value — a tensor, or a scalar of the element type it is written with,
-alone or inside a tuple or a struct — and returns the same tree with each leaf wrapped in
+Uploads every leaf of the value -- an array, or a scalar of the element type it is written
+with, alone or inside a tuple or a struct -- and gives the same tree with each leaf wrapped in
 `Device<...>`. A leaf of any other type is refused when the call is compiled.
 
-- With effects: transfers to the device.
-- Example: `upload(host)` gives `a Device<f32[..]>`
+- Example (a fragment, not compiled): `host->upload` gives `a Device<f32[..]>`
+- Why it is not compiled: the value comes from the caller
 
 #### `download`
 
 ```camel
-download: (value: Device<f32[..]>) => f32[..]
+download: (value: Device<f32[..]>) => f32[..] uses driver
 ```
 
-Downloads every device leaf of the value and returns the host value it came from. A tree with a
+Downloads every device leaf of the value and gives the host value it came from. A tree with a
 leaf that is not a device value is refused when the call is compiled.
 
-- With effects: transfers from the device.
-- Example: `download(resident)` gives `the tensor resident holds`
+- Example (a fragment, not compiled): `resident->download` gives `the array resident holds`
+- Why it is not compiled: the value comes from the caller
 
 #### `run_preferred_resident`
 
 ```camel
-run_preferred_resident: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => Device<f32>
+run_preferred_resident: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => Device<f32> uses driver
 ```
 
-Runs the function through the device path the pipeline prepared for it — the device when a
-program can be made for it, the host otherwise — and answers the resident form of its result.
-This is the operator `tiles::compile` inserts for an outlined region; a `#gpu` scope asks for
-the device explicitly, and an operator the device cannot run is a compile error there.
+Runs the function through the device path the pipeline prepared for it -- the device when a
+program can be made for it, the host otherwise -- and gives the resident form of its result.
+This is the operator `tiles::compile` inserts for an outlined region and the tests use; a
+program asks for the device with `#gpu`, not with this.
 
-- With effects: transfers to the device and runs device code.
-- Example: `run_preferred_resident<(a: f32, b: f32): f32 => a + b>((f32(2.0), f32(3.0)))` gives `a Device<f32>`
+- Example: `(f32(2.0), f32(3.0))->run_preferred_resident<(a: f32, b: f32): f32 => a + b>` gives `a Device<f32>`
 
 #### `source`
 
 ```camel
-source: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string
+source: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
 ```
 
 The CUDA source the function compiles to, without running it.
 
-- With effects: compiles device code.
-- Example: `println(source<(a: f32, b: f32): f32 => a + b>((f32(2.0), f32(3.0))))`
+- Example: `(f32(2.0), f32(3.0))->source<(a: f32, b: f32): f32 => a + b>`
 
 #### `inspect`
 
 ```camel
-inspect: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string
+inspect: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
 ```
 
 A report on the function's device plan, without running it: the kernel, its launch shape and
 the values it would keep on the device.
 
-- With effects: compiles device code.
-- Example: `println(inspect<(a: f32, b: f32): f32 => a + b>((f32(2.0), f32(3.0))))`
+- Example: `(f32(2.0), f32(3.0))->inspect<(a: f32, b: f32): f32 => a + b>`
 
 #### `benchmark`
 
 ```camel
-benchmark: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string
+benchmark: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
 ```
 
-Times the function on the device, and on the host for comparison, and returns the report as
-JSON text.
+Times the function on the device, and on the host for comparison, and gives the report as JSON
+text.
 
-- With effects: transfers both ways and runs device code.
-- Example: `println(benchmark<(a: f32, b: f32): f32 => a + b>((f32(2.0), f32(3.0))))`
+- Example: `(f32(2.0), f32(3.0))->benchmark<(a: f32, b: f32): f32 => a + b>`
 
 #### `regions`
 
 ```camel
-regions: <fn: (a: f32, b: f32) => f32> () => string
+regions: <fn: (a: f32, b: f32) => f32> () => string uses driver
 ```
 
 The regions the compiler would take for the whole program, as text: which nodes would run on
 the device and why the others would not.
 
-- With effects: compiles device code.
-- Example: `println(regions<(a: f32, b: f32): f32 => a + b>())`
+- Example: `regions<(a: f32, b: f32): f32 => a + b>()`
 
 #### `available`
 
 ```camel
-available: () => bool
+available: () => bool uses driver
 ```
 
 Whether this machine can run a program on a CUDA device: false when the driver, the toolkit or
-a visible device is missing. A capability question only — a device the run names with
-`--devices` and that is not there is a fault, never `false`.
+a visible device is missing. A capability question only -- a device the run names with
+`--devices` and that is not there is a fault at start-up, never `false`.
 
-- With effects: probes the driver.
 - Example: `available()`
 
 #### `device`
 
 ```camel
-device: () => string
+device: () => string! uses driver
 ```
 
 A description of the CUDA device the run selects: its ordinal, name, compute capability and
-memory. Asking is a requirement, not a preference: with no device the call is a fault.
+memory.
 
-- With effects: probes the driver.
-- Failure: fault `RuntimeError` when this build or this machine has no CUDA device; fault `DeviceUnavailable` when `--devices` names a device that is not there.
-- Example: `println(device())`
+- Failure: error value `DeviceUnavailable` when this build or this machine has no CUDA device.
+- Example: `device() !! 'no device'`
 
 <a id="pyplot"></a>
 
