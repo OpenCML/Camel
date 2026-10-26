@@ -215,7 +215,7 @@ backends = ["nvm"]
 backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
-expect_output_contains = ["name=SemanticDiag::PartialApplicationRefused", "err_overload_choice_name.cml:18:13:", "<k: f32> (x: f32) => f32", "<k: float> (x: float) => float"]
+expect_output_contains = ["name=SemanticDiag::PartialApplicationRefused", "err_overload_choice_name.cml:17:13:", "<k: f32> (x: f32) => f32", "<k: float> (x: float) => float"]
 
 [[tests]]
 name = "partial_application.err_context_argument_name"

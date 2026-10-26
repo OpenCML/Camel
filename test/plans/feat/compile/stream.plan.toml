@@ -796,7 +796,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::StreamConsumedInLoop"
 expect_diagnostic_code = "0x030001ED"
-expect_diagnostic_line = 26
+expect_diagnostic_line = 25
 expect_diagnostic_column = 57
 expect_output_contains = ["consumed once per round of this loop", "the loop this use stands in", "loop acc = 0, rest = s while", "for x in s"]
 expect_output_not_contains = ["UnknownInternalError"]
@@ -868,7 +868,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TeeHintNotPositive"
 expect_diagnostic_code = "0x030001EF"
-expect_diagnostic_line = 25
+expect_diagnostic_line = 24
 expect_diagnostic_column = 47
 expect_output_contains = ["width '0' is below 1", "buffers the elements the other has not read yet", "the default of 8"]
 expect_output_not_contains = ["UnknownInternalError"]

@@ -1438,7 +1438,7 @@ kind = "negative"
 case = "../../../cases/linear/byref/var_function_as_value_function.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "var_function_as_value_function.cml:18:17"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "var_function_as_value_function.cml:17:17"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 

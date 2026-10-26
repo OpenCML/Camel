@@ -838,7 +838,7 @@ kind = "negative"
 case = "../../../cases/compile/generics/err_body.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "err_body.cml:4:16:", "in the instance 'double<int[]>' of the generic function 'double' with T = int[]", "instantiated by the call at 10:19"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "err_body.cml:2:16:", "in the instance 'double<int[]>' of the generic function 'double' with T = int[]", "instantiated by the call at 10:19"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
@@ -1046,7 +1046,7 @@ kind = "negative"
 case = "../../../cases/compile/generics/err_export_body.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["export_lib.cml:41:16: [Error]: No matching function found", "in the instance 'bad<string>'", "err_export_body.cml:7:16", "name=SemanticDiag::NoMatchingFunction"]
+expect_output_contains = ["export_lib.cml:40:16: [Error]: No matching function found", "in the instance 'bad<string>'", "err_export_body.cml:5:16", "name=SemanticDiag::NoMatchingFunction"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 

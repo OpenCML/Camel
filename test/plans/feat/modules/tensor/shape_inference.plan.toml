@@ -47,7 +47,7 @@ kind = "behavior"
 case = "../../../../cases/modules/tensor/shape_inference/computed_extent_run_time.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["ran", "reshape changes tensor element count: [6] -> [3, 3]", "computed_extent_run_time.cml:8:18"]
+expect_output_contains = ["ran", "reshape changes tensor element count: [6] -> [3, 3]", "computed_extent_run_time.cml:7:18"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -244,7 +244,7 @@ kind = "negative"
 case = "../../../../cases/modules/tensor/shape_inference/var_argument_non_numeric.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["No matching function found for argument types: <> (string[], float)", "var_argument_non_numeric.cml:17:17"]
+expect_output_contains = ["No matching function found for argument types: <> (string[], float)", "var_argument_non_numeric.cml:16:17"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -266,7 +266,7 @@ kind = "negative"
 case = "../../../../cases/modules/tensor/shape_inference/var_argument_with_parameter_non_numeric.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["No matching function found for argument types: <string[]> (float)", "var_argument_with_parameter_non_numeric.cml:18:21"]
+expect_output_contains = ["No matching function found for argument types: <string[]> (float)", "var_argument_with_parameter_non_numeric.cml:17:21"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -277,7 +277,7 @@ kind = "behavior"
 case = "../../../../cases/modules/tensor/shape_inference/as_fails.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["ran", "conversion to 'f32[4]' failed: the array has shape [6]", "as_fails.cml:9:15"]
+expect_output_contains = ["ran", "conversion to 'f32[4]' failed: the array has shape [6]", "as_fails.cml:8:15"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -288,7 +288,7 @@ kind = "behavior"
 case = "../../../../cases/modules/tensor/shape_inference/as_fails.cml"
 args = ["${case}", "std::fvm"]
 expect_exit = 1
-expect_output_contains = ["ran", "conversion to 'f32[4]' failed: the array has shape [6]", "as_fails.cml:9:15"]
+expect_output_contains = ["ran", "conversion to 'f32[4]' failed: the array has shape [6]", "as_fails.cml:8:15"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -299,7 +299,7 @@ kind = "behavior"
 case = "../../../../cases/modules/tensor/shape_inference/as_fails.cml"
 args = ["${case}", "std::jit"]
 expect_exit = 1
-expect_output_contains = ["ran", "conversion to 'f32[4]' failed: the array has shape [6]", "as_fails.cml:9:15"]
+expect_output_contains = ["ran", "conversion to 'f32[4]' failed: the array has shape [6]", "as_fails.cml:8:15"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -310,6 +310,6 @@ kind = "behavior"
 case = "../../../../cases/modules/tensor/shape_inference/as_fails.cml"
 args = ["${case}", "std::prl"]
 expect_exit = 1
-expect_output_contains = ["ran", "conversion to 'f32[4]' failed: the array has shape [6]", "as_fails.cml:9:15"]
+expect_output_contains = ["ran", "conversion to 'f32[4]' failed: the array has shape [6]", "as_fails.cml:8:15"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000

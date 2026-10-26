@@ -106,7 +106,7 @@ case = "../../../cases/consistency/entry/error_from_operator.cml"
 args = ["--error-format", "text", "--color", "never", "${case}", "${backend}"]
 backends_agree = ["exit_code", "stdout_normalized", "stderr_normalized"]
 expect_exit = 1
-expect_stderr_contains = ["error[RuntimeDiag::UnhandledError]: An error value reached the exit of 'main' without being handled: ParseError: '12abc' is not an integer.", "error_from_operator.cml:7:1", "note: the error was made by <parse_int>, which records no position"]
+expect_stderr_contains = ["error[RuntimeDiag::UnhandledError]: An error value reached the exit of 'main' without being handled: ParseError: '12abc' is not an integer.", "error_from_operator.cml:6:1", "note: the error was made by <parse_int>, which records no position"]
 verify_script = """
 assert(input.normalized.stdout === 'before\n', JSON.stringify(input.normalized.stdout))
 """

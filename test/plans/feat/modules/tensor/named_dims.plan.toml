@@ -76,7 +76,7 @@ kind = "negative"
 case = "../../../../cases/modules/tensor/named_dims/unknown_extent_mismatch.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["conversion to 'f32[3]' failed: the array has shape [4]", "unknown_extent_mismatch.cml:10:17"]
+expect_output_contains = ["conversion to 'f32[3]' failed: the array has shape [4]", "unknown_extent_mismatch.cml:9:17"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
@@ -120,7 +120,7 @@ kind = "negative"
 case = "../../../../cases/modules/tensor/named_dims/err_return_extent.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["conversion to 'f32[3]' failed: the array has shape [4]", "err_return_extent.cml:9:16"]
+expect_output_contains = ["conversion to 'f32[3]' failed: the array has shape [4]", "err_return_extent.cml:8:16"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 

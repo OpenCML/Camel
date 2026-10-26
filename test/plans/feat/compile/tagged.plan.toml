@@ -55,13 +55,13 @@ const want = [
   "5",
   "-1",
   "ok 5",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:15",
   "ok 10",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:15",
   "ok 4",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:15",
   "ok 6",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:15",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
@@ -322,13 +322,13 @@ const want = [
   "5",
   "-1",
   "ok 5",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:15",
   "ok 10",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:15",
   "ok 4",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:15",
   "ok 6",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:15",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
@@ -413,13 +413,13 @@ const want = [
   "5",
   "-1",
   "ok 5",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:15",
   "ok 10",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:15",
   "ok 4",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:15",
   "ok 6",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:15",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
@@ -504,13 +504,13 @@ const want = [
   "5",
   "-1",
   "ok 5",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:15",
   "ok 10",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:15",
   "ok 4",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:15",
   "ok 6",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:15",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
@@ -595,13 +595,13 @@ const want = [
   "5",
   "-1",
   "ok 5",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:15",
   "ok 10",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:15",
   "ok 4",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:15",
   "ok 6",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:15",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
@@ -686,13 +686,13 @@ const want = [
   "5",
   "-1",
   "ok 5",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:15",
   "ok 10",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:15",
   "ok 4",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:15",
   "ok 6",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:15",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
@@ -770,13 +770,13 @@ const want = [
   "5",
   "-1",
   "ok 5",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:15",
   "ok 10",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:15",
   "ok 4",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:15",
   "ok 6",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:15",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
@@ -1061,7 +1061,7 @@ assert(next, 'the thrown value is used')
 const cast = next.trim().split(' ')[2]
 assert(lines.some((l) => l.trim().startsWith(cast + ' [label="CAST"')), 'throw feeds a CAST')
 assert(lines.some((l) => l.trim().startsWith(cast + ' -> O') && l.includes('type="EXIT"')), 'the CAST is the exit of the graph')
-assert(out.includes('label="graph_throw_pass.cml:9:11"'), 'the position of error(...) is a constant argument')
+assert(out.includes('label="graph_throw_pass.cml:8:11"'), 'the position of error(...) is a constant argument')
 }
 """
 timeout_ms = 8000
@@ -1311,7 +1311,7 @@ kind = "negative"
 case = "../../../cases/compile/tagged/err_plain_use.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "err_plain_use.cml:8:30:", "<> (int!, int)"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "err_plain_use.cml:7:30:", "<> (int!, int)"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -1341,7 +1341,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_line = 6
 expect_diagnostic_column = 11
-expect_output_contains = ["An error value reached the exit of 'main' without being handled: Zero: zero.", "error_position_pipeline.cml:8:11", "(name=RuntimeDiag::UnhandledError"]
+expect_output_contains = ["An error value reached the exit of 'main' without being handled: Zero: zero.", "error_position_pipeline.cml:6:11", "(name=RuntimeDiag::UnhandledError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 
 [[tests]]
