@@ -845,15 +845,29 @@ node_handle_t Builder::overloadValueFor(
 std::optional<oper_idx_ptr_t> Builder::resolveGroupedCall(
     const oper_group_ptr_t &ops, const type_vec_t &explicitTypes, Type *expectedResult,
     const type_vec_t &withTypes, const type_vec_t &normTypes, static_args_t normStatics,
-    std::vector<std::pair<std::string, std::string>> &unmet, std::vector<std::string> *ambiguous) {
+    std::vector<std::pair<std::string, std::string>> &unmet, std::vector<std::string> *ambiguous,
+    const std::vector<Argument> *withInputs) {
     std::optional<oper_idx_ptr_t> chosen;
     // The candidates that write `when` and whose condition holds for these arguments. One of them
     // is a call that has an answer; two or more are a call that has none, and the writing order
     // of the declarations is not what settles it (see the declaration of this function).
     std::vector<std::string> holding;
     for (const auto &[uri, resolver] : ops->resolvers()) {
+        // A rule that is declared takes every count of `with` arguments from its required ones to
+        // its full arity: the types of the defaults it registers stand for what the call left out.
+        type_vec_t ruleWith = withTypes;
+        if (FunctionType *declared = resolver->fixedSignature() != nullptr
+                                         ? resolver->fixedSignature()
+                                         : resolver->declaredSignature();
+            declared != nullptr) {
+            const auto completed = withTypesCompletedFor(uri, declared, withTypes, withInputs);
+            if (!completed.has_value()) {
+                continue;
+            }
+            ruleWith = *completed;
+        }
         auto result = resolver->resolveForCall(
-            explicitTypes, expectedResult, withTypes, normTypes, normStatics);
+            explicitTypes, expectedResult, ruleWith, normTypes, normStatics);
         if (!result) {
             // The rule's parameters do not take these arguments: it was never a candidate for
             // this call, and its condition is not asked about a call it does not fit.
@@ -866,7 +880,7 @@ std::optional<oper_idx_ptr_t> Builder::resolveGroupedCall(
         // unmet, only when no rule at all takes it.
         std::string condition;
         const RuleVerdict verdict =
-            ruleVerdictForCall(resolver, ops->name(), withTypes, normTypes, &condition);
+            ruleVerdictForCall(resolver, ops->name(), ruleWith, normTypes, &condition);
         if (verdict == RuleVerdict::ConditionUnmet) {
             unmet.emplace_back(resolver->signature(), std::move(condition));
             continue;
@@ -893,6 +907,32 @@ std::optional<oper_idx_ptr_t> Builder::resolveGroupedCall(
         *ambiguous = std::move(holding);
     }
     return chosen;
+}
+
+std::optional<type_vec_t> Builder::withTypesCompletedFor(
+    const std::string &uri, FunctionType *signature, const type_vec_t &withTypes,
+    const std::vector<Argument> *withInputs) const {
+    const size_t arity = signature->withTypesCount();
+    if (withTypes.size() > arity) {
+        return withTypes; // too many: the rule says so itself
+    }
+    const auto native = nativeDefaults_.find(uri);
+    type_vec_t completed = withTypes;
+    completed.resize(arity, nullptr);
+    for (size_t i = 0; i < arity; ++i) {
+        const bool written = i < withTypes.size() &&
+                             !(withInputs != nullptr && i < withInputs->size() &&
+                               (*withInputs)[i].left);
+        if (written) {
+            continue;
+        }
+        if (native == nativeDefaults_.end() || i >= native->second.with.size() ||
+            !native->second.with[i].has_value()) {
+            return std::nullopt;
+        }
+        completed[i] = native->second.with[i]->data->type();
+    }
+    return completed;
 }
 
 std::string Builder::unstatedBindingForCall(
@@ -2933,7 +2973,24 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 normInputTypes,
                 normStatics,
                 unmetConditions,
-                &ambiguousConditions);
+                &ambiguousConditions,
+                &withInputs);
+            if (res.has_value()) {
+                // The with arguments the rule took are the ones it completes (design principles
+                // 4.4: a parameter with a default may be left out).
+                for (const auto &[ruleUri, rule] : ops->resolvers()) {
+                    FunctionType *declared = rule->fixedSignature() != nullptr
+                                                 ? rule->fixedSignature()
+                                                 : rule->declaredSignature();
+                    if (ruleUri == (*res)->uri() && declared != nullptr &&
+                        (withInputs.size() < declared->withTypesCount() ||
+                         std::any_of(withInputs.begin(), withInputs.end(), [](const Argument &a) {
+                             return a.left;
+                         }))) {
+                        completeWithFor(nullptr, ruleUri, declared, withInputs, withInputTypes);
+                    }
+                }
+            }
             if (!res.has_value()) {
                 // A literal operand takes the other operand's type in a named operator call too:
                 // `add(x, 2.0)` with an f32 tensor is the f32 sum, as `x * 2.0` already is

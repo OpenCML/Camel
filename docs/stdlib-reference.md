@@ -4755,6 +4755,29 @@ threads a run creates.
 
 - Example: `thread_count()` gives `1 at -t 1`
 
+#### `with_probe`
+
+```camel
+with_probe: <base: int, step: int = 10, mode: int = 0> (x: T) => int
+```
+
+`base * 10000 + step * 100 + mode`: the three `with` values the call ended with, the defaults of
+the parameters it left out among them. A native operator with a generic declaration, for the
+tests that pin where the names and the defaults of a call come from.
+
+- Example: `with_probe<1>(0)` gives `11000`
+
+#### `with_probe`
+
+```camel
+with_probe: <base: int, step: int = 10, mode: int = 0> (xs: int[]) => int
+```
+
+The same for an array: the number plus the length of the array, so a test reads which of the two
+declarations of the name a call reached.
+
+- Example: `with_probe<1>([5, 6])` gives `11002`
+
 <a id="this"></a>
 
 ## `this`

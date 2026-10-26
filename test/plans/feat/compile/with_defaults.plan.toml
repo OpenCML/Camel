@@ -229,3 +229,26 @@ expect_exit = 0
 expect_stdout_exact = "7 0 103\n512 532 534 519\n8\n-1 20 21 10 31\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "with_defaults.native_generic"
+desc = "A native operator takes the names and the defaults of its parameters from its declaration, a generic one too and a set of two declarations alike: `with_probe<1>(0)` leaves `step` and `mode` to their defaults, `<mode: 7, base: 1>` gives them by name, `<base: 1, mode: 7>` skips `step`, and each declaration of the name gives the defaults it registers."
+kind = "behavior"
+case = "../../../cases/compile/with_defaults/native_generic.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "11000 10200 10203\n11000 11007 11007\n11002 21002 10206\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "with_defaults.callee_unknown"
+desc = "A named `with` argument of a callee that records no parameter names (`format`, whose parameter count follows its arguments) is refused where it is written, WithArgumentCallee."
+kind = "negative"
+case = "../../../cases/compile/with_defaults/callee_unknown.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WithArgumentCallee"
+expect_diagnostic_line = 10
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

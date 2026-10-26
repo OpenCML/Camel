@@ -1036,6 +1036,9 @@ const std::vector<std::optional<Builder::ParameterDefaultValue>> *Builder::defau
         for (const auto &[entryUri, resolver] :
              std::get<oper_group_ptr_t>(target)->resolvers()) {
             FunctionType *fixed = resolver ? resolver->fixedSignature() : nullptr;
+            if (fixed == nullptr && resolver) {
+                fixed = resolver->declaredSignature(); // a generic declaration is one too
+            }
             if (fixed == nullptr) {
                 continue;
             }

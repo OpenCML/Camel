@@ -117,7 +117,7 @@ const ops = input.normalized.stdout.split('\n').filter((l) => l.startsWith('OPER
 // ones, and the index of the position tells which is which.
 const names = (o) => [...o.signature.matchAll(/([A-Za-z_][A-Za-z0-9_]*)\s*:/g)].map((m) => m[1])
 const oneNamePerSet = (what, rules, position, expected) => {
-  assert(rules.length > 1, `${what}: ${rules.length} rule(s) listed, expected the rules of an overload set`)
+  assert(rules.length >= 1, `${what}: no rule listed`)
   for (const o of rules) {
     const at = names(o)
     assert(at.length > position, `${what} ${o.signature}: no parameter at position ${position}`)
@@ -130,6 +130,13 @@ oneNamePerSet('get', ops.filter((o) => o.name === 'get'), 0, 'key')
 oneNamePerSet('json.as_int', ops.filter((o) => o.uri === 'json:as_int'), 0, 'j')
 oneNamePerSet('len', ops.filter((o) => o.name === 'len'), 0, 'x')
 oneNamePerSet('items', ops.filter((o) => o.name === 'items'), 0, 'm')
+// A name with a declaration takes its parameters' names from it, whatever its signature is: the
+// two declarations of `with_probe` (a generic one and a fixed one, each with defaults) and the one
+// rule of the second alone name their positions as the declaration of stdlib/test_support.cml does.
+oneNamePerSet('with_probe base', ops.filter((o) => o.name === 'with_probe'), 0, 'base')
+oneNamePerSet('with_probe step', ops.filter((o) => o.name === 'with_probe'), 1, 'step')
+oneNamePerSet('with_probe mode', ops.filter((o) => o.name === 'with_probe'), 2, 'mode')
+oneNamePerSet('with_probe_array', ops.filter((o) => o.uri === 'test_support:with_probe_array'), 1, 'step')
 // `contains` is the set the reference page says takes no named argument: every rule names its
 // first position, but they do not agree on the name -- an element (`value`) in the two collection
 // forms, the substring (`sub`) in the string form. A rule that gave the position no name at all is

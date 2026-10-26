@@ -1706,7 +1706,15 @@ class Builder {
         const camel::core::type::type_vec_t &normTypes,
         camel::core::type::static_args_t normStatics,
         std::vector<std::pair<std::string, std::string>> &unmet,
-        std::vector<std::string> *ambiguous = nullptr);
+        std::vector<std::string> *ambiguous = nullptr,
+        const std::vector<Argument> *withInputs = nullptr);
+    /// The `with` types of a call as one declared rule reads them: the ones written, and the type of
+    /// the default the rule registers for every parameter the call leaves out. Nothing when the rule
+    /// has no default for such a parameter (completeWithFor says the same of the arguments).
+    std::optional<camel::core::type::type_vec_t> withTypesCompletedFor(
+        const std::string &uri, FunctionType *signature,
+        const camel::core::type::type_vec_t &withTypes, const std::vector<Argument> *withInputs)
+        const;
     /// The type variable `ops` leaves without a type for these arguments, or an empty string when
     /// none is: an argument that states no element type (`[]`) cannot fix the variable of the
     /// parameter it stands at, so the call has a type argument nobody can infer (design
