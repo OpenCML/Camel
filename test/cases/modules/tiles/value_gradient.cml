@@ -1,3 +1,27 @@
+/**
+ * The resident path's value and gradient, against the host's, and the reading of the rule a
+ * reduction follows.
+ *
+ * A floating-point array's reduction accumulates in f64 and rounds into the element type once
+ * (design principles 7.3), and the device's whole-tensor `sum`/`mean` is defined by the same rule
+ * (`modules/tiles/src/serial_kernel.cpp`: an f64 accumulator, the count divided in f64, one cast to
+ * the node's element type). `exact` is four elements chosen so that this rule and the two ways of
+ * getting it wrong are told apart:
+ *
+ *   - `sum`: 2^25 + 1 + 1 + 1 is 33554435 in f64, and 33554435 is not an f32 value -- the grid
+ *     there is the multiples of 4 -- so the one rounding gives 33554436. An f32 accumulator, which
+ *     rounds after every addition, cannot leave 2^25: 2^25 + 1 is nearer 2^25 than the next multiple
+ *     of 4, so it answers 33554432.
+ *   - `mean`: 33554435 / 4 = 8388608.75 rounds once to 8388609, while rounding the sum to f32
+ *     before dividing gives 33554432 / 4 = 8388608 exactly.
+ *
+ * Every rounding above is a plain nearest with no tie, so the readings do not depend on the tie
+ * rule. Two elements cannot tell the two rules apart -- with two they are the same single rounding
+ * -- and neither can three 1s at 2^25: 2^25 + 1 + 1 is a tie that rounds back to 2^25, which is
+ * what the fold answers too. The four elements below leave both the accumulator's width and the
+ * single rounding visible. The three readings are the distances from the one-rounding answer, so a
+ * per-step accumulator, or a sum rounded before the division, makes the line non-zero (-4, -1, -4).
+ */
 module tiles_value_gradient
 import { reshape, sum, mean, abs, zeros } from tensor
 import { with_grad } from autodiff
@@ -17,12 +41,12 @@ func main(): int sync {
     let gpu = download(run_preferred_resident<vg>(x))
     println(gpu.0 - cpu.0)
     println(sum(abs(gpu.1 - cpu.1)))
-    let exact = reshape([16777216.0, 1.0] as f32[], [2])
-    println(download(run_preferred_resident<total>(exact)) - 16777217.0)
-    println(download(run_preferred_resident<average>(exact)) - 8388608.5)
+    let exact = reshape([33554432.0, 1.0, 1.0, 1.0] as f32[], [4])
+    println(download(run_preferred_resident<total>(exact)) - 33554436.0)
+    println(download(run_preferred_resident<average>(exact)) - 8388609.0)
     println(sum(abs(download(run_preferred_resident<normalize>(x)) - normalize(x))))
     let result = download(run_preferred_resident<mixed>(exact))
-    println(result.0 - 16777217.0)
+    println(result.0 - 33554436.0)
     println(sum(abs(result.1 - (exact + 1.0))))
     println(result.2 - 1.0000000000000002)
     println(download(run_preferred_resident<total>(zeros([0]))))
