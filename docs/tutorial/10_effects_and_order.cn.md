@@ -14,7 +14,6 @@
 // An effect whose result nothing needs: `greet`'s body is not a sync block, so its `println`
 // never runs.
 // Run: camel docs/tutorial/examples/10_unused_effect.cml
-module unused_effect
 
 func greet(): int {
     println('hello from greet')
@@ -33,9 +32,9 @@ camel docs/tutorial/examples/10_unused_effect.cml
 
 ```text
 warning[SemanticDiag::EffectNotExecuted]: The call of 'println' has side effects but is never executed: nothing depends on it and it is not in a sync block.
-  --> docs/tutorial/examples/10_unused_effect.cml:7:5
+  --> docs/tutorial/examples/10_unused_effect.cml:6:5
    |
- 7 |     println('hello from greet')
+ 6 |     println('hello from greet')
    |     ^^^^^^^
 help: Evaluation is driven by dependencies: outside a sync block an expression whose result (or the variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or use its result.
 
@@ -56,7 +55,6 @@ help: Evaluation is driven by dependencies: outside a sync block an expression w
 ```cml
 // The same two statements as 10_unused_effect.cml, in a sync body: now both run.
 // Run: camel docs/tutorial/examples/10_sync_body.cml
-module sync_body
 
 func greet(): int sync {
     println('hello from greet')
@@ -90,7 +88,6 @@ hello from greet
 // A sync function body orders its own statements. What is written inside it -- an arm, a loop
 // body -- is ordered only if it says `sync` itself.
 // Run: camel docs/tutorial/examples/10_sync_block.cml
-module sync_block
 
 func report(second: bool): int sync {
     println('the body is a sync block')
@@ -111,9 +108,9 @@ camel docs/tutorial/examples/10_sync_block.cml
 
 ```text
 warning[SemanticDiag::EffectNotExecuted]: The call of 'println' has side effects but is never executed: nothing depends on it and it is not in a sync block.
-  --> docs/tutorial/examples/10_sync_block.cml:8:22
+  --> docs/tutorial/examples/10_sync_block.cml:7:22
    |
- 8 |     if second then { println('three'); println('four') }
+ 7 |     if second then { println('three'); println('four') }
    |                      ^^^^^^^
 help: Evaluation is driven by dependencies: outside a sync block an expression whose result (or the variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or use its result.
 
@@ -139,7 +136,6 @@ six
 // A `var` and the order of its writes: in a sync body the statements run in the order written, a
 // read takes the value of the most recent write before it, and a write nobody reads does not run.
 // Run: camel docs/tutorial/examples/10_var_order.cml
-module var_order
 
 func bump(var counter: int): int sync {
     counter += 1
@@ -191,7 +187,6 @@ camel docs/tutorial/examples/10_var_order.cml
 // earlier uses of the variable. Both programs below print the same `1`: what the sync block adds is
 // the guarantee, not the value.
 // Run: camel docs/tutorial/examples/10_write_nobody_reads.cml
-module write_nobody_reads
 
 func unordered(): int {
     var c = 1
@@ -220,16 +215,16 @@ camel docs/tutorial/examples/10_write_nobody_reads.cml
 
 ```text
 warning[SemanticDiag::IgnoredSideEffect]: The call of '<__assn__>: (var int, int) => int' is not in a sync block, and it takes a var argument.
-   --> docs/tutorial/examples/10_write_nobody_reads.cml:10:5
+   --> docs/tutorial/examples/10_write_nobody_reads.cml:9:5
     |
- 10 |     c = 5
+ 9 |     c = 5
     |     ^^^^^
 help: Put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'): only then is the write ordered after the earlier uses of the variable. Without one, the write runs only if the variable is read afterwards.
 
 warning[SemanticDiag::EffectNotExecuted]: The assignment has side effects but is never executed: nothing depends on it and it is not in a sync block.
-   --> docs/tutorial/examples/10_write_nobody_reads.cml:10:7
+   --> docs/tutorial/examples/10_write_nobody_reads.cml:9:7
     |
- 10 |     c = 5
+ 9 |     c = 5
     |       ^
 help: Evaluation is driven by dependencies: outside a sync block an expression whose result (or the variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or use its result.
 
@@ -253,7 +248,6 @@ help: Evaluation is driven by dependencies: outside a sync block an expression w
 ```cml
 // Two effects on the same resource (stdout) keep the written order without a sync block.
 // Run: camel docs/tutorial/examples/10_same_resource.cml
-module same_resource
 
 func report(): int {
     return 5->println->println
@@ -291,7 +285,6 @@ camel docs/tutorial/examples/10_same_resource.cml
 // What a call touches: a resource of the module, a group of them, a handle type and `uses` on a
 // parameter. The bodies touch nothing -- a clause is a promise the compiler checks where it can.
 // Run: camel docs/tutorial/examples/10_resources.cml
-module resources
 
 resource db
 resource console = [db, stdout]
@@ -349,8 +342,8 @@ camel docs/tutorial/examples/10_resources.cml
 ```
 
 三行都在说"这个调用会碰到什么"：`read_id` 碰它收到的那个句柄，`tick` 碰 `console` 这一组（展开成 `db` 与
-`stdout`），`bump` 碰调用方给它的那个格子。**这就是资源推断**：不必手写，图上看得到；手写出来的是承诺，编译器
-检查它能查的那些（下面几条）。
+`stdout`），`bump` 碰调用方给它的那个格子。**这就是资源推断**：不必手写，图上看得到；手写出来的是承诺，函数体
+超出就是编译错误（下面几条）。
 
 写错了会看到什么（都是编译错误）：
 
@@ -359,18 +352,21 @@ camel docs/tutorial/examples/10_resources.cml
   `uses` 说的是"碰这些"，两者只能写一个。
 - 没有函数体的声明（原生算子）写的子句与算子不符：`SemanticDiag::NativeResourceMismatch`——那种声明就是
   算子的全部签名，资源也在里面。
+- 函数体超出了它自己的 `pure`/`uses` 承诺：`SemanticDiag::UsesPromiseViolated`——`uses` 是上界，`pure` 是空集，
+  报在声明处，帮助指向第一个超出的使用点（`pure` 带 `var` 形参也在这里报：`var` 形参本身就是资源）。
 
 ## `pure`：一个资源都不碰
 
-`pure` 是"这个调用一个资源都不碰"的承诺。写在**函数类型**上时它是要求：谁要传函数进来，就得传一个满足它的；
-满足它的意思是**它自己的签名里写着 `pure`**。
+`pure` 是"这个调用一个资源都不碰"的承诺。写在**函数类型**上时它是要求：谁要传函数进来，就得传一个**推断出的资源集
+不超过它**的函数——资源少的函数可以用在要求资源多的地方，反之不行（[设计原则 3.3](../design-principles.cn.md#33-资源uses-与-pure)）。
+**手写的是承诺，函数体超出就是编译错误**：具名函数写了子句就照子句核对，写了 `pure` 就必须推成空集；匿名函数没有
+子句，它的资源是推出来的，所以一个不碰资源的 lambda、一个没写子句却不碰资源的具名函数，都能传给 `pure` 形参。
 [`examples/10_pure_callback.cml`](examples/10_pure_callback.cml) 里的 `apply` 只接受纯函数：
 
 ```cml
-// `pure` in a function type is part of the requirement: `apply` accepts only a function whose own
-// signature says `pure`, and `twice` says it.
+// `pure` in a function type is part of the requirement: what is compared is the resources the
+// argument's body infers against the empty set the parameter asks for, and `twice` touches nothing.
 // Run: camel docs/tutorial/examples/10_pure_callback.cml
-module pure_callback
 
 func apply(f: (x: int) => int pure, x: int): int {
     return f(x)
@@ -394,15 +390,15 @@ camel docs/tutorial/examples/10_pure_callback.cml
 8
 ```
 
-把一个签名里没有 `pure` 的函数传进去，就不是"值不对"，而是**签名不匹配**——这类错误在调用处就挡住（[`examples/10_pure_callback_wrong.cml`](examples/10_pure_callback_wrong.cml)）：
+把一个碰资源的函数传进去，就不是"值不对"，而是**签名不匹配**——比较的是**实参推断出的资源 ⊆ 形参要求的资源**，
+这类错误在调用处就挡住（[`examples/10_pure_callback_wrong.cml`](examples/10_pure_callback_wrong.cml)）：
 
 <!-- camel-snippet: counter-example: 这个程序故意不编译：调用处就是不匹配，下面的 text 块是诊断，不是输出 -->
 
 ```cml
-// A counter-example: `noisy` prints and its own signature does not say `pure`, so its type is not
-// what the requirement asks for. The error names the signature that would have matched.
+// A counter-example: `noisy` prints, so the resources its body infers do not fit the empty set the
+// parameter asks for. The error names the signature that would have matched.
 // Run: camel docs/tutorial/examples/10_pure_callback_wrong.cml
-module pure_callback_wrong
 
 func apply(f: (x: int) => int pure, x: int): int {
     return f(x)
@@ -425,9 +421,9 @@ camel docs/tutorial/examples/10_pure_callback_wrong.cml
 
 ```text
 error[SemanticDiag::NoMatchingFunction]: No matching function found for argument types: <> ((x: int) => int, int).
-   --> docs/tutorial/examples/10_pure_callback_wrong.cml:16:18
+   --> docs/tutorial/examples/10_pure_callback_wrong.cml:15:18
     |
- 16 |     println(apply(noisy, 4))
+ 15 |     println(apply(noisy, 4))
     |                  ^^^^^^^^^^
 help: Check the number and types of arguments to ensure they match one of the available overloaded function signatures. Available overloads:
           apply: (f: (x: int) => int pure, x: int) => int
@@ -444,11 +440,12 @@ camel: 1 error
 
 ![twice 的子图：`var c` 是一个格子，两次写入之间有同步边](images/10_var_order.svg)
 
-- `N07` 是 `var c = 0` 建出来的那个**格子**（`:var/new`）：`var` 在图上是"一个建格子的节点 + 普通的读写"，
+- `N09` 是 `var c = 0` 建出来的那个**格子**（`:var/new`）：`var` 在图上是"一个建格子的节点 + 普通的读写"，
   不是一个会自己变的变量。
-- `N08`、`N09` 是两次 `bump` 调用，**它们之间有一条同步边**（虚线，`type="CTRL"`）：写在同步块里，所以
-  后一次在前一次之后。这就是 `2` 的来源。
-- `N0A`（`:var/get`）读的是那个格子，`N0B` 是 `GATE`：同步链的末尾把值经它交出去，它一头读值、一头接链尾，
+- `N0A`、`N0B` 是两次 `bump` 调用，**它们之间有一条同步边**（虚线，`type="CTRL"`）：写在同步块里，所以
+  后一次在前一次之后。**它们之间还有一条顺序边**（点线，`type="ORDER"`）：同一个格子的两次写之间只有先后，
+  顺序边不传递"被用到"，哪一次真的执行看有没有读接到它。这就是 `2` 的来源。
+- `N0C`（`:var/get`）读的是那个格子，`N0D` 是 `GATE`：同步链的末尾把值经它交出去，它一头读值、一头接链尾，
   值原样放行（[设计稿：图上的三种边](../design/effects/edges.cn.md)）。
 
 图上有三类边，这一章把后两类认全了：
@@ -457,7 +454,7 @@ camel: 1 error
 |---|---|---|
 | 数据边 | 值从哪来；被用到的节点把"被用到"传给它读的节点 | 值的传递 |
 | 同步边 | 先后，并且前一条因此被用到 | 同步块里相邻的语句 |
-| 顺序边 | 只排先后，**不**传递"被用到" | 同一资源上的效应之间 |
+| 顺序边 | 只排先后，**不**传递"被用到" | 同一资源上的效应之间；同一 `var` 的写与写之间 |
 
 **只有数据边与同步边决定"执行不执行"**；顺序边只管"都执行时谁在前"。这一条推论很值钱：一个效应只要没人要、
 又不在同步块里，它可以整个不执行——这一章开头那个 `1` 就是这么来的。
@@ -476,7 +473,6 @@ camel: 1 error
 // The answer to the exercise of chapter 10: a `var` written inside a sync block, and a callback
 // that has to be pure.
 // Run: camel docs/tutorial/examples/10_exercise.cml
-module exercise_effects
 
 func sum_upto(n: int): int sync {
     var total = 0

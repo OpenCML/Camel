@@ -13,9 +13,9 @@
  * Every floating instance is checked, the two reduced-precision ones included: the sampler draws a
  * `bf16` and an `f16` as it draws an f32 -- the drawn value is rounded once into the element type,
  * a tensor of either type is two bytes per element -- and the comparison uses the element epsilon
- * of the type the instance is at (the rule on
- * `docs/handover/reviews/questions-2026-10-23.md`, §check-generic-instance-space, 3, which opened
- * this lane; `check_reduced_element_type.cml` is the case that reads those rows one by one). The 39
+ * of the type the instance is at: each generic rule is checked at the types of the
+ * instance's type tuple, one row per type, and `check_reduced_element_type.cml` reads
+ * those rows one by one. The 39
  * rules of this list are 70 instances of generic laws (13 integer laws x 2 types, 11 floating laws
  * x 4 types -- the two accuracy laws are not in this list) besides the 15 rules of it that are not
  * generic, so the report is 85 lines: 70 instances with a verdict and the 15 rules that are not
@@ -32,7 +32,7 @@ import {
         int_add_self, int_add_zero, int_combine, int_combine_one, int_distribute, int_div_one, int_fold, int_fold_add, int_mul_one, int_mul_zero, int_neg_neg, int_sub_self, int_sub_zero,
         float_add_minus_zero, float_add_self, float_combine, float_combine_mixed, float_combine_one, float_combine_one_mixed, float_div_one, float_double, float_fold, float_mul_one, float_neg_neg, float_sub_zero,
         float32_double,
-        tensor_f32_add_minus_zero, tensor_f32_add_self, tensor_f32_combine, tensor_f32_combine_mixed, tensor_f32_combine_one, tensor_f32_combine_one_mixed, tensor_f32_div_one, tensor_f32_double, tensor_f32_fold, tensor_f32_mul_one, tensor_f32_neg_neg, tensor_f32_sub_zero, tensor_i64_distribute
+        tensor_add_minus_zero, tensor_add_self, tensor_combine, tensor_combine_mixed, tensor_combine_one, tensor_combine_one_mixed, tensor_div_one, tensor_double, tensor_fold, tensor_mul_one, tensor_neg_neg, tensor_sub_zero, tensor_distribute
 } from rules
 
 func main(): int sync {
@@ -40,7 +40,7 @@ func main(): int sync {
         int_add_self, int_add_zero, int_combine, int_combine_one, int_distribute, int_div_one, int_fold, int_fold_add, int_mul_one, int_mul_zero, int_neg_neg, int_sub_self, int_sub_zero,
         float_add_minus_zero, float_add_self, float_combine, float_combine_mixed, float_combine_one, float_combine_one_mixed, float_div_one, float_double, float_fold, float_mul_one, float_neg_neg, float_sub_zero,
         float32_double,
-        tensor_f32_add_minus_zero, tensor_f32_add_self, tensor_f32_combine, tensor_f32_combine_mixed, tensor_f32_combine_one, tensor_f32_combine_one_mixed, tensor_f32_div_one, tensor_f32_double, tensor_f32_fold, tensor_f32_mul_one, tensor_f32_neg_neg, tensor_f32_sub_zero, tensor_i64_distribute
+        tensor_add_minus_zero, tensor_add_self, tensor_combine, tensor_combine_mixed, tensor_combine_one, tensor_combine_one_mixed, tensor_div_one, tensor_double, tensor_fold, tensor_mul_one, tensor_neg_neg, tensor_sub_zero, tensor_distribute
     ], 200, 7))
     return 0
 }

@@ -55,9 +55,8 @@ for (const l of [
   'RESOURCES footprint main rmw ambient rng; write ambient stdout; read ambient fs; rmw object (any); external',
   'RESOURCES node main 2 :var/new: allocates variable',
   'RESOURCES node main 9 :op/assn_l: write variable (node 2); result same 0',
-  'RESOURCES node main 10 FUNC bump: rmw variable (node 2); result unknown',
+  'RESOURCES node main 10 FUNC bump: rmw variable (node 2)',
   'RESOURCES node main 12 FUNC countdown: rmw variable (node 5); result unknown',
-  'RESOURCES node main 15 CALL: rmw variable (node 2)',
   'RESOURCES node main 19 :var/take: rmw variable (node 18); result may_alias 0',
   'RESOURCES node main 20 array:sort_l_in_place: rmw object (node 19); result same 0',
   'RESOURCES node main 23 rand:seed: write ambient rng; external',
@@ -70,6 +69,10 @@ for (const l of [
   'RESOURCES order countdown 4 12 resource ordered by control',
   'true', 'false', '4', '16', '[1, 2, 3]',
 ]) line(l)
+// A call's access is the one the callee's own resource clause names: `FUNC bump` says
+// `rmw variable (node 2)` with no result part (a clause of a type has none), while the recursive
+// `countdown` answers `result unknown` from the fixpoint of its body, and the `CALL` node of
+// `main` records no access of its own.
 // The closure `let inc = sync () => { c += 1 }` is an anonymous graph, and its name is the number
 // the compilation had reached when it was built -- how many graphs were created before it, the
 // imported modules' and the speculative instantiations' included -- not a fact about the program
@@ -78,7 +81,7 @@ for (const l of [
 // says: one graph, the captured cell, and the whole access to it. A pin on the number would fail
 // on any change to any module compiled before the closure, and would say nothing more than this.
 // The result part is `fresh`, and that is the analysis's answer rather than a loosened pin: the
-// closure's body is a compound assignment, which is its plain form (`c = c + 1`, the ruling on the
+// closure's body is a compound assignment, which is its plain form (`c = c + 1`, the rule on the
 // read of a write and the write-valued body), so the write is `:op/assn_l`, whose declaration says
 // its result is operand 0 -- this version's cell -- and the resolver answers `fresh` for a cell
 // reached through a capture: the write makes a new version of the caller's variable. While the
@@ -114,7 +117,7 @@ assert(!/RESOURCES order main (2|5|18) /.test(out), 'making a cell conflicts wit
 // `c` and `d` are two variables and so two resources (design principles 3.3: each `var` is one
 // resource, and a `var` parameter is the caller's own variable; 10.5: a `var` cell is one of the
 // things that have an identity). The versions of one variable's cell are that one cell (the
-// ruling on the var version node: a write gives this version's cell), so a write of `c` conflicts
+// rule on the var version node: a write gives this version's cell), so a write of `c` conflicts
 // with every other access to `c` and with nothing of `d`. A cell reached through a write whose
 // resource declaration does not name the cell is unknown instead, and then *every* variable of
 // the graph meets it; that over-approximation is what this pair used to be.
@@ -179,7 +182,7 @@ expect_output_not_contains = ["RESOURCES "]
 
 [[tests]]
 name = "conflict_per_resource"
-desc = "F9 (design principles 3.3): a conflict is judged by resource alone. Three effects that name three different resources — `seed` writes the random generator, `exists` reads the file system, `println` writes the console — are no pair at all, and the two `println`s, one resource (`stdout`), are a pair that keeps the order the `sync` body gives them. The pair set is what a plan and its edges are written from (F1-F3); the parallel scheduler's own evidence cannot be observed while the plan generator consults no resource query (handover 5.20 item 4), so the query's answer is the witness."
+desc = "F9 (design principles 3.3): a conflict is judged by resource alone. Three effects that name three different resources — `seed` writes the random generator, `exists` reads the file system, `println` writes the console — are no pair at all, and the two `println`s, one resource (`stdout`), are a pair that keeps the order the `sync` body gives them. The pair set is what a plan and its edges are written from (F1-F3); the parallel scheduler's own evidence cannot be observed while the plan generator consults no resource query, so the query's answer is the witness."
 kind = "behavior"
 case = "../../../cases/resources/conflict_per_resource.cml"
 args = ["${case}", "test::resources"]
@@ -250,7 +253,7 @@ for (const [uri, text] of Object.entries(expect)) {
 
 [[tests]]
 name = "resource_names"
-desc = "The resource set of the standard library is pinned (H134): `camel inspect --ops` on a program that imports every module declaring a resource prints exactly these ambient and foreign names, so a later task cannot quietly rename one back. The names are the ones design principles 3.3 gives (`stdout`, `stderr`, `stdin`, `clock`, `env`, `fs`, plus the module's own `rng`, `tensor:generator`, `tensor:threads`, `tiles:driver`, `tiles:device`, `para:rendezvous`, `process`); raw mode writes `stdin`, the one resource the terminal mode was merged into (the author's ruling on H134 question 1)."
+desc = "The resource set of the standard library is pinned (H134): `camel inspect --ops` on a program that imports every module declaring a resource prints exactly these ambient and foreign names, so a later task cannot quietly rename one back. The names are the ones design principles 3.3 gives (`stdout`, `stderr`, `stdin`, `clock`, `env`, `fs`, plus the module's own `rng`, `tensor:generator`, `tensor:threads`, `tiles:driver`, `tiles:device`, `para:rendezvous`, `process`); raw mode writes `stdin`, the one resource the terminal mode was merged into ."
 kind = "behavior"
 case = "../../../cases/resources/names.cml"
 args = ["inspect", "--ops", "${case}"]
@@ -312,7 +315,7 @@ for (const [uri, text] of Object.entries(expect)) {
 
 [[tests]]
 name = "inspect_resources_is_not_an_option"
-desc = "There is no `inspect --resources` flag (the author's ruling on H134 question 3): the command line is refused before anything runs, and the unknown option is named. The resources are read per operator from `inspect --ops` instead."
+desc = "There is no `inspect --resources` flag: the command line is refused before anything runs, and the unknown option is named. The resources are read per operator from `inspect --ops` instead."
 kind = "negative"
 case = "../../../cases/resources/names.cml"
 args = ["inspect", "--resources", "${case}"]

@@ -15,14 +15,14 @@
  *     folding lane measured that it was the one exported rule no `check` reached (68 of the
  *     library's 69 rules before the fold, and no test named it after), in one call of 300 samples;
  *   * `float_log1p` and `float_expm1` in a call of their own: they ask for `refine_accuracy`, and
- *     this case keeps the arrangement its verdicts were measured at rather than re-deriving it (the
- *     seed of a rule now follows the rule's identity, its name and its instance's type tuple, not
- *      its place in the array -- the rule on `accuracy-check-sampling`, 1, landed by
- *      the slice S0 and measured in the rule on `verification-report-surface-s0`,
- *     in `docs/handover/reviews/questions-2026-10-23.md`);
+ *     this case keeps the arrangement its verdicts were measured at rather
+ *     than re-deriving it: the seed of a rule follows the rule's identity, its
+ *     name and its instance's type tuple, not its place in the array, so
+ *     re-deriving the arrangement would move the verdicts and the numbers
+ *     this case pins;
  *   * `tensor_log_softmax_of_softmax` in a call of its own, over the 100 samples and the seed its
  *     verdict was measured at (`worst error ratio 1`, which the new 7.2 definition accepts: the
- *      right side is never worse and the bound holds -- the rule on
+ *      right side is never worse and the bound holds -- the rule
  *     `verification-report-surface-s0`).
  *
  * A rule that no line of the report mentions is a rule this case did not reach, and the check in
@@ -34,7 +34,7 @@ import {
         int_add_self, int_add_zero, int_combine, int_combine_one, int_distribute, int_div_one, int_fold, int_fold_add, int_mul_one, int_mul_zero, int_neg_neg, int_sub_self, int_sub_zero,
         float_add_minus_zero, float_add_self, float_combine, float_combine_mixed, float_combine_one, float_combine_one_mixed, float_div_one, float_double, float_expm1, float_fold, float_log1p, float_mul_one, float_neg_neg, float_sub_zero,
         float32_double,
-        tensor_f32_add_minus_zero, tensor_f32_add_self, tensor_f32_combine, tensor_f32_combine_mixed, tensor_f32_combine_one, tensor_f32_combine_one_mixed, tensor_f32_div_one, tensor_f32_double, tensor_f32_fold, tensor_f32_mul_one, tensor_f32_neg_neg, tensor_f32_sub_zero, tensor_i64_distribute,
+        tensor_add_minus_zero, tensor_add_self, tensor_combine, tensor_combine_mixed, tensor_combine_one, tensor_combine_one_mixed, tensor_div_one, tensor_double, tensor_fold, tensor_mul_one, tensor_neg_neg, tensor_sub_zero, tensor_distribute,
         tensor_log_softmax_of_softmax, tensor_sigmoid_chain
 } from rules
 
@@ -43,7 +43,7 @@ func main(): int sync {
         int_add_self, int_add_zero, int_combine, int_combine_one, int_distribute, int_div_one, int_fold, int_fold_add, int_mul_one, int_mul_zero, int_neg_neg, int_sub_self, int_sub_zero,
         float_add_minus_zero, float_add_self, float_combine, float_combine_mixed, float_combine_one, float_combine_one_mixed, float_div_one, float_double, float_fold, float_mul_one, float_neg_neg, float_sub_zero,
         float32_double,
-        tensor_f32_add_minus_zero, tensor_f32_add_self, tensor_f32_combine, tensor_f32_combine_mixed, tensor_f32_combine_one, tensor_f32_combine_one_mixed, tensor_f32_div_one, tensor_f32_double, tensor_f32_fold, tensor_f32_mul_one, tensor_f32_neg_neg, tensor_f32_sub_zero, tensor_i64_distribute,
+        tensor_add_minus_zero, tensor_add_self, tensor_combine, tensor_combine_mixed, tensor_combine_one, tensor_combine_one_mixed, tensor_div_one, tensor_double, tensor_fold, tensor_mul_one, tensor_neg_neg, tensor_sub_zero, tensor_distribute,
         tensor_sigmoid_chain
     ], 200, 7))
     print(check([float_log1p, float_expm1], 100, 11))

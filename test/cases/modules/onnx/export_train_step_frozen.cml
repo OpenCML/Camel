@@ -7,7 +7,7 @@
  */
 module export_train_step_frozen
 
-import { Tensor, relu, mean, reshape } from tensor
+import { relu, mean, reshape } from tensor
 import { with_grad, stop_gradient } from autodiff
 import { sgd } from nn
 import { export_model } from onnx
@@ -19,7 +19,7 @@ with <m: Mlp>
 func loss(x: float[..]): float {
     let h = relu(x @ stop_gradient(m.w1) + m.b1)
     let y = h @ m.w2 + m.b2
-    return mean(y * y)
+    return float(mean(y * y))
 }
 
 func step(m: Mlp, x: float[..]): (float, Mlp) {

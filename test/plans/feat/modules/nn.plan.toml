@@ -715,7 +715,7 @@ verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
 assert(input.exit_code !== 0, 'conv2d shape error case unexpectedly succeeded')
-assert(text.includes("Tensor shape mismatch in 'conv2d': conv2d input channels 1 do not match kernel channels 2"), 'missing conv2d channel diagnostic')
+assert(text.includes("Array shape mismatch in 'conv2d': conv2d input channels 1 do not match kernel channels 2"), 'missing conv2d channel diagnostic')
 assert(text.includes('RuntimeDiag::TensorDimensionMismatch'), 'missing tensor shape diagnostic category')
 }
 """
@@ -1261,7 +1261,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "residual_mlp_large_bytecode"
-desc = "Same as residual_mlp under a pipeline whose linked FastVM program has jump targets beyond 65535 bytecode words (they were truncated to 16 bits: a crash, or subtract: Unsupported Tensor dtype)."
+desc = "Same as residual_mlp under a pipeline whose linked FastVM program has jump targets beyond 65535 bytecode words (they were truncated to 16 bits: a crash, or subtract: Unsupported array element type)."
 kind = "behavior"
 case = "../../../cases/modules/nn/residual_mlp.cml"
 args = ["${case}", "std::opt::specialize", "std::opt", "tensor::fuse", "std::opt::dce", "std::opt::fold", "std::macro", "std::opt::devirtualize", "std::fvm"]

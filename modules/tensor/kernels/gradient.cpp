@@ -43,8 +43,7 @@ const Array *asFloat(const Array *t, mm::IAllocator &allocator) {
 /// The element type of `asFloat`'s argument (f32 or f64): what the gradient is written at, what
 /// its additions are done at and what one rounding stores back. The accumulator is the input's
 /// element type, so an f32 sum keeps every bit it has today (f32 additions, f32 answer) and an
-/// f64 sum adds f64s and rounds once into f64 (design principles 7.3; the ruling
-/// docs/handover/reviews/reduced-precision.md (d): a float reduction returns its input's element
+/// f64 sum adds f64s and rounds once into f64 (design principles 7.3: a float reduction returns its input's element
 /// type and accumulates in f64). A bf16 or f16 arm would accumulate in f64 and would need the
 /// half types' own store, so it is not added here.
 template <TypeCode Code>
@@ -262,8 +261,7 @@ Array *sumToArm(const Array *src, std::span<const int64_t> shape, mm::IAllocator
 /// Accumulation type: the input's element type, and one arm per admitted type (f32 and f64). An
 /// f32 gradient is added as f32 from +0 and answers f32, exactly as before; an f64 gradient is
 /// added as f64 from +0 and answers f64 in one rounding. The accumulator is never narrower than
-/// the values it adds (design principles 7.3; the ruling docs/handover/reviews/reduced-precision.md
-/// (d) states the one-rounding rule for the reductions that return their input's element type, and
+/// the values it adds (design principles 7.3; the rule states the one-rounding rule for the reductions that return their input's element type, and
 /// this is one of them), and the width is named by the declaration rather than read at run time:
 /// `sumToArm<Float32>` is instantiated as the f32 arm and `sumToArm<Float64>` as the f64 arm, and
 /// no code inside either one asks what the element type is.
@@ -498,54 +496,6 @@ Array *layerNormGrad(
     }
     for (int64_t k = 0; k < width; ++k) {
         po[k] = static_cast<float>(acc[static_cast<size_t>(k)]);
-    }
-    return out;
-}
-
-Array *sliceGrad(
-    const Array *dy, std::span<const int64_t> shape, int64_t axisArg, int64_t start,
-    int64_t end, int64_t step, mm::IAllocator &allocator) {
-    if (step <= 0) {
-        throw std::invalid_argument("slice step must be positive");
-    }
-    const auto rank    = static_cast<int64_t>(shape.size());
-    const int64_t axis = axisArg < 0 ? axisArg + rank : axisArg;
-    if (axis < 0 || axis >= rank) {
-        throw std::invalid_argument("slice axis out of range");
-    }
-    const int64_t extent = shape[static_cast<size_t>(axis)];
-    // The forward slice's bounds, normalized the same way (the forward slice faulted when they
-    // were out of range, so they are in range here unless the gradient was built by hand).
-    const auto range = normalizeSliceBounds(extent, start, end);
-    if (!range) {
-        throw std::out_of_range("slice bounds out of range");
-    }
-    start = range->start;
-    end   = range->end;
-    const int64_t count     = end > start ? (end - start + step - 1) / step : 0;
-    const Array *src = asFloat(dy, allocator);
-    if (src->rank() != shape.size() || src->dim(static_cast<size_t>(axis)) != count) {
-        throw ShapeError("slice gradient: dy shape does not match the slice");
-    }
-    Array *out = createTensor(TypeCode::Float32, shape, allocator, true);
-    uint64_t outer = 1, inner = 1;
-    for (int64_t d = 0; d < axis; ++d) {
-        outer *= static_cast<uint64_t>(shape[static_cast<size_t>(d)]);
-    }
-    for (int64_t d = axis + 1; d < rank; ++d) {
-        inner *= static_cast<uint64_t>(shape[static_cast<size_t>(d)]);
-    }
-    const float *in = src->dataAs<float>();
-    float *dst      = out->dataAs<float>();
-    for (uint64_t o = 0; o < outer; ++o) {
-        for (int64_t k = 0; k < count; ++k) {
-            const uint64_t to =
-                (o * static_cast<uint64_t>(extent) + static_cast<uint64_t>(start + k * step)) *
-                inner;
-            const uint64_t from =
-                (o * static_cast<uint64_t>(count) + static_cast<uint64_t>(k)) * inner;
-            std::copy(in + from, in + from + inner, dst + to);
-        }
     }
     return out;
 }

@@ -1211,7 +1211,7 @@ expect_exit = 0
 expect_stdout_contains = ["std::nvm: async public exact bits, completed results and eager faults PASS", "std::fvm: async public exact bits, completed results and eager faults PASS", "std::jit: async public exact bits, completed results and eager faults PASS", "std::prl: async public exact bits, completed results and eager faults PASS"]
 timeout_ms = 180000
 
-# --- No host fallback inside `#gpu` (GPU design 6.1, review of the GPU plan) -------------
+# --- No host fallback inside `#gpu` (GPU design 6.1) -------------
 # A `#gpu` scope promises the device runs everything written in it and in the functions it
 # calls. An operator without a device program at this use is a compile-time error, never a host
 # run; the cases below pin the promise, the refusal, the host behaviour outside a scope
@@ -1614,7 +1614,7 @@ case = "../../cases/gpu/nofallback/grad_expand_plain.cml"
 args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 1
-expect_output_contains = ["RuntimeDiag::RuntimeError", "depends on a differentiated parameter", "Device<Tensor<float32, [2, 3]>>"]
+expect_output_contains = ["RuntimeDiag::RuntimeError", "depends on a differentiated parameter", "Device<float32[2, 3]>"]
 expect_output_not_contains = ["macro operator no pass has expanded", "cannot run on the device", "has no device program"]
 timeout_ms = 30000
 

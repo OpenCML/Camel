@@ -4,7 +4,7 @@
  */
 module mlp
 
-import { Tensor, relu, mean } from tensor
+import { relu, mean } from tensor
 import { grad, with_grad } from autodiff
 import { sgd, save_params } from nn
 import { get_env } from env
@@ -29,7 +29,7 @@ func forward(x: f32[..]): f32[..] {
 with <m: Mlp>
 func loss(x: f32[..]): float {
     let y = forward<m>(x)
-    return mean(y * y)
+    return float(mean(y * y))
 }
 
 func train_step(m: Mlp, x: f32[..]): float sync {

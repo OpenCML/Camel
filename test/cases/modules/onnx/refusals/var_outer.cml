@@ -2,7 +2,7 @@
  * Refused: the exported function reads a variable of the enclosing function (state outside the model).
  */
 module var_outer
-import { Tensor, reshape } from tensor
+import { reshape } from tensor
 import { export_model } from onnx
 import { get_env } from env
 

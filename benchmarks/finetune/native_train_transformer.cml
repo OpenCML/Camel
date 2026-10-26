@@ -9,9 +9,7 @@
  */
 module native_train_transformer
 
-import {
-    Tensor, layer_norm, softmax, gelu, reshape, permute, transpose, shape, mean, load_npy
-} from tensor
+import { layer_norm, softmax, gelu, reshape, permute, transpose, shape, mean, load_npy } from tensor
 import { with_grad } from autodiff
 import { sgd, save_params } from nn
 import { get_env } from env
@@ -59,7 +57,7 @@ func forward(x: f32[..]): f32[..] {
 with <m: Block>
 func loss(x: f32[..]): float {
     let y = forward<m>(x)
-    return mean(y * y)
+    return float(mean(y * y))
 }
 
 /// One training step: the loss and the updated parameters (as exported to ONNX).

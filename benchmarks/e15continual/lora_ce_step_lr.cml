@@ -15,7 +15,7 @@
  */
 module lora_ce_step_lr
 
-import { Tensor, relu, mean, sum, neg, log_softmax, load_npy } from tensor
+import { relu, mean, sum, neg, log_softmax, load_npy } from tensor
 import { with_grad, stop_gradient } from autodiff
 import { sgd, save_params } from nn
 import { get_env } from env
@@ -41,7 +41,7 @@ func forward(x: f32[..]): f32[..] {
 with <m: LoraMlp>
 func loss_ce(x: f32[..], target: f32[..]): float {
     let y = forward<m>(x)
-    return mean(sum(target * neg(log_softmax(y, 1)), 1))
+    return float(mean(sum(target * neg(log_softmax(y, 1)), 1)))
 }
 
 /// The SGD learning rate, CAMEL_FT_LR or 0.05; shared by the export and the native loop.

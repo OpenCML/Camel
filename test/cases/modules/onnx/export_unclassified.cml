@@ -8,7 +8,7 @@
  * module and has no row, which is what the classification check reports.
  */
 module export_unclassified
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { mark } from test_attrs
 import { export_model } from onnx
 import { get_env } from env

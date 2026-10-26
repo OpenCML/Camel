@@ -2,7 +2,7 @@ id = "modules.stdlib_reduced"
 order = 376
 tier = "fast"
 tags = ["feat", "modules", "stdlib", "types", "tensor"]
-desc = "The reduced-precision floating types are scalar types of the language (handover H238, design principles 7.3, ruling docs/handover/reviews/reduced-precision.md): `bf16` and `f16` have literals that round once to the nearest member of the type, written conversions (`bf16(x)`, `f16(x)`, `x as f32`) that need no numeric permission, the scalar arithmetic and comparison of any other float computed in f32 and rounded once into the element type, and a place in an array; `is_float` names both, so `is_numeric` and `is_ordered` inherit them; and `array::sum` over one of them accumulates in f64 and rounds once, as the tensor reduction does. What is left refused is refused by name, with the element type and the operation that cannot take it."
+desc = "The reduced-precision floating types are scalar types of the language (design principles 7.3): `bf16` and `f16` have literals that round once to the nearest member of the type, written conversions (`bf16(x)`, `f16(x)`, `x as f32`) that need no numeric permission, the scalar arithmetic and comparison of any other float computed in f32 and rounded once into the element type, and a place in an array; `is_float` names both, so `is_numeric` and `is_ordered` inherit them; and `array::sum` over one of them accumulates in f64 and rounds once, as the tensor reduction does. What is left refused is refused by name, with the element type and the operation that cannot take it."
 
 # The predicates: the element types belong to the float family, and the composed predicates follow.
 
@@ -24,7 +24,7 @@ timeout_ms = 6000
 
 [[tests]]
 name = "reduced_scalar"
-desc = "A bf16 or f16 literal is the nearest member of the written number, rounded once with ties to even (1+2^-8 is bf16 1.0 and 1+2^-11 is f16 1.0, the even neighbour of the tie), and an element of a cast tensor holding the same number has the same bytes (0.1 is bf16 0x3DCD and f16 0x2E66, the two types rounding the same f32 in opposite directions). The written conversion `bf16(x)` / `f16(x)` gives that element by another route; reading one back as f32 is exact; a result beyond the range of the element type is an infinity and not a saturation (the halfway 65504 + 16 is f16 +inf, and so is 65504 + 65504); a negative literal keeps its sign bit and still compares equal to its positive zero; arithmetic is computed in f32 and rounded once (0.1 * 0.1 is bf16 0x3C24, not 0x3C25); and the six answers of a comparison are the six of two equal values. The text of one of these values is the shortest that reads back as the same element of its own type (7.7; ruling docs/handover/reviews/questions-2026-10-23.md, reduced-precision-text), so 0.1 as a bf16 prints `0.1` and not the `0.100097656` of the f32 it widens to; the last section asserts that property of the largest finite value, the least normal value, a subnormal, a third and both zeros by reading the printed text back through `bf16(s)` / `f16(s)`, and asserts that an array element prints by the same rule as the scalar. The digits the rule gives are pinned by this plan's `expect_stdout`, and two of them are worth naming because they surprise: the f16 largest finite value 65504 prints `65500.0` and f16 32752 prints `32750.0`, the shortest decimals that round back to those elements rather than the values themselves; the bf16 third prints `0.334` and the f16 third `0.3333`. Before this change no line of the case compiled: bf16 had no literal, no conversion and no operator."
+desc = "A bf16 or f16 literal is the nearest member of the written number, rounded once with ties to even (1+2^-8 is bf16 1.0 and 1+2^-11 is f16 1.0, the even neighbour of the tie), and an element of a cast tensor holding the same number has the same bytes (0.1 is bf16 0x3DCD and f16 0x2E66, the two types rounding the same f32 in opposite directions). The written conversion `bf16(x)` / `f16(x)` gives that element by another route; reading one back as f32 is exact; a result beyond the range of the element type is an infinity and not a saturation (the halfway 65504 + 16 is f16 +inf, and so is 65504 + 65504); a negative literal keeps its sign bit and still compares equal to its positive zero; arithmetic is computed in f32 and rounded once (0.1 * 0.1 is bf16 0x3C24, not 0x3C25); and the six answers of a comparison are the six of two equal values. The text of one of these values is the shortest that reads back as the same element of its own type, so 0.1 as a bf16 prints `0.1` and not the `0.100097656` of the f32 it widens to; the last section asserts that property of the largest finite value, the least normal value, a subnormal, a third and both zeros by reading the printed text back through `bf16(s)` / `f16(s)`, and asserts that an array element prints by the same rule as the scalar. The digits the rule gives are pinned by this plan's `expect_stdout`, and two of them are worth naming because they surprise: the f16 largest finite value 65504 prints `65500.0` and f16 32752 prints `32750.0`, the shortest decimals that round back to those elements rather than the values themselves; the bf16 third prints `0.334` and the f16 third `0.3333`. Before this change no line of the case compiled: bf16 had no literal, no conversion and no operator."
 kind = "behavior"
 case = "../../../cases/modules/stdlib/reduced_scalar.cml"
 args = ["${case}", "${backend}"]
@@ -39,7 +39,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "reduced_sum_refused"
-desc = "The case that used to assert that `sum` over a bf16 array is refused with SemanticDiag::StaticMatchNotExhaustive now computes, because the ruling gives the two types the conversion the `match type` of `sum` was missing: `[2^24, 1, -2^24]` answers bf16 1.0 (an f32 accumulator answers 0, so the width is pinned), the same answer the tensor reduction gives bit for bit, the halfway total [1.0, 2^-8] rounds once with ties to even to 1.0, [1.0, 2^-8, 2^-8] answers 1.0078125 -- so the total is rounded once and not at every addition, which would answer 1.0 -- [65504, 736] rounds to f16 +infinity rather than saturating, and the sum of no elements is the bf16 +0, which prints `0.0` under the text rule of 7.7."
+desc = "The case that used to assert that `sum` over a bf16 array is refused with SemanticDiag::StaticMatchNotExhaustive now computes, because the rule gives the two types the conversion the `match type` of `sum` was missing: `[2^24, 1, -2^24]` answers bf16 1.0 (an f32 accumulator answers 0, so the width is pinned), the same answer the tensor reduction gives bit for bit, the halfway total [1.0, 2^-8] rounds once with ties to even to 1.0, [1.0, 2^-8, 2^-8] answers 1.0078125 -- so the total is rounded once and not at every addition, which would answer 1.0 -- [65504, 736] rounds to f16 +infinity rather than saturating, and the sum of no elements is the bf16 +0, which prints `0.0` under the text rule of 7.7."
 kind = "behavior"
 case = "../../../cases/modules/stdlib/reduced_sum_refused.cml"
 args = ["${case}", "${backend}"]
@@ -54,7 +54,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "reduced_reduction_bytes"
-desc = "A `sum` over a Tensor<bf16> of shape [2, 3] along axis 1 gives two elements in four bytes: row [2^24, 1, -2^24] answers bf16 1.0 (0x3F80, bytes [128, 63]) because the accumulator is wider than f32 (an f32 accumulator answers 0), and row [3, 2^-7, 0] rounds the halfway 3.0078125 once, with ties to even, to bf16 3.0 (0x4040, bytes [64, 64])."
+desc = "A `sum` over a bf16[..] of shape [2, 3] along axis 1 gives two elements in four bytes: row [2^24, 1, -2^24] answers bf16 1.0 (0x3F80, bytes [128, 63]) because the accumulator is wider than f32 (an f32 accumulator answers 0), and row [3, 2^-7, 0] rounds the halfway 3.0078125 once, with ties to even, to bf16 3.0 (0x4040, bytes [64, 64])."
 kind = "behavior"
 case = "../../../cases/modules/stdlib/reduced_reduction_bytes.cml"
 args = ["${case}", "${backend}"]
@@ -86,7 +86,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "reduced_arithmetic_refused"
-desc = "A `%` over two bf16 values has no candidate -- `__mod__` is registered for the integer types only, as it is for f32 -- so the call is refused as SemanticDiag::ReducedPrecisionUnsupported, naming `operator %` and the element type bf16 rather than listing overloads that could never match. `+` over the same values is no longer refused: it is the ruling's item (b), and reduced_scalar pins what it computes. The case used to write `+`; the ruling's item (b) is what re-points it at `%`."
+desc = "A `%` over two bf16 values has no candidate -- `__mod__` is registered for the integer types only, as it is for f32 -- so the call is refused as SemanticDiag::ReducedPrecisionUnsupported, naming `operator %` and the element type bf16 rather than listing overloads that could never match. `+` over the same values is no longer refused: a bf16 value has the scalar operations of any other float, and reduced_scalar pins what it computes. The case used to write `+`; that change is what re-points it at `%`."
 kind = "negative"
 case = "../../../cases/modules/stdlib/reduced_arithmetic_refused.cml"
 args = ["${case}"]
@@ -100,7 +100,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "reduced_narrowing_as_refused"
-desc = "`x as bf16` on an f32 is refused with SemanticDiag::DynamicCastForbidden: the conversion rounds, so a cast that says nothing about that is the wrong form for it, exactly as `x as i32` on an f32 is refused. `bf16(x)` is the written conversion of the ruling's item (c) and needs no permission; `b as f32` widens and is accepted, which reduced_scalar writes."
+desc = "`x as bf16` on an f32 is refused with SemanticDiag::DynamicCastForbidden: the conversion rounds, so a cast that says nothing about that is the wrong form for it, exactly as `x as i32` on an f32 is refused. `bf16(x)` is the written conversion and needs no permission; `b as f32` widens and is accepted, which reduced_scalar writes."
 kind = "negative"
 case = "../../../cases/modules/stdlib/reduced_narrowing_as_refused.cml"
 args = ["${case}"]

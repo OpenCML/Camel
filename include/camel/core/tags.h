@@ -20,7 +20,7 @@
  *   - On declarations: an attribute set kept by the module that declares the function, type
  *     or field (module::Module::declarationTags). A C++ module reads it with
  *     ofDeclaration/ofField; reading it from Camel code (`match type`, `fields`) comes with
- *     the first stage of generics, as the handover says.
+ *     the first stage of generics.
  *
  * A parameterized tag's value is its arguments: one argument is the value itself (an integer,
  * a symbol, a graph reference); several make a tuple. A tag without parameters has the unit
@@ -72,7 +72,7 @@ enum Position : uint8_t {
     Type       = 1u << 1, // before a type declaration
     Field      = 1u << 2, // before a field of a struct type
     Nodes      = 1u << 3, // on a function or a block: the nodes written in it
-    Param      = 1u << 4, // before a function parameter (not written yet: H2b)
+    Param      = 1u << 4, // before a function parameter (not written yet)
     Module     = 1u << 5, // before `module`: the module's top-level functions (design principles 13.4)
 };
 using Positions = uint8_t;

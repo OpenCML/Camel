@@ -43,7 +43,7 @@ namespace camel::execute {
 /// dimension and is not a sequence").
 ///
 /// Two values have no dimension and both arrive here. A value with no dimension is the element
-/// itself, not an array (the rank-zero ruling, docs/handover/reviews/questions-2026-10-23.md), so
+/// itself, not an array, so
 /// the slot of an array-typed position may hold no array at all (`array == nullptr`). And the round
 /// an array of open rank hands over is the array of no dimension holding its element
 /// (loopRoundValue), which is an array object of rank 0 whose first extent is absent as well.
@@ -127,8 +127,7 @@ inline void bindLoopRound(
  * readings differ for exactly one shape, deliberately:
  *
  *  - a rank-1 array (`f32[]`) declares the element, `f32`: "one dimension fewer" reaches the
- *    element while the program is compiled, and a scalar is not a rank-0 array (the rank-zero
- *    ruling, docs/handover/reviews/questions-2026-10-23.md);
+ *    element while the program is compiled, and a scalar is not a rank-0 array;
  *  - an array whose rank is open (`f32[..]`, the spelling a tensor parameter uses) declares that
  *    array, so `for v in x` declares `v: f32[..]`; a round of a value whose rank turns out to be 1
  *    is the array of no dimension holding the element — the sub-tensor one dimension fewer,

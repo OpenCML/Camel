@@ -1,5 +1,5 @@
 module tiles_max_special
-import { Tensor, reshape, max, save_npy } from tensor
+import { reshape, max, save_npy } from tensor
 import { nan, inf } from math
 import { get_env } from env
 import { inspect, run_preferred_resident, download } from tiles
@@ -18,7 +18,7 @@ func sample(i: int): f32 {
         else if row == 6 then nan
         else (if col == 1 || col == width - 1 then 9.0 else -2.0))
 }
-func maximum(x: Tensor<f32>): Tensor<f32> { return max(x, -1) }
+func maximum(x: f32[..]): f32[..] { return max(x, -1) }
 func main(): int sync {
     let width = int(get_env('TILES_TEST_WIDTH'))
     let x = reshape(0..(8 * width)->map<sample<width>>, [8, width])

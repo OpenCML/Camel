@@ -178,9 +178,9 @@ def fastest(run, calls):
     of calls does follow it, and unequally: one descheduling inside a round lifts a round of short
     calls far more than a round of long ones. That is what this guard used to read -- across 23
     read tables on this host the 1 MiB cell of the copy read 135.0-1199.3 us (the copy itself is
-    ~0.1 ms there), and the ratio of the two means fell to 3.83 under load, in this test
-    (docs/handover/reviews/questions-2026-10-24-evening.md, the
-    2026-10-25-python-binding-host-copy-bandwidth-guard answer).
+    ~0.1 ms there), and the ratio of the two means fell to 3.83 under load.
+    The guard reads the host's own CPU time, so what else the host runs cannot lift
+    it; a wall-clock guard could.
     """
     best = float("inf")
     for _ in range(calls):
@@ -240,6 +240,34 @@ def main():
         )
         check(list(array) == [1.0, 2.0, 3.0, 4.0], "and it reads the caller's values")
         print(f"numpy:         the array rules.identity returns points at 0x{address_np:x} as well")
+
+        # And the direction a project takes: a NumPy array goes in as itself, through the
+        # `__dlpack__` its producer implements, not through a capsule this test built by hand. NumPy
+        # 2 writes the strides explicitly even for a compact array -- the capsule above says null --
+        # and the import path has to read that form as compact rather than as strided (H604: it
+        # tested the strides pointer for null, so every NumPy array was refused as "not contiguous"
+        # while `examples/python/rules/basket.py` handed one over).
+        source = numpy.arange(4, dtype=numpy.float32) * 1.5
+        passed = rules.identity(source)
+        check(
+            passed.ctypes.data == source.ctypes.data,
+            "an array NumPy hands over by __dlpack__ is the caller's buffer, not a copy",
+        )
+        check(list(passed) == list(source), "and it reads the values NumPy wrote there")
+        print(f"numpy:         an array handed in by __dlpack__ keeps 0x{source.ctypes.data:x}")
+        # The other half of the same rule: a layout that is not compact is still refused, so the
+        # check above cannot be satisfied by accepting everything.
+        strided = numpy.arange(8, dtype=numpy.float32)[::2]
+        try:
+            rules.identity(strided)
+        except camel.DiagnosticError as refused:
+            check(
+                "Only contiguous DLPack tensors are supported" in str(refused),
+                f"a strided array is refused for the layout, and the message says which: {refused}",
+            )
+        else:
+            check(False, "a strided array must not be adopted as a compact one")
+        print("numpy:         a strided array is still refused, by name")
     else:
         print("numpy:         not importable here; the wrapper hands back the capsule itself")
 

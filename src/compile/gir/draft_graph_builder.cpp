@@ -68,6 +68,18 @@ void DraftGraphBuilder::setExitType(camel::core::type::Type *exitType) {
     }
 }
 
+void DraftGraphBuilder::setResources(const camel::core::sem::ResourceSignature &resources) {
+    camel::core::type::FunctionType *funcType = draft_->funcType();
+    ASSERT(funcType != nullptr, "A graph under construction has a function type.");
+    if (auto *open = funcType->asOpen()) {
+        // The declaration's own signature, which no other function shares: what a function
+        // promises about resources is part of its type, so it is written where the type is.
+        open->setResources(resources);
+    } else {
+        draft_->setFuncType(funcType->withResources(resources));
+    }
+}
+
 std::vector<std::string_view> DraftGraphBuilder::captureNames() const {
     std::vector<std::string_view> names;
     names.reserve(draft_->captureNames().size());

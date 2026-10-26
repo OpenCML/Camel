@@ -46,8 +46,8 @@ const Array *constantTensor(const Value &value) {
 }
 
 /// The ONNX element dtype an operand of Camel dtype `dtype` takes: exactly the Camel type.
-/// A tensor is the element type it is written with here too, so `Tensor<f64>` is an ONNX
-/// double and `Tensor<i32>` an ONNX int32, never a normalized stand-in.
+/// A tensor is the element type it is written with here too, so `f64[..]` is an ONNX
+/// double and `i32[..]` an ONNX int32, never a normalized stand-in.
 TypeCode operandTarget(TypeCode dtype) { return dtype; }
 
 /// Encodes `count` elements read through `read(i)` into raw little-endian bytes of `dtype`.
@@ -462,8 +462,7 @@ std::string Emitter::constantOperand(const Value &value, std::optional<TypeCode>
     if (value.ty->code() == TypeCode::Array) {
         // Numeric (nested) arrays become tensors of their inferred dtype and shape. The tensor
         // states the dtype and the shape it holds: the array it was may be nested, so its own
-        // type is not the tensor's, and a rank-0 tensor is the element type itself (the rank-zero
-        // ruling).
+        // type is not the tensor's, and a rank-0 tensor is the element type itself.
         Array *t =
             tensor::tensorFromArray(value.slot, value.ty, tensor::ops::resultAllocator());
         const auto dims    = t->shapeSpan();

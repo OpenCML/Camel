@@ -7,7 +7,7 @@
  */
 module loop_carried_state
 
-import { Tensor, reshape, relu, mean } from tensor
+import { reshape, relu, mean } from tensor
 import { with_grad } from autodiff
 import { sgd } from nn
 
@@ -17,7 +17,7 @@ with <m: Mlp>
 func loss(x: f32[..]): float {
     let h = relu(x @ m.w1 + m.b1)
     let y = h @ m.w2 + m.b2
-    return mean(y * y)
+    return float(mean(y * y))
 }
 
 func train(m: Mlp, x: f32[..], step: int, steps: int): Mlp {

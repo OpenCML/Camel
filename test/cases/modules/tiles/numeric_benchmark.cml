@@ -1,7 +1,7 @@
 module tiles_numeric_benchmark
-import { Tensor, random, seed } from tensor
+import { random, seed } from tensor
 import { benchmark } from tiles
-func strict_chain(x: Tensor<f32>, w: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
+func strict_chain(x: f32[..], w: f32[..], b: f32[..]): f32[..] {
     let a0 = x * w + b
     let a1 = a0 * w + b
     let a2 = a1 * w + b
@@ -12,7 +12,7 @@ func strict_chain(x: Tensor<f32>, w: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
     return a6 * w + b
 }
 #[contract]
-func contracted_chain(x: Tensor<f32>, w: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
+func contracted_chain(x: f32[..], w: f32[..], b: f32[..]): f32[..] {
     let a0 = x * w + b
     let a1 = a0 * w + b
     let a2 = a1 * w + b

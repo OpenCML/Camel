@@ -1,8 +1,8 @@
 module tiles_vector_add
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { device, run_preferred_resident, download } from tiles
 
-func add(x: Tensor<f32>, y: Tensor<f32>): Tensor<f32> {
+func add(x: f32[..], y: f32[..]): f32[..] {
     return x + y
 }
 

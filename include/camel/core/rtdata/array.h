@@ -433,9 +433,8 @@ class Array : public rtdata::Object {
     /// `ArrayType::firstDimensionElement()` gets: the element itself for a rank-1 array, and the
     /// row — a view that shares this array's data — for a higher-rank one (design principles 5.4:
     /// `t[i]` takes the i-th along the first dimension, one row when it has more than one). This
-    /// is the value a `for` over the array binds each round, for every array of every rank (the
-    /// ruling of 2026-10-24, docs/handover/reviews/questions-2026-10-24-evening.md section
-    /// loop-domain-through-the-tensor-iterator). `index` must be below `size()`, the number of
+    /// is the value a `for` over the array binds each round, for every array of every rank
+    /// (design principles 5.4). `index` must be below `size()`, the number of
     /// elements along the first dimension, which is what ends such a loop. A row of a slot array
     /// (an array of references with more than one dimension) is copied rather than viewed: an
     /// array is an immutable value, so the copy is the same value.
@@ -492,8 +491,17 @@ class Array : public rtdata::Object {
         Slow,      // a slot array (the barrier) or an element of any width but one slot
     };
 
+    // The class a loop decides once has to be the class getSlot/setSlot decide per element, and
+    // the one question the two used to disagree on is whether the element's bytes are a slot:
+    // `c64` is eight bytes and is *not* slot-resident (isSlotResidentElement), so reading its
+    // bytes as a slot hands the callback the two f32 parts of 1 + 2i where a `Complex *` is due
+    // (`fromSlot<Complex *>` then holds 0x400000003F800000, and the complex operator faults on
+    // it), and writing one stores the pointer into the element's bytes. Both therefore ask
+    // isSlotResidentElement as well, and a c64 element is read and written through
+    // getSlotSlow/setSlotSlow like every other element that is not one slot.
     ElementRead elementRead() const {
-        if (isSlots() || (!isAggregateElement() && elementSize_ == sizeof(slot_t))) {
+        if (isSlots() ||
+            (!isAggregateElement() && isSlotResidentElement() && elementSize_ == sizeof(slot_t))) {
             return ElementRead::Direct;
         }
         return isAggregateElement() ? ElementRead::View : ElementRead::Slow;
@@ -505,7 +513,8 @@ class Array : public rtdata::Object {
         if (isAggregateElement()) {
             return ElementWrite::Aggregate;
         }
-        return elementSize_ == sizeof(slot_t) ? ElementWrite::Direct : ElementWrite::Slow;
+        return isSlotResidentElement() && elementSize_ == sizeof(slot_t) ? ElementWrite::Direct
+                                                                        : ElementWrite::Slow;
     }
 
     /// One element, with the class already decided by elementRead. A View read needs the array

@@ -108,7 +108,7 @@ head: (xs: T[]) => T
 last: (xs: T[]) => T
 tail: (xs: T[]) => T[]
 slice: <start: int, end: int> (xs: T[]) => T[]
-slice: (t: T[], axis: int, start: int, end: int, step?: int) => T[]
+slice: (t: T[], axis: int, start: int, end: int, step: int = 1, written: int = 3) => T[]
 concat: (xs: T[], ys: T[]) => T[]
 contains: <value: T> (xs: T[]) => bool
 contains: <sub: string> (s: string) => bool
@@ -190,7 +190,7 @@ tree_reduce: <f: (acc: R, leaf: A) => R> (t: T, init: R) => R
 tree_unzip: (r: R, s: S) => ?
 ```
 
-**`tensor`** — import { ... } from tensor — 70 name(s)
+**`tensor`** — import { ... } from tensor — 69 name(s)
 
 ```text
 new: (values: float[..] | number[]) => float[..]
@@ -199,7 +199,7 @@ zeros: (shape: int[]) => f32[..]
 ones: (shape: int[]) => f32[..]
 full: (shape: int[], value: number) => float[..]
 eye: (n: int) => f32[..]
-range: (start: int, stop?: int, step?: int) => Tensor<int64>
+range: (start: int, stop?: int, step?: int) => int64[..]
 random: (shape: int[], low: number, high: number) => f32[..]
 randn: (shape: int[], mean?: number, std?: number) => f32[..]
 add: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
@@ -228,16 +228,15 @@ unsqueeze: (t: float[..], axis: int) => float[..]
 transpose: (t: float[..]) => float[..]
 permute: (t: float[..], perm: int[]) => float[..]
 concat: (a: float[..] | number[], b: float[..] | number[], axis: int) => float[..]
-slice: (t: float[..], axis: int, start: int, end: int, step?: int) => float[..]
 take: (t: float[..], indices: int64[..] | number[]) => float[..]
 one_hot: (labels: int64[..] | number[], classes: int) => int64[..]
 shape: (t: T[..]) => int[] when is_numeric::<T>()
 numel: (t: T[..]) => int when is_numeric::<T>()
 dim: (t: T[..], axis: int) => int when is_numeric::<T>()
 dim: (t: T[..], axis: i32) => int when is_numeric::<T>()
-sum: (t: float[..]) => float
+sum: (t: T[..]) => T
 sum: (t: float[..], axis: int, keepdims?: bool) => float[..]
-mean: (t: float[..]) => float
+mean: (t: T[..]) => T
 mean: (t: float[..], axis: int, keepdims?: bool) => float[..]
 max: (t: float[..], axis: int, keepdims?: bool) => float[..]
 min: (t: float[..], axis: int, keepdims?: bool) => float[..]
@@ -254,7 +253,7 @@ ones_like: (t: float[..]) => float[..]
 cast: (t: float[..] | number[], dtype: string) => int64[..]
 load_npy: (path: string) => T[..]
 show: (t: A[..]) => void
-from_bytes: (bytes: Bytes, shape: int[]) => f32[..]
+from_bytes: (bytes: Bytes, shape: int[]) => T[..] when is_plain::<T>()
 to_bytes: (t: T[..]) => Bytes when is_plain::<T>()
 save_npy: (t: T[..], path: string) => void when is_numeric::<T>()
 num_threads: () => int
@@ -328,6 +327,12 @@ max: (xs: T[]) => T? when is_ordered::<T>()
 flat_map: <f: (x: T) => U[]> (xs: T[]) => U[]
 sort_by: <key: (x: T) => K> (xs: T[]) => T[]
 zip_with: <f: (a: T, b: U) => V> (xs: T[], ys: U[]) => V[]
+```
+
+**`stream`** — import { ... } from stream — 1 name(s)
+
+```text
+unfold: (state: S, step: (state: S) => (T, S)?) => T..
 ```
 
 **`math`** — import { ... } from math — 48 name(s)
@@ -714,8 +719,8 @@ rule_consts: (r: Rule) => int
 **`tiles`** — import { ... } from tiles — 9 name(s)
 
 ```text
-upload: (value: Tensor<f32>) => Device<Tensor<f32>>
-download: (value: Device<Tensor<f32>>) => Tensor<f32>
+upload: (value: f32[..]) => Device<f32[..]>
+download: (value: Device<f32[..]>) => f32[..]
 run_preferred_resident: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => Device<f32>
 source: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string
 inspect: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string
@@ -814,7 +819,7 @@ asian_call_price: (paths: int, steps: int, seed: int) => float
 **`onnx`** — import { ... } from onnx — 2 name(s)
 
 ```text
-export_model: (fn: (x: Tensor<f32>) => void, example: Tensor<f32>, path: string) => void
+export_model: (fn: (x: f32[..]) => void, example: f32[..], path: string) => void
 supported_operators: () => string[]
 ```
 <!-- camel-for-ai end: stdlib-signatures -->

@@ -109,31 +109,19 @@ std::string to_string(ReservedDataOp op);
 
 class DataLoad : public Load {
   public:
-    DataLoad(DataType type, bool notNull = false)
-        : Load(LoadType::Data), dataType_(type), notNull_(notNull) {}
+    DataLoad(DataType type) : Load(LoadType::Data), dataType_(type) {}
 
     const std::string toString() const override {
-        std::string result = "DataLoad: " + to_string(dataType_) + this->status();
+        std::string result = "DataLoad: " + to_string(dataType_);
         return result;
     }
 
     DataType dataType() const { return dataType_; }
 
-    const std::string status() const {
-        std::string status;
-        if (notNull_) {
-            status += " (non-null)";
-        }
-        return status;
-    }
-
-    void setNonNull(bool notNull) { notNull_ = notNull; }
-    bool isNonNull() const { return notNull_; }
     const std::string geneCode() const override;
 
   private:
     DataType dataType_;
-    bool notNull_;
 };
 
 class UnaryExprLoad : public DataLoad {
@@ -141,7 +129,7 @@ class UnaryExprLoad : public DataLoad {
     UnaryExprLoad(UnaryDataOp op) : DataLoad(DataType::UnaryExpr), op_(op) {}
 
     const std::string toString() const override {
-        return "UnaryExpr: " + to_string(op_) + this->status();
+        return "UnaryExpr: " + to_string(op_);
     }
 
     UnaryDataOp op() const { return op_; }
@@ -156,7 +144,7 @@ class BinaryExprLoad : public DataLoad {
     BinaryExprLoad(BinaryDataOp op) : DataLoad(DataType::BinaryExpr), op_(op) {}
 
     const std::string toString() const override {
-        return "BinaryExpr: " + to_string(op_) + this->status();
+        return "BinaryExpr: " + to_string(op_);
     }
 
     BinaryDataOp op() const { return op_; }
@@ -171,7 +159,7 @@ class ReservedExprLoad : public DataLoad {
     ReservedExprLoad(ReservedDataOp op) : DataLoad(DataType::ReservedExpr), op_(op) {}
 
     const std::string toString() const override {
-        return "ReservedExpr: " + to_string(op_) + this->status();
+        return "ReservedExpr: " + to_string(op_);
     }
 
     ReservedDataOp op() const { return op_; }
@@ -196,7 +184,7 @@ class IfExprLoad : public DataLoad {
   public:
     IfExprLoad() : DataLoad(DataType::IfExpr) {}
 
-    const std::string toString() const override { return "IfExpr" + this->status(); }
+    const std::string toString() const override { return "IfExpr"; }
     const std::string geneCode() const override;
 };
 
@@ -204,7 +192,7 @@ class MatchExprLoad : public DataLoad {
   public:
     MatchExprLoad() : DataLoad(DataType::MatchExpr) {}
 
-    const std::string toString() const override { return "MatchExpr" + this->status(); }
+    const std::string toString() const override { return "MatchExpr"; }
     const std::string geneCode() const override;
 };
 
@@ -214,12 +202,12 @@ class TypeMatchLoad : public DataLoad {
   public:
     TypeMatchLoad() : DataLoad(DataType::TypeMatch) {}
 
-    const std::string toString() const override { return "TypeMatch" + this->status(); }
+    const std::string toString() const override { return "TypeMatch"; }
     const std::string geneCode() const override { return "match type"; }
 };
 
 /// One pattern of a `match type` case. `kind` is a shape, or Identity with the type written
-/// in `type` (a TypeLoad): `case int`, `case Tensor<f32, [..]>`, `case T`.
+/// in `type` (a TypeLoad): `case int`, `case f32[..]`, `case T`.
 struct TypeCasePattern {
     TypeCaseKind kind = TypeCaseKind::Wildcard;
     node_ptr_t type; // Identity only
@@ -269,7 +257,7 @@ class StaticForLoad : public DataLoad {
     size_t nameCount() const { return nameCount_; }
     /// `indices ts` walks the positions of a tuple value; `fields T` walks the fields of a type.
     bool byIndices() const { return byIndices_; }
-    const std::string toString() const override { return "StaticFor" + this->status(); }
+    const std::string toString() const override { return "StaticFor"; }
     const std::string geneCode() const override { return "static for"; }
 
   private:
@@ -309,7 +297,7 @@ class StaticLoopLoad : public DataLoad {
     /// The head is `in <序列>`: the written sequence, whose elements the compiler must work out
     /// (a constant interval today). Only one name is bound, the element itself, not a position.
     bool bySequence() const { return bySequence_; }
-    const std::string toString() const override { return "StaticLoop" + this->status(); }
+    const std::string toString() const override { return "StaticLoop"; }
     const std::string geneCode() const override { return "static loop"; }
 
   private:
@@ -328,7 +316,7 @@ class StaticAccessLoad : public DataLoad {
   public:
     StaticAccessLoad() : DataLoad(DataType::StaticAccess) {}
 
-    const std::string toString() const override { return "StaticAccess" + this->status(); }
+    const std::string toString() const override { return "StaticAccess"; }
     const std::string geneCode() const override { return ".[]"; }
 };
 
@@ -345,12 +333,7 @@ class MatchCaseLoad : public DataLoad {
   public:
     MatchCaseLoad() : DataLoad(DataType::MatchCase) {}
 
-    const std::string toString() const override { return "MatchCase" + this->status(); }
-    const std::string geneCode() const override {
-        throw camel::core::error::DiagnosticBuilder::of(
-            camel::core::error::InternalDiag::UnknownInternalError)
-            .commit("MatchCaseLoad::geneCode() not implemented");
-    }
+    const std::string toString() const override { return "MatchCase"; }
 };
 
 /// loop S1 = INIT1, ..., Sk = INITk (for BINDER in SEQUENCE)? (while CONDITION)? do BODY
@@ -394,7 +377,7 @@ class LiteralLoad : public DataLoad {
   public:
     LiteralLoad(Literal value) : DataLoad(DataType::Literal), value_(value) {}
 
-    const std::string toString() const override { return value_.toString() + this->status(); }
+    const std::string toString() const override { return value_.toString(); }
 
     const Literal &value() const { return value_; }
     const std::string geneCode() const override;
@@ -414,7 +397,7 @@ class ArrayDataLoad : public DataLoad {
   public:
     ArrayDataLoad() : DataLoad(DataType::Array) {}
 
-    const std::string toString() const override { return "ArrayData" + this->status(); }
+    const std::string toString() const override { return "ArrayData"; }
     const std::string geneCode() const override;
 };
 
@@ -422,7 +405,7 @@ class StructDataLoad : public DataLoad {
   public:
     StructDataLoad() : DataLoad(DataType::Struct) {}
 
-    const std::string toString() const override { return "StructData" + this->status(); }
+    const std::string toString() const override { return "StructData"; }
     const std::string geneCode() const override;
 };
 
@@ -430,7 +413,7 @@ class TupleDataLoad : public DataLoad {
   public:
     TupleDataLoad() : DataLoad(DataType::Tuple) {}
 
-    const std::string toString() const override { return "TupleData" + this->status(); }
+    const std::string toString() const override { return "TupleData"; }
     const std::string geneCode() const override;
 };
 
@@ -440,7 +423,7 @@ class TupleCompLoad : public DataLoad {
   public:
     TupleCompLoad() : DataLoad(DataType::TupleComp) {}
 
-    const std::string toString() const override { return "TupleComp" + this->status(); }
+    const std::string toString() const override { return "TupleComp"; }
     const std::string geneCode() const override;
 };
 
@@ -450,7 +433,7 @@ class StructCompLoad : public DataLoad {
   public:
     StructCompLoad() : DataLoad(DataType::StructComp) {}
 
-    const std::string toString() const override { return "StructComp" + this->status(); }
+    const std::string toString() const override { return "StructComp"; }
     const std::string geneCode() const override;
 };
 
@@ -460,7 +443,7 @@ class ShapeCompLoad : public DataLoad {
   public:
     ShapeCompLoad() : DataLoad(DataType::ShapeComp) {}
 
-    const std::string toString() const override { return "ShapeComp" + this->status(); }
+    const std::string toString() const override { return "ShapeComp"; }
     const std::string geneCode() const override;
 };
 
@@ -470,14 +453,14 @@ class FuncDataLoad : public DataLoad {
     FuncDataLoad(const Reference &ref) : DataLoad(DataType::Func), ref_(ref) {}
 
     const std::string toString() const override {
-        return "FuncData: " + ref_.toString() + this->status();
+        return "FuncData: " + ref_.toString();
     }
 
     const Reference &ref() const { return ref_; }
     /// The declaration's applicability condition: the expression after `when`, or null. It is
     /// not one of the node's children (a body-less declaration has one child), because it is
     /// not part of the signature or the body: it is evaluated when the declaration is
-    /// instantiated (design principles 5.13).
+    /// instantiated (design principles 4.4).
     const node_ptr_t &when() const { return when_; }
     void setWhen(const node_ptr_t &when) { when_ = when; }
     const std::string &whenText() const { return whenText_; }
@@ -495,7 +478,7 @@ class RefDataLoad : public DataLoad {
     RefDataLoad(const Reference &ref) : DataLoad(DataType::Ref), ref_(ref) {}
 
     const std::string toString() const override {
-        return "RefData: " + ref_.toString() + this->status();
+        return "RefData: " + ref_.toString();
     }
 
     const Reference &ref() const { return ref_; }
@@ -513,7 +496,7 @@ class ConstAsLoad : public DataLoad {
     ConstAsLoad(const Reference &ref) : DataLoad(DataType::ConstAs), ref_(ref) {}
 
     const std::string toString() const override {
-        return "ConstAsData: " + ref_.toString() + this->status();
+        return "ConstAsData: " + ref_.toString();
     }
     const Reference &ref() const { return ref_; }
     const std::string geneCode() const override;
@@ -530,7 +513,7 @@ class SliceLoad : public DataLoad {
     SliceLoad() : DataLoad(DataType::Slice) {}
 
     const std::string toString() const override {
-        return "DataLoad: " + to_string(dataType()) + this->status();
+        return "DataLoad: " + to_string(dataType());
     }
     const std::string geneCode() const override;
 };
@@ -557,7 +540,7 @@ class EnumPatternLoad : public DataLoad {
     const std::vector<EnumPatternField> &fields() const { return fields_; }
 
     const std::string toString() const override {
-        return "EnumPattern: " + ref_.toString() + this->status();
+        return "EnumPattern: " + ref_.toString();
     }
     const std::string geneCode() const override;
 

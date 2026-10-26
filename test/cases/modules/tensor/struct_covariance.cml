@@ -1,11 +1,11 @@
 /**
  * Aggregates of precisely typed tensors are accepted where the declared type
- * uses plain `Tensor`: struct fields, tuple elements, and array elements are
+ * uses an open-rank array (`f64[..]`): struct fields, tuple elements, and array elements are
  * checked covariantly (they are immutable).
  */
 module struct_covariance
 
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 
 type Layer = { w: f64[..], b: f64[..] }
 
@@ -15,7 +15,7 @@ func apply(x: f64[..]): f64[..] {
 }
 
 func total(ts: f64[..][]): float {
-    return sum(ts[0]) + sum(ts[1])
+    return float(sum(ts[0])) + float(sum(ts[1]))
 }
 
 func first(pair: (f64[..], f64[..])): f64[..] {

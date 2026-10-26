@@ -227,7 +227,6 @@ class ParserImpl {
     void parseRuleDecl();
     /// ruleDecl after the tag uses that may precede it; `m` marks where they began.
     void parseRuleDeclRest(size_t m);
-    void parseRuleContext();
     void parseRuleBody();
     /// At the name `fact` (offset `n`, after the `with` parameters and an `export` when they are
     /// written) that starts a fact declaration.
@@ -255,7 +254,7 @@ class ParserImpl {
     /// touches. `uses` and `pure` are contextual keywords.
     void parseResourceClause();
     /// whenClause : 'when' logicalOrExpr
-    /// A declaration's applicability condition, after its signature (design principles 5.13).
+    /// A declaration's applicability condition, after its signature (design principles 4.4).
     void parseWhenClause();
     void parseRetStmt();
 
@@ -292,11 +291,11 @@ class ParserImpl {
         const uint32_t i = offsetOf(n);
         return toks_[i].kind == TK::Identifier && tree_.tokens_.text(i) == word;
     }
-    /// `{` at token offset `n` opens a struct literal: `{ name: ...`, `{ ...`, or a struct
+    /// `{` at token offset `n` opens a struct literal: `{ name: ...`, or a struct
     /// comprehension `{ static for...`. Anything else is a block.
     bool braceIsStruct(uint32_t n) const {
         const TK next = peek(n + 1);
-        return next == TK::Ellipsis || (next == TK::Identifier && peek(n + 2) == TK::Colon) ||
+        return (next == TK::Identifier && peek(n + 2) == TK::Colon) ||
                (next == TK::KwStatic && peek(n + 2) == TK::KwFor);
     }
 
@@ -360,7 +359,8 @@ class ParserImpl {
     void parseTypeCasePattern();
     void parseEnumTuplePattern();
     void parseEnumStructPattern();
-    void parsePattern();
+    /// `fieldPosition` reads a `fieldPattern` (`identRef | '_'`) instead of a whole `pattern`.
+    void parsePattern(bool fieldPosition = false);
     void parseLoop();
     void parseOr();
     void parseAnd();
@@ -397,11 +397,6 @@ class ParserImpl {
     // ---- Types (parser_type.cpp) ----
     bool typeStartsAt(uint32_t n) const;
     void parseType();
-    void parseInterType();
-    void parseDiffType();
-    void parseKeyUnionDiffType();
-    void parseKeyInterType();
-    void parseTypeUnit();
     void parseArrayType();
     void parseArrayDim();
     void parseSpecType();

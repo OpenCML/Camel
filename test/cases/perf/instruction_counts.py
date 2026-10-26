@@ -13,7 +13,7 @@ run length; the program's own `naive config` line is checked against the cell be
 accepted, and the generated text's SHA-256 is recorded so two builds can be shown to have run the
 same text.
 
-`/usr/bin/perf stat -e instructions:u` is the counter the ruling names.  On this host
+`/usr/bin/perf stat -e instructions:u` is the counter the rule names.  On this host
 `kernel.perf_event_paranoid` is 4, so an unprivileged `perf` is refused; the counter therefore runs
 inside a privileged container that chroots into the host root (`--privileged -v /:/host`), where
 perf holds CAP_PERFMON and measures the same host process without changing any host-wide setting.
@@ -146,19 +146,19 @@ def scaled_source(shape: dict, steps: int, warmup: int) -> tuple[str, list[list[
         ("let steps = 16", f"let steps = {steps}", 1),
         ("let warmup = 3", f"let warmup = {warmup}", 1),
         ("[8, 16, 64]", f"[{b}, {s}, {d}]", 1),
-        ("type HeadStates = Tensor<f32, [8, 4, 16, 16]>",
-         f"type HeadStates = Tensor<f32, [{b}, {h}, {s}, {dh}]>", 1),
-        ("type Scores = Tensor<f32, [8, 4, 16, 16]>",
-         f"type Scores = Tensor<f32, [{b}, {h}, {s}, {s}]>", 1),
+        ("type HeadStates = f32[8, 4, 16, 16]",
+         f"type HeadStates = f32[{b}, {h}, {s}, {dh}]", 1),
+        ("type Scores = f32[8, 4, 16, 16]",
+         f"type Scores = f32[{b}, {h}, {s}, {s}]", 1),
         ("[8, 16, 128]", f"[{b}, {s}, {d_ff}]", 1),
         ("[8, 16, 32]", f"[{b}, {s}, {vocab}]", 1),
-        ("Tensor<f32, [64, 64]>", f"Tensor<f32, [{d}, {d}]>", 8),
-        ("Tensor<f32, [64, 128]>", f"Tensor<f32, [{d}, {d_ff}]>", 2),
-        ("Tensor<f32, [128, 64]>", f"Tensor<f32, [{d_ff}, {d}]>", 2),
-        ("Tensor<f32, [128]>", f"Tensor<f32, [{d_ff}]>", 2),
-        ("Tensor<f32, [64]>", f"Tensor<f32, [{d}]>", 9),
-        ("Tensor<f32, [64, 32]>", f"Tensor<f32, [{d}, {vocab}]>", 2),
-        ("Tensor<i64, [8, 16]>", f"Tensor<i64, [{b}, {s}]>", 2),
+        ("f32[64, 64]", f"f32[{d}, {d}]", 8),
+        ("f32[64, 128]", f"f32[{d}, {d_ff}]", 2),
+        ("f32[128, 64]", f"f32[{d_ff}, {d}]", 2),
+        ("f32[128]", f"f32[{d_ff}]", 2),
+        ("f32[64]", f"f32[{d}]", 9),
+        ("f32[64, 32]", f"f32[{d}, {vocab}]", 2),
+        ("i64[8, 16]", f"i64[{b}, {s}]", 2),
     ]
     applied = []
     for old, new, expected in substitutions:

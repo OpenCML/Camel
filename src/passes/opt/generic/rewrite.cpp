@@ -10,6 +10,7 @@
 
 #include "camel/core/operator_traits.h"
 #include "camel/runtime/draft_session.h"
+#include "camel/runtime/draft_writes.h"
 #include "camel/utils/log.h"
 
 #include "camel/core/type/intern.h"
@@ -102,10 +103,11 @@ bool reaches(const GraphDraft &draft, gc_node_ref_t from, gc_node_ref_t to) {
     return false;
 }
 
-namespace {
-
 /// True for nodes that run in order with effects: calls, branches, effectful operators, and gates
-/// or joins that wait on something.
+/// or joins that wait on something -- on a control input, or on the sync edge the chain of a `sync`
+/// block is written as (docs/design/effects/edges.cn.md 5.3). The rule is the one
+/// `src/runtime/writings.cpp` keeps for the rewrite engine, which asks the same question of a node
+/// it is about to replace.
 bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t id) {
     const auto *h = draft.header(id);
     if (!h) {
@@ -120,7 +122,7 @@ bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t id) {
     case camel::runtime::GCNodeKind::Loop: // runs its graphs, which may have effects
         return true;
     case camel::runtime::GCNodeKind::Gate:
-        return !draft.ctrlInputsOf(id).empty();
+        return !draft.ctrlInputsOf(id).empty() || !draft.syncInputsOf(id).empty();
     case camel::runtime::GCNodeKind::Oper:
         return !isPureOper(draft, id);
     default:
@@ -128,7 +130,31 @@ bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t id) {
     }
 }
 
-} // namespace
+bool readsNoWrittenSlot(const GraphDraft &draft, gc_node_ref_t id) {
+    std::vector<gc_node_ref_t> work{id};
+    std::vector<bool> seen(draft.nodeSlotCount(), false);
+    while (!work.empty()) {
+        const gc_node_ref_t at = work.back();
+        work.pop_back();
+        if (at >= seen.size() || seen[at] || draft.header(at) == nullptr) {
+            continue;
+        }
+        seen[at] = true;
+        // A node written in place is not one value: the slot holds what each write put there, so a
+        // computation that reads it is the value of one read, not of the graph.
+        if (camel::runtime::isWrittenInPlace(draft, at)) {
+            return false;
+        }
+        // The walk follows what the value is computed from: the node's own inputs, and the waits
+        // that order them, because a node on the way may read the written slot itself.
+        for (auto inputs :
+             {draft.normInputsOf(at), draft.withInputsOf(at), draft.ctrlInputsOf(at),
+              draft.syncInputsOf(at)}) {
+            work.insert(work.end(), inputs.begin(), inputs.end());
+        }
+    }
+    return true;
+}
 
 std::vector<gc_node_ref_t> orderedSources(const GraphDraft &draft, gc_node_ref_t id) {
     std::vector<gc_node_ref_t> sources, work;
@@ -147,9 +173,12 @@ std::vector<gc_node_ref_t> orderedSources(const GraphDraft &draft, gc_node_ref_t
             sources.push_back(n);
             continue;
         }
-        // A pure node on a control chain (a statement after an effect) runs after its control
-        // predecessors as well.
-        for (auto inputs : {draft.normInputsOf(n), draft.withInputsOf(n), draft.ctrlInputsOf(n)}) {
+        // A pure node on a chain (a statement after an effect) runs after what its chain
+        // predecessor runs after as well: the control inputs of the chain as it was written, and
+        // the sync predecessor of the chain of a `sync` block.
+        for (auto inputs :
+             {draft.normInputsOf(n), draft.withInputsOf(n), draft.ctrlInputsOf(n),
+              draft.syncInputsOf(n)}) {
             work.insert(work.end(), inputs.begin(), inputs.end());
         }
     }
@@ -190,6 +219,17 @@ void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement)
     // the chain over the removed node, with the control edge naming the same pair beside the sync
     // edge; this only has to know which users are already this node's successors in the chain.
     const auto syncUsers = copy(draft.syncUsersOf(id));
+    // The wait the removed node carried for its successor, when the chain does not hand one on.
+    // A branch is not one of them: what waits on a BRCH is in one of its arms, and the successor
+    // standing where the removed node stood keeps its own arm (src/runtime/branch_arms.cpp).
+    std::vector<gc_node_ref_t> inheritedWait;
+    for (gc_node_ref_t pred : draft.ctrlInputsOf(id)) {
+        const camel::runtime::DraftNodeHeader *header = draft.header(pred);
+        if (header != nullptr && header->kind == GCNodeKind::Brch) {
+            continue;
+        }
+        inheritedWait.push_back(pred);
+    }
 
     if (replacement != kInvalidNodeRef) {
         draft.replaceAllValueUses(id, replacement);
@@ -212,6 +252,24 @@ void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement)
         }
     }
     draft.eraseNode(id);
+    // Closing the chain over a node hands its successor the place that node stood in. A node the
+    // program did not write as a statement of the block stands in none -- a pure node the block's
+    // value reads -- and one whose place is in another block keeps none of it either (the chain of
+    // a block joins its own statements, docs/design/effects/edges.cn.md 4.6). The successor is then
+    // left waiting on nothing, and everything the removed node waited on stops being reached from
+    // the program's result, which is what ran those effects (section 2). It keeps that wait instead:
+    // it runs where the removed code did, which is where its own statement was written.
+    for (gc_node_ref_t user : syncUsers) {
+        if (user == id || !draft.alive(user) || !draft.syncInputsOf(user).empty() ||
+            !draft.ctrlInputsOf(user).empty()) {
+            continue;
+        }
+        for (gc_node_ref_t pred : inheritedWait) {
+            if (pred != user && draft.alive(pred)) {
+                camel::runtime::appendControlDependency(draft, pred, user);
+            }
+        }
+    }
 }
 
 namespace {

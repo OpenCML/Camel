@@ -183,11 +183,11 @@ func greet(): int {
 | Group | Words |
 |---|---|
 | Declaration | `let` `var` `func` `type` `with` `module` `import` `export` `from` `namespace` `using` |
-| Control | `if` `then` `else` `match` `case` `return` `throw` `sync` `loop` `while` `do` `for` `in` `static` |
+| Control | `if` `then` `else` `match` `case` `return` `throw` `yield` `sync` `loop` `while` `do` `for` `in` `static` |
 | Type and conversion | `as` `const` `constas` `enum` `typeof` |
 | Literal | `null` `true` `false` |
 
-**Operators and separators** (55): `;` `,` `:` `::` `.` `..` `...` `(` `)` `[` `]` `{` `}` `<` `<` `>` `<=` `<=>` `>=` `==` `!=` `===` `!==` `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `|=` `+` `-` `*` `/` `%` `^` `@` `#` `&` `|` `&&` `||` `!` `!!` `~` `?` `??` `->` `?->` `=>` `\\` `_`
+**Operators and separators** (54): `;` `,` `:` `::` `.` `..` `...` `(` `)` `[` `]` `{` `}` `<` `<` `>` `<=` `<=>` `>=` `==` `!=` `===` `!==` `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `|=` `+` `-` `*` `/` `%` `^` `@` `#` `&` `|` `&&` `||` `!` `!!` `~` `?` `??` `->` `?->` `=>` `_`
 <!-- camel-for-ai end: lexical -->
 
 **Common errors.** `let if = 1` is `SyntaxDiag::KeywordAsIdentifier`; the name must be outside the
@@ -341,7 +341,7 @@ parallel, result in position order), `xs->reduce<f, init>` and `xs->foreach<f>` 
 16  negExpr             - ! ~                              prefix
 17  negPower            - ! ~ ^                            prefix, right
 18  compExpr            ..                                 repeat, left
-19  annoExpr            !                                  repeat, left
+19  annoExpr            -                                  repeat, left
 ```
 
 The production of each level, as `src/parse/syntax/parser_expr.cpp` writes it above the
@@ -366,7 +366,7 @@ linkExpr           : negExpr (('->' | '?->') compExpr)*
 negExpr            : ('-' | '!' | '~') negPower | compExpr
 negPower           : ('-' | '!' | '~') negPower | compExpr ('^' negPower)?
 compExpr           : annoExpr ('..' annoExpr)*
-annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | '!' | memberAccess)*
+annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | memberAccess)*
 ```
 <!-- camel-for-ai end: precedence -->
 
@@ -561,7 +561,7 @@ writes must be `sync`, or its call is `SemanticDiag::EffectNotExecuted` (§12.1)
 
 `T..` (a stream of `T`), `yield`, and `tee` are how a graph consumes data that does not fit in
 memory: the push/pull boundary is written as a function the stream calls, and the design is
-`docs/design/io-concurrency-streams/` (design principles 4.2 names the ruling). A pipeline can also
+`docs/design/io-concurrency-streams/` (design principles 4.2 names the rule). A pipeline can also
 be expressed with `1..n` and the `map`/`filter`/`reduce` operators, and a file read with
 `fs::read_text` or the `io` module. A function whose body writes `yield` produces a stream, and its
 return type is written as a stream type in the head:
@@ -855,7 +855,7 @@ func f(x: Tensor): int {
 }
 ```
 
-**Write instead** — import the name and build values with the module's functions: `Tensor<f32, [2, 3]>`
+**Write instead** — import the name and build values with the module's functions: `f32[2, 3]`
 and `f32[2, 3]` write one type, so the tensor operators take either spelling. A bare `Tensor`
 parameter is on its way out (**target**, `docs/design-principles.cn.md` §5.4).
 
@@ -863,7 +863,7 @@ parameter is on its way out (**target**, `docs/design-principles.cn.md` §5.4).
 import tensor
 import { Tensor } from tensor
 
-func twice(x: f32[..]): float {
+func twice(x: f32[..]): f32 {
     return tensor::sum(tensor::multiply(x, 2.0))
 }
 

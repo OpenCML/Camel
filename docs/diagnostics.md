@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-280 diagnostics: 263 errors, 17 warnings. 15 carry a machine-applicable edit, 265 say why they carry none.
+285 diagnostics: 268 errors, 17 warnings. 15 carry a machine-applicable edit, 270 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -235,7 +235,7 @@ prints one entry.
 | `0x030001E2` | [SemanticDiag::CompOperandNotUnary](#compoperandnotunary) | Error | no |
 | `0x030001E3` | [SemanticDiag::StreamInContainer](#streamincontainer) | Error | no |
 | `0x030001E4` | [SemanticDiag::CompOperandGenericWithoutType](#compoperandgenericwithouttype) | Error | no |
-| `0x030001E5` | [SemanticDiag::RangeTwoArgumentsRemoved](#rangetwoargumentsremoved) | Error | no |
+| `0x030001E5` | [SemanticDiag::StreamConsumedTwice](#streamconsumedtwice) | Error | no |
 | `0x030001E6` | [SemanticDiag::RangeStepZero](#rangestepzero) | Error | no |
 | `0x030001E7` | [SemanticDiag::StaticLoopSequenceNotKnown](#staticloopsequencenotknown) | Error | no |
 | `0x030001E8` | [SemanticDiag::RuleConstParamNotMatched](#ruleconstparamnotmatched) | Error | no |
@@ -243,9 +243,14 @@ prints one entry.
 | `0x030001EA` | [SemanticDiag::TagFieldNameAmbiguous](#tagfieldnameambiguous) | Error | no |
 | `0x030001EB` | [SemanticDiag::TagFunctionArgumentNotReadable](#tagfunctionargumentnotreadable) | Error | no |
 | `0x030001EC` | [SemanticDiag::GenericTypeArgumentGrows](#generictypeargumentgrows) | Error | no |
-| `0x030001ED` | [SemanticDiag::TensorElementTypeRequired](#tensorelementtyperequired) | Error | no |
 | `0x030001EE` | [SemanticDiag::BranchElementTypeMismatch](#branchelementtypemismatch) | Error | no |
 | `0x030001F0` | [SemanticDiag::RuleWithArgumentNotConstant](#rulewithargumentnotconstant) | Error | no |
+| `0x030001F1` | [SemanticDiag::UsesPromiseViolated](#usespromiseviolated) | Error | no |
+| `0x030001F2` | [SemanticDiag::TypeAliasRecursionUnrepresented](#typealiasrecursionunrepresented) | Error | no |
+| `0x030001F3` | [SemanticDiag::EnumWrittenWhereATypeIsExpected](#enumwrittenwhereatypeisexpected) | Error | no |
+| `0x030001F4` | [SemanticDiag::StructComprehensionWithoutFields](#structcomprehensionwithoutfields) | Error | no |
+| `0x030001F5` | [SemanticDiag::IdentifierPatternNeedsNullableOrErrorType](#identifierpatternneedsnullableorerrortype) | Error | no |
+| `0x030001F6` | [SemanticDiag::FunctionTypeArgumentNotInferred](#functiontypeargumentnotinferred) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -651,11 +656,13 @@ None: choice: a reserved word is not a name, and the name to use instead is the 
 Choose another name, for example '{0}_'.
 ```
 
-**Example** (`test/cases/parse/rulings/loop_is_keyword.cml`, run as `camel -E short test/cases/parse/rulings/loop_is_keyword.cml`)
+**Example** (`test/cases/compile/stream/yield_keyword.cml`, run as `camel test/cases/compile/stream/yield_keyword.cml`)
 
 ```camel
-func loop(i: int): int {
-    return i
+func main(): int sync {
+    let yield = 1
+    println(yield)
+    return 0
 }
 ```
 
@@ -763,13 +770,18 @@ Unexpected {0}{1}.
 The token fits nothing that can stand where it is. What the parser expected instead follows the semicolon above: a list whose items have no ',' between them, a bracket that is not closed and a reserved word where a name belongs are the usual causes.
 ```
 
-**Example** (`test/cases/compile/check/syntax_error.cml`, run as `camel check --syntax-only -O short test/cases/compile/check/syntax_error.cml`)
+**Example** (`test/cases/compile/array_shape/err_const_shape.cml`, run as `camel test/cases/compile/array_shape/err_const_shape.cml`)
 
 ```camel
-module my_module
+// A shape is written without `const`: the extents of an array type are expressions, so a `const`
+// in front of one is the retired spelling and the parser refuses the word there.
+module array_shape_err_const
+
+func bad(x: f32[const 3]): int {
+    return 0
+}
 
 func main(): int sync {
-    let x =
     return 0
 }
 ```
@@ -1019,7 +1031,7 @@ A lambda's parameters need their parentheses: write '(x) => e', not 'x => e'.
 **Help**
 
 ```text
-A lambda's parameters are written in parentheses, and a parameter list destructured as a tuple is written '((a, b)) => e' (design principles 5.9). An unparenthesised 'x => e' is not a lambda: inside a rule body the '=>' is the rule's own arrow (rule r(x: int) { x => x }), so the two readings would collide and no unparenthesised spelling is added (the author's ruling of 2026-10-24). What is written here is an expression followed by an arrow that fits nothing; if a rewrite was meant, it is declared with 'rule'.
+A lambda's parameters are written in parentheses, and a parameter list destructured as a tuple is written '((a, b)) => e' (design principles 5.9). An unparenthesised 'x => e' is not a lambda: inside a rule body the '=>' is the rule's own arrow (rule r(x: int) { x => x }), so the two readings would collide and no unparenthesised spelling is added. What is written here is an expression followed by an arrow that fits nothing; if a rewrite was meant, it is declared with 'rule'.
 ```
 
 **Example** (`test/cases/parse/rulings/lambda_without_parentheses.cml`, run as `camel test/cases/parse/rulings/lambda_without_parentheses.cml`)
@@ -1360,17 +1372,28 @@ Unresolved type reference: '{0}'.
 Ensure the type is defined and visible in the current scope.
 ```
 
-**Example** (`test/cases/compile/generic_head/err_unknown_type_in_signature.cml`, run as `camel test/cases/compile/generic_head/err_unknown_type_in_signature.cml`)
+**Example** (`test/cases/compile/array_alias/bare_tensor.cml`, run as `camel test/cases/compile/array_alias/bare_tensor.cml ${backend}`)
 
 ```camel
-module err_unknown_type_in_signature
+// The old tensor name is no type at all (the arrays and memory plan, section 5.1): a program that
+// writes it writes an unknown name, and the report says so where it stands. The spellings that
+// state an element type are the array types -- `f32[..]` (any rank) and `f32[2, 3]` -- and a
+// signature that takes a tensor of any element type declares a type variable in its head
+// (`func count::<T>(t: T[..])`), whose call's argument fixes it. That positive spelling is
+// test/cases/loops/iterate_tensor.cml.
+module array_alias_bare_tensor
 
-func identity(x: T): T {
-    return x
+import { ones } from tensor
+
+func count(t: Tensor): int {
+    return len(t)
 }
 
 func main(): int sync {
-    println(identity(1))
+    let ints: int[3] = [1, 2, 3]
+    let floats: f32[2, 3] = ones([2, 3])
+    println(count(ints))
+    println(count(floats))
     return 0
 }
 ```
@@ -1528,13 +1551,13 @@ Check the number and types of arguments to ensure they match one of the availabl
 **Example** (`test/cases/compile/array_alias/type_text.cml`, run as `camel test/cases/compile/array_alias/type_text.cml ${backend}`)
 
 ```camel
-// The printed form of each spelling: `Tensor<f32>` is `f32[..]` and `Tensor<f32, [2, 3]>` is
-// `f32[2, 3]`. The candidate list of a refused call is where the text is visible.
+// The printed form of an array type is the array spelling: `f32[..]` and `f32[2, 3]`. The
+// candidate list of a refused call is where the text is visible.
 module array_alias_type_text
+import tensor
 
-import { Tensor } from tensor
 
-func takes(a: Tensor<f32>, b: Tensor<f32, [2, 3]>): int {
+func takes(a: f32[..], b: f32[2, 3]): int {
     return 0
 }
 
@@ -1899,7 +1922,6 @@ Add a top-level main function or ensure it is registered as a direct root subgra
 
 ```camel
 // A library module used by 12_modules.cml.
-module shapes
 
 import { sqrt } from math
 
@@ -2038,23 +2060,18 @@ None: context: the construct is not built here, so the program has to be restruc
 The grammar accepts this construct, but the compiler does not implement it. Remove it; nothing in the language replaces it yet.
 ```
 
-**Example** (`test/cases/compile/enum/err_nested_pattern.cml`, run as `camel -E short test/cases/compile/enum/err_nested_pattern.cml`)
+**Example** (`test/cases/modules/tensor/subscript/index_other_dimension.cml`, run as `camel test/cases/modules/tensor/subscript/index_other_dimension.cml`)
 
 ```camel
-type Shape = enum {
-    Circle(float),
-    Empty,
-}
+module subscript_index_other_dimension
+import { reshape, shape } from tensor
 
-func f(s: Shape): float {
-    return match s {
-        case Shape::Circle(0.0) => 1.0
-        case Shape::Empty => 0.0
-    }
-}
-
-func main(): void sync {
-    println(f(Shape::Empty))
+func main(): int sync {
+    println('reached')
+    let m = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3])
+    let column = m[:, 0]
+    println(shape(column))
+    return 0
 }
 ```
 
@@ -2078,20 +2095,19 @@ The arguments of the type '{0}<...>' are not accepted: {1}.
 What a type takes between '<' and '>' is defined by the type itself (a type argument, or a constant written 'const <data>'). An argument a type does not accept is an error; it is never ignored.
 ```
 
-**Example** (`test/cases/compile/array_alias/err_element_type.cml`, run as `camel test/cases/compile/array_alias/err_element_type.cml ${backend}`)
+**Example** (`test/cases/compile/collections/err_bare_name.cml`, run as `camel test/cases/compile/collections/err_bare_name.cml`)
 
 ```camel
-// The element type of the alias is a numeric scalar (plan section 5.1): anything else is the
-// type's own refusal, and the message names the set it takes.
-module array_alias_err_element_type
+module main
 
-import { Tensor } from tensor
+// `Map` is always written with its key and value types.
 
-func count(x: Tensor<string>): int {
+func size(m: Map): int {
     return 0
 }
 
 func main(): int sync {
+    println("never printed")
     return 0
 }
 ```
@@ -2120,12 +2136,12 @@ A type that leaves open what a parameter fixes is never accepted implicitly, and
 
 ```camel
 module shape_inference_computed_extent_stays_open
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 // The computed extent itself is not known: [?, 3] does not enter a [2, 3] parameter.
-func exact(a: Tensor<f32, [2, 3]>): float {
-    return sum(a)
+func exact(a: f32[2, 3]): float {
+    return float(sum(a))
 }
-func f(x: Tensor<f32, [?, 3]>, n: int): float {
+func f(x: f32[?, 3], n: int): float {
     return exact(reshape(x, [n, 3]))
 }
 func main(): int sync {
@@ -2225,19 +2241,19 @@ The feature '{0}' is not supported yet.
 Check the documentation for supported features.
 ```
 
-**Example** (`test/cases/compile/not_supported/struct_unpacking.cml`, run as `camel test/cases/compile/not_supported/struct_unpacking.cml`)
+**Example** (`test/cases/compile/stream/yield_lowering.cml`, run as `camel test/cases/compile/stream/yield_lowering.cml`)
 
 ```camel
-module struct_unpacking
-
-func helper(): int {
-    let p = { x: 1, y: 2 }
-    let {x, y} = p
-    return x + y
+func count(n: int): int.. {
+    loop i = 0 while i < n do {
+        yield i
+        i + 1
+    }
 }
 
 func main(): int sync {
-    println('never printed')
+    let s = count(3)
+    println(1)
     return 0
 }
 ```
@@ -2337,14 +2353,14 @@ A type variable takes the type of the argument found at its first binding positi
 
 ```camel
 module constas_argument_shape
-import { Tensor, ones, sum } from tensor
+import { ones, sum } from tensor
 
 func total(constas n: int, x: f32[n]): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func main(): int sync {
-    // The instance for n = 3 takes a Tensor<f32, [3]>; this argument has extent 4.
+    // The instance for n = 3 takes a f32[3]; this argument has extent 4.
     println(total(3, ones([4])))
     return 0
 }
@@ -2494,7 +2510,7 @@ The generic function '{0}' cannot be {1}.
 **Help**
 
 ```text
-This use of a generic function is not supported.
+A decorator is applied where the declaration is: '@d func f' is 'let f = d(f0)', and d takes the function as its value (design principles 6.1). A function that declares type parameters is instantiated where a call fixes them (design principles 5.5); a decorated declaration fixes none, so the decorator has no instance to take.
 ```
 
 **Example** (`test/cases/compile/generics/err_decorated.cml`, run as `camel test/cases/compile/generics/err_decorated.cml`)
@@ -3553,13 +3569,13 @@ None: choice: what to iterate instead is the writer's to write
 **Message**
 
 ```text
-'for' takes the elements of an array, a string, a map or a tensor; '{0}' has type '{1}'.
+'for' takes the elements of an array, a string, a map, a tensor or a stream; '{0}' has type '{1}'.
 ```
 
 **Help**
 
 ```text
-A loop's 'for x in xs' visits the elements of xs in order (design principles 3.10): the elements of an array; the code points of a string, each a one-character string; the (key, value) pairs of a map, in key order (11.3); and the sub-tensors of a tensor along its first dimension. 'a..b' is the array of the integers from 'a' to 'b - 1', left closed and right open, and a 'for' over it takes them in order without building the array (4.2).
+A loop's 'for x in xs' visits the elements of xs in order (design principles 3.10): the elements of an array; the code points of a string, each a one-character string; the (key, value) pairs of a map, in key order (11.3); the sub-tensors of a tensor along its first dimension; and the elements of a stream, one pull of its step function per round (5.4). 'a..b' is the array of the integers from 'a' to 'b - 1', left closed and right open, and a 'for' over it takes them in order without building the array (4.2).
 ```
 
 **Example** (`test/cases/loops/err_not_iterable.cml`, run as `camel -E short test/cases/loops/err_not_iterable.cml`)
@@ -4031,18 +4047,19 @@ The dimension name '{0}' is bound here, but only a parameter type can bind one.
 **Help**
 
 ```text
-A dimension name binds where it first appears in a parameter type, 'x: Tensor<f32, [n, 3]>'. Every later occurrence, including one in the return type, writes 'n'.
+A dimension name binds where it first appears in a parameter type, 'x: f32[n, 3]'. Every later occurrence, including one in the return type, writes 'n'.
 ```
 
 **Example** (`test/cases/compile/constas/constas_dimension_name.cml`, run as `camel test/cases/compile/constas/constas_dimension_name.cml`)
 
 ```camel
-/// The retired 'const constas n' spelling of a dimension name in a type argument.
+/// The retired `const constas n` spelling of a dimension name: a constant type argument cannot
+/// bind a dimension name, only a parameter type can bind one.
 module constas_dimension_name
 
-import { Tensor } from tensor
+type Vec<T> = { data: T }
 
-func f(x: Tensor<f32, const constas n>): int {
+func f(y: Vec<const constas n>): int {
     return 0
 }
 
@@ -5456,10 +5473,10 @@ The value selects the instance of the declaration, so it must be known before th
 
 ```camel
 module constas_value_not_constant
-import { Tensor, ones, sum } from tensor
+import { ones, sum } from tensor
 
-func total(constas n: int, x: Tensor<f32, [n]>): float {
-    return sum(x)
+func total(constas n: int, x: f32[n]): float {
+    return float(sum(x))
 }
 
 func use(m: int): float {
@@ -5496,13 +5513,13 @@ The value must be known where the call is written. Call the declaration directly
 
 ```camel
 module constas_as_value
-import { Tensor, ones, sum } from tensor
+import { ones, sum } from tensor
 
-func total(constas n: int, x: Tensor<f32, [n]>): float {
-    return sum(x)
+func total(constas n: int, x: f32[n]): float {
+    return float(sum(x))
 }
 
-func apply(f: (x: Tensor<f32>) => float, x: Tensor<f32>): float {
+func apply(f: (x: f32[..]) => float, x: f32[..]): float {
     return f(x)
 }
 
@@ -5537,11 +5554,11 @@ A body-less declaration names a C++ operator whose signature is fixed; a 'consta
 
 ```camel
 module constas_native
-import { Tensor } from tensor
+import tensor
 
 // A body-less declaration names a C++ operator whose signature does not carry a compile-time
 // value parameter, even when the value writes the result's extent.
-func zeros(constas n: int): Tensor<f32, [n]>
+func zeros(constas n: int): f32[n]
 
 func main(): int sync {
     println(zeros(3))
@@ -5573,10 +5590,10 @@ A 'constas' value is bound at the call, like any other argument, but it is not a
 
 ```camel
 module constas_missing_argument
-import { Tensor, ones, sum } from tensor
+import { ones, sum } from tensor
 
-func total(constas n: int, x: Tensor<f32, [n]>): float {
-    return sum(x)
+func total(constas n: int, x: f32[n]): float {
+    return float(sum(x))
 }
 
 func main(): int sync {
@@ -5876,7 +5893,7 @@ std::cml cannot print {0}: {1}.
 **Help**
 
 ```text
-This version prints expressions, `let` and `var`, branches, loops, closures, `with` and `var` parameters, and `sync` blocks (handover H240). Tags, named types, generic instances and the other region kinds are refused.
+This version prints expressions, `let` and `var`, branches, loops, closures, `with` and `var` parameters, and `sync` blocks. Tags, named types, generic instances and the other region kinds are refused.
 ```
 
 *No example: no test small enough to show raises it.*
@@ -7289,7 +7306,7 @@ The call of '{0}' cannot take a value of the reduced-precision element type '{1}
 **Help**
 
 ```text
-bf16 and f16 are floating types of the language: a literal has one, bf16(x) and f16(x) are written conversions, and the scalar arithmetic and comparison compute in f32 and round once into the element type (design principles 7.3, H238). This call asks for an operation one of them has no overload for - an operation the same type refuses on f32, such as %, or a function that takes a fixed set of types. Write the operation on a type that has it, or read the value as f32 (or f64) first, which is exact: f32(x).
+bf16 and f16 are floating types of the language: a literal has one, bf16(x) and f16(x) are written conversions, and the scalar arithmetic and comparison compute in f32 and round once into the element type (design principles 7.3). This call asks for an operation one of them has no overload for - an operation the same type refuses on f32, such as %, or a function that takes a fixed set of types. Write the operation on a type that has it, or read the value as f32 (or f64) first, which is exact: f32(x).
 ```
 
 **Example** (`test/cases/modules/stdlib/reduced_sort_refused.cml`, run as `camel test/cases/modules/stdlib/reduced_sort_refused.cml`)
@@ -7786,8 +7803,8 @@ The name of a generic function stands for no one function until a position fixes
 // principles 5.5), and nothing here does: the composition stands in a `let` with no declared
 // type, so neither the operand nor the whole expression has a function type to take the instance
 // from. The refusal is the composition's own, and it says what the operand is and both ways to
-// settle it (the rule is docs/handover/reviews/questions-2026-10-23.md, section
-// generic-operands-of-composition).
+// settle it (design principles 5.5: a name of a generic function is an instance only
+// where a position fixes its type arguments).
 module h428_comp_operand_generic
 
 func ident::<T>(x: T): T {
@@ -7801,37 +7818,53 @@ func main(): int sync {
 }
 ```
 
-### RangeTwoArgumentsRemoved
+### StreamConsumedTwice
 
-`0x030001E5` · Error · `SemanticDiag::RangeTwoArgumentsRemoved`
+`0x030001E5` · Error · `SemanticDiag::StreamConsumedTwice`
 
 **Fix**
 
-None: internal: the interval this refusal asks for is a text the compiler could write itself, and it does not offer that edit yet
+None: choice: a stream has one consumer on each path, so which place reads it and where the streams of tee go are the writer's to write
 
 **Message**
 
 ```text
-The two-parameter 'range(a, b)' is gone; write the interval 'a..b'.
+'{0}' is consumed twice: a stream is read once on each execution path.
 ```
 
 **Help**
 
 ```text
-The language has one spelling for the integers from 'a' to 'b - 1' (design principles 4.2; the author's ruling of 2026-10-24 on `h248-generator-and-composition`): the interval 'a..b', left closed and right open, as the slice 't[a:b]' is, and the array of them. 'range(0, 10)' becomes '0..10'. A 'for' over an interval is fused by the compiler, so 'for i in 0..n' builds no array. The two-parameter 'range' is the only spelling deleted: a module's own interval-like function (a tensor's, say) is that module's own, reached by its qualified name or at another arity, while an unqualified two-argument 'range(a, b)' is this built-in.
+A stream is read one element at a time and is done when it ends, so on each execution path its value has one consumer (design principles 5.4). The second consumer is here and the first is here. To read one stream from two places, write `tee(s, n)`: it gives two streams, each read once, and both see the same elements.
 ```
 
-**Example** (`test/cases/compile/static_expansion/static_loop_sequence_range_two.cml`, run as `camel test/cases/compile/static_expansion/static_loop_sequence_range_two.cml`)
+**Example** (`test/cases/compile/stream/consumed_twice.cml`, run as `camel test/cases/compile/stream/consumed_twice.cml`)
 
 ```camel
-module static_loop_sequence_range_two
+module stream_consumed_twice
 
-func sum(): int {
-    return static loop acc = 0 for i in range(0, 3) do acc + i
+func count(n: int): int.. {
+    return step(n)
 }
 
-func main(): int {
-    return sum()
+func step(n: int): () => (int, int..)? {
+    return () => if n > 0 then (n, step(n - 1)) else null
+}
+
+func firstOf(p: (int, int..)?): int {
+    return match p {
+        case null => 0
+        case v => v.0
+    }
+}
+
+func twice(s: int..): int {
+    let first = loop acc = 0 for x in s do acc + x
+    return first + firstOf(s())
+}
+
+func main(): int sync {
+    return twice(count(3))
 }
 ```
 
@@ -7852,7 +7885,7 @@ The range 'range({0}, {1}, 0)' has a step of 0, so it is no sequence of integers
 **Help**
 
 ```text
-The integers of `range(a, b, step)` are `a`, `a + step`, ... below `b`, so the step decides which integers the range holds: a step that does not move names no one sequence, whatever the bounds are (design principles 4.2; the author's ruling of 2026-10-24 on `h426-interval-step-form`). The step is a constant here, so the call can never be right and the refusal is at the call, where the step is written. Give a non-zero step, or write the interval `a..b` when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).
+The integers of `range(a, b, step)` are `a`, `a + step`, ... below `b`, so the step decides which integers the range holds: a step that does not move names no one sequence, whatever the bounds are (design principles 4.2). The step is a constant here, so the call can never be right and the refusal is at the call, where the step is written. Give a non-zero step, or write the interval `a..b` when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).
 ```
 
 **Example** (`test/cases/compile/static_expansion/static_loop_sequence_range_step_zero.cml`, run as `camel test/cases/compile/static_expansion/static_loop_sequence_range_step_zero.cml`)
@@ -8111,52 +8144,6 @@ func main(): int sync {
 }
 ```
 
-### TensorElementTypeRequired
-
-`0x030001ED` · Error · `SemanticDiag::TensorElementTypeRequired`
-
-**Fix**
-
-None: choice: which element type the value has is the writer's to say, and the help names both spellings
-
-**Message**
-
-```text
-The type '{0}' states no element type: a tensor's element type is part of its type, so this spelling is not a type of a value.
-```
-
-**Help**
-
-```text
-Every tensor type writes its element type: 'Tensor<f32>' (a rank nobody fixes yet), 'Tensor<f32, [2, 3]>', or the array type itself, 'f32[..]' and 'f32[2, 3]'. A signature that takes a tensor of any element type declares a type variable in its head and writes it as the element type -- 'func f::<T>(x: Tensor<T>)', which is the same type as 'func f::<T>(x: T[..])' -- and the call's argument fixes that type variable, so the body sees the element type the call bound. A shape written without an element type ('Tensor<[3]>') leaves the same question open.
-```
-
-**Example** (`test/cases/compile/array_alias/bare_tensor.cml`, run as `camel test/cases/compile/array_alias/bare_tensor.cml ${backend}`)
-
-```camel
-// A tensor type states the element type of the values it describes, so a signature that writes
-// the tensor name alone is refused where it is written, and the report says which spellings state
-// one: `Tensor<f32>` (any rank), `Tensor<f32, [2, 3]>`, or the array type itself (`f32[..]`,
-// `f32[2, 3]`). A signature that takes a tensor of any element type declares a type variable in
-// its head -- `func count::<T>(t: Tensor<T>)`, which is `func count::<T>(t: T[..])` -- and the
-// call's argument fixes it. That positive spelling is test/cases/loops/iterate_tensor.cml.
-module array_alias_bare_tensor
-
-import { Tensor, ones } from tensor
-
-func count(t: Tensor): int {
-    return len(t)
-}
-
-func main(): int sync {
-    let ints: int[3] = [1, 2, 3]
-    let floats: f32[2, 3] = ones([2, 3])
-    println(count(ints))
-    println(count(floats))
-    return 0
-}
-```
-
 ### BranchElementTypeMismatch
 
 `0x030001EE` · Error · `SemanticDiag::BranchElementTypeMismatch`
@@ -8233,6 +8220,220 @@ func main(): int sync {
 }
 ```
 
+### UsesPromiseViolated
+
+`0x030001F1` · Error · `SemanticDiag::UsesPromiseViolated`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+'{0}' does not keep its resource promise: {1}.
+```
+
+**Help**
+
+```text
+A signature is a promise the compiler checks against the resources the function uses. 'uses' is an upper bound, so every resource the body uses must be named there, and 'pure' promises the empty set; a 'var' parameter is a resource by itself, and so is a capture. Change the body so that it no longer reaches for it, or change the signature to name it. When the use is a call through a parameter of function type, what the call reaches is the instantiation's: write 'pure' on the parameter to promise the empty set, or write there the resources the values it takes reach.
+```
+
+**Example** (`test/cases/effects/err_promise_through_parameter.cml`, run as `camel test/cases/effects/err_promise_through_parameter.cml`)
+
+```camel
+module err_promise_through_parameter
+
+func applyPure(f: (x: int) => int): int pure {
+    return f(1)
+}
+
+func twice(x: int): int {
+    return x * 2
+}
+
+func main(): int sync {
+    println(applyPure(twice))
+    return 0
+}
+```
+
+### TypeAliasRecursionUnrepresented
+
+`0x030001F2` · Error · `SemanticDiag::TypeAliasRecursionUnrepresented`
+
+**Fix**
+
+None: context: the repair is a second declaration, or a shape spread over more than one type
+
+**Message**
+
+```text
+The type '{0}' mentions itself through a collection: recursion through an array, a map, a set or an enum is admitted by the language, and this compiler does not have that representation.
+```
+
+**Help**
+
+```text
+A type may reach itself indirectly, through an array, a map, a set or an enum (design principles 5.2), and the shape that needs is not built here: write the type without mentioning itself. Containing itself directly, as a struct field of its own type, is a different error: `ModuleTypeCycle`.
+```
+
+**Example** (`test/cases/compile/semantic/type_recursion_through_map.cml`, run as `camel -E short test/cases/compile/semantic/type_recursion_through_map.cml`)
+
+```camel
+module type_recursion_through_map
+
+type Node = { children: Map<int, Node> }
+
+func main(): int {
+    return 0
+}
+```
+
+### EnumWrittenWhereATypeIsExpected
+
+`0x030001F3` · Error · `SemanticDiag::EnumWrittenWhereATypeIsExpected`
+
+**Fix**
+
+None: choice: the name the declaration gives the enum is the writer's to write
+
+**Message**
+
+```text
+An enum is declared in a type declaration ('type Shape = enum ...') and its type is the name that declaration gives it: the variants are written there and nowhere else.
+```
+
+**Help**
+
+```text
+An enum is a named type (design principles 5.3): `type Shape = enum { Circle(float), Dot }` declares it, and `Shape` is what is written where a value of it is expected. The variants are written in the `type` declaration and nowhere else.
+```
+
+**Example** (`test/cases/compile/semantic/enum_where_type_expected.cml`, run as `camel -E short test/cases/compile/semantic/enum_where_type_expected.cml`)
+
+```camel
+module enum_where_type_expected
+
+type Shape = enum { Dot, Circle(float) }
+
+func take(s: enum { Dot }): int {
+    return 0
+}
+
+func main(): int {
+    return 0
+}
+```
+
+### StructComprehensionWithoutFields
+
+`0x030001F4` · Error · `SemanticDiag::StructComprehensionWithoutFields`
+
+**Fix**
+
+None: choice: whether the value is a struct or a tuple is the writer's to write
+
+**Message**
+
+```text
+A struct comprehension takes its field names from 'fields T', and 'indices' walks positions, which have no names: write a tuple comprehension '( static for ... in indices ... )', or walk 'fields T'.
+```
+
+**Help**
+
+```text
+A struct value is written as one value per field name, and `indices` walks the positions of a tuple, so a struct comprehension over it would have nothing to name its fields with (design principles 5.2). A tuple comprehension has one element per position, which is what `indices` gives.
+```
+
+**Example** (`test/cases/compile/static_expansion/indices_struct_comprehension.cml`, run as `camel test/cases/compile/static_expansion/indices_struct_comprehension.cml`)
+
+```camel
+module indices_struct_comprehension
+
+func bad(t: (int, int)): {a: int, b: int} {
+    return { static for j in indices t => t.[j] }
+}
+
+func main(): int {
+    let v = bad((1, 2))
+    return v.a
+}
+```
+
+### IdentifierPatternNeedsNullableOrErrorType
+
+`0x030001F5` · Error · `SemanticDiag::IdentifierPatternNeedsNullableOrErrorType`
+
+**Fix**
+
+None: choice: either the pattern or the type of the value has to change
+
+**Message**
+
+```text
+The pattern '{0}' takes a value of type 'T?' or 'T!' apart, and this value has type '{1}': write '??' or '!!', or a 'match' pattern that is a literal or '_'.
+```
+
+**Help**
+
+```text
+The patterns that bind are the fixed forms of the two marks (design principles 3.8): `error e` reads the error out of a `T!`, and a plain name reads the value out of a `T?` or a `T!`. Over any other type there is no mark to take apart, so the value is read with a literal pattern or '_'.
+```
+
+**Example** (`test/cases/compile/not_supported/pattern_identifier.cml`, run as `camel test/cases/compile/not_supported/pattern_identifier.cml`)
+
+```camel
+module pattern_identifier
+
+func f(n: int): int {
+    return match n {
+        case other => 1
+        case _ => 0
+    }
+}
+
+func main(): int sync {
+    println('never printed')
+    println(f(1))
+    return 0
+}
+```
+
+### FunctionTypeArgumentNotInferred
+
+`0x030001F6` · Error · `SemanticDiag::FunctionTypeArgumentNotInferred`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+Cannot infer the type argument '{0}' of '{1}': the empty literal '[]' states no element type.
+```
+
+**Help**
+
+```text
+A variable takes its type from where it stands, and an empty literal states no element type, so the position '[]' is written in is the only thing that can fix the variable - and a generic parameter states none (design principles 5.1, 5.2). Write the type argument ('show::<f32>([])'), or give the literal a position whose type it can take ('let e: f32[] = []').
+```
+
+**Example** (`test/cases/compile/native/tensor_show_empty_array.cml`, run as `camel test/cases/compile/native/tensor_show_empty_array.cml`)
+
+```camel
+module tensor_show_empty_array
+
+import { show } from tensor
+
+func main(): int sync {
+    show([])
+    return 0
+}
+```
+
 ### IgnoredSideEffect
 
 `0x03100002` · Warn · `SemanticDiag::IgnoredSideEffect`
@@ -8286,13 +8487,13 @@ None: context: an effect reachable only from a branch that never runs; the repai
 **Message**
 
 ```text
-{0} has side effects but is never executed: nothing depends on it and it is not in a sync block.
+{0} has side effects but is never executed: {1}.
 ```
 
 **Help**
 
 ```text
-Evaluation is driven by dependencies: outside a sync block an expression whose result (or the variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or use its result.
+Evaluation is driven by dependencies: an expression whose result (or the variable it writes) nothing needs does not run, and a sync block nothing needs does not run either, so the effects written directly in it do not run with it. This is legal. To run it, put it on a sync chain ('sync { ... }' in a function body, or use the block's value), or use its result.
 ```
 
 **Example** (`test/cases/compile/diag_json/dropped_effects_forward.cml`, run as `camel --output-format json test/cases/compile/diag_json/dropped_effects_forward.cml`)
@@ -8877,7 +9078,7 @@ None: runtime: the shapes meet only at run time, and the repair is in the progra
 **Message**
 
 ```text
-Tensor shape mismatch in '{0}': {1}.
+Array shape mismatch in '{0}': {1}.
 ```
 
 **Help**
@@ -8889,13 +9090,13 @@ Check the shapes of all operands involved in the operation and ensure they are c
 **Example** (`test/cases/loops/fault_tensor_rank0.cml`, run as `camel -E short test/cases/loops/fault_tensor_rank0.cml ${backend}`)
 
 ```camel
-// Reshaping a tensor to no dimension makes it the one element it holds — the rank-zero ruling,
-// docs/handover/reviews/questions-2026-10-23.md section rank-zero-tensor — so another element count
+// Reshaping a tensor to no dimension makes it the one element it holds,
+// so another element count
+// has no value to become, and the count is checked when the shape runs (the shape arrives through a
 // has no value to become, and the count is checked when the shape runs (the shape arrives through a
 // parameter). The loop below is never reached: `for` over a value with no dimension is refused
 // where it is written (loops.err_tensor_rank0), and rank 0 is decided at the instantiation, so the
-// parameter is written the final way, `T[..]` (the author's ruling of 2026-10-25 on
-// no-dimension-value-in-an-array-typed-slot).
+// parameter is written the final way, `T[..]`.
 module tensor_rank0_runtime
 
 import { zeros, reshape } from tensor
@@ -9798,12 +9999,12 @@ The `#gpu` tag promises that the device runs everything written in the function 
 
 ```camel
 module tiles_gpu_scope_refusal
-import { Tensor, reshape, tanh, sum } from tensor
+import { reshape, tanh, sum } from tensor
 
 // `tanh` is a pure tensor operator that the device back end does not lower. Inside a `#gpu`
 // scope that is a compile error, not a silent fallback to the host.
 #gpu
-func activate(x: Tensor<f32>): Tensor<f32> { return tanh(x) }
+func activate(x: f32[..]): f32[..] { return tanh(x) }
 
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
@@ -9904,14 +10105,14 @@ The `#gpu` tag promises that the device runs everything written in the scope, in
 /// host. `test/cases/gpu/nofallback/host.cml` is the same program without the tag.
 module gpu_nofallback_refused_operator
 
-import { Tensor, tanh, reshape } from tensor
+import { tanh, reshape } from tensor
 
-func activate(x: Tensor<f32>): Tensor<f32> {
+func activate(x: f32[..]): f32[..] {
     return tanh(x)
 }
 
 #gpu
-func step(x: Tensor<f32>): Tensor<f32> {
+func step(x: f32[..]): f32[..] {
     return activate(x)
 }
 
@@ -10006,9 +10207,9 @@ The device back end has no program for this graph, so the operator that asked fo
 
 ```camel
 module tiles_reject_effect
-import { Tensor, reshape } from tensor
+import { reshape } from tensor
 import { source } from tiles
-func noisy(x: Tensor<f32>): Tensor<f32> sync {
+func noisy(x: f32[..]): f32[..] sync {
     println("BODY MUST NOT EXECUTE")
     return x + x
 }
@@ -10056,11 +10257,11 @@ Name a device this machine has (--devices <ordinal>), or drop the operator that 
 /// says the runtime broke where the run has no device.
 module tiles_gpu_scope_benchmark
 
-import { Tensor, reshape } from tensor
+import { reshape } from tensor
 import { benchmark } from tiles
 
 #gpu
-func pair(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
+func pair(x: f32[3]): f32[3] {
     let y = x * 2.0
     let z = y + 3.0
     return z - 1.0

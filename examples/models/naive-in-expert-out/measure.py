@@ -23,7 +23,7 @@ thread count, the versions, the load that was running and the Camel build's fing
 recorded per cell because a time without them is not a measurement.
 
 The sweep holds the program fixed and varies one model width at a time.  `d_model` 64, 256 and
-1024 are the sizes the review asks for; `batch` and `sequence` grow with the width by the same
+1024 are the sizes the sweep asks for; `batch` and `sequence` grow with the width by the same
 factor as each other (x2 per 4x width), so the token count of a step grows with the width and
 neither axis alone carries the scale-up.  See README.md, "The sweep", for why that is the honest
 choice and what it does not cover.
@@ -187,7 +187,7 @@ def shape_for(d_model: int) -> dict:
     batch and sequence scale by the same factor as each other, and the token count grows with the
     width: a wider model is trained on proportionally more tokens per step.  The step's arithmetic
     therefore grows as the cube of the width (x64 per 4x), which is what lets the fixed per-operator
-    overhead stop dominating inside the range the review asked for.  Scaling both axes by the full
+    overhead stop dominating inside the range the sweep asks for.  Scaling both axes by the full
     width ratio would make the largest cell 65,536x the smallest step and would time a data center,
     not this question; the README states the choice.
     """
@@ -230,19 +230,19 @@ def scaled_source(shape: dict, steps: int, warmup: int) -> tuple[str, list[tuple
         ("let warmup = 3", f"let warmup = {warmup}", 1),
         # The named shape aliases and every field/signature written with a literal extent.
         ("[8, 16, 64]", f"[{b}, {s}, {d}]", 1),
-        ("type HeadStates = Tensor<f32, [8, 4, 16, 16]>",
-         f"type HeadStates = Tensor<f32, [{b}, {h}, {s}, {dh}]>", 1),
-        ("type Scores = Tensor<f32, [8, 4, 16, 16]>",
-         f"type Scores = Tensor<f32, [{b}, {h}, {s}, {s}]>", 1),
+        ("type HeadStates = f32[8, 4, 16, 16]",
+         f"type HeadStates = f32[{b}, {h}, {s}, {dh}]", 1),
+        ("type Scores = f32[8, 4, 16, 16]",
+         f"type Scores = f32[{b}, {h}, {s}, {s}]", 1),
         ("[8, 16, 128]", f"[{b}, {s}, {d_ff}]", 1),
         ("[8, 16, 32]", f"[{b}, {s}, {vocab}]", 1),
-        ("Tensor<f32, [64, 64]>", f"Tensor<f32, [{d}, {d}]>", 8),
-        ("Tensor<f32, [64, 128]>", f"Tensor<f32, [{d}, {d_ff}]>", 2),
-        ("Tensor<f32, [128, 64]>", f"Tensor<f32, [{d_ff}, {d}]>", 2),
-        ("Tensor<f32, [128]>", f"Tensor<f32, [{d_ff}]>", 2),
-        ("Tensor<f32, [64]>", f"Tensor<f32, [{d}]>", 9),
-        ("Tensor<f32, [64, 32]>", f"Tensor<f32, [{d}, {vocab}]>", 2),
-        ("Tensor<i64, [8, 16]>", f"Tensor<i64, [{b}, {s}]>", 2),
+        ("f32[64, 64]", f"f32[{d}, {d}]", 8),
+        ("f32[64, 128]", f"f32[{d}, {d_ff}]", 2),
+        ("f32[128, 64]", f"f32[{d_ff}, {d}]", 2),
+        ("f32[128]", f"f32[{d_ff}]", 2),
+        ("f32[64]", f"f32[{d}]", 9),
+        ("f32[64, 32]", f"f32[{d}, {vocab}]", 2),
+        ("i64[8, 16]", f"i64[{b}, {s}]", 2),
     ]
     applied = []
     for old, new, expected in substitutions:

@@ -1,5 +1,5 @@
 /**
- * Handover, item 6: a conversion written by the program (`i32(5000000000)`) is checked at
+ * a conversion written by the program (`i32(5000000000)`) is checked at
  * compile time for a literal argument, and says the value is out of the range.
  */
 module literal_context_conversion_out_of_range

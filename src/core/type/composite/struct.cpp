@@ -412,7 +412,7 @@ namespace {
 
 /// Whether a value laid out as `source` can be read as `target` without moving anything: the
 /// same field names in the same order, each readable as the target field's type. A field of a
-/// refined module type (`Tensor<f32>` where `Tensor` is declared) keeps its one slot, so the
+/// refined module type (`f32[..]` where `Tensor` is declared) keeps its one slot, so the
 /// conversion is a no-op (camel/core/type/base.h, CastSafety).
 bool layoutCompatibleFrom(const StructType &target, const StructType &source) {
     if (target.size() != source.size()) {
@@ -498,7 +498,7 @@ slot_t StructType::castSlotFrom(slot_t value, Type *sourceType) const {
 // fields are its fields, by name, in the declaration's order; a struct literal at a position
 // of a named type is built there in that order, so its written order is free (the builder
 // converts it before this check). An unnamed type accepts any struct whose fields are its
-// fields in its own (written) order, with covariant field types (e.g. { w: Tensor<float32> }
+// fields in its own (written) order, with covariant field types (e.g. { w: float32[..] }
 // where { w: Tensor } is expected).
 bool StructType::assignableFrom(Type *sourceType) const {
     if (sourceType == nullptr || sourceType->code() != TypeCode::Struct) {

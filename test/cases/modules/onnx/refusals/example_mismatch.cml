@@ -6,11 +6,11 @@
  */
 module example_mismatch
 
-import { Tensor, reshape } from tensor
+import { reshape } from tensor
 import { export_model } from onnx
 
 func main(): int sync {
     let ex = reshape([1.0, -1.0, 0.5, 2.0, 3.0, -2.0] as f32[], [2, 3])
-    export_model((x: Tensor<f32, [4, 3]>): f32[..] => x * 2.0, ex, 'tmp/test/onnx/refusal_example_mismatch.onnx')
+    export_model((x: f32[4, 3]): f32[..] => x * 2.0, ex, 'tmp/test/onnx/refusal_example_mismatch.onnx')
     return 0
 }

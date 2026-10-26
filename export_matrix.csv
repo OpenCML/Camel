@@ -3,6 +3,8 @@ operator,forward_lowering_min_opset,gradient_lowering_min_opset
 :op/idx_arr,1,
 :op/not,1,
 :op/or,1,
+:op/slice_sub,10,
+:tangent/scatter_slice_arr,13,
 autodiff:stop_gradient,,1
 math:sqrt,1,
 nn:adam,,7
@@ -44,6 +46,7 @@ tensor:expand_axis,,13
 tensor:eye,,
 tensor:flatten,1,
 tensor:fma_f32,,
+tensor:from_bytes_aggregate,,
 tensor:full,9,
 tensor:ge,1,
 tensor:gelu,1,
@@ -97,8 +100,6 @@ tensor:set_num_threads,,
 tensor:shape,1,
 tensor:show,,
 tensor:sigmoid,1,
-tensor:slice,10,
-tensor:slice_grad,,11
 tensor:softmax,13,
 tensor:softmax_grad,,13
 tensor:sqrt,1,

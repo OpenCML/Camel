@@ -1,0 +1,21 @@
+/**
+ * A variable that carries an element type is that type. `s: float` beside an f32 tensor is a mixed
+ * pair, and no conversion between numeric types reaches an arm of `tensor:multiply` (design
+ * principles 5.1), so the call is refused rather than narrowed into one. Only a *literal* takes its
+ * element type from the context it is written in -- which is what keeps `x * 0.5` with an f32 `x` a
+ * single-width call, and is the caller's rule and not an allowance of the operator.
+ *
+ * The same holds for a value whose extents no fact pins down: `x: f64[..]` beside a tensor of
+ * another width is refused for its element type, whatever is known of the shape.
+ */
+module f64_variable_beside_f32_tensor
+
+import { sum } from tensor
+
+func scale(x: f32[2, 3], s: float): float {
+    return float(sum(x * s))
+}
+
+func main(): int sync {
+    return 0
+}

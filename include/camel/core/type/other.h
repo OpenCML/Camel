@@ -21,8 +21,8 @@ class Data;
 namespace camel::core::type {
 
 /// One argument of a parameterised type as it is written between `<` and `>`: a type
-/// (`Tensor<f32>`), a compile-time constant (`Tensor<const [3, 4]>`), or a list of extents over
-/// dimension names (`Tensor<f32, const [constas n, 3]>`). Exactly one member is set.
+/// (`f32[..]`), a compile-time constant (`f32[3, 4]`), or a list of extents over
+/// dimension names (`f32[n, 3]`). Exactly one member is set.
 ///
 /// The core array type and the module types both take arguments; this is the one shape of an
 /// argument, so `Type::applyArguments` can be the only entry point a type expression uses.
@@ -101,7 +101,7 @@ class OtherType : public Type {
     cloneWithArguments(std::span<const TypeArgument> arguments, std::string &error) const;
 
     /// Whether the arguments of this type are plain types and nothing else (`Map<K, V>`), as
-    /// opposed to arguments the type gives a meaning of its own (`Tensor<f32, const [3]>`).
+    /// opposed to arguments the type gives a meaning of its own (`f32[3]`).
     /// When true, a type variable may be written among them, and the type-variable algebra
     /// (typevar.h) substitutes and binds through params() with cloneWithParams.
     virtual bool typeArguments() const { return false; }

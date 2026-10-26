@@ -45,6 +45,16 @@ struct StaticArg {
 /// Compile-time knowledge of a call's norm arguments, aligned with their types.
 using static_args_t = std::span<const StaticArg>;
 
+/**
+ * A result callback that also reads what the compiler knows about the call's constant arguments:
+ * the path a rule whose result type depends on their values needs (`slice(t, axis, a, b)` states
+ * the length it takes when the bounds are constants, design principles 5.4). A rule that declares
+ * one answers from it whenever the caller has the statics -- `resolveWith`, which every call site
+ * with constants reaches -- and keeps the plain callback above for a caller that has none.
+ */
+using ResolverWithStaticsFunc = std::function<std::optional<Type *>(
+    const type_vec_t &, const type_vec_t &, static_args_t, const ModifierSet &)>;
+
 /// The names a signature gives its parameters, the `with` ones first and the ordinary ones after;
 /// false when it records no name for some position (see FuncTypeResolver::parameterNames).
 bool namesOfSignature(
@@ -82,6 +92,15 @@ class FuncTypeResolver {
      * and nothing else (design principles 4.3, log 2.17).
      */
     virtual FunctionType *fixedSignature() const { return nullptr; }
+
+    /**
+     * The signature the rule declares, type variables and all: the same function type as
+     * fixedSignature() for a rule without variables, and the declared form for one that is a
+     * family. nullptr for a rule whose signature is computed rather than declared. It is what a
+     * reader asks about the parameters themselves -- which of them mentions a type variable --
+     * where fixedSignature() cannot answer, a family having no one signature.
+     */
+    virtual FunctionType *declaredSignature() const { return nullptr; }
 
     /**
      * The names this rule gives its parameters, the `with` ones first and the ordinary ones
@@ -234,6 +253,21 @@ class DynamicFuncTypeResolver : public FuncTypeResolver {
         const type_vec_t &with, const type_vec_t &norm,
         const ModifierSet &modifiers) const override;
 
+    /// The same resolution with the call's constants in hand: a rule that declared a callback
+    /// reading them (withStatics) answers from it, so its result type may follow the values the
+    /// program wrote, and a rule that declared none answers as it always did.
+    std::optional<FunctionType *> resolveWith(
+        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics,
+        const ModifierSet &modifiers) const override;
+
+    /// Declares that this rule's result may also follow the call's constant arguments, for an
+    /// operator whose result type depends on their values. The plain callback above stays: it
+    /// answers a caller that has no statics, and it is what the rule answers without them.
+    DynamicFuncTypeResolver *withStatics(ResolverWithStaticsFunc resolver) {
+        staticsResolver_ = std::move(resolver);
+        return this;
+    }
+
     std::string signature() const override { return signature_; }
 
     bool varParameters(std::vector<bool> &with, std::vector<bool> &norm) const override {
@@ -292,6 +326,9 @@ class DynamicFuncTypeResolver : public FuncTypeResolver {
     FunctionType *fixed_ = nullptr;
     var_declare_t withVars_, normVars_;
     ResolverFunc resolver_;
+    /// The callback that also reads the call's constants; null for a rule whose result follows
+    /// its argument types alone.
+    ResolverWithStaticsFunc staticsResolver_;
 };
 
 /**
@@ -322,6 +359,16 @@ class DeclaredFuncTypeResolver : public FuncTypeResolver {
         const type_vec_t &with, const type_vec_t &norm,
         const ModifierSet &modifiers) const override;
 
+    /// The declaration's own variables, fixed by the call's `::<...>` type arguments before the
+    /// arguments are read: a variable the call writes is what the call is an instance of, so the
+    /// arguments are matched against the declaration with those variables already bound
+    /// (`show::<f32>([])`). A rule without variables takes no type argument, as an ordinary
+    /// resolver does.
+    std::optional<FunctionType *> resolveForCall(
+        const type_vec_t &types, Type *expectedResult, const type_vec_t &with,
+        const type_vec_t &norm, static_args_t normStatics,
+        const ModifierSet &modifiers) const override;
+
     std::string signature() const override { return funcType_->toString(); }
 
     bool varParameters(std::vector<bool> &with, std::vector<bool> &norm) const override {
@@ -337,6 +384,11 @@ class DeclaredFuncTypeResolver : public FuncTypeResolver {
     /// The signature as declared, closed (an operator's type is not a function still being
     /// built); null when the declaration has type variables, whose instances are not this rule.
     FunctionType *fixedSignature() const override { return generic_ ? nullptr : funcType_; }
+
+    /// The declaration's own type, the variables still in it: a family's parameters are the ones
+    /// the rule writes, and a call that leaves one of their variables without a type is a
+    /// question about the declaration rather than about one of its instances.
+    FunctionType *declaredSignature() const override { return funcType_; }
 
     /// A declaration names every parameter it writes, whatever its signature resolves to: the
     /// names are the declaration's own, and a named call reads them from here.

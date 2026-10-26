@@ -12,7 +12,7 @@
 module c6_vae
 
 // == imports ==
-import { Tensor, exp, load_npy, mean, numel, relu, set_num_threads, shape, slice, sum } from tensor
+import { exp, load_npy, mean, numel, relu, set_num_threads, shape, sum } from tensor
 import { with_grad } from autodiff
 import { adam, adam_state } from nn
 import { now } from time
@@ -47,8 +47,8 @@ func loss(x: f32[..], eps: f32[..]): float {
     let (mu, logvar) = encode<m>(x)
     let z = mu + exp(0.5 * logvar) * eps
     let errors = decode<m>(z) - x
-    let reconstruction = mean(sum(errors * errors, 1))
-    let kl = -0.5 * mean(sum(1.0 + logvar - mu * mu - exp(logvar), 1))
+    let reconstruction = float(mean(sum(errors * errors, 1)))
+    let kl = -0.5 * float(mean(sum(1.0 + logvar - mu * mu - exp(logvar), 1)))
     return reconstruction + kl
 }
 
@@ -70,8 +70,8 @@ func load_model(data: string): Vae {
 func evaluate(m: Vae, x: f32[..]): (float, float, float) {
     let (mu, logvar) = encode<m>(x)
     let errors = decode<m>(mu) - x
-    let reconstruction = mean(sum(errors * errors, 1))
-    let kl = -0.5 * mean(sum(1.0 + logvar - mu * mu - exp(logvar), 1))
+    let reconstruction = float(mean(sum(errors * errors, 1)))
+    let kl = -0.5 * float(mean(sum(1.0 + logvar - mu * mu - exp(logvar), 1)))
     return (reconstruction, kl, reconstruction + kl)
 }
 

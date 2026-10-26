@@ -8,7 +8,7 @@
  * when ONNX_OUT is set.
  */
 module ort_grad_loop_values
-import { Tensor, load_npy, reshape, save_npy, sum, tanh } from tensor
+import { load_npy, reshape, save_npy, sum, tanh } from tensor
 import { with_grad } from autodiff
 import { export_model } from onnx
 import { get_env } from env
@@ -24,14 +24,14 @@ func walk(h: f32[..], k: int): (f32[..], int) {
 with <m: P>
 func loss_a(x: f32[..]): float {
     let (h, k) = walk<m>(x, 0)
-    return sum(h * h)
+    return float(sum(h * h))
 }
 
 // B: the counter enters the loss as a number (it has no derivative).
 with <m: P>
 func loss_b(x: f32[..]): float {
     let (h, k) = walk<m>(x, 0)
-    return sum(h * h) * (1.0 + 0.5 * float(k))
+    return float(sum(h * h)) * (1.0 + 0.5 * float(k))
 }
 
 // C: the same as a struct.
@@ -45,24 +45,24 @@ func walk_c(h: f32[..], k: int): Run {
 with <m: P>
 func loss_c(x: f32[..]): float {
     let r = walk_c<m>(x, 0)
-    return sum(r.state)
+    return float(sum(r.state))
 }
 
 // D: four carried values, three of them differentiable (two tensors and a float).
 with <m: P>
 func walk_d(h: f32[..], k: int, acc: f32[..], e: float): (f32[..], int, f32[..], float) {
-    return if k >= 6 || sum(h * h) < 1.0 then (h, k, acc, e) else walk_d<m>(
+    return if k >= 6 || float(sum(h * h)) < 1.0 then (h, k, acc, e) else walk_d<m>(
         tanh(h @ m.w) * 0.3 + h * 0.6,
         k + 1,
         acc + h * h,
-        e * 0.5 + sum(h)
+        e * 0.5 + float(sum(h))
     )
 }
 
 with <m: P>
 func loss_d(x: f32[..]): float {
     let r = walk_d<m>(x, 0, x * 0.0, 0.25)
-    return sum(r.0) + sum(r.2) * 0.1 + r.3 * 0.3
+    return float(sum(r.0)) + float(sum(r.2)) * 0.1 + r.3 * 0.3
 }
 
 // The counter as an output of the model, next to the value and the gradient.

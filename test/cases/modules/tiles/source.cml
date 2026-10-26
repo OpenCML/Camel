@@ -1,7 +1,7 @@
 module tiles_source
-import { Tensor, reshape } from tensor
+import { reshape } from tensor
 import { source } from tiles
-func add(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return a + b }
+func add(a: f32[..], b: f32[..]): f32[..] { return a + b }
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
     println(source<add>((x, x)))

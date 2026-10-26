@@ -327,6 +327,7 @@ bool ParserImpl::startsStmt(TK kind) const {
     case TK::KwExport:
     case TK::KwReturn:
     case TK::KwThrow:
+    case TK::KwYield:
     case TK::At:
     case TK::Hash:
     case TK::KwStatic:
@@ -461,6 +462,7 @@ void ParserImpl::parseStmt() {
         return parseUsingNamespaceDecl();
     case TK::KwReturn:
     case TK::KwThrow:
+    case TK::KwYield:
         return parseRetStmt();
     case TK::KwFunc:
     case TK::KwWith:
@@ -965,7 +967,7 @@ void ParserImpl::parseTagRef() {
 
 /// whenClause : IDENTIFIER logicalOrExpr
 /// The IDENTIFIER is the name `when`, read here only: a declaration's applicability condition,
-/// after its signature (design principles 5.13). It is evaluated when the declaration is
+/// after its signature (design principles 4.4). It is evaluated when the declaration is
 /// instantiated, not when it is parsed, and a false condition makes the declaration
 /// inapplicable rather than erroneous. It follows the return type and the resource clause and
 /// precedes the body, so a body-less native declaration may carry one too.
@@ -1083,7 +1085,10 @@ void ParserImpl::parseOperatorName() {
 
 /// dataDecl : ('let' | 'var') carrier (':' typeList)? '=' dataList
 ///          | 'let' '_' (':' typeList)? '=' dataList
-/// carrier  : identList | parentIdents | bracedIdents | bracketIdents
+/// carrier  : identList | parentIdents
+/// A destructuring declaration binds the fields of a struct or the elements of an array, and
+/// neither is in the language: `let {x, y} = p` and `let [x, y] = xs` are syntax errors. A
+/// parenthesized carrier (`let (a, b) = t`) destructures a tuple, which the language has.
 void ParserImpl::parseDataDecl() {
     const size_t m   = mark();
     const bool isLet = cur_ == TK::KwLet;
@@ -1105,12 +1110,6 @@ void ParserImpl::parseDataDecl() {
     } break;
     case TK::LParen:
         parseBracketedIdents(TK::RParen, NK::ParentIdents);
-        break;
-    case TK::LBrace:
-        parseBracketedIdents(TK::RBrace, NK::BracedIdents);
-        break;
-    case TK::LBracket:
-        parseBracketedIdents(TK::RBracket, NK::BracketIdents);
         break;
     case TK::Identifier:
         parseIdentList();
@@ -1214,7 +1213,7 @@ bool ParserImpl::atResourceDecl(uint32_t n) const {
     return atWord(n, "resource") && peek(n + 1) == TK::Identifier;
 }
 
-/// retStmt : ('return' | 'throw') dataList
+/// retStmt : ('return' | 'throw' | 'yield') dataList
 void ParserImpl::parseRetStmt() {
     const size_t m = mark();
     bump();

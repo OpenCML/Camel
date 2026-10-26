@@ -10,7 +10,7 @@
  */
 module fuse
 
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 
 func pair(x: f32[..], w: f32[..], b: f32[..]): (f32[..], f32[..]) {
     let loose = x @ w + b

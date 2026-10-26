@@ -101,8 +101,8 @@ void setElement(Type *type, slot_t aggregate, size_t index, slot_t value) {
     }
 }
 
-/// A trainable leaf that is a tensor, in whichever spelling its type uses (`Tensor`, `Tensor<f32,
-/// [4, 4]>`, `f32[4, 4]`, `f32[]`): a numeric array is one tensor, not an array of its elements.
+/// A trainable leaf that is a tensor, in whichever spelling its type uses (`f32[4, 4]`, `f32[..]`,
+/// `f32[]`): a numeric array is one tensor, not an array of its elements.
 bool isTensorLeaf(Type *type) { return camel::tensor::isTensorType(type); }
 
 /// Rebuilds one array of a trainable tree, element by element and with the length the primal
@@ -192,8 +192,7 @@ void walk(Type *type, std::span<const slot_t> in, std::span<slot_t> out, const L
 /// whose type states an element type and its value always agree (the slot refuses a value of
 /// another type), and a leaf whose type states none has its element type written in its value
 /// alone -- `full([3, 2], 0.1)` is an f64 tensor, and "unstated" means the type does not say it,
-/// not that the value is f32 (docs/handover/reviews/questions-2026-10-23.md, section
-/// `f64-tensor-leaf`). A written element type is kept exactly and is never narrowed either (design
+/// not that the value is f32. A written element type is kept exactly and is never narrowed either (design
 /// principles 7.4: the element type is exact; computing at a lower precision than the program
 /// wrote would need the `change_precision` permission of 7.2-7.3).
 TypeCode leafElementType(const Array *t) {
@@ -590,9 +589,8 @@ const std::vector<oper_group_ptr_t> &optimizerOperatorGroups() {
         OperatorGroup::create(
             "adam",
             {{"nn:adam", std::make_shared<OptimizerResolver>(Kind::Adam)}}),
-        // `save_params` is not here: its signature is declared in `stdlib/nn.cml` (handover H19,
-        // step 10; H165), and the C++ side keeps its kernel (`optimizerKernels`) and its
-        // resource and traits (`NnModule::load`).
+        // `save_params` is not here: its signature is declared in `stdlib/nn.cml`, and C++ keeps
+        // only its kernel (`optimizerKernels`) and its resource and traits (`NnModule::load`).
     };
     return groups;
 }

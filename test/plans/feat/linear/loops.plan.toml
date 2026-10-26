@@ -89,7 +89,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "loops.zero_leaf_state"
-desc = "A loop's state may be a struct with no leaves, the zero-leaf case of the split that makes a struct's fields the state's components (design principles 3.10, H71). The ruling of 2026-10-23 allows it — 「(a) 允许空结构体状态：它是「按叶子拆成分量」的零叶子情形，不加规则、不加诊断。」 — so nothing refuses it and nothing diagnoses it: the state carries nothing, the loop runs one round per element (round 7, round 8, which only the body's effects can show), its value is still that zero-leaf struct ({} {}, and equal to a fresh one), and the four back ends agree."
+desc = "A loop's state may be a struct with no leaves, the zero-leaf case of the split that makes a struct's fields the state's components (design principles 3.10, H71). The rule allows it — 「(a) 允许空结构体状态：它是「按叶子拆成分量」的零叶子情形，不加规则、不加诊断。」 — so nothing refuses it and nothing diagnoses it: the state carries nothing, the loop runs one round per element (round 7, round 8, which only the body's effects can show), its value is still that zero-leaf struct ({} {}, and equal to a fresh one), and the four back ends agree."
 kind = "behavior"
 case = "../../../cases/loops/zero_leaf_state.cml"
 args = ["${case}", "${backend}"]
@@ -208,7 +208,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "loops.iterate_tensor"
-desc = "`for` over a tensor takes its elements along the first dimension: the rank-1 rows of a rank-2 tensor (views of the same data), the elements of a rank-1 tensor (values of the element type, not rank-0 arrays), a tensor whose first extent is 0, a loop over a row inside the body, and a function whose parameter is a `Tensor` of unknown rank (its elements have type `Tensor`)."
+desc = "`for` over a tensor takes its elements along the first dimension: the rank-1 rows of a rank-2 tensor (views of the same data), the elements of a rank-1 tensor (values of the element type, not rank-0 arrays), a tensor whose first extent is 0, a loop over a row inside the body, and a function whose parameter is a `f32[..]` of unknown rank (its elements have type `f32[..]`)."
 kind = "behavior"
 case = "../../../cases/loops/iterate_tensor.cml"
 args = ["${case}", "${backend}"]
@@ -234,7 +234,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "loops.open_rank_round_rank1"
-desc = "The round of a `for` over an array whose rank is open hands over a value of the type the round's port declares (design principles 5.4, ArrayType::firstDimensionElement): `Tensor<f32>` is `f32[..]`, so the round is declared as that open-rank array one dimension fewer, and a value whose runtime rank is 1 gives the array of no dimension holding the element (a view sharing the element's data). `sum(v)` reads the element itself — 6.0 for [1.0, 2.0, 3.0] — on every back end; the scalar reading of this round is a compile-time type error (loops.open_rank_round_scalar_read)."
+desc = "The round of a `for` over an array whose rank is open hands over a value of the type the round's port declares (design principles 5.4, ArrayType::firstDimensionElement): `f32[..]` is `f32[..]`, so the round is declared as that open-rank array one dimension fewer, and a value whose runtime rank is 1 gives the array of no dimension holding the element (a view sharing the element's data). `sum(v)` reads the element itself — 6.0 for [1.0, 2.0, 3.0] — on every back end; the scalar reading of this round is a compile-time type error (loops.open_rank_round_scalar_read)."
 kind = "behavior"
 case = "../../../cases/loops/open_rank_round_rank1.cml"
 args = ["${case}", "${backend}"]
@@ -260,7 +260,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "loops.open_rank_round_scalar_read"
-desc = "A round of an array whose rank is open is that array, not its element (`Tensor<f32>` is `f32[..]`), so the scalar reading of the round -- `s + v` where `s` is the state -- is refused when the program is compiled, with the position of the operator that cannot take the two operands. The report keeps the types of both operands and names a writing that fits either intent: the conversion of the scalar operand, and the reduction that reads a scalar out of the array, `sum(v)`, which is the reading this round needs."
+desc = "A round of an array whose rank is open is that array, not its element (`f32[..]` is `f32[..]`), so the scalar reading of the round -- `s + v` where `s` is the state -- is refused when the program is compiled, with the position of the operator that cannot take the two operands. The report keeps the types of both operands and names a writing that fits either intent: the conversion of the scalar operand, and the reduction that reads a scalar out of the array, `sum(v)`, which is the reading this round needs."
 kind = "negative"
 case = "../../../cases/loops/open_rank_round_scalar_read.cml"
 args = ["-E", "short", "${case}"]
@@ -630,7 +630,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 [[tests]]
 name = "loops.state_in_place.multi"
-desc = "The per-state decision on the shapes the second H17c item asks for, 200 rounds, values hand-computed: four states of four types (an appended int array, a counter, a bool, a float) where the appended value is another state's old value; two appended arrays of different element types; a struct state whose array field is appended (the struct's fields are the loop's state components, design principles 10.5 as H71 reads it for a struct, so the array is one private state: one block at entry and none per round) and an array of structs (compact aggregate elements, one block in place); a state that starts from an array element the loop does not own; a body that reads the previous state's length while writing the next (the read sees the old length, and the copy form runs); the loop's state read after the loop; a constant component between two appended arrays; the appended array as the third state after two constants; and two states from the same literal, each privately copied. `std::mem::blocks()` between the operations shows one block for each appended array and one per round for a state that copies."
+desc = "The per-state decision on these shapes, 200 rounds, values hand-computed: four states of four types (an appended int array, a counter, a bool, a float) where the appended value is another state's old value; two appended arrays of different element types; a struct state whose array field is appended (the struct's fields are the loop's state components, design principles 10.5 read for a struct, so the array is one private state: one block at entry and none per round) and an array of structs (compact aggregate elements, one block in place); a state that starts from an array element the loop does not own; a body that reads the previous state's length while writing the next (the read sees the old length, and the copy form runs); the loop's state read after the loop; a constant component between two appended arrays; the appended array as the third state after two constants; and two states from the same literal, each privately copied. `std::mem::blocks()` between the operations shows one block for each appended array and one per round for a state that copies."
 kind = "behavior"
 case = "../../../cases/loops/state_in_place_multi.cml"
 args = ["${case}", "${backend}"]

@@ -1,0 +1,46 @@
+/**
+ * The order of a round: `c` is judged first and the step function is called only where `c` holds,
+ * which is the array's order. The step prints on every call, and the call is the read, so a
+ * condition that accepts ten rounds reads ten elements and not eleven -- the eleventh read is what
+ * `for line in read_lines(f) while n < 10` must not cause -- while a condition that fails reads
+ * nothing at all for that round.
+ *
+ * The plain `for` asks nothing, so it reads one element per round plus the call that answers "the
+ * stream is over"; a `while` head reads once per round it accepts and nothing for the round it
+ * refuses, which is the reading the language author asked for (2026-10-26).
+ */
+module stream_pull_order
+
+func lines(n: int): int.. {
+    return step(n)
+}
+
+func step(n: int): () => (int, int..)? {
+    return () => sync {
+        println("read", n)
+        if n > 0 then (n, step(n - 1)) else null
+    }
+}
+
+func ten(): int {
+    return loop k = 0 for x in lines(10) while k < 10 do k + 1
+}
+
+func two(): int {
+    return loop k = 0 for x in lines(3) while k < 2 do k + 1
+}
+
+func total(): int {
+    return loop acc = 0 for x in lines(3) do acc + x
+}
+
+func main(): int sync {
+    println("ten")
+    println(ten())
+    println("two")
+    println(two())
+    println("total")
+    println(total())
+    println("done")
+    return 0
+}

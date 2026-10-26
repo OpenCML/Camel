@@ -6,8 +6,8 @@
  * were right by accident.
  *
  * The loaded fixture and the accumulator are written with their element type (`f32[..]`: an
- * f32 array of unstated rank), the terminal spelling for a value whose element type a bare
- * `Tensor` leaves unstated: `x[0]` is then an `f32` and `x[0] + 2.6` finds its overload.
+ * f32 array of unstated rank), the terminal spelling for a value whose element type a bare array
+ * parameter leaves unstated: `x[0]` is then an `f32` and `x[0] + 2.6` finds its overload.
  *
  * Expected: "r 0.4375" (the four elements of the fixture sum to 1.75; two halvings).
  */

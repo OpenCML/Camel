@@ -64,7 +64,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "si_plain_result"
-desc = "A result declared `Tensor<f32>`, whose rank nobody fixes, has no extents for its caller. Passing it to a shaped parameter names the argument, both types and the conversion to write."
+desc = "A result declared `f32[..]`, whose rank nobody fixes, has no extents for its caller. Passing it to a shaped parameter names the argument, both types and the conversion to write."
 kind = "negative"
 case = "../../../../cases/modules/tensor/shape_inference/plain_result.cml"
 args = ["${case}"]
@@ -72,7 +72,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentNeedsConversion"
 expect_diagnostic_line = 12
 expect_diagnostic_column = 14
-expect_output_contains = ["The call to 'h: (a: f32[3]) => float' needs an explicit conversion", "argument 1 ('t', for parameter 'a') has type 'f32[..]', which is less exact than 'f32[3]'", "write the conversion: 't as f32[3]'"]
+expect_output_contains = ["The call to 'h: (a: f32[3]) => float pure' needs an explicit conversion", "argument 1 ('t', for parameter 'a') has type 'f32[..]', which is less exact than 'f32[3]'", "write the conversion: 't as f32[3]'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -89,7 +89,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "si_loaded_struct"
-desc = "A struct with a field loaded from a file, passed to a with parameter whose field is shaped: the field is named (`Tensor<float32>`, the element type the load declared) and the conversion, which writes the shape alone, is suggested for it."
+desc = "A struct with a field loaded from a file, passed to a with parameter whose field is shaped: the field is named (`float32[..]`, the element type the load declared) and the conversion, which writes the shape alone, is suggested for it."
 kind = "negative"
 case = "../../../../cases/modules/tensor/shape_inference/loaded_struct.cml"
 args = ["${case}"]
@@ -164,7 +164,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "si_tuple_return"
-desc = "A returned tuple whose elements came from a function declared (Tensor<f32>, Tensor<f32>): each element that is less exact than declared is named, with its own conversion."
+desc = "A returned tuple whose elements came from a function declared (f32[..], f32[..]): each element that is less exact than declared is named, with its own conversion."
 kind = "negative"
 case = "../../../../cases/modules/tensor/shape_inference/tuple_return.cml"
 args = ["${case}"]
@@ -172,7 +172,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ReturnNeedsConversion"
 expect_diagnostic_line = 9
 expect_diagnostic_column = 5
-expect_output_contains = ["element .0 of the value ('(a, sum(x), b)') has type 'f32[..]', which is less exact than 'f32[3]'", "element .2 of the value", "'a as f32[3]', 'b as f32[3]'"]
+expect_output_contains = ["element .0 of the value ('(a, float(sum(x)), b)') has type 'f32[..]', which is less exact than 'f32[3]'", "element .2 of the value", "'a as f32[3]', 'b as f32[3]'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

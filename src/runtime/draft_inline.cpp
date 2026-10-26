@@ -86,13 +86,12 @@ bool refinesType(camel::core::type::Type *actual, camel::core::type::Type *forma
 /// declaration leaves undetermined kept as declared. An extent that is not a constant asks
 /// nothing at a call (5.4), so an argument's exact length is a property of the value and never
 /// part of the instance — which is what lets a recursion that writes `int[]`, `T[?]` or a
-/// `Tensor` reach a fixed point instead of taking a new copy at every level (the ruling of
-/// 2026-10-24 evening, model-dependent-recursion-unrolls-after-the-flip, item 1).
+/// `Tensor` reach a fixed point instead of taking a new copy at every level.
 ///
 /// A dimension name the declaration writes (`T[n]`) is bound from the argument. `relaxNames`
 /// widens it to an unknown extent instead of binding it, which is how a recursion that carries
 /// one name to a different value at every level (polymorphic recursion) stops making new
-/// instances (the same ruling, item 2).
+/// instances.
 ///
 /// A non-array type is returned as `actual`: what a declaration says about a tuple, a struct or
 /// a scalar is not a dimension, and refining those is what this helper must not change.
@@ -597,7 +596,7 @@ std::vector<DraftFormalBinding> collectDirectFuncSpecializations(
     // lap of a recursion: a dimension name it states binds no further value from there on.
     // The lap that unrolls a recursion is the recursive call *inside* an instance: it names the
     // function itself again with arguments of the instance's own types, and a new instance made
-    // from there is one level of that recursion per rewriting pass (H463). Both laps count as
+    // from there is one level of that recursion per rewriting pass. Both laps count as
     // past the first.
     const GraphId calleeRoot = calleeGraph->typeSpecializationRoot();
     const GraphId callerRoot = draft.typeSpecializationRoot();
@@ -999,11 +998,8 @@ bool specializeDirectFuncInDraft(
     }
 
     // The recursive call inside a type instance of the function it names asks for an instance
-    // whose parameters are the ones that instance already states: the one it is in. Making a new
-    // copy there is what unrolled the recursion one level per rewriting pass — the same key again
-    // and again, because every rewrite of a call inside the base invalidates the entry that names
-    // the copy — until a count bound stopped it, and an export found no loop in the result (H463).
-    // Nothing is bound by the copy, so the types the instance states have to accept the arguments;
+    // whose parameters are the ones that instance already states: the one it is in. Nothing is
+    // bound by the copy, so the types the instance states have to accept the arguments;
     // when they do not, the call still specializes.
     const GraphId instanceRoot = draft.typeSpecializationRoot();
     if (std::ranges::none_of(
@@ -1028,7 +1024,7 @@ bool specializeDirectFuncInDraft(
 
     // Type-only specialization on a call cycle has no shape bound any more. A call inside an
     // instance of the function it names reuses that instance (above), and a call whose key
-    // differs is the polymorphic case the ruling widens to `?`; what is left here is a runaway
+    // differs is the polymorphic case, which widens to `?`; what is left here is a runaway
     // guard, and passing it means the specialization did not reach a fixed point. That is a
     // compiler error naming the function: the eight-copy count this replaces used to keep the
     // current callee instead, which silently truncated the shape.

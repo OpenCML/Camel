@@ -10,7 +10,7 @@
  * the import of this module itself. The engines, `rewrite`, `run`, `saturate` and `extract`, take
  * the rules as an array.
  *
- * The callable operators are declared in `stdlib/rewrite.cml` (handover H183; `run`, H226); this
+ * The callable operators (`run` among them) are declared in `stdlib/rewrite.cml`; this
  * file keeps their kernels, the executor and their purity. The reserved groups the language's
  * `rule` and `fact` declarations compile to (`__rule`, `__rule_when`, `__rule_generic`,
  * `__fact`) have no callable Camel name, so they stay exported from here.
@@ -182,9 +182,7 @@ slot_t ruleWhenKernel(ArgsView &, ArgsView &norm, Context &) {
 /// given is the id the rule's templates were registered under (the front end registers them while it
 /// builds this call) and the value of each `with` parameter, in the order the declaration writes
 /// them: such a rule has no function values to hold, so it keeps the id and the values, and the
-/// engine makes its sides where it matches, one instance per type tuple and set of values (the
-/// ruling of 2026-10-23 on generic-rule-instantiation, and the ruling of 2026-10-25 on the one
-/// instantiation channel).
+/// engine makes its sides where it matches, one instance per type tuple and set of values.
 slot_t genericRuleKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto name = camel::core::internSymbol(norm.get<String *>(0)->view());
     std::vector<data::data_ptr_t> withValues;
@@ -483,14 +481,12 @@ camel::runtime::RuleSource instanceOf(
 /// How many type tuples of one generic rule are enumerated at most, wherever a set of tuples is
 /// built (the engine's own tuple list, `why_not`'s candidates, and `check`'s instance walk). A law
 /// of one type parameter over the registered types is far below it; the product for a law of two is
-/// not, and it is capped rather than instantiated body by body (the ruling of 2026-10-24 on
-/// `generic-rule-check-surface-and-multi-parameter-instances`).
+/// not, and it is capped rather than instantiated body by body.
 constexpr size_t kCheckTupleCap = 64;
 
 /// The types of every value the program has, each once, in the order the graphs write them. Two
 /// things ask for them: the tuples a generic rule is instantiated at where the engine walks the
-/// program's own side, and the types a `check` given a program adds to its candidate set (the
-/// ruling of 2026-10-24 on `generic-rule-check-surface-and-multi-parameter-instances`, §1).
+/// program's own side, and the types a `check` given a program adds to its candidate set.
 std::vector<Type *> programValueTypes(const camel::runtime::Program &program) {
     std::vector<Type *> types;
     for (const camel::runtime::GCGraph *graph : program.graphs()) {
@@ -521,8 +517,7 @@ std::vector<Type *> programValueTypes(const camel::runtime::Program &program) {
 /// The type tuples a generic rule is instantiated at, one per type parameter: for a rule of one
 /// parameter the types themselves, and for a rule of more the product of the types over its
 /// parameters, capped at `kCheckTupleCap` tuples in a fixed order. The types are those of every
-/// value the program being rewritten has, each once, in the order the graphs write them. The ruling
-/// of 2026-10-23 on generic-rule-instantiation binds the rule's type variables from the nodes it
+/// value the program being rewritten has, each once, in the order the graphs write them. It binds the rule's type variables from the nodes it
 /// matches, so the types are the program's own (not the registered meta-types `check` adds).
 ///
 /// A tuple is kept only when the rule's condition admits it at the type level (`ruleConditionAt`),
@@ -623,8 +618,7 @@ std::vector<std::vector<Type *>> tuplesHolding(const Type *type, size_t arity) {
 
 /// The compiled rules of one instance of a generic rule, made now if this is the first read and
 /// kept in the entry: the instance is compiled once, so a second application of the same rule at
-/// the same types pays nothing (the ruling of 2026-10-23 on generic-rule-instantiation: the type
-/// part is folded once per tuple and cached).
+/// the same types pays nothing.
 const std::vector<camel::runtime::Rule> &instanceRules(
     Context &ctx, const RuleObject &rule, GenericRuleEntry &entry, size_t index) {
     static const std::vector<camel::runtime::Rule> none;
@@ -681,8 +675,7 @@ std::vector<camel::runtime::Rule> engineRules(
                 continue;
             }
             // The rule's own number of type parameters decides how many types a tuple has: a law of
-            // two is instantiated at a pair of the program's types, not at one of them (the ruling
-            // of 2026-10-23 on generic-rule-instantiation assumes one type per value, and asking a
+            // two is instantiated at a pair of the program's types, not at one of them (the ruleeneric-rule-instantiation assumes one type per value, and asking a
             // two-parameter rule for one type is what left such a law with no instance at all).
             GenericRuleEntry *entry = camel::compile::gir::genericRuleEntry(ctx, ruleId);
             const size_t arity      = entry != nullptr ? entry->typeParams.size() : 1;
@@ -694,8 +687,7 @@ std::vector<camel::runtime::Rule> engineRules(
                 entry = camel::compile::gir::genericRuleEntry(ctx, ruleId);
                 if (entry == nullptr || index >= entry->instances.size() ||
                     !entry->instances[index].made) {
-                    // A type tuple the rule cannot be written for says nothing: the ruling of
-                    // 2026-10-23 keeps a failed instantiation quiet, and `why_not` is where the
+                    // A type tuple the rule cannot be written for says nothing: the rule keeps a failed instantiation quiet, and `why_not` is where the
                     // reason is read.
                     continue;
                 }
@@ -788,10 +780,11 @@ bool ProofType::assignableFrom(Type *source) const { return is(source); }
 
 OtherType *ProofType::cloneWithParams(std::span<Type *const>) const { return get(); }
 
-/// `CheckReport`, the type of what `check` answers (H247, slice S0). A report is a table of rows
-/// (checkreport.h), not a string: the fixed rendering of the table is its `print`, so a reader
-/// keeps the fields and gets the text, and no caller has to parse the text back into fields. The
-/// type holds text and no reference into any GC space, so it is an ordinary other type.
+/// `CheckReport`, the type of what `check` answers (docs/design/rewrite/plan-verification.cn.md,
+/// S0). A report is a table of rows (checkreport.h), not a string: the fixed rendering of the
+/// table is its `print`, so a reader keeps the fields and gets the text, and no caller has to
+/// parse the text back into fields. The type holds text and no reference into any GC space, so
+/// it is an ordinary other type.
 class CheckReportType final : public OtherType {
   public:
     static CheckReportType *get();
@@ -841,11 +834,10 @@ bool CheckReportType::assignableFrom(Type *source) const { return is(source); }
 
 OtherType *CheckReportType::cloneWithParams(std::span<Type *const>) const { return get(); }
 
-/// What a verdict is about, read off the permissions the rule asks for (the ruling of 2026-10-24 on
-/// `verification-licence-to-precondition`):
+/// What a verdict is about, read off the permissions the rule asks for:
 ///
 ///   * `reassociate` and `contract` let the rewriting change the rounding, so the proposition is
-///     the two halves the ruling gives it: real equality on the finite inputs and IEEE equality,
+///     the two halves the rule gives it: real equality on the finite inputs and IEEE equality,
 ///     bit for bit, on the values a real model does not have (NaN, the infinities, -0) -- unless
 ///     the rule asks for `no_nans` / `no_infs` / `no_signed_zeros`, which narrow the domain the
 ///     assumptions cover rather than change what is claimed.
@@ -871,8 +863,7 @@ std::string propositionOf(camel::core::sem::PermissionMask needs) {
     return kPropositionEquality;
 }
 
-/// The stream one rule's samples are drawn from (the ruling of 2026-10-24 on
-/// `accuracy-check-sampling`, 1): the seed is derived from the rule's identity -- its name together
+/// The stream one rule's samples are drawn from: the seed is derived from the rule's identity -- its name together
 /// with the type tuple of the instance, `add_zero<i32>` -- and not from its place in the array the
 /// caller passed, so the same rule draws the same samples in any call, whatever else is checked
 /// beside it. `seed` stays the caller's knob: the identity decides *which* stream, the seed *where*
@@ -971,8 +962,8 @@ slot_t rewriteKernel(ArgsView &, ArgsView &norm, Context &ctx) {
 }
 
 /// `run<rules, rounds: 16, strict: false, explain: false>(p)`: one application of the rules, with
-/// what it cost (H226). The configuration is the declaration's `with` parameters (handover H235),
-/// which is why the kernel reads them from `with` and the program from `norm`. It answers the
+/// what it cost. The configuration is the declaration's `with` parameters, which is why the
+/// kernel reads them from `with` and the program from `norm`. It answers the
 /// `Run<Program>` that `stdlib/rewrite.cml` declares: a struct with the program, the rewrites
 /// applied, the rounds, the nodes visited, the nodes erased, whether the last round reached a
 /// fixpoint, the wall time in seconds, and the proof when the attribution was recorded. The fields
@@ -1352,7 +1343,7 @@ slot_t whyNotKernel(ArgsView &, ArgsView &norm, Context &ctx) {
             if (step.rule.starts_with(std::string(ruleNow()->name()) + "<")) {
                 // The step came from an instance of this generic rule: the answer names it, since
                 // which types an instance was made for is the one thing a generic rule's report
-                // has to say (the ruling of 2026-10-23 on generic-rule-instantiation).
+                // has to say.
                 return answer(std::format(
                     "the rule fired here in round {} of graph {} as `{}`: {} was made from {}",
                     step.round, step.graph, step.rule, step.producedText, before));
@@ -1370,8 +1361,7 @@ slot_t whyNotKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     try {
         if (ruleNow()->ruleId() != 0) {
             // A generic rule has no sides of its own: what the value's type has is an instance,
-            // and the question is about it (the ruling of 2026-10-23 on
-            // generic-rule-instantiation). Which types the rule was instantiated at, and what came
+            // and the question is about it. Which types the rule was instantiated at, and what came
             // of each, is what a reader of a generic rule needs to know.
             const camel::runtime::GCGraph *graph = programNow()->graph(graphId);
             const Type *type =
@@ -1391,9 +1381,7 @@ const uint64_t ruleId = ruleNow()->ruleId();
             // (one candidate per position the value's type can stand at). The reason a candidate
             // could not be made is then the body's own reason -- `genericRuleInstance` asked for
             // one type where the rule writes two says only that the numbers differ, which is not
-            // what a reader of a failed law needs to hear (the ruling of 2026-10-23 on
-            // generic-rule-instantiation-set-and-predicate, §3: `why_not` is where the reason is
-            // read).
+            // what a reader of a failed law needs to hear.
             GenericRuleEntry *entry = camel::compile::gir::genericRuleEntry(ctx, ruleId);
             // The rule's own number of type parameters: a rule that declares none is asked at the
             // empty tuple, and the values it was bound to are the rest of its key.
@@ -1653,8 +1641,7 @@ double elementOfBytes(TypeCode dtype, const uint8_t *at) {
 }
 
 /// The text of one element of a bf16 or an f16 tensor sample: the element type's own shortest
-/// text (camel/core/rtdata/half.h, `halfText`), never the f32 text of the value it widens to
-/// (design principles 7.7; the ruling of 2026-10-23 on `reduced-precision-text`).
+/// text (camel/core/rtdata/half.h, `halfText`), never the f32 text of the value it widens to.
 std::string halfTextOf(const TensorSample &t, size_t at) {
     uint16_t bits = 0;
     std::memcpy(&bits, t.bytes.data() + at * 2, sizeof(bits));
@@ -1933,16 +1920,43 @@ RefTensor tensorOfSample(const TensorSample &sample) {
     return out;
 }
 
+/// `value` rounded once into `element`: the value the element type's own arithmetic would hold, so a
+/// step whose exact result leaves the type's range reads as the infinity (or the zero) it becomes
+/// there. The reduced-precision types are rounded through f32 and their own two bytes, exactly as
+/// the sampler rounds a drawn value into a parameter's type.
+long double roundToElement(long double value, TypeCode element) {
+    switch (element) {
+    case TypeCode::Float64:
+        return static_cast<long double>(static_cast<double>(value));
+    case TypeCode::Float32:
+        return static_cast<long double>(static_cast<float>(value));
+    case TypeCode::BFloat16:
+        return static_cast<long double>(
+            halfToFloat<BFloat16>(halfFromFloat<BFloat16>(static_cast<float>(value))));
+    case TypeCode::Float16:
+        return static_cast<long double>(
+            halfToFloat<Float16>(halfFromFloat<Float16>(static_cast<float>(value))));
+    default:
+        return value;
+    }
+}
+
 /**
  * The higher-precision reference of one side of a rule: the side's expression evaluated over the
  * same argument values in long double. It reads the operators the accuracy library uses, and
  * refuses (rather than guesses) an operator it does not know, so a rule the check cannot examine
  * fails the check instead of passing it silently.
+ *
+ * With an `element` it also holds the side in that element type: every step is rounded into it and
+ * the special values the steps produce are recorded. That is the arithmetic the side is written in,
+ * and it is what the licences `no_nans` and `no_infs` speak about (`no_infs` assumes no value is an
+ * infinity, the intermediate results included, design principles 7.2).
  */
 class RefEvaluator {
   public:
-    RefEvaluator(const camel::runtime::GCGraph &graph, const std::vector<Sample> &args)
-        : graph_(graph), args_(args),
+    RefEvaluator(const camel::runtime::GCGraph &graph, const std::vector<Sample> &args,
+        std::optional<TypeCode> element = std::nullopt)
+        : graph_(graph), args_(args), element_(element),
           ports_(graph.normPorts().begin(), graph.normPorts().end()) {}
 
     RefValue eval(camel::runtime::gc_node_ref_t ref) {
@@ -1951,11 +1965,34 @@ class RefEvaluator {
             return found->second;
         }
         RefValue value = evalUncached(ref);
+        if (element_) {
+            value = refMap(value, [&](long double x) { return roundToElement(x, *element_); });
+        }
+        recordSpecials(value);
         memo_.emplace(ref, value);
         return value;
     }
 
+    /// Whether a step of the side evaluated to an infinity / a NaN. Both are false without an
+    /// element type: the reference's own precision is not the side's arithmetic.
+    bool stepWasInfinite() const { return sawInfinity_; }
+    bool stepWasNaN() const { return sawNaN_; }
+
   private:
+    void recordSpecials(const RefValue &value) {
+        const auto note = [&](long double x) {
+            sawInfinity_ = sawInfinity_ || std::isinf(x);
+            sawNaN_      = sawNaN_ || std::isnan(x);
+        };
+        if (!value.tensor) {
+            note(value.scalar);
+            return;
+        }
+        for (const long double x : value.t.values) {
+            note(x);
+        }
+    }
+
     RefValue evalUncached(camel::runtime::gc_node_ref_t ref) {
         const camel::runtime::GCNode *node = graph_.node(ref);
         if (node == nullptr || node->kind == camel::runtime::GCNodeKind::Dead) {
@@ -2074,19 +2111,23 @@ class RefEvaluator {
                 in[1],
                 [&](long double a, long double b) { return fn(a, b); });
         };
-        if (uri == ":op/add_f" || uri == ":op/add_d") {
+        // The element type a side is written in decides the operator's uri, and the reduced-precision
+        // types have stems of their own -- `_bf` for bfloat16, `_f6` for float16
+        // (src/builtin/modules/globals.cpp) -- so a rule instantiated at bf16 or f16 is read exactly
+        // as one at f32 or f64 is. `_f` is f32's stem and `_d` is f64's.
+        if (uri == ":op/add_f" || uri == ":op/add_d" || uri == ":op/add_bf" || uri == ":op/add_f6") {
             return binary([](long double a, long double b) { return a + b; });
         }
-        if (uri == ":op/sub_f" || uri == ":op/sub_d") {
+        if (uri == ":op/sub_f" || uri == ":op/sub_d" || uri == ":op/sub_bf" || uri == ":op/sub_f6") {
             return binary([](long double a, long double b) { return a - b; });
         }
-        if (uri == ":op/mul_f" || uri == ":op/mul_d") {
+        if (uri == ":op/mul_f" || uri == ":op/mul_d" || uri == ":op/mul_bf" || uri == ":op/mul_f6") {
             return binary([](long double a, long double b) { return a * b; });
         }
-        if (uri == ":op/div_f" || uri == ":op/div_d") {
+        if (uri == ":op/div_f" || uri == ":op/div_d" || uri == ":op/div_bf" || uri == ":op/div_f6") {
             return binary([](long double a, long double b) { return a / b; });
         }
-        if (uri == ":op/neg_f" || uri == ":op/neg_d") {
+        if (uri == ":op/neg_f" || uri == ":op/neg_d" || uri == ":op/neg_bf" || uri == ":op/neg_f6") {
             return unary([](long double a) { return -a; });
         }
         if (uri == "math:sqrt") {
@@ -2171,8 +2212,11 @@ class RefEvaluator {
 
     const camel::runtime::GCGraph &graph_;
     const std::vector<Sample> &args_;
+    std::optional<TypeCode> element_;
     std::vector<camel::runtime::gc_node_ref_t> ports_;
     std::unordered_map<camel::runtime::gc_node_ref_t, RefValue> memo_;
+    bool sawInfinity_ = false;
+    bool sawNaN_      = false;
 };
 
 /// The normalized error of a native value against the reference: the difference relative to the
@@ -2667,9 +2711,12 @@ class Sampler {
 /// needs no permission, or within the numeric contract below when it does. `element` is the
 /// element type the two values are of (`f32`, `f64`, `bf16` or `f16`): it decides both the bit
 /// pattern an exact comparison compares and the epsilon a bounded one is measured in, so a
-/// reduced-precision instance is never judged with f32's tolerance.
+/// reduced-precision instance is never judged with f32's tolerance. `needs` decides what an exact
+/// comparison looks at: `no_signed_zeros` says a zero's sign is not observable, so the two zeros are
+/// one bit pattern under it, where a rule without the licence has the sign as part of its bits.
 bool agreeFloat(double x, double y, TypeCode element,
-    const camel::core::sem::RewriteErrorBound &bound, double scale) {
+    const camel::core::sem::RewriteErrorBound &bound, double scale,
+    camel::core::sem::PermissionMask needs) {
     if (std::isnan(x) || std::isnan(y)) {
         return std::isnan(x) && std::isnan(y);
     }
@@ -2677,6 +2724,9 @@ bool agreeFloat(double x, double y, TypeCode element,
         return true; // no contract to compare against (reported as unchecked)
     }
     if (bound.ulps == 0.0 && bound.relative == 0.0) {
+        if ((needs & camel::core::sem::kNoSignedZeros) != 0 && x == 0.0 && y == 0.0) {
+            return true;
+        }
         // A bf16 or an f16 widens to its f32 exactly (camel/core/rtdata/half.h), so comparing the
         // widened f32 bits compares the two-byte patterns: the two paths are one comparison.
         return element == TypeCode::Float64
@@ -2709,7 +2759,8 @@ double tensorElement(const TensorSample &t, size_t at) {
 /// a byte comparison (which would fail a legal rounding) nor with f32's (which would call an
 /// illegal one equal).
 bool agreeTensor(const TensorSample &a, const TensorSample &b,
-    const camel::core::sem::RewriteErrorBound &bound, double scale) {
+    const camel::core::sem::RewriteErrorBound &bound, double scale,
+    camel::core::sem::PermissionMask needs) {
     if (a.dtype != b.dtype || a.shape != b.shape || a.bytes.size() != b.bytes.size()) {
         return false;
     }
@@ -2719,7 +2770,8 @@ bool agreeTensor(const TensorSample &a, const TensorSample &b,
     const size_t elementBytes = elementBytesOf(a.dtype);
     const size_t count = elementBytes == 0 ? 0 : a.bytes.size() / elementBytes;
     for (size_t i = 0; i < count; ++i) {
-        if (!agreeFloat(tensorElement(a, i), tensorElement(b, i), a.dtype, bound, scale)) {
+        if (!agreeFloat(
+                tensorElement(a, i), tensorElement(b, i), a.dtype, bound, scale, needs)) {
             return false;
         }
     }
@@ -2728,15 +2780,17 @@ bool agreeTensor(const TensorSample &a, const TensorSample &b,
 
 /// Whether two results agree: bit for bit when the rule needs no permission (a NaN is a NaN),
 /// otherwise within the numeric contract of the rule's permissions and the operators' declared
-/// bounds (camel/core/operator_semantics.h, rewriteErrorBound).
+/// bounds (camel/core/operator_semantics.h, rewriteErrorBound). `needs` is the rule's licences: an
+/// exact comparison reads the sign of a zero only when `no_signed_zeros` is not one of them.
 bool agree(
     const Sample &a, const Sample &b, const camel::core::sem::RewriteErrorBound &bound,
-    double scale) {
+    double scale, camel::core::sem::PermissionMask needs) {
     if (a.tensor != nullptr || b.tensor != nullptr) {
-        return a.tensor != nullptr && b.tensor != nullptr && agreeTensor(*a.tensor, *b.tensor, bound, scale);
+        return a.tensor != nullptr && b.tensor != nullptr &&
+               agreeTensor(*a.tensor, *b.tensor, bound, scale, needs);
     }
     if (isFloatingScalar(a.code)) {
-        return agreeFloat(a.asDouble, b.asDouble, a.code, bound, scale);
+        return agreeFloat(a.asDouble, b.asDouble, a.code, bound, scale, needs);
     }
     if (a.code == TypeCode::Int32) {
         return fromSlot<Int32>(a.slot) == fromSlot<Int32>(b.slot);
@@ -2746,11 +2800,11 @@ bool agree(
 
 // ---- the proposition of a `reassociate` / `contract` rule ------------------------------------
 //
-// The ruling of 2026-10-24 on `verification-report-surface-s0` corrects what these rules are
+// The rule corrects what these rules are
 // checked against. `reassociate` licenses a different rounding, and a different rounding may differ
 // from the written one by far more than one rounding step when the expression cancels -- the right
 // side is then the *more* accurate one -- so "the two sides differ by less than a rounding bound"
-// is not the proposition. The proposition is the two halves the ruling gives it: real equality on
+// is not the proposition. The proposition is the two halves the rule gives it: real equality on
 // the finite values, and IEEE equality, bit for bit, on the values the real model does not have
 // (NaN, the infinities, a signed zero) -- unless the rule asked for `no_nans` / `no_infs` /
 // `no_signed_zeros`, which narrow its domain.
@@ -2760,7 +2814,7 @@ bool agree(
 // contract that remains is the rule's own -- a rule whose syntax rounds (`x * (c1 + c2)` folds
 // `c1 + c2` in the element type, one rounding the permission covers) may differ by that rounding --
 // but the cancellation that inflates two element-type results is not part of the comparison any
-// more, which is the whole of the correction: at `x = 1e+30` the library's `tensor_f32_combine_mixed`
+// more, which is the whole of the correction: at `x = 1e+30` the library's `tensor_combine_mixed`
 // has two element-type results 27 ulps apart and one real value.
 //
 // The method needs the reference, so it applies to the element types the reference reads; a rule
@@ -2853,21 +2907,64 @@ bool zeroSignsDiffer(const Sample &a, const Sample &b) {
            std::signbit(a.asDouble) != std::signbit(b.asDouble);
 }
 
+/// Whether a licence of the rule puts this point outside the domain the rule claims. A rule that
+/// asks for `no_infs` or `no_nans` assumes that no value is an infinity or a NaN, the intermediate
+/// results of its own sides included (design principles 7.2), so a point where a step of either side
+/// produces one is not a counterexample to it: the check leaves that point out instead of refusing
+/// the rule with it. Both sides are evaluated in the element type they are written in, so a step that
+/// leaves the type's range reads as the infinity it becomes there. One side the reference cannot read
+/// is not evidence about the licence and does not keep a point the other side puts outside it; when
+/// neither side can be read the caller judges the point as it did before.
+bool outsideLicensedDomain(const camel::runtime::GCGraph &leftGraph,
+    const camel::runtime::GCGraph &rightGraph, const std::vector<Sample> &values, TypeCode element,
+    camel::core::sem::PermissionMask needs) {
+    const bool noInfs = (needs & camel::core::sem::kNoInfs) != 0;
+    const bool noNans = (needs & camel::core::sem::kNoNans) != 0;
+    if (!noInfs && !noNans) {
+        return false;
+    }
+    bool infinity = false;
+    bool nan      = false;
+    bool readOne  = false;
+    for (const camel::runtime::GCGraph *side : {&leftGraph, &rightGraph}) {
+        if (side->normPorts().size() > values.size()) {
+            continue; // the two sides do not take the same arguments
+        }
+        try {
+            RefEvaluator reference(*side, values, element);
+            reference.eval(side->exitNodeRef());
+            readOne  = true;
+            infinity = infinity || reference.stepWasInfinite();
+            nan      = nan || reference.stepWasNaN();
+        } catch (const std::exception &) {
+            // A side the reference cannot read is not evidence about the licence: the other side
+            // still is.
+        }
+    }
+    if (!readOne) {
+        return false; // no side could be read: the caller's own comparison stands
+    }
+    return (noInfs && infinity) || (noNans && nan);
+}
+
 /// What the check found when it compared two values under the proposition of a `reassociate` /
 /// `contract` rule.
 struct RealComparison {
     /// Whether the two values agree under that proposition (meaningless when `compared` is false).
     bool agree = true;
-    /// True when the higher-precision reference decided the comparison. False when the ruling's
+    /// True when the higher-precision reference decided the comparison. False when the rule's
     /// method does not apply to this rule -- its proposition is not real equality, or its element
     /// type is not one the reference reads -- or when the reference cannot evaluate a side; the
     /// caller then compares the two element-type values as it did before.
     bool compared = false;
+    /// True when a licence of the rule puts this point outside the domain the rule claims, so the
+    /// point is not a counterexample and the caller leaves it out of the comparison.
+    bool outsideDomain = false;
     /// Which half of the proposition failed, for the row's line.
     std::string why;
 };
 
-/// The comparison the ruling gives a rule of this proposition: real equality on the finite values,
+/// The comparison the rule gives a rule of this proposition: real equality on the finite values,
 /// bit for bit on a special value. `leftGraph` and `rightGraph` are the two sides over the same
 /// arguments (`values`), and `leftValue` / `rightValue` the two element-type results the VM made of
 /// them -- the special half is read off those, the finite half off the reference.
@@ -2877,6 +2974,10 @@ RealComparison propositionComparison(const std::string &proposition,
     camel::core::sem::PermissionMask needs, const camel::core::sem::RewriteErrorBound &bound,
     double scale) {
     RealComparison result;
+    if (outsideLicensedDomain(leftGraph, rightGraph, values, elementCodeOf(leftValue), needs)) {
+        result.outsideDomain = true;
+        return result;
+    }
     if (proposition != kPropositionRealEquality || !realComparable(elementCodeOf(leftValue)) ||
         leftGraph.normPorts().size() != rightGraph.normPorts().size()) {
         return result;
@@ -2895,7 +2996,7 @@ RealComparison propositionComparison(const std::string &proposition,
     const bool special = std::isinf(refSampleError(leftValue, referenceLeft)) ||
                          std::isinf(refSampleError(rightValue, referenceRight));
     if (special) {
-        result.agree = agree(leftValue, rightValue, {}, 1.0);
+        result.agree = agree(leftValue, rightValue, {}, 1.0, needs);
         result.why   = "a special value is not the same bit for bit";
         return result;
     }
@@ -2938,8 +3039,7 @@ std::string sampleText(const Sample &s) {
                 break;
             case TypeCode::BFloat16:
             case TypeCode::Float16:
-                // The text of the element is the element type's own (design principles 7.7 and
-                // the ruling of 2026-10-23 on `reduced-precision-text`): the shortest digits that
+                // The text of the element is the element type's own (design principles 7.7): the shortest digits that
                 // read back as the same bf16 or f16, not the f32 text of the value it widens to.
                 text += halfTextOf(t, i);
                 break;
@@ -3119,13 +3219,13 @@ uint64_t constMaskOf(const camel::runtime::RuleSource &source) {
 /// its own left side and agree too. A rule that asks for `refine_accuracy` is compared by its error
 /// against a higher-precision reference instead, sample by sample, and the worst error ratio is
 /// reported. `stream` picks the samples; the caller derives it from the rule's identity, not from
-/// its place in the array (the ruling of 2026-10-24 on `accuracy-check-sampling`, 1).
+/// its place in the array.
 ///
-/// The rows this appends are the verdict table `check` answers (H247, slice S0): the verdict, what
-/// it is about, and the evidence or the reason it is what it is. With no solver in the build a rule
+/// The rows this appends are the verdict table `check` answers
+/// (docs/design/rewrite/plan-verification.cn.md, S0): the verdict, what it is about, and the
+/// evidence or the reason it is what it is. With no solver in the build a rule
 /// whose two sides agree on every sample is `sampled`, never `proved`: the check compared samples,
-/// and `proved` is reserved for a licence's proposition being established (the ruling of
-/// 2026-10-24 on `verification-licence-to-precondition`).
+/// and `proved` is reserved for a licence's proposition being established (the rule on `verification-licence-to-precondition`).
 void checkOneRule(
     Context &ctx, const camel::runtime::RuleSource &source, int64_t samples, uint64_t stream,
     std::string_view instance, std::vector<CheckRow> &rows) {
@@ -3141,10 +3241,10 @@ void checkOneRule(
     const std::string proposition              = propositionOf(source.needs);
     const bool conditional                       = source.when != nullptr;
     const camel::core::sem::PermissionMask needs = source.needs;
-    // What the translation layer made of this rule's two sides (H247, slice S1). The sides are read
-    // once, here: the same two sides are the rule's own graphs, whatever the instance. A rule the
-    // layer cannot translate is `sampled` with the reason written in the coverage column (the ruling
-    // of 2026-10-24 on `verification-verdict-surface`, 3).
+    // What the translation layer made of this rule's two sides
+    // (docs/design/rewrite/plan-verification.cn.md, S1). The sides are read once, here: the same
+    // two sides are the rule's own graphs, whatever the instance. A rule the
+    // layer cannot translate is `sampled` with the reason written in the coverage column (the rule on `verification-verdict-surface`, 3).
     const std::string coverage = camel::verify::translate(source).column();
     const auto addRow = [&](std::string_view verdict, std::string evidence, std::string reason,
                             std::string detail) {
@@ -3224,7 +3324,7 @@ void checkOneRule(
     NodeVMSchedPass vm(ctx.shared_from_this());
     // What went wrong, in the shape a row wants it: the `detail` line, the `evidence` the verdict
     // rests on ("counterexample" when a value is the witness, "none" when nothing could be
-    // compared), and the `reason` the ruling has written apart from the verdict.
+    // compared), and the `reason` the rule has written apart from the verdict.
     std::string failure;
     std::string failureEvidence;
     std::string failureReason;
@@ -3235,8 +3335,7 @@ void checkOneRule(
         // `nondeterministic` has no numeric contract: there is nothing to compare against, so
         // nothing was examined. The verdict stays `sampled` -- the three words are closed and the
         // fourth the check used to write is gone -- but the reason is written in its own column and
-        // is never left out, so a reader cannot take this `sampled` for one that sampled (the
-        // ruling of 2026-10-24 on `verification-licence-to-precondition`, licence 3, option A).
+        // is never left out, so a reader cannot take this `sampled` for one that sampled.
         addRow(kVerdictSampled, "none", "no numeric bound", "");
         return;
     }
@@ -3298,7 +3397,7 @@ void checkOneRule(
                         checked.ratio);
                 } else {
                     // Nothing could be compared: the rule is outside what the check can examine,
-                    // and the ruling has that said out loud rather than reported as a failure.
+                    // and the rule has that said out loud rather than reported as a failure.
                     failureEvidence = "none";
                     failureReason   = checked.reason;
                     failure         = std::format("the check cannot examine this rule at ({})", at);
@@ -3310,7 +3409,11 @@ void checkOneRule(
             const RealComparison real = propositionComparison(
                 proposition, *lhsGraph, *program->graph(rhsId), values, left, right, needs, bound,
                 sampleScale);
-            const bool holds = real.compared ? real.agree : agree(left, right, bound, sampleScale);
+            if (real.outsideDomain) {
+                continue; // a licence of the rule leaves this point outside what it claims
+            }
+            const bool holds =
+                real.compared ? real.agree : agree(left, right, bound, sampleScale, needs);
             if (!holds) {
                 std::string at;
                 for (size_t i = 0; i < values.size(); ++i) {
@@ -3426,8 +3529,11 @@ void checkOneRule(
                     needs,
                     bound,
                     sampleScale);
+                if (real.outsideDomain) {
+                    continue; // a licence of the rule leaves this point outside what it claims
+                }
                 const bool holds =
-                    real.compared ? real.agree : agree(before, after, bound, sampleScale);
+                    real.compared ? real.agree : agree(before, after, bound, sampleScale, needs);
                 if (!holds) {
                     std::string at;
                     for (const Sample &value : values) {
@@ -3510,17 +3616,16 @@ void checkOneRule(
     }
 }
 
-/// The instances of one generic rule, checked one by one (the ruling of 2026-10-24 on
-/// `generic-rule-check-surface-and-multi-parameter-instances`).
+/// The instances of one generic rule, checked one by one.
 ///
 /// The candidate tuples are the product of the types the operator groups registered
 /// (`compile::gir::ruleInstanceTypes`) over the rule's type parameters, each tuple filtered by the
 /// rule's condition at the type level: a tuple the condition rejects is not an instance of the law
 /// and says nothing. A tuple the pattern cannot be written for is not an instance either, and is
-/// quiet as well (the ruling of 2026-10-23 on `generic-rule-instantiation-set-and-predicate` §3);
+/// quiet as well;
 /// `why_not` is where that reason is read. An instance that was made but whose values the check
 /// cannot draw is `sampled` with that reason: that is the one place where the check covers less
-/// than the law says, and the reason column is where the ruling has it written.
+/// than the law says, and the reason column is where the rule has it written.
 void checkGenericRule(
     Context &ctx, RuleObject &rule, int64_t samples, uint64_t seed,
     const std::vector<Type *> &programTypes, std::vector<CheckRow> &rows) {
@@ -3559,7 +3664,7 @@ void checkGenericRule(
     // to: what its instances are made at is the pair (type tuple, values), and the values are the
     // rule value's own (design principles 5.4, 5.5).
     // The types the operator groups registered, and then the types a program the call was given
-    // has (the ruling of 2026-10-24 on `check-program-parameter`): a call that leaves the
+    // has: a call that leaves the
     // parameter out reads its null and the candidate set is the registered types alone, which is
     // every reading the check had before the parameter existed.
     std::vector<Type *> universe = camel::compile::gir::ruleInstanceTypes();
@@ -3645,8 +3750,7 @@ void checkGenericRule(
         const GenericRuleInstance &instance = current->instances[place];
         const std::string instanceName = std::format("{}<{}>", name, instance.typeText);
         const auto *lhsType = instance.lhs->funcType();
-        // The seed follows the instance's identity, not its place in the array the caller passed
-        // (the ruling of 2026-10-24 on `accuracy-check-sampling`, 1).
+        // The seed follows the instance's identity, not its place in the array the caller passed.
         const uint64_t stream = sampleStreamOf(seed, instanceName);
         Sampler probe(stream, live()->needs());
         std::string cannot;
@@ -3693,19 +3797,18 @@ void checkGenericRule(
 /// A rule that asks for `refine_accuracy` is compared by its error against a higher-precision
 /// reference instead, sample by sample, and the worst error ratio is reported.
 /// A generic rule is checked once per instance its condition admits over the types the operator
-/// groups registered (the ruling of 2026-10-24 on
-/// `generic-rule-check-surface-and-multi-parameter-instances`).
+/// groups registered.
 ///
-/// It answers a `CheckReport` (H247, slice S0): the verdict table, one row per rule or per instance
-/// of a generic law, each row carrying the rule, the instance, the verdict, what the verdict is
-/// about and the evidence or the reason (the ruling of 2026-10-24 on
-/// `verification-verdict-surface`, 2: the verdict is published by `check` and the text output is
-/// the fixed rendering of that table, which is what a reader -- and the acceptance -- reads).
+/// It answers a `CheckReport` (docs/design/rewrite/plan-verification.cn.md, S0): the verdict
+/// table, one row per rule or per instance of a generic law, each row carrying the rule, the
+/// instance, the verdict, what the verdict is about and the evidence or the reason (the rule on `verification-verdict-surface`, 2: the verdict is published by `check` and
+/// the text output is the fixed rendering of that table, which is what a reader -- and the
+/// acceptance -- reads).
 slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     const int64_t samples = std::max<int64_t>(1, norm.get<Int64>(1));
     const uint64_t seed   = static_cast<uint64_t>(norm.get<Int64>(2));
     // The program the call was given, or none: the parameter is a `Program?` whose default is
-    // `null` (design principles 4.4; the ruling of 2026-10-24 on `check-program-parameter`), so a
+    // `null` (design principles 4.4), so a
     // call that leaves it out reads the null constant of the type and has no types of its own to
     // add. Its types join the candidate set of every generic rule below.
     std::vector<Type *> programTypes;
@@ -3728,8 +3831,7 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         RuleObject *made = norm.get<Array *>(0)->get<RuleObject *>(index);
         if (made->ruleId() != 0) {
             // A generic rule has no two sides of its own: it is checked once per instance its
-            // condition admits over the types the operator groups registered (the ruling of
-            // 2026-10-24 on `generic-rule-check-surface-and-multi-parameter-instances`). The index
+            // condition admits over the types the operator groups registered (the rule on `generic-rule-check-surface-and-multi-parameter-instances`). The index
             // is not passed: the seed of a rule follows its identity, not its place in this array.
             checkGenericRule(ctx, *made, samples, seed, programTypes, rows);
             continue;
@@ -3751,8 +3853,7 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         const RuleObject *rule = ruleRoot ? ruleRoot->getAs<RuleObject>() : made;
         // The rule object is read now and not again: a function runs below, and objects move.
         const camel::runtime::RuleSource source = sourceOf(*rule, 1, call);
-        // The seed follows the rule's own name (the ruling of 2026-10-24 on
-        // `accuracy-check-sampling`, 1).
+        // The seed follows the rule's own name.
         checkOneRule(
             ctx, source, samples, sampleStreamOf(seed, std::string_view(source.name)), "", rows);
     }
@@ -3823,10 +3924,10 @@ slot_t checkReasonKernel(ArgsView &, ArgsView &norm, Context &) {
     return rowColumnKernel(norm, "<rewrite::check_reason>", &CheckRow::reason);
 }
 
-/// What the translation layer made of one row's rule (H247, slice S1): the proposition it read out
-/// of the two sides, or `beyond translation coverage` with the reason it refused. A rule outside
-/// the coverage is `sampled` and this is where the reason is written (the ruling of 2026-10-24 on
-/// `verification-verdict-surface`, 3).
+/// What the translation layer made of one row's rule
+/// (docs/design/rewrite/plan-verification.cn.md, S1): the proposition read out of the two sides,
+/// or `beyond translation coverage` with the reason it refused. A rule outside
+/// the coverage is `sampled` and this is where the reason is written.
 slot_t checkCoverageKernel(ArgsView &, ArgsView &norm, Context &) {
     return rowColumnKernel(norm, "<rewrite::check_coverage>", &CheckRow::coverage);
 }
@@ -3930,9 +4031,7 @@ class RewriteModule final : public BuiltinModule {
         // parameters or `with` parameters. The front end writes it instead of `__rule` /
         // `__rule_when`: the sides are generic functions (or functions of a `constas` parameter),
         // which have no value, so the maker is given the id of their templates after `consts`, and
-        // then the value of each `with` parameter, one argument per parameter (the ruling of
-        // 2026-10-23 on generic-rule-instantiation, and the ruling of 2026-10-25 on the one
-        // instantiation channel).
+        // then the value of each `with` parameter, one argument per parameter.
         exportEntity(
             "__rule_generic",
             OperatorGroup::create(
@@ -4022,7 +4121,7 @@ class RewriteModule final : public BuiltinModule {
                       })}}));
         // The callable operators (`rewrite`, `saturate`, `extract`, `check`, `run` and the four
         // rule readers) are declared in `stdlib/rewrite.cml`; the declarations are the one source
-        // of their signatures, so the module exports none of them itself (handover H183).
+        // of their signatures, so the module exports none of them itself.
     }
 
     bool load() override {

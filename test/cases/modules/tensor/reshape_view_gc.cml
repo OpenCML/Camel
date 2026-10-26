@@ -6,7 +6,7 @@
  */
 module reshape_view_gc
 
-import { Tensor, reshape, flatten, unsqueeze, new, sum, concat } from tensor
+import { reshape, flatten, unsqueeze, new, sum, concat } from tensor
 
 // A fresh owner every call: only the returned view keeps it alive.
 func make_view(i: int): f32[..] {

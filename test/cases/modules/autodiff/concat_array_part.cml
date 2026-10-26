@@ -9,25 +9,25 @@
  * twice, and a gradient shifted by the constant part changes both). An array part that depends
  * on the parameter used to have its gradient dropped and be refused by name at the concat call;
  * the refusal was removed with this case, which now asserts the adjoint the tensor rule builds
- * for both parts (`tensor:slice` of the upstream gradient). The distance to [1, 1] is 0.0 only
+ * for both parts (`:op/slice_sub` of the upstream gradient). The distance to [1, 1] is 0.0 only
  * for that adjoint, and its sum, 2.0, is not the dropped zero.
  */
 module concat_array_part
 
-import { Tensor, concat, reshape, sum } from tensor
+import { concat, reshape, sum } from tensor
 import { grad } from autodiff
 
 with <w: f64[..]>
 func skip_constant_array(): float {
     let y = concat([2.0, 3.0], w, 0)
     let c = reshape([1.0, 0.0, 2.0, 3.0], [4])
-    return sum(y * c)
+    return float(sum(y * c))
 }
 
 with <xs: float[]>
 func active_array(): float {
     let y = concat(xs, reshape([10.0, 20.0], [2]), 0)
-    return sum(y)
+    return float(sum(y))
 }
 
 func main(): int sync {

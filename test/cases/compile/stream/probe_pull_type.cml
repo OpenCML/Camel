@@ -1,0 +1,26 @@
+/**
+ * What one pull of a stream gives: `pull()` has the type of the step signature`s exit, the
+ * nullable pair of the element and the rest of the stream, so the whole pair is what a
+ * consumer takes apart -- the element alone is not the pull. The probe reads the type back
+ * out of a declared position, where the compiler names it.
+ */
+module stream_step_value_pull
+
+func count(n: int): int.. {
+    return step(n)
+}
+
+func step(n: int): () => (int, int..)? {
+    return () => if n > 0 then (n, step(n - 1)) else null
+}
+
+func probe(s: int..): int {
+    let pull = s as (() => (int, int..)?)
+    let pulled = pull()
+    let wrong: int = pulled
+    return wrong
+}
+
+func main(): int sync {
+    return probe(count(1))
+}

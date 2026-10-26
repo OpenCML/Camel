@@ -40,8 +40,7 @@ inline bool hasArg(ArgsView &args, size_t index) { return index < args.size(); }
 /// result type the caller reads the value by (the operator's own `infer`, the node's type in the
 /// VM): a rank-0 result becomes the element slot only when that type says the element; under an
 /// array type — including one whose rank the compiler could not fix, `Tensor` and `f32[..]` — the
-/// rank-0 array stays an array, so the value never contradicts the type (the rank-zero ruling,
-/// docs/handover/reviews/questions-2026-10-23.md section rank-zero-tensor). A caller that declares
+/// rank-0 array stays an array, so the value never contradicts the type. A caller that declares
 /// no result type reads the array: it cannot tell the element of a rank-0 tensor from a rank-0
 /// array, so the array is what it gets.
 slot_t wrap(type::Type *declared, Array *tensor);
@@ -83,9 +82,18 @@ std::string formatShape(std::span<const std::optional<int64_t>> shape);
 std::string formatShape(std::span<const int64_t> shape);
 type::Type *tensorOf(std::optional<type::TypeCode> dtype, std::optional<StaticShape> shape);
 
-/// Promotion that propagates unknown dtypes.
+/// The element type two operands are computed in: the one element type they both state. An
+/// element type the facts do not pin down is the other operand's.
 std::optional<type::TypeCode>
-promote(std::optional<type::TypeCode> lhs, std::optional<type::TypeCode> rhs);
+commonElementType(std::optional<type::TypeCode> lhs, std::optional<type::TypeCode> rhs);
+
+/// Refuses two operands that state different element types, with the reason the call gets: a
+/// tensor operator computes in one element type, and there is no implicit conversion between
+/// numeric types, so a pair that states two of them matches no arm and the program writes the
+/// conversion that says which type it computes in (design principles 5.1). The operator's own
+/// inference and the exporter's lowering of it both call this, so the two readers of a pair
+/// cannot part ways.
+void refuseMixedElementTypes(std::optional<type::TypeCode> lhs, std::optional<type::TypeCode> rhs);
 
 /// Broadcast on possibly unknown shapes. Throws ShapeError on a certain conflict.
 std::optional<StaticShape>

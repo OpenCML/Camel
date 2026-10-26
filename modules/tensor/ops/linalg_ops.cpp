@@ -66,9 +66,13 @@ matmulStaticShape(const std::optional<StaticShape> &lhs, const std::optional<Sta
     return out;
 }
 
+/// A product of two arrays is computed in the one element type both of them state: an f64 array
+/// beside an f32 one matches no arm and is written with the conversion (refuseMixedElementTypes,
+/// design principles 5.1). The shape rule below is the one the kernel applies.
 std::optional<Type *> matmulInfer(const InferContext &ctx) {
     const TensorFacts a = ctx.facts(0), b = ctx.facts(1);
-    return tensorOf(promote(a.dtype, b.dtype), matmulStaticShape(a.shape, b.shape));
+    refuseMixedElementTypes(a.dtype, b.dtype);
+    return tensorOf(commonElementType(a.dtype, b.dtype), matmulStaticShape(a.shape, b.shape));
 }
 
 slot_t linearKernel(ArgsView &, ArgsView &norm, context::Context &) {
@@ -82,7 +86,13 @@ slot_t linearKernel(ArgsView &, ArgsView &norm, context::Context &) {
 
 std::optional<Type *> linearInfer(const InferContext &ctx) {
     const TensorFacts x = ctx.facts(0), w = ctx.facts(1);
-    auto dtype = promote(x.dtype, w.dtype);
+    // `x @ w + bias` computes in the element type the value and the weight state, and the two of
+    // them and the bias are the same type: a mixed pair matches no arm here either.
+    refuseMixedElementTypes(x.dtype, w.dtype);
+    if (ctx.has(2)) {
+        refuseMixedElementTypes(x.dtype, ctx.facts(2).dtype);
+    }
+    auto dtype = commonElementType(x.dtype, w.dtype);
     if (w.shape && w.shape->size() != 2) {
         return std::nullopt;
     }
@@ -140,7 +150,7 @@ std::vector<OpDef> linalgOps() {
         .name      = "matmul",
         .exports   = {"__mat__", "matmul"},
         .params    = {{"lhs", ParamKind::Tensor}, {"rhs", ParamKind::Tensor}},
-        .resultDoc = "Tensor",
+        .resultDoc = "float[..]",
         .infer     = matmulInfer,
         .kernel    = &matmulKernel,
         .traits    = {}});
@@ -151,7 +161,7 @@ std::vector<OpDef> linalgOps() {
             {{"x", ParamKind::Tensor},
              {"weight", ParamKind::Tensor},
              {"bias", ParamKind::Tensor, true}},
-        .resultDoc = "Tensor",
+        .resultDoc = "float[..]",
         .infer     = linearInfer,
         .kernel    = &linearKernel,
         .traits    = {}});

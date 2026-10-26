@@ -197,7 +197,7 @@ gpuRefusal(const rt::GCGraph &graph, const SegmentAnalysis &analysis, rt::gc_nod
     const auto oper   = graph.nodeBodyAs<rt::GCOperBody>(id)->oper;
     const auto &table = core::OperatorTable::instance();
     // A host effect is the boundary of a device scope, not an operator the device must run
-    // (review of the GPU plan, Q3): the pass leaves it to the host and this refusal ignores it.
+    // The pass leaves it to the host and this refusal ignores it.
     if (!table.isPure(oper) || table.hasExternalEffect(oper))
         return "";
     if (reason == "unsupported_operator") {
@@ -215,9 +215,9 @@ gpuRefusal(const rt::GCGraph &graph, const SegmentAnalysis &analysis, rt::gc_nod
         // arguments cannot change a static one.
         return "no device program for this shape";
     }
-    // Unresolved types and index instances are not refusals (h251 retries with the actual
-    // shapes); structural host code (`node_kind`, `control_edge`, `inside_loop`) is not an
-    // operator's business.
+    // Unresolved types and index instances are not refusals: the run retries with the actual
+    // shapes and decides then; structural host code (`node_kind`, `control_edge`, `inside_loop`)
+    // is not an operator's business.
     return "";
 }
 // The reading the residency conclusion is fed with: the graph's placements, and the blocks its

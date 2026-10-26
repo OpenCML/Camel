@@ -22,7 +22,7 @@ type Tree<T> = enum { Leaf, Node(Tree<T>, T, Tree<T>) }
 - `enum` 是关键字（[`parser_type.cpp`](../../src/parse/syntax/parser_type.cpp) 的类型声明入口把它作为 `=` 之后的一种类型体）。`type` 声明仍是 `TypeType` 节点，`enum` 体由 `TypeType::Enum` + `EnumTypeLoad`（变体表）表示，变体形状是 `EnumVariantShape`。
 - 模式是 CST 的 `EnumTuplePattern` / `EnumStructPattern`，AST 里是 `DataType::EnumPattern` + `EnumPatternLoad`；结构体模式的每个字段有名字与绑定名（`{ w }` 绑定同名，`{ w: width }` 改名）。
 - 限定名（`Shape::Circle`）在表达式里仍是 `IdentRef`；AST 区分不了它与模块成员，区分发生在建图时（名字解析之后）。
-- **字段位置暂不支持模式**：`case Shape::Circle(0.0)` 在 AST 建树时给出 `SemanticDiag::ConstructNotSupported`，而不是留给后面的层猜。
+- **字段位置只写名字或 `_`**：`case Shape::Circle(0.0)` 在解析时就是普通语法错误（`fieldPattern`，`SyntaxDiag::UnexpectedToken`；[`parser_expr.cpp`](../../src/parse/syntax/parser_expr.cpp)`parsePattern(bool fieldPosition)`），不解成嵌套模式再让后面的层拒绝。
 
 ## 类型层
 
@@ -56,4 +56,4 @@ type Tree<T> = enum { Leaf, Node(Tree<T>, T, Tree<T>) }
 
 ## 留给语言作者的问题
 
-见 `handover note ⟨d80a283⟩ (H1)` 的"待决问题"：变体跨模块的可见性、`T?`/`T!` 是否改由 `enum` 实现、泛型实参的推断范围、`json` 访问器是否接受 `Json!`。枚举作为 `Map` 键与 `Set` 元素已定（设计原则 11.3，H16 第 3 项）：所有字段都可作键时允许，顺序按变体声明顺序、再逐字段；实现见 `camel/core/type/collection.cpp` 的 `collectionKeyProblem`、`camel/core/rtdata/collection.cpp` 的 `compareKeys` 与 `docs/technical/31_map_and_set.md` 第 3.1 节。
+见 `` 的"待决问题"：变体跨模块的可见性、`T?`/`T!` 是否改由 `enum` 实现、泛型实参的推断范围、`json` 访问器是否接受 `Json!`。枚举作为 `Map` 键与 `Set` 元素已定（设计原则 11.3，H16 第 3 项）：所有字段都可作键时允许，顺序按变体声明顺序、再逐字段；实现见 `camel/core/type/collection.cpp` 的 `collectionKeyProblem`、`camel/core/rtdata/collection.cpp` 的 `compareKeys` 与 `docs/technical/31_map_and_set.md` 第 3.1 节。

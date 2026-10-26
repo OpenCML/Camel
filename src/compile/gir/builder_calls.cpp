@@ -417,23 +417,14 @@ node_handle_t Builder::partialApplicationOf(
     if (calleeType == nullptr) {
         return nullptr;
     }
-    for (size_t i = 0; i < calleeType->withTypesCount(); ++i) {
-        if (calleeType->withIsVarAt(i)) {
-            // DESIGN-QUESTION(partial-application-var): a `with` parameter declared `var`
-            // is a variable the function writes. Binding one ahead of the call would make
-            // the function value a writer of a captured variable; whether that is meant has
-            // not been decided, so it is refused rather than guessed.
-            diags_->of(SemanticDiag::ConstructNotSupported)
-                .atOrigin(at)
-                .commit(
-                    "f<w> as a value",
-                    "a partial application is implemented for functions without 'var' "
-                    "context parameters; this one has '" +
-                        calleeType->toString() + "'. Call it with its arguments in place");
-            throw BuildAbortException();
-        }
-    }
-
+    // A `with` parameter declared `var` is a variable the function writes, and binding one here
+    // is ordinary: the value the partial application captures is the cell, the body the new graph
+    // makes writes it through the call, and the graph's own signature says so -- the captured cell
+    // is one of its captures (graph model Q9, `partial-application-var`: "a `Forwarder` graph that
+    // captured the cell of `t`, its effect summary has the captured-variable bit set, its function
+    // type carries `sync`"). Design principles 3.5 writes the format of a right-hand side, not a
+    // restriction on what a context argument may be.
+    //
     // A literal bound as a context argument takes the type of its `with` parameter here, now
     // that the callee is known, exactly as a literal argument does at a call (design principles
     // 5.1): the captured value is of the parameter's type, so the call the partial application
@@ -452,9 +443,14 @@ node_handle_t Builder::partialApplicationOf(
     // The bound values and, unless it is named, the callee: bound to names no program can
     // write, in the scope the expression stands in, so that the new graph captures them the
     // way any closure captures a name. Nothing refers to a node of another graph.
+    //
+    // What is bound is the argument as the call would take it, not its value: a variable bound
+    // to a `var` context parameter is the cell, and the call the new graph makes takes the cell
+    // (elsewhere the binding would hand it a read, and a read is immutable). Every other
+    // position reads the variable at the call, which is the same value as before.
     std::vector<std::string> boundNames;
     for (const Argument &arg : bound) {
-        boundNames.push_back(bindTemporary(valueOf(arg.node)));
+        boundNames.push_back(bindTemporary(arg.node != nullptr ? arg.node : valueOf(arg.node)));
     }
     const auto make = [&](GCT::node_ptr_t node) {
         node->setOrigin(at);
@@ -869,8 +865,7 @@ node_handle_t Builder::visitOperand(const GCT::node_ptr_t &expr, const GCT::node
 
 void Builder::requireMutableArgument(const Argument &arg, const std::string &callee) {
     // The argument is handed to the callee as a resource: the cell is shared with it, so it keeps
-    // its cell and is never made SSA (questions-2026-10-24-evening.md, var-version-node: a `var`
-    // "handed out as a var argument -- it is a resource"), wherever the callee is written.
+    // its cell and is never made SSA, wherever the callee is written.
     if (arg.expr != nullptr && arg.expr->type() == GCT::NodeKind::DREF) {
         if (const std::string name = moduleLevelName(arg.expr->name()); nodeAt(name).has_value()) {
             if (node_handle_t node = resolveNodeByRef(name); isVariable(node)) {
@@ -1080,9 +1075,7 @@ std::optional<Builder::CalleeSet> Builder::declarationsOfCallee(node_handle_t ca
         if (std::holds_alternative<oper_group_ptr_t>(target)) {
             // The rules of an operator group are the declarations of its name (design principles
             // 6.4): whether a call can give an argument by name does not depend on whether the
-            // callee is a Camel declaration or a group of rules a C++ module registered (the
-            // language rule, 2026-10-24, "named arguments reach operator groups";
-            // docs/handover/reviews/questions-2026-10-23.md). The name has to mark the same
+            // callee is a Camel declaration or a group of rules a C++ module registered. The name has to mark the same
             // position in every rule, exactly as it has to in every declaration of a name, and a
             // rule that cannot place a name (a signature that follows its arguments and spells
             // none, a variadic list, a `rest` parameter) makes the whole call refuse one: the
@@ -1135,8 +1128,7 @@ std::optional<Builder::CalleeSet> Builder::declarationsOfCallee(node_handle_t ca
     // declaration). A name with none is reported at the call like any other unresolved name. The
     // set path fills no default -- with one declaration it could, but the rule that a default is
     // written by one declaration is the very reason the two paths differ -- so a group with one
-    // rule keeps the signature path too, and what a name reaches there is what that path can read
-    // (a rule whose signature is fixed; docs/handover/reviews/questions-2026-10-23.md §one-rule-group-names).
+    // rule keeps the signature path too, and what a name reaches there is what that path can read.
     if (set.declarations.size() < 2) {
         return std::nullopt;
     }
@@ -1248,8 +1240,7 @@ void Builder::bindNamedArgumentsToDeclarations(
         // The parameter at that position carries the name in every declaration that has it: a
         // declaration that names it otherwise is one the call's name does not reach, and the
         // overloads of a name have to name each position the same way for a named argument to
-        // hold for each of them (docs/handover/reviews/questions-2026-10-23.md, 复核：optim 返工
-        // 与泛型重载).
+        // hold for each of them.
         for (const CalleeDeclaration &declaration : set.declarations) {
             if (*one < countOf(declaration) && nameOfPosition(declaration, *one) != name) {
                 diags_
@@ -1319,7 +1310,7 @@ void Builder::bindArguments(
     // A callee that is several declarations is read as the declarations themselves, when they
     // record their names: the parameter at a position carries the same name in every one of them,
     // which is what lets one named argument mean the same parameter in each of them
-    // (docs/handover/reviews/questions-2026-10-23.md, 复核：optim 返工与泛型重载). The signature a
+    // The signature a
     // call of several declarations does have -- the one entry whose parameters are the same as the
     // others' -- answers for the types of the arguments, not for which parameter a name is.
     const std::optional<CalleeSet> declarations = declarationsOfCallee(callee);

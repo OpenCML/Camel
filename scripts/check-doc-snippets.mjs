@@ -147,14 +147,14 @@ const PENDING = [
     },
     {
         file: 'docs/tutorial/17_teaching_a_law.cn.md',
-        key: '541c9f141b75d63c',
+        key: '5ffb278a87e871fa',
         reason:
             'chapter 18: the `fact` compiles now; the text block asks for `check` to fire a law on ' +
             'a fact\'s conclusion (rewrite design 8.1), and `math:abs_l` is not translated',
     },
     {
         file: 'docs/tutorial/17_teaching_a_law.en.md',
-        key: '541c9f141b75d63c',
+        key: '5ffb278a87e871fa',
         reason:
             'chapter 18: the `fact` compiles now; the text block asks for `check` to fire a law on ' +
             'a fact\'s conclusion (rewrite design 8.1), and `math:abs_l` is not translated',
@@ -611,7 +611,7 @@ function normalizeDump(text) {
 }
 
 // A block that opens the dump is the whole dump; anything else is one excerpt of it, and the
-// ruling for an excerpt is that its lines appear in the output one after another.
+// rule for an excerpt is that its lines appear in the output one after another.
 function opensTheDump(pageLines) {
     const first = pageLines.find((line) => line.trim() !== '') || ''
     return /^\s*digraph\b/.test(first)
@@ -620,7 +620,7 @@ function opensTheDump(pageLines) {
 // A node, a function cluster or an equivalence class is named by a letter and a number: `N03`,
 // `O04`, `F0D`, `C01`, and the `c1` that a saturation dump writes as a class label. The number is
 // an accident of the run -- the counter has drawn every node above it by the time this one is
-// numbered -- so the author's ruling of 2026-10-25 is that an excerpt does not compare numbers:
+// numbered -- so the rule is that an excerpt does not compare numbers:
 // it matches when *some* one-to-one renaming of one side's numbers onto the other's makes it a run
 // of the dump. Everything between the numbers is still compared verbatim, so a different operator
 // or constant is still a difference, and two numbers of one side may not become one number of the

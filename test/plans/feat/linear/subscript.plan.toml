@@ -64,7 +64,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "subscript.step"
-desc = "A subscript slice with a step other than 1 takes every step-th element, a negative step runs backwards, and an omitted start with a negative step is the last element. Until H17's strided views the result is a copy, with the same elements on every back end (design principles 5.4)."
+desc = "A subscript slice with a step other than 1 takes every step-th element, a negative step runs backwards, and an omitted start with a negative step is the last element. The result is a copy, with the same elements on every back end (design principles 5.4)."
 kind = "behavior"
 case = "../../../cases/linear/faults/subscript_step.cml"
 args = ["${case}", "${backend}"]
@@ -116,6 +116,26 @@ expect_output_not_contains = ["not reached"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
+# The same constant, written in the function form of the node: `slice(t, axis, start, end, step)`
+# is the `:op/slice_sub` node the subscript lowers to, so the fault is the same one and gets the
+# same named diagnostic -- the check reads the node, not the spelling. The caret is under the
+# step, the fifth ordinary argument the call wrote.
+[[tests]]
+name = "subscript.step_zero_call"
+desc = "A call of the function form with a constant step of 0 is refused where the step is written, with the same named diagnostic as the subscript (one node, one answer): `slice(xs, 0, 0, 6, 0)` is `SemanticDiag::SliceStepZero`, and the program after it does not run."
+kind = "negative"
+case = "../../../cases/linear/faults/slice_step_zero_call.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::SliceStepZero"
+expect_diagnostic_code = "0x030001E9"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 32
+expect_output_contains = ["The slice 't[a:b:s]' has a step of 0"]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
 [[tests]]
 name = "subscript.take_index"
 desc = "An int-array subscript is take: an index outside the array is IndexOutOfRange with the index as written, and the first call (with a repeated index) prints its elements in the order given."
@@ -145,3 +165,27 @@ expect_output_contains = ["Index -1 is out of range for an array of length 0."]
 expect_output_not_contains = ["not reached"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "subscript.slice_positions"
+desc = "The tensor holds its own positions, so what a slice of it prints is the positions it took: `x[1:7:2]` every second position from 1, `x[6:0:-1]` backwards from 6, and a call whose bounds only the run knows reading the positions those bounds name (design principles 5.4). `SLICE_FAULT=1` asks for a bound the axis cannot hold, which the run faults on."
+kind = "behavior"
+case = "../../../cases/linear/subscript/slice_positions.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "window [1.0, 3.0, 5.0]\nbackward [6.0, 5.0, 4.0, 3.0, 2.0, 1.0]\nrange_of [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "subscript.slice_declaration_vs_kernel"
+desc = "The declaration of the core's slice node against what the kernel takes (docs/design/op-semantics section 12): slice_declaration.py reads the instance the table publishes for every `:op/slice_sub` node of the previous case (the tensor module states it, because a slice reads the shape facts of a tensor) and checks the positions it states are the ones the run printed -- the domain `d0 < len parallel` with `len = derived = 3`, the access `start + step*d0` with `start = static(2) = 1` and `step = static(4) = 2`; for a bound only the run knows, the interval `[0, s0_0]` it states, which the negative bound of the fault run leaves and the fault reports with the axis' length. A constant bound with the extent known is required of the parameters (`where 0 <= start, start <= s0_0`), not checked at run time."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/linear/subscript/slice_declaration.py"
+args = ["${case}", "--camel", "${camel}"]
+expect_exit = 0
+expect_stdout_contains = ["3 slices, 0 wrong", "PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000

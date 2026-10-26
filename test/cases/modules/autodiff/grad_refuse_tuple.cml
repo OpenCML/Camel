@@ -1,12 +1,12 @@
 /**
  * Refused: the first `with` parameter is a tuple, and one of its members has no gradient (9.9). The
  * refusal names that member by its position -- "element 1", a `string` -- rather than saying only
- * that the tuple has none, the way the struct case names its field (the author's ruling of
- * 2026-10-25 on discrete-tuple-tangent-space-and-machinery-aggregates: "a tuple model with a
- * `string` member is refused, and the diagnostic names that member, by position").
+ * that the tuple has none, the way the struct case names its field: a tuple model with a
+ * `string` member is refused, and the diagnostic names that member, by position, so the
+ * message says which member stands in the way.
  */
 module grad_refuse_tuple
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { grad } from autodiff
 
 with <m: (f32[..], string)>

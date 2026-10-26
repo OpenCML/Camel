@@ -1,0 +1,66 @@
+id = "consistency.decorated_overloads_export"
+order = 366
+tier = "fast"
+tags = ["feat", "consistency", "modules", "decorators", "overloads"]
+desc = "A module exports a name that is a decorated function and another function of the same name: the importing module receives both, and a call of the name chooses among them as it does in the module that declares them"
+
+[defaults]
+kind = "behavior"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_not_contains = ["[Error]", "error[", "Segmentation fault", "dumped core"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "decorated_overloads_export.call_through_the_name"
+desc = "`lib::bump(3)` is the decorated function and `lib::bump(2.0)` the other one; the name bound to a local name resolves its calls the same way. Exporting the decorated one alone dropped the others without a word, and exporting the others alone lost the decorators."
+case = "../../../cases/consistency/decorated_overloads_export/use.cml"
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = [
+  "5",
+  "2.5",
+  "6 7",
+].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "decorated_overloads_export.decorated_alone"
+desc = "A name the module declares once, with decorators and no other function of the name, is exported as what its decorators returned: `lib_dec::bump(3)` is 4 and not 3."
+case = "../../../cases/consistency/decorated_overloads_export/use_dec.cml"
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === "4", `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "decorated_overloads_export.plain_alone"
+desc = "A name the module declares once, without decorators, is exported as its function: `lib_plain::bump(2.0)` is 2.5."
+case = "../../../cases/consistency/decorated_overloads_export/use_plain.cml"
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === "2.5", `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "decorated_overloads_export.no_function_value"
+desc = "A name that stands for two functions has no function value, in the importing module as in the declaring one: `->map<lib::bump>` is refused, naming both functions. Each is listed by the type it has, and neither overload writes a resource clause, so each carries what its body was measured to reach: `pure`."
+kind = "negative"
+case = "../../../cases/consistency/decorated_overloads_export/err_no_function_value.cml"
+args = ["-E", "short", "${case}"]
+backends = ["nvm"]
+backends_agree = []
+expect_exit = 1
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
+expect_output_contains = ["name=SemanticDiag::FunctionNameAsValue", "err_no_function_value.cml:11:29:", "names 2 functions of that name [(x: int) => int pure; (x: float) => float pure]"]
+timeout_ms = 20000

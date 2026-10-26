@@ -1,7 +1,6 @@
 // One source, several pipelines.
 // Run: camel docs/tutorial/examples/14_passes.cml
 //      camel docs/tutorial/examples/14_passes.cml std::opt std::fvm
-module passes_demo
 
 func square(x: int): int {
     return x * x

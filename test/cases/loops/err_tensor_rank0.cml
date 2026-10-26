@@ -1,11 +1,11 @@
 // A scalar is not iterable: `for` over one is refused. `reshape(x, [])` has the element type as
-// its result — a value with no dimension is the element it holds, not a rank-0 array (the
-// rank-zero ruling, docs/handover/reviews/questions-2026-10-23.md section rank-zero-tensor) — so
+// its result — a value with no dimension is the
+// element it holds, not a rank-0 array  — so
 // the loop's sequence here is a scalar and the refusal is at compile time. The shape reaches
 // `reshape` through a variable; the constant `[]` it holds is a legal target.
 module tensor_rank0
 
-import { Tensor, zeros, reshape } from tensor
+import { zeros, reshape } from tensor
 
 func main(): int sync {
     let no: int[] = []

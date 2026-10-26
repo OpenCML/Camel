@@ -1443,7 +1443,7 @@ class CmlPrinter {
     }
 
     /// The cell a read of `ref` reads. A write's product is the version of the variable it wrote
-    /// (`:op/assn*` returns this version's cell, questions-2026-10-24-evening.md var-version-node):
+    /// (`:op/assn*` returns this version's cell; design principles 2.1):
     /// the cell a write stores into is that same variable, so a read whose data port is a write
     /// reads the variable itself and is written with the variable's own name. Every other data port
     /// is the cell it names, and one that has no name yet is named by `cellName` as before.
@@ -2002,27 +2002,30 @@ class CmlPrinter {
                 90};
         }
         if (uri == ":struct/range") {
-            // The interval `a..b` (design principles 4.2): the one spelling of the integers from
-            // `a` to `b - 1`, and the operator the front end lowers it to. Writing the operator
-            // back as the interval is what keeps the round trip a round trip; the two-parameter
-            // `range(a, b)` no longer compiles (SemanticDiag::RangeTwoArgumentsRemoved).
-            if (inputs.size() == 2) {
-                return {
-                    std::format(
-                        "{}..{}", intervalOperand(expression(inputs[0]), kIntervalPrecedence),
-                        intervalOperand(expression(inputs[1]), kIntervalPrecedence + 1)),
-                    kIntervalPrecedence};
-            }
+            // The interval `a..b` (design principles 4.2) is the one spelling of the integers from
+            // `a` to `b - 1`, and it lowers to this operator's call with its step written out,
+            // `range(a, b, 1)`: the rule takes exactly three arguments and the two-argument
+            // spelling is gone. A step of one is that interval and is written back as it, which is
+            // what keeps the round trip a round trip; any other step stays the call it is.
             if (inputs.size() == 3) {
+                const Expr step = expression(inputs[2]);
+                if (step.text == "1") {
+                    return {
+                        std::format(
+                            "{}..{}",
+                            intervalOperand(expression(inputs[0]), kIntervalPrecedence),
+                            intervalOperand(expression(inputs[1]), kIntervalPrecedence + 1)),
+                        kIntervalPrecedence};
+                }
                 // The stepped range `range(a, b, step)`: written back as the call it is, so the
-                // program the printer writes reads the way the program it prints did (the
-                // rule on ` -interval-step-form`).
+                // program the printer writes reads the way the program it prints did (design
+                // principles 4.2).
                 return {
                     std::format(
                         "range({}, {}, {})",
                         expression(inputs[0]).text,
                         expression(inputs[1]).text,
-                        expression(inputs[2]).text),
+                        step.text),
                     100};
             }
             fail(ref, "a range without its bounds");

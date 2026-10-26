@@ -92,6 +92,9 @@ void registerTensorOps() {
         // The subscript a numeric array's `t[idx]` reaches is the core's operator, so its rule
         // is published here, where this module's own operators are registered.
         registerSubscriptTakeRule();
+        // `t[a:b:s]` and `slice(t, axis, a, b, s)` are one node of the core's, and the read it
+        // declares is a tensor's: this module publishes that declaration (indexing.cpp).
+        registerCoreSliceIndexing();
         // The core's shape facts (core.shape, camel/runtime/core_facts.h) read a tensor's
         // element type and extents from its type, which this module defines.
         camel::runtime::fact::registerShapeReader(

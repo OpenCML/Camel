@@ -140,7 +140,7 @@ func forward(x: f32[..], s: BnStats): (f32[..], BnStats) {""")
 with <m: Resnet>
 func loss(x: f32[..], s: BnStats): float {
     let r = forward<m>(x, s)
-    return mean(r.0 * r.0)
+    return float(mean(r.0 * r.0))
 }
 
 func train_step(m: Resnet, s: BnStats, x: f32[..]): float sync {

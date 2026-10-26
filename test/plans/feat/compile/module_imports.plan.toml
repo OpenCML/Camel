@@ -388,7 +388,7 @@ expect_stdout_exact = "1 2\n"
 
 [[tests]]
 name = "imports.order_local_shadows_stdlib"
-desc = "A library beside a graph.cml imports `graph`: the local file shadows the standard library's graph with no diagnostic (41; stdlib/graph has no `answer`). Pinned as the ruling's consequence; whether a warning is wanted is an open author question (H220 report)."
+desc = "A library beside a graph.cml imports `graph`: the local file shadows the standard library's graph with no diagnostic (41; stdlib/graph has no `answer`). Pinned as the rule's consequence; whether a warning is wanted is an open author question (H220 report)."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/import_order/stdlib_shadow/main.cml"
 args = ["-E", "short", "${case}"]
@@ -536,9 +536,9 @@ expect_stdout_exact = "local-lib\n"
 
 [[tests]]
 name = "imports.d6_rgir_port_names"
-desc = "The capture port is named by the captured name and the parameter by its own (the capture had the parameter's name and the parameter none)."
+desc = "The capture port is named by the captured name and the parameter by its own (the capture had the parameter's name and the parameter none). The parameter's port also carries the position the parameter is written at, so what is said about a parameter has somewhere to point."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/d4_cpp_literal.cml"
 args = ["${case}", "std::gir"]
 expect_exit = 0
-expect_stdout_contains = ["N00 [label=\"k\", type=\"PORT\", param_name=\"k\", param_kind=\"capture\", param_index=\"0\", value_type=\"int\"];", "N01 [label=\"x\", type=\"PORT\", param_name=\"x\", param_kind=\"normal\", param_index=\"0\", value_type=\"int\"];", "F02 -> N00 [label=\"0\", type=\"WITH_PORT\"];", "F02 -> N01 [label=\"0\", type=\"NORM_PORT\"];"]
+expect_stdout_contains = ["N00 [label=\"k\", type=\"PORT\", param_name=\"k\", param_kind=\"capture\", param_index=\"0\", value_type=\"int\"];", "N01 [label=\"x\", type=\"PORT\", param_name=\"x\", param_kind=\"normal\", param_index=\"0\", value_type=\"int\", origin=", "param_kind=\"normal\", param_index=\"0\", value_type=\"int\", origin=", ", span=\"2:11-2:17\"", "F02 -> N00 [label=\"0\", type=\"WITH_PORT\"];", "F02 -> N01 [label=\"0\", type=\"NORM_PORT\"];"]

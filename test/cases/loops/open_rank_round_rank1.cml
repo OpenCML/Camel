@@ -1,6 +1,6 @@
 // What a round of a `for` hands over is the type its port declares (design principles 5.4,
 // ArrayType::firstDimensionElement): the element itself for a rank-1 array, the row one dimension
-// shorter above it, and the same open-rank array when the rank is open. `Tensor<f32>` is `f32[..]`
+// shorter above it, and the same open-rank array when the rank is open. `f32[..]` is `f32[..]`
 // (the spelling a tensor parameter uses), so `for v in x` declares `v: f32[..]` and the round of a
 // value whose runtime rank is 1 is the array of no dimension holding the element — the sub-tensor
 // one dimension fewer, which shares the element's data. `sum(v)` therefore reads the element
@@ -8,10 +8,10 @@
 // error (open_rank_round_scalar_read.cml).
 module open_rank_round_rank1
 
-import { Tensor, sum } from tensor
+import { sum } from tensor
 
-func total(x: Tensor<f32>): float {
-    return loop s = 0.0 for v in x do s + sum(v)
+func total(x: f32[..]): float {
+    return loop s = 0.0 for v in x do s + float(sum(v))
 }
 
 func main(): int sync {

@@ -1,10 +1,10 @@
 /**
  * The core's own slice, on a rank-1 tensor whose length is stated: `reshape(x, [6])` gives
- * `f32[6]`, `a[1:4]` is the core's `:op/slice_sub` (both `[]` forms are the core's alone -- the
- * author's ruling of 2026-10-25, discrete-gradient-and-rank-one-slice-ownership, point 2), and its
+ * `f32[6]`, `a[1:4]` is the
+ * core's `:op/slice_sub`, and its
  * adjoint is `:tangent/scatter_slice_arr`. That kernel used to build its result with
  * `Array::create(alloc, size)` -- an array of bare slots -- so the gradient carried no element
- * type and the next tensor operator to read it refused with `sum: Unsupported Tensor dtype`
+ * type and the next tensor operator to read it refused with `sum: Unsupported array element type`
  * (exit 1). The adjoint now creates the value with the tangent type, so the value states the
  * element type the forward value has (`f32[6]`).
  *
@@ -16,13 +16,13 @@
  */
 module core_slice_adjoint
 
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { grad } from autodiff
 
 with <x: f32[..]>
 func probe(): float {
     let a = reshape(x, [6])
-    return sum(a[1:4])
+    return float(sum(a[1:4]))
 }
 
 func main(): int sync {

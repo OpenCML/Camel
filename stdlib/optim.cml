@@ -23,7 +23,7 @@
 module optim
 
 import math
-import { Tensor, cast, sqrt, zeros_like } from tensor
+import { cast, sqrt, zeros_like } from tensor
 import { is_float } from types
 import { tree_unzip } from tree
 
@@ -192,8 +192,8 @@ func zero_leaf::<L>(x: L) {
     return match type L {
         case float => 0.0
         case f32 => f32(0.0)
-        case Tensor<f32, [?]> => cast(zeros_like(x), 'float32')
-        case Tensor<f64, [?]> => cast(zeros_like(x), 'float64')
+        case f32[?] => cast(zeros_like(x), 'float32')
+        case f64[?] => cast(zeros_like(x), 'float64')
         case _ => zeros_like(x)
     }
 }
@@ -219,8 +219,8 @@ func sgd_leaf::<P, G>(p: P, g: G, rate: float) {
     return match type P {
         case f32 => f32(float(p) - rate * float(g))
         case float => p - rate * g
-        case Tensor<f32, [?]> => p - f32(rate) * g
-        case Tensor<f64, [?]> => p - rate * g
+        case f32[?] => p - f32(rate) * g
+        case f64[?] => p - rate * g
         case _ => sgd_value_leaf(p, g, rate)
     }
 }
@@ -269,8 +269,8 @@ func decay_leaf::<L>(x: L, rate_decay: float) {
     return match type L {
         case f32 => f32(float(x) * (1.0 - rate_decay))
         case float => x * (1.0 - rate_decay)
-        case Tensor<f32, [?]> => x * f32(1.0 - rate_decay)
-        case Tensor<f64, [?]> => x * (1.0 - rate_decay)
+        case f32[?] => x * f32(1.0 - rate_decay)
+        case f64[?] => x * (1.0 - rate_decay)
         case _ => decay_value_leaf(x, rate_decay)
     }
 }
@@ -303,8 +303,8 @@ func adam_leaf::<P, G, M, V>(p: P, g: G, m: M, v: V, c: Rates) {
     return match type P {
         case f32 => narrow_numbers(adam_number(float(p), float(g), float(m), float(v), c))
         case float => adam_number(p, g, m, v, c)
-        case Tensor<f32, [?]> => narrow_tensors(adam_wide(p, g, m, v, c))
-        case Tensor<f64, [?]> => adam_wide(p, g, m, v, c)
+        case f32[?] => narrow_tensors(adam_wide(p, g, m, v, c))
+        case f64[?] => adam_wide(p, g, m, v, c)
         case _ => adam_value_leaf(p, g, m, v, c)
     }
 }

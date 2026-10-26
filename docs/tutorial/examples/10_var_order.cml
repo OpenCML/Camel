@@ -1,7 +1,6 @@
 // A `var` and the order of its writes: in a sync body the statements run in the order written, a
 // read takes the value of the most recent write before it, and a write nobody reads does not run.
 // Run: camel docs/tutorial/examples/10_var_order.cml
-module var_order
 
 func bump(var counter: int): int sync {
     counter += 1

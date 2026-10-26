@@ -1,12 +1,12 @@
 module tiles_resident_fallback
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { upload, download, run_preferred_resident } from tiles
 
-func cpu(x: Tensor<f32>): Tensor<f32> sync {
+func cpu(x: f32[..]): f32[..] sync {
     println("cpu region once")
     return x + x
 }
-func square(x: Tensor<f32>): Tensor<f32> { return x * x }
+func square(x: f32[..]): f32[..] { return x * x }
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3])
     let input = upload(x)

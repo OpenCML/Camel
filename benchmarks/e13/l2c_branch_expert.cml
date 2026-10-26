@@ -16,7 +16,7 @@
  */
 module e13_l2c_branch_expert
 
-import { Tensor, relu, mean, reshape, save_npy } from tensor
+import { relu, mean, reshape, save_npy } from tensor
 import { with_grad } from autodiff
 import { sgd, save_params } from nn
 import { get_env } from env
@@ -26,8 +26,8 @@ type Moe = { wa1: float[..], ba1: float[..], wa2: float[..], ba2: float[..], wb:
 
 with <m: Moe>
 func loss(x: float[..]): float {
-    let y = if mean(x) > 0.0 then relu(x @ m.wa1 + m.ba1) @ m.wa2 + m.ba2 else x @ m.wb + m.bb
-    return mean(y * y)
+    let y = if float(mean(x)) > 0.0 then relu(x @ m.wa1 + m.ba1) @ m.wa2 + m.ba2 else x @ m.wb + m.bb
+    return float(mean(y * y))
 }
 
 func fwd(m: Moe, x: float[..]): float {

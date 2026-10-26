@@ -9,16 +9,16 @@
  * probability has error 4.98e-8 and the stable form's 1.91e-6, so `check` refuses the rewrite.
  *
  * The rule is local: a candidate that fails the check is not exported by the library. The
- * full mechanism and the two options for the reviewer are in
- * `docs/handover/reports/accuracy-softmax-trade.md`.
+ * full mechanism and the two options for a
+ * rejected candidate are written down with the rule.
  */
 module check_rejected_softmax
 
 import { check } from rewrite
-import { Tensor, exp, softmax, sum } from tensor
+import { exp, softmax, sum } from tensor
 
 #requires(refine_accuracy)
-rule tensor_softmax_naive(x: Tensor<f32, [3]>, const axis: int) {
+rule tensor_softmax_naive(x: f32[3], const axis: int) {
     exp(x) / sum(exp(x), axis, true) => softmax(x, axis)
 }
 

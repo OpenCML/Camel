@@ -321,7 +321,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "GenericFunctionUnsupported",
                 "The generic function '{0}' cannot be {1}.",
-                "This use of a generic function is not supported.",
+                "A decorator is applied where the declaration is: '@d func f' is 'let f = d(f0)', and d takes the function as its value (design principles 6.1). A function that declares type parameters is instantiated where a call fixes them (design principles 5.5); a decorated declaration fixes none, so the decorator has no instance to take.",
             },
         },
         {
@@ -600,8 +600,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::LoopSequenceNotIterable,
             {
                 "LoopSequenceNotIterable",
-                "'for' takes the elements of an array, a string, a map or a tensor; '{0}' has type '{1}'.",
-                "A loop's 'for x in xs' visits the elements of xs in order (design principles 3.10): the elements of an array; the code points of a string, each a one-character string; the (key, value) pairs of a map, in key order (11.3); and the sub-tensors of a tensor along its first dimension. 'a..b' is the array of the integers from 'a' to 'b - 1', left closed and right open, and a 'for' over it takes them in order without building the array (4.2).",
+                "'for' takes the elements of an array, a string, a map, a tensor or a stream; '{0}' has type '{1}'.",
+                "A loop's 'for x in xs' visits the elements of xs in order (design principles 3.10): the elements of an array; the code points of a string, each a one-character string; the (key, value) pairs of a map, in key order (11.3); the sub-tensors of a tensor along its first dimension; and the elements of a stream, one pull of its step function per round (5.4). 'a..b' is the array of the integers from 'a' to 'b - 1', left closed and right open, and a 'for' over it takes them in order without building the array (4.2).",
             },
         },
         {
@@ -661,6 +661,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::FunctionTypeArgumentNotInferred,
+            {
+                "FunctionTypeArgumentNotInferred",
+                "Cannot infer the type argument '{0}' of '{1}': the empty literal '[]' states no element type.",
+                "A variable takes its type from where it stands, and an empty literal states no element type, so the position '[]' is written in is the only thing that can fix the variable - and a generic parameter states none (design principles 5.1, 5.2). Write the type argument ('show::<f32>([])'), or give the literal a position whose type it can take ('let e: f32[] = []').",
+            },
+        },
+        {
             SemanticDiag::EnumFieldTypeMismatch,
             {
                 "EnumFieldTypeMismatch",
@@ -681,7 +689,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "ConstasNotAllowed",
                 "The dimension name '{0}' is bound here, but only a parameter type can bind one.",
-                "A dimension name binds where it first appears in a parameter type, 'x: Tensor<f32, [n, 3]>'. Every later occurrence, including one in the return type, writes 'n'.",
+                "A dimension name binds where it first appears in a parameter type, 'x: f32[n, 3]'. Every later occurrence, including one in the return type, writes 'n'.",
             },
         },
         {
@@ -1105,7 +1113,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "CmlUnsupportedConstruct",
                 "std::cml cannot print {0}: {1}.",
-                "This version prints expressions, `let` and `var`, branches, loops, closures, `with` and `var` parameters, and `sync` blocks (handover H240). Tags, named types, generic instances and the other region kinds are refused.",
+                "This version prints expressions, `let` and `var`, branches, loops, closures, `with` and `var` parameters, and `sync` blocks. Tags, named types, generic instances and the other region kinds are refused.",
             },
         },
         {
@@ -1501,19 +1509,11 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::RangeTwoArgumentsRemoved,
-            {
-                "RangeTwoArgumentsRemoved",
-                "The two-parameter 'range(a, b)' is gone; write the interval 'a..b'.",
-                "The language has one spelling for the integers from 'a' to 'b - 1' (design principles 4.2; the author's ruling of 2026-10-24 on `h248-generator-and-composition`): the interval 'a..b', left closed and right open, as the slice 't[a:b]' is, and the array of them. 'range(0, 10)' becomes '0..10'. A 'for' over an interval is fused by the compiler, so 'for i in 0..n' builds no array. The two-parameter 'range' is the only spelling deleted: a module's own interval-like function (a tensor's, say) is that module's own, reached by its qualified name or at another arity, while an unqualified two-argument 'range(a, b)' is this built-in.",
-            },
-        },
-        {
             SemanticDiag::RangeStepZero,
             {
                 "RangeStepZero",
                 "The range 'range({0}, {1}, 0)' has a step of 0, so it is no sequence of integers.",
-                "The integers of `range(a, b, step)` are `a`, `a + step`, ... below `b`, so the step decides which integers the range holds: a step that does not move names no one sequence, whatever the bounds are (design principles 4.2; the author's ruling of 2026-10-24 on `h426-interval-step-form`). The step is a constant here, so the call can never be right and the refusal is at the call, where the step is written. Give a non-zero step, or write the interval `a..b` when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).",
+                "The integers of `range(a, b, step)` are `a`, `a + step`, ... below `b`, so the step decides which integers the range holds: a step that does not move names no one sequence, whatever the bounds are (design principles 4.2). The step is a constant here, so the call can never be right and the refusal is at the call, where the step is written. Give a non-zero step, or write the interval `a..b` when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).",
             },
         },
         {
@@ -1529,7 +1529,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "ReducedPrecisionUnsupported",
                 "The call of '{0}' cannot take a value of the reduced-precision element type '{1}'.",
-                "bf16 and f16 are floating types of the language: a literal has one, bf16(x) and f16(x) are written conversions, and the scalar arithmetic and comparison compute in f32 and round once into the element type (design principles 7.3, H238). This call asks for an operation one of them has no overload for - an operation the same type refuses on f32, such as %, or a function that takes a fixed set of types. Write the operation on a type that has it, or read the value as f32 (or f64) first, which is exact: f32(x).",
+                "bf16 and f16 are floating types of the language: a literal has one, bf16(x) and f16(x) are written conversions, and the scalar arithmetic and comparison compute in f32 and round once into the element type (design principles 7.3). This call asks for an operation one of them has no overload for - an operation the same type refuses on f32, such as %, or a function that takes a fixed set of types. Write the operation on a type that has it, or read the value as f32 (or f64) first, which is exact: f32(x).",
             },
         },
         {
@@ -1581,19 +1581,19 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::StreamConsumedTwice,
+            {
+                "StreamConsumedTwice",
+                "'{0}' is consumed twice: a stream is read once on each execution path.",
+                "A stream is read one element at a time and is done when it ends, so on each execution path its value has one consumer (design principles 5.4). The second consumer is here and the first is here. To read one stream from two places, write `tee(s, n)`: it gives two streams, each read once, and both see the same elements.",
+            },
+        },
+        {
             SemanticDiag::NodeOfNotAParameter,
             {
                 "NodeOfNotAParameter",
                 "'{0}' is not a const parameter of the rule '{1}', so node_of({0}) names no node.",
                 "node_of reaches the node of a const parameter, so that a condition can read a fact or a shape of the constant: write it over a name the rule declares const, as in the condition sign(node_of(c)) == 1 of the rule r(x: int, const c: float) whose sides are x * c and x. A parameter that is not const is a node of the draft already, so the condition names it directly, and a name that is not a parameter of this rule has no node here.",
-            },
-        },
-        {
-            SemanticDiag::TensorElementTypeRequired,
-            {
-                "TensorElementTypeRequired",
-                "The type '{0}' states no element type: a tensor's element type is part of its type, so this spelling is not a type of a value.",
-                "Every tensor type writes its element type: 'Tensor<f32>' (a rank nobody fixes yet), 'Tensor<f32, [2, 3]>', or the array type itself, 'f32[..]' and 'f32[2, 3]'. A signature that takes a tensor of any element type declares a type variable in its head and writes it as the element type -- 'func f::<T>(x: Tensor<T>)', which is the same type as 'func f::<T>(x: T[..])' -- and the call's argument fixes that type variable, so the body sees the element type the call bound. A shape written without an element type ('Tensor<[3]>') leaves the same question open.",
             },
         },
         {
@@ -1629,6 +1629,46 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::UsesPromiseViolated,
+            {
+                "UsesPromiseViolated",
+                "'{0}' does not keep its resource promise: {1}.",
+                "A signature is a promise the compiler checks against the resources the function uses. 'uses' is an upper bound, so every resource the body uses must be named there, and 'pure' promises the empty set; a 'var' parameter is a resource by itself, and so is a capture. Change the body so that it no longer reaches for it, or change the signature to name it. When the use is a call through a parameter of function type, what the call reaches is the instantiation's: write 'pure' on the parameter to promise the empty set, or write there the resources the values it takes reach.",
+            },
+        },
+        {
+            SemanticDiag::TypeAliasRecursionUnrepresented,
+            {
+                "TypeAliasRecursionUnrepresented",
+                "The type '{0}' mentions itself through a collection: recursion through an array, a map, a set or an enum is admitted by the language, and this compiler does not have that representation.",
+                "A type may reach itself indirectly, through an array, a map, a set or an enum (design principles 5.2), and the shape that needs is not built here: write the type without mentioning itself. Containing itself directly, as a struct field of its own type, is a different error: `ModuleTypeCycle`.",
+            },
+        },
+        {
+            SemanticDiag::EnumWrittenWhereATypeIsExpected,
+            {
+                "EnumWrittenWhereATypeIsExpected",
+                "An enum is declared in a type declaration ('type Shape = enum ...') and its type is the name that declaration gives it: the variants are written there and nowhere else.",
+                "An enum is a named type (design principles 5.3): `type Shape = enum {{ Circle(float), Dot }}` declares it, and `Shape` is what is written where a value of it is expected. The variants are written in the `type` declaration and nowhere else.",
+            },
+        },
+        {
+            SemanticDiag::StructComprehensionWithoutFields,
+            {
+                "StructComprehensionWithoutFields",
+                "A struct comprehension takes its field names from 'fields T', and 'indices' walks positions, which have no names: write a tuple comprehension '( static for ... in indices ... )', or walk 'fields T'.",
+                "A struct value is written as one value per field name, and `indices` walks the positions of a tuple, so a struct comprehension over it would have nothing to name its fields with (design principles 5.2). A tuple comprehension has one element per position, which is what `indices` gives.",
+            },
+        },
+        {
+            SemanticDiag::IdentifierPatternNeedsNullableOrErrorType,
+            {
+                "IdentifierPatternNeedsNullableOrErrorType",
+                "The pattern '{0}' takes a value of type 'T?' or 'T!' apart, and this value has type '{1}': write '?\?' or '!!', or a 'match' pattern that is a literal or '_'.",
+                "The patterns that bind are the fixed forms of the two marks (design principles 3.8): `error e` reads the error out of a `T!`, and a plain name reads the value out of a `T?` or a `T!`. Over any other type there is no mark to take apart, so the value is read with a literal pattern or '_'.",
+            },
+        },
+        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",
@@ -1640,8 +1680,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::EffectNotExecuted,
             {
                 "EffectNotExecuted",
-                "{0} has side effects but is never executed: nothing depends on it and it is not in a sync block.",
-                "Evaluation is driven by dependencies: outside a sync block an expression whose result (or the variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync block ('sync {{ ... }}', or a function body 'func f(): T sync {{ ... }}'), or use its result.",
+                "{0} has side effects but is never executed: {1}.",
+                "Evaluation is driven by dependencies: an expression whose result (or the variable it writes) nothing needs does not run, and a sync block nothing needs does not run either, so the effects written directly in it do not run with it. This is legal. To run it, put it on a sync chain ('sync {{ ... }}' in a function body, or use the block's value), or use its result.",
             },
         },
         {

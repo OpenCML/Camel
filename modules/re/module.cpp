@@ -5,8 +5,8 @@
  * The regular expression module. A string counts code points (design principles 11.1), so `.` and
  * a character class stand for one code point: text above ASCII is matched as wide characters.
  *
- * The signature is written once, in the declaration module `stdlib/re.cml` (design principles 6.4;
- * handover H19, step 10). What is left here is what only C++ knows: the kernel in operators.cpp,
+ * The signature is written once, in the declaration module `stdlib/re.cml` (design principles 6.4).
+ * What is left here is what only C++ knows: the kernel in operators.cpp,
  * the executor that runs it, and the operator trait declared at load.
  */
 

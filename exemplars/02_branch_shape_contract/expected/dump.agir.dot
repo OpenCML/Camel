@@ -5,7 +5,7 @@ digraph GraphIR {
             label="pick";
             F02 [label="ARGS", type="ARGS"];
             O02 [label="EXIT", type="EXIT"];
-            N00 [label="flag", type="PORT", param_name="flag", param_kind="normal", param_index="0", value_type="bool"];
+            N00 [label="flag", type="PORT", param_name="flag", param_kind="normal", param_index="0", value_type="bool", origin=<ORIGIN>, span="12:10-12:20", srcfile="exemplars/02_branch_shape_contract/program.cml"];
             N01 [label="JOIN", type="JOIN", role="branch-contract", origin=<ORIGIN>, span="13:11-13:55", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="f32[?, ?]"];
             N02 [label="BRCH", type="BRCH", origin=<ORIGIN>, span="13:11-13:55", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="int"];
             N03 [label="[2, 3]", type="DATA", origin=<ORIGIN>, span="13:30-13:36", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="int[]"];

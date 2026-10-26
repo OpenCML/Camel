@@ -159,7 +159,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "fstring_empty_comment_interpolation"
-desc = "The criterion is 'no token that is neither white space nor a comment': a comment-only interpolation `${/*c*/}` is empty (H89 ruling 3)."
+desc = "The criterion is 'no token that is neither white space nor a comment': a comment-only interpolation `${/*c*/}` is empty ."
 kind = "negative"
 case = "../../../cases/compile/fstring/empty_comment_interpolation.cml"
 args = ["${case}"]

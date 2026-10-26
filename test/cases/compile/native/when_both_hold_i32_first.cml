@@ -1,7 +1,7 @@
 /**
  * Two declarations of one kernel name whose `when` conditions hold together for one call: both
  * are candidates, and a call has no single answer. The rule on
- * `two-when-conditions-hold` (`docs/handover/reviews/questions-2026-10-23.md`): "带 `when` 的候选
+ * `two-when-conditions-hold`: "带 `when` 的候选
  * 都适用时，调用处报歧义，列出两条候选与各自成立的条件" -- "先写的赢" no longer exists for a
  * candidate that writes `when`, because the declaration-time check only samples the types the
  * compiler registers, and the call site is what decides.

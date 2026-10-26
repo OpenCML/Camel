@@ -82,13 +82,13 @@ const a = run(
     'foreign_tensor_kernel',
     {
         'site_a.cml': `module kernel_site_a
-import { Tensor } from tensor
+import tensor
 
 #op('tensor:log_softmax')
-func log_softmax_kernel(x: Tensor<f32>, axis: int): Tensor<f32>
+func log_softmax_kernel(x: f32[..], axis: int): f32[..]
 
 #impl(log_softmax_kernel)
-func log_softmax_here(x: Tensor<f32>, axis: int): Tensor<f32> {
+func log_softmax_here(x: f32[..], axis: int): f32[..] {
     return x
 }
 
@@ -161,15 +161,15 @@ const cFiles = {
     'tensor.cml': `module tensor
 
 #op('tensor:log_softmax')
-func log_softmax_kernel(x: Tensor<f32>, axis: int): Tensor<f32>
+func log_softmax_kernel(x: f32[..], axis: int): f32[..]
 
 #impl(log_softmax_kernel)
-export func log_softmax(x: Tensor<f32>, axis: int): Tensor<f32> {
+export func log_softmax(x: f32[..], axis: int): f32[..] {
     return x
 }
 `,
     'main.cml': `import tensor
-import { Tensor } from tensor
+
 
 func main(): int sync {
     return 0

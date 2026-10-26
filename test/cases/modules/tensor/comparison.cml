@@ -2,8 +2,8 @@
  * The two comparisons of an array (design principles 4.2): `a === b` is the comparison of the
  * elements, an array of the same shape whose elements are `bool`; `a == b` is the whole
  * comparison, one `bool` that says the shapes are the same and the elements are equal
- * everywhere. Whether the element type is written in the type (`Tensor<f32>`) or left to the
- * value (`Tensor`) does not change either result, and neither does the operator's element type
+ * everywhere. Whether the element type is written in the type (`f32[..]`) or left to the
+ * value (`f32[..]`) does not change either result, and neither does the operator's element type
  * decide which one a program gets: `==` is whole and `===` is elementwise for every array.
  *
  * The whole comparison follows the float rules of a scalar (design principles 7.3): an array
@@ -13,10 +13,10 @@
  */
 module comparison
 
-import { Tensor, new, cast, log, sum } from tensor
+import { new, cast, log, sum } from tensor
 
 func bareEq::<T>(a: T[..], b: T[..]): bool { return a == b }
-func writtenEq(a: Tensor<f32>, b: Tensor<f32>): bool { return a == b }
+func writtenEq(a: f32[..], b: f32[..]): bool { return a == b }
 
 func main(): int sync {
     // A scalar: `===` is `==`, and `!==` is `!=`.
@@ -43,7 +43,7 @@ func main(): int sync {
 
     // NaN and the two zeros, in both comparisons.
     let s = log(cast([-1.0, 2.0], 'float32'))
-    println('nan', s == s, sum(s !== s))
+    println('nan', s == s, float(sum(s !== s)))
     let z1: f32[] = [f32(0.0)]
     let z2: f32[] = [f32(-0.0)]
     println('zero', z1 == z2, z1 === z2)

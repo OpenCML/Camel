@@ -5,6 +5,7 @@
 
 #include "camel/core/rtdata/tagged.h"
 #include "camel/core/type/composite/func.h"
+#include "camel/core/type/text.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/utils/type.h"
 
@@ -26,7 +27,9 @@ std::optional<Type *> resolveFaultIsolationType(const type_vec_t &with, const ty
         return std::nullopt;
     }
     for (size_t i = 0; i < funcType->normTypesCount(); ++i) {
-        if (!funcType->normTypeAt(i)->equals(norm[i + 1])) {
+        // An argument stands at the parameter the callee declares for it: a parameter type written
+        // without a resource clause takes the resources of the value that meets it.
+        if (!sameTypeWithUnwrittenResources(funcType->normTypeAt(i), norm[i + 1])) {
             return std::nullopt;
         }
     }

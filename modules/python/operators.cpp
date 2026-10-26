@@ -249,8 +249,7 @@ std::unordered_map<std::string, operator_t> getPythonOpsMap() {
 
 // py_call: 调用 Python 函数 (fn, ...args)，首参为字符串时按 "module.attr" 解析
 slot_t __python_py_call__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
-    // The interpreter is created at the operator's first use, not by `import python` (design
-    // principles 3.1; the language author's ruling of 2026-10-22; handover H221).
+    // The interpreter is created at the operator's first use, not by `import python`.
     ensurePythonInterpreter(ctx);
     py::gil_scoped_acquire gil;
     py::object callable = resolveCallable(norm, ctx);
@@ -274,8 +273,7 @@ slot_t __python_py_call__(ArgsView &with, ArgsView &norm, camel::core::context::
 // py_call_kw: 调用 Python 函数 (fn, args?: Tuple|Array<PyObject>, kwargs?: Struct<PyObject>)，1–3
 // 参
 slot_t __python_py_call_kw__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
-    // The interpreter is created at the operator's first use, not by `import python` (design
-    // principles 3.1; the language author's ruling of 2026-10-22; handover H221).
+    // The interpreter is created at the operator's first use, not by `import python`.
     ensurePythonInterpreter(ctx);
     py::gil_scoped_acquire gil;
     py::object callable = resolveCallable(norm, ctx);
@@ -339,8 +337,7 @@ slot_t __python_py_call_kw__(ArgsView &with, ArgsView &norm, camel::core::contex
 
 // py_exec: 执行任意 Python 代码（语句），返回 None
 slot_t __python_py_exec__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
-    // The interpreter is created at the operator's first use, not by `import python` (design
-    // principles 3.1; the language author's ruling of 2026-10-22; handover H221).
+    // The interpreter is created at the operator's first use, not by `import python`.
     ensurePythonInterpreter(ctx);
     py::gil_scoped_acquire gil;
     if (norm.size() < 1) {
@@ -367,8 +364,7 @@ slot_t __python_py_exec__(ArgsView &with, ArgsView &norm, camel::core::context::
 
 // py_eval: 计算表达式并返回结果
 slot_t __python_py_eval__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
-    // The interpreter is created at the operator's first use, not by `import python` (design
-    // principles 3.1; the language author's ruling of 2026-10-22; handover H221).
+    // The interpreter is created at the operator's first use, not by `import python`.
     ensurePythonInterpreter(ctx);
     py::gil_scoped_acquire gil;
     if (norm.size() < 1) {
@@ -395,8 +391,7 @@ slot_t __python_py_eval__(ArgsView &with, ArgsView &norm, camel::core::context::
 
 // py_run: 执行指定路径的 Python 脚本文件
 slot_t __python_py_run__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
-    // The interpreter is created at the operator's first use, not by `import python` (design
-    // principles 3.1; the language author's ruling of 2026-10-22; handover H221).
+    // The interpreter is created at the operator's first use, not by `import python`.
     ensurePythonInterpreter(ctx);
     py::gil_scoped_acquire gil;
     if (norm.size() < 1) {
@@ -427,8 +422,7 @@ slot_t __python_py_run__(ArgsView &with, ArgsView &norm, camel::core::context::C
 
 // py_attr: 获取 PyObject 属性，attr 可含 . 表示链式访问（如 "a.b.c"）
 slot_t __python_py_attr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
-    // The interpreter is created at the operator's first use, not by `import python` (design
-    // principles 3.1; the language author's ruling of 2026-10-22; handover H221).
+    // The interpreter is created at the operator's first use, not by `import python`.
     ensurePythonInterpreter(ctx);
     py::gil_scoped_acquire gil;
     if (norm.size() < 2) {
@@ -478,8 +472,7 @@ slot_t __python_py_attr__(ArgsView &with, ArgsView &norm, camel::core::context::
 
 // py_import: 导入 Python 模块，返回 PyObject（模块对象）
 slot_t __python_py_import__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
-    // The interpreter is created at the operator's first use, not by `import python` (design
-    // principles 3.1; the language author's ruling of 2026-10-22; handover H221).
+    // The interpreter is created at the operator's first use, not by `import python`.
     ensurePythonInterpreter(ctx);
     py::gil_scoped_acquire gil;
     if (norm.size() < 1) {
@@ -513,8 +506,7 @@ slot_t __python_py_import__(ArgsView &with, ArgsView &norm, camel::core::context
 
 // py_print / py_println: 打印任意数量 PyObject 以便调试
 slot_t __python_py_print__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
-    // The interpreter is created at the operator's first use, not by `import python` (design
-    // principles 3.1; the language author's ruling of 2026-10-22; handover H221).
+    // The interpreter is created at the operator's first use, not by `import python`.
     ensurePythonInterpreter(ctx);
     py::gil_scoped_acquire gil;
     py::module_ builtins = py::module_::import("builtins");
@@ -534,8 +526,7 @@ slot_t __python_py_print__(ArgsView &with, ArgsView &norm, camel::core::context:
     }
 }
 slot_t __python_py_println__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
-    // The interpreter is created at the operator's first use, not by `import python` (design
-    // principles 3.1; the language author's ruling of 2026-10-22; handover H221).
+    // The interpreter is created at the operator's first use, not by `import python`.
     ensurePythonInterpreter(ctx);
     py::gil_scoped_acquire gil;
     py::module_ builtins = py::module_::import("builtins");
@@ -558,8 +549,7 @@ slot_t __python_py_println__(ArgsView &with, ArgsView &norm, camel::core::contex
 }
 
 slot_t __python_wrap__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
-    // The interpreter is created at the operator's first use, not by `import python` (design
-    // principles 3.1; the language author's ruling of 2026-10-22; handover H221).
+    // The interpreter is created at the operator's first use, not by `import python`.
     ensurePythonInterpreter(ctx);
     py::gil_scoped_acquire gil;
     if (norm.size() < 1) {
@@ -693,8 +683,7 @@ pyToCamel(py::object obj, Type *targetType, camel::core::context::Context &ctx) 
 }
 
 slot_t __python_upwrap__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
-    // The interpreter is created at the operator's first use, not by `import python` (design
-    // principles 3.1; the language author's ruling of 2026-10-22; handover H221).
+    // The interpreter is created at the operator's first use, not by `import python`.
     ensurePythonInterpreter(ctx);
     py::gil_scoped_acquire gil;
     PythonObjectHolder *h = unwrapPyObject(norm.slot(0), ctx);
@@ -718,8 +707,7 @@ slot_t __python_upwrap__(ArgsView &with, ArgsView &norm, camel::core::context::C
 }
 
 slot_t __python_py_dispose__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
-    // The interpreter is created at the operator's first use, not by `import python` (design
-    // principles 3.1; the language author's ruling of 2026-10-22; handover H221).
+    // The interpreter is created at the operator's first use, not by `import python`.
     ensurePythonInterpreter(ctx);
     py::gil_scoped_acquire gil;
     if (norm.size() < 1) {

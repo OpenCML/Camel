@@ -257,8 +257,8 @@ void Builder::declareModule(const module_ptr_t &module, GCT::Tree &tree, diagnos
             }
         }
         // The body-less declarations are exported as the operator groups of their names once
-        // all of them have been read: the group of a name is its set of overloads (handover
-        // step 1). A module written in Camel otherwise exports through the program's
+        // all of them have been read: the group of a name is its set of overloads (design
+        // principles 10.2). A module written in Camel otherwise exports through the program's
         // table; an operator group is the module's own, as it is for a C++ module. The export
         // list is read first: a declaration the module does not export is a private operator of
         // the module.
@@ -655,6 +655,11 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
     }
     if (ok) {
         settleEffectfulGraphs();
+        // A declaration's clause is a promise; the bodies measure what it actually touches, and
+        // the declaration is held to the promise (design effects plan, step 5). The measurement
+        // runs here, while the bodies are still in hand; the report runs per module below, with
+        // the other diagnostics of the module being reported.
+        measureInferredResources();
         // Before the graphs are encoded: the reads whose value cannot be kept leave the mark
         // that lets `acc = acc->append<v>` append in place (design principles 11.3).
         markNonRetainingReads();
@@ -665,6 +670,8 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
                 // Before the bodies are let go by reportDroppedEffectsOfBodies.
                 reportUnusedFallibleValues();
                 reportEffectfulConditions();
+                // Before the bodies are let go, like reportDroppedEffectsOfBodies below.
+                checkInferredResources();
                 reportDroppedEffectsOfBodies();
                 if (unit->entry) {
                     // The top-level declarations run only as far as the call of `main`

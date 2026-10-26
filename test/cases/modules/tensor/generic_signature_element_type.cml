@@ -1,20 +1,20 @@
 /// The array spelling of a tensor signature's parameter is an explicit type variable of the head
-/// (design principles 4.1 and 5.5; the rule on
-/// `bare-tensor-parameter-instantiation-measured`,
-/// docs/handover/reviews/questions-2026-10-23.md): `shape`, `numel`, `dim` and `to_bytes` take a
+/// (design principles 4.1, 5.5): the array spelling of a parameter's
+/// type states
+/// the element type: `shape`, `numel`, `dim` and `to_bytes` take a
 /// native array of any rank and any numeric element type, the call site's argument type fixes the
 /// element type, and a function whose parameter is written `T[..]` sees that element type in its
-/// body (`t[0]` is `T`, never a fixed `float`). The module `Tensor` spelling stands beside it, so
+/// body (`t[0]` is `T`, never a fixed `float`). The module's own array spelling stands beside it, so
 /// the programs that pass what the tensor operators return are unchanged.
 ///
 /// The rank the argument carries is the rank the body sees: a `f32[3]` and a `f32[..]` bound to the
 /// same open-rank parameter each read their own extent, and nothing here is specialised to one
-/// rank. (A rank-2 native array has no producer yet — the module `Tensor` a tensor operator returns
+/// rank. (A rank-2 native array has no producer yet — the module type a tensor operator returns
 /// is not the array alias until P4, and a nested literal is refused — so this case stays at the
 /// ranks a program can make today.)
 module tensor_generic_signature_element_type
 
-import { Tensor, ones, shape, numel, dim, to_bytes } from tensor
+import { ones, shape, numel, dim, to_bytes } from tensor
 import { is_numeric } from types
 import { size } from bytes
 

@@ -1,0 +1,17 @@
+/**
+ * The empty literal in a position whose type the call states: `show::<f32>([])` writes the type
+ * argument that the literal's own position cannot state, so the call is made at `f32` and the
+ * literal takes the element type of the parameter it stands at (`f32[..]`), exactly as it takes
+ * the type of any other position it stands in (`let e: f32[] = []`). Both calls run and print the
+ * empty array, which is what the value is.
+ */
+module tensor_show_empty_array_typed
+
+import { show } from tensor
+
+func main(): int sync {
+    show::<f32>([])
+    let e: f32[] = []
+    show(e)
+    return 0
+}

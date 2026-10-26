@@ -1,6 +1,5 @@
 // Map<K, V> and Set<T> are built in; they are made from an array with `as`.
 // Run: camel docs/tutorial/examples/11_collections.cml
-module collections
 
 func main(): int sync {
     let ages = [('bob', 31), ('alice', 28)] as Map<string, int>

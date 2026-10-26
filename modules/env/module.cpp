@@ -5,7 +5,7 @@
  * The environment of the process: the value of a variable and the current working directory.
  *
  * The signatures are written once, in the declaration module `stdlib/env.cml` (design principles
- * 6.4; handover H19, step 10; H163). What is left here is what only C++ knows: the kernels in
+ * 6.4). What is left here is what only C++ knows: the kernels in
  * operators.cpp, the executor that runs them, and the operator traits declared at load -- the
  * purity and the `env` resource both names read.
  */

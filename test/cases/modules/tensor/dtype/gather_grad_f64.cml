@@ -1,5 +1,5 @@
 /**
- * A gather's adjoint is of the tensor's own element type. `sum(w[labels])` on a `Tensor<f64>`
+ * A gather's adjoint is of the tensor's own element type. `sum(w[labels])` on a `f64[..]`
  * selects rows 1 and 0 of a [2, 3] tensor and sums them, so each row enters the loss once and every
  * element's adjoint is exactly 1.0: the gradient sums to 6.0 and each row to 3.0.
  *
@@ -14,22 +14,22 @@
  */
 module dtype_gather_grad_f64
 
-import { Tensor, cast, reshape, sum, take } from tensor
+import { cast, reshape, sum, take } from tensor
 import { with_grad } from autodiff
 
 type M = {
-    w: Tensor<f64>,
-    labels: Tensor<i64>,
+    w: f64[..],
+    labels: i64[..],
 }
 
 with <m: M>
 func total(): float {
-    return sum(m.w)
+    return float(sum(m.w))
 }
 
 with <m: M>
 func gather_loss(): float {
-    return sum(m.w[m.labels])
+    return float(sum(m.w[m.labels]))
 }
 
 func main(): int sync {

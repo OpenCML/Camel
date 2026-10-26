@@ -1,16 +1,17 @@
 /**
- * The polymorphic recursion the ruling of 2026-10-24 evening asks for
+ * The polymorphic recursion the rule evening asks for
  * (dim-name-relaxation-has-no-readable-difference): the parameter's static extent changes at
  * every level, and how deep the recursion goes is a runtime value, so no level's key is a
  * constant the compiler could have folded away. The entry argument `[1.0, 2.0]` is `f32[2]`, and
  * the recursive call passes `concat(xs, xs[0 .. 1])`, which is longer.
  *
- * The ruling predicts exactly two instances, `f32[2]` and `f32[?]`, whatever
+ * the rule predicts exactly two instances, `f32[2]` and `f32[?]`, whatever
  * kMaxTypeSpecializationsPerRecursiveFunction is set to. Measured, std::opt::specialize makes no
  * instance at all: a parameter written `f32[n]` is not a refinement at a call, so no instance key
  * is built for the entry call either and the widening is never reached. The count, the graph and
  * the isolation probes are recorded in the tests that name this file and in
- * docs/handover/questions/dim-name-relaxation-and-element-type-change.md.
+ * the rule, section
+ * dim-name-relaxation-and-element-type-change.
  *
  * The author's sketch reads the depth from `read_int()`. The plan runner closes a test's standard
  * input (`stdio: ['ignore', ...]`, test/tools/run-tests.mjs), so the depth is read from the

@@ -63,7 +63,7 @@ args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::FunctionNameAsValue"
 expect_diagnostic_line = 6
-expect_output_contains = ["2 functions of that name [(x: int) => int; (x: float) => float]"]
+expect_output_contains = ["2 functions of that name [(x: int) => int pure; (x: float) => float pure]"]
 
 [[tests]]
 name = "surface.if_without_else"
@@ -115,7 +115,7 @@ expect_output_not_contains = ["Error", "Segmentation fault", "internal error"]
 
 [[tests]]
 name = "surface.composition"
-desc = "`f..g` is the composition `(x) => g(f(x))` (the ruling of 2026-10-24), a function value like any other. It used to be ConstructNotSupported at the operator, before the meaning was decided."
+desc = "`f..g` is the composition `(x) => g(f(x))`, a function value like any other. It used to be ConstructNotSupported at the operator, before the meaning was decided."
 kind = "behavior"
 case = "../../../cases/compile/surface/composition.cml"
 args = ["-E", "short", "${case}"]
@@ -195,13 +195,45 @@ timeout_ms = 10000
 
 [[tests]]
 name = "semantic.type_recursion_through_map"
-desc = "A struct that mentions itself through a map is legal by design principles 5.2, but only the array case has a representation: the declaration says so (FeatureNotSupported) instead of leaving the name unresolved. The array form is a positive case in recursive_struct.plan.toml."
+desc = "A struct that mentions itself through a map is admitted by design principles 5.2, and the shape it needs is not built: the declaration names the rule and what to write instead of leaving the name unresolved. The array form of a struct field is a positive case in recursive_struct.plan.toml."
 kind = "negative"
 case = "../../../cases/compile/semantic/type_recursion_through_map.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::FeatureNotSupported"
-expect_diagnostic_line = 8
-expect_output_contains = ["mentions itself through a map, a set or an enum", "'Node'"]
+expect_diagnostic_name = "SemanticDiag::TypeAliasRecursionUnrepresented"
+expect_diagnostic_code = "0x030001F2"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 1
+expect_output_contains = ["mentions itself through a collection", "'Node'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "semantic.type_alias_recursion_array"
+desc = "An alias whose right-hand side mentions itself through an array: the rule admits recursion through an array, a map, a set or an enum (design principles 5.2), and an alias cannot be read with its own name in scope, so the declaration names the rule and what to write instead. The array form of a struct field is built."
+kind = "negative"
+case = "../../../cases/compile/semantic/type_alias_recursion_array.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TypeAliasRecursionUnrepresented"
+expect_diagnostic_code = "0x030001F2"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 1
+expect_output_contains = ["mentions itself through a collection", "'Row'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "semantic.enum_where_type_expected"
+desc = "An enum written where a type is expected: an enum is a named type, declared in a `type` declaration, and the name that declaration gives it is what is written where a value of it is expected (design principles 5.3)."
+kind = "negative"
+case = "../../../cases/compile/semantic/enum_where_type_expected.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::EnumWrittenWhereATypeIsExpected"
+expect_diagnostic_code = "0x030001F3"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 14
+expect_output_contains = ["An enum is declared in a type declaration", "the variants are written there and nowhere else"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000

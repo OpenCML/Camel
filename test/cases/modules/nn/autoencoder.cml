@@ -6,7 +6,7 @@
 module autoencoder
 
 import { grad, with_grad } from autodiff
-import { Tensor, full, shape, sigmoid, sum, zeros } from tensor
+import { full, shape, sigmoid, sum, zeros } from tensor
 import { sgd } from nn
 
 type AutoEncoder = {
@@ -22,7 +22,7 @@ func reconstruction_loss(x: f32[..], target: f32[..]): float {
     let recon = sigmoid((hidden @ model.dec_w) + model.dec_b)
     let errors = recon - target
     let squared = errors * errors
-    return sum(squared) / float(shape(x)[0])
+    return float(sum(squared)) / float(shape(x)[0])
 }
 
 func init(): AutoEncoder {

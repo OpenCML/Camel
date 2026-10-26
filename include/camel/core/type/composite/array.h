@@ -113,12 +113,6 @@ class ArrayType : public CompositeType {
     /// spelling a bare `..` produces).
     static ArrayType *openRank(Type *elemType, std::span<const ExtentForm> prefix = {});
 
-    /// The object a name that still has to be given an element type is bound to (`Tensor`, before
-    /// its arguments are applied): the open-rank array whose element type nobody stated. It
-    /// denotes no value — the element type of a value is always in its type — and `applyArguments`
-    /// is what turns it into one (docs/design/arrays-memory/plan.cn.md section 5.1a).
-    static ArrayType *elementTypeOpen();
-
     /// create() with the factory's element type.
     static ArrayType *fromFactory(ArrayTypeFactory &factory);
 
@@ -143,8 +137,7 @@ class ArrayType : public CompositeType {
     /// One dimension fewer: the element itself for a rank-1 array, `T[d1, ...]` for `T[d0, d1,
     /// ...]`, the element type for a nested array (`T[]` of `T[][]`), and the same open-rank
     /// array when the rank is open. `for x in xs` takes these for every array of every rank, and
-    /// the core owns the rule (the ruling of 2026-10-24, docs/handover/reviews/questions-2026-10-24-evening.md
-    /// section loop-domain-through-the-tensor-iterator): the builder states the element port with
+    /// the core owns the rule (design principles 5.4): the builder states the element port with
     /// it, the loop interface checks the port against it, and the executors take one of these a
     /// round.
     Type *firstDimensionElement() const;
@@ -156,11 +149,6 @@ class ArrayType : public CompositeType {
     std::string shapeMangle() const;
 
     virtual Type *resolve(const type_vec_t &typeList) const override;
-    /// `Tensor<f32>`, `Tensor<f32, [2, 3]>`, `Tensor<T, [n, 784]>`: the array a name that requires
-    /// an element type is applied to (docs/design/arrays-memory/plan.cn.md section 5.1a), so the
-    /// two spellings of one type are one type and `Name<args...>` needs no second path.
-    virtual const Type *
-    applyArguments(std::span<const TypeArgument> arguments, std::string &error) const override;
     virtual bool resolved() const override;
     virtual std::string toString() const override;
     virtual std::string mangle() const override;
@@ -214,10 +202,11 @@ bool isNumericArrayType(const Type *type);
 /// principles 5.1, 5.2).
 bool isUntypedArrayType(const Type *type);
 
-/// True for the object a name that requires an element type is bound to (`ArrayType::elementTypeOpen()`):
-/// the open-rank array whose element type nobody stated. It is the one untyped array that is not
-/// the literal's (the literal states one unknown dimension, not an open rank), so it is what a
-/// spelling that leaves the element type out holds.
-bool isElementTypeOpenArray(const Type *type);
+/// True for `Void` itself and for an array whose element type nobody wrote (`Void[]`, `Void[..]`
+/// and the further dimensions of one): what a type is left with where an element type is not
+/// stated. `Void` is the "no value" marker rather than an element type, so a type variable takes
+/// no such type: the empty literal `[]` is one, states no element type, and leaves the position it
+/// stands in to state one — and a generic parameter states none (design principles 5.1, 5.2).
+bool isElementTypeUnstated(const Type *type);
 
 } // namespace camel::core::type

@@ -1,14 +1,14 @@
-// `Tensor<i32>` holds i32: four-byte elements, and int32 arithmetic that wraps as int32 does.
+// `i32[..]` holds i32: four-byte elements, and int32 arithmetic that wraps as int32 does.
 // `2147483647 * 2` is -2 here, so the four products sum to -4 and their bytes are the bytes of
 // -2, 2, -4 and 0; under int64 normalization the products would sum to 4294967296 and `to_bytes`
 // would be eight bytes per element. `sum` is a float reduction (it returns float), which is why
 // the sums print with a decimal point.
 module tensor_dtype_i32_exact
 
-import { Tensor, new, multiply, sum, to_bytes, from_bytes } from tensor
+import { new, multiply, sum, to_bytes, from_bytes } from tensor
 import { to_array, size } from bytes
 
-func doubled(x: Tensor<i32>): Tensor<i32> {
+func doubled(x: i32[..]): i32[..] {
     return multiply(x, 2)
 }
 
@@ -21,7 +21,7 @@ func main(): int sync {
     println(sum(doubled(t)))
     println(to_array(to_bytes(doubled(t))))
     let edge: i32[] = [2147483647, 1]
-    let back: Tensor<i32> = from_bytes(to_bytes(new(edge)), [2])
+    let back: i32[..] = from_bytes(to_bytes(new(edge)), [2])
     println(to_array(to_bytes(back)))
     return 0
 }

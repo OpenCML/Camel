@@ -2,7 +2,7 @@ id = "compile.native_declarations"
 order = 340
 tier = "fast"
 tags = ["feat", "compile", "modules", "native", "declaration", "generics"]
-desc = "A body-less `export func` in a `.cml` is the declaration of an operator of a C++ module: the declaration is the signature, a call checks against it and reaches the operator, and a generic declaration is instantiated by type (handover H19, step 1)"
+desc = "A body-less `export func` in a `.cml` is the declaration of an operator of a C++ module: the declaration is the signature, a call checks against it and reaches the operator, and a generic declaration is instantiated by type "
 
 # Design principles 6.4 (a primitive is an operator written in C++, and its signature is written
 # once) and 6.2 (the tag that names the exception), step 1.
@@ -279,7 +279,7 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F",
 
 [[tests]]
 name = "native.random_sample_count_type"
-desc = "`rand:sample` declares its count as `int`: a `float` count is refused at the call, and the message lists the declaration's signature. The old C++ resolver checked only the array argument, so H202's count narrowing is pinned here (handover H202, H223)."
+desc = "`rand:sample` declares its count as `int`: a `float` count is refused at the call, and the message lists the declaration's signature. The old C++ resolver checked only the array argument, so H202's count narrowing is pinned here ."
 kind = "negative"
 case = "../../../cases/compile/native/random_sample_count_type.cml"
 args = ["${case}"]
@@ -421,7 +421,7 @@ expect_stdout_exact = "9\n"
 
 [[tests]]
 name = "native.declaration_module_may_have_body"
-desc = "The author's ruling of 2026-10-23 on the impl-kernel site (`docs/handover/reviews/questions-2026-10-23.md`, 「## impl-kernel-site」) removed the wall this entry used to pin: 「选 (a)，而且取宽的那一种：声明模块可以有函数体，`DeclarationModuleHasBody` 删除」. A `bytes.cml` written beside a `bytes.cmo` declares that module's operators and holds the definitions the module writes in Camel: a definition added to the module's own `.cml` compiles, runs over an operator the same file declares, and is used by an importer."
+desc = "The author's rule on the impl-kernel site  removed the wall this entry used to pin: 「选 (a)，而且取宽的那一种：声明模块可以有函数体，`DeclarationModuleHasBody` 删除」. A `bytes.cml` written beside a `bytes.cmo` declares that module's operators and holds the definitions the module writes in Camel: a definition added to the module's own `.cml` compiles, runs over an operator the same file declares, and is used by an importer."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/compile/native/declaration_module_body.mjs"
@@ -460,7 +460,7 @@ expect_output_contains = ["overlap.cml:14", "Two declarations of 'pick'", "(xs: 
 # ---- Two same-named declarations whose conditions exclude each other are overloads ----
 #
 # The rule on `impl-declaration-arms`
-# (`docs/handover/reviews/questions-2026-10-23.md`): declarations split by mutually exclusive
+#: declarations split by mutually exclusive
 # `when` conditions are overloads and may stand side by side, and the check is the same for every
 # same-named overload that writes `when`, not a special case of `#impl`. A type that satisfies both
 # conditions is reported with the two declarations.
@@ -511,7 +511,7 @@ expect_stdout_exact = "i32=-4\nint=42\n"
 
 [[tests]]
 name = "native.when_order_at_call.int_first"
-desc = "The same program with the two declarations in the other order prints the same two lines: which rule a call reaches is decided by its argument types and the rule's own `when`, never by the order the declarations are written in (design principles 4.4; the author's ruling of 2026-10-24 on `impl-declaration-arms`)."
+desc = "The same program with the two declarations in the other order prints the same two lines: which rule a call reaches is decided by its argument types and the rule's own `when`, never by the order the declarations are written in (design principles 4.4)."
 kind = "behavior"
 case = "../../../cases/compile/native/when_order_at_call_int_first.cml"
 args = ["${case}"]
@@ -545,7 +545,7 @@ verify_script = """
 # ---- Two candidates whose own `when` both hold are an ambiguity, not a choice ----
 #
 # The rule on `two-when-conditions-hold`
-# (`docs/handover/reviews/questions-2026-10-23.md`): "带 `when` 的候选都适用时，调用处报歧义，列出两
+#: "带 `when` 的候选都适用时，调用处报歧义，列出两
 # 条候选与各自成立的条件". "先写的赢" no longer exists for a candidate that writes `when`, because the
 # declaration-time check samples the registered types one at a time and the call site is what
 # decides, so the fallback has to be a report and not an order.
@@ -609,7 +609,7 @@ args = ["${case}"]
 expect_exit = 1
 # The message spans two lines (it lists the declaration as the available overload), so the
 # short format the runner parses as one diagnostic line does not apply; check the text.
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "declaration_type_argument.cml:18:45", "<tensor:from_bytes_f32>: (encoded: Bytes, shape: int[]) => L"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "declaration_type_argument.cml:18:41", "<tensor:from_bytes_f32>: (encoded: Bytes, shape: int[]) => L"]
 
 [[tests]]
 name = "native.declaration_per_result_type"
@@ -800,7 +800,7 @@ kind = "negative"
 case = "../../../cases/compile/native/para_unordered_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_unordered_arity.cml:10:5", "argument types: <(item: int) => int> (int[], int)", "<:mark/unordered_foreach_arr>: <f: (item: T) => R> (xs: T[]) => void"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_unordered_arity.cml:10:5", "argument types: <(item: int) => int pure> (int[], int)", "<:mark/unordered_foreach_arr>: <f: (item: T) => R> (xs: T[]) => void"]
 
 [[tests]]
 name = "native.para_unordered_wrong_type"
@@ -809,16 +809,16 @@ kind = "negative"
 case = "../../../cases/compile/native/para_unordered_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_unordered_type.cml:11:5", "argument types: <(item: int) => int> (int)", "<:mark/unordered_foreach_arr>: <f: (item: T) => R> (xs: T[]) => void"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_unordered_type.cml:11:5", "argument types: <(item: int) => int pure> (int)", "<:mark/unordered_foreach_arr>: <f: (item: T) => R> (xs: T[]) => void"]
 
 [[tests]]
 name = "native.para_unordered_reduce_callback_arity"
-desc = "`para:unordered_reduce` declares its callback with exactly two ordinary parameters: a third one is refused at the call. The old C++ resolver checked only that the callback had at least two, so H202's callback-arity narrowing is pinned here (handover H202, H223)."
+desc = "`para:unordered_reduce` declares its callback with exactly two ordinary parameters: a third one is refused at the call. The old C++ resolver checked only that the callback had at least two, so H202's callback-arity narrowing is pinned here ."
 kind = "negative"
 case = "../../../cases/compile/native/para_unordered_reduce_callback_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_unordered_reduce_callback_arity.cml:13:103", "argument types: <(acc: int, item: int, extra: int) => int, int> (int[])", "<:mark/unordered_reduce_arr>: <f: (acc: T, item: T) => T, initial: T> (xs: T[]) => T"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_unordered_reduce_callback_arity.cml:13:103", "argument types: <(acc: int, item: int, extra: int) => int pure, int> (int[])", "<:mark/unordered_reduce_arr>: <f: (acc: T, item: T) => T, initial: T> (xs: T[]) => T"]
 
 #  ---- The declaration of `this` ----
 
@@ -897,7 +897,7 @@ expect_output_contains = ["This value has type 'bool', which is not the declared
 # a body-less `export func` can write; they stay in C++ and are recorded in
 # `stdlib/signatures/tensor.cml` as computed signatures. The cases below prove the declared
 # half: an importer reads it, a call checks against it, and a type-qualified alias
-# (`Tensor::numel`) is the same declaration, not a second signature.
+# (`tensor::numel`) is the same declaration, not a second signature.
 
 [[tests]]
 name = "native.tensor_declaration_import"
@@ -936,7 +936,7 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F",
 
 [[tests]]
 name = "native.tensor_show_declaration_import"
-desc = "`show`'s declaration is what an importer sees: the tensor call and the array call both type-check against the one rule `func show::<A>(t: A[..])` and both reach the C++ operator, printing the array form (the single print form of the 2026-10-24 ruling: the value's own shape in brackets, each element in the shortest text of its own type); the marker line proves the program ran to the end."
+desc = "`show`'s declaration is what an importer sees: the tensor call and the array call both type-check against the one rule `func show::<A>(t: A[..])` and both reach the C++ operator, printing the array form (the single print form of the rule: the value's own shape in brackets, each element in the shortest text of its own type); the marker line proves the program ran to the end."
 kind = "behavior"
 case = "../../../cases/compile/native/tensor_show_declaration_import.cml"
 args = ["${case}"]
@@ -963,12 +963,21 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F",
 
 [[tests]]
 name = "native.tensor_show_empty_array"
-desc = "The umbrella boundary: the empty array literal's element type is `void`, which binds the second rule's type variable to nothing, so no candidate applies and `show([])` is refused when the program is compiled, with the one candidate the declaration has. The C++ `TensorLike` resolver accepted the call and left it to the kernel to fault (docs/stdlib-conventions.cn.md 第 8 节)."
+desc = "The empty literal states no element type, so the type variable of the parameter it stands at is one nobody can infer: `show([])` is refused as `SemanticDiag::FunctionTypeArgumentNotInferred`, naming the argument `A` and the call `show`. The C++ `TensorLike` resolver accepted the call and left it to the kernel to fault (docs/stdlib-conventions.cn.md 第 8 节)."
 kind = "negative"
 case = "../../../cases/compile/native/tensor_show_empty_array.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_show_empty_array.cml:15:5", "argument types: <> (void[])", "<tensor:show>: (t: A[..]) => void"]
+expect_output_contains = ["SemanticDiag::FunctionTypeArgumentNotInferred", "code=0x030001F6", "tensor_show_empty_array.cml:14:5", "Cannot infer the type argument 'A' of 'show': the empty literal '[]' states no element type"]
+
+[[tests]]
+name = "native.tensor_show_empty_array_typed"
+desc = "The two repairs the refusal names: `show::<f32>([])` writes the type argument the literal cannot state, and `let e: f32[] = []` gives the literal a position whose type it can take. Both calls run and print the empty array as `[]` — the element type nobody wrote is not printed as `void[]`."
+kind = "behavior"
+case = "../../../cases/compile/native/tensor_show_empty_array_typed.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "[]\n[]\n"
 #  ---- The declarations of `pyplot` ----
 #
 # `pyplot:plot` has a fixed signature: four element types and two arities. The C++ module never
@@ -1367,12 +1376,12 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F",
 
 [[tests]]
 name = "native.graph_declaration_import"
-desc = "The declarations of `graph` are what an importer sees: `Program`, `Graph` and `Node` come from the module's declaration file, the two comparisons are the operators of the handle types, and each call reaches the operator the C++ module runs. It locks the answers: an entry equals itself and differs from the other one, a graph's name is `__root__`, a graph has nodes, `id` is stable on a node, and `type_of` of a node of no type answers null so the type name printed is the function's signature `() => int`."
+desc = "The declarations of `graph` are what an importer sees: `Program`, `Graph` and `Node` come from the module's declaration file, the two comparisons are the operators of the handle types, and each call reaches the operator the C++ module runs. It locks the answers: an entry equals itself and differs from the other one, a graph's name is `__root__`, a graph has nodes, `id` is stable on a node, and `type_of` of a node of no type answers null so the type name printed is the function's signature `() => int uses stdout`."
 kind = "behavior"
 case = "../../../cases/compile/native/graph_declaration_import.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_exact = "true\nfalse\n__root__\ntrue\ntrue\n() => int\n"
+expect_stdout_exact = "true\nfalse\n__root__\ntrue\ntrue\n() => int uses stdout\n"
 
 [[tests]]
 name = "native.graph_wrong_arity"

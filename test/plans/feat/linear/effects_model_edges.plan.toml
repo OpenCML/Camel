@@ -6,12 +6,38 @@ tags = ["feat", "linear", "runtime", "effects", "gir"]
 # The edge model of docs/design/effects/edges.cn.md, asserted on the graph of one frozen input
 # (`test/cases/linear/runtime/effects_model_edges.cml`) read with `std::gir`.
 #
-# Each entry below states one clause of the design. They are marked `known_fail` because the code
-# on `origin/develop` does not implement the model yet: it still has a `GCNodeKind::Sync`, its
-# ordering between effect statements is a `CTRL` edge (which carries "used" *and* orders, so no
-# pass can treat it as either), and its `GATE` still takes a control input. The mark is what makes
-# this lane's work measurable: the runner refuses a `known_fail` that passes, so the entry that
-# flips to green fails the run until its mark is removed in the same commit that fixes the clause.
+# Each entry below states one clause of the design. They are marked `known_fail` against H242, the
+# integration of the edge model, which the decision-maker put ahead of new small
+# tasks. The layer that holds all four is the graph's construction and its
+# consumers, not this plan, and the code is what disagrees with the design: the code still has a
+# `GCNodeKind::Sync`, its ordering between effect statements is a `CTRL` edge (which carries "used"
+# *and* orders, so no pass can treat it as either), and its `GATE` still takes a control input.
+#
+# Measured on this tree, which is what says the clauses cannot be burned one at a time:
+#   - the builder still generates a control edge where the model puts a sync or an order edge:
+#     fourteen `linkNodes(LinkType::Ctrl, ...)` sites under src/compile/gir/ (the sync chain, the
+#     GATE's wait, the var ordering), against exactly one sync site -- the branch join,
+#     src/compile/gir/builder_control.cpp#linkNodes -- and no `LinkType::Order` argument
+#     anywhere in the tree. The only order edges the tree can make are the ones the inliner and the
+#     relink paths append (src/runtime/draft_inline.cpp#appendOrderDependency), and the frozen input
+#     runs no pass that would make them;
+#   - `DraftEdgeKind::Ctrl`, `ctrlInputsOf` and `ctrlOutputsOf` occur in 53 source files under
+#     src/, include/ and modules/, and `std::opt::ctrl` keeps a GATE's control input on purpose
+#     (src/runtime/control.cpp#appendControlDependency, "A GATE must still have at least one CTRL
+#     input"), so the consumers still sort by the kind the model removes. `GCNodeKind::Sync` is read
+#     in 23 more files.
+#   - 26 checked-in pictures under test/ and exemplars/ carry 143 `type="CTRL"` edges (20 of them
+#     under a `golden/` directory), so the construction change lands with every one of them
+#     re-recorded.
+#   - the `SYNC` node's own deletion is unreachable code plus the 30 consumer cases the note at the
+#     end of this file lists.
+#
+# The mark is what makes H242's work measurable: the runner refuses a `known_fail` that passes, so
+# the entry that flips to green fails the run until its mark is removed in the same commit that
+# fixes the clause. No criterion here is relaxed: each entry asserts its clause of
+# docs/design-principles.cn.md 3.1 (normative: an edge only orders does not pass "used"; the edges
+# of a graph are three; the kind "control edge" does not exist) and of
+# docs/design/effects/edges.cn.md.
 #
 # What the code does today, verbatim (the values these entries are red against), from
 # `effects_model_edges.cml std::gir`:
@@ -28,7 +54,7 @@ kind = "behavior"
 case = "../../../cases/linear/runtime/effects_model_edges.cml"
 backends = ["gir"]
 known_fail = ["gir"]
-known_fail_note = "origin/develop still generates CTRL edges; this lane (handover/h418-effects-model) replaces them with sync and order edges."
+known_fail_note = "H242's construction part: the builder still generates a control edge where the model puts a sync or an order edge (fourteen `linkNodes(LinkType::Ctrl, ...)` sites under src/compile/gir/), and src/runtime/writings.cpp#DraftWritings::rewrite carries a statement's waits across a rewrite as Ctrl. It cannot be burned alone: the 53 files that read the control kind and the 26 stored pictures with 143 CTRL edges move in the same commit."
 args = ["${case}", "${run_gir}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -60,7 +86,7 @@ kind = "behavior"
 case = "../../../cases/linear/runtime/effects_model_edges.cml"
 backends = ["gir"]
 known_fail = ["gir"]
-known_fail_note = "origin/develop writes the sync chain as CTRL edges; the graph has no sync edge at all."
+known_fail_note = "The construction part plus the sync chain rule: the chain is Ctrl today, written where the block's statements are built (src/compile/gir/builder_expr.cpp#lastSyncedNode_), and the kind's own storage and relink rules are what the two commits that added it landed (62cc673af, 82d554476). The one sync edge the builder makes is the branch join, so the frozen input's graph has none."
 args = ["${case}", "${run_gir}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -107,7 +133,7 @@ kind = "behavior"
 case = "../../../cases/linear/runtime/effects_model_edges.cml"
 backends = ["gir"]
 known_fail = ["gir"]
-known_fail_note = "origin/develop writes the write/read ordering as a CTRL edge; the graph has no order edge at all."
+known_fail_note = "H242's construction part and the `std::opt::ctrl` -> `std::opt::order` change: no site in the tree passes `LinkType::Order`, so the builder cannot make an order edge; the write/read ordering is Ctrl (which orders *and* carries used, so it cannot be read as one thing or the other), and the only order edges in a graph come from the inliner and the relink paths (src/runtime/draft_inline.cpp#appendOrderDependency)."
 args = ["${case}", "${run_gir}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -142,7 +168,7 @@ kind = "behavior"
 case = "../../../cases/linear/runtime/effects_model_edges.cml"
 backends = ["gir"]
 known_fail = ["gir"]
-known_fail_note = "origin/develop's inliner and builder still give the GATE the chain's tail as a control input (type=\"CTRL\")."
+known_fail_note = "H242's construction part and its item on the GATE (edges.cn.md 5.3): the builder gives the arm's output a control input (src/compile/gir/builder_control.cpp#coerceArmExit), the inliner keeps a GATE's control inputs (src/runtime/draft_inline.cpp#setCtrlInputs) and std::opt::ctrl preserves them on purpose (src/runtime/control.cpp#appendControlDependency). The GATE loses that port only when the sync chain carries the wait instead."
 args = ["${case}", "${run_gir}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

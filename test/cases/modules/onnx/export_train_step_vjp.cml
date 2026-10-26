@@ -6,7 +6,7 @@
  * agree (checked by hand, artifacts: b2/probes/p11_vjp_step.cml).
  */
 module export_train_step_vjp
-import { Tensor, reshape, sum, tanh, where } from tensor
+import { reshape, sum, tanh, where } from tensor
 import { with_grad } from autodiff
 import { sgd } from nn
 import { export_model } from onnx
@@ -28,7 +28,7 @@ type P = { w: f32[..], b: f32[..] }
 with <m: P>
 func loss(x: f32[..]): float {
     let h = hard_sign(x @ m.w + m.b)
-    return sum(tanh(h + x @ m.w) * h)
+    return float(sum(tanh(h + x @ m.w) * h))
 }
 
 func step(m: P, x: f32[..]): (float, P) {

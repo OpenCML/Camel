@@ -917,7 +917,7 @@ case = "../../../cases/modules/autodiff/pb_statics_gc.cml"
 args = ["${case}", "${run_nvm}"]
 envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
 expect_exit = 0
-expect_stdout_contains = ["loss=0.3579342999437358 gqw=0.19846567139029503 gkw=0.0764192040078342", "loss2=0.3579342999437358 gqw2=0.19846567139029503 gkw2=0.0764192040078342"]
+expect_stdout_contains = ["loss=0.35793429613113403 gqw=0.19846568 gkw=0.076419204", "loss2=0.35793429613113403 gqw2=0.19846568 gkw2=0.076419204"]
 timeout_ms = 20000
 
 [[tests]]
@@ -928,7 +928,7 @@ case = "../../../cases/modules/autodiff/pb_statics_gc.cml"
 args = ["${case}", "${run_fvm}"]
 envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
 expect_exit = 0
-expect_stdout_contains = ["loss=0.3579342999437358 gqw=0.19846567139029503 gkw=0.0764192040078342", "loss2=0.3579342999437358 gqw2=0.19846567139029503 gkw2=0.0764192040078342"]
+expect_stdout_contains = ["loss=0.35793429613113403 gqw=0.19846568 gkw=0.076419204", "loss2=0.35793429613113403 gqw2=0.19846568 gkw2=0.076419204"]
 timeout_ms = 20000
 
 [[tests]]
@@ -1577,7 +1577,8 @@ kind = "behavior"
 case = "../../../cases/modules/autodiff/loop_grad_record_tensor_fd.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
-expect_stdout_exact = "loop_grad_record_tensor_fd d=94.840000 fd=94.828963 gap=0.011036873\n"
+expect_stdout_exact = """loop_grad_record_tensor_fd d=94.840000 fd=94.833374 gap=0.006626129
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -1588,7 +1589,8 @@ kind = "behavior"
 case = "../../../cases/modules/autodiff/loop_grad_record_tensor_fd.cml"
 args = ["${case}", "${run_fvm}"]
 expect_exit = 0
-expect_stdout_exact = "loop_grad_record_tensor_fd d=94.840000 fd=94.828963 gap=0.011036873\n"
+expect_stdout_exact = """loop_grad_record_tensor_fd d=94.840000 fd=94.833374 gap=0.006626129
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -1793,7 +1795,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'loss | helper | helper: done | loss: helper returned | 0.557950884103775 | loss | helper | helper: done | loss: helper returned | [1.7692266, 1.7808359, 1.7770708] | loss | helper | helper: done | loss: helper returned | (0.557950884103775, [1.7692266, 1.7808359, 1.7770708])', `unexpected output: ${out}`)
+assert(out === 'loss | helper | helper: done | loss: helper returned | 0.5579508543014526 | loss | helper | helper: done | loss: helper returned | [1.7692266, 1.7808359, 1.7770708] | loss | helper | helper: done | loss: helper returned | (0.5579508543014526, [1.7692266, 1.7808359, 1.7770708])', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1809,7 +1811,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'loss | helper | helper: done | loss: helper returned | 0.557950884103775 | loss | helper | helper: done | loss: helper returned | [1.7692266, 1.7808359, 1.7770708] | loss | helper | helper: done | loss: helper returned | (0.557950884103775, [1.7692266, 1.7808359, 1.7770708])', `unexpected output: ${out}`)
+assert(out === 'loss | helper | helper: done | loss: helper returned | 0.5579508543014526 | loss | helper | helper: done | loss: helper returned | [1.7692266, 1.7808359, 1.7770708] | loss | helper | helper: done | loss: helper returned | (0.5579508543014526, [1.7692266, 1.7808359, 1.7770708])', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1825,7 +1827,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'loss | helper | helper: done | loss: helper returned | 0.557950884103775 | loss | helper | helper: done | loss: helper returned | [1.7692266, 1.7808359, 1.7770708] | loss | helper | helper: done | loss: helper returned | (0.557950884103775, [1.7692266, 1.7808359, 1.7770708])', `unexpected output: ${out}`)
+assert(out === 'loss | helper | helper: done | loss: helper returned | 0.5579508543014526 | loss | helper | helper: done | loss: helper returned | [1.7692266, 1.7808359, 1.7770708] | loss | helper | helper: done | loss: helper returned | (0.5579508543014526, [1.7692266, 1.7808359, 1.7770708])', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1841,7 +1843,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'loss | helper | helper: done | loss: helper returned | 0.557950884103775 | loss | helper | helper: done | loss: helper returned | [1.7692266, 1.7808359, 1.7770708] | loss | helper | helper: done | loss: helper returned | (0.557950884103775, [1.7692266, 1.7808359, 1.7770708])', `unexpected output: ${out}`)
+assert(out === 'loss | helper | helper: done | loss: helper returned | 0.5579508543014526 | loss | helper | helper: done | loss: helper returned | [1.7692266, 1.7808359, 1.7770708] | loss | helper | helper: done | loss: helper returned | (0.5579508543014526, [1.7692266, 1.7808359, 1.7770708])', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1990,7 +1992,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "grad_function_value_branch.default"
-desc = "Refused: the function called is chosen by a branch at run time. The value is called twice; the diagnostic itself is located at the first call in source order (line 11), although the reverse pass meets the second call (line 11) first, and the reason given is the branch. Under: the default run (grad runs with the program)."
+desc = "Refused: the function called is chosen by a branch at run time. The value is called twice (11:13 and 12:13); a run-time refusal is a fault, and a run stops at the first fault, so one diagnostic, at the first call in source order. The position is the diagnostic's own field and is not written into the message; the branch that chooses the function is the related position. Under: the default run (grad runs with the program)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_function_value_branch.cml"
 args = ["${case}"]
@@ -1999,9 +2001,11 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_branch.cml:11:13: [Error]'), 'the diagnostic is not located at the call (11:13): ' + text)
-assert(/[(]at [^ ]*grad_function_value_branch[.]cml:11:13[)]/.test(text), 'the message does not name the call: ' + text)
-assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
+const errors = text.split('\n').filter((line) => line.includes('[Error]'))
+assert(errors.length === 1, 'expected one diagnostic (a run-time refusal stops the run at the first): ' + text)
+assert(errors[0].includes('grad_function_value_branch.cml:11:13'), 'the diagnostic is not located at the first call in source order (11:13): ' + text)
+assert(!/[(]at [^)]*grad_function_value_branch[.]cml:11:13[)]/.test(text), 'the position is written into the message: ' + text)
+assert(text.includes('[the function value is chosen here at 10:13]'), 'missing the related position of the branch that chooses the function: ' + text)
 assert(text.includes('which function it calls is not evident where it is called'), 'missing: which function it calls is not evident where it is called in: ' + text)
 assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
 }
@@ -2010,7 +2014,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "grad_function_value_branch.macro"
-desc = "Refused: the function called is chosen by a branch at run time. The value is called twice; the diagnostic itself is located at the first call in source order (line 11), although the reverse pass meets the second call (line 11) first, and the reason given is the branch. Under: std::macro (grad built at compile time)."
+desc = "Refused: the function called is chosen by a branch at run time. The value is called twice (11:13 and 12:13): the expansion collects every refused call, and the run reports one fault, at the first of them in source order, with each further refused call as related information carrying its own position and its own reason. The branch that chooses the function is the related position of the refusal it belongs to. Under: std::macro (grad built at compile time)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_function_value_branch.cml"
 args = ["${case}", "std::macro"]
@@ -2019,20 +2023,23 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_branch.cml:11:13: [Error]'), 'the diagnostic is not located at the call (11:13): ' + text)
-assert(/[(]at [^ ]*grad_function_value_branch[.]cml:11:13[)]/.test(text), 'the message does not name the call: ' + text)
-assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
-assert(text.includes('which function it calls is not evident where it is called'), 'missing: which function it calls is not evident where it is called in: ' + text)
+const errors = text.split('\n').filter((line) => line.includes('[Error]'))
+assert(errors.length === 1, 'expected one diagnostic: ' + text)
+assert(errors[0].includes('grad_function_value_branch.cml:11:13'), 'the diagnostic is not located at the first call in source order (11:13): ' + text)
+assert(!/[(]at [^)]*grad_function_value_branch[.]cml:11:13[)]/.test(text), 'the position is written into the message: ' + text)
+assert(text.split('[the function value is chosen here at 10:13]').length === 3, 'each refused call must carry the branch that chooses the function as its related position: ' + text)
+const alsoRefused = text.match(/\[[^\]]*the function is chosen by a branch[^\]]*at 12:13\]/g) || []
+assert(alsoRefused.length === 1, 'the second refused call is not named with its own position and its own reason: ' + text)
 assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
-assert(/the macro call is at [^ ]*[.]cml:[0-9]+:[0-9]+/.test(text), 'macro call not named: ' + text)
+assert(/the macro call is at [^ ]*[.]cml:17:13/.test(text), 'macro call not named: ' + text)
 }
 """
 timeout_ms = 12000
 
 [[tests]]
 name = "grad_function_value_static_branch.default"
-desc = "Refused like any branch: the condition is a constant expression (1 > 0), but the graph grad sees still chooses the function by a branch; the diagnostic is located at the call. Under: the default run (grad runs with the program)."
+desc = "Refused like any branch: the condition is a constant expression (1 > 0), but the graph grad sees still chooses the function by a branch. One call, one diagnostic at it; the position is the diagnostic's own field and is not written into the message; the branch is the related position. Under: the default run (grad runs with the program)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_function_value_static_branch.cml"
 args = ["${case}"]
@@ -2041,9 +2048,11 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_static_branch.cml:11:16: [Error]'), 'the diagnostic is not located at the call (11:16): ' + text)
-assert(/[(]at [^ ]*grad_function_value_static_branch[.]cml:11:16[)]/.test(text), 'the message does not name the call: ' + text)
-assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
+const errors = text.split('\n').filter((line) => line.includes('[Error]'))
+assert(errors.length === 1, 'expected one diagnostic: ' + text)
+assert(errors[0].includes('grad_function_value_static_branch.cml:11:22'), 'the diagnostic is not located at the call (11:22): ' + text)
+assert(!/[(]at [^)]*grad_function_value_static_branch[.]cml:11:22[)]/.test(text), 'the position is written into the message: ' + text)
+assert(text.includes('[the function value is chosen here at 10:13]'), 'missing the related position of the branch that chooses the function: ' + text)
 assert(text.includes('which function it calls is not evident where it is called'), 'missing: which function it calls is not evident where it is called in: ' + text)
 assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
 }
@@ -2052,7 +2061,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "grad_function_value_static_branch.macro"
-desc = "Refused like any branch: the condition is a constant expression (1 > 0), but the graph grad sees still chooses the function by a branch; the diagnostic is located at the call. Under: std::macro (grad built at compile time)."
+desc = "Refused like any branch: the condition is a constant expression (1 > 0), but the graph grad sees still chooses the function by a branch. One call, so compile-time expansion reports one diagnostic, at it, with the branch as the related position and no position in the message. Under: std::macro (grad built at compile time)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_function_value_static_branch.cml"
 args = ["${case}", "std::macro"]
@@ -2061,20 +2070,21 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_static_branch.cml:11:16: [Error]'), 'the diagnostic is not located at the call (11:16): ' + text)
-assert(/[(]at [^ ]*grad_function_value_static_branch[.]cml:11:16[)]/.test(text), 'the message does not name the call: ' + text)
-assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
-assert(text.includes('which function it calls is not evident where it is called'), 'missing: which function it calls is not evident where it is called in: ' + text)
+const errors = text.split('\n').filter((line) => line.includes('[Error]'))
+assert(errors.length === 1, 'expected one diagnostic (the program has one refused call): ' + text)
+assert(errors[0].includes('grad_function_value_static_branch.cml:11:22'), 'the diagnostic is not located at the call (11:22): ' + text)
+assert(!/[(]at [^)]*grad_function_value_static_branch[.]cml:11:22[)]/.test(text), 'the position is written into the message: ' + text)
+assert(text.includes('[the function value is chosen here at 10:13]'), 'missing the related position of the branch that chooses the function: ' + text)
 assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
-assert(/the macro call is at [^ ]*[.]cml:[0-9]+:[0-9]+/.test(text), 'macro call not named: ' + text)
+assert(/the macro call is at [^ ]*[.]cml:15:13/.test(text), 'macro call not named: ' + text)
 }
 """
 timeout_ms = 12000
 
 [[tests]]
 name = "grad_function_value_parameter.default"
-desc = "Refused: the function called is a parameter of the differentiated function itself. Called twice; the diagnostic is located at the first call (line 9) and says that it is a parameter. Under: the default run (grad runs with the program)."
+desc = "Refused: the function called is a parameter of the differentiated function itself. The value is called twice (11:13 and 12:22); a run-time refusal is a fault, and a run stops at the first fault, so one diagnostic, at the first call in source order. The related position names the parameter the function value came in through: the port of the parameter carries the position the parameter is written at (10:11). Under: the default run (grad runs with the program)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_function_value_parameter.cml"
 args = ["${case}"]
@@ -2083,9 +2093,11 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_parameter.cml:11:13: [Error]'), 'the diagnostic is not located at the call (11:13): ' + text)
-assert(/[(]at [^ ]*grad_function_value_parameter[.]cml:11:13[)]/.test(text), 'the message does not name the call: ' + text)
-assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
+const errors = text.split('\n').filter((line) => line.includes('[Error]'))
+assert(errors.length === 1, 'expected one diagnostic (a run-time refusal stops the run at the first): ' + text)
+assert(errors[0].includes('grad_function_value_parameter.cml:11:13'), 'the diagnostic is not located at the first call in source order (11:13): ' + text)
+assert(!/[(]at [^)]*grad_function_value_parameter[.]cml:11:13[)]/.test(text), 'the position is written into the message: ' + text)
+assert(text.includes('[the function value is chosen here at 10:11]'), 'missing the related position of the parameter the function value came in through: ' + text)
 assert(text.includes('the function is a parameter, or a captured value, of the function being differentiated'), 'missing: the function is a parameter, or a captured value, of the function being differentiated in: ' + text)
 }
 """
@@ -2093,7 +2105,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "grad_function_value_parameter.macro"
-desc = "Refused: the function called is a parameter of the differentiated function itself. Called twice; the diagnostic is located at the first call (line 9) and says that it is a parameter. Under: std::macro (grad built at compile time)."
+desc = "Refused: the function called is a parameter of the differentiated function itself. The value is called twice (11:13 and 12:22): the expansion collects every refused call, and the run reports one fault, at the first of them in source order, with each further refused call as related information carrying its own position and its own reason. The related position of each names the parameter the function value came in through; the port of the parameter carries the position the parameter is written at (10:11). Under: std::macro (grad built at compile time)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_function_value_parameter.cml"
 args = ["${case}", "std::macro"]
@@ -2102,19 +2114,24 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_parameter.cml:11:13: [Error]'), 'the diagnostic is not located at the call (11:13): ' + text)
-assert(/[(]at [^ ]*grad_function_value_parameter[.]cml:11:13[)]/.test(text), 'the message does not name the call: ' + text)
-assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
+const errors = text.split('\n').filter((line) => line.includes('[Error]'))
+assert(errors.length === 1, 'expected one diagnostic: ' + text)
+assert(errors[0].includes('grad_function_value_parameter.cml:11:13'), 'the diagnostic is not located at the first call in source order (11:13): ' + text)
+assert(!/[(]at [^)]*grad_function_value_parameter[.]cml:(11:13|12:22)[)]/.test(text), 'the position is written into the message: ' + text)
 assert(text.includes('the function is a parameter, or a captured value, of the function being differentiated'), 'missing: the function is a parameter, or a captured value, of the function being differentiated in: ' + text)
+assert(text.split('[the function value is chosen here at 10:11]').length === 3, 'each refused call must carry the parameter the value came in through as its related position: ' + text)
+const alsoRefused = text.match(/\[[^\]]*the function is a parameter[^\]]*at 12:22\]/g) || []
+assert(alsoRefused.length === 1, 'the second refused call is not named with its own position and its own reason: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
-assert(/the macro call is at [^ ]*[.]cml:[0-9]+:[0-9]+/.test(text), 'macro call not named: ' + text)
+assert(/the macro call is at [^ ]*[.]cml:17:13/.test(text), 'macro call not named: ' + text)
+assert(text.includes('[the function value is chosen here at 10:11]'), 'missing the related position of the parameter the function value came in through: ' + text)
 }
 """
 timeout_ms = 12000
 
 [[tests]]
 name = "grad_function_value_container.default"
-desc = "Refused: the function called is read from a tuple; located at the call, with that reason. Under: the default run (grad runs with the program)."
+desc = "Refused: the function called is read from a tuple. One call, one diagnostic at it; the position is the diagnostic's own field and is not written into the message; the read that selects the function is the related position. Under: the default run (grad runs with the program)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_function_value_container.cml"
 args = ["${case}"]
@@ -2123,9 +2140,11 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_container.cml:11:16: [Error]'), 'the diagnostic is not located at the call (11:16): ' + text)
-assert(/[(]at [^ ]*grad_function_value_container[.]cml:11:16[)]/.test(text), 'the message does not name the call: ' + text)
-assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
+const errors = text.split('\n').filter((line) => line.includes('[Error]'))
+assert(errors.length === 1, 'expected one diagnostic: ' + text)
+assert(errors[0].includes('grad_function_value_container.cml:11:22'), 'the diagnostic is not located at the call (11:22): ' + text)
+assert(!/[(]at [^)]*grad_function_value_container[.]cml:11:22[)]/.test(text), 'the position is written into the message: ' + text)
+assert(text.includes('[the function value is chosen here at 10:13]'), 'missing the related position of the read that selects the function: ' + text)
 assert(text.includes('the function is read from a tuple, a struct or an array'), 'missing: the function is read from a tuple, a struct or an array in: ' + text)
 }
 """
@@ -2133,7 +2152,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "grad_function_value_container.macro"
-desc = "Refused: the function called is read from a tuple; located at the call, with that reason. Under: std::macro (grad built at compile time)."
+desc = "Refused: the function called is read from a tuple. One call, so compile-time expansion reports one diagnostic, at it, with the read that selects the function as the related position and no position in the message. Under: std::macro (grad built at compile time)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_function_value_container.cml"
 args = ["${case}", "std::macro"]
@@ -2142,12 +2161,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_container.cml:11:16: [Error]'), 'the diagnostic is not located at the call (11:16): ' + text)
-assert(/[(]at [^ ]*grad_function_value_container[.]cml:11:16[)]/.test(text), 'the message does not name the call: ' + text)
-assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
+const errors = text.split('\n').filter((line) => line.includes('[Error]'))
+assert(errors.length === 1, 'expected one diagnostic (the program has one refused call): ' + text)
+assert(errors[0].includes('grad_function_value_container.cml:11:22'), 'the diagnostic is not located at the call (11:22): ' + text)
+assert(!/[(]at [^)]*grad_function_value_container[.]cml:11:22[)]/.test(text), 'the position is written into the message: ' + text)
+assert(text.includes('[the function value is chosen here at 10:13]'), 'missing the related position of the read that selects the function: ' + text)
 assert(text.includes('the function is read from a tuple, a struct or an array'), 'missing: the function is read from a tuple, a struct or an array in: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
-assert(/the macro call is at [^ ]*[.]cml:[0-9]+:[0-9]+/.test(text), 'macro call not named: ' + text)
+assert(/the macro call is at [^ ]*[.]cml:15:13/.test(text), 'macro call not named: ' + text)
 }
 """
 timeout_ms = 12000
@@ -2218,7 +2239,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "grad_function_value_recursion.default"
-desc = "Refused: a recursive function passes a function value on to itself. The value is followed into the function once; the call reached through the recursive call is refused, located at that call, and the reason names the recursive function. Under: the default run (grad runs with the program)."
+desc = "Refused: a recursive function passes a function value on to itself. The value is followed into the function once; the call reached through the recursive call is refused, located at that call (7:52), and the reason names the recursive function. The related position names the parameter the function value came in through: the port of the parameter carries the position the parameter is written at (6:14). Under: the default run (grad runs with the program)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_function_value_recursion.cml"
 args = ["${case}"]
@@ -2227,19 +2248,21 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_recursion.cml:7:52: [Error]'), 'the diagnostic is not located at the call (7:52): ' + text)
-assert(/[(]at [^ ]*grad_function_value_recursion[.]cml:7:52[)]/.test(text), 'the message does not name the call: ' + text)
-assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
+const errors = text.split('\n').filter((line) => line.includes('[Error]'))
+assert(errors.length === 1, 'expected one diagnostic: ' + text)
+assert(errors[0].includes('grad_function_value_recursion.cml:7:52'), 'the diagnostic is not located at the call (7:52): ' + text)
+assert(!/[(]at [^)]*grad_function_value_recursion[.]cml:7:52[)]/.test(text), 'the position is written into the message: ' + text)
 assert(text.includes('the function is a parameter of'), 'missing: the function is a parameter of in: ' + text)
 assert(text.includes('iterate'), 'missing: iterate in: ' + text)
 assert(text.includes('a recursive function that passes it on to itself'), 'missing: a recursive function that passes it on to itself in: ' + text)
+assert(text.includes('[the function value is chosen here at 6:14]'), 'missing the related position of the parameter the function value came in through: ' + text)
 }
 """
 timeout_ms = 12000
 
 [[tests]]
 name = "grad_function_value_recursion.macro"
-desc = "Refused: a recursive function passes a function value on to itself. The value is followed into the function once; the call reached through the recursive call is refused, located at that call, and the reason names the recursive function. Under: std::macro (grad built at compile time)."
+desc = "Refused: a recursive function passes a function value on to itself. The value is followed into the function once; the call reached through the recursive call is refused, located at that call (7:52), and the reason names the recursive function. The related position names the parameter the function value came in through, whose port carries the position the parameter is written at (6:14). Under: std::macro (grad built at compile time)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_function_value_recursion.cml"
 args = ["${case}", "std::macro"]
@@ -2248,21 +2271,23 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_recursion.cml:7:52: [Error]'), 'the diagnostic is not located at the call (7:52): ' + text)
-assert(/[(]at [^ ]*grad_function_value_recursion[.]cml:7:52[)]/.test(text), 'the message does not name the call: ' + text)
-assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
+const errors = text.split('\n').filter((line) => line.includes('[Error]'))
+assert(errors.length === 1, 'expected one diagnostic (the program has one refused call): ' + text)
+assert(errors[0].includes('grad_function_value_recursion.cml:7:52'), 'the diagnostic is not located at the call (7:52): ' + text)
+assert(!/[(]at [^)]*grad_function_value_recursion[.]cml:7:52[)]/.test(text), 'the position is written into the message: ' + text)
 assert(text.includes('the function is a parameter of'), 'missing: the function is a parameter of in: ' + text)
 assert(text.includes('iterate'), 'missing: iterate in: ' + text)
 assert(text.includes('a recursive function that passes it on to itself'), 'missing: a recursive function that passes it on to itself in: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
-assert(/the macro call is at [^ ]*[.]cml:[0-9]+:[0-9]+/.test(text), 'macro call not named: ' + text)
+assert(/the macro call is at [^ ]*[.]cml:17:13/.test(text), 'macro call not named: ' + text)
+assert(text.includes('[the function value is chosen here at 6:14]'), 'missing the related position of the parameter the function value came in through: ' + text)
 }
 """
 timeout_ms = 12000
 
 [[tests]]
 name = "grad_function_value_passed.default"
-desc = "Refused: a function value that depends on the differentiated parameter (chosen by a branch between two closures capturing x) is passed to a function without a differentiable parameter. The call used to count as a constant: the gradient came out as 1 instead of 7 without any error. The diagnostic is located at the call that passes the value. Under: the default run (grad runs with the program)."
+desc = "Refused: a function value that depends on the differentiated parameter (chosen by a branch between two closures capturing x) is passed to a function without a differentiable parameter. The call used to count as a constant: the gradient came out as 1 instead of 7 without any error. One diagnostic at the call that passes the value (15:12); the position is the diagnostic's own field and is not written into the message; the branch that chose the value is the related position. Under: the default run (grad runs with the program)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_function_value_passed.cml"
 args = ["${case}"]
@@ -2271,9 +2296,11 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_passed.cml:15:12: [Error]'), 'the diagnostic is not located at the call (15:12): ' + text)
-assert(/[(]at [^ ]*grad_function_value_passed[.]cml:15:12[)]/.test(text), 'the message does not name the call: ' + text)
-assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
+const errors = text.split('\n').filter((line) => line.includes('[Error]'))
+assert(errors.length === 1, 'expected one diagnostic: ' + text)
+assert(errors[0].includes('grad_function_value_passed.cml:15:12'), 'the diagnostic is not located at the call (15:12): ' + text)
+assert(!/[(]at [^)]*grad_function_value_passed[.]cml:15:12[)]/.test(text), 'the position is written into the message: ' + text)
+assert(text.includes('[the function value is chosen here at 14:13]'), 'missing the related position of the branch that chooses the function: ' + text)
 assert(text.includes('cannot differentiate through this call of'), 'missing: cannot differentiate through this call of in: ' + text)
 assert(text.includes('call0'), 'missing: call0 in: ' + text)
 assert(text.includes('a function value that depends on a differentiated parameter'), 'missing: a function value that depends on a differentiated parameter in: ' + text)
@@ -2284,7 +2311,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "grad_function_value_passed.macro"
-desc = "Refused: a function value that depends on the differentiated parameter (chosen by a branch between two closures capturing x) is passed to a function without a differentiable parameter. The call used to count as a constant: the gradient came out as 1 instead of 7 without any error. The diagnostic is located at the call that passes the value. Under: std::macro (grad built at compile time)."
+desc = "Refused: a function value that depends on the differentiated parameter (chosen by a branch between two closures capturing x) is passed to a function without a differentiable parameter. The call used to count as a constant: the gradient came out as 1 instead of 7 without any error. One call, so compile-time expansion reports one diagnostic at it (15:12), with the branch that chose the value as the related position and no position in the message. Under: std::macro (grad built at compile time)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_function_value_passed.cml"
 args = ["${case}", "std::macro"]
@@ -2293,15 +2320,17 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_passed.cml:15:12: [Error]'), 'the diagnostic is not located at the call (15:12): ' + text)
-assert(/[(]at [^ ]*grad_function_value_passed[.]cml:15:12[)]/.test(text), 'the message does not name the call: ' + text)
-assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
+const errors = text.split('\n').filter((line) => line.includes('[Error]'))
+assert(errors.length === 1, 'expected one diagnostic (the program has one refused call): ' + text)
+assert(errors[0].includes('grad_function_value_passed.cml:15:12'), 'the diagnostic is not located at the call (15:12): ' + text)
+assert(!/[(]at [^)]*grad_function_value_passed[.]cml:15:12[)]/.test(text), 'the position is written into the message: ' + text)
+assert(text.includes('[the function value is chosen here at 14:13]'), 'missing the related position of the branch that chooses the function: ' + text)
 assert(text.includes('cannot differentiate through this call of'), 'missing: cannot differentiate through this call of in: ' + text)
 assert(text.includes('call0'), 'missing: call0 in: ' + text)
 assert(text.includes('a function value that depends on a differentiated parameter'), 'missing: a function value that depends on a differentiated parameter in: ' + text)
 assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
-assert(/the macro call is at [^ ]*[.]cml:[0-9]+:[0-9]+/.test(text), 'macro call not named: ' + text)
+assert(/the macro call is at [^ ]*[.]cml:19:13/.test(text), 'macro call not named: ' + text)
 }
 """
 timeout_ms = 12000
@@ -2371,8 +2400,7 @@ expect_exit = 0
 expect_stdout_contains = ["== transformer_big (camel_opt_nvm)", "gradient check: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # The cost bound is this check's own CPU time (user + system), and the timeout is its liveness
-# bound, by the rule (docs/handover/reviews/questions-2026-10-23.md,
-# "declaration-cost-gate" (a)):
+# bound, by the rule:
 #
 #   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移，这正是 40/45/100/90 ms 在负载 106–130
 #     下报红的原因；进程的 CPU 时间（用户态 + 内核态）基本不随负载变（该判定已经用 CPU 中位数）。
@@ -2415,8 +2443,7 @@ expect_exit = 0
 expect_stdout_contains = ["verdict resnet seed=benchmark activation=tanh: PASS (", "gradient referee: PASS"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # The cost bound is this referee's own CPU time (user + system), and the timeout is its liveness
-# bound, by the rule (docs/handover/reviews/questions-2026-10-23.md,
-# "declaration-cost-gate" (a)):
+# bound, by the rule:
 #
 #   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移 ... 进程的 CPU 时间（用户态 + 内核态）基本
 #    不随负载变"
@@ -2593,7 +2620,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "grad_int_zero"
-desc = "An `int` parameter is differentiable and its gradient is the zero of its own type: `let g: int = grad(twice)<3>(2.0)` gives the int `0`, and the printed line is the only value in it. The gradient type of a parameter is a question of its own, asked for the user -- a number is its own gradient type, at zero -- and `string`/function parameters are still refused (`grad_refuse_string`, `grad_refuse_function`), because they have no gradient type at all (the author's ruling of 2026-10-25 on discrete-tuple-tangent-space-and-machinery-aggregates). The machinery's own question about the same int is still answered `no` (it carries no gradient through the tape)."
+desc = "An `int` parameter is differentiable and its gradient is the zero of its own type: `let g: int = grad(twice)<3>(2.0)` gives the int `0`, and the printed line is the only value in it. The gradient type of a parameter is a question of its own, asked for the user -- a number is its own gradient type, at zero -- and `string`/function parameters are still refused (`grad_refuse_string`, `grad_refuse_function`), because they have no gradient type at all. The machinery's own question about the same int is still answered `no` (it carries no gradient through the tape)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_int_zero.cml"
 args = ["${case}", "std::macro", "${backend}"]
@@ -2642,7 +2669,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "grad_refuse_tuple"
-desc = "Refused at compile time with NotDifferentiable: the first `with` parameter is a tuple with a member that has no gradient, and the refusal names that member by its position (`element 1`, a `string`) rather than saying only that the tuple has none. A tuple answers by the same rule as a struct -- a member without a gradient makes the whole parameter have none (the author's ruling of 2026-10-25 on discrete-tuple-tangent-space-and-machinery-aggregates)."
+desc = "Refused at compile time with NotDifferentiable: the first `with` parameter is a tuple with a member that has no gradient, and the refusal names that member by its position (`element 1`, a `string`) rather than saying only that the tuple has none. A tuple answers by the same rule as a struct -- a member without a gradient makes the whole parameter have none ."
 kind = "negative"
 case = "../../../cases/modules/autodiff/grad_refuse_tuple.cml"
 args = ["${case}", "std::macro"]
@@ -2654,7 +2681,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "grad_struct_all_discrete"
-desc = "A model whose every field is discrete is differentiable: the tangent space of a struct is taken field by field, and an integer and a boolean each have one -- their own type, with the value zero -- so the gradient is the model's own type, all zeros. There is no \"at least one trainable field\" exception (the author's ruling of 2026-10-25 on discrete-gradient-and-rank-one-slice-ownership)."
+desc = "A model whose every field is discrete is differentiable: the tangent space of a struct is taken field by field, and an integer and a boolean each have one -- their own type, with the value zero -- so the gradient is the model's own type, all zeros. There is no \"at least one trainable field\" exception ."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_struct_all_discrete.cml"
 args = ["${case}", "std::macro", "${backend}"]
@@ -2667,7 +2694,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "grad_tuple_discrete_member"
-desc = "A tuple model keeps its discrete member in the gradient: `with <m: (f32[..], int)>` gets `(f32[..], int)` back, with the `int` at zero, and `let g: (f32[..], int) = gradient` pins that the gradient is the model's own type. What decides is who reads the answer -- the user's `grad`/`with_grad` gradient against the machinery's own aggregates -- not whether the parameter is a struct or a tuple (the author's ruling of 2026-10-25 on discrete-tuple-tangent-space-and-machinery-aggregates)."
+desc = "A tuple model keeps its discrete member in the gradient: `with <m: (f32[..], int)>` gets `(f32[..], int)` back, with the `int` at zero, and `let g: (f32[..], int) = gradient` pins that the gradient is the model's own type. What decides is who reads the answer -- the user's `grad`/`with_grad` gradient against the machinery's own aggregates -- not whether the parameter is a struct or a tuple ."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_tuple_discrete_member.cml"
 args = ["${case}", "std::macro", "${backend}"]
@@ -2731,7 +2758,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "grad_data_input_is_data"
-desc = "An ordinary argument is data even when its type has a tangent: a float `scale` converted to int and a `Tensor` of integer labels cast to int64 and back to float are inputs of the differentiated computation with nothing differentiable upstream, so they are not refused; the gradient is taken through the first `with` parameter and is 3.0 and [0, 1, 0] (sum 1.0) respectively (design principles 9.9). This is the C2 `with_grad(loss)` shape."
+desc = "An ordinary argument is data even when its type has a tangent: a float `scale` converted to int and an integer array of labels cast to int64 and back to float are inputs of the differentiated computation with nothing differentiable upstream, so they are not refused; the gradient is taken through the first `with` parameter and is 3.0 and [0, 1, 0] (sum 1.0) respectively (design principles 9.9). This is the C2 `with_grad(loss)` shape."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_data_input.cml"
 args = ["${case}", "std::macro"]
@@ -2933,7 +2960,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "array_slice_grad.runtime.nvm"
-desc = "A slice of an array takes a range of positions, so its adjoint is the upstream gradient placed back in that range of the parent's zeros: the range scatter tangent/scatter_slice_arr, the array counterpart of the tensor's slice_grad. Checked against adjoints written out by hand for a subscript slice ([0,2,3,0,0]), the same slice through the function form, a slice of a slice (the direct adjoint again), a sliced-backwards `xs[4:1:-1]` ([0,0,5,3,2]) and a stepped `xs[0:5:2]` ([2,0,3,0,5]); the printed raw gradients are pinned too. `nonzero` is the summed squared distance to the zero array — 115.0 from the tree — so a rule that returned zeros prints 0.0 and fails. (grad built at run time)"
+desc = "A slice of an array takes a range of positions, so its adjoint is the upstream gradient placed back in that range of the parent's zeros: the range scatter tangent/scatter_slice_arr, the array's own adjoint of a slice. Checked against adjoints written out by hand for a subscript slice ([0,2,3,0,0]), the same slice through the function form, a slice of a slice (the direct adjoint again), a sliced-backwards `xs[4:1:-1]` ([0,0,5,3,2]) and a stepped `xs[0:5:2]` ([2,0,3,0,5]); the printed raw gradients are pinned too. `nonzero` is the summed squared distance to the zero array — 115.0 from the tree — so a rule that returned zeros prints 0.0 and fails. (grad built at run time)"
 kind = "behavior"
 case = "../../../cases/modules/autodiff/array_slice_grad.cml"
 args = ["${case}", "${run_nvm}"]
@@ -3034,7 +3061,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "refuse_container_new"
-desc = "`new(xs)` with `xs: float[][]` converts the container to a tensor by flattening it, and the container has no adjoint: the gradient would have to return as an array of arrays, which no operator of this module builds from a tensor's gradient. The call is refused by name, with the container's type, at the new call (line 21); `refuse_container_reshape` is the same refusal for `reshape`. A numeric array is a tensor and is not refused (`adjoint_new_array` asserts its adjoint), and a constant container is converted by the forward rule and never visited here. Without the refusal this program faulted in the kernels, which read the container as a tensor: \"Expected Tensor argument\", with no place in the source to point at. (grad built at run time)"
+desc = "`new(xs)` with `xs: float[][]` converts the container to a tensor by flattening it, and the container has no adjoint: the gradient would have to return as an array of arrays, which no operator of this module builds from a tensor's gradient. The call is refused by name, with the container's type, at the new call (line 21); `refuse_container_reshape` is the same refusal for `reshape`. A numeric array is a tensor and is not refused (`adjoint_new_array` asserts its adjoint), and a constant container is converted by the forward rule and never visited here. Without the refusal this program faulted in the kernels, which read the container as a tensor: \"Expected an array argument\", with no place in the source to point at. (grad built at run time)"
 kind = "negative"
 case = "../../../cases/modules/autodiff/refuse_container_new.cml"
 args = ["${case}", "${run_nvm}"]
@@ -3194,7 +3221,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "f64_broadcast_grad"
-desc = "An f64 gradient through a broadcast: sum(x * p0) with x a Tensor<f64, [2, 3]> and p0 a Tensor<f64, [3]> multiplies by broadcasting p0 over the rows, and tensor:sum_to is the reduction of that broadcast, so this is where an f64 gradient was refused with \"'the gradient kernels' does not support a value of type 'Tensor<f64>'\". Both gradients are printed in the array form and both distances are 0.0 against the values written out by hand from the forward expression (d/dx is the row broadcast of p0, d/dp0 the column sum [5, 7, 9]). The wide pair sums 2^24 + 1 in the third column: 16777217.0 in f64 and 16777216.0 if the value is accumulated in f32, so its printed third coordinate and its distance (0.0 against 1.0) say which accumulator the arm uses."
+desc = "An f64 gradient through a broadcast: sum(x * p0) with x a f64[2, 3] and p0 a f64[3] multiplies by broadcasting p0 over the rows, and tensor:sum_to is the reduction of that broadcast, so this is where an f64 gradient was refused with \"'the gradient kernels' does not support a value of type 'f64[..]'\". Both gradients are printed in the array form and both distances are 0.0 against the values written out by hand from the forward expression (d/dx is the row broadcast of p0, d/dp0 the column sum [5, 7, 9]). The wide pair sums 2^24 + 1 in the third column: 16777217.0 in f64 and 16777216.0 if the value is accumulated in f32, so its printed third coordinate and its distance (0.0 against 1.0) say which accumulator the arm uses."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/f64_broadcast_grad.cml"
 args = ["${case}", "${run_nvm}"]
@@ -3207,6 +3234,24 @@ assert(text.includes('f64_broadcast_grad value=22.25 a_x=0.0 a_p0=0.0 wa=0.0'), 
 assert(text.includes('gx [[0.5, 0.25, 2.0], [0.5, 0.25, 2.0]]'), `the x gradient is not the row broadcast of p0: ${text}`)
 assert(text.includes('gp [5.0, 7.0, 9.0]'), `the p0 gradient is not the column sum of x: ${text}`)
 assert(text.includes('wp [16777217.0, 2.0, 16777217.0]'), `the wide sum did not accumulate in f64: ${text}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "f64_matmul_grad_width"
+desc = "The width the matmul gradient accumulates in: loss = sum(x @ w) with x an f64[2, 3] and w an f64[3, 1] gives d/dw = x^T @ dy (tensor:matmul_grad_rhs) and d/dx = dy @ w^T (tensor:matmul_grad_lhs), the only two gradient operators that add several products together. The narrow pair prints the hand-written column sums [5, 7, 9] and the row of w. The wide pair's x is [[2^24, 1, 0], [1, 0, 0]], so d/dw is [2^24 + 1, 1, 0] = [16777217.0, 1.0, 0.0]: 1 is below half an ulp of 2^24, so an f32 accumulation of the two rows answers 16777216.0 and its distance is 1.0 where the f64 one is 0.0. The operators used to declare f32 whatever the width of the value they are the gradient of, which is what made a sum_to of an f64 step a pair the signature refuses; the declaration follows the value's width now, and this pair is what pins that the declaration is not a claim the arithmetic cannot keep: the printed wide gradient is [[16777217.0], [1.0], [0.0]] and its distance 0.0, so tensor:matmul_grad_rhs adds the two rows of an f64 d/dw at f64's width and the f64 declaration is the one the kernel actually keeps."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/f64_matmul_grad_width.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.stdout
+assert(text.includes('f64_matmul_grad_width value=21.0 a_w=0.0 a_x=0.0 wa=0.0'), `unexpected distances: ${text}`)
+assert(text.includes('gw [[5.0], [7.0], [9.0]]'), `the w gradient is not the column sums of x: ${text}`)
+assert(text.includes('wg [[16777217.0], [1.0], [0.0]]'), `the two rows were not added at f64's width: ${text}`)
 }
 """
 timeout_ms = 10000

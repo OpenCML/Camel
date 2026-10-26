@@ -115,12 +115,30 @@ class FactQueryNoValue : public std::exception {
     std::string what_;
 };
 
+/// A report the fault carries beside its own place: the same work met more than one place it has
+/// to refuse, and each of them is a report of its own.
+///
+/// A pass that works on a whole function (`grad`) refuses every call of a function value it cannot
+/// differentiate, not only the first: each refused call is collected, so that a reader fixes them
+/// all in one round (design principles 9.9), and the pass that raises the fault is the only one
+/// that knows how many there are. What a run shows of them is one fault, naming the first in
+/// source order, which is the report a run-time fault records; the others are attached to that
+/// one as its related positions, one entry each with its own place and its own reason, and the
+/// run-time sink's rule ends the run there (the macro evaluator reports them that way).
+struct CarriedReport {
+    camel::source::origin_id_t origin = camel::source::kInvalidOriginId;
+    std::vector<std::string> formatArgs;
+    /// Places the report is about beside the one it stands at: where the refused value was chosen.
+    std::vector<DiagLabel> related;
+};
+
 class RuntimeFault : public std::exception {
   public:
     RuntimeFault(
         RuntimeDiag diag, std::vector<std::string> formatArgs = {}, std::string detail = "",
         std::exception_ptr cause = nullptr, ExecutionSiteHint hint = {},
-        RuntimeFaultPolicy policy = RuntimeFaultPolicy::AbortCurrentExecution);
+        RuntimeFaultPolicy policy = RuntimeFaultPolicy::AbortCurrentExecution,
+        std::vector<CarriedReport> carried = {});
 
     template <typename... Args> static RuntimeFault make(RuntimeDiag diag, Args &&...args) {
         std::vector<std::string> formatArgs;
@@ -135,6 +153,9 @@ class RuntimeFault : public std::exception {
     std::exception_ptr cause() const { return cause_; }
     const ExecutionSiteHint &hint() const { return hint_; }
     RuntimeFaultPolicy policy() const { return policy_; }
+    /// The reports this fault carries beside its own (see CarriedReport): empty for a fault that
+    /// met one place, one entry per refused place for a fault a whole-function pass raised.
+    const std::vector<CarriedReport> &carried() const { return carried_; }
 
     const char *what() const noexcept override;
 
@@ -145,6 +166,7 @@ class RuntimeFault : public std::exception {
     std::exception_ptr cause_;
     ExecutionSiteHint hint_;
     RuntimeFaultPolicy policy_;
+    std::vector<CarriedReport> carried_;
     mutable std::string what_;
 };
 

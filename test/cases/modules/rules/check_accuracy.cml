@@ -10,7 +10,7 @@ module check_accuracy
 
 import { check } from rewrite
 import { log, log1p } from math
-import { Tensor, log, log_softmax, softmax } from tensor
+import { log, log_softmax, softmax } from tensor
 
 #requires(refine_accuracy)
 rule accurate_log1p(x: float) {
@@ -23,17 +23,17 @@ rule worse_log1p(x: float) {
 }
 
 #requires(refine_accuracy)
-rule softmax_vector(x: Tensor<f32, [3]>, const axis: int) {
+rule softmax_vector(x: f32[3], const axis: int) {
     log(softmax(x, axis)) => log_softmax(x, axis)
 }
 
 #requires(refine_accuracy)
-rule softmax_matrix(x: Tensor<f32, [2, 3]>, const axis: int) {
+rule softmax_matrix(x: f32[2, 3], const axis: int) {
     log(softmax(x, axis)) => log_softmax(x, axis)
 }
 
 #requires(refine_accuracy)
-rule softmax_axis2(x: Tensor<f32, [2, 2, 2]>, const axis: int) {
+rule softmax_axis2(x: f32[2, 2, 2], const axis: int) {
     log(softmax(x, axis)) => log_softmax(x, axis)
 }
 

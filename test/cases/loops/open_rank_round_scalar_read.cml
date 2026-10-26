@@ -1,13 +1,13 @@
-// A round of an array whose rank is open is that array, not its element: with `x: Tensor<f32>`
+// A round of an array whose rank is open is that array, not its element: with `x: f32[..]`
 // (`f32[..]`) the round `v` is declared `f32[..]`, so `s + v` reads an array where the operator
 // takes a scalar and is refused when the program is compiled. The refusal keeps the type of both
 // operands and names the reading to write instead — the element the array holds is read with
 // `sum(v)` or an explicit conversion (this case pins that spelling).
 module open_rank_round_scalar_read
+import tensor
 
-import { Tensor } from tensor
 
-func bad(x: Tensor<f32>): float {
+func bad(x: f32[..]): float {
     return loop s = 0.0 for v in x do s + v
 }
 

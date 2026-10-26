@@ -3,8 +3,8 @@
  * gradient of the same type, `(f32[..], int)`, and the `int` member's value is the zero of its own
  * type. The gradient of a parameter is what the user sees -- `grad of P`, and the value
  * `grad`/`with_grad` hand back -- and *that* is what tells the two answers apart, not whether the
- * parameter is a struct or a tuple (the author's ruling of 2026-10-25 on
- * discrete-tuple-tangent-space-and-machinery-aggregates: "a model written as a tuple
+ * parameter is a struct or a tuple, and that is the rule the case pins:
+ * "a model written as a tuple
  * `with <m: (f32[..], int)>` must get `(f32[..], int)` back too, with the `int` at zero").
  *
  * `let g: (f32[..], int) = gradient` pins the other half: the gradient is the model's own type, not
@@ -15,13 +15,13 @@
  */
 module grad_tuple_discrete_member
 
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { with_grad } from autodiff
 
 with <m: (f32[..], int)>
 func loss(): float {
     let (p, k) = m
-    return sum(p) * float(k)
+    return float(sum(p)) * float(k)
 }
 
 func main(): int sync {

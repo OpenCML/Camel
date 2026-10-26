@@ -3,7 +3,7 @@
  * order, with a repeated index repeating its row.
  */
 module subscript_take_rows
-import { Tensor, reshape, shape, sum } from tensor
+import { reshape, shape, sum } from tensor
 
 func main(): int sync {
     let b = reshape([1.0, 2.0, 3.0, 4.0], [4])

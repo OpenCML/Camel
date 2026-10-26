@@ -862,7 +862,7 @@ Context::loadModuleFrom(const std::string &moduleName, const std::string &path, 
                     moduleName, camel::utils::pathToUtf8(declarations), shared_from_this()));
             declared->setDeclarationModule(true);
             declared->setImplementation(mod);
-            // One module, not two (design principles 6.4; handover): what the
+            // One module, not two (design principles 6.4): what the
             // C++ module exports — its types, its constants and the groups and tags it
             // declares — is what this module exports, and a `.cml` name is written into the
             // same tables. An importer of the name never learns there were two objects.

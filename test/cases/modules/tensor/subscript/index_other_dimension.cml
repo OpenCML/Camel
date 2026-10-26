@@ -1,0 +1,17 @@
+/**
+ * A subscript that names a range on one dimension and a position on another (`m[:, 0]`,
+ * `m[a:b, c]`): the syntax is accepted and the form is refused with a located diagnostic, because
+ * the slice operator takes one axis and keeps every other dimension, while the index operator
+ * takes the first dimension and drops it. Neither one reads a position on a later dimension, so
+ * the subscript is refused rather than read as a slice of the wrong axis.
+ */
+module subscript_index_other_dimension
+import { reshape, shape } from tensor
+
+func main(): int sync {
+    println('reached')
+    let m = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3])
+    let column = m[:, 0]
+    println(shape(column))
+    return 0
+}

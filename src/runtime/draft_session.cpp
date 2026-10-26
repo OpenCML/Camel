@@ -256,8 +256,8 @@ slot_t cloneStaticSlot(
         // `subtract: ...`) and a reader that asks for the width of an element got one the value
         // has not (`to_bytes`). A native multidimensional array is its element type and its shape
         // (design principles 5.4), and an unstated element type means the type does not say which
-        // one the value has — not that the value has none — so the clone takes the value's (the
-        // ruling the `nn`/`optim` tensor leaf already follows, develop's 392d7e734).
+        // one the value has — not that the value has none — so the clone takes the value's, the rule
+        // the `nn`/`optim` tensor leaf already follows.
         if (array != nullptr && array->isCompact()) {
             auto *clonedArray =
                 static_cast<::Array *>(array->clone(mm::autoSpace(), arrayType, false));

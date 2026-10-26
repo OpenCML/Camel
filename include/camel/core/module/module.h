@@ -76,15 +76,25 @@ class Entity {
     struct generic_payload_t {
         std::shared_ptr<void> tmpls;
     };
+    /// The name of a decorated function that shares its name with other functions of the module:
+    /// what the decorators made of the declaration, and the functions of the name it stands
+    /// beside. An importer receives both -- a name stands for the decorated function and its
+    /// overloads at once, and a call of it chooses among them (`docs/design-principles.cn.md`
+    /// 4.4) -- so the two travel together.
+    struct decorated_overloads_payload_t {
+        graph_payload_t decorated;
+        graph_set_ptr_t overloads;
+    };
     using storage_t = std::variant<
         node_payload_t, graph_set_ptr_t, oper_group_ptr_t, graph_payload_t, generic_payload_t,
-        camel::core::data::data_ptr_t, tag_payload_t>;
+        camel::core::data::data_ptr_t, tag_payload_t, decorated_overloads_payload_t>;
 
     explicit Entity(node_payload_t node) : storage_(node) {}
     explicit Entity(tag_payload_t tag) : storage_(tag) {}
     explicit Entity(graph_set_ptr_t graphs) : storage_(std::move(graphs)) {}
     explicit Entity(graph_payload_t graph) : storage_(std::move(graph)) {}
     explicit Entity(generic_payload_t generic) : storage_(std::move(generic)) {}
+    explicit Entity(decorated_overloads_payload_t overloads) : storage_(std::move(overloads)) {}
 
     storage_t storage_;
 };
@@ -308,11 +318,11 @@ class Module : public std::enable_shared_from_this<Module> {
     /// becomes the module's signature for `ident`, every qualified entity whose identifier is
     /// `ident` and whose group answers for one of the same URIs resolves to that same entity: the
     /// alias is the declaration under another name, not a second entity beside it (design
-    /// principles 6.4; handover). Returns how many aliases were replaced.
+    /// principles 6.4). Returns how many aliases were replaced.
     size_t replaceTypeQualifiedAliases(const std::string &ident, const entity &ent);
     /// Adds every name `other` exports to this module's own tables: its types, its entities
     /// (operator groups, constants, tags) and the names it brings along. The two objects are one
-    /// module (design principles 6.4; handover): the C++ module implements, the
+    /// module (design principles 6.4): the C++ module implements, the
     /// `.cml` declares, and both are read under the one name the import found.
     void inheritExportsFrom(const Module &other);
     /// Exports the constant `value` under `ref` (a C++ module's `math::pi`; design principles

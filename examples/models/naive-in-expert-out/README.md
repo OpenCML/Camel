@@ -438,7 +438,7 @@ as a limit; the allocator column of `std::profile` (above) measures what a step 
 what a cell holds. The effect of the rules pipeline is not covered because it is
 not usable end to end yet: `rules::accuracy` and `rules::fusion` exist as libraries with their own
 tests, but the naive source is not rewritten into the expert form, so the "Camel + rules" row the
-ruling asks for cannot be measured. The GPU is not covered; that is H49.
+rule asks for cannot be measured. The GPU is not covered.
 
 **The earlier numbers.** 2.062 ms/step was reported for an earlier revision and 2.314 ms/step
 on a busy host.  Neither report left its machine, command or revision in the tree—this
@@ -501,9 +501,7 @@ that rounds a `1` away.  `accuracy.cml` repeats the f32 measurements in Camel.
 
 - **H238 (priority): tensors still keep one storage type.** The public tensor element types are
   effectively f32, i64 and bool; f64 is normalised to f32 by `normalizeTensorDType` on creation
-  and cast, and i32 to i64.  This paragraph is provisional: when **H238** lands (branches
-  `handover/h259-dtype`, which refuses `Tensor<f64>`/`Tensor<i32>` instead of substituting, and
-  `handover/h260-tensor-storage`, which deletes the normalisation table), delete it and add an
+  and cast, and i32 to i64.  This paragraph is provisional: when **H238** lands, delete it and add an
   f64 column to the table if f64 then works.  Until then bf16 overflow and the fp64 error of the
   step cannot be measured in Camel; its f32 thresholds match PyTorch's f32 thresholds exactly.
 - **The two blocks are now one `Block[]`, and the forward pass is the plain
@@ -517,9 +515,9 @@ that rounds a `1` away.  `accuracy.cml` repeats the f32 measurements in Camel.
   array elements are named by index, so an existing checkpoint still loads.
 - **`f32[b, t, d]` does not reach the tensor operators.**  `exp`, `@`, `sum` and the rest take
   `Tensor`, not the core array type; `let x: f32[2, 3] = randn(...)` is a `DeclaredTypeMismatch`.
-  The example writes shaped `Tensor<f32, [8, 16, 64]>` (and named aliases `TokenStates`,
+  The example writes shaped `f32[8, 16, 64]` (and named aliases `TokenStates`,
   `HeadStates`, ...), so every signature and every field shows its extents.  Dimension names
-  inside `Tensor<f32, [b, t, d]>` do not bind (the checker warns `DimensionNameUsedOnce`), so the
+  inside `f32[b, t, d]` do not bind (the checker warns `DimensionNameUsedOnce`), so the
   extents are written as literals and named by the aliases and the comment at the top.
 - **No dtype conversion written as a type.**  `f32(oh)` has no tensor overload, and
   `oh as f32[...]` is a `DynamicCastForbidden`; the one-hot product uses numeric promotion

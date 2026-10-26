@@ -49,7 +49,6 @@ Camel 是图原生的通用编程语言：程序只表达计算意图——要�
 [`examples/01_hello.cml`](examples/01_hello.cml)：
 
 ```cml
-module hello
 
 func main(): int sync {
     println('Hello, Camel!')
@@ -75,7 +74,6 @@ Hello, Camel!
 [`examples/02_values.cml`](examples/02_values.cml)：
 
 ```cml
-module values
 
 type Point = { x: int, y: int }
 
@@ -130,7 +128,6 @@ func main(): int sync {
 [`examples/03_functions.cml`](examples/03_functions.cml)：
 
 ```cml
-module functions
 
 func square(x: int): int {
     return x * x
@@ -179,7 +176,6 @@ func main(): int sync {
 [`examples/04_branches.cml`](examples/04_branches.cml)：
 
 ```cml
-module branches
 
 func sign(x: int): string {
     return if x > 0 then 'positive' else if x < 0 then 'negative' else 'zero'
@@ -225,7 +221,6 @@ A B D
 在图上，分支的每个臂是它自己的一张子图。所以**臂的块里写的 `return` 给出的是这个分支的值，不是离开函数**。[`examples/04_block_return.cml`](examples/04_block_return.cml)：
 
 ```cml
-module block_return
 
 // The `if` is a statement whose value nobody uses, so the two `return`s have no effect.
 func wrong(x: int): string {
@@ -254,9 +249,9 @@ negative
 
 ```text
 warning[SemanticDiag::ExitInUnusedBranch]: This 'return' gives the value of the 'if' it is in, and nothing uses that value: it does not leave the function.
-  --> docs/tutorial/examples/04_block_return.cml:7:21
+  --> docs/tutorial/examples/04_block_return.cml:6:21
    |
- 7 |     if x < 0 then { return 'negative' } else { return 'not negative' }
+ 6 |     if x < 0 then { return 'negative' } else { return 'not negative' }
    |                     ^^^^^^^^^^^^^^^^^
 note: the value of this 'if' is not used
 ```
@@ -268,7 +263,6 @@ Camel 里没有“提前返回”。让分支成为函数体的最后一个表�
 [`examples/05_arrays.cml`](examples/05_arrays.cml)：
 
 ```cml
-module arrays
 
 func main(): int sync {
     let xs = 1..11    // [1, ..., 10]
@@ -311,7 +305,6 @@ item c
 `map` 的各个元素之间**没有执行顺序的约定**。元素函数是纯的时候这无关紧要；一旦它调用了有状态的东西，结果就取决于哪个元素先算。[`examples/05_map_order.cml`](examples/05_map_order.cml) 用随机数发生器演示（`randint` 每调用一次，隐藏的状态前进一步）：
 
 ```cml
-module map_order
 
 import { seed, randint } from random
 
@@ -356,7 +349,6 @@ func main(): int sync {
 这带来一个推论：**在同步块之外，一个结果没人用的调用不会执行**，哪怕它有副作用。[`examples/06_unused_effect.cml`](examples/06_unused_effect.cml)：
 
 ```cml
-module unused_effect
 
 func greet(): int {
     println('hello from greet')     // not used, not in a sync block: never runs
@@ -375,9 +367,9 @@ camel docs/tutorial/examples/06_unused_effect.cml
 
 ```text
 warning[SemanticDiag::EffectNotExecuted]: The call of 'println' has side effects but is never executed: nothing depends on it and it is not in a sync block.
-  --> docs/tutorial/examples/06_unused_effect.cml:6:5
+  --> docs/tutorial/examples/06_unused_effect.cml:5:5
    |
- 6 |     println('hello from greet')     // not used, not in a sync block: never runs
+ 5 |     println('hello from greet')     // not used, not in a sync block: never runs
    |     ^^^^^^^
 help: Evaluation is driven by dependencies: outside a sync block an expression whose result (or the
       variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync
@@ -424,7 +416,6 @@ func f(c: bool): int sync {
 `main` 的函数体是同步块，那它调用的函数里的 `println` 会执行吗？不会。函数编译成它自己的子图，调用只是把这个子图节点放进更大的图里，不改变它的结构。[`examples/06_callee_decides.cml`](examples/06_callee_decides.cml)：
 
 ```cml
-module callee_decides
 
 func log(x: int): int {
     println(x)          // result unused, body is not a sync block: not executed
@@ -450,7 +441,6 @@ func main(): int sync {
 `sync` 写在**函数体**位置时（`func g(): int sync { ... }`），它修饰的是函数体那个块：块里的语句按书写顺序执行。不写 `sync` 的函数体不是同步块，里面 `println` 这类效果不执行（按依赖求值）。[`examples/06_sync_body.cml`](examples/06_sync_body.cml)：
 
 ```cml
-module sync_body
 
 func f(): int {
     println('f')        // 不执行：函数体不是同步块
@@ -481,9 +471,9 @@ Camel 里一切值按引用传递。形参前写 `var` 表示函数会修改它�
 
 ```text
 error[SemanticDiag::ImmutablePassedToVarParam]: 'k' is immutable and cannot be passed to a var parameter of 'bump'.
-   --> docs/tutorial/examples/06_let_to_var.cml:11:10
+   --> docs/tutorial/examples/06_let_to_var.cml:10:10
     |
- 11 |     bump(k)
+ 10 |     bump(k)
     |          ^
 help: Only a variable declared with 'var' (or a var parameter) can be modified. Declare it with
       'var', or bind the new value to a new name.
@@ -492,7 +482,6 @@ help: Only a variable declared with 'var' (or a var parameter) can be modified. 
 有了可变的变量，就有了顺序问题：读要排在哪次写之后？答案是同步块：写进同一个同步块的语句按书写顺序执行，所以两次写入与后面的读取有确定的先后。[`examples/06_var_order.cml`](examples/06_var_order.cml)：
 
 ```cml
-module var_order
 
 func bump(var counter: int): int sync {
     counter += 1
@@ -528,7 +517,6 @@ func main(): int sync {
 [`examples/07_closures.cml`](examples/07_closures.cml)：
 
 ```cml
-module closures
 
 func inc(x: int): int { return x + 1 }
 func dbl(x: int): int { return x * 2 }
@@ -574,7 +562,6 @@ func main(): int sync {
 [`examples/08_generics.cml`](examples/08_generics.cml)：
 
 ```cml
-module generics
 
 type Pair<T> = (T, T)
 
@@ -614,7 +601,6 @@ a
 声明还可以说明**自己在哪里适用**：签名后的 `when` 是对声明类型参数的编译期条件。下面的 `double_it` 只适用于数值；一次调用若所有候选的条件都不成立，调用处会报错，并列出每个候选写下的条件。`is_numeric` 不是编译器内建的名字，而是用 `match type` 写出来的普通函数（标准库的七个类型谓词在 `types` 里）；条件调用的是这个模块看得到的函数，所以片段把它写在同一个模块。
 
 ```cml
-module applicability
 
 func is_numeric::<T>(): bool {
     return match type T {
@@ -638,7 +624,6 @@ func main(): int sync {
 Camel 没有异常，没有 `try`/`catch`。可能失败的函数把返回类型声明为 **`T!`**：它的值要么是一个 `T`，要么是一个错误。[`examples/09_errors.cml`](examples/09_errors.cml)：
 
 ```cml
-module errors
 
 func safe_div(a: int, b: int): int! {
     return if b == 0 then {
@@ -689,9 +674,9 @@ error DivByZero: the divisor is zero
 ```text
 before
 error[RuntimeDiag::IndexOutOfRange]: Index 5 is out of range for an array of length 3.
-  --> docs/tutorial/examples/09_fault.cml:8:15
+  --> docs/tutorial/examples/09_fault.cml:7:15
    |
- 8 |     println(xs[5])
+ 7 |     println(xs[5])
    |               ^
 help: Ensure the index is within the valid range of the collection.
 ```
@@ -701,7 +686,6 @@ help: Ensure the index is within the valid range of the collection.
 **`T?`** 的值要么是 `null`，要么是一个 `T`。[`examples/10_nullable.cml`](examples/10_nullable.cml)：
 
 ```cml
-module nullable
 
 func find(xs: int[], target: int, i: int): int? {
     return if i >= len(xs) then null
@@ -742,7 +726,6 @@ null
 `Map<K, V>` 与 `Set<T>` 是内建类型。没有专门的字面量：写一个数组，再用 `as` 转换。[`examples/11_collections.cml`](examples/11_collections.cml)：
 
 ```cml
-module collections
 
 func main(): int sync {
     let ages = [('bob', 31), ('alice', 28)] as Map<string, int>
@@ -780,7 +763,6 @@ func main(): int sync {
 [`examples/shapes.cml`](examples/shapes.cml) 是一个库模块，用 `export` 标出对外可见的名字：
 
 ```cml
-module shapes
 
 import { sqrt } from math
 
@@ -798,7 +780,6 @@ export func area(w: float, h: float): float {
 [`examples/12_modules.cml`](examples/12_modules.cml) 使用它和标准模块 `math`：
 
 ```cml
-module modules_demo
 
 import { sqrt } from math
 import { hypot, Vec } from shapes
@@ -827,7 +808,6 @@ func main(): int sync {
 随 Camel 提供的模块有 `str`（字符串）、`array`（数组）、`math`、`statistics`、`random`、`time`、`fs`、`json`、`process`、`env`、`re`、`hash`、`para`、`this`，张量一系的 `tensor`、`nn`、`autodiff`、`onnx`，以及嵌入 Python 的 `python`（[语言参考 5.2.1](../language/05_modules.md#521-随-camel-提供的模块)）。[标准库参考](../stdlib-reference.md)逐个列出前十四个模块的函数：签名、是否纯、失败时的行为、例子。[`examples/12_stdlib.cml`](examples/12_stdlib.cml)：
 
 ```cml
-module stdlib_demo
 
 import { split, trim, to_upper, replace, find } from str
 import { sort_by, take, sum, reverse, unique } from array
@@ -890,7 +870,6 @@ OPERATOR {"module":"str","name":"split","uri":"str:split","with":1,"norm":1,"pur
 到这里一直在说“函数是子图，调用是节点”。现在亲眼看一看。[`examples/13_graph.cml`](examples/13_graph.cml)：
 
 ```cml
-module graph_demo
 
 func add(a: int, b: int): int {
     return a + b
@@ -963,7 +942,6 @@ digraph GraphIR {
 `std::rgir` 是一个**遍**。Camel 把编译、优化、执行、导出都建模为对图的变换，文件名后面写的就是要依次运行的遍。同一份源码，换一组遍，做不同的事。用 [`examples/14_passes.cml`](examples/14_passes.cml)：
 
 ```cml
-module passes_demo
 
 func square(x: int): int {
     return x * x
@@ -1024,7 +1002,6 @@ camel docs/tutorial/examples/14_passes.cml --dump-after-each-pass snap std::opt:
 张量来自 `tensor` 模块。[`examples/15_tensor.cml`](examples/15_tensor.cml)：
 
 ```cml
-module tensor_demo
 
 import { Tensor, ones, zeros, shape, sum, transpose } from tensor
 
@@ -1050,11 +1027,10 @@ func main(): int sync {
 **一个最小的模型。** Camel 程序的本来面目是只表达计算：`main` 就是模型，它的参数就是模型的输入。[`examples/15_model.cml`](examples/15_model.cml)：
 
 ```cml
-module model
 
 import { Tensor, ones, relu, sum } from tensor
 
-func main(x: Tensor<f32, [2, 3]>): f32[..] {
+func main(x: f32[2, 3]): f32[..] {
     let w = ones([3, 1])
     return relu(x @ w)
 }
@@ -1091,7 +1067,6 @@ onnx::export: wrote model.onnx
 自动微分是建立在遍机制之上的库：`grad(f)` 把 `f` 的图改写成它的导数的图。`f` 的第一个 `with` 参数是被求导的权重，普通参数是数据。[`examples/16_grad.cml`](examples/16_grad.cml)：
 
 ```cml
-module grad_demo
 
 import { grad, with_grad } from autodiff
 

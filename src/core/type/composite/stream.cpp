@@ -4,6 +4,8 @@
 #include "camel/core/type/composite/stream.h"
 
 #include "camel/core/mm.h"
+#include "camel/core/type/composite/func.h"
+#include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/intern.h"
 #include "camel/core/type/storage.h"
 #include "camel/core/type/text.h"
@@ -37,6 +39,14 @@ StreamType *StreamType::make(Type *elemType) {
 }
 
 StreamType *StreamType::create(Type *elemType) { return make(elemType); }
+
+// The step signature `() => (T, T..)?`: one function type per element type, interned like every
+// other type, so two values of the same stream type name the same signature.
+FunctionType *StreamType::stepType() const {
+    const param_vec_t none;
+    return FunctionType::create(
+        none, none, TupleType::nullable(TupleType::create({elemType_, const_cast<StreamType *>(this)})));
+}
 
 // A stream is never written as a literal, so resolve() is reached only by a type that stands
 // where an element was still unknown (`Ref`). There is no element list to join: the type is
@@ -74,9 +84,10 @@ Type *StreamType::unify(Type *other) const {
 
 Type *StreamType::widened() const { return create(elemType_->widened()); }
 
-// A stream converts to nothing but its own type: what turns some other value into a stream (a
-// source, a generator, `tee`) is an operator of its own, not a conversion of a value that is
-// already a stream.
+// A stream is its step function (StreamType::stepType): a value of that signature is a value of
+// this type, so the conversion is safe and moves nothing. Nothing else becomes a stream by
+// conversion -- what turns another value into one (a source, a generator, `tee`) is an operator
+// of its own, not a conversion.
 CastSafety StreamType::castSafetyFrom(Type *sourceType) const {
     if (sourceType == nullptr) {
         return CastSafety::Forbidden;
@@ -91,7 +102,18 @@ bool StreamType::assignableFrom(Type *sourceType) const {
     if (sourceType == this) {
         return true;
     }
-    return sourceType->code() == TypeCode::Stream && typeEquals(this, sourceType);
+    if (sourceType->code() == TypeCode::Stream) {
+        return typeEquals(this, sourceType);
+    }
+    if (sourceType->code() != TypeCode::Function) {
+        return false;
+    }
+    // A stream is its step function: a value of that signature is a value of this type, and the
+    // step signature is asked whether it accepts the function rather than compared with it. The
+    // rest of a stream is a stream, so the same value is written two ways -- `(n, step(n - 1))`
+    // gives `(int, () => (int, int..)?)`, whose second component is the step signature of `int..`
+    // and stands where `int..` does -- and a comparison by equality refused the written form.
+    return stepType()->assignableFrom(sourceType);
 }
 
 } // namespace camel::core::type

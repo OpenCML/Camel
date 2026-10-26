@@ -6,7 +6,7 @@
 module siamese_shared_encoder
 
 import { grad, with_grad } from autodiff
-import { Tensor, full, sum, tanh, zeros } from tensor
+import { full, sum, tanh, zeros } from tensor
 import { sgd } from nn
 
 type Encoder = {
@@ -30,7 +30,7 @@ func encode(x: f32[..]): f32[..] {
 
 func pair_loss(za: f32[..], zb: f32[..]): float {
     let diff = za - zb
-    return sum(diff * diff)
+    return float(sum(diff * diff))
 }
 
 with <model: Siamese>

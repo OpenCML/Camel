@@ -23,7 +23,7 @@ using namespace camel::core::module;
 using namespace camel::core::type;
 
 // The module exports no operator group of its own: `plot` is declared in `stdlib/pyplot.cml`,
-// which is the one source of its signature (design principles 6.4; handover H19, step 10; H166).
+// which is the one source of its signature (design principles 6.4).
 // The C++ side keeps the kernel, the executor and the operator traits.
 PyplotModule::PyplotModule(context_ptr_t ctx) : BuiltinModule("pyplot", ctx) {}
 
@@ -44,8 +44,7 @@ void ensurePyplotInterpreter() {
 bool PyplotModule::load() {
     if (loaded_)
         return true;
-    // `import` executes no code (design principles 3.1; the language author's ruling of
-    // 2026-10-22; handover H221): loading registers the executor and the purity of the operator,
+    // `import` executes no code (design principles 3.1): loading registers the executor and the purity of the operator,
     // which the declaration loader needs, and nothing that touches CPython. The interpreter is
     // created by the first `plot` (`ensurePyplotInterpreter`), or attached to when `python`
     // created it first.
@@ -54,7 +53,7 @@ bool PyplotModule::load() {
     // The purity of the module's operator (design principles 3.3). `plot` writes an image file
     // (or opens a window when matplotlib shows one): no pass may fold, merge or drop the call.
     // Without this entry the declaration loader refuses a body-less declaration of `pyplot:plot`
-    // (`Builder::declareNativeOperator`, src/compile/gir/builder_modules.cpp#declareNativeOperator; H157, H166).
+    // (`Builder::declareNativeOperator`, src/compile/gir/builder_modules.cpp#declareNativeOperator).
     camel::core::OperatorTable::instance().declare("pyplot", {{"plot", false}});
     loaded_ = true;
     return true;

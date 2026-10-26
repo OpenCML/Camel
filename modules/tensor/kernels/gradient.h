@@ -71,11 +71,6 @@ Array *layerNormGrad(
     const Array *x, const Array *gamma, const Array *dy, double eps,
     LayerNormGrad which, mm::IAllocator &allocator);
 
-/// Gradient of slice(t, axis, start, end, step) for an input of `shape`: dy scattered into zeros.
-Array *sliceGrad(
-    const Array *dy, std::span<const int64_t> shape, int64_t axis, int64_t start,
-    int64_t end, int64_t step, mm::IAllocator &allocator);
-
 /// Gradients of matmul(lhs, rhs) given dy, reduced over broadcast batch dimensions. `useLibrary`
 /// is the forward node's `tensor.kernel` choice carried to the gradient; the library GEMM itself
 /// falls back to the canonical kernel below the measured shape threshold (gemm.cpp).

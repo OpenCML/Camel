@@ -1,20 +1,20 @@
 module batch_matmul_checks
-import { Tensor, randn, seed, sum, mean, abs, reshape, shape, set_num_threads } from tensor
+import { randn, seed, sum, mean, abs, reshape, shape, set_num_threads } from tensor
 import { with_grad } from autodiff
 import { source, run_preferred_resident, download } from tiles
 
-type Pair = { a: Tensor<f32>, b: Tensor<f32> }
-func pair(a: Tensor<f32>, b: Tensor<f32>): Pair { return { a: a, b: b } }
-func product(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return a @ b }
+type Pair = { a: f32[..], b: f32[..] }
+func pair(a: f32[..], b: f32[..]): Pair { return { a: a, b: b } }
+func product(a: f32[..], b: f32[..]): f32[..] { return a @ b }
 with <w: Pair>
-func loss(target: Tensor<f32>): float {
+func loss(target: f32[..]): float {
     let e = w.a @ w.b - target
-    return mean(e * e)
+    return float(mean(e * e))
 }
-func derivative(w: Pair, target: Tensor<f32>): (float, Pair) {
+func derivative(w: Pair, target: f32[..]): (float, Pair) {
     return with_grad(loss)<w>(target)
 }
-func check(name: string, a: Tensor<f32>, b: Tensor<f32>, target: Tensor<f32>, run_gpu: bool): int sync {
+func check(name: string, a: f32[..], b: f32[..], target: f32[..], run_gpu: bool): int sync {
     let w = pair(a, b)
     let code = source<derivative>((w, target))
     if len(code) == 0 then sync { exit(1) }
@@ -26,7 +26,7 @@ func check(name: string, a: Tensor<f32>, b: Tensor<f32>, target: Tensor<f32>, ru
         let plus = pair(a + 0.001, b - 0.001)
         let minus = pair(a - 0.001, b + 0.001)
         let fd = (loss<plus>(target) - loss<minus>(target)) / 0.002
-        let fd_error = sum(abs(reshape([f32(fd - sum(gpu.1.a) + sum(gpu.1.b))], [1])))
+        let fd_error = float(sum(abs(reshape([f32(fd - float(sum(gpu.1.a)) + float(sum(gpu.1.b)))], [1]))))
         println('BATCH {} forward_l1={} gradient_l1={} directional_error={}'->format<name, forward_error, gradient_error, fd_error>)
         if forward_error > 0.0001 || gradient_error > 0.0001 || fd_error > 0.002 then sync { exit(1) }
     }

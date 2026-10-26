@@ -16,7 +16,7 @@
  */
 module dyn_train_step
 
-import { Tensor, relu, mean, sum, reshape, shape, load_npy } from tensor
+import { relu, mean, sum, reshape, shape, load_npy } from tensor
 import { with_grad } from autodiff
 import { sgd, save_params } from nn
 import { export_model } from onnx
@@ -33,13 +33,13 @@ func fwd(x: float[..]): float[..] {
 with <m: Mlp>
 func loss_mean(x: float[..]): float {
     let y = fwd<m>(x)
-    return mean(y * y)
+    return float(mean(y * y))
 }
 
 with <m: Mlp>
 func loss_summean(x: float[..]): float {
     let y = fwd<m>(x)
-    return sum(y * y) / float(shape(y)[0] * shape(y)[1])
+    return float(sum(y * y)) / float(shape(y)[0] * shape(y)[1])
 }
 
 func step_mean(m: Mlp, x: float[..]): (float, Mlp) {

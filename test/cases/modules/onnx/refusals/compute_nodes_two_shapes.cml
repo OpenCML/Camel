@@ -3,14 +3,14 @@
  * (std::opt::fold then devirtualize then inline) has spliced `combine` into `main` before the
  * inliner examines the call of `main`, while the other (std::opt, whose rewrite rounds run
  * between its folding stages) examines it first. The export refusal reports the size of `main`,
- * and the review of 2026-10-24 fixed that size to the compute nodes of the function being
+ * and the size is fixed to the compute nodes of the function being
  * inlined, so both pipelines must report the same one (before the change they reported 11 and
  * 15: the copy of `combine` that had been spliced in, two OPERs behind its own region, and the
  * three GATEs the splice adds for its arguments were counted).
  */
 module compute_nodes_two_shapes
 
-import { Tensor, reshape } from tensor
+import { reshape } from tensor
 import { export_model } from onnx
 import { get_env } from env
 

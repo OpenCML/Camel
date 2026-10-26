@@ -1,6 +1,6 @@
 // Every keyword of the lexer in a position the parser accepts it in, where there is one.
 // `inner`, `outer`, `atomic`, `shared`, `is`, `of`, `keyof`, `try`, `catch` and `finally` are
-// not keywords: they are ordinary names (handover 5.00 "语法层收口" item 5), so they appear
+// not keywords: they are ordinary names, so they appear
 // below as values.
 module keywords
 

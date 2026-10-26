@@ -1,8 +1,8 @@
 /**
  * `change_precision` governs a computation the compiler moves to a lower precision, and that is
- * still gated after the rule (design principles 7.2-7.3; the rule in
- * docs/handover/reviews/reduced-precision.md: "编译器自行引入的低精度计算（例如把 f32 的矩阵乘换成
- * bf16 计算）仍然要 change_precision"): the tiles scheduler takes the cuBLAS BF16 matrix product for
+ * still gated after the rule
+ * (design principles 7.2-7.3): the
+ * tiles scheduler takes the cuBLAS BF16 matrix product for
  * an f32 matmul only where the node carries `reassociate`, `change_precision` and `finite_math`
  * together (modules/tiles/src/schedule.cpp), and `#strict` revokes every permission, that one
  * included (7.4).
@@ -17,16 +17,16 @@
  */
 module compile_bf16_permission_gate
 
-import { Tensor, ones } from tensor
+import { ones } from tensor
 import { inspect } from tiles
 
 #[reassociate, change_precision, finite_math]
-func granted(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return a @ b }
+func granted(a: f32[..], b: f32[..]): f32[..] { return a @ b }
 
 #[strict, reassociate, change_precision, finite_math]
-func revoked(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return a @ b }
+func revoked(a: f32[..], b: f32[..]): f32[..] { return a @ b }
 
-func canonical(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return a @ b }
+func canonical(a: f32[..], b: f32[..]): f32[..] { return a @ b }
 
 func main(): int sync {
     let left = ones([8, 8]) * 1.00390625

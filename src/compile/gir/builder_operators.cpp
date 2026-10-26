@@ -15,6 +15,7 @@
 #include "camel/core/numeric_convert.h"
 #include "camel/core/operator_names.h"
 #include "camel/core/rtdata/string.h"
+#include "camel/core/type/composite/stream.h"
 #include "camel/execute/entry_args.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/graph.h"
@@ -26,6 +27,7 @@
 
 #include "camel/core/operator_traits.h"
 #include "camel/core/type/collection.h"
+#include "camel/core/type/composite/array.h"
 #include "camel/core/type/other.h"
 
 #include <algorithm>
@@ -96,7 +98,7 @@ Builder::OperatorOverloads Builder::operatorOverloadsOf(const std::string &group
     }
     set.ops = imported.ops;
     // The rules of this module's own body-less declarations are its operator overloads too
-    // (design principles 10.2; handover): a call written here reaches them, and
+    // (design principles 10.2): a call written here reaches them, and
     // the comparison of the candidates counts them. They come before what an import brings, and
     // a fixed rule before a generic one (a call both accept is the more specific rule's).
     if (module_ != nullptr) {
@@ -895,6 +897,42 @@ std::optional<oper_idx_ptr_t> Builder::resolveGroupedCall(
     return chosen;
 }
 
+std::string Builder::unstatedBindingForCall(
+    const oper_group_ptr_t &ops, const type_vec_t &explicitTypes, const type_vec_t &normTypes) {
+    // A call that writes its type arguments has already fixed the variables they name, so an
+    // empty literal among its arguments is an argument the call answered for itself: what it
+    // said is what the argument takes, and the type it takes is not one the call infers.
+    if (std::ranges::any_of(explicitTypes, [](Type *type) {
+            return type != nullptr && type->code() != TypeCode::Void;
+        })) {
+        return {};
+    }
+    for (const auto &[uri, resolver] : ops->resolvers()) {
+        (void)uri;
+        // The signature the rule declares, with its type variables still in it: a rule that
+        // computes its signature from the arguments writes no variable a call could leave open.
+        FunctionType *declared = resolver->declaredSignature();
+        if (declared == nullptr) {
+            continue;
+        }
+        // The arguments are matched to the parameters the way the call wrote them: a `constas`
+        // parameter is written at its own position and is not a runtime argument.
+        size_t written = 0;
+        for (size_t i = 0; i < declared->normTypesCount() && written < normTypes.size(); ++i) {
+            if (declared->normIsConstasAt(i)) {
+                continue;
+            }
+            const std::string name =
+                unstatedBindingOf(declared->normTypeAt(i), valueTypeOf(normTypes[written]));
+            ++written;
+            if (!name.empty()) {
+                return name;
+            }
+        }
+    }
+    return {};
+}
+
 bool Builder::plainOperatorAvailableFor(
     const std::string &group, const std::vector<Argument> &operands, const type_vec_t &normTypes) {
     if (normTypes.size() != operands.size()) {
@@ -929,7 +967,7 @@ node_handle_t Builder::compoundAssignmentByRebinding(
     // `a op= b` is `a = a op b` (design principles 4.2): one rule for every type, whoever
     // declared it — a number's built-in `+`, a `+` the tensor module declares for a numeric
     // array, an `operator +` of the program. What the compound assignment follows is that
-    // operator, so what is asked of it is what the ruling of 2026-10-24 says: that `a op b` be
+    // operator, so what is asked of it is what design principles 4.2 says: that `a op b` be
     // defined for these operands, and that `a = a op b` be a legal assignment — the value the
     // operator gives fits `a`'s type where the assignment would put it (an addition broadcasts
     // `f32[]` and `f32[2]` to `f32[2]`, which a `var` holding `f32[]` takes). `int[]` has no
@@ -1384,8 +1422,7 @@ node_handle_t Builder::buildComposition(const GCT::node_ptr_t &gct, Type *expect
     // it is typed exactly as that lambda is typed: the function type the position expects gives
     // the composed function its input - the parameter of `f` - and its output - the result of
     // `g` - and it instantiates the operands where they stand, as the lambda's two calls are
-    // instantiated (design principles 5.9). The rule is
-    // docs/handover/reviews/questions-2026-10-23.md, section generic-operands-of-composition.
+    // instantiated (design principles 5.9, 5.5).
     FunctionType *expectedFunc = nullptr;
     if (expected != nullptr && expected->code() == TypeCode::Function) {
         auto *candidate = tt::as_ptr<FunctionType>(expected);
@@ -1524,8 +1561,8 @@ Builder::buildCompositionWith(const GCT::node_ptr_t &gct, node_handle_t lhs, nod
 node_handle_t Builder::composeFunctionValue(
     node_handle_t lhs, node_handle_t rhs, FunctionType *lhsType, FunctionType *rhsType,
     const GCT::node_ptr_t &gct) {
-    // The composition is the lambda `(x) => g(f(x))` and nothing else (design principles 4.2; the
-    // rule on ` -generator-and-composition`): it has the parameter
+    // The composition is the lambda `(x) => g(f(x))` and nothing else (design principles 4.2):
+    // it has the parameter
     // of `f`, the result of `g`, and the two functions as its captures. Its type, its generic
     // instantiation and its overloads are the ones that lambda has, because it is built as one.
     FunctionTypeFactory factory;
@@ -1583,8 +1620,10 @@ node_handle_t Builder::composeFunctionValue(
 node_handle_t Builder::intervalValue(
     node_handle_t lhs, node_handle_t rhs, const GCT::node_ptr_t &gct) {
     // `a..b` of two integers is the array of them from `a` to `b - 1`, left closed and right
-    // open, as the slice `t[a:b]` is (design principles 4.2). That is what `range(a, b)` gives,
-    // and the interval is that call; the written form is retired, not the operation.
+    // open, as the slice `t[a:b]` is (design principles 4.2). It is the step-1 case of `range`,
+    // written out as that call with the step, `range(a, b, 1)`: the group has one rule and it
+    // takes three arguments, so the two-argument spelling is an ordinary no-match while the
+    // interval keeps its own lowering -- the operation is retired nowhere.
     const auto make = [&](GCT::node_ptr_t node) {
         node->setOrigin(gct->origin());
         return node;
@@ -1592,9 +1631,11 @@ node_handle_t Builder::intervalValue(
     const auto nameNode = [&](const std::string &name) { return make(tree_->makeDRef(name)); };
     const std::string lhsName = bindTemporary(lhs);
     const std::string rhsName = bindTemporary(rhs);
-    GCT::node_ptr_t call      = make(tree_->makeLink(2));
+    GCT::node_ptr_t call      = make(tree_->makeLink(3));
     *call << make(tree_->makeDRef(std::string(kRangeCall))) << nameNode(lhsName)
-          << nameNode(rhsName);
+          << nameNode(rhsName)
+          << make(tree_->makeData(
+                 tt::as_shared<Data>(std::make_shared<PrimaryData<int64_t>>(int64_t{1}))));
     node_handle_t value = visitLinkNode(call);
     nodeScope_->erase(lhsName, false);
     nodeScope_->erase(rhsName, false);
@@ -1638,9 +1679,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         }
     }
     // `a..b` (gct.comp): one construct of two readings, told apart by the types of its two
-    // operands, and they are known only here (design principles 4.2; the rule of
-    //  2026-10-24 on ` -generator-and-composition`). The type this position expects is what a
-    // generic operand is instantiated from (section generic-operands-of-composition).
+    // operands, and they are known only here (design principles 4.2). The type this position
+    // expects is what a generic operand is instantiated from (design principles 5.5).
     if (gct->size() == 3 && gct->at(0)->type() == GCT::NodeKind::DREF &&
         gct->at(0)->name() == camel::core::kCompositionCall) {
         node_handle_t composed = buildComposition(gct, expectedResult);
@@ -2224,7 +2264,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     ExtentPacks dimPacks;
     const auto enterParameters = [&](FunctionType *funcType) {
         // The parameter types may write their extents over names the signature binds, e.g.
-        // `func f(x: Tensor<f32, const [constas n]>, y: Tensor<f32, const [n]>)`. Bind each name
+        // `func f(x: f32[n], y: f32[n])`. Bind each name
         // from every argument whose extent is statically known; what the arguments leave open is
         // checked when the call runs, by passing the argument through the checked conversion
         // (`as`) to the refined parameter type. Nothing here depends on the values at runtime,
@@ -2475,7 +2515,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             compile_graph_ptr_t chosenDecorated = nullptr;
             // Candidates that took the arguments but whose `when` condition is false: if no
             // other candidate applies, the call is reported as one whose conditions are unmet
-            // (design principles 5.13), not as an ordinary mismatch.
+            // (design principles 4.4), not as an ordinary mismatch.
             std::vector<std::pair<std::string, std::string>> unmetConditions;
             const auto signatureOf = [&](const compile_graph_ptr_t &g) -> FunctionType * {
                 if (auto it = decoratedOf_.find(g.get()); it != decoratedOf_.end()) {
@@ -2573,7 +2613,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 if (!unmetConditions.empty()) {
                     // Every candidate that took the arguments was made inapplicable by its
                     // condition. The report names each candidate and the condition it wrote
-                    // (design principles 5.13: the call-site error lists the unmet conditions).
+                    // (design principles 4.4: the call-site error lists the unmet conditions).
                     std::map<std::string, std::string> listed;
                     for (const auto &[name, text] : unmetConditions) {
                         listed.emplace(name, text);
@@ -2727,9 +2767,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 return strutil::join(written, ", ", [](const std::string &s) { return s; });
             };
             // Candidates whose own `when` holds for these arguments: one of them is the call,
-            // and more than one is a call with no answer (design principles 4.4; the language
-            // rule on `two-when-conditions-hold`,
-            // docs/handover/reviews/questions-2026-10-23.md: "带 `when` 的候选都适用时，调用处报
+            // and more than one is a call with no answer (design principles 4.4:
+            // "带 `when` 的候选都适用时，调用处报
             // 歧义，列出两条候选与各自成立的条件"). The declaration-time check asks about one type
             // at a time, so this is the first place the pair can be seen.
             std::vector<std::string> ambiguousConditions;
@@ -2840,6 +2879,19 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     diags_->of(SemanticDiag::WhenConditionUnmet)
                         .atOrigin(gct->origin())
                         .commit(ops->name(), argTypes, conditions);
+                    throw BuildAbortException();
+                }
+                // An argument that states no element type (`[]`, an array whose element type
+                // nobody wrote) is not a mismatch of types: the type variable of the parameter it
+                // stands at can be fixed by nothing, and the call is reported as the type argument
+                // it cannot infer (design principles 5.1, 5.2). The candidate that would have
+                // taken the argument names the variable.
+                if (const std::string name =
+                        unstatedBindingForCall(ops, explicitTypes, normInputTypes);
+                    !name.empty()) {
+                    diags_->of(SemanticDiag::FunctionTypeArgumentNotInferred)
+                        .atOrigin(gct->origin())
+                        .commit(name, ops->name());
                     throw BuildAbortException();
                 }
                 // A bf16 or f16 operand (or an array of one) that no overload can take: the
@@ -2957,24 +3009,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 throw BuildAbortException();
             }
             targetOperator = *res;
-            // The interval of two integers is written `a..b` and nothing else: the two-parameter
-            // `range(a, b)` is deleted, one thing one spelling (design principles 4.2; the
-            // rule on ` -generator-and-composition`). The call the
-            // program writes is refused here, where it stands, with the spelling to write
-            // instead. The operation stays: it is what `a..b` becomes on the graph
-            // (`intervalValue`), and the compiler writes that call with the built-in callee name
-            // (`$builtin::range`), which no program writes and which this does not touch.
-            if (targetOperator->uri() == ":struct/range" && normInputs.size() == 2 &&
-                withInputs.empty() && gct->size() >= 1 &&
-                gct->at(0)->type() == GCT::NodeKind::DREF && gct->at(0)->name() == "range") {
-                // The caret is under the name the program wrote, so the refused spelling is what
-                // the reader sees marked.
-                const auto where = gct->at(0)->origin() != 0 ? gct->at(0)->origin() : gct->origin();
-                diags_->of(SemanticDiag::RangeTwoArgumentsRemoved).atOrigin(where).commit();
-                throw BuildAbortException();
-            }
             // `range(a, b, step)` is the integers `a`, `a + step`, ... below `b` (design
-            // principles 4.2; the rule on ` -interval-step-form`), so
+            // principles 4.2), so
             // a step of 0 names no sequence at all: a fault when the step is known only at the
             // run, and the refusal here when it is a constant, where the step is written. A
             // constant step that is not 0 is left to the call: the array it builds is the value
@@ -3004,16 +3040,20 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     throw BuildAbortException();
                 }
             }
-            // A subscript slice with a constant step of 0 takes no element at all: the same rule
-            // as the step of a range, refused where the step is written (design principles 5.4
-            // for the slice, 4.2 for the range). The step is the fifth ordinary argument of
-            // `__slice__` -- the value, the axis, the two bounds, the step; the sixth is the mask
-            // that says which of the two bounds were written, so it is not the step. A step that
-            // is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument), and a
-            // tensor's own slice checks its step with the shape facts it holds.
-            if (targetOperator->uri() == ":op/slice_sub" && normInputs.size() == 6 &&
-                withInputs.empty() && gct->size() >= 1 &&
-                gct->at(0)->type() == GCT::NodeKind::DREF && gct->at(0)->name() == "__slice__") {
+            // A slice with a constant step of 0 takes no element at all: the same rule as the step of a
+            // range, refused where the step is written (design principles 5.4 for the slice, 4.2
+            // for the range). The two spellings of the node are one node -- the subscript's
+            // `__slice__` and the function form's `slice(t, axis, start, end, step, written)`, both
+            // the core's `:op/slice_sub` -- so the check reads the node and not the spelling: one
+            // fault has one answer, the catalog's `SliceStepZero`, with the caret under the step.
+            // The step is the node's fifth ordinary argument (the value, the axis, the two bounds,
+            // the step; the sixth is the mask that says which of the two bounds were written, and a
+            // call that stops at five words wrote no mask, so it is read as "both bounds", 3). A
+            // step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument,
+            // and a tensor's own slice checks its step with the shape facts it holds).
+            if (targetOperator->uri() == ":op/slice_sub" && normInputs.size() >= 5 &&
+                normInputs.size() <= 6 && withInputs.empty() && gct->size() >= 1 &&
+                gct->at(0)->type() == GCT::NodeKind::DREF) {
                 const auto stepIsZero = [](const data_ptr_t &data) {
                     if (const auto integer = std::dynamic_pointer_cast<LongData>(data);
                         integer != nullptr) {
@@ -3045,6 +3085,29 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     *form);
             }
             rejectLiteralConversion(ops->name(), targetOperator->funcType(), normInputs, gct);
+            // The empty literal `[]` stated no element type where it was written, and the type
+            // argument the call wrote is what fixes it now (`show::<f32>([])` has an `f32[]`
+            // argument, not the `void[]` it was built as): it takes the type of the parameter it
+            // stands at, the way it takes the type of any other position it stands in (design
+            // principles 3.8, 5.1). An argument already of the parameter's type is left as it is.
+            if (!explicitTypes.empty()) {
+                for (size_t i = 0; i < normInputs.size(); ++i) {
+                    if (i >= targetOperator->funcType()->normTypesCount()) {
+                        break;
+                    }
+                    Type *parameter = targetOperator->funcType()->normTypeAt(i);
+                    if (Type *type = valueTypeOf(nodeTypeOf(normInputs[i].node));
+                        type != nullptr && type->equals(parameter)) {
+                        continue;
+                    }
+                    if (node_handle_t typed =
+                            checkValue(normInputs[i].node, parameter, normInputs[i].expr);
+                        typed != nullptr) {
+                        normInputs[i].node = typed;
+                        normInputTypes[i]  = parameter;
+                    }
+                }
+            }
             // `foreach` drops what its element function gives: the value of the body of a
             // function written in place here is a value nothing takes (design principles
             // 11.3). A function named here may be used elsewhere, where its value counts.
@@ -3212,6 +3275,16 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         }
     } else {
         Type *dataType = nodeTypeOf(targetNode);
+        // A stream's value is its step function (StreamType::stepType), so a call of a stream is
+        // one pull: the element with the rest of the stream, or `null` at the end. The call reads
+        // the signature the stream type gives it, and nothing is converted -- the value already
+        // is that function value -- so no arguments are taken and `s()` is the form.
+        if (dataType != nullptr && dataType->code() == TypeCode::Stream) {
+            // A pull is one consumer of the stream (design principles 5.4: a stream is read once on
+            // each execution path), the other being a `for` over it.
+            consumeStream(targetNode, gct);
+            dataType = tt::as_ptr<StreamType>(dataType)->stepType();
+        }
         ASSERT(
             dataType->code() == TypeCode::Function,
             "Target node of LINK must be a function or operator node.");
@@ -3423,7 +3496,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     }
     if (targetOperator == nullptr && (!dimValues.empty() || !dimPacks.empty()) &&
         targetFuncType != nullptr && targetFuncType->hasExitType()) {
-        // The return type may speak about the names the parameters bound (`: Tensor<[n, k]>`).
+        // The return type may speak about the names the parameters bound (`: f32[n, k]`).
         // The function still has one graph: what varies with the call is only the static type,
         // and the value is passed through the checked conversion to it (the same check `as`
         // makes), so a body that breaks the relation is caught where the call runs.
@@ -3464,7 +3537,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         return negation;
     }
     // What an assignment gives where a value is wanted is the value it wrote: the write's second
-    // operand, one data edge, and no `:var/get` (the ruling on the var version node: the value
+    // operand, one data edge, and no `:var/get` (design principles 2.1: the value
     // and the version are two, and the write itself gives the version -- the cell it writes
     // into). Written as a statement, or where the position wants no value at all (the last
     // statement of a `: void` body), the write stands for it: the write is what the statement

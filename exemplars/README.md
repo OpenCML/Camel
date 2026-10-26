@@ -21,7 +21,7 @@ graph-based ML stack end to end. Every directory holds:
 | # | Exemplar | Shows |
 |---|---|---|
 | 01 | [Scalar boundary](01_scalar_boundary) | Tensor elements read back to the host decide a branch, host numbers re-enter tensor math; the annotated dump marks each crossing. |
-| 02 | [Branch shape contract](02_branch_shape_contract) | Arms of different static shapes join to `Tensor<float32, [?, ?]>`; the operator that needs a shape fails at run time at its own column, with both extents. |
+| 02 | [Branch shape contract](02_branch_shape_contract) | Arms of different static shapes join to `float32[?, ?]`; the operator that needs a shape fails at run time at its own column, with both extents. |
 | 03 | [Export capability](03_export_capability) | `Relu` on int64 is valid ONNX but ONNX Runtime's CPU provider has no kernel: the export stops at the `relu` call ([PyTorch comparison](../benchmarks/capability_demo.py)). |
 | 04 | [Staticness](04_staticness) | Recursion with shape-determined depth unrolls and exports; tail recursion with value-determined depth exports as a Loop; a linear recursion (the result of its one recursive call is used afterwards) exports as paired Loops; a recursion decided by two branches stops the export with a located diagnostic. Tree recursion is refused. |
 | 05 | [Effect and callback order](05_effect_order) | Prints inside a callback keep their order under NodeVM, FastVM and after inlining. |

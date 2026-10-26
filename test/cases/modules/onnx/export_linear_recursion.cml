@@ -5,7 +5,7 @@
  * the result in reverse order. None of them comes from autodiff.
  */
 module export_linear_recursion
-import { Tensor, reshape, sum, tanh } from tensor
+import { reshape, sum, tanh } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
@@ -36,7 +36,7 @@ func main(): int sync {
     let x = reshape([1.0, 2.0, 0.5, -1.0] as f32[], [2, 2])
     export_model(
         (x: f32[..], w: f32[..]): (f32[..], f32[..], f32[..]) =>
-            (pile(x), fold(0, int(sum(x * x) * 0.5), x, w), fold2(x, w)),
+            (pile(x), fold(0, int(float(sum(x * x)) * 0.5), x, w), fold2(x, w)),
         (x, w),
         get_env('ONNX_OUT')
     )

@@ -306,7 +306,7 @@ expect_output_not_contains = ["TagHasNoReader"]
 
 [[tests]]
 name = "shadows_permission"
-desc = "A program may not declare a tag with the name of a core permission (log 2026-10-21): the declaration would never be read, so it is refused where it is written."
+desc = "A program may not declare a tag with the name of a core permission: the declaration would never be read, so it is refused where it is written."
 kind = "negative"
 case = "../../../cases/compile/tags/err_tag_shadows_permission.cml"
 args = ["${case}"]

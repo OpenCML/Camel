@@ -1,0 +1,16 @@
+/**
+ * An enum written where a type is expected. An enum is a named type (design principles 5.3):
+ * `type Shape = enum { ... }` declares it, and `Shape` is what is written where a value of it
+ * is expected. The variants are written in the declaration and nowhere else.
+ */
+module enum_where_type_expected
+
+type Shape = enum { Dot, Circle(float) }
+
+func take(s: enum { Dot }): int {
+    return 0
+}
+
+func main(): int {
+    return 0
+}

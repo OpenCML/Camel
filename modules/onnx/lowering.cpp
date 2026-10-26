@@ -5,9 +5,10 @@
  * The ONNX lowering table for the tensor and nn operators (see lowering.h).
  *
  * Conventions shared by the entries:
- *   - Arithmetic operands are converted to the inferred result dtype, which
- *     reproduces Camel's promotion rules (ONNX requires equal input types).
- *   - Comparisons convert operands to their promoted dtype and yield bool.
+ *   - Arithmetic operands are emitted in the one element type the node computes in, the same
+ *     answer the operator's own inference gives (ONNX requires equal input types and Camel has
+ *     no implicit conversion between numeric types).
+ *   - Comparisons read their operands by that same rule and yield bool.
  *   - Hyper-parameters (axes, strides, shapes) must be export-time constants;
  *     they become node attributes or constant int64 initializers.
  */
@@ -166,10 +167,12 @@ std::string reduceAxes(
     Emitter &e, const std::string &op, const std::string &x, std::vector<int64_t> axes,
     bool keepDims);
 
-/// The element type an elementwise operator computes in, mirroring the kernels' `operandType`:
-/// one scalar takes the tensor's element type (a float scalar meeting an integer tensor computes
-/// in f32), and two tensors promote by widening. A bare `Tensor` operand has no facts and takes
-/// the graph's element type. The whole node is emitted in this one type, so ONNX never sees a
+/// The element type an elementwise operator computes in, the same answer the operator's own
+/// inference gives (elementwise_ops.cpp): one scalar operand is read at the tensor's element type
+/// (a float scalar beside an integer tensor computes in f32), and two data operands state the one
+/// element type the node computes in. Two of them that state different element types are the pair
+/// the arithmetic refuses, and the export refuses it here rather than emitting the conversion
+/// execution would not make. The whole node is emitted in this one type, so ONNX never sees a
 /// double constant beside a float tensor.
 std::optional<TypeCode> operandDtype(const LowerContext &ctx);
 
@@ -219,8 +222,11 @@ std::optional<TypeCode> operandDtype(const LowerContext &ctx) {
         }
         return TypeCode::Float32;
     }
-    if (auto promoted = tensor::ops::promote(left.dtype, right.dtype)) {
-        return promoted;
+    // Two data operands: the same refusal the operator's inference makes, so a node the arithmetic
+    // would refuse is refused here too instead of being exported as a conversion.
+    tensor::ops::refuseMixedElementTypes(left.dtype, right.dtype);
+    if (auto common = tensor::ops::commonElementType(left.dtype, right.dtype)) {
+        return common;
     }
     return ctx.elementDtype();
 }
@@ -408,149 +414,67 @@ Value lowerConcat(const LowerContext &ctx) {
         {intAttr("axis", ctx.constInt(2))});
 }
 
-/**
- * slice(t, axis, start, end[, step]). The axis and the step are constants of the model. A
- * start or an end outside the axis (after a negative one is counted from the end) is a fault in
- * Camel (design principles 3.9), while the ONNX Slice clamps it, so the exporter never relies
- * on Slice for the bounds:
- *
- *   - constant bounds on an axis of known extent are checked here (proved in range, or the
- *     export fails with a located error) and give a plain Slice;
- *   - otherwise (a bound that depends on the model input, such as the counter of a loop over
- *     the time axis, or an extent known only when the model runs) each bound goes through a
- *     guard that faults in ONNX exactly when Camel faults: a Gather into a vector of n + 1
- *     zeros at b (b >= 0) or b - 1 (b < 0), which is in range exactly for -n <= b <= n, and
- *     whose zero is added to the bound so the guard stays on the data path;
- *   - such a guard cannot be emitted where the model computes both arms of a branch and
- *     selects one (Emitter::speculative): it would fault on the arm Camel does not run. That
- *     slice is refused.
- */
-namespace {
-
-/// The parameter of `source` for `operand` (and `axis`, or 0xFF for any), or nullptr.
-const core::sem::Param *findParam(
-    const core::sem::IndexedInstance &inst, core::sem::ParamSource source, size_t operand,
-    uint8_t axis = 0xFF) {
-    for (const core::sem::Param &p : inst.domain.params) {
-        if (p.source == source && p.operand == operand && (axis == 0xFF || p.axis == axis)) {
-            return &p;
-        }
-    }
-    return nullptr;
-}
-
-/// The check the declaration makes on operand `operand`, or nullptr.
-const core::sem::OperandCheck *findCheck(const core::sem::IndexedInstance &inst, size_t operand) {
-    for (const core::sem::OperandCheck &c : inst.checks) {
-        if (c.operand == operand) {
-            return &c;
-        }
-    }
-    return nullptr;
-}
-
-/// True when `value` is -1 * `other` (the form a negative bound's lower limit takes).
-bool isNegationOf(
-    const core::sem::ExprPool &pool, core::sem::ExprId value, core::sem::ExprId other) {
-    const core::sem::Expr &e = pool[value];
-    if (e.op != core::sem::ExprOp::Mul) {
-        return false;
-    }
-    const auto isMinusOne = [&](core::sem::ExprId id) {
-        const core::sem::Expr &f = pool[id];
-        return f.op == core::sem::ExprOp::Const && f.value == -1;
-    };
-    return (isMinusOne(e.lhs) && e.rhs == other) || (isMinusOne(e.rhs) && e.lhs == other);
-}
-
-} // namespace
 
 /**
- * `slice`: the operator's index semantics declaration (ops/indexing.cpp) states the axis, the
- * step and, for a bound that depends on the model, the interval the bound is accepted in. This
- * lowering follows that declaration instead of restating the rules:
+ * `:op/slice_sub`: the core's one slice -- the node both `t[a:b:s]` and `slice(t, axis, a, b, s)`
+ * build, for any rank and any axis (design principles 5.4).
+ * Its words are the value, the axis, the two bounds, the step and the mask that says which
+ * bounds the source wrote (`src/compile/gct/builder.cpp` fills it; the subscript's lowering
+ * always writes 3, the function form leaves it out when the caller did). The mask is the core's
+ * bookkeeping about the source text rather than part of the slice: it is read here for the
+ * defaults -- step 1, both bounds written -- and never exported.
  *
- *   - Constant bounds that the declaration proves in range (it gives them no check) go to a
- *     plain ONNX Slice, which normalizes a negative bound the same way. A constant bound the
- *     declaration only checks (the axis extent is not known at export time) is guarded like a
- *     model-dependent one.
- *   - A bound that depends on the model is guarded from the declared interval: the declaration
- *     states [-n, n] around the axis extent n, and the guard Gathers into zeros of length n + 1
- *     at b - (b < 0), which is a valid index exactly for -n <= b <= n (ONNX Gather accepts
- *     negative indices from -n - 1); anything else makes the run fail where Camel faults.
- *   - A declaration this lowering cannot follow (no instance, no declared check, an interval
- *     that is not the axis extent around zero) is a diagnostic, not a guess.
+ * ONNX Slice clamps a bound that leaves the axis, where Camel faults (design principles 3.9),
+ * and that difference is the whole difficulty of this lowering. So a written bound that is not
+ * a proved constant travels through `Add(b, Gather(zeros(extent + 1), b))`: the gathered zero
+ * leaves the value alone where the bound is legal, and where it is not, the gather reads outside
+ * its zeros and ONNX Runtime fails where the run faults -- and the `Add` is what keeps the guard
+ * in the graph at all. The guard's index domain is the axis' own legal range, so a backward
+ * slice's start (which must be a position the axis has) is guarded by `extent` zeros and its end
+ * (which may be one past the first element) by `extent + 1`. A constant bound needs no guard:
+ * the write site refused a negative or out-of-range one already.
+ *
+ * A bound is a position from the end only in ONNX's own reading of a negative index, which is
+ * nothing Camel has: the end of a backward slice is written as -1, ONNX's own "before the first
+ * element", exactly as the core's kernel reads it (`src/builtin/operators/struct.cpp`,
+ * `sliceRange`).
  */
-Value lowerSlice(const LowerContext &ctx) {
+Value lowerSliceSub(const LowerContext &ctx) {
     Emitter &e = ctx.emitter();
-    if (!ctx.instance()) {
+    if (!ctx.has(3)) {
         throw ExportError(
-            "'tensor:slice': the operator's index semantics declaration gives no instance for "
-            "this call (an unknown rank, a non-constant axis or step, or a constant bound "
-            "outside the axis), so the export cannot state the rule it follows");
-    }
-    const core::sem::IndexedInstance &inst = *ctx.instance();
-    const core::sem::Param *axisParam      = findParam(inst, core::sem::ParamSource::Static, 1);
-    if (axisParam == nullptr || !axisParam->value) {
-        throw ExportError(
-            "'tensor:slice': the index semantics declaration does not state the axis of this "
-            "call");
+            std::format(
+                "':op/slice_sub': a slice node has at least 4 words (value, axis, start, end), "
+                "this one has {}",
+                ctx.size()));
     }
     const auto facts = ctx.facts(0);
     if (!facts.shape) {
-        throw ExportError("'tensor:slice' of a tensor of unknown rank is not supported");
+        throw ExportError("':op/slice_sub' of a tensor of unknown rank is not supported");
     }
-    const int64_t rank = static_cast<int64_t>(facts.shape->size());
-    const int64_t at   = *axisParam->value;
+    const int64_t rank   = static_cast<int64_t>(facts.shape->size());
+    const int64_t rawAt  = ctx.constInt(1);
+    const int64_t at     = rawAt < 0 ? rawAt + rank : rawAt;
     if (at < 0 || at >= rank) {
         throw ExportError(
             std::format(
-                "'tensor:slice': the index semantics declaration normalized the axis to {}, which "
-                "is out of range for rank {}",
-                at,
-                rank));
+                "':op/slice_sub': the axis {} is out of range for rank {}", rawAt, rank));
     }
+    // A step that is not a constant would change the result's rank at run time, which no ONNX
+    // Slice can do; a zero step is refused where the program is written, so it cannot be here.
+    const int64_t step = ctx.has(4) ? ctx.constInt(4) : 1;
+    if (step == 0) {
+        throw ExportError("':op/slice_sub': a slice step must not be 0");
+    }
+    const int64_t written    = ctx.has(5) ? ctx.constInt(5) : 3;
+    const bool wroteStart    = (written & 2) != 0;
+    const bool wroteEnd      = (written & 1) != 0;
     const std::optional<int64_t> extent = (*facts.shape)[static_cast<size_t>(at)];
-    const core::sem::Param *stepParam = findParam(inst, core::sem::ParamSource::Static, 4);
-    const int64_t step = stepParam != nullptr && stepParam->value ? *stepParam->value : 1;
-    const core::sem::OperandCheck *startCheck = findCheck(inst, 2);
-    const core::sem::OperandCheck *stopCheck  = findCheck(inst, 3);
+    const int64_t zero[] = {0}, one[] = {1}, two[] = {2}, minusOne[] = {-1};
+    const auto int64Cast = intAttr("to", static_cast<int64_t>(elemTypeOf(TypeCode::Int64)));
 
-    // Proved in range from the static extent and the constants: a plain Slice.
-    if (startCheck == nullptr && stopCheck == nullptr && ctx.arg(2).isConstant() &&
-        ctx.arg(3).isConstant()) {
-        if (!extent.has_value()) {
-            throw ExportError(
-                "'tensor:slice': the index semantics declaration gives no check for constant "
-                "bounds whose axis extent is unknown, so the export cannot prove them in range");
-        }
-        const int64_t start[] = {ctx.constInt(2)}, end[] = {ctx.constInt(3)};
-        const int64_t axis[] = {at}, steps[] = {step};
-        auto shape = facts.shape.value_or(tensor::StaticShape{});
-        if (ctx.result().shape) {
-            shape = *ctx.result().shape;
-        }
-        return Value::symbolic(
-            e.node(
-                "Slice",
-                {ctx.input(0), e.int64s(start), e.int64s(end), e.int64s(axis), e.int64s(steps)}),
-            facts.dtype,
-            shape);
-    }
-
-    if (e.speculative()) {
-        throw ExportError(
-            std::format(
-                "'tensor:slice': its bounds on axis {} cannot be proved within the axis at export "
-                "time, and it is on an arm of a branch on a model-dependent condition, which the "
-                "exported model computes whether or not it is taken; an ONNX Slice there would "
-                "clamp bounds that Camel faults on (design principles 3.9). Prove the bounds with "
-                "constants, or move the slice out of the branch",
-                at));
-    }
-
-    // The guards: zeros of length n + 1, n the extent (known now, or read from the shape).
-    const int64_t zero[] = {0}, one[] = {1};
+    // The extent as a one-element int64 tensor: the number now, or read from the value's shape
+    // when the axis' extent is not known at export time.
     std::string extentVec;
     if (extent.has_value()) {
         const int64_t n[] = {*extent};
@@ -562,67 +486,177 @@ Value lowerSlice(const LowerContext &ctx) {
             {e.node("Shape", {ctx.input(0)}), e.int64s(axisIndex)},
             {intAttr("axis", 0)});
     }
-    const auto int64Cast    = intAttr("to", static_cast<int64_t>(elemTypeOf(TypeCode::Int64)));
-    const std::string zeros = e.node(
-        "Cast",
-        {e.node("ConstantOfShape", {e.node("Add", {extentVec, e.int64s(one)})})},
-        {int64Cast});
-    const auto guarded = [&](size_t index) {
-        std::string b;
-        if (ctx.arg(index).isConstant()) {
-            const int64_t value[] = {ctx.constInt(index)};
-            b                     = e.int64s(value);
-        } else {
-            b = e.node("Unsqueeze", {ctx.input(index, TypeCode::Int64), e.int64s(zero)});
+    // The guard's index domain is the axis' own legal range of positions, held as zeros of that
+    // length: an index inside the domain gathers a zero, an index outside it reads past the end
+    // of the zeros and ONNX Runtime fails where the run faults. A forward slice's bounds are
+    // positions 0..extent (the end may be one past the last position, which is the axis' own
+    // extent), a backward slice's start is a position the axis has (0..extent - 1) while its end
+    // may be one before the first. ONNX reads a *negative* index from the end of the tensor,
+    // which no Camel bound ever is, so a negative index is pushed further out of range on that
+    // side instead of landing on a legal one.
+    const auto boundOf = [&](size_t index, bool isStart) {
+        const bool known    = ctx.arg(index).isConstant();
+        const int64_t value = known ? ctx.constInt(index) : 0;
+        const bool legal    = known && extent.has_value() && value >= 0 &&
+                           (isStart && step < 0 ? value < *extent : value <= *extent);
+        if (legal) {
+            const int64_t proved[] = {value};
+            return e.int64s(proved); // the write site proved it a position of the axis
         }
-        const core::sem::OperandCheck *check = findCheck(inst, index);
-        if (check == nullptr) {
-            if (ctx.arg(index).isConstant()) {
-                return b; // the declaration proved the constant in range
-            }
-            throw ExportError(
-                std::format(
-                    "'tensor:slice': the index semantics declaration states no fault for argument "
-                    "{} when it depends on the model, so the exported model would clamp a bound "
-                    "that Camel faults on",
-                    index));
-        }
-        if (check->onInvalid != core::sem::OnInvalid::Fault) {
-            throw ExportError(
-                std::format(
-                    "'tensor:slice': the index semantics declaration does not make a bound outside "
-                    "the axis of argument {} a fault, which the ONNX guard would have to reproduce",
-                    index));
-        }
-        const core::sem::Expr &upper = inst.exprs[check->upper];
-        const bool isExtent =
-            upper.op == core::sem::ExprOp::Param &&
-            inst.domain.params[upper.value].source == core::sem::ParamSource::Extent &&
-            inst.domain.params[upper.value].operand == 0 &&
-            inst.domain.params[upper.value].axis == at;
-        if (!isExtent || !isNegationOf(inst.exprs, check->lower, check->upper)) {
-            throw ExportError(
-                std::format(
-                    "'tensor:slice': the declared legal range of argument {} is not [-n, n] around "
-                    "the extent n of axis {}, which the ONNX fault guard cannot express",
-                    index,
-                    at));
-        }
+        const std::string length = isStart && step < 0
+                                       ? extentVec
+                                       : e.node("Add", {extentVec, e.int64s(one)});
+        const std::string zeros = e.node("Cast", {e.node("ConstantOfShape", {length})}, {int64Cast});
+        const std::string bound =
+            e.node("Unsqueeze", {ctx.input(index, TypeCode::Int64), e.int64s(zero)});
         const std::string negative =
-            e.node("Cast", {e.node("Less", {b, e.int64s(zero)})}, {int64Cast});
-        const std::string inRange =
-            e.node("Gather", {zeros, e.node("Sub", {b, negative})}, {intAttr("axis", 0)});
-        return std::string(e.node("Add", {b, inRange}));
+            e.node("Cast", {e.node("Less", {bound, e.int64s(zero)})}, {int64Cast});
+        const std::string pushed = e.node(
+            "Sub",
+            {bound,
+             e.node(
+                 "Mul", {negative, e.node("Add", {length, e.int64s(two)})})});
+        return std::string(
+            e.node("Add", {bound, e.node("Gather", {zeros, pushed}, {intAttr("axis", 0)})}));
     };
-    const std::string starts = guarded(2);
-    const std::string ends   = guarded(3);
+    const std::string start =
+        wroteStart ? boundOf(2, true)
+                   : (step > 0 ? e.int64s(zero)
+                               : (extent.has_value()
+                                      ? e.int64s(std::vector<int64_t>{*extent - 1})
+                                      : e.node("Sub", {extentVec, e.int64s(one)})));
+    const std::string end = wroteEnd ? boundOf(3, false) : (step > 0 ? extentVec : e.int64s(minusOne));
+
+    // The length of the slice, when the extent and both bounds are known now.
+    std::optional<int64_t> length;
+    if (extent.has_value() && (wroteStart ? ctx.arg(2).isConstant() : true) &&
+        (wroteEnd ? ctx.arg(3).isConstant() : true)) {
+        const int64_t s = wroteStart ? ctx.constInt(2) : (step > 0 ? 0 : *extent - 1);
+        const int64_t n = wroteEnd ? ctx.constInt(3) : (step > 0 ? *extent : -1);
+        length          = step > 0 ? (s < n ? (n - s + step - 1) / step : 0)
+                                   : (s > n ? (s - n - step - 1) / (-step) : 0);
+    }
     const int64_t axis[] = {at}, steps[] = {step};
-    auto shape = ctx.result().shape.value_or(facts.shape.value_or(tensor::StaticShape{}));
-    shape[static_cast<size_t>(at)] = std::nullopt;
+    auto shape = facts.shape.value_or(tensor::StaticShape{});
+    shape[static_cast<size_t>(at)] = length;
     return Value::symbolic(
-        e.node("Slice", {ctx.input(0), starts, ends, e.int64s(axis), e.int64s(steps)}),
+        e.node("Slice", {ctx.input(0), start, end, e.int64s(axis), e.int64s(steps)}),
         facts.dtype,
         shape);
+}
+
+/// A rank-0 int64 constant: the shape `Range` reads its bounds in, and the scalar index with
+/// which `Gather` reads one entry of a shape.
+std::string int64Scalar(Emitter &e, int64_t value) {
+    return e.operand(
+        Value::constant(rtdata::toSlot<rtdata::Int64>(value), type::Type::Int64()),
+        TypeCode::Int64);
+}
+
+/**
+ * The reverse of the core's slice: `tangent/scatter_slice_arr(dx, like, axis, start, end, step,
+ * written)` is an array of `like`'s shape whose sliced positions hold `dx` and whose other
+ * positions are zero. A slice takes the positions its step names along one axis -- `start`,
+ * `start + step`, ... -- so its adjoint writes each element of `dx` at the position the step
+ * names for it, and ONNX says exactly that with `ScatterND`: the indices are coordinate tuples,
+ * and the tuple of a gradient element is its own coordinates with the axis one replaced by the
+ * position the range takes there, which is the arithmetic the core's own `parentIndexOfSlice`
+ * does. `Pad` can only write a contiguous range, so it writes the positions of a step of 1 and no
+ * other step's; computing the positions from the start and the step is the one reading that
+ * writes every step (design principles 5.4).
+ *
+ * The count and every coordinate but the axis one come from `dx`'s own shape: a slice's gradient
+ * is an array of the slice's shape, so its extents are the range's count and the parent's other
+ * extents. That is why no bound and no parent extent has to be an export-time constant here, and
+ * why a slice whose end is not written exports like any other. The start of a slice whose source
+ * did not write one is the axis' first position, or its last one for a backward slice, which is
+ * the position that walk begins at (5.4).
+ */
+Value lowerScatterSliceArr(const LowerContext &ctx) {
+    Emitter &e = ctx.emitter();
+    if (ctx.size() < 7) {
+        throw ExportError(
+            std::format(
+                "':tangent/scatter_slice_arr': a scatter node has seven words (the gradient, the "
+                "value the slice came from, the axis, the two bounds, the step and the mask), this "
+                "one has {}",
+                ctx.size()));
+    }
+    const auto facts = ctx.facts(1);
+    if (!facts.shape) {
+        throw ExportError(
+            "':tangent/scatter_slice_arr' of a value of unknown rank is not supported");
+    }
+    const int64_t rank  = static_cast<int64_t>(facts.shape->size());
+    const int64_t rawAt = ctx.constInt(2);
+    const int64_t at    = rawAt < 0 ? rawAt + rank : rawAt;
+    if (at < 0 || at >= rank) {
+        throw ExportError(
+            std::format(
+                "':tangent/scatter_slice_arr': the axis {} is out of range for rank {}",
+                rawAt,
+                rank));
+    }
+    const int64_t step = ctx.constInt(5);
+    if (step == 0) {
+        throw ExportError("':tangent/scatter_slice_arr': a slice step must not be 0");
+    }
+    const bool wroteStart = (ctx.constInt(6) & 2) != 0;
+    // The element type of the gradient is the element type of the value the slice came from: the
+    // tangent of an array is the array of its elements' tangents (design principles 9.9).
+    const std::optional<TypeCode> dtype = facts.dtype ? facts.dtype : ctx.elementDtype();
+
+    // The array the scatter writes into: the zeros of the value's shape, in that element type.
+    // One zero expanded, rather than an array of zeros written out: the shape is what the run
+    // gives the value, not an export-time constant.
+    const std::string shape = e.node("Shape", {ctx.input(1)});
+    const std::string zeros = e.node(
+        "Expand",
+        {e.operand(
+             Value::constant(
+                 rtdata::toSlot(static_cast<rtdata::Float64>(0.0)), type::Type::Float64()),
+             dtype),
+         shape});
+
+    // The first position the range takes: the one the source wrote, or, when it wrote none, the
+    // axis' own first position -- its last one for a backward slice.
+    std::string start = int64Scalar(e, 0);
+    if (wroteStart) {
+        start = ctx.input(3, TypeCode::Int64);
+    } else if (step < 0) {
+        start = e.node(
+            "Sub",
+            {e.node("Gather", {shape, int64Scalar(e, at)}, {intAttr("axis", 0)}),
+             int64Scalar(e, 1)});
+    }
+
+    // The index of every element of the gradient: one column per coordinate, each column that
+    // coordinate's own range broadcast along the other dimensions, with the axis' column holding
+    // the position the range takes there. The last dimension of the indices picks the coordinate.
+    const std::string gradientShape = e.node("Shape", {ctx.input(0)});
+    std::string indices;
+    for (int64_t d = 0; d < rank; ++d) {
+        const std::string extent =
+            e.node("Gather", {gradientShape, int64Scalar(e, d)}, {intAttr("axis", 0)});
+        std::string positions = e.node("Range", {int64Scalar(e, 0), extent, int64Scalar(e, 1)});
+        if (d == at) {
+            positions =
+                e.node("Add", {e.node("Mul", {int64Scalar(e, step), positions}), start});
+        }
+        std::vector<int64_t> axes;
+        for (int64_t k = 0; k <= rank; ++k) {
+            if (k != d) {
+                axes.push_back(k);
+            }
+        }
+        std::vector<int64_t> column(static_cast<size_t>(rank), 0);
+        column[static_cast<size_t>(d)] = 1;
+        const std::string term = e.node(
+            "Mul", {e.node("Unsqueeze", {positions, e.int64s(axes)}), e.int64s(column)});
+        indices = indices.empty() ? term : e.node("Add", {indices, term});
+    }
+    return Value::symbolic(
+        e.node("ScatterND", {zeros, indices, ctx.input(0)}), facts.dtype, facts.shape);
 }
 
 /// Reduction over one axis. Opset 18 moved `axes` from an attribute to an input for every
@@ -887,10 +921,29 @@ LowerFn scalarOp(std::string opType, size_t operands) {
     };
 }
 
-/// Scalar comparisons: operands converted to their promoted dtype, bool result.
+/// The element type a scalar comparison reads its two operands in. A literal has no element type
+/// of its own: it takes the one the value it is compared with states (design principles 5.1, the
+/// literal rule), so `t[0] > 0.5` is a comparison in the tensor's element type. Two values that
+/// each state their own element type meet in no operator, and the export refuses that pair the
+/// way the operator's own inference does.
+std::optional<TypeCode> comparisonDtype(const LowerContext &ctx) {
+    const std::optional<TypeCode> left = ctx.facts(0).dtype, right = ctx.facts(1).dtype;
+    const bool leftLiteral  = ctx.arg(0).isConstant();
+    const bool rightLiteral = ctx.arg(1).isConstant();
+    if (leftLiteral != rightLiteral) {
+        return leftLiteral ? right : left;
+    }
+    tensor::ops::refuseMixedElementTypes(left, right);
+    if (auto common = tensor::ops::commonElementType(left, right)) {
+        return common;
+    }
+    return left ? left : right;
+}
+
+/// Scalar comparisons: the two operands are read in that one element type and the result is bool.
 LowerFn scalarCompare(std::string opType, bool negate) {
     return [opType = std::move(opType), negate](const LowerContext &ctx) {
-        auto dtype = tensor::ops::promote(ctx.facts(0).dtype, ctx.facts(1).dtype);
+        const std::optional<TypeCode> dtype = comparisonDtype(ctx);
         std::vector<std::string> inputs{ctx.input(0, dtype), ctx.input(1, dtype)};
         if (!negate) {
             return ctx.emitScalar(opType, std::move(inputs));
@@ -1174,7 +1227,6 @@ LoweringRegistry::LoweringRegistry() {
     add("tensor:flatten", lowerFlatten);
     add("tensor:unsqueeze", lowerUnsqueeze, 13);
     add("tensor:concat", lowerConcat);
-    add("tensor:slice", lowerSlice, 10);
     add("tensor:shape", lowerShape);
     add("tensor:dim", lowerDim);
     add("tensor:numel", lowerNumel);
@@ -1230,6 +1282,15 @@ LoweringRegistry::LoweringRegistry() {
         }
     }
     add(":op/idx_arr", lowerArrayIndex);
+    // The core's own slice: the node `t[a:b:s]` and `slice(t, axis, a, b, s)` both build, for
+    // any rank, any axis and any element type. It is the only slice the language has, so every
+    // slice in a program reaches this lowering.
+    add(":op/slice_sub", lowerSliceSub, 10);
+    // The same operator's adjoint, which a training step's backward pass builds (the scatter is
+    // the reverse of the forward slice, not a gradient operator of ONNX). It writes the positions
+    // with `ScatterND` and computes them with `Range`, opset 11 operators, whose columns are
+    // broadcast with an `Unsqueeze` that takes its axes as an input (opset 13).
+    add(":tangent/scatter_slice_arr", lowerScatterSliceArr, 13);
     addGradientLowerings(add);
     add("math:sqrt", scalarOp("Sqrt", 1));
 

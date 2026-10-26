@@ -2,8 +2,7 @@
 
 This records implementation evidence against the language's numerical contract.
 Neither the CPU implementation nor the CUDA implementation is normative by
-itself. The language author's ruling is recorded in design principles 7 on
-`fsh-dev` (latest ruling verified at `d7d192de`). Basic arithmetic follows correctly rounded,
+itself. The rule is recorded in design principles 7. Basic arithmetic follows correctly rounded,
 ordered operations without contraction; transcendental functions require a
 declared ULP error bound. Five independent explicit permissions govern relaxation.
 
@@ -20,7 +19,7 @@ module tiles_exp_contract_audit
 import { Tensor, reshape, exp, sum } from tensor
 import { run_preferred_resident, download } from tiles
 
-func exponent(x: Tensor<f32>): Tensor<f32> { return exp(x) }
+func exponent(x: f32[..]): f32[..] { return exp(x) }
 
 func main(): int sync {
     let x = reshape([-90.0], [1])
@@ -65,13 +64,13 @@ this difference.
   distinguish signed zeros or NaN payloads. Calling this gate bitwise validation
   would be incorrect.
 
-## Matrix multiplication ruling and correction
+## Matrix multiplication rule and correction
 
 The regression `test/cases/modules/tiles/matmul_rounding.cml` computes a two-term
 dot product: `-1 + (1 + 2^-23) * (1 - 2^-23)`. Separate f32 rounding produces
 positive zero; fused accumulation produces `-2^-46`, observed as
 `-1.4210854715202004e-14`. The earlier separate-rounding implementation in
-`f2749f17` is superseded by the author's Q7B ruling: matmul itself specifies an
+`f2749f17` is superseded by the rule: matmul itself specifies an
 increasing-k FMA chain from +0. Tiles therefore emits `fmaf` with one accumulator
 across all K tiles, skipping padded K entries. A 34-term regression crosses two
 tile boundaries and distinguishes the continuous chain (1) from independent

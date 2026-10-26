@@ -9,7 +9,7 @@
  * executor and the operator traits.
  *
  * The signatures are written once, in the declaration module `stdlib/fs.cml` (design principles
- * 6.4; handover H19, step 10). A declaration carries a signature, not an effect: the effect and
+ * 6.4). A declaration carries a signature, not an effect: the effect and
  * resource facts stay here, where only C++ knows them.
  */
 

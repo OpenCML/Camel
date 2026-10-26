@@ -1,13 +1,13 @@
 /**
  * Branch shape contract. The two arms of `pick` build tensors of different
- * static shapes, so the join only promises `Tensor<float32, [?, ?]>` (the
+ * static shapes, so the join only promises `float32[?, ?]` (the
  * branch-contract role in the dump carries that type). The shape that reaches
  * `@` then depends on the flag: with `false` the product fails at run time,
  * reported at the `@` with both inner extents.
  */
 module branch_shape_contract
 
-import { Tensor, zeros, ones } from tensor
+import { zeros, ones } from tensor
 import { get_env } from env
 
 func pick(flag: bool): f32[..] {

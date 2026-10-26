@@ -4,10 +4,10 @@
 /// `test/cases/gpu/nofallback/host.cml` is the same program without the tag.
 module gpu_nofallback_refused_shape
 
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 
 #gpu
-func product(a: Tensor<f32, [2, 3]>, b: Tensor<f32, [3]>): Tensor<f32, [2]> {
+func product(a: f32[2, 3], b: f32[3]): f32[2] {
     return a @ b
 }
 

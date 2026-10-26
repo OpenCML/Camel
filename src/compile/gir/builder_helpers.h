@@ -238,9 +238,9 @@ inline bool collectConversionGaps(
         // (design principles 5.4: an array whose shape is unknown entering a position that
         // declares one is converted explicitly; camel/core/type/composite/array.cpp). The gap is
         // the whole value: one `as` reaches it, whatever is left open inside it. Without this
-        // branch a call like `f(t)` with `t: Tensor` and `b: Tensor<[3]>` was refused as
+        // branch a call like `f(t)` with `t: Tensor` and `b: f32[3]` was refused as
         // "no matching function" with the overload list, which says less than the conversion to
-        // write (ruling 2026-10-24 evening, h450 item 2).
+        // write.
         if (want->castSafetyFrom(have) != CastSafety::Unsafe) {
             return false;
         }
@@ -389,7 +389,8 @@ inline void setNodeMacro(node_handle_t node, bool enabled) {
 
 inline compile_graph_ptr_t createCompileGraph(
     runtime::GraphId id, FunctionType *funcType, const compile_graph_ptr_t &outer,
-    std::string name = "") {
+    std::string name = "",
+    const std::vector<camel::source::origin_id_t> &parameterOrigins = {}) {
     auto graph = std::make_shared<DraftGraphBuilder>(funcType ? funcType : FunctionType::create());
     graph->draft().setId(id);
     if (name.empty()) {
@@ -400,6 +401,16 @@ inline compile_graph_ptr_t createCompileGraph(
         graph->setOuterGraph(outer);
         outer->addSubGraph(graph);
     }
+    // A port stands for the parameter it is made for, and carries that parameter's own position:
+    // what is said about the parameter -- the refusal of a function value that came in through it
+    // -- then has somewhere to point. The slot is the parameter's in the signature, `with`
+    // parameters first and the ordinary ones after them, which is the order the ports are made in.
+    const auto stampPortOrigin = [&](node_handle_t port, size_t slot) {
+        if (slot < parameterOrigins.size() &&
+            parameterOrigins[slot] != camel::source::kInvalidOriginId) {
+            nodeDraftOf(port)->setNodeOrigin(nodeIdOf(port), parameterOrigins[slot]);
+        }
+    };
     if (funcType) {
         for (size_t i = 0; i < funcType->withTypesCount(); ++i) {
             const std::string portName = i < funcType->argNamesCount()
@@ -407,7 +418,9 @@ inline compile_graph_ptr_t createCompileGraph(
                                              : std::format("__w{}", i);
             const bool isVar           = funcType->withIsVarAt(i);
             Type *type                 = funcType->withTypeAt(i);
-            graph->addPortNode(isVar ? TupleType::cell(type) : type, portName, true);
+            const node_handle_t port =
+                graph->addPortNode(isVar ? TupleType::cell(type) : type, portName, true);
+            stampPortOrigin(port, i);
         }
         for (size_t i = 0; i < funcType->normTypesCount(); ++i) {
             const size_t argIndex      = funcType->withTypesCount() + i;
@@ -416,7 +429,9 @@ inline compile_graph_ptr_t createCompileGraph(
                                              : std::format("__n{}", i);
             const bool isVar           = funcType->normIsVarAt(i);
             Type *type                 = funcType->normTypeAt(i);
-            graph->addPortNode(isVar ? TupleType::cell(type) : type, portName, false);
+            const node_handle_t port =
+                graph->addPortNode(isVar ? TupleType::cell(type) : type, portName, false);
+            stampPortOrigin(port, argIndex);
         }
     }
     return graph;
@@ -442,6 +457,32 @@ inline bool hasDirectDataDependency(node_handle_t lhs, node_handle_t rhs) {
            std::ranges::find(withInputsOf(rhs), lhsId) != withInputsOf(rhs).end() ||
            std::ranges::find(normInputsOf(lhs), rhsId) != normInputsOf(lhs).end() ||
            std::ranges::find(withInputsOf(lhs), rhsId) != withInputsOf(lhs).end();
+}
+
+/// Whether the model lets an order edge sit on this node (docs/design/effects/edges.cn.md 4.6):
+/// an order edge only orders, and its two ends are effects or nodes that may fault, so a node the
+/// model lets a pass arrange freely -- pure and unable to fault (design principles 3.4) -- carries
+/// none. The seal check asks the same question through the same classification
+/// (src/runtime/graph_edges.cpp), so an edge written through this one cannot be refused, and a node
+/// whose operator is not known is left out rather than ordered: a missing order only leaves the
+/// two writes in the order they were written.
+inline bool nodeTakesAnOrder(node_handle_t node) {
+    if (node == nullptr) {
+        return false;
+    }
+    const runtime::GCNodeKind kind = nodeKindOf(node);
+    camel::core::OperId oper      = camel::core::kNoOper;
+    if (kind == runtime::GCNodeKind::Oper) {
+        const auto &op = nodeGraphOf(node)->operTarget(node);
+        const auto id  = op == nullptr
+                             ? std::optional<camel::core::OperId>{}
+                             : camel::core::OperatorTable::instance().lookup(op->uri());
+        if (!id.has_value()) {
+            return false;
+        }
+        oper = *id;
+    }
+    return !camel::runtime::nodeIsFreelySchedulable(kind, oper);
 }
 
 inline bool shouldAddSyncCtrlLink(node_handle_t from, node_handle_t to) {
@@ -474,7 +515,7 @@ inline bool valueReadsThrough(node_handle_t value, node_handle_t producer) {
 /// Whether the statement a sync chain ends with has to reach the value the graph hands on by a sync
 /// edge: only when the value does not already read it. A value that came out of that statement (the
 /// `v` of `v = 2; v`) is ordered after it by its own data edge, so it takes no edge and no GATE
-/// (the language author's ruling of 2026-10-24; docs/design/effects/edges.cn.md 5.3); every other value is
+/// (docs/design/effects/edges.cn.md 5.3); every other value is
 /// reached from that statement by a sync edge, carried by a GATE whose data port reads the value --
 /// when the value *is* that statement the GATE is what keeps the edge, and the chain it ends, able
 /// to reach the graph's exit at all. The tail `return v`, a body whose last statement is `v` and a
@@ -789,8 +830,7 @@ inline std::vector<std::string> formatPlaceholders(std::string_view pattern) {
 // ---- Whether two same-named declarations of one signature are told apart by their conditions ----
 
 /// How the applicability conditions of two same-named declarations relate (design principles
-///  4.4; the rule on `impl-declaration-arms`,
-/// `docs/handover/reviews/questions-2026-10-23.md`): "同名声明按 `when` 互斥分臂就是重载"
+///  4.4): "同名声明按 `when` 互斥分臂就是重载"
 /// -- declarations split by mutually exclusive conditions ARE overloads, so a same-named set of
 /// them may stand side by side, one family of types each.
 enum class ConditionSeparation {

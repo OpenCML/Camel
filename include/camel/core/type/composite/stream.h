@@ -7,6 +7,8 @@
 
 namespace camel::core::type {
 
+class FunctionType;
+
 /**
  * Immutable StreamType: `T..` (design principles 5.4), the elements of `T` that arrive one
  * after another — a sequence produced on demand, possibly endless.
@@ -25,9 +27,19 @@ namespace camel::core::type {
  * back from a graph. Equality, overload selection, `#impl` signature agreement and every
  * printed form follow from that one object.
  *
- * A value of this type does not exist yet: producing one (a generator, a source) is another
- * slice, and this type states only what the programs that will produce them are written
- * against.
+ * A stream is a value like any other: its value is its step function together with its state,
+ * the closure that answers the next element (design principles 5.4: a stream is a value). So it
+ * is written in a signature, passed, returned and `tee`d, and it needs no runtime
+ * representation of its own for that, and no node kind of its own. What consumes it -- a `for`
+ * that calls the step function once per round and stops when it comes back empty -- reads the
+ * same whether the producer is fused into the consumer's loop (an optimisation, taken where
+ * producer and consumer are both visible) or reached through the value.
+ *
+ * The value of `T..` is a function value of the step signature `() => (T, T..)?`
+ * (StreamType::stepType): called, it answers the next element together with the rest of the
+ * stream, or `null` when the stream is over. A stream and that function value are one value --
+ * the state a stream is at lives in the function value's captures -- so a stream is converted
+ * to its step signature and back by a cast that moves nothing.
  */
 class StreamType : public CompositeType {
   public:
@@ -40,6 +52,11 @@ class StreamType : public CompositeType {
 
     /// The type of one element of the stream.
     Type *elemType() const { return elemType_; }
+
+    /// `() => (T, T..)?`, the signature of one pull: the element and the rest of the stream, or
+    /// `null` when there are no more elements. Every value of this type is a value of `T..` and
+    /// the other way round; the type is what a consumer calls a stream through.
+    FunctionType *stepType() const;
 
     virtual Type *resolve(const type_vec_t &typeList) const override;
     virtual bool resolved() const override;

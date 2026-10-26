@@ -32,13 +32,10 @@ Array *tensorArg(ArgsView &args, size_t index, bool allowArray) {
         auto *tensor = args.get<Array *>(index);
         if (!tensor) {
             // The slot the type promises a pointer in holds the element itself when the value has
-            // no dimension (the rank-zero ruling, docs/handover/reviews/questions-2026-10-23.md
-            // section rank-zero-tensor): a rank-0 result stays an array only where the type it is
+            // no dimension: a rank-0 result stays an array only where the type it is
             // read by says so (wrap), so a value like this is a value with no dimension and not an
             // argument that went missing. The message says what the value is rather than calling it
-            // a null argument (the author's ruling of 2026-10-25 on
-            // no-dimension-value-in-an-array-typed-slot: the transition-period bare `Tensor` is
-            // that gap, and no mechanism is built for it).
+            // a null argument.
             throwRuntimeFault(
                 RuntimeDiag::RuntimeError, "Tensor argument holds a value with no dimension");
         }
@@ -47,9 +44,8 @@ Array *tensorArg(ArgsView &args, size_t index, bool allowArray) {
     if (allowArray && argType->code() == TypeCode::Array) {
         return tensorFromArray(args.slot(index), argType, resultAllocator());
     }
-    // Rank zero is the element type itself (the rank-zero ruling,
-    // docs/handover/reviews/questions-2026-10-23.md): the value of a rank-0 tensor is a scalar
-    // slot, and the type says so — `Tensor<f32, []>` is `f32`, not an array. A kernel that reads
+    // Rank zero is the element type itself: the value of a rank-0 tensor is a scalar
+    // slot, and the type says so — `f32` is `f32`, not an array. A kernel that reads
     // the tensor reads an array of no dimension, so the scalar is boxed here; wrap() takes the
     // same value back out of a kernel's result, where the declared result type says the element.
     // Without this a gradient handed to `tensor:sum_to` or a broadcast reached the kernel as the
@@ -62,7 +58,7 @@ Array *tensorArg(ArgsView &args, size_t index, bool allowArray) {
             ArrayType::create(Type::create(argType->code()), std::span<const int64_t>{}));
         return box;
     }
-    throwRuntimeFault(RuntimeDiag::RuntimeError, "Expected Tensor argument");
+    throwRuntimeFault(RuntimeDiag::RuntimeError, "Expected an array argument");
 }
 
 kernels::Operand operandArg(ArgsView &args, size_t index, kernels::ScalarOperand &storage) {
@@ -95,7 +91,7 @@ Shape shapeArg(ArgsView &args, size_t index) {
 }
 
 slot_t wrap(type::Type *declared, Array *tensor) {
-    // A result with no dimension is the element itself (the rank-zero ruling) — where the type
+    // A result with no dimension is the element itself (the rule) — where the type
     // the result is read by says the element. When that type is an array, declared or with a rank
     // the compiler could not fix (`Tensor`, `f32[..]`), an array is what its readers take the
     // slot for, so a rank-0 array stays one: a consumer reading an array (tensorArg, a reducer,
@@ -177,8 +173,7 @@ StaticFacts::StaticFacts(std::span<type::Type *const> types, type::static_args_t
 
 type::Type *tensorOf(const TensorFacts &facts) {
     // The type a value with these facts has: a numeric array of that element type and shape
-    // (plan section 5.2). No dimension at all is the element type itself — the rank-zero ruling,
-    // docs/handover/reviews/questions-2026-10-23.md, section rank-zero-tensor — and a rank
+    // (plan section 5.2). No dimension at all is the element type itself, and a rank
     // nobody fixed is the open-rank array.
     std::vector<ExtentForm> forms;
     if (facts.shape) {
@@ -189,12 +184,10 @@ type::Type *tensorOf(const TensorFacts &facts) {
     }
     // Every array a value can have states its element type (design principles 5.1), so a result
     // type built from the facts always has one: the element type is a precondition of this
-    // function, not something a program can leave out. The two branches that used to build the
-    // transitional type here (`numericUnknown` / `numericUnknownFromForms`, plan section 5.1a's
-    // table row `tensorOf(facts)`) are gone with it.
+    // function, not something a program can leave out.
     ASSERT(facts.dtype.has_value(), "a tensor's element type is always in its type");
     if (!isSupportedTensorScalar(*facts.dtype)) {
-        throw std::invalid_argument("Unsupported Tensor element type");
+        throw std::invalid_argument("Unsupported array element type");
     }
     type::Type *elem = type::Type::create(*facts.dtype);
     if (!facts.shape) {
@@ -210,11 +203,25 @@ type::Type *tensorOf(std::optional<TypeCode> dtype, std::optional<StaticShape> s
     return tensorOf(TensorFacts{dtype, std::move(shape)});
 }
 
-std::optional<TypeCode> promote(std::optional<TypeCode> lhs, std::optional<TypeCode> rhs) {
+std::optional<TypeCode> commonElementType(std::optional<TypeCode> lhs, std::optional<TypeCode> rhs) {
     if (!lhs || !rhs) {
         return std::nullopt;
     }
-    return promoteTensorTypes(*lhs, *rhs);
+    // One element type, or none: the two operands state the type the operation computes in, and
+    // there is no widening from one to another (design principles 5.1).
+    return *lhs == *rhs ? lhs : std::nullopt;
+}
+
+void refuseMixedElementTypes(std::optional<TypeCode> lhs, std::optional<TypeCode> rhs) {
+    if (!lhs || !rhs || *lhs == *rhs) {
+        return;
+    }
+    throw std::invalid_argument(
+        "the two tensor operands have different element types ('" + typeCodeToString(*lhs) +
+        "' and '" + typeCodeToString(*rhs) +
+        "'): a tensor operator computes in one element type, and there is no implicit conversion "
+        "between numeric types (write the conversion, cast(value, \"" + typeCodeToString(*lhs) +
+        "\") or cast(value, \"" + typeCodeToString(*rhs) + "\"))");
 }
 
 std::optional<StaticShape>
@@ -290,8 +297,7 @@ bool anyTensor(const InferContext &ctx, size_t count) {
     if (ctx.sourceLevel()) {
         return false;
     }
-    // A rank-0 tensor's static type is the element type itself (the rank-zero ruling,
-    // docs/handover/reviews/questions-2026-10-23.md), so a type alone cannot tell one from a
+    // A rank-0 tensor's static type is the element type itself, so a type alone cannot tell one from a
     // scalar -- and `tensorArg` boxes exactly that scalar slot, a kernel reading the tensor as an
     // array of no dimension. Reading a graph the compiler already built (a pass, the export, a
     // draft re-inference) the node itself answers the question the type cannot: it is a `tensor:`

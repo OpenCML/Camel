@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The applicability condition of a declaration (design principles 5.13; handover).
+ * The applicability condition of a declaration (design principles 4.4).
  *
  * `func f(...): T when p { ... }` is selected only where `p` holds. The condition is a
  * compile-time predicate over the declaration's type parameters and its `with` parameters; it
@@ -274,7 +274,32 @@ class GctConstantEvaluator {
     }
 
     Type *bound(Type *type) const {
-        return camel::core::type::substituteTypeVars(type, vars_);
+        return camel::core::type::substituteTypeVars(type, effectiveBindings());
+    }
+
+    /// The type bindings in force while the body is walked: the function's own type parameters,
+    /// plus the names the walk bound as it went (`match type` and `static loop ... for i, F in
+    /// fields T` bind the type the round is on). A nested call is folded with these, so the
+    /// field a predicate recurses over -- `is_plain::<F>()` inside `static loop` over
+    /// `fields T` -- is the concrete field's own type and its instance is the one asked about.
+    /// The loop's own name wins over an outer one of the same name, which is the scope the body
+    /// is read in.
+    camel::core::type::type_bindings_t effectiveBindings() const {
+        camel::core::type::type_bindings_t all = vars_;
+        for (const auto &entry : typeEnv_) {
+            bool replaced = false;
+            for (auto &outer : all) {
+                if (outer.first == entry.first) {
+                    outer.second = entry.second;
+                    replaced     = true;
+                    break;
+                }
+            }
+            if (!replaced) {
+                all.emplace_back(entry.first, entry.second);
+            }
+        }
+        return all;
     }
 
     data_ptr_t eval(const GCT::node_ptr_t &node) {
@@ -686,8 +711,8 @@ class GctConstantEvaluator {
         if (callResolver_ != nullptr) {
             return callResolver_(
                 node, callee, args,
-                [this](const GCT::node_ptr_t &expression) { return eval(expression); }, vars_,
-                depth_);
+                [this](const GCT::node_ptr_t &expression) { return eval(expression); },
+                effectiveBindings(), depth_);
         }
         fail(
             EvalProblem::Construct, name,
@@ -1388,10 +1413,47 @@ const std::string written = callee->at(0)->name();
                         return problem;
                     }
                 }
-                local.outcome = WhenOutcome::NotEvaluable;
-                local.subject = callee->name();
-                local.detail  = "only '!', '&&' and '||' can combine compile-time values";
-                return local;
+                // Any other call: a type function is an ordinary function that runs at compile
+                // time (design principles 5.5), so a condition evaluates a call the same way a
+                // folded body's own calls are evaluated -- an operator over constants, an
+                // ordinary function of this module or of one it imports, or a predicate this
+                // condition reaches through one of them. `evaluateCallInsideBody` is that path,
+                // and it refuses what is not a pure body over compile-time constants (a `sync`
+                // function, a `var`, a body reading a name other than its parameters), which is
+                // what keeps a condition that really reads a run-time value refused.
+                std::vector<data_ptr_t> callArguments;
+                for (size_t i = 1; i < node->size(); ++i) {
+                    const GCT::node_ptr_t &argument = soleValue(node->at(i));
+                    if (argument == nullptr || argument->type() != GCT::NodeKind::DATA ||
+                        argument->data() == nullptr) {
+                        local.outcome = WhenOutcome::NeedsWithValue;
+                        local.subject = written.empty() ? callee->name() : written;
+                        local.detail  = "the call gives a value that is not a compile-time "
+                                        "constant";
+                        return local;
+                    }
+                    callArguments.push_back(argument->data());
+                }
+                try {
+                    const data_ptr_t folded = evaluateCallInsideBody(
+                        node, callee, callArguments,
+                        [](const GCT::node_ptr_t &) -> data_ptr_t { return nullptr; }, bindings,
+                        0);
+                    std::optional<bool> value;
+                    if (folded != nullptr && boolOf(folded, value)) {
+                        local.outcome = *value ? WhenOutcome::Holds : WhenOutcome::Fails;
+                        return local;
+                    }
+                    local.outcome = WhenOutcome::NotBool;
+                    local.subject = written.empty() ? callee->name() : written;
+                    local.detail  = "the call's value is not a bool";
+                    return local;
+                } catch (const EvalFailure &failure) {
+                    local.outcome = WhenOutcome::NotEvaluable;
+                    local.subject = written.empty() ? callee->name() : written;
+                    local.detail  = failure.why;
+                    return local;
+                }
             }
             local.outcome = WhenOutcome::NotEvaluable;
             local.detail  = "the condition calls something that is not a compile-time query";

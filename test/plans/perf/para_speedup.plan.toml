@@ -3,8 +3,7 @@ order = 411
 tier = "slow"
 tags = ["perf", "para"]
 
-# The cheap half of the parallel benchmark, gated on a property instead of on a number (the author's
-# rule, docs/handover/reviews/questions-2026-10-23.md, "perf-para-gate"):
+# The cheap half of the parallel benchmark, gated on a property instead of on a number:
 #
 #   "选 B：把已量过的便宜子集（monte_carlo_pi.prl，约 1.6 s）立成可进闸门的计划。度量取同一次运行里
 #    并行对串行的加速比（与绝对墙钟相比对负载不那么敏感），并记 CPU 时间；整条 perf.para 仍在发布前跑。"
@@ -53,7 +52,7 @@ tags = ["perf", "para"]
 #
 # `monte_carlo_pi.min_cores_refused` is the same tool asked for more cores than any host has: it
 # must refuse (exit 2) and say that it examined nothing, because a check that examined nothing is not
-# a pass (the same 2026-10-23 review, "declaration-cost-gate" (b), and). The real host
+# a pass (the same gate reading (b)). The real host
 # requirement is `--min-cores 4` inside the tool, and a host below it makes the guard's `skip_unless`
 # report `[SKIP]` with the reason printed -- never a pass.
 
@@ -79,9 +78,8 @@ skip_unless_timeout_ms = 30000
 # wall of this test tracks the host's load rather than its own work, and 900 s is a hang detector,
 # not a busy-host detector: four times the worst measurement is 451 s, so the timeout is that bound
 # with room to spare, and the tool kills a child of its own at 600 s with a reason.
-# This plan is the wall-bound exception of the sweep of the slow tier, and the rule of
-# 2026-10-23 covers the case (docs/handover/reviews/questions-2026-10-23.md, "declaration-cost-gate"
-# (a)): what this entry measures is a ratio of two wall windows of one run -- the seconds a user waits
+# This plan is the wall-bound exception of the sweep of the slow tier, and the rule covers
+# the case: what this entry measures is a ratio of two wall windows of one run -- the seconds a user waits
 # -- so its own CPU time cannot stand in for it, and no cpu_budget_ms is declared here. It was
 # measured on 2026-10-24 on the loaded host (32 threads, 1-minute load 85.69/91.25/84.56) anyway:
 # 63.33 s of CPU / 62.79 s of wall, the CPU being the serial side's 31.7 s plus the parallel side's

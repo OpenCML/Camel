@@ -191,21 +191,31 @@ slot_t __slice_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 
 namespace {
 
-// The positions a slice of an array of `size` elements takes. The bounds follow the rules of the
-// slice function (design principles 3.9): a position from 0 to the length, the end one past the
-// last element taken, a negative bound a fault rather than a count from the end, and an end
-// before the start the empty range. A negative step runs backwards: the start defaults to the
-// last element and the end, left out, stands for the position before the first. The step and
-// which of the start and the end were written come with the call as a two-bit mask (bit 0 end,
-// bit 1 start). The forward slice and the range scatter of its gradient both read the range
-// here, so the adjoint puts each element's gradient back where the forward took the element.
+// The positions a slice takes along the one axis it names. The bounds follow the rules of the
+// slice function (design principles 3.9 and 5.4): a position from 0 to the extent, the end one
+// past the last element taken, a negative bound a fault rather than a count from the end (`last(t)`
+// names the last element, 5.4: "不支持负数下标（负数是故障），最后一个元素用 last(t)"), and an end
+// before the start the empty range. A negative step runs backwards: the start defaults to the last
+// position and the end, left out, stands for the position before the first. Any non-zero step is
+// accepted; the constant 0 is refused where it is written (the static check in
+// `src/builtin/modules/globals.cpp`) and is a fault when only the run knows it.
+//
+// The step and which of the start and the end the program wrote come with the call as a two-bit
+// mask (bit 0 end, bit 1 start), which is exactly the lowering the subscript writes
+// (`src/compile/gct/builder.cpp`: `intConstant((written[1] ? 1 : 0) | (written[0] ? 2 : 0))`). The
+// two spellings of a slice -- the subscript `t[a:b]` and the call `slice(t, axis, a, b, s)` -- are
+// one node with one parameter table, and the function form fills the mask "both written" (3),
+// which is the value that same lowering gives a subscript that writes both bounds.
+//
+// The forward slice and the range scatter of its gradient both read the range here, so the
+// adjoint puts each element's gradient back where the forward took the element.
 struct SliceRange {
     Int64 start = 0; // the first position taken
-    Int64 count = 0; // how many elements the slice has
+    Int64 count = 0; // how many positions the slice takes
     Int64 step  = 1; // the distance between two positions taken
 };
 
-SliceRange sliceRange(Int64 size, Int64 startRaw, Int64 endRaw, Int64 step, Int64 written) {
+SliceRange sliceRange(Int64 extent, Int64 startRaw, Int64 endRaw, Int64 step, Int64 written) {
     const bool wroteEnd   = (written & 1) != 0;
     const bool wroteStart = (written & 2) != 0;
     if (step == 0) {
@@ -215,85 +225,159 @@ SliceRange sliceRange(Int64 size, Int64 startRaw, Int64 endRaw, Int64 step, Int6
     range.step = step;
     if (step > 0) {
         range.start = wroteStart ? startRaw : 0;
-        const Int64 end = wroteEnd ? endRaw : size;
-        if (range.start < 0 || range.start > size || end < 0 || end > size) {
+        const Int64 end = wroteEnd ? endRaw : extent;
+        if (range.start < 0 || range.start > extent || end < 0 || end > extent) {
             throwRuntimeFault(
-                RuntimeDiag::SliceOutOfRange, range.start, end, "an array", size);
+                RuntimeDiag::SliceOutOfRange, range.start, end, "an array", extent);
         }
         range.count = range.start < end ? (end - range.start + step - 1) / step : 0;
         return range;
     }
-    range.start = wroteStart ? startRaw : size - 1;
+    range.start = wroteStart ? startRaw : extent - 1;
     const Int64 end = wroteEnd ? endRaw : -1;
-    if ((wroteStart && (range.start < 0 || range.start >= size)) ||
-        (wroteEnd && (end < 0 || end > size))) {
-        throwRuntimeFault(RuntimeDiag::SliceOutOfRange, range.start, end, "an array", size);
+    if ((wroteStart && (range.start < 0 || range.start >= extent)) ||
+        (wroteEnd && (end < 0 || end > extent))) {
+        throwRuntimeFault(RuntimeDiag::SliceOutOfRange, range.start, end, "an array", extent);
     }
     range.count = range.start > end ? (range.start - end + (-step) - 1) / (-step) : 0;
     return range;
 }
 
+/// The axis a slice names, read as the position it is: an axis counts from the end when it is
+/// negative, `-1` being the last one. A value does not have the axis is a fault.
+Int64 sliceAxis(const Array *arr, Int64 axisArg) {
+    const auto rank = static_cast<Int64>(arr->rank());
+    const Int64 axis = axisArg < 0 ? axisArg + rank : axisArg;
+    if (axis < 0 || axis >= rank) {
+        throwRuntimeFault(
+            RuntimeDiag::InvalidArgument,
+            "[]",
+            std::format("a slice axis must be between 0 and {}, not {}", rank - 1, axisArg));
+    }
+    return axis;
+}
+
+/// The flat index in the parent of the element at flat index `flat` of a slice of `axis`: every
+/// coordinate but the sliced one is the coordinate the element has in the slice, and the sliced one
+/// is the position the range takes there. The parent's row-major strides are computed from its own
+/// extents, so a parent whose element type is not pure data (a slot array) maps by the same
+/// arithmetic as a compact one.
+Int64 parentIndexOfSlice(
+    Int64 flat,
+    const std::vector<int64_t> &sliceExtents,
+    const std::vector<int64_t> &parentStrides,
+    size_t axis,
+    const SliceRange &range) {
+    Int64 rest   = flat;
+    Int64 parent = 0;
+    for (size_t k = sliceExtents.size(); k-- > 0;) {
+        const Int64 extent = sliceExtents[k];
+        const Int64 coord  = extent != 0 ? rest % extent : 0;
+        if (extent != 0) {
+            rest /= extent;
+        }
+        parent += (k == axis ? range.start + coord * range.step : coord) * parentStrides[k];
+    }
+    return parent;
+}
+
+/// The row-major strides, in elements, of a value with these extents.
+std::vector<int64_t> rowMajorStrides(const std::vector<int64_t> &extents) {
+    std::vector<int64_t> strides(extents.size(), 1);
+    for (size_t k = extents.size(); k-- > 1;) {
+        strides[k - 1] = strides[k] * extents[k];
+    }
+    return strides;
+}
+
+/// The extents of the value a slice of `arr` along `axis` has: the extent of the sliced axis is
+/// how many positions the range takes, and every other extent is the one it had.
+std::vector<int64_t> slicedExtents(const Array *arr, size_t axis, const SliceRange &range) {
+    std::vector<int64_t> extents = arr->shapeVector();
+    extents[axis]                = range.count;
+    return extents;
+}
+
+/// How many elements a value with these extents has.
+uint64_t numelOf(const std::vector<int64_t> &extents) {
+    uint64_t total = 1;
+    for (int64_t extent : extents) {
+        total *= static_cast<uint64_t>(extent);
+    }
+    return total;
+}
+
+/// Put `dx`'s elements at the positions `result` holds for the slice: the element at flat index
+/// `i` of the slice goes to the flat index the parent's own coordinates give it. `result` is
+/// already filled with the zeros of the positions the slice does not take.
+void scatterSliceGradient(
+    Array *result,
+    const Array *dx,
+    const std::vector<int64_t> &sliceExtents,
+    const std::vector<int64_t> &parentExtents,
+    size_t axis,
+    const SliceRange &range,
+    const ArrayType *tangentType) {
+    const std::vector<int64_t> strides = rowMajorStrides(parentExtents);
+    const uint64_t count               = numelOf(sliceExtents);
+    for (uint64_t i = 0; i < count; ++i) {
+        const Int64 at = parentIndexOfSlice(
+            static_cast<Int64>(i), sliceExtents, strides, axis, range);
+        result->set<slot_t>(
+            static_cast<uint64_t>(at), dx->get<slot_t>(i), tangentType);
+    }
+}
+
 } // namespace
 
-// `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]`: the slice of the first dimension a subscript
-// writes (design principles 5.4). The call is the slice node itself: the value, the axis (0 --
-// a subscript slices the first dimension), the two bounds, the step and the two-bit mask. The
-// bounds are read by `sliceRange` above.
+// `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]` and `slice(t, axis, a, b, s)`: one slice node,
+// whichever of the two spellings wrote it (design principles 5.4). The six words are the value,
+// the axis, the two bounds, the step and the mask that says which of the bounds the program wrote;
+// the argument count no longer tells the two spellings apart.
 //
-// The function form `slice(t, 0, a, b, s?)` is the same node with the words a call has and a
-// subscript has not: it writes the axis itself and leaves out the mask, which for it is "both
-// bounds were written" (3). One operator, one rule, one adjoint rule for both spellings, and the
-// spelling is what the argument count says -- exactly as the tensor module's one `slice`
-// operator answered both before the ruling of 2026-10-25 (the author's
-// discrete-gradient-and-rank-one-slice-ownership, point 2: `t[a:b]` and `slice(t, 0, a, b)` are
-// the same node).
-//
-// A step other than 1 is a view with strides, which needs the multidimensional array
-// representation of. Until it lands, a stepped slice is a copy: the elements are the same
-// and the program does not have to know, but the result does not share the array's block.
-// records the deviation; step 1 still shares the block.
+// The slice holds for any rank and along any axis: the elements are the positions the range takes
+// along the axis named, with every other coordinate left as it is. A step-1 slice of the first
+// axis of a compact array is a run of the block, so it is a view sharing it (5.4). A slice of
+// another axis, or a stepped one, has no such run: it is a copy whose elements are the same, which
+// is the deviation the flip line records for a stepped slice and records here for another axis
+// (that a slice shares the block is what the multidimensional array representation will
+// make true of every slice).
 slot_t __slice_sub__(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)with;
+    (void)ctx;
     Array *arr    = norm.get<Array *>(0);
     auto *arrType = tt::as_ptr<ArrayType>(norm.type(0));
-    // `norm.get<Int64>(1)` is the axis: a subscript writes the constant 0 for it, the function
-    // form writes the axis the program named (0 for a rank-1 array -- the only axis it has), and
-    // an array of values is sliced along its only dimension, so it is read and not otherwise
-    // used. The step and the mask follow the two bounds; a call that writes neither still says
-    // "step 1, both bounds written".
+    // The step and the mask are the last two words; a call that left them out stands for step 1
+    // and "both bounds written" (3), which is the value the declaration defaults them to and the
+    // value the subscript's own lowering gives a subscript that writes both bounds. The argument
+    // count still tells the two spellings apart until the declaration's defaults reach the call
+    // (see the report).
     const size_t words  = norm.size();
     const Int64 step    = words >= 5 ? norm.get<Int64>(4) : 1;
     const Int64 written = words >= 6 ? norm.get<Int64>(5) : 3;
+    const Int64 axis  = sliceAxis(arr, norm.get<Int64>(1));
+    const auto at     = static_cast<size_t>(axis);
     const SliceRange range = sliceRange(
-        static_cast<Int64>(arr->size()),
+        arr->dim(at),
         norm.get<Int64>(2),
         norm.get<Int64>(3),
         step,
         written);
-    if (arr->rank() != 1) {
-        // A slice of a dimension other than the first is a view with strides; the type
-        // system states rank 1, so this is a defect rather than something a program writes.
-        throwRuntimeFault(
-            RuntimeDiag::InvalidArgument,
-            "[]",
-            "a slice of an array of rank 1; a slice of another dimension is a view with "
-            "strides, which needs the multidimensional array representation of H17");
-    }
-    if (range.step == 1 && arr->isCompact()) {
+    std::vector<int64_t> extents = slicedExtents(arr, at, range);
+    if (axis == 0 && range.step == 1 && arr->isCompact()) {
         // A slice is a view sharing the data block (design principles 5.4).
         return rtdata::toSlot(Array::view(
-            arr,
-            std::span<const int64_t>(&range.count, 1),
-            static_cast<uint64_t>(range.start)));
+            arr, extents, static_cast<uint64_t>(range.start * arr->step(0))));
     }
-    // A slot array has no block to share and is copied (records that for slot arrays); so
-    // is a stepped slice.
-    Array *res = Array::create(mm::autoSpace(), arrType, static_cast<size_t>(range.count));
-    for (Int64 i = 0; i < range.count; ++i) {
-        res->setSlot(
-            static_cast<uint64_t>(i),
-            arr->getSlot(static_cast<uint64_t>(range.start + i * range.step)),
-            arrType);
+    // A slot array has no block to share and is copied (the deviation recorded for slot arrays);
+    // so is a stepped slice, and a slice of an axis other than the first.
+    Array *res = Array::create(mm::autoSpace(), arrType, extents);
+    const std::vector<int64_t> strides = rowMajorStrides(arr->shapeVector());
+    const uint64_t count               = res->numel();
+    for (uint64_t i = 0; i < count; ++i) {
+        const Int64 src = parentIndexOfSlice(
+            static_cast<Int64>(i), extents, strides, at, range);
+        res->set<slot_t>(i, arr->get<slot_t>(static_cast<uint64_t>(src)), arrType);
     }
     return rtdata::toSlot(res);
 }
@@ -636,8 +720,7 @@ slot_t zeroTangent(Context &ctx, Type *primalType, Type *tangentType, slot_t pri
         // marker, not a type whose tangent exists, so there is no element to take the zero of. The
         // zero of such a value is its kind's own zero, made from the value
         // (`tensor:zeros_like`), and the element type follows the value
-        // (docs/handover/reviews/questions-2026-10-23.md, rank-zero-tensor and
-        // unstated-element-type-scalar-and-print): zeroing the elements one by one is not the
+        // elements element by element is not the
         // answer, and doing it refused with "a zero tangent is not defined for tangent type
         // 'void'" although the value it is the zero of is a tensor.
         const bool elementsUnstated = tangentArray->elemType() != nullptr &&
@@ -913,13 +996,14 @@ slot_t __tangent_scatter_take_arr__(ArgsView &with, ArgsView &norm, Context &ctx
     return rtdata::toSlot(result);
 }
 
-// `tangent/scatter_slice_arr(dx, like, start, end, step, written)`: the tangent of `like`'s
-// length whose positions the slice of those bounds takes hold dx's elements, and whose other
-// positions are the zero tangent of `like`'s elements. The reverse of a slice: the gradient of
-// the elements a slice took goes back to their places in the parent's gradient, the array
-// counterpart of `tensor:slice_grad`. A slice takes each position at most once, so a place is
-// written rather than added. `like` is the primal array the slice was taken from: its length and
-// its elements give the zeros, and the result type is the tangent of its type.
+// `tangent/scatter_slice_arr(dx, like, axis, start, end, step, written)`: the tangent of `like`
+// whose positions the slice takes along `axis` hold dx's elements, and whose other positions are
+// the zero tangent of `like`'s elements. The reverse of a slice: the gradient of the elements a
+// slice took goes back to their places in the parent's gradient. A slice takes each position at
+// most once, so a place is written rather than added. `like` is the primal array the slice was
+// taken from: its shape gives the result's, its elements give the zeros, and the result type is
+// the tangent of its type. The axis is the slice's own second word, so the adjoint scatters along
+// the axis the forward took the elements from, for any rank.
 slot_t __tangent_scatter_slice_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)with;
     (void)ctx;
@@ -937,43 +1021,45 @@ slot_t __tangent_scatter_slice_arr__(ArgsView &with, ArgsView &norm, Context &ct
     auto *const tangentArray = tt::as_ptr<ArrayType>(tangentType);
     auto *const like         = norm.get<Array *>(1);
     auto *const dx           = norm.get<Array *>(0);
+    const Int64 axis         = sliceAxis(like, norm.get<Int64>(2));
+    const auto at            = static_cast<size_t>(axis);
     const SliceRange range   = sliceRange(
-        static_cast<Int64>(like->size()),
-        norm.get<Int64>(2),
+        like->dim(at),
         norm.get<Int64>(3),
         norm.get<Int64>(4),
-        norm.get<Int64>(5));
-    if (static_cast<Int64>(dx->size()) != range.count) {
+        norm.get<Int64>(5),
+        norm.get<Int64>(6));
+    const std::vector<int64_t> sliceExtents = slicedExtents(like, at, range);
+    if (static_cast<uint64_t>(dx->numel()) != numelOf(sliceExtents) ||
+        dx->rank() != like->rank()) {
         throwRuntimeFault(
             RuntimeDiag::RuntimeError,
             std::format(
-                "autodiff: the gradient of a slice has {} elements, the slice takes {}",
-                dx->size(),
-                range.count));
+                "autodiff: the gradient of a slice has {} elements of rank {}, the slice takes "
+                "{} elements of rank {}",
+                dx->numel(),
+                dx->rank(),
+                numelOf(sliceExtents),
+                like->rank()));
     }
     // The result is the tangent of the parent, so it is created with that type: the value the
     // adjoint hands back states the element type the forward value has (design principles 9.9),
     // and a downstream operator reading a slice's gradient reads that type off the value. An
     // array created without a type holds bare slots and names no element type at all.
-    Array *result = Array::create(mm::autoSpace(), tangentArray, like->size());
+    Array *result = Array::create(mm::autoSpace(), tangentArray, like->shapeVector());
     // An array whose tangent's element type is `Void` has no element type to take a zero from;
     // its kind's own zero reads the element type the value actually has, and every position the
     // slice does not take holds that zero.
     if (tangentArray->elemType() != nullptr &&
         tangentArray->elemType()->code() == TypeCode::Void) {
         slot_t zero = moduleZeroTangent(ctx, primalType, tangentType, rtdata::toSlot(like));
-        for (size_t i = 0; i < like->size(); ++i) {
+        for (size_t i = 0; i < like->numel(); ++i) {
             result->set<slot_t>(i, zero, tangentArray);
         }
-        for (Int64 i = 0; i < range.count; ++i) {
-            result->set<slot_t>(
-                static_cast<size_t>(range.start + i * range.step),
-                dx->get<slot_t>(static_cast<size_t>(i)),
-                tangentArray);
-        }
+        scatterSliceGradient(result, dx, sliceExtents, like->shapeVector(), at, range, tangentArray);
         return rtdata::toSlot(result);
     }
-    for (size_t i = 0; i < like->size(); ++i) {
+    for (size_t i = 0; i < like->numel(); ++i) {
         result->set<slot_t>(
             i,
             zeroTangent(
@@ -983,12 +1069,7 @@ slot_t __tangent_scatter_slice_arr__(ArgsView &with, ArgsView &norm, Context &ct
                 like->get<slot_t>(i)),
             tangentArray);
     }
-    for (Int64 i = 0; i < range.count; ++i) {
-        result->set<slot_t>(
-            static_cast<size_t>(range.start + i * range.step),
-            dx->get<slot_t>(static_cast<size_t>(i)),
-            tangentArray);
-    }
+    scatterSliceGradient(result, dx, sliceExtents, like->shapeVector(), at, range, tangentArray);
     return rtdata::toSlot(result);
 }
 

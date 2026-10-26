@@ -536,25 +536,37 @@ constexpr const char *kGrowingArray =
     "an array variable is appended to (`acc = acc->append<v>`); an ONNX model holds no growing "
     "arrays: compute the values as a tensor instead";
 
-/// Whether running `from` is a precondition of running `to` (data or control edges).
+/// Whether running `from` is a precondition of running `to` (data, control or sync edges).
+///
+/// The walk goes backwards, from `to` to its predecessors, because that is the direction the
+/// graph's tables have: the data and control predecessors are the node's own input runs, and the
+/// sync predecessors of the chain of a `sync` block are `syncPredsOf` (docs/design/effects/edges.cn.md
+/// 1.5). The sync edge is one of the orderings that make a run before another -- a read that
+/// follows the assignment written before it in the same block runs after it by that edge -- so a
+/// model whose variables are read and assigned in one `sync` block is exportable. (Forward, the
+/// graph has no `syncUsersOf`: the sync edges live in their own array, sorted by user.)
 bool runsBefore(const GCGraph *g, gc_node_ref_t from, gc_node_ref_t to) {
     if (from == to) {
         return false;
     }
-    std::unordered_set<gc_node_ref_t> seen{from};
-    std::vector<gc_node_ref_t> work{from};
+    std::unordered_set<gc_node_ref_t> seen{to};
+    std::vector<gc_node_ref_t> work{to};
     while (!work.empty()) {
         const gc_node_ref_t ref = work.back();
         work.pop_back();
-        for (const auto users :
-             {g->normOutputsOf(ref), g->withOutputsOf(ref), g->ctrlOutputsOf(ref)}) {
-            for (gc_node_ref_t user : users) {
-                if (user == to) {
-                    return true;
+        if (ref == from) {
+            return true;
+        }
+        for (const auto preds : {g->normInputsOf(ref), g->withInputsOf(ref), g->ctrlInputsOf(ref)}) {
+            for (gc_node_ref_t pred : preds) {
+                if (seen.insert(pred).second) {
+                    work.push_back(pred);
                 }
-                if (seen.insert(user).second) {
-                    work.push_back(user);
-                }
+            }
+        }
+        for (const auto &edge : g->syncPredsOf(ref)) {
+            if (edge.user == ref && seen.insert(edge.pred).second) {
+                work.push_back(edge.pred);
             }
         }
     }
@@ -1238,9 +1250,7 @@ Value rebuildValue(const Value &like, std::span<const Value> leaves, size_t &nex
 /// Whether a value is one a Loop can keep as a state, by its kind: a tensor (any rank, whatever
 /// the type states about its shape), or a numeric / bool scalar. What a Loop additionally needs is
 /// not a property of the type at all but a *fact about the loop*: the shape of the carried value is
-/// the same on every round (the ruling of 2026-10-24-evening, growable-array-vs-tensor-in-the-onnx-
-/// exporter — a value the body appends to or concatenates changes its length, one it passes
-/// through shape-preserving operators does not). The fact is checked where the body's next state
+/// the same on every round. The fact is checked where the body's next state
 /// and the state are both in hand (`loopBodyShapeChange`, `emitLoop`'s body, `The shape of a
 /// carried value` below): a rank-1 value whose length the type leaves open is kept when the body
 /// keeps its length, and the type printer's `[]` spelling decides nothing.
@@ -1259,8 +1269,7 @@ bool isCarriable(const Value &v) {
 
 /// Whether the model can hold `v` as a value a Loop carries: a tensor or a scalar, or an int
 /// array the model writes as an int64 vector, whose dtype and shape its facts state. The kind
-/// alone is not the criterion (the ruling of 2026-10-24-evening,
-/// growable-array-vs-tensor-in-the-onnx-exporter): an int array whose length is the same on every
+/// alone is not the criterion: an int array whose length is the same on every
 /// round is carried like a tensor, and what decides is that the shape holds — the checks that
 /// know both values (`shapeIsKept`, the two paths' facts) ask for it before this one is reached.
 bool carriesAsTensor(const Value &v) {
@@ -1273,9 +1282,7 @@ bool carriesAsTensor(const Value &v) {
 }
 
 /// The operators that grow an array's length: the body appends one element or concatenates two
-/// arrays (the ruling's own test for a value that changes from one round to the next,
-/// questions-2026-10-24-evening §growable-array-vs-tensor-in-the-onnx-exporter: "循环体对它追加或拼接
-/// 就变，否则不变"). The value facts say the same thing whenever the expression can be computed at
+/// arrays. The value facts say the same thing whenever the expression can be computed at
 /// export time; this is what answers for one that cannot, because the model has no lowering for an
 /// array whose length a run-time value decides (`:struct/append_arr` on a symbolic array).
 bool growsItsExtent(const GCGraph *g, gc_node_ref_t ref) {
@@ -1301,7 +1308,7 @@ bool growsItsExtent(const GCGraph *g, gc_node_ref_t ref) {
 }
 
 /// Whether a Loop can keep the value the body gives the recursive call in the place of `before`:
-/// the *fact* the ruling asks for is that its shape is the same on every round, so both must state
+/// the *fact* the rule asks for is that its shape is the same on every round, so both must state
 /// a dtype and a shape, the same ones. A length that only the value has — an array the body grows —
 /// states none, or a different one, and a Loop state input has one shape for every round.
 bool shapeIsKept(const Value &before, const Value &next, std::string &why) {
@@ -1345,8 +1352,9 @@ Value placeholderLike(const Value &like, std::string name) {
     return Value::symbolic(std::move(name), facts.dtype, facts.shape);
 }
 
-/// The values a Loop carries for one argument (H44's outline, H71 item 3): the value itself when
-/// it is a tensor or a scalar, and the leaves of a struct or tuple in the order `flattenValue`
+/// The values a Loop carries for one argument
+/// (docs/technical/25_tensor_stack_and_onnx_export.md 3.6): the value itself when it is a tensor
+/// or a scalar, and the leaves of a struct or tuple in the order `flattenValue`
 /// gives them. False when there is nothing to carry (no leaf, or a leaf that a Loop cannot
 /// carry: an array, a string, a function). The leaf order is the type's declaration order, so
 /// the rebuilt value has the layout the program wrote.
@@ -1409,8 +1417,7 @@ void leafPaths(const Value &v,
 
 /// Whether a type states no length for a one-dimensional array — `int[]`, the shape the type
 /// printer spells without an extent. Only a diagnostic names a value this way: whether a Loop can
-/// keep it is a fact about the loop body (the ruling of 2026-10-24-evening,
-/// growable-array-vs-tensor-in-the-onnx-exporter), not what its type says.
+/// keep it is a fact about the loop body, not what its type says.
 bool lengthIsOpen(const type::Type *ty) {
     const auto *array = type::asArrayType(ty);
     return array != nullptr && !array->anyRank() && array->extents().size() == 1 &&
@@ -1453,7 +1460,7 @@ std::string carriedKind(const Value &v) {
 }
 
 /// The noun a diagnostic uses for an array the body grows, by its element type: `an int array`
-/// (the wording the ruling of 2026-10-24-evening uses for the leaf), `a float array`, and the
+///, `a float array`, and the
 /// element type's own name for anything else. This spells the *declared* type, not `valueKind`:
 /// valueKind's branches stay in the order it has, and the declared type is what names the leaf.
 std::string arrayKindName(const type::Type *array) {
@@ -1709,9 +1716,10 @@ Evaluator::BodyOutcome Evaluator::mergeOutcomes(
             out.next[k] = a.next[k];
             continue;
         }
-        // A carried struct or tuple changes leaf by leaf: each leaf that differs is one output of
-        // the If, and the aggregate is rebuilt from the leaves (H44's outline, as for the result
-        // below). A leaf that is the same on both paths keeps its value.
+        // A carried struct or tuple changes leaf by leaf: each leaf that differs is one output
+        // of the If, and the aggregate is rebuilt from the leaves
+        // (docs/technical/25_tensor_stack_and_onnx_export.md 3.6; as for the result below). A leaf
+        // that is the same on both paths keeps its value.
         std::vector<Value> la, lb;
         flattenValue(a.next[k], la);
         flattenValue(b.next[k], lb);
@@ -1731,9 +1739,7 @@ Evaluator::BodyOutcome Evaluator::mergeOutcomes(
                 continue;
             }
             if (!isCarriable(la[j]) || !isCarriable(lb[j])) {
-                // The kind decides nothing here (the ruling of 2026-10-24-evening,
-                // growable-array-vs-tensor-in-the-onnx-exporter, replaced the spelling with the
-                // fact): what a Loop needs is that the two paths state the same dtype and the
+                // The kind decides nothing here: what a Loop needs is that the two paths state the same dtype and the
                 // same shape, which an int array the model holds as an int64 vector does as much
                 // as a tensor does. A string, a closure, or an array the paths disagree about
                 // still has no state.
@@ -1822,8 +1828,7 @@ Evaluator::BodyOutcome Evaluator::mergeOutcomes(
             }
             // An int array the model holds as an int64 vector states a dtype and a shape, so it
             // stands in for the missing side as a tensor does; the kind alone refuses it, and the
-            // kind is not the criterion (the ruling of 2026-10-24-evening,
-            // growable-array-vs-tensor-in-the-onnx-exporter).
+            // kind is not the criterion.
             if (!carriesAsTensor(real) || !facts.dtype) {
                 unsupported(
                     act,
@@ -1909,8 +1914,8 @@ Evaluator::evalLoopBody(Activation &act, gc_node_ref_t ref, LoopFrame &loop) {
     }
     case GCNodeKind::Cast: {
         // A cast is not a decision: the branch under it decides whether the recursion goes on,
-        // and the conversion is applied to the value the path returns. (H5 puts a struct
-        // conversion between a returned branch and the function's exit; without this the
+        // and the conversion is applied to the value the path returns. (A struct conversion sits
+        // between a returned branch and the function's exit; without this the
         // branch is hidden from the loop translation and its recursive call is taken for a
         // call in value position.)
         BodyOutcome out = evalLoopBody(act, g->normInputsOf(ref).front(), loop);
@@ -1925,7 +1930,7 @@ Evaluator::evalLoopBody(Activation &act, gc_node_ref_t ref, LoopFrame &loop) {
             // The recursive call in tail position: the next state. One argument at a time, so that
             // the one the model cannot compute can be answered for: a body that appends to the
             // state or concatenates it gives it another length on every round, which is exactly
-            // what a Loop state cannot hold (the ruling of 2026-10-24-evening). The fact is the
+            // what a Loop state cannot hold. The fact is the
             // value's shape from one round to the next; this is the case where the value cannot be
             // computed at export time at all, so the operations the body applies to it say it.
             const auto with = g->withInputsOf(ref);
@@ -2142,8 +2147,9 @@ Value Evaluator::translateLoop(Activation &act, GCGraph *fn, std::vector<Value> 
                 continue;
             }
             // A struct or tuple argument is carried leaf by leaf, in the order of its fields
-            // (H44's outline): the Loop state holds the leaves, and the body rebuilt from them
-            // is the struct the program wrote. Every leaf must keep its dtype and shape.
+            // (docs/technical/25_tensor_stack_and_onnx_export.md 3.6): the Loop state holds the
+            // leaves, and the body rebuilt from them is the struct the program wrote. Every leaf
+            // must keep its dtype and shape.
             std::vector<Value> inLeaves, outLeaves;
             carriableLeaves(inputs[k], inLeaves);
             flattenValue(outcome.next[k], outLeaves);
@@ -2280,8 +2286,9 @@ std::vector<Value> Evaluator::emitLoop(
     }
     emitter_.pushScope("loop_body");
     std::vector<ValueInfo> inputs, outputs;
-    // One Loop state input per leaf (H44's outline): a struct or tuple carried value is flattened
-    // in the order of its fields, and the leaves are what the Loop keeps between calls.
+    // One Loop state input per leaf (docs/technical/25_tensor_stack_and_onnx_export.md 3.6): a
+    // struct or tuple carried value is flattened in the order of its fields, and the leaves are
+    // what the Loop keeps between calls.
     std::vector<std::vector<Value>> initLeaves(init.size());
     std::vector<size_t> leafArgument;
     try {
@@ -2592,7 +2599,7 @@ Value Evaluator::translateLinear(Activation &act, GCGraph *fn, std::vector<Value
                             "the kind of a value changes from one call of a recursion to the next; "
                             "a loop can only carry values of a fixed dtype and shape");
                     }
-                    // The fact the ruling of 2026-10-24-evening asks for: the shape of the value
+                    // The fact the rule asks for: the shape of the value
                     // the body hands the recursive call is the shape of the state it came from.
                     // A state input of a Loop has one shape for all its rounds.
                     std::string why;
@@ -3475,7 +3482,7 @@ Value Evaluator::applyOper(
         try {
             if (auto inferred = def->infer(inferContext)) {
                 // An operator's answer is a tensor, and its rank 0 is the element type itself
-                // (the rank-zero ruling): `sum` and a vector-by-vector `matmul` answer the
+                // (the rule): `sum` and a vector-by-vector `matmul` answer the
                 // element, not an array, and the facts of that answer are the rank-0 tensor a
                 // scalar argument carries. Asking only for a numeric array here lost them —
                 // the value became one with no dtype and no shape, and every lowering that
@@ -4715,8 +4722,8 @@ void refuseUnendedUnrolling(
             "changing; here every level that was unrolled gave the next call arguments more "
             "specific than the loop's own (a more precise type, or a constant), so one more "
             "level was unrolled each time. Give the values the recursion carries and the "
-            "constants it uses types that say their element type and shape (`x as Tensor<f32, "
-            "const [...]>`)",
+            "constants it uses types that say their element type and shape (`x as f32[..]`, "
+            "`x as f32[const [...] ]`)",
             isSourceName(name) ? std::format(" of '{}'", name) : std::string(),
             full->graph(),
             full->bytes(),
@@ -4857,7 +4864,7 @@ class DeclaredInputBinder {
                     name,
                     std::format(
                         "is declared '{}', which leaves its {} unknown; a model input needs "
-                        "both: write the type with them, e.g. Tensor<f32, const [2, 3]> (a "
+                        "both: write the type with them, e.g. f32[2, 3] (a "
                         "negative extent is a dynamic axis), or give the parameter a value "
                         "with --arg, which makes it a constant of the model",
                         ty->toString(),

@@ -1,8 +1,7 @@
 # A dump excerpt whose nodes are numbered differently
 
 This page is a fixture, not a reader-facing page: the excerpt below is its own program's dump with
-the node and cluster numbers written differently, which is a match (the author's ruling of
-2026-10-25: an excerpt does not compare numbers, and one one-to-one renaming is enough).
+the node and cluster numbers written differently, which is a match: an excerpt does not compare numbers, and one one-to-one renaming is enough.
 
 ```cml
 func main(): int sync {

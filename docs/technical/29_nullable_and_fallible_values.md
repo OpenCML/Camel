@@ -8,7 +8,7 @@ the user-facing description is in `docs/language/` (3.4, 6.6, 6.8.2, 7.3).
 
 Choices the design principles do not make are collected in section 10 as questions for the
 language author. Each is implemented the way section 10 recommends and marked in the code with
-`DESIGN-QUESTION(nullable-error) Qn`, so that a ruling can be applied in one place.
+`DESIGN-QUESTION(nullable-error) Qn`, so that a rule can be applied in one place.
 
 ## 1. What they are on the graph
 
@@ -258,7 +258,7 @@ run time.
 
 `try`, `catch` and `finally` are not keywords: they are ordinary names, and a `try { ... }` written
 with them is an ordinary syntax error. (Until the syntax closure of 2026-10-25 the parser read the
-form only to explain itself, with `TryCatchNotInLanguage`; that diagnostic is retired.) `raise` is
+form only to explain itself, with a diagnostic of its own; that code is empty now.) `raise` is
 untouched (undecided, design principles section 15).
 
 ## 6. Errors and faults

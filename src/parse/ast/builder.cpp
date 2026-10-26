@@ -183,6 +183,33 @@ inline camel::source::SemanticPart semanticPart(
         .label  = label};
 }
 
+/// Appends one `Parameter` part per parameter written in a function type load (`with` parameters
+/// first, then the ordinary ones; each with its slot in the signature and the position it is
+/// written at). A port of the function's graph stands for one parameter, so that what is said
+/// about a parameter -- the refusal of a function value that came in through it -- points at the
+/// parameter itself. The list keeps its own `params` part as well, for what reads the parameter
+/// list as one place.
+inline void appendParameterParts(
+    std::vector<camel::source::SemanticPart> &parts, const node_ptr_t &funcTypeNode) {
+    if (!funcTypeNode || funcTypeNode->size() < 2) {
+        return;
+    }
+    const auto add = [&](const node_ptr_t &params, size_t firstSlot) {
+        if (!params) {
+            return;
+        }
+        for (size_t i = 0; i < params->size(); ++i) {
+            parts.push_back(semanticPart(
+                camel::source::SemanticRole::Parameter,
+                nodeOrigin(params->at(i)),
+                static_cast<int32_t>(firstSlot + i),
+                "param"));
+        }
+    };
+    add(funcTypeNode->at(0), 0);
+    add(funcTypeNode->at(1), funcTypeNode->at(0)->size());
+}
+
 inline void registerAstSemanticBundle(
     const node_ptr_t &node, std::vector<camel::source::SemanticPart> parts = {},
     std::vector<camel::source::origin_id_t> mergedInputs = {}, bool synthetic = false,
@@ -740,31 +767,34 @@ Value Builder::visitFuncData(cst::FuncData context) {
     setNodeTokenRangeByContext(funcNode, context);
     *funcNode << funcTypeNode;
     *funcNode << blockNode;
-    registerAstSemanticBundle(
-        funcNode,
-        {
-            semanticPart(
-                camel::source::SemanticRole::GenericParameter,
-                nodeOrigin(funcTypeNode->at(0)),
-                -1,
-                "withParams"),
-            semanticPart(
-                camel::source::SemanticRole::Parameter,
-                nodeOrigin(funcTypeNode->at(1)),
-                -1,
-                "params"),
-            semanticPart(
-                camel::source::SemanticRole::ReturnType,
-                typeOptNode->empty() ? camel::source::kInvalidOriginId
-                                     : nodeOrigin(typeOptNode->front()),
-                -1,
-                "returnType"),
-            semanticPart(
-                camel::source::SemanticRole::ValueProducer,
-                nodeOrigin(blockNode),
-                -1,
-                "body"),
-        });
+    std::vector<camel::source::SemanticPart> semanticParts{
+        semanticPart(
+            camel::source::SemanticRole::GenericParameter,
+            nodeOrigin(funcTypeNode->at(0)),
+            -1,
+            "withParams"),
+        semanticPart(
+            camel::source::SemanticRole::Parameter,
+            nodeOrigin(funcTypeNode->at(1)),
+            -1,
+            "params"),
+        semanticPart(
+            camel::source::SemanticRole::ReturnType,
+            typeOptNode->empty() ? camel::source::kInvalidOriginId
+                                 : nodeOrigin(typeOptNode->front()),
+            -1,
+            "returnType"),
+        semanticPart(
+            camel::source::SemanticRole::ValueProducer,
+            nodeOrigin(blockNode),
+            -1,
+            "body"),
+    };
+    // Each parameter as written, with its own position and its slot in the signature: a port of
+    // the function's graph stands for one parameter, and what is said about a parameter points at
+    // where it is written.
+    appendParameterParts(semanticParts, funcTypeNode);
+    registerAstSemanticBundle(funcNode, std::move(semanticParts));
 
     LEAVE("FuncData");
     return funcNode;
@@ -839,7 +869,7 @@ funcDecl   :
 */
 /*
 ruleDecl : frontMatter? ('with' angledParams)? 'export'? IDENTIFIER identDef typeParams?
-           ruleContext? parentParams whenClause? '{' ruleBody '}' ;
+           parentParams whenClause? '{' ruleBody '}' ;
 ruleBody : dataExpr ('=>' | '<=>') dataExpr ;
 
 A rule is the shorthand of a pair of functions with the same parameters, the left one the pattern
@@ -874,11 +904,6 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     const Reference ref    = qualifyRef(Reference(name));
     if (context->has(TK::KwExport)) {
         export_->addRef(ref);
-    }
-    if (context->get<cst::RuleContext>()) {
-        diags_->of(SemanticDiag::ConstructNotSupported)
-            .at(rangeOf(context->get<cst::RuleContext>()->firstToken()))
-            .commit("rule<...>", "a rule over functions is not implemented");
     }
     const auto body   = context->get<cst::RuleBody>();
     const auto sides  = body->exprs();
@@ -945,7 +970,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         }
     }
 
-// A `with` parameter of a rule is a compile-time value the rule is specialised by: every
+    // A `with` parameter of a rule is a compile-time value the rule is specialised by: every
     // function the declaration becomes -- the two sides and the condition -- takes it as a
     // `constas` parameter, so the instance an application makes reads it from a static slot and
     // both sides may write it (design principles 5.4, 5.5). The grammar writes the type of a `with`
@@ -1110,7 +1135,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     // A condition is a fourth function of the same parameters: `func name__when(params) => expr`.
     // A parameter that is not `const` is a node of the draft being rewritten (`graph::Node`); a
     // `const` one is the constant's value, of the type it was declared with (rewrite design 2
-    // (second version) 1, reviews/stdlib-rules.md item 5), so the guard is written on the value
+    // (second version) 1), so the guard is written on the value
     // and needs neither `constant(node, sample)` nor the `match … case null` layers around it.
     node_ptr_t whenFunc;
     if (when) {
@@ -1338,7 +1363,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     setNodeTokenRangeByContext(dataList, context);
     *dataList << call;
     node_ptr_t valueDecl =
-        createNodeAs<DataDeclLoad>(false, UnpackType::Tuple, std::vector<Reference>{ref});
+        createNodeAs<DataDeclLoad>(false, std::vector<Reference>{ref});
     unwrapNodeAs<DataDeclLoad>(valueDecl)->setDoc(docOf(context));
     setNodeTokenRangeByContext(valueDecl, context);
     *valueDecl << typeList << dataList;
@@ -1401,9 +1426,10 @@ resolved where the fact's type is known.
 The declaration's `with` parameters are the arguments the query is written with
 (`depth<8>(x)`, and one with a default may be left out). They are copied onto the query function
 and marked `constas` there: the compiler must compute the argument, since the argument is part of
-which fact this is, and the engine computes and caches one fact per argument. A case or a trailing
-clause cannot name one: the engine calls those functions with the value the fact is about, without
-the arguments the query was written with (the refusal below says so).
+which fact this is, and the engine computes and caches one fact per argument. Every function the
+declaration becomes carries them as well, so a case or a trailing clause names one and reads the
+value: on the query they are `constas`, and on the functions the engine calls they are plain
+`with` parameters, which the engine fills with the arguments the query was written with.
 
 The head parameters are the parts of a value the query is written on
 (`aligned(x, y)` for `fact aligned(a: int, b: int)`), and are typed `Node` in the generated
@@ -2102,30 +2128,11 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
     unwrapNodeAs<FuncDataLoad>(funcNode)->setWhenText(std::move(whenText));
     *funcNode << funcTypeNode;
     *funcNode << blockNode;
-
-    node_ptr_t funcDeclNode = createNodeAs<FuncDeclLoad>(ref);
-    unwrapNodeAs<FuncDeclLoad>(funcDeclNode)->setDoc(docOf(context));
-    unwrapNodeAs<FuncDeclLoad>(funcDeclNode)->setOperatorSymbol(operatorSymbol);
-    if (!operatorSymbol.empty()) {
-        unwrapNodeAs<FuncDeclLoad>(funcDeclNode)->setDeclaredIn(namespaceStack_);
-    }
-    if (annoListNode) {
-        *funcDeclNode << annoListNode;
-    }
-    // The tag uses written before the function, after the decorators. They are read when the
-    // function is compiled: a tag declared `on func` belongs to the declaration, one declared
-    // `on nodes` to the nodes of its body (design principles 6.2).
-    addTagUses(funcDeclNode, context);
-    *funcDeclNode << funcNode;
-    setNodeTokenRangeByContext(funcDeclNode, context);
-    registerAstSemanticBundle(
-        funcDeclNode,
-        {
-            semanticPart(
-                camel::source::SemanticRole::FuncName,
-                deriveAstAnchorOrigin(funcDeclNode, nameNode, "ast.func.name"),
-                -1,
-                ref.toString()),
+    // The signature as the node the function is built from knows it: the same parts the body of a
+    // lambda registers (`visitFuncData`), so that the graph of a declared function reads its
+    // parameters from where its body is built, whichever of the two nodes it is entered from.
+    {
+        std::vector<camel::source::SemanticPart> funcParts{
             semanticPart(
                 camel::source::SemanticRole::GenericParameter,
                 nodeOrigin(funcTypeNode->at(0)),
@@ -2147,7 +2154,59 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
                 blockNode ? nodeOrigin(blockNode) : camel::source::kInvalidOriginId,
                 -1,
                 "body"),
-        });
+        };
+        appendParameterParts(funcParts, funcTypeNode);
+        registerAstSemanticBundle(funcNode, std::move(funcParts));
+    }
+
+    node_ptr_t funcDeclNode = createNodeAs<FuncDeclLoad>(ref);
+    unwrapNodeAs<FuncDeclLoad>(funcDeclNode)->setDoc(docOf(context));
+    unwrapNodeAs<FuncDeclLoad>(funcDeclNode)->setOperatorSymbol(operatorSymbol);
+    if (!operatorSymbol.empty()) {
+        unwrapNodeAs<FuncDeclLoad>(funcDeclNode)->setDeclaredIn(namespaceStack_);
+    }
+    if (annoListNode) {
+        *funcDeclNode << annoListNode;
+    }
+    // The tag uses written before the function, after the decorators. They are read when the
+    // function is compiled: a tag declared `on func` belongs to the declaration, one declared
+    // `on nodes` to the nodes of its body (design principles 6.2).
+    addTagUses(funcDeclNode, context);
+    *funcDeclNode << funcNode;
+    setNodeTokenRangeByContext(funcDeclNode, context);
+    std::vector<camel::source::SemanticPart> declSemanticParts{
+        semanticPart(
+            camel::source::SemanticRole::FuncName,
+            deriveAstAnchorOrigin(funcDeclNode, nameNode, "ast.func.name"),
+            -1,
+            ref.toString()),
+        semanticPart(
+            camel::source::SemanticRole::GenericParameter,
+            nodeOrigin(funcTypeNode->at(0)),
+            -1,
+            "withParams"),
+        semanticPart(
+            camel::source::SemanticRole::Parameter,
+            nodeOrigin(funcTypeNode->at(1)),
+            -1,
+            "params"),
+        semanticPart(
+            camel::source::SemanticRole::ReturnType,
+            typeOptNode->empty() ? camel::source::kInvalidOriginId
+                                 : nodeOrigin(typeOptNode->front()),
+            -1,
+            "returnType"),
+        semanticPart(
+            camel::source::SemanticRole::ValueProducer,
+            blockNode ? nodeOrigin(blockNode) : camel::source::kInvalidOriginId,
+            -1,
+            "body"),
+    };
+    // Each parameter as written, with its own position and its slot in the signature: the
+    // declaration's own node is where the parameter list is read as one place, and where the
+    // parameters of a declaration without a body are the whole of it.
+    appendParameterParts(declSemanticParts, funcTypeNode);
+    registerAstSemanticBundle(funcDeclNode, std::move(declSemanticParts));
 
     LEAVE("FuncDecl");
     return funcDeclNode;
@@ -2213,17 +2272,12 @@ Value Builder::visitDataDecl(cst::DataDecl context, bool topLevel) {
     if (context->tok(TK::KwVar)) {
         isVar = true;
     }
-    // carrier : identList | parentIdents | bracedIdents | bracketIdents
-    UnpackType type          = UnpackType::Tuple;
+    // carrier : identList | parentIdents
+    // A parenthesized carrier destructures a tuple; the parser refuses `{` and `[` here, so a
+    // declaration never binds the fields of a struct or the elements of an array.
     cst::IdentList identList = context->get<cst::IdentList>();
     if (auto parent = context->get<cst::ParentIdents>()) {
         identList = parent->get<cst::IdentList>();
-    } else if (auto braced = context->get<cst::BracedIdents>()) {
-        type      = UnpackType::Struct;
-        identList = braced->get<cst::IdentList>();
-    } else if (auto bracket = context->get<cst::BracketIdents>()) {
-        type      = UnpackType::Array;
-        identList = bracket->get<cst::IdentList>();
     }
     vector<Reference> refs;
     std::vector<cst::IdentDef> bindingIdents;
@@ -2231,7 +2285,7 @@ Value Builder::visitDataDecl(cst::DataDecl context, bool topLevel) {
         refs.push_back(topLevel ? qualifyRef(Reference(ident->text())) : Reference(ident->text()));
         bindingIdents.push_back(ident);
     }
-    node_ptr_t dataDeclNode = createNodeAs<DataDeclLoad>(isVar, type, refs);
+    node_ptr_t dataDeclNode = createNodeAs<DataDeclLoad>(isVar, refs);
     setNodeTokenRangeByContext(dataDeclNode, context);
     unwrapNodeAs<DataDeclLoad>(dataDeclNode)->setDoc(docOf(context));
     if (context->get<cst::TypeList>()) {
@@ -2375,14 +2429,17 @@ Value Builder::visitTypeDecl(cst::TypeDecl context) {
 }
 
 /*
-retStmt    : (RETURN | THROW) dataList ;
+retStmt    : (RETURN | THROW | YIELD) dataList ;
 */
 Value Builder::visitRetStmt(cst::RetStmt context) {
     ENTER("RetStmt");
     // `throw e` returns an error value: an exit like `return`, whose value is the failed form
     // of the function's declared `T!` (design principles 3.9; the graph builder checks the
-    // declaration).
-    ExitType exitType   = context->tok(TK::KwThrow) ? ExitType::Throw : ExitType::Return;
+    // declaration). `yield e` is the third exit the production reads: it gives one element of
+    // the stream the function's head declares (design principles 5.4).
+    ExitType exitType   = context->tok(TK::KwThrow) ? ExitType::Throw
+                        : context->tok(TK::KwYield) ? ExitType::Yield
+                                                    : ExitType::Return;
     node_ptr_t exitNode = createNodeAs<ExitStmtLoad>(exitType);
     setNodeTokenRangeByContext(exitNode, context);
     if (context->get<cst::DataList>()) {
@@ -2390,23 +2447,6 @@ Value Builder::visitRetStmt(cst::RetStmt context) {
     }
     LEAVE("RetStmt");
     return exitNode;
-}
-
-/*
-indexValue   : '...'? dataExpr ;
-*/
-Value Builder::visitSpreadValue(cst::SpreadValue context) {
-    ENTER("IndexValue");
-    if (context->childCount() > 1) {
-        // `...xs` is in the grammar but spreading is not implemented. The marker used to be
-        // dropped, so that `[...xs, 4]` was built as the array of `xs` and 4.
-        diags_->of(SemanticDiag::ConstructNotSupported)
-            .at(rangeOf(context->firstToken()))
-            .commit("...", "spreading is not implemented");
-    }
-    node_ptr_t res = any2node(visitExpr(context->expr()));
-    LEAVE("IndexValue");
-    return res;
 }
 
 /*
@@ -2442,18 +2482,12 @@ Value Builder::visitKeyTypePair(cst::KeyTypePair context) {
 }
 
 /*
-keyValuePair : identDef ':' dataExpr | '...' dataExpr ;
+keyValuePair : identDef ':' dataExpr ;
 */
 Value Builder::visitKeyValuePair(cst::KeyValuePair context) {
     ENTER("KeyValuePair");
-    if (!context->get<cst::IdentDef>()) {
-        // `...s` in a struct literal or an argument list: in the grammar, not implemented. It
-        // used to dereference the missing key and crash the compiler.
-        diags_->of(SemanticDiag::ConstructNotSupported)
-            .at(rangeOf(context->firstToken()))
-            .commit("...", "spreading is not implemented");
-    }
-    // The error above stops compilation; a placeholder key keeps the rest of the file checked.
+    // A key is always a name; only a text that ends inside the pair leaves the node without one,
+    // and a placeholder key keeps the rest of the file checked.
     Reference ref(
         context->get<cst::IdentDef>() ? context->get<cst::IdentDef>()->text() : std::string("_"));
     node_ptr_t namedDataNode = createNodeAs<NamedDataLoad>(ref);
@@ -2580,8 +2614,8 @@ Value Builder::visitIndexValues(cst::IndexValues context) {
 
 /*
 pairedValues : keyValuePair (',' keyValuePair)* ;
-In a call's parentheses the list may also hold a positional argument written after a named one
-(handover H276): it is a StrayPositional, and the call refuses it. The named arguments are all
+In a call's parentheses the list may also hold a positional argument written after a named one:
+it is a StrayPositional, and the call refuses it. The named arguments are all
 this function returns.
 */
 Value Builder::visitPairedValues(cst::PairedValues context) {
@@ -2775,11 +2809,13 @@ Value Builder::visitAngledValues(cst::AngledValues context) {
 
 /*
 pattern
-    : identRef
+    : 'error' identDef
+    | identRef (enumTuplePattern | enumStructPattern)?
     | literal
-    | '(' (dataList | identList)? ','? ')'
-    | '{' (pairedValues | identList)? ','? '}'
     | '_' // wildcard
+    ;
+fieldPattern
+    : identRef | '_'
     ;
 */
 Value Builder::visitPattern(cst::Pattern context) {
@@ -2797,15 +2833,9 @@ Value Builder::visitPattern(cst::Pattern context) {
         // value taken out of a `T?` / `T!`, `error e` binds the error of a failed `T!`. Both
         // are a reference node; `error e` carries the bound name as its child. Whether the
         // scrutinee has such a type is known to the graph builder only, which reports an
-        // identifier pattern over any other type as not implemented.
-        if (context->get<cst::IdentDef>() && context->get<cst::IdentRef>()->text() != "error") {
-            diags_->of(SemanticDiag::ConstructNotSupported)
-                .at(rangeOf(context->firstToken(), context->lastToken()))
-                .commit(
-                    context->get<cst::IdentRef>()->text() + " " +
-                        context->get<cst::IdentDef>()->text(),
-                    "the only pattern of two words is 'error e'");
-        }
+        // identifier pattern over any other type by the rule itself: only the two marks `T?` and
+        // `T!` can be taken apart (design principles 3.8). The parser reads the second
+        // word of a pattern only after `error` (`parsePattern`), so the name here is the error's.
         if (context->get<cst::EnumTuplePattern>() || context->get<cst::EnumStructPattern>() ||
             context->get<cst::IdentRef>()->text().find("::") != std::string::npos) {
             // A variant without fields is written by its qualified name (`case Shape::Empty`):
@@ -2824,17 +2854,9 @@ Value Builder::visitPattern(cst::Pattern context) {
             *res << bound;
         }
     } else {
-        // Tuple and struct patterns are in the grammar, but what they destructure and bind
-        // has not been decided. They used to end in an internal error without a position.
-        const char *kind = context->get<cst::IdentRef>()          ? "an identifier pattern"
-                           : context->firstToken()->text() == "(" ? "a tuple pattern"
-                                                                  : "a struct pattern";
-        diags_->of(SemanticDiag::ConstructNotSupported)
-            .at(rangeOf(context->firstToken(), context->lastToken()))
-            .commit(
-                context->text(),
-                std::string(kind) + " is not implemented, only literal patterns and '_' are");
-        // The error above stops compilation; a wildcard keeps the rest of the file checked.
+        // A pattern is an identifier, a variant path, a literal or `_`. What the fields of a
+        // variant bind is read by the enum patterns above; the parser builds no other shape.
+        ASSERT(false, "a pattern of another shape reached the builder");
         res = createNodeAs<NullLoad>();
         setNodeTokenRangeByContext(res, context);
     }
@@ -2950,7 +2972,7 @@ staticForExpr
 staticForHeader
     : FOR '(' identDef (',' identDef)* ')' IN ('fields' typeExpr | 'indices' dataExpr)
     ;
-`indices` (H51 step 6) walks the positions of a tuple value; its operand is child 0 as an
+`indices` walks the positions of a tuple value; its operand is child 0 as an
 ordinary expression, where `fields` has a type there. The head may name up to three things --
 `fields`'s element is the triple (name, type, tags), every other element is one thing -- and
 whether the count fits is read from the element (`SemanticDiag::StaticHeadNameCount`).
@@ -3003,7 +3025,7 @@ staticLoopExpr
     ;
 The children of the node are described at StaticLoopLoad: a Repeated Data of the first values,
 the walked shape (a type for `fields`, a value for `indices` and for a sequence), and the body.
-The head's own production (H462) is `staticLoopHeader`: `for i in <序列>`, without the
+The head's own production is `staticLoopHeader`: `for i in <序列>`, without the
 parentheses `static for` still has.
 */
 Value Builder::visitStaticLoopExpr(cst::StaticLoopExpr context) {
@@ -3225,7 +3247,7 @@ Value Builder::visitCtrlExpr(syn::Node context) {
             // The first case that matches is taken, so nothing after the wildcard can be. A
             // guarded wildcard is not a wildcard: `case _ when c` is not taken when `c` is
             // false, so the cases written after it are still reached (and the guarded case
-            // does not cover the match by itself, review `when-placement-and-match-guards`).
+            // does not cover the match by itself).
             if (casesNode->size() > 0) {
                 const node_ptr_t &lastCase = casesNode->at(casesNode->size() - 1);
                 if (lastCase->front()->type() == LoadType::Null && lastCase->size() <= 2) {
@@ -3308,7 +3330,7 @@ Value Builder::visitCtrlExpr(syn::Node context) {
     default:
         // Every kind `visitExpr` sends here has a case above. `try`/`catch`/`finally` are not
         // part of the language (design principles 3.9) and are not tokens any more, so the
-        // parser never builds a node for them (handover 5.00 "语法层收口" item 5).
+        // parser never builds a node for them.
         throw std::runtime_error("Invalid control expression");
     }
     LEAVE("CtrlExpr");
@@ -4182,11 +4204,9 @@ Value Builder::visitAnnoExpr(cst::AnnoExpr context) {
             }
             lhsNode = exprNode;
         } else {
-            // The postfix `!` (non-null assertion) used to be recorded and never read.
-            diags_->of(SemanticDiag::ConstructNotSupported)
-                .at(rangeOf(tokenOf(child)))
-                .commit("!", "the postfix non-null assertion is not implemented");
-            unwrapNodeAs<DataLoad>(lhsNode)->setNonNull(true);
+            // Every shape of an `annoExpr` is read above; the postfix `!` is not one of them any
+            // more (the parser refuses it: the mark belongs to a `T!`, not to a value).
+            ASSERT(false, "an annoExpr child of another shape reached the builder");
         }
     }
     LEAVE("AnnoExpr");
@@ -4333,7 +4353,7 @@ node_ptr_t Builder::makeStaticAccess(
 /*
 structData
     : '{' (pairedValues ','?)? '}' // no list comprehension because the struct is immutable
-    | '{' staticForExpr '}'        // a struct comprehension (H51 step 4)
+    | '{' staticForExpr '}'        // a struct comprehension
     ;
 */
 Value Builder::visitStructData(cst::StructData context) {
@@ -4408,7 +4428,7 @@ Value Builder::visitArrayData(cst::ArrayData context) {
 /*
 tupleData
     : '(' dataList? ','? ')'
-    | '(' staticForExpr ')'        // a tuple comprehension (H51 step 4)
+    | '(' staticForExpr ')'        // a tuple comprehension
     ;
 */
 Value Builder::visitTupleData(cst::TupleData context) {
@@ -4757,13 +4777,9 @@ Value Builder::visitLiteral(cst::Literal context) {
         // Keep the trailing `i`: the literal's text is what the GCT reads the value from.
         type = LiteralType::Imaginary;
     } else if (context->tok(TK::String) || context->tok(TK::FString)) {
-        if (context->tok(TK::FString)) {
-            // An expression builds a formatted string (visitFStringData); a pattern needs a
-            // constant, and an interpolation is not one.
-            diags_->of(SemanticDiag::ConstructNotSupported)
-                .at(rangeOf(context->firstToken()))
-                .commit("`...`", "a formatted string is not a constant, so it cannot be a pattern");
-        }
+        // The text of a string constant, as a pattern takes it (`case 'x'`). The formatted
+        // strings of an expression go to visitFStringData (visitLiteralData), and the pattern
+        // production no longer takes one, so what arrives here is a plain string.
         data = data.substr(1, data.size() - 2); // Remove quotes
         type = LiteralType::String;
     } else if (context->tok(TK::MultiStr)) {
@@ -4798,19 +4814,13 @@ Value Builder::visitEnumPattern(cst::Pattern context, cst::IdentRef ref) {
     const auto bind = [&](cst::Pattern pattern, const std::string &name) {
         std::string binding;
         if (pattern->text() != "_") {
-            if (pattern->get<cst::IdentRef>() && !pattern->get<cst::EnumTuplePattern>() &&
-                !pattern->get<cst::EnumStructPattern>()) {
-                binding = pattern->get<cst::IdentRef>()->text();
-            } else {
-                // Nested patterns are read so that the message is about the language rather
-                // than about the grammar; what they would bind has not been decided.
-                diags_->of(SemanticDiag::ConstructNotSupported)
-                    .at(rangeOf(pattern->firstToken(), pattern->lastToken()))
-                    .commit(
-                        pattern->text(),
-                        "a nested pattern is not supported; write a name or '_' for each field and "
-                        "match inside the arm");
-            }
+            // A field is a `fieldPattern`: a name or `_`. The parser refuses a nested pattern and
+            // a literal where it is written (`parsePattern`), so a name is all that arrives.
+            ASSERT(
+                pattern->get<cst::IdentRef>() && !pattern->get<cst::EnumTuplePattern>() &&
+                    !pattern->get<cst::EnumStructPattern>(),
+                "a field pattern of another shape reached the builder");
+            binding = pattern->get<cst::IdentRef>()->text();
         }
         fields.push_back(EnumPatternField{name, binding});
     };
@@ -4885,7 +4895,7 @@ Value Builder::visitEnumType(cst::EnumType context) {
 
 /*
 typeExpr
-    : interType ('?' | '!' | '..')*
+    : arrayType ('?' | '!' | '..')*
     ;
 */
 Value Builder::visitTypeExpr(cst::TypeExpr context) {
@@ -4907,94 +4917,6 @@ Value Builder::visitTypeExpr(cst::TypeExpr context) {
     return lhsNode;
 }
 
-/*
-interType
-    : diffType ('&' diffType)*
-    ;
-*/
-Value Builder::visitInterType(cst::InterType context) {
-    ENTER("InterType");
-    node_ptr_t lhsNode = any2node(visitType(context->type(0)));
-    for (size_t i = 1; i < context->types().size(); ++i) {
-        node_ptr_t rhsNode      = any2node(visitType(context->type(i)));
-        node_ptr_t typeExprNode = createNodeAs<TypeExprLoad>(TypeOp::Inter);
-        setNodeTokenRangeByContext(typeExprNode, context->type(i));
-        *typeExprNode << lhsNode << rhsNode;
-        lhsNode = typeExprNode;
-    }
-    LEAVE("InterType");
-    return lhsNode;
-}
-
-/*
-diffType
-    : keyUnionDiffType ('\\' keyUnionDiffType)*
-    ;
-*/
-Value Builder::visitDiffType(cst::DiffType context) {
-    ENTER("DiffType");
-    node_ptr_t lhsNode = any2node(visitType(context->type(0)));
-    for (size_t i = 1; i < context->types().size(); ++i) {
-        node_ptr_t rhsNode      = any2node(visitType(context->type(i)));
-        node_ptr_t typeExprNode = createNodeAs<TypeExprLoad>(TypeOp::Diff);
-        setNodeTokenRangeByContext(typeExprNode, context->type(i));
-        *typeExprNode << lhsNode << rhsNode;
-        lhsNode = typeExprNode;
-    }
-    LEAVE("DiffType");
-    return lhsNode;
-}
-
-/*
-keyUnionDiffType
-    : keyInterType (('+' | '-') keyInterType)*
-    ;
-*/
-Value Builder::visitKeyUnionDiffType(cst::KeyUnionDiffType context) {
-    ENTER("KeyUnionDiffType");
-    node_ptr_t lhsNode = any2node(visitType(context->type(0)));
-    for (size_t i = 1; i < context->types().size(); ++i) {
-        TypeOp op;
-        string strOp = context->child(i * 2 - 1)->text();
-        if (strOp == "+") {
-            op = TypeOp::KeyUnion;
-        } else if (strOp == "-") {
-            op = TypeOp::KeyDiff;
-        } else {
-            throw std::runtime_error("Invalid key union diff operator: " + strOp);
-        }
-        node_ptr_t rhsNode      = any2node(visitType(context->type(i)));
-        node_ptr_t typeExprNode = createNodeAs<TypeExprLoad>(op);
-        setNodeTokenRangeByContext(typeExprNode, context->type(i));
-        *typeExprNode << lhsNode << rhsNode;
-        lhsNode = typeExprNode;
-    }
-    LEAVE("KeyUnionDiffType");
-    return lhsNode;
-}
-
-/*
-keyInterType
-    : typeUnit ('^' typeUnit)*
-    ;
-*/
-Value Builder::visitKeyInterType(cst::KeyInterType context) {
-    ENTER("KeyInterType");
-    node_ptr_t lhsNode = any2node(visitType(context->type(0)));
-    for (size_t i = 1; i < context->types().size(); ++i) {
-        node_ptr_t rhsNode      = any2node(visitType(context->type(i)));
-        node_ptr_t typeExprNode = createNodeAs<TypeExprLoad>(TypeOp::KeyInter);
-        setNodeTokenRangeByContext(typeExprNode, context->type(i));
-        *typeExprNode << lhsNode << rhsNode;
-        lhsNode = typeExprNode;
-    }
-    LEAVE("KeyInterType");
-    return lhsNode;
-}
-
-/*
-typeUnit : (identDef OF)? arrayType ;
-*/
 /*
 arrayType
     : specType arrayDim+
@@ -5313,8 +5235,6 @@ Value Builder::visitLoopExpr(cst::LoopExpr context) {
 /// Any expression (what `dataExpr` derives).
 Value Builder::visitExpr(syn::Node context) {
     switch (context.kind()) {
-    case NK::SpreadValue:
-        return visitSpreadValue(cst::SpreadValue(context));
     case NK::RestValue:
         return visitRestValue(cst::RestValue(context));
     case NK::IfExpr:
@@ -5385,14 +5305,6 @@ Value Builder::visitType(syn::Node context) {
     switch (context.kind()) {
     case NK::TypeExpr:
         return visitTypeExpr(cst::TypeExpr(context));
-    case NK::InterType:
-        return visitInterType(cst::InterType(context));
-    case NK::DiffType:
-        return visitDiffType(cst::DiffType(context));
-    case NK::KeyUnionDiffType:
-        return visitKeyUnionDiffType(cst::KeyUnionDiffType(context));
-    case NK::KeyInterType:
-        return visitKeyInterType(cst::KeyInterType(context));
     case NK::ArrayType:
         return visitArrayType(cst::ArrayType(context));
     case NK::ArrayDim:

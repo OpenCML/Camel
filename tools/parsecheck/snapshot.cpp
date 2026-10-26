@@ -9,7 +9,7 @@
  * diagnostics alone when the file is rejected. A diagnostic is recorded by its code and its place,
  * never by its wording (Diagnostics::dumpIdentity): rewording a message, a help text or a note
  * leaves the hash where it was, so the snapshot answers "does the front end read this file the
- * same way" and not "is the report about it worded the same way" (H252). The list committed as
+ * same way" and not "is the report about it worded the same way". The list committed as
  * test/plans/feat/parse/golden/ast_hashes.txt is the regression snapshot of the parser: it was
  * recorded when the ASTs were last compared with those of the ANTLR parser, just before that
  * parser was removed.
@@ -92,7 +92,7 @@ std::string withSortedImports(const std::string &structure) {
 
 int runHashes(const std::vector<std::string> &files) {
     // A list that names nothing would hash nothing and report success; that is not a pass
-    // (agents/test.md, H185/H199).
+    // (agents/test.md).
     if (files.empty()) {
         std::cerr << "hashes: expected at least 1 file in the list, got 0; refusing to hash nothing\n";
         return 2;
@@ -116,7 +116,7 @@ int runHashes(const std::vector<std::string> &files) {
 
 int runFormatCheck(const std::vector<std::string> &files) {
     // Every file below counts as checked or skipped, so an empty list would print a clean summary
-    // of nothing (H199). The floor that compares against the tree's parse corpus is in check.py,
+    // of nothing. The floor that compares against the tree's parse corpus is in check.py,
     // which is the only caller that can count it; this refuses the empty list itself.
     if (files.empty()) {
         std::cerr << "fmtcheck: expected at least 1 file in the list, got 0; refusing to check nothing\n";

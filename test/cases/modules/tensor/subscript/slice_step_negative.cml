@@ -1,15 +1,19 @@
 /**
- * A slice with a negative step runs backwards for an array, but on a tensor the step must be
- * the constant 1: any other step is a view with strides, which waits for (design principles
- * 5.4), and is refused at compile time. A negative step is refused like a positive one, not read
- * as "the same slice backwards", so no gradient is ever built from it.
+ * A negative step runs backwards: the core's one slice takes any non-zero step, and a negative one
+ * walks the positions from the start down while they are above the end. The result is a copy, not
+ * a view (the deviation recorded for a stepped slice, and the same one for another axis), so
+ * `b[3:0:-1]` is the elements at 3, 2 and 1 -- position 0 is not taken, because the end is where
+ * the walk stops; an end left out stands for the position before the first.
  */
 module subscript_slice_step_negative
-import { Tensor, reshape, shape } from tensor
+import { reshape, shape, sum } from tensor
 
 func main(): int sync {
     println('ran')
     let b = reshape([1.0, 2.0, 3.0, 4.0], [4])
     println(shape(b[3:0:-1]))
+    println(sum(b[3:0:-1]))
+    println(shape(b[3::-1]))
+    println(shape(b[:0:-1]))
     return 0
 }

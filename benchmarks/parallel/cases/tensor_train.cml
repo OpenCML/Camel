@@ -5,7 +5,7 @@
 // Needs std::macro before the scheduler (autodiff).
 module tensor_train
 
-import { Tensor, ones, relu, mean } from tensor
+import { ones, relu, mean } from tensor
 import { with_grad } from autodiff
 import { sgd } from nn
 
@@ -20,7 +20,7 @@ func loss(x: f32[..]): float {
     let h1 = relu(x @ m.fc1_w + m.fc1_b)
     let h2 = relu(h1 @ m.fc2_w + m.fc2_b)
     let y = h2 @ m.fc3_w + m.fc3_b
-    return mean(y * y)
+    return float(mean(y * y))
 }
 
 func train(m: Mlp, x: f32[..], steps: int, last: float): float {

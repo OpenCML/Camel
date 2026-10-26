@@ -1,0 +1,20 @@
+/**
+ * Two tensor operands of different element types are the mixed call the signature refuses: the
+ * element type of each is the one its type carries, and there is no implicit conversion between
+ * numeric types to widen one into the other (design principles 5.1). Both shapes are known here,
+ * and the refusal does not look at them: it is the element types that disagree.
+ */
+module mixed_width_known_shapes
+
+import { reshape, sum } from tensor
+
+func both(x: f64[2], y: f32[2]): float {
+    return float(sum(x * y))
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0] as f64[], [2])
+    let y = reshape([1.0, 2.0] as f32[], [2])
+    println(both(x, y))
+    return 0
+}

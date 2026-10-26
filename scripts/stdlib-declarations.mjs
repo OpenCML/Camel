@@ -73,7 +73,7 @@
 // OperatorNotOverloadable), and the compiler negates a *Camel* overload of `==`, not a native
 // one, so a module whose types have their own `==` keeps the `__neq__` group in C++. Rewrite's
 // `__rule`, `__rule_when`, `__rule_generic` and `__analysis` are the compiled form of the
-// language's `rule` and `analysis` declarations, so they are exported by C++ as well (handover
+// language's `rule` and `analysis` declarations, so they are exported by C++ as well.
 // None of them has a Camel name: neither the declaration file nor the reference page
 // carries it, and `--verify-ops` filters reserved names out. Every other reserved group stays
 // checked.
@@ -840,7 +840,7 @@ function staticChecks() {
             problems.push(
                 `${where.file}:${where.line}: the computed signature '${name}' of '${module.name}' is recorded inline as ` +
                     `'// dynamic func'${also ? ` and in ${also.file}:${also.line}` : ''}; a computed name has exactly one ` +
-                    `place: stdlib/signatures/${module.name}.cml, named by the MODULES entry's computed: field (handover H180)`,
+                    `place: stdlib/signatures/${module.name}.cml, named by the MODULES entry's computed: field`,
             )
         }
         // The pointer must agree with the file: a module whose MODULES entry names a computed
@@ -944,7 +944,7 @@ function staticChecks() {
                     problems.push(
                         `${loop.file}:${loop.line}: the loop over the operator registry does not export the ` +
                             `type-qualified alias of a name; a module that publishes 'Type.name' must publish it ` +
-                            `for every operator (handover H151)`,
+                            `for every operator`,
                     )
                 }
                 if (!loop.skipsDeclared) {

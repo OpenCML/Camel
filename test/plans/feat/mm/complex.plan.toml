@@ -3,7 +3,7 @@ order = 372
 tier = "fast"
 debug_tier = true # also selected by --tier debug (Debug build)
 tags = ["feat", "mm", "complex", "literal", "layout", "view"]
-desc = "Complex numbers c64 and c128: imaginary literals take their type from the context (c128 when there is none), arithmetic and printing, the pure-data layout inside arrays and tuples, and the compact-element view boundary (design principles 5.1, 10.5; H15b, H28 review items 1-3)."
+desc = "Complex numbers c64 and c128: imaginary literals take their type from the context (c128 when there is none), arithmetic and printing, the pure-data layout inside arrays and tuples, and the compact-element view boundary (design principles 5.1, 10.5)."
 
 [defaults]
 kind = "behavior"
@@ -15,16 +15,16 @@ timeout_ms = 60000
 
 [[tests]]
 name = "complex.values"
-desc = "Imaginary literals, c64/c128 arithmetic, comparison, conversion, printing, and the math accessors. A NaN part is text without its sign, with and without a format specification (language reference 2.5.2, 2.5.3): a computed negative NaN in the real part prints `nan+4.00i`, never `-nan+4.00i`, and one in the imaginary part prints `nan+nani`, not `+ -nani`."
+desc = "Imaginary literals, c64/c128 arithmetic, comparison, conversion, printing, and the math accessors. A NaN part is text without its sign, with and without a format specification (language reference 2.5.2, 2.5.3): a computed negative NaN in the real part prints `nan+4.00i`, never `-nan+4.00i`, and one in the imaginary part prints `nan+nani`, not `+ -nani`. The array loops over a compact `c64` array answer the same values as the element-wise reads beside them: a `c64` element is eight bytes and is not one slot, so a loop reads and writes it through `getSlotSlow`/`setSlotSlow`."
 args = ["${case}", "std::nvm"]
-expect_stdout_contains = ["3+4i", "0+4.5i", "0-2i", "3+5i", "-5+10i", "-1+0i", "true", "false", "true", "1+2i", "2+4i", "-3+4i", "1+0i", "-1-2i", "2+0i", "1+2i", "[1+2i, 3+4i]", "4+6i", "[(1+2i, 3), (3+4i, 5)]", "5.0", "3.0", "4.0", "3-4i", "0.5403", "nan+4i", "nan+4.00i", "   nan+4.00i", "nan+nani"]
+expect_stdout_contains = ["3+4i", "0+4.5i", "0-2i", "3+5i", "-5+10i", "-1+0i", "true", "false", "true", "1+2i", "2+4i", "-3+4i", "1+0i", "-1-2i", "2+0i", "1+2i", "[1+2i, 3+4i]", "4+6i", "[(1+2i, 3), (3+4i, 5)]", "5.0", "3.0", "4.0", "3-4i", "0.5403", "nan+4i", "nan+4.00i", "   nan+4.00i", "nan+nani", "[-3+4i, -5+10i]", "[2+4i, 4+6i]", "[3+4i]"]
 expect_output_not_contains = ["-nan", "Segmentation fault", "dumped core", "[Error]"]
 
 [[tests]]
 name = "complex.fastvm"
-desc = "The same program under the bytecode scheduler."
+desc = "The same program under the bytecode scheduler, which is where the array loops over a compact `c64` array run through the slow element class: the two bytecode VMs used to die by a signal at that reduce."
 args = ["${case}", "std::fastvm"]
-expect_stdout_contains = ["3+4i", "-5+10i", "[(1+2i, 3), (3+4i, 5)]", "3-4i", "nan+4.00i", "nan+nani"]
+expect_stdout_contains = ["3+4i", "-5+10i", "[(1+2i, 3), (3+4i, 5)]", "3-4i", "nan+4.00i", "nan+nani", "[-3+4i, -5+10i]", "[2+4i, 4+6i]", "[3+4i]", "4+6i"]
 expect_output_not_contains = ["-nan", "Segmentation fault", "dumped core", "[Error]"]
 
 [[tests]]

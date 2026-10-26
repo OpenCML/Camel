@@ -350,13 +350,25 @@
           "id": "g2n0",
           "kind": "PORT",
           "label": "x",
+          "origin": "<ORIGIN>",
           "outputType": "int",
           "parameter": {
             "index": 0,
             "kind": "normal",
             "name": "x"
           },
-          "roles": []
+          "roles": [],
+          "source": {
+            "end": {
+              "character": 22,
+              "line": 21
+            },
+            "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
+            "start": {
+              "character": 16,
+              "line": 21
+            }
+          }
         },
         {
           "id": "g2n1",
@@ -400,7 +412,7 @@
       "normalPorts": [
         "g2n0"
       ],
-      "signature": "(x: int) => int"
+      "signature": "(x: int) => int pure"
     },
     {
       "capturePorts": [],
@@ -430,13 +442,25 @@
           "id": "g3n0",
           "kind": "PORT",
           "label": "x",
+          "origin": "<ORIGIN>",
           "outputType": "i32",
           "parameter": {
             "index": 0,
             "kind": "normal",
             "name": "x"
           },
-          "roles": []
+          "roles": [],
+          "source": {
+            "end": {
+              "character": 24,
+              "line": 25
+            },
+            "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
+            "start": {
+              "character": 18,
+              "line": 25
+            }
+          }
         },
         {
           "id": "g3n1",
@@ -480,7 +504,7 @@
       "normalPorts": [
         "g3n0"
       ],
-      "signature": "(x: i32) => i32"
+      "signature": "(x: i32) => i32 pure"
     },
     {
       "capturePorts": [],
@@ -662,7 +686,7 @@
         }
       ],
       "normalPorts": [],
-      "signature": "() => int"
+      "signature": "() => int uses stdout"
     }
   ],
   "root": "g0",

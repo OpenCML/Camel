@@ -319,8 +319,7 @@ assert(d.data.moduleName === '' && d.data.modulePath === '',
     'a command-line diagnostic has no file: ' + JSON.stringify(d.data))
 assert(d.message.includes("its library 'unloadable' cannot be loaded"), 'message: ' + d.message)
 // The refusal, not any `42` in the output: the message carries the loader's words, which name the
-// module's absolute path, so a checkout whose directory name holds `42` (this handover's own
-// ` -graph-ops`, a home directory, a runner's workspace) would otherwise fail the run above
+// module's absolute path, so a checkout whose directory name holds `42`  would otherwise fail the run above
 // while the refusal was exactly right. The program's own output is the line `42` and nothing else.
 assert(!input.stdout.split(/\r?\n/).some((line) => line.trim() === '42'), 'the program must not run')
 """

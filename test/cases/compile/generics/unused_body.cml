@@ -4,8 +4,8 @@
  * whether `+` applies to it, whether a field is there -- is not made for it.
  *
  * The names are not such a check: they are resolved where the declaration is written, and a
- * misspelling there is reported whether or not an instance is ever made (the rule of
- * 2026-10-24 on `generic-rule-condition-unresolved-name`, docs/handover/reviews/questions-2026-10-23.md).
+ * misspelling there is reported whether
+ * or not an instance is ever made.
  * `err_decl_name.cml` is the case that pins that half.
  */
 module unused_body

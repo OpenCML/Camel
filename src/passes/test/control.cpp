@@ -259,6 +259,45 @@ void manyReaders() {
     }
     check(draft.normUsersOf(producer).empty(), "a reader was left behind");
 }
+/// The queries that ask what orders a node read the chain of a `sync` block. Its wait is the sync
+/// edge the block wrote (docs/design/effects/edges.cn.md 1.5), so a gate whose only wait is
+/// that edge still carries the program's order, and a walk that follows a node's orderings follows
+/// the chain through a node that carries none. Both are what the generic rewrite pass asks before
+/// it replaces a node (src/passes/opt/generic/rewrite.cpp, `carriesOrdering` and `orderedSources`).
+void syncChainOrdering() {
+    // A gate whose only wait is the chain's tail: one data port, one sync predecessor and no
+    // control input at all (5.3).
+    {
+        GraphDraft draft;
+        const auto tail  = draft.addSyncNode();
+        const auto value = node(draft);
+        const auto gate  = draft.addGateNode(camel::core::type::Type::Float32());
+        draft.setNormInputs(gate, std::span<const gc_node_ref_t>(&value, 1));
+        check(draft.setSyncPredecessor(gate, tail), "a gate did not take the chain's tail");
+        const auto reader = node(draft);
+        draft.setNormInputs(reader, std::span<const gc_node_ref_t>(&gate, 1));
+        const auto sources = camel::passes::generic::orderedSources(draft, reader);
+        check(
+            sources.size() == 1 && sources.front() == gate,
+            "a gate that waits only on the sync chain does not carry the order");
+    }
+    // A node that carries no order of its own: the walk reaches what ordered it through the chain
+    // it stands in, not only through the control edge it used to be written as.
+    {
+        GraphDraft draft;
+        const auto tail  = draft.addSyncNode();
+        const auto value = node(draft);
+        const auto plain = draft.addNode(DraftNodeInit{.kind = GCNodeKind::Copy});
+        draft.setNormInputs(plain, std::span<const gc_node_ref_t>(&value, 1));
+        check(draft.setSyncPredecessor(plain, tail), "a node did not take the chain's tail");
+        const auto reader = node(draft);
+        draft.setNormInputs(reader, std::span<const gc_node_ref_t>(&plain, 1));
+        const auto sources = camel::passes::generic::orderedSources(draft, reader);
+        check(
+            std::ranges::find(sources, tail) != sources.end(),
+            "the walk did not follow the sync chain");
+    }
+}
 } // namespace
 
 const camel::runtime::Program *
@@ -272,6 +311,7 @@ ControlTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
     denseDataChain();
     forwardingGateConsumers();
     manyReaders();
+    syncChainOrdering();
     os << "CONTROL topology, budgets, branches, dense chain: PASS\n";
     return program;
 }

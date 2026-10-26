@@ -5,7 +5,7 @@ digraph GraphIR {
             label="gate";
             F02 [label="ARGS", type="ARGS"];
             O02 [label="EXIT", type="EXIT"];
-            N00 [label="t", type="PORT", param_name="t", param_kind="normal", param_index="0", value_type="f32[4]"];
+            N00 [label="t", type="PORT", param_name="t", param_kind="normal", param_index="0", value_type="f32[4]", origin=<ORIGIN>, span="13:10-13:19", srcfile="exemplars/01_scalar_boundary/program.cml"];
             N01 [label="0", type="DATA", origin=<ORIGIN>, span="14:16-14:17", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="int"];
             N02 [label=":op/idx_arr", type="OPER", role="scalar-boundary", origin=<ORIGIN>, span="14:15-14:16", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="f32"];
             N03 [label="0.5", type="DATA", origin=<ORIGIN>, span="14:21-14:24", srcfile="exemplars/01_scalar_boundary/program.cml", value_type="f32"];

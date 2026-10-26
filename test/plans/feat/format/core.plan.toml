@@ -78,17 +78,20 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
 [[tests]]
-name = "format.pattern_empty_snapshot"
-desc = "Formats empty tuple and struct match patterns using CST-only parsing."
-kind = "snapshot"
+name = "format.pattern_empty_refused"
+desc = "Empty tuple and struct match patterns are refused with the parser's diagnostic instead of formatted: a pattern is an identifier, a variant path, a literal or `_`, so `case ()` and `case {}` are ordinary syntax errors (the formatter parses before it writes, and it must not format what the parser refuses)."
+kind = "negative"
 tool = "camel-format"
 case = "../../../cases/format/pattern_empty.cml"
 args = ["${case}"]
-expect_exit = 0
-snapshot_stream = "stdout"
-snapshot_compare = "text_exact"
-golden = "./golden/pattern_empty.cml"
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_code = "0x0200000A"
+expect_diagnostic_line = 3
+expect_diagnostic_column = 29
+expect_output_contains = ["Unexpected '('; expected a pattern."]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
 [[tests]]
@@ -179,7 +182,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "format.when_clause_snapshot"
-desc = "A declaration's applicability condition follows the result type: `when is_ordered::<T>()` is one space after it, whatever spacing the source used, and it is not dropped. A condition written on its own line in the source is joined to the signature when the head fits the wrap width. A rule's condition is written between its parameters and its body, never after the body (design principles 4.4; the rulings of 2026-10-24 and 2026-10-25)."
+desc = "A declaration's applicability condition follows the result type: `when is_ordered::<T>()` is one space after it, whatever spacing the source used, and it is not dropped. A condition written on its own line in the source is joined to the signature when the head fits the wrap width. A rule's condition is written between its parameters and its body, never after the body (design principles 4.4: the condition is part of the signature and is written before the body it guards)."
 kind = "snapshot"
 tool = "camel-format"
 case = "../../../cases/format/when_clause.cml"
@@ -304,7 +307,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "format.wrap_wide_rule_snapshot"
-desc = "A rule declaration head wider than the wrap width (80): the `when` clause goes on a line of its own, indented one level, and the body's opening brace stays at the end of that line. A rule whose head fits keeps the condition on the signature's line (handover 5.00 \"格式化器\", the ruling of 2026-10-25)."
+desc = "A rule declaration head wider than the wrap width (80): the `when` clause goes on a line of its own, indented one level, and the body's opening brace stays at the end of that line. A rule whose head fits keeps the condition on the signature's line (design principles 4.4)."
 kind = "snapshot"
 tool = "camel-format"
 case = "../../../cases/format/wrap_wide_rule.cml"
@@ -318,7 +321,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "format.wrap_wide_func_snapshot"
-desc = "A generic function signature still wider than the wrap width (80) after its `when` clause moved to a line of its own: the parameters go one per line, indented one level, and the result type follows the closing parenthesis. A head that fits keeps the clause on the signature's line (handover 5.00 \"格式化器\", the ruling of 2026-10-25)."
+desc = "A generic function signature still wider than the wrap width (80) after its `when` clause moved to a line of its own: the parameters go one per line, indented one level, and the result type follows the closing parenthesis. A head that fits keeps the clause on the signature's line (design principles 4.4)."
 kind = "snapshot"
 tool = "camel-format"
 case = "../../../cases/format/wrap_wide_func.cml"

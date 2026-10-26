@@ -26,12 +26,12 @@ timeout_ms = 10000
 
 [[tests]]
 name = "reads_of_one_graph"
-desc = "The nodes, inputs, users, purity and printed form of a small graph."
+desc = "The nodes, inputs, users, purity and printed form of a small graph. Every node has a position, a parameter's port included: the port stands for the parameter, so it carries the position the parameter is written at."
 kind = "behavior"
 case = "../../../cases/modules/graph_read.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "[%0 Port : int, %1 Data : int, %2 Oper :op/mul_l : int, %3 Data : int, %4 Oper :op/add_l : int]\n[0, 0, 2, 0, 2]\n[1, 1, 1, 1, 0]\n[false, false, true, false, true]\n[none, none, :op/mul_l, none, :op/add_l]\n[int, int, int, int, int]\n[, , , , ]\n[null, 2, null, 1, null]\n[false, true, true, true, true]\n[none, compute]\n"
+expect_stdout_exact = "[%0 Port : int, %1 Data : int, %2 Oper :op/mul_l : int, %3 Data : int, %4 Oper :op/add_l : int]\n[0, 0, 2, 0, 2]\n[1, 1, 1, 1, 0]\n[false, false, true, false, true]\n[none, none, :op/mul_l, none, :op/add_l]\n[int, int, int, int, int]\n[, , , , ]\n[null, 2, null, 1, null]\n[true, true, true, true, true]\n[none, compute]\n"
 timeout_ms = 10000
 
 # A pass written in Camel is a function (p: Program) => Program! exported by a module; it runs
@@ -136,7 +136,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "camel_pass_reads_the_handover_reproduction"
-desc = "The H37 handover brief's program: a module-level literal (`two = 2`) and a module-level value computed by a call (`twelve = two + ten()`), read by the pass."
+desc = "The reproduction program: a module-level literal (`two = 2`) and a module-level value computed by a call (`twelve = two + ten()`), read by the pass."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/tiny.cml"
 args = ["${case}", "gl::apply", "std::nvm"]
@@ -361,7 +361,7 @@ timeout_ms = 20000
 # keeps the graph's named node (the C++ pass's isReplaceable), while the rule engine rewrites it and
 # moves the anchor onto what the rule's right side wrote -- the handover
 # makes the engine's job and not a rule condition
-# (`docs/handover/reviews/questions-2026-10-23.md`, `rule-conditions-and-policy` item 3). Both facts
+#. Both facts
 # are pinned here so that neither can drift silently.
 
 [[tests]]
@@ -385,7 +385,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "the_rule_engine_retargets_the_named_node"
-desc = "rules::simplify rewrites the same add and moves the graph's return to the port: the rule engine's job is the handover, not the refusal the C++ pass's isReplaceable applies (the 2026-10-23 ruling, `rule-conditions-and-policy` item 3)."
+desc = "rules::simplify rewrites the same add and moves the graph's return to the port: the rule engine's job is the handover, not the refusal the C++ pass's isReplaceable applies (this is the engine's job, not a rule condition)."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/neutral_target.cml"
 args = ["${case}", "rules::simplify", "std::jgir"]

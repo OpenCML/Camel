@@ -1,7 +1,7 @@
 /**
  * A reduction over a bf16 tensor accumulates in a wider type than the element type and rounds
  * once when it stores the result (design principles 7.3; modules/tensor/kernels/reduce.cpp uses
- * a double accumulator for every floating element type). The result is a Tensor<bf16>, so it is
+ * a double accumulator for every floating element type). The result is a bf16[..], so it is
  * two bytes per element: the two reduced rows are four bytes.
  *
  * The values separate the two widths. Row 0 is [2^24, 1, -2^24]: f32 addition rounds 2^24 + 1
@@ -12,11 +12,11 @@
  */
 module stdlib_reduced_reduction_bytes
 
-import { Tensor, new, cast, reshape, sum, to_bytes } from tensor
+import { new, cast, reshape, sum, to_bytes } from tensor
 import { to_array, size } from bytes
 
 #[change_precision]
-func narrow(x: Tensor<f32>): Tensor<bf16> {
+func narrow(x: f32[..]): bf16[..] {
     return cast(x, 'bf16')
 }
 

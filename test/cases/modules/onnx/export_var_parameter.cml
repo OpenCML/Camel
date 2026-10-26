@@ -6,7 +6,7 @@
  */
 module export_var_parameter
 
-import { Tensor, reshape, tanh } from tensor
+import { reshape, tanh } from tensor
 import { export_model } from onnx
 import { get_env } from env
 

@@ -1,9 +1,9 @@
 module constas_native
-import { Tensor } from tensor
+import tensor
 
 // A body-less declaration names a C++ operator whose signature does not carry a compile-time
 // value parameter, even when the value writes the result's extent.
-func zeros(constas n: int): Tensor<f32, [n]>
+func zeros(constas n: int): f32[n]
 
 func main(): int sync {
     println(zeros(3))

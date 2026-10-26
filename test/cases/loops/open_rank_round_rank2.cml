@@ -1,14 +1,14 @@
-// The same rule with a rank-2 value: `x` is passed to a parameter of open rank (`Tensor<f32>` is
+// The same rule with a rank-2 value: `x` is passed to a parameter of open rank (`f32[..]` is
 // `f32[..]`), so the round is declared as the open-rank array one dimension fewer (design
 // principles 5.4); at run time each round is the row, and `sum(v)` reads that row's sum. The row
 // sums are the proof that the round is read as an array of the row's elements and not as the
 // scalar the rank-1 case of open_rank_round_rank1.cml holds.
 module open_rank_round_rank2
 
-import { Tensor, sum } from tensor
+import { sum } from tensor
 
-func rowSums(x: Tensor<f32>): float[] {
-    return loop acc = [] for v in x do acc->append<sum(v)>
+func rowSums(x: f32[..]): float[] {
+    return loop acc = [] for v in x do acc->append<float(sum(v))>
 }
 
 func main(): int sync {

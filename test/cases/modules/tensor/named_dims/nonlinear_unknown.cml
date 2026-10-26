@@ -1,13 +1,13 @@
 module named_dims_nonlinear_unknown
-import { Tensor, ones, sum } from tensor
+import { ones, sum } from tensor
 // A product of two named dimensions is not linear: its value is unknown, so the third
 // argument is accepted whatever its extent is (design principles 5.4).
 func scaled(
-    a: Tensor<f32, [n]>,
-    b: Tensor<f32, [m]>,
-    c: Tensor<f32, [n * m]>
+    a: f32[n],
+    b: f32[m],
+    c: f32[n * m]
 ): float {
-    return sum(a) + sum(b) + sum(c)
+    return float(sum(a)) + float(sum(b)) + float(sum(c))
 }
 func main(): int sync {
     println(scaled(ones([2]), ones([3]), ones([99])))

@@ -3,7 +3,7 @@
  * variable holds when the callee runs is not known there.
  */
 module var_tensor_read_in_callee
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { with_grad } from autodiff
 
 type P = { p0: f64[..] }
@@ -15,7 +15,7 @@ func peek(var acc: f64[]): f64[..] {
 with <m: P>
 func loss(x: f64[..], var acc: f64[]): float sync {
     let b = peek(acc)
-    return sum(m.p0 * x) + sum(b)
+    return float(sum(m.p0 * x)) + float(sum(b))
 }
 
 func main(): int sync {

@@ -26,7 +26,7 @@
 | 映射、集合 | `Map<K, V>`、`Set<T>` | 见 3.6 |
 | 枚举 | `Shape`，`Option<int>` | 见 3.5 |
 | 无值 | `void` | 没有返回值的函数的返回类型；它唯一的值打印为 `null` |
-| 模块类型 | 由模块引入的类型名（如 `Json`）；`Tensor` 不是另一个类型，它是数值数组的另一种拼写（过渡期保留），`Tensor<f32, [2, 3]>` 与 `f32[2, 3]` 写的是同一个类型 | 由该模块引入；名字与尖括号里的实参由该类型自己解释，表示由该模块定义 |
+| 模块类型 | 由模块引入的类型名（如 `Json`）；数值数组类型不是模块类型（过渡期的 `Tensor` 名字已删除，写它是未知名字） | 由该模块引入；名字与尖括号里的实参由该类型自己解释，表示由该模块定义 |
 
 没有 `any` 类型：编译之后每个值都有确定的类型（设计原则 5.10）。在任何类型位置写 `any`，与写别的未知类型名一样，是编译期错误 `SemanticDiag::UnresolvedTypeReference`；接受多种类型的形参用类型参数（见 [7.5](07_statements.md#75-泛型函数)），不同类型的值并排放用元组或结构体。
 
@@ -304,7 +304,7 @@ func area(s: Shape): float {
 - **穷尽**：列全了所有变体就不必写 `case _`；漏了变体又没有 `case _` 是编译期错误 `EnumMatchNotExhaustive`，诊断列出漏掉的变体名。已被前面的臂覆盖的变体再写一次给警告（`EnumVariantCaseRepeated`）；`case _` 之后的臂永远不执行，给警告（`MatchCaseAfterWildcard`）；列全所有变体之后还写 `case _`，这个通配符永远不会命中，给警告（`MatchWildcardRedundant`）。
 - 模式必须写现在匹配的类型的变体，前缀（`Shape::`）与变体名都要对：写错是 `EnumPatternMismatch`，诊断列出该类型声明的变体。
 - **模式里不带 `::` 的名字是绑定名**（`case v` 用于 `T?`／`T!`），不是变体：单元变体要写全限定名 `case Shape::Empty`。写成 `case Empty` 是 `EnumPatternMismatch`，诊断指出 `Empty` 是该枚举的变体、并给出 `case Shape::Empty`。
-- **嵌套模式**：`case Shape::Circle(0.0)` 这种把模式写在字段位置的写法给出"暂不支持"（`ConstructNotSupported`），要求为每个字段写名字或 `_`，在臂里再匹配。
+- **嵌套模式不在语言里**：字段位置只写名字或 `_`，所以 `case Shape::Circle(0.0)` 这种把模式写在字段位置的写法是**普通语法错误**（在写下的那个 `(` 或 `0.0` 处），为每个字段写名字或 `_`，在臂里再匹配。
 - `match` 的值可以是任意表达式，包括返回 `enum` 的调用；各臂结果类型的统一与现有的 `match` 相同（[6.8.2](06_expressions.md#682-match)）。
 
 **相等与打印。** 同一个 `enum` 实例类型的两个值可以 `==`、`!=`：先比变体，再按声明顺序逐字段比较；任一字段类型不能比较时，这个 `enum` 也不能比较（编译期错误）。打印与源码写法一致：`Shape::Circle(1.0)`、`Shape::Rect { w: 2.0, h: 3.0 }`、`Shape::Empty`；泛型实例不打印类型参数（`Option::Some(42)`，不是 `Option::Some<int>(42)`）。

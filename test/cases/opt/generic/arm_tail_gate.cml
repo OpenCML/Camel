@@ -10,7 +10,7 @@
  */
 module arm_tail_gate
 
-import { Tensor, ones, zeros, shape } from tensor
+import { ones, zeros, shape } from tensor
 
 func run(t: int, steps: int, x: f32[..], h: f32[..]): f32[..] {
     return if t >= steps then h else run(t + 1, steps, x, h + h)

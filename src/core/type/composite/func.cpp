@@ -3,6 +3,7 @@
 
 #include "camel/core/type/composite/func.h"
 #include "camel/core/mm.h"
+#include "camel/core/type/composite/stream.h"
 #include "camel/core/type/intern.h"
 #include "camel/core/type/text.h"
 #include "camel/core/type/storage.h"
@@ -366,15 +367,23 @@ bool FunctionType::equals(Type *other) const { return typeEquals(this, other); }
 CastSafety FunctionType::castSafetyFrom(Type *sourceType) const {
     if (sourceType == nullptr)
         return CastSafety::Forbidden;
-    if (this == sourceType)
-        return CastSafety::Safe;
-    return CastSafety::Forbidden;
+    return assignableFrom(sourceType) ? CastSafety::Safe : CastSafety::Forbidden;
 }
 
 bool FunctionType::assignableFrom(Type *other) const {
     if (this == other)
         return true;
-    if (!other || other->code() != TypeCode::Function)
+    if (!other)
+        return false;
+    if (other->code() == TypeCode::Stream) {
+        // A stream's value is its step function (StreamType::stepType), which is this signature,
+        // and a stream is read only through it: `s()` is the next element with the rest of the
+        // stream. So a stream enters a signature exactly when that signature accepts its own step
+        // signature, and nothing else about it is converted.
+        return static_cast<StreamType *>(other)->stepType()->assignableFrom(
+            const_cast<FunctionType *>(this));
+    }
+    if (other->code() != TypeCode::Function)
         return false;
 
     const FunctionType &otherFunc = static_cast<const FunctionType &>(*other);
@@ -398,63 +407,10 @@ bool FunctionType::assignableFrom(Type *other) const {
         return false;
     }
 
-    // Resources (design effects plan 2.2): a target that promises nothing accepts anything; a
-    // Concrete target accepts a Concrete source that uses no more (a `pure` function fits
-    // anywhere, an arbitrary one does not fit a pure position). A Generic source cannot be
-    // proved to fit a Concrete target.
-    const sem::ResourceSignature &target = resources_;
-    const sem::ResourceSignature &source = otherFunc.resources_;
-    if (target.mode == sem::ResourceSignature::Mode::Concrete) {
-        if (source.mode == sem::ResourceSignature::Mode::Generic) {
-            return false;
-        }
-        const auto coversMode = [](sem::AccessMode targetMode, sem::AccessMode sourceMode) {
-            return targetMode == sem::AccessMode::ReadModifyWrite ||
-                   targetMode == sourceMode;
-        };
-        for (const auto &use : source.params) {
-            const bool covered = std::any_of(
-                target.params.begin(), target.params.end(), [&](const auto &t) {
-                    return t.index == use.index && t.cls == use.cls && t.name == use.name &&
-                           coversMode(t.mode, use.mode);
-                });
-            const bool any = std::any_of(target.anyOf.begin(), target.anyOf.end(), [&](auto cls) {
-                return cls == use.cls || cls == sem::ResourceClass::Unknown;
-            });
-            if (!covered && !any) {
-                return false;
-            }
-        }
-        for (const auto &use : source.ambient) {
-            const bool covered = std::any_of(
-                target.ambient.begin(), target.ambient.end(), [&](const auto &t) {
-                    return t.name == use.name && coversMode(t.mode, use.mode);
-                });
-            if (!covered) {
-                return false;
-            }
-        }
-        for (uint8_t capture : source.captures) {
-            if (std::find(target.captures.begin(), target.captures.end(), capture) ==
-                target.captures.end()) {
-                return false;
-            }
-        }
-        for (sem::ResourceClass cls : source.anyOf) {
-            if (std::find(target.anyOf.begin(), target.anyOf.end(), cls) == target.anyOf.end()) {
-                return false;
-            }
-        }
-        if (source.allocates && !target.allocates) {
-            return false;
-        }
-        if (source.allocates && target.allocates && !(*source.allocates == *target.allocates)) {
-            return false;
-        }
-        if (source.external && !target.external) {
-            return false;
-        }
-    }
-    return true;
+    // Resources (design effects plan 2.2, design principles 3.3): the rule is sem::covers, which
+    // the declaration-site check and the call site share with this one, so a signature that
+    // promises nothing accepts anything, and a Concrete target accepts a Concrete source that
+    // uses no more. A Generic source cannot be proved to fit a Concrete target.
+    return sem::covers(resources_, otherFunc.resources_);
 }
 

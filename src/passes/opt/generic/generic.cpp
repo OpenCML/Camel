@@ -142,9 +142,12 @@ staticValueOf(const GraphDraft &draft, gc_node_ref_t id) {
 }
 
 /// True when `id` can be replaced by another node holding its value: it does not anchor the
-/// graph, and nothing writes it in place. A written node is not one value: it is a variable's
-/// cell or an object an operator changes in place (a constant's object is shared by every run
-/// of the graph), and readers ordered after the writer see what it wrote.
+/// graph, nothing writes it in place, and nothing its value is computed from reads a slot the
+/// program writes. A written node is not one value: it is a variable's cell or an object an
+/// operator changes in place (a constant's object is shared by every run of the graph), and
+/// readers ordered after the writer see what it wrote. The same holds of the nodes a value is
+/// computed from -- a slot holding what each write put there is the value of one read, not of the
+/// graph -- so folding across such a read gives every reader the value of one of them.
 ///
 /// The value the graph returns is not one of the anchors that pin a node: it is the value of the
 /// function's last expression, and when that expression is the one being folded, the function
@@ -155,11 +158,15 @@ staticValueOf(const GraphDraft &draft, gc_node_ref_t id) {
 /// folding round skipped it, and every inlining of that function copied the unfolded conversion.
 /// A returned value that waits on something (`sync` bodies end in a gate that carries that
 /// ordering) is not folded: it is the tail of the graph's effect order, and a constant replacing
-/// it would carry none of it.
+/// it would carry none of it. The wait is read in both kinds the chain of a block is written as
+/// (docs/design/effects/edges.cn.md 1.5 and 5.3), the control input and the sync edge. A returned
+/// gate that waits carries the chain behind it: the statements of its block run because the graph's
+/// result is reached through them (edges.cn.md 2), so folding it to its own input detaches every
+/// one of them.
 bool isFoldable(const GraphDraft &draft, gc_node_ref_t id) {
-    const bool valueAnchor =
-        isReplaceable(draft, id) || (id == draft.returnNode() && draft.ctrlInputsOf(id).empty());
-    return valueAnchor && !isWrittenInPlace(draft, id);
+    const bool waits = !draft.ctrlInputsOf(id).empty() || !draft.syncInputsOf(id).empty();
+    const bool valueAnchor = isReplaceable(draft, id) || (id == draft.returnNode() && !waits);
+    return valueAnchor && !isWrittenInPlace(draft, id) && readsNoWrittenSlot(draft, id);
 }
 
 /// Replaces `id` by `replacement` (see replaceNode) and makes the replacement the graph's exit,
@@ -324,6 +331,47 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
         }
     }
     const auto removed = [&](gc_node_ref_t n) { return static_cast<bool>(dropped[n]); };
+    // The taken arm's chain tail: the statement the arm's block value reads -- the sync predecessor
+    // of the value the arm gives, when that value is the gate forwarding it -- or, when the block's
+    // value carries no chain of its own (a void block, whose value is a constant), the last
+    // statement of the arm's chain: the node of the arm that nothing of the arm follows
+    // (docs/design/effects/edges.cn.md 5.3: the chain's tail is what the block's value reads).
+    //
+    // With the branch gone the taken arm's code is code of this block, so the statements written
+    // after the branch wait on this node and the arm's code stands in the chain in the branch's
+    // place. The chain is what says which statements are reached from the graph's result and run
+    // (docs/design/effects/edges.cn.md 2): waiting on the arm's value alone instead steps over the
+    // arm's code whenever that value is not a statement of it. `opt_lambda_effect_lost` is the
+    // counterexample -- a `null` arm value with a lambda call in the arm, whose effect stopped
+    // running -- and it is why both ends are written and not just the one at the value.
+    const std::vector<gc_node_ref_t> armNodes(regions[*arm]);
+    const auto inArm = [&](gc_node_ref_t n) {
+        return std::ranges::find(armNodes, n) != armNodes.end();
+    };
+    gc_node_ref_t armTail = kInvalidNodeRef;
+    for (gc_node_ref_t pred : draft.syncInputsOf(result)) {
+        if (inArm(pred)) {
+            armTail = pred;
+        }
+    }
+    if (armTail == kInvalidNodeRef) {
+        for (gc_node_ref_t n : armNodes) {
+            if (!carriesOrdering(draft, n)) {
+                continue;
+            }
+            bool followed = false;
+            for (gc_node_ref_t user : draft.syncUsersOf(n)) {
+                if (inArm(user)) {
+                    followed = true;
+                    break;
+                }
+            }
+            if (!followed) {
+                armTail = n;
+                break;
+            }
+        }
+    }
     const auto &preds = brchPreds;
     const std::vector<gc_node_ref_t> brchCtrlUsers(
         draft.ctrlUsersOf(brch).begin(),
@@ -388,6 +436,17 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
     }
     if (draft.returnNode() == join) {
         draft.setReturnNode(result, draft.returnKind());
+    }
+
+    // 5.7: the branch's place in the block's chain is handed to the taken arm's chain tail --
+    // the arm's code is the block's code once the branch is dissolved (eraseNode re-parents its
+    // regions) -- and the arm's chain is entered from where the branch stood. Both ends are written:
+    // waiting on the arm's value alone steps over the arm's code whenever that value is not a
+    // statement of it, which is what the counterexample `opt_lambda_effect_lost` is (a `null` arm
+    // value with a lambda call in the arm, whose effect stopped running). The call runs before the
+    // erases so that eraseNode's own chain closing finds no successor left to close over.
+    if (armTail != kInvalidNodeRef && draft.alive(armTail) && draft.alive(join)) {
+        draft.handChainPlaceTo(join, armTail);
     }
 
     draft.eraseNode(join);

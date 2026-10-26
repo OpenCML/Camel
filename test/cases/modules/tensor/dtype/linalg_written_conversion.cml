@@ -1,0 +1,27 @@
+/**
+ * The product and the linear layer with the conversion written: `cast(x, "f64") @ w` computes in
+ * f64 because that is what the program wrote, and a bias is passed at the tensor's own element type
+ * rather than beside it (design principles 5.1). Both answer the numbers the same call answered when
+ * the widths were silently widened, and the result type is the one the operands state.
+ */
+module linalg_written_conversion
+
+import { reshape, cast, matmul, linear, sum } from tensor
+
+func widened(x: f32[2, 2], w: f64[2, 2]): float {
+    return float(sum(matmul(cast(x, "f64"), w)))
+}
+
+func with_bias(x: f32[2, 2], w: f32[2, 2], bias: f32[2]): float {
+    return float(sum(linear(x, w, bias)))
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [2, 2])
+    let w64 = reshape([1.0, 0.0, 0.0, 1.0] as f64[], [2, 2])
+    println(widened(x, w64))
+    let w = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [2, 2])
+    let bias = reshape([0.5, -0.5] as f32[], [2])
+    println(with_bias(x, w, bias))
+    return 0
+}

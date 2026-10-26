@@ -4,7 +4,7 @@
  */
 module export_unsupported
 
-import { Tensor, reshape } from tensor
+import { reshape } from tensor
 import { softmax_cross_entropy } from nn
 import { export_model } from onnx
 import { get_env } from env

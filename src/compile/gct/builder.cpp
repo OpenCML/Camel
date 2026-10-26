@@ -319,7 +319,7 @@ void Builder::initInnerTypes() {
     typeScope_->insert(Reference("c64"), Type::Complex64());
     typeScope_->insert(Reference("c128"), Type::Complex128());
     // Reduced-precision tensor element types (design principles 7.3). They are names a
-    // program writes only as an argument of `Tensor<...>` and of `from_bytes::<...>`; no
+    // program writes only as an argument of an array spelling and of `from_bytes::<...>`; no
     // literal or scalar operator produces a value of either.
     typeScope_->insert(Reference("bf16"), Type::BFloat16());
     typeScope_->insert(Reference("f16"), Type::Float16());
@@ -622,14 +622,13 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
                 // (design principles 9.3), and for a function with a body the record is where the
                 // condition of the declaration is read while the declarations of one name are
                 // compared -- two of them whose conditions exclude each other are overloads and
-                // may stand side by side (design principles 4.4; the rule on
-                // `impl-declaration-arms`, docs/handover/reviews/questions-2026-10-23.md).
+                // may stand side by side (design principles 4.4).
                 if (const auto *when = tree_->whenOf(node); when != nullptr) {
                     tree_->setWhen(declNode, *when);
                 }
                 if (node->nativeDeclaration()) {
                     // The declaration keeps what makes it one: no body, so the graph builder
-                    // makes an operator rule of it instead of a graph (handover step 1),
+                    // makes an operator rule of it instead of a graph (design principles 10.4),
                     // and its tag uses go with it (`#op('module:function')`; design principles
                     // 6.2).
                     declNode->setNativeDeclaration();
@@ -957,7 +956,7 @@ Reference defaultImportNamespace(const std::string &path) {
 }
 
 /*
-DataDecl(bool isVar, UnpackType type, Ref[] refs) : Type* type, Data* value;
+DataDecl(bool isVar, Ref[] refs) : Type* type, Data* value;
 */
 node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
     ENTER("DataDecl");
@@ -976,126 +975,105 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
     // program: in a sync block the initializer keeps its place in the block's order.
     node_ptr_t res = makeExec(false, true);
 
-    // Handle different unpacking types
-    switch (dataDeclLoad->unpackType()) {
-    case AST::UnpackType::Struct: {
-        // Struct unpacking is not supported; log diagnostics and throw an exception
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("Struct Unpacking");
-        throw BuildAbortException();
-    } break;
+    // The declaration binds one name, several names, or the elements of a tuple (the
+    // parenthesized carrier). A struct or an array carrier is not in the language: the
+    // parser refuses it, so no declaration reaches here with one.
+    if (refs.size() == dataNodes->size()) {
+        for (size_t i = 0; i < refs.size(); ++i) {
+            const auto &ref         = refs[i];
+            const auto &dataASTNode = dataNodes->atAs<AST::DataLoad>(i);
+            // The declared type first: an array literal takes the form of its elements
+            // from it (visitDataInto).
+            Type *declaredType = nullptr;
+            if (i < typeNodes->size()) {
+                declaredType = visitType(typeNodes->atAs<AST::TypeLoad>(i));
+            }
+            bool enteredLiteral = false;
+            node_ptr_t dataNode = declaredType != nullptr
+                                      ? visitDataInto(dataASTNode, declaredType, enteredLiteral)
+                                      : visitData(dataASTNode);
 
-    case AST::UnpackType::Array: {
-        // Array unpacking is not supported; log diagnostics and throw an exception
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("Array Unpacking");
-        throw BuildAbortException();
-    } break;
+            // Validate the identifier
+            if (!validateIdent(ref.ident())) {
+                diags_->of(SemanticDiag::ReservedIdentifier)
+                    .at(dataDeclLoad->tokenRange())
+                    .commit();
+                throw BuildAbortException();
+            }
 
-    case AST::UnpackType::Tuple: {
-        if (refs.size() == dataNodes->size()) {
-            for (size_t i = 0; i < refs.size(); ++i) {
-                const auto &ref         = refs[i];
-                const auto &dataASTNode = dataNodes->atAs<AST::DataLoad>(i);
-                // The declared type first: an array literal takes the form of its elements
-                // from it (visitDataInto).
-                Type *declaredType = nullptr;
-                if (i < typeNodes->size()) {
-                    declaredType = visitType(typeNodes->atAs<AST::TypeLoad>(i));
+            if (i < typeNodes->size() && !enteredLiteral) {
+                dataNode = declaredValue(dataNode, declaredType, ast);
+            }
+
+            // Ensure the data node is of type Data
+            ASSERT(
+                dataASTNode->type() == AST::LoadType::Data,
+                "A declaration requires Data type nodes");
+            // Create a reference node and link the data node to it. A value of a
+            // namespace block is named with its namespaces (`Config::limit`).
+            node_ptr_t nRefNode = tree_->makeNRef(ref.toString());
+            *nRefNode << dataNode;
+            setOriginFromOrigin(
+                context_,
+                nRefNode,
+                findBindingOrigin(context_, ast, i),
+                camel::source::OriginKind::GctNode,
+                "gct.nref");
+            if (refs.size() == 1) {
+                res = nRefNode;
+            } else {
+                // `let a, b = 1, 2` binds every name: only the last one used to be kept.
+                *res << nRefNode;
+            }
+        }
+    } else {
+        if (dataNodes->size() == 1) {
+            // If there is only one data node, process it as a reference and access node
+            const auto &dataASTNode = dataNodes->atAs<AST::DataLoad>(0);
+            node_ptr_t dataNode     = visitData(dataASTNode);
+
+            if (typeNodes->size() > 0) {
+                const auto &typeASTNode = typeNodes->atAs<AST::TypeLoad>(0);
+                Type *type              = nullptr;
+                {
+                    type = visitType(typeASTNode);
                 }
-                bool enteredLiteral = false;
-                node_ptr_t dataNode = declaredType != nullptr
-                                          ? visitDataInto(dataASTNode, declaredType, enteredLiteral)
-                                          : visitData(dataASTNode);
+                dataNode = declaredValue(dataNode, type, ast);
+            }
 
-                // Validate the identifier
+            const string id     = std::to_string(idIndex_++);
+            node_ptr_t nRefNode = tree_->makeNRef(id);
+            node_ptr_t dRefNode = tree_->makeDRef(id);
+            *nRefNode << dataNode;
+            *res << nRefNode;
+            for (size_t i = 0; i < refs.size(); ++i) {
+                const auto &ref = refs[i];
                 if (!validateIdent(ref.ident())) {
                     diags_->of(SemanticDiag::ReservedIdentifier)
                         .at(dataDeclLoad->tokenRange())
                         .commit();
                     throw BuildAbortException();
                 }
-
-                if (i < typeNodes->size() && !enteredLiteral) {
-                    dataNode = declaredValue(dataNode, declaredType, ast);
-                }
-
-                // Ensure the data node is of type Data
-                ASSERT(
-                    dataASTNode->type() == AST::LoadType::Data,
-                    "Tuple unpacking requires Data type nodes");
-                // Create a reference node and link the data node to it. A value of a
-                // namespace block is named with its namespaces (`Config::limit`).
                 node_ptr_t nRefNode = tree_->makeNRef(ref.toString());
-                *nRefNode << dataNode;
+                node_ptr_t accsNode = tree_->makeAccs(i);
+                *accsNode << tree_->clone(dRefNode);
+                *nRefNode << accsNode;
                 setOriginFromOrigin(
                     context_,
                     nRefNode,
                     findBindingOrigin(context_, ast, i),
                     camel::source::OriginKind::GctNode,
                     "gct.nref");
-                if (refs.size() == 1) {
-                    res = nRefNode;
-                } else {
-                    // `let a, b = 1, 2` binds every name: only the last one used to be kept.
-                    *res << nRefNode;
-                }
+                *res << nRefNode;
             }
         } else {
-            if (dataNodes->size() == 1) {
-                // If there is only one data node, process it as a reference and access node
-                const auto &dataASTNode = dataNodes->atAs<AST::DataLoad>(0);
-                node_ptr_t dataNode     = visitData(dataASTNode);
-
-                if (typeNodes->size() > 0) {
-                    const auto &typeASTNode = typeNodes->atAs<AST::TypeLoad>(0);
-                    Type *type              = nullptr;
-                    {
-                        type = visitType(typeASTNode);
-                    }
-                    dataNode = declaredValue(dataNode, type, ast);
-                }
-
-                const string id     = std::to_string(idIndex_++);
-                node_ptr_t nRefNode = tree_->makeNRef(id);
-                node_ptr_t dRefNode = tree_->makeDRef(id);
-                *nRefNode << dataNode;
-                *res << nRefNode;
-                for (size_t i = 0; i < refs.size(); ++i) {
-                    const auto &ref = refs[i];
-                    if (!validateIdent(ref.ident())) {
-                        diags_->of(SemanticDiag::ReservedIdentifier)
-                            .at(dataDeclLoad->tokenRange())
-                            .commit();
-                        throw BuildAbortException();
-                    }
-                    node_ptr_t nRefNode = tree_->makeNRef(ref.toString());
-                    node_ptr_t accsNode = tree_->makeAccs(i);
-                    *accsNode << tree_->clone(dRefNode);
-                    *nRefNode << accsNode;
-                    setOriginFromOrigin(
-                        context_,
-                        nRefNode,
-                        findBindingOrigin(context_, ast, i),
-                        camel::source::OriginKind::GctNode,
-                        "gct.nref");
-                    *res << nRefNode;
-                }
-            } else {
-                // If the number of data nodes does not match, log diagnostics and throw an
-                // exception
-                diags_->of(SemanticDiag::TupleUnpackingCountMismatch)
-                    .at(ast->load()->tokenRange())
-                    .commit();
-                throw BuildAbortException();
-            }
+            // If the number of data nodes does not match, log diagnostics and throw an
+            // exception
+            diags_->of(SemanticDiag::TupleUnpackingCountMismatch)
+                .at(ast->load()->tokenRange())
+                .commit();
+            throw BuildAbortException();
         }
-    } break;
-    default:
-        // If the unpacking type is unknown, throw an exception
-        ASSERT(false, "Unknown unpack type in DataDecl");
     }
 
     // If it's a variable declaration, create a variable node and link the result node to it
@@ -1362,6 +1340,58 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
         throw BuildAbortException();
     }
     if (clause->pure()) {
+        // `pure` promises the empty set (design effects plan 4.3, step 5). A `var` parameter is a
+        // resource by itself: the cell is shared with the caller, so a call through the parameter
+        // reads and writes that cell wherever the body is written, and no body can bring the set
+        // back to empty. So a signature that writes `pure` and gives a parameter `var` is refused
+        // where it is written, and the note points at the parameter that breaks the promise (the
+        // error is at the declaration's clause, and the note at the first use the
+        // signature does not promise).
+        const auto varRangeOf =
+            [&](const std::string &name) -> std::optional<camel::core::error::TokenRange> {
+            for (size_t list = 0; list < 2; ++list) {
+                const auto &params = funcTypeAst->atAs<AST::RepeatedLoad>(list);
+                for (size_t pi = 0; pi < params->size(); ++pi) {
+                    const auto &pair = (*params)[pi];
+                    if (pair == nullptr) {
+                        continue;
+                    }
+                    const auto &load = pair->loadAs<AST::NamedPairLoad>();
+                    if (load->isVar() && load->getRef().ident() == name) {
+                        return load->tokenRange();
+                    }
+                }
+            }
+            return std::nullopt;
+        };
+        const auto varNameAt = [&](size_t index) -> std::string {
+            // The parameter numbering a call uses: `with` parameters first, ordinary ones after
+            // them (the same numbering resourceSignatureOf uses below).
+            const size_t withCount = built->withTypesCount();
+            if (index < withCount) {
+                return built->withIsVarAt(index) ? std::string(built->argNameAt(index))
+                                                 : std::string();
+            }
+            const size_t norm = index - withCount;
+            return built->normIsVarAt(norm) ? std::string(built->argNameAt(index)) : std::string();
+        };
+        for (size_t i = 0; i < built->withTypesCount() + built->normTypesCount(); ++i) {
+            const std::string name = varNameAt(i);
+            if (name.empty()) {
+                continue;
+            }
+            // The builder is kept by value: `of` hands out a temporary and the chain returns a
+            // reference to it, so a reference held across statements would outlive the builder.
+            auto diag = diags_->of(SemanticDiag::UsesPromiseViolated).at(clause->tokenRange());
+            if (const auto range = varRangeOf(name); range.has_value()) {
+                diag.related(
+                    *range,
+                    "this parameter is a resource: a call through it writes the caller's cell, so "
+                    "the call touches it wherever the body is written");
+            }
+            diag.commit(built->toString(), "the 'var' parameter '" + name + "'");
+            throw BuildAbortException();
+        }
         return signature;
     }
     // The parameters the clause may name, in the numbering a call uses: with parameters first,
@@ -1641,9 +1671,9 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
         // nothing: `type Alias = Other` stays an alias for the type `Other` (structural).
         if (typeLoad->params().empty()) {
             // A type that mentions itself where a value of it would have to be held: a cycle
-            // that can never be built (design principles 5.2). Recursion through an array is
-            // allowed; through a map or a set it is legal by the rule but has no representation
-            // yet, so it is reported rather than left unresolved.
+            // that can never be built (design principles 5.2). Recursion through an array, a map,
+            // a set or an enum is admitted by the rule and needs a shape this compiler does not
+            // have, so it is named rather than left unresolved.
             TypeMention mention;
             findTypeMention(typeNode, typeLoad->ref().toString(), false, false, mention);
             if (mention.any) {
@@ -1655,13 +1685,9 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
                     throw BuildAbortException();
                 }
                 if (mention.viaOtherCollection) {
-                    diags_->of(SemanticDiag::FeatureNotSupported)
+                    diags_->of(SemanticDiag::TypeAliasRecursionUnrepresented)
                         .at(ast->load()->tokenRange())
-                        .commit(
-                            std::format(
-                                "a type that mentions itself through a map, a set or an enum "
-                                "('{}')",
-                                name));
+                        .commit(name);
                     throw BuildAbortException();
                 }
                 // Through an array: declareStructType puts the name in scope before the fields
@@ -1679,15 +1705,12 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
         if (mention.any) {
             const std::string name = typeLoad->ref().toString();
             if (!mention.directly) {
-                // Legal by the rule, but the representation cannot hold it yet (see the
-                // the report): say so instead of leaving the name unresolved.
-                diags_->of(SemanticDiag::FeatureNotSupported)
+                // A recursion the rule admits, whose shape this compiler does not have: the
+                // diagnostic names the rule and what to write instead of leaving the name
+                // unresolved.
+                diags_->of(SemanticDiag::TypeAliasRecursionUnrepresented)
                     .at(ast->load()->tokenRange())
-                    .commit(
-                        std::format(
-                            "a type that mentions itself through an array or another collection "
-                            "('{}')",
-                            name));
+                    .commit(name);
             } else {
                 diags_->of(SemanticDiag::ModuleTypeCycle)
                     .at(ast->load()->tokenRange())
@@ -2013,7 +2036,19 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
 
     // Create an ExitLoad node to represent the exit statement. `throw` is an exit as well:
     // it returns the failed form of the function's declared `T!` (the graph builder checks).
-    const bool isThrow  = ast->loadAs<AST::ExitStmtLoad>()->exitType() == AST::ExitType::Throw;
+    const AST::ExitType astExit = ast->loadAs<AST::ExitStmtLoad>()->exitType();
+    if (astExit == AST::ExitType::Yield) {
+        // The syntax reads `yield` (design principles 5.4: a function whose body writes it
+        // produces a stream, and its head writes the stream type). What produces that stream is
+        // the generator state machine of docs/design/io-concurrency-streams/plan.cn.md slice E,
+        // which is not built yet: several `yield`s in one round, any nesting, `match` arms and
+        // `sync` blocks, per-element faults and linear values are all things that machine has to
+        // produce. Refusing it by name here is what keeps a `yield` from running as a `return`:
+        // a wrong value would be worse than a named gap.
+        diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("generators");
+        throw BuildAbortException();
+    }
+    const bool isThrow  = astExit == AST::ExitType::Throw;
     node_ptr_t exitNode = tree_->makeExit(isThrow ? ExitType::Throw : ExitType::Return);
     reportExitInUnusedArm(ast, isThrow);
 
@@ -2410,19 +2445,39 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
 
     // A dimension of a subscript that slices is not an element index (design principles 5.4):
     // `t[a:b]` calls the slice operator, `t[i]` the index operator. The dimensions are counted
-    // because a slice of a dimension other than the first is a view with strides, which needs
-    // the multidimensional array representation that is not there yet.
+    // because the slice operator names one axis and keeps the other dimensions as they are, so a
+    // subscript that writes bounds on one dimension and `:` for every other one is that one slice,
+    // whichever dimension it slices; a subscript that selects on more than one dimension has no
+    // single node to be.
     AST::node_ptr_t sliceDimension = nullptr;
-    size_t subscriptDimensions     = 0;
+    AST::node_ptr_t writtenSlice   = nullptr;
+    size_t dimension               = 0;
+    size_t sliceDimensionIndex     = 0;
+    size_t writtenSlices           = 0;
+    size_t indexDimensions         = 0;
     if (binaryExpr->op() == AST::BinaryDataOp::Index) {
         for (const auto &item : *ast->atAs<AST::RepeatedLoad>(1)) {
-            ++subscriptDimensions;
+            const size_t at = dimension++;
             if (item->type() == AST::LoadType::Data &&
                 item->loadAs<AST::DataLoad>()->dataType() == AST::DataType::Slice) {
                 sliceDimension = item;
+                bool namesRange = false;
+                for (size_t part = 0; part < 3; ++part) {
+                    namesRange = namesRange || item->at(part)->type() != AST::LoadType::Null;
+                }
+                if (namesRange) {
+                    writtenSlice        = item;
+                    sliceDimensionIndex = at;
+                    ++writtenSlices;
+                }
+            } else {
+                ++indexDimensions;
             }
         }
     }
+    // The dimension the slice runs along: the one the subscript wrote bounds on, and the first
+    // dimension when it wrote none (`t[:]`, `t[:, :]`: every dimension taken whole).
+    const size_t sliceAxis = writtenSlice != nullptr ? sliceDimensionIndex : 0;
 
     // Determine the binary operator and create the corresponding node
     switch (binaryExpr->op()) {
@@ -2481,33 +2536,32 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
     if (binaryExpr->op() == AST::BinaryDataOp::Index) {
         auto indices = ast->atAs<AST::RepeatedLoad>(1);
         if (sliceDimension != nullptr) {
-            if (subscriptDimensions > 1) {
-                // `t[:, 0]`, `t[a:b, c]`: the result takes every element of the dimension that
-                // is not sliced at the coordinate the index gives, so it is a view with
-                // strides (design principles 5.4). That needs the multidimensional array
-                // representation that is not there yet; until then the form is a located error rather
-                // than a copy that would read like the view but not share its block.
+            if (writtenSlices > 1 || indexDimensions > 0) {
+                // `t[a:b, c]`, `t[a:b, c:d]`: the subscript selects on more than one dimension.
+                // The slice operator names one axis and keeps the other dimensions as they are,
+                // and the index operator drops the dimension it names, so the two together are
+                // not one node. Refused here rather than read as a slice of the wrong axis.
                 diags_->of(SemanticDiag::ConstructNotSupported)
                     .at(indices->load()->tokenRange())
                     .commit(
-                        "a subscript that slices a dimension other than the first",
-                        "it is a view with strides, which needs the multidimensional array "
-                        "representation of H17; until then take the rows with the function "
-                        "'take', or index one dimension at a time");
+                        "a subscript that names a range or a position on more than one dimension",
+                        "the slice operator takes one axis, and the index operator takes the "
+                        "first dimension");
                 throw BuildAbortException();
             }
-            // `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]`: the slice of the first dimension a
-            // subscript writes (design principles 5.4). The call is the slice node itself: the
-            // value, the axis (the constant 0 -- a subscript slices the first dimension), the
-            // two bounds, the step, and a two-bit mask (bit 0 end, bit 1 start) saying which of
-            // the start and the end the program wrote: `t[a:]` and `t[:b]` differ, and a
-            // negative step needs to know whether the start was given. A part that was not
+            // `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]`: the slice of the axis a subscript
+            // writes (design principles 5.4). The call is the slice node itself: the value, the
+            // axis (the dimension the bounds are written on, so `t[:, a:b]` is the same node with
+            // the axis 1), the two bounds, the step, and a two-bit mask (bit 0 end, bit 1 start)
+            // saying which of the start and the end the program wrote: `t[a:]` and `t[:b]` differ,
+            // and a negative step needs to know whether the start was given. A part that was not
             // written is passed as the value it stands for, 0 for the start and 1 for the step;
             // the end is read only when written.
+            const AST::node_ptr_t boundsOf = writtenSlice != nullptr ? writtenSlice : sliceDimension;
             node_ptr_t bound[3] = {nullptr, nullptr, nullptr};
             bool written[3]     = {false, false, false};
             for (size_t i = 0; i < 3; ++i) {
-                const auto &part = sliceDimension->at(i);
+                const auto &part = boundsOf->at(i);
                 written[i]       = part->type() != AST::LoadType::Null;
                 if (written[i]) {
                     bound[i] = visitData(part);
@@ -2520,9 +2574,9 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
             bound[1]                  = written[1] ? bound[1] : intConstant(0);
             bound[2]                  = written[2] ? bound[2] : intConstant(1);
             node_ptr_t endWrittenNode = intConstant((written[1] ? 1 : 0) | (written[0] ? 2 : 0));
-            // The axis: a subscript slices the first dimension, so the slice node's second
-            // argument is the constant 0 (the function form writes the axis itself).
-            *res << intConstant(0);
+            // The axis: the dimension the subscript wrote the bounds on (the function form writes
+            // the axis itself, and an all-`:` subscript takes the first dimension whole).
+            *res << intConstant(static_cast<int64_t>(sliceAxis));
             for (size_t i = 0; i < 3; ++i) {
                 *res << bound[i];
                 if (written[i]) {
@@ -2896,7 +2950,7 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
     case AST::ReservedDataOp::Comp: {
         const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);
         // `a..b` has two readings, and the types of its two operands tell them apart (design
-        // principles 4.2; the rule on ` -generator-and-composition`):
+        // principles 4.2):
         // between two functions it is the composition `f..g`, the lambda `(x) => g(f(x))`, and
         // between two integers it is the interval `[a, b)`. GCT has no types, so the construct
         // is handed on as one call of the compiler's own name for it, which the GIR builder
@@ -3316,7 +3370,7 @@ node_ptr_t Builder::visitMatchExpr(const AST::node_ptr_t &ast) {
         // The guard of the case, when it has one. `case p when c => ...` is taken only when the
         // pattern matches *and* `c` holds, so the graph builder evaluates the guard in the arm
         // this case becomes and sends the value on to the cases written after it when it does
-        // not hold (review 「when-placement-and-match-guards」). The guard is kept beside the
+        // not hold. The guard is kept beside the
         // CASE rather than among its children: the arm's body is the last child every reader of
         // that node takes, and the guard is read in the arm's scope, where the names the
         // pattern binds are in force.
@@ -3457,7 +3511,7 @@ staticForExpr
 staticForHeader
     : FOR '(' identDef (',' identDef)* ')' IN ('fields' typeExpr | 'indices' dataExpr)
     ;
-The walked shape is child 0: a TYPE for `fields`, the operand value for `indices` (H51 step 6).
+The walked shape is child 0: a TYPE for `fields`, the operand value for `indices`.
 The head names up to three things, and how many the element gives is read here, where the walked
 shape is known (`checkStaticHeadNames`): `fields` gives the triple (name, type, tags) and
 `indices` gives one thing.
@@ -3519,8 +3573,8 @@ The AST node holds the first values of the state (a Repeated Data), the walked s
 body (StaticLoopLoad). The GCT node holds the shape first, then the first values, then the EXEC
 body. `F` is an ordinary type variable of the enclosing function's instance, bound per field
 by the graph builder; `n` (or `j` for `indices`, or the element's name for a written sequence)
-and the state names are bound per round. The head of `static loop` lost its parentheses in H462
-: `in <序列>` is what `static for` still writes between parentheses.
+and the state names are bound per round. The head of `static loop` writes `in <序列>`; `static for`
+still writes it between parentheses.
 How many names the element gives is read here (`checkStaticHeadNames`): the triple (name, type,
 tags) for `fields`, one thing for everything else.
 */
@@ -5054,7 +5108,7 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     }
     node_ptr_t typeNode = tree_->makeType(funcType);
     // The applicability condition is built in the scope of the signature: it sees the type
-    // parameters declared at the head and the `with` parameters (design principles 5.13). It is
+    // parameters declared at the head and the `with` parameters (design principles 4.4). It is
     // not evaluated here -- instantiation is where its type parameters have types -- so it is
     // kept on the FUNC, beside the type, for the graph builder.
     node_ptr_t whenNode = nullptr;
@@ -5185,7 +5239,10 @@ node_ptr_t Builder::visitRefData(const AST::node_ptr_t &ast) {
 /*
 Type(TypeType type) :=
     StreamType | NullableType | TypeExpr | ArrayType | StructType | TupleType
-    | FuncType | SpecType | UnitType | InferType | DataType | RefType ;
+    | FuncType | SpecType | RefType | EnumType ;
+An `InferType` node never reaches this dispatch: it is the marker of a type left out of a
+lambda's parameter list, and the signature builders read it where it stands (design
+principles 5.9).
 */
 Type *Builder::visitType(const AST::node_ptr_t &ast) {
     ENTER("Type");
@@ -5230,27 +5287,15 @@ Type *Builder::visitType(const AST::node_ptr_t &ast) {
     case AST::TypeType::Spec:
         res = visitSpecType(ast);
         break;
-    case AST::TypeType::Unit:
-        res = visitUnitType(ast);
-        break;
-    case AST::TypeType::Infer:
-        res = visitInferType(ast);
-        break;
-    case AST::TypeType::Data:
-        res = visitDataType(ast);
-        break;
     case AST::TypeType::Ref:
         res = visitRefType(ast);
         break;
     case AST::TypeType::Enum:
         // An enum is declared, not written where a value of it is expected: its variants are
         // names of the module (`type Shape = enum {...}`), and a use is that name.
-        diags_->of(SemanticDiag::ConstructNotSupported)
+        diags_->of(SemanticDiag::EnumWrittenWhereATypeIsExpected)
             .at(ast->load()->tokenRange())
-            .commit(
-                "enum { ... }",
-                "an enum is declared in a type declaration, 'type Shape = enum { ... }', and "
-                "its type is written by the name it declares");
+            .commit();
         throw BuildAbortException();
     default:
         throw std::runtime_error("Unknown type type");
@@ -5277,18 +5322,6 @@ Type *Builder::visitType(const AST::node_ptr_t &ast) {
                 std::format(
                     "it takes {} type argument(s) and is used without any",
                     typeFunc->params().size()));
-        throw BuildAbortException();
-    }
-
-    // A name that requires an element type (`Tensor`) stands for no type of a value on its own:
-    // the element type of a value is in its type (design principles 5.1). It is a type as the base
-    // of the spelling that gives it one (`Tensor<f32>`), and `visitSpecType` applies that
-    // argument; everywhere else the author is told to write one
-    // (docs/design/arrays-memory/plan.cn.md section 5.1a).
-    if (res != nullptr && !asTypeFunctionBase && isElementTypeOpenArray(res)) {
-        diags_->of(SemanticDiag::TensorElementTypeRequired)
-            .at(ast->load()->tokenRange())
-            .commit(res->toString());
         throw BuildAbortException();
     }
 
@@ -5334,14 +5367,11 @@ Type *Builder::visitNullableType(const AST::node_ptr_t &ast) {
 /*
 TypeExpr(TypeOp op) := Type lhs, Type rhs ;
 enum TypeOp {
-    Inter,
-    Diff,
-    KeyUnion,
-    KeyInter,
-    KeyDiff,
-    Specialize, // Type type, (Type | Data)* args
     TypeOf
 }
+The reserved type operators (`&`, `\`, `+`, `-`, `^`) and the older spelling of specialization were
+read as `TypeOp` codes and refused here; they are not in the language, so the parser refuses them
+first and `typeof` is the only operation a `TypeExpr` carries.
 */
 Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
     ENTER("TypeExpr");
@@ -5352,50 +5382,7 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
     const auto &typeExpr = ast->loadAs<AST::TypeExprLoad>();
     AST::TypeOp op       = typeExpr->op();
 
-    // Handle different type operations based on the TypeOp enumeration
     switch (op) {
-    case AST::TypeOp::Inter: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("TypeOp::Inter");
-        throw BuildAbortException();
-    } break;
-
-    case AST::TypeOp::Diff: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("TypeOp::Diff");
-        throw BuildAbortException();
-    } break;
-
-    case AST::TypeOp::KeyUnion: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("TypeOp::KeyUnion");
-        throw BuildAbortException();
-    } break;
-
-    case AST::TypeOp::KeyInter: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("TypeOp::KeyInter");
-        throw BuildAbortException();
-    } break;
-
-    case AST::TypeOp::KeyDiff: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("TypeOp::KeyDiff");
-        throw BuildAbortException();
-    } break;
-
-    case AST::TypeOp::Specialize: {
-        diags_->of(SemanticDiag::FeatureNotSupported)
-            .at(ast->load()->tokenRange())
-            .commit("TypeOp::Specialize (a.k.a. Generics or T<U, V, ...>)");
-        throw BuildAbortException();
-    } break;
-
     case AST::TypeOp::TypeOf: {
         // `typeof e`: the type of the value `e` will have. The placeholder keeps the expression
         // node; the graph builder builds it where this type is used and replaces the
@@ -5405,9 +5392,6 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
         node_ptr_t expression = visitData(ast->at(0));
         res                   = TypeOfType::create(expression);
     } break;
-
-    default:
-        ASSERT(false, "Unknown TypeOp");
     }
 
     LEAVE("TypeExpr");
@@ -5703,10 +5687,10 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
             // position, and their values are not read by a type necessarily: the body may use
             // them (design principles 5.4).
             if (!signature) {
+                // The parser admits `constas` only in a declaration's own parameter list
+                // (`parseParentParams(true, true)`, the single call site in parser.cpp), so this
+                // is a compiler bug rather than anything a program can write.
                 ASSERT(false, "A constas parameter outside a function declaration.");
-                diags_->of(SemanticDiag::FeatureNotSupported)
-                    .at(paramLoad->tokenRange())
-                    .commit("a constas parameter outside a function declaration");
                 throw BuildAbortException();
             }
             if (paramPair->size() == 0) {
@@ -5729,11 +5713,10 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
             // A rest parameter is untyped and last (design principles 5.5); it stands in the
             // signature as a `void` parameter that no call passes a value for.
             if (!signature) {
-                // The parser admits `..` only in a function declaration's parameter list.
+                // The parser admits `..` only in a declaration's own parameter list
+                // (`parseParentParams(true, true)`, the single call site in parser.cpp), so this
+                // is a compiler bug rather than anything a program can write.
                 ASSERT(false, "A rest parameter outside a function declaration.");
-                diags_->of(SemanticDiag::FeatureNotSupported)
-                    .at(paramLoad->tokenRange())
-                    .commit("a rest parameter outside a function declaration");
                 throw BuildAbortException();
             }
             if (pi + 1 != normParams.size()) {
@@ -5847,39 +5830,6 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
     return built;
 }
 
-/*
-UnitType(Ref ref) : Type type ;
-*/
-Type *Builder::visitUnitType(const AST::node_ptr_t &ast) {
-    ENTER("UnitType");
-    diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("UnitType");
-    throw BuildAbortException();
-    LEAVE("UnitType");
-    return nullptr;
-}
-
-/*
-InferType(Ref ref) ;
-*/
-Type *Builder::visitInferType(const AST::node_ptr_t &ast) {
-    ENTER("InferType");
-    diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("InferType");
-    throw BuildAbortException();
-    LEAVE("InferType");
-    return nullptr;
-}
-
-/*
-DataType() : Data data ;
-*/
-Type *Builder::visitDataType(const AST::node_ptr_t &ast) {
-    ENTER("DataType");
-    diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("DataType");
-    throw BuildAbortException();
-    LEAVE("DataType");
-    return nullptr;
-}
-
 // DESIGN-QUESTION(map-duplicate-keys): in an array literal written under `as Map<...>`, two
 // equal constant keys are an error. Entries that are not constants (they refer to a name) are
 // not looked at; at run time the later entry of two equal keys wins. A set takes duplicates.
@@ -5924,17 +5874,6 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
     ASSERT(ast->size() >= 1, "SpecType must have base type");
     typeFunctionBase_ = ast->size() >= 2;
     Type *base        = visitType(ast->atAs<AST::TypeLoad>(0));
-    // A name that requires an element type (`Tensor`, which the tensor module exports as the open
-    // rank array whose element type nobody stated) reads that element type from the spelling's
-    // first argument: one that gives only a shape leaves the question the name exists to answer
-    // open, and the author is told which spellings answer it (docs/design/arrays-memory/plan.cn.md
-    // section 5.1a).
-    const auto refuseElementTypeOpen = [&]() {
-        diags_->of(SemanticDiag::TensorElementTypeRequired)
-            .at(ast->load()->tokenRange())
-            .commit(base->toString());
-        throw BuildAbortException();
-    };
     if (ast->size() < 2) {
         LEAVE("SpecType");
         return base;
@@ -5951,7 +5890,7 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
             // signature binds, not a runtime array constant (plan P3, 4.1).
             const AST::DimGroup &group = child->loadAs<AST::ArrayDimLoad>()->dim();
             if (group.pack != AST::DimPack::None) {
-                // `Tensor<f32, [..s]>` would make the element type's rank open; only an array
+                // `f32[..s]` would make the element type's rank open; only an array
                 // type takes a pack, and a shape argument is not a type.
                 diags_->of(SemanticDiag::InvalidTypeArgument)
                     .at(child->load()->tokenRange())
@@ -5970,21 +5909,6 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
         if (child->type() == AST::LoadType::Type) {
             arguments.push_back(TypeArgument{.type = visitType(child), .data = nullptr});
             continue;
-        }
-        if (child->type() == AST::LoadType::Data) {
-            const auto &dataLoad = child->loadAs<AST::DataLoad>();
-            if (dataLoad->dataType() == AST::DataType::Array && base->toString() == "Tensor") {
-                // `const [3]` is the spelling a shape had before the array type took shapes
-                // over; a shape argument is written without `const` (plan P3, 4.1).
-                diags_->of(SemanticDiag::InvalidTypeArgument)
-                    .at(child->load()->tokenRange())
-                    .commit(
-                        base->toString(),
-                        std::format(
-                            "a shape is written without 'const': '{}<f32, [3]>'",
-                            base->toString()));
-                throw BuildAbortException();
-            }
         }
         const data_ptr_t data = extractStaticDataFromNode(visitData(child));
         if (!data) {
@@ -6025,23 +5949,8 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
         return typeFunc->apply(types);
     }
     if (arguments.empty()) {
-        if (isElementTypeOpenArray(base)) {
-            // `Tensor<>`: no argument at all states no element type either.
-            refuseElementTypeOpen();
-        }
         LEAVE("SpecType");
         return base;
-    }
-    if (isElementTypeOpenArray(base)) {
-        // The first argument of `Tensor` is its element type; a spelling that gives only a shape
-        // (`Tensor<[3]>`) leaves the question the name exists to answer open.
-        bool statesElementType = false;
-        for (const TypeArgument &argument : arguments) {
-            statesElementType = statesElementType || argument.type != nullptr;
-        }
-        if (!statesElementType) {
-            refuseElementTypeOpen();
-        }
     }
     if (const CollectionType *coll = asCollectionTypeOrPrototype(base);
         coll != nullptr && !arguments.empty() && arguments.front().type != nullptr) {

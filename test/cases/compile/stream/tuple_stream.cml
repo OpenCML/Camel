@@ -1,0 +1,24 @@
+/**
+ * A tuple may hold a stream (design principles 5.4; the rule's `tee` hands one out as a
+ * tuple): the item is written and passed on like any other, and building such a tuple is what
+ * `tee` and a loop that carries a stream beside its state both need.
+ */
+module stream_in_tuple_value
+
+func count(n: int): int.. {
+    return step(n)
+}
+
+func step(n: int): () => (int, int..)? {
+    return () => if n > 0 then (n, step(n - 1)) else null
+}
+
+func pair(s: int..): (int.., int) {
+    return (s, 1)
+}
+
+func main(): int sync {
+    let both = pair(count(2))
+    println(both.1)
+    return 0
+}

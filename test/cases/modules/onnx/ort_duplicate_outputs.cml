@@ -14,7 +14,7 @@
  */
 module ort_duplicate_outputs
 
-import { Tensor, reshape, sum, tanh } from tensor
+import { reshape, sum, tanh } from tensor
 import { export_model } from onnx
 
 type Run = { state: f32[..], steps: int }
@@ -33,7 +33,7 @@ func constants(h: f32[..]): (float, float) {
 }
 
 func computed(h: f32[..]): (float, float) {
-    let s = sum(h)
+    let s = float(sum(h))
     return (s, s)
 }
 

@@ -1,0 +1,43 @@
+/**
+ * A fact whose fragments read its `with` parameters (rewrite design 7.5, design principles 5.5).
+ *
+ * The declaration's `with` parameters are handed to every function the fact is made of, so a
+ * `case` reads them by name: `at_cap` answers the value of `cap` for a constant, and the
+ * condition of a rule asks the fact about the node of the constant it matched (`y`).
+ *
+ * The three runs say which arguments the fact was computed with: `at_cap` at its default answers
+ * 5 and `at_cap<9>` answers 9, so `mul_default` fires and `mul_nine` fires while the other does
+ * not -- the argument is part of which fact this is, and the two are cached apart.
+ */
+module fact_with_case
+
+import { max } from math
+import { Program } from graph
+import { rewrite } from rewrite
+
+with <cap: int = 5>
+fact at_cap(v: int): int match v {
+    case const c: int => cap
+    case _            => 0
+} join max
+
+rule mul_default(y: int, x: int) when at_cap(y) == 5 { x * y => x + 100 }
+
+rule mul_nine(y: int, x: int) when at_cap<9>(y) == 9 { x * y => x + 200 }
+
+/// The fact at its default: the rule that asks for 5 fires and the product becomes a sum.
+export func apply_default(p: Program): Program! {
+    return rewrite(p, [mul_default])
+}
+
+/// The same fact at `cap = 9`: this is another fact, so the rule that asks for 9 fires.
+export func apply_nine(p: Program): Program! {
+    return rewrite(p, [mul_nine])
+}
+
+func left(x: int): int { return x * 1 }
+
+func main(): int sync {
+    println(left(3))
+    return 0
+}
