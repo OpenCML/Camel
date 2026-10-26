@@ -479,6 +479,8 @@ ScalarExpr elementwiseExpression(std::string_view op, DType type) {
     const auto a = ScalarExpr::symbol("a", type), b = ScalarExpr::symbol("b", type);
     if (op == "cast_f32")
         return ScalarExpr::cast(DType::F32, ScalarExpr::symbol("a", DType::F64));
+    if (op == "cast_f64")
+        return ScalarExpr::cast(DType::F64, ScalarExpr::symbol("a", DType::F32));
     if (op == "reshape" || op == "reindex")
         return a;
     for (const auto &[name, operation] : std::vector<std::pair<std::string_view, ScalarOp>>{

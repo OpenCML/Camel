@@ -28,14 +28,14 @@ with <m: Model>
 func loss(): float {
     let a = [m.w * 2.0, m.w * 3.0]
     let t = reshape(a, [2])
-    return sum(t)
+    return float(sum(t))
 }
 
 with <w: float[]>
 func weighted_reshape(): float {
     let s = reshape(w, [2, 2])
     let c = reshape([2.0, 3.0, 5.0, 7.0] as f64[], [2, 2])
-    return sum(s * c)
+    return float(sum(s * c))
 }
 
 // The squared distance from a four-element gradient to the adjoint written out by hand: the

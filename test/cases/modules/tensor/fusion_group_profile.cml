@@ -16,14 +16,14 @@ type W = { w: f32[..] }
 
 with <m: W>
 func private_chain(x: f32[..]): float {
-    return sum(x / m.w)
+    return float(sum(x / m.w))
 }
 
 type AB = { a: f32[..], w: f32[..] }
 
 with <m: AB>
 func shared_chain(): float {
-    return sum(m.a / m.w)
+    return float(sum(m.a / m.w))
 }
 
 func main(fused: int): int sync {

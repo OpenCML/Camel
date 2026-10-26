@@ -2138,7 +2138,7 @@ module shape_inference_computed_extent_stays_open
 import { reshape, sum } from tensor
 // The computed extent itself is not known: [?, 3] does not enter a [2, 3] parameter.
 func exact(a: f32[2, 3]): float {
-    return sum(a)
+    return float(sum(a))
 }
 func f(x: f32[?, 3], n: int): float {
     return exact(reshape(x, [n, 3]))
@@ -2355,7 +2355,7 @@ module constas_argument_shape
 import { ones, sum } from tensor
 
 func total(constas n: int, x: f32[n]): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func main(): int sync {
@@ -5475,7 +5475,7 @@ module constas_value_not_constant
 import { ones, sum } from tensor
 
 func total(constas n: int, x: f32[n]): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func use(m: int): float {
@@ -5515,7 +5515,7 @@ module constas_as_value
 import { ones, sum } from tensor
 
 func total(constas n: int, x: f32[n]): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func apply(f: (x: f32[..]) => float, x: f32[..]): float {
@@ -5592,7 +5592,7 @@ module constas_missing_argument
 import { ones, sum } from tensor
 
 func total(constas n: int, x: f32[n]): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func main(): int sync {

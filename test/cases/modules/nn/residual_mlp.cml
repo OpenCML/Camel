@@ -34,7 +34,7 @@ func forward(x: f32[..]): f32[..] {
 with <model: ResidualMlp>
 func loss(x: f32[..], target: f32[..]): float {
     let diff = x->forward<model> - target
-    return sum(diff * diff) / 4.0
+    return float(sum(diff * diff)) / 4.0
 }
 
 func init(): ResidualMlp {

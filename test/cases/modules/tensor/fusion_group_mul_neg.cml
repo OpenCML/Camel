@@ -21,13 +21,13 @@ type AB = { a: f32[..], w: f32[..] }
 
 with <m: AB>
 func shared_chain(): float {
-    return sum(m.a / m.w)
+    return float(sum(m.a / m.w))
 }
 
 with <m: AB>
 func strict_shared_chain(): float {
     #strict {
-        return sum(m.a / m.w)
+        return float(sum(m.a / m.w))
     }
 }
 

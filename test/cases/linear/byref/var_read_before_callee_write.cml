@@ -36,7 +36,7 @@ func g(var c: int): float sync {
     let snapshot = c + 0
     let t = reshape([1.0, 2.0], [2])
     let y = steps(0, 3, t, c)
-    return sum(y) + float(snapshot % 4) * 100.0
+    return float(sum(y)) + float(snapshot % 4) * 100.0
 }
 
 func main(): int sync {

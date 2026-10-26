@@ -59,6 +59,13 @@ GOLDEN_JSON = HERE / "fusion_group_none.profile.golden.json"
 # "compilation - self time by phase" table gains that module's five rows (`resolve types` through
 # `declare types`). Nothing about this program's graph, its operator rows or their counts moved:
 # the five added lines are that table and the diff is only those lines.
+#
+# Re-recorded on 2026-10-26: a whole-tensor reduction answers its element type (design principles
+# 7.3), so the `sum` in this program's step is f32 while the arithmetic around it is f64, and the
+# report gains the two conversions that carry it there: `:op/dtof` and `:op/ftod`, three calls
+# each. That is the whole diff: the operator calls per step rise from 15 to 17 (55 to 61 in all),
+# the two new rows take their place in the time-sorted table, and the `w` the program prints is an
+# f32 reading. No other row, count, hint, loop or phase line moved.
 
 # The measured numbers a report prints: durations, shares and byte counts. Everything else in the
 # report is a count or a name, and must not change.

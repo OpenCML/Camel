@@ -3,7 +3,7 @@ import { ones, sum, load_npy } from tensor
 // The same call as unknown_extent_checked, with a file of four elements: the extent is unknown
 // statically, so the check is made when the call runs, like `as`.
 func fit(a: f32[n], b: f32[n]): float {
-    return sum(a) + sum(b)
+    return float(sum(a)) + float(sum(b))
 }
 func main(): int sync {
     let t = load_npy::<f32>('test/cases/compile/entry_args/b.npy') as f32[?]

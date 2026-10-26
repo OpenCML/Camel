@@ -33,7 +33,7 @@ func constants(h: f32[..]): (float, float) {
 }
 
 func computed(h: f32[..]): (float, float) {
-    let s = sum(h)
+    let s = float(sum(h))
     return (s, s)
 }
 

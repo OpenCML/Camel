@@ -24,12 +24,12 @@ type M = {
 
 with <m: M>
 func total(): float {
-    return sum(m.w)
+    return float(sum(m.w))
 }
 
 with <m: M>
 func gather_loss(): float {
-    return sum(m.w[m.labels])
+    return float(sum(m.w[m.labels]))
 }
 
 func main(): int sync {

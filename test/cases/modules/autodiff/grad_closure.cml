@@ -12,21 +12,21 @@ import { grad } from autodiff
 // 1. the reproducer: a let-bound lambda capturing a value computed from the parameter
 with <p: f32[..]>
 func loss1(): float {
-    let s = sum(p)
+    let s = float(sum(p))
     let g = (t: f32[..]): f32[..] => tanh(t * f32(s))
-    return sum(g(p))
+    return float(sum(g(p)))
 }
 
 // 2. nested lambdas: the inner one captures a value of the outer one and of the function
 with <p: f32[..]>
 func loss2(): float {
-    let s = sum(p * p)
+    let s = float(sum(p * p))
     let wrap = (t: f32[..]): f32[..] => {
         let u = t * f32(s)
         let deep = (v: f32[..]): f32[..] => tanh(v * u) + v * f32(s)
         deep(t + u)
     }
-    return sum(wrap(p))
+    return float(sum(wrap(p)))
 }
 
 // 3. a lambda capturing a TENSOR that depends on the differentiated input
@@ -34,22 +34,22 @@ with <p: f32[..]>
 func loss3(): float {
     let q = tanh(p) * 2.0
     let g = (t: f32[..]): f32[..] => t * q + q
-    return sum(g(p * p))
+    return float(sum(g(p * p)))
 }
 
 // 4. a lambda called twice (one derivative, two call sites)
 with <p: f32[..]>
 func loss4(): float {
-    let s = sum(p)
+    let s = float(sum(p))
     let g = (t: f32[..]): f32[..] => tanh(t * f32(s))
-    return sum(g(p) * g(p * 0.5))
+    return float(sum(g(p) * g(p * 0.5)))
 }
 
 // 5. a lambda that captures nothing
 with <p: f32[..]>
 func loss5(): float {
     let g = (t: f32[..]): f32[..] => tanh(t) * t
-    return sum(g(p))
+    return float(sum(g(p)))
 }
 
 func main(): int sync {
