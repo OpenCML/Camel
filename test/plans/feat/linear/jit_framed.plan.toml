@@ -102,7 +102,7 @@ case = "../../../cases/linear/jit/framed_faults.cml"
 envs = ["FAULT=index"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
-expect_diagnostic_line = 15
+expect_diagnostic_line = 14
 expect_diagnostic_column = 14
 expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
 
@@ -113,7 +113,7 @@ case = "../../../cases/linear/jit/framed_faults.cml"
 envs = ["FAULT=rem"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
-expect_diagnostic_line = 23
+expect_diagnostic_line = 22
 expect_diagnostic_column = 14
 expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
 
@@ -124,7 +124,7 @@ case = "../../../cases/linear/jit/framed_faults.cml"
 envs = ["FAULT=div"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
-expect_diagnostic_line = 31
+expect_diagnostic_line = 30
 expect_diagnostic_column = 20
 expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
 
@@ -136,7 +136,7 @@ envs = ["FAULT=depth"]
 backends = ["nvm", "fvm", "jit", "prl"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
-expect_diagnostic_line = 39
+expect_diagnostic_line = 38
 expect_diagnostic_column = 44
 expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]
 

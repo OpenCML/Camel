@@ -1,9 +1,6 @@
 >// Operators and punctuation: the tokens of the parser grammar (include/camel/parse/syntax/token_kinds.def).
 #^^ comment.line.double-slash.camel punctuation.definition.comment.camel
 #  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
->module operators
-#^^^^^^ keyword.control.import.module.camel
-#       ^^^^^^^^^ entity.name.namespace.module.camel
 >
 >func compare(a: int, b: int): bool {
 #^^^^ meta.function.definition.camel storage.type.function.camel

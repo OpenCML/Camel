@@ -7,9 +7,6 @@
 >// outside the positions below it is a name like any other.
 #^^ comment.line.double-slash.camel punctuation.definition.comment.camel
 #  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
->module context_keywords
-#^^^^^^ keyword.control.import.module.camel
-#       ^^^^^^^^^^^^^^^^ entity.name.namespace.module.camel
 >
 >export resource fs
 #^^^^^^ keyword.control.import.camel

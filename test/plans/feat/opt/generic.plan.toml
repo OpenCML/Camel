@@ -1050,7 +1050,7 @@ args = ["${case}", "std::opt::specialize", "std::nvm"]
 envs = ["H476_NEST_DEPTH=3"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::GenericTypeArgumentGrows"
-expect_diagnostic_line = 17
+expect_diagnostic_line = 16
 expect_diagnostic_column = 40
 expect_output_contains = ["The recursive call makes the type argument 'T' of the generic function 'nest' grow from 'float' to 'float[n]': every instance's type argument would contain the one before it, so specialization never stops.", "name=SemanticDiag::GenericTypeArgumentGrows, code=0x030001EC", "name=SemanticDiag::DimensionNameUsedOnce, code=0x03100161"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -1735,7 +1735,7 @@ case = "../../../cases/opt/generic/fold_cast_fails.cml"
 args = ["${case}", "std::opt", "${run_nvm}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 14
+expect_diagnostic_line = 13
 expect_diagnostic_column = 13
 expect_output_contains = ["before", "conversion to 'f32[3, 2]' failed: the array has shape [2, 3]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

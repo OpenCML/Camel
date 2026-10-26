@@ -1569,7 +1569,7 @@ args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::GpuScopeUnsupported"
-expect_diagnostic_line = 35
+expect_diagnostic_line = 34
 expect_diagnostic_column = 14
 expect_output_contains = ["`#gpu` scope 'step'", "operator 'autodiff:with_grad'", "needs a function known at compile time"]
 timeout_ms = 30000

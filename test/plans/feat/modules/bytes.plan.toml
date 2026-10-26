@@ -33,7 +33,7 @@ case = "../../../cases/modules/bytes_fault_from_array.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 5
 expect_output_not_contains = ["not reached"]
 timeout_ms = 10000
 
@@ -45,7 +45,7 @@ case = "../../../cases/modules/bytes_fault_from_array.cml"
 args = ["${case}", "std::opt", "std::fvm"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 5
 expect_output_not_contains = ["not reached"]
 timeout_ms = 10000
 

@@ -572,7 +572,7 @@ kind = "negative"
 case = "../../../cases/compile/native/when_both_hold_i32_first.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_line = 46
+expect_diagnostic_line = 45
 expect_diagnostic_column = 31
 expect_output_contains = ["The call to 'dual_kernel' with (i32, int) fits more than one overload. More than one function takes these arguments; make the choice explicit: annotate the literal with its type (for example '2 as f32') or convert an argument with 'as'. The overloads that take them: (a: T, b: U) => T — when is_first_i32::<T>(); (a: T, b: U) => T — when is_second_int::<U>()", "(name=SemanticDiag::AmbiguousCall, code=0x030000F4)"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -586,7 +586,7 @@ kind = "negative"
 case = "../../../cases/compile/native/when_both_hold_int_first.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_line = 37
+expect_diagnostic_line = 36
 expect_diagnostic_column = 31
 expect_output_contains = ["The call to 'dual_kernel' with (i32, int) fits more than one overload. More than one function takes these arguments; make the choice explicit: annotate the literal with its type (for example '2 as f32') or convert an argument with 'as'. The overloads that take them: (a: T, b: U) => T — when is_first_i32::<T>(); (a: T, b: U) => T — when is_second_int::<U>()", "(name=SemanticDiag::AmbiguousCall, code=0x030000F4)"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -620,7 +620,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::Redeclaration"
 expect_diagnostic_code = "0x03000001"
-expect_diagnostic_line = 14
+expect_diagnostic_line = 13
 expect_diagnostic_column = 1
 
 # ---- Names in a `case` that is not selected ----
@@ -884,7 +884,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
 expect_diagnostic_code = "0x03000110"
-expect_diagnostic_line = 12
+expect_diagnostic_line = 11
 expect_diagnostic_column = 5
 expect_output_contains = ["This value has type 'bool', which is not the declared type 'int'"]
 #  ---- The declarations of `tensor` ----
@@ -1112,7 +1112,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
 expect_diagnostic_code = "0x03000110"
-expect_diagnostic_line = 12
+expect_diagnostic_line = 11
 expect_diagnostic_column = 5
 expect_output_contains = ["This value has type 'float', which is not the declared type 'int'"]
 
@@ -1183,7 +1183,7 @@ args = ["check", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
 expect_diagnostic_code = "0x03000110"
-expect_diagnostic_line = 12
+expect_diagnostic_line = 11
 expect_diagnostic_column = 5
 expect_output_contains = ["This value has type 'string[]', which is not the declared type 'int'"]
 # the callable operators of `rewrite` are declarations now (`stdlib/rewrite.cml`):
@@ -1412,7 +1412,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::InvalidOperatorURI"
 expect_diagnostic_code = "0x03000019"
-expect_diagnostic_line = 4
+expect_diagnostic_line = 3
 expect_diagnostic_column = 1
 expect_output_contains = ["Invalid operator URI format: 'stdadd'. Expected 'protocol:path'."]
 
@@ -1425,7 +1425,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::NativeDeclarationIncomplete"
 expect_diagnostic_code = "0x0300017B"
-expect_diagnostic_line = 4
+expect_diagnostic_line = 3
 expect_diagnostic_column = 1
 expect_output_contains = ["The body-less declaration 'foo' is incomplete: it has no result type."]
 
@@ -1438,6 +1438,6 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::FieldNotFound"
 expect_diagnostic_code = "0x04000033"
-expect_diagnostic_line = 15
+expect_diagnostic_line = 14
 expect_diagnostic_column = 12
 expect_output_contains = ["The struct has no field 'y'. A struct is indexed by the name of one of its fields."]

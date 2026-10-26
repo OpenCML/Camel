@@ -10,9 +10,6 @@
 >// below as values.
 #^^ comment.line.double-slash.camel punctuation.definition.comment.camel
 #  ^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
->module keywords
-#^^^^^^ keyword.control.import.module.camel
-#       ^^^^^^^^ entity.name.namespace.module.camel
 >
 >import { now } from time
 #^^^^^^ keyword.control.import.camel

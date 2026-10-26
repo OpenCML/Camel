@@ -45,7 +45,7 @@ case = "../../../cases/compile/check/syntax_error.cml"
 args = ["check", "--syntax-only", "-O", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
-expect_diagnostic_line = 5
+expect_diagnostic_line = 3
 expect_output_contains = ["(my_module)"]
 expect_output_not_contains = ["(main)"]
 

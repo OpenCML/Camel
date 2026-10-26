@@ -1,9 +1,6 @@
 >// Type declarations and type expressions.
 #^^ comment.line.double-slash.camel punctuation.definition.comment.camel
 #  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
->module types
-#^^^^^^ keyword.control.import.module.camel
-#       ^^^^^ entity.name.namespace.module.camel
 >
 >type Point = {
 #^^^^ meta.type.definition.camel storage.type.type.camel

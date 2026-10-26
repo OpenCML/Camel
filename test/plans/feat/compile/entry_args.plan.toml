@@ -131,7 +131,7 @@ args = ["${case}", "--arg", "n=3"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentMissing"
 expect_diagnostic_code = "0x04000010"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 6
 expect_diagnostic_column = 1
 expect_output_contains = ["No value was given for the parameters 'rate', 'name' and 'loud' of 'main'", "--arg name=value"]
 expect_output_not_contains = ["hi", "arity", ":?:?:"]
@@ -160,7 +160,7 @@ args = ["${case}", "--arg", "n=3", "--arg", "rate=0.5", "--arg", "name=hi", "--a
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
 expect_diagnostic_code = "0x04000011"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 6
 expect_diagnostic_column = 1
 expect_output_contains = ["Cannot bind the argument 'extra' of 'main'", "its parameters: n, rate, name, loud"]
 expect_output_not_contains = ["hi 3"]
@@ -175,7 +175,7 @@ case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "--arg", "n=three", "--arg", "rate=0.5", "--arg", "name=hi", "--arg", "loud=true"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 6
 expect_output_contains = ["Cannot bind the argument 'n' of 'main': Cannot convert the string 'three' to int"]
 expect_output_not_contains = ["hi "]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -189,7 +189,7 @@ case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "--arg", "n=3", "--arg", "rate=0x1.8p1", "--arg", "name=hi", "--arg", "loud=true"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 6
 expect_output_contains = ["Cannot bind the argument 'rate' of 'main': Cannot convert the string '0x1.8p1' to float"]
 expect_output_not_contains = ["hi 3"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
@@ -203,7 +203,7 @@ case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "--arg", "n=3", "--arg", "rate=1.", "--arg", "name=hi", "--arg", "loud=true"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 6
 expect_output_contains = ["Cannot bind the argument 'rate' of 'main': Cannot convert the string '1.' to float"]
 expect_output_not_contains = ["hi 3"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
@@ -217,7 +217,7 @@ case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "--arg", "n=3", "--arg", "rate=.5", "--arg", "name=hi", "--arg", "loud=true"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 6
 expect_output_contains = ["Cannot bind the argument 'rate' of 'main': Cannot convert the string '.5' to float"]
 expect_output_not_contains = ["hi 3"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
@@ -296,7 +296,7 @@ case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "--arg", "n=1e3", "--arg", "rate=0.5", "--arg", "name=hi", "--arg", "loud=true"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 6
 expect_output_contains = ["Cannot bind the argument 'n' of 'main': Cannot convert the string '1e3' to int"]
 expect_output_not_contains = ["hi "]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
@@ -310,7 +310,7 @@ case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "--arg", "n=3", "--arg", "rate=0xFFFFFFFFFFFFFFFF", "--arg", "name=hi", "--arg", "loud=true"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 6
 expect_output_contains = ["Cannot bind the argument 'rate' of 'main': Cannot convert '0xFFFFFFFFFFFFFFFF' to float: the value is outside the range of an integer (-9223372036854775808 to 9223372036854775807)"]
 expect_output_not_contains = ["hi 3"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
@@ -324,7 +324,7 @@ case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "--arg", "n=3", "--arg", "rate=0x1.8", "--arg", "name=hi", "--arg", "loud=true"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 6
 expect_output_contains = ["Cannot bind the argument 'rate' of 'main': Cannot convert the string '0x1.8' to float"]
 expect_output_not_contains = ["hi 3"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
@@ -338,7 +338,7 @@ case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "--arg", "n=3", "--arg", "rate= 0.5", "--arg", "name=hi", "--arg", "loud=true"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 6
 expect_output_contains = ["Cannot bind the argument 'rate' of 'main': Cannot convert the string ' 0.5' to float"]
 expect_output_not_contains = ["hi 3"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
@@ -352,7 +352,7 @@ case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "--arg", "n=3", "--arg", "rate=0.5 ", "--arg", "name=hi", "--arg", "loud=true"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 6
 expect_output_contains = ["Cannot bind the argument 'rate' of 'main': Cannot convert the string '0.5 ' to float"]
 expect_output_not_contains = ["hi 3"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
@@ -366,7 +366,7 @@ case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "--arg", "n=3", "--arg", "rate=1e9999", "--arg", "name=hi", "--arg", "loud=true"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 6
 expect_output_contains = ["Cannot bind the argument 'rate' of 'main': Cannot convert '1e9999' to float: the value is outside the range of float (at most about 1.8e308 in magnitude)"]
 expect_output_not_contains = ["hi 3"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
@@ -380,7 +380,7 @@ case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "--arg", "n=3", "--arg", "rate=1e-9999", "--arg", "name=hi", "--arg", "loud=true"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 6
 expect_output_contains = ["Cannot bind the argument 'rate' of 'main': Cannot convert '1e-9999' to float: the value is too small for float (the nearest value is zero)"]
 expect_output_not_contains = ["hi 3 0.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -394,7 +394,7 @@ case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "--arg", "n=99999999999999999999", "--arg", "rate=0.5", "--arg", "name=hi", "--arg", "loud=true"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 6
 expect_output_contains = ["Cannot bind the argument 'n' of 'main': Cannot convert '99999999999999999999' to int: the value is outside the range of int (-9223372036854775808 to 9223372036854775807)"]
 expect_output_not_contains = ["hi "]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
@@ -432,7 +432,7 @@ case = "../../../cases/compile/entry_args/widths.cml"
 args = ["${case}", "--arg", "n=3000000000", "--arg", "rate=0.5"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_output_contains = ["Cannot bind the argument 'n' of 'main': Cannot convert '3000000000' to i32: the value is outside the range of i32 (-2147483648 to 2147483647)"]
 expect_output_not_contains = ["2147483647 0.5"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -446,7 +446,7 @@ case = "../../../cases/compile/entry_args/widths.cml"
 args = ["${case}", "--arg", "n=-2147483649", "--arg", "rate=0.5"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_output_contains = ["Cannot convert '-2147483649' to i32: the value is outside the range of i32 (-2147483648 to 2147483647)"]
 expect_output_not_contains = ["2147483647 0.5"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -460,7 +460,7 @@ case = "../../../cases/compile/entry_args/widths.cml"
 args = ["${case}", "--arg", "n=three", "--arg", "rate=0.5"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_output_contains = ["Cannot bind the argument 'n' of 'main': Cannot convert the string 'three' to i32"]
 expect_output_not_contains = ["2147483647 0.5"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -474,7 +474,7 @@ case = "../../../cases/compile/entry_args/widths.cml"
 args = ["${case}", "--arg", "n=3", "--arg", "rate=3.5e38"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_output_contains = ["Cannot bind the argument 'rate' of 'main': Cannot convert '3.5e38' to f32: the value is outside the range of f32 (at most about 3.4e38 in magnitude)"]
 expect_output_not_contains = ["3 inf"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -488,7 +488,7 @@ case = "../../../cases/compile/entry_args/widths.cml"
 args = ["${case}", "--arg", "n=3", "--arg", "rate=1e-50"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_output_contains = ["Cannot bind the argument 'rate' of 'main': Cannot convert '1e-50' to f32: the value is too small for f32 (the nearest value is zero)"]
 expect_output_not_contains = ["3 0.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -562,7 +562,7 @@ case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "--arg", "n=3", "--arg", "rate=INF", "--arg", "name=hi", "--arg", "loud=true"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 6
 expect_output_contains = ["Cannot bind the argument 'rate' of 'main': Cannot convert the string 'INF' to float"]
 expect_output_not_contains = ["hi 3"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
@@ -588,7 +588,7 @@ case = "../../../cases/compile/entry_args/no_params.cml"
 args = ["${case}", "--arg", "x=1"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 3
+expect_diagnostic_line = 1
 expect_output_contains = ["'main' takes no parameters"]
 expect_output_not_contains = ["ran\n"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -638,7 +638,7 @@ case = "../../../cases/compile/entry_args/tensors.cml"
 args = ["${case}", "--arg", "x=test/cases/compile/entry_args/bad_shape.npy", "--arg", "w=test/cases/compile/entry_args/w.npy"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 8
 expect_output_contains = ["Cannot bind the argument 'x' of 'main'", "[2, 3]", "the array has shape [3, 3]"]
 expect_output_not_contains = ["tensor(["]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -696,7 +696,7 @@ case = "../../../cases/compile/entry_args/with_params.cml"
 args = ["${case}", "--arg", "x=test/cases/compile/entry_args/x.npy"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentMissing"
-expect_diagnostic_line = 16
+expect_diagnostic_line = 15
 expect_output_contains = ["No value was given for the parameters 'w' and 'b' of 'main'"]
 expect_output_not_contains = ["tensor(["]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -845,7 +845,7 @@ case = "../../../cases/compile/entry_args/complex.cml"
 args = ["${case}", "--arg", "z=0x1.8p1", "--arg", "w=-2"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 11
+expect_diagnostic_line = 10
 expect_output_contains = ["Cannot bind the argument 'z' of 'main'", "Cannot convert the string '0x1.8p1' to a complex number"]
 expect_output_not_contains = ["3+0i"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
@@ -859,7 +859,7 @@ case = "../../../cases/compile/entry_args/complex.cml"
 args = ["${case}", "--arg", "z=1.", "--arg", "w=-2"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 11
+expect_diagnostic_line = 10
 expect_output_contains = ["Cannot bind the argument 'z' of 'main'", "Cannot convert the string '1.' to a complex number"]
 expect_output_not_contains = ["1+0i"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
@@ -873,7 +873,7 @@ case = "../../../cases/compile/entry_args/complex.cml"
 args = ["${case}", "--arg", "z= 1.5", "--arg", "w=-2"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 11
+expect_diagnostic_line = 10
 expect_output_contains = ["Cannot bind the argument 'z' of 'main'", "Cannot convert the string ' 1.5' to a complex number"]
 expect_output_not_contains = ["1.5+0i"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
@@ -911,7 +911,7 @@ case = "../../../cases/compile/entry_args/complex.cml"
 args = ["${case}", "--arg", "z=1+2", "--arg", "w=4i"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 11
+expect_diagnostic_line = 10
 expect_output_contains = ["Cannot bind the argument 'z' of 'main'", "Cannot convert the string '1+2' to a complex number"]
 expect_output_not_contains = ["0+4i", ":?:?:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -925,7 +925,7 @@ case = "../../../cases/compile/entry_args/complex.cml"
 args = ["${case}", "--arg", "z=1+2j", "--arg", "w=4i"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 11
+expect_diagnostic_line = 10
 expect_output_contains = ["Cannot convert the string '1+2j' to a complex number"]
 expect_output_not_contains = ["0+4i"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -939,7 +939,7 @@ case = "../../../cases/compile/entry_args/complex.cml"
 args = ["${case}", "--arg", "z=abc", "--arg", "w=4i"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 11
+expect_diagnostic_line = 10
 expect_output_contains = ["Cannot bind the argument 'z' of 'main'", "Cannot convert the string 'abc' to a complex number", "or a real number such as 1.5"]
 expect_output_not_contains = ["0+4i"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -953,7 +953,7 @@ case = "../../../cases/compile/entry_args/complex.cml"
 args = ["${case}", "--arg", "z=1+", "--arg", "w=4i"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 11
+expect_diagnostic_line = 10
 expect_output_contains = ["Cannot bind the argument 'z' of 'main'", "Cannot convert the string '1+' to a complex number"]
 expect_output_not_contains = ["0+4i"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -967,7 +967,7 @@ case = "../../../cases/compile/entry_args/complex.cml"
 args = ["${case}", "--arg", "z=1e9999+2i", "--arg", "w=4i"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 11
+expect_diagnostic_line = 10
 expect_output_contains = ["Cannot bind the argument 'z' of 'main': Cannot convert '1e9999+2i' to c128: the real part is outside the range of c128 (each part at most about 1.8e308 in magnitude)"]
 expect_output_not_contains = ["0+4i"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
@@ -981,7 +981,7 @@ case = "../../../cases/compile/entry_args/complex.cml"
 args = ["${case}", "--arg", "z=1+2i", "--arg", "w=1+1e-9999i"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 11
+expect_diagnostic_line = 10
 expect_output_contains = ["Cannot bind the argument 'w' of 'main': Cannot convert '1+1e-9999i' to c64: the imaginary part is too small for c64 (the nearest value is zero)"]
 expect_output_not_contains = ["1+0i"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -1019,7 +1019,7 @@ case = "../../../cases/compile/entry_args/complex.cml"
 args = ["${case}", "--arg", "z=1+2i", "--arg", "w=3.5e38+1i"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 11
+expect_diagnostic_line = 10
 expect_output_contains = ["Cannot bind the argument 'w' of 'main': Cannot convert '3.5e38+1i' to c64: the real part is outside the range of c64 (each part at most about 3.4e38 in magnitude)"]
 expect_output_not_contains = ["1+2i"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
@@ -1033,7 +1033,7 @@ case = "../../../cases/compile/entry_args/complex.cml"
 args = ["${case}", "--arg", "z=1+2i", "--arg", "w=1+3.5e38i"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 11
+expect_diagnostic_line = 10
 expect_output_contains = ["Cannot convert '1+3.5e38i' to c64: the imaginary part is outside the range of c64 (each part at most about 3.4e38 in magnitude)"]
 expect_output_not_contains = ["1+2i"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]

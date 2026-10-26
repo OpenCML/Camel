@@ -114,7 +114,7 @@ case = "../../../cases/compile/tags/err_position.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagNotAtPosition"
-expect_diagnostic_line = 6
+expect_diagnostic_line = 5
 expect_diagnostic_column = 2
 expect_output_contains = ["The tag 'shape' may not be written at a func: it is declared for type."]
 
@@ -126,7 +126,7 @@ case = "../../../cases/compile/tags/err_undeclared.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagUndeclared"
-expect_diagnostic_line = 4
+expect_diagnostic_line = 3
 expect_diagnostic_column = 2
 expect_output_contains = ["No tag 'nope' is declared."]
 
@@ -138,7 +138,7 @@ case = "../../../cases/compile/tags/err_arity.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagArgumentCount"
-expect_diagnostic_line = 6
+expect_diagnostic_line = 5
 expect_diagnostic_column = 2
 expect_output_contains = ["The tag 'width' takes 1 parameter(s), but 0 argument(s) are written."]
 
@@ -150,7 +150,7 @@ case = "../../../cases/compile/tags/err_const.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagArgumentNotConstant"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 6
 expect_diagnostic_column = 6
 expect_output_contains = ["The argument 'n' of the tag 'width' is not a compile-time value."]
 
@@ -182,7 +182,7 @@ case = "../../../cases/compile/tags/err_float.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagArgumentType"
-expect_diagnostic_line = 6
+expect_diagnostic_line = 5
 expect_diagnostic_column = 2
 expect_output_contains = ["The parameter 'w' of the tag 'width' is declared 'int', but the argument is '1.5' (float)."]
 
@@ -194,7 +194,7 @@ case = "../../../cases/compile/tags/err_type.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagArgumentType"
-expect_diagnostic_line = 6
+expect_diagnostic_line = 5
 expect_diagnostic_column = 2
 expect_output_contains = ["The parameter 'w' of the tag 'width' is declared 'int', but the argument is 'true' (bool)."]
 
@@ -206,7 +206,7 @@ case = "../../../cases/compile/tags/err_param_type.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagParameterType"
-expect_diagnostic_line = 6
+expect_diagnostic_line = 5
 expect_diagnostic_column = 2
 expect_output_contains = ["The parameter 'xs' of the tag 'callback' is declared 'int[]': a tag parameter is an int, a float, a bool, a string, a concrete function type, or a type parameter the condition selects with is_function."]
 
@@ -236,7 +236,7 @@ case = "../../../cases/compile/tags/err_func_signature.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagArgumentType"
-expect_diagnostic_line = 11
+expect_diagnostic_line = 10
 expect_diagnostic_column = 6
 expect_output_contains = ["The parameter 'f' of the tag 'rule' is declared '(x: int) => int', but the argument is 'twice_float' ((x: float) => float)."]
 
@@ -248,7 +248,7 @@ case = "../../../cases/compile/tags/err_old_annotation.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::InvalidAnnotation"
-expect_diagnostic_line = 4
+expect_diagnostic_line = 3
 expect_diagnostic_column = 1
 expect_output_contains = ["an annotation takes '<...>' arguments, not '(...)'", "'#name', '#name(args)' or '#[a, b(v)]'"]
 [[tests]]
@@ -279,7 +279,7 @@ case = "../../../cases/compile/tags/err_reads_empty.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagArgumentCount"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 6
 expect_diagnostic_column = 2
 expect_output_contains = ["The tag 'reads' takes 1 or more parameter(s), but 0 argument(s) are written."]
 
@@ -291,7 +291,7 @@ case = "../../../cases/compile/tags/err_reads_undeclared.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagUndeclared"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 6
 expect_diagnostic_column = 2
 expect_output_contains = ["No tag 'nowhere' is declared."]
 
@@ -312,7 +312,7 @@ case = "../../../cases/compile/tags/err_tag_shadows_permission.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagShadowsPermission"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_diagnostic_column = 1
 expect_output_contains = ["The tag 'reassociate' is declared with the name of a tag of the language."]
 
@@ -483,7 +483,7 @@ case = "../../../cases/compile/tags/placement_conflict.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagValueConflict"
-expect_diagnostic_line = 5
+expect_diagnostic_line = 4
 expect_diagnostic_column = 8
 expect_output_contains = ["The tag 'cpu' gives the fact 'tiles.placement' the value \"cpu\", but the node already says \"gpu\"."]
 
@@ -548,7 +548,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagOnUnnamedField"
 expect_diagnostic_code = "0x03000167"
-expect_diagnostic_line = 6
+expect_diagnostic_line = 5
 expect_diagnostic_column = 14
 expect_output_contains = ["A tag on the field 'a' of an unnamed struct type belongs to no declaration."]
 
@@ -561,6 +561,6 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagArgumentNamed"
 expect_diagnostic_code = "0x03000168"
-expect_diagnostic_line = 6
+expect_diagnostic_line = 5
 expect_diagnostic_column = 7
 expect_output_contains = ["A tag argument is positional: 'NamedData: w' is named."]

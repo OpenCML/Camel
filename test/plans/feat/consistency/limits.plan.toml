@@ -60,7 +60,7 @@ case = "../../../cases/consistency/limits/depth_value.cml"
 envs = ["N=50"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
-expect_diagnostic_line = 10
+expect_diagnostic_line = 9
 expect_diagnostic_column = 38
 expect_stdout_starts_with = "start\n"
 expect_output_contains = ["Maximum recursion depth (100) exceeded"]
@@ -81,7 +81,7 @@ case = "../../../cases/consistency/limits/depth_map.cml"
 envs = ["N=130"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
-expect_diagnostic_line = 10
+expect_diagnostic_line = 9
 expect_diagnostic_column = 38
 expect_stdout_starts_with = "start\n"
 expect_output_contains = ["Maximum recursion depth (100) exceeded"]
