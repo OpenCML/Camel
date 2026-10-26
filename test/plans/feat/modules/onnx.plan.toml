@@ -1823,14 +1823,30 @@ timeout_ms = 120000
 
 [[tests]]
 name = "export_core_slice_grad"
-desc = "The reverse of the core's own slice exports too: `:tangent/scatter_slice_arr`, the adjoint the backward pass builds beside `:op/slice_sub`, is lowered as the zeros of the value's shape with the slice's positions written, so a training step whose loss slices exports whole -- the slice's own gradient used to be the only part of that path with no ONNX form."
+desc = "The reverse of the core's own slice exports too: `:tangent/scatter_slice_arr`, the adjoint the backward pass builds beside `:op/slice_sub`, is lowered as the zeros of the value's shape with the slice's positions written by a ScatterND, so a training step whose loss slices exports whole -- the slice's own gradient used to be the only part of that path with no ONNX form."
 kind = "behavior"
 case = "../../../cases/modules/onnx/ort_core_slice_grad.cml"
 args = ["${case}"]
 envs = ["ONNX_OUT=${test_tmp}/export_core_slice_grad.onnx"]
 expect_exit = 0
-expect_stdout_contains = ["exported"]
+# The values the program's own backward pass prints are pinned: the adjoint of a slice of step 1
+# writes the same numbers it wrote before this scatter replaced the padded range.
+expect_stdout_contains = ["exported", "[-2.5]", "[0.0, 0.25, -1.0, 0.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.test_tmp, 'export_core_slice_grad.onnx'))
+const count = (op) => model.ops.filter((o) => o === op).length
+// One scatter per gradient the step returns (`d loss / d x` and `d loss / d w`), and no padded
+// range: the positions a step names are not a range ONNX Pad can write.
+assert(count('ScatterND') === 2, `expected the two gradients as scatters, got ${model.ops}`)
+assert(count('Pad') === 0, `the adjoint writes positions, not a padded range: ${model.ops}`)
+}
+"""
 timeout_ms = 8000
 
 [[tests]]
@@ -1843,6 +1859,48 @@ args = ["${case}"]
 skip_unless = ["${python}", "-c", "import numpy, onnx, onnxruntime"]
 expect_exit = 0
 expect_stdout_contains = ["ort core slice grad: 0 failing", "PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "export_slice_grad_stride"
+desc = "The adjoint of a slice whose step is not 1 exports too: the positions a step names are the ones the scatter writes, computed from the start and the step, and the model's graph carries one ScatterND per slice its backward pass took and no Pad. The loss slices with a step of 2, with a negative step of 2 and along the second axis of a rank-2 value with a negative step whose start the source left out."
+kind = "behavior"
+case = "../../../cases/modules/onnx/ort_slice_grad_stride.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=${test_tmp}/export_slice_grad_stride.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.test_tmp, 'export_slice_grad_stride.onnx'))
+const count = (op) => model.ops.filter((o) => o === op).length
+// Six scatters and no padded range: the program slices six times (both operands of each of the
+// three products, the two rank-1 pairs and the rank-2 one), and the backward pass writes each
+// slice's gradient back at the positions that slice took.
+assert(count('ScatterND') === 6, `expected six scatters, got ${model.ops}`)
+assert(count('Pad') === 0, `the adjoint writes positions, not a padded range: ${model.ops}`)
+assert(model.ops.includes('Range'), `the positions are the ones the step names: ${model.ops}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "ort_slice_grad_stride"
+desc = "A slice whose step is not 1 on ONNX Runtime: the model of ort_slice_grad_stride.cml is run for three (w, x, a, b) sets and its three outputs (the loss, `d loss / d x` and `d loss / d b`) are compared with the analytic values -- `w` at the five positions the two rank-1 slices take and zero at the position they do not, `a` at the two columns the rank-2 slice takes -- within 1e-6, so the comparison does not go through Camel's own backward pass. The node count, the ScatterND count and the output shapes are printed too."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/onnx/ort_slice_grad_stride.py"
+args = ["${case}"]
+skip_unless = ["${python}", "-c", "import numpy, onnx, onnxruntime"]
+expect_exit = 0
+expect_stdout_contains = ["ort slice grad stride: 0 failing", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000

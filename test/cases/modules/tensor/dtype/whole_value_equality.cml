@@ -1,0 +1,29 @@
+/**
+ * `==` compares two arrays by content and answers one `bool`: it is the elementwise comparison
+ * reduced, so its result is not an array at all (design principles 4.2). Writing an array type for
+ * it is refused, and the refusal names the type it does have.
+ *
+ * A program that wants a mask writes the elementwise comparison `===`, whose result is a `bool`
+ * array of the same shape as its operands; that one is read as the numbers it stands for once the
+ * conversion is written (design principles 5.1).
+ */
+module whole_value_equality
+
+import { reshape } from tensor
+
+func same_everywhere(x: f32[..], y: f32[..]): bool {
+    return (x > 0.0) == (y > 0.0)
+}
+
+func mask_as_array(x: f32[..], y: f32[..]) {
+    let same: bool[..] = (x > 0.0) == (y > 0.0)
+    println(same)
+}
+
+func main(): int sync {
+    let x = reshape([1.0, -2.0] as f32[], [2])
+    let y = reshape([1.0, 2.0] as f32[], [2])
+    println(same_everywhere(x, y))
+    mask_as_array(x, y)
+    return 0
+}
