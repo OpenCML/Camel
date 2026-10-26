@@ -74,7 +74,7 @@ digraph GraphIR {
         N20 [label="camel gate={} {} {} {}", type="DATA", origin=<ORIGIN>, span="23:4-23:28", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="string"];
         N21 [label=":str/format", type="OPER", role="export-capability", origin=<ORIGIN>, span="23:36-23:60", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="string"];
         N22 [label=":io/println", type="OPER", role="effect;export-capability", origin=<ORIGIN>, span="23:62-23:69", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="string"];
-        N23 [label="Function(graph=__g_4__, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="24:17-24:59", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="(t: f32[..]) => f32[..]"];
+        N23 [label="Function(graph=__g_4__, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="24:17-24:59", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="(t: f32[..]) => f32[..] pure"];
         N24 [label="ONNX_OUT", type="DATA", origin=<ORIGIN>, span="24:72-24:82", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="string"];
         N25 [label="env:get_env", type="OPER", role="effect;export-capability", origin=<ORIGIN>, span="24:64-24:71", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="string"];
         N26 [label="onnx:export_model", type="OPER", role="effect;export-capability", origin=<ORIGIN>, span="24:4-24:16", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="void"];
@@ -114,7 +114,7 @@ digraph GraphIR {
         N28 -> N2A [label="0|0", type="CTRL"];
     }
     O00 [label="EXIT", type="EXIT"];
-    N2B [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="20:0-27:1", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="() => int"];
+    N2B [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="20:0-27:1", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="() => int uses env, stdout"];
     N2C [label="CALL", type="CALL", value_type="int"];
     N2C -> O00 [label="0", type="EXIT"];
     N2B -> N2C [label="0|0", type="WITH"];

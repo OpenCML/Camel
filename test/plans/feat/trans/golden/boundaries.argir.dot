@@ -4,7 +4,7 @@ digraph GraphIR {
     edge [minlen=2];
     subgraph cluster_F01 {
         label="main";
-        tooltip="() => int";
+        tooltip="() => int uses stdout";
         subgraph cluster_F02 {
             label="gate";
             tooltip="(t: f32[4]) => f32[4] pure";
@@ -68,7 +68,7 @@ digraph GraphIR {
         N15 -> N17 [label="0|0", type="CTRL", style=dashed, arrowhead=empty];
     }
     O00 [label="EXIT", type="EXIT", style=dashed, shape=circle];
-    N18 [label="Functio\nn(gr...", type="DATA", shape=circle, style=solid, value_type="() => int", origin=<ORIGIN>, span="18:0-22:1", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="Function(graph=main, tupleSlots=0)\n__root__::node#n0"];
+    N18 [label="Functio\nn(gr...", type="DATA", shape=circle, style=solid, value_type="() => int uses stdout", origin=<ORIGIN>, span="18:0-22:1", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="Function(graph=main, tupleSlots=0)\n__root__::node#n0"];
     N19 [label="CALL", type="CALL", shape=diamond, style=solid, value_type="int", tooltip="CALL\n__root__::node#n1"];
     N19 -> O00 [label="0", type="EXIT", style=solid];
     N18 -> N19 [label="0|0", type="WITH", style=dashed];

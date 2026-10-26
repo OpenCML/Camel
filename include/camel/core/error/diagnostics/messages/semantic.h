@@ -98,10 +98,8 @@ enum class SemanticDiag : uint32_t {
     ModuleValueCycle          = 0x0000D1,
     CaptureAfterRecursiveCall = 0x0000D2,
     AmbiguousName             = 0x0000D3,
-    // `any` (design principles 5.10), 0xE0 and up. 0xE0 (AnyUncheckedCast), 0xE1
-    // (AnyBranchSubject) and 0xE2 (AnyNotAllowed) are retired: there is no `any` type, and
-    // writing it is an ordinary unknown name. Their codes are not reused.
-    // The condition and the cases of a branch (found with the `any` cases above).
+    // 0xE0-0xE2: empty. The numbers are not reused.
+    // The condition and the cases of a branch.
     ConditionNotBool      = 0x0000E3,
     MatchCaseTypeMismatch = 0x0000E4,
     // Rules (design principles log 2.12) on operators and on collections that
@@ -133,8 +131,7 @@ enum class SemanticDiag : uint32_t {
     EnumPatternMismatch    = 0x000134,
     EnumMatchNotExhaustive = 0x000135,
     EnumFieldAccess        = 0x000136,
-    // 0x137 and 0x138 reported the retired forms `A | B` and `T ? U`; the parser no longer reads
-    // either, so they are gone and their codes are not reused.
+    // 0x137-0x138: empty. The numbers are not reused.
     EnumTypeArgumentNotInferred = 0x000139,
     /// A type variable that a call's arguments leave without a type, because the only argument that
     /// mentions it is an empty literal, which states no element type.
@@ -246,14 +243,13 @@ enum class SemanticDiag : uint32_t {
     NativeResourceMismatch = 0x0001A4,
 
     // `std::cml`, the source printer (step S1). 0x1A5 and up.
-    /// A graph holds a construct the printer does not turn into source (yet).
+    /// A graph holds a construct the printer does not turn into source.
     CmlUnsupportedConstruct = 0x0001A5,
     /// A constant is larger than the printer's max_literal_bytes.
     CmlBigConstant = 0x0001A6,
 
-    // Array element types (design/arrays-memory, P4 "element type exact"). 0x1A7 is retired: a
-    // tensor keeps the element type it is written with, so nothing rewrites it and there is no
-    // such diagnostic. The code is not reused.
+    // Array element types (design/arrays-memory, P4 "element type exact"). 0x1A7: empty. The
+    // number is not reused.
 
     // Applicability conditions (`when`, design principles 4.4). 0x1A8 and up.
     /// The condition's value is not a bool.
@@ -431,7 +427,7 @@ enum class SemanticDiag : uint32_t {
 
     // The resource clause's promise (design effects plan 4.3, step 5): the resources a body infers
     // have to be within what its signature promises. The resource group above is 0x1A0-0x1A4, and
-    // 0x1A5-0x1A6 are `std::cml` and 0x1A7 is retired, so this one is appended at the end of the
+    // 0x1A5-0x1A6 are `std::cml` and 0x1A7 is empty, so this one is appended at the end of the
     // semantic space instead of being placed next to a group that has no room left.
     /// The resources a body uses are not within what its `pure`/`uses` signature promises.
     UsesPromiseViolated = 0x0001F1,
