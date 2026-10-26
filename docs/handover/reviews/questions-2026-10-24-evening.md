@@ -1721,3 +1721,5 @@ C20 已由决策者这边做完（`c2f6b8058`）：`(T?)[3]`、`((x: int) => int
 2. 教程 `tutorial.cn.md:810`、`tutorial.en.md:810` 的 `find` 改成 `index_of`（字符串里的查找在 `str` 里叫 `index_of`；`re::find` 是正则的查找）。
 - 那几段关于控制边收口的核对说明按目标态读，对。
 Python 边界（C25、C27）已合入（`937cbc71e`、`b0413e05f`）。索引里的 **C4（一张转换表、按 5.1）与 C22（一个类型一个身份、补 `unify`）也由决策者这边做**，施工方不做这两组。
+
+**`json`、`fs`、`io`、`env`、`process`、`time`、`hash` 已接入**（`0331947c4` 到 `f0c617d52`，合并 `d87e2f35e`）。暂缓的三处等前置落地后补：`time::timed`（要闭包调用）、`fs::read_lines`（要流的数据源）、`exit` 的返回类型改成 `never`（随 `fail`/`never`）。`read_text` 里的 `?->` 随 `->` 自动传递那一项一起改。`RuntimeDiag::FileOpenFailed` 已删。还剩一处工具缺口留给施工方：`--verify-ops` 跳过只有私有核函数的模块（`hash`），随"`inspect --ops` 列出私有核函数"一起修。`examples/tty/snake.cml` 编译不过（`concat` 类型不匹配）在 fsh-dev 原样上也是这样，不是这一批引起的，请施工方看一下。
