@@ -874,7 +874,15 @@ void emitDraftPayload(
                             "calls (its reference table).",
                             planned.ref));
                 }
-                writeBody(payload.payload, header, GCFuncRef{.ref = found->second});
+                // The frozen node names the callee by its index in the reference table, and keeps
+                // the rest of the draft's payload: which captured variables the call writes, and
+                // so what its value carries the new version of (GCFuncRef::reserved).
+                GCFuncRef body{.ref = found->second};
+                if (payloadBytes.size_bytes() >= sizeof(body)) {
+                    std::memcpy(&body, payloadBytes.data(), sizeof(body));
+                    body.ref = found->second;
+                }
+                writeBody(payload.payload, header, body);
             }
             break;
         case GCNodeKind::Loop: {
@@ -1768,6 +1776,52 @@ uint64_t GCGraph::nodeOrigin(gc_node_ref_t ref) const {
 }
 
 camel::core::type::FunctionType *GCGraph::funcType() const { return funcType_; }
+
+uint32_t funcWriteMaskOf(const GCGraph &graph, gc_node_ref_t ref) {
+    if (!graph.hasNodePayload() || !graph.containsNodeRef(ref)) {
+        return 0;
+    }
+    const GCNode *node = graph.node(ref);
+    if (node == nullptr || node->kind != GCNodeKind::Func || !node->hasPayload()) {
+        return 0;
+    }
+    return graph.nodeBodyAs<GCFuncRef>(ref)->reserved;
+}
+
+camel::core::type::Type *callValueTypeOf(const GCGraph &callee, uint32_t writtenCaptures) {
+    camel::core::type::FunctionType *calleeType = callee.funcType();
+    camel::core::type::Type *exit = calleeType != nullptr ? calleeType->exitType() : nullptr;
+    if (writtenCaptures == 0) {
+        return exit;
+    }
+    const bool hasExit = exit != nullptr && exit->code() != camel::core::type::TypeCode::Void;
+    // The capture ports are the with-ports after the declared ones, in the order the captures
+    // were made: bit k of the mask is the k-th of them.
+    const size_t declaredWith =
+        calleeType != nullptr ? calleeType->withTypesCount() : size_t{0};
+    const std::span<const gc_node_ref_t> withPorts = callee.withPorts();
+    std::vector<camel::core::type::Type *> parts;
+    if (hasExit) {
+        parts.push_back(exit);
+    }
+    for (size_t k = 0; k < 32; ++k) {
+        if ((writtenCaptures & (uint32_t{1} << k)) == 0) {
+            continue;
+        }
+        const size_t port = declaredWith + k;
+        const GCNode *capture = port < withPorts.size() ? callee.node(withPorts[port]) : nullptr;
+        if (capture != nullptr && capture->dataType() != nullptr) {
+            parts.push_back(capture->dataType());
+        }
+    }
+    if (parts.size() == 1) {
+        return parts.front();
+    }
+    if (parts.empty()) {
+        return exit;
+    }
+    return camel::core::type::TupleType::create(parts);
+}
 
 const TupleType *GCGraph::runtimeDataType() const { return runtimeDataType_; }
 
