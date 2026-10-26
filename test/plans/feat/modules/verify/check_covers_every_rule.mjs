@@ -145,8 +145,7 @@ if (unreached.length > 0) {
 // A `refuted` line is the check's verdict that a law of the library does not hold, and no name is
 // excused from it: a rule a numeric licence puts outside this comparison passes under that licence
 // in the check itself, and a rule with a real counterexample is fixed, or its guard is, rather than
-// registered as known. The list that used to stand here let two names through, which is how a
-// refuted law stayed in the default set.
+// registered as known.
 const refuted = (name) => {
     const word = new RegExp(`^refuted\\s+${name}(?![A-Za-z0-9_])`)
     return stdout.split('\n').some((line) => word.test(line.trim()))
