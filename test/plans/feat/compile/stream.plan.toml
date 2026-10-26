@@ -625,3 +625,72 @@ expect_output_contains = ["has type '(int, int..)?'"]
 expect_output_not_contains = ["UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
+[[tests]]
+name = "stream.for_loop"
+desc = "`for x in s` over a stream expands into the `while` the graph already has: the rounds are the pulls of the stream`s step function, the element is read out of the pull, the body gives the state of the next round and the round ends by pulling the element that follows. The case walks a hand-written stream through the three shapes (one state, the empty stream, and a head that wrote a condition) and through two states."
+kind = "behavior"
+case = "../../../cases/compile/stream/for_loop.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["6", "0", "3", "3 6"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.for_loop_fvm"
+desc = "The same case through `std::opt::inline std::fvm`: a loop over a stream is an ordinary LOOP node with an ordinary CALL per round, so the bytecode back end runs it unchanged."
+kind = "behavior"
+case = "../../../cases/compile/stream/for_loop.cml"
+args = ["${case}", "std::opt::inline", "std::fvm"]
+expect_exit = 0
+expect_stdout_contains = ["6", "0", "3", "3 6"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.for_loop_jit"
+desc = "The same case through `std::opt::inline std::opt std::jit`: the JIT back end runs the same LOOP node, so the four back ends agree on a loop over a stream."
+kind = "behavior"
+case = "../../../cases/compile/stream/for_loop.cml"
+args = ["${case}", "std::opt::inline", "std::opt", "std::jit"]
+expect_exit = 0
+expect_stdout_contains = ["6", "0", "3", "3 6"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.for_loop_prl"
+desc = "The same case through `std::opt std::prl`: the parallel back end runs the same LOOP node, so the four back ends agree on a loop over a stream."
+kind = "behavior"
+case = "../../../cases/compile/stream/for_loop.cml"
+args = ["${case}", "std::opt", "std::prl"]
+expect_exit = 0
+expect_stdout_contains = ["6", "0", "3", "3 6"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+[[tests]]
+name = "stream.for_loop_gir"
+desc = "The graph `for x in s` over a stream becomes, printed before anything runs: the expansion is a LOOP node of the form the graph already has, so the shape is a reading rather than a belief."
+kind = "behavior"
+case = "../../../cases/compile/stream/for_loop.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+expect_stdout_contains = ["LOOP"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+[[tests]]
+name = "stream.tuple_stream"
+desc = "A tuple may hold a stream: building one and reading the other item out of it is what `tee` and a loop carrying a stream beside its state need, so the form is pinned here."
+kind = "behavior"
+case = "../../../cases/compile/stream/tuple_stream.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["1"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000

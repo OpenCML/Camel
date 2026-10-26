@@ -99,6 +99,7 @@ error InvalidAge: age is negative
 - The other reading holds too: **exactly that** signature makes a function value a `T..` (`let s: int.. = step(3)`), any other signature does not, and a `T..` is not converted from anything else. `T..` and its step signature are two writings of one runtime value, and the conversion moves nothing.
 - Consuming is a pull through that signature: `s()` pulls one element. A stream is a value and is pure, so pulling the same stream value twice answers the same element, and **the consumer holds the rest it was handed and passes it on** -- an empty stream is one that answers `null` at once (see [7.3.1](#731-yield)).
 - `s()` takes no arguments: the step signature has none, and `s(1)` is an ordinary mismatch report.
+- A stream writes directly in a `for`: every round of `for x in s` is one pull, expanded on the graph into the `while` that already exists (no new node kind, no new driver, no new loop form; a back end sees the LOOP node it always saw). The state of the head is the state of the loop; `x` is the element of this round's pull, and the next round's pull happens at the end of the body, after the statements the program wrote. `for x in s while c` folds `c` into the condition and asks it after "this pull has an element": the stream ending ends the loop without asking `c`. A stream that answers `null` at once is the empty stream, and no round runs (see [7.3.1](#731-yield)).
 
 ## 7.4 Functions
 

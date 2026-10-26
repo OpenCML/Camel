@@ -1,0 +1,39 @@
+/**
+ * `for x in s` where `s` is a stream (design principles 5.4): the rounds are the pulls of the
+ * stream's step function, so the loop is the `while` the graph already has -- the driver and
+ * every back end see the same LOOP node they always did. The state of the loop is the pull
+ * together with the state the program wrote: the element is read out of the pull, the program's
+ * body gives the next state, and the round ends by pulling the element that follows. A stream
+ * that answers `null` at once is the empty stream, and `for ... while c` folds `c` in after the
+ * test that the pull has a value.
+ */
+module stream_for_loop
+
+func count(n: int): int.. {
+    return step(n)
+}
+
+func step(n: int): () => (int, int..)? {
+    return () => if n > 0 then (n, step(n - 1)) else null
+}
+
+func total(s: int..): int {
+    return loop acc = 0 for x in s do acc + x
+}
+
+func bounded(s: int..): int {
+    return loop acc = 0 for x in s while acc < 3 do acc + x
+}
+
+func counted(s: int..): (int, int) {
+    return loop n = 0, acc = 0 for x in s do (n + 1, acc + x)
+}
+
+func main(): int sync {
+    println(total(count(3)))
+    println(total(count(0)))
+    println(bounded(count(3)))
+    let pair = counted(count(3))
+    println(pair.0, pair.1)
+    return 0
+}
