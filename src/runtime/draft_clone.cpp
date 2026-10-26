@@ -73,9 +73,16 @@ std::vector<std::byte> clonePayloadBytes(
     }
 
     if (sourceNode->kind == GCNodeKind::Func) {
-        // The index is into the source graph's reference table: the owner's has its own.
-        const GCFuncRef callee{
+        // The index is into the source graph's reference table: the owner's has its own. The rest
+        // of the payload is the node's own and says which captured variables the call writes, so
+        // that its value carries their new versions (GCFuncRef::reserved).
+        GCFuncRef callee{
             .ref = owner.payloadGraphIndexOf(sourceGraph->calleeIdOf(sourceRef))};
+        const auto sourceBytes = sourceGraph->nodePayloadBytes(sourceRef);
+        if (sourceBytes.size() >= sizeof(callee)) {
+            std::memcpy(&callee, sourceBytes.data(), sizeof(callee));
+            callee.ref = owner.payloadGraphIndexOf(sourceGraph->calleeIdOf(sourceRef));
+        }
         std::vector<std::byte> bytes(sizeof(GCFuncRef));
         std::memcpy(bytes.data(), &callee, sizeof(callee));
         return bytes;
@@ -131,7 +138,14 @@ std::vector<std::byte> clonePayloadBytes(
     }
 
     if (sourceNode->kind == GCNodeKind::Func) {
-        const GCFuncRef callee{.ref = owner.payloadGraphIndexOf(sourceDraft.calleeIdOf(sourceRef))};
+        // The node's own payload travels with it: which captured variables the call writes, and so
+        // which new versions its value carries (GCFuncRef::reserved).
+        GCFuncRef callee{.ref = owner.payloadGraphIndexOf(sourceDraft.calleeIdOf(sourceRef))};
+        const auto sourceBytes = sourceDraft.payloadOf(sourceRef);
+        if (sourceBytes.size() >= sizeof(callee)) {
+            std::memcpy(&callee, sourceBytes.data(), sizeof(callee));
+            callee.ref = owner.payloadGraphIndexOf(sourceDraft.calleeIdOf(sourceRef));
+        }
         std::vector<std::byte> bytes(sizeof(GCFuncRef));
         std::memcpy(bytes.data(), &callee, sizeof(callee));
         return bytes;
