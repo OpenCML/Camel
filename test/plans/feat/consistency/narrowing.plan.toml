@@ -161,12 +161,13 @@ assert(lines.some((l) => l.includes("the null case of 'match' is never taken")),
 
 [[tests]]
 name = "narrowing.shadowed_not_narrowed"
-desc = "A lambda parameter that shadows a narrowed name is not the narrowed name: `??` on it stays an error."
+desc = "A lambda parameter that shadows a narrowed name is not the narrowed name: `case null` over the plain `int` it is stays the plain match's own type error and is not reopened into a `T?` the way the narrowed name is. (`??` no longer tells the two apart: over a value that cannot be null it is allowed with the same warning either way.) Design principles 3.8."
 kind = "negative"
 case = "../../../cases/consistency/narrowing/shadowed_not_narrowed.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::TaggedOperandMismatch", ".cml:4:"]
+expect_output_contains = ["SemanticDiag::MatchCaseTypeMismatch", ".cml:4:"]
+expect_output_not_contains = ["KnownNotNull"]
 
 [[tests]]
 name = "narrowing.functions"

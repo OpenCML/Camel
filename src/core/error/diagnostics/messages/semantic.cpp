@@ -1761,7 +1761,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "KnownNotNull",
                 "'{0}' is known not to be null here (it has type '{1}'): the null case of '{2}' is never taken.",
-                "An 'if' around this narrowed the name: in the arm where it is not null it is a 'T'. Use the name directly.",
+                "Only a value of type 'T?' can be null. A plain value cannot be null, and in the arm of 'if x != null' the name 'x' is already a 'T'. Use the value directly, without testing it for null.",
             },
         },
         {

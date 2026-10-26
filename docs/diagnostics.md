@@ -2736,15 +2736,15 @@ None: choice: the operands carry tags that do not meet; the repair is in what is
 'a ?? b' needs 'a' of type 'T?' and 'b' of type 'T' (the result is a 'T') or 'T?' (the result is a 'T?', so that 'a ?? b ?? c' tries each in turn). 'a !! b' needs 'a' of type 'T!' and 'b' of type 'T' or 'T!'. 'x ?-> f' needs 'x' of type 'T!' and a function 'f' that takes a 'T'.
 ```
 
-**Example** (`test/cases/compile/tagged/err_plain_left.cml`, run as `camel test/cases/compile/tagged/err_plain_left.cml`)
+**Example** (`test/cases/compile/tagged/err_wrong_form.cml`, run as `camel test/cases/compile/tagged/err_wrong_form.cml`)
 
 ```camel
-module err_plain_left
+module err_wrong_form
 
 func main(): int sync {
     println('never printed')
-    let a = 1
-    let b = a ?? 7
+    let a = 1 as int?
+    let b = a !! 7
     println(b)
     return 0
 }
@@ -8903,27 +8903,18 @@ None: choice: the repair is a decision only the writer can make
 **Help**
 
 ```text
-An 'if' around this narrowed the name: in the arm where it is not null it is a 'T'. Use the name directly.
+Only a value of type 'T?' can be null. A plain value cannot be null, and in the arm of 'if x != null' the name 'x' is already a 'T'. Use the value directly, without testing it for null.
 ```
 
-**Example** (`test/cases/consistency/narrowing/after_narrowing.cml`, run as `camel -E short test/cases/consistency/narrowing/after_narrowing.cml ${backend}`)
+**Example** (`test/cases/compile/tagged/err_plain_left.cml`, run as `camel test/cases/compile/tagged/err_plain_left.cml`)
 
 ```camel
-func describe(x: int?, ready: bool): string {
-    return if x != null && ready then {
-        let a = x ?? 0                                  // line 7: warned, `??`
-        let b = match x { case null => -1  case v => v * 2 }   // line 8: warned, `match`
-        let c = x != null                               // line 9: warned, always true
-        let d = if x == null then 'null' else 'set'     // line 10: warned, always false
-        let e = if ready then x ?? 1 else 0             // line 11: warned, in a nested arm
-        return '{} {} {} {} {}'->format<a, b, c, d, e>
-    } else 'none'
-}
+module err_plain_left
 
 func main(): int sync {
-    println(describe(4, true))
-    println(describe(null, true))
-    println(describe(4, false))
+    let a = 1
+    let b = a ?? 7
+    println(b)
     return 0
 }
 ```

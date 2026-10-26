@@ -2668,11 +2668,12 @@ class Builder {
     std::unordered_set<node_handle_t> narrowedValues_;
     /// Whether `expr` is a name narrowed to a `T` by an `if` around it (see narrowedValues_).
     bool isNarrowedName(const GCT::node_ptr_t &expr);
-    /// `subject`, the value of the narrowed name `expr`, put back into `T?` so that a
-    /// construct written for a `T?` (`??`, a `match` with `case null`) applies to it, with a
-    /// warning that the name is known not to be null (KnownNotNull; design principles 3.8).
-    /// `construct` names the construct in the warning.
-    node_handle_t reopenNarrowedName(
+    /// `subject`, the left side `expr` of a construct written for a `T?` that cannot be null
+    /// (a plain value, or the narrowed name of `isNarrowedName`), put back into `T?` so that
+    /// the construct (`??`, a `match` with `case null`) applies to it exactly as it does to a
+    /// `T?`, with a warning that its value is known not to be null (KnownNotNull; design
+    /// principles 3.8). `construct` names the construct in the warning.
+    node_handle_t reopenKnownNotNull(
         const GCT::node_ptr_t &expr, node_handle_t subject, const GCT::node_ptr_t &at,
         const char *construct);
     /// Warns about every `T!` that is evaluated in a body and that nothing takes
