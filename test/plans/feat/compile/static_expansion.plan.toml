@@ -79,7 +79,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "match_type_unselected_names_are_resolved"
-desc = "Names in an unselected case are still resolved (H51 step 1 limitation)."
+desc = "Names in an unselected case are still resolved (a limitation of static expansion)."
 kind = "negative"
 case = "../../../cases/compile/static_expansion/match_type_unresolved.cml"
 args = ["${case}"]
@@ -640,7 +640,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "indices"
-desc = "`indices` (H51 step 6) walks the positions of a tuple value at instantiation, in both `static for` and `static loop`: `j` is an ordinary int and a compile-time key, the trip count is the tuple's arity (zero for the empty tuple, the type parameter's at instantiation for a generic), and a generator nested in a `fields` body walks a local tuple."
+desc = "`indices` walks the positions of a tuple value at instantiation, in both `static for` and `static loop`: `j` is an ordinary int and a compile-time key, the trip count is the tuple's arity (zero for the empty tuple, the type parameter's at instantiation for a generic), and a generator nested in a `fields` body walks a local tuple."
 kind = "behavior"
 case = "../../../cases/compile/static_expansion/indices.cml"
 args = ["${case}", "std::fvm"]
