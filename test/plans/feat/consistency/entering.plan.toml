@@ -286,6 +286,20 @@ expect_diagnostic_line = 2
 expect_diagnostic_column = 14
 
 [[tests]]
+name = "entering.err_error_arm_no_type"
+desc = "Without an expected type nothing joins an error value with the other arm: `let x = if c then error(...) else v` is refused (the ruling of 2026-10-26 keeps this refusal; the position of a declared T! is what makes the error arm the failing one)."
+kind = "negative"
+case = "../../../cases/consistency/entering/err_error_arm_no_type.cml"
+args = ["-E", "short", "${case}"]
+backends = ["nvm"]
+backends_agree = []
+expect_exit = 1
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
+expect_diagnostic_name = "SemanticDiag::BranchReturnTypeMismatch"
+expect_diagnostic_line = 3
+expect_diagnostic_column = 13
+
+[[tests]]
 name = "entering.arms_folded.plain"
 desc = "Arms put into T? under a constant condition, each back end: a pass that prunes the branch must find the arm's value in a slot of the joined type (progen finding F42)."
 kind = "behavior"
@@ -327,3 +341,14 @@ backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_starts_with = "7 -1\nnone b\n[] 0 [] [1, 2]\n"
+
+[[tests]]
+name = "entering.error_arm"
+desc = "An error value in a T! position is that position's failing arm (design principles 3.9): `return if c then error(...) else v` under a declared T! (the position's type reaches each arm), a `return error(...)` with no branch at all, and an error value bound in a declared T!; the kind and the message arrive in the failed arm of the call. Alike on the four back ends."
+kind = "behavior"
+case = "../../../cases/consistency/entering/error_arm.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_starts_with = "-1\n7\nBad: c was true\nvalue 7\n-1\nDirect: no branch\n"

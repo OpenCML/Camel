@@ -669,6 +669,20 @@ node_handle_t Builder::coerceTo(node_handle_t node, Type *target, const GCT::nod
             }
         }
     }
+    // An error value in a position of a `T!` is that type's failed form: the value `throw`
+    // gives (design principles 3.9). It is how `return if c then error(...) else v` is accepted
+    // under a declared `T!` -- the position's type is what each arm takes, and the error arm is
+    // the failing one. Without an expected type nothing joins the error value with the other
+    // arm, and the branch is still refused. This is a rule of the position, like the literal
+    // rules above, not a general entrance: `entersImplicitly` is unchanged.
+    if (TupleType *fallible = asFallible(target);
+        fallible != nullptr && source->equals(errorType())) {
+        const std::string name = bindTemporary(valueOf(node));
+        node_handle_t failed =
+            applyTagOperator(camel::core::oper::TagThrow, name, origin);
+        return nodeTypeOf(failed)->equals(fallible) ? failed
+                                                    : castNodeTo(failed, fallible, origin);
+    }
     if (!entersImplicitly(target, source)) {
         return nullptr;
     }
