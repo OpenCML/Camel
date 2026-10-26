@@ -387,8 +387,8 @@ camel fired.cml fired::simplify std::gir
             label="distance";
             F04 [label="ARGS", type="ARGS"];
             O04 [label="EXIT", type="EXIT"];
-            N03 [label="a", type="PORT", param_name="a", param_kind="normal", param_index="0", value_type="int"];
-            N04 [label="b", type="PORT", param_name="b", param_kind="normal", param_index="1", value_type="int"];
+            N03 [label="a", type="PORT", param_name="a", param_kind="normal", param_index="0", value_type="int", origin=73, span="14:14-14:20", srcfile="fired.cml"];
+            N04 [label="b", type="PORT", param_name="b", param_kind="normal", param_index="1", value_type="int", origin=75, span="14:22-14:28", srcfile="fired.cml"];
             N05 [label=":op/add_l", type="OPER", origin=4343, span="14:17-14:18", srcfile="fired.cml", value_type="int"];
             F04 -> N03 [label="0", type="NORM_PORT"];
             F04 -> N04 [label="1", type="NORM_PORT"];

@@ -158,14 +158,17 @@ void Builder::buildEntryCall() {
     }
 }
 
-compile_graph_ptr_t Builder::enterScope(FunctionType *funcType, const std::string &name) {
+compile_graph_ptr_t Builder::enterScope(
+    FunctionType *funcType, const std::string &name,
+    const std::vector<camel::source::origin_id_t> &parameterOrigins) {
     // A new graph is a new set of draft nodes: an access remembered for an earlier graph can
     // never be reused here (staticAccessCache_).
     staticAccessCache_.clear();
     std::string scopeName = name;
     if (name.empty()) {
         const bool atRoot = currGraph_ == rootGraph_;
-        currGraph_        = createCompileGraph(context_->graphIds().allocate(), funcType, currGraph_);
+        currGraph_        = createCompileGraph(
+            context_->graphIds().allocate(), funcType, currGraph_, "", parameterOrigins);
         if (atRoot) {
             rootSubGraphOwners_[currGraph_.get()] = unit_;
         }
@@ -185,7 +188,8 @@ compile_graph_ptr_t Builder::enterScope(FunctionType *funcType, const std::strin
             }
         }
         if (!found) {
-            found = createCompileGraph(context_->graphIds().allocate(), funcType, currGraph_, name);
+            found = createCompileGraph(
+                context_->graphIds().allocate(), funcType, currGraph_, name, parameterOrigins);
             insertGraph(name, found);
             if (currGraph_ == rootGraph_) {
                 rootSubGraphOwners_[found.get()] = unit_;
@@ -595,6 +599,9 @@ bool Builder::isPassDeclaration(const GCT::node_ptr_t &gct) {
                                      });
 }
 
+std::vector<camel::source::origin_id_t> parameterPortOrigins(
+    const context_ptr_t &context, const GCT::node_ptr_t &gct);
+
 void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
     ENTER("DECL");
     if (gct->nativeDeclaration()) {
@@ -646,7 +653,8 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
     FunctionType *funcType = tt::as_ptr<FunctionType>(type);
     rejectRedeclaredFunction(gct->name(), funcType, gct, true);
     rejectOperatorConflict(gct->name(), funcType, gct);
-    compile_graph_ptr_t graph = enterScope(funcType, gct->name());
+    compile_graph_ptr_t graph =
+        enterScope(funcType, gct->name(), parameterPortOrigins(context_, gct));
     if (const auto *when = GCT::Tree::of(gct)->whenOf(gct)) {
         // The declaration's condition, kept while the declarations of one name are read: the
         // next declaration of the name is compared with this one before either body is built
@@ -662,6 +670,55 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
 
     LEAVE("DECL");
     return nullptr;
+}
+
+/// The positions the parameters of a function are written at, `with` ones first, by slot. The
+/// semantic parts the parameter list was parsed into carry them (one per parameter, with its
+/// slot); the ports of the function's graph are made from this list, so that what is said about a
+/// parameter -- the refusal of a function value that came in through it -- points at the
+/// parameter itself.
+///
+/// A declaration is two nodes before it is one graph (design principles 6.4, step 1): the node the
+/// declaration is read from and the node its body is built from may be entered in either order,
+/// and the parameter list was parsed once, under the declaration they both come from. So the walk
+/// follows the derivation chain and takes the first bundle that numbers its parameters.
+std::vector<camel::source::origin_id_t> parameterPortOrigins(
+    const context_ptr_t &context, const GCT::node_ptr_t &gct) {
+    std::vector<camel::source::origin_id_t> origins;
+    if (!context || !gct) {
+        return origins;
+    }
+    auto sourceContext = context->sourceContext();
+    if (!sourceContext) {
+        return origins;
+    }
+    camel::source::origin_id_t origin = gct->origin();
+    for (int hop = 0; hop < 8 && origin != camel::source::kInvalidOriginId; ++hop) {
+        for (const camel::source::SemanticBundle *bundle :
+             {sourceContext->gctSemantic(origin), sourceContext->astSemantic(origin)}) {
+            if (bundle == nullptr) {
+                continue;
+            }
+            for (const camel::source::SemanticPart &part : bundle->parts) {
+                if (part.role != camel::source::SemanticRole::Parameter || part.slot < 0) {
+                    continue;
+                }
+                const size_t slot = static_cast<size_t>(part.slot);
+                if (origins.size() <= slot) {
+                    origins.resize(slot + 1, camel::source::kInvalidOriginId);
+                }
+                if (origins[slot] == camel::source::kInvalidOriginId) {
+                    origins[slot] = part.origin;
+                }
+            }
+        }
+        if (!origins.empty()) {
+            return origins;
+        }
+        const camel::source::OriginRecord *record = sourceContext->origin(origin);
+        origin = record != nullptr ? record->parent : camel::source::kInvalidOriginId;
+    }
+    return origins;
 }
 
 compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
@@ -718,7 +775,7 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     rejectRedeclaredFunction(name, funcType, gct, true);
     rejectOperatorConflict(name, funcType, gct);
     staticGrantsOf(gct); // its decorators are resolved here, where they are written
-    compile_graph_ptr_t graph = enterScope(funcType, name);
+    compile_graph_ptr_t graph = enterScope(funcType, name, parameterPortOrigins(context_, gct));
     if (const auto *when = GCT::Tree::of(gct)->whenOf(gct)) {
         // The condition belongs to the function, not to its instance: it is evaluated when
         // this graph is selected by a call, where the types and the `with` arguments of the

@@ -317,20 +317,38 @@ MacroEvaluator::tryEvaluate(const MacroCandidate &candidate, std::ostream &os) {
     } catch (const RuntimeFault &fault) {
         (void)os;
         // A fault of an operator the evaluation ran: its diagnostic name and message, as the
-        // run would report it, at the place the fault names when it names one.
-        const DiagInfo info = getDiagInfo(fault.diag());
-        std::string message = info.message;
-        for (size_t i = 0; i < fault.formatArgs().size(); ++i) {
-            const std::string slot = std::format("{{{}}}", i);
-            for (size_t at = message.find(slot); at != std::string::npos;
-                 at        = message.find(slot, at + fault.formatArgs()[i].size())) {
-                message.replace(at, slot.size(), fault.formatArgs()[i]);
+        // run would report it, at the place the fault names when it names one. A fault that
+        // refused several places carries one report per place (see CarriedReport), and each of
+        // them is collected as a refusal of its own: an expansion happens at compile time, where
+        // the ruling of 2026-10-24 collects every refusal in one round instead of stopping at the
+        // first. What a run shows of the collected ones is one fault, the first in source order,
+        // with the rest as its related positions (the ruling of 2026-10-26; `reportFailures`).
+        const DiagInfo info  = getDiagInfo(fault.diag());
+        const auto rendered = [&](const std::vector<std::string> &args) {
+            std::string message = info.message;
+            for (size_t i = 0; i < args.size(); ++i) {
+                const std::string slot = std::format("{{{}}}", i);
+                for (size_t at = message.find(slot); at != std::string::npos;
+                     at        = message.find(slot, at + args[i].size())) {
+                    message.replace(at, slot.size(), args[i]);
+                }
+            }
+            return message;
+        };
+        if (fault.carried().empty()) {
+            noteFailure(
+                candidate,
+                std::format("{}: {}", info.name, rendered(fault.formatArgs())),
+                fault.hint().cachedOrigin);
+        } else {
+            for (const camel::core::error::CarriedReport &report : fault.carried()) {
+                noteFailure(
+                    candidate,
+                    std::format("{}: {}", info.name, rendered(report.formatArgs)),
+                    report.origin,
+                    report.related);
             }
         }
-        noteFailure(
-            candidate,
-            std::format("{}: {}", info.name, message),
-            fault.hint().cachedOrigin);
         return std::nullopt;
     } catch (const std::exception &e) {
         (void)os;
@@ -388,7 +406,8 @@ bool firstReport(uint64_t origin, const std::string &text) {
 } // namespace
 
 void MacroEvaluator::noteFailure(
-    const MacroCandidate &candidate, std::string reason, camel::source::origin_id_t origin) {
+    const MacroCandidate &candidate, std::string reason, camel::source::origin_id_t origin,
+    std::vector<camel::core::error::DiagLabel> related) {
     while (!reason.empty() && (reason.back() == '.' || reason.back() == '\n')) {
         reason.pop_back(); // the diagnostic's message ends the sentence itself
     }
@@ -406,34 +425,60 @@ void MacroEvaluator::noteFailure(
             range.start.character + 1);
     }
     failures_.push_back(Failure{
-        .origin = elsewhere ? origin : callOrigin,
-        .callee = calleeNameOf(*program_, candidate.runtimeGraph, candidate.nodeRef),
-        .reason = std::move(reason),
+        .origin  = elsewhere ? origin : callOrigin,
+        .callee  = calleeNameOf(*program_, candidate.runtimeGraph, candidate.nodeRef),
+        .reason  = std::move(reason),
+        .related = std::move(related),
     });
 }
 
 void MacroEvaluator::reportFailures() {
-    // Design principles 8: a failed evaluation is a fault like a fault during the run of any
-    // pass, not a compile error. It is recorded through the run-time sink, at the call (or at
-    // the place the evaluation reports), with the stage of the pass that was running. The
-    // program is not run: the sink's error limit stops the pipeline after this first fault.
+    // Every call this expansion refused is collected here. What a run shows of them is one fault:
+    // a refusal is a fault like a fault during the run of any pass (design principles 8), and a
+    // fault during the run ends the run, so the run-time sink still ends it at the first. The
+    // ruling of 2026-10-26 (`how-many-macro-refusals-the-user-sees`) says what that one fault
+    // carries: the first refusal in source order is its own place and reason, and every other
+    // refusal the expansion collected is a related position of it, one entry each, with its own
+    // position and its own reason -- never a count of the rest, and never a rule of its own in the
+    // CLI. The macro call and the stage of the pass that was running are recorded with it.
     std::vector<Failure> failures = std::move(failures_);
     failures_.clear();
-    for (const Failure &failure : failures) {
-        const auto origin = static_cast<camel::source::origin_id_t>(failure.origin);
-        RuntimeFault fault(
-            RuntimeDiag::MacroEvaluationFailed,
-            {failure.callee, failure.reason},
-            "",
-            nullptr,
-            ExecutionSiteHint{.cachedOrigin = origin});
-        ExecutionSite site;
-        site.cachedOrigin = origin;
-        Diagnostic diagnostic =
-            context_->runtimeErrorReporter()->describe(fault, site);
-        diagnostic.stage = "pass:std::macro";
-        context_->runtimeDiagSink()->add(std::move(diagnostic));
+    if (failures.empty()) {
+        return;
     }
+    const Failure &first = failures.front();
+    const auto firstOrigin = static_cast<camel::source::origin_id_t>(first.origin);
+    std::vector<camel::core::error::DiagLabel> related = first.related;
+    for (size_t i = 1; i < failures.size(); ++i) {
+        const Failure &failure = failures[i];
+        const auto origin       = static_cast<camel::source::origin_id_t>(failure.origin);
+        related.push_back(camel::core::error::DiagLabel{
+            origin,
+            failure.reason,
+            context_->sourceContext() ? context_->sourceContext()->pathForOrigin(origin)
+                                      : std::string()});
+        // The places that refusal is about beside its own (where the value it names was chosen),
+        // as the refusal that stands at the fault's own place carries them.
+        for (const camel::core::error::DiagLabel &label : failure.related) {
+            related.push_back(label);
+        }
+    }
+    RuntimeFault fault(
+        RuntimeDiag::MacroEvaluationFailed,
+        {first.callee, first.reason},
+        "",
+        nullptr,
+        ExecutionSiteHint{.cachedOrigin = firstOrigin},
+        RuntimeFaultPolicy::AbortCurrentExecution,
+        // The places this fault is about beside its own: the reporter attaches them to the
+        // diagnostic (`RuntimeErrorReporter::describe`).
+        {camel::core::error::CarriedReport{
+            .origin = firstOrigin, .formatArgs = {first.reason}, .related = std::move(related)}});
+    ExecutionSite site;
+    site.cachedOrigin = firstOrigin;
+    Diagnostic diagnostic = context_->runtimeErrorReporter()->describe(fault, site);
+    diagnostic.stage      = "pass:std::macro";
+    context_->runtimeDiagSink()->add(std::move(diagnostic));
 }
 
 void MacroEvaluator::noteNotStatic(
