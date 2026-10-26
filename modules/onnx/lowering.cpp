@@ -545,20 +545,32 @@ Value lowerSliceSub(const LowerContext &ctx) {
         shape);
 }
 
+/// A rank-0 int64 constant: the shape `Range` reads its bounds in, and the scalar index with
+/// which `Gather` reads one entry of a shape.
+std::string int64Scalar(Emitter &e, int64_t value) {
+    return e.operand(
+        Value::constant(rtdata::toSlot<rtdata::Int64>(value), type::Type::Int64()),
+        TypeCode::Int64);
+}
+
 /**
  * The reverse of the core's slice: `tangent/scatter_slice_arr(dx, like, axis, start, end, step,
  * written)` is an array of `like`'s shape whose sliced positions hold `dx` and whose other
- * positions are zero. A forward slice gathers a range, so its adjoint writes that same range into
- * an array of zeros, and ONNX says exactly that with `Pad` of `dx`: as many zeros before the axis
- * as the slice skipped and as many after it as the slice left, which is the value's shape again.
- * Nothing has to be added to the zeros, because the padded `dx` already fills the range.
+ * positions are zero. A slice takes the positions its step names along one axis -- `start`,
+ * `start + step`, ... -- so its adjoint writes each element of `dx` at the position the step
+ * names for it, and ONNX says exactly that with `ScatterND`: the indices are coordinate tuples,
+ * and the tuple of a gradient element is its own coordinates with the axis one replaced by the
+ * position the range takes there, which is the arithmetic the core's own `parentIndexOfSlice`
+ * does. `Pad` can only write a contiguous range, so it writes the positions of a step of 1 and no
+ * other step's; computing the positions from the start and the step is the one reading that
+ * writes every step (design principles 5.4).
  *
- * The step is the constant 1, and the counts come from the bounds the source wrote: `start` zeros
- * before the axis and `extent - end` after it. A bound the program did not write counts nothing --
- * the start of the axis is nothing before it and its end is nothing after it -- so a slice that
- * runs to the end of an extent only the run knows still exports. A stepped reverse slice names
- * positions a range does not (`a`, `a + step`, ...), which `Pad` cannot write, and it is refused
- * here with that reason rather than exported as a wrong array.
+ * The count and every coordinate but the axis one come from `dx`'s own shape: a slice's gradient
+ * is an array of the slice's shape, so its extents are the range's count and the parent's other
+ * extents. That is why no bound and no parent extent has to be an export-time constant here, and
+ * why a slice whose end is not written exports like any other. The start of a slice whose source
+ * did not write one is the axis' first position, or its last one for a backward slice, which is
+ * the position that walk begins at (5.4).
  */
 Value lowerScatterSliceArr(const LowerContext &ctx) {
     Emitter &e = ctx.emitter();
@@ -586,36 +598,65 @@ Value lowerScatterSliceArr(const LowerContext &ctx) {
                 rank));
     }
     const int64_t step = ctx.constInt(5);
-    if (step != 1) {
-        throw ExportError(
-            std::format(
-                "':tangent/scatter_slice_arr': the adjoint of a slice whose step is {} is not "
-                "supported: the positions a step names are not the range ONNX Pad writes",
-                step));
+    if (step == 0) {
+        throw ExportError("':tangent/scatter_slice_arr': a slice step must not be 0");
     }
-    const int64_t written = ctx.constInt(6);
-    const int64_t before  = (written & 2) != 0 ? ctx.constInt(3) : 0;
-    int64_t after         = 0;
-    if ((written & 1) != 0) {
-        const std::optional<int64_t> extent = (*facts.shape)[static_cast<size_t>(at)];
-        if (!extent.has_value()) {
-            throw ExportError(
-                "':tangent/scatter_slice_arr': the slice's end is a constant but the axis' extent "
-                "is not known at export time, so the zeros after the slice are not either");
+    const bool wroteStart = (ctx.constInt(6) & 2) != 0;
+    // The element type of the gradient is the element type of the value the slice came from: the
+    // tangent of an array is the array of its elements' tangents (design principles 9.9).
+    const std::optional<TypeCode> dtype = facts.dtype ? facts.dtype : ctx.elementDtype();
+
+    // The array the scatter writes into: the zeros of the value's shape, in that element type.
+    // One zero expanded, rather than an array of zeros written out: the shape is what the run
+    // gives the value, not an export-time constant.
+    const std::string shape = e.node("Shape", {ctx.input(1)});
+    const std::string zeros = e.node(
+        "Expand",
+        {e.operand(
+             Value::constant(
+                 rtdata::toSlot(static_cast<rtdata::Float64>(0.0)), type::Type::Float64()),
+             dtype),
+         shape});
+
+    // The first position the range takes: the one the source wrote, or, when it wrote none, the
+    // axis' own first position -- its last one for a backward slice.
+    std::string start = int64Scalar(e, 0);
+    if (wroteStart) {
+        start = ctx.input(3, TypeCode::Int64);
+    } else if (step < 0) {
+        start = e.node(
+            "Sub",
+            {e.node("Gather", {shape, int64Scalar(e, at)}, {intAttr("axis", 0)}),
+             int64Scalar(e, 1)});
+    }
+
+    // The index of every element of the gradient: one column per coordinate, each column that
+    // coordinate's own range broadcast along the other dimensions, with the axis' column holding
+    // the position the range takes there. The last dimension of the indices picks the coordinate.
+    const std::string gradientShape = e.node("Shape", {ctx.input(0)});
+    std::string indices;
+    for (int64_t d = 0; d < rank; ++d) {
+        const std::string extent =
+            e.node("Gather", {gradientShape, int64Scalar(e, d)}, {intAttr("axis", 0)});
+        std::string positions = e.node("Range", {int64Scalar(e, 0), extent, int64Scalar(e, 1)});
+        if (d == at) {
+            positions =
+                e.node("Add", {e.node("Mul", {int64Scalar(e, step), positions}), start});
         }
-        after = *extent - ctx.constInt(4);
-    }
-    std::vector<int64_t> pads(static_cast<size_t>(2 * rank), 0);
-    pads[static_cast<size_t>(at)]        = before;
-    pads[static_cast<size_t>(at + rank)] = after;
-    // Pad-11 takes the counts as an input (which is also where a computed count would go);
-    // before that they are the `pads` attribute.
-    if (ctx.opset() >= 11) {
-        return Value::symbolic(
-            e.node("Pad", {ctx.input(0), e.int64s(pads)}), facts.dtype, facts.shape);
+        std::vector<int64_t> axes;
+        for (int64_t k = 0; k <= rank; ++k) {
+            if (k != d) {
+                axes.push_back(k);
+            }
+        }
+        std::vector<int64_t> column(static_cast<size_t>(rank), 0);
+        column[static_cast<size_t>(d)] = 1;
+        const std::string term = e.node(
+            "Mul", {e.node("Unsqueeze", {positions, e.int64s(axes)}), e.int64s(column)});
+        indices = indices.empty() ? term : e.node("Add", {indices, term});
     }
     return Value::symbolic(
-        e.node("Pad", {ctx.input(0)}, {ints("pads", pads)}), facts.dtype, facts.shape);
+        e.node("ScatterND", {zeros, indices, ctx.input(0)}), facts.dtype, facts.shape);
 }
 
 /// Reduction over one axis. Opset 18 moved `axes` from an attribute to an input for every
@@ -1246,8 +1287,10 @@ LoweringRegistry::LoweringRegistry() {
     // slice in a program reaches this lowering.
     add(":op/slice_sub", lowerSliceSub, 10);
     // The same operator's adjoint, which a training step's backward pass builds (the scatter is
-    // the reverse of the forward slice, not a gradient operator of ONNX).
-    add(":tangent/scatter_slice_arr", lowerScatterSliceArr, 10);
+    // the reverse of the forward slice, not a gradient operator of ONNX). It writes the positions
+    // with `ScatterND` and computes them with `Range`, opset 11 operators, whose columns are
+    // broadcast with an `Unsqueeze` that takes its axes as an input (opset 13).
+    add(":tangent/scatter_slice_arr", lowerScatterSliceArr, 13);
     addGradientLowerings(add);
     add("math:sqrt", scalarOp("Sqrt", 1));
 
