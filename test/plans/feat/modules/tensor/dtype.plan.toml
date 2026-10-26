@@ -410,3 +410,84 @@ expect_exit = 0
 expect_stdout = "17.0\n17.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+[[tests]]
+name = "mask_bool_times_f32"
+desc = "A mask is a bool array, and a bool is an element type like any other: `mask * x` is a mixed pair with no arm (design principles 5.1) and the call is refused, naming the conversion to write. The rule is the same for every pair of element types; this one is not about the two float widths."
+kind = "negative"
+case = "../../../../cases/modules/tensor/dtype/mask_bool_times_f32.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["the two tensor operands have different element types ('f32' and 'bool')", "no implicit conversion between numeric types"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "mask_written_conversion"
+desc = "The two writings a mask is read with once the conversion is written: `where(mask, x, 0.0)` selects what the mask keeps, and `x * cast(mask, \"f32\")` reads the mask as the number it stands for. Both compute in the tensor's element type and answer the numbers the mask idiom always gave."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/dtype/mask_written_conversion.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout = "4.0\n4.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "int_beside_f32_tensor"
+desc = "An integer is an element type like any other on the array side: `i64[..] * f32[..]` states two of them and matches no arm (design principles 5.1), whatever the values would fit, and the report names the conversion to write."
+kind = "negative"
+case = "../../../../cases/modules/tensor/dtype/int_beside_f32_tensor.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["the two tensor operands have different element types ('f32' and 'int')", "no implicit conversion between numeric types"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "int_written_conversion"
+desc = "The integer operand with its conversion written: `x * cast(k, \"f32\")` computes in the tensor's element type and answers the values the program asked for (design principles 5.1)."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/dtype/int_written_conversion.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout = "20.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "compare_mixed_width"
+desc = "A comparison reads its two operands at one element type, the rule of the arithmetic around it (design principles 4.2 and 5.1): `f64[..] === f32[..]` matches no arm, so the elementwise comparison is refused rather than answered at a width the program did not write."
+kind = "negative"
+case = "../../../../cases/modules/tensor/dtype/compare_mixed_width.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["the two tensor operands have different element types ('float' and 'f32')", "no implicit conversion between numeric types"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "matmul_mixed_width"
+desc = "A product is computed in the one element type its two arrays state, so `f64[..] @ f32[..]` is the mixed pair that matches no arm (design principles 5.1), the same answer the arithmetic gives; the shape rule is untouched by it."
+kind = "negative"
+case = "../../../../cases/modules/tensor/dtype/matmul_mixed_width.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_output_contains = ["the two tensor operands have different element types ('float' and 'f32')", "no implicit conversion between numeric types"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "linalg_written_conversion"
+desc = "The product and the linear layer with the conversion written: `cast(x, \"f64\") @ w` computes in f64 because that is what the program wrote, and a bias is passed at the tensor's own element type rather than beside it (design principles 5.1). Both answer the numbers the same call answered when the widths were silently widened."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/dtype/linalg_written_conversion.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout = "10.0\n54.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
