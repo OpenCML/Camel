@@ -4,24 +4,32 @@
 /**
  * The properties of types that an applicability condition asks about. These are ordinary Camel
  * functions: each one matches the type it is given with `match type` and returns a constant, so
- * `func f::<T>(x: T) when is_numeric::<T>()` is applicable exactly where `T` is a number.
+ * `func f::<T>(x: T) when is_float::<T>()` is applicable exactly where `T` is a float. There is
+ * no run-time inspection of a type: a predicate is settled when the call is compiled.
+ *
+ * One family, one spelling: `is_<property>::<T>()` asks one type, and `is_same::<T, U>()` asks two.
+ * The identity predicates (`is_integer`, `is_float`, `is_complex`, `is_string`, `is_bool`,
+ * `is_function`) carry the `match type` cases; the others ask them (`is_numeric`, `is_ordered`,
+ * `is_plain`), so a type is named in one place and a new integer width is added to `is_integer`
+ * alone. A single type (`i32`, `f32`, `int`) is asked with `is_same`.
  *
  * `match type` compares a type's identity as well as its shape (design principles 5.5): the
  * cases below name the types the language spells (`int`, `i32`, `float`, `f32`, `bf16`, `f16`,
  * `c64`, `c128`, `string`, `bool`), and `case func` is the shape of every function type.
- *
- * A type is named once: the family predicates (`is_integer`, `is_float`, `is_complex`,
- * `is_string`, `is_bool`) carry the identity cases, and `is_numeric` and `is_ordered` ask them
- * instead of listing the types again, so a new integer width is added in one place.
- *
- * `bf16` and `f16` are floating-point types (design principles 7.3): a tensor
- * stores an element in one of them, every kernel computes in f32 and rounds once, and the
- * language itself gives them what it gives `f32`: literals, a written conversion (`bf16(x)`,
- * `f16(x)`), scalar arithmetic and comparison, and arrays of them. They belong to
+ * `bf16` and `f16` are floating-point types (design principles 7.3), so they belong to
  * `is_float` and inherit `is_numeric` and `is_ordered` from it.
  */
 
-module types
+/// True when `T` and `U` are the same type. Identity, not shape: two named types with the same
+/// fields are different, `i32` and `int` are different.
+/// @example is_same::<int, int>()    // true
+/// @example is_same::<i32, int>()    // false
+export func is_same::<T, U>(): bool {
+    return match type T {
+        case U => true
+        case _ => false
+    }
+}
 
 /// True when `T` is an integer type (`int` is 64-bit, `i32` is 32-bit).
 /// @example is_integer::<int>()    // true
@@ -64,14 +72,21 @@ export func is_complex::<T>(): bool {
 /// @example is_numeric::<string>()    // false
 /// @example is_numeric::<c64>()    // true
 export func is_numeric::<T>(): bool {
-    return is_integer::<T>() || is_float::<T>() || is_complex::<T>()
+    return is_real::<T>() || is_complex::<T>()
+}
+
+/// True when `T` is a real number: an integer or a float. A complex number is not.
+/// @example is_real::<float>()    // true
+/// @example is_real::<c64>()    // false
+export func is_real::<T>(): bool {
+    return is_integer::<T>() || is_float::<T>()
 }
 
 /// True when `T` has a total order: the number types, `string` and `bool`.
 /// @example is_ordered::<string>()    // true
 /// @example is_ordered::<bool>()    // true
 export func is_ordered::<T>(): bool {
-    return is_integer::<T>() || is_float::<T>() || is_string::<T>() || is_bool::<T>()
+    return is_real::<T>() || is_string::<T>() || is_bool::<T>()
 }
 
 /// True when `T` is a function type, whatever its parameters and result.

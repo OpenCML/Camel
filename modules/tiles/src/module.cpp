@@ -11,6 +11,7 @@
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/struct.h"
+#include "camel/core/rtdata/tagged.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
@@ -589,7 +590,15 @@ slot_t runPreferredResidentKernel(ArgsView &with, ArgsView &norm, Context &ctx) 
     return runResidentPrepared(with, std::move(program));
 }
 slot_t deviceKernel(ArgsView &, ArgsView &, Context &) {
-    return checked([] { return td::toSlot(::String::from(deviceInfo(), core::mm::autoSpace())); });
+    try {
+        return td::toSlot(::String::from(deviceInfo(), core::mm::autoSpace()));
+    } catch (const BackendUnavailable &e) {
+        // This build or this machine having no device is not a broken run: the call answers an
+        // error value of kind `DeviceUnavailable` and the caller decides how to report it. An
+        // ordinal the run named with `--devices` and that is not there is the other shape of
+        // this: it is refused at start-up, before any graph runs, and stays a fault.
+        return td::makeError("DeviceUnavailable", e.what(), "<tiles::device>");
+    }
 }
 
 bool supportedLeaves(Type *type) {

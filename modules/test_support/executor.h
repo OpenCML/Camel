@@ -4,4 +4,4 @@
 #pragma once
 #include "camel/execute/executor.h"
 
-executor_ptr_t createParaExecutor(camel::core::context::context_ptr_t ctx);
+executor_ptr_t createTestSupportExecutor(camel::core::context::context_ptr_t ctx);

@@ -262,6 +262,8 @@ add_subdirectory(modules/str)
 add_subdirectory(modules/env)
 add_subdirectory(modules/json)
 add_subdirectory(modules/para)
+# The facilities of a test, not of a program: `rendezvous` and `thread_count`.
+add_subdirectory(modules/test_support)
 add_subdirectory(modules/sim)
 add_subdirectory(modules/tensor)
 add_subdirectory(modules/tiles)

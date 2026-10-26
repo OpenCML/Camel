@@ -20,7 +20,7 @@ case = "../../../tools/import-audit.mjs"
 # `${camel}` is the compiler of the build under test, named as an argument.
 args = ["${case}", "--camel", "${camel}"]
 expect_exit = 0
-expect_stdout_contains = ["import.audit modules=27 a=0 b=2 c=25", "import.audit pyplot", "import.audit python", "import.audit array ", "import.audit resolution", "import.audit declaration"]
+expect_stdout_contains = ["import.audit modules=28 a=0 b=2 c=26", "import.audit pyplot", "import.audit python", "import.audit array ", "import.audit resolution", "import.audit declaration"]
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 120000
 
