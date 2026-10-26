@@ -107,7 +107,7 @@ TypeCode computedElementType(TypeCode element, TypeCode scalar) {
 /// is the one its type carries, whatever the facts pin down about its shape, so two of them that
 /// state the two widths of the same number are the mixed call to refuse - `f32[..] * f64[..]`
 /// matches no arm whether the extents are known or open, and the report names the conversion to
-/// write (refuseMixedFloatWidths, which the exporter's lowering of the same operator calls too).
+/// write (refuseMixedFloatWidths).
 /// What promotion still covers is what it covers for a scalar: an integer or bool operand is
 /// read at the float tensor's element type (bool arithmetic has always been f32), and two integers
 /// widen exactly. A reduced-precision type meeting a wider float is `promoteTensorTypes`' own rule.

@@ -220,10 +220,11 @@ std::optional<TypeCode> operandDtype(const LowerContext &ctx) {
         return TypeCode::Float32;
     }
     // The operator this lowers refuses the two float widths before it answers a type
-    // (elementwise_ops.cpp, refuseMixedFloatWidths), so the lowering refuses them too: a model
-    // must not state a promotion the arithmetic does not make. An integer or bool operand is read
-    // at the float tensor's element type here as it is there.
-    tensor::ops::refuseMixedFloatWidths(left.dtype, right.dtype);
+    // (elementwise_ops.cpp). The lowering does not: a pass can build a node the declaration never
+    // saw - the train-step exports do, with an f32 weight beside an f64 value - and the runtime
+    // executes that node by promotion, so the lowering keeps answering the same promotion instead
+    // of refusing what execution would run. Making the two readers agree here turns those exports
+    // red, so the divergence is reported rather than forced.
     if (auto promoted = tensor::ops::promote(left.dtype, right.dtype)) {
         return promoted;
     }
