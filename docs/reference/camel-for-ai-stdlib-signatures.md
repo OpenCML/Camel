@@ -545,14 +545,13 @@ get_char: () => string?
 clear_input_buffer: () => void
 ```
 
-**`process`** — import { ... } from process — 5 name(s)
+**`process`** — import { ... } from process — 4 name(s)
 
 ```text
 sleep: (seconds: float) => void
-exit: (code: int) => void
+exit: (code: int) => void uses process
 user_name: () => string!
 cpu_count: () => int
-thread_count: () => int
 ```
 
 **`env`** — import { ... } from env — 2 name(s)

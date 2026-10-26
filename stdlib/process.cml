@@ -14,11 +14,14 @@
 /// @example sleep(0.1)
 export func sleep(seconds: float): void
 
+/// The process as a resource: ending it is an effect on it, and a test that reads the number of its
+/// threads (`test_support::thread_count`) reads it too.
+export resource process
+
 /// Ends the program with the given exit code, after the buffered output is written and the
 /// external resources are released. Nothing that is written after the call runs.
-/// @effect ends the program
 /// @example exit(2)
-export func exit(code: int): void
+export func exit(code: int): void uses process
 
 /// The name of the user the process runs as.
 /// @effect reads the environment
@@ -30,10 +33,3 @@ export func user_name(): string!
 /// @effect reads the machine
 /// @example cpu_count()    // 8
 export func cpu_count(): int
-
-/// The number of threads this process has, the caller included: the count the operating system
-/// reports for the process, not the number of processors. A test reads it to pin how many worker
-/// threads a run creates.
-/// @effect reads the process
-/// @example thread_count()    // 1 at -t 1
-export func thread_count(): int
