@@ -3,7 +3,7 @@
 // ordinary signature that tiles::run and tiles::source specialize on.
 module tiles_core_views
 import { load_npy, save_npy, reshape, permute, sum, zeros } from tensor
-import { grad } from autodiff
+import { grad, vjp } from autodiff
 import { source, inspect, run_preferred_resident, download } from tiles
 import { get_env } from env
 let weights = reshape([1.0, -2.0, 3.0, -4.0, 5.0, -6.0] as f32[], [2, 3])
@@ -23,19 +23,19 @@ func negative_loss(): float {
     return float(sum(mark(sum(x, -2)) * weights))
 }
 with <x: f32[..]>
-func keep_loss(): float { return sum(sum(x, -2, true)) }
+func keep_loss(): float { return float(sum(sum(x, -2, true))) }
 func empty_rule(x: f32[..], dy: f32[..]): f32[..] { return reshape(dy, [3, 0]) }
 #vjp(empty_rule)
 func empty_mark(x: f32[..]): f32[..] { return x }
 with <x: f32[..]>
-func empty_loss(): float { return sum(empty_mark(sum(x, 1))) }
+func empty_loss(): float { return float(sum(empty_mark(sum(x, 1)))) }
 func wide_rule(x: f32[..], dy: f32[..]): f32[..] { return reshape(dy, [4, 5, 2]) }
 #vjp(wide_rule)
 func wide_mark(x: f32[..]): f32[..] { return x }
 with <x: f32[..]>
-func wide_loss(): float { return sum(wide_mark(sum(x, 1))) }
+func wide_loss(): float { return float(sum(wide_mark(sum(x, 1)))) }
 func main(): int sync {
-    let folder = get_env('TILES_TEST_OUT')
+    let folder = get_env('TILES_TEST_OUT') ?? ''
     let x = load_npy::<f32>(folder + '/x.npy') as f32[2, 3, 4]
     save_npy(chained(x), folder + '/chain_cpu.npy')
     save_npy(download(run_preferred_resident<chained>(x)), folder + '/chain_gpu.npy')

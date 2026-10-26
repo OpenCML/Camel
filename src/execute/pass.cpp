@@ -5,6 +5,7 @@
 #include "camel/common/scope.h"
 #include "camel/core/array/block_selftest.h"
 #include "camel/core/type/array_type_selftest.h"
+#include "camel/core/type/type_identity_selftest.h"
 #include "camel/core/debug_breakpoint.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/diagnostics/messages/semantic.h"
@@ -22,6 +23,9 @@
 #include "camel/execute/observer.h"
 #include "camel_pass.h"
 #include "camel/passes/test/chunks.h"
+#include "camel/passes/test/context_lifetime.h"
+#include "camel/passes/test/contexts.h"
+#include "camel/passes/test/derivatives.h"
 #include "camel/passes/test/edges.h"
 #include "camel/passes/test/graph_release.h"
 #include "camel/passes/test/keepfn.h"
@@ -266,6 +270,18 @@ class ArrayTypeSelfTestPass final : public GraphIRPass {
     }
 };
 
+class TypeIdentitySelfTestPass final : public GraphIRPass {
+  public:
+    explicit TypeIdentitySelfTestPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
+
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override {
+        os << "TYPE_IDENTITY_SELFTEST ok "
+           << camel::core::type::debugRunTypeIdentitySelfTest() << "\n";
+        return program;
+    }
+};
+
 class GcRememberedSetPass final : public GraphIRPass {
   public:
     explicit GcRememberedSetPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
@@ -481,6 +497,7 @@ PassMaker taskflowPass() {
         options.bytecode  = args.getBool("bytecode");
         options.gcStats   = static_cast<int>(args.getInt("gc_stats"));
         options.gcStress  = args.getBool("gc_stress");
+        options.blockingLeaves = args.getBool("blocking_leaves");
         auto pass         = std::make_unique<TaskflowExecSchedPass>(ctx);
         pass->setOptions(options);
         return pass;
@@ -522,6 +539,7 @@ void registerCoreKernels() {
     registerCoreKernel("topo_node_seq", makePass<TopoNodeSeqDumpPass>());
     registerCoreKernel("tfdump", makePass<TfDumpPass>());
     registerCoreKernel("arraytype", makePass<ArrayTypeSelfTestPass>());
+    registerCoreKernel("identitytype", makePass<TypeIdentitySelfTestPass>());
     registerCoreKernel("gc::snapshot", makePass<GcSnapshotPass>());
     registerCoreKernel("gc::verify", makePass<GcVerifyPass>());
     registerCoreKernel("gc::minor", makePass<GcMinorPass>());
@@ -606,6 +624,7 @@ const std::map<std::string, std::string> passAliases = {
     // written, and the old spelling keeps resolving to it.
     {"std::null", "std::nop"},
     {"std::type::array", "std::arraytype"},
+    {"std::type::identity", "std::identitytype"},
     {"std::cxx", "std::cpp"},
     {"std::cppmod", "std::cpp::module_file"},
     {"std::cppinspect", "std::cpp::inspect"},
@@ -893,6 +912,9 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kEdgesOkTestPass, EdgesOkTestPass),
         TEST_PASS(kCommitConflictTestPass, CommitConflictTestPass),
         TEST_PASS(kKeepFnTestPass, KeepFnTestPass),
+        TEST_PASS(kContextLifetimeTestPass, ContextLifetimeTestPass),
+        TEST_PASS(kContextsTestPass, ContextsTestPass),
+        TEST_PASS(kDerivativesTestPass, DerivativesTestPass),
         TEST_PASS(kCommitMergeTestPass, CommitMergeTestPass),
         TEST_PASS(kEdgesOrderOkTestPass, EdgesOrderOkTestPass),
         TEST_PASS(kEdgesOrderPureTestPass, EdgesOrderPureTestPass),
@@ -1893,6 +1915,19 @@ PassApplyResult applyPassesDetailed(
                 ctx->rtmDiags()->of(RuntimeDiag::PassInternalError).commit(p, what);
                 CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (internal error)", p);
                 return {nullptr, PassApplyStatus::Failed};
+            }
+            // A pass is `(f: F) => F!` (design principles 9.1): a pass that cannot produce the
+            // program ends with an error value instead of a diagnostic. The pipeline stops at that
+            // pass -- nothing after it runs, the fallback list included -- and the value is handed
+            // to the driver that ran the list, which reports it the way an error value nobody
+            // handled is (3.9): on standard error, with the exit code the run ends with
+            // (reportPassErrorValue). The value is read here, inside the same safepoint window as
+            // `apply`, and the driver reports it before the next one, so nothing collects it in
+            // between.
+            if (pass->hasErrorValue()) {
+                const slot_t error = pass->errorValue();
+                CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (error value)", p);
+                return {nullptr, PassApplyStatus::Errored, error};
             }
             camel::core::mm::autoSpace().safepoint(std::format("after pass {}", p));
             // What the pass had to say about the program, before the next pass runs it.

@@ -6,6 +6,7 @@
 #include "camel/core/operator_table.h"
 #include "camel/core/tags.h"
 #include "camel/core/type/intern.h"
+#include "camel/core/type/text.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/draft_writes.h"
 
@@ -179,6 +180,15 @@ slot_t canonicalConstant(slot_t value, const camel::core::type::Type *type) {
     default:
         return value;
     }
+}
+
+/// Whether two constants are the same: the same type -- the same `Type`, by its canonical id, not
+/// by the address of whichever object states it, as the rest of this file compares types -- and the
+/// same value bits (see canonicalConstant). One predicate for every place a constant is compared.
+bool sameConstantValue(
+    slot_t a, const camel::core::type::Type *ta, slot_t b, const camel::core::type::Type *tb) {
+    return camel::core::type::sameCanonicalType(ta, tb) &&
+           canonicalConstant(a, ta) == canonicalConstant(b, tb);
 }
 
 /// The bytes a constant is keyed and compared by: its value's bits, with the bits that are not the
@@ -1040,6 +1050,17 @@ DraftWritings::extract(const CostModel &model, camel::core::context::Context *co
     for (uint32_t r = 0; r < draft_.regionCount(); ++r) {
         regionResults.push_back(valueOf(draft_.region(r).result));
         select(regionResults.back());
+        // A control region is entered with all its ports, as a function with all its parameters:
+        // a loop condition that reads one state of two still has a port for the other. The ports
+        // stay whether or not something in the region reads them (the graph check requires every
+        // port of a control region; an annotation region may lose one a rewrite removed).
+        const GCRegionKind kind = draft_.region(r).kind;
+        if (kind == GCRegionKind::Arm || kind == GCRegionKind::LoopCond ||
+            kind == GCRegionKind::LoopBody) {
+            for (gc_node_ref_t port : draft_.regionPortsOf(r)) {
+                select(port);
+            }
+        }
     }
     for (size_t at = 0; at < work.size(); ++at) {
         // The other writings of this value that waited for something: the writing that stays waits
@@ -1132,6 +1153,19 @@ DraftWritings::extract(const CostModel &model, camel::core::context::Context *co
     }
     for (gc_node_ref_t node = 0; node < slots; ++node) {
         if (draft_.alive(node) && !selected[node]) {
+            // Replacing a node hands its sync edge and its order edges to the replacement
+            // (docs/design/effects/edges.cn.md 4, the rule for the three kinds): the statements
+            // written after the writing being folded away wait for the writing that takes its value
+            // instead of losing the edge with the node, and it is entered from where the folded
+            // writing stood. The marks the sync kind needs and the control edge beside it are
+            // `handChainPlaceTo`'s, the same call the branch dissolve makes
+            // (src/passes/opt/generic/generic.cpp); a node a chain does not hold is erased as it
+            // was.
+            const gc_node_ref_t replacement = multi[node] ? chosen[classOf[node]] : node;
+            if (replacement != node && replacement != kInvalidNodeRef && draft_.alive(replacement) &&
+                !draft_.syncUsersOf(node).empty()) {
+                draft_.handChainPlaceTo(node, replacement);
+            }
             draft_.eraseNode(node);
             ++stats.erased;
         }
@@ -1155,7 +1189,7 @@ bool hasWritings(const Program &program) {
 
 const Program *extractWritings(
     const std::shared_ptr<camel::core::context::Context> &context, const Program *program,
-    const CostModel &model) {
+    const CostModel &model, bool detached) {
     if (program == nullptr || !hasWritings(*program)) {
         return program;
     }
@@ -1168,7 +1202,7 @@ const Program *extractWritings(
         DraftWritings writings(draft);
         writings.extract(model, context.get());
     }
-    return session.commit();
+    return session.commit(detached);
 }
 
 gc_node_ref_t DraftWritings::find(gc_node_ref_t node) { return store_.find(contextOf(node), node); }
@@ -1403,9 +1437,7 @@ bool DraftWritings::matchFrom(
                 // `x * 3.0 + x * 3.0` has two DATA nodes of the same value.
                 const auto a = constantOf(bind[p.var]);
                 const auto b = constantOf(item.node);
-                same = a && b && a->second == b->second &&
-                       canonicalConstant(a->first, a->second) ==
-                           canonicalConstant(b->first, b->second);
+                same = a && b && sameConstantValue(a->first, a->second, b->first, b->second);
             }
             return same && matchFrom(context, work, at + 1, bind, bound, waits, commuted, emit);
         }
@@ -1418,8 +1450,7 @@ bool DraftWritings::matchFrom(
         }
     case Pattern::Kind::Constant: {
         const auto found = constantOf(item.node);
-        if (!found || found->second != p.type ||
-            canonicalConstant(found->first, p.type) != canonicalConstant(p.value, p.type)) {
+        if (!found || !sameConstantValue(found->first, found->second, p.value, p.type)) {
             return false;
         }
         return matchFrom(context, work, at + 1, bind, bound, waits, commuted, emit);
@@ -1617,9 +1648,8 @@ bool DraftWritings::matchFrom(
                         return acceptsType(q.type, th->dataType);
                     case Pattern::Kind::Constant: {
                         const auto found = constantOf(term);
-                        return found && found->second == q.type &&
-                               canonicalConstant(found->first, q.type) ==
-                                   canonicalConstant(q.value, q.type);
+                        return found &&
+                               sameConstantValue(found->first, found->second, q.value, q.type);
                     }
                     case Pattern::Kind::Op: {
                         // A term stands for its whole class: any writing of it is a candidate,
@@ -2244,8 +2274,7 @@ RuleMiss DraftWritings::whyNot(const Rule &rule, gc_node_ref_t node) {
         }
         case Pattern::Kind::Constant: {
             const auto found = constantOf(at);
-            if (!found || found->second != p.type ||
-                canonicalConstant(found->first, p.type) != canonicalConstant(p.value, p.type)) {
+            if (!found || !sameConstantValue(found->first, found->second, p.value, p.type)) {
                 return std::format(
                     "{} is {} where the pattern writes a constant", where, nodeText(draft_, at));
             }
@@ -2456,6 +2485,15 @@ SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget 
             try {
                 made = build(rule.rhs, Match{*this, match.root, match.vars, match.remainder}, base);
             } catch (const RuleSkipped &) {
+                continue;
+            }
+            // The writings of one value share a region: extraction may put any writing of a class
+            // in the place of any other, and a node of an arm cannot stand for a value read outside
+            // the arm. A right side that is a node of another region -- a bound variable from an
+            // enclosing region, as `x + 1 => x` with `x` outside the arm of `&&` -- is therefore
+            // no writing of this value, and the equivalence is not recorded. The one-way rewrite
+            // still makes the replacement: reading an enclosing value inside an arm is a plain edge.
+            if (made != match.root && draft_.nodeRegion(made) != draft_.nodeRegion(match.root)) {
                 continue;
             }
             stats.newWritings += draft_.nodeSlotCount() - before;

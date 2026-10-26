@@ -255,6 +255,7 @@ std::string snapshotToJson(bool detailed) {
              {"lastTracedRootReferenceCount", stats.lastTracedRootReferenceCount},
              {"rememberedSetSize", stats.rememberedSetSize},
              {"rootSources", autoSp.rootSourceDescriptions()},
+             {"graphSweepers", autoSp.graphSweeperDescriptions()},
          }},
         {"foreignResources",
          {
@@ -324,6 +325,14 @@ std::string summaryToText() {
         os << "  rootSources:";
         for (const auto &source : sources) {
             os << " " << source;
+        }
+        os << "\n";
+    }
+    const auto sweepers = autoSp.graphSweeperDescriptions();
+    if (!sweepers.empty()) {
+        os << "  graphSweepers:";
+        for (const auto &sweeper : sweepers) {
+            os << " " << sweeper;
         }
         os << "\n";
     }

@@ -26,10 +26,10 @@
 #include "camel/core/operator_table.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/resource_semantics.h"
+#include "camel/core/rtdata/half.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/type.h"
 #include "camel/core/type/composite/array.h"
-#include "camel/profile/profile.h"
 #include "camel/utils/type.h"
 
 #include <algorithm>
@@ -56,6 +56,10 @@ template <typename T> bool numberLess(T a, T b) {
             return !std::isnan(a);
         if (std::isnan(a))
             return false;
+        // -0 is below +0, so that the order of two zeros does not depend on where they stand
+        // (design principles 7.7: the order `min` and `max` use).
+        if (a == b)
+            return std::signbit(a) && !std::signbit(b);
     }
     return a < b;
 }
@@ -74,6 +78,10 @@ template <typename T> bool numberLess(T a, T b) {
 template <typename Key> bool keyLess(Array *keys, Int64 a, Int64 b) {
     if constexpr (std::is_same_v<Key, String *>) {
         return keys->get<String *>(a)->compare(keys->get<String *>(b)) < 0;
+    } else if constexpr (is_reduced_float_v<Key>) {
+        // A bf16 or an f16 is ordered as the f32 it widens to, exactly.
+        return numberLess(
+            keys->dataAs<Key>()[a].toFloat(), keys->dataAs<Key>()[b].toFloat());
     } else {
         return numberLess(keys->get<Key>(a), keys->get<Key>(b));
     }
@@ -103,6 +111,8 @@ ARRAY_ARGSORT_IMPL(f, Float32)
 ARRAY_ARGSORT_IMPL(d, Float64)
 ARRAY_ARGSORT_IMPL(b, Bool)
 ARRAY_ARGSORT_IMPL(s, String *)
+ARRAY_ARGSORT_IMPL(bf, BFloat16)
+ARRAY_ARGSORT_IMPL(f6, Float16)
 
 #undef ARRAY_ARGSORT_IMPL
 
@@ -278,14 +288,11 @@ void mergeSortSlots(T *vals, size_t n, Compare comp, T *tmp) {
 // guess: an element type no declaration names never reaches an executor at all.
 template <SortAlgo Algo, typename T> Array *__doSortSlots__(Array *arr, const ArrayType *arrType, bool inPlace) {
     size_t n = arr->size();
-    // The in-place form is only taken when the block is unshared and writable; a view or an
+    // The in-place form is only taken when the storage is this value's alone; a view or an
     // imported (external) buffer means someone else sees the old order. Where the memory plan
     // could not prove the old value has no other observer, this is the answer of the array
     // itself (docs/design/arrays-memory/README.cn.md 4.3.1).
-    const bool ownStorage = inPlace && arr->canWriteInPlace();
-    if (camel::profile::enabledInline() && inPlace) {
-        camel::profile::arrayCountAnswer(ownStorage);
-    }
+    const bool ownStorage = inPlace && arr->writableInPlace();
     Array *target = ownStorage ? arr : static_cast<Array *>(arr->clone(mm::autoSpace(), arrType));
     if (n <= 1) {
         return target;
@@ -428,6 +435,8 @@ const std::pair<const char *, operator_t> kArgsortTypes[] = {
     {"l", __array_argsort_l__},
     {"f", __array_argsort_f__},
     {"d", __array_argsort_d__},
+    {"bf", __array_argsort_bf__},
+    {"f6", __array_argsort_f6__},
     {"b", __array_argsort_b__},
     {"s", __array_argsort_s__},
 };
@@ -453,6 +462,18 @@ std::unordered_map<std::string, operator_t> getArrayOpsMap() {
         // The primitives that are not sorts.
         {"flatten", __array_flatten__},
         {"unique", __array_unique__},
+        // The layout atoms and the reductions along an axis (array_axis.cpp).
+        {"shape", __array_shape__},
+        {"numel", __array_numel__},
+        {"dim", __array_dim__},
+        {"elements", __array_elements__},
+        {"to_bytes", __array_to_bytes__},
+        {"sum_axis", __array_sum_axis__},
+        {"mean_axis", __array_mean_axis__},
+        {"min_axis", __array_min_axis__},
+        {"max_axis", __array_max_axis__},
+        {"argmax_axis", __array_argmax_axis__},
+        {"argmin_axis", __array_argmin_axis__},
     };
     // The sorting family, one operator per element type (kSortTypes): `sort_<t>` returns a new
     // array (design principles 11.3) and `sort_<t>_in_place` is the form the compiler calls for
@@ -517,6 +538,17 @@ void declareArrayOperatorFacts() {
         {
             {"flatten", true},
             {"unique", true},
+            {"shape", true},
+            {"numel", true},
+            {"dim", true},
+            {"elements", true},
+            {"to_bytes", true},
+            {"sum_axis", true},
+            {"mean_axis", true},
+            {"min_axis", true},
+            {"max_axis", true},
+            {"argmax_axis", true},
+            {"argmin_axis", true},
             // The reductions' kernels are pure as the functions they execute are: the fold reads
             // the array it is given and touches nothing else. The declarations in the map above
             // name them; this is what tells the compiler what a call of one may touch. One entry

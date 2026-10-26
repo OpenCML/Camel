@@ -12,6 +12,7 @@
 #include "runtime_support.h"
 
 #include "camel/core/rtdata/base.h"
+#include "camel/execute/graph_runtime_support.h"
 
 using namespace camel::core::context;
 using namespace camel::core::rtdata;
@@ -50,6 +51,34 @@ size_t selectBranchArm(const Bytecode &bc, Frame *frame) {
         }
     }
     return bc.withCnt();
+}
+
+slot_t funcValueForCall(const BytecodeHeader *call, Frame *callerFrame, slot_t result) {
+    // A return that lands in an indirect CALL hands the callee's result on as it is: only a
+    // direct call carries the mask of the captured variables its callee writes.
+    if (!isDirectCallOpcode(call->opcode)) {
+        return result;
+    }
+    const uint32_t written = getFuncExtraWriteMask(call);
+    if (written == 0) {
+        return result;
+    }
+    auto *callee = getFuncExtraRuntimeGraph(call);
+    ASSERT(callee != nullptr, "A call that writes captured variables needs its callee's graph.");
+    // The caller's operands are its arguments in order: its norm arguments first, then its `with`
+    // arguments, which are what the callee's with-ports are passed as. The callee's with-ports
+    // are its declared `with` parameters and then its captures, in the order it made them, so
+    // they are the last withPorts().size() operands.
+    const data_arr_t args = call->directCallSrcArgs();
+    const size_t withCount = callee->withPorts().size();
+    ASSERT(args.size() >= withCount, "A call's operands must hold its `with` arguments.");
+    std::vector<slot_t> withValues;
+    withValues.reserve(withCount);
+    for (size_t i = 0; i < withCount; ++i) {
+        withValues.push_back(callerFrame->get<slot_t>(args[args.size() - withCount + i]));
+    }
+    return camel::execute::runtimeFuncValue(
+        callerFrame->typeAt<Type>(call->result), callee, written, withValues, result);
 }
 
 } // namespace camel::passes::sched::fastvm

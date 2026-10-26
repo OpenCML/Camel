@@ -236,8 +236,13 @@ class EdgeChecker {
 
     /// Two types a value can pass between: equal, or one refines the other (a tensor of a known
     /// shape and the tensor of the same element type whose shape is not known), or either may
-    /// be assigned to the other. Names of parameters and fields do not matter.
+    /// be assigned to the other. Names of parameters and fields do not matter. A node typed `void`
+    /// is a value nobody reads (the arms of a branch used as a statement, a discarded result),
+    /// which takes whatever reaches it.
     static bool compatible(Type *a, Type *b) {
+        if (a->code() == TypeCode::Void || b->code() == TypeCode::Void) {
+            return true;
+        }
         return a == b || a->equals(b) || a->unify(b) != nullptr || a->assignableFrom(b) ||
                b->assignableFrom(a);
     }
@@ -443,15 +448,18 @@ class EdgeChecker {
         };
         compare(norm, normPorts, "ordinary");
         compare(with, withPorts, "'with'");
-        const auto *calleeType = callee->funcType();
-        if (calleeType && calleeType->hasExitType() && node.dataType() &&
-            !compatible(calleeType->exitType(), node.dataType())) {
+        // What the call is: the value it hands on. That is the callee's exit type alone, unless
+        // the callee writes captured variables, and then it is the tuple of the exit value and
+        // the new version of each of them, in the callee's capture order (callValueTypeOf).
+        camel::core::type::Type *wanted = callValueTypeOf(*callee, funcWriteMaskOf(graph_, ref));
+        if (wanted != nullptr && node.dataType() != nullptr &&
+            !compatible(wanted, node.dataType())) {
             report(
                 ref,
                 std::format(
-                    "calls '{}', which returns a {}, and is a {}",
+                    "calls '{}', whose value is a {}, and is a {}",
                     callee->name(),
-                    show(calleeType->exitType()),
+                    show(wanted),
                     show(node.dataType())));
         }
     }

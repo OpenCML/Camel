@@ -13,7 +13,6 @@
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/resolver.h"
-#include "camel/profile/profile.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/type.h"
 
@@ -45,31 +44,27 @@ std::optional<Int64> constantOf(static_args_t statics, size_t index) {
 class SetFieldTypeResolver final : public FuncTypeResolver {
   public:
     std::optional<FunctionType *> resolve(
-        const type_vec_t &with, const type_vec_t &norm,
-        const ModifierSet &modifiers) const override {
-        return decide(with, norm, {}, modifiers);
+        const type_vec_t &with, const type_vec_t &norm) const override {
+        return decide(with, norm, {});
     }
 
     std::optional<FunctionType *> resolveWith(
-        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics,
-        const ModifierSet &modifiers) const override {
-        return decide(with, norm, normStatics, modifiers);
+        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics) const override {
+        return decide(with, norm, normStatics);
     }
 
     std::optional<FunctionType *> resolveForCall(
         const type_vec_t &types, Type *expectedResult, const type_vec_t &with,
-        const type_vec_t &norm, static_args_t normStatics,
-        const ModifierSet &modifiers) const override {
+        const type_vec_t &norm, static_args_t normStatics) const override {
         (void)expectedResult;
-        return types.empty() ? decide(with, norm, normStatics, modifiers) : std::nullopt;
+        return types.empty() ? decide(with, norm, normStatics) : std::nullopt;
     }
 
     std::string signature() const override { return "(aggregate: A, field: int, value: V) => A"; }
 
   private:
     std::optional<FunctionType *> decide(
-        const type_vec_t &with, const type_vec_t &norm, static_args_t statics,
-        const ModifierSet &modifiers) const {
+        const type_vec_t &with, const type_vec_t &norm, static_args_t statics) const {
         if (!with.empty() || norm.size() != 3 || norm[0] == nullptr || norm[1] == nullptr ||
             norm[1]->code() != TypeCode::Int64) {
             return std::nullopt;
@@ -98,7 +93,6 @@ class SetFieldTypeResolver final : public FuncTypeResolver {
             return std::nullopt;
         }
         FunctionTypeFactory factory;
-        factory.setModifiers(modifiers);
         factory.setExitType(result);
         for (size_t i = 0; i < norm.size(); ++i) {
             factory.addNormArg(std::format("__n{}", i), norm[i], false);
@@ -160,8 +154,8 @@ slot_t __builtin__set_index__(ArgsView &with, ArgsView &norm, Context &) {
 
 // The in-place form. The memory plan decided, for the node that names it, whether the old value
 // has an observer it can see: where it could not prove that (docs/design/arrays-memory/README.cn.md
-// 4.3.1), the array itself answers -- `canWriteInPlace` is true when the only reference to a block
-// it owns is the array's own -- and the update copies when it is not.
+// 4.3.1), the array itself answers -- `writableInPlace` is true when the storage the write would
+// reach is this value's alone (array.h) -- and the update copies when it is not.
 slot_t __builtin__set_index_in_place__(ArgsView &with, ArgsView &norm, Context &) {
     (void)with;
     auto *array           = norm.get<Array *>(0);
@@ -170,13 +164,7 @@ slot_t __builtin__set_index_in_place__(ArgsView &with, ArgsView &norm, Context &
     const slot_t val      = norm.slot(2);
     checkElementIndex(array, raw);
     const size_t index = static_cast<size_t>(raw);
-    // A slot array is handed to a second name as it is (Array::shareForSecondName), so writing it
-    // here would be seen through that name: only the array's own answer says the write is unseen.
-    const bool ownStorage = array->canWriteInPlace();
-    if (camel::profile::enabledInline()) {
-        camel::profile::arrayCountAnswer(ownStorage);
-    }
-    if (ownStorage) {
+    if (array->writableInPlace()) {
         array->setSlot(index, val, arrayType);
         return toSlot(array);
     }
@@ -199,7 +187,7 @@ const std::vector<oper_group_ptr_t> &getSetValueOperatorGroups() {
               DynamicFuncTypeResolver::create(
                   {{0, {}}, {3, {false, false, false}}},
                   "(array: T[], index: int, value: T) => T[]",
-                  [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                  [](const type_vec_t &, const type_vec_t &norm)
                       -> std::optional<Type *> {
                       if (norm.size() != 3 || norm[0] == nullptr ||
                           norm[0]->code() != TypeCode::Array || norm[1] == nullptr ||

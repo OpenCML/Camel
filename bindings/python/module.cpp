@@ -231,23 +231,51 @@ std::optional<std::string> textOf(PyObject *object, std::string &out) {
     return std::nullopt;
 }
 
+/// The class name and the text of the exception Python has set, cleared: what a message about a
+/// failed call into Python carries instead of a guess.
+std::string takePythonError() {
+    PyObject *type = nullptr, *value = nullptr, *trace = nullptr;
+    PyErr_Fetch(&type, &value, &trace);
+    PyErr_NormalizeException(&type, &value, &trace);
+    std::string text = type != nullptr ? reinterpret_cast<PyTypeObject *>(type)->tp_name : "an exception";
+    if (value != nullptr) {
+        if (PyObject *shown = PyObject_Str(value)) {
+            if (const char *utf8 = PyUnicode_AsUTF8(shown)) {
+                if (*utf8 != '\0') {
+                    text += std::string(": ") + utf8;
+                }
+            }
+            Py_DECREF(shown);
+        }
+        PyErr_Clear();
+    }
+    Py_XDECREF(type);
+    Py_XDECREF(value);
+    Py_XDECREF(trace);
+    return text;
+}
+
 /// The Camel array a Python object stands for, through DLPack. An object with `__dlpack__`
 /// (NumPy, PyTorch, CuPy, JAX) is asked for its capsule; a capsule is taken as it is, which is
 /// what the protocol says a consumer may be handed and what lets a project without any of those
-/// libraries still pass an array. Either way the capsule is consumed: its name becomes
-/// "used_dltensor" and the memory is adopted by this array, whose block releases it through the
-/// producer's deleter.
+/// libraries still pass an array. The capsule is consumed only when the import succeeds: then
+/// its name becomes "used_dltensor" and the memory is adopted by this array, whose block releases
+/// it through the producer's deleter. A capsule that was refused keeps its name, so its own
+/// destructor gives the memory back to the producer.
 std::optional<std::string> adoptArray(PyObject *object, Array *&out, const std::string &what) {
     PyObject *capsule = nullptr;
     if (PyCapsule_CheckExact(object)) {
         capsule = object;
         Py_INCREF(capsule);
     } else {
-        capsule = PyObject_CallMethod(object, "__dlpack__", nullptr);
-        if (capsule == nullptr) {
+        if (!PyObject_HasAttrString(object, "__dlpack__")) {
             PyErr_Clear();
             return "a " + what + " array must offer __dlpack__ (NumPy, PyTorch, CuPy and JAX "
                    "do), or be a DLPack capsule";
+        }
+        capsule = PyObject_CallMethod(object, "__dlpack__", nullptr);
+        if (capsule == nullptr) {
+            return "its __dlpack__ raised " + takePythonError();
         }
     }
     if (!PyCapsule_CheckExact(capsule)) {
@@ -257,13 +285,10 @@ std::optional<std::string> adoptArray(PyObject *object, Array *&out, const std::
     void *raw = PyCapsule_GetPointer(capsule, "dltensor");
     if (raw == nullptr) {
         PyErr_Clear();
+        const bool consumed = PyCapsule_IsValid(capsule, "used_dltensor") != 0;
         Py_DECREF(capsule);
-        return "its DLPack capsule does not name a dltensor";
-    }
-    if (PyCapsule_SetName(capsule, "used_dltensor") != 0) {
-        PyErr_Clear();
-        Py_DECREF(capsule);
-        return "its DLPack capsule could not be marked consumed";
+        return consumed ? "its DLPack capsule was already consumed by another importer"
+                        : "its DLPack capsule does not name a dltensor";
     }
     try {
         out = camel::core::array::fromDLPack(
@@ -272,6 +297,10 @@ std::optional<std::string> adoptArray(PyObject *object, Array *&out, const std::
     } catch (const std::exception &e) {
         Py_DECREF(capsule);
         return std::string("its DLPack tensor is not one Camel accepts: ") + e.what();
+    }
+    // The array owns the memory now: say so, so the capsule's destructor leaves it alone.
+    if (PyCapsule_SetName(capsule, "used_dltensor") != 0) {
+        PyErr_Clear();
     }
     Py_DECREF(capsule);
     return std::nullopt;
@@ -357,9 +386,9 @@ std::optional<std::string> convertArgument(PyObject *object, Type *declared, Arg
 
 // ---- result conversion -----------------------------------------------------
 
-/// The capsule destructor the DLPack protocol prescribes: a consumer that has renamed the capsule
-/// to "used_dltensor" has taken the memory over, and this one has not, so it releases it here.
-/// `toDLPack` retained the block, and the managed tensor's deleter drops that reference.
+/// The capsule destructors the DLPack protocol prescribes: a consumer that has renamed the capsule
+/// to "used_dltensor..." has taken the memory over, and this one has not, so it releases it here.
+/// The export retained the block, and the managed tensor's deleter drops that reference.
 void capsuleDestructor(PyObject *capsule) {
     if (PyCapsule_IsValid(capsule, "dltensor")) {
         void *raw = PyCapsule_GetPointer(capsule, "dltensor");
@@ -372,6 +401,43 @@ void capsuleDestructor(PyObject *capsule) {
             PyErr_Clear();
         }
     }
+}
+
+void versionedCapsuleDestructor(PyObject *capsule) {
+    if (PyCapsule_IsValid(capsule, "dltensor_versioned")) {
+        void *raw = PyCapsule_GetPointer(capsule, "dltensor_versioned");
+        if (raw != nullptr) {
+            auto *managed = static_cast<camel::core::array::DLManagedTensorVersioned *>(raw);
+            if (managed->deleter != nullptr) {
+                managed->deleter(managed);
+            }
+        } else {
+            PyErr_Clear();
+        }
+    }
+}
+
+/// `legacy_dlpack(capsule)`: a "dltensor_versioned" capsule as the legacy "dltensor" capsule over
+/// the same memory, for a consumer that predates DLPack 1.0. The versioned capsule is consumed.
+/// The legacy form cannot say the memory is read-only: the caller marks the array it makes.
+PyObject *legacyDlpack(PyObject *, PyObject *capsule) {
+    if (!PyCapsule_CheckExact(capsule) || !PyCapsule_IsValid(capsule, "dltensor_versioned")) {
+        PyErr_SetString(PyExc_TypeError, "legacy_dlpack takes an unconsumed dltensor_versioned capsule");
+        return nullptr;
+    }
+    auto *versioned = static_cast<camel::core::array::DLManagedTensorVersioned *>(
+        PyCapsule_GetPointer(capsule, "dltensor_versioned"));
+    auto *legacy = camel::core::array::toLegacyDLPack(versioned);
+    PyObject *result = PyCapsule_New(legacy, "dltensor", &capsuleDestructor);
+    if (result == nullptr) {
+        legacy->deleter(legacy);
+        return nullptr;
+    }
+    // The legacy tensor owns the versioned one from here on.
+    if (PyCapsule_SetName(capsule, "used_dltensor_versioned") != 0) {
+        PyErr_Clear();
+    }
+    return result;
 }
 
 /// The Python object a returned slot stands for. `type` is the function's declared result type,
@@ -420,8 +486,11 @@ PyObject *toPython(slot_t value, Type *type) {
                 "only an array of numeric scalars can be handed to Python through DLPack");
             return nullptr;
         }
-        auto *managed = camel::core::array::toDLPack(array);
-        PyObject *capsule = PyCapsule_New(managed, "dltensor", &capsuleDestructor);
+        // The array is a value that other Camel values may share, so what Python gets is
+        // read-only: the DLPack 1.0 flag says so, and the wrapper marks the NumPy view.
+        auto *managed = camel::core::array::toDLPackVersioned(array);
+        PyObject *capsule =
+            PyCapsule_New(managed, "dltensor_versioned", &versionedCapsuleDestructor);
         if (capsule == nullptr) {
             managed->deleter(managed);
             return nullptr;
@@ -540,6 +609,8 @@ Report reportOfLibrary(
 
 // ---- the Session type ------------------------------------------------------
 
+Report reportOfCurrentException() noexcept;
+
 struct SessionObject {
     PyObject_HEAD
     std::string entryDir;
@@ -547,7 +618,7 @@ struct SessionObject {
 };
 
 /// `_camel.Session(entry_dir=None, search_dirs=())`.
-PyObject *sessionNew(PyTypeObject *type, PyObject *args, PyObject *kwargs) {
+PyObject *sessionNewImpl(PyTypeObject *type, PyObject *args, PyObject *kwargs) {
     static const char *names[] = {"entry_dir", "search_dirs", nullptr};
     PyObject *entryDirObject   = Py_None;
     PyObject *searchDirsObject = nullptr;
@@ -599,6 +670,14 @@ PyObject *sessionNew(PyTypeObject *type, PyObject *args, PyObject *kwargs) {
     return reinterpret_cast<PyObject *>(self);
 }
 
+PyObject *sessionNew(PyTypeObject *type, PyObject *args, PyObject *kwargs) {
+    try {
+        return sessionNewImpl(type, args, kwargs);
+    } catch (...) {
+        CAMEL_RAISE(reportOfCurrentException());
+    }
+}
+
 void sessionDealloc(PyObject *self) {
     auto *session = reinterpret_cast<SessionObject *>(self);
     session->entryDir.~basic_string();
@@ -610,9 +689,57 @@ void sessionDealloc(PyObject *self) {
     Py_DECREF(type);
 }
 
+/// The report of the C++ exception being handled: a fault of the runtime, a diagnostic of the
+/// compiler, or any other failure of the host, as the Camel diagnostic text the exception carries.
+/// Called from a `catch` block; no exception leaves it.
+Report reportOfCurrentException() noexcept {
+    try {
+        try {
+            throw;
+        } catch (const camel::core::error::RuntimeFault &fault) {
+            // The same construction src/execute/standalone_bridge.cpp uses for a fault of an
+            // operator: the catalogue entry plus the ten strings the format has.
+            std::array<std::string, 10> a;
+            for (size_t i = 0; i < fault.formatArgs().size() && i < a.size(); ++i) {
+                a[i] = fault.formatArgs()[i];
+            }
+            const auto rendered =
+                camel::core::error::DiagnosticBuilder::of(fault.diag(), nullptr)
+                    .commit(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9]);
+            Report r;
+            r.fault      = true;
+            r.stage      = "run";
+            r.name       = rendered.name;
+            r.code       = "0x" + camel::core::error::Diagnostic::hex8(rendered.diagCode());
+            r.suggestion = rendered.suggestion;
+            r.message    = rendered.message;
+            r.text       = rendered.toText();
+            return r;
+        } catch (const camel::core::error::Diagnostic &diagnostic) {
+            return reportOfDiagnostic(diagnostic);
+        } catch (const std::exception &e) {
+            Report r;
+            r.fault   = true;
+            r.stage   = "run";
+            r.name    = "HostFailure";
+            r.message = e.what();
+            r.text    = std::string("error: ") + e.what();
+            return r;
+        }
+    } catch (...) {
+        Report r;
+        r.fault   = true;
+        r.stage   = "run";
+        r.name    = "HostFailure";
+        r.message = "the host failed in a way it cannot describe";
+        r.text    = "error: " + r.message;
+        return r;
+    }
+}
+
 /// `session.call(library, function, args)` -> the function's value. `args` is a tuple; each item
 /// is converted to the declared type of the parameter it stands for.
-PyObject *sessionCall(PyObject *self, PyObject *args) {
+PyObject *sessionCallImpl(PyObject *self, PyObject *args) {
     auto *session    = reinterpret_cast<SessionObject *>(self);
     const char *library  = nullptr;
     const char *function = nullptr;
@@ -693,34 +820,8 @@ PyObject *sessionCall(PyObject *self, PyObject *args) {
         result = vm.callGraph(
             found->program, graph, std::span<const slot_t>(converted.slots.data(),
                                                             converted.slots.size()));
-    } catch (const camel::core::error::RuntimeFault &fault) {
-        // The same construction src/execute/standalone_bridge.cpp uses for a fault of an
-        // operator: the catalogue entry plus the ten strings the format has.
-        std::array<std::string, 10> a;
-        for (size_t i = 0; i < fault.formatArgs().size() && i < a.size(); ++i) {
-            a[i] = fault.formatArgs()[i];
-        }
-        const auto rendered = camel::core::error::DiagnosticBuilder::of(fault.diag(), nullptr)
-                                  .commit(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9]);
-        Report r;
-        r.fault      = true;
-        r.stage      = "run";
-        r.name       = rendered.name;
-        r.code       = "0x" + camel::core::error::Diagnostic::hex8(rendered.diagCode());
-        r.suggestion = rendered.suggestion;
-        r.message    = rendered.message;
-        r.text       = rendered.toText();
-        CAMEL_RAISE(r);
-    } catch (const camel::core::error::Diagnostic &diagnostic) {
-        CAMEL_RAISE(reportOfDiagnostic(diagnostic));
-    } catch (const std::exception &e) {
-        Report r;
-        r.fault   = true;
-        r.stage   = "run";
-        r.name    = "HostFailure";
-        r.message = e.what();
-        r.text    = std::string("error: ") + e.what();
-        CAMEL_RAISE(r);
+    } catch (...) {
+        CAMEL_RAISE(reportOfCurrentException());
     }
 
     Type *resultType = signature->hasExitType() ? signature->exitType() : nullptr;
@@ -741,6 +842,16 @@ PyObject *sessionCall(PyObject *self, PyObject *args) {
             reinterpret_cast<camel::core::rtdata::Object *>(result), resultType, "python result");
     }
     return toPython(result, resultType);
+}
+
+/// The entry the interpreter calls. A C++ exception that crossed it would end the process, so
+/// every failure of the host is a `CamelError` here.
+PyObject *sessionCall(PyObject *self, PyObject *args) {
+    try {
+        return sessionCallImpl(self, args);
+    } catch (...) {
+        CAMEL_RAISE(reportOfCurrentException());
+    }
 }
 
 PyMethodDef sessionMethods[] = {
@@ -768,6 +879,9 @@ PyType_Spec sessionSpec = {
 // ---- the module ------------------------------------------------------------
 
 PyMethodDef moduleMethods[] = {
+    {"legacy_dlpack", legacyDlpack, METH_O,
+     "legacy_dlpack(capsule) -> capsule\n\n"
+     "A dltensor_versioned capsule as a legacy dltensor capsule over the same memory."},
     {nullptr, nullptr, 0, nullptr},
 };
 

@@ -1,6 +1,0 @@
-error[RuntimeDiag::FileOpenFailed]: 'fs.read_text' cannot open the file 'no/such/dir/file.txt': No such file or directory.
-  --> <ROOT>/test/cases/compile/diag_render/runtime_file_open.cml:6:13
-   |
- 6 |     println(read_text('no/such/dir/file.txt'))
-   |             ^^^^^^^^^
-help: Check that the path exists and that the program may access it; a relative path is taken from the directory the program is run in. Where a missing file is expected, fs.try_read_text returns an error value instead of ending the program.

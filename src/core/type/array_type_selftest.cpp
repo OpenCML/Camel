@@ -102,13 +102,16 @@ std::string debugRunArrayTypeSelfTest() {
         fromInts->mangle() == "Array_f32_2_3,4",
         "the f32[3, 4] mangle changed: " + fromInts->mangle());
 
-    // ---- Equality ignores dimension names (as the tensor type's did) ----------------------
+    // ---- Equality ignores the spelling of dimension names, not what the forms say ---------
     ArrayType *namedShape =
         ArrayType::create(f32, std::vector<ExtentForm>{named("n"), ExtentForm::constant(3)});
     ArrayType *plainShape =
+        ArrayType::create(f32, std::vector<ExtentForm>{named("m"), ExtentForm::constant(3)});
+    ArrayType *unknownShape =
         ArrayType::create(f32, std::vector<ExtentForm>{ExtentForm::unknown(), ExtentForm::constant(3)});
-    require(namedShape != plainShape, "f32[n, 3] and f32[?, 3] are the same object");
-    require(namedShape->equals(plainShape), "f32[n, 3] does not equal f32[?, 3]");
+    require(namedShape != plainShape, "f32[n, 3] and f32[m, 3] are the same object");
+    require(namedShape->equals(plainShape), "f32[n, 3] does not equal f32[m, 3]");
+    require(!namedShape->equals(unknownShape), "f32[n, 3] equals f32[?, 3]");
     require(namedShape->mangle() == plainShape->mangle(), "a dimension name leaks into the mangle");
     require(!namedShape->equals(ArrayType::create(f32, shapeOf({3, 4}))), "f32[n, 3] equals f32[3, 4]");
     require(

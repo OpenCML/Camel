@@ -1,0 +1,14 @@
+module match_type_err_unreachable_array
+
+func kind::<T>(): string {
+    return match type T {
+        case array => 'array'
+        case int[] => 'ints'
+        case _ => 'other'
+    }
+}
+
+func main(): int sync {
+    println(kind::<int[]>())
+    return 0
+}

@@ -46,7 +46,7 @@ func loss_ce(x: f32[..], target: f32[..]): float {
 
 /// The SGD learning rate, CAMEL_FT_LR or 0.05; shared by the export and the native loop.
 func ce_lr(): float sync {
-    let v = get_env('CAMEL_FT_LR')
+    let v = get_env('CAMEL_FT_LR') ?? ''
     return if v == '' then 0.05 else float(v)
 }
 
@@ -58,7 +58,7 @@ func step_ce(m: LoraMlp, x: f32[..], target: f32[..], lr: float): (float, LoraMl
 func loop_ce(m: LoraMlp, i: int, steps: int, nb: int, lr: float): LoraMlp {
     return if i >= steps then m else sync {
         let bi = '{}'->format<i % nb>
-        let dir = get_env('CAMEL_FT_BATCHES')
+        let dir = get_env('CAMEL_FT_BATCHES') ?? ''
         let x = load_npy::<f32>(dir + '/batch_' + bi + '.npy')
         let t = load_npy::<f32>(dir + '/target_' + bi + '.npy')
         let vg = step_ce(m, x, t, lr)
@@ -79,28 +79,28 @@ func load(): LoraMlp {
 }
 
 func do_export_ce(m: LoraMlp): int sync {
-    let dir = get_env('CAMEL_FT_BATCHES')
+    let dir = get_env('CAMEL_FT_BATCHES') ?? ''
     let x = load_npy::<f32>(dir + '/batch_0.npy')
     let t = load_npy::<f32>(dir + '/target_0.npy')
     let lr = ce_lr()
     export_model(
         (mm: LoraMlp, xx: f32[..], tt: f32[..]): (float, LoraMlp) => step_ce(mm, xx, tt, lr),
         (m, x, t),
-        get_env('CAMEL_BENCH_EXPORT')
+        get_env('CAMEL_BENCH_EXPORT') ?? ''
     )
     return 0
 }
 
 func do_train_ce(m: LoraMlp): int sync {
-    let steps = int(get_env('CAMEL_FT_STEPS'))
-    let nb = int(get_env('CAMEL_FT_NBATCHES'))
+    let steps = int(get_env('CAMEL_FT_STEPS') ?? '')
+    let nb = int(get_env('CAMEL_FT_NBATCHES') ?? '')
     let final = loop_ce(m, 0, steps, nb, ce_lr())
-    let dump = get_env('CAMEL_FT_DUMP')
+    let dump = get_env('CAMEL_FT_DUMP') ?? ''
     if dump != '' then save_params(final, dump)
     return 0
 }
 
 func main(): int sync {
     let m = load()
-    return if get_env('CAMEL_BENCH_WORKLOAD') == 'export_ce' then do_export_ce(m) else do_train_ce(m)
+    return if (get_env('CAMEL_BENCH_WORKLOAD') ?? '') == 'export_ce' then do_export_ce(m) else do_train_ce(m)
 }

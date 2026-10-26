@@ -27,12 +27,14 @@ timeout_ms = 10000
 
 [[tests]]
 name = "rules.two_way_refused"
-desc = "A rule from <=> given to rewrite is an error value, RuleTwoWay, that names the rule: the pass fails and the program does not run."
+desc = "A rule from <=> given to rewrite is an error value, RuleTwoWay, that names the rule: the pass fails with it, and the error value reaches the exit unhandled, so the program does not run."
 kind = "negative"
 case = "../../../cases/modules/rules/target.cml"
 args = ["${case}", "simplify::swapped", "std::nvm"]
 expect_exit = 1
-expect_output_contains = ["GraphPassFailed", "RuleTwoWay", "Rule 'swap' holds both ways"]
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_output_contains = ["RuleTwoWay", "Rule 'swap' holds both ways"]
+expect_stderr_contains = ["without being handled: RuleTwoWay:"]
 expect_output_not_contains = ["56 42"]
 timeout_ms = 10000
 
@@ -569,6 +571,37 @@ expect_stdout_contains = ["sum 3 mixed 2 one 1 two 1\nsum 3 mixed 2 one 0 two 1\
 timeout_ms = 20000
 
 [[tests]]
+name = "rules.fact_reads_a_fact_at_the_type_argument_it_is_given"
+desc = "A fact whose head declares a type parameter is one declaration and one fact per type argument (rewrite design 7.5). A rule's parameter is declared `y: T`, so the node its condition hands the query has the value type `T` and `depth(y)` is read at the type argument the declaration gives, the way any generic call infers one from its arguments (design principles 5.9); the fact body's own `x` is a case node, which states no value type, so the query there writes `depth::<T>(x)`. `drop_deep` rewrites `x + y` to `x` only where `depth(y) > 1`, so `target` (`a + (b + 1)`) loses its outer addition and `keep` (`a + b`) keeps its one: `keep`'s second operand is one addition deep, which is not more than one, while `target`'s second operand is two deep, so the rule drops the whole outer addition of `target` and leaves `a`. The two reports are `target 5 keep 1` (3 + 2 additions deep, then 1) and `target 0 keep 1`, and `target(3, 4)` is 3 where it was 8."
+kind = "behavior"
+case = "../../../cases/modules/rules/fact_at_type_argument_target.cml"
+args = ["${case}", "fact_at_type_argument::report", "fact_at_type_argument::apply", "fact_at_type_argument::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["target 5 keep 1\ntarget 0 keep 1\n3 7\n"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.a_nodes_value_type_is_a_type_a_program_writes"
+desc = "A node's value type is a type a program writes (language reference 9, design principles 5.9): `depthOfWritten(n: Node<int>)` is given a node whose value type is stated, so `depth(n)` infers the fact's type argument from it, the way any generic call infers one from its arguments; a node a pass read out of a graph states no value type, so `depthOfBare(n: Node)` writes `depth::<int>(n)`. Both read the same fact of the two additions of `target` (`a + (b + 1)`, depths 2 and 3), so the report is `written 5 bare 5` and the value is `8`."
+kind = "behavior"
+case = "../../../cases/modules/rules/fact_value_type_target.cml"
+args = ["${case}", "fact_value_type::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["written 5 bare 5\n8\n"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.a_query_given_a_value_names_the_node_type_it_takes"
+desc = "A fact is asked about a node, so a query handed a value is refused with the type its parameter takes and the type the argument has (language reference 9, design principles 5.9): `depth(a)` in a function whose parameter is an `int` names the query's parameter as a node of a value type -- `Node<T>` -- against the `int` value given, which is not the `NoMatchingFunction` of a call no declaration takes."
+kind = "negative"
+case = "../../../cases/modules/rules/fact_query_value.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["GenericArgumentsMismatch", "argument 1 has type 'int', but its parameter 'v: Node<"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
 name = "rules.fact_takes_the_parts_of_a_compound"
 desc = "A declaration with parameters (`fact mul_by_one(a: Node, b: Node): bool`) is a multi-parameter query: a rule's condition hands it the parts of the compound, and the fact is the one of the value whose parts they are (rewrite design 4.1-4.2). `mul_one_by_parts` rewrites `x * 1` to `x` because `mul_by_one(x, node_of(c))` reads `sign(y) == 1` through the `x * y` case; `x * 2` keeps its product because the query answers false. The coefficient is a `const` parameter, so its node is reached with `node_of(c)` (rule-language design v2, section 1: `const c` is the constant's value in a condition, and `node_of(c)` is the node), and the two parts are a factor and a node rather than two values pinned by shape. The first report prints one product in each function, the second only in `two`, and the values are unchanged."
 kind = "behavior"
@@ -577,6 +610,17 @@ args = ["${case}", "fact_parts::report", "fact_parts::apply", "fact_parts::repor
 expect_exit = 0
 expect_stdout_contains = ["one 1 two 1\none 0 two 1\n7 14\n"]
 timeout_ms = 20000
+
+[[tests]]
+name = "rules.fact_refuses_a_query_that_leaves_its_type_arguments_open"
+desc = "A query of a fact whose head declares type parameters without them (`literal_of(n)` where `n` is a `Node`) fixes none of the fact's type arguments: the instance the query asked for cannot be built, and the call is reported where it is written as the same `GenericArgumentsMismatch` any generic call gives when its arguments determine no type, asking for the type arguments to be written out (`literal_of::<...>`) -- a node stands for the value it is the node of and gives no type (design principles 5.9)."
+kind = "negative"
+case = "../../../cases/modules/rules/fact_generic_no_type_arguments.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["GenericArgumentsMismatch", "cannot be determined from the arguments or expected result", "literal_of::<...>"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
 
 [[tests]]
 name = "rules.node_of_reaches_a_const_parameter"
@@ -1057,7 +1101,9 @@ kind = "negative"
 case = "../../../cases/modules/rules/schedule_target.cml"
 args = ["${case}", "schedulers::refuse", "std::nvm"]
 expect_exit = 1
-expect_output_contains = ["GraphPassFailed", "RuleInvalid", "Rule 'bad': the left side has a term that is not an operator, a constant or a parameter"]
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_output_contains = ["RuleInvalid", "Rule 'bad': the left side has a term that is not an operator, a constant or a parameter"]
+expect_stderr_contains = ["without being handled: RuleInvalid:"]
 expect_output_not_contains = ["\n5\n"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
@@ -1171,7 +1217,9 @@ kind = "negative"
 case = "../../../cases/modules/rules/explain_target.cml"
 args = ["${case}", "explain_pass::without_attribution", "std::nvm"]
 expect_exit = 1
-expect_output_contains = ["GraphPassFailed", "NoAttribution", "the run was made without attribution"]
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_output_contains = ["NoAttribution", "the run was made without attribution"]
+expect_stderr_contains = ["without being handled: NoAttribution:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
@@ -1689,4 +1737,136 @@ args = ["${case}", "fact_no_value::report", "fact_no_value::apply", "fact_no_val
 expect_exit = 0
 expect_stdout_contains = ["kept 1\nkept 1\nkept 14\n"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.fact_declaration_without_its_type"
+desc = "A fact declaration writes the type of the fact after its parameters (`fact depth(n): int`, rewrite design 7.5), and that is the only type it writes there: `fact depth(n)` with no type is refused where the `:` belongs, by the parser, and nothing of the declaration is compiled. The compiler's own guard for a declaration that reached it without that type is an assertion, not a diagnostic: a file the parser refused is never given an AST."
+kind = "negative"
+case = "../../../cases/modules/rules/fact_no_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::MissingToken"
+expect_diagnostic_code = "0x02000009"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 13
+expect_output_contains = ["Expected ':' before ')'."]
+expect_output_not_contains = ["UnknownInternalError", "ConstructNotSupported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.fact_body_without_a_case"
+desc = "The cases of a fact say what it is, and a body that writes none is refused where the first case belongs, by the parser (`Expected 'case'`), before any fact is built."
+kind = "negative"
+case = "../../../cases/modules/rules/fact_no_cases.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_code = "0x0200000A"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 1
+expect_output_contains = ["Unexpected '}'; expected 'case'."]
+expect_output_not_contains = ["UnknownInternalError", "ConstructNotSupported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.fact_declaration_without_a_join"
+desc = "`join` is the clause that is required: it says how the facts of two writings of one value are merged, and it is the least upper bound of the two (rewrite design 7.5). A fact that writes none is refused with `SemanticDiag::FactJoinRequired` (name=SemanticDiag::FactJoinRequired, code=0x030001F9) on the `fact` line, which names the rule and the clause to write rather than calling the declaration unsupported."
+kind = "negative"
+case = "../../../cases/modules/rules/fact_no_join.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FactJoinRequired"
+expect_diagnostic_code = "0x030001F9"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 1
+expect_output_contains = ["The fact 'sign' writes no 'join'.", "it says how the facts of two writings of one value are merged", "Write it after the cases, naming one binary function or a lambda"]
+expect_output_not_contains = ["UnknownInternalError", "ConstructNotSupported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.fact_const_case_without_a_type"
+desc = "A `const` case matches one constant and the fact function is given the value itself, so the type of that constant is written somewhere: in the case, or in the head of a fact that declares the value it is about with a type (rewrite design 7.5). A fact with no head parameters whose case writes no type is refused with `SemanticDiag::FactConstCaseTypeRequired` (name=SemanticDiag::FactConstCaseTypeRequired, code=0x030001F7), which names the two places the type can stand."
+kind = "negative"
+case = "../../../cases/modules/rules/fact_const_case_without_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FactConstCaseTypeRequired"
+expect_diagnostic_code = "0x030001F7"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 1
+expect_output_contains = ["The 'const' case 'c' of the fact 'one' writes no type.", "case const c: int => c", "fact sign(v: int): int"]
+expect_output_not_contains = ["UnknownInternalError", "ConstructNotSupported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.fact_case_that_binds_no_variable"
+desc = "The cases read how a value was built, and the parts they read are the variables their patterns name: `case x + y` binds the two operands (rewrite design 7.5). A case whose pattern names none is refused with `SemanticDiag::FactCaseBindsNoVariable` (name=SemanticDiag::FactCaseBindsNoVariable, code=0x030001F8), which says what the case has to name, instead of the case being reported as a construct the compiler does not support."
+kind = "negative"
+case = "../../../cases/modules/rules/fact_case_binds_nothing.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FactCaseBindsNoVariable"
+expect_diagnostic_code = "0x030001F8"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 1
+expect_output_contains = ["This case of the fact 'one' names no variable.", "the parts they read are the variables their patterns name", "bind a part with a name, or write `case _`"]
+expect_output_not_contains = ["UnknownInternalError", "ConstructNotSupported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.fact_legal_forms_stay_compilable"
+desc = "The writings the fact rules leave open stay green, and the fact's value is real: a `const` case whose type comes from the head, a `const` case that writes the type of its constant itself, a case whose pattern binds variables (`case x + y`, which recurses into the same fact), the required `join` and `case _` last all compile in one declaration each. The rule `mul_by_sign` reads `sign(y) == 2` in its `when`, so the product `3 * 2` is rewritten to `3 + 100` and `left(3)` prints 103 rather than 106."
+kind = "behavior"
+case = "../../../cases/modules/rules/fact_legal_forms.cml"
+args = ["${case}", "fact_legal_forms::apply", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["103\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+[[tests]]
+name = "saturate_rhs_from_an_enclosing_region"
+desc = "`x + 1 => x` matches `x + 1` in the arm of `&&` with `x` the parameter outside it. The writings of a value share a region, so saturation records no equivalence there instead of failing; saturate and extract from Camel, then the run, give the program's meaning."
+kind = "behavior"
+case = "../../../cases/modules/rules/saturate_outer_operand.cml"
+backends = ["nvm", "fvm"]
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "saturated false true false\n"
+timeout_ms = 20000
+
+[[tests]]
+name = "opt_saturate_rhs_from_an_enclosing_region"
+desc = "The same program through the pipeline's saturation: std::opt::saturate keeps the writings it may, the next pass extracts one per value, and the run gives the program's meaning."
+kind = "behavior"
+case = "../../../cases/modules/rules/saturate_outer_operand.cml"
+args = ["${case}", "std::opt::saturate", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "saturated false true false\n"
+timeout_ms = 20000
+
+[[tests]]
+name = "opt_saturate_loop_with_an_unread_state"
+desc = "A loop whose condition reads one of two states, in a graph with classes of writings: the pipeline's saturation and the extraction the next pass makes keep the condition's port for the unread state, so the run gives the loop's value."
+kind = "behavior"
+case = "../../../cases/modules/rules/saturate_loop_unread_state.cml"
+backends = ["nvm", "fvm"]
+args = ["${case}", "std::opt::saturate", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "3\n"
+timeout_ms = 20000
+
+[[tests]]
+name = "opt_saturate_program_importing_str"
+desc = "A program that imports str (whose cut has a loop of that shape) goes through the pipeline's saturation and runs."
+kind = "behavior"
+case = "../../../cases/modules/rules/saturate_imports_str.cml"
+args = ["${case}", "std::opt::saturate", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "true\n"
 timeout_ms = 20000

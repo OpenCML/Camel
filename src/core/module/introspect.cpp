@@ -126,16 +126,13 @@ std::string semanticsJson(const sem::OperatorSemantics &s) {
     return out + ",\"algorithm\":" + jsonString(n.algorithm) + "}";
 }
 
-} // namespace
-
-std::vector<OperatorDescription> describeOperators(const Module &module) {
-    std::vector<OperatorDescription> result;
-    const auto entities = module.nativeEntityNS();
-    if (!entities) {
-        return result;
-    }
-    const auto &traits = OperatorTable::instance();
-    entities->forEach([&](const Reference &ref, const entity &ent) {
+// The overloads of one entity namespace as descriptions. A module's exported names and the
+// operator groups it declares without exporting (its kernels) are read the same way; only the
+// flag differs, and it is what the listing prints as "private": true.
+void collectOperators(
+    const Module &module, const entity_ns_ptr_t &ns, bool isPrivate, const OperatorTable &traits,
+    std::vector<OperatorDescription> &result) {
+    ns->forEach([&](const Reference &ref, const entity &ent) {
         if (!ent.isOperGroup() || !ent.operGroup()) {
             return;
         }
@@ -144,6 +141,7 @@ std::vector<OperatorDescription> describeOperators(const Module &module) {
             d.module    = module.name();
             d.name      = ref.toString();
             d.uri       = uri;
+            d.isPrivate = isPrivate;
             d.signature = resolver ? resolver->signature() : "";
             if (auto *fixed = dynamic_cast<type::StaticFuncTypeResolver *>(resolver.get())) {
                 d.withCount = static_cast<int>(fixed->funcType()->withTypesCount());
@@ -170,6 +168,24 @@ std::vector<OperatorDescription> describeOperators(const Module &module) {
             result.push_back(std::move(d));
         }
     });
+}
+
+} // namespace
+
+std::vector<OperatorDescription> describeOperators(const Module &module) {
+    std::vector<OperatorDescription> result;
+    const auto entities = module.nativeEntityNS();
+    if (!entities) {
+        return result;
+    }
+    const auto &traits = OperatorTable::instance();
+    collectOperators(module, entities, false, traits, result);
+    // A module's private operators are operators too: a kernel an `#impl` function runs is
+    // declared body-less and registered by the compiler, and it is listed here marked private
+    // (the reference checker reads the listing, so a kernel left out is a kernel nobody checks).
+    if (const auto privateEntities = module.privateEntityNS()) {
+        collectOperators(module, privateEntities, true, traits, result);
+    }
     std::sort(result.begin(), result.end(), [](const auto &a, const auto &b) {
         return std::tie(a.name, a.uri) < std::tie(b.name, b.uri);
     });
@@ -200,6 +216,9 @@ void dumpOperators(const std::vector<module_ptr_t> &modules, std::ostream &os) {
                << ",\"with\":" << d.withCount << ",\"norm\":" << d.normCount
                << ",\"purity\":" << jsonString(to_string(d.purity))
                << ",\"signature\":" << jsonString(d.signature);
+            if (d.isPrivate) {
+                os << ",\"private\":true";
+            }
             if (d.semantics) {
                 os << ",\"semantics\":" << semanticsJson(*d.semantics);
             }

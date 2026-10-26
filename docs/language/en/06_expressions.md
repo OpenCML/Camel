@@ -8,7 +8,7 @@ Almost everything in Camel is an expression: `if`, `match`, blocks and assignmen
 
 ## 6.1 Evaluation
 
-An expression is a node on the graph, and its operands are its input edges. Whether and when an expression is evaluated is decided by dependencies ([4.2](04_execution_model.md#42-evaluation-by-dependency)); operator precedence and associativity decide only the shape of the graph ([6.12](#612-operator-precedence)). `&&`, `||`, `??`, `!!`, `?->` and `if`, `match` are branches: the side that is not selected is not evaluated.
+An expression is a node on the graph, and its operands are its input edges. Whether and when an expression is evaluated is decided by dependencies ([4.2](04_execution_model.md#42-evaluation-by-dependency)); operator precedence and associativity decide only the shape of the graph ([6.12](#612-operator-precedence)). `&&`, `||`, `??`, `!!`, `->` and `if`, `match` are branches: the side that is not selected is not evaluated.
 
 ## 6.2 Literals and construction
 
@@ -100,7 +100,7 @@ func main(): int sync {
   - A name that stands for more than one function has no function value: an overloaded built-in operator (such as `len`, which has three signatures) is one, and the refusal is `SemanticDiag::FunctionNameAsValue`. Write the call in a lambda there.
 - Arguments may be given by name (`f(x: 1)`): positional arguments first, named ones after; a name the callee does not declare as a parameter is `SemanticDiag::ParamArgumentUnknown`.
 - Two calls with angle brackets in one argument list (`f<a>(x), g<b>(y)`) are read as comparisons; a call with angle brackets followed by a pipe with angle brackets (`f<a>(x)->g<b>`) may be too. Write them as two statements.
-- A lambda written in parentheses can be called directly: `((x: int): int => x + 1)(3)`; it can also be written on the right of `->` and `?->`: `3->(x: int): int => x + 1`, `parse_int(s) ?-> (x: int): int => x * 2`.
+- A lambda written in parentheses can be called directly: `((x: int): int => x + 1)(3)`; it can also be written on the right of `->`: `3->(x: int): int => x + 1`, `parse_int(s) -> (x: int): int => x * 2`.
 
 ## 6.5 Pipes
 
@@ -121,7 +121,7 @@ func main(): int sync {
 total = 35
 ```
 
-- For `x ?-> f` see [6.6](#66-operators-for-null-and-errors).
+- A pipe `x -> f` over a `T?` or a `T!` carries a null or an error along, see [6.6](#66-operators-for-null-and-errors).
 - `f..g` is function composition: `(f..g)(x)` is `g(f(x))`, the same direction as the pipeline `x->f->g`; with integers on both sides `a..b` is the half-open interval, giving `int[]`, and a step is written `range(a, b, step)`. `for i in 0..n` is fused by the compiler and materialises no array. `..` binds tighter than `->`: `x->f..g` reads as `x->(f..g)`.
 
 ## 6.6 Operators for null and errors
@@ -132,7 +132,7 @@ For `T?` and `T!` see [3.4](03_data_model.md#34-may-be-null-t-and-may-fail-t). O
 |---|---|---|---|
 | `a ?? b` | `T?` | `T` | `b` when `a` is null, otherwise the value inside `a` |
 | `a !! b` | `T!` | `T` | `b` when `a` is an error, otherwise the value inside `a` |
-| `x ?-> f` | `T!` | A function that accepts `T` | When `x` is an error the error is passed on unchanged, otherwise `f` is called; the result is `U!` (`f` may return either `U` or `U!`) |
+| `x -> f` | `T?` or `T!` | A function that does not accept the `T?` / `T!` itself | A null `x` gives null and an error is passed on unchanged, otherwise `f` is called with the value; the result is `U?` or `U!` (`f` may return either `U` or a value already of that form) |
 
 ```cml
 func half(x: int): int! {
@@ -141,8 +141,8 @@ func half(x: int): int! {
 
 func main(): int sync {
     println(parse_int('12') !! 0, parse_int('twelve') !! 0)
-    println(parse_int('12') ?-> half ?-> half !! -1)
-    println(parse_int('10') ?-> half ?-> half !! -1)
+    println(parse_int('12') -> half -> half !! -1)
+    println(parse_int('10') -> half -> half !! -1)
     return 0
 }
 ```
@@ -155,8 +155,9 @@ func main(): int sync {
 
 - The right side is evaluated only when it is selected.
 - **The right-hand side may be nullable.** In `a ?? b`, when `b` is a `T` the result is a `T`; when `b` is a `T?` the result is a `T?`. So `a ?? b ?? 9` tries `a`, then `b`, then gives the default, and the result is the same however it is parenthesized. Likewise `!!` (when `b` is a `T!` the result is a `T!`). On the graph each `??` is still one branch. A right-hand side `[]` takes the element type of the left-hand side.
+- **`->` asks the overloads of `f` first, with the value as it is.** `f` is looked for among the functions of that name by the type of `x` itself (`T?` or `T!`), their `when` conditions included: one that takes it (a parameter of type `T?`, or a generic `T` its condition allows to be a `T?`) is called with `x` whole. Only when none does, the call takes `x` apart: a null `x` gives null, a failed `x` gives its error as it is, and anything else calls `f` with the value inside. The other arguments of the call belong to the call that is taken and are evaluated only then. A value that is tagged twice (`T?!`) is taken apart one tag at a time, the same way.
 - The right side of `??` and `!!` extends to the end of the expression: `x ?? 0 + 1` is `x ?? (0 + 1)`. To take the value first and then compute, add parentheses: `(x ?? 0) + 1`.
-- A left side that is not of the required form (`??` on a plain `int`, `!!` or `?->` on a `T?`), or a right side of the wrong type, is `SemanticDiag::TaggedOperandMismatch`.
+- A left side that is not of the required form (`!!` on a `T?`, `??` on a `T!`), or a right side of the wrong type, is `SemanticDiag::TaggedOperandMismatch`. `??` on a value that cannot be null (a plain `int`, or a name an `if` already narrowed to a `T`) is allowed: its null arm is never taken and the result is the value itself; the compiler warns (`SemanticDiag::KnownNotNull`, design principles 3.8).
 
 ## 6.7 Other operators
 
@@ -231,8 +232,11 @@ false
 - constructing maps and sets: `[...] as Map<K, V>`, `[...] as Set<T>`;
 - checked conversion of module types: the type's own condition is checked at the conversion.
 - checked conversion of arrays: `a as f32[4]`, where the shape is checked at the conversion; `f32[3]` is another spelling of a numeric array (kept during the transition), and `t as f32[3]` is the same conversion.
+- converting a value to its own type, which does nothing (`n as int`).
 
-`as` never changes the type of a value unchecked. The result of `json::decode` is a `Json`, which does not convert to another type with `as`; JSON of a known shape is decoded with `json::decode_as(s, [0])`, which checks the shape while decoding and gives a `T!`.
+`as` does not convert between numbers, for a literal as for a variable: `5 as float` and `n as float` are both `SemanticDiag::DynamicCastForbidden`, and so are `true as int` and `n as bool`. A number of another type is made by the conversion function of the target (`float(n)`, `int(x)`, `i32(n)`, `f32(x)`), whose loss rule (a value that does not fit is a fault) is in design principles 5.1.
+
+`as` never changes the type of a value unchecked. The result of `json::decode` is a `Json`, which does not convert to another type with `as`; JSON of a known shape is decoded with `json::decode_as::<int[]>(s)`, which checks the shape while decoding and gives a `T!`.
 
 Conversions between numbers use functions such as `float(x)` ([3.2](03_data_model.md#32-numbers)). `is` is not a keyword: the `is` of `e is T` is an ordinary name, and writing it is a syntax error (there is no type information at run time). A postfix `!` is not a form of the language: the `!` of `T!` belongs to the type, and the value of a `T?` is taken out with `x ?? default`, so `x!` is an ordinary syntax error (at the `!`).
 
@@ -272,7 +276,7 @@ func sign(x: int): string {
   - only a name bound by `let` or a parameter is narrowed, not a `var` (it may be rewritten between the test and the use; bind its value with `let` first);
   - only the direct forms count, in either order (`x != null`, `null != x`): a test that is the whole condition, or one of the operands `&&` joins, narrows the `then` arm (`if x != null && ready then ...`). The `else` arm is narrowed only by a whole condition `x == null`, never by a conjunction. A test under `||` or `!` (`x != null || ready`, `!(x == null)`) or kept in a `let` narrows nothing; nest the `if`s, or use `match` or `??`;
   - only inside the arm: after the `if`, `x` is a `T?` again. Declaring the name again inside the arm (`let x = ...`) is a redeclaration.
-  - after narrowing, the arm may still apply to `x` the constructs written for a `T?`, `??` and a `match` with `case null`: they work on the value put back into `T?`, checked as they were before narrowing, only their null arm is never taken; the compiler warns (`SemanticDiag::KnownNotNull`). Testing `x == null` or `x != null` again in the arm is the comparison of a value that is never null (above): a warning, and a fixed result.
+  - after narrowing, the arm may still apply to `x` the constructs written for a `T?`, `??` and a `match` with `case null`: they work on the value put back into `T?`, checked as they were before narrowing, only their null arm is never taken; the compiler warns (`SemanticDiag::KnownNotNull`; `??` on a value that was never nullable in the first place is allowed with the same warning). Testing `x == null` or `x != null` again in the arm is the comparison of a value that is never null (above): a warning, and a fixed result.
 
   Since `a && b` is `if a then b else false`, the right side of `x != null && ...` is such an arm, and so is the right side of `x == null || ...`. When a name is tested and then used as a `T` where narrowing does not apply, the error carries a note that says why.
 
@@ -386,7 +390,7 @@ A missing case, an extra case or a literal case mixed in is `SemanticDiag::Tagge
 
 Tuple patterns and struct patterns are not in the language: `case (...)` and `case {...}` are ordinary syntax errors. An identifier pattern on a value of an ordinary type (`case n => ...`), and `error e` over an ordinary type, report `SemanticDiag::IdentifierPatternNeedsNullableOrErrorType`: only the two marks `T?` and `T!` can be taken apart (3.8), so to read the value or to catch the error write `??`, `!!`, or a `match` with a literal pattern and `_`. Tuple and struct patterns of enum variants are implemented, but a field position takes only a name or `_`.
 
-`try`/`catch`/`finally` is not part of Camel (it has no stable mapping onto the graph), and none of the three is a keyword: they are ordinary names, so a `try { ... }` written with them is an ordinary syntax error. An operation that may fail returns `T!`, handled with `!!`, `?->` and `case error e`.
+`try`/`catch`/`finally` is not part of Camel (it has no stable mapping onto the graph), and none of the three is a keyword: they are ordinary names, so a `try { ... }` written with them is an ordinary syntax error. An operation that may fail returns `T!`, handled with `!!`, `->` and `case error e`.
 
 ### 6.8.3 `match type`
 
@@ -395,6 +399,7 @@ Tuple patterns and struct patterns are not in the language: `case (...)` and `ca
 ```
 match type type {
     case struct => branch
+    case array  => branch
     case tuple  => branch
     case func   => branch
     case #leaf  => branch
@@ -405,7 +410,7 @@ match type type {
 }
 ```
 
-- `struct` selects a structure; `tuple` selects an **ordinary** tuple; `func` selects a function type; `#leaf` selects every other type (scalars, `string`, arrays, functions, `T?`, `T!`, cells, ...). `struct` and `tuple` are the two shapes of an [R3 inner node](../../design/generic-structure/README.cn.md): `T?` and `T!` are tagged tuples and, like mutable cells, fall into `#leaf`, not `tuple`.
+- `struct` selects a structure; `tuple` selects an **ordinary** tuple; `array` selects every array type, whatever its elements (still a leaf for `#leaf` when no earlier case takes it); `func` selects a function type; `#leaf` selects every other type (scalars, `string`, arrays, functions, `T?`, `T!`, cells, ...). `struct` and `tuple` are the two shapes of an [R3 inner node](../../design/generic-structure/README.cn.md): `T?` and `T!` are tagged tuples and, like mutable cells, fall into `#leaf`, not `tuple`.
 - A type written in the pattern is an **identity pattern**: `case int`, `case Json`, `case MyStruct`, `case T`. Identity is **exact**: `case float` does not select `int` (`float` and `f64` are the same type, and so are `int` and `i64`; `int` and `i32` are not); `case f32` does not select `f64`; `case MyStruct` selects the declared name, not another structure with the same fields; `case T` substitutes the binding of `T` at the instantiation, so it selects exactly that type. Shapes and identities share one case and one `|` (`case tuple | MyStruct`), judged in the order written: a type an earlier case already selects is `SemanticDiag::StaticMatchPatternCannotMatch` in a later identity pattern.
 - `_` selects everything, like `#leaf`, and is the fallback spelling; both must be the last case. `case struct | tuple` selects either shape. `case int` before `case #leaf` is normal; after `#leaf`/`_` it is `SemanticDiag::StaticMatchUnreachableCase`.
 - The type after `match type` is a type position: a `(` there is always the start of a type, so `match type () { ... }` matches the empty tuple type; a function type takes one more pair of parentheses, `match type ((x: int) => int) { ... }`. The pattern after `case` is a type position too, with the same rule: `case (int, int)` and `case ()` are tuples, and a function type is written `case ((x: int) => int)`.
@@ -594,7 +599,7 @@ A lambda is written `(parameters): return-type => body`; the return type can be 
 (x: int): int => { let y = x * 2; return y + 1 }
 (x) => x + 1                                    // the parameter type comes from where it stands (below)
 (s: string) => sync { println(s) }              // a sync block as the function body
-sync (x: int) => sync { total = total + x }     // writes a captured variable: add the function modifier sync
+(x: int) => sync { total = total + x }          // writes a captured variable: the body is a sync block
 ```
 
 A function type is written `(x: T) => R`, and the parameters must be named: `(x: int) => int`, `(acc: int, x: int) => int`.
@@ -732,7 +737,7 @@ From lowest to highest:
 | 9 | `??` `!!` | The right side is a complete expression |
 | 10 | `as` | |
 | 10a | Unary `-` `!` `~` | Looser than `->` and `^`: `!xs->is_empty()` is `!(xs->is_empty())`, `-a->f` is `-(a->f)`, `-a ^ 2` is `-(a ^ 2)`; a literal and a name read alike (`-1->abs` is `-(1->abs)`; to negate first write `(-1)->abs`) |
-| 11 | `->` `?->` | Left-associative |
+| 11 | `->` | Left-associative |
 | 12 | `..` | Range (between numbers) and function composition (between functions) |
 | 13 | Postfix: `.field`, `[subscript]`, `(arguments)`, `<with arguments>` | Must directly follow |
 

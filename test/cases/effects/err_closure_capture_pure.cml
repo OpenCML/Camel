@@ -1,0 +1,15 @@
+// A function declared inside another one reaches the variables around it. Which capture of the
+// enclosing function a use is cannot be read from the body's own graph, and the measurement used
+// to give up there, which skipped the clause the function wrote. The use is now read as touching
+// any variable, so the `pure` of `bump` is refused at its clause.
+module err_closure_capture_pure
+
+func main(): int sync {
+    var n = 0
+    func bump(x: int): int pure sync {
+        n = n + x
+        return n
+    }
+    println(bump(2))
+    return 0
+}

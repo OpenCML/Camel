@@ -1,0 +1,11 @@
+// What converts a number is the conversion function of the target type; `as` is for the forms
+// `T?` and `T!`, module types, shapes, and a value to its own type (design principles 5.1).
+func main(): int sync {
+    let n = 5
+    let x = 2.75
+    let f: f32 = 1.5
+    println(float(n), int(x), i32(n), f64(f), f32(x))
+    println(n as int, x as float, f as f32)
+    println(n as int?, null as int?)
+    return 0
+}

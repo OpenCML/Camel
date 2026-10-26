@@ -551,7 +551,12 @@ class GraphDraft {
     uint32_t payloadGraphIndexOf(GraphId graph);
     gc_node_ref_t addFuncNode(
         GraphId calleeGraph, camel::core::type::Type *type, uint8_t runtimeFlags = 0,
-        gc_slot_idx_t dataIndex = 0);
+        gc_slot_idx_t dataIndex = 0, uint32_t writtenCaptures = 0);
+    /// Which of a FUNC node's callee's captured variables the call writes, as a bit per capture
+    /// of the callee's capture table, in the order its captures were made: the value the call
+    /// hands on carries the new version of each (camel::runtime::GCFuncRef::reserved).
+    uint32_t funcWriteMaskOf(gc_node_ref_t id) const;
+    void setFuncWriteMask(gc_node_ref_t id, uint32_t writtenCaptures);
     /// A LOOP node calling `body.condGraph` and `body.bodyGraph` (camel/runtime/loop.h); the
     /// caller links its inputs and keeps the two graphs among the draft's dependencies.
     gc_node_ref_t

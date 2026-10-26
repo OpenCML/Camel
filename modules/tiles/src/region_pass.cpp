@@ -39,8 +39,9 @@ class RegionPass final : public RuntimeGraphRewritePass {
         // placement report, before the rewrite, and empty for a program that writes no fact, so
         // an untagged program's output is unchanged. It reads the graph; it inserts no node yet.
         out << residencyReport(*program);
-        size_t count = 0;
-        return outlineRegions(
+        size_t count    = 0;
+        slot_t refusal  = NullSlot;
+        const auto *result = outlineRegions(
             *context_,
             program,
             program->root(),
@@ -48,7 +49,18 @@ class RegionPass final : public RuntimeGraphRewritePass {
             preferred_.executeUri,
             count,
             &preferred_,
-            /*refuseGpuScopes=*/true);
+            /*refuseGpuScopes=*/true,
+            &refusal);
+        if (refusal != NullSlot) {
+            // A `#gpu` scope holds an operator the device cannot run: the pass cannot keep the
+            // scope's promise, so it fails, and its failure is an error value (design principles
+            // 9.1). The driver stops the pipeline at this pass and reports it the way an error
+            // value nobody handled is (3.9). The diagnostic is the other refusal, the missing
+            // `std::macro`: the graphs are left unrewritten in both cases.
+            failWithErrorValue(refusal);
+            return nullptr;
+        }
+        return result;
     }
 };
 } // namespace

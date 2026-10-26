@@ -83,7 +83,13 @@ FunctionType *Builder::signatureForArgumentContext(node_handle_t target) const {
         FunctionType *same = nullptr;
         bool mixed         = false;
         for (const auto &[uri, resolver] : ops->resolvers()) {
+            // A rule the module declares gives its parameters, a generic declaration too; a rule
+            // whose signature is computed has none of its own (design principles 6.4: the
+            // declaration is the one source of a signature).
             FunctionType *fixed = resolver ? resolver->fixedSignature() : nullptr;
+            if (fixed == nullptr && resolver) {
+                fixed = resolver->declaredSignature();
+            }
             if (fixed == nullptr) {
                 continue;
             }

@@ -463,7 +463,7 @@ g
 3
 ```
 
-A `sync` written before a lambda (`sync (x: int) => ...`) is a different use: it modifies the function type, and is unchanged.
+When the body of a lambda has to run in order, write the `sync` before the block: `(x: int) => sync { ... }`. A lambda head has no `sync`.
 
 ### 6.5 `var`, references and order
 
@@ -540,7 +540,7 @@ func main(): int sync {
     println(ops->map<(f: (x: int) => int): int => f(10)>)
 
     var total = 0                            // captured by reference
-    [1, 2, 3]->foreach<sync (x: int) => sync { total = total + x }>
+    [1, 2, 3]->foreach<(x: int) => sync { total = total + x }>
     println(total)
     return 0
 }
@@ -645,8 +645,8 @@ func describe(r: int!): string {
 func main(): int sync {
     println(safe_div(9, 3) !! -1)            // 3
     println(safe_div(9, 0) !! -1)            // -1: the substitute
-    println(describe(safe_div(8, 2) ?-> inc))
-    println(describe(safe_div(8, 0) ?-> inc))
+    println(describe(safe_div(8, 2) -> inc))
+    println(describe(safe_div(8, 0) -> inc))
     println(parse_int('12') !! 0, parse_int('twelve') !! 0)
     println(safe_div(1, 0))
     return 0
@@ -665,7 +665,7 @@ error DivByZero: the divisor is zero
 - **`throw e` returns an error value**; it is the same kind of construct as `return`. It does not unwind the call stack; what the caller gets is simply a value of type `int!`.
 - An `int!` cannot be used as an `int`; it must be unwrapped first:
   - `a !! b`: takes `b` on an error, otherwise the value inside;
-  - `x ?-> f`: on an error passes the error on unchanged, otherwise calls `f`; these can be chained;
+  - `x -> f`: on an error passes the error on unchanged, otherwise calls `f`; these can be chained;
   - `match` with `case error e` (`e.kind`, `e.message`, `e.location`) and `case v`.
 - In the graph, all three forms are a branch whose condition is a one-bit tag on the value; it is the same kind of structure as `if`.
 
@@ -809,7 +809,7 @@ The modules that come with Camel are `str` (strings), `array` (arrays), `math`, 
 
 ```cml
 
-import { split, trim, to_upper, replace, find } from str
+import { split, trim, to_upper, replace, index_of } from str
 import { sort_by, take, sum, reverse, unique } from array
 import { abs, hypot, bit_and, pi } from math
 import { mean } from statistics
@@ -822,8 +822,8 @@ func main(): int sync {
     println('hello'->to_upper, 'a-b-c'->replace<'-', '+'>, len('héllo'))
 
     // A result that may not exist is a T?.
-    let at_l = 'hello'->find<'l'> ?? -1
-    let at_z = 'hello'->find<'z'> ?? -1
+    let at_l = 'hello'->index_of<'l'> ?? -1
+    let at_z = 'hello'->index_of<'z'> ?? -1
     println(at_l, at_z)
 
     // Arrays and numbers.

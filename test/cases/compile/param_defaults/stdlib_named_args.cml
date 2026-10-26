@@ -44,5 +44,5 @@ func main(): int sync {
     println(items(m), items(s))
     // A single rule of a declaration module: its one parameter is `s`.
     println("[" + trim(s: "  x  ") + "]", "[" + trim("  x  ") + "]")
-    return decode('{"a": 7, "b": 8}') ?-> report !! 1
+    return decode('{"a": 7, "b": 8}') -> report !! 1
 }

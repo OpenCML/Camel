@@ -372,7 +372,7 @@ case = "../../../../cases/modules/tensor/dtype/mixed_width_known_shapes.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
-expect_output_contains = ["Invalid call to '__mul__'", "(float[2], f32[2])", "the two tensor operands have different element types ('float' and 'f32')", "cast(value, \"float\") or cast(value, \"f32\")"]
+expect_output_contains = ["Invalid call to '__mul__'", "(float[2], f32[2])", "the two tensor operands have different element types ('float' and 'f32')", "float(value) or f32(value)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -425,7 +425,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "mask_written_conversion"
-desc = "The two writings a mask is read with once the conversion is written: `where(mask, x, 0.0)` selects what the mask keeps, and `x * cast(mask, \"f32\")` reads the mask as the number it stands for. Both compute in the tensor's element type - four bytes an element in `to_bytes`, the width the tensor states and not the wider one the pair could have been read at - and both answer the numbers the mask idiom always gave."
+desc = "The two writings a mask is read with once the conversion is written: `where(mask, x, 0.0)` selects what the mask keeps, and `x * f32(mask)` reads the mask as the number it stands for. Both compute in the tensor's element type - four bytes an element in `to_bytes`, the width the tensor states and not the wider one the pair could have been read at - and both answer the numbers the mask idiom always gave."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/dtype/mask_written_conversion.cml"
 args = ["${case}", "${run_nvm}"]
@@ -448,7 +448,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "int_written_conversion"
-desc = "The integer operand with its conversion written: `x * cast(k, \"f32\")` computes in the tensor's element type and answers the values the program asked for (design principles 5.1)."
+desc = "The integer operand with its conversion written: `x * f32(k)` computes in the tensor's element type and answers the values the program asked for (design principles 5.1)."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/dtype/int_written_conversion.cml"
 args = ["${case}", "${run_nvm}"]
@@ -483,7 +483,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "linalg_written_conversion"
-desc = "The product and the linear layer with the conversion written: `cast(x, \"f64\") @ w` computes in f64 because that is what the program wrote, and a bias is passed at the tensor's own element type rather than beside it (design principles 5.1). Both answer the numbers the same call answered when the widths were silently widened."
+desc = "The product and the linear layer with the conversion written: `f64(x) @ w` computes in f64 because that is what the program wrote, and a bias is passed at the tensor's own element type rather than beside it (design principles 5.1). Both answer the numbers the same call answered when the widths were silently widened."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/dtype/linalg_written_conversion.cml"
 args = ["${case}", "${run_nvm}"]
@@ -494,7 +494,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "array_mask_elementwise"
-desc = "The mask an accuracy counts is an array: `===` compares elementwise, so its result is a `bool` array of the operands' shape (design principles 4.2), and a mask is not a number, so the ones and zeros are read by a conversion the program writes (design principles 5.1). `cast(hits, \"float\")` and the selection `where(hits, 1.0, 0.0)` read the same numbers, and the reduction over the array they produce is ordinary: the mask that agrees nowhere counts 0, the one that agrees at two of four positions counts 2 and agrees 0.5."
+desc = "The mask an accuracy counts is an array: `===` compares elementwise, so its result is a `bool` array of the operands' shape (design principles 4.2), and a mask is not a number, so the ones and zeros are read by a conversion the program writes (design principles 5.1). `float(hits)` and the selection `where(hits, 1.0, 0.0)` read the same numbers, and the reduction over the array they produce is ordinary: the mask that agrees nowhere counts 0, the one that agrees at two of four positions counts 2 and agrees 0.5."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/dtype/array_mask_elementwise.cml"
 args = ["${case}", "${run_nvm}"]

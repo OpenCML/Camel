@@ -66,9 +66,9 @@ result may be any of them, and it has an external effect when its traits say so.
 | `rand:*` | write or read-modify-write `rng`, external |
 | `tensor:seed`, `tensor:random`, `tensor:randn` | write or read-modify-write `tensor:generator`, external |
 | `time:now`, `process:sleep` | read `clock`, external |
-| `time:strftime`, `time:strptime`, `env:get_env`, `env:get_cwd`, `process:whoami`, `process:cpu_count` | read `env`, external |
+| `time:strftime`, `time:strptime`, `env:get_env`, `env:get_cwd`, `process:user_name`, `process:cpu_count` | read `env`, external |
 | `process:exit` | read-modify-write `process`, external |
-| `:profiler/*`, `para:rendezvous`, `tensor:(set_)num_threads` | their ambient state, external |
+| `:profiler/*`, `test_support:rendezvous`, `tensor:(set_)num_threads` | their ambient state, external |
 | `tiles:upload` | allocates `tiles:device`; read-modify-write `tiles:driver`, external |
 | `tiles:download`, `tiles:run_preferred_resident`, `tiles:benchmark` | read the device values among operand 0; `tiles:driver`, external |
 | `tiles:run_preferred_resident` (resident form) | allocates `tiles:device`, the result may alias operand 0 |

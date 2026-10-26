@@ -2,7 +2,7 @@ id = "compile.tagged"
 order = 324
 tier = "fast"
 tags = ["feat", "compile", "nullable", "fallible", "types"]
-desc = "The tagged forms `T?` and `T!`, the operators `??`, `!!`, `?->`, the fixed `match` patterns and `throw` (design principles 3.9; docs/technical/29_nullable_and_fallible_values.md)."
+desc = "The tagged forms `T?` and `T!`, the operators `??`, `!!`, `->`, the fixed `match` patterns and `throw` (design principles 3.9; docs/technical/29_nullable_and_fallible_values.md)."
 
 [[tests]]
 name = "nullable"
@@ -40,7 +40,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "fallible"
-desc = "`T!`: `throw error(kind, message)` with the position of the call, `return` under a declared `T!`, `!!`, `?->` (one step and chained, with a callee that returns `U` or `U!`), `match` with `case error e`, rethrowing a caught error."
+desc = "`T!`: `throw error(kind, message)` with the position of the call, `return` under a declared `T!`, `!!`, `->` (one step and chained, with a callee that returns `U` or `U!`), `match` with `case error e`, rethrowing a caught error."
 kind = "behavior"
 case = "../../../cases/compile/tagged/fallible.cml"
 args = ["${case}"]
@@ -89,7 +89,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "stdlib"
-desc = "Library operators that can fail return a `T!`: parse_int, parse_float, fs::try_read_text."
+desc = "Library operators that can fail return a `T!`: parse_int, parse_float, fs::read_text."
 kind = "behavior"
 case = "../../../cases/compile/tagged/stdlib.cml"
 args = ["${case}"]
@@ -106,7 +106,7 @@ const want = [
   "ParseError: '99999999999999999999' is out of the range of an integer at <parse_int>",
   "2.5",
   "-1.0",
-  "error IOError: cannot open 'tagged_no_such_file.txt'",
+  "error NotFound: 'tagged_no_such_file.txt': No such file or directory",
   "<no file>",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
@@ -1035,7 +1035,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "graph.throw_and_pass"
-desc = "`throw e` is the exit of its graph (OPER, CAST, EXIT, no branch); `x ?-> f` is one BRCH/JOIN."
+desc = "`throw e` is the exit of its graph (OPER, CAST, EXIT, no branch); `x -> f` is one BRCH/JOIN."
 kind = "behavior"
 case = "../../../cases/compile/tagged/graph_throw_pass.cml"
 args = ["${case}", "std::gir"]
@@ -1051,7 +1051,7 @@ const idOf = (text) => {
   assert(line, 'a node ' + text)
   return line.trim().split(' ')[0]
 }
-assert(count('type="BRCH"') === 1 && count('type="JOIN"') === 1, 'one branch: the one of ?->')
+assert(count('type="BRCH"') === 1 && count('type="JOIN"') === 1, 'one branch: the one of ->')
 assert(count('label=":op/tag_throw"') === 1, 'one throw')
 assert(count('label=":op/tag_is_error"') === 1, 'one tag read')
 assert(count('label=":op/tag_error_value"') === 1, 'one value read')
@@ -1198,17 +1198,18 @@ timeout_ms = 8000
 
 [[tests]]
 name = "null_then_plain_left"
-desc = "`??` over a plain `int`, at the operator. (It used to be reported as not implemented.)"
-kind = "negative"
+desc = "`??` over a plain `int`: allowed, with the warning that its null case is never taken (KnownNotNull), at the operator; design principles 3.8."
+kind = "behavior"
 case = "../../../cases/compile/tagged/err_plain_left.cml"
 args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::TaggedOperandMismatch"
-expect_diagnostic_code = "0x03000075"
+expect_exit = 0
+expect_stdout_exact = "1\n"
+expect_diagnostic_name = "SemanticDiag::KnownNotNull"
+expect_diagnostic_code = "0x03100111"
 expect_diagnostic_line = 9
 expect_diagnostic_column = 15
-expect_output_contains = ["'??' cannot be applied here: its left side has type 'int', which is not a 'T?'."]
-expect_output_not_contains = ["never printed", "UnknownInternalError"]
+expect_output_contains = ["is known not to be null here (it has type 'int'): the null case of '??' is never taken."]
+expect_output_not_contains = ["TaggedOperandMismatch", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -1245,17 +1246,17 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
-name = "pass_over_nullable"
-desc = "`?->` hands on errors only: over a `T?` it is rejected, at the start of the expression."
+name = "null_then_null_literal_left"
+desc = "`??` over `null`: `null` has type `void`, so there is no value to put back into a `T?` and the operator is refused at its own position. A value that cannot be null is allowed there with a warning (KnownNotNull); `void` is not a value."
 kind = "negative"
-case = "../../../cases/compile/tagged/err_pass_nullable.cml"
+case = "../../../cases/compile/tagged/err_null_left.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TaggedOperandMismatch"
 expect_diagnostic_code = "0x03000075"
-expect_diagnostic_line = 11
-expect_diagnostic_column = 13
-expect_output_contains = ["'?->' cannot be applied here: its left side has type 'int?', which is not a 'T!'."]
+expect_diagnostic_line = 10
+expect_diagnostic_column = 18
+expect_output_contains = ["'??' cannot be applied here: its left side has type 'void', which is not a 'T?'."]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

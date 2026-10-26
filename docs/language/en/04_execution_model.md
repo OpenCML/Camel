@@ -12,7 +12,7 @@ A Camel program is a graph. This chapter explains how this graph is evaluated: e
 | Function | A subgraph of its own; a call site is a node in the enclosing graph that points to that subgraph |
 | `sync { ... }` block | Control edges between the adjacent statements it writes directly |
 | `var` parameter | The callee subgraph and the caller point to the same object |
-| `if`, `match`, `??`, `!!`, `?->` | A branch node; each arm is a subgraph |
+| `if`, `match`, `??`, `!!`, `->` over a `T?` / `T!` | A branch node; each arm is a subgraph |
 | `#macro` function | An ordinary subgraph; the `std::macro` pass can evaluate it ahead of time and materialise the result as a constant in the graph |
 
 ---
@@ -153,7 +153,7 @@ g
 3
 ```
 
-To make a function body execute in order, write the `sync` in the function body position; the `sync` prefix of a lambda (`sync (x: int) => ...`) is the same modifier written on a lambda.
+To make a function body execute in order, write the `sync` in the function body position; the body of a lambda is a block, and the `sync` is written before it: `(x: int) => sync { ... }`. A lambda head has no modifier (`sync (x: int) => ...` is a syntax error), and neither has a function type: `sync` is a property of a block, not of a type.
 
 ## 4.4 `var` and the order of writes
 

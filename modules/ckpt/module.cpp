@@ -26,7 +26,7 @@ using namespace camel::core::context;
 class TreeLeavesResolver final : public FuncTypeResolver {
   public:
     std::optional<FunctionType *>
-    resolve(const type_vec_t &, const type_vec_t &, const ModifierSet &) const override {
+    resolve(const type_vec_t &, const type_vec_t &) const override {
         return std::nullopt; // The compiler resolves the leaf tuple from the tree's type.
     }
     std::string signature() const override { return "tree_leaves (type-directed)"; }

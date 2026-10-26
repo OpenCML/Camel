@@ -25,7 +25,7 @@ func eraseAll(p: Program, hits: Node[]): Program! sync {
 
 func settle(p: Program): Program! sync {
     let hits = allNodes(p)->filter<isUnused>
-    return if len(hits) == 0 then p else eraseAll(p, hits) ?-> settle
+    return if len(hits) == 0 then p else eraseAll(p, hits) -> settle
 }
 
 /// The constants and pure operations that no node reads, removed until none is left.

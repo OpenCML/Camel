@@ -1,0 +1,18 @@
+/**
+ * Extraction after saturation keeps every port of a control region. The condition of this loop
+ * reads only `b`, so its port for `a` has no reader; it is still a port of the region (the
+ * region is called with the whole state), and erasing it left the region naming a node the graph
+ * did not have. The two constants `0` and the two `1`s are writings of one value each, so the
+ * graph has classes and extraction runs over it.
+ */
+module saturate_loop_unread_state
+
+func both(n: int): int {
+    let (a, b) = loop a = 0, b = 0 while b < n do (a + 1, b + 1)
+    return a
+}
+
+func main(): int sync {
+    println(both(3))
+    return 0
+}

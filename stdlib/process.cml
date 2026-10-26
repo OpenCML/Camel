@@ -2,43 +2,34 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Every function touches the process or the machine and is declared with effects. `sleep` and
- * `exit` are also built in: they need no import. The terminal is `io`'s.
+ * The process and the machine it runs on: waiting, ending, who runs it and how many threads it can
+ * have. Durations are seconds as a `float`, like `time::now`. The terminal is `io`'s, the
+ * environment `env`'s.
  */
 
-// The declarations of the operators of the C++ module `modules/process` (design principles 6.4).
-// This file is the one source of their signatures; the C++ side
-// keeps the kernels, the executor, the purity and the resources: `sleep` waits on the clock,
-// `whoami` and `cpu_count` read the environment, and `thread_count` reads the process (design
-// principles 3.3). `exit` is the built-in operator of `src/builtin/modules/globals.cpp`, not a
-// group of this module, so it is not declared here.
-//
-// No signature of this module is computed from an argument: `sleep` answers nothing and the other
-// three answer `string` and `int` whatever the values are. `modules/process` therefore exports no
-// operator group of its own, and the module needs no `stdlib/signatures/process.cml`.
-
-module process
-
-/// Suspends the program for the given number of milliseconds.
+/// Suspends the program for the given number of seconds. The wait is on the clock, so a call is
+/// never folded away and the work of other ready nodes goes on meanwhile.
 /// @effect waits
-/// @fails fault `InvalidArgument` when the duration is negative
-/// @example sleep(100)
-export func sleep(milliseconds: int): void
+/// @fails fault `InvalidArgument` when seconds is negative or not a number
+/// @example sleep(0.1)
+export func sleep(seconds: float): void
+
+/// The process as a resource: ending it is an effect on it, and a test that reads the number of its
+/// threads (`test_support::thread_count`) reads it too.
+export resource process
+
+/// Ends the program with the given exit code, after the buffered output is written and the
+/// external resources are released. Nothing that is written after the call runs.
+/// @example exit(2)
+export func exit(code: int): void uses process
 
 /// The name of the user the process runs as.
 /// @effect reads the environment
-/// @fails fault `RuntimeError` when the name cannot be found
-/// @example whoami()    // 'alice'
-export func whoami(): string
+/// @fails error value `NotFound` when the system has no name for the user
+/// @example user_name() !! 'unknown'    // 'alice'
+export func user_name(): string!
 
 /// The number of hardware threads, at least 1.
 /// @effect reads the machine
 /// @example cpu_count()    // 8
 export func cpu_count(): int
-
-/// The number of threads this process has, the caller included: the count the operating system
-/// reports for the process, not the number of processors. A test reads it to pin how many worker
-/// threads a run creates.
-/// @effect reads the process
-/// @example thread_count()    // 1 at -t 1
-export func thread_count(): int

@@ -652,7 +652,7 @@ kind = "negative"
 case = "../../../cases/compile/native/re_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "re_arity.cml:10:27", "argument types: <string> (string, string)", "<re:test>: <pattern: string> (text: string) => bool"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "re_arity.cml:10:27", "argument types: <string> (string, string)", "has_match: <pattern: string> (text: string) => bool"]
 
 [[tests]]
 name = "native.re_wrong_type"
@@ -661,13 +661,13 @@ kind = "negative"
 case = "../../../cases/compile/native/re_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "re_type.cml:11:29", "argument types: <string> (int)", "<re:test>: <pattern: string> (text: string) => bool"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "re_type.cml:11:29", "argument types: <string> (int)", "has_match: <pattern: string> (text: string) => bool"]
 
 #  ---- The declarations of `time`: the clock and its text forms ----
 
 [[tests]]
 name = "native.time_declaration_import"
-desc = "`time`'s declarations are the module's signature: an importer calls `now`, `strftime` and `strptime` with the declared float and string types and reads their declared results from `stdlib/time.cml`, and every call reaches the C++ operator."
+desc = "`time`'s declarations are the module's signature: an importer calls `now`, `strftime` and `strptime` with the declared float and string types, the format being a with-argument and reads their declared results from `stdlib/time.cml`, and every call reaches the C++ operator."
 kind = "behavior"
 case = "../../../cases/compile/native/time_declaration_import.cml"
 args = ["${case}"]
@@ -676,21 +676,21 @@ expect_stdout_exact = "true\n1970-01-01\ntrue\n"
 
 [[tests]]
 name = "native.time_wrong_arity"
-desc = "`time:strftime` is declared with two ordinary arguments: a missing one is refused at the call, and the overload the message lists is the declaration's, parameter names included."
+desc = "`time:strftime` is declared with one ordinary argument: a second one is refused at the call, and the overload the message lists is the declaration's, parameter names included."
 kind = "negative"
 case = "../../../cases/compile/native/time_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "time_arity.cml:10:21", "(float)", "<time:strftime>: (timestamp: float, format: string) => string"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "time_arity.cml:10:27", "argument types: <string> (float, float)", "<time:strftime>: <format: string> (timestamp: float) => string"]
 
 [[tests]]
 name = "native.time_wrong_type"
-desc = "An `int` where the declaration says `string`: refused at the declaration's type, and the signature in the message has the declaration's own parameter names (`text`, `format`) — `stdlib/time.cml`, not the C++, is the source."
+desc = "An `int` where the declaration says `string`: refused at the declaration's type, and the signature in the message has the declaration's own parameter names (`text`; `format` among the with-parameters) — `stdlib/time.cml`, not the C++, is the source."
 kind = "negative"
 case = "../../../cases/compile/native/time_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "time_type.cml:11:21", "argument types: <> (int, string)", "<time:strptime>: (text: string, format: string) => float"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "time_type.cml:11:27", "argument types: <string> (int)", "<time:strptime>: <format: string> (text: string) => float!"]
 
 #  ---- Retired names are unknown names, not aliases (design principles 1) ----
 #
@@ -738,7 +738,7 @@ kind = "behavior"
 case = "../../../cases/compile/native/fs_declaration_import.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_exact = "true\nfalse\ntrue\ntrue\n26\nhello from the declaration\nhello\nhello from the declaration\nok\nNotFound\nok\nok\nfalse\n"
+expect_stdout_exact = "ok\nfalse\ntrue\ntrue\n26\nhello from the declaration\nhello\nhello from the declaration\nok\nNotFound\nok\nok\nfalse\n"
 
 [[tests]]
 name = "native.fs_wrong_arity"
@@ -768,7 +768,7 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F",
 
 [[tests]]
 name = "native.para_declaration_import"
-desc = "`para`'s declarations are the module's signature: the fixed signature of `rendezvous` and the two operators whose type comes from the element type of their array, `unordered_foreach` with a callback whose result type is free and `unordered_reduce` with one from the element to itself; every call reaches the operator the module runs."
+desc = "`para`'s declarations are the module's signature: the two operators whose type comes from the element type of their array, `unordered_foreach` with a callback whose result is dropped and `unordered_reduce` with one from the element to itself — and `test_support`'s `rendezvous` is read from its own declaration; every call reaches the operator the module runs."
 kind = "behavior"
 case = "../../../cases/compile/native/para_declaration_import.cml"
 args = ["${case}"]
@@ -777,21 +777,21 @@ expect_stdout_exact = "1\n10\ndone\n"
 
 [[tests]]
 name = "native.para_wrong_arity"
-desc = "`para:rendezvous` is declared with two ordinary arguments: a single one is refused at the call, and the overload the message lists is the declaration's."
+desc = "`test_support:rendezvous` is declared with two ordinary arguments: a single one is refused at the call, and the overload the message lists is the declaration's."
 kind = "negative"
 case = "../../../cases/compile/native/para_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_arity.cml:10:23", "(int)", "<para:rendezvous>: (parties: int, timeout_ms: int) => int"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_arity.cml:10:23", "(int)", "<test_support:rendezvous>: (parties: int, timeout: float) => int"]
 
 [[tests]]
 name = "native.para_wrong_type"
-desc = "A `string` where the declaration says `int`: refused at the call, and the message carries the declaration's own parameter names (`parties`, `timeout_ms`) — `stdlib/para.cml`, not the C++, is the source."
+desc = "A `string` where the declaration says `int`: refused at the call, and the message carries the declaration's own parameter names (`parties`, `timeout`) — `stdlib/test_support.cml`, not the C++, is the source."
 kind = "negative"
 case = "../../../cases/compile/native/para_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_type.cml:11:23", "argument types: <> (string, int)", "<para:rendezvous>: (parties: int, timeout_ms: int) => int"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_type.cml:11:23", "argument types: <> (string, float)", "<test_support:rendezvous>: (parties: int, timeout: float) => int"]
 
 [[tests]]
 name = "native.para_unordered_wrong_arity"
@@ -800,7 +800,7 @@ kind = "negative"
 case = "../../../cases/compile/native/para_unordered_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_unordered_arity.cml:10:5", "argument types: <(item: int) => int pure> (int[], int)", "<:mark/unordered_foreach_arr>: <f: (item: T) => R> (xs: T[]) => void"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_unordered_arity.cml:10:5", "argument types: <(item: int) => int pure> (int[], int)", "<:mark/unordered_foreach_arr>: <f: (item: T) => void> (xs: T[]) => void"]
 
 [[tests]]
 name = "native.para_unordered_wrong_type"
@@ -809,7 +809,18 @@ kind = "negative"
 case = "../../../cases/compile/native/para_unordered_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_unordered_type.cml:11:5", "argument types: <(item: int) => int pure> (int)", "<:mark/unordered_foreach_arr>: <f: (item: T) => R> (xs: T[]) => void"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_unordered_type.cml:11:5", "argument types: <(item: int) => int pure> (int)", "<:mark/unordered_foreach_arr>: <f: (item: T) => void> (xs: T[]) => void"]
+
+[[tests]]
+name = "native.para_unordered_pure_result"
+desc = "`unordered_foreach` is declared `with <f: (item: T) => void>`: its element function is written for its effects, so a call that runs for nothing is refused as UnusedPureResult, as the element function of `foreach` is."
+kind = "negative"
+case = "../../../cases/compile/native/para_unordered_pure_result.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnusedPureResult"
+expect_diagnostic_line = 13
+expect_diagnostic_column = 38
 
 [[tests]]
 name = "native.para_unordered_reduce_callback_arity"
@@ -858,13 +869,13 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F",
 
 [[tests]]
 name = "native.tiles_declaration_import"
-desc = "`tiles:available` and `tiles:device` are declared with no parameters, a `bool` and a `string` result; the importer reads both from `stdlib/tiles.cml`, `available` reaches the C++ operator, and `device` type-checks as `() => string` without being called."
+desc = "`tiles:available` and `tiles:device` are declared with no parameters, a `bool` and a `string!` result; the importer reads both from `stdlib/tiles.cml`, and both reach the C++ operator: `available` answers `false` and `device` type-checks as `() => string!`, whose error value of kind `DeviceUnavailable` a run without a device carries and `!!` stands for."
 kind = "behavior"
 case = "../../../cases/compile/native/tiles_declaration_import.cml"
 args = ["${case}"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 0
-expect_stdout_exact = "false\n"
+expect_stdout_exact = "false\nno device\n"
 
 [[tests]]
 name = "native.tiles_wrong_arity"
@@ -1280,7 +1291,7 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F",
 
 [[tests]]
 name = "native.process_declaration_import"
-desc = "`process`'s declarations are what an importer sees: `sleep` takes the declared `int` and answers nothing, `whoami` and `cpu_count` take nothing and answer the declared `string` and `int`. Every call reaches the C++ kernels, and all three stay effectful (they run in a `sync` block)."
+desc = "`process`'s declarations are what an importer sees: `sleep` takes the declared `float` (seconds) and answers nothing, `user_name` and `cpu_count` take nothing and answer the declared `string!` and `int`. Every call reaches the C++ kernels, and all three stay effectful (they run in a `sync` block)."
 kind = "behavior"
 case = "../../../cases/compile/native/process_declaration_import.cml"
 args = ["${case}"]
@@ -1289,25 +1300,25 @@ expect_stdout_exact = "true\ntrue\n"
 
 [[tests]]
 name = "native.process_wrong_arity"
-desc = "`process:sleep` is declared with one ordinary argument: none is refused at the call. The message lists the built-in's `(int) => void` — `sleep` is also built in — and the declaration's `(milliseconds: int) => void` from `stdlib/process.cml`."
+desc = "`process:sleep` is declared with one ordinary argument: none is refused at the call. The message lists the declaration's `(seconds: float) => void` from `stdlib/process.cml`."
 kind = "negative"
 case = "../../../cases/compile/native/process_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "process_arity.cml:10:5", "argument types: <> ()", "<process:sleep>: (milliseconds: int) => void"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "process_arity.cml:10:5", "argument types: <> ()", "<process:sleep>: (seconds: float) => void"]
 
 [[tests]]
 name = "native.process_wrong_type"
-desc = "The parameter of `process:sleep` is the declaration's `int`: a `string` there is refused at the call. The message lists the built-in's `(int) => void` and the declaration's `(milliseconds: int) => void`, whose parameter name comes from `stdlib/process.cml`."
+desc = "The parameter of `process:sleep` is the declaration's `float`: a `string` there is refused at the call. The message lists the declaration's `(seconds: float) => void`, whose parameter name comes from `stdlib/process.cml`."
 kind = "negative"
 case = "../../../cases/compile/native/process_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "process_type.cml:11:5", "argument types: <> (string)", "<process:sleep>: (milliseconds: int) => void"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "process_type.cml:11:5", "argument types: <> (string)", "<process:sleep>: (seconds: float) => void"]
 
 [[tests]]
 name = "native.hash_declaration_import"
-desc = "`hash`'s declarations are what an importer sees: `sha256` accepts a `string` and a `Bytes` value (two declarations with `hash:sha256_str` and `hash:sha256_bytes`), `sha256_rounds` takes the declared `string` and `int`, and every call reaches the C++ kernel and prints the declared `string`."
+desc = "`hash`'s declarations are what an importer sees: `sha256` accepts a `string` and a `Bytes` value (two functions written in Camel over the one kernel `hash:sha256_bytes`), and every call reaches the C++ kernel and prints the declared `string`."
 kind = "behavior"
 case = "../../../cases/compile/native/hash_declaration_import.cml"
 args = ["${case}"]
@@ -1316,21 +1327,21 @@ expect_stdout_exact = "true\ntrue\ntrue\ntrue\n"
 
 [[tests]]
 name = "native.hash_wrong_arity"
-desc = "Both declarations of `hash:sha256` take one ordinary argument: a second one is refused at the call, and the overloads the message lists are the two declarations, under the two operator URIs the `#op` tags name (`hash:sha256_str`, `hash:sha256_bytes`) — `stdlib/hash.cml`, not the C++ module."
+desc = "Both `sha256` functions take one ordinary argument: a second one is refused at the call, and the overloads the message lists are the two functions of `stdlib/hash.cml`, with the parameter names it gave."
 kind = "negative"
 case = "../../../cases/compile/native/hash_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "hash_arity.cml:10:19", "argument types: <> (string, string)", "<hash:sha256_str>: (s: string) => string", "<hash:sha256_bytes>: (s: Bytes) => string"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "hash_arity.cml:10:19", "argument types: <> (string, string)", "hash::sha256: (data: Bytes) => string", "hash::sha256: (text: string) => string"]
 
 [[tests]]
 name = "native.hash_wrong_type"
-desc = "Neither declaration of `hash:sha256` accepts an `int`: the call is refused against both, and the signatures in the message carry the parameter name the declarations gave (`s`) under the two operator URIs — `stdlib/hash.cml`, not the C++ module."
+desc = "Neither `sha256` accepts an `int`: the call is refused against both, and the signatures in the message carry the parameter names `stdlib/hash.cml` gave (`data`, `text`)."
 kind = "negative"
 case = "../../../cases/compile/native/hash_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "hash_type.cml:11:19", "argument types: <> (int)", "<hash:sha256_str>: (s: string) => string", "<hash:sha256_bytes>: (s: Bytes) => string"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "hash_type.cml:11:19", "argument types: <> (int)", "hash::sha256: (data: Bytes) => string", "hash::sha256: (text: string) => string"]
 
 #  ---- The declarations of `graph`: `constant` per sample type ----
 #

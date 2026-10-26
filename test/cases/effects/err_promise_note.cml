@@ -1,0 +1,18 @@
+/**
+ * The report points at the first use the clause does not name: a use the clause does name is not
+ * where the body stopped matching it, so the note skips past it and lands on the use that is
+ * outside the promise (design principles 3.3).
+ */
+module err_promise_note
+
+func bump(var c: int): int uses c sync {
+    c += 1
+    println(c)
+    return c
+}
+
+func main(): int sync {
+    var c = 0
+    println(bump(c))
+    return 0
+}

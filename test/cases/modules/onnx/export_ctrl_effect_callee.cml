@@ -17,7 +17,7 @@ func shrink(t: f32[..]): f32[..] sync {
 
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [2, 2])
-    export_model((t: f32[..]): f32[..] => shrink(t), x, get_env('ONNX_OUT'))
+    export_model((t: f32[..]): f32[..] => shrink(t), x, get_env('ONNX_OUT') ?? '')
     println('unreachable')
     return 0
 }

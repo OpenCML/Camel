@@ -1,16 +1,16 @@
 /**
- * The declarations of `process` are what an importer sees: `sleep` takes the declared `int` and
- * answers nothing, and `whoami` and `cpu_count` take nothing and answer the declared `string`
- * and `int`. Every call reaches the C++ operator.
+ * The declarations of `process` are what an importer sees: `sleep` takes the declared `float`
+ * (seconds) and answers nothing, `user_name` answers the declared `string!`, and `cpu_count` the
+ * declared `int`. Every call reaches the C++ operator.
  */
 module process_declaration_import
 
-import { sleep, whoami, cpu_count } from process
+import { sleep, user_name, cpu_count } from process
 
 func main(): int sync {
-    let user: string = whoami()
+    let user: string = user_name() !! ''
     let cores: int = cpu_count()
-    sleep(1)
+    sleep(0.001)
     println(user != '')
     println(cores > 0)
     return 0

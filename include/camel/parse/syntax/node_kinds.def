@@ -108,7 +108,7 @@ CAMEL_NODE(PowerExpr, Expr)            // nullableExpr ('^' powerExpr)?; also th
 CAMEL_NODE(NullableExpr, Expr)         // unaryExpr (('??' | '!!') dataExpr)?
 CAMEL_NODE(CastExpr, Expr)             // linkExpr ('as' | 'is') typeExpr
 CAMEL_NODE(UnaryExpr, Expr)            // ('!' | '~') linkExpr, '-' negPower
-CAMEL_NODE(LinkExpr, Expr)             // negExpr (('->' | '?->') compExpr)*
+CAMEL_NODE(LinkExpr, Expr)             // negExpr ('->' compExpr)*
 CAMEL_NODE(CompExpr, Expr)             // annoExpr ('..' annoExpr)*
 CAMEL_NODE(AnnoExpr, Expr)             // accessExpr (indices | parentArgues | structData | angledValues | typeArguments | memberAccess)*
 CAMEL_NODE(AccessExpr, Expr)           // primaryData ('.' (IDENTIFIER | INTEGER | REAL))*

@@ -261,7 +261,6 @@ bool isIsolatableFault(RuntimeDiag diag) {
     case RuntimeDiag::OperandTypeUnsupported:
     case RuntimeDiag::InvalidArgument:
     // A library operator that is not declared `T!` failed.
-    case RuntimeDiag::FileOpenFailed:
     case RuntimeDiag::FileSystemError:
     case RuntimeDiag::RegexInvalid:
     case RuntimeDiag::TimeFormatFailed:

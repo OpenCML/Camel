@@ -3,5 +3,5 @@ first line
 second line
 lines: 2 last: second line
 exists: false
-<unreadable: IOError>
+<unreadable: NotFound>
 default contents

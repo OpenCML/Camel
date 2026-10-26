@@ -1,0 +1,25 @@
+/**
+ * Saturation over a value whose rewriting is a node of an enclosing region: `x + 1` sits in the
+ * arm of `&&`, and `x + 1 => x` names `x`, the parameter outside the arm. The writings of one
+ * value share a region (an arm's node cannot stand for a value read outside the arm), so the
+ * engine does not record that equivalence; saturating, extracting and running give the program
+ * its meaning back.
+ */
+module saturate_outer_operand
+import { Program, current } from graph
+import { Rule, saturate, extract } from rewrite
+
+rule drop_one(x: int) { x + 1 => x }
+
+func positiveNext(x: int, c: bool): bool {
+    return c && x + 1 > 0
+}
+
+func main(): int sync {
+    let p = current()
+    let rules: Rule[] = [drop_one]
+    let s = saturate(p, rules, 2) !! p
+    let q = extract(s, 'size') !! s
+    println(`saturated ${positiveNext(-1, true)} ${positiveNext(1, true)} ${positiveNext(5, false)}`)
+    return 0
+}

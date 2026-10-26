@@ -152,8 +152,9 @@ version lives as long as a live `Program` holds it, a `Program` as long as somet
   `GCGraph::updateRefs` its static values, `Function::updateRefs` the `Program` it was made in
   (slot `program`) and its graph. A frame keeps the graph it runs (`FramePool` tracer).
 - **Two collections.** While a program runs, a major collection of run-time values marks through
-  the heap and `GCGraphManager::sweepMarked()` (installed with `setGraphSweeper`, called after
-  `markPhase`) frees the unmarked `Program`s and graph versions; the graph space also asks for a
+  the heap and `GCGraphManager::sweepMarked()` (installed with `registerGraphSweeper`, one per
+  context, called after `markPhase`) frees the unmarked `Program`s and graph versions; the graph
+  space also asks for a
   major collection when it holds a megabyte (`--graph-gc-mb`, default 64) and as much again
   as it held after the last sweep (`requestMajorCollection`). Between passes (nothing runs)
   `collect()` has the heap marked the same way, without sweeping or moving anything

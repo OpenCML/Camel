@@ -11,6 +11,7 @@
 #include "camel/parse/parse.h"
 #include "camel/utils/install_layout.h"
 #include "camel/utils/log.h"
+#include "camel/utils/path.h"
 #include "service/codegen/source/generator.h"
 #include <filesystem>
 #include <format>
@@ -27,6 +28,12 @@ using namespace camel::core::module;
 namespace fs = std::filesystem;
 
 int main(int argc, char *argv[]) {
+    // `CAMEL_HOME` picks the installation whose standard library the run reads; a value that does
+    // not name an installation is reported as that, before anything is loaded.
+    if (const std::string problem = camel::utils::camelHomeProblem(); !problem.empty()) {
+        std::cerr << "camel-codegen: " << problem << "\n";
+        return 1;
+    }
     camel::ScopedRuntime camelRuntime;
     std::string inputPath;
     for (int i = 1; i < argc; ++i) {
@@ -79,7 +86,10 @@ int main(int argc, char *argv[]) {
 
     auto diagnostics = std::make_shared<Diagnostics>("camel-codegen", inputPath);
     auto parser      = std::make_shared<CamelParser>(diagnostics);
-    auto mainModule  = std::make_shared<UserDefinedModule>("main", inputPath, ctx, parser);
+    // The entry module is named by its file (design principles 10.2), as in the CLI. The
+    // diagnostics above keep `camel-codegen`: that name is the tool reporting, not the module.
+    auto mainModule  = std::make_shared<UserDefinedModule>(
+        camel::utils::moduleNameOfFile(inputPath), inputPath, ctx, parser);
     ctx->setMainModule(mainModule);
 
     (void)mm::autoSpace();

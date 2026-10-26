@@ -74,7 +74,7 @@ digraph GraphIR {
         N1C -> N1E [label="0|0", type="CTRL"];
     }
     O00 [label="EXIT", type="EXIT"];
-    N1F [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="39:0-44:1", srcfile="<ROOT>/test/cases/opt/camel_passes/fold_subject.cml", value_type="() => int"];
+    N1F [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="39:0-44:1", srcfile="<ROOT>/test/cases/opt/camel_passes/fold_subject.cml", value_type="() => int uses stdout"];
     N20 [label="CALL", type="CALL", value_type="int"];
     N20 -> O00 [label="0", type="EXIT"];
     N1F -> N20 [label="0|0", type="WITH"];

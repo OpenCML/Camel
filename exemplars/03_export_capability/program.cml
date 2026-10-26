@@ -7,20 +7,20 @@
  */
 module export_capability_exemplar
 
-import { reshape, relu, cast } from tensor
+import { reshape, relu } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
 func counts(t: f32[..]): i64[..] {
-    return relu(cast(t, 'int64') - 2)
+    return relu(int(t) - 2)
 }
 
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [2, 2])
     println(counts(x))
-    export_model(counts, x, get_env('ONNX_OUT_UNCHECKED'), [], 'none')
+    export_model(counts, x, get_env('ONNX_OUT_UNCHECKED') ?? '', [], 'none')
     println('written without the check')
-    export_model(counts, x, get_env('ONNX_OUT'))
+    export_model(counts, x, get_env('ONNX_OUT') ?? '')
     println('unreachable')
     return 0
 }

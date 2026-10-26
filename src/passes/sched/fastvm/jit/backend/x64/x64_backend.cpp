@@ -142,6 +142,18 @@ std::vector<JitBlocker> collectBlockers(const CompilationUnit &unit, bool firstO
                     std::format("pc={} BRCH is not followed by one JUMP for each arm", pc));
             }
         }
+        if ((bc.opcode == OpCode::FUNC || bc.opcode == OpCode::TAIL) &&
+            getFuncExtraWriteMask(&bc) != 0) {
+            // The call hands on the tuple of the result and the new version of each captured
+            // variable its callee writes. Only the interpreter builds that tuple, and a compiled
+            // caller has nowhere to ask for it, so the graph stays in the interpreter.
+            add(pc,
+                "writes-captures",
+                std::format(
+                    "pc={} {} writes captured variables, whose versions its value carries",
+                    pc,
+                    bc.opcode == OpCode::FUNC ? "FUNC" : "TAIL"));
+        }
         pc += bc.opsize;
     }
     return found;

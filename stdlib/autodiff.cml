@@ -2,30 +2,43 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Automatic differentiation: `grad` turns a function into its gradient function, `with_grad`
- * returns the value together with that gradient, and `stop_gradient` marks a value as a
- * constant. The gradient of a function is a function of the same parameters, so the useful
- * signature is the type of the function it differentiates.
+ * Automatic differentiation: function transforms that turn a function into the function of its
+ * gradient. `grad(f)` and `with_grad(f)` take the function as an ordinary argument (it is what is
+ * transformed, not a configuration) and give a function of the same parameters, so
+ * `with_grad(loss)<model>(x, y)` is the loss together with the gradient of the model, and the two
+ * steps can be written apart: `let step = with_grad(loss)`, then `step<model>(x, y)` in the loop.
+ *
+ * What is differentiated is the first `with` parameter of `f` (the weights); every other `with`
+ * parameter is a constant, and so is every ordinary parameter. To differentiate the data, bind it
+ * as a `with` parameter with a lambda. A function with no `with` parameter, or whose first one has
+ * no tangent, or a result that is not a scalar float, is refused where the call is compiled.
+ *
+ * The gradient has the type of the parameter it is the gradient of: a struct gives a struct of
+ * gradients, a tuple a tuple, an array of floats an array of the same element type and shape, a
+ * float a float of its own type. An integer or a bool leaf is not a continuous quantity: its
+ * gradient is a zero of its own type, so a parameter tree that carries a counter can be updated by
+ * leaving the counter as it is. A string or a function leaf has no gradient and is refused with
+ * the path of the leaf named. A value that depends on the differentiated parameter but has no way
+ * for its gradient to flow (an array of strings read inside a loop) is refused as well, never
+ * dropped.
+ *
+ * `grad` and `with_grad` are the transforms of reverse mode, built on the pass mechanism: they
+ * need `std::macro` to have expanded what they differentiate, and they leave a call whose callee is
+ * not known when they run to a run-time refusal. `vjp` is reverse mode for a result that is not a
+ * scalar (it gives the result and the pullback from the cotangent of the result to the gradient),
+ * and `jvp` is forward mode (the result and its tangent along a direction); both land with the
+ * autodiff lane, not before they work.
+ * `stop_gradient` marks a value as a constant, and a custom derivative of a function is the tag
+ * `#vjp(rule)` on its declaration.
  */
 
-// The declaration of the one fixed signature of the C++ module `modules/autodiff` (design
-// principles 6.4). This file is the one source of `stop_gradient`'s
-// signature; the C++ side keeps the kernel, the executor, the operator traits and the semantics.
-//
-// `grad` and `with_grad` compute their signature from their argument: the result is a function
-// whose parameter list is the argument function's and whose result type is the gradient of the
-// argument's result (`gradientSignature(f)`). A declaration cannot write that rule; the two stay
-// in C++ as `GradResolver`, and `stdlib/signatures/autodiff.cml` keeps their reference entries
-// (as `json` and `random` do with their computed signatures).
-//
-// No operator of this module needs PyTorch or a GPU: `stop_gradient` is the identity on its
-// argument, and the declarations here describe C++ operators of the core tensor stack.
+/// The custom derivative of the function it is written on: calls of that function use `rule`
+/// instead of differentiating its body. The rule has the signature of the pullback of the
+/// function (`stdlib/signatures/autodiff.cml`).
+export tag vjp::<F>(rule: F) on func when is_function::<F>()
 
-module autodiff
-
-/// Returns its argument unchanged, and cuts the gradient at this point: a value passed through
+/// Gives its argument unchanged and cuts the gradient at this point: a value passed through
 /// `stop_gradient` is a constant to `grad`. Any value is accepted, and the result has the
 /// argument's own type.
-/// @pure
 /// @example stop_gradient(3.0)    // 3.0
-export func stop_gradient::<T>(x: T): T
+export func stop_gradient::<T>(x: T): T pure

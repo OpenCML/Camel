@@ -54,4 +54,14 @@ inline std::string currentDirectory() {
     return pathToUtf8(std::filesystem::current_path());
 }
 
+/// The module name a module file has: its name without the extension (design principles 10.2: a
+/// file is a module, and the module is named by the file, with no declaration needed). `counts.cml`
+/// is the module `counts` and `shapes.cmo` is `shapes`; only the last extension is dropped
+/// (`a.b.cml` is the module `a.b`), and a name with no extension is used as it stands. Nothing is
+/// looked up or read here: the name follows from the path alone, which is why every tool that
+/// loads an entry file names the entry module the same way.
+inline std::string moduleNameOfFile(std::string_view path) {
+    return pathToUtf8(pathFromUtf8(path).stem());
+}
+
 } // namespace camel::utils

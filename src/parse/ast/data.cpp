@@ -74,6 +74,8 @@ std::string to_string(TypeCaseKind kind) {
         return "_";
     case TypeCaseKind::Func:
         return "func";
+    case TypeCaseKind::Array:
+        return "array";
     case TypeCaseKind::Identity:
         return "type";
     default:
@@ -170,8 +172,6 @@ std::string to_string(ReservedDataOp op) {
         return "??";
     case ReservedDataOp::ErrorThen:
         return "!!";
-    case ReservedDataOp::NotNullThen:
-        return "?";
     case ReservedDataOp::Access:
         return ".";
     case ReservedDataOp::Call:

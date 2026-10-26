@@ -183,7 +183,6 @@ FunctionTypeFactory rebuildFunctionType(
     FunctionType *func, const type_bindings_t &bindings, const ExtentValues *extents,
     bool dropConstas, bool &changed) {
     FunctionTypeFactory factory;
-    factory.setModifiers(func->modifiers());
     factory.setHasCompileInfo(func->hasArgNames());
     const auto replaced = [&](Type *type) {
         Type *result = substituteTypeVars(type, bindings);
@@ -643,7 +642,11 @@ bool bindTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
         return true;
     }
     if (const TypeVarType *var = asVar(pattern)) {
-        if (var->binder() && findTypeBinding(bindings, var->name()) == nullptr) {
+        // A handle into a program or a draft determines no type parameter: it stands for a value
+        // and is not one (design principles 5.9, `Type::determinesTypeParameters`). The variable
+        // stays unbound, and the call reports the type arguments it needs written out.
+        if (var->binder() && actual->determinesTypeParameters() &&
+            findTypeBinding(bindings, var->name()) == nullptr) {
             bindings.emplace_back(var->name(), actual);
         }
         return true;
@@ -740,10 +743,19 @@ bool bindTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
         break;
     }
     if (OtherType *want = asTypeApplication(pattern)) {
-        // The same type code was checked above; an argument list of another length is the
-        // prototype of the name (`Map` written without arguments).
         auto *have = static_cast<OtherType *>(actual);
+        if (have->paramCount() == 0 && want->paramCount() > 0) {
+            // The bare name states no argument, so it fixes no type variable, and it is not of the
+            // wrong form either: whether it is accepted where the arguments are wanted is the
+            // assignment rule's business (`Node` is a node whose value type the program did not
+            // state, so it is taken where a node of a stated value type is and leaves that type
+            // open -- language reference 9.6, design principles 5.9). A parameter whose variables
+            // no argument fixes is then refused by name, with the type arguments to write.
+            return true;
+        }
         if (have->paramCount() != want->paramCount()) {
+            // The same type code was checked above; an argument list of another length is the
+            // prototype of the name (`Map` written without arguments).
             return false;
         }
         for (size_t i = 0; i < want->paramCount(); ++i) {

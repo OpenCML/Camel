@@ -57,7 +57,7 @@ Camel 是图原生的通用编程语言，AI 是它首要的应用领域。
 
 ### 4.3 语言特性
 
-- `[定]` `??`、`!!`、`?->` 实现为图上的分支；`throw` 实现为返回错误值；`try`/`catch` 从语法中移除并给出指引性的诊断。（状态：部分完成——三个运算符、`throw` 与对 `try` 的指引性诊断 `TryCatchNotInLanguage` 已实现并有测试（`test/plans/feat/compile/tagged.plan.toml`）；`throw` 接受什么、`?->` 能否用于 `T?`、`??`/`!!` 右侧的类型按建议实现，标为 `DESIGN-QUESTION(nullable-error)`，待裁定）
+- `[定]` `??`、`!!`、`->` 实现为图上的分支；`throw` 实现为返回错误值；`try`/`catch` 从语法中移除并给出指引性的诊断。（状态：部分完成——三个运算符、`throw` 与对 `try` 的指引性诊断 `TryCatchNotInLanguage` 已实现并有测试（`test/plans/feat/compile/tagged.plan.toml`）；`throw` 接受什么、`->` 能否用于 `T?`、`??`/`!!` 右侧的类型按建议实现，标为 `DESIGN-QUESTION(nullable-error)`，待裁定）
 - `[定]` 故障隔离算子（名称暂定 `attempt`）与终止前的清理。（状态：部分完成——终止前的清理已做（刷新输出、释放外部资源，`test/plans/feat/consistency/cleanup.plan.toml`）；隔离算子 `attempt` 未实现）
 - `[定]` 循环：`for`/`while` 语法与图上的循环节点。（状态：已完成——设计原则 3.10；实现见 `docs/technical/39_loops.md`）
 - `[定]` 映射与集合作为内建类型，用数组字面量加 `as` 构造。（状态：部分完成——`Map<K, V>` 与 `Set<T>` 已实现并有测试（`docs/technical/31_map_and_set.md`、`test/plans/feat/compile/collections.plan.toml`）；键的类型、顺序、重复键、相等与打印、下标、可空的值、调用形式、持久化结构按建议实现，标为 `DESIGN-QUESTION(map-*)`，待裁定）
@@ -111,7 +111,7 @@ Camel 是图原生的通用编程语言，AI 是它首要的应用领域。
 - **语言服务器**：悬停、跳转到定义、补全、重命名、语义高亮、增量同步（现在只有诊断与格式化）。（状态：未开始）
 - **编辑器支持**：语法高亮定义与 VS Code 扩展。（状态：未开始）
 - **其他工具**：REPL；`camel test`；性能分析器；文档生成器；包管理器。（状态：部分完成——已有按阶段计时的 `-P`/`--profile` 与性能分析器 `camel-pr`（`tools/profiler`）；文档生成器只有生成标准库参考的 `scripts/stdlib-reference.mjs`，没有面向用户代码的文档生成器；REPL、`camel test`、包管理器未做）
-- **文档**：入门教程、按任务组织的指南、标准库参考、通用示例集；设计原则的英文译本同步（目前落后于中文版）；`[定]` README 的定位表述更新。（状态：部分完成——入门教程（`docs/tutorial/tutorial.cn.md`、`tutorial.en.md`）、标准库参考（`docs/stdlib-reference.md`，由签名文件与库源码生成）、通用示例集（`examples/`，由 `test/plans/feat/examples.plan.toml` 逐个运行并核对输出）、中英文语言参考（`docs/language/`、`docs/language/en/`）、设计原则的英文译本（`docs/design-principles.en.md`）、README 的定位表述已完成；按任务组织的指南只有按任务分目录的示例集，没有成文的指南）
+- **文档**：入门教程、按任务组织的指南、标准库参考、通用示例集；设计原则的英文译本同步（目前落后于中文版）；`[定]` README 的定位表述更新。（状态：部分完成——入门教程（`docs/tutorial/tutorial.cn.md`、`docs/tutorial/tutorial.en.md`）、标准库参考（`docs/stdlib-reference.md`，由签名文件与库源码生成）、通用示例集（`examples/`，由 `test/plans/feat/examples.plan.toml` 逐个运行并核对输出）、中英文语言参考（`docs/language/`、`docs/language/en/`）、设计原则的英文译本（`docs/design-principles.en.md`）、README 的定位表述已完成；按任务组织的指南只有按任务分目录的示例集，没有成文的指南）
 
 ## 7. 依赖关系
 

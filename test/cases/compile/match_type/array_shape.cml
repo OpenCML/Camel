@@ -1,0 +1,23 @@
+/**
+ * `case array` selects every array type, whatever its elements (design principles 5.5). It is a
+ * shape like `struct` and `tuple`: an identity case written before it still wins for its own type,
+ * and `#leaf` after it takes the rest.
+ */
+module match_type_array_shape
+
+type Point = { x: int, y: int }
+
+func kind::<T>(): string {
+    return match type T {
+        case int[] => 'ints'
+        case array => 'array'
+        case struct => 'struct'
+        case #leaf => 'leaf'
+    }
+}
+
+func main(): int sync {
+    println(kind::<int[]>(), kind::<string[]>(), kind::<float[][]>(), kind::<Point[]>())
+    println(kind::<Point>(), kind::<int>(), kind::<string>())
+    return 0
+}

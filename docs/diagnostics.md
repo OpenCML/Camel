@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-287 diagnostics: 270 errors, 17 warnings. 15 carry a machine-applicable edit, 272 say why they carry none.
+288 diagnostics: 271 errors, 17 warnings. 15 carry a machine-applicable edit, 273 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -253,6 +253,10 @@ prints one entry.
 | `0x030001F4` | [SemanticDiag::StructComprehensionWithoutFields](#structcomprehensionwithoutfields) | Error | no |
 | `0x030001F5` | [SemanticDiag::IdentifierPatternNeedsNullableOrErrorType](#identifierpatternneedsnullableorerrortype) | Error | no |
 | `0x030001F6` | [SemanticDiag::FunctionTypeArgumentNotInferred](#functiontypeargumentnotinferred) | Error | no |
+| `0x030001F7` | [SemanticDiag::FactConstCaseTypeRequired](#factconstcasetyperequired) | Error | no |
+| `0x030001F8` | [SemanticDiag::FactCaseBindsNoVariable](#factcasebindsnovariable) | Error | no |
+| `0x030001F9` | [SemanticDiag::FactJoinRequired](#factjoinrequired) | Error | no |
+| `0x030001FA` | [SemanticDiag::StreamCaptured](#streamcaptured) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -283,7 +287,6 @@ prints one entry.
 | `0x04000032` | [RuntimeDiag::OperandTypeUnsupported](#operandtypeunsupported) | Error | no |
 | `0x04000033` | [RuntimeDiag::FieldNotFound](#fieldnotfound) | Error | no |
 | `0x04000034` | [RuntimeDiag::InvalidArgument](#invalidargument) | Error | no |
-| `0x04000035` | [RuntimeDiag::FileOpenFailed](#fileopenfailed) | Error | no |
 | `0x04000036` | [RuntimeDiag::FileSystemError](#filesystemerror) | Error | no |
 | `0x04000039` | [RuntimeDiag::RegexInvalid](#regexinvalid) | Error | no |
 | `0x0400003A` | [RuntimeDiag::TimeFormatFailed](#timeformatfailed) | Error | no |
@@ -292,10 +295,8 @@ prints one entry.
 | `0x04000051` | [RuntimeDiag::UnhandledError](#unhandlederror) | Error | no |
 | `0x04000052` | [RuntimeDiag::SliceOutOfRange](#sliceoutofrange) | Error | no |
 | `0x04000060` | [RuntimeDiag::InvalidPassParameter](#invalidpassparameter) | Error | no |
-| `0x04000061` | [RuntimeDiag::GraphPassFailed](#graphpassfailed) | Error | no |
 | `0x04000062` | [RuntimeDiag::PassNeedsExtraction](#passneedsextraction) | Error | no |
 | `0x04000070` | [RuntimeDiag::DeviceUnavailable](#deviceunavailable) | Error | no |
-| `0x04000071` | [RuntimeDiag::GpuScopeUnsupported](#gpuscopeunsupported) | Error | no |
 | `0x04000186` | [RuntimeDiag::PassNotProvidedByModule](#passnotprovidedbymodule) | Error | no |
 | `0x04000187` | [RuntimeDiag::PassNotExportedByModule](#passnotexportedbymodule) | Error | no |
 | `0x040001A7` | [RuntimeDiag::GpuScopeNoDeviceProgram](#gpuscopenodeviceprogram) | Error | no |
@@ -391,17 +392,19 @@ Invalid number format: '{0}'.
 **Help**
 
 ```text
-A number is decimal digits without a leading zero, or '0x', '0b' or '0o' followed by digits of that base: octal 63 is '0o77', not '077'; '09' and '077' are not number tokens. In an entry argument and a conversion text a leading zero is decimal ('077' is 77).
+A number is decimal digits without a leading zero in its whole part (an integer or a real: '0.5' is a number, '007' and '007.5' are not), or '0x', '0b' or '0o' followed by digits of that base: octal 63 is '0o77', not '077'; '09' and '077' are not number tokens. An entry argument is read by the same rule; a conversion text is data, and reads '077' as 77.
 ```
 
-**Example** (`test/cases/parse/numbers/leading_zero.cml`, run as `camel -E short test/cases/parse/numbers/leading_zero.cml`)
+**Example** (`test/cases/compile/precedence/leading_zero_real.cml`, run as `camel test/cases/compile/precedence/leading_zero_real.cml`)
 
 ```camel
-module parse_numbers_leading_zero
-
+// A real has no leading zero in its whole part, as an integer has none: `007.5` is refused like
+// `007`; `0.5` is a number.
 func main(): int sync {
-    let a = 077
-    return a
+    let a = 0.5
+    let b = 007.5
+    println(a + b)
+    return 0
 }
 ```
 
@@ -425,7 +428,18 @@ This string literal is not closed.
 A string ends with the quote character it starts with ({0}). Add the closing quote; to put a quote character inside the string, write it with a backslash.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/precedence/unterminated_string.cml`, run as `camel test/cases/compile/precedence/unterminated_string.cml`)
+
+```camel
+// A string no quote closes is an error on the line it opened on; it does not run on to the last
+// escaped quote of the file.
+func main(): int sync {
+    let s = 'abc
+    println(s)
+    let t = "it\'s"
+    return 0
+}
+```
 
 ### UnterminatedComment
 
@@ -2699,7 +2713,7 @@ A value of type '{0}' cannot be used here: {1}.
 **Help**
 
 ```text
-A value that may be null ('T?') or may have failed ('T!') is opened only by '??', '!!', '?->' and by 'match' with 'case null' / 'case error e'.
+A value that may be null ('T?') or may have failed ('T!') is opened only by '??', '!!', '->' (which passes a null or an error on) and by 'match' with 'case null' / 'case error e'.
 ```
 
 **Example** (`test/cases/compile/tagged/err_member.cml`, run as `camel test/cases/compile/tagged/err_member.cml`)
@@ -2732,18 +2746,18 @@ None: choice: the operands carry tags that do not meet; the repair is in what is
 **Help**
 
 ```text
-'a ?? b' needs 'a' of type 'T?' and 'b' of type 'T' (the result is a 'T') or 'T?' (the result is a 'T?', so that 'a ?? b ?? c' tries each in turn). 'a !! b' needs 'a' of type 'T!' and 'b' of type 'T' or 'T!'. 'x ?-> f' needs 'x' of type 'T!' and a function 'f' that takes a 'T'.
+'a ?? b' needs 'a' of type 'T?' and 'b' of type 'T' (the result is a 'T') or 'T?' (the result is a 'T?', so that 'a ?? b ?? c' tries each in turn). 'a !! b' needs 'a' of type 'T!' and 'b' of type 'T' or 'T!'.
 ```
 
-**Example** (`test/cases/compile/tagged/err_plain_left.cml`, run as `camel test/cases/compile/tagged/err_plain_left.cml`)
+**Example** (`test/cases/compile/tagged/err_wrong_form.cml`, run as `camel test/cases/compile/tagged/err_wrong_form.cml`)
 
 ```camel
-module err_plain_left
+module err_wrong_form
 
 func main(): int sync {
     println('never printed')
-    let a = 1
-    let b = a ?? 7
+    let a = 1 as int?
+    let b = a !! 7
     println(b)
     return 0
 }
@@ -3249,7 +3263,7 @@ func check(a: Json): int sync {
 }
 
 func main(): int sync {
-    return decode('true') ?-> check !! 1
+    return decode('true') -> check !! 1
 }
 ```
 
@@ -3310,15 +3324,16 @@ The result of '{0}' is not used, and '{0}' changes nothing: it returns a new val
 The operations of the standard library return new values and leave their arguments as they were: after 'let ys = xs->append<5>', 'xs' is unchanged. To change a variable, bind it to the result, 'xs = xs->append<5>', as 'x = x + 1' does for a number.
 ```
 
-**Example** (`test/cases/consistency/new_values/unused_var.cml`, run as `camel test/cases/consistency/new_values/unused_var.cml`)
+**Example** (`test/cases/compile/native/para_unordered_pure_result.cml`, run as `camel test/cases/compile/native/para_unordered_pure_result.cml`)
 
 ```camel
-module unused_var
+module para_unordered_pure_result
+
+import { abs } from math
+import { unordered_foreach } from para
 
 func main(): int sync {
-    var xs = [1, 2]
-    xs->append<5>
-    println(xs)
+    unordered_foreach<(item: int) => abs(item)>([-1, 2])
     return 0
 }
 ```
@@ -3340,7 +3355,7 @@ None: context: the operator cannot be overloaded at all, so the expression has t
 **Help**
 
 ```text
-The operators that can be overloaded are the binary '+', '-', '*', '/', '%', '^', '@', '==', '<', '<=', '>', '>=', '&', '|', indexing '[]', and the unary '-', '!', '~'; '!=' follows '=='. '&&', '||', '??', '!!', '->', '?->', '..', 'as', assignment and compound assignment are constructs of the language.
+The operators that can be overloaded are the binary '+', '-', '*', '/', '%', '^', '@', '==', '<', '<=', '>', '>=', '&', '|', indexing '[]', and the unary '-', '!', '~'; '!=' follows '=='. '&&', '||', '??', '!!', '->', '..', 'as', assignment and compound assignment are constructs of the language.
 ```
 
 **Example** (`test/cases/consistency/operator_overloads/not_overloadable_logical.cml`, run as `camel test/cases/consistency/operator_overloads/not_overloadable_logical.cml`)
@@ -5167,11 +5182,11 @@ A module declares only the operators it implements: a body-less declaration stan
 
 ```camel
 import bytes
-import { size } from bytes_tag
+import { to_array } from bytes_tag
 
 func main(): int sync {
     let b = bytes::encode('abc')
-    println(size(b))
+    println(to_array(b))
     return 0
 }
 ```
@@ -6716,20 +6731,21 @@ The identity pattern '{0}' cannot select a type here: {1}.
 An identity pattern is exact: it selects only the type it names, after the declaration's type variables are bound. Name a concrete type, do not write the same type twice in one case, and put a pattern an earlier case already selects before that case or remove it.
 ```
 
-**Example** (`test/cases/compile/static_expansion/type_identity_duplicate.cml`, run as `camel test/cases/compile/static_expansion/type_identity_duplicate.cml`)
+**Example** (`test/cases/compile/match_type/err_unreachable_array.cml`, run as `camel test/cases/compile/match_type/err_unreachable_array.cml`)
 
 ```camel
-module type_identity_duplicate
+module match_type_err_unreachable_array
 
-func twice::<T>(t: T): int {
+func kind::<T>(): string {
     return match type T {
-        case int | int => 1
-        case _ => 0
+        case array => 'array'
+        case int[] => 'ints'
+        case _ => 'other'
     }
 }
 
 func main(): int sync {
-    println(twice(1))
+    println(kind::<int[]>())
     return 0
 }
 ```
@@ -6980,8 +6996,8 @@ The body of a folded call is read from the same constructs a 'when' condition re
 module fold_call_not_evaluable
 
 func first_of_list(): int {
-    let xs = [1, 2, 3]
-    return xs.[0]
+    let step = (n: int): int => n + 1
+    return step(1)
 }
 
 func main(): int {
@@ -8530,6 +8546,167 @@ func main(): int sync {
 }
 ```
 
+### FactConstCaseTypeRequired
+
+`0x030001F7` · Error · `SemanticDiag::FactConstCaseTypeRequired`
+
+**Fix**
+
+None: choice: which of the two places writes the constant's type is the writer's to write
+
+**Message**
+
+```text
+The 'const' case '{0}' of the fact '{1}' writes no type.
+```
+
+**Help**
+
+```text
+A `const` case matches one constant, and the fact function is given the value itself, so the type of that constant is written somewhere (rewrite design 7.5): in the case (`case const c: int => c`), or in the head of a fact that declares the value it is about with a type (`fact sign(v: int): int`), whose first parameter's type the case then takes.
+```
+
+**Example** (`test/cases/modules/rules/fact_const_case_without_type.cml`, run as `camel test/cases/modules/rules/fact_const_case_without_type.cml`)
+
+```camel
+module fact_const_case_without_type
+import { max } from math
+
+fact one: int match v {
+    case const c => c
+    case _       => 0
+} join max
+
+func main(): int sync {
+    return 0
+}
+```
+
+### FactCaseBindsNoVariable
+
+`0x030001F8` · Error · `SemanticDiag::FactCaseBindsNoVariable`
+
+**Fix**
+
+None: choice: the part of the value the case reads is the writer's to write
+
+**Message**
+
+```text
+This case of the fact '{0}' names no variable.
+```
+
+**Help**
+
+```text
+The cases read how a value was built, and the parts they read are the variables their patterns name: `case x + y` binds the two operands, and the fact function is computed from them (rewrite design 7.5). A pattern that names no variable leaves the case with nothing to read, so the fact says nothing about the values it matches; bind a part with a name, or write `case _`, which is the last case and says what the fact is for a value no other case matched.
+```
+
+**Example** (`test/cases/modules/rules/fact_case_binds_nothing.cml`, run as `camel test/cases/modules/rules/fact_case_binds_nothing.cml`)
+
+```camel
+module fact_case_binds_nothing
+import { max } from math
+
+fact one(v: int): int match v {
+    case 1 => 1
+    case _ => 0
+} join max
+
+func main(): int sync {
+    return 0
+}
+```
+
+### FactJoinRequired
+
+`0x030001F9` · Error · `SemanticDiag::FactJoinRequired`
+
+**Fix**
+
+None: choice: the function that merges the two facts is the writer's to write
+
+**Message**
+
+```text
+The fact '{0}' writes no 'join'.
+```
+
+**Help**
+
+```text
+`join` is the clause that is required: it says how the facts of two writings of one value are merged, and it is the least upper bound of the two (rewrite design 7.5). Write it after the cases, naming one binary function or a lambda: `} join max`, `} join (lhs: int, rhs: int) => lhs | rhs`. Without it a value the program wrote two ways has no fact the engine can settle on.
+```
+
+**Example** (`test/cases/modules/rules/fact_no_join.cml`, run as `camel test/cases/modules/rules/fact_no_join.cml`)
+
+```camel
+module fact_no_join
+import { max } from math
+
+fact sign(v: int): int match v {
+    case const c => c
+    case _       => 0
+}
+
+func main(): int sync {
+    return 0
+}
+```
+
+### StreamCaptured
+
+`0x030001FA` · Error · `SemanticDiag::StreamCaptured`
+
+**Fix**
+
+None: choice: where the stream is read instead is the writer's to write
+
+**Message**
+
+```text
+'{0}' cannot be captured: a stream is read once, and a closure outlives the read.
+```
+
+**Help**
+
+```text
+A stream is read one element at a time and is done when it ends, so on each execution path its value has one consumer (design principles 5.4). The body of a closure runs after the path that made the closure has finished, so the read a capture would make is not that path's one read: write the stream where it is consumed -- as the argument of a call that reads it, or as the subject of a loop -- and let a closure that needs a stream open one of its own.
+```
+
+**Example** (`test/cases/compile/stream/capture_stream.cml`, run as `camel test/cases/compile/stream/capture_stream.cml`)
+
+```camel
+module stream_capture_stream
+
+let source: int.. = count(3)
+
+func count(n: int): int.. {
+    return step(n)
+}
+
+func step(n: int): () => (int, int..)? {
+    return () => if n > 0 then (n, step(n - 1)) else null
+}
+
+func firstOf(p: (int, int..)?): int {
+    return match p {
+        case null => 0
+        case v => v.0
+    }
+}
+
+func read(): () => int {
+    return () => firstOf(source())
+}
+
+func main(): int sync {
+    let take = read()
+    println(take())
+    return 0
+}
+```
+
 ### IgnoredSideEffect
 
 `0x03100002` · Warn · `SemanticDiag::IgnoredSideEffect`
@@ -8676,7 +8853,7 @@ This value has type '{0}' and nothing uses it: an error it holds is lost{1}.
 **Help**
 
 ```text
-A function that returns a 'T!' reports its failure through that value. Take the value apart with '!!', '?->' or 'match', return it from a function that declares a 'T!', or drop it on purpose with 'let _ = ...'.
+A function that returns a 'T!' reports its failure through that value. Take the value apart with '!!', '->' or 'match', return it from a function that declares a 'T!', or drop it on purpose with 'let _ = ...'.
 ```
 
 **Example** (`test/cases/consistency/unused_fallible/main_undeclared.cml`, run as `camel -E short test/cases/consistency/unused_fallible/main_undeclared.cml`)
@@ -8740,27 +8917,18 @@ None: choice: the repair is a decision only the writer can make
 **Help**
 
 ```text
-An 'if' around this narrowed the name: in the arm where it is not null it is a 'T'. Use the name directly.
+Only a value of type 'T?' can be null. A plain value cannot be null, and in the arm of 'if x != null' the name 'x' is already a 'T'. Use the value directly, without testing it for null.
 ```
 
-**Example** (`test/cases/consistency/narrowing/after_narrowing.cml`, run as `camel -E short test/cases/consistency/narrowing/after_narrowing.cml ${backend}`)
+**Example** (`test/cases/compile/tagged/err_plain_left.cml`, run as `camel test/cases/compile/tagged/err_plain_left.cml`)
 
 ```camel
-func describe(x: int?, ready: bool): string {
-    return if x != null && ready then {
-        let a = x ?? 0                                  // line 7: warned, `??`
-        let b = match x { case null => -1  case v => v * 2 }   // line 8: warned, `match`
-        let c = x != null                               // line 9: warned, always true
-        let d = if x == null then 'null' else 'set'     // line 10: warned, always false
-        let e = if ready then x ?? 1 else 0             // line 11: warned, in a nested arm
-        return '{} {} {} {} {}'->format<a, b, c, d, e>
-    } else 'none'
-}
+module err_plain_left
 
 func main(): int sync {
-    println(describe(4, true))
-    println(describe(null, true))
-    println(describe(4, false))
+    let a = 1
+    let b = a ?? 7
+    println(b)
     return 0
 }
 ```
@@ -9155,7 +9323,7 @@ func depth(n: int): int {
 }
 
 func main(): int sync {
-    let n = int(get_env('N'))
+    let n = int(get_env('N') ?? '')
     println('start')
     println(depth(n))
     println('done')
@@ -9673,28 +9841,6 @@ func main(): int sync {
 }
 ```
 
-### FileOpenFailed
-
-`0x04000035` · Error · `RuntimeDiag::FileOpenFailed`
-
-**Fix**
-
-None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
-
-**Message**
-
-```text
-'{0}' cannot open the file '{1}': {2}.
-```
-
-**Help**
-
-```text
-Check that the path exists and that the program may access it; a relative path is taken from the directory the program is run in. Where a missing file is expected, fs.try_read_text returns an error value instead of ending the program.
-```
-
-*No example: no test small enough to show raises it.*
-
 ### FileSystemError
 
 `0x04000036` · Error · `RuntimeDiag::FileSystemError`
@@ -9786,7 +9932,7 @@ A derivative rule returns a gradient of the parameter's element type. Convert th
 ```camel
 module refuse_gradient_element_type_rule
 
-import { grad } from autodiff
+import { grad, vjp } from autodiff
 
 func pick_rule(xs: float[], i: int, dy: float): f32 {
     return f32(0.0)
@@ -9867,7 +10013,7 @@ An error value reached the exit of 'main' without being handled: {0}: {1}.
 **Help**
 
 ```text
-A value of type T! that has failed must be opened before the program ends: give a replacement with '!!', pass it on with '?->', or take it apart with 'match ... case error e'. The position is where the error was made (the definition of 'main' when the error records none).
+A value of type T! that has failed must be opened before the program ends: give a replacement with '!!', pass it on with '->', or take it apart with 'match ... case error e'. The position is where the error was made (the definition of 'main' when the error records none).
 ```
 
 **Example** (`test/cases/consistency/entry/error_thrown.cml`, run as `camel test/cases/consistency/entry/error_thrown.cml ${backend}`)
@@ -9946,36 +10092,6 @@ A pass is written on the pipeline as its name followed by its parameters as key=
 ```
 
 **Example** (`test/cases/modules/graph_pass/tiny.cml`, run as `camel test/cases/modules/graph_pass/tiny.cml unparsable_pass::run std::nvm`)
-
-```camel
-module tiny
-func main(): int sync {
-    println(21 * 2)
-    return 0
-}
-```
-
-### GraphPassFailed
-
-`0x04000061` · Error · `RuntimeDiag::GraphPassFailed`
-
-**Fix**
-
-None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
-
-**Message**
-
-```text
-Pass '{0}' failed: {1}.
-```
-
-**Help**
-
-```text
-A pass written in Camel returned an error value instead of a program, and the message is the error's kind and text. The program is left as the previous pass produced it, and the pipeline stops.
-```
-
-**Example** (`test/cases/modules/graph_pass/tiny.cml`, run as `camel test/cases/modules/graph_pass/tiny.cml identity::refuse std::nvm`)
 
 ```camel
 module tiny
@@ -10071,44 +10187,6 @@ func main(): int sync {
 }
 ```
 
-### GpuScopeUnsupported
-
-`0x04000071` · Error · `RuntimeDiag::GpuScopeUnsupported`
-
-**Fix**
-
-None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
-
-**Message**
-
-```text
-`#gpu` scope '{0}': {1} cannot run on the device ({2}).
-```
-
-**Help**
-
-```text
-The `#gpu` tag promises that the device runs everything written in the function or block. Remove the tag, write the part the device cannot run under `#cpu`, or rewrite the scope so that every operator in it has a device implementation; `--devices cpu` runs the whole program on the host.
-```
-
-**Example** (`test/cases/modules/tiles/gpu_scope_refusal.cml`, run as `CUDA_VISIBLE_DEVICES=-1 camel test/cases/modules/tiles/gpu_scope_refusal.cml tiles::compile std::nvm`)
-
-```camel
-module tiles_gpu_scope_refusal
-import { reshape, tanh, sum } from tensor
-
-// `tanh` is a pure tensor operator that the device back end does not lower. Inside a `#gpu`
-// scope that is a compile error, not a silent fallback to the host.
-#gpu
-func activate(x: f32[..]): f32[..] { return tanh(x) }
-
-func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
-    println(sum(activate(x)))
-    return 0
-}
-```
-
 ### PassNotProvidedByModule
 
 `0x04000186` · Error · `RuntimeDiag::PassNotProvidedByModule`
@@ -10189,32 +10267,31 @@ None: runtime: the fault is raised while the program runs, and the repair is in 
 **Help**
 
 ```text
-The `#gpu` tag promises that the device runs everything written in the scope, including the functions it calls; an operator the device back end cannot build a program for is a compile-time error there, never a host execution. Change the operator, its shape or the function it is written in, put it under `#cpu` where the scope allows that, or remove the tag; `--devices cpu` runs the whole program on the host.
+The `#gpu` tag promises that the device runs everything written in the scope, including the functions it calls; an operator the device back end cannot build a program for is never replayed on the host. Change the operator, its shape or the function it is written in, put it under `#cpu` where the scope allows that, or remove the tag; `--devices cpu` runs the whole program on the host.
 ```
 
-**Example** (`test/cases/gpu/nofallback/refused_operator.cml`, run as `CUDA_VISIBLE_DEVICES=-1 camel test/cases/gpu/nofallback/refused_operator.cml tiles::compile std::nvm`)
+**Example** (`test/cases/gpu/nofallback/runtime_refusal.cml`, run as `camel test/cases/gpu/nofallback/runtime_refusal.cml tiles::compile std::nvm`)
 
 ```camel
-/// (b) An operator without a device program, written in a function a `#gpu` scope calls. The
-/// scope covers the functions it calls (GPU design 2.3), so `tanh` here is inside it; `tanh` has
-/// no device implementation, and the compiler refuses the program instead of running it on the
-/// host. `test/cases/gpu/nofallback/host.cml` is the same program without the tag.
-module gpu_nofallback_refused_operator
+/// (e) The runtime side of the same promise: `product` is `#gpu` but its signature is generic,
+/// so the compile pass cannot see the rank until the call site. The actual arguments are rank 1,
+/// the device back end refuses the shape, and the run reports it instead of replaying the graph
+/// on the host (GPU design 6.1). The compile pass defers this case on purpose: shows that a
+/// shape the types do not fix may still compile with the actual arguments.
+module gpu_nofallback_runtime
 
-import { tanh, reshape } from tensor
-
-func activate(x: f32[..]): f32[..] {
-    return tanh(x)
-}
+import { reshape } from tensor
+import { run_preferred_resident, download } from tiles
 
 #gpu
-func step(x: f32[..]): f32[..] {
-    return activate(x)
+func product(a: f32[..], b: f32[..]): f32[..] {
+    return a @ b
 }
 
 func main() {
-    let x = reshape([1.0, 2.0] as f32[], [2])
-    println(step(x))
+    let a = reshape([1.0, 2.0, 3.0] as f32[], [3])
+    let b = reshape([1.0, 1.0, 1.0] as f32[], [3])
+    println(download(run_preferred_resident<product>((a, b))))
 }
 ```
 
@@ -10473,16 +10550,16 @@ std::cpp has no standalone translation of {0}: the program it writes calls the C
 Every other operator is translated into C++ that needs only the standard library (docs/cpp_export_build.md). The comment at the top of the C++ file gives the command that builds it with the runtime.
 ```
 
-**Example** (`test/cases/trans/cpp/hash_bridge.cml`, run as `camel test/cases/trans/cpp/hash_bridge.cml std::cpp`)
+**Example** (`test/cases/trans/cpp/runtime_bridge.cml`, run as `camel test/cases/trans/cpp/runtime_bridge.cml std::cpp`)
 
 ```camel
-/// std::cpp has no standalone translation of a hash operator: the program links the runtime.
-module cpp_hash_bridge
+/// std::cpp has no standalone translation of a string operator: the program links the runtime.
+module cpp_runtime_bridge
 
-import hash
+import str
 
 func main(): int sync {
-    println(hash::sha256('a'))
+    println(str::to_upper('a'))
     return 0
 }
 ```

@@ -440,7 +440,7 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
         statics.push_back(staticArgOf(input.node));
     }
     const bool builtinAccepts =
-        set.ops->resolve(withTypes, normTypes, statics, Modifier::None).has_value();
+        set.ops->resolve(withTypes, normTypes, statics).has_value();
     // Design principles 4.3: an overload of the program is preferred where it is more
     // specific than the others that take the arguments. "More specific" is exact: its
     // parameter types are the argument types themselves (as written, without a value entering
@@ -464,7 +464,7 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
     const bool builtinExact = std::ranges::any_of(set.ops->resolvers(), [&](const auto &entry) {
         FunctionType *fixed = entry.second->fixedSignature();
         return fixed != nullptr && exactFor(fixed) &&
-               entry.second->resolve(withTypes, normTypes, Modifier::None).has_value();
+               entry.second->resolve(withTypes, normTypes).has_value();
     });
     const auto where        = [&](const void *overload) {
         const auto it = set.moduleOf.find(overload);
@@ -529,7 +529,7 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
             }
             if (builtinAccepts && !entering) {
                 for (const auto &[uri, resolver] : set.ops->resolvers()) {
-                    if (resolver->resolve(withTypes, normTypes, Modifier::None).has_value()) {
+                    if (resolver->resolve(withTypes, normTypes).has_value()) {
                         overloads.push_back(
                             std::format(
                                 "the built-in or module operator <{}>: {}",
@@ -706,7 +706,6 @@ Builder::operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &o
     }
     // Its own type object (a graph completes its function type in place).
     FunctionTypeFactory factory;
-    factory.setModifiers(opType->modifiers());
     factory.setExitType(opType->exitType());
     // The function value promises what the operator's type promises (effects plan 2.3): a call
     // through this value takes its footprint from the type, not by walking the one-node body.
@@ -749,7 +748,7 @@ Builder::operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &o
         }
         setGraphReturnFromResult(graph, nodeIdOf(call), nodeIdOf(call), opType->exitType());
         bodyStates_[graph.get()] = BodyState::Built;
-        unit_->builtBodies.push_back(graph);
+        registerBuiltBody(graph);
     } catch (...) {
         bodyStates_[graph.get()] = BodyState::Built;
         leaveScope();
@@ -814,8 +813,7 @@ node_handle_t Builder::overloadValueFor(
                 expected->exitType(),
                 withTypes,
                 normTypes,
-                statics,
-                Modifier::None);
+                statics);
             if (!type || !(*type)->hasExitType() ||
                 !(*type)->exitType()->equals(expected->exitType())) {
                 continue;
@@ -847,15 +845,29 @@ node_handle_t Builder::overloadValueFor(
 std::optional<oper_idx_ptr_t> Builder::resolveGroupedCall(
     const oper_group_ptr_t &ops, const type_vec_t &explicitTypes, Type *expectedResult,
     const type_vec_t &withTypes, const type_vec_t &normTypes, static_args_t normStatics,
-    std::vector<std::pair<std::string, std::string>> &unmet, std::vector<std::string> *ambiguous) {
+    std::vector<std::pair<std::string, std::string>> &unmet, std::vector<std::string> *ambiguous,
+    const std::vector<Argument> *withInputs) {
     std::optional<oper_idx_ptr_t> chosen;
     // The candidates that write `when` and whose condition holds for these arguments. One of them
     // is a call that has an answer; two or more are a call that has none, and the writing order
     // of the declarations is not what settles it (see the declaration of this function).
     std::vector<std::string> holding;
     for (const auto &[uri, resolver] : ops->resolvers()) {
+        // A rule that is declared takes every count of `with` arguments from its required ones to
+        // its full arity: the types of the defaults it registers stand for what the call left out.
+        type_vec_t ruleWith = withTypes;
+        if (FunctionType *declared = resolver->fixedSignature() != nullptr
+                                         ? resolver->fixedSignature()
+                                         : resolver->declaredSignature();
+            declared != nullptr) {
+            const auto completed = withTypesCompletedFor(uri, declared, withTypes, withInputs);
+            if (!completed.has_value()) {
+                continue;
+            }
+            ruleWith = *completed;
+        }
         auto result = resolver->resolveForCall(
-            explicitTypes, expectedResult, withTypes, normTypes, normStatics, Modifier::None);
+            explicitTypes, expectedResult, ruleWith, normTypes, normStatics);
         if (!result) {
             // The rule's parameters do not take these arguments: it was never a candidate for
             // this call, and its condition is not asked about a call it does not fit.
@@ -868,7 +880,7 @@ std::optional<oper_idx_ptr_t> Builder::resolveGroupedCall(
         // unmet, only when no rule at all takes it.
         std::string condition;
         const RuleVerdict verdict =
-            ruleVerdictForCall(resolver, ops->name(), withTypes, normTypes, &condition);
+            ruleVerdictForCall(resolver, ops->name(), ruleWith, normTypes, &condition);
         if (verdict == RuleVerdict::ConditionUnmet) {
             unmet.emplace_back(resolver->signature(), std::move(condition));
             continue;
@@ -895,6 +907,32 @@ std::optional<oper_idx_ptr_t> Builder::resolveGroupedCall(
         *ambiguous = std::move(holding);
     }
     return chosen;
+}
+
+std::optional<type_vec_t> Builder::withTypesCompletedFor(
+    const std::string &uri, FunctionType *signature, const type_vec_t &withTypes,
+    const std::vector<Argument> *withInputs) const {
+    const size_t arity = signature->withTypesCount();
+    if (withTypes.size() > arity) {
+        return withTypes; // too many: the rule says so itself
+    }
+    const auto native = nativeDefaults_.find(uri);
+    type_vec_t completed = withTypes;
+    completed.resize(arity, nullptr);
+    for (size_t i = 0; i < arity; ++i) {
+        const bool written = i < withTypes.size() &&
+                             !(withInputs != nullptr && i < withInputs->size() &&
+                               (*withInputs)[i].left);
+        if (written) {
+            continue;
+        }
+        if (native == nativeDefaults_.end() || i >= native->second.with.size() ||
+            !native->second.with[i].has_value()) {
+            return std::nullopt;
+        }
+        completed[i] = native->second.with[i]->data->type();
+    }
+    return completed;
 }
 
 std::string Builder::unstatedBindingForCall(
@@ -947,7 +985,7 @@ bool Builder::plainOperatorAvailableFor(
     // tensor module declares for a numeric array): the group answers for the operand types
     // alone (design principles 4.3).
     if (operatorOverloadsOf(group)
-            .ops->resolve({}, normTypes, statics, Modifier::None)
+            .ops->resolve({}, normTypes, statics)
             .has_value()) {
         return true;
     }
@@ -1140,7 +1178,7 @@ node_handle_t Builder::inPlaceRebindingOf(const GCT::node_ptr_t &gct) {
     // The overload the call resolves to, as visitLinkNode will resolve it: rewritten only when
     // it has an in-place form and gives an array of the variable's own type.
     const std::vector<StaticArg> statics(1);
-    const auto resolved       = group->resolve(withTypes, {arrayType}, statics, Modifier::None);
+    const auto resolved       = group->resolve(withTypes, {arrayType}, statics);
     const bool inPlace        = resolved.has_value() &&
                                 table.inPlaceForm((*resolved)->uri()).has_value() &&
                                 (*resolved)->funcType()->exitType() != nullptr &&
@@ -1439,7 +1477,6 @@ node_handle_t Builder::buildComposition(const GCT::node_ptr_t &gct, Type *expect
     FunctionType *lhsExpected = nullptr;
     if (expectedFunc != nullptr) {
         FunctionTypeFactory factory;
-        factory.setModifiers(expectedFunc->modifiers());
         factory.addNormArg(
             std::string(kCompParameter), expectedFunc->normTypeAt(0), expectedFunc->normIsVarAt(0));
         lhsExpected = factory.build();
@@ -1467,7 +1504,6 @@ node_handle_t Builder::buildComposition(const GCT::node_ptr_t &gct, Type *expect
             if (lhsFunc->withTypesCount() == 0 && lhsFunc->normTypesCount() == 1 &&
                 lhsFunc->hasExitType()) {
                 FunctionTypeFactory factory;
-                factory.setModifiers(expectedFunc->modifiers());
                 factory.addNormArg(std::string(kCompParameter), lhsFunc->exitType(), false);
                 if (expectedFunc->hasExitType()) {
                     factory.setExitType(expectedFunc->exitType());
@@ -1607,7 +1643,7 @@ node_handle_t Builder::composeFunctionValue(
         node_handle_t value = visitLinkNode(outer);
         setGraphReturnFromResult(graph, nodeIdOf(value), nodeIdOf(value), nodeTypeOf(value));
         restore();
-        unit_->builtBodies.push_back(graph);
+        registerBuiltBody(graph);
     } catch (...) {
         restore();
         leaveScope();
@@ -1642,7 +1678,89 @@ node_handle_t Builder::intervalValue(
     return value;
 }
 
+node_handle_t Builder::visitPipeLink(
+    const GCT::node_ptr_t &call, const GCT::node_ptr_t &replacement) {
+    const auto unused = unusedStatement_;
+    PipeState detect;
+    detect.call        = call;
+    detect.replacement = replacement;
+    detect.previous    = pipe_;
+    pipe_              = &detect;
+    try {
+        node_handle_t built = visitLinkNode(call);
+        pipe_               = detect.previous;
+        return built;
+    } catch (const PipeTagged &) {
+        pipe_ = detect.previous;
+    } catch (...) {
+        pipe_ = detect.previous;
+        throw;
+    }
+    // The receiver is a `T?` or a `T!`. Does an overload take it as it is?
+    node_handle_t receiver = detect.receiver;
+    bool direct            = true;
+    {
+        PipeState scratch;
+        scratch.call     = call;
+        scratch.receiver = receiver;
+        scratch.mode     = PipeMode::Scratch;
+        scratch.previous = pipe_;
+        unusedStatement_                 = nullptr;
+        runtime::GraphDraft &draft       = currGraph_->draft();
+        const draft_node_ref_t firstNode = static_cast<draft_node_ref_t>(draft.nodeSlotCount());
+        // Nothing the dropped arm built stays in the graph: a node of it that had an effect would
+        // be reported as one that never runs, and one that did would run.
+        const auto dropScratch = [&] {
+            for (draft_node_ref_t id = static_cast<draft_node_ref_t>(draft.nodeSlotCount());
+                 id > firstNode;) {
+                --id;
+                if (draft.alive(id)) {
+                    draft.eraseNode(id);
+                }
+            }
+        };
+        try {
+            pipe_ = &scratch;
+            buildArm(call, [&] { return visitLinkNode(call); });
+        } catch (const PipeNoMatch &) {
+            direct = false;
+        } catch (...) {
+            pipe_ = scratch.previous;
+            throw;
+        }
+        pipe_ = scratch.previous;
+        dropScratch();
+    }
+    unusedStatement_ = unused;
+    if (!direct) {
+        return peelPipeReceiver(call, receiver);
+    }
+    PipeState real;
+    real.call     = call;
+    real.receiver = receiver;
+    real.mode     = PipeMode::Direct;
+    real.previous = pipe_;
+    pipe_         = &real;
+    try {
+        node_handle_t built = visitLinkNode(call);
+        pipe_               = real.previous;
+        return built;
+    } catch (...) {
+        pipe_ = real.previous;
+        throw;
+    }
+}
+
+void Builder::yieldToPipe(const GCT::node_ptr_t &call) {
+    if (pipe_ != nullptr && pipe_->call == call && pipe_->mode == PipeMode::Scratch) {
+        throw PipeNoMatch();
+    }
+}
+
 node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
+    if (GCT::Tree::of(gct)->isPipe(gct) && (pipe_ == nullptr || pipe_->call != gct)) {
+        return visitPipeLink(gct, nullptr);
+    }
     ENTER("LINK");
     Type *expectedResult = expectedValueType_;
     ExpectedValueScope callScope(expectedValueType_, nullptr);
@@ -1707,7 +1825,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     withArgsOfCall_                = outerWithArgsOfCall;
     genericCalleeAllowed_          = false;
     // The callee may be a lambda written in place (`((x: int): int => x + 1)(3)`,
-    // `v ?-> (x: int): int => x * 2`): visiting it gives its graph, and what is called is the
+    // `v -> (x: int): int => x * 2`): visiting it gives its graph, and what is called is the
     // function value of that graph. (The graph was cast to a node: `bad any_cast`, bare.)
     node_handle_t targetNode = valueNodeOf(targetNodeRes);
 
@@ -1868,11 +1986,26 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
             continue;
         }
-        node_handle_t inputNode = visitOperand(gct->at(i), gct);
+        // The receiver of a pipe whose value was taken apart is the value taken out.
+        const bool pipeReceiver = i == 1 && pipe_ != nullptr && pipe_->call == gct;
+        const GCT::node_ptr_t &argumentExpr =
+            pipeReceiver && pipe_->replacement != nullptr ? pipe_->replacement : gct->at(i);
+        node_handle_t inputNode = nullptr;
+        if (pipeReceiver && pipe_->receiver != nullptr) {
+            inputNode = pipe_->receiver; // built once, before the overloads were asked
+        } else {
+            inputNode = visitOperand(argumentExpr, gct);
+        }
+        if (pipeReceiver && pipe_->receiver == nullptr) {
+            pipe_->receiver = inputNode;
+            if (asTagged(valueTypeOf(nodeTypeOf(inputNode))) != nullptr) {
+                throw PipeTagged();
+            }
+        }
         const std::optional<std::string> name =
             argumentNames != nullptr && i - 1 < argumentNames->size() ? (*argumentNames)[i - 1]
                                                                       : std::nullopt;
-        normInputs.push_back({inputNode, gct->at(i), name});
+        normInputs.push_back({inputNode, argumentExpr, name});
         if (isAssignment && i == 1) {
             Type *place = valueTypeOf(nodeTypeOf(inputNode));
             if (place != nullptr && place->code() == TypeCode::Function) {
@@ -2249,13 +2382,12 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     const auto accepts = [&](FunctionType *funcType, bool entering) {
         StaticFuncTypeResolver resolver(funcType);
         if (!entering) {
-            return resolver.resolve(withInputTypes, normInputTypes, Modifier::None).has_value();
+            return resolver.resolve(withInputTypes, normInputTypes).has_value();
         }
         return resolver
             .resolve(
                 enteringTypes(funcType, withInputs, withInputTypes, true),
-                enteringTypes(funcType, normInputs, normInputTypes, false),
-                Modifier::None)
+                enteringTypes(funcType, normInputs, normInputTypes, false))
             .has_value();
     };
     // The dimension names a call binds (design principles 5.4), remembered for the checked
@@ -2364,6 +2496,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         node_handle_t decoratorInvoke = lowerDecoratedGraphValue(decoratedGraph, gct);
         FunctionType *factoryType     = tt::as_ptr<FunctionType>(nodeTypeOf(decoratorInvoke));
         if (!accepts(factoryType, false) && !accepts(factoryType, true)) {
+            yieldToPipe(gct);
             reportConversionGaps(
                 {{std::string(), factoryType}},
                 withInputs,
@@ -2441,6 +2574,14 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             withInputTypes,
             normInputTypes,
             gct);
+        if (chosenTemplate != nullptr &&
+            (withInputs.size() < chosenTemplate->funcType->withTypesCount() ||
+             std::any_of(withInputs.begin(), withInputs.end(), [](const Argument &a) {
+                 return a.left;
+             }))) {
+            completeWithFor(
+                chosenTemplate.get(), "", chosenTemplate->funcType, withInputs, withInputTypes);
+        }
         targetGraph = resolveGenericCall(
             chosenTemplate,
             withInputs,
@@ -2482,8 +2623,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     expectedResult,
                     withInputTypes,
                     normInputTypes,
-                    kernelStatics,
-                    Modifier::None);
+                    kernelStatics);
                 resolved.has_value()) {
                 targetOperator = *resolved;
                 targetNode     = currGraph_->addOperNode(targetOperator, 0);
@@ -2534,6 +2674,20 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
             const std::string argumentTypes =
                 strutil::join(argumentTypeTexts, ", ", [](const std::string &s) { return s; });
+            // A declaration takes every count of `with` arguments from its required ones to its
+            // full arity (design principles 4.4): the call is completed for each declaration with
+            // the defaults that declaration registers, and the arguments of the one chosen are
+            // the completed ones.
+            const std::vector<Argument> writtenWith = withInputs;
+            const type_vec_t writtenWithTypes       = withInputTypes;
+            std::unordered_map<const void *, std::pair<std::vector<Argument>, type_vec_t>>
+                completedWith;
+            const auto leavesOut = [&](FunctionType *funcType) {
+                return writtenWith.size() < funcType->withTypesCount() ||
+                       std::any_of(writtenWith.begin(), writtenWith.end(), [](const Argument &a) {
+                           return a.left;
+                       });
+            };
             for (const bool entering : {false, true}) {
                 if (targetGraph || chosenDecorated) {
                     break;
@@ -2541,9 +2695,16 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 std::vector<compile_graph_ptr_t> fitted;
                 for (const auto &g : *graphs) {
                     FunctionType *funcType = signatureOf(g);
+                    withInputs             = writtenWith;
+                    withInputTypes         = writtenWithTypes;
+                    if (leavesOut(funcType) &&
+                        !completeWithFor(g.get(), "", funcType, withInputs, withInputTypes)) {
+                        continue;
+                    }
                     if (!accepts(funcType, entering)) {
                         continue;
                     }
+                    completedWith[g.get()] = {withInputs, withInputTypes};
                     // A function of the top level not built yet is built now: its return type
                     // may come from its body, its decorated form exists once it is built (step
                     // two of loading builds on demand).
@@ -2609,7 +2770,17 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 }
                 targetGraph = g;
             }
+            withInputs     = writtenWith;
+            withInputTypes = writtenWithTypes;
+            if (targetGraph) {
+                if (const auto done = completedWith.find(targetGraph.get());
+                    done != completedWith.end()) {
+                    withInputs     = done->second.first;
+                    withInputTypes = done->second.second;
+                }
+            }
             if (!targetGraph && !chosenDecorated) {
+                yieldToPipe(gct);
                 if (!unmetConditions.empty()) {
                     // Every candidate that took the arguments was made inapplicable by its
                     // condition. The report names each candidate and the condition it wrote
@@ -2710,6 +2881,13 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 // 2026-10-23 on generic-rule-instantiation).
                 settleGenericRuleMaker(normInputs, normInputTypes, gct);
             }
+            if (ops->name() == "__fact") {
+                // The maker of a fact whose head declares type parameters: the functions it is made
+                // of are generic, and this call is the instance of its query, so the type arguments
+                // they are made at are the ones that instance was resolved with (rewrite design
+                // 7.5; design principles 5.9).
+                settleGenericFactMaker(normInputs, normInputTypes, gct);
+            }
             settleGenericOperatorArguments(
                 ops,
                 withInputs,
@@ -2795,7 +2973,24 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 normInputTypes,
                 normStatics,
                 unmetConditions,
-                &ambiguousConditions);
+                &ambiguousConditions,
+                &withInputs);
+            if (res.has_value()) {
+                // The with arguments the rule took are the ones it completes (design principles
+                // 4.4: a parameter with a default may be left out).
+                for (const auto &[ruleUri, rule] : ops->resolvers()) {
+                    FunctionType *declared = rule->fixedSignature() != nullptr
+                                                 ? rule->fixedSignature()
+                                                 : rule->declaredSignature();
+                    if (ruleUri == (*res)->uri() && declared != nullptr &&
+                        (withInputs.size() < declared->withTypesCount() ||
+                         std::any_of(withInputs.begin(), withInputs.end(), [](const Argument &a) {
+                             return a.left;
+                         }))) {
+                        completeWithFor(nullptr, ruleUri, declared, withInputs, withInputTypes);
+                    }
+                }
+            }
             if (!res.has_value()) {
                 // A literal operand takes the other operand's type in a named operator call too:
                 // `add(x, 2.0)` with an f32 tensor is the f32 sum, as `x * 2.0` already is
@@ -2850,6 +3045,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 }
             }
             if (!res.has_value()) {
+                yieldToPipe(gct);
                 if (!unmetConditions.empty()) {
                     // Every candidate whose parameters took the arguments was made inapplicable
                     // by its own `when` (design principles 4.4: a rule that does not apply is
@@ -2923,8 +3119,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                             expectedResult,
                             withInputTypes,
                             normInputTypes,
-                            normStatics,
-                            Modifier::None)) {
+                            normStatics)) {
                         if (std::ranges::find(reasons, *reason) == reasons.end()) {
                             if (auto diag = resolver->rejectionDiag()) {
                                 if (dedicated.has_value() && *dedicated != *diag) {
@@ -2976,8 +3171,12 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                         const std::vector<StaticArg> statics(
                             normStatics.begin(),
                             normStatics.begin() + static_cast<std::ptrdiff_t>(normCount));
-                        if (ops->resolve(asWith, asNorm, statics, Modifier::None).has_value()) {
-                            argTypesStr += withArgumentsHint(ops->name(), normInputs, normCount);
+if (ops->resolve(asWith, asNorm, statics).has_value()) {
+                            // A call of a function with an `#impl` kernel resolves in the
+                            // kernel's group: the hint names the declaration, not the kernel.
+                            const std::string declared = declaredNameOfKernelGroup(ops);
+                            argTypesStr += withArgumentsHint(
+                                declared.empty() ? ops->name() : declared, normInputs, normCount);
                             break;
                         }
                     }
@@ -2987,8 +3186,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     strutil::join(
                         ops->resolvers(),
                         "\n    ",
-                        [](const std::pair<std::string, resolver_ptr_t> &p) {
-                            return "<" + p.first + ">: " + p.second->signature();
+                        [this](const std::pair<std::string, resolver_ptr_t> &p) {
+                            return calleeNameForMessage(p.first) + ": " + p.second->signature();
                         }) +
                     "\n";
                 // The overloads of the program are part of the set (design principles 10.2).
@@ -3283,8 +3482,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         // is that function value -- so no arguments are taken and `s()` is the form.
         if (dataType != nullptr && dataType->code() == TypeCode::Stream) {
             // A pull is one consumer of the stream (design principles 5.4: a stream is read once on
-            // each execution path), the other being a `for` over it.
-            consumeStream(targetNode, gct);
+            // each execution path), the other being a `for` over it; the check on the built graph
+            // reads this pull from the data edge the call writes.
             dataType = tt::as_ptr<StreamType>(dataType)->stepType();
         }
         ASSERT(
@@ -3292,6 +3491,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             "Target node of LINK must be a function or operator node.");
         auto *funcType = tt::as_ptr<FunctionType>(dataType);
         if (!accepts(funcType, false) && !accepts(funcType, true)) {
+            yieldToPipe(gct);
             reportConversionGaps(
                 {{std::string(), funcType}},
                 withInputs,
@@ -3495,6 +3695,34 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     if (targetGraph) {
         captured = capturedUsesOf(targetGraph);
     }
+    // What the call hands on beside its return value: the new version of each captured variable
+    // it writes, in the callee's capture order. The mask was decided when the node was made and
+    // is in its payload; here it says which of the call's With inputs are those versions, and
+    // each is recorded against the variable it is of, so a read of that variable after the call
+    // takes the access node of the part (Builder::valueVersionOf) instead of the cell and a
+    // control input.
+    uint32_t writtenMask = 0;
+    if (targetGraph) {
+        if (auto mask = callWriteMasks_.find(targetNode); mask != callWriteMasks_.end()) {
+            writtenMask = mask->second;
+        }
+    }
+    const bool callReturnsValue =
+        targetFuncType != nullptr && targetFuncType->hasExitType() &&
+        !isVoidGraphExitType(targetFuncType->exitType());
+    if (writtenMask != 0) {
+        CallValue value;
+        value.hasReturn = callReturnsValue;
+        const auto table = capturedValues_.find(targetGraph.get());
+        for (size_t k = 0; table != capturedValues_.end() && k < table->second.size(); ++k) {
+            if ((writtenMask & (uint32_t{1} << k)) == 0) {
+                continue;
+            }
+            value.variables.push_back(
+                captureInto(currGraph_, table->second[k].origin, table->second[k].name));
+        }
+        callValues_[targetNode] = std::move(value);
+    }
     std::vector<node_handle_t> capturedWrites;
     for (const CapturedUse &use : captured) {
         orderAfterLastWriter(use.variable, targetNode);
@@ -3608,6 +3836,29 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         return gate;
     }
     LEAVE("LINK");
+    if (writtenMask != 0 && callReturnsValue && valueWanted) {
+        // The value the position takes is the call's return value, the first part of what the
+        // call hands on. A call whose value nothing wants builds no access node for it.
+        return callValuePartOf(targetNode, 0);
+    }
+    if (writtenMask != 0 && !valueWanted && !unusedStatement && expectedResult != nullptr &&
+        isVoidGraphExitType(expectedResult)) {
+        // A position that expects `void` takes no value, and a branch joins the value that
+        // stands here with the values of its other arms: what the call hands on beside its
+        // return value is the new version of each captured variable it writes, and a version is
+        // a `var` cell -- a place, not a value a position takes. It is taken only where a
+        // reader takes it, through the access node of the call (Builder::valueVersionOf). What
+        // stands here is the callee's own value -- nothing -- after the call, so an arm joining
+        // this call with a `void` one stays `void` and not a `var T?` (design principles 190,
+        // 189: the join of such arms takes no value). The value is handed on behind a gate whose
+        // other input is the call, which is what the position does (`setArmResult`).
+        node_handle_t empty = currGraph_->addStaticDataNode(Data::null());
+        node_handle_t gate  = currGraph_->addGateNode(nodeTypeOf(empty));
+        linkNodes(LinkType::Norm, empty, gate);
+        linkNodes(LinkType::Ctrl, targetNode, gate);
+        LEAVE("LINK");
+        return gate;
+    }
     return targetNode;
 }
 

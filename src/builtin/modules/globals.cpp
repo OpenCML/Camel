@@ -23,6 +23,7 @@
 #include "camel/utils/assert.h"
 #include "camel/utils/log.h"
 
+#include <mutex>
 #include <algorithm>
 #include <format>
 #include <optional>
@@ -36,6 +37,14 @@ using namespace camel::core::rtdata;
 using namespace camel::core::type;
 
 namespace {
+// Both sides of `==` are one type; an unnamed struct value is the named type it has the fields
+// of, read as it is (design principles 5.2), so the two compare by their fields.
+bool sameOrEnteringStruct(Type *a, Type *b) {
+    if (a->equals(b))
+        return true;
+    return a->code() == TypeCode::Struct && b->code() == TypeCode::Struct &&
+           (a->assignableFrom(b) || b->assignableFrom(a));
+}
 
 /// Whether a value of type `type` exists at run time, so that an operator taking a value of
 /// every type (`string(x)`) may take it: not `void`, not a type the compiler uses on its own
@@ -318,30 +327,27 @@ class StaticCheckedResolver final : public FuncTypeResolver {
         : inner_(std::move(inner)), check_(check) {}
 
     std::optional<FunctionType *> resolve(
-        const type_vec_t &with, const type_vec_t &norm,
-        const ModifierSet &modifiers) const override {
-        return inner_->resolve(with, norm, modifiers);
+        const type_vec_t &with, const type_vec_t &norm) const override {
+        return inner_->resolve(with, norm);
     }
 
     /// A rejected call is one whose arguments do not fit, so the value-carrying resolution the
     /// drafts use answers for it exactly as for any other mismatch.
     std::optional<FunctionType *> resolveWith(
-        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics,
-        const ModifierSet &modifiers) const override {
+        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics) const override {
         if (check_(norm, normStatics).has_value()) {
             return std::nullopt;
         }
-        return inner_->resolveWith(with, norm, normStatics, modifiers);
+        return inner_->resolveWith(with, norm, normStatics);
     }
 
     /// The reason the call cannot be right, for the report the call gets (`ArgumentsRejected`).
     std::optional<std::string> explainRejection(
-        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics,
-        const ModifierSet &modifiers) const override {
+        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics) const override {
         if (auto reason = check_(norm, normStatics)) {
             return reason;
         }
-        return inner_->explainRejection(with, norm, normStatics, modifiers);
+        return inner_->explainRejection(with, norm, normStatics);
     }
 
     std::string signature() const override { return inner_->signature(); }
@@ -529,7 +535,7 @@ resolver_ptr_t sequenceSliceResolver(Type *sequence, std::string signature) {
     return std::make_shared<StaticCheckedResolver>(DynamicFuncTypeResolver::create(
         {{0, {}}, {-1, {}}},
         std::move(signature),
-        [sequence](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+        [sequence](const type_vec_t &, const type_vec_t &norm)
             -> optional<Type *> {
             if (norm.size() < 4 || norm.size() > 6 || !norm[0]->equals(sequence)) {
                 return nullopt;
@@ -568,16 +574,14 @@ resolver_ptr_t coreSliceFunctionResolver() {
                     // report: the six-word table waits for that path, not for this rule.
                     {{0, {}}, {-1, {}}},
                     "(t: T[], axis: int, start: int, end: int, step: int, written: int) => T[]",
-                    [](const type_vec_t &with, const type_vec_t &norm,
-                       const ModifierSet &) -> optional<Type *> {
+                    [](const type_vec_t &with, const type_vec_t &norm) -> optional<Type *> {
                         (void)with;
                         // A caller that holds no constants: the axis and the bounds are then the
                         // run's, and only the rank and the element type are the call's own.
                         return sliceResultType(norm, {});
                     }),
                 sliceParameterTable()),
-            [](const type_vec_t &with, const type_vec_t &norm, static_args_t statics,
-               const ModifierSet &) -> optional<Type *> {
+            [](const type_vec_t &with, const type_vec_t &norm, static_args_t statics) -> optional<Type *> {
                 (void)with;
                 return sliceResultType(norm, statics);
             }),
@@ -995,7 +999,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
                         "(x: T) => string",
-                        [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &, const type_vec_t &norm)
                             -> optional<Type *> {
                             if (!isConcreteValueType(norm[0])) {
                                 return nullopt;
@@ -1016,7 +1020,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
                         "(value: T) => var T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> { return TupleType::cell(norm[0]->widened()); }),
                 },
             }),
@@ -1028,7 +1032,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
                         "(variable: var T) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             if (valueTypeOf(norm[0]) == norm[0]) {
                                 return nullopt; // not a variable
@@ -1048,7 +1052,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
                         "(variable: var T) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             if (valueTypeOf(norm[0]) == norm[0]) {
                                 return nullopt; // not a variable
@@ -1069,7 +1073,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {true}}},
                         "(var variable: T[]) => T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
@@ -1085,7 +1089,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {true, false}}},
                         "(var self: T[], value: T[]) => var T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array || !norm[0]->equals(norm[1]))
                                 return nullopt;
@@ -1147,7 +1151,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {true, false}}},
                         "(var self: T, other: T) => var T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             // The target keeps its declared type; the value only has to fit it.
                             if (!norm[0]->assignableFrom(norm[1])) {
@@ -1565,7 +1569,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {false, false}}},
                         "(a: T, b: T) => bool, T an array, tuple or struct of comparable parts",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             // By content (design principles 4.2): both sides of one type,
                             // an array, a tuple or a struct, every part of which is itself
@@ -1580,7 +1584,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                                     !tt::as_ptr<TupleType>(norm[0])->isTagged());
                             // An enum compares by its variant and then its fields.
                             const bool comparable = composite || asEnumType(norm[0]) != nullptr;
-                            if (!comparable || !norm[0]->equals(norm[1]) ||
+                            if (!comparable || !sameOrEnteringStruct(norm[0], norm[1]) ||
                                 !isContentComparable(norm[0])) {
                                 return nullopt;
                             }
@@ -1660,7 +1664,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {false, false}}},
                         "(a: T, b: T) => bool, T an array, tuple or struct of comparable parts",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             // By content (design principles 4.2): both sides of one type,
                             // an array, a tuple or a struct, every part of which is itself
@@ -1675,7 +1679,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                                     !tt::as_ptr<TupleType>(norm[0])->isTagged());
                             // An enum compares by its variant and then its fields.
                             const bool comparable = composite || asEnumType(norm[0]) != nullptr;
-                            if (!comparable || !norm[0]->equals(norm[1]) ||
+                            if (!comparable || !sameOrEnteringStruct(norm[0], norm[1]) ||
                                 !isContentComparable(norm[0])) {
                                 return nullopt;
                             }
@@ -2159,7 +2163,7 @@ std::make_shared<StaticCheckedResolver>(
                         DynamicFuncTypeResolver::create(
                             {{0, {}}, {2, {false, false}}},
                             "(arr: T[], index: int) => T",
-                            [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            [](const type_vec_t &with, const type_vec_t &norm)
                                 -> optional<Type *> {
                                 if (norm[0]->code() != TypeCode::Array ||
                                     norm[1]->code() != TypeCode::Int64)
@@ -2192,7 +2196,7 @@ std::make_shared<StaticCheckedResolver>(
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {false, false}}},
                         "(arr: T[], indices: int[]) => T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array ||
                                 norm[1]->code() != TypeCode::Array)
@@ -2221,7 +2225,7 @@ std::make_shared<StaticCheckedResolver>(
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {false, false}}},
                         "(str: string, index: int) => string",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::String ||
                                 norm[1]->code() != TypeCode::Int64)
@@ -2295,7 +2299,7 @@ std::make_shared<StaticCheckedResolver>(
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
                         "(prompt: string) => string",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             if (!norm[0]->equals(Type::String()))
                                 return nullopt;
@@ -2311,7 +2315,7 @@ std::make_shared<StaticCheckedResolver>(
                     DynamicFuncTypeResolver::create(
                         {{-1, {}}, {-1, {}}},
                         "<fmt?: string> (x: T, ...rest: U...) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             if (with.size() > 0 && with[0]->code() != TypeCode::String) {
                                 return nullopt;
@@ -2331,7 +2335,7 @@ std::make_shared<StaticCheckedResolver>(
                     DynamicFuncTypeResolver::create(
                         {{-1, {}}, {-1, {}}},
                         "<fmt?: string> (x: T, ...rest: U...) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             if (with.size() > 0 && with[0]->code() != TypeCode::String) {
                                 return nullopt;
@@ -2353,7 +2357,7 @@ std::make_shared<StaticCheckedResolver>(
                     DynamicFuncTypeResolver::create(
                         {{-1, {}}, {-1, {}}},
                         "<fmt?: string> (x: T, ...rest: U...) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             if (with.size() > 0 && with[0]->code() != TypeCode::String) {
                                 return nullopt;
@@ -2365,23 +2369,6 @@ std::make_shared<StaticCheckedResolver>(
                         }),
                 },
             }),
-        // ======= process (implemented in process.cmo) ======
-        OperatorGroup::create(
-            "sleep",
-            {
-                {
-                    "process:sleep",
-                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Void()),
-                },
-            }),
-        OperatorGroup::create(
-            "exit",
-            {
-                {
-                    "process:exit",
-                    StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Void()),
-                },
-            }),
         // ======= string =======
         OperatorGroup::create(
             "format",
@@ -2391,7 +2378,7 @@ std::make_shared<StaticCheckedResolver>(
                     DynamicFuncTypeResolver::create(
                         {{-1, {}}, {1, {false}}},
                         "<...args: T...> (fmt: string) => string",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             if (!norm[0]->equals(Type::String()))
                                 return nullopt;
@@ -2407,7 +2394,7 @@ std::make_shared<StaticCheckedResolver>(
                     DynamicFuncTypeResolver::create(
                         {{1, {false}}, {1, {false}}},
                         "<sep: string> (xs: string[]) => string",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             if (!with[0]->equals(Type::String()))
                                 return nullopt;
@@ -2441,7 +2428,7 @@ std::make_shared<StaticCheckedResolver>(
                         {{0, {}}, {1, {false}}},
                         // One position, one name: the collection rule below is `len(x: …)` too.
                         "<> (x: T[]) => int",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
@@ -2463,7 +2450,7 @@ std::make_shared<StaticCheckedResolver>(
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
                         "<> (s: string) => string[]",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             if (!with.empty() || norm.size() != 1 ||
                                 norm[0]->code() != TypeCode::String) {
@@ -2481,7 +2468,7 @@ std::make_shared<StaticCheckedResolver>(
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {-1, {}}},
                         "(...args: T[]) => (T, T, ...)[]",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             if (norm.size() < 2)
                                 return nullopt;
@@ -2506,7 +2493,7 @@ std::make_shared<StaticCheckedResolver>(
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
                         "<> (xs: T[]) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
@@ -2523,7 +2510,7 @@ std::make_shared<StaticCheckedResolver>(
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
                         "<> (xs: T[]) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
@@ -2540,7 +2527,7 @@ std::make_shared<StaticCheckedResolver>(
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
                         "<> (xs: T[]) => T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
@@ -2557,7 +2544,7 @@ std::make_shared<StaticCheckedResolver>(
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {3, {false, false, false}}},
                         "(start: int, end: int, step: int) => int[]",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             // `range(a, b, step)` is the integers `a`, `a + step`, ... below `b`; the interval
                             // `a..b` is the step-1 case of it and lowers to exactly this call, `range(a, b, 1)`
@@ -2584,7 +2571,7 @@ std::make_shared<StaticCheckedResolver>(
                     DynamicFuncTypeResolver::create(
                         {{2, {false, false}}, {1, {false}}},
                         "<start: int, end: int> (xs: T[]) => T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
@@ -2630,14 +2617,12 @@ std::make_shared<StaticCheckedResolver>(
                                 {{0, {}}, {6, {false, false, false, false, false, false}}},
                                 "(arr: T[], axis: int, start: int, end: int, step: int, written: "
                                 "int) => T[]",
-                                [](const type_vec_t &, const type_vec_t &norm,
-                                   const ModifierSet &) -> optional<Type *> {
+                                [](const type_vec_t &, const type_vec_t &norm) -> optional<Type *> {
                                     // A caller that holds no constants: the axis and the bounds are
                                     // the run's, and only the rank and the element type are known.
                                     return coreSliceSubscriptResultType(norm, {});
                                 }),
-                            [](const type_vec_t &, const type_vec_t &norm, static_args_t statics,
-                               const ModifierSet &) -> optional<Type *> {
+                            [](const type_vec_t &, const type_vec_t &norm, static_args_t statics) -> optional<Type *> {
                                 return coreSliceSubscriptResultType(norm, statics);
                             }),
                         staticSliceRejection),
@@ -2659,7 +2644,7 @@ std::make_shared<StaticCheckedResolver>(
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {false, false}}},
                         "<> (xs: T[], ys: T[]) => T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
@@ -2667,9 +2652,22 @@ std::make_shared<StaticCheckedResolver>(
                                 return nullopt;
                             const auto &arrType      = tt::as_ptr<ArrayType>(norm[0]);
                             const auto &otherArrType = tt::as_ptr<ArrayType>(norm[1]);
-                            if (!arrType->elemType()->equals(otherArrType->elemType()))
+                            // The same relation as `append` and `contains` hold their values
+                            // to (design principles 5.2): an unnamed struct element enters the
+                            // named element type of the other array, which is the result's.
+                            Type *left  = arrType->elemType();
+                            Type *right = otherArrType->elemType();
+                            if (left->equals(right))
+                                return ArrayType::create(left);
+                            // Elements are copied slot by slot, so only a value that is read as
+                            // the type without moving anything qualifies (assignableFrom).
+                            if (left == Type::Void() || right == Type::Void())
                                 return nullopt;
-                            return ArrayType::create(arrType->elemType());
+                            if (left->assignableFrom(right))
+                                return ArrayType::create(left);
+                            if (right->assignableFrom(left))
+                                return ArrayType::create(right);
+                            return nullopt;
                         }),
                 },
             }),
@@ -2681,7 +2679,7 @@ std::make_shared<StaticCheckedResolver>(
                     DynamicFuncTypeResolver::create(
                         {{1, {false}}, {1, {false}}},
                         "<value: T> (xs: T[]) => T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
@@ -2708,7 +2706,7 @@ std::make_shared<StaticCheckedResolver>(
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
                         "(arr: T[]) => T[]",
-                        [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &, const type_vec_t &norm)
                             -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
@@ -2719,9 +2717,9 @@ std::make_shared<StaticCheckedResolver>(
         // `xs->append<v>` where the compiler proved the old array invisible: one state of a
         // loop body, with that state bound only to this call and its first value a fresh
         // literal (Builder::markLoopStateInPlace, per state). The append may then write into
-        // the state's own Block (Array::canWriteInPlace) instead of copying the array; when
-        // the array is not compact (an element that holds references) or the block is shared,
-        // it behaves exactly as `append`. Not a name a program can reach for on its own.
+        // the state's own storage (Array::writableInPlace) instead of copying the array; when
+        // the storage is shared or is not this value's, it behaves exactly as `append`. Not a
+        // name a program can reach for on its own.
         OperatorGroup::create(
             "__append_owned__",
             {
@@ -2730,7 +2728,7 @@ std::make_shared<StaticCheckedResolver>(
                     DynamicFuncTypeResolver::create(
                         {{1, {false}}, {1, {false}}},
                         "<value: T> (xs: T[]) => T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
@@ -2750,7 +2748,7 @@ std::make_shared<StaticCheckedResolver>(
                     DynamicFuncTypeResolver::create(
                         {{1, {false}}, {1, {false}}},
                         "<other: T[]> (xs: T[]) => T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
@@ -2772,7 +2770,7 @@ std::make_shared<StaticCheckedResolver>(
                     DynamicFuncTypeResolver::create(
                         {{1, {false}}, {1, {false}}},
                         "<value: T> (xs: T[]) => bool",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
@@ -2816,7 +2814,7 @@ std::make_shared<StaticCheckedResolver>(
                         DynamicFuncTypeResolver::create(
                             {{1, {false}}, {1, {false}}},
                             "<f: (item: T) => U> (xs: T[]) => U[]",
-                            [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            [](const type_vec_t &with, const type_vec_t &norm)
                                 -> optional<Type *> {
                                 if (norm[0]->code() != TypeCode::Array)
                                     return nullopt;
@@ -2847,7 +2845,7 @@ std::make_shared<StaticCheckedResolver>(
                     DynamicFuncTypeResolver::create(
                         {{1, {false}}, {1, {false}}},
                         "<f: (item: T) => T> (xs: T[]) => T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
@@ -2877,7 +2875,7 @@ std::make_shared<StaticCheckedResolver>(
                     DynamicFuncTypeResolver::create(
                         {{1, {false}}, {1, {false}}},
                         "<f: (item: T) => bool> (xs: T[]) => T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
@@ -2910,7 +2908,7 @@ std::make_shared<StaticCheckedResolver>(
                         DynamicFuncTypeResolver::create(
                             {{2, {false, false}}, {1, {false}}},
                             "<f: (acc: U, item: T) => U, initial: U> (xs: T[]) => U",
-                            [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                            [](const type_vec_t &with, const type_vec_t &norm)
                                 -> optional<Type *> {
                                 if (norm[0]->code() != TypeCode::Array)
                                     return nullopt;
@@ -2946,7 +2944,7 @@ std::make_shared<StaticCheckedResolver>(
                     DynamicFuncTypeResolver::create(
                         {{1, {false}}, {1, {false}}},
                         "<f: (item: T) => void> (xs: T[]) => void",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
@@ -2981,7 +2979,7 @@ std::make_shared<StaticCheckedResolver>(
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {false, false}}},
                         "(lhs: (arg1: T1, arg2: T2, ...) => R, rhs: (arg: R) => U) => U",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Function)
                                 return nullopt;
@@ -3015,7 +3013,7 @@ std::make_shared<StaticCheckedResolver>(
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {5, {false, false, false, false, false}}},
                         "(hint: int, cap: int, elements: int, peak: int, s: T..) => void",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> optional<Type *> {
                             if (norm.size() != 5) {
                                 return nullopt;
@@ -3038,7 +3036,11 @@ std::make_shared<StaticCheckedResolver>(
 
 GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule("", ctx) {
     registerBuiltinOperatorTraits();
-    registerBuiltinDerivatives();
+    // The derivative registry is the process's: the rules and the tangent spaces are registered
+    // once, as the tensor module registers its own. Registered again by the next context they
+    // would replace the rules a later module put there and clear the tangent spaces it added.
+    static std::once_flag derivativesRegistered;
+    std::call_once(derivativesRegistered, [] { registerBuiltinDerivatives(); });
     // The operators over Map and Set (design principles 11.3). Those named like a group of
     // this module (`len`, `contains`, `__idx__`, `__eq__`, `__neq__`) are further overloads
     // of it: one group is exported per name, the existing overloads first.

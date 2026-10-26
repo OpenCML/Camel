@@ -162,6 +162,27 @@ struct BoundEntryArgument {
 /// not listed: a number has no identity to find again in a graph.
 std::vector<BoundEntryArgument> boundEntryArguments();
 
+/**
+ * Reports an error value nobody handled (design principles 3.9): standard error, in the format
+ * the command line chose (`json`), located where the error value says it was made.
+ *
+ * Two things reach it. The value an entry graph returns, when `main` declares a fallible result
+ * (writeEntryResultTo), and the value a pass ends with (`(f: F) => F!`, design principles 9.1):
+ * the pass driver stops the pipeline there and reports it here, and the run ends with a non-zero
+ * exit code (Context::setProcessExitCode). One rule, one report.
+ */
+void reportUnhandledError(core::context::Context &ctx, slot_t fallible, bool json);
+
+/**
+ * Reports the error value a pass ended with and returns the exit code the run ends with (design
+ * principles 9.1: a pass is `(f: F) => F!`). The driver that ran the pass list calls this, with
+ * the diagnostic format the command line chose, as soon as it sees PassApplyStatus::Errored and
+ * before anything else runs: the value is alive in the frame the pass made it in. The exit code
+ * is non-zero, the same one a failed result of `main` gets.
+ */
+int reportPassErrorValue(
+    const core::context::context_ptr_t &ctx, slot_t error, bool json);
+
 /// Where diagnostics about the entry function are located: the definition of `main`.
 uint64_t entryFunctionOrigin(const core::context::Context &context);
 

@@ -42,6 +42,7 @@ namespace {
 
 std::atomic<DiagFormat> g_format{DiagFormat::Short};
 std::atomic<ColorMode> g_color{ColorMode::Always};
+std::atomic<bool> g_json{false};
 
 bool isTerminal(int fd) {
 #ifdef _WIN32
@@ -817,12 +818,15 @@ std::string renderRich(const Diagnostic &d, const RenderOptions &options, const 
 
 } // namespace
 
-void setDiagnosticRenderConfig(DiagFormat format, ColorMode color) {
+void setDiagnosticRenderConfig(DiagFormat format, ColorMode color, bool json) {
     g_format.store(format);
     g_color.store(color);
+    g_json.store(json);
 }
 
 DiagFormat diagnosticFormat() { return g_format.load(); }
+
+bool diagnosticJson() { return g_json.load(); }
 
 RenderOptions renderOptionsFor(const std::ostream &os) {
     RenderOptions options;

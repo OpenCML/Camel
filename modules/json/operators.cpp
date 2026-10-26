@@ -440,15 +440,34 @@ bool hasJsonForm(Type *type) {
 
 } // namespace
 
-slot_t __json_encode__(ArgsView &, ArgsView &norm, Context &ctx) {
+// encode(value) and encode<indent: n>(value): a null or absent indent is one line.
+slot_t __json_encode__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Type *t  = norm.type(0);
     slot_t s = norm.slot(0);
     auto opt = camelToJson(t, s, ctx);
     if (!opt)
         return NullSlot;
-    int indent = norm.size() >= 2 ? static_cast<int>(fromSlot<Int64>(norm.slot(1))) : -1;
-    if (indent < 0)
-        indent = -1;
+    int indent = -1;
+    if (with.size() >= 1) {
+        slot_t slot = with.slot(0);
+        bool given  = true;
+        if (asNullable(with.type(0)) != nullptr) {
+            given = !isNullValue(slot);
+            slot  = nullablePayload(slot);
+        } else if (with.type(0)->code() != TypeCode::Int64) {
+            given = false; // the type of `null`
+        }
+        if (given) {
+            const Int64 n = fromSlot<Int64>(slot);
+            if (n < 0) {
+                throwRuntimeFault(
+                    RuntimeDiag::InvalidArgument,
+                    "json.encode",
+                    std::format("the indent is {}; it must not be negative", n));
+            }
+            indent = static_cast<int>(n);
+        }
+    }
     std::string out = indent >= 0 ? opt->dump(indent, ' ') : opt->dump();
     return toSlot(String::from(out, mm::autoSpace()));
 }
@@ -538,14 +557,14 @@ bool jsonTypeEncodable(Type *type) {
     return false;
 }
 
-// decode_as<shape>(text), decode_as(text, shape): the type of `shape` is the type decoded to;
-// its value is not read (DESIGN-QUESTION(json-typed-decode)). The result is a `T!`: text that
-// is not JSON, JSON that does not have the shape of `T`, and a document deeper than the limit
-// (JsonTooDeep) are error values, not faults.
+// decode_as::<T>(source): the type T is the one the call names, or the one the position it stands
+// in determines (`let cfg: Config! = text->decode_as`); the call's own result type carries it
+// here. The result is a `T!`: text that is not JSON, JSON that does not have the shape of `T`, and
+// a document deeper than the limit (JsonTooDeep) are error values, not faults.
 slot_t __json_decode_as__(ArgsView &with, ArgsView &norm, Context &ctx) {
     static const char *kWhere = "<json::decode_as>";
-    Type *target              = with.size() > 0 ? with.type(0) : norm.type(1);
-    const TupleType *result   = TupleType::fallible(target);
+    const TupleType *result   = asFallible(norm.resultType());
+    Type *target              = result->payloadType();
     json document;
     if (isJsonType(norm.type(0))) {
         // A Json decoded before: its document, read again with a type.
@@ -654,10 +673,6 @@ slot_t __json_kind__(ArgsView &, ArgsView &norm, Context &) {
     return toSlot(String::from(JsonValue::kindName(value->kind()), mm::autoSpace()));
 }
 
-slot_t __json_is_null__(ArgsView &, ArgsView &norm, Context &) {
-    return toSlot<Bool>(fromSlot<JsonValue *>(norm.slot(0))->kind() == JsonValue::Kind::Null);
-}
-
 slot_t __json_as_bool__(ArgsView &, ArgsView &norm, Context &) {
     return payloadIf(norm, JsonValue::Kind::Bool, Type::Bool());
 }
@@ -731,7 +746,6 @@ std::unordered_map<std::string, operator_t> getJsonOpsMap() {
         {"decode", __json_decode__},
         {"decode_as", __json_decode_as__},
         {"kind", __json_kind__},
-        {"is_null", __json_is_null__},
         {"as_bool", __json_as_bool__},
         {"as_int", __json_as_int__},
         {"as_float", __json_as_float__},

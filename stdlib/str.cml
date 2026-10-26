@@ -29,14 +29,18 @@ export func codepoints(s: string): int[]
 /// @pure
 export func from_codepoints(xs: int[]): string!
 
-/// s with every letter in upper case, by the Unicode simple (one code point to one code point)
-/// case mapping; a letter without one is kept as it is.
-/// @example to_upper('héllo')    // 'HÉLLO'
+/// s with every letter in upper case, by the Unicode case mapping that does not depend on a
+/// language or on the context: a letter may become several (`'ß'` is `'SS'`), and a letter
+/// without a mapping, such as a CJK character or an emoji, is kept. The language-specific rules
+/// are not applied: `'i'` is `'I'` and a dotless `'ı'` is also `'I'`, and Greek `'Σ'` is always `'σ'` in lower case,
+/// even at the end of a word.
+/// @example to_upper('straße')    // 'STRASSE'
 /// @pure
 export func to_upper(s: string): string
 
-/// s with every letter in lower case, by the Unicode simple case mapping.
-/// @example to_lower('HeLLo')    // 'hello'
+/// s with every letter in lower case, by the same mapping as `to_upper`: `'İ'` is `'i'` followed
+/// by a combining dot above, and `'I'` is `'i'`.
+/// @example to_lower('ÀÉÎ Привет')    // 'àéî привет'
 /// @pure
 export func to_lower(s: string): string
 

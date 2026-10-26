@@ -45,7 +45,13 @@ class ExecutorManager {
     bool factoryRegistered(const std::string &protocol) const;
 
   public:
-    ExecutorManager(camel::core::context::context_ptr_t ctx) : context_(ctx) {};
+    // The executor manager is a member of its context, so its back-reference to that context must
+    // not own it: an owning one would keep the context alive through the context's own member. The
+    // factories it holds capture this same handle, so an executor a module registered does not own
+    // the context either (Context::handle()). As in Module, the conversion belongs in the
+    // constructor rather than at the construction site, which is Context::create alone.
+    ExecutorManager(camel::core::context::context_ptr_t ctx)
+        : context_(ctx ? ctx->handle() : camel::core::context::context_ptr_t{}) {};
     ~ExecutorManager() = default;
     void registerExecutorFactory(std::string name, executor_factory_t fact);
 

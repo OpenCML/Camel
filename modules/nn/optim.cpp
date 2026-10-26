@@ -519,9 +519,7 @@ class OptimizerResolver final : public camel::core::type::FuncTypeResolver {
     explicit OptimizerResolver(Kind kind) : kind_(kind) {}
 
     std::optional<FunctionType *> resolve(
-        const type_vec_t &with, const type_vec_t &norm,
-        const ModifierSet &modifiers) const override {
-        (void)modifiers;
+        const type_vec_t &with, const type_vec_t &norm) const override {
         if (!with.empty() || norm.empty() || gradientTypeOf(norm[0]) == nullptr) {
             return std::nullopt;
         }

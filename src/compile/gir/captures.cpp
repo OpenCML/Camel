@@ -95,6 +95,27 @@ node_handle_t Builder::captureInto(
     graph->addCaptureName(shown);
     capturedValues_[graph.get()].push_back({origin, port, shown});
     captureOriginOf_[port] = origin;
+    // A stream a closure captures is refused where the closure is built (design principles 5.4):
+    // the body of a closure runs after the path that made it has finished, so the read such a
+    // capture would make is not that path's one read. It is refused here, at the one place a
+    // capture is made, and not by the pass that counts reads: inside the closure the capture port
+    // and what it captured are one value, so counting edges would see one read where the program
+    // wrote two names. A cell is not the value -- a captured `var` is a resource the closure
+    // shares, and the reads of it are judged where they stand (the standard library's `tee` holds
+    // its source that way). What the rule refuses is the read the capture would make, so what the
+    // closure makes of the port is settled with the pass, once its body is built: a closure that
+    // only hands the value on -- into a cell, into a report, into the captures of a call -- reads
+    // nothing, and the standard library's `tee` holds its source that way to key its report.
+    if (!isVar && camel::compile::gir::streamReadOnce(nodeTypeOf(origin))) {
+        StreamViolation violation;
+        violation.kind   = StreamViolation::Kind::Captured;
+        violation.graph  = graph.get();
+        violation.port   = port;
+        violation.origin = nodeDraftOf(origin)->nodeOrigin(nodeIdOf(origin));
+        Type *valueType  = valueTypeOf(nodeTypeOf(origin));
+        violation.what   = valueType != nullptr ? valueType->toString() : std::string("a stream");
+        streamViolations_.push_back(std::move(violation));
+    }
     if (isVar) {
         variables_.insert(port);
         captures_[graph.get()].variables.push_back(origin);
@@ -102,6 +123,11 @@ node_handle_t Builder::captureInto(
         escapingVariables_.insert(origin);
     }
     return port;
+}
+
+void Builder::noteMachinePortOrigin(node_handle_t port, node_handle_t origin) {
+    ASSERT(port != nullptr && origin != nullptr, "A port stands for a value.");
+    machinePortOrigin_[port] = origin;
 }
 
 void Builder::addCaptureSite(node_handle_t call, const compile_graph_ptr_t &callee) {
@@ -115,6 +141,10 @@ void Builder::addCaptureSite(node_handle_t call, const compile_graph_ptr_t &call
     for (const CapturedValue &value : captured) {
         node_handle_t here = captureInto(currGraph_, value.origin, value.name);
         site.values.push_back(here);
+        // What the capture is worth as of this call: a capture of a variable already written
+        // here passes that write's version on, not the cell. The call is linked to it later
+        // (linkCaptureSites), when the caller may already have written again.
+        site.versions.push_back(valueVersionOf(here));
     }
     captureSites_.push_back(std::move(site));
 }
@@ -131,7 +161,7 @@ void Builder::linkCaptureSites() {
                 CaptureSite &site = captureSites_[i];
                 node_handle_t value = nullptr;
                 if (k < site.values.size()) {
-                    value = site.values[k];
+                    value = site.versions[k] != nullptr ? site.versions[k] : site.values[k];
                 } else {
                     const size_t before = capturedValues_[site.caller.get()].size();
                     value = captureInto(site.caller, captured[k].origin, captured[k].name);
@@ -141,7 +171,9 @@ void Builder::linkCaptureSites() {
                 }
                 // The With inputs of a FUNC node are its callee's with-ports in order: the
                 // declared `with` arguments, linked where the call was built, then the
-                // captures, linked here.
+                // captures, linked here. A capture of a variable this caller wrote is that
+                // write's version, which is also what the call's value carries it as
+                // (callValueTypeOf, Builder::valueVersionOf).
                 tryRemoveCtrlLink(value, site.call);
                 linkNodes(LinkType::With, value, site.call);
                 site.linked = k + 1;

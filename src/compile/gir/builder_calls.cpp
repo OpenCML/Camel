@@ -149,6 +149,19 @@ node_handle_t Builder::functionValueOf(node_handle_t node, const GCT::node_ptr_t
     return node;
 }
 
+node_handle_t Builder::addCallNodeOf(const compile_graph_ptr_t &callee) {
+    // The value the call hands on, and the mask the run time packs it from, are decided here,
+    // once: a callee's writes are only exact once every body is built, and its callers' types
+    // cannot wait for that (Builder::captureWriteMaskOf).
+    const uint32_t writtenCaptures = captureWriteMaskOf(callee);
+    node_handle_t call =
+        currGraph_->addFuncNode(callee, callValueTypeOf(callee, writtenCaptures), writtenCaptures);
+    if (writtenCaptures != 0) {
+        callWriteMasks_[call] = writtenCaptures;
+    }
+    return call;
+}
+
 node_handle_t Builder::createFuncDataNode(
     const graph_ptr_t &graph, bool callableAsResult, bool allowParameterization) {
     ASSERT(
@@ -192,7 +205,7 @@ node_handle_t Builder::createFuncDataNode(
             }
             graph->setParameterized(true);
         }
-        node_handle_t funcNode = currGraph_->addFuncNode(graph, 0);
+        node_handle_t funcNode = addCallNodeOf(graph);
         markMacroNode(funcNode);
         addCaptureSite(funcNode, graph);
         bindGraphScopedFuncNodeDebug(sourceContext, graphOrigin, graph, funcNode);
@@ -471,7 +484,6 @@ node_handle_t Builder::partialApplicationOf(
 
     // The function: the `with` parameters that are left, then the ordinary parameters.
     FunctionTypeFactory factory;
-    factory.setModifiers(calleeType->modifiers());
     factory.setExitType(calleeType->exitType());
     const size_t withCount = calleeType->withTypesCount();
     const auto nameAt      = [&](size_t argIndex, const char *prefix, size_t i) {
@@ -562,7 +574,7 @@ node_handle_t Builder::partialApplicationOf(
         node_handle_t value = visitLinkNode(call);
         setGraphReturnFromResult(graph, nodeIdOf(value), nodeIdOf(value), nodeTypeOf(value));
         restore();
-        unit_->builtBodies.push_back(graph);
+        registerBuiltBody(graph);
     } catch (...) {
         restore();
         leaveScope();
@@ -720,7 +732,6 @@ compile_graph_ptr_t Builder::forwardingGraphOf(const compile_graph_ptr_t &target
     // Its own type object (a graph completes its function type in place): the declared
     // parameters and result of the target, and no captures yet.
     FunctionTypeFactory factory;
-    factory.setModifiers(targetType->modifiers());
     factory.setExitType(targetType->exitType());
     const auto nameAt = [&](size_t argIndex, const char *prefix, size_t i) {
         return argIndex < targetType->argNamesCount() ? std::string(targetType->argNameAt(argIndex))
@@ -760,7 +771,7 @@ compile_graph_ptr_t Builder::forwardingGraphOf(const compile_graph_ptr_t &target
         graph->addDependencyGraph(target);
         // The call the target's direct callers make: the arguments, then the target's
         // captures, which become captures of this graph (passed by the link step).
-        node_handle_t call = graph->addFuncNode(target, 0);
+        node_handle_t call = addCallNodeOf(target);
         if (isMacroGraph(target)) {
             setNodeMacro(call, true);
         }
@@ -775,9 +786,16 @@ compile_graph_ptr_t Builder::forwardingGraphOf(const compile_graph_ptr_t &target
         // The summaries see the target as a function this graph calls: what the target
         // writes of the captured variables, this graph writes.
         (void)capturedUsesOf(target);
-        setGraphReturnFromResult(graph, nodeIdOf(call), nodeIdOf(call), targetType->exitType());
+        // What the forwarder returns is the target's return value: the first part of what the
+        // call hands on, which is the call itself when the target writes no captured variable.
+        draft_node_ref_t returned = nodeIdOf(call);
+        if (callWriteMasks_.contains(call) && targetType->hasExitType() &&
+            !isVoidGraphExitType(targetType->exitType())) {
+            returned = nodeIdOf(callValuePartOf(call, 0));
+        }
+        setGraphReturnFromResult(graph, nodeIdOf(call), returned, targetType->exitType());
         bodyStates_[graph.get()] = BodyState::Built;
-        unit_->builtBodies.push_back(graph);
+        registerBuiltBody(graph);
     } catch (...) {
         bodyStates_[graph.get()] = BodyState::Built;
         leaveScope();
@@ -1018,6 +1036,9 @@ const std::vector<std::optional<Builder::ParameterDefaultValue>> *Builder::defau
         for (const auto &[entryUri, resolver] :
              std::get<oper_group_ptr_t>(target)->resolvers()) {
             FunctionType *fixed = resolver ? resolver->fixedSignature() : nullptr;
+            if (fixed == nullptr && resolver) {
+                fixed = resolver->declaredSignature(); // a generic declaration is one too
+            }
             if (fixed == nullptr) {
                 continue;
             }
@@ -1281,6 +1302,11 @@ void Builder::bindNamedArgumentsToDeclarations(
             continue;
         }
         const std::optional<std::string> name = agreedName(p);
+        if (name.has_value() && isWith && anyDeclarationDefaults(set, p, isWith)) {
+            // A position a declaration of the set defaults: the call leaves it out, and the
+            // declaration the arguments choose gives it its default (completeWithFor).
+            continue;
+        }
         if (!name.has_value() || anyDeclarationDefaults(set, p, isWith)) {
             const Argument &input = firstNamed();
             diags_->of(calleeDiag).atOrigin(input.expr->origin()).commit(*input.name, label);
@@ -1293,10 +1319,67 @@ void Builder::bindNamedArgumentsToDeclarations(
         throw BuildAbortException();
     }
     std::vector<Argument> ordered(slots);
+    for (size_t p = 0; p < slots; ++p) {
+        if (!taken[p]) {
+            // A stand-in of type void until the declaration is known (completeWithFor).
+            node_handle_t none = currGraph_->addStaticDataNode(Data::null());
+            registerNodeOrigin(context_, none, call, "gir.data.static.paramdefault");
+            ordered[p] = Argument{none, call, std::nullopt, true};
+        }
+    }
     for (size_t at = 0; at < written; ++at) {
         ordered[position[at]] = inputs[at];
     }
     inputs = std::move(ordered);
+}
+
+bool Builder::completeWithFor(
+    const void *owner, const std::string &uri, FunctionType *signature,
+    std::vector<Argument> &inputs, camel::core::type::type_vec_t &types) {
+    const size_t arity = signature->withTypesCount();
+    if (inputs.size() > arity) {
+        return false;
+    }
+    const std::vector<std::optional<ParameterDefaultValue>> *defaults = nullptr;
+    if (const auto found = defaults_.find(owner); found != defaults_.end()) {
+        defaults = &found->second.with;
+    } else if (const auto native = nativeDefaults_.find(uri); native != nativeDefaults_.end()) {
+        defaults = &native->second.with;
+    }
+    std::vector<Argument> completed(inputs);
+    completed.resize(arity);
+    for (size_t i = 0; i < arity; ++i) {
+        const bool written = i < inputs.size() && !inputs[i].left;
+        if (written) {
+            continue;
+        }
+        if (defaults == nullptr || i >= defaults->size() || !(*defaults)[i].has_value()) {
+            return false;
+        }
+        // The default is one constant of the declaration: a static node holding it, shared by the
+        // calls of one graph that leave the parameter out (as bindArguments makes it).
+        const ParameterDefaultValue &value = *(*defaults)[i];
+        node_handle_t dataNode{};
+        if (const auto graph = defaultNodes_.find(currGraph_.get()); graph != defaultNodes_.end()) {
+            if (const auto found = graph->second.find(value.expr); found != graph->second.end()) {
+                dataNode = found->second;
+            }
+        }
+        if (dataNode == nullptr) {
+            dataNode = currGraph_->addStaticDataNode(value.data);
+            rememberConstant(dataNode, value.data);
+            registerNodeOrigin(context_, dataNode, value.expr, "gir.data.static.paramdefault");
+            defaultNodes_[currGraph_.get()][value.expr] = dataNode;
+        }
+        completed[i] = Argument{dataNode, value.expr, std::nullopt, false};
+    }
+    types.clear();
+    for (const Argument &input : completed) {
+        types.push_back(input.node == nullptr ? Type::Void()
+                                              : valueTypeOf(nodeTypeOf(input.node)));
+    }
+    inputs = std::move(completed);
+    return true;
 }
 
 void Builder::bindArguments(

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "operators.h"
+#include "case_tables.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
@@ -88,21 +89,11 @@ slot_t __str_split__(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 
 slot_t __str_to_upper__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    std::string text = textOf(norm, 0);
-    for (char &c : text) {
-        if (c >= 'a' && c <= 'z')
-            c = static_cast<char>(c - 'a' + 'A');
-    }
-    return makeString(text);
+    return makeString(camel::str::toUpperCase(norm.get<String *>(0)->view()));
 }
 
 slot_t __str_to_lower__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    std::string text = textOf(norm, 0);
-    for (char &c : text) {
-        if (c >= 'A' && c <= 'Z')
-            c = static_cast<char>(c - 'A' + 'a');
-    }
-    return makeString(text);
+    return makeString(camel::str::toLowerCase(norm.get<String *>(0)->view()));
 }
 
 slot_t __str_find__(ArgsView &with, ArgsView &norm, Context &ctx) {

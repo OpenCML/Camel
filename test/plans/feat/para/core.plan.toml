@@ -231,7 +231,7 @@ timeout_ms = 60000
 
 # Graph-level task execution: nodes of one graph with no path between them run concurrently
 # under PRL, calls included. The assertions are deterministic: calls wait for each other at a
-# rendezvous (module para) and report whether a peer arrived; nothing is timed. On a scheduler
+# rendezvous (module test_support) and report whether a peer arrived; nothing is timed. On a scheduler
 # that runs a graph node by node every rendezvous times out and the counts are 0.
 [[tests]]
 name = "concurrent_calls.prl"

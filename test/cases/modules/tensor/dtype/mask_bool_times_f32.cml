@@ -2,7 +2,7 @@
  * The mask of the usual idiom is a bool array, and a bool is an element type on the array side like
  * any other: `mask * x` puts a bool array beside an f32 one, which is the mixed pair no arm matches
  * (design principles 5.1), and the number that comes of a bool is a conversion the program writes -
- * `where(mask, x, 0.0)`, or `cast(mask, "f32")` where the multiplication itself is what is wanted.
+ * `where(mask, x, 0.0)`, or `f32(mask)` where the multiplication itself is what is wanted.
  * The refusal names the conversion to write, and it is the same answer for every pair of element
  * types: this one is not about the two widths of a float.
  */

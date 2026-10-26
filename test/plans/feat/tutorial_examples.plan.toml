@@ -279,7 +279,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_not_contains = []
 expect_diagnostic_name = "SemanticDiag::EntryModuleMissingMain"
-expect_output_contains = ["Entry module 'main' must define a resolvable 'main'"]
+expect_output_contains = ["Entry module 'shapes' must define a resolvable 'main'"]
 
 # ---- Entries for the other command lines the headers and the pages give ----------------------
 
@@ -598,6 +598,21 @@ expect_exit = 1
 expect_output_not_contains = []
 expect_output_contains = ["10_pure_callback_wrong.cml:15:18: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "apply: (f: (x: int) => int pure, x: int) => int"]
 
+# The counter-example of the `uses` section: the clause is a promise the compiler holds the body
+# to, so a body that reaches past it is refused where the declaration is written, and the resource
+# the clause left out is named. Like the one above, what is asserted is the output text: the run
+# reads the position and the diagnostic name from it.
+[[tests]]
+name = "tutorial.examples.10_uses_beyond"
+desc = "A program the compiler refuses: `stamp` promises `db` and its body writes the standard output, which the clause does not name, so the declaration is refused and the resource it left out is named."
+kind = "behavior"
+case = "../../../docs/tutorial/examples/10_uses_beyond.cml"
+backends = false
+args = ["${case}"]
+expect_exit = 1
+expect_output_not_contains = []
+expect_output_contains = ["10_uses_beyond.cml:8:1: [Error]: '() => int uses db' does not keep its resource promise", "stdout", "(name=SemanticDiag::UsesPromiseViolated, code=0x030001F1)"]
+
 [[tests]]
 name = "tutorial.examples.10_exercise"
 desc = "The answer to the exercise of chapter 10: a `var` written inside a sync block, and a callback whose body touches no resource, passed where the pure requirement asks for one."
@@ -638,4 +653,4 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_not_contains = []
 expect_diagnostic_name = "SemanticDiag::EntryModuleMissingMain"
-expect_output_contains = ["Entry module 'main' must define a resolvable 'main'"]
+expect_output_contains = ["Entry module 'geometry' must define a resolvable 'main'"]

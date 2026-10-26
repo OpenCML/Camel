@@ -39,10 +39,15 @@ struct OperatorDescription {
     OperatorPurity purity = OperatorPurity::Undeclared;
     /// The declared semantics (owned by the operator table), nullptr when none is declared.
     const sem::OperatorSemantics *semantics = nullptr;
+    /// Whether the module declares the group without exporting it: the kernel of an `#impl`
+    /// function (design principles 10.4). Its own bodies call it, an importer cannot, and the
+    /// listing says so ("private": true) instead of hiding it.
+    bool isPrivate = false;
 };
 
-/// Every overload of every operator group `module` exports, sorted by name and URI. The module
-/// must be loaded: a module declares the purity of its operators when it is loaded at the latest.
+/// Every overload of every operator group `module` exports, and of the groups it declares
+/// privately (isPrivate), sorted by name and URI. The module must be loaded: a module declares
+/// the purity of its operators when it is loaded at the latest.
 std::vector<OperatorDescription> describeOperators(const Module &module);
 
 /// One line `OPERATOR {json}` per overload. An operator with declared semantics has a member

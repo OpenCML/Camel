@@ -29,7 +29,7 @@ func rounds(i: int, n: int, acc: int): int {
 }
 
 func main(): int sync {
-    let n = int(get_env('N'))
+    let n = int(get_env('N') ?? '')
     println(rounds(0, n, 0))
     println(attempt(build, 1, 0))
     println((attempt(build, 1, 5) !! ['none'])[19])

@@ -116,7 +116,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 currFrame                = lastFrame;
 
                 Bytecode &lbc = bytecodes_[pc];
-                currFrame->set(lbc.result, result);
+                currFrame->set(lbc.result, funcValueForCall(&lbc, currFrame, result));
 
                 // Continue execution from the next instruction.
                 pc += lbc.opsize;
@@ -315,7 +315,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                     slot_t result = invokeOwnedJitFrame(fn, funcFrame, currentJitCtx_);
                     (void)pop();
                     if (bc.result != 0) {
-                        currFrame->set(bc.result, result);
+                        currFrame->set(bc.result, funcValueForCall(&bc, currFrame, result));
                     }
                     break;
                 }

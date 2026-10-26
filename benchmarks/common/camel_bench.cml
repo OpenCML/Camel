@@ -20,12 +20,12 @@ import { now } from time
 
 /// The benchmark input (CAMEL_BENCH_INPUT).
 export func bench_input(): f32[..] {
-    return load_npy::<f32>(get_env('CAMEL_BENCH_INPUT'))
+    return load_npy::<f32>(get_env('CAMEL_BENCH_INPUT') ?? '')
 }
 
 /// Loads weight `name` from CAMEL_BENCH_WEIGHTS.
 export func weight(name: string): f32[..] {
-    return load_npy::<f32>(get_env('CAMEL_BENCH_WEIGHTS') + '/' + name + '.npy')
+    return load_npy::<f32>((get_env('CAMEL_BENCH_WEIGHTS') ?? '') + '/' + name + '.npy')
 }
 
 func warmup(forward: (x: f32[..]) => f32[..], x: f32[..], remaining: int): int {
@@ -47,7 +47,7 @@ func timed(forward: (x: f32[..]) => f32[..], x: f32[..], remaining: int): int {
 
 /// Exports `forward`, specialized to the benchmark input's dtype and shape, to `path`.
 func export_onnx(forward: (x: f32[..]) => f32[..], path: string): int sync {
-    let x = load_npy::<f32>(get_env('CAMEL_BENCH_INPUT'))
+    let x = load_npy::<f32>(get_env('CAMEL_BENCH_INPUT') ?? '')
     let start = now()
     export_model(forward, x, path)
     'CAMEL_BENCH export_ms={}'->format<(now() - start) * 1000.0>->println
@@ -56,15 +56,15 @@ func export_onnx(forward: (x: f32[..]) => f32[..], path: string): int sync {
 
 /// Runs warmup and timed repetitions of `forward` and saves its output.
 func measure(forward: (x: f32[..]) => f32[..]): int sync {
-    set_num_threads(int(get_env('CAMEL_BENCH_THREADS')))
-    let x = load_npy::<f32>(get_env('CAMEL_BENCH_INPUT'))
+    set_num_threads(int(get_env('CAMEL_BENCH_THREADS') ?? ''))
+    let x = load_npy::<f32>(get_env('CAMEL_BENCH_INPUT') ?? '')
     let warmStart = now()
     let first = forward(x)
     'CAMEL_BENCH compile_ms={}'->format<(now() - warmStart) * 1000.0>->println
-    let warmed = warmup(forward, x, int(get_env('CAMEL_BENCH_WARMUP')) - 1)
+    let warmed = warmup(forward, x, int(get_env('CAMEL_BENCH_WARMUP') ?? '') - 1)
     'CAMEL_BENCH warmup_ms={}'->format<(now() - warmStart) * 1000.0>->println
-    let status = timed(forward, x, int(get_env('CAMEL_BENCH_REPS')))
-    save_npy(first, get_env('CAMEL_BENCH_OUTPUT'))
+    let status = timed(forward, x, int(get_env('CAMEL_BENCH_REPS') ?? ''))
+    save_npy(first, get_env('CAMEL_BENCH_OUTPUT') ?? '')
     return status
 }
 
@@ -94,21 +94,21 @@ func stateless_training(step: (x: f32[..]) => float, x: f32[..]): int sync {
     let warmStart = now()
     let first = step(x)
     'CAMEL_BENCH compile_ms={}'->format<(now() - warmStart) * 1000.0>->println
-    let warmed = warm_steps(step, x, int(get_env('CAMEL_BENCH_WARMUP')) - 1)
+    let warmed = warm_steps(step, x, int(get_env('CAMEL_BENCH_WARMUP') ?? '') - 1)
     'CAMEL_BENCH warmup_ms={}'->format<(now() - warmStart) * 1000.0>->println
-    return timed_steps(step, x, int(get_env('CAMEL_BENCH_REPS')))
+    return timed_steps(step, x, int(get_env('CAMEL_BENCH_REPS') ?? ''))
 }
 
 /// Untimed steps at the start of the stateful loop (at least the first, which carries the
 /// first-call overhead).
 export func warm_count(): int {
-    let n = int(get_env('CAMEL_BENCH_WARMUP'))
+    let n = int(get_env('CAMEL_BENCH_WARMUP') ?? '')
     return if n < 1 then 1 else n
 }
 
 /// Steps of the stateful loop: the untimed ones, then CAMEL_BENCH_REPS timed ones.
 export func step_count(): int {
-    return warm_count() + int(get_env('CAMEL_BENCH_REPS'))
+    return warm_count() + int(get_env('CAMEL_BENCH_REPS') ?? '')
 }
 
 func log_ms(enabled: bool, key: string, ms: float): int sync {
@@ -149,10 +149,10 @@ export func run_training(
     dump: (x: f32[..], dir: string) => int,
     stateful: (x: f32[..]) => int
 ): int sync {
-    set_num_threads(int(get_env('CAMEL_BENCH_THREADS')))
-    let x = load_npy::<f32>(get_env('CAMEL_BENCH_INPUT'))
-    let gradsDir = get_env('CAMEL_BENCH_GRADS')
-    return if gradsDir != '' then dump(x, gradsDir) else if get_env('CAMEL_BENCH_TRAIN_PROTOCOL') == 'stateless' then stateless_training(step, x) else sync {
+    set_num_threads(int(get_env('CAMEL_BENCH_THREADS') ?? ''))
+    let x = load_npy::<f32>(get_env('CAMEL_BENCH_INPUT') ?? '')
+    let gradsDir = get_env('CAMEL_BENCH_GRADS') ?? ''
+    return if gradsDir != '' then dump(x, gradsDir) else if (get_env('CAMEL_BENCH_TRAIN_PROTOCOL') ?? '') == 'stateless' then stateless_training(step, x) else sync {
         'CAMEL_BENCH protocol=stateful updates=consumed-by-next-step'->println
         return stateful(x)
     }
@@ -160,6 +160,6 @@ export func run_training(
 
 /// Runs the benchmark protocol for `forward` and returns the process exit code.
 export func run_benchmark(forward: (x: f32[..]) => f32[..]): int {
-    let exportPath = get_env('CAMEL_BENCH_EXPORT')
+    let exportPath = get_env('CAMEL_BENCH_EXPORT') ?? ''
     return if exportPath == '' then measure(forward) else export_onnx(forward, exportPath)
 }

@@ -622,6 +622,103 @@ void Builder::settleGenericRuleMaker(
     }
 }
 
+// ---- A generic fact, asked for by its own query (rewrite design 7.5) ----
+
+void Builder::settleGenericFactMaker(
+    std::vector<Argument> &normInputs, type_vec_t &normTypes, const GCT::node_ptr_t &call) {
+    // `__fact(name, <the fact's type parameters>, <its functions>, withCount, <with arguments>,
+    // <queried nodes>, <case triples>)`, what the front end writes for a `fact` declaration. A
+    // fact whose head declares type parameters is one fact per type argument (design principles
+    // 5.5): the functions it is made of are templates and have no value of their own, so the
+    // instances of the fact this call stands for are built here, from the instance of the fact's
+    // query -- the type arguments are the ones that instance was resolved with, the ones written
+    // at the query (`range::<int>(n)`), which is the channel rules and facts share (design
+    // principles 5.9) and the only channel a caller that holds a node has. A query whose arguments
+    // fix none of them is reported here and asks for them. They are part of what the fact is: two
+    // instances at two types are two facts, and the written arguments name it (`range<int>`).
+    constexpr size_t kTypes   = 1;
+    constexpr size_t kInitial = 2;
+    if (normInputs.size() <= kInitial) {
+        return;
+    }
+    // The fact's functions, as the front end named them: every argument of the call that is one is
+    // generic, and each is instantiated at the types the query was resolved with. They are not all
+    // of them leading -- the `with` count, the `with` values and the queried nodes sit between the
+    // fact's clauses and its cases (`__fact('range', 'int', initial, join, ..., 0, n, case0,
+    // case0_fact, ...)`, modules/rewrite/fact.h), and a generic function left uninstantiated in an
+    // argument position is a function value the operator cannot take.
+    std::vector<size_t> at;
+    std::vector<generic_template_ptr_t> made;
+    for (size_t i = kInitial; i < normInputs.size(); ++i) {
+        const auto found = genericDrefs_.find(normInputs[i].node);
+        if (found == genericDrefs_.end()) {
+            continue;
+        }
+        at.push_back(i);
+        made.push_back(found->second.one());
+    }
+    if (made.empty()) {
+        // A fact whose head declares no type parameters is the value its functions already are.
+        return;
+    }
+    const std::vector<std::string> names = typeParameterNames(made.front());
+    if (names.empty()) {
+        return;
+    }
+    // The fact's name, as a reader writes it: the functions the declaration becomes are its name
+    // with a suffix (`range__initial`, `range__case0_fact`).
+    std::string factName = made.front()->name;
+    if (const size_t scope = factName.rfind("::"); scope != std::string::npos) {
+        factName = factName.substr(scope + 2);
+    }
+    if (const size_t side = factName.rfind("__"); side != std::string::npos) {
+        factName.resize(side);
+    }
+    type_bindings_t bindings;
+    std::string arguments;
+    std::string declared;
+    for (const std::string &one : names) {
+        declared += (declared.empty() ? "" : ", ") + one;
+        Type *bound = findTypeBinding(typeBindings_, one);
+        if (bound == nullptr || containsTypeVar(bound)) {
+            // A type the query does not fix is no instance of the fact: the type arguments of a
+            // fact whose head declares type parameters are the ones its query was resolved with,
+            // and a query whose arguments fix none of them has to write them
+            // (`range::<int>(n)`) -- the same answer any generic call gives, and this is where
+            // the instance the query asked for is built.
+            diags_->of(SemanticDiag::GenericArgumentsMismatch)
+                .atOrigin(call->origin())
+                .commit(
+                    factName,
+                    declared,
+                    "the type variable(s) " + one +
+                        " cannot be determined from the arguments or expected result; give an "
+                        "expected type or explicit " +
+                        factName + "::<...> type arguments",
+                    factName + "::<" + declared + ">");
+            throw BuildAbortException();
+        }
+        bindings.emplace_back(one, bound);
+        arguments += (arguments.empty() ? "" : ", ") + bound->toString();
+    }
+    for (size_t i = 0; i < made.size(); ++i) {
+        const compile_graph_ptr_t instance = instantiateGeneric(made[i], bindings, {}, {}, call);
+        if (instance == nullptr) {
+            return; // the instance reported its own reason, at the declaration
+        }
+        normInputs[at[i]] = Argument{createFuncDataNode(instance, true, false), call, std::nullopt};
+        normTypes[at[i]]  = valueTypeOf(nodeTypeOf(normInputs[at[i]].node));
+    }
+    // What the type arguments are: the fact's key reads them, and the engine makes one fact per
+    // key (`buildDefinition`), so the instances of two types never share a value or a kind.
+    const data_ptr_t written = tt::as_shared<Data>(std::make_shared<StringData>(arguments));
+    const node_handle_t typesNode = currGraph_->addStaticDataNode(written);
+    rememberConstant(typesNode, written);
+    registerNodeOrigin(context_, typesNode, call, "gir.fact.types");
+    normInputs[kTypes] = Argument{typesNode, call, std::nullopt};
+    normTypes[kTypes]  = Type::String();
+}
+
 bool Builder::instantiateRuleTemplates(
     const GenericRuleEntry &entry, const std::vector<Type *> &types, const RuleWithArguments &with,
     compile_graph_ptr_t &lhs, compile_graph_ptr_t &rhs, compile_graph_ptr_t &when,
@@ -1041,8 +1138,20 @@ generic_template_ptr_t Builder::chooseGenericOverload(
     // they are declared in.
     const auto binds = [&](const generic_template_ptr_t &tmpl) {
         FunctionType *signature = tmpl->funcType;
-        if (signature->hasRest() || signature->withTypesCount() != withTypes.size()) {
+        if (signature->hasRest() || withTypes.size() > signature->withTypesCount()) {
             return false;
+        }
+        // A `with` parameter the call leaves out needs a default of this declaration.
+        const auto registered = defaults_.find(tmpl.get());
+        for (size_t i = 0; i < signature->withTypesCount(); ++i) {
+            const bool written = i < withInputs.size() && !withInputs[i].left;
+            if (written) {
+                continue;
+            }
+            if (registered == defaults_.end() || i >= registered->second.with.size() ||
+                !registered->second.with[i].has_value()) {
+                return false;
+            }
         }
         const size_t params = signature->normTypesCount() - signature->constasCount();
         if (params != normTypes.size()) {
@@ -1119,6 +1228,7 @@ generic_template_ptr_t Builder::chooseGenericOverload(
         }
         rejectAmbiguousCall(candidates.front()->name, argTypes, also, call);
     }
+    yieldToPipe(call);
     diags_->of(SemanticDiag::NoMatchingFunction)
         .atOrigin(call->origin())
         .commit(argTypes, strutil::join(listed, "; ", [](const std::string &s) { return s; }));
@@ -1529,6 +1639,7 @@ compile_graph_ptr_t Builder::instantiateForCall(
         const WhenResult verdict =
             evaluateWhenCondition(when->condition, signature, bindings, withValues, tmpl);
         if (verdict.fails()) {
+            yieldToPipe(call);
             std::vector<Type *> all(withTypes);
             all.insert(all.end(), normTypes.begin(), normTypes.end());
             diags_->of(SemanticDiag::WhenConditionUnmet)
@@ -1617,7 +1728,7 @@ void Builder::settleGenericOperatorArguments(
         for (const Argument &input : normInputs) {
             statics.push_back(isWaiting(input) ? StaticArg{} : staticArgOf(input.node));
         }
-        return ops->resolve(withTypes, normTypes, statics, Modifier::None).has_value();
+        return ops->resolve(withTypes, normTypes, statics).has_value();
     };
     // A name with several functions: the one the operator accepts, when it is exactly one
     // (`xs->map<abs>`, `xs->reduce<max, 0>`). The operator is asked about each candidate's
@@ -1666,11 +1777,11 @@ void Builder::settleGenericOperatorArguments(
                 // A signature computed from the argument types: asked for the candidate
                 // types, one and two parameters.
                 for (Type *first : candidates) {
-                    if (auto one = resolver->resolve({}, {first}, Modifier::None)) {
+                    if (auto one = resolver->resolve({}, {first})) {
                         add(uri, *one);
                     }
                     for (Type *second : candidates) {
-                        if (auto two = resolver->resolve({}, {first, second}, Modifier::None)) {
+                        if (auto two = resolver->resolve({}, {first, second})) {
                             add(uri, *two);
                         }
                     }
@@ -1843,9 +1954,25 @@ void Builder::rejectInvalidCollectionKey(Type *type, const GCT::node_ptr_t &at) 
 }
 
 compile_graph_ptr_t Builder::instantiateGeneric(
-    const generic_template_ptr_t &tmpl, const type_bindings_t &bindings, const ExtentValues &extents,
-    const ConstasValues &constas, const GCT::node_ptr_t &call) {
+    const generic_template_ptr_t &tmpl, const type_bindings_t &callBindings,
+    const ExtentValues &extents, const ConstasValues &constas, const GCT::node_ptr_t &call) {
     ExpectedValueScope instanceScope(expectedValueType_, nullptr);
+    // The key of an instance is the template's own type parameters and what they are bound to,
+    // whatever else the caller passed: a call from the body gives just those, a predicate
+    // evaluated for a `when` gives the template's outer bindings first (they are the template's
+    // own, kept in `tmpl->outerBindings` and put in front of these when the body is built). Two
+    // routes to one instance are one instance, and one diagnostic.
+    const std::vector<std::string> ownNames = typeParameterNames(tmpl);
+    type_bindings_t bindings;
+    for (const auto &binding : callBindings) {
+        const bool own = std::find(ownNames.begin(), ownNames.end(), binding.first) !=
+                             ownNames.end() &&
+                         findTypeBinding(tmpl->outerBindings, binding.first) == nullptr;
+        const bool seen = findTypeBinding(bindings, binding.first) != nullptr;
+        if (own && !seen) {
+            bindings.push_back(binding);
+        }
+    }
     // All routes (inferred calls, function values and::<T>) enforce the same type rules.
     Type *concrete = substituteExtentValues(substituteTypeVars(tmpl->funcType, bindings), extents);
     if (TupleType *repeated = findRepeatedMark(concrete)) {

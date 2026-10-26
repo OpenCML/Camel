@@ -108,7 +108,7 @@ const std::vector<oper_group_ptr_t> &getTaggedOperatorGroups() {
         return DynamicFuncTypeResolver::create(
             {{0, {}}, {1, {false}}},
             signature,
-            [tag, result](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+            [tag, result](const type_vec_t &, const type_vec_t &norm)
                 -> optional<Type *> {
                 TupleType *tagged = asTagged(norm[0]);
                 if (tagged == nullptr || tagged->tag() != tag) {
@@ -118,7 +118,7 @@ const std::vector<oper_group_ptr_t> &getTaggedOperatorGroups() {
             });
     };
     static const std::vector<oper_group_ptr_t> groups = {
-        // ======= Lowering targets of ??, !!, ?->, throw and the match patterns =======
+        // ======= Lowering targets of ??, !!, ->, throw and the match patterns =======
         OperatorGroup::create(
             "__is_null__",
             {{":op/tag_is_null",
@@ -165,7 +165,7 @@ const std::vector<oper_group_ptr_t> &getTaggedOperatorGroups() {
               DynamicFuncTypeResolver::create(
                   {{0, {}}, {-1, {}}},
                   "(kind: string, message: string) => Error",
-                  [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                  [](const type_vec_t &, const type_vec_t &norm)
                       -> optional<Type *> {
                       if (norm.size() != 2 && norm.size() != 3) {
                           return nullopt;
@@ -185,7 +185,7 @@ const std::vector<oper_group_ptr_t> &getTaggedOperatorGroups() {
               DynamicFuncTypeResolver::create(
                   {{0, {}}, {-1, {}}},
                   "(f: (...args: A) => T, ...args: A) => T!",
-                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                  [](const type_vec_t &with, const type_vec_t &norm)
                       -> optional<Type *> {
                       return camel::execute::resolveFaultIsolationType(with, norm);
                   })}}),

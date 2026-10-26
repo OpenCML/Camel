@@ -509,14 +509,20 @@ std::vector<gc_node_ref_t> externalInputsOf(const GraphDraft &draft, uint32_t re
     return externals;
 }
 
-/// Whether anything `node` runs after is ordered by a control edge (code with effects).
+/// Whether anything `node` runs after is ordered (code with effects): the control input a
+/// statement carries, or the sync edge of its block's chain.
 bool hasOrdering(const GraphDraft &draft, gc_node_ref_t node) {
     std::unordered_set<gc_node_ref_t> seen{node};
     std::vector<gc_node_ref_t> work{node};
     while (!work.empty()) {
         const gc_node_ref_t current = work.back();
         work.pop_back();
-        if (!draft.ctrlInputsOf(current).empty()) {
+        // The order is written in two kinds while the move onto the sync edge is in progress, and
+        // both are the wait a statement carries (docs/design/effects/edges.cn.md 1.5, 4.5). Reading
+        // only the control kind would answer "no order" for a statement its block's chain holds,
+        // and the GATE that keeps a gradient behind the function's own effects would not be built
+        // at all (below, where the gradient's result is waited on).
+        if (!draft.ctrlInputsOf(current).empty() || !draft.syncInputsOf(current).empty()) {
             return true;
         }
         for (auto inputs : {draft.normInputsOf(current), draft.withInputsOf(current)}) {
@@ -547,8 +553,17 @@ void pruneUnreachable(GraphDraft &draft) {
             continue;
         }
         live[node] = true;
-        for (auto inputs :
-             {draft.normInputsOf(node), draft.withInputsOf(node), draft.ctrlInputsOf(node)}) {
+        // Dead code is judged along the data edges and the sync edges, so a sync predecessor is
+        // used (docs/design/effects/edges.cn.md 4, the rule for the three kinds; 2, the execution
+        // rule reaches a node from the result along the data edges or the sync edges; 1.5, the
+        // table that gives the sync edge to scheduling and the liveness judgement). The wait a
+        // statement carries is written in the control kind or, where the chain of its block has
+        // moved onto the sync kind, as its sync predecessor; reading only the control kind would
+        // prune the statements a chain holds up.
+        for (auto inputs : {draft.normInputsOf(node),
+                            draft.withInputsOf(node),
+                            draft.ctrlInputsOf(node),
+                            draft.syncInputsOf(node)}) {
             for (gc_node_ref_t input : inputs) {
                 if (!live[input]) {
                     stack.push_back(input);
@@ -4099,7 +4114,7 @@ const PullbackPlan &Engine::planForClosure(GCGraph *graph) {
         portTypes.push_back(captured);
     }
     lifted->setFuncType(
-        FunctionType::create(withParams, normParams, type->exitType(), type->modifiers()));
+        FunctionType::create(withParams, normParams, type->exitType()));
     lifted->setClosureType(nullptr);
     PullbackPlan plan =
         reserve(graph->name(), makePlanTypes(std::move(portTypes), type->exitType()));
@@ -4268,8 +4283,7 @@ void Engine::build(Pending &pending) {
         FunctionType::create(
             withParams,
             normParams,
-            plan.forwardValueType,
-            sourceType->modifiers()));
+            plan.forwardValueType));
 
     group_.define(plan.forward, std::move(pending.source));
     group_.define(plan.pullback, std::move(pullback));

@@ -16,6 +16,7 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/pure.h"
 #include "camel/core/type/text.h"
+#include "camel/profile/profile.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/number_text.h"
 
@@ -1002,14 +1003,27 @@ void Array::adoptBlock(Block *block, size_t newBytes) {
     noteBlockHeld(block);
 }
 
-bool Array::canWriteInPlace() const {
-    if (!isCompact()) {
-        return false;
+bool Array::writableInPlace() const {
+    // One answer for every in-place update, and the one `std::profile` reports: the storage is
+    // this value's alone, so a write through it changes no other name (array.h).
+    const bool alone = [this] {
+        if (view_ || offset_ != 0) {
+            return false; // reads someone else's block, or starts inside one
+        }
+        if (isSlots()) {
+            // A slot array's `FixedArray` is its own: the second name gets a copy, so no count
+            // has to be kept apart.
+            return true;
+        }
+        if (block_ == nullptr) {
+            return true; // inline: this array object is the storage, and the second name copied it
+        }
+        return block_->unique() && block_->camelOwned();
+    }();
+    if (camel::profile::enabledInline()) {
+        camel::profile::arrayCountAnswer(alone);
     }
-    if (block_ == nullptr) {
-        return true; // inline: this array object is the storage, so nothing else can see it
-    }
-    return block_->unique() && block_->camelOwned() && offset_ == 0 && !view_;
+    return alone;
 }
 
 void Array::ensureBlock() {
@@ -1031,10 +1045,22 @@ void Array::ensureBlock() {
 
 Array *Array::shareForSecondName(camel::core::mm::IAllocator &allocator) {
     // A write through one name is visible through another only when the two names are the same
-    // storage. An array no write can reach -- a slot array (canWriteInPlace is false for it), a
-    // view, an imported block, one shifted from its block's start -- hands itself out.
-    if (!isCompact() || view_ || offset_ != 0) {
+    // storage. An array no write can reach -- a view, one shifted from its block's start, an
+    // imported block -- hands itself out.
+    if (view_ || offset_ != 0) {
         return this;
+    }
+    if (isSlots()) {
+        // A slot array has no block whose references could count the names, so the second name
+        // gets a storage of its own: each name is then the only holder of what it writes, and
+        // `writableInPlace` answers true for both (design principles 10.5).
+        const type::Type *elemType = elemType_;
+        if (elemType == nullptr) {
+            return this; // not a value a program names: nothing to copy the slots with
+        }
+        const type::ArrayType *arrayType = type::ArrayType::create(
+            const_cast<type::Type *>(elemType), std::span<const int64_t>(extents_, rank_));
+        return static_cast<Array *>(clone(allocator, arrayType, false));
     }
     const std::span<const int64_t> extents(extents_, rank_);
     if (block_ == nullptr) {
