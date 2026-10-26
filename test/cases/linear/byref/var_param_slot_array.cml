@@ -1,0 +1,17 @@
+// Writing an element of a string array through a `var` parameter changes that variable only:
+// another name that holds the same array keeps its value (design principles 3.5, values).
+
+func set_first(var xs: string[]): void sync {
+    xs[0] = 'changed'
+}
+
+func main(): int sync {
+    let original = ['a', 'b', 'c']
+    var copy = original
+    copy[0] = 'x'
+    println(original, copy)
+    var other = original
+    set_first(other)
+    println(original, other)
+    return 0
+}

@@ -667,12 +667,12 @@ timeout_ms = 60000
 
 [[tests]]
 name = "loops.grad_loop_collect"
-desc = "A loop state that starts as `[]` and is only appended to is a collection output (design principles 3.10): the element type comes from the appended value (5.1, 5.2), the driver builds the array in one pass, and the state stays the program's value and gradient channel. The gradient reads the appended values back through the state, and 1000 rounds cost 2 blocks, not one copy per round (`std::mem::blocks()`, 10.5). One block fewer than the `range(0, n)` this loop head used to hold: the interval `0..n` a `for` iterates is fused by the compiler and no array of its elements is built (design principles 4.2)."
+desc = "A loop state that starts as `[]` and is only appended to is a collection output (design principles 3.10): the element type comes from the appended value (5.1, 5.2), the driver builds the array in one pass, and the state stays the program's value and gradient channel. The gradient reads the appended values back through the state, and 1000 rounds cost 1 block, not one copy per round (`std::mem::blocks()`, 10.5). One block fewer than the `range(0, n)` this loop head used to hold: the interval `0..n` a `for` iterates is fused by the compiler and no array of its elements is built (design principles 4.2). One block fewer again than the count this case recorded before the one in-place rule (`Array::writableInPlace`, docs/design/arrays-memory/README.cn.md 4.3.1): the state's storage is the loop's own, so the append is taken in place instead of the array being handed a copy that the update then had to make; the three values are unchanged."
 kind = "behavior"
 case = "../../../cases/loops/grad_loop_collect.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 0
-expect_stdout_exact = "6.0\n3.0\n1998.0\n2\n"
+expect_stdout_exact = "6.0\n3.0\n1998.0\n1\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
