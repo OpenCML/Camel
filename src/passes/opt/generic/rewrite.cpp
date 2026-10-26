@@ -192,6 +192,17 @@ void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement)
     // the chain over the removed node, with the control edge naming the same pair beside the sync
     // edge; this only has to know which users are already this node's successors in the chain.
     const auto syncUsers = copy(draft.syncUsersOf(id));
+    // The wait the removed node carried for its successor, when the chain does not hand one on.
+    // A branch is not one of them: what waits on a BRCH is in one of its arms, and the successor
+    // standing where the removed node stood keeps its own arm (src/runtime/branch_arms.cpp).
+    std::vector<gc_node_ref_t> inheritedWait;
+    for (gc_node_ref_t pred : draft.ctrlInputsOf(id)) {
+        const camel::runtime::DraftNodeHeader *header = draft.header(pred);
+        if (header != nullptr && header->kind == GCNodeKind::Brch) {
+            continue;
+        }
+        inheritedWait.push_back(pred);
+    }
 
     if (replacement != kInvalidNodeRef) {
         draft.replaceAllValueUses(id, replacement);
@@ -214,6 +225,24 @@ void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement)
         }
     }
     draft.eraseNode(id);
+    // Closing the chain over a node hands its successor the place that node stood in. A node the
+    // program did not write as a statement of the block stands in none -- a pure node the block's
+    // value reads -- and one whose place is in another block keeps none of it either (the chain of
+    // a block joins its own statements, docs/design/effects/edges.cn.md 4.6). The successor is then
+    // left waiting on nothing, and everything the removed node waited on stops being reached from
+    // the program's result, which is what ran those effects (section 2). It keeps that wait instead:
+    // it runs where the removed code did, which is where its own statement was written.
+    for (gc_node_ref_t user : syncUsers) {
+        if (user == id || !draft.alive(user) || !draft.syncInputsOf(user).empty() ||
+            !draft.ctrlInputsOf(user).empty()) {
+            continue;
+        }
+        for (gc_node_ref_t pred : inheritedWait) {
+            if (pred != user && draft.alive(pred)) {
+                camel::runtime::appendControlDependency(draft, pred, user);
+            }
+        }
+    }
 }
 
 namespace {
