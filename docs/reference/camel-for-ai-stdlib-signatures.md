@@ -626,6 +626,13 @@ unordered_foreach: <f: (item: T) => R> (xs: T[]) => void
 unordered_reduce: <f: (acc: T, item: T) => T, initial: T> (xs: T[]) => T
 ```
 
+**`test_support`** — import { ... } from test_support — 2 name(s)
+
+```text
+rendezvous: (parties: int, timeout: float) => int uses rendezvous_point
+thread_count: () => int uses process
+```
+
 **`this`** — import { ... } from this — 1 name(s)
 
 ```text

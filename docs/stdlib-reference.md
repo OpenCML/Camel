@@ -67,6 +67,7 @@ Not in this reference: the profiler (`perf`).
 | [hash](#hash) | `import { ... } from hash` | C++ |
 | [re](#re) | `import { ... } from re` | C++ |
 | [para](#para) | `import { ... } from para` | C++ |
+| [test_support](#test_support) | `import { ... } from test_support` | C++ |
 | [this](#this) | `import { ... } from this` | C++ |
 | [graph](#graph) | `import { ... } from graph` | C++ |
 | [rewrite](#rewrite) | `import { ... } from rewrite` | C++ |
@@ -99,6 +100,7 @@ Not in this reference: the profiler (`perf`).
 | [hash](#hash) | `import { ... } from hash` |  |
 | [re](#re) | `import { ... } from re` |  |
 | [para](#para) | `import { ... } from para` |  |
+| [test_support](#test_support) | `import { ... } from test_support` |  |
 | [this](#this) | `import { ... } from this` |  |
 | [graph](#graph) | `import { ... } from graph` |  |
 | [rewrite](#rewrite) | `import { ... } from rewrite` |  |
@@ -4343,6 +4345,39 @@ combined is not fixed, so f should be associative and commutative.
 
 - With effects: what f does.
 - Example: `[1, 2, 3]->unordered_reduce<(acc: int, x: int): int => acc + x, 0>`
+
+<a id="test_support"></a>
+
+## `test_support`: the facilities of a test
+
+Facilities for tests of the runtime, not for programs: things that make a property of the
+scheduler visible.
+
+#### `rendezvous`
+
+```camel
+rendezvous: (parties: int, timeout: float) => int uses rendezvous_point
+```
+
+Blocks until `parties` calls are waiting at the meeting point, or until `timeout` seconds have
+passed, and gives how many calls met (after a timeout, how many were waiting). A tool for
+showing that calls really run at the same time.
+
+- Failure: fault `InvalidArgument` when parties is below 1 or timeout is negative.
+- Example (a fragment, not compiled): `rendezvous(2, 1.0)` gives `2 when another call arrived in time`
+- Why it is not compiled: waits for another call, which a page cannot supply
+
+#### `thread_count`
+
+```camel
+thread_count: () => int uses process
+```
+
+The number of threads this process has, the caller included: the count the operating system
+reports for the process, not the number of processors. A test reads it to pin how many worker
+threads a run creates.
+
+- Example: `thread_count()` gives `1 at -t 1`
 
 <a id="this"></a>
 

@@ -257,6 +257,14 @@ const MODULES = [
         declaration: true,
     },
     {
+        name: 'test_support',
+        title: '`test_support`: the facilities of a test',
+        kind: 'cpp',
+        // The declarations, not a signature file: they are what the module compiles.
+        source: 'test_support.cml',
+        declaration: true,
+    },
+    {
         name: 'this',
         title: '`this`',
         kind: 'cpp',

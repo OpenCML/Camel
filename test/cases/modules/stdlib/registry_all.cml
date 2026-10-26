@@ -18,6 +18,8 @@ import math
 // resources and its effects in C++, and `exit` stays the built-in operator.
 import process
 import para
+// `test_support` is the facilities of a test, not of a program: `rendezvous` and `thread_count`.
+import test_support
 import random
 import re
 import sim

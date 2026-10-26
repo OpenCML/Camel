@@ -614,7 +614,7 @@ inside a batch chunk. `gemm_library_threads()` reports the library's own count f
 the same call: 1 when the library ran, 0 when the canonical kernel did.
 `test/plans/feat/modules/threads.plan.toml` pins `plain == -t` and
 `plain_lib == 1` at 1, 4, 8 and 16 threads, and pins the process's own thread
-count within `-t` (`process.thread_count()`), so a second pool is red.
+count within `-t` (`test_support.thread_count()`), so a second pool is red.
 
 **Why the second pool had to go.** OpenBLAS creates its worker pool in a
 constructor when the library is loaded, at the machine's thread count, before any
