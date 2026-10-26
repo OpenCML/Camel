@@ -1,0 +1,28 @@
+/**
+ * A generic function may take and answer a stream: `T..` is a type like any other in a signature,
+ * so binding its argument substitutes the element type, and the instantiation's result type is the
+ * stream of the concrete element (design principles 5.4 -- the library's `unfold` is exactly such
+ * a generic function, and this pins the reading on its own).
+ */
+module stream_generic
+
+func count(n: int): int.. {
+    return step(n)
+}
+
+func step(n: int): () => (int, int..)? {
+    return () => if n > 0 then (n, step(n - 1)) else null
+}
+
+func same::<T>(s: T..): T.. {
+    return s
+}
+
+func total(s: int..): int {
+    return loop acc = 0 for x in s do acc + x
+}
+
+func main(): int sync {
+    println(total(same(count(3))))
+    return 0
+}

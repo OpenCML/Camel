@@ -134,7 +134,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `LoopStateWithoutType` | The first value of the loop state '{0}' does not give it a type ('{1}'). |
 | `LoopConditionNotBool` | The condition after 'while' has type '{0}'; a condition is a 'bool'. |
 | `LoopNameRepeated` | The name '{0}' is declared twice in this loop head. |
-| `LoopSequenceNotIterable` | 'for' takes the elements of an array, a string, a map or a tensor; '{0}' has type '{1}'. |
+| `LoopSequenceNotIterable` | 'for' takes the elements of an array, a string, a map, a tensor or a stream; '{0}' has type '{1}'. |
 | `DuplicateEnumVariant` | The variant '{0}' is declared twice in enum '{1}'. |
 | `DuplicateEnumField` | The field '{0}' is declared twice in variant '{1}' of enum '{2}'. |
 | `EnumVariantFieldCount` | The variant '{0}' of enum '{1}' takes {2} field(s), but {3} were given. |
