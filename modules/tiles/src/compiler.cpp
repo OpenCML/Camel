@@ -420,8 +420,7 @@ class Compiler {
         // Only values read from outside the regions are captured; a constant is lowered in place
         // by eval() (a DATA node, or a node whose value is known at build time), so a constant
         // (a tensor literal, a tuple FILL template, the round counter's initial value) is not a
-        // capture (H91, "a constant is not a capture"). Capturing the tuple template of the
-        // next-state FILL is what used to make a multi-state loop unlowerable.
+        // capture (a constant is not a capture).
         const std::vector<rt::gc_node_ref_t> outerRefs = view.externalInputs(false);
         for (auto ref : outerRefs) {
             const auto outer = eval(frame, ref);

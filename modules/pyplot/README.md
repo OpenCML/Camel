@@ -24,7 +24,7 @@ func main() sync {
 - Python 解释器进程内单例：**第一次 `plot` 或 `py_*` 调用**创建它，先用到谁谁创建，另一个附着而不新建（共享入口 `modules/python/embed.h`；`import` 本身不初始化，见下）
 - 部署时将 `python*.dll` 置于 `libs/`，与 `libcamel.dll` 同目录（`collect-out` 已自动复制）
 
-## 启动成本与首次使用（H203 → H221）
+## 启动成本与首次使用
 
 `import pyplot` 不再初始化 CPython。2026-10-22 语言作者裁定：`import` 不执行代码（设计原则 3.1），
 所以导入期初始化是违规的，**可以优化掉**——在第一次真正使用时初始化，不在导入时。今天 `load()` 只注册

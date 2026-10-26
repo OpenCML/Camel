@@ -106,11 +106,11 @@ const PLANS = [
         measures:
             'everything camel does before the program runs: the process (--version), a one-line ' +
             'program, inspect --ops over the whole standard library, and the same imports on the run path',
-        cost: 'a few seconds per repetition: the whole plan is 2.1 s (H167)',
+        cost: 'a few seconds per repetition: the whole plan is 2.1 s',
         own:
-            'yes: four CPU-time ceilings (H142; the 2026-10-23 ruling changed their unit from the ' +
+            'yes: four CPU-time ceilings (the ruling of 2026-10-23: CPU time, not the ' +
             'wall clock) and declaration.cost -- per declaration, absolute CPU total and the ' +
-            'structural assertion that no (phase, module) repeats in a round (H152, H177); the ' +
+            'structural assertion that no (phase, module) repeats in a round; the ' +
             'compile-work share retired with that ruling',
         cases: [
             {
@@ -146,7 +146,7 @@ const PLANS = [
         measures:
             'recursive Fibonacci timed with --timeit on nvm, fvm and jit, each also after ' +
             'std::opt::inline (ten timed iterations per case)',
-        cost: 'about 11 s per repetition for all six cases (H167)',
+        cost: 'about 11 s per repetition for all six cases',
         own: 'no budget: the plan records the means and its header says why the old budgets were dropped',
         cases: [
             { name: 'fib.nvm_timeit', argv: (camel) => timeit(camel, 'std::nvm', false) },
@@ -166,7 +166,7 @@ const PLANS = [
             'an Asian option Monte Carlo, a 100M-element mergesort and a Monte Carlo pi estimator, ' +
             'one timed iteration each on std::nvm and std::prl',
         cost:
-            '178.7 s for one repetition of all six cases (H167); asian_option_mc.nvm alone is ' +
+            '178.7 s for one repetition of all six cases; asian_option_mc.nvm alone is ' +
             '67.5 s, and merge_sort holds 3.8 GB (nvm) or 11.9 GB (prl) resident',
         own: 'no budget; the plan has timeouts only',
     },
@@ -459,8 +459,7 @@ function refuse(plan) {
                 `  ${plan.id} ${plan.measures}.\n` +
                 `  ${plan.cost}.\n` +
                 '  A repetition costs minutes, so the median cannot be repeated often enough to be a\n' +
-                '  gate. H167 classified the layer and measured the plans whose cost allowed it\n' +
-                '  (handover note ⟨f14c90d⟩); the bounds above are this plan\'s own. If a milestone\n' +
+                '  gate. The bounds above are this plan\'s own. If a milestone\n' +
                 '  needs it, run that plan itself (docs/test-plans.md, "Layers: fast, slow And debug").\n'
         )
     } else {
@@ -470,8 +469,7 @@ function refuse(plan) {
                 `  ${plan.id} ${plan.measures}.\n` +
                 `  ${plan.cost}.\n` +
                 `  policy -- ${POLICY}\n` +
-                '  handover note ⟨0ee01ba⟩ (H154) section 2 records this plan as not run for exactly that\n' +
-                '  reason, and test/plan-selection.json keeps it out of --changed.\n' +
+                '  The policy above is why test/plan-selection.json keeps this plan out of --changed.\n' +
                 '  A milestone run names the plan file to the test runner itself; this gate never\n' +
                 '  measures it.\n'
         )
@@ -738,7 +736,7 @@ function writeBaseline(file, measured, planIds, options, revision, build, host, 
             'Medians and spreads of the commands of the gateable perf plans, measured on the host ' +
             'named below. `node scripts/perf-gate.mjs` compares against this file; `--update` ' +
             'rewrites it from a run on the same kind of host. A baseline from another machine is ' +
-            'not comparable (docs/test-plans.md, "Performance measurement"; H167).',
+            'not comparable (docs/test-plans.md, "Performance measurement").',
         written_at: new Date().toISOString(),
         written_by: 'node scripts/perf-gate.mjs --update',
         plans: planIds,

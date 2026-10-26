@@ -1244,10 +1244,10 @@ class Adapter {
     /// Held across a command of the worker (the POST and its answer) and across the end of the
     /// session. The worker writes the answer to `continue` or `nextPass` on its server thread
     /// at the same moment the program finishes; killing it first would cut that answer off,
-    /// telling the client the program had ended instead of answering the command that ended it
-    /// (H150). The end holds it while it records why the session is over and kills the worker,
+    /// telling the client the program had ended instead of answering the command that ended it.
+    /// The end holds it while it records why the session is over and kills the worker,
     /// so a command either lands before that decision (and the worker answers it) or after it
-    /// (and the adapter answers from `endReason_`) (H159).
+    /// (and the adapter answers from `endReason_`).
     std::mutex workerCallMutex_;
     std::shared_ptr<ChildProcess> worker_;
     std::optional<int> programExit_; // set when the end of the worker is expected

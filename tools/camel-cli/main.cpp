@@ -295,8 +295,8 @@ int runCommand(int argc, char *argv[]) {
         }
         size_t errors = 0, warnings = 0;
         // The same scope the diagnostic report used: a pass library the pass list loaded is not
-        // part of the program, so its errors are not counted in the program's summary either
-        // (H198/H210). `compileSummary` is only called on paths that asked ProgramDependencies.
+        // part of the program, so its errors are not counted in the program's summary either.
+        // `compileSummary` is only called on paths that asked ProgramDependencies.
         for (const auto &mod :
              camel_cli::findModuleFailures(ctx, camel_cli::ModuleScope::ProgramDependencies)
                  .modules) {
@@ -338,7 +338,7 @@ int runCommand(int argc, char *argv[]) {
             // list above imported the pass's library, and that library is not part of the
             // program the user asked to run. Its own parse error is reported by pass resolution
             // (as `InvalidPassParameter`) when the program gets that far; printing it here, as
-            // a bare `SyntaxDiag`, would answer a question the user did not ask (H198/H210).
+            // a bare `SyntaxDiag`, would answer a question the user did not ask.
             camel_cli::reportModuleFailures(
                 ctx,
                 camel_cli::findModuleFailures(
@@ -389,11 +389,10 @@ int runCommand(int argc, char *argv[]) {
                 mainModule->compile(CompileStage::Done);
             }
             // Every dump below reads something the compile produced, so the question is asked
-            // once, before the first one: did anything fail? A `--gct` dump used to print the
-            // construction tree even when the tree was partial and then exit 0 (H181), which is
-            // H172's `--ops` silence on a different output path. `--ops` keeps the contract that
-            // H172 gave it: the listing is what stdout carries, so the diagnostics and the
-            // declaration files that failed go to stderr.
+            // once, before the first one: did anything fail? A dump of a partial tree is not an
+            // answer, and exiting 0 on one would be silence on that output path. For `--ops` the
+            // listing is what stdout carries, so the diagnostics and the declaration files that
+            // failed go to stderr.
             //
             // The scope is the program's dependencies: these dumps are of the program `inspect`
             // compiled, and the failure that makes a dump untrue is one in its entry module or
@@ -475,7 +474,7 @@ int runCommand(int argc, char *argv[]) {
                 // A listing is only worth printing when nothing it should contain is missing. A
                 // module that failed to compile leaves its operators out, and this tool is how
                 // the inventory is checked: exiting 0 with a shorter list is the silence that
-                // hid the `pyplot`/`python` registration gap (handover H166, H172). Loading a
+                // hid the `pyplot`/`python` registration gap. Loading a
                 // module here can still fail (a module nothing compiled yet), so the same
                 // question the compile asked is asked again, after the load, by the same helper.
                 // A module that is not imported is not looked at, and a C++ module whose
@@ -483,7 +482,7 @@ int runCommand(int argc, char *argv[]) {
                 // to fail.
                 //
                 // The scope is every user module: the listing is the inventory of every module
-                // the context holds, including the imported ones just loaded above (H172). A
+                // the context holds, including the imported ones just loaded above. A
                 // module that failed to compile leaves its operators out wherever it sits, so
                 // this is the one command whose question is about all of them.
                 if (camel_cli::failIfModuleErrors(
@@ -505,7 +504,7 @@ int runCommand(int argc, char *argv[]) {
         // library that does not parse has its diagnostics in the context by now — but it is not
         // a dependency of the program, and stopping here would replace the pass resolution's
         // `InvalidPassParameter` (with the parse error as its secondary location) with the raw
-        // parse diagnostic (H198). A pass that is really unusable is reported by the pipeline,
+        // parse diagnostic. A pass that is really unusable is reported by the pipeline,
         // which runs next and has the pass's name to put in the message.
         if (camel_cli::failIfModuleErrors(
                 ctx,
@@ -747,7 +746,7 @@ int runCommand(int argc, char *argv[]) {
         }
     } catch (DiagnosticsLimitExceededBaseException &e) {
         // The compile stopped at its error limit. Report the program's own modules, the ones
-        // `module_failures.h` names; a pass library is not one of them (H198/H210).
+        // `module_failures.h` names; a pass library is not one of them.
         const camel_cli::ModuleFailures failures =
             camel_cli::findModuleFailures(ctx, camel_cli::ModuleScope::ProgramDependencies);
         camel_cli::reportModuleFailures(ctx, failures, os, useJsonFormat);

@@ -3513,7 +3513,7 @@ staticForExpr
 staticForHeader
     : FOR '(' identDef (',' identDef)* ')' IN ('fields' typeExpr | 'indices' dataExpr)
     ;
-The walked shape is child 0: a TYPE for `fields`, the operand value for `indices` (H51 step 6).
+The walked shape is child 0: a TYPE for `fields`, the operand value for `indices`.
 The head names up to three things, and how many the element gives is read here, where the walked
 shape is known (`checkStaticHeadNames`): `fields` gives the triple (name, type, tags) and
 `indices` gives one thing.
@@ -3575,8 +3575,8 @@ The AST node holds the first values of the state (a Repeated Data), the walked s
 body (StaticLoopLoad). The GCT node holds the shape first, then the first values, then the EXEC
 body. `F` is an ordinary type variable of the enclosing function's instance, bound per field
 by the graph builder; `n` (or `j` for `indices`, or the element's name for a written sequence)
-and the state names are bound per round. The head of `static loop` lost its parentheses in H462
-: `in <序列>` is what `static for` still writes between parentheses.
+and the state names are bound per round. The head of `static loop` writes `in <序列>`; `static for`
+still writes it between parentheses.
 How many names the element gives is read here (`checkStaticHeadNames`): the triple (name, type,
 tags) for `fields`, one thing for everything else.
 */

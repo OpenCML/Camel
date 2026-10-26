@@ -181,12 +181,11 @@ resolver_ptr_t namedStaticSignature(const char *name, Type *param, Type *exit) {
  * The same static extent makes the slice a view sharing the block (5.4), so its first dimension
  * must be the only one and its step the constant 1: a slice of a rank-2 or deeper array, and a
  * step other than 1, are views with strides, which need the multidimensional array representation
- * of H17, and are refused at the call rather than lowered to a copy that would not share the
+ * and are refused at the call rather than lowered to a copy that would not share the
  * block. Where the extent is not in the type the operator is left to its kernel, which reads a
- * stepped slice as a copy — the H17 deviation `feat.linear.subscript`'s `subscript.step` records.
+ * stepped slice as a copy — the deviation `feat.linear.subscript`'s `subscript.step` records.
  *
- * These are the checks the tensor module's `indexInfer` and `sliceSubInfer` made for `t[i]` and
- * `t[a:b]` before `Tensor` became an array (H419): a `Tensor` is an array now, so the built-in
+ * These are the checks `t[i]` and `t[a:b]` need: a `Tensor` is an array, so the built-in
  * `[]` operators are the ones its subscripts reach, and the rule has to be here or it is nowhere.
  */
 

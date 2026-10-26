@@ -5,7 +5,7 @@ digraph GraphIR {
             label="gate";
             F02 [label="ARGS", type="ARGS"];
             O02 [label="EXIT", type="EXIT"];
-            N00 [label="t", type="PORT", param_name="t", param_kind="normal", param_index="0", value_type="f32[4]"];
+            N00 [label="t", type="PORT", param_name="t", param_kind="normal", param_index="0", value_type="f32[4]", origin=<ORIGIN>, span="16:10-16:19", srcfile="exemplars/08_structured_control_flow/program.cml"];
             N01 [label="0", type="DATA", origin=<ORIGIN>, span="17:16-17:17", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="int"];
             N02 [label=":op/idx_arr", type="OPER", role="scalar-boundary", origin=<ORIGIN>, span="17:15-17:16", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="f32"];
             N03 [label="0.5", type="DATA", origin=<ORIGIN>, span="17:21-17:24", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="f32"];
@@ -50,7 +50,7 @@ digraph GraphIR {
             label="__g_4__";
             F03 [label="ARGS", type="ARGS"];
             O03 [label="EXIT", type="EXIT"];
-            N11 [label="t", type="PORT", param_name="t", param_kind="normal", param_index="0", value_type="f32[..]"];
+            N11 [label="t", type="PORT", param_name="t", param_kind="normal", param_index="0", value_type="f32[..]", origin=<ORIGIN>, span="24:18-24:28", srcfile="exemplars/08_structured_control_flow/program.cml"];
             N12 [label="CAST", type="CAST", origin=<ORIGIN>, span="24:47-24:58", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="f32[4]"];
             N13 [label="gate", type="FUNC", origin=<ORIGIN>, span="24:42-24:59", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="f32[4]"];
             F03 -> N11 [label="0", type="NORM_PORT"];

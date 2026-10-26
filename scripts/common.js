@@ -502,7 +502,7 @@ export function copyBuildArtifacts(config) {
         { cwd: BASEDIR, stdio: 'inherit' }
     )
     if (guard.status !== 0) {
-        logFail('Build output was found in the source tree; a build must not write it there (H191)')
+        logFail('Build output was found in the source tree; a build must not write it there')
         process.exit(guard.status || 1)
     }
     logDone(`Copied all build artifacts`)
