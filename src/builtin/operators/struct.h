@@ -11,10 +11,7 @@ slot_t __iter_str__(ArgsView &with, ArgsView &norm, camel::core::context::Contex
 slot_t __len_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 
 slot_t __zip__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
-slot_t __head_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
-slot_t __tail_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __range__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
-slot_t __slice_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 // The subscript forms of design principles 5.4: `t[a:b:s]`, `t[idx]` and `last(t)`.
 slot_t __slice_sub__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __slice_str__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
@@ -36,7 +33,6 @@ slot_t __append_owned_arr__(ArgsView &with, ArgsView &norm, camel::core::context
 // cannot be written in place.
 slot_t __append_in_place_arr__(
     ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
-slot_t __extend_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __contains_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __contains_str__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 

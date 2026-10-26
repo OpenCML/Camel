@@ -1147,16 +1147,6 @@ expect_output_contains = ["err_split_ordinary.cml:6:18: [Error]: No matching fun
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 
 [[tests]]
-name = "callform_err_slice"
-desc = "A built-in with two with-arguments, slice(xs, 0, 2)."
-kind = "negative"
-case = "../../../cases/compile/callform/err_slice_ordinary.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_output_contains = ["err_slice_ordinary.cml:5:18: [Error]: No matching function found", "'slice' takes '0, 2' in angle brackets, not in the parentheses: write slice<0, 2>(xs) or xs->slice<0, 2>"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-
-[[tests]]
 name = "callform_err_take"
 desc = "A generic function written in Camel, take(xs, 2): the hint names its with-parameter."
 kind = "negative"

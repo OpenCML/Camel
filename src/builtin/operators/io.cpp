@@ -166,22 +166,4 @@ slot_t __op_eprintln__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return result;
 }
 
-slot_t __op_input__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    std::stringstream oss;
 
-    for (size_t i = 0; i < norm.size(); i++) {
-        if (i > 0) {
-            oss << " ";
-        }
-        slot_t data = norm.slot(i);
-        printSlot(oss, data, norm.type(i));
-    }
-
-    std::cout << oss.str();
-
-    std::string input;
-    std::getline(std::cin, input);
-
-    String *str = camel::core::rtdata::checkedString(input, mm::autoSpace(), "input");
-    return toSlot(str);
-}

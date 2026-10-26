@@ -9975,7 +9975,7 @@ A bound of 'slice' is a position from 0 to the length; the end is one past the l
 ```camel
 module slice_out_of_range
 
-func head(xs: int[], n: int): int[] { return xs->slice<0, n> }
+func head(xs: int[], n: int): int[] { return xs[0:n] }
 
 func main(): int sync {
     let xs = [10, 20, 30]

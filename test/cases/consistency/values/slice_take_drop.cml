@@ -6,7 +6,7 @@ module slice_take_drop
 
 import { take, drop } from array
 
-func cut(xs: int[], a: int, b: int): int[] { return xs->slice<a, b> }
+func cut(xs: int[], a: int, b: int): int[] { return xs[a:b] }
 
 func main(): int sync {
     let xs = [10, 20, 30, 40]

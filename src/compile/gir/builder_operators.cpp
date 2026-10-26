@@ -2141,6 +2141,32 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             normInputs.push_back({location, gct, std::nullopt});
         }
     }
+    // The with-form of the core slice (design principles 5.4): `xs->slice<axis, start, end>` and
+    // `<axis, start, end, step>` are the slice node the subscript and the function form build,
+    // whose words after the value are the axis, the two bounds, the step and the mask saying both
+    // bounds were written. The with-arguments become those ordinary words, so there is one node
+    // and one rule for every consumer of it (its derivative, its checks, its lowering).
+    if (nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
+        const auto &sliceTarget = nodeGraphOf(targetNode)->drefTarget(targetNode);
+        if (std::holds_alternative<oper_group_ptr_t>(sliceTarget) &&
+            std::get<oper_group_ptr_t>(sliceTarget)->name() == "slice" && normInputs.size() == 1 &&
+            (withInputs.size() == 3 || withInputs.size() == 4)) {
+            const auto staticWord = [&](int64_t value) {
+                node_handle_t word = currGraph_->addStaticDataNode(tt::as_shared<Data>(
+                    std::make_shared<PrimaryData<int64_t>>(value)));
+                registerNodeOrigin(context_, word, gct, "gir.data");
+                return Argument{word, gct, std::nullopt};
+            };
+            for (const Argument &word : withInputs) {
+                normInputs.push_back({word.node, word.expr, std::nullopt});
+            }
+            if (withInputs.size() == 3) {
+                normInputs.push_back(staticWord(1));
+            }
+            normInputs.push_back(staticWord(3));
+            withInputs.clear();
+        }
+    }
     // The one place the ordinary argument types are built: from the bound nodes, in the
     // declaration's order. A binding that fills a default puts the declaration's own static
     // node there, so the type is the parameter's, and nothing here reads the written order.

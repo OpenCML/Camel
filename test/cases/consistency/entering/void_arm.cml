@@ -1,7 +1,7 @@
 /**
  * Two rules (design principles log 2.11) that were already implemented:
  * an arm without a value (`void`) and an arm of type `T` make the branch a `T?`, the arm
- * without a value giving `null`; and `xs->slice<2, 1>`, whose start is after its end, is
+ * without a value giving `null`; and `xs[2:1]`, whose start is after its end, is
  * the empty array (not a fault).
  */
 module void_arm
@@ -22,6 +22,6 @@ func main(): int sync {
     println(pick(true) ?? -1, pick(false) ?? -1)
     println(pick_block(true) ?? 'none', pick_block(false) ?? 'none')
     let xs = [1, 2, 3]
-    println(xs->slice<2, 1>, len(xs->slice<3, 0>), xs->slice<1, 1>, xs->slice<0, 2>)
+    println(xs[2:1], len(xs[3:0]), xs[1:1], xs[0:2])
     return 0
 }

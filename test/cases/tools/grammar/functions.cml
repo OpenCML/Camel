@@ -46,7 +46,7 @@ func tools::helper(x: int): int {
 func calls(arr: int[], p: Point): int sync {
     let direct = fib(10)
     let with_args = add_n<3>(fib)
-    let bound = arr->slice<0, len(arr) - 1>
+    let bound = arr[0:len(arr) - 1]
     let named = make(x: 1, y: p.x)
     let qualified = math::sqrt(2.0)
     let deep = a::b::c(1)

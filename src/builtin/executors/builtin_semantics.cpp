@@ -206,7 +206,6 @@ void declareElementCalls() {
     };
     constexpr Row rows[] = {
         {":mark/map_arr", ElementShape::Map, true},
-        {":mark/apply_arr", ElementShape::Map, true},
         {":mark/filter_arr", ElementShape::Filter, true},
         {":mark/foreach_arr", ElementShape::Foreach, false},
         {":mark/unordered_foreach_arr", ElementShape::Foreach, true},
@@ -387,11 +386,6 @@ void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
         ":io/eprintln",
         ResourceSpec{
             .accesses       = {ambientAccess("stderr", AccessMode::Write)},
-            .externalEffect = true});
-    table.declareResources(
-        ":io/input",
-        ResourceSpec{
-            .accesses       = {ambientAccess("stdin", AccessMode::ReadModifyWrite)},
             .externalEffect = true});
     for (const char *uri :
          {":profiler/begin", ":profiler/end", ":profiler/instant", ":profiler/enable"}) {
