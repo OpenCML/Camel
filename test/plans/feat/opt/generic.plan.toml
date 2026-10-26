@@ -955,7 +955,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "specialize_dim_name_recursion.graph"
-desc = "The graph of the same program names what the widening did to the types: the one instance the recursion takes is declared `(n: int, xs: f32[n]) => f32`, the declaration itself with the name still unbound and never the eight the entry argument is long, and the call inside it is a call of the base `walk` that takes no further instance."
+desc = "The graph of the same program names what the widening did to the types: the one instance the recursion takes is declared `(n: int, xs: f32[n]) => f32 pure` -- the declaration wrote no resource clause, so its type carries the set its body was measured to reach, which is the empty one -- the declaration itself with the name still unbound and never the eight the entry argument is long, and the call inside it is a call of the base `walk` that takes no further instance."
 kind = "behavior"
 case = "../../../cases/opt/generic/specialize_dim_name_recursion.cml"
 args = ["${case}", "std::opt::specialize", "std::jgir"]
@@ -969,7 +969,7 @@ const byId = new Map(doc.graphs.map((g) => [g.id, g]))
 const base = doc.graphs.find((g) => g.name === 'walk')
 const instance = doc.graphs.find((g) => g.name === 'walk$spec0')
 assert(base && instance, `graphs: ${doc.graphs.map((g) => g.name).join(', ')}`)
-assert(instance.signature === '(n: int, xs: f32[n]) => f32', `instance declared '${instance.signature}'`)
+assert(instance.signature === '(n: int, xs: f32[n]) => f32 pure', `instance declared '${instance.signature}'`)
 const call = instance.nodes.find((n) => n.callee !== undefined)
 assert(call && byId.get(call.callee) === base, `the recursive call is bound to '${call && byId.get(call.callee).name}'`)
 const instances = doc.graphs.filter((g) => g.name.startsWith('walk$'))
@@ -1012,7 +1012,8 @@ const out = input.normalized.stdout.trim()
 const stats = JSON.parse(out.match(/GRAPH_STATS (\{.*\})/)[1])
 assert(stats.specializations === 0, `unexpected specialization count: ${stats.specializations}`)
 assert(stats.graphs === 3, `unexpected graph count: ${stats.graphs}`)
-assert(stats.branches === 1, `the recursion's branch is gone: ${stats.branches}`)
+// The recursion's branch and the `??` of the environment read.
+assert(stats.branches === 2, `the recursion's branch is gone: ${stats.branches}`)
 assert(out.endsWith('5.0'), `unexpected output: ${out}`)
 }
 """
@@ -1020,7 +1021,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "specialize_dim_name_grow.graph"
-desc = "The document says the same thing as the count. After std::opt::specialize the program holds `__root__`, `main` and the base `grow` alone, and `grow` is declared with the declaration's own signature `(xs: f32[n], k: int) => f32` (`f32[n]` still written with the name, never `f32[2]` and never `f32[?]`); no graph is named `grow$...`. The one instance the neighbouring case holds (`walk$spec0`) is not made here: that program passes a constant `int` to the recursion's value parameter at the entry call, and this one reads its depth from the environment."
+desc = "The document says the same thing as the count. After std::opt::specialize the program holds `__root__`, `main` and the base `grow` alone, and `grow` is declared with the declaration's own signature `(xs: f32[n], k: int) => f32 pure` (`f32[n]` still written with the name, never `f32[2]` and never `f32[?]`); no graph is named `grow$...`. The one instance the neighbouring case holds (`walk$spec0`) is not made here: that program passes a constant `int` to the recursion's value parameter at the entry call, and this one reads its depth from the environment."
 kind = "behavior"
 case = "../../../cases/opt/generic/specialize_dim_name_grow.cml"
 args = ["${case}", "std::opt::specialize", "std::jgir"]
@@ -1034,7 +1035,7 @@ const doc = JSON.parse(input.normalized.stdout.match(/\{[\s\S]*\}/)[0])
 const names = doc.graphs.map((g) => g.name).sort()
 assert(JSON.stringify(names) === JSON.stringify(['__root__', 'grow', 'main']), `unexpected graphs: ${names}`)
 const grow = doc.graphs.find((g) => g.name === 'grow')
-assert(grow.signature === '(xs: f32[n], k: int) => f32', `grow declared '${grow.signature}'`)
+assert(grow.signature === '(xs: f32[n], k: int) => f32 pure', `grow declared '${grow.signature}'`)
 const instances = doc.graphs.filter((g) => g.name.startsWith('grow$'))
 assert(instances.length === 0, `the recursion took ${instances.length} instances`)
 }
@@ -1590,7 +1591,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "fold_cast.rewrites"
-desc = "A conversion (`e as T`, a CAST node) of a constant is a constant: after std::opt no CAST is left, for a conversion to the shape the compiler already knew, for one checked against the value (the source is declared a plain Tensor) and for a number converted to another primitive type. Folding used to leave every CAST, so nothing under `as` was a constant."
+desc = "A conversion (`e as T`, a CAST node) of a constant is a constant: after std::opt no CAST is left, for a conversion to the shape the compiler already knew, for one checked against the value (the source is declared a plain Tensor); a number converted by the conversion function is folded as any call of constants is. Folding used to leave every CAST, so nothing under `as` was a constant."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_cast.cml"
 args = ["${case}", "std::opt", "std::gir"]

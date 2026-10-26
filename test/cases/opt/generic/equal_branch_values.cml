@@ -16,7 +16,7 @@ func right(): float sync {
 }
 
 func main(): int sync {
-    let flag = get_env('CAMEL_EQUAL_BRANCH') == ''
+    let flag = (get_env('CAMEL_EQUAL_BRANCH') ?? '') == ''
     let x = if flag then left() else right()
     println(x * x)
     let different = if flag then 2.0 else 3.0

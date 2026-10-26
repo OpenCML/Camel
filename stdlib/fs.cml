@@ -2,102 +2,148 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * The file system: the content of a file, writing and atomically replacing it, the few questions
- * about a path, and the two removals. Every operator of the module touches the file system, which
- * the program cannot see from its arguments, so every one has an effect and a call runs only when
- * it is reachable from a sync block; no pass folds or merges one. A declaration carries a
- * signature, not an effect: the resource facts stay in the C++ module (`modules/fs`), where only
- * C++ knows them.
+ * The file system. A file is read and written either as text (`string`, always UTF-8) or as
+ * `Bytes`; the two sets of functions are separate and meet only in `bytes::encode` and
+ * `bytes::decode`, so a text file is never half-read as binary and the bytes written for a text are
+ * the same on every platform. What the file system can refuse -- a missing file, a permission, a
+ * full disk -- is an error value (`T!`) whose kind says which; a wrong argument, such as a negative
+ * size, is a fault.
+ *
+ * Every function here uses the resource `fs`: a call runs only when its result is needed or it is
+ * written in a `sync` block, and calls on the file system keep their written order. A path is the
+ * data a reader works on (`'notes.txt'->read_text`) and the destination a writer is configured with
+ * (`text->write_text<'out/log.txt'>`), so `write_text<'out/log.txt'>` is itself the function that
+ * writes that file. Relative paths start at the working directory (`env::get_cwd`).
  */
 
-// The declarations of the operators of the C++ module `modules/fs` (design principles 6.4).
-// This file is the one source of their signatures; the C++ side keeps the
-// kernels, the executor, the operator traits and the resources. A declaration names
-// `fs:<function>` by convention, so no `#op` tag is needed.
+import { encode, decode } from bytes
 
+// ---- reading ----
 
-/// The whole content of the file.
+/// The whole content of a file, as text.
+/// @fails error value `NotFound` when nothing exists at the path; error value `PermissionDenied` when the file system refuses the read; error value `IOError` when the path is a directory or the read fails for another reason; error value `EncodingError` when the content is not valid UTF-8
+/// @example 'notes.txt'->read_text !! ''    // the text of the file, or '' when it cannot be read
+export func read_text(path: string): string! {
+    return path->read_bytes ?-> decode
+}
+
+/// The whole content of a file, every byte preserved.
 /// @effect reads a file
-/// @fails fault `FileOpenFailed` when the file cannot be opened; fault `InvalidArgument` for malformed UTF-8; use read_bytes for binary files
-/// @example read_text('notes.txt')    // the text of the file
-export func read_text(path: string): string
+/// @fails error value `NotFound` when nothing exists at the path; error value `PermissionDenied` when the file system refuses the read; error value `IOError` when the path is a directory or the read fails for another reason
+/// @example-fragment the example builds its default `Bytes` with `encode` from the `bytes` module, which this page does not import
+/// @example 'pixels.bin'->read_bytes !! encode('')    // the bytes of the file
+export func read_bytes(path: string): Bytes!
 
-/// The whole content of the file, or an error value.
+/// Up to size bytes of a file from byte offset on; fewer at the end of the file, none at or past
+/// it. Reading a large file piece by piece is `read_chunk` with a growing offset.
 /// @effect reads a file
-/// @fails error `IOError` when the path is a directory, or the file cannot be opened or read; error `EncodingError` for malformed UTF-8
-/// @example try_read_text('notes.txt') !! ''    // the text, or '' when it cannot be read
-export func try_read_text(path: string): string!
+/// @fails fault `InvalidArgument` when offset or size is negative; error value `NotFound`, `PermissionDenied` or `IOError` as for `read_bytes`
+/// @example-fragment the example builds its default `Bytes` with `encode` from the `bytes` module, which this page does not import
+/// @example 'notes.txt'->read_chunk<0, 16> !! encode('')    // the first 16 bytes
+with <offset: int, size: int>
+export func read_chunk(path: string): Bytes!
 
-/// Up to size bytes of the file starting at byte offset; fewer at the end of the file.
-/// @effect reads a file
-/// @fails fault `InvalidArgument` when offset or size is negative; fault `FileOpenFailed` or `FileSystemError` when the file cannot be opened or read
-/// @example read_chunk('notes.txt', 0, 16)    // the first 16 bytes
-export func read_chunk(path: string, offset: int, size: int): Bytes
+// ---- writing ----
 
-/// The complete binary content, preserving every byte.
-/// @effect reads a file
-/// @example read_bytes('pixels.bin')
-export func read_bytes(path: string): Bytes
+/// Replaces the content of the file at path with a text, creating the file and its parent
+/// directories when they are not there. With atomic the content is first written to a temporary
+/// file in the same directory and then renamed over the destination, so a reader sees the old
+/// content or the new, never half of it.
+/// @fails error value `PermissionDenied` when the file system refuses the write; error value `IOError` when the path is a directory or the write fails for another reason (no space left included)
+/// @example-fragment writes the file system when it runs, and the example only has the `void!` result to show
+/// @example 'done'->write_text<'out/log.txt'>
+with <path: string, atomic: bool = false>
+export func write_text(content: string): void! {
+    return content->encode->write_bytes<path, atomic>
+}
 
-/// Writes binary content, creating parent directories when needed.
+/// Replaces the content of the file at path with bytes; creating, atomic and errors as for
+/// `write_text`.
 /// @effect writes a file
-/// @example write_bytes('pixels.bin', payload)
-export func write_bytes(path: string, content: Bytes): void
+/// @fails error value `PermissionDenied` when the file system refuses the write; error value `IOError` when the path is a directory or the write fails for another reason (no space left included)
+/// @example-fragment writes the file system when it runs, and the example only has the `void!` result to show
+/// @example encode('abc')->write_bytes<'payload.bin', atomic: true>
+with <path: string, atomic: bool = false>
+export func write_bytes(content: Bytes): void!
 
-/// Flushes a temporary in the same directory and atomically replaces the destination.
-/// @effect writes and replaces a file
-/// @example replace('checkpoint.bin', payload)
-export func replace(path: string, content: Bytes): void
+/// Adds a text to the end of the file at path, creating the file and its parent directories when
+/// they are not there.
+/// @fails error value `PermissionDenied` when the file system refuses the write; error value `IOError` when the path is a directory or the write fails for another reason
+/// @example-fragment writes the file system when it runs, and the example only has the `void!` result to show
+/// @example 'one more line\n'->append_text<'out/log.txt'>
+with <path: string>
+export func append_text(content: string): void! {
+    return content->encode->append_bytes<path>
+}
 
-/// Replaces the content of the file, creating it and its parent directories when needed.
+/// Adds bytes to the end of the file at path; creating and errors as for `append_text`.
 /// @effect writes a file
-/// @fails fault `FileSystemError` when a directory cannot be created; fault `FileOpenFailed` when the file cannot be opened
-/// @example write_text('out/log.txt', 'done')
-export func write_text(path: string, content: string): void
+/// @fails error value `PermissionDenied` when the file system refuses the write; error value `IOError` when the path is a directory or the write fails for another reason
+/// @example-fragment writes the file system when it runs, and the example only has the `void!` result to show
+/// @example encode('abc')->append_bytes<'payload.bin'>
+with <path: string>
+export func append_bytes(content: Bytes): void!
 
-/// Whether something exists at the path.
+// ---- questions about a path ----
+
+/// Whether anything exists at the path. A path that cannot be looked at (a directory that may not
+/// be searched) is reported as not existing.
 /// @effect reads the file system
-/// @example exists('notes.txt')    // true or false
+/// @example 'notes.txt'->exists    // true or false
 export func exists(path: string): bool
 
 /// Whether the path names a regular file.
 /// @effect reads the file system
-/// @example is_file('notes.txt')    // true or false
+/// @example 'notes.txt'->is_file    // true or false
 export func is_file(path: string): bool
 
 /// Whether the path names a directory.
 /// @effect reads the file system
-/// @example is_dir('out')    // true or false
+/// @example 'out'->is_dir    // true or false
 export func is_dir(path: string): bool
 
-/// The size of the file in bytes.
+/// The size of a file in bytes.
 /// @effect reads the file system
-/// @fails fault `FileSystemError` when the size cannot be read (no such file)
-/// @example file_size('notes.txt')    // 1024
-export func file_size(path: string): int
+/// @fails error value `NotFound` when nothing exists at the path; error value `PermissionDenied` when the file system refuses the question; error value `IOError` otherwise
+/// @example 'notes.txt'->file_size !! 0    // 1024
+export func file_size(path: string): int!
 
-/// Creates one directory; false when it already exists.
-/// @effect changes the file system
-/// @fails fault `FileSystemError` when it cannot be created (no parent directory)
-/// @example mkdir('out')    // true
-export func mkdir(path: string): bool
+/// The names of what a directory holds, without the path in front of them, in the byte order of
+/// the names (so the order is the same on every platform). `.` and `..` are not listed.
+/// @effect reads the file system
+/// @fails error value `NotFound` when nothing exists at the path; error value `PermissionDenied` when the file system refuses the listing; error value `IOError` when the path is not a directory
+/// @example 'out'->list_dir !! []    // ['log.txt', 'today']
+export func list_dir(path: string): string[]!
 
-/// Creates a directory and every missing parent; false when it already exists.
+// ---- creating and removing ----
+
+/// Creates one directory. The parent directory must exist, and the directory must not.
 /// @effect changes the file system
-/// @fails fault `FileSystemError` when it cannot be created
-/// @example mkdirs('out/logs/today')    // true
-export func mkdirs(path: string): bool
+/// @fails error value `AlreadyExists` when something exists at the path; error value `NotFound` when the parent directory does not exist; error value `PermissionDenied` when the file system refuses; error value `IOError` otherwise
+/// @example-fragment creates a directory when it runs, and the example only has the `void!` result to show
+/// @example 'out'->mkdir
+export func mkdir(path: string): void!
+
+/// Creates a directory and every missing parent. A directory that is already there is not an
+/// error, so the call can be repeated.
+/// @effect changes the file system
+/// @fails error value `AlreadyExists` when a file, not a directory, exists at the path; error value `PermissionDenied` when the file system refuses; error value `IOError` otherwise
+/// @example-fragment creates a directory when it runs, and the example only has the `void!` result to show
+/// @example 'out/logs/today'->mkdirs
+export func mkdirs(path: string): void!
 
 /// Removes a file or a symbolic link; a directory, even an empty one, is an error (use
-/// `remove_dir`). Removing a path that is not there is an error value, not a silent success.
+/// `remove_dir`). Removing a path that is not there is an error, not a silent success.
 /// @effect removes a file
-/// @fails error `NotFound` when nothing exists at the path; error `PermissionDenied` when the file system refuses the removal; error `IOError` when the path is a directory or the removal fails for another reason
-/// @example remove('notes.txt')
+/// @fails error value `NotFound` when nothing exists at the path; error value `PermissionDenied` when the file system refuses the removal; error value `IOError` when the path is a directory or the removal fails for another reason
+/// @example-fragment removes a file when it runs, and the example only has the `void!` result to show
+/// @example 'notes.txt'->remove
 export func remove(path: string): void!
 
 /// Removes one empty directory. A directory that is not empty is an error, not a recursive
 /// delete; a file or a symbolic link is an error too.
 /// @effect removes a directory
-/// @fails error `NotFound` when nothing exists at the path; error `PermissionDenied` when the file system refuses the removal; error `IOError` when the path is a file, a symbolic link, or a directory that is not empty
-/// @example remove_dir('out/old')
+/// @fails error value `NotFound` when nothing exists at the path; error value `PermissionDenied` when the file system refuses the removal; error value `IOError` when the path is a file, a symbolic link, or a directory that is not empty
+/// @example-fragment removes a directory when it runs, and the example only has the `void!` result to show
+/// @example 'out/old'->remove_dir
 export func remove_dir(path: string): void!

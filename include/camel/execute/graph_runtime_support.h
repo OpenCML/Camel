@@ -171,6 +171,17 @@ void writeRuntimeFillSlots(
     camel::core::rtdata::Object *target, camel::core::type::Type *targetType,
     const camel::runtime::GCFillBody *fillBody, std::span<const slot_t> values);
 
+/// The value a FUNC node hands on: the callee's result alone when the callee writes no captured
+/// variable (`written` is then 0), and otherwise the tuple of it and the new version of each
+/// variable the callee writes, in the callee's capture order. `withValues` are the values of the
+/// call's With inputs, in the order it passes them: the callee's declared `with` arguments, then
+/// its captures; the versions are taken from the capture ports, which `written` names. The tuple
+/// is materialized per call, typed by the call node's own value type, and the ACCS nodes of the
+/// call read its parts. `result` is the callee's return value.
+slot_t runtimeFuncValue(
+    camel::core::type::Type *valueType, camel::runtime::GCGraph *calleeGraph, uint32_t written,
+    std::span<const slot_t> withValues, slot_t result);
+
 void fillFrameForDirectInvoke(
     camel::core::context::Frame *from, camel::core::context::Frame *dest,
     camel::runtime::GCGraph *callerGraph, camel::runtime::gc_node_ref_t callNodeRef);

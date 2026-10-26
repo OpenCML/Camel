@@ -16,6 +16,7 @@
 #include "camel/utils/log.h"
 
 #include <algorithm>
+#include <numeric>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -48,6 +49,88 @@ bool isCompactElementType(TypeCode code) {
 }
 
 bool isNumericScalarTypeCode(TypeCode code) { return isCompactElementType(code); }
+
+std::vector<ExtentForm> canonicalShape(std::span<const ExtentForm> forms) {
+    // The names in the order they first appear; a form lists its terms by name, which is not an
+    // order two spellings share, so the numbering is the one that makes the whole shape smallest.
+    std::vector<std::string> names;
+    for (const ExtentForm &form : forms) {
+        for (const auto &[name, coefficient] : form.terms()) {
+            if (std::find(names.begin(), names.end(), name) == names.end()) {
+                names.push_back(name);
+            }
+        }
+    }
+    if (names.empty()) {
+        return std::vector<ExtentForm>(forms.begin(), forms.end());
+    }
+    const auto encode = [&](const std::vector<size_t> &ids) {
+        std::vector<int64_t> key;
+        for (const ExtentForm &form : forms) {
+            key.push_back(static_cast<int64_t>(form.kind()));
+            key.push_back(form.constant());
+            std::vector<std::pair<size_t, int64_t>> terms;
+            for (const auto &[name, coefficient] : form.terms()) {
+                const auto at = std::find(names.begin(), names.end(), name) - names.begin();
+                terms.emplace_back(ids[static_cast<size_t>(at)], coefficient);
+            }
+            std::sort(terms.begin(), terms.end());
+            for (const auto &[id, coefficient] : terms) {
+                key.push_back(static_cast<int64_t>(id));
+                key.push_back(coefficient);
+            }
+            key.push_back(-1000000007);
+        }
+        return key;
+    };
+    std::vector<size_t> ids(names.size());
+    std::iota(ids.begin(), ids.end(), size_t{0});
+    std::vector<size_t> best = ids;
+    if (names.size() <= 7) {
+        std::vector<int64_t> bestKey = encode(ids);
+        while (std::next_permutation(ids.begin(), ids.end())) {
+            std::vector<int64_t> key = encode(ids);
+            if (key < bestKey) {
+                bestKey = std::move(key);
+                best    = ids;
+            }
+        }
+    }
+    std::vector<ExtentForm> out;
+    out.reserve(forms.size());
+    for (const ExtentForm &form : forms) {
+        if (form.kind() != ExtentForm::Kind::Linear) {
+            out.push_back(form);
+            continue;
+        }
+        std::vector<std::pair<std::string, int64_t>> terms;
+        for (const auto &[name, coefficient] : form.terms()) {
+            const auto at = std::find(names.begin(), names.end(), name) - names.begin();
+            terms.emplace_back("#" + std::to_string(best[static_cast<size_t>(at)]), coefficient);
+        }
+        out.push_back(ExtentForm::linear(form.constant(), std::move(terms)));
+    }
+    return out;
+}
+
+bool ArrayType::sameShape(const ArrayType &other) const {
+    if (anyRank_ != other.anyRank_ || extents_.size() != other.extents_.size()) {
+        return false;
+    }
+    bool named = false;
+    for (size_t i = 0; i < extents_.size(); ++i) {
+        named = named || extents_[i].hasNames() || other.extents_[i].hasNames();
+        if (extents_[i].isConstant() != other.extents_[i].isConstant() ||
+            extents_[i].isUnknown() != other.extents_[i].isUnknown() ||
+            (extents_[i].isConstant() && extents_[i].constant() != other.extents_[i].constant())) {
+            return false;
+        }
+    }
+    if (!named) {
+        return true;
+    }
+    return canonicalShape(extents_) == canonicalShape(other.extents_);
+}
 
 bool sameExtentConstraint(const ExtentForm &a, const ExtentForm &b) {
     // A constant extent is a value the shape must equal; every other extent (unknown, or a
@@ -154,13 +237,10 @@ ArrayType *ArrayType::make(
             TypeTable::Shape::Array, std::span<const uintptr_t>(words, 4),
             [&]() -> Type * { return createObject(elemType, extents, packText); }));
     }
-    // The name-erased twin: every extent that is not a constant is one unknown dimension, and the
-    // pack name is dropped, which is exactly what the shape's mangled name already erases.
-    std::vector<ExtentForm> plainForms;
-    plainForms.reserve(extents.size());
-    for (const ExtentForm &form : extents) {
-        plainForms.push_back(form.isConstant() ? form : ExtentForm::unknown());
-    }
+    // The canonical twin: the shape with its dimension names numbered in a canonical order (a
+    // linear form is the same form whatever its names are called, `[n]` and `[n + 1]` are two
+    // shapes), and the pack name dropped, which is exactly what the shape's mangled name erases.
+    std::vector<ExtentForm> plainForms = canonicalShape(extents);
     const std::vector<ExtentForm> *plainShape =
         TypeTable::instance().internExtents(std::span<const ExtentForm>(plainForms));
     Type *plainElement        = TypeTable::instance().canonical(elemType);
@@ -237,11 +317,24 @@ std::string ArrayType::shapeText() const {
 
 std::string ArrayType::shapeMangle() const {
     std::string shape = anyRank_ ? "any_" : std::to_string(extents_.size()) + "_";
+    const std::vector<ExtentForm> canonical = canonicalShape(extents_);
     for (size_t i = 0; i < extents_.size(); ++i) {
         shape += (i ? "," : "");
-        // Dimension names are signature metadata, not part of the type's identity: they are
-        // not in the mangled name, as they are not in equality.
-        shape += extents_[i].isConstant() ? std::to_string(extents_[i].constant()) : "?";
+        // The spelling of a dimension name is not part of the type's identity, so it is not in the
+        // mangled name; a linear form is, as the canonical shape writes it.
+        const ExtentForm &form = canonical[i];
+        if (form.isConstant()) {
+            shape += std::to_string(form.constant());
+        } else if (form.isUnknown()) {
+            shape += "?";
+        } else {
+            shape += "L" + std::string(form.constant() < 0 ? "m" : "") +
+                     std::to_string(form.constant() < 0 ? -form.constant() : form.constant());
+            for (const auto &[name, coefficient] : form.terms()) {
+                shape += "_" + name.substr(1) + "x" + (coefficient < 0 ? "m" : "") +
+                         std::to_string(coefficient < 0 ? -coefficient : coefficient);
+            }
+        }
     }
     return shape;
 }
@@ -340,8 +433,8 @@ Type *ArrayType::unify(Type *other) const {
     if (sameSkeleton) {
         forms.reserve(extents_.size());
         for (size_t i = 0; i < extents_.size(); ++i) {
-            if (extents_[i].isConstant() && rhs->extents_[i].isConstant() &&
-                extents_[i].constant() == rhs->extents_[i].constant()) {
+            if (extents_[i] == rhs->extents_[i] && !extents_[i].isUnknown()) {
+                // The same constant, or the same form over the same names.
                 forms.push_back(extents_[i]);
             } else {
                 forms.push_back(ExtentForm::unknown());
@@ -457,9 +550,9 @@ slot_t ArrayType::castSlotFrom(slot_t value, Type *sourceType) const {
     return value;
 }
 
-// Arrays have no element mutation, so they accept arrays of assignable element types
-// (e.g. `int[]` where `f64[]` is expected when an int is assignable to an f64) whose shape this
-// type permits.
+// Arrays have no element mutation, so they accept arrays of assignable element types (a refined
+// module type where its general form is expected; a number of one type is never assignable to
+// another, design principles 5.1) whose shape this type permits.
 bool ArrayType::assignableFrom(Type *sourceType) const {
     if (this == sourceType) {
         return true;

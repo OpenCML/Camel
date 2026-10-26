@@ -237,8 +237,9 @@ a new name. Division by zero is a fault, never an error value.
 Rules: an operation that can fail from the environment returns `T!`, and "may be absent" returns
 `T?`; never both for one failure. An unhandled error reaching `main` is printed with its position
 and exits non-zero. A `T!` that is evaluated and never used is a warning; write `let _ = f()` to
-drop it on purpose. `return` also works inside an expression (`m[k] ?? return error('NotFound', k)`)
-and has the type `never`, like `fail` and `exit`.
+drop it on purpose. `return` gives the value of the block it is in and never leaves an outer block; write an early
+error as the two arms of a branch (`return match m[k] { case null => error('NotFound', k) case v => v }`)
+or let `->` carry the failure to a final `??`/`!!`. `fail` and `exit` have the type `never`.
 
 ## 7. Effects and resources
 

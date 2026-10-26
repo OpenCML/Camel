@@ -11,7 +11,7 @@ import { exists } from fs
 import { get_env } from env
 
 func main(): int sync {
-    let root = get_env('CAMEL_TEST_TMPDIR')
+    let root = get_env('CAMEL_TEST_TMPDIR') ?? ''
     let dir = if root == '' then 'test/tmp/nn_declaration' else root + '/nn_declaration'
     let params = { w: new([1.0, 2.0]), b: new([0.0]) }
     save_params(params, dir)

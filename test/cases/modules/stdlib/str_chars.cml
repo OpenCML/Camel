@@ -4,20 +4,20 @@
  * not a code point.
  */
 
-import { substr, codepoints, from_codepoints } from str
-import { encode, decode, from_array, size } from bytes
+import { codepoints, from_codepoints } from str
+import { encode, decode, from_array } from bytes
 
 func main(): int sync {
     let s = 'h€😀é'        // 1 + 3 + 4 + 2 bytes, 4 characters
-    println(len(s), size(encode(s)))
+    println(len(s), len(encode(s)))
     println(codepoints(s))
     println(codepoints(''), len(''))
     println(from_codepoints([104, 8364, 128512, 233]) !! 'bad')
     println(len(from_codepoints([0, 127, 128, 2047, 2048, 65535, 65536, 1114111]) !! 'bad'))
     println(codepoints(from_codepoints([0, 127, 128, 2047, 2048, 65535, 65536, 1114111]) !! ''))
     println(s[0], s[1], s[2], s[3])
-    println(s->substr<1, 2>, s->substr<0, 4>)
-    println(len(s->substr<4, 0>), len(''->substr<0, 0>))
+    println(s[1:3], s[0:4])
+    println(len(s[4:4]), len(''[0:0]))
 
     // not a code point: an error value
     println(from_codepoints([55296]) !! 'surrogate')

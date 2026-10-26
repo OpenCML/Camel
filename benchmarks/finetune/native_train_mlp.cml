@@ -43,10 +43,10 @@ func spin(m: Mlp, i: int, steps: int, nb: int): Mlp {
     return if i >= steps then m else sync {
         let si = '{}'->format<i>
         let bi = '{}'->format<i % nb>
-        let x = load_npy::<f32>(get_env('CAMEL_FT_BATCHES') + '/batch_' + bi + '.npy')
+        let x = load_npy::<f32>((get_env('CAMEL_FT_BATCHES') ?? '') + '/batch_' + bi + '.npy')
         let vg = step(m, x)
         'CAMEL_BENCH step={} loss={}'->format<i, vg.0>->println
-        let dump = get_env('CAMEL_FT_DUMP')
+        let dump = get_env('CAMEL_FT_DUMP') ?? ''
         if dump != '' then save_params(vg.1, dump + '/step_' + si)
         return spin(vg.1, i + 1, steps, nb)
     }
@@ -58,8 +58,8 @@ func main(): int sync {
         fc2_w: weight('fc2_w'), fc2_b: weight('fc2_b'),
         fc3_w: weight('fc3_w'), fc3_b: weight('fc3_b')
     }
-    let steps = int(get_env('CAMEL_FT_STEPS'))
-    let nb = int(get_env('CAMEL_FT_NBATCHES'))
+    let steps = int(get_env('CAMEL_FT_STEPS') ?? '')
+    let nb = int(get_env('CAMEL_FT_NBATCHES') ?? '')
     let final = spin(m, 0, steps, nb)
     return 0
 }

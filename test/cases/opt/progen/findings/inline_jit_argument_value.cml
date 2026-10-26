@@ -18,7 +18,7 @@ func r1(a2: int, a3: int): int {
 }
 
 func main(): int sync {
-    let n20 = int(get_env('PROGEN_I1'));
+    let n20 = int(get_env('PROGEN_I1') ?? '');
     func g34(a35: int): int sync {
         println('L8 {} {} {}'->format<0, 0, a35>);
         return 31;

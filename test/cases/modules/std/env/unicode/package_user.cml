@@ -9,6 +9,6 @@ import { get_env } from env
 
 func main(): int sync {
     'package={}'->format<twice(21)>->println
-    'home={}'->format<get_env('CAMEL_HOME')>->println
+    'home={}'->format<(get_env('CAMEL_HOME') ?? '')>->println
     return 0
 }

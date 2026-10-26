@@ -14,7 +14,7 @@ import { get_env } from env
 type P = { x: int, y: int }
 
 func main(): int sync {
-    let n41 = int(get_env('PROGEN_I0'));
+    let n41 = int(get_env('PROGEN_I0') ?? '');
     let n59 = if 7 != (if false then 0 else 0) then {
         let n56 = string(if false then n41 else 3);
         return (match n56 {

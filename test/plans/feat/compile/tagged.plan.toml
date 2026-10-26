@@ -89,7 +89,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "stdlib"
-desc = "Library operators that can fail return a `T!`: parse_int, parse_float, fs::try_read_text."
+desc = "Library operators that can fail return a `T!`: parse_int, parse_float, fs::read_text."
 kind = "behavior"
 case = "../../../cases/compile/tagged/stdlib.cml"
 args = ["${case}"]
@@ -106,7 +106,7 @@ const want = [
   "ParseError: '99999999999999999999' is out of the range of an integer at <parse_int>",
   "2.5",
   "-1.0",
-  "error IOError: cannot open 'tagged_no_such_file.txt'",
+  "error NotFound: 'tagged_no_such_file.txt': No such file or directory",
   "<no file>",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)

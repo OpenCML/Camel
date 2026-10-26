@@ -1,5 +1,5 @@
 // An imported name can be given another name; the original name is then not visible here.
-import { find as str_find, trim } from str
+import { index_of as str_find, trim } from str
 import { find } from array
 
 func main(): int sync {

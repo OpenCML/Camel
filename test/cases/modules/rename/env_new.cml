@@ -6,8 +6,8 @@
 import { get_env, get_cwd } from env
 
 func main(): int sync {
-    let path = get_env('PATH')
-    let cwd = get_cwd()
+    let path = get_env('PATH') ?? ''
+    let cwd = get_cwd() !! ''
     println(path->len > 0)
     println(cwd->len > 0)
     return 0

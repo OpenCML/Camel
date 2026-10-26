@@ -67,9 +67,11 @@ __all__ = [
 class _CapsuleArray:
     """A DLPack capsule dressed as the producer side of the protocol.
 
-    The extension hands an array back as the capsule `core::array::toDLPack` built, which is what
-    every consumer of the standard accepts; wrapping it costs nothing and means NumPy's
-    `from_dlpack` is called the way its documentation describes, whatever its version.
+    The extension hands an array back as a read-only DLPack 1.0 capsule (`dltensor_versioned`,
+    flag `READ_ONLY`): an array is a value that other Camel values may share, so Python cannot
+    write it. A consumer that negotiates the version (NumPy 2.1 and later) gets that capsule
+    and the read-only view it asks for; an older one gets the legacy capsule over the same memory
+    and the caller marks its array read-only itself.
     """
 
     __slots__ = ("_capsule",)
@@ -78,22 +80,27 @@ class _CapsuleArray:
         self._capsule = capsule
 
     def __dlpack__(self, *, stream: Any = None, max_version: Any = None, copy: Any = None) -> Any:
-        return self._capsule
+        if max_version is not None and tuple(max_version)[0] >= 1:
+            return self._capsule
+        return _camel.legacy_dlpack(self._capsule)
 
     def __dlpack_device__(self) -> tuple:
         return (1, 0)  # kDLCPU, device 0: the only device the runtime carries today
 
 
 def _as_python(value: Any) -> Any:
-    """A returned capsule becomes an array when NumPy is importable, and stays a capsule when it
-    is not: the extension itself does not need NumPy, only the convenience here does."""
+    """A returned capsule becomes a read-only array when NumPy is importable, and stays a capsule
+    when it is not: the extension itself does not need NumPy, only the convenience here does.
+    Whoever needs to write the numbers takes a copy (`array.copy()`)."""
     if value is None or not _looks_like_capsule(value):
         return value
     try:
         import numpy
     except ImportError:
         return value
-    return numpy.from_dlpack(_CapsuleArray(value))
+    array = numpy.from_dlpack(_CapsuleArray(value))
+    array.flags.writeable = False
+    return array
 
 
 def _looks_like_capsule(value: Any) -> bool:

@@ -4,6 +4,7 @@
 import { reshape, mean, abs, sum } from tensor
 import { grad } from autodiff
 import { source, run_preferred_resident, download } from tiles
+import { exit } from process
 with <x: f32[..]>
 func mse(): float { return float(mean(x * x)) }
 func main(run_gpu: bool): int sync {

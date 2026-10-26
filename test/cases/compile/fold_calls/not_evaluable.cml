@@ -1,13 +1,13 @@
 /**
  * A call whose body is built from a construct the build-time evaluator does not read is not
- * folded: `first_of_list` holds an array, and an array is not one of the constructs a `when`
+ * folded: `first_of_list` holds a function literal, and that is not one of the constructs a `when`
  * condition's evaluator handles. A place that needs a constant refuses the call by name
  * (FoldCallNotEvaluable) with the construct it stopped at, rather than guessing a value.
  */
 
 func first_of_list(): int {
-    let xs = [1, 2, 3]
-    return xs.[0]
+    let step = (n: int): int => n + 1
+    return step(1)
 }
 
 func main(): int {

@@ -15,9 +15,8 @@
 // a second copy of the signature from C++ all leave `--verify-ops` green, because the second
 // copy agrees with the declaration. This script is the guard for those shapes.
 //
-// A module is a *declaration module* when `stdlib/<module>.cml` exists and a C++ module of that
-// name registers itself with `BuiltinModule`: a module is a file there, and its name is its
-// file's. The
+// A module is a *declaration module* when `stdlib/<module>.cml` exists, its header says
+// `module <module>`, and a C++ module of that name registers itself with `BuiltinModule`. The
 // set is read from the tree, not from a list in this script: the next batch (`time`,
 // `statistics`, `tree`/`ckpt`) is covered the day its `.cml` lands.
 //
@@ -509,12 +508,13 @@ function declarationModules() {
     const modules = []
     for (const file of fs.readdirSync(STDLIB_DIR).sort()) {
         if (!file.endsWith('.cml')) continue
-        // A module's name is its file's (design principles 10.2): the files under stdlib/ that a
-        // C++ module registers are the declaration modules, and the file's text says nothing more.
         const name = file.slice(0, -'.cml'.length)
         const dir = cppModuleDir(name)
         if (!dir) continue
-        modules.push({ name, cppDir: dir, source: path.join(STDLIB_DIR, file) })
+        const source = path.join(STDLIB_DIR, file)
+        // The file is the module and its name is the file's name: a `.cml` beside the `.cmo`
+        // of the same name is that module's declaration module, and it is read by its name.
+        modules.push({ name, cppDir: dir, source })
     }
     return modules
 }
@@ -522,7 +522,7 @@ function declarationModules() {
 // The declarations of a file: each `#op('uri')` binds the next `func`, and a default URI is
 // `<module>:<name>`. `// dynamic func` records a signature C++ computes (math); a body-less
 // `func` is the same declaration without an export.
-function readDeclarations(file, moduleName) {
+function readDeclarations(file, moduleName, allowPass = true) {
     const lines = read(file).split('\n')
     const declarations = []
     const dynamic = []
@@ -544,8 +544,11 @@ function readDeclarations(file, moduleName) {
         if (declaration) {
             // A pass declaration (design principles 9.3): a body-less function whose condition is
             // the pass applicability. It is a function the pipeline applies to the program, not
-            // an operator of the module, so it has no registered operator to agree with.
-            if (/\bwhen\s+is_function::<\w+>\(\)\s*$/.test(trimmed)) {
+            // an operator of the module, so it has no registered operator to agree with. Only a
+            // compiled declaration can declare a pass; a file under stdlib/signatures/ is
+            // reference text, and there the same condition is the type's
+            // (`grad::<F>(f: F): Gradient<F> when is_function::<F>()`).
+            if (allowPass && /\bwhen\s+is_function::<\w+>\(\)\s*$/.test(trimmed)) {
                 pendingUri = null
                 continue
             }
@@ -585,7 +588,7 @@ function computedPlaces(module, entry) {
     if (entry && entry.computed) {
         filePath = path.join(STDLIB_DIR, entry.computed)
         if (fs.existsSync(filePath)) {
-            for (const declaration of readDeclarations(filePath, module.name).declarations) {
+            for (const declaration of readDeclarations(filePath, module.name, false).declarations) {
                 if (!file.has(declaration.name)) {
                     file.set(declaration.name, {
                         file: relative(filePath),

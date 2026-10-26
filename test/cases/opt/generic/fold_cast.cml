@@ -3,7 +3,7 @@
  * check the conversion performs when it runs. `a` is converted to the shape the compiler
  * already knows, `b` comes from a function declared to return a plain `f32[..]` (the conversion
  * is checked against the value), `n` is a number converted to another
- * primitive type.
+ * primitive type by the conversion function (`as` does not convert numbers).
  */
 
 import { reshape, sum } from tensor
@@ -15,7 +15,7 @@ func three(): int { return 3 }
 func main(): int sync {
     let a = reshape([0.5, 0.5, 0.5, 0.5, 0.5, 0.5] as f32[], [2, 3]) as f32[2, 3]
     let b = weights() as f32[?, 3]
-    let n = three() as float
+    let n = float(three())
     println(float(sum(a * b)) * n)
     return 0
 }

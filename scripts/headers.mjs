@@ -203,6 +203,9 @@ const NOT_SOURCE = new Set([
     '.gif',
     '.svg',
     '.ico',
+    // Brand assets in a moving-image format: a video is not source in any language this policy
+    // names, and it is the one such file the repository carries.
+    '.mp4',
     '.def',
     '.in',
     '.cmo',

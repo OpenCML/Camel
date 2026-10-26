@@ -215,7 +215,7 @@ def ex(n: N, ind: int, top: bool = False) -> str:
         # `f<w>`: the function `f` with its context arguments given (a partial application).
         return n.a["name"] + "<" + ", ".join(arg(x) for x in n.c) + ">"
     if k == "env":
-        s = f"get_env({str_lit(n.a['name'])})"
+        s = f"(get_env({str_lit(n.a['name'])}) ?? '')"
         return f"int({s})" if n.t == INT else s
     if k == "bin":
         return wrap(bin_src(sub(n.c[0]), n.a["op"], sub(n.c[1])))

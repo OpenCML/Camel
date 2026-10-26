@@ -8,10 +8,10 @@
 
 import { seed, shuffle } from random
 import { merge_sort, merge_sorted_arrays } from array
-import { rendezvous } from para
+import { rendezvous } from test_support
 
 func sort_leaf(arr: int[]): (int[], int) sync {
-    let met = rendezvous(2, 5000) - 1
+    let met = rendezvous(2, 5.0) - 1
     return (merge_sort(arr), met)
 }
 

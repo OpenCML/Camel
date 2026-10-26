@@ -1,5 +1,5 @@
 /**
- * The declaration of `bytes:size` is the signature a call is checked against: two arguments are
+ * The declaration of `bytes:to_array` is the signature a call is checked against: two arguments are
  * refused at the call, where the overload is written as the declaration wrote it (
  * step 1).
  */
@@ -7,5 +7,6 @@ import bytes
 
 func main(): int sync {
     let b = bytes::from_array([1, 2, 3])
-    return bytes::size(b, b)
+    println(bytes::to_array(b, b))
+    return 0
 }

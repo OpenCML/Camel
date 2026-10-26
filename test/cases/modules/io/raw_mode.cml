@@ -1,14 +1,14 @@
 /**
  * Raw mode is the writer side of the terminal: turning it off is a no-op that succeeds, while
  * turning it on asks the terminal and fails where stdin is not one (the test runner gives the
- * process a pipe or the null device). The failure is a `RuntimeError` fault value at the call,
- * not an exit from the program.
+ * process a pipe or the null device). The failure is a `NotATerminal` error value, not a fault and not an
+ * exit from the program.
  */
 
 import { set_terminal_raw_mode } from io
 
 func outcome(enabled: bool): string {
-    return match attempt(set_terminal_raw_mode, enabled) {
+    return match set_terminal_raw_mode(enabled) {
         case error e => e.kind
         case _ => 'ok'
     }

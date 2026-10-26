@@ -220,7 +220,7 @@ def make_arms(rng: random.Random, j: int):
 def make_arms_program(rng: random.Random, k: int):
     """A program of its own for the third shape: each function is called twice, the second time
     with a larger run-time integer (another arm may be taken) and a run-time or a literal `x`."""
-    functions, body, expected = [], [f"    let k = int(get_env('{ENV_NAME}'))"], []
+    functions, body, expected = [], [f"    let k = int(get_env('{ENV_NAME}') ?? '')"], []
     v = 0
     for j in range(ARMS_FUNCTIONS):
         text, sim = make_arms(rng, j)

@@ -1,5 +1,5 @@
 import { new, reshape, to_bytes, zeros } from tensor
-import { to_array, size } from bytes
+import { to_array } from bytes
 
 func main(): int sync {
     // The element type of the literal is the one written: these four values are f32, and the bytes
@@ -9,7 +9,7 @@ func main(): int sync {
     println(to_array(to_bytes(floats)))
     println(to_array(to_bytes(new([9007199254740993, -2]))))
     println(to_array(to_bytes(new([true, false, true]))))
-    println(size(to_bytes(zeros([0, 2]))))
+    println(len(to_bytes(zeros([0, 2]))))
     println(to_array(to_bytes(reshape(floats, [2, 2]))))
     return 0
 }

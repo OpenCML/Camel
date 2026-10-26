@@ -1,7 +1,7 @@
 /**
  * The declarations of `time` are what an importer sees: `now` gives a float, `strftime` takes a
- * timestamp and a format and gives a string, `strptime` takes two strings and gives a float.
- * Every call reaches the C++ operator (step 10).
+ * timestamp, with the format as its with-argument, and gives a string, `strptime` takes a text and
+ * gives a float or an error. Every call reaches the C++ operator.
  */
 
 import { now, strftime, strptime } from time
@@ -9,9 +9,9 @@ import { now, strftime, strptime } from time
 func main(): int sync {
     let t: float = now()
     println(t > 0.0)
-    let text: string = strftime(0.0, '%Y-%m-%d')
+    let text: string = 0.0->strftime<'%Y-%m-%d'>
     println(text)
-    let parsed: float = strptime('1970-01-02', '%Y-%m-%d')
+    let parsed: float = '1970-01-02'->strptime<'%Y-%m-%d'> !! 0.0
     println(parsed > 0.0)
     return 0
 }

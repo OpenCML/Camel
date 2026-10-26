@@ -1,0 +1,16 @@
+/**
+ * A recursive `pure` function is held to its clause like any other: the body prints, and its call
+ * to itself is a use like any other call. The measurement settles each body against its callees, so
+ * the recursive call reads the reach of the round before and the declaration ends up refused
+ * (design principles 3.3).
+ */
+module err_pure_recursive
+
+func countdown(n: int): int pure {
+    println(n)
+    return if n <= 0 then 0 else countdown(n - 1)
+}
+
+func main(): int sync {
+    return countdown(2)
+}

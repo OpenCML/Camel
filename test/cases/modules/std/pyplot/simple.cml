@@ -9,7 +9,7 @@ func main(): int sync {
     let data = [1.0, 2.0, 3.0]
     // The runner's per-test scratch directory, so nothing is left under a fixed path; a direct
     // run keeps the older fixed path.
-    let root = get_env('CAMEL_TEST_TMPDIR')
+    let root = get_env('CAMEL_TEST_TMPDIR') ?? ''
     let out = if root == '' then 'test/tmp/pyplot' else root + '/pyplot'
     plot(data, out + "/simple_out.png")
     println("pyplot.plot OK")

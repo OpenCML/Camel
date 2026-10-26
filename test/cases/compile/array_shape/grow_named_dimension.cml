@@ -20,7 +20,7 @@ func grow(xs: f32[n], k: int): f32 {
 }
 
 func main(): int sync {
-    let depth = int(get_env('CAMEL_GROW_DEPTH'))
+    let depth = int(get_env('CAMEL_GROW_DEPTH') ?? '')
     println(grow([1.0, 2.0], depth))
     return 0
 }

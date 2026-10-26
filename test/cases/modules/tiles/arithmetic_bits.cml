@@ -5,7 +5,7 @@ func arithmetic(a: f32[..], b: f32[..]): (f32[..], f32[..], f32[..], f32[..], f3
     return (a + b, a - b, a * b, a / b, sqrt(a), a * b + a)
 }
 func main(): int sync {
-    let folder = get_env('TILES_TEST_OUT')
+    let folder = get_env('TILES_TEST_OUT') ?? ''
     let a = load_npy::<f32>(folder + '/a.npy') as f32[..]
     let b = load_npy::<f32>(folder + '/b.npy') as f32[..]
     let cpu = arithmetic(a, b)

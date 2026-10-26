@@ -1,0 +1,20 @@
+/**
+ * The program `fact_at_type_argument` rewrites: `target` is an addition whose second operand is
+ * itself an addition, so the fact of that operand is deeper than a constant's, and `keep` is an
+ * addition of two parameters, whose second operand is as deep as a constant.
+ */
+module fact_at_type_argument_target
+import fact_at_type_argument
+
+func target(a: int, b: int): int {
+    return a + (b + 1)
+}
+
+func keep(a: int, b: int): int {
+    return a + b
+}
+
+func main(): int sync {
+    println(target(3, 4), keep(3, 4))
+    return 0
+}

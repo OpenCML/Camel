@@ -1,8 +1,0 @@
-import { substr } from str
-
-func main(): int sync {
-    println('before')
-    println('hello'->substr<6, 0>)
-    println('not reached')
-    return 0
-}

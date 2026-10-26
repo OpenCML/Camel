@@ -181,6 +181,12 @@ class Module : public std::enable_shared_from_this<Module> {
     /// filled when the module is loaded and never rewritten. A module written in Camel
     /// exports its entities into ProgramExports; this table stays empty for it.
     entity_ns_ptr_t nativeEntityNS_;
+    /// The operator groups the module's own body-less declarations declare without exporting:
+    /// the kernels an `#impl` function runs (design principles 10.4). The module's own bodies
+    /// call them and an importer cannot, so they are not among the module's names; they are kept
+    /// here so that `inspect --ops` lists them (marked private) and the reference checker
+    /// verifies their signature and their purity like any other declaration's.
+    entity_ns_ptr_t privateEntityNS_;
     /// The same entities, by the operator URI they export: an operator group of several
     /// overloads answers for each of its URIs. Filled by exportEntity, read by the compiler
     /// for the operators it emits itself (nativeOperatorGroup).
@@ -312,6 +318,12 @@ class Module : public std::enable_shared_from_this<Module> {
     /// rule 1), so a declaration of an operator the C++ module exported too writes the
     /// module's signature, not a second entity beside it.
     bool replaceEntity(const Reference &ref, const entity &ent);
+    /// Declares an operator group the module declares without exporting it (the kernel of an
+    /// `#impl` function; design principles 10.4). A private operator is not one of the module's
+    /// names: an importer cannot reach it and it is not in the module's entity namespace. It is
+    /// an operator all the same, so it is listed by `inspect --ops` marked private and checked
+    /// against its declaration by the reference checker.
+    bool declarePrivateEntity(const Reference &ref, const entity &ent);
     /// The same, for the aliases a module publishes under a type namespace: a module may export
     /// one operator under its own name and under a type's (`shape` and `Tensor.shape` in
     /// `modules/tensor`). A declaration can write only the plain function, so when a plain name
@@ -389,6 +401,11 @@ class Module : public std::enable_shared_from_this<Module> {
     std::vector<std::pair<std::string, std::shared_ptr<Module>>> importedNamespaces() const;
     type_ns_ptr_t exportedTypeNS() const;
     entity_ns_ptr_t nativeEntityNS() const;
+    /// The operator groups this module declares without exporting (declarePrivateEntity): the
+    /// kernels of its `#impl` functions. They are operators, so a tool that lists what a module
+    /// registers (`inspect --ops`) reads them here, marked private; a compiler resolving a name
+    /// the module exports does not.
+    entity_ns_ptr_t privateEntityNS() const;
 
     // ---- Resources (design effects plan 3.2) -----------------------------------------------
 

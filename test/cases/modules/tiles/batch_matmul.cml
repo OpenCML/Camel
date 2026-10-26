@@ -1,6 +1,7 @@
 import { randn, seed, sum, mean, abs, reshape, shape, set_num_threads } from tensor
 import { with_grad } from autodiff
 import { source, run_preferred_resident, download } from tiles
+import { exit } from process
 
 type Pair = { a: f32[..], b: f32[..] }
 func pair(a: f32[..], b: f32[..]): Pair { return { a: a, b: b } }

@@ -16,7 +16,7 @@ func epilogue(x: f32[..], b: f32[..]): f32[..] {
 func two_reductions(x: f32[..]): f32[..] { return sum(x * 0.5, 1) + mean(x, 1) }
 func rounded(x: f32[..]): f32[..] { return sum(x, 1) - 16777216.0 }
 func main(): int sync {
-    let folder = get_env('TILES_TEST_OUT')
+    let folder = get_env('TILES_TEST_OUT') ?? ''
     let x = reshape(0..(17 * 513)->map<sample>, [17, 513])
     let b = reshape(0..513->map<sample>, [1, 513])
     let y = reshape(0..(2 * 257 * 3)->map<sample>, [2, 257, 3])

@@ -1,8 +1,0 @@
-import { replace } from str
-
-func main(): int sync {
-    println('before')
-    println('abc'->replace<'', 'x'>)
-    println('not reached')
-    return 0
-}

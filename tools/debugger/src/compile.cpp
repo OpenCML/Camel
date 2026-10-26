@@ -8,6 +8,7 @@
 #include "camel/core/module/userdef.h"
 #include "camel/parse/parse.h"
 #include "camel/utils/install_layout.h"
+#include "camel/utils/path.h"
 #include "camel/utils/windows_parser_guard.h"
 #include "core/module/userdef_internal.h"
 #include "gir_json.h"
@@ -61,12 +62,13 @@ CompilationState createCompilationStateForPath(const std::string &path) {
     // its first error like the command line's.
     ctx->runtimeDiagSink()->setConfig(runtimeDiagsConfig());
     GlobalConfig::SetInspectionMode(true);
-    auto diagnostics = std::make_shared<Diagnostics>(
-        camel::utils::pathToUtf8(camel::utils::pathFromUtf8(path).stem()), path, ctx->sourceContext());
+    // The entry module is named by its file (design principles 10.2), as in the CLI.
+    const std::string entryModuleName = camel::utils::moduleNameOfFile(path);
+    auto diagnostics = std::make_shared<Diagnostics>(entryModuleName, path, ctx->sourceContext());
     diagnostics->setConfig(compileDiags);
     auto parser = std::make_shared<CamelParser>(diagnostics);
     parser->setSourceContext(ctx->sourceContext());
-    auto mainModule = std::make_shared<UserDefinedModule>("main", path, ctx, parser);
+    auto mainModule = std::make_shared<UserDefinedModule>(entryModuleName, path, ctx, parser);
     ctx->setMainModule(mainModule);
     (void)mm::autoSpace();
     (void)mm::metaSpace();

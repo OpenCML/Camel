@@ -12,11 +12,13 @@
  * (design principles 3.6: the smallest index; lowest_index.cml tells the elements apart).
  */
 
+import { sleep } from process
+
 func work(x: int): int sync {
     println(format<x>('start {}'))
     let d = if x == 0 then 0 else 1
     let q = 100 / d
-    sleep(30)
+    sleep(0.03)
     println(format<x>('end {}'))
     return q + x
 }

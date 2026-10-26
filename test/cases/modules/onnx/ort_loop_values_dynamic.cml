@@ -38,8 +38,8 @@ func main(): int sync {
     save_npy(reshape([r.1], [1]), 'native_1.npy')
     save_npy(r.2, 'native_2.npy')
     save_npy(r.3, 'native_3.npy')
-    let exported = if get_env('ONNX_OUT') != '' then sync {
-        export_model((x: f32[..]): (f32[..], int, float[..], f32[..]) => step<m>(x), x, get_env('ONNX_OUT'), [0])
+    let exported = if (get_env('ONNX_OUT') ?? '') != '' then sync {
+        export_model((x: f32[..]): (f32[..], int, float[..], f32[..]) => step<m>(x), x, get_env('ONNX_OUT') ?? '', [0])
         1
     } else 0
     println(exported)

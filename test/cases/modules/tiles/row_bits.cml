@@ -5,7 +5,7 @@ func centered(x: f32[..]): f32[..] {
     return x * 1.0 - sum(x, 1, true)
 }
 func main(): int sync {
-    let folder = get_env('TILES_TEST_OUT')
+    let folder = get_env('TILES_TEST_OUT') ?? ''
     let x = load_npy::<f32>(folder + '/input.npy') as f32[..]
     save_npy(centered(x), folder + '/cpu.npy')
     save_npy(download(run_preferred_resident<centered>(x)), folder + '/gpu.npy')

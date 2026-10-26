@@ -18,15 +18,15 @@ func main(): int sync {
 
     let text = json::encode(ada)
     println(text)
-    println(json::encode(ada, 2))                    // pretty-printed with an indent of 2
+    println(ada->json::encode<indent: 2>)                    // pretty-printed with an indent of 2
 
-    // decode_as takes the JSON text and a value of the wanted type; the result is a User!.
-    println(describe(json::decode_as(text, ada)))
-    println(describe(json::decode_as('{"name": "bob", "age": "old", "tags": []}', ada)))
-    println(describe(json::decode_as('{"name": "bob"', ada)))
+    // decode_as::<T> takes the JSON text and names the wanted type; the result is a T!.
+    println(describe(json::decode_as::<User>(text)))
+    println(describe(json::decode_as::<User>('{"name": "bob", "age": "old", "tags": []}')))
+    println(describe(json::decode_as::<User>('{"name": "bob"')))
 
     // Containers decode the same way.
-    let scores = json::decode_as('{"math": 91, "art": 78}', [] as Map<string, int>) !! ([] as Map<string, int>)
+    let scores = json::decode_as::<Map<string, int>>('{"math": 91, "art": 78}') !! ([] as Map<string, int>)
     println(scores, scores['math'] ?? 0, scores['music'] ?? 0)
     return 0
 }

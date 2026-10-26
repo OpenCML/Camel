@@ -19,7 +19,7 @@ func kind(r: int!): string {
 }
 
 func main(): int sync {
-    let n = int(get_env('N'))
+    let n = int(get_env('N') ?? '')
     println('start')
     println(depth(200))
     println(kind(attempt(depth, n)))

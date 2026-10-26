@@ -13,6 +13,8 @@
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/bytes.h"
 #include "camel/core/rtdata/string.h"
+#include "camel/core/rtdata/tagged.h"
+#include "camel/core/type/composite/tuple.h"
 #include "camel/utils/utf8.h"
 
 #include <format>
@@ -32,6 +34,7 @@ namespace mm = camel::core::mm;
 using namespace camel::core::error;
 using namespace camel::core::context;
 using namespace camel::core::rtdata;
+using namespace camel::core::type;
 
 #ifdef _WIN32
 namespace Terminal {
@@ -53,6 +56,10 @@ bool setRawMode(bool enable) {
         rawModeEnabled = false;
     }
     return true;
+}
+bool isTerminal() {
+    DWORD mode;
+    return GetConsoleMode(hStdin, &mode) != 0;
 }
 bool hasInput() { return _kbhit() != 0; }
 // `maxChars` counts characters (code points), and a character is read whole.
@@ -97,6 +104,7 @@ bool setRawMode(bool enable) {
     }
     return true;
 }
+bool isTerminal() { return isatty(STDIN_FILENO) != 0; }
 bool hasInput() {
     fd_set fds;
     struct timeval tv = {0, 0};
@@ -131,30 +139,37 @@ std::unordered_map<std::string, operator_t> getIOOpsMap() {
     return {
         {"set_terminal_raw_mode", __io_set_terminal_raw_mode__},
         {"has_input", __io_has_input__},
-        {"get_char", __io_get_char__},
         {"get_chars", __io_get_chars__},
         {"clear_input_buffer", __io_clear_input_buffer__},
     };
 }
 
 slot_t __io_set_terminal_raw_mode__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    static const TupleType *resultType = TupleType::fallible(Type::Void());
     Bool enable = norm.get<Bool>(0);
     if (!Terminal::setRawMode(enable)) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<set_terminal_raw_mode> failed");
+        // Only turning raw mode on can fail: off is always a success.
+        return makeError(
+            Terminal::isTerminal() ? "IOError" : "NotATerminal",
+            Terminal::isTerminal() ? "the terminal refused raw mode"
+                                   : "standard input is not a terminal",
+            "<io::set_terminal_raw_mode>");
     }
-    return NullSlot;
+    return makeOk(NullSlot, resultType);
 }
 
 slot_t __io_has_input__(ArgsView &with, ArgsView &norm, Context &) {
     return toSlot(Terminal::hasInput());
 }
 
-slot_t __io_get_char__(ArgsView &with, ArgsView &norm, Context &) {
-    return toSlot(checkedString(Terminal::readInput(1), mm::autoSpace(), "io.get_char"));
-}
-
 slot_t __io_get_chars__(ArgsView &with, ArgsView &norm, Context &) {
     Int64 maxChars = norm.get<Int64>(0);
+    if (maxChars < 0) {
+        throwRuntimeFault(
+            RuntimeDiag::InvalidArgument,
+            "io.get_chars",
+            std::format("the number of characters is {}; it must not be negative", maxChars));
+    }
     return toSlot(checkedString(
         Terminal::readInput(static_cast<int>(maxChars)),
         mm::autoSpace(),

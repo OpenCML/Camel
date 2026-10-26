@@ -5,7 +5,7 @@
 // the sums print with a decimal point.
 
 import { new, multiply, sum, to_bytes, from_bytes } from tensor
-import { to_array, size } from bytes
+import { to_array } from bytes
 
 func doubled(x: i32[..]): i32[..] {
     return multiply(x, 2)
@@ -15,7 +15,7 @@ func main(): int sync {
     let numbers: i32[] = [2147483647, 1, -2, 0]
     let t = new(numbers)
     println(sum(t))
-    println(size(to_bytes(t)))
+    println(len(to_bytes(t)))
     println(to_array(to_bytes(t)))
     println(sum(doubled(t)))
     println(to_array(to_bytes(doubled(t))))

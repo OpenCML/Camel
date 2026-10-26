@@ -4,9 +4,9 @@
  * `stdlib/str.cml`, not the C++ module (step 10).
  */
 
-import { trim } from str
+import { to_upper } from str
 
 func main(): int sync {
-    println(trim(42))
+    println(to_upper(42))
     return 0
 }

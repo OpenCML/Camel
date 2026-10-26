@@ -408,63 +408,66 @@ Type *StructType::clone(bool deep /* = false */) const {
 
 bool StructType::equals(Type *type) const { return typeEquals(this, type); }
 
-namespace {
-
-/// Whether a value laid out as `source` can be read as `target` without moving anything: the
-/// same field names in the same order, each readable as the target field's type. A field of a
-/// refined module type (`f32[..]` where `Tensor` is declared) keeps its one slot, so the
-/// conversion is a no-op (camel/core/type/base.h, CastSafety).
-bool layoutCompatibleFrom(const StructType &target, const StructType &source) {
-    if (target.size() != source.size()) {
-        return false;
+StructRelation camel::core::type::relateStructs(const StructType *target, const StructType *source) {
+    if (target == nullptr || source == nullptr) {
+        return StructRelation::None;
     }
-    for (size_t i = 0; i < target.size(); ++i) {
-        if (target.fieldName(i) != source.fieldName(i)) {
-            return false;
-        }
-        Type *targetField = target.typeAt(i);
-        Type *sourceField = source.typeAt(i);
-        if (targetField == nullptr || sourceField == nullptr ||
-            !targetField->assignableFrom(sourceField)) {
-            return false;
-        }
+    if (target == source || target->equals(const_cast<StructType *>(source))) {
+        return StructRelation::SameLayout;
     }
-    return true;
+    if (target->size() != source->size()) {
+        return StructRelation::None;
+    }
+    bool sameLayout = true;
+    for (size_t i = 0; i < target->size(); ++i) {
+        const auto from = source->findField(target->fieldName(i));
+        if (!from.has_value()) {
+            return StructRelation::None;
+        }
+        if (*from != i) {
+            sameLayout = false;
+        }
+        Type *targetField = target->typeAt(i);
+        Type *sourceField = source->typeAt(*from);
+        if (targetField == nullptr || sourceField == nullptr) {
+            return StructRelation::None;
+        }
+        // A field of a refined module type (`f32[..]` where `Tensor` is declared) keeps its one
+        // slot, so it is readable as the target field's type without a move.
+        if (targetField->assignableFrom(sourceField)) {
+            continue;
+        }
+        // The empty array literal takes the element type of the field it stands in, which is a copy
+        // of the field (design principles 5.1).
+        if (targetField->code() == TypeCode::Array && isUntypedArrayType(sourceField)) {
+            sameLayout = false;
+            continue;
+        }
+        // A field that is itself a struct is related the same way, by name.
+        if (targetField->code() == TypeCode::Struct && sourceField->code() == TypeCode::Struct) {
+            switch (relateStructs(
+                static_cast<const StructType *>(targetField),
+                static_cast<const StructType *>(sourceField))) {
+            case StructRelation::SameLayout:
+                continue;
+            case StructRelation::ByName:
+                sameLayout = false;
+                continue;
+            case StructRelation::None:
+                return StructRelation::None;
+            }
+        }
+        return StructRelation::None;
+    }
+    return sameLayout ? StructRelation::SameLayout : StructRelation::ByName;
 }
-
-} // namespace
 
 bool camel::core::type::structFieldsMatchByName(
     const StructType *target, const StructType *source) {
     if (target == nullptr || source == nullptr || !target->named() || source->named()) {
         return false;
     }
-    if (target->size() != source->size()) {
-        return false;
-    }
-    for (size_t i = 0; i < target->size(); ++i) {
-        const auto from = source->findField(target->fieldName(i));
-        if (!from.has_value()) {
-            return false;
-        }
-        Type *targetField = target->typeAt(i);
-        Type *sourceField = source->typeAt(*from);
-        if (targetField == nullptr || sourceField == nullptr) {
-            return false;
-        }
-        if (targetField->assignableFrom(sourceField)) {
-            continue;
-        }
-        // A field that is itself a struct is matched the same way, by name.
-        if (targetField->code() == TypeCode::Struct && sourceField->code() == TypeCode::Struct &&
-            structFieldsMatchByName(
-                static_cast<const StructType *>(targetField),
-                static_cast<const StructType *>(sourceField))) {
-            continue;
-        }
-        return false;
-    }
-    return true;
+    return relateStructs(target, source) != StructRelation::None;
 }
 
 // Converting a value to its own type is legal and does nothing (design principles 5.1). An
@@ -481,8 +484,11 @@ CastSafety StructType::castSafetyFrom(Type *sourceType) const {
     if (equals(sourceType)) {
         return CastSafety::Safe;
     }
+    // Only a conversion that moves nothing is Safe; a copy in another field order is made by the
+    // builder (convertStructValue), which asks relateStructs as well.
     const auto *source = static_cast<const StructType *>(sourceType);
-    return layoutCompatibleFrom(*this, *source) ? CastSafety::Safe : CastSafety::Forbidden;
+    return relateStructs(this, source) == StructRelation::SameLayout ? CastSafety::Safe
+                                                                     : CastSafety::Forbidden;
 }
 
 // Every conversion castSafetyFrom admits keeps the value.
@@ -511,7 +517,36 @@ bool StructType::assignableFrom(Type *sourceType) const {
     if (named() && other->named()) {
         return false;
     }
-    return layoutCompatibleFrom(*this, *other);
+    return relateStructs(this, other) == StructRelation::SameLayout;
+}
+
+// Least common type at a branch join: two anonymous struct types with the same fields in the same
+// written order whose field types have a common type each are the struct of those; the same
+// named type with the same arguments is itself. A named type and an anonymous one, two named
+// types and other field names have none.
+Type *StructType::unify(Type *other) const {
+    if (other == nullptr || other->code() != TypeCode::Struct) {
+        return nullptr;
+    }
+    if (equals(other)) {
+        return const_cast<StructType *>(this);
+    }
+    const auto *rhs = static_cast<const StructType *>(other);
+    if (named() || rhs->named() || size() != rhs->size()) {
+        return nullptr;
+    }
+    StructTypeFactory factory;
+    for (size_t i = 0; i < size(); ++i) {
+        if (fieldName(i) != rhs->fieldName(i) || typeAt(i) == nullptr || rhs->typeAt(i) == nullptr) {
+            return nullptr;
+        }
+        Type *field = typeAt(i)->unify(rhs->typeAt(i));
+        if (field == nullptr) {
+            return nullptr;
+        }
+        factory.add(std::string(fieldName(i)), field);
+    }
+    return factory.build();
 }
 
 Type *StructType::widened() const {

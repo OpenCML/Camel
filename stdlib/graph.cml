@@ -233,9 +233,9 @@ export func erase(t: Txn, n: Node): void
 /// @example eval(t, n)
 export func eval(t: Txn, n: Node): Node?
 
-/// Checks the edits and makes the new Program, which shares every graph nothing changed; the transaction is over. The error value has the kind `GraphConflict` (a graph the transaction touched changed since it was opened), `GraphInvalid` (an edit broke an invariant; the message names the graph, the node and the edge) or `TxnUsed` (the transaction was over already).
+/// Checks the edits and makes the new Program, which shares every graph nothing changed; the transaction is over. The new Program is a value: the one the transaction was opened on, and the running program, stay as they were (design principles 9.1), so two transactions over one Program commit to two Programs. The error value has the kind `GraphInvalid` (an edit broke an invariant; the message names the graph, the node and the edge) or `TxnUsed` (the transaction was over already).
 /// @effect changes the transaction
-/// @fails error value `GraphConflict` when a graph the transaction touched changed since it was opened; error value `GraphInvalid` when an edit broke an invariant; error value `TxnUsed` when the transaction was over already
+/// @fails error value `GraphInvalid` when an edit broke an invariant; error value `TxnUsed` when the transaction was over already
 /// @example commit(t)
 export func commit(t: Txn): Program!
 

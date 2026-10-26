@@ -1,8 +1,0 @@
-/// std::cpp has no standalone translation of a hash operator: the program links the runtime.
-
-import hash
-
-func main(): int sync {
-    println(hash::sha256('a'))
-    return 0
-}

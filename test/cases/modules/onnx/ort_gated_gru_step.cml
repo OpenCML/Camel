@@ -60,9 +60,9 @@ func loaded(dir: string): Gru {
 }
 
 func main(): int sync {
-    let r = step(loaded(get_env('PARAMS')), load_npy::<f32>(get_env('X')))
-    save_npy(reshape([r.0], [1]), get_env('OUT') + '/loss.npy')
-    save_params(r.1, get_env('OUT') + '/params')
+    let r = step(loaded(get_env('PARAMS') ?? ''), load_npy::<f32>(get_env('X') ?? ''))
+    save_npy(reshape([r.0], [1]), (get_env('OUT') ?? '') + '/loss.npy')
+    save_params(r.1, (get_env('OUT') ?? '') + '/params')
     println('ran')
     return 0
 }

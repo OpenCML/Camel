@@ -18,7 +18,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "source.declared_resources"
-desc = "Two calls of `consume` touch the same handle (the value they are given) and are ordered by control, two calls of `tick` touch the group's `db` and `stdout`, two calls of `bump` touch the same cell: the bodies touch nothing, so the footprint can only come from the clauses. The program's own output is unchanged."
+desc = "Two calls of `consume` touch the same handle (the value they are given) and are ordered by control, two calls of `tick` touch the group's `db` and `stdout` and are visible outside the program -- naming an ambient resource in a clause promises the effect that comes with it -- and two calls of `bump` touch the same cell: the bodies touch nothing, so the footprint can only come from the clauses. The program's own output is unchanged."
 kind = "behavior"
 case = "../../../cases/effects/declared.cml"
 args = ["${case}", "test::resources"]
@@ -43,7 +43,7 @@ const cells = nodes(/^RESOURCES node \S+ (\d+) FUNC bump: rmw variable \(node (\
 pair('bump', cells)
 assert(cells[0][2] === cells[1][2], `bump: the two calls name different cells: ${cells[0][0]} | ${cells[1][0]}`)
 
-const ambient = nodes(/^RESOURCES node \S+ (\d+) FUNC tick: rmw ambient db; rmw ambient stdout$/)
+const ambient = nodes(/^RESOURCES node \S+ (\d+) FUNC tick: rmw ambient db; rmw ambient stdout; external$/)
 assert(ambient.length === 2, `tick: expected two calls of the group, got ${ambient.map((m) => m[0]).join(' | ')}; all nodes: ${allNodes}`)
 pair('tick', ambient)
 
@@ -51,6 +51,31 @@ assert(lines.includes('7'), `the handle value was not printed: ${lines.filter((l
 assert(lines.includes('0'), `the untouched cell was not printed: ${lines.filter((l) => !l.startsWith('RESOURCES')).join(' | ')}`)
 }
 """
+
+# ---- A resource is an exported name of the module that declares it ----
+#
+# A resource is identified by the module that declares it together with its name (design principles
+# 10.2), so another module reaches it the way it reaches any other exported name: through the
+# module (`m::r`), or by importing it by name and writing it bare. A name that is neither declared
+# here, nor standard, nor imported stays unknown (the case below).
+
+[[tests]]
+name = "resource.through_module"
+desc = "A clause writes `test_support::rendezvous_point`, the exported resource of an imported module: accepted, and the program runs."
+kind = "behavior"
+case = "../../../cases/effects/exported_resource_qualified.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "0\n"
+
+[[tests]]
+name = "resource.imported_by_name"
+desc = "A clause writes `rendezvous_point` after `import { rendezvous_point } from test_support`: the imported resource, named bare."
+kind = "behavior"
+case = "../../../cases/effects/exported_resource_imported.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "0\n"
 
 # ---- A body-less native declaration carries the operator's signature ----
 
@@ -112,6 +137,42 @@ expect_exit = 0
 expect_stdout_exact = "0\n"
 expect_output_not_contains = ["SemanticDiag::EffectNotExecuted"]
 
+[[tests]]
+name = "inferred.lambda_is_empty"
+desc = "A lambda is the same rule without a written clause: its type carries what its body measures, so a lambda that touches nothing measures the empty set and stands where `pure` is asked for. No syntax of its own: the resources of a lambda are inferred."
+kind = "behavior"
+case = "../../../cases/effects/pure_parameter_takes_lambda.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "0\n"
+expect_output_not_contains = ["SemanticDiag::EffectNotExecuted"]
+
+[[tests]]
+name = "effect.ambient_clause_covers_body"
+desc = "A clause that names the resource its body reaches keeps its promise, the effect outside the program included: `stdout` is state the program does not own, so a clause that writes it promises the effect that comes with it, and the resource and the effect are not two things the writer has to say."
+kind = "behavior"
+case = "../../../cases/effects/uses_ambient_covers_body.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "x\n1\n"
+
+[[tests]]
+name = "inferred.recursive_is_empty"
+desc = "A recursive function that wrote no clause settles at the set its body reaches: the measurement starts every body at the empty set and grows it round by round, so the call to itself reads the round before and `step` ends at the empty set -- its type says `pure`, and a caller taking its value reads that, not `Generic`."
+kind = "behavior"
+case = "../../../cases/effects/inferred_recursive_is_empty.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+expect_output_contains = ["Function(graph=step", "value_type=\"(n: int) => int pure\""]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+const step = lines.filter((l) => l.includes('Function(graph=step')).join(' | ')
+assert(step.includes('(n: int) => int pure'), `step's value carries the set its body settled at, not nothing: ${step}`)
+assert(!step.includes('(n: int) => int"'), `step's value is not read as a signature that says nothing: ${step}`)
+}
+"""
+
 # ---- Refusals ----
 
 [[tests]]
@@ -156,6 +217,17 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UnknownResource"
 expect_diagnostic_code = "0x030001A0"
 expect_output_contains = ["err_unknown_resource.cml:", "'nowhere'"]
+
+[[tests]]
+name = "err.resource_not_imported"
+desc = "`uses rendezvous_point` without importing it: importing the module `test_support` does not put the resource it exports into this module's own namespace, and the name is no standard resource."
+kind = "negative"
+case = "../../../cases/effects/err_resource_not_imported.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnknownResource"
+expect_diagnostic_code = "0x030001A0"
+expect_output_contains = ["err_resource_not_imported.cml:", "'rendezvous_point'"]
 
 [[tests]]
 name = "err.pure_and_uses"
@@ -233,3 +305,102 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::HandleTypeNotNominal"
 expect_diagnostic_code = "0x030001A3"
 expect_output_contains = ["err_handle_not_nominal.cml:", "'Id'"]
+
+[[tests]]
+name = "err.callee_clause_reaches"
+desc = "A call reads the signature of the function it calls: `stamp` promises `db` and its body calls `fill`, which promises `cache`, so the caller has reached `cache` and is refused even though `fill`'s body touches nothing -- the clause is the contract, which is what lets `fill` change its body within it later without touching its callers."
+kind = "negative"
+case = "../../../cases/effects/err_callee_clause_reaches.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_diagnostic_code = "0x030001F1"
+expect_output_contains = ["err_callee_clause_reaches.cml:16:", "uses db", "cache"]
+
+[[tests]]
+name = "err.promise_note"
+desc = "The note of a violation points at the first use the clause does not name, skipping the uses it does name: `bump` promises the cell `c` and then prints, so the report names `stdout` and the note lands on the print rather than on the write of `c` above it."
+kind = "negative"
+case = "../../../cases/effects/err_promise_note.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_diagnostic_code = "0x030001F1"
+expect_output_contains = ["err_promise_note.cml:8:", "stdout", "at 10:5]"]
+
+[[tests]]
+name = "err.pure_recursive"
+desc = "A recursive `pure` function is held to its clause like any other: the body prints, and the call to itself is a use like any other call, so the declaration is refused and the use is named."
+kind = "negative"
+case = "../../../cases/effects/err_pure_recursive.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_diagnostic_code = "0x030001F1"
+expect_output_contains = ["err_pure_recursive.cml:9:", "(n: int) => int pure", "stdout"]
+
+[[tests]]
+name = "err.wide_parameters"
+desc = "A use through a parameter the signature cannot number (the 257th) is not dropped: the measurement gives up on the body and records it as reaching something unknown, so a declaration whose clause cannot be shown to cover it is refused rather than passing on a use nobody recorded."
+kind = "negative"
+case = "../../../cases/effects/err_wide_parameters.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_diagnostic_code = "0x030001F1"
+expect_output_contains = ["err_wide_parameters.cml:11:", "does not keep its resource promise"]
+
+# ---- The measurement is a fixed point, and a use it cannot place is never dropped ----
+
+[[tests]]
+name = "err.recursive_pure"
+desc = "A recursive function is measured from the empty set and iterated to stability: `count_down` prints and calls itself, so its `pure` is refused where it is written. It used to be accepted, because a body that calls itself was never measured."
+kind = "negative"
+case = "../../../cases/effects/err_recursive_pure.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_diagnostic_code = "0x030001F1"
+expect_output_contains = ["err_recursive_pure.cml:8:", "pure", "stdout"]
+
+[[tests]]
+name = "err.mutual_recursive_pure"
+desc = "Two functions that call each other settle against each other: `ping` calls only `pong`, `pong` prints, and the cycle carries `stdout` back to `ping`, whose `pure` is refused."
+kind = "negative"
+case = "../../../cases/effects/err_mutual_recursive_pure.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_diagnostic_code = "0x030001F1"
+expect_output_contains = ["err_mutual_recursive_pure.cml:6:", "pure", "stdout"]
+
+[[tests]]
+name = "err.closure_capture_pure"
+desc = "A function declared inside another one writes a variable of the function around it. Which capture that is cannot be read from its own body; the use is read as touching any variable, not skipped, so the `pure` it wrote is refused and the report says what could not be determined."
+kind = "negative"
+case = "../../../cases/effects/err_closure_capture_pure.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_diagnostic_code = "0x030001F1"
+expect_output_contains = ["err_closure_capture_pure.cml:9:", "pure"]
+
+[[tests]]
+name = "err.many_parameters_pure"
+desc = "A parameter index is a byte in a signature. A use through the 300th parameter used to be dropped, so a `pure` that cannot hold passed; the use is now read as touching any handle and the clause is refused, with the reason."
+kind = "negative"
+case = "../../../cases/effects/err_many_parameters_pure.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_diagnostic_code = "0x030001F1"
+expect_output_contains = ["err_many_parameters_pure.cml:15:", "pure"]
+
+[[tests]]
+name = "ok.recursive_pure"
+desc = "A recursion that touches nothing keeps its `pure` (the fixed point only grows from the empty set), two functions that call only each other too, and a recursion whose clause names what it does touch, or that writes none, stays accepted."
+kind = "behavior"
+case = "../../../cases/effects/ok_recursive_pure.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["120 true true"]

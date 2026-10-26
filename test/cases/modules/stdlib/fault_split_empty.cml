@@ -1,8 +1,0 @@
-import { split } from str
-
-func main(): int sync {
-    println('before')
-    println('abc'->split<''>)
-    println('not reached')
-    return 0
-}

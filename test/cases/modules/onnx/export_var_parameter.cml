@@ -23,7 +23,7 @@ func main(): int sync {
         let o = step(x, acc)
         return (o, acc)
     }
-    export_model(f, (ex, es), get_env('EXPORT_VAR_PARAMETER_OUT'))
+    export_model(f, (ex, es), get_env('EXPORT_VAR_PARAMETER_OUT') ?? '')
     println('exported')
     return 0
 }

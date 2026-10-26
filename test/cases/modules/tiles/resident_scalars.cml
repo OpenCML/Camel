@@ -1,17 +1,20 @@
-import { reshape, sum, abs, zeros } from tensor
+import { reshape, sum, abs, zeros, cast } from tensor
 import { with_grad } from autodiff
 import { Device, upload, download, run_preferred_resident } from tiles
 with <x: f32[..]>
-func loss(): float { return sum(x * x) }
-func total(x: f32[..]): float { return sum(x) }
+func loss(): float { return float(sum(x * x)) }
+func total(x: f32[..]): float { return float(sum(x)) }
 func identity(x: float): float { return x }
 // A scalar at the boundary takes the element type it is written with (design principles 7.3): the
 // scalar this region takes is `f32` and stays `f32` in it, so `x * k` needs no conversion. A
 // `float` k beside an f32 tensor is a type error (design principles 5.1); a program that really
 // wrote an f64 scalar passes one and gets a `Device<float>` leaf.
 func scale(x: f32[..], k: f32): f32[..] { return x * k }
+// The f64 reading this case pins is the f64 scalar leaf: the device graph carries no f64 scalar of
+// its own, so the program that wants one really writes an f64 tensor and reduces that (the ruling
+// on `f32-scalar-to-the-device`: a scalar leaf takes the element type it is written with).
 func mixed(x: f32[..]): (float, f32[..], float) {
-    return (sum(x), x + 1.0, 1.0000000000000002)
+    return (float(sum(cast(x, 'f64'))), x + 1.0, 1.0000000000000002)
 }
 func read(x: Device<float>): float { return download(x) }
 func main(): int sync {
@@ -20,9 +23,10 @@ func main(): int sync {
     let result = run_preferred_resident<vg>(upload(x))
     println(read(result.0) - 14.0)
     println(sum(abs(download(result.1) - x * 2.0)))
-    // `loss` answers `float` (the whole-tensor reduction's answer is still the f64 accumulator's
-    // type), so the f32 scalar the region declares is written here: read it back to the host and
-    // state the element type the boundary takes.
+    // `loss` answers `float` because its call site writes that conversion — the reduction itself
+    // answers the operand's element type (design principles 7.3) — so the f32 scalar the region
+    // declares is written here: read it back to the host and state the element type the boundary
+    // takes.
     println(sum(abs(download(run_preferred_resident<scale>((result.1, f32(read(result.0))))) - x * 28.0)))
     let exact = reshape([16777216.0, 1.0] as f32[], [2])
     let p = run_preferred_resident<mixed>(exact)

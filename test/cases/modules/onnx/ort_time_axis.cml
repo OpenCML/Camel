@@ -22,13 +22,13 @@ func back(t: int, steps: int, x: f32[..]): f32[..] {
 }
 
 func main(): int sync {
-    let steps = int(get_env('STEPS'))
+    let steps = int(get_env('STEPS') ?? '')
     let x = ones([2, steps, 3]) * 0.1
     export_model(
         (x: f32[..]): (f32[..], f32[..]) =>
             (scan(0, shape(x)[1], x, zeros([shape(x)[0], shape(x)[2]])), back(0, shape(x)[1], x)),
         x,
-        get_env('ONNX_OUT')
+        get_env('ONNX_OUT') ?? ''
     )
     println('exported')
     return 0

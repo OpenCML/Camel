@@ -7,6 +7,6 @@ import { read_text } from fs
 import { get_cwd } from env
 
 func main(): int sync {
-    println(read_text(get_cwd() + '/不存在 文件 🐪.txt'))
+    println((((get_cwd() !! '') + '/不存在 文件 🐪.txt')->read_text !! ''))
     return 0
 }

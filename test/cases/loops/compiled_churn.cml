@@ -11,7 +11,7 @@ func churn(n: int): int {
 }
 
 func main(): int sync {
-    let n = int(get_env('N'))
+    let n = int(get_env('N') ?? '')
     println(churn(n))
     println('done')
     return 0

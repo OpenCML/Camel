@@ -1,13 +1,11 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// The declaration of the operator of the C++ module `modules/this` (design principles 6.4).
-// This file is the one source of its signature; the C++ side keeps the
-// kernel and the executor. A declaration names `this:<function>` by convention, so no `#op` tag
-// is needed.
-
+/**
+ * The text of the Zen of Camel. The file `ZEN` of the repository is built into the module, so the
+ * text has one source and a program that asks for it reads no file.
+ */
 
 /// The Zen of Camel, the text of the file ZEN.
-/// @pure
 /// @example println(zen())
 export func zen(): string

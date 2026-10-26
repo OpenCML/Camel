@@ -13,8 +13,8 @@ func double(t: f32[..]): f32[..] {
 }
 
 func main(): int sync {
-    return if get_env('P7_MODE') == 'export' then sync {
-        let shape: int[] = [len(get_env('P7_INPUT')), 2]
+    return if (get_env('P7_MODE') ?? '') == 'export' then sync {
+        let shape: int[] = [len(get_env('P7_INPUT') ?? ''), 2]
         export_model(double, zeros(shape), 'tmp/test/onnx/refusal_request_in_arm_and_target.onnx')
         return 0
     } else 0

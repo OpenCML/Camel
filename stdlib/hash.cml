@@ -1,32 +1,28 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// The declarations of the operators of the C++ module `modules/hash` (design principles 6.4).
-// This file is the one source of their signatures; the C++ side
-// keeps the kernels, the executor and the purity.
-//
-// `sha256` accepts a `string` and a `Bytes` value, which are two operators with two URIs
-// (`hash:sha256_str`, `hash:sha256_bytes`); a declaration names one URI, so each of the two
-// declarations carries the `#op` tag that names its operator. No signature of this module
-// is computed from an argument, so the module needs no `stdlib/signatures/hash.cml`.
+/**
+ * Digests. A digest is computed over bytes: the digest of a text is the digest of its UTF-8
+ * bytes (`bytes::encode`), so a text and its encoding have the same digest on every platform.
+ * Every function here is pure; the digest is written as lower-case hexadecimal text.
+ */
 
+import { encode } from bytes
 
-/// The SHA-256 digest of the bytes of s, as 64 lower-case hexadecimal digits.
-/// @pure
-/// @example sha256('abc')    // 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
-#op('hash:sha256_str')
-export func sha256(s: string): string
-/// The SHA-256 digest of a `Bytes` value, as 64 lower-case hexadecimal digits. The two overloads are
-/// two operators (`hash:sha256_str`, `hash:sha256_bytes`); the one is chosen when the program is
-/// compiled.
-/// @pure
-/// @example sha256(encode('abc')) == sha256('abc')    // true
+// The one kernel. The two public overloads below share it, so the text form is not a second
+// operator but the first one applied to the encoded text.
 #op('hash:sha256_bytes')
-export func sha256(s: Bytes): string
+func sha256_bytes(data: Bytes): string
 
-/// SHA-256 applied rounds times, each round to the hexadecimal text of the one before;
-/// 0 rounds gives s itself.
-/// @pure
-/// @fails fault `InvalidArgument` when rounds is negative
-/// @example sha256_rounds('abc', 1) == sha256('abc')    // true
-export func sha256_rounds(s: string, rounds: int): string
+/// The SHA-256 digest of a `Bytes` value, as 64 lower-case hexadecimal digits.
+/// @example-fragment the example builds its `Bytes` value with `encode` from the `bytes` module, which this page does not import
+/// @example sha256(encode('abc'))    // 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
+export func sha256(data: Bytes): string {
+    return sha256_bytes(data)
+}
+
+/// The SHA-256 digest of the UTF-8 bytes of a text, as 64 lower-case hexadecimal digits.
+/// @example sha256('abc')    // 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
+export func sha256(text: string): string {
+    return sha256_bytes(encode(text))
+}

@@ -889,6 +889,55 @@ void writeRuntimeFillSlots(
     }
 }
 
+slot_t runtimeFuncValue(
+    camel::core::type::Type *valueType, camel::runtime::GCGraph *calleeGraph, uint32_t written,
+    std::span<const slot_t> withValues, slot_t result) {
+    if (written == 0) {
+        // A call that writes no captured variable hands on the callee's return value alone.
+        return result;
+    }
+    // The versions are the call's With inputs at the callee's capture ports: the declared `with`
+    // arguments come first, then the captures in the order the callee made them.
+    camel::core::type::FunctionType *calleeType = calleeGraph->funcType();
+    const size_t declaredWith =
+        calleeType != nullptr ? calleeType->withTypesCount() : size_t{0};
+    const bool hasExit =
+        calleeType != nullptr && calleeType->hasExitType() &&
+        calleeType->exitType() != nullptr &&
+        calleeType->exitType()->code() != camel::core::type::TypeCode::Void;
+    std::vector<slot_t> parts;
+    if (hasExit) {
+        parts.push_back(result);
+    }
+    for (size_t k = 0; k < 32; ++k) {
+        if ((written & (uint32_t{1} << k)) == 0) {
+            continue;
+        }
+        const size_t at = declaredWith + k;
+        ASSERT(
+            at < withValues.size(),
+            "A call that writes captured variables must pass each of them as a With input.");
+        parts.push_back(withValues[at]);
+    }
+    if (parts.size() <= 1) {
+        // A `void` callee writing one variable: the value is that version itself.
+        return parts.empty() ? result : parts.front();
+    }
+    // More than one part: the value is the tuple the builder typed the call node with, in the
+    // order the parts were just gathered (the return value first, then the written versions).
+    ASSERT(valueType != nullptr, "A call whose value is a tuple must be typed as one.");
+    auto *tupleType = tt::as_ptr<camel::core::type::TupleType>(valueType);
+    ASSERT(
+        tupleType->size() == parts.size(),
+        "A call must hand on exactly the parts its value type declares.");
+    auto *tuple = Tuple::create(parts.size(), camel::core::mm::autoSpace());
+    for (size_t i = 0; i < parts.size(); ++i) {
+        CAMEL_ASSERT_NOT_VIEW(parts[i], tupleType->typeAt(i), "the value of a call");
+        tuple->set<slot_t>(i, parts[i], tupleType);
+    }
+    return camel::core::rtdata::toSlot(tuple);
+}
+
 void fillFrameForDirectInvoke(
     Frame *from, Frame *dest, camel::runtime::GCGraph *callerGraph, gc_node_ref_t callNodeIndex) {
     if (from == nullptr || dest == nullptr) {

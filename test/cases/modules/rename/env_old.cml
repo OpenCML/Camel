@@ -5,6 +5,6 @@
 import { get_env } from sys
 
 func main(): int sync {
-    println(get_env('PATH'))
+    println(get_env('PATH') ?? '')
     return 0
 }

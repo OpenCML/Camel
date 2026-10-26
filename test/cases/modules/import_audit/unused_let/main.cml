@@ -16,7 +16,7 @@ import { exists } from fs
 import unused_let_writer
 
 func main(): int sync {
-    let path = get_env('CAMEL_TEST_TMPDIR') + '/h222_unused_let_flag.txt'
+    let path = (get_env('CAMEL_TEST_TMPDIR') ?? '') + '/h222_unused_let_flag.txt'
     println("unused import, flag exists =", exists(path))
     return 0
 }

@@ -928,7 +928,9 @@ Application applyRewrite(
         total.erased += stats.erased;
         total.fixpoint = total.fixpoint && stats.fixpoint;
     }
-    return {session.commitChecked(), total};
+    // A detached commit: the result is a value the caller holds, and the context's program stays
+    // as it is (design principles 9.1); the pass driver installs what a pass hands on.
+    return {session.commit(true), total};
 }
 
 /// `rewrite(p, rules)` and `rewrite(p, rules, strict)`: the program with the rules applied one way,
@@ -1516,7 +1518,8 @@ slot_t saturateKernel(ArgsView &, ArgsView &norm, Context &ctx) {
             writings.saturate(compiled, budget);
             writings.save();
         }
-        const camel::runtime::Program *committed = session.commitChecked();
+        // Detached, as `rewrite`: the result is a value, the context's program is left alone.
+        const camel::runtime::Program *committed = session.commit(true);
         return makeOk(toSlot(const_cast<camel::runtime::Program *>(committed)), resultType);
     } catch (const camel::runtime::RuleCompileError &e) {
         return makeError("RuleInvalid", e.what(), "<rewrite::saturate>");
@@ -1538,7 +1541,7 @@ slot_t extractKernel(ArgsView &, ArgsView &norm, Context &ctx) {
             "<rewrite::extract>");
     }
     const camel::runtime::Program *extracted =
-        camel::runtime::extractWritings(ctx.shared_from_this(), base, *model);
+        camel::runtime::extractWritings(ctx.shared_from_this(), base, *model, /*detached=*/true);
     return makeOk(toSlot(const_cast<camel::runtime::Program *>(extracted)), resultType);
 }
 
@@ -3991,7 +3994,7 @@ class RewriteModule final : public BuiltinModule {
                       {{0, {}}, {6, {false, false, false, false, false, false}}},
                       "(name: string, two_way: bool, needs: int, consts: int, lhs: F, rhs: F) => "
                       "Rule",
-                      [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                      [](const type_vec_t &, const type_vec_t &norm)
                           -> std::optional<Type *> {
                           if (norm[0]->code() != TypeCode::String ||
                               norm[1]->code() != TypeCode::Bool ||
@@ -4011,7 +4014,7 @@ class RewriteModule final : public BuiltinModule {
                       {{0, {}}, {7, {false, false, false, false, false, false, false}}},
                       "(name: string, two_way: bool, needs: int, consts: int, lhs: F, rhs: F, "
                       "when: F) => Rule",
-                      [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                      [](const type_vec_t &, const type_vec_t &norm)
                           -> std::optional<Type *> {
                           if (norm[0]->code() != TypeCode::String ||
                               norm[1]->code() != TypeCode::Bool ||
@@ -4040,7 +4043,7 @@ class RewriteModule final : public BuiltinModule {
                   DynamicFuncTypeResolver::create(
                       {{0, {}}, {-1, {}}},
                       "(name: string, two_way: bool, needs: int, consts: int, id: int, ...) => Rule",
-                      [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                      [](const type_vec_t &, const type_vec_t &norm)
                           -> std::optional<Type *> {
                           if (norm.size() < 5 || norm[0]->code() != TypeCode::String ||
                               norm[1]->code() != TypeCode::Bool ||
@@ -4068,11 +4071,11 @@ class RewriteModule final : public BuiltinModule {
                           return RuleType::get();
                       })}}));
         // `__fact` (rewrite design 7.5): the compiled form of a `fact` declaration. Its arity is
-        // 7 + w + k + 3n: the name, the five functions the fact is made of (initial, join, meet,
-        // widen, narrow), the number w of `with` arguments the query was written with, those
-        // arguments, the k nodes the query was written on (one, `n`, in the one-value form), then
-        // for each case its pattern function, its fact function and the mask of its `const`
-        // parameters.
+        // 8 + w + k + 3n: the name, the fact's type arguments (empty for a fact whose head declares
+        // none), the five functions the fact is made of (initial, join, meet, widen, narrow), the
+        // number w of `with` arguments the query was written with, those arguments, the k nodes the
+        // query was written on (one, `n`, in the one-value form), then for each case its pattern
+        // function, its fact function and the mask of its `const` parameters.
         exportEntity(
             "__fact",
             OperatorGroup::create(
@@ -4080,25 +4083,26 @@ class RewriteModule final : public BuiltinModule {
                 {{"rewrite:fact",
                   DynamicFuncTypeResolver::create(
                       {{0, {}}, {-1, {}}},
-                      "(name: string, initial: F, join: F, meet: F, widen: F, narrow: F, "
-                      "withCount: int, ...) => T",
-                      [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                      "(name: string, types: string, initial: F, join: F, meet: F, widen: F, "
+                      "narrow: F, withCount: int, ...) => T",
+                      [](const type_vec_t &, const type_vec_t &norm)
                           -> std::optional<Type *> {
-                          if (norm.size() < 8 || norm[0]->code() != TypeCode::String) {
+                          if (norm.size() < 9 || norm[0]->code() != TypeCode::String ||
+                              norm[1]->code() != TypeCode::String) {
                               return std::nullopt;
                           }
-                          for (size_t i = 1; i < 6; ++i) {
+                          for (size_t i = 2; i < 7; ++i) {
                               if (norm[i]->code() != TypeCode::Function) {
                                   return std::nullopt;
                               }
                           }
-                          if (norm[6]->code() != TypeCode::Int64) {
+                          if (norm[7]->code() != TypeCode::Int64) {
                               return std::nullopt;
                           }
                           // The cases follow the queried nodes as triples that begin with a
                           // function. A `with` argument is a compile-time value and a queried
                           // node is a node, so neither begins one.
-                          size_t at = 7;
+                          size_t at = 8;
                           while (at < norm.size() && norm[at]->code() != TypeCode::Function) {
                               ++at;
                           }
@@ -4113,7 +4117,7 @@ class RewriteModule final : public BuiltinModule {
                               }
                           }
                           const auto *initial =
-                              static_cast<const FunctionType *>(norm[1]);
+                              static_cast<const FunctionType *>(norm[2]);
                           if (initial->exitType() == nullptr) {
                               return std::nullopt;
                           }

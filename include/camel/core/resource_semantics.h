@@ -122,6 +122,12 @@ std::string_view accessModeName(AccessMode mode);
 /// True for Write and ReadModifyWrite.
 inline bool writes(AccessMode mode) { return mode != AccessMode::Read; }
 
+/// The access two uses of one resource amount to: the wider one. The same access stays itself, and
+/// Read with Write is covered by no single access but ReadModifyWrite. Two writes are one write:
+/// widening them into a read-modify-write would make the reading harder to cover than the uses it
+/// stands for. Every place that unites two uses of one resource reads this one rule.
+AccessMode uniteAccess(AccessMode left, AccessMode right);
+
 struct ResourceAccess {
     Resource resource;
     ResourceBinding binding;
@@ -215,6 +221,9 @@ struct ResourceSignature {
     ResultAlias result;
     /// The call's result is a new resource of this class.
     std::optional<Resource> allocates;
+    /// Running the call is visible outside the program. An ambient resource is the state the
+    /// program does not own, so a signature that names one carries this too: writing `stdout` in a
+    /// clause promises the effect that comes with it (design principles 3.3).
     bool external = false;
 
     /// Concrete and touching nothing: `pure`.
@@ -228,6 +237,18 @@ struct ResourceSignature {
 /// The signature a declared spec publishes, in the parameter numbering of a function with
 /// `withCount` with parameters (with parameters first, ordinary ones after them).
 ResourceSignature signatureOf(const ResourceSpec &spec, size_t withCount);
+
+/// What naming a resource in a signature means, beyond the resource itself: an ambient resource is
+/// state the program does not own, reached without being handed it, so a signature that names one
+/// also runs visibly outside the program (design principles 3.3). A written clause has no word of
+/// its own for that component, so the resource has to bring it -- otherwise a clause could never
+/// cover the body that reaches the very resource it names. Both the signature a spec publishes and
+/// the one a written clause builds end with this, so the two agree.
+inline void ambientCarriesExternal(ResourceSignature &signature) {
+    if (!signature.ambient.empty()) {
+        signature.external = true;
+    }
+}
 
 /// Whether a call that touches `source` may stand where `target` is promised: one signature
 /// covers another when it allows no less, so the caller is told at least what it gets.

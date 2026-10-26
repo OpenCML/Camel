@@ -309,3 +309,51 @@ expect_diagnostic_line = 15
 expect_output_contains = ["is_plain::<T>()", "every candidate's 'when' condition is false"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+# ---- Build-time evaluation does not guess ----
+
+[[tests]]
+name = "when.called_declaration_scope"
+desc = "A called declaration's `when` is answered where the declaration is written, not where the call is: `ns::slot` sits in a namespace beside the predicate `plain_int` and names it unqualified, and the call, at the top of the module, folds to the key of a static access. The condition used to be read in the caller's scope and the call was refused."
+kind = "behavior"
+case = "../../../cases/compile/when/scope/main.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "20\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.overloaded_predicate"
+desc = "A predicate with two overloads in a condition is chosen by the call's arguments, not by declaration order: `pick::<T>('s')` is the `string` one, which holds, and the declaration applies. The first declaration of the name used to answer every call."
+kind = "behavior"
+case = "../../../cases/compile/when/overload_predicate.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.fold_broken_body"
+desc = "A function whose body does not build is not folded: its own error is the one reported, and the call is not given a value read from a body that has a diagnostic (it used to add a second error about effects)."
+kind = "negative"
+case = "../../../cases/compile/when/fold_broken_body.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
+expect_output_contains = ["Unresolved reference: 'missing_name'"]
+expect_output_not_contains = ["FoldCallHasEffects", "cannot be evaluated at build time"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.nested_open_type"
+desc = "A type variable that reaches an inner predicate through an outer one is reported as not concrete, never taken for false (the `_` arm of a `match type` is not chosen for a type that is not known yet)."
+kind = "negative"
+case = "../../../cases/compile/when/nested_open_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenTypeQueryNotConcrete"
+expect_output_contains = ["still has a type variable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

@@ -37,7 +37,7 @@ func main(): int sync {
         (x: f32[..], w: f32[..]): (f32[..], f32[..], f32[..]) =>
             (pile(x), fold(0, int(float(sum(x * x)) * 0.5), x, w), fold2(x, w)),
         (x, w),
-        get_env('ONNX_OUT')
+        get_env('ONNX_OUT') ?? ''
     )
     println('exported')
     return 0

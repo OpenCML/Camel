@@ -2,7 +2,13 @@
  * Exercises the hashing APIs of the hash module, focusing on determinism and the difference between single-round and repeated hashing.
  */
 
-import { sha256, sha256_rounds } from hash
+import { sha256 } from hash
+
+// SHA-256 applied `rounds` times, each to the hexadecimal text of the one before.
+func sha256_rounds(s: string, rounds: int): string {
+    let (digest, done) = loop digest = s, done = 0 while done < rounds do (sha256(digest), done + 1)
+    return digest
+}
 
 func main(): int sync {
     println("=== Hash Module Basic Tests ===")

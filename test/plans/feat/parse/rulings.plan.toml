@@ -43,14 +43,14 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rulings.import_rename_hides_original"
-desc = "After `find as str_find` the original name is not visible in the importing module."
+desc = "After `index_of as str_find` the original name is not visible in the importing module."
 kind = "negative"
 case = "../../../cases/parse/rulings/import_rename_hides.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
 expect_diagnostic_line = 5
-expect_output_contains = ["'find'"]
+expect_output_contains = ["'index_of'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

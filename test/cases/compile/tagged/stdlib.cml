@@ -2,7 +2,7 @@
  * Library operators that can fail return a `T!`: parse_int, parse_float, fs::try_read_text.
  */
 
-import { try_read_text } from fs
+import { read_text } from fs
 
 func show(r: int!): string {
     return match r {
@@ -19,7 +19,7 @@ func main(): int sync {
     println(show(parse_int('99999999999999999999')))
     println(parse_float('2.5') !! 0.0)
     println(parse_float('abc') !! -1.0)
-    let missing = try_read_text('tagged_no_such_file.txt')
+    let missing = 'tagged_no_such_file.txt'->read_text
     println(missing)
     println(missing !! '<no file>')
     return 0

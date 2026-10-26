@@ -47,7 +47,7 @@ func kind(r: int!): string {
 
 func main(): int sync {
     let xs = [3, 1, 4, 1, 5, 9, 2, 6]
-    let fault = get_env('FAULT')
+    let fault = get_env('FAULT') ?? ''
     println(picks(xs, 0, 8, 0))
     println(rems(100, 7, 1, 0))
     println(quots(xs, 3, 1, 0))

@@ -54,9 +54,12 @@ func add(x: f32[..], y: f32[..]): f32[..] { return x + y }
 host) is chosen at run time with `--devices`. `tiles::compile` reads the label as a promise:
 every operator written in the scope — including the ones written in the functions it calls —
 must have a device program, and a scope the device cannot serve is a compile error, never a host
-run. The capability miss is `GpuScopeUnsupported`; an operator the device back end has a program
-for but not for this shape, or one whose module provides none, is `GpuScopeNoDeviceProgram`. Both
-are located at the operator, name the scope and say why. A report operator (`inspect`, `source`,
+run. A scope the pass cannot serve makes it fail, and its failure is an error value (design
+principles 9.1: a pass is `(f: F) => F!`): `GpuScopeUnsupported` names the scope, every operator
+it cannot run and the reason each one gives — an operator no module lowers for the device at all,
+one the back end has a program for but not for this shape, or one whose module provides none. The
+value reaches the exit unhandled, so it is reported on standard error with a non-zero exit code,
+at the first such operator. A report operator (`inspect`, `source`,
 `benchmark`, `regions`) asked about a function the device back end refuses names itself and the
 graph it was given (`RuntimeDiag::GraphNoDeviceProgram`, `RuntimeDiag::DeviceNotSelected` when the
 run has no device to serve it): the miss is a scheduling decision, so it is a diagnostic and not a

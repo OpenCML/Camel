@@ -1,0 +1,84 @@
+/**
+ * The value a call hands on when it writes captured variables (docs/design/effects/edges.cn.md
+ * 5.6; docs/design-principles.cn.md 3.5): the call's value is the tuple of the return value and
+ * the new version of each variable it wrote, in capture-table order, and the parts are read with
+ * access nodes. A call that writes one variable and returns nothing hands that version on
+ * unwrapped; a call that writes nothing is unchanged.
+ *
+ * The four shapes, one function each (plan linear.captured_writes, test
+ * captured_write_value.shape):
+ *   two_writes()  writes both `p` and `q` and returns int: the value is (int, p, q)
+ *   bump_void()   writes `n` and returns void:            the value is n itself
+ *   plain()       writes no captured variable:            the value is its return value
+ *   unused()      writes `m`, its value is dropped:       no access node for the return value
+ *
+ * Expected output, one line per case:
+ *   7110    two_case      the two versions the call handed on, then its return value
+ *   12      void_case     the void writer's version is the new value of n
+ *   30      plain_case    a call that writes nothing is its return value
+ *   54      unused_case   the return value is not read, the write still happens
+ *   95      used_case     the return value read beside the version
+ */
+module captured_write_value
+
+var p = 0
+var q = 0
+var n = 0
+var m = 0
+
+func two_writes(): int sync {
+    p += 1
+    q += 10
+    return 7
+}
+
+func bump_void(): void sync {
+    n += 1
+}
+
+func plain(): int {
+    return 3
+}
+
+func unused(): int sync {
+    m += 5
+    return 9
+}
+
+func two_case(): int sync {
+    p = 0
+    q = 0
+    let a = two_writes()
+    return a * 1000 + p * 100 + q
+}
+
+func void_case(): int sync {
+    n = 0
+    bump_void()
+    return n * 10 + 2
+}
+
+func plain_case(): int {
+    return plain() * 10
+}
+
+func unused_case(): int sync {
+    m = 0
+    unused()
+    return m * 10 + 4
+}
+
+func used_case(): int sync {
+    m = 0
+    let r = unused()
+    return r * 10 + m
+}
+
+func main(): int sync {
+    println(two_case())
+    println(void_case())
+    println(plain_case())
+    println(unused_case())
+    println(used_case())
+    return 0
+}

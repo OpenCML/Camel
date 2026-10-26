@@ -72,18 +72,17 @@
 #                          ^ meta.parens.camel punctuation.section.parens.end.camel
 #                            ^^ keyword.operator.arrow.camel
 #                               ^^^^ support.type.primitive.camel
->type Effect = sync (x: int) => void
+>type Effect = (x: int) => void
 #^^^^ meta.type.definition.camel storage.type.type.camel
 #     ^^^^^^ meta.type.definition.camel entity.name.type.camel
 #            ^ keyword.operator.assignment.camel
-#              ^^^^ storage.modifier.sync.camel
-#                   ^ meta.parens.camel punctuation.section.parens.begin.camel
-#                    ^ meta.parens.camel variable.parameter.camel
-#                     ^ meta.parens.camel punctuation.separator.colon.camel
-#                       ^^^ meta.parens.camel support.type.primitive.camel
-#                          ^ meta.parens.camel punctuation.section.parens.end.camel
-#                            ^^ keyword.operator.arrow.camel
-#                               ^^^^ support.type.primitive.camel
+#              ^ meta.parens.camel punctuation.section.parens.begin.camel
+#               ^ meta.parens.camel variable.parameter.camel
+#                ^ meta.parens.camel punctuation.separator.colon.camel
+#                  ^^^ meta.parens.camel support.type.primitive.camel
+#                     ^ meta.parens.camel punctuation.section.parens.end.camel
+#                       ^^ keyword.operator.arrow.camel
+#                          ^^^^ support.type.primitive.camel
 >type Grid = float[][]
 #^^^^ meta.type.definition.camel storage.type.type.camel
 #     ^^^^ meta.type.definition.camel entity.name.type.camel

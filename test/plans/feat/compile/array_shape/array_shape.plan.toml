@@ -368,7 +368,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "named_dimension_makes_no_instance"
-desc = "A named dimension is not part of what an instance is keyed by (design principles 5.4): a function whose parameter is written `f32[n]` is not a generic function, and the graph of a program that calls it -- at a depth only the run knows -- holds the declaration itself and no instance of it, declared `(xs: f32[n], k: int) => f32`. The name is written once in the signature, so the compiler warns and the program still runs."
+desc = "A named dimension is not part of what an instance is keyed by (design principles 5.4): a function whose parameter is written `f32[n]` is not a generic function, and the graph of a program that calls it -- at a depth only the run knows -- holds the declaration itself and no instance of it, declared `(xs: f32[n], k: int) => f32 pure`: the declaration wrote no resource clause, so its type carries the set its body was measured to reach, which is the empty one. The name is written once in the signature, so the compiler warns and the program still runs."
 kind = "behavior"
 case = "../../../../cases/compile/array_shape/grow_named_dimension.cml"
 args = ["${case}", "std::jgir"]
@@ -385,7 +385,7 @@ for (const name of names) {
   assert(['__root__', 'main', 'grow'].includes(name), `unexpected graph '${name}'`)
 }
 const grow = doc.graphs.find((g) => g.name === 'grow')
-assert(grow && grow.signature === '(xs: f32[n], k: int) => f32', `grow is declared '${grow && grow.signature}'`)
+assert(grow && grow.signature === '(xs: f32[n], k: int) => f32 pure', `grow is declared '${grow && grow.signature}'`)
 }
 """
 timeout_ms = 8000

@@ -1,6 +1,6 @@
-import { test } from re
+import { has_match } from re
 
 func main(): int sync {
-    println(test('(unclosed', 'abc'))
+    println('abc'->has_match<'(unclosed'>)
     return 0
 }

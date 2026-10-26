@@ -49,12 +49,14 @@ timeout_ms = 10000
 
 [[tests]]
 name = "camel_pass_error_stops_the_pipeline"
-desc = "A pass that returns an error value fails with its kind and message, and the program does not run."
+desc = "A pass that returns an error value stops the pipeline at that pass: the error value reaches the exit unhandled, so it is reported on standard error, the exit code is not zero, and the program does not run."
 kind = "negative"
 case = "../../../cases/modules/graph_pass/tiny.cml"
 args = ["${case}", "identity::refuse", "std::nvm"]
 expect_exit = 1
-expect_output_contains = ["GraphPassFailed", "error NotSupported: this program has too few graphs"]
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_diagnostic_code = "0x04000051"
+expect_stderr_contains = ["An error value reached the exit of 'main' without being handled: NotSupported: this program has too few graphs"]
 expect_output_not_contains = ["42"]
 timeout_ms = 10000
 
@@ -178,13 +180,13 @@ expect_output_not_contains = ["126"]
 timeout_ms = 10000
 
 [[tests]]
-name = "txn_conflict"
-desc = "Two transactions edit one graph; the second commit gives the error GraphConflict."
+name = "txn_two_commits_are_two_values"
+desc = "Two transactions edit one graph of the same Program; each commit makes a Program of its own (design principles 9.1), so the second succeeds too."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/edits.cml"
 args = ["${case}", "probes::conflict", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "GraphConflict\n126\ntext\n"
+expect_stdout_exact = "ok\n126\ntext\n"
 timeout_ms = 10000
 
 [[tests]]
@@ -589,7 +591,7 @@ kind = "negative"
 case = "../../../cases/modules/graph_pass/tiny.cml"
 args = ["${case}", "unparsable_pass::run", "std::nvm"]
 expect_exit = 1
-expect_output_contains = ["InvalidPassParameter", "its library 'unparsable_pass' does not compile. [SyntaxDiag::MissingClosingDelimiter:", "Expected ')' before 'return', to close the '('.", "at <ROOT>/test/cases/modules/graph_pass/unparsable_pass.cml:7:5]"]
+expect_output_contains = ["InvalidPassParameter", "its library 'unparsable_pass' does not compile. [SyntaxDiag::MissingClosingDelimiter:", "Expected ')' before 'return', to close the '('.", "at <ROOT>/test/cases/modules/graph_pass/unparsable_pass.cml:8:5]"]
 expect_output_not_contains = ["42", "does not compile: SyntaxDiag"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
 timeout_ms = 10000
@@ -621,7 +623,7 @@ kind = "negative"
 case = "../../../cases/modules/graph_pass/imports_unparsable.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 1
-expect_output_contains = ["ModuleParseFailed", "SyntaxDiag::MissingClosingDelimiter", "unparsable_pass.cml:7:5"]
+expect_output_contains = ["ModuleParseFailed", "SyntaxDiag::MissingClosingDelimiter", "unparsable_pass.cml:8:5"]
 expect_output_not_contains = ["InvalidPassParameter", "42"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
 timeout_ms = 10000
@@ -638,7 +640,7 @@ kind = "negative"
 case = "../../../cases/modules/graph_pass/tiny.cml"
 args = ["${case}", "unparsable_pass_lib::run", "std::nvm"]
 expect_exit = 1
-expect_output_contains = ["RuntimeDiag::InvalidPassParameter", "its library 'unparsable_pass_lib' does not compile. [SyntaxDiag::MissingClosingDelimiter:", "unparsable_pass_lib.cml:9:5"]
+expect_output_contains = ["RuntimeDiag::InvalidPassParameter", "its library 'unparsable_pass_lib' does not compile. [SyntaxDiag::MissingClosingDelimiter:", "unparsable_pass_lib.cml:10:5"]
 expect_output_not_contains = ["(name=SyntaxDiag::MissingClosingDelimiter", "42"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
 timeout_ms = 10000
@@ -654,7 +656,7 @@ kind = "negative"
 case = "../../../cases/modules/graph_pass/unparsable_pass.cml"
 args = ["${case}", "unparsable_pass_lib::run"]
 expect_exit = 1
-expect_output_contains = ["(name=SyntaxDiag::MissingClosingDelimiter", "unparsable_pass.cml:7:5"]
+expect_output_contains = ["(name=SyntaxDiag::MissingClosingDelimiter", "unparsable_pass.cml:8:5"]
 expect_output_not_contains = ["unparsable_pass_lib.cml", "InvalidPassParameter"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
 timeout_ms = 10000
@@ -666,7 +668,7 @@ kind = "negative"
 case = "../../../cases/modules/graph_pass/unparsable_pass.cml"
 args = ["--error-format", "text", "${case}", "unparsable_pass_lib::run"]
 expect_exit = 1
-expect_output_contains = ["error[SyntaxDiag::MissingClosingDelimiter]", "unparsable_pass.cml:7:5", "camel: 1 error"]
+expect_output_contains = ["error[SyntaxDiag::MissingClosingDelimiter]", "unparsable_pass.cml:8:5", "camel: 1 error"]
 expect_output_not_contains = ["unparsable_pass_lib.cml", "InvalidPassParameter", "camel: 2 errors"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
 timeout_ms = 10000
@@ -683,7 +685,7 @@ kind = "negative"
 case = "../../../cases/modules/graph_pass/imports_unparsable.cml"
 args = ["${case}", "unparsable_pass_lib::run", "std::nvm"]
 expect_exit = 1
-expect_output_contains = ["(name=SemanticDiag::ModuleParseFailed", "unparsable_pass.cml:7:5"]
+expect_output_contains = ["(name=SemanticDiag::ModuleParseFailed", "unparsable_pass.cml:8:5"]
 expect_output_not_contains = ["unparsable_pass_lib.cml"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
 timeout_ms = 10000
@@ -695,7 +697,7 @@ kind = "negative"
 case = "../../../cases/modules/graph_pass/imports_unparsable.cml"
 args = ["--error-format", "text", "${case}", "unparsable_pass_lib::run", "std::nvm"]
 expect_exit = 1
-expect_output_contains = ["[imported by main]", "unparsable_pass.cml:7:5", "camel: 2 errors"]
+expect_output_contains = ["[imported by imports_unparsable]", "unparsable_pass.cml:8:5", "camel: 2 errors"]
 expect_output_not_contains = ["unparsable_pass_lib.cml", "camel: 3 errors"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
 timeout_ms = 10000
@@ -726,7 +728,7 @@ kind = "negative"
 case = "../../../cases/modules/graph_pass/tiny.cml"
 args = ["--timeit", "unparsable_pass_lib::run/1", "${case}"]
 expect_exit = 1
-expect_output_contains = ["[timeit] 1/1 pass=unparsable_pass_lib::run failed", "RuntimeDiag::InvalidPassParameter", "its library 'unparsable_pass_lib' does not compile.", "unparsable_pass_lib.cml:9:5"]
+expect_output_contains = ["[timeit] 1/1 pass=unparsable_pass_lib::run failed", "RuntimeDiag::InvalidPassParameter", "its library 'unparsable_pass_lib' does not compile.", "unparsable_pass_lib.cml:10:5"]
 expect_output_not_contains = ["(name=SyntaxDiag::MissingClosingDelimiter", "elapsed=", "mean"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
 timeout_ms = 10000

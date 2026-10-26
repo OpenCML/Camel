@@ -229,7 +229,7 @@ primaryType        : structType | enumType | identRef | '(' typeExpr ')' | tuple
 tupleType          : '(' typeList? ','? ')'
 structType         : '{' (keyTypePair (',' keyTypePair)*)? ','? '}'
 keyTypePair        : tagUse* identDef ':' typeExpr
-funcType           : modifiers? angledParams? parentParams '=>' typeExpr resourceClause?
+funcType           : angledParams? parentParams '=>' typeExpr resourceClause?
 resourceClause     : ('uses' identRef (',' identRef)* | 'pure')+
 typeList           : typeExpr (',' typeExpr)*
 enumType           : 'enum' '{' (enumVariant (',' enumVariant)*)? ','? '}'

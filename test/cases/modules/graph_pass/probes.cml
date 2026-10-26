@@ -86,7 +86,8 @@ export func abort_unused(p: Program): Program! sync {
     return p
 }
 
-/// Two transactions edit the same graph; the one that commits second conflicts.
+/// Two transactions edit the same graph of one Program: each commit is a value of its own, so
+/// both succeed (design principles 9.1), and the pass hands on the first.
 export func conflict(p: Program): Program! sync {
     let first = open(p)
     let second = open(p)

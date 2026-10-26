@@ -278,7 +278,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "captured_write_graph.edges"
-desc = "The control edges for captured variables in the compiled graph: writer call -> later reader call; earlier user call -> waited writer call; none between two calls of a recursive function that only reads its captured variable; JOIN of a branch whose arm writes -> the later read."
+desc = "How a captured variable written by a call reaches its later readers in the compiled graph: the call's value carries the new version, the reader takes that version as a `with` argument, and no control edge stands in for it. A writer still waits for its earlier readers; a read-only recursive function orders nothing; the JOIN of a branch whose arm writes precedes the later read."
 kind = "behavior"
 case = "../../../cases/linear/byref/captured_write_graph.cml"
 args = ["${case}", "std::gir"]
@@ -296,7 +296,15 @@ const one = (label, type) => {
 }
 const edge = (from, to, type) =>
     new RegExp(from + ' -> ' + to + ' \\[label="[^"]*", type="' + type + '"').test(text)
-assert(edge(one('write_a', 'FUNC'), one('read_a', 'FUNC'), 'CTRL'), 'missing write_a -> read_a')
+// The call hands the new version of `a` on as the second part of its value, and the later read
+// takes that version. Nothing stands in for it with a control edge any more.
+const writeA = one('write_a', 'FUNC')
+const readA = one('read_a', 'FUNC')
+const version = text.match(new RegExp(writeA + ' -> (N[0-9A-F]+) \\[label="1\\|0", type="NORM"'))
+assert(version, 'missing the access node of the second part of the value of write_a')
+assert(edge(version[1], readA, 'WITH'), 'missing the version of a -> read_a')
+assert(!edge(writeA, readA, 'CTRL'), 'the substituted control edge must be gone')
+// A writer still waits for the reader that comes before it.
 assert(edge(one('use_b', 'FUNC'), one('write_b', 'FUNC'), 'CTRL'), 'missing use_b -> write_b')
 assert(!edge(one('write_b', 'FUNC'), one('use_b', 'FUNC'), 'CTRL'), 'write_b must not precede use_b')
 // look: one call inside its own arm, two in reads(). The two outer calls are unordered.
@@ -631,11 +639,182 @@ const diags = JSON.parse(input.stderr)
 const at = d => (d.range.start.line + 1) + ':' + (d.range.start.character + 1)
 const ignored = diags.filter(d => d.data.name === 'SemanticDiag::IgnoredSideEffect').map(d => at(d) + ' ' + d.message)
 const want = [
-    "39:20 The call of 'write_a: () => int pure' is not in a sync block, and it writes the captured variable 'a'.",
-    "58:13 The branch is not in a sync block, and an arm writes the captured variable 'c'.",
+    "40:20 The call of 'write_a: () => int' is not in a sync block, and it writes the captured variable 'a'.",
+    "59:13 The branch is not in a sync block, and an arm writes the captured variable 'c'.",
 ]
 assert(JSON.stringify(ignored) === JSON.stringify(want), 'IgnoredSideEffect: ' + ignored.join(' | '))
 assert(!diags.some(d => d.message.includes("'look'") || d.message.includes("'limit'")), 'the read-only recursive function is not reported')
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "captured_write_value.default"
+desc = "The value a call hands on when it writes captured variables: the tuple of its return value and the new version of each variable it wrote, in capture order; a void writer's value is that one version; a call writing nothing is unchanged; an unused return value has no access node. Pipeline: default (no pass)."
+kind = "behavior"
+case = "../../../cases/linear/byref/captured_write_value.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '7110 | 12 | 30 | 54 | 95', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "captured_write_value.fvm"
+desc = "The value a call hands on when it writes captured variables: the tuple of its return value and the new version of each variable it wrote, in capture order; a void writer's value is that one version; a call writing nothing is unchanged; an unused return value has no access node. Pipeline: std::fvm."
+kind = "behavior"
+case = "../../../cases/linear/byref/captured_write_value.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '7110 | 12 | 30 | 54 | 95', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "captured_write_value.jit"
+desc = "The value a call hands on when it writes captured variables: the tuple of its return value and the new version of each variable it wrote, in capture order; a void writer's value is that one version; a call writing nothing is unchanged; an unused return value has no access node. Pipeline: std::jit."
+kind = "behavior"
+case = "../../../cases/linear/byref/captured_write_value.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '7110 | 12 | 30 | 54 | 95', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "captured_write_value.tf"
+desc = "The value a call hands on when it writes captured variables: the tuple of its return value and the new version of each variable it wrote, in capture order; a void writer's value is that one version; a call writing nothing is unchanged; an unused return value has no access node. Pipeline: std::tf."
+kind = "behavior"
+case = "../../../cases/linear/byref/captured_write_value.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '7110 | 12 | 30 | 54 | 95', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "captured_write_value.macro"
+desc = "The value a call hands on when it writes captured variables: the tuple of its return value and the new version of each variable it wrote, in capture order; a void writer's value is that one version; a call writing nothing is unchanged; an unused return value has no access node. Pipeline: std::macro."
+kind = "behavior"
+case = "../../../cases/linear/byref/captured_write_value.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '7110 | 12 | 30 | 54 | 95', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "captured_write_value.inline"
+desc = "The value a call hands on when it writes captured variables: the tuple of its return value and the new version of each variable it wrote, in capture order; a void writer's value is that one version; a call writing nothing is unchanged; an unused return value has no access node. Pipeline: std::opt::inline."
+kind = "behavior"
+case = "../../../cases/linear/byref/captured_write_value.cml"
+args = ["${case}", "std::opt::inline"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '7110 | 12 | 30 | 54 | 95', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "captured_write_value.macro_fvm"
+desc = "The value a call hands on when it writes captured variables: the tuple of its return value and the new version of each variable it wrote, in capture order; a void writer's value is that one version; a call writing nothing is unchanged; an unused return value has no access node. Pipeline: std::macro std::fvm."
+kind = "behavior"
+case = "../../../cases/linear/byref/captured_write_value.cml"
+args = ["${case}", "std::macro", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '7110 | 12 | 30 | 54 | 95', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "captured_write_value.shape"
+desc = "The shape of the value of a call that writes captured variables, on the graph dump: two_writes() is (int, var int, var int) with the return value first and the versions in capture order; bump_void() is var int alone, unwrapped; plain() is int with no access node; unused() is (int, var int) with an access node for the version only. No control edge stands in for the version."
+kind = "behavior"
+case = "../../../cases/linear/byref/captured_write_value.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.stdout
+const funcNode = (label) => {
+    const m = text.match(new RegExp('(N[0-9A-F]+) \\[label="' + label + '", type="FUNC", [^\\]]*value_type="([^"]+)"'))
+    assert(m, `no call of ${label}`)
+    return { node: m[1], type: m[2] }
+}
+const accsType = (node) => {
+    const m = text.match(new RegExp(node + ' \\[label="\\.(\\d+)", type="ACCS", value_type="([^"]+)"'))
+    return m ? { part: Number(m[1]), type: m[2] } : null
+}
+// The parts of a call's value that are read through an access node.
+const accessParts = (node) =>
+    [...text.matchAll(new RegExp(node + ' -> (N[0-9A-F]+) \\[label="(\\d+)\\|0", type="NORM"', 'g'))]
+        .map(m => accsType(m[1]))
+        .filter(a => a !== null)
+        .sort((a, b) => a.part - b.part)
+// two_writes() writes both `p` and `q` and returns int: the return value, then the versions.
+const two = funcNode('two_writes')
+assert(two.type === '(int, var int, var int)', `two_writes is a ${two.type}`)
+const twoParts = accessParts(two.node)
+assert(twoParts.length === 3, `two_writes reads ${twoParts.length} parts through an access node`)
+assert(twoParts.map(p => p.part).join(',') === '0,1,2', 'the parts are the return value and then the versions in capture order')
+assert(twoParts.map(p => p.type).join(',') === 'int,var int,var int', 'the parts are typed return value first')
+// bump_void() writes one variable and returns nothing: that version itself, not a tuple.
+const bump = funcNode('bump_void')
+assert(bump.type === 'var int', `bump_void is a ${bump.type}`)
+assert(accessParts(bump.node).length === 0, 'a void writer hands its one version on unwrapped')
+// plain() writes no captured variable: its value is its return value, with no access node.
+const plain = funcNode('plain')
+assert(plain.type === 'int', `plain is a ${plain.type}`)
+assert(accessParts(plain.node).length === 0, 'a call that writes no captured variable has no parts')
+// unused() writes `m` and its return value is dropped: only the version has an access node.
+const unused = funcNode('unused')
+assert(unused.type === '(int, var int)', `unused is a ${unused.type}`)
+const unusedParts = accessParts(unused.node)
+assert(unusedParts.length === 1 && unusedParts[0].part === 1 && unusedParts[0].type === 'var int',
+    `unused reads ${JSON.stringify(unusedParts)} through an access node, wanted the version of m alone`)
+// The reads written after two_writes() take the version's access node, not a control edge.
+const section = text.slice(text.indexOf('label="two_case"'), text.indexOf('label="void_case"'))
+assert(section.length > 0, 'no graph for two_case')
+const reads = [...section.matchAll(/(N[0-9A-F]+) \[label=":var\/(?:get|peek)", type="OPER"/g)].map(m => m[1])
+assert(reads.length > 0, 'no read of a captured variable after the call in two_case')
+for (const r of reads)
+    assert(!new RegExp(two.node + ' -> ' + r + ' \\[label="[^"]*", type="CTRL"').test(section),
+        `the call must not order the read ${r} with a control edge`)
 }
 """
 timeout_ms = 10000

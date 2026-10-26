@@ -2,7 +2,7 @@ import { reshape, sum, abs } from tensor
 import { with_grad } from autodiff
 import { upload, download, inspect, benchmark, run_preferred_resident } from tiles
 with <x: f32[..]>
-func loss(): float { return -(sum(x * x) + sum(x) * 2.0 - 1.0) / 3.0 }
+func loss(): float { return -(float(sum(x * x)) + float(sum(x)) * 2.0 - 1.0) / 3.0 }
 func loss_value(x: f32[..]): float { return loss<x>() }
 func arithmetic(a: float, b: float): float { return (a + b) * 2.0 - a / b }
 func main(): int sync {

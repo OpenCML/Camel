@@ -172,8 +172,6 @@ std::string typeCodeToString(TypeCode code);
 /// by hand as text (the type rules of built-in operators); a Type prints itself that way.
 std::string sourceTypeSpelling(std::string_view text);
 
-extern const signed char primitiveTypeConvMatrix[6][6];
-
 class Type;
 using type_vec_t = std::vector<Type *>;
 
@@ -270,6 +268,15 @@ class Type {
     virtual CastSafety castSafetyFrom(Type *sourceType) const;
     virtual slot_t castSlotFrom(slot_t value, Type *sourceType) const;
     bool assignableFrom(Type *sourceType) const;
+    /**
+     * Whether an argument of this type gives a type parameter of a generic function the type it
+     * binds (design principles 5.9). A value of the type does; a handle into a program or a draft
+     * (`graph::Node` and the other handle kinds) does not: it stands for a value of the program
+     * being rewritten and says nothing about which type that value has, so a fact asked for with
+     * one (`range(n)`) has its type arguments written out (`range::<int>(n)`) rather than read off
+     * the handle.
+     */
+    virtual bool determinesTypeParameters() const { return true; }
 
     /**
      * The dimensions this type states, in declaration order, as compile-time extents (design

@@ -12,7 +12,7 @@ func via(f: (n: int) => int, n: int): int {
 func step(n: int): int { return 0 + via(step, n) }
 
 func main(): int sync {
-    let n = int(get_env('N'))
+    let n = int(get_env('N') ?? '')
     println('start')
     println(step(n))
     println('done')

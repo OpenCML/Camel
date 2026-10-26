@@ -9,7 +9,7 @@ type Pair<T> = (T, T)
 type Entry<K, V> = { key: K, value: V }
 type Tight<T>= T[]
 type Predicate = (p: Point) => bool
-type Effect = sync (x: int) => void
+type Effect = (x: int) => void
 type Grid = float[][]
 type Shape = f32[3, 4]
 type Lookup = Map<string, Set<i64>>

@@ -1,0 +1,58 @@
+/**
+ * A composite literal in the receiver of `->` takes the parameter's type, as it does when it is
+ * written as the first ordinary argument (design principles 4.4, 5.1): `[1.0, 2.0]->total` with
+ * `total(xs: f32[])` is an `f32[]`, an integer element takes the element type, a struct and a
+ * tuple receiver become the parameter's named type or tuple, and the elements are converted once
+ * from the values as they were written.
+ *
+ * The last two lines are what tells a conversion element by element from the double the whole
+ * literal was first given: the same array written in a declared `f32[]` position takes its type
+ * from the elements (an `f32[]` whose `1.0` was rounded through `float`), while the receiver
+ * form converts each element from the exact value written, so the value just above the f32
+ * midpoint prints 1.00000012 and not 1.
+ */
+module literal_context_arrow_receiver
+
+type Point = { x: f32, y: f32 }
+type Box = { xs: f32[] }
+
+func total(xs: f32[]): f32 { return xs[0] + xs[1] }
+func sum32(xs: i32[]): i32 { return xs[0] + xs[1] }
+func count(xs: f32[]): int { return len(xs) }
+func norm(p: Point): f32 { return p.x * p.x + p.y * p.y }
+func volume(b: Box): f32 { return b.xs[0] * b.xs[1] }
+func corner(xs: f32[][]): f32 { return xs[1][0] }
+func pairSum(t: (f32, f32)): f32 { return t.0 + t.1 }
+func join::<T>(a: T[], b: T[]): T { return a[0] + b[0] }
+
+// An array literal, an integer element, an empty one, and a nested array.
+func arrayReceiver(): f32 { return [1.0, 2.0]->total }
+func integerElement(): i32 { return [1, 2]->sum32 }
+func emptyReceiver(): int { return []->count }
+func nestedArray(): f32 { return [[1.0, 2.0], [3.0, 4.0]]->corner }
+
+// A struct receiver, a struct receiver whose field is written as an array, and a tuple receiver.
+func structReceiver(): f32 { return { x: 3.0, y: 4.0 }->norm }
+func structArrayField(): f32 { return { xs: [3.0, 4.0] }->volume }
+func tupleReceiver(): f32 { return (1, 2.5)->pairSum }
+
+// The receiver enters the first call of a chain, and an argument written after the receiver is
+// an argument like any other.
+func chainedReceiver(): f32 { return [1.0, 2.0]->join([3.0, 4.0]) }
+func afterReceiver(): float { return [1.0, 2.0]->total->float }
+
+// The element is converted from the value written: 1.00000012, never the 1 that the double the
+// literal has without a position prints.
+func exactElement(): f32 { return [1.0000000596046447753906251, 2.0]->total }
+func declaredElement(): f32 {
+    let xs: f32[] = [1.0000000596046447753906251, 2.0]
+    return xs[0] + xs[1]
+}
+
+func main(): int sync {
+    println(arrayReceiver(), integerElement(), emptyReceiver(), nestedArray())
+    println(structReceiver(), structArrayField(), tupleReceiver())
+    println(chainedReceiver(), afterReceiver())
+    println('{:.9g}'->format<exactElement()>, '{:.9g}'->format<declaredElement()>)
+    return 0
+}

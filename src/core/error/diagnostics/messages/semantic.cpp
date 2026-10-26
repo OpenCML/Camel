@@ -1605,6 +1605,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::StreamCaptured,
+            {
+                "StreamCaptured",
+                "'{0}' cannot be captured: a stream is read once, and a closure outlives the read.",
+                "A stream is read one element at a time and is done when it ends, so on each execution path its value has one consumer (design principles 5.4). The body of a closure runs after the path that made the closure has finished, so the read a capture would make is not that path's one read: write the stream where it is consumed -- as the argument of a call that reads it, or as the subject of a loop -- and let a closure that needs a stream open one of its own.",
+            },
+        },
+        {
             SemanticDiag::NodeOfNotAParameter,
             {
                 "NodeOfNotAParameter",
@@ -1682,6 +1690,30 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "IdentifierPatternNeedsNullableOrErrorType",
                 "The pattern '{0}' takes a value of type 'T?' or 'T!' apart, and this value has type '{1}': write '?\?' or '!!', or a 'match' pattern that is a literal or '_'.",
                 "The patterns that bind are the fixed forms of the two marks (design principles 3.8): `error e` reads the error out of a `T!`, and a plain name reads the value out of a `T?` or a `T!`. Over any other type there is no mark to take apart, so the value is read with a literal pattern or '_'.",
+            },
+        },
+        {
+            SemanticDiag::FactJoinRequired,
+            {
+                "FactJoinRequired",
+                "The fact '{0}' writes no 'join'.",
+                "`join` is the clause that is required: it says how the facts of two writings of one value are merged, and it is the least upper bound of the two (rewrite design 7.5). Write it after the cases, naming one binary function or a lambda: `}} join max`, `}} join (lhs: int, rhs: int) => lhs | rhs`. Without it a value the program wrote two ways has no fact the engine can settle on.",
+            },
+        },
+        {
+            SemanticDiag::FactConstCaseTypeRequired,
+            {
+                "FactConstCaseTypeRequired",
+                "The 'const' case '{0}' of the fact '{1}' writes no type.",
+                "A `const` case matches one constant, and the fact function is given the value itself, so the type of that constant is written somewhere (rewrite design 7.5): in the case (`case const c: int => c`), or in the head of a fact that declares the value it is about with a type (`fact sign(v: int): int`), whose first parameter's type the case then takes.",
+            },
+        },
+        {
+            SemanticDiag::FactCaseBindsNoVariable,
+            {
+                "FactCaseBindsNoVariable",
+                "This case of the fact '{0}' names no variable.",
+                "The cases read how a value was built, and the parts they read are the variables their patterns name: `case x + y` binds the two operands, and the fact function is computed from them (rewrite design 7.5). A pattern that names no variable leaves the case with nothing to read, so the fact says nothing about the values it matches; bind a part with a name, or write `case _`, which is the last case and says what the fact is for a value no other case matched.",
             },
         },
         {

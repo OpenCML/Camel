@@ -38,7 +38,9 @@ func main(): int sync {
     let one = 5..6->map<(x: int): int => x + 1>
     println('edge', len(none), one)
 
-    unordered_foreach<(x: int) => x>(0..5000)
+    // `unordered_foreach` drops what its element function gives, so the function is written for its
+    // effects and nothing here is printed.
+    unordered_foreach<(x: int) => sync { let _ = x }>(0..5000)
     println('done')
     return 0
 }

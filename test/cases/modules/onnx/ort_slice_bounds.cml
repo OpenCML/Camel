@@ -20,10 +20,10 @@ func branch(x: f32[..]): f32[..] {
 func main(): int sync {
     let x = reshape([1.0, 1.0, 1.0] as f32[], [3])
     println(head(x))
-    if get_env('MODE') == 'branch' then {
-        export_model((x: f32[..]): f32[..] => branch(x), x, get_env('ONNX_OUT'))
+    if (get_env('MODE') ?? '') == 'branch' then {
+        export_model((x: f32[..]): f32[..] => branch(x), x, get_env('ONNX_OUT') ?? '')
     } else {
-        export_model((x: f32[..]): f32[..] => head(x), x, get_env('ONNX_OUT'))
+        export_model((x: f32[..]): f32[..] => head(x), x, get_env('ONNX_OUT') ?? '')
     }
     println('exported')
     return 0

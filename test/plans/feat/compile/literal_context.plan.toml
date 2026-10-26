@@ -500,6 +500,40 @@ expect_stdout = "10 10 10\nabc 10\n10 4.0\n5 0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
+# `x->f` is `f(x, ...)`, so a composite literal in the receiver of the arrow is the first
+# ordinary argument and takes the parameter's type by the same rule (design principles 4.4, 5.1):
+# `[1.0, 2.0]->total` with `total(xs: f32[])` is an `f32[]`, an integer element takes the element
+# type, a struct and a tuple receiver become the parameter's type, and the elements are converted
+# once from the values as they were written (1.00000012, not the 1 the double prints).
+
+[[tests]]
+name = "context.arrow_receiver"
+desc = "A composite literal in the receiver of `->` takes the parameter's type: `[1.0, 2.0]->total` with `xs: f32[]` is an `f32[]` (an integer element too), `[]` is the empty one, a nested array, a struct literal and a struct literal with an array field become the parameter's type, and so does a tuple. The receiver enters the first call of a chain, an argument written after the receiver is an argument like any other, and the element just above the f32 midpoint prints 1.00000012 where the same array written in a declared `f32[]` position prints 1 (that one is a `float[]` rounded through the double)."
+kind = "behavior"
+case = "../../../cases/compile/literals/context_arrow_receiver.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_not_contains = ["Error", "Warn"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+expect_stdout_exact = "3.0 3 0 3.0\n25.0 12.0 3.5\n4.0 3.0\n3 3\n"
+timeout_ms = 8000
+
+[[tests]]
+name = "context.arrow_receiver_out_of_range"
+desc = "An element of a composite literal in the receiver of `->` takes the element type of the parameter: 3000000000 does not fit the i32 of `sum32`, and the arrow call is refused with `LiteralNotRepresentable` (quoting the element) instead of `NoMatchingFunction`."
+kind = "negative"
+case = "../../../cases/compile/literals/context_arrow_receiver_out_of_range.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
+expect_diagnostic_line = 14
+expect_diagnostic_column = 17
+expect_output_contains = ["'3000000000'", "type 'i32'", "out of range (-2147483648 to 2147483647)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
 [[tests]]
 name = "context.array_argument_out_of_range"
 desc = "An element of an array literal argument takes the element type of the parameter: 3000000000 does not fit the i32 of `sum32([1, 3000000000])`, and the call is refused with `LiteralNotRepresentable` (quoting the element) instead of `NoMatchingFunction`."

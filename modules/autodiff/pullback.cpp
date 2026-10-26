@@ -547,8 +547,17 @@ void pruneUnreachable(GraphDraft &draft) {
             continue;
         }
         live[node] = true;
-        for (auto inputs :
-             {draft.normInputsOf(node), draft.withInputsOf(node), draft.ctrlInputsOf(node)}) {
+        // Dead code is judged along the data edges and the sync edges, so a sync predecessor is
+        // used (docs/design/effects/edges.cn.md 4, the rule for the three kinds; 2, the execution
+        // rule reaches a node from the result along the data edges or the sync edges; 1.5, the
+        // table that gives the sync edge to scheduling and the liveness judgement). The wait a
+        // statement carries is written in the control kind or, where the chain of its block has
+        // moved onto the sync kind, as its sync predecessor; reading only the control kind would
+        // prune the statements a chain holds up.
+        for (auto inputs : {draft.normInputsOf(node),
+                            draft.withInputsOf(node),
+                            draft.ctrlInputsOf(node),
+                            draft.syncInputsOf(node)}) {
             for (gc_node_ref_t input : inputs) {
                 if (!live[input]) {
                     stack.push_back(input);
@@ -4099,7 +4108,7 @@ const PullbackPlan &Engine::planForClosure(GCGraph *graph) {
         portTypes.push_back(captured);
     }
     lifted->setFuncType(
-        FunctionType::create(withParams, normParams, type->exitType(), type->modifiers()));
+        FunctionType::create(withParams, normParams, type->exitType()));
     lifted->setClosureType(nullptr);
     PullbackPlan plan =
         reserve(graph->name(), makePlanTypes(std::move(portTypes), type->exitType()));
@@ -4268,8 +4277,7 @@ void Engine::build(Pending &pending) {
         FunctionType::create(
             withParams,
             normParams,
-            plan.forwardValueType,
-            sourceType->modifiers()));
+            plan.forwardValueType));
 
     group_.define(plan.forward, std::move(pending.source));
     group_.define(plan.pullback, std::move(pullback));

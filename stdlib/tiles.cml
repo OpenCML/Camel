@@ -2,46 +2,42 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Programs on a CUDA device: a function value is compiled to device code, its inputs are uploaded,
- * the device computes, and the results come back to the host. `tiles::compile` outlines the regions
- * the device can run, `source`/`inspect`/`benchmark` show what would run, and `upload`/`download`
- * move a value by hand. Placement is asked for in the source with the `#gpu` label (design
- * principles 13.4), which `tiles::compile` reads; the card is chosen at run time with `--devices`.
- * The device holds a foreign resource (`tiles:device`) and the driver is ambient state
- * (`tiles:driver`), so every operator of this module has effects and none is folded or dropped.
+ * Programs on a CUDA device. Where a computation runs is asked for in the source with the tag
+ * `#gpu`, written on a function, a block or a namespace block (design principles 13.4), and the
+ * card is chosen when the program runs, with `--devices`. The pass `tiles::compile` reads
+ * the tags, outlines the regions the device can run, compiles them and runs the program: an
+ * operator the device cannot run inside a `#gpu` scope is a compile error that names the operator
+ * and the scope, never a quiet fall back to the host. An array on the device is an ordinary array
+ * value whose data block lives there; the host reading it (printing, writing a file, turning it
+ * into a host number) downloads it, and the reports of a run list every such transfer.
+ *
+ * What a program does by hand is small: ask whether a device is there (`available`, `device`), move
+ * a value (`upload`, `download`), and look at what would run (`source`, `inspect`, `benchmark`,
+ * `regions`). The device and the driver are one resource, `driver`, so every call here keeps its
+ * written order against the others and is never folded, merged or dropped. The functions to look
+ * at are the `with` argument and the data is the example input, as for `map`:
+ * `inputs->inspect<fn>`.
+ *
+ * The functions that compute their type from an argument (`upload`, `download`, `source`,
+ * `inspect`, `benchmark`, `regions`, and `run_preferred_resident`, the entry `tiles::compile` and
+ * the tests use) are in `stdlib/signatures/tiles.cml`.
  */
 
-// The declarations of the operators of the C++ module `modules/tiles` (design principles 6.4).
-// This file is the one source of the two fixed signatures; the C++
-// side keeps the kernels, the executor, the operator traits, the resources and the semantics.
-//
-// The other seven operators the module exports compute their signature from an argument, so they
-// stay in C++ (`DynamicFuncTypeResolver`): `upload`/`download` wrap and unwrap every leaf of their
-// argument in the module's `Device<...>` handle; `run_preferred_resident` takes the function's
-// parameter list as the ordinary parameter and answers its result type wrapped in `Device<...>`;
-// `source`, `inspect` and `benchmark` answer text but their ordinary parameter is the function's
-// parameter list; `regions` takes any function value. `stdlib/signatures/tiles.cml` keeps their
-// reference entries, as `json` and `random` do with their computed signatures.
-//
-// No signature of this module depends on which device the run selects, or on a shape known at
-// compile time: `available` and `device` answer a capability question at run time and their types
-// are fixed. Device-dependent types are the `Device<...>` results of the computed operators, and
-// their host type — a tensor's static shape included — comes from the argument.
-
+/// The CUDA driver and the devices behind it, as one resource: every use of the device is a use
+/// of this.
+export resource driver
 
 /// Whether this machine can run a program on a CUDA device: false when the driver, the toolkit or
-/// a visible device is missing. A capability question only — a device the run names with
-/// `--devices` and that is not there is a fault, never `false`.
-/// @effect probes the driver
+/// a visible device is missing. A capability question only -- a device the run names with
+/// `--devices` and that is not there is a fault at start-up, never `false`.
 /// @example available()
-export func available(): bool
+export func available(): bool uses driver
 
 /// A description of the CUDA device the run selects: its ordinal, name, compute capability and
-/// memory. Asking is a requirement, not a preference: with no device the call is a fault.
-/// @effect probes the driver
-/// @fails fault `RuntimeError` when this build or this machine has no CUDA device; fault `DeviceUnavailable` when `--devices` names a device that is not there
-/// @example println(device())
-export func device(): string
+/// memory.
+/// @fails error value `DeviceUnavailable` when this build or this machine has no CUDA device
+/// @example device() !! 'no device'
+export func device(): string! uses driver
 
 // -----------------------------------------------------------------------------
 // Passes: functions the pipeline applies to the program
@@ -49,4 +45,5 @@ export func device(): string
 
 /// Outlines the regions the device can run, compiles them and executes the program; the card is
 /// chosen at run time with `--devices`, never by a pass parameter.
-export func compile::<F>(f: F): F! when is_function::<F>()
+/// @fails error value `GpuScopeUnsupported` when a `#gpu` scope holds an operator the device cannot run (the error names the operator and the scope)
+export func compile::<F>(f: F): F! uses driver when is_function::<F>()

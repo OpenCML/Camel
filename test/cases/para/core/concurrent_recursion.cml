@@ -6,10 +6,10 @@
  * leaf finds a peer (8 leaves, groups of two); node by node, none does. Nothing is timed.
  */
 
-import { rendezvous } from para
+import { rendezvous } from test_support
 
 func leaf(): int sync {
-    return rendezvous(2, 5000) - 1
+    return rendezvous(2, 5.0) - 1
 }
 
 func tree(depth: int): int {

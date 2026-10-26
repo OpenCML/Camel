@@ -26,6 +26,7 @@
 #include "camel/utils/install_layout.h"
 #include "camel/utils/log.h"
 #include "camel/utils/memperf.h"
+#include "camel/utils/path.h"
 #include "camel/utils/phase_timer.h"
 #include "check.h"
 #include "config.h"
@@ -191,8 +192,11 @@ int runCommand(int argc, char *argv[]) {
         .total_limit         = -1,
         .per_severity_limits = {{Severity::Error, 0}},
     };
-    diagnostics_ptr_t diagnostics = make_shared<Diagnostics>(
-        camel::utils::pathToUtf8(camel::utils::pathFromUtf8(targetFile).stem()), targetFile);
+    // The program is named by its file, as a library module is (design principles 10.2): the name
+    // a diagnostic prints before the position is the entry module's, `counts` for `counts.cml`.
+    // A `module X` declaration in the file still overrides it in the parser (setModuleName).
+    const std::string entryModuleName = camel::utils::moduleNameOfFile(targetFile);
+    diagnostics_ptr_t diagnostics = make_shared<Diagnostics>(entryModuleName, targetFile);
     diagnostics->setConfig(compileDiagsConfig);
 
     bool useJsonFormat = (errorFormat == "json");
@@ -272,7 +276,10 @@ int runCommand(int argc, char *argv[]) {
     ctx->runtimeDiagSink()->setConfig(runtimeDiagsConfig);
 
     parser_ptr_t parser = std::make_shared<CamelParser>(diagnostics);
-    auto mainModule     = make_shared<UserDefinedModule>("main", targetFile, ctx, parser);
+    // The entry module's name is its file's name (design principles 10.2). Nothing is loaded under
+    // the placeholder `main`: the name is what the entry module's own qualified references
+    // (`counts::twice` in `counts.cml`) and the tags it declares are written with.
+    auto mainModule     = make_shared<UserDefinedModule>(entryModuleName, targetFile, ctx, parser);
     ctx->setMainModule(mainModule);
     // The pass list is resolved against a context that has the program's module. Doing it
     // before the build leaves the entry requirement decided before anything is compiled.
@@ -328,7 +335,7 @@ int runCommand(int argc, char *argv[]) {
         if (selectedCommand == Command::Run && pipelineNamesProfile(Run::resolvedPassList)) {
             phase::enableRecording();
         }
-        std::optional<phase::Scope> parsePhase(std::in_place, "parse", "main");
+        std::optional<phase::Scope> parsePhase(std::in_place, "parse", entryModuleName);
         const bool parsedOk = parser->parse(*input);
         parsePhase.reset();
         if (!parsedOk) {
@@ -411,7 +418,7 @@ int runCommand(int argc, char *argv[]) {
                 return 1;
             }
         } else {
-            phase::Scope phaseScope("compile", "main");
+            phase::Scope phaseScope("compile", entryModuleName);
             mainModule->compile(CompileStage::Done);
         }
 
@@ -587,7 +594,7 @@ int runCommand(int argc, char *argv[]) {
                         // The run's configuration, not a line of the program: the runtime sink
                         // is created without a module, so name the entry file here and leave the
                         // position unknown (the short format writes `?`).
-                        diagnostic.moduleName = "main";
+                        diagnostic.moduleName = entryModuleName;
                         diagnostic.modulePath = targetFile;
                         try {
                             ctx->runtimeDiagSink()->add(std::move(diagnostic));
@@ -672,6 +679,13 @@ int runCommand(int argc, char *argv[]) {
                         nullptr);
                     auto result = applyPassesDetailed(program, Run::resolvedPassList, ctx, os);
                     program     = result.program;
+                    if (result.errored()) {
+                        // The pass ended with an error value: the pipeline stopped there, and the
+                        // error is reported the way an error value nobody handled is (design
+                        // principles 9.1, 3.9) -- standard error, and a non-zero exit code.
+                        return camel::execute::reportPassErrorValue(
+                            ctx, result.errorValue, useJsonFormat);
+                    }
                     if (result.failed()) {
                         const auto &diags = ctx->runtimeDiagSink();
                         if (diags->hasErrors()) {
@@ -686,6 +700,10 @@ int runCommand(int argc, char *argv[]) {
                         auto fallbackResult =
                             applyPassesDetailed(program, Run::fallbackPasses, ctx, os);
                         program = fallbackResult.program;
+                        if (fallbackResult.errored()) {
+                            return camel::execute::reportPassErrorValue(
+                                ctx, fallbackResult.errorValue, useJsonFormat);
+                        }
                         if (fallbackResult.failed()) {
                             const auto &diags = ctx->runtimeDiagSink();
                             if (diags->hasErrors()) {
@@ -822,6 +840,15 @@ int main(int argc, char *argv[]) {
     // (/DELAYLOAD), and initialize() is what adds the directories it is found in. A call made
     // earlier ends the process with "module not found" (0xC06D007E) before any output.
     // initialize() is idempotent; runCommand's ScopedRuntime calls it again.
+    // `CAMEL_HOME` is checked first, before the library it would locate: it is the one environment
+    // variable that picks the installation a run reads its standard library from, and a value that
+    // does not name an installation is an error about that variable, not a "module not found"
+    // somewhere later (design principles: an illegal value is an error, and the message says which
+    // value).
+    if (const std::string problem = camel::utils::camelHomeProblem(); !problem.empty()) {
+        std::cerr << "Error: " << problem << std::endl;
+        return 1;
+    }
     camel::initialize();
     phase::enableFromEnvironment();
     // The command line is UTF-8 from here on: on Windows `wmain` is what receives it as UTF-16,

@@ -144,7 +144,7 @@ func main(): int sync {
     println(a == b, a != b, a < b, a <= b, a > b, a >= b)
 
     // ---- a narrowing to i32 truncates toward zero; a widening is exact ----
-    println(i32(a), f32(a), a as f32)
+    println(i32(a), f32(a), f32(a))
 
     // ---- a reduction over a bf16 array accumulates in f64 and rounds once ----
     let cancelling: bf16[] = [16777216.0, 1.0, -16777216.0]

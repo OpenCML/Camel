@@ -2,21 +2,21 @@
  * Exercises regex matching with positive, anchored, and negative cases to keep the wrapper semantics stable.
  */
 
-import { test } from re
+import { has_match } from re
 
 func main(): int sync {
     println("=== RE Module Basic Tests ===")
 
-    println("\n[1] test('\\d+', 'abc123')")
-    let r1 = test("\\d+", "abc123")
+    println("\n[1] has_match('\\d+', 'abc123')")
+    let r1 = "abc123"->has_match<"\\d+">
     println("  match =", r1)
 
-    println("\n[2] test('^hello', 'hello world')")
-    let r2 = test("^hello", "hello world")
+    println("\n[2] has_match('^hello', 'hello world')")
+    let r2 = "hello world"->has_match<"^hello">
     println("  match =", r2)
 
-    println("\n[3] test('xyz', 'hello')")
-    let r3 = test("xyz", "hello")
+    println("\n[3] has_match('xyz', 'hello')")
+    let r3 = "hello"->has_match<"xyz">
     println("  match =", r3)
 
     println("\n=== RE tests completed ===")

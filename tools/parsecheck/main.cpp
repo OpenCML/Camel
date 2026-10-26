@@ -22,6 +22,7 @@
 #include "../format/fmt.h"
 #include "camel/init.h"
 #include "camel/parse/parse.h"
+#include "camel/utils/path.h"
 
 #include <exception>
 #include <fstream>
@@ -68,7 +69,8 @@ std::vector<std::string> readList(const std::string &path) {
 ParseOutcome parseText(const std::string &path, const std::string &text) {
     ParseOutcome outcome;
     auto sourceContext = std::make_shared<camel::source::SourceContext>();
-    auto diagnostics   = std::make_shared<Diagnostics>("main", path, sourceContext);
+    auto diagnostics =
+        std::make_shared<Diagnostics>(camel::utils::moduleNameOfFile(path), path, sourceContext);
     camel::parse::CamelParser parser(diagnostics);
     parser.setSourceContext(sourceContext);
     std::istringstream input(text);

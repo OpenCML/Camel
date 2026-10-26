@@ -368,8 +368,7 @@ class CanonicalDocument {
         case TypeCode::Function: {
             auto *function = static_cast<type::FunctionType *>(t);
             key            = std::format(
-                "f:{},{}",
-                static_cast<uint32_t>(function->modifiers().mask),
+                "f:{}",
                 function->hasRest());
             for (size_t i = 0; i < function->withTypesCount(); ++i)
                 key +=
@@ -513,7 +512,6 @@ class CanonicalDocument {
                         {"var", function->normIsVarAt(i)}});
             return json{
                 {"k", "func"},
-                {"mods", static_cast<uint32_t>(function->modifiers().mask)},
                 {"rest", function->hasRest()},
                 {"with", std::move(with)},
                 {"norm", std::move(norm)},

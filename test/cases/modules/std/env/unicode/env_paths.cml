@@ -9,22 +9,22 @@ import { get_env, get_cwd } from env
 import { write_text, read_text, exists, file_size } from fs
 
 func main(): int sync {
-    let cwd = get_cwd()
+    let cwd = get_cwd() !! ''
     'cwd={}'->format<cwd>->println
-    'value={}'->format<get_env('CAMEL_H9_VALUE')>->println
-    'named={}'->format<get_env('H9变量')>->println
+    'value={}'->format<(get_env('CAMEL_H9_VALUE') ?? '')>->println
+    'named={}'->format<(get_env('H9变量') ?? '')>->println
 
     let text = '你好，世界 Ω 🐪'
     let file = cwd + '/数据 文件 🐪.txt'
-    write_text(file, text)
+    let _ = text->write_text<file>
     'exists={}'->format<exists(file)>->println
-    'size={}'->format<file_size(file)>->println
-    'text={}'->format<read_text(file)>->println
+    'size={}'->format<(file->file_size !! 0)>->println
+    'text={}'->format<(file->read_text !! '')>->println
 
     // The parent directory does not exist yet: writing the leaf makes it (fs.write_text).
     let nested = cwd + '/子 目录/嵌套 文件.txt'
-    write_text(nested, '嵌套内容')
-    'nested={}'->format<read_text(nested)>->println
+    let _ = '嵌套内容'->write_text<nested>
+    'nested={}'->format<(nested->read_text !! '')>->println
 
     'missing={}'->format<exists(cwd + '/不存在 文件 🐪.txt')>->println
     return 0

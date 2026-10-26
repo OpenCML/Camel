@@ -16,7 +16,7 @@
  */
 
 import { num_threads, sum, zeros } from tensor
-import { thread_count } from process
+import { thread_count } from test_support
 
 func main(): int sync {
     let a = zeros([1024, 1024]) + 0.001

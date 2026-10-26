@@ -50,12 +50,12 @@ func load(): Mlp {
 func main(): int sync {
     let m = load()
     let x = reshape([1.0, 2.0, -1.0, 0.5], [2, 2])
-    return if get_env('WHAT') == 'fwd' then sync {
-        export_model(fwd, (m, x), get_env('ONNX_OUT'))
+    return if (get_env('WHAT') ?? '') == 'fwd' then sync {
+        export_model(fwd, (m, x), get_env('ONNX_OUT') ?? '')
         println('exported fwd')
         return 0
     } else sync {
-        export_model(step, (m, x), get_env('ONNX_OUT'))
+        export_model(step, (m, x), get_env('ONNX_OUT') ?? '')
         println('exported step')
         return 0
     }

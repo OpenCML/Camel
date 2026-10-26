@@ -20,7 +20,7 @@ func churn(k: int, left: int, total: int): int {
 }
 
 func nap(millis: int): int sync {
-    sleep(millis)
+    sleep(float(millis) / 1000.0)
     return 1
 }
 

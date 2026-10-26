@@ -1,6 +1,6 @@
-import { strptime } from time
+import { strftime } from time
 
 func main(): int sync {
-    println(strptime('not a date', '%Y-%m-%d'))
+    println(1.0e20->strftime<'%Y'>)
     return 0
 }

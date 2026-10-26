@@ -43,9 +43,9 @@ hints - loops that run on the host element by element
  why on the host no device region covers this loop, and its body could not be one kernel even then: the body calls a function. It runs in the host interpreter.
 
 compilation - self time by phase
- parse main <time>
- compile main <time>
- gct main <time>
+ parse fusion_group_none <time>
+ compile fusion_group_none <time>
+ gct fusion_group_none <time>
  resolve tensor <time>
  cmo_load tensor <time>
  resolve autodiff <time>
@@ -64,8 +64,8 @@ compilation - self time by phase
  (counting) <time>
  declare autodiff <time>
  (counting) <time>
- declare main <time>
- gir main <time>
+ declare fusion_group_none <time>
+ gir fusion_group_none <time>
  encode <time>
  pass std::profile top=0 <time>
  pass std::default <time>

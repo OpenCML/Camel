@@ -10,7 +10,7 @@ func words_of(text: string): string[] {
 }
 
 func tally(path: string): Map<string, int> {
-    let words = words_of(read_text(path))
+    let words = words_of(path->read_text !! '')
     return words->reduce<(acc: Map<string, int>, w: string): Map<string, int> => acc->put<w, (acc[w] ?? 0) + 1>, [] as Map<string, int>>
 }
 

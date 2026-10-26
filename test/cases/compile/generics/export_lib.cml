@@ -29,7 +29,7 @@ export func plus_helper::<T>(xs: T[]): int {
 }
 
 export func root_len::<T>(xs: T[]): float {
-    return sqrt(len(xs) as float)
+    return sqrt(float(len(xs)))
 }
 
 export func biased::<T>(x: T): int {

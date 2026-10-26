@@ -34,7 +34,7 @@ func step(w: float, x: float, steps: int): (float, float) {
 func main(): int sync {
     println('before grad')
     // Not a constant of the program: the recursion cannot be unrolled (run with STEPS=3).
-    let steps = int(get_env('STEPS'))
+    let steps = int(get_env('STEPS') ?? '')
     let vg = step(2.0, 1.0, steps)
     // h = x w^3 + w^2 + w + 1 = 15: loss 225, d/dw = 2 * 15 * (3 x w^2 + 2 w + 1) = 510
     'grad_unexpanded_specialize loss={} grad={} direct={}'->format<vg.0, vg.1, loss<2.0>(1.0, steps)>->println

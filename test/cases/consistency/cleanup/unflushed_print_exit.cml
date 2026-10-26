@@ -2,6 +2,8 @@
  * print (no line end) before exit(4): the text is written, the exit code is 4.
  */
 
+import { exit } from process
+
 func main(): int sync {
     println('line')
     print('pending')

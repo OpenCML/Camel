@@ -499,12 +499,11 @@ void registerEntryResultSaver(TypeCode code, EntryResultSaver saver) {
     registry.savers.insert_or_assign(static_cast<uint32_t>(code), std::move(saver));
 }
 
-namespace {
-
-/// An error value nobody handled reached the exit of `main` (design principles 3.9): it is
-/// reported on standard error as a diagnostic, in the format the command line chose, located
-/// where the error value says it was made (`file:line:column`, the file name without its
-/// directory; an error made by an operator names the operator instead and has no position).
+/// An error value nobody handled reached the exit of the run (design principles 3.9): the value
+/// an entry graph returned, or the value a pass ended with (9.1). It is reported on standard
+/// error as a diagnostic, in the format the command line chose, located where the error value
+/// says it was made (`file:line:column`, the file name without its directory; an error made by an
+/// operator names the operator instead and has no position).
 void reportUnhandledError(core::context::Context &ctx, slot_t fallible, bool json) {
     const auto *info = rtdata::fromSlot<const ::Struct *>(rtdata::fallibleError(fallible));
     const auto text  = [&](std::string_view field) {
@@ -579,7 +578,14 @@ void reportUnhandledError(core::context::Context &ctx, slot_t fallible, bool jso
     std::cerr.flush();
 }
 
-} // namespace
+int reportPassErrorValue(const core::context::context_ptr_t &ctx, slot_t error, bool json) {
+    // A pass that failed is an error value nobody handled arriving at the exit of the pipeline
+    // (design principles 9.1, 3.9): the same report, the same non-zero exit code -- the one a
+    // failed result of `main` gets (deriveProcessExitCode).
+    ctx->setProcessExitCode(1);
+    reportUnhandledError(*ctx, error, json);
+    return ctx->processExitCodeOr(1);
+}
 
 void writeEntryResultTo(
     const core::context::context_ptr_t &context, std::string path, bool jsonDiagnostics) {

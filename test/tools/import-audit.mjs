@@ -58,9 +58,9 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const REGISTRY_ALL = path.join(REPO_ROOT, 'test', 'cases', 'modules', 'stdlib', 'registry_all.cml')
 const IMPORTS_NOTHING = path.join(REPO_ROOT, 'test', 'cases', 'perf', 'startup', 'imports_nothing.cml')
 
-// The modules of the table, in the order the standard-library registry imports them: the 26
+// The modules of the table, in the order the standard-library registry imports them: the 27
 // `.cmo` modules this tree builds plus `array`, which is a Camel module with no `.cmo`.
-// `registry_all.cml` imports all of them, so its list is the table's list (27 rows);
+// `registry_all.cml` imports all of them, so its list is the table's list (28 rows);
 // the two debug-only builtin modules (`test_attrs`, `profiler`) are not `.cmo` modules and are
 // not imported by name here.
 function moduleNames() {

@@ -1,0 +1,20 @@
+/**
+ * An element write on a `var` whose value this graph made, and a read of the same variable after it.
+ *
+ * This is the positive control of the in-place plan (docs/design/arrays-memory/README.cn.md 4.3.1,
+ * and the partial-order question of the back ends): the graph's own edges order the read after the
+ * write, so the plan may say the update reuses the input's storage, and it must keep saying it. A
+ * check that is too eager to hand the decision back to the array's own count would answer "by the
+ * array's count" here and lose the guarantee of design principles 10.5 on every ordinary program.
+ * `std::profile` reports the marks this pins; `inplace_update_other_arm`'s shape -- an update and a
+ * read the graph does not order -- cannot reach this branch from source at all, so the conservative
+ * direction is measured by setting the walk's limits to 1 (see the review of C3).
+ */
+module inplace_write_then_read
+
+func main(): int sync {
+    var v = [1, 2, 3]
+    v[0] = 9
+    println("v[0] =", v[0])
+    return 0
+}

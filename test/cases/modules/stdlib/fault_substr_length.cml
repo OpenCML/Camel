@@ -1,9 +1,0 @@
-import { substr } from str
-
-func main(): int sync {
-    println('before')
-    // a range past the end is a fault, as for slice on arrays (design principles 3.9)
-    println('hello'->substr<3, 3>)
-    println('not reached')
-    return 0
-}

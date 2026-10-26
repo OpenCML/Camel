@@ -7,7 +7,7 @@
  * per differentiable parameter of the decorated function.
  */
 
-import { grad } from autodiff
+import { grad, vjp } from autodiff
 
 // A deliberately different rule, so the test can tell which derivative was used: 10 * dy.
 func cube_rule(x: float, dy: float): float {

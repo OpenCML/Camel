@@ -7,7 +7,7 @@ func positive(a: f32[..]): f32[..] { return relu(a) }
 func fused(a: f32[..], b: f32[..]): f32[..] { return relu(minimum(maximum(a, b), b)) }
 func rows(a: f32[..]): f32[..] { return max(a, -1) }
 func main(): int sync {
-    let folder = get_env('TILES_TEST_OUT')
+    let folder = get_env('TILES_TEST_OUT') ?? ''
     let a = load_npy::<f32>(folder + '/a.npy') as f32[..]
     let b = load_npy::<f32>(folder + '/b.npy') as f32[..]
     save_npy(hi(a,b), folder + '/hi_cpu.npy')

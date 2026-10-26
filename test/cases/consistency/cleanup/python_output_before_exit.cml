@@ -3,10 +3,11 @@
  */
 
 import { py_call, py_wrap } from python
+import { exit } from process
 
 func main(): int sync {
     println('camel 1')
-    py_call('print', py_wrap('python 1'))
+    let _ = py_call('print', py_wrap('python 1'))
     exit(6)
     println('not reached')
     return 0

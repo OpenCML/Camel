@@ -1,17 +1,18 @@
 /**
- * The declarations of `para` are what an importer sees: the fixed one of `rendezvous` and the two
- * that take the element type of their array argument (`unordered_foreach` has a callback whose
- * result type is free, `unordered_reduce` a callback from the element to itself). Every call
- * reaches the operator the module runs (step 10).
+ * The declarations of `para` are what an importer sees: the two that take the element type of
+ * their array argument (`unordered_foreach` has a callback whose result is dropped,
+ * `unordered_reduce` a callback from the element to itself). `rendezvous` is `test_support`'s, and
+ * the call reaches its operator too (step 10).
  */
 
-import { rendezvous, unordered_foreach, unordered_reduce } from para
+import { rendezvous } from test_support
+import { unordered_foreach, unordered_reduce } from para
 
 func main(): int sync {
-    let met: int = rendezvous(1, 0)
+    let met: int = rendezvous(1, 0.0)
     println(met)
     println(unordered_reduce<(acc: int, item: int): int => acc + item, 0>(1..5))
-    unordered_foreach<(item: int) => item>(0..3)
+    unordered_foreach<(item: int) => sync { let _ = item }>(0..3)
     println('done')
     return 0
 }

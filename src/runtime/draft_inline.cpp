@@ -1090,14 +1090,25 @@ bool specializeDirectFuncInDraft(
         }
     }
 
-    GCFuncRef newBody{.ref = draft.payloadGraphIndexOf(specializedGraph->id())};
+    // The call keeps the mask of the captured variables it writes: only its declared `with`
+    // arguments can be bound away here, so the captures keep their places after them, and the
+    // value it hands on is the same tuple of their new versions, typed for this callee.
+    const uint32_t writtenCaptures = draft.funcWriteMaskOf(funcNodeId);
+    GCFuncRef newBody{
+        .ref = draft.payloadGraphIndexOf(specializedGraph->id()), .reserved = writtenCaptures};
     std::array<std::byte, sizeof(GCFuncRef)> newPayload{};
     std::memcpy(newPayload.data(), &newBody, sizeof(newBody));
     init.payload    = std::span<const std::byte>(newPayload.data(), newPayload.size());
     init.normInputs = normInputs;
     init.withInputs = withInputs;
-    if (const auto *type = specializedGraph->funcType(); type && type->hasExitType()) {
-        init.dataType = type->exitType();
+    const auto *type = specializedGraph->funcType();
+    if (type != nullptr) {
+        camel::core::type::Type *value =
+            writtenCaptures != 0 ? callValueTypeOf(*specializedGraph, writtenCaptures)
+                                 : (type->hasExitType() ? type->exitType() : nullptr);
+        if (value != nullptr) {
+            init.dataType = value;
+        }
     }
     draft.rewriteNode(funcNodeId, init);
 
@@ -1210,8 +1221,7 @@ GCGraph *liftClosureGraph(RuntimeGraphDraftSession &session, GCGraph *base, size
         camel::core::type::FunctionType::create(
             withTypes,
             normTypes,
-            type->exitType(),
-            type->modifiers()));
+            type->exitType()));
     draft->setClosureType(nullptr);
     GCGraph *lifted = encodeSpecializedGraph(session, *draft, base, "lift", nonce);
     session.rememberSpecialization(std::move(key), lifted);
@@ -1510,6 +1520,17 @@ DraftInlineResult inlineCallableInDraft(
         CAMEL_LOG_INFO_S(
             "DraftInline",
             "Inline splice node {} rejected: node is missing or not FUNC.",
+            funcNodeId);
+        return result;
+    }
+    if (draft.funcWriteMaskOf(funcNodeId) != 0) {
+        // The call hands on the tuple of the callee's result and the new versions of the captured
+        // variables it writes, and its ACCS nodes read its parts; the body spliced in its place
+        // has the result alone, so the call is left as it is.
+        CAMEL_LOG_INFO_S(
+            "DraftInline",
+            "Inline splice node {} rejected: the call writes captured variables, and its value is "
+            "their tuple.",
             funcNodeId);
         return result;
     }

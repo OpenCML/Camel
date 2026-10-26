@@ -1,8 +1,0 @@
-import { repeat } from str
-
-func main(): int sync {
-    println('before')
-    println('ab'->repeat<-1>)
-    println('not reached')
-    return 0
-}

@@ -95,7 +95,7 @@ func main(
     let val_x = load_npy::<f32>(data + '/val_images.npy')
     let val_labels = load_npy::<i64>(data + '/val_labels.npy')
     let order = load_npy::<i64>(data + '/train_order.npy')
-    let dataset_id = trim(read_text(data + '/dataset.id'))
+    let dataset_id = trim(((data + '/dataset.id')->read_text !! ''))
 
     let model = load_model(data)
     let leaves = tree_paths(model)

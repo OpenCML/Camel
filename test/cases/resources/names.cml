@@ -13,6 +13,7 @@ import para
 import process
 import random
 import tensor
+import test_support
 import tiles
 import time
 
