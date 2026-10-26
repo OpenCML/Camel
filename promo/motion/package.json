@@ -1,0 +1,22 @@
+{
+  "name": "camel-promo",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "serve": "vite",
+    "check": "tsc --noEmit",
+    "render": "node render.cjs"
+  },
+  "dependencies": {
+    "@motion-canvas/2d": "3.17.2",
+    "@motion-canvas/core": "3.17.2"
+  },
+  "devDependencies": {
+    "@motion-canvas/ffmpeg": "1.1.0",
+    "@motion-canvas/ui": "3.17.2",
+    "@motion-canvas/vite-plugin": "3.17.2",
+    "puppeteer": "22.15.0",
+    "typescript": "5.4.5",
+    "vite": "4.5.3"
+  }
+}

@@ -242,8 +242,8 @@ std::vector<FStringInterpolation> TokenBuffer::interpolationsOf(uint32_t token) 
 namespace {
 
 /// The end of the string that starts at `i` (s[i] is `'`, `"` or a backtick), just past its
-/// closing quote; npos when it does not close. It is what the lexer does, without the fallback
-/// of an unclosed string: used to skip the strings inside a `${...}`.
+/// closing quote; npos when it does not close. It is what the lexer does for a string that closes:
+/// used to skip the strings inside a `${...}`.
 size_t skipQuoted(const char *s, size_t n, size_t i);
 
 /// Finds the `}` that ends the `${` at `open`; `close` is set to it. Strings, comments and
@@ -496,7 +496,8 @@ TokenBuffer Lexer::tokenizeImpl(std::string source, size_t from, size_t to) {
         }
         case kDigit: {
             // REAL: digits '.' digits, with an exponent; it is the longest match whenever it
-            // applies (`007.5` is a real). `1.` and `1..2` leave the dot to the next token.
+            // applies. `1.` and `1..2` leave the dot to the next token. The whole part has no
+            // leading zero, as an integer has none: `007.5` is refused as `007` is.
             size_t j = i + 1;
             while (isDigit(at(j))) {
                 ++j;
@@ -507,6 +508,20 @@ TokenBuffer Lexer::tokenizeImpl(std::string source, size_t from, size_t to) {
                     ++k;
                 }
                 k = exponentEnd(k);
+                if (c == '0' && isDigit(at(i + 1))) {
+                    size_t refusedEnd = k;
+                    if (at(refusedEnd) == 'i' && !isIdentPart(at(refusedEnd + 1))) {
+                        ++refusedEnd;
+                    }
+                    buffer.errors_.push_back(
+                        LexError{
+                            LexErrorKind::InvalidNumber,
+                            static_cast<uint32_t>(i),
+                            static_cast<uint32_t>(refusedEnd)});
+                    emitTrivia(TokenKind::Error, i, refusedEnd, false);
+                    i = refusedEnd;
+                    continue;
+                }
                 if (at(k) == 'i' && !isIdentPart(at(k + 1))) {
                     // `4.5i`: an imaginary literal. The suffix belongs to the number only when
                     // no identifier character follows, so `4if` stays `4` and `if`.
@@ -634,9 +649,8 @@ TokenBuffer Lexer::tokenizeImpl(std::string source, size_t from, size_t to) {
                 // Camel source (strings and braces nest); `\${` is a literal `${`; other
                 // braces are literal; it may span lines. The interpolation entries remember
                 // where each expression is, for the AST and the language server.
-                size_t j           = i + 1;
-                size_t fallbackEnd = 0;
-                bool closed        = false;
+                size_t j    = i + 1;
+                bool closed = false;
                 std::vector<FStringInterpolation> parts;
                 while (j < n) {
                     const char d = s[j];
@@ -651,7 +665,6 @@ TokenBuffer Lexer::tokenizeImpl(std::string source, size_t from, size_t to) {
                             continue;
                         }
                         if (s[j + 1] == '`') {
-                            fallbackEnd = j + 2;
                             j += 2;
                             continue;
                         }
@@ -677,10 +690,6 @@ TokenBuffer Lexer::tokenizeImpl(std::string source, size_t from, size_t to) {
                     }
                     ++j;
                 }
-                if (!closed && fallbackEnd != 0) {
-                    j      = fallbackEnd;
-                    closed = true;
-                }
                 if (closed) {
                     noteLines(i, j);
                     const uint32_t tokenIndex = static_cast<uint32_t>(tokens.size());
@@ -693,20 +702,26 @@ TokenBuffer Lexer::tokenizeImpl(std::string source, size_t from, size_t to) {
                     i = j;
                     continue;
                 }
+                // Unclosed: the error is the line the string opened on. What follows is source
+                // again, not more of the string (a string that was never closed would swallow
+                // everything to the end of the file, and the next error would be far from the
+                // mistake).
+                const void *lineEnd = std::memchr(s + i, '\n', n - i);
+                const size_t errorEnd =
+                    lineEnd == nullptr ? n : static_cast<size_t>(static_cast<const char *>(lineEnd) - s);
                 buffer.errors_.push_back(
                     {LexErrorKind::UnclosedString,
                      static_cast<uint32_t>(i),
-                     static_cast<uint32_t>(n)});
-                emitTrivia(TokenKind::Error, i, n, noteLines(i, n));
-                i = n;
+                     static_cast<uint32_t>(errorEnd)});
+                emitTrivia(TokenKind::Error, i, errorEnd, false);
+                i = errorEnd;
                 continue;
             }
             // '...', "...", `...`: to the closing quote; `\\` and an escaped quote do not
-            // close. A string may span lines. When no quote closes it, the string ends at its
-            // last escaped quote if it has one ('C:\dir\' is a string), as it always did.
+            // close. A string may span lines. A string no quote closes is an error on the line it
+            // opened on ('C:\dir\' is not closed, its last quote is escaped: write
+            // 'C:\\dir\\').
             size_t j               = i + 1;
-            size_t fallbackEnd     = 0;
-            size_t fallbackLines   = 0;
             const size_t lineCount = lines.size();
             bool closed            = false;
             while (j < n) {
@@ -720,8 +735,6 @@ TokenBuffer Lexer::tokenizeImpl(std::string source, size_t from, size_t to) {
                     const unsigned char e = static_cast<unsigned char>(s[j + 1]);
                     if (e == c) {
                         j += 2;
-                        fallbackEnd   = j;
-                        fallbackLines = lines.size();
                         continue;
                     }
                     if (e == '\\') {
@@ -734,21 +747,23 @@ TokenBuffer Lexer::tokenizeImpl(std::string source, size_t from, size_t to) {
                 }
                 ++j;
             }
-            if (!closed && fallbackEnd != 0) {
-                lines.resize(fallbackLines);
-                j      = fallbackEnd;
-                closed = true;
-            }
             if (closed) {
                 emit(c == '`' ? TokenKind::FString : TokenKind::String, i, j);
                 i = j;
                 continue;
             }
-            // Unclosed: everything to the end of the file is the error.
+            // Unclosed: the error is the line the string opened on, and what follows is source
+            // again; the lines the scan passed are noted again when the lexer reaches them.
+            lines.resize(lineCount);
+            const void *lineEnd = std::memchr(s + i, '\n', n - i);
+            const size_t errorEnd =
+                lineEnd == nullptr ? n : static_cast<size_t>(static_cast<const char *>(lineEnd) - s);
             buffer.errors_.push_back(
-                {LexErrorKind::UnclosedString, static_cast<uint32_t>(i), static_cast<uint32_t>(n)});
-            emitTrivia(TokenKind::Error, i, n, lines.size() > lineCount);
-            i = n;
+                {LexErrorKind::UnclosedString,
+                 static_cast<uint32_t>(i),
+                 static_cast<uint32_t>(errorEnd)});
+            emitTrivia(TokenKind::Error, i, errorEnd, false);
+            i = errorEnd;
             continue;
         }
         case kHash: {

@@ -599,7 +599,7 @@ A lambda is written `(parameters): return-type => body`; the return type can be 
 (x: int): int => { let y = x * 2; return y + 1 }
 (x) => x + 1                                    // the parameter type comes from where it stands (below)
 (s: string) => sync { println(s) }              // a sync block as the function body
-sync (x: int) => sync { total = total + x }     // writes a captured variable: add the function modifier sync
+(x: int) => sync { total = total + x }          // writes a captured variable: the body is a sync block
 ```
 
 A function type is written `(x: T) => R`, and the parameters must be named: `(x: int) => int`, `(acc: int, x: int) => int`.

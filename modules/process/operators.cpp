@@ -5,6 +5,7 @@
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
+#include "camel/core/mm/blocking.h"
 #include "camel/core/operator.h"
 #include "camel/core/process_exit.h"
 #include "camel/core/rtdata/bytes.h"
@@ -56,6 +57,12 @@ slot_t __process_sleep__(ArgsView &with, ArgsView &norm, Context &ctx) {
     // About 285 years is the longest wait a steady clock can hold; a longer one is that long.
     constexpr double kLongestSeconds = 9.0e9;
     try {
+// A sleep is a wait, and a wait is announced: the scheduler takes this thread out of its
+        // GC region for it and puts it back after, so that a sleeping worker is not what makes a
+        // cooperative stop-the-world collection give up (C24, MG/R5/BE/6). Without a scheduler
+        // that registered itself (every other back end, and every serial run) this costs one
+        // relaxed load.
+        camel::core::mm::BlockingWaitScope wait;
         std::this_thread::sleep_for(
             std::chrono::duration_cast<std::chrono::nanoseconds>(
                 std::chrono::duration<double>(std::min(seconds, kLongestSeconds))));

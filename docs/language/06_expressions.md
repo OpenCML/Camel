@@ -599,7 +599,7 @@ lambda 的写法是 `(形参): 返回类型 => 体`，返回类型可以省略�
 (x: int): int => { let y = x * 2; return y + 1 }
 (x) => x + 1                                    // 形参类型从所在位置推出（见下）
 (s: string) => sync { println(s) }              // 同步块作函数体
-sync (x: int) => sync { total = total + x }     // 写入被捕获的变量：加函数修饰符 sync
+(x: int) => sync { total = total + x }          // 写入被捕获的变量：函数体写成同步块
 ```
 
 函数类型写作 `(x: T) => R`，形参要写名字：`(x: int) => int`、`(acc: int, x: int) => int`。

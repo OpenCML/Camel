@@ -1,0 +1,22 @@
+/**
+ * A prefix `-`, `!` and `~` bind looser than `->` and `^` and tighter than the other binary
+ * operators (design principles 4.2, reference 6.12): `-b->absolute` is `-(b->absolute)`, so the
+ * sign is applied to what the call gives, for a name and for a literal alike.
+ */
+module unary_link
+
+func always(x: bool): bool {
+    return true
+}
+
+func absolute(x: int): int {
+    return if x < 0 then 0 - x else x
+}
+
+func main(): int sync {
+    let b = 5
+    let t = true
+    println(-b->absolute, ~b->absolute, !t->always, -2->absolute, -b ^ 2, -b * 2)
+    println((-b)->absolute, (-2)->absolute)
+    return 0
+}

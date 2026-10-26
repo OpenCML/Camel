@@ -7,6 +7,16 @@
             "plans": "feat/mm/"
         },
         {
+"comment": "The process-state cases are fast mm cases that live in the GC directory: the generic test/cases rule below resolves that directory to feat/mm/gc.plan.toml, the slow GC-stress plan, which runs neither of them. These exact paths come first and name no fall-through, so a change to either selects the feat/mm directory (layered, so the slow plans there still follow --tier).",
+            "paths": ["test/cases/feat/mm/gc/contexts.cml", "test/cases/feat/mm/gc/gc_prl_blocked_worker.cml"],
+            "plans": "feat/mm/"
+        },
+        {
+            "comment": "The context-lifetime case is a fast mm case that lives in the GC directory as well: the generic test/cases rule below resolves that directory to feat/mm/gc.plan.toml, the slow GC-stress plan, which does not run it. This exact path comes first and names no fall-through, so the file rule for the case selects the plan that reads it.",
+            "paths": ["test/cases/feat/mm/gc/context_lifetime.cml"],
+            "plans": "feat/mm/"
+        },
+        {
             "comment": "The formatted-print case is a fast consistency program that happens to live under the cpp exec dump directory: the generic test/cases rule below resolves it to feat/trans/cpp.plan.toml, whose agree_with_fvm test compiles and runs C++ for up to ten minutes, and which does not run this case. This exact path comes first and falls through to the file rule that names print_formats.",
             "paths": ["test/cases/trans/cpp/exec/print_formats.cml"],
             "plans": "feat/consistency/"
@@ -374,6 +384,16 @@
             "comment": "The graph-space gradient case: the directory rule above keeps the slow GC plan off it, and this is the fast plan that runs it.",
             "paths": ["test/cases/feat/mm/gc/graph_space_grad.cml"],
             "plans": ["feat/mm/graph_space.plan.toml"]
+        },
+        {
+"comment": "The process-state cases: the directory rule above keeps the slow GC plan off them, and this is the fast plan that runs them.",
+            "paths": ["test/cases/feat/mm/gc/contexts.cml", "test/cases/feat/mm/gc/gc_prl_blocked_worker.cml"],
+            "plans": ["feat/mm/process_state.plan.toml"]
+        },
+        {
+            "comment": "The context-lifetime case: the directory rule above keeps the slow GC plan off it, and this is the fast plan that runs it.",
+            "paths": ["test/cases/feat/mm/gc/context_lifetime.cml"],
+            "plans": ["feat/mm/context_lifetime.plan.toml"]
         },
         {
             "comment": "The smoke cases: test/plans/smoke is outside the feat/ tree, so no directory rule can mirror test/cases/smoke.",

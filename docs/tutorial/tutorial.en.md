@@ -463,7 +463,7 @@ g
 3
 ```
 
-A `sync` written before a lambda (`sync (x: int) => ...`) is a different use: it modifies the function type, and is unchanged.
+When the body of a lambda has to run in order, write the `sync` before the block: `(x: int) => sync { ... }`. A lambda head has no `sync`.
 
 ### 6.5 `var`, references and order
 
@@ -540,7 +540,7 @@ func main(): int sync {
     println(ops->map<(f: (x: int) => int): int => f(10)>)
 
     var total = 0                            // captured by reference
-    [1, 2, 3]->foreach<sync (x: int) => sync { total = total + x }>
+    [1, 2, 3]->foreach<(x: int) => sync { total = total + x }>
     println(total)
     return 0
 }

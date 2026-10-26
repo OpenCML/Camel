@@ -1669,6 +1669,11 @@ class Builder {
     /// string when `ops` is not such a group: what a message about a call that resolves in the
     /// kernel says, in place of the kernel's own name (design principles 10.4).
     std::string declaredNameOfKernelGroup(const oper_group_ptr_t &ops) const;
+    /// How a message names the callee behind the operator `uri`: the name its function is
+    /// declared under when the operator is an `#impl` kernel, the operator's own `<uri>`
+    /// otherwise. The one place a message names a callee, so the hint of the call form and the
+    /// list of overloads cannot disagree about it.
+    std::string calleeNameForMessage(const std::string &uri) const;
     /// Whether the graph being built is an `#impl` body or nested in one (a lambda in the
     /// body). A call written there stays a call of the function's semantic graph, so that the
     /// body the expansion reads is the body without the tag; the kernel is for callers.

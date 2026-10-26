@@ -463,7 +463,7 @@ g
 3
 ```
 
-写在 lambda 之前的 `sync`（`sync (x: int) => ...`）是另一种用法：它修饰函数类型，保持不变。
+lambda 的函数体需要按顺序执行时，把 `sync` 写在块前：`(x: int) => sync { ... }`。lambda 头上没有 `sync`。
 
 ### 6.5 `var`、引用与顺序
 
@@ -540,7 +540,7 @@ func main(): int sync {
     println(ops->map<(f: (x: int) => int): int => f(10)>)
 
     var total = 0                            // captured by reference
-    [1, 2, 3]->foreach<sync (x: int) => sync { total = total + x }>
+    [1, 2, 3]->foreach<(x: int) => sync { total = total + x }>
     println(total)
     return 0
 }

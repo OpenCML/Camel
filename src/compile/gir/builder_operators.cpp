@@ -3092,11 +3092,7 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
                         ops->resolvers(),
                         "\n    ",
                         [this](const std::pair<std::string, resolver_ptr_t> &p) {
-                            const auto declared = implDeclaredNames_.find(p.first);
-                            return (declared != implDeclaredNames_.end()
-                                        ? declared->second
-                                        : "<" + p.first + ">") +
-                                   ": " + p.second->signature();
+                            return calleeNameForMessage(p.first) + ": " + p.second->signature();
                         }) +
                     "\n";
                 // The overloads of the program are part of the set (design principles 10.2).
