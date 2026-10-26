@@ -23,7 +23,7 @@ per-item attribution and bisect logs; the rows it named and this run shares are 
 | `opt.progen/progen_check` | `44.18 s cpu of 150.00 s budget`, 57.28 s wall, red | pre-existing: the 10-24 record already had it red (82 wrong cells), red at `07e81237f` |
 | `progen_fixed` | 15.94 s, red | not in the 10-24 record's short list; same `progen` family |
 | `benchmark_gradients_vs_torch` | `761.76 s cpu of 1600.00 s budget`, 183.24 s wall, red | budget not the cause (under half); unattributed |
-| `modules.onnx/pass_export_equals_export_model` | `2.91 s cpu of 75.00 s budget`, 1.75 s wall, red | the 10-24 record: the margin rule (`d0278f224`) reads CPU time and fails it; green at `07e81237f` |
+| `feat/modules/onnx` `pass_export_equals_export_model` | `2.91 s cpu of 75.00 s budget`, 1.75 s wall, red | filed with the perf-margin family after the 10-24 record, and **taken out of it by the 10-27 run**: the reading is under budget and the failure is an `onnxruntime` session failure on the pass's own model (`docs/handover/batch-slow-2026-10-27.md`), so the classification is not this record's; second-look attribution pending |
 | `gc.runtime_graph_constants.moving.nvm` / `.fvm` | 158–166 ms, red | unattributed (new since the 10-24 record) |
 | `gc.macro_round_lifetime.moving_stress.nvm` / `.fvm` / `.jit` / `.prl` | 210–266 ms, red | unattributed (new since the 10-24 record) |
 | `poison:compile.stream:stream.tee_report` / `…_element_size_unknown` | 250 / 173 ms, red | unattributed (new since the 10-24 record) |
