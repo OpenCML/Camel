@@ -1757,3 +1757,13 @@ C4、C22 已合入（`8fa694785`）：`as` 在基本类型之间只把一个类�
 **onnx-with-parameters-cannot-carry-a-runtime-path**：前提不对。**`with` 实参不要求是编译期常量**：`x->linear<w, b>` 的权重、`f<w>` 绑定的 `var` 上下文参数都是运行期的值。只有声明本身要求静态值的地方才必须是常量：规则与事实的 `with`、命令行上的遍参数、出现在类型里的维度。所以 `export_model<out: get_env('ONNX_OUT')>(f, x)` 是合法的，照草稿接入。如果实现里把函数的 `with` 实参当成只收常量，那是缺陷，一起修。172 个文件的迁移照做，`refusals` 那 7 个用例按草稿从故障改成错误值。`process.cml` 加 `export resource process`、`tiles.cml` 的 `driver` 照"库的资源"那条做，你们可以直接动这两个文件；设计稿 `effects/plan.cn.md:48` 那句过时的话直接改。
 
 **pass-failures-have-no-error-value-path**：选 1。原则 9.1 写的遍类型就是 `(f: F) => F!`，遍可以失败，失败就是错误值，**遍 API 要长出这条路**：遍返回错误值时，流水线在那里停下，把错误按"没被处理的错误值到达出口"的规则报出（打印到标准错误，退出码非零）；在 Camel 里调用遍时就是普通的 `T!`。`tiles::compile` 照草稿改成错误值 `GpuScopeUnsupported`，用例措辞随之改。诊断只留给编译期就能确定的错误。
+
+## 2026-10-26-entry-module-name-and-candidate-table
+
+1. **一律取文件名**（选 1）：原则 10.2，一个文件就是一个模块，模块名只来自文件名。`module` 声明照 5a 删除，删完就不存在"两个名字"。在那之前文件里的 `module` 行不影响任何命名。
+2. **候选名表删掉**（选 1）：只认写出来的那个名字，找不到就是"找不到模块"，并给出搜索过的路径。一件事一种写法，不替用户猜。两条用例改成反例。
+
+## 2026-10-26-recognizing-an-array-in-match-type
+
+**甲：加形状词 `case array`**，与 `struct`、`tuple`、`func`、`#leaf` 并列，匹配任何数组类型（任意元素类型、任意形状）。于是 `is_array::<T>()` 用 Camel 写得出来，`is_sliceable::<T>()` 由 `is_array`、`is_string`、`is_same::<T, Bytes>` 合成，用户也能自己写。设计原则 5.5 的形状词列表补上 `func` 与 `array`（现在只写了三个）。
+- **缺陷单独先修**：不认识的形状词在 Release 里静默当成 `case _`，在 Debug 里中止。改成一条带位置的具名诊断（"未知的形状词，可用的是 `struct`、`tuple`、`func`、`array`、`#leaf`"），`builder_static.cpp` 里那份名字表与解析器共用一处。这正是 `agents/refactor.md` 里"拒绝必须说出来"那一条。
