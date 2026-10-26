@@ -3533,11 +3533,36 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
         enter(normInputs, normInputTypes, false);
     };
 
+    // `v = e` where the place is a `T?` / `T!`: the value enters the form at the assignment as it
+    // does at a declaration, an argument and a return (design principles 3.8), and `null` likewise.
+    // The target type is known here -- it is the type the place was declared with -- so the
+    // entrance is automatic, and the resolver that accepted the operands (`:op/assn`) is the one
+    // rule that names a place a value is written to. A built-in operator reads the argument types
+    // its signature names and converts nothing else, so this entrance is made here; the place
+    // keeps its declared type and is only ever written through, so the cell itself is left alone.
+    const auto enterAssignmentForm = [&](FunctionType *funcType) {
+        if (targetOperator == nullptr || targetOperator->name() != "__assn__" ||
+            funcType->normTypesCount() < 2 || normInputs.size() < 2 ||
+            normInputTypes.size() < 2) {
+            return;
+        }
+        Type *place = funcType->normTypeAt(0);
+        if (place == nullptr || asTagged(place) == nullptr || normInputTypes[1] == nullptr ||
+            normInputTypes[1]->equals(place)) {
+            return;
+        }
+        if (node_handle_t entered = checkValue(normInputs[1].node, place, normInputs[1].expr)) {
+            normInputs[1].node = entered;
+            normInputTypes[1]  = place;
+        }
+    };
+
     ASSERT(targetFuncType != nullptr, "Target function type must be resolved.");
     if (targetOperator == nullptr) {
         enterParameters(targetFuncType);
     } else {
         enterStructParameters(targetFuncType);
+        enterAssignmentForm(targetFuncType);
     }
     if (recorder_) {
         const bool macroCallee =

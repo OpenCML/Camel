@@ -2,7 +2,7 @@ id = "consistency.entering"
 order = 357
 tier = "fast"
 tags = ["feat", "consistency", "compile", "nullable", "fallible"]
-desc = "A value enters a T? / T! position by itself where the target type is known, never the other way; [] takes its element type from its position; a nullable right side of ?? (design principles 3.8)"
+desc = "A value enters a T? / T! position by itself where the target type is known (an argument, an annotated let, an array element, a branch arm, a return, and an assignment to a var of the form), never the other way; [] takes its element type from its position; a nullable right side of ?? (design principles 3.8)"
 
 # docs/technical/29_nullable_and_fallible_values.md section 4.2. Every behaviour test runs on
 # the four back ends, which must agree, and through the optimisation and inlining pipelines.
@@ -258,6 +258,30 @@ expect_output_not_contains = ["Segmentation fault", "dumped core", "internal err
 expect_output_contains = ["name=SemanticDiag::NoMatchingFunction", "err_numeric.cml:4:14:"]
 
 [[tests]]
+name = "entering.err_assignment_reverse"
+desc = "Never the other way, at an assignment too: an int? is not written into an int place, whose declared type is known there as it is at a declaration."
+kind = "negative"
+case = "../../../cases/consistency/entering/err_assignment_reverse.cml"
+args = ["-E", "short", "${case}"]
+backends = ["nvm"]
+backends_agree = []
+expect_exit = 1
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
+expect_output_contains = ["name=SemanticDiag::NoMatchingFunction", "err_assignment_reverse.cml:4:5:"]
+
+[[tests]]
+name = "entering.err_assignment_other_payload"
+desc = "An int? place does not take a float at an assignment: one payload does not become another, as at every other position of the form."
+kind = "negative"
+case = "../../../cases/consistency/entering/err_assignment_other_payload.cml"
+args = ["-E", "short", "${case}"]
+backends = ["nvm"]
+backends_agree = []
+expect_exit = 1
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
+expect_output_contains = ["name=SemanticDiag::NoMatchingFunction", "err_assignment_other_payload.cml:3:5:"]
+
+[[tests]]
 name = "entering.err_arms_unrelated"
 desc = "Arms of unrelated types (int and string) still do not join."
 kind = "negative"
@@ -341,7 +365,6 @@ backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_starts_with = "7 -1\nnone b\n[] 0 [] [1, 2]\n"
-
 [[tests]]
 name = "entering.error_arm"
 desc = "An error value in a T! position is that position's failing arm (design principles 3.9): `return if c then error(...) else v` under a declared T! (the position's type reaches each arm), a `return error(...)` with no branch at all, and an error value bound in a declared T!; the kind and the message arrive in the failed arm of the call. Alike on the four back ends."
@@ -352,3 +375,30 @@ backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_starts_with = "-1\n7\nBad: c was true\nvalue 7\n-1\nDirect: no branch\n"
+
+# An assignment to a `var` of the form is a position whose target type is known: the place was
+# declared with it. `best = hi` with `best: float?` and `hi: float` puts `hi` into the form (the
+# primer's section 7 writes `hi as float?` for it), `null` enters a `T?` place, and a literal takes
+# the place's type; the two `err_assignment_*` cases hold the other direction.
+
+[[tests]]
+name = "entering.assignment"
+desc = "A value of the payload written into a `T?` place, a `T` written into a `T!` place, a literal taking the place's type and `null` written into a `T?` place, including the `var` a `sync` closure captures. Alike on the four back ends."
+kind = "behavior"
+case = "../../../cases/consistency/entering/assignment.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "2.0 2.0 2.0 3.0\n-1\n5\nok 7\n"
+
+[[tests]]
+name = "entering.assignment.opt"
+desc = "The same program through std::opt, each back end: the write of the value into the form must survive the optimiser."
+kind = "behavior"
+case = "../../../cases/consistency/entering/assignment.cml"
+args = ["${case}", "std::opt", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "2.0 2.0 2.0 3.0\n-1\n5\nok 7\n"
