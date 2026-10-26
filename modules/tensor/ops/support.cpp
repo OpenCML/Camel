@@ -207,11 +207,25 @@ type::Type *tensorOf(std::optional<TypeCode> dtype, std::optional<StaticShape> s
     return tensorOf(TensorFacts{dtype, std::move(shape)});
 }
 
-std::optional<TypeCode> promote(std::optional<TypeCode> lhs, std::optional<TypeCode> rhs) {
+std::optional<TypeCode> commonElementType(std::optional<TypeCode> lhs, std::optional<TypeCode> rhs) {
     if (!lhs || !rhs) {
         return std::nullopt;
     }
-    return promoteTensorTypes(*lhs, *rhs);
+    // One element type, or none: the two operands state the type the operation computes in, and
+    // there is no widening from one to another (design principles 5.1).
+    return *lhs == *rhs ? lhs : std::nullopt;
+}
+
+void refuseMixedElementTypes(std::optional<TypeCode> lhs, std::optional<TypeCode> rhs) {
+    if (!lhs || !rhs || *lhs == *rhs) {
+        return;
+    }
+    throw std::invalid_argument(
+        "the two tensor operands have different element types ('" + typeCodeToString(*lhs) +
+        "' and '" + typeCodeToString(*rhs) +
+        "'): a tensor operator computes in one element type, and there is no implicit conversion "
+        "between numeric types (write the conversion, cast(value, \"" + typeCodeToString(*lhs) +
+        "\") or cast(value, \"" + typeCodeToString(*rhs) + "\"))");
 }
 
 std::optional<StaticShape>

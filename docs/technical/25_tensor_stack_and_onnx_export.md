@@ -154,9 +154,10 @@ export targets and a backend's table doubles as its capability registry.
 dimensions, where each dimension is either a known extent or unknown (`?`).
 An unknown rank is represented by an absent shape.
 
-- Every `OpDef::infer` computes the result dtype (with promotion) and propagates
-  shape where inputs are known: broadcasting, matmul contraction, reductions,
-  convolution and pooling arithmetic.
+- Every `OpDef::infer` computes the result dtype, which is the one element type its operands
+  state (two different ones match no arm, design principles 5.1), and propagates shape where
+  inputs are known: broadcasting, matmul contraction, reductions, convolution and pooling
+  arithmetic.
 - A shape conflict that is certain at compile time is a semantic diagnostic
   (`TensorShapeMismatch`, carrying the operator and both shapes). Unknown
   dimensions never produce errors; they fall back to runtime checks.
@@ -330,8 +331,9 @@ Every node evaluates to either a constant or a symbolic tensor:
   table (`lowering.h`/`lowering.cpp`, keyed by URI and minimum opset). Result
   dtype and shape come from the operator's `OpDef::infer` with constant
   arguments supplied, so the emitted graph carries full shape information.
-  Operand dtypes are converted to the inferred result dtype, which reproduces
-  Camel's promotion rules (ONNX requires equal input types).
+  Operand dtypes are emitted in that one element type, the same answer the operator's own
+  inference gives (ONNX requires equal input types and Camel has no implicit conversion
+  between numeric types).
 - `tensor:take` lowers to `Gather(axis = 0)`; constant `int[]` indices become an i64 initializer
   (the same mapping `nn:embedding` uses). `take`'s reverse is the internal `tensor:take_grad`,
   which has no ONNX lowering.
@@ -464,7 +466,7 @@ Implemented in `modules/tensor/`:
 
 | Path | Responsibility |
 |---|---|
-| `dtype.h/.cpp` | storage dtypes (float32, int64, bool), promotion, `dispatchDType` |
+| `dtype.h/.cpp` | storage dtypes (float32, int64, bool), element-type helpers, `dispatchDType` |
 | `tensor.h/.cpp` | `TensorObject`, `ShapeError` |
 | `interop.h/.cpp` | scalar/array/shape/DLPack conversions |
 | `type.h/.cpp` | interned `TensorType` with optional dtype and partially known shape |
