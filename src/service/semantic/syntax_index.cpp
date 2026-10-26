@@ -393,13 +393,6 @@ class Walker {
         }
     }
 
-    void moduleDecl(cst::ModuleDecl ctx) {
-        if (auto ident = ctx.get<cst::IdentDef>(); ident && nameOf(ident)) {
-            index_.moduleName      = nameOf(ident).text();
-            index_.moduleNameRange = rangeOf(nameOf(ident));
-        }
-    }
-
     void importDecl(cst::ImportDecl ctx) {
         const auto moduleName  = ctx.get<cst::ModuleName>();
         const std::string from = moduleName ? textOf(rangeOf(moduleName)) : std::string();

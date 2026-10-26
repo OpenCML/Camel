@@ -211,7 +211,7 @@ any Formatter::visitProgram(cst::Program context) {
     // licence header from the file's own description, and without it the two runs of comments
     // become one, which changes how the parser reads the file.
     {
-        const size_t limit = decls.empty() ? tokens.size() - 1 : decls.front()->firstToken().index();
+        const size_t limit = decls.empty() ? tokens.size() - 1 : decls.front().firstToken().index();
         size_t previousEnd = 0;
         for (size_t i = 0; i < limit; i++) {
             if (tokens[i].channel > 1) {
