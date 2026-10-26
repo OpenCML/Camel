@@ -1,3 +1,5 @@
+[0.2.35]
+
 [0.2.34]
 Changes:
 - 标准库长出新的一块：`bytes` 成为核心值类型（长度、连接、相等、切片），`re` 重写到 `Match` 上（`find`、`has_match`、`find_all`、`replace`、`split`、`validate`），`str` 按 Unicode 的大小写映射转换、按码点切片（像 rank-1 数组那样）；字符串搜索按模块导出的 `index_of` 调用，`find` 成为模块私有的 kernel。
