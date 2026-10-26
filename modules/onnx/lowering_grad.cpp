@@ -227,11 +227,20 @@ Value lowerSliceGrad(const LowerContext &ctx) {
         throw ExportError("tensor:slice_grad: the sliced axis must have a static extent");
     }
     const int64_t extent = *extentOpt;
-    const auto clamp = [&](int64_t v) {
-        v = v < 0 ? v + extent : v;
-        return std::clamp<int64_t>(v, 0, extent);
-    };
-    const int64_t start = clamp(ctx.constInt(3)), end = clamp(ctx.constInt(4));
+    // A bound is a position from 0 to the extent (design principles 5.4): a negative one is
+    // refused, not read from the end, and a bound that leaves the axis is refused rather than
+    // clamped, since Camel faults on such a run where ONNX Slice would quietly clamp it.
+    const int64_t start = ctx.constInt(3), end = ctx.constInt(4);
+    if (start < 0 || end < 0 || start > extent || end > extent) {
+        throw ExportError(
+            std::format(
+                "{}: the bounds {}..{} are outside axis {} of extent {}",
+                ctx.uri(),
+                start,
+                end,
+                axis,
+                extent));
+    }
     std::vector<int64_t> pads(static_cast<size_t>(2 * rank), 0);
     pads[static_cast<size_t>(axis)]        = start;
     pads[static_cast<size_t>(rank + axis)] = extent - end;

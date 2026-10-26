@@ -40,22 +40,6 @@ Shape concatShape(std::span<const std::span<const int64_t>> inputs, int64_t axis
 Array *
 concat(std::span<const Array *const> inputs, int64_t axis, mm::IAllocator &allocator);
 
-/// The bounds of a slice along an axis of `extent` elements, normalized: a negative bound
-/// counts from the end of the axis. A bound still outside [0, extent] after that is out of
-/// range: nullopt, and the operator faults (design principles 3.9: a `slice` out of bounds at
-/// run time is a fault, as an index out of bounds is). An end before the start is the empty
-/// range, not a fault (3.9).
-struct SliceRange {
-    int64_t start;
-    int64_t end;
-};
-/// One bound of a slice along an axis of `extent` elements, normalized: a negative bound counts
-/// from the end. nullopt when the bound is outside [-extent, extent] (the operator faults with
-/// SliceOutOfRange). The rule `slice_grad`'s bounds follow (`kernels/gradient.cpp`); the core's
-/// own slice refuses a negative bound instead (design principles 5.4), so nothing else reads it.
-std::optional<int64_t> normalizeSliceBound(int64_t extent, int64_t bound);
-std::optional<SliceRange> normalizeSliceBounds(int64_t extent, int64_t start, int64_t end);
-
 /// The elements `t[a:b:s]` takes along the first axis of a tensor, by the rule an array's
 /// subscript slice follows (design principles 5.4, 3.9): a bound is a position from 0 to
 /// `extent`, the end one past the last element taken, and a negative bound is out of range

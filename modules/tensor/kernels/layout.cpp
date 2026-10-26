@@ -267,23 +267,6 @@ concat(std::span<const Array *const> inputs, int64_t axisArg, mm::IAllocator &al
     return out;
 }
 
-std::optional<int64_t> normalizeSliceBound(int64_t extent, int64_t bound) {
-    const int64_t b = bound < 0 ? bound + extent : bound;
-    if (b < 0 || b > extent) {
-        return std::nullopt;
-    }
-    return b;
-}
-
-std::optional<SliceRange> normalizeSliceBounds(int64_t extent, int64_t start, int64_t end) {
-    const auto s = normalizeSliceBound(extent, start);
-    const auto e = normalizeSliceBound(extent, end);
-    if (!s || !e) {
-        return std::nullopt;
-    }
-    return SliceRange{*s, *e};
-}
-
 SubscriptSliceRange
 subscriptSliceRange(int64_t extent, int64_t start, int64_t end, int64_t step, int64_t written) {
     const bool wroteEnd   = (written & 1) != 0;

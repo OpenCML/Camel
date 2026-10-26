@@ -17,13 +17,18 @@
 #include "../kernels/layout.h"
 #include "../type.h"
 #include "camel/core/derivative.h"
+#include "camel/core/error/runtime.h"
 #include "catalog.h"
 #include "support.h"
+
+#include <format>
 
 namespace camel::tensor::ops {
 
 using namespace camel::core::type;
 namespace k = camel::tensor::kernels;
+using camel::core::error::RuntimeDiag;
+using camel::core::error::throwRuntimeFault;
 
 namespace {
 
@@ -133,10 +138,31 @@ slot_t layerNormGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
 
 // slice_grad(dy, like, axis, start, end, step?)
 slot_t sliceGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    // A bound of a slice is a position from 0 to the extent (design principles 5.4): a negative
+    // one is a fault, not a count from the end, exactly as the core's own slice node reads it.
+    // Checked before the kernel so the diagnostic is SliceOutOfRange, not a kernel error; a
+    // malformed axis or step is left to the kernel.
+    const Array *like     = likeArg(norm, 1);
+    const int64_t axisArg = intArg(norm, 2);
+    const int64_t start   = intArg(norm, 3);
+    const int64_t end     = intArg(norm, 4);
+    const auto rank       = static_cast<int64_t>(like->rank());
+    const int64_t axis    = axisArg < 0 ? axisArg + rank : axisArg;
+    if (axis >= 0 && axis < rank) {
+        const int64_t extent = like->dim(static_cast<size_t>(axis));
+        if (start < 0 || end < 0 || start > extent || end > extent) {
+            throwRuntimeFault(
+                RuntimeDiag::SliceOutOfRange,
+                start,
+                end,
+                std::format("axis {} of a tensor", axis),
+                extent);
+        }
+    }
     return runKernel("slice_grad", [&] {
         return wrap(norm.resultType(), k::sliceGrad(
             tensorArg(norm, 0),
-            likeArg(norm, 1)->shapeSpan(),
+            like->shapeSpan(),
             intArg(norm, 2),
             intArg(norm, 3),
             intArg(norm, 4),

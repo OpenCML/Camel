@@ -514,14 +514,13 @@ Array *sliceGrad(
         throw std::invalid_argument("slice axis out of range");
     }
     const int64_t extent = shape[static_cast<size_t>(axis)];
-    // The forward slice's bounds, normalized the same way (the forward slice faulted when they
-    // were out of range, so they are in range here unless the gradient was built by hand).
-    const auto range = normalizeSliceBounds(extent, start, end);
-    if (!range) {
-        throw std::out_of_range("slice bounds out of range");
+    // A bound of a slice is a position from 0 to the extent (design principles 5.4): a negative
+    // one is refused, not read from the end, which is the core's own reading of `:op/slice_sub`.
+    // The operator checks the bounds before it comes here, so the diagnostic is SliceOutOfRange;
+    // a bound that leaves the axis at this point is a range with no elements to read.
+    if (start < 0 || end < 0 || start > extent || end > extent) {
+        throw ShapeError("slice gradient: a bound is outside the axis");
     }
-    start = range->start;
-    end   = range->end;
     const int64_t count     = end > start ? (end - start + step - 1) / step : 0;
     const Array *src = asFloat(dy, allocator);
     if (src->rank() != shape.size() || src->dim(static_cast<size_t>(axis)) != count) {
