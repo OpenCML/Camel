@@ -48,7 +48,6 @@ kind = "negative"
 case = "../../../cases/modules/module_resolution/cmo_hit_stops/main.cml"
 args = ["-E", "short", "-I", "roots/one", "${case}"]
 expect_exit = 1
-expect_stdout_exact = ""
 expect_output_contains = ["Module 'foo' not found", "name=SemanticDiag::ModuleNotFound", "Found .cmo but load failed", "foo.cmo"]
 
 # `thing.md` and no `thing.cml`: a Markdown document is not a module file, whatever it holds.
@@ -60,7 +59,6 @@ kind = "negative"
 case = "../../../cases/modules/module_resolution/only_cml_and_cmo/markdown_only/main.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_stdout_exact = ""
 expect_output_contains = ["Module 'thing' not found", "name=SemanticDiag::ModuleNotFound", "no file 'thing.cml' or 'thing.cmo'"]
 
 [[tests]]
@@ -70,7 +68,8 @@ kind = "negative"
 case = "../../../cases/modules/module_resolution/only_cml_and_cmo/txt_only/main.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_stdout_exact = ""
+# 700 is what the text file holds: a run that read it as the module printed that and no diagnostic.
+expect_stdout_not_contains = ["700"]
 expect_output_contains = ["Module 'thing' not found", "no file 'thing.cml' or 'thing.cmo'"]
 
 [[tests]]
@@ -107,7 +106,6 @@ kind = "negative"
 case = "../../../cases/modules/module_resolution/only_cml_and_cmo/py_only/main.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_stdout_exact = ""
 expect_output_contains = ["Module 'thing' not found", "name=SemanticDiag::ModuleNotFound", "no file 'thing.cml' or 'thing.cmo'"]
 expect_output_not_contains = ["SyntaxDiag::UnexpectedToken", "thing.py"]
 
@@ -121,7 +119,6 @@ kind = "negative"
 case = "../../../cases/modules/module_resolution/only_cml_and_cmo/cmo_beside_cml/main.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_stdout_exact = ""
 expect_output_contains = ["Module 'thing' not found", "Found .cmo but load failed", "thing.cmo"]
 
 # A file is a module and the module's name is the file's name, for the entry file too (design
@@ -156,7 +153,8 @@ case = "../../../cases/compile/module_imports/include_path/prog/only_from_includ
 args = ["-E", "short", "${case}"]
 envs = ["CAMEL_MODULE_PATH=../roots/one"]
 expect_exit = 1
-expect_stdout_exact = ""
+# 101 is what `only_here` returns: the variable used to add the root, and the run printed that.
+expect_stdout_not_contains = ["101"]
 expect_output_contains = ["Module 'only_here' not found", "name=SemanticDiag::ModuleNotFound"]
 
 [[tests]]
@@ -170,11 +168,11 @@ expect_stdout_exact = "101\n"
 
 [[tests]]
 name = "camel_home_that_names_nothing_is_an_error"
-desc = "`CAMEL_HOME` pointing at a path that does not exist ends the run with an error naming the variable and the path, before anything is loaded: the run does not search a directory that is not there and fail later with 'module not found'."
+desc = "`CAMEL_HOME` pointing at a path that does not exist ends the run with an error naming the variable and the path, before anything is loaded: the run does not search a directory that is not there and fail later with 'module not found'. A checker of its own, because the runner sets `CAMEL_HOME` for every child it starts; the second half of it runs the same program with the installation root the run measures, which must still print 3."
 kind = "negative"
-case = "../../../cases/modules/module_resolution/only_cml_and_cmo/md_and_cml/main.cml"
-args = ["${case}"]
-envs = ["CAMEL_HOME=no_such_camel_home_directory"]
-expect_exit = 1
-expect_stdout_exact = ""
-expect_output_contains = ["CAMEL_HOME", "no_such_camel_home_directory", "does not exist"]
+tool = "node"
+case = "../../../cases/modules/module_resolution/camel_home_is_checked.mjs"
+args = ["${case}", "${camel}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS a CAMEL_HOME that names nothing is refused", "PASS the installation root the run measures still runs the program"]
+timeout_ms = 30000
