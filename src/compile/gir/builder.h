@@ -2246,6 +2246,14 @@ class Builder {
     /// where the loop is, its condition and its body as regions of the current graph (built where
     /// they are written, like the arms of a branch), and one LOOP node that has them.
     node_handle_t visitLoopNode(const GCT::node_ptr_t &gct);
+    /// `for x in s` where `s` is a stream (design principles 5.4; the shape the ruling of
+    /// 2026-10-26 gives): the rounds are the pulls of the stream's step function, so the loop is
+    /// the `while` the graph already has, whose state is the pull together with the state the
+    /// program wrote. `sequence` is the stream value, `initial` the program's first values (in
+    /// the head's order) and `stateTypes` their types.
+    node_handle_t buildStreamLoop(
+        const GCT::node_ptr_t &gct, node_handle_t sequence,
+        const std::vector<node_handle_t> &initial, const std::vector<camel::core::type::Type *> &stateTypes);
     /// Rewrites the body of a loop whose state values are handed back as `xs->append<v>`, when
     /// that state's first value is a fresh literal, to the form that may append to the state in
     /// place (design principles 10.5): the state's old value cannot be seen once the next round

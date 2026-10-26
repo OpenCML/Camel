@@ -16,6 +16,7 @@
 #include "camel/core/rtdata/bytes.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/type/bytes.h"
+#include "camel/core/type/pure.h"
 #include "camel/utils/path.h"
 #include "catalog.h"
 #include "support.h"
@@ -30,6 +31,19 @@ using namespace camel::core::type;
 namespace k = camel::tensor::kernels;
 
 namespace {
+
+/// True for an array whose element type is a compact aggregate of pure data (a struct or a tuple
+/// laid out field by field, binary.cpp): the elements a tensor's own storage does not describe,
+/// and the ones `tensorArg` converts and refuses. The predicate is the type's layout, so it
+/// answers for the same element types the payload writer walks.
+bool isAggregateElementArray(const Type *type) {
+    const ArrayType *array = asArrayType(type);
+    if (array == nullptr) {
+        return false;
+    }
+    const DataLayout *layout = pureDataLayout(array->elemType());
+    return layout != nullptr && layout->aggregate;
+}
 
 slot_t idxKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("idx", [&] {
@@ -226,7 +240,14 @@ slot_t saveNpyKernel(ArgsView &, ArgsView &norm, context::Context &) {
 
 slot_t toBytesKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("to_bytes", [&] {
-        const auto bytes = tensorToLittleEndian(tensorArg(norm, 0, true));
+        // A tensor's own storage is its payload: the elements are a compact run of one scalar's
+        // bits in row-major order, so its bytes are the payload once each element is
+        // little-endian. An aggregate element type is the same run with each element laid out
+        // field by field (binary.cpp), and the tensor conversion refuses it (it has no scalar to
+        // flatten to), so the array's own bytes are what the writer walks.
+        const auto bytes = isAggregateElementArray(norm.type(0))
+                               ? plainSequenceToLittleEndian(norm.get<Array *>(0))
+                               : tensorToLittleEndian(tensorArg(norm, 0, true));
         return camel::core::rtdata::toSlot(
             camel::core::rtdata::BytesObject::from(bytes, resultAllocator()));
     });

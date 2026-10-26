@@ -254,7 +254,7 @@ ones_like: (t: float[..]) => float[..]
 cast: (t: float[..] | number[], dtype: string) => int64[..]
 load_npy: (path: string) => T[..]
 show: (t: A[..]) => void
-from_bytes: (bytes: Bytes, shape: int[]) => f32[..]
+from_bytes: (bytes: Bytes, shape: int[]) => T[..] when is_plain::<T>()
 to_bytes: (t: T[..]) => Bytes when is_plain::<T>()
 save_npy: (t: T[..], path: string) => void when is_numeric::<T>()
 num_threads: () => int
@@ -328,6 +328,12 @@ max: (xs: T[]) => T? when is_ordered::<T>()
 flat_map: <f: (x: T) => U[]> (xs: T[]) => U[]
 sort_by: <key: (x: T) => K> (xs: T[]) => T[]
 zip_with: <f: (a: T, b: U) => V> (xs: T[], ys: U[]) => V[]
+```
+
+**`stream`** — import { ... } from stream — 1 name(s)
+
+```text
+unfold: (state: S, step: (state: S) => (T, S)?) => T..
 ```
 
 **`math`** — import { ... } from math — 48 name(s)

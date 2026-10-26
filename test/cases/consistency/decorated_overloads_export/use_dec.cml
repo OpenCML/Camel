@@ -1,0 +1,8 @@
+module use_dec
+
+import lib_dec
+
+func main(): int sync {
+    println(lib_dec::bump(3))
+    return 0
+}

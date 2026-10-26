@@ -1,0 +1,24 @@
+/**
+ * A decorated function shares its name with a plain function of the same name, and the name is
+ * exported: the importing module receives the decorated function and the plain one together, and
+ * a call of the name chooses among them exactly as a call in the declaring module does (design
+ * principles 4.4). The decorated one is not declared first here.
+ *
+ * The name is what its calls choose from, so `let f = bump` binds the name and `f(4)` resolves
+ * as `bump(4)` does; a position that needs one function of the name has none and says so, which
+ * is what the declaring module says of the same name.
+ */
+module use
+
+import lib
+
+func main(): int sync {
+    // the decorated `bump`: twice its body
+    println(lib::bump(3))
+    // the plain `bump`: the overload the argument's type chooses
+    println(lib::bump(2.0))
+    // the name, bound to a local name: its calls choose as the calls above do
+    let f = lib::bump
+    println(f(4), f(5))
+    return 0
+}
