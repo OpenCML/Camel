@@ -605,12 +605,12 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.step_value_other_signature"
-desc = "The step signature is the only function value that is a stream: a function value of any other signature is refused where a stream is expected, so the seam between a stream and a function value is exactly one signature wide."
+desc = "The step signature is the only function value that is a stream: a function value of any other signature is refused where a stream is expected, so the seam between a stream and a function value is exactly one signature wide. The lambda writes no resource clause, so its type carries what its body was measured to reach -- it touches nothing, which is `pure` -- and the refusal quotes the type it has."
 kind = "behavior"
 case = "../../../cases/compile/stream/step_value_signature.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["has type '(x: int) => int', which is not the declared type 'int..'"]
+expect_output_contains = ["has type '(x: int) => int pure', which is not the declared type 'int..'"]
 expect_output_not_contains = ["UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
