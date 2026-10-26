@@ -2014,7 +2014,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "grad_function_value_branch.macro"
-desc = "Refused: the function called is chosen by a branch at run time. The value is called twice (11:13 and 12:13): the compile-time expansion collects every refused call, and the run reports one error, at the first of them in source order. The position is the diagnostic's own field and is not written into the message; the branch that chooses the function is the related position. Under: std::macro (grad built at compile time)."
+desc = "Refused: the function called is chosen by a branch at run time. The value is called twice (11:13 and 12:13): the expansion collects every refused call, and the run reports one fault, at the first of them in source order, with each further refused call as related information carrying its own position and its own reason. The branch that chooses the function is the related position of the refusal it belongs to. Under: std::macro (grad built at compile time)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_function_value_branch.cml"
 args = ["${case}", "std::macro"]
@@ -2027,7 +2027,9 @@ const errors = text.split('\n').filter((line) => line.includes('[Error]'))
 assert(errors.length === 1, 'expected one diagnostic: ' + text)
 assert(errors[0].includes('grad_function_value_branch.cml:11:13'), 'the diagnostic is not located at the first call in source order (11:13): ' + text)
 assert(!/[(]at [^)]*grad_function_value_branch[.]cml:11:13[)]/.test(text), 'the position is written into the message: ' + text)
-assert(text.split('[the function value is chosen here at 10:13]').length === 2, 'the diagnostic must carry the related position of the branch that chooses the function: ' + text)
+assert(text.split('[the function value is chosen here at 10:13]').length === 3, 'each refused call must carry the branch that chooses the function as its related position: ' + text)
+const alsoRefused = text.match(/\[[^\]]*the function is chosen by a branch[^\]]*at 12:13\]/g) || []
+assert(alsoRefused.length === 1, 'the second refused call is not named with its own position and its own reason: ' + text)
 assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
 assert(/the macro call is at [^ ]*[.]cml:17:13/.test(text), 'macro call not named: ' + text)
@@ -2103,7 +2105,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "grad_function_value_parameter.macro"
-desc = "Refused: the function called is a parameter of the differentiated function itself. The value is called twice (11:13 and 12:22): the compile-time expansion collects every refused call, and the run reports one error, at the first of them in source order. The related position names the parameter the function value came in through: the port of the parameter carries the position the parameter is written at (10:11). Under: std::macro (grad built at compile time)."
+desc = "Refused: the function called is a parameter of the differentiated function itself. The value is called twice (11:13 and 12:22): the expansion collects every refused call, and the run reports one fault, at the first of them in source order, with each further refused call as related information carrying its own position and its own reason. The related position of each names the parameter the function value came in through; the port of the parameter carries the position the parameter is written at (10:11). Under: std::macro (grad built at compile time)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_function_value_parameter.cml"
 args = ["${case}", "std::macro"]
@@ -2117,6 +2119,9 @@ assert(errors.length === 1, 'expected one diagnostic: ' + text)
 assert(errors[0].includes('grad_function_value_parameter.cml:11:13'), 'the diagnostic is not located at the first call in source order (11:13): ' + text)
 assert(!/[(]at [^)]*grad_function_value_parameter[.]cml:(11:13|12:22)[)]/.test(text), 'the position is written into the message: ' + text)
 assert(text.includes('the function is a parameter, or a captured value, of the function being differentiated'), 'missing: the function is a parameter, or a captured value, of the function being differentiated in: ' + text)
+assert(text.split('[the function value is chosen here at 10:11]').length === 3, 'each refused call must carry the parameter the value came in through as its related position: ' + text)
+const alsoRefused = text.match(/\[[^\]]*the function is a parameter[^\]]*at 12:22\]/g) || []
+assert(alsoRefused.length === 1, 'the second refused call is not named with its own position and its own reason: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
 assert(/the macro call is at [^ ]*[.]cml:17:13/.test(text), 'macro call not named: ' + text)
 assert(text.includes('[the function value is chosen here at 10:11]'), 'missing the related position of the parameter the function value came in through: ' + text)

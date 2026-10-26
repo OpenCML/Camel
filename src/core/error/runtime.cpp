@@ -178,8 +178,8 @@ RuntimeErrorReporter::describe(const RuntimeFault &fault, const ExecutionSite &s
     }
     // The places the fault is about beside the one it stands at (see CarriedReport): this
     // diagnostic is the fault's own report, which is the first of the carried ones, and the
-    // places it names are attached to it. A reader who needs all of them -- the macro evaluator,
-    // which records one diagnostic per report -- walks the list itself.
+    // places it names are attached to it. A fault that collected more than one refusal has them
+    // attached to this same report, one entry each, by whoever reports it (the macro evaluator).
     if (!fault.carried().empty()) {
         for (const DiagLabel &label : fault.carried().front().related) {
             d.related.push_back(label);
