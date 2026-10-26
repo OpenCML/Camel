@@ -25,7 +25,7 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-device-'))
 const source = path.join(dir, 'probe.cml')
 fs.writeFileSync(
     source,
-    'module probe_device\nimport { available } from tiles\nfunc main(): int sync {\n    println(available())\n    return 0\n}\n',
+    'import { available } from tiles\nfunc main(): int sync {\n    println(available())\n    return 0\n}\n',
 )
 const proc = spawnSync(camel, [source, 'std::nvm'], {
     cwd: ROOT,

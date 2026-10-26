@@ -42,38 +42,33 @@ const BROKEN_HOME = path.join(SCRATCH, 'broken-python-home')
 fs.mkdirSync(BROKEN_HOME, { recursive: true })
 
 const programs = {
-    import_pyplot: `module import_pyplot
-import pyplot
+    import_pyplot: `import pyplot
 
 func main(): int {
     return 0
 }
 `,
-    import_python: `module import_python
-import python
+    import_python: `import python
 
 func main(): int {
     return 0
 }
 `,
-    use_pyplot: `module use_pyplot
-import { plot } from pyplot
+    use_pyplot: `import { plot } from pyplot
 
 func main(): int sync {
     plot([1.0, 2.0, 3.0], "${SCRATCH}/use-pyplot.svg")
     return 0
 }
 `,
-    use_python: `module use_python
-import { py_exec } from python
+    use_python: `import { py_exec } from python
 
 func main(): int sync {
     py_exec("x = 1")
     return 0
 }
 `,
-    python_then_plot: `module python_then_plot
-import { py_import } from python
+    python_then_plot: `import { py_import } from python
 import { plot } from pyplot
 
 func main(): int sync {
@@ -82,8 +77,7 @@ func main(): int sync {
     return 0
 }
 `,
-    plot_then_python: `module plot_then_python
-import { plot } from pyplot
+    plot_then_python: `import { plot } from pyplot
 import { py_import } from python
 
 func main(): int sync {
@@ -92,8 +86,7 @@ func main(): int sync {
     return 0
 }
 `,
-    twice: `module twice
-import { plot } from pyplot
+    twice: `import { plot } from pyplot
 import { py_exec } from python
 
 func main(): int sync {

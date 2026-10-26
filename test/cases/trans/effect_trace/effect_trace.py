@@ -113,7 +113,7 @@ def main() -> int:
             check([l["stage"] for l in macro_lines] == ["macro", "run"], "with std::macro: stages macro, run")
             drop = lambda ls: [{k: v for k, v in l.items() if k not in ("seq", "stage")} for l in ls]
             check(drop(run_lines) == drop(macro_lines), "traces agree on uri, origin and payload")
-            check(run_lines[0]["origin"]["line"] == 8, "the macro body println is at line 8")
+            check(run_lines[0]["origin"]["line"] == 7, "the macro body println is at line 7")
         elif mode == "payload":
             # One ASCII letter then 1500 two-byte characters: with the "string=" prefix the
             # 2048-byte limit falls inside a character, so the cut backs off by one byte.
@@ -121,7 +121,7 @@ def main() -> int:
             special = 'q"b\\s|p\tz'  # quote, backslash, the separator character, a tab
             program = Path(t) / "payload.cml"
             program.write_text(
-                "module effect_trace_payload\n\nfunc main(): int sync {\n"
+                "func main(): int sync {\n"
                 '    println("hi")\n'
                 '    println("q\\"b\\\\s|p\\tz")\n'
                 f'    println("{long_text}")\n'
@@ -147,7 +147,7 @@ def main() -> int:
         elif mode == "variables":
             program = Path(t) / "variables.cml"
             program.write_text(
-                "module effect_trace_variables\n\nfunc main(): int sync {\n"
+                "func main(): int sync {\n"
                 "    var c = 1\n"
                 "    let a = c + 1\n"
                 "    c += a\n"

@@ -351,7 +351,7 @@ backends = false
 case = "../../../cases/consistency/attempt/refuse_translate.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 0
-expect_output_contains = ["rt::attempt<double>(depth, at_11_12, rt::Fn<double(double)>(\"Function(graph=risky, tupleSlots=0)\"", "if (v1_attempt.failed()) {"]
+expect_output_contains = ["rt::attempt<double>(depth, at_10_12, rt::Fn<double(double)>(\"Function(graph=risky, tupleSlots=0)\"", "if (v1_attempt.failed()) {"]
 expect_output_not_contains = ["TranslationRefused", "Segmentation fault", "dumped core"]
 
 [[tests]]

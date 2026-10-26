@@ -122,5 +122,5 @@ verify_script = """
 const errors = JSON.parse(input.stdout)
 assert(errors.length === 2, 'exactly two JSON diagnostics')
 assert(errors.every(d => d.data.name === 'LexicalDiag::IllegalCharacter'), 'lexical diagnostic names')
-assert(errors.every(d => d.range.start.line === 1), 'source positions retained')
+assert(errors.every(d => d.range.start.line === 0), 'source positions retained')
 """

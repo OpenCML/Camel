@@ -275,7 +275,7 @@ expectFix({
     title: "insert the ')' that is missing",
     // After the last token before the closer that `)` belongs to, not at the token the parser
     // tripped over.
-    edits: [{ range: { start: { line: 3, character: 19 }, end: { line: 3, character: 19 } }, replacement: ')' }],
+    edits: [{ range: { start: { line: 1, character: 19 }, end: { line: 1, character: 19 } }, replacement: ')' }],
     accepted: true,
 })
 expectFix({
@@ -283,7 +283,7 @@ expectFix({
     file: render('syntax_missing_token'),
     name: 'SyntaxDiag::MissingToken',
     title: "insert ':'",
-    edits: [{ range: { start: { line: 2, character: 8 }, end: { line: 2, character: 8 } }, replacement: ':' }],
+    edits: [{ range: { start: { line: 0, character: 8 }, end: { line: 0, character: 8 } }, replacement: ':' }],
     accepted: true,
 })
 expectFix({
@@ -294,7 +294,7 @@ expectFix({
     // The end of the line the string opens on, never the end of the file: the lexer reads an
     // unclosed string to the end of the file, and a quote there would put the rest of the program
     // inside it - the fix would compile and mean something else.
-    edits: [{ range: { start: { line: 3, character: 19 }, end: { line: 3, character: 19 } }, replacement: "'" }],
+    edits: [{ range: { start: { line: 1, character: 19 }, end: { line: 1, character: 19 } }, replacement: "'" }],
     // The string is closed, and the compiler then reports the next mistake the file always had:
     // the ')' the writer meant to close the call with was inside the string as written, so the
     // call is missing it (MissingClosingDelimiter). Closing the string at the end of the file
@@ -306,7 +306,7 @@ expectFix({
     file: render('lexical_illegal_character'),
     name: 'LexicalDiag::IllegalCharacter',
     title: 'remove it',
-    edits: [{ range: { start: { line: 3, character: 14 }, end: { line: 3, character: 15 } }, replacement: '' }],
+    edits: [{ range: { start: { line: 1, character: 14 }, end: { line: 1, character: 15 } }, replacement: '' }],
     // `let x = 1 $ 2` becomes `let x = 1  2`: the line break rule makes the `2` a statement of
     // its own, so the file is accepted - which is what removing a character that no token starts
     // with means, not a claim that it is what the writer wanted.
@@ -317,7 +317,7 @@ expectFix({
     file: 'parse/syntax/comparison_needs_space.cml',
     name: 'SyntaxDiag::ComparisonNeedsSpace',
     title: "write a space before '<'",
-    edits: [{ range: { start: { line: 6, character: 8 }, end: { line: 6, character: 8 } }, replacement: ' ' }],
+    edits: [{ range: { start: { line: 5, character: 8 }, end: { line: 5, character: 8 } }, replacement: ' ' }],
     accepted: true,
 })
 expectFix({
@@ -327,7 +327,7 @@ expectFix({
     title: "remove the space before '>'",
     // The space before the '>' the message is about, not the whitespace in front of the token the
     // parser stopped at (which is on the next line).
-    edits: [{ range: { start: { line: 8, character: 20 }, end: { line: 8, character: 21 } }, replacement: '' }],
+    edits: [{ range: { start: { line: 7, character: 20 }, end: { line: 7, character: 21 } }, replacement: '' }],
     // The parse is repaired; the file has a second mistake of its own, because `pick<int>` passes
     // `int` as a value rather than as a type argument (FunctionNameAsValue).
     accepted: false,
@@ -337,7 +337,7 @@ expectFix({
     file: 'parse/syntax/line_starts_with_operator.cml',
     name: 'SyntaxDiag::LineStartsWithOperator',
     title: 'join this line to the one before it',
-    edits: [{ range: { start: { line: 4, character: 13 }, end: { line: 5, character: 4 } }, replacement: ' ' }],
+    edits: [{ range: { start: { line: 3, character: 13 }, end: { line: 4, character: 4 } }, replacement: ' ' }],
     // The line joins the one before it; the case has a second mistake of its own, because `x` was
     // never declared (UnresolvedReference).
     accepted: false,
@@ -347,7 +347,7 @@ expectFix({
     file: 'parse/syntax/unterminated_comment.cml',
     name: 'LexicalDiag::UnterminatedComment',
     title: 'close the comment',
-    edits: [{ range: { start: { line: 8, character: 0 }, end: { line: 8, character: 0 } }, replacement: '*/' }],
+    edits: [{ range: { start: { line: 7, character: 0 }, end: { line: 7, character: 0 } }, replacement: '*/' }],
     accepted: true,
 })
 expectFix({
@@ -358,8 +358,8 @@ expectFix({
     // One fix with two edits: the clause is written in front of the body and removed from behind
     // it. They name disjoint ranges, so a tool applies both to the text as written.
     edits: [
-        { range: { start: { line: 3, character: 21 }, end: { line: 3, character: 21 } }, replacement: 'when true ' },
-        { range: { start: { line: 3, character: 36 }, end: { line: 3, character: 45 } }, replacement: '' },
+        { range: { start: { line: 2, character: 21 }, end: { line: 2, character: 21 } }, replacement: 'when true ' },
+        { range: { start: { line: 2, character: 36 }, end: { line: 2, character: 45 } }, replacement: '' },
     ],
     accepted: true,
 })
@@ -380,7 +380,7 @@ expectFix({
     file: 'compile/diag_fixes/leading_zero_09.cml',
     name: 'LexicalDiag::InvalidNumberFormat',
     title: 'write the number without its leading zero',
-    edits: [{ range: { start: { line: 9, character: 12 }, end: { line: 9, character: 14 } }, replacement: '9' }],
+    edits: [{ range: { start: { line: 8, character: 12 }, end: { line: 8, character: 14 } }, replacement: '9' }],
     accepted: true,
 })
 
@@ -398,7 +398,7 @@ expectFix({
     file: 'parse/rulings/lambda_without_parentheses.cml',
     name: 'SyntaxDiag::LambdaParametersNeedParentheses',
     title: 'put the parameters in parentheses',
-    edits: [{ range: { start: { line: 16, character: 35 }, end: { line: 16, character: 36 } }, replacement: '(x)' }],
+    edits: [{ range: { start: { line: 15, character: 35 }, end: { line: 15, character: 36 } }, replacement: '(x)' }],
     accepted: true,
 })
 

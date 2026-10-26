@@ -9,6 +9,12 @@
 // digests were recorded once more for that field: deleting the node `name` entries from the
 // document reproduces the previous values exactly.
 //
+// Recorded once more when the samples stopped declaring `module <name>`: the digest covers each
+// node's span, and the samples' only change on this branch is that deleted declaration (one line
+// each), so their nodes stand on the line above the one they stood on. The three digests below are
+// the documents the runs of the current samples produce, normalized the way this script normalizes
+// them: `module` and the checkout path replaced, `origin` dropped.
+//
 // The sample programs hold literals only and `std::jgir` is a translation pass: no environment
 // read, hash or machine query is executed, so the graph is the same on every machine.
 //
@@ -35,19 +41,19 @@ const CASES = {
         old: 'sys',
         now: 'env',
         file: 'env_identity.cml',
-        expected: 'bdfca7bab26ddbb00227bcb92ee94983d1c021bc4716b6d24b1c3b1bbc4d0020',
+        expected: 'b7340fb18b74240ed13bcfbe7a9b056ed3692f7f745fffda0796cde952f2c75b',
     },
     process: {
         old: 'os',
         now: 'process',
         file: 'process_identity.cml',
-        expected: 'd08da5491e23d6999032d46e703435cb17e8973fe45327eba4ca6dfe218d7c49',
+        expected: '92a32a088572ece27eed08a59553056120f93fb86ce2d153ef1fbbe4f42f5b0a',
     },
     hash: {
         old: 'crypto',
         now: 'hash',
         file: 'hash_identity.cml',
-        expected: '4e3858820c04c8b127d8e2caa79f29f95fd79e523755f6df257b545fb9a7b700',
+        expected: '392a26ad1011fd25d73956cc276aafefb3968a50136a222522babee6bc691c28',
     },
 }
 
