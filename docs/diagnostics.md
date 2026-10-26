@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-285 diagnostics: 268 errors, 17 warnings. 15 carry a machine-applicable edit, 270 say why they carry none.
+287 diagnostics: 270 errors, 17 warnings. 15 carry a machine-applicable edit, 272 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -243,7 +243,9 @@ prints one entry.
 | `0x030001EA` | [SemanticDiag::TagFieldNameAmbiguous](#tagfieldnameambiguous) | Error | no |
 | `0x030001EB` | [SemanticDiag::TagFunctionArgumentNotReadable](#tagfunctionargumentnotreadable) | Error | no |
 | `0x030001EC` | [SemanticDiag::GenericTypeArgumentGrows](#generictypeargumentgrows) | Error | no |
+| `0x030001ED` | [SemanticDiag::StreamConsumedInLoop](#streamconsumedinloop) | Error | no |
 | `0x030001EE` | [SemanticDiag::BranchElementTypeMismatch](#branchelementtypemismatch) | Error | no |
+| `0x030001EF` | [SemanticDiag::TeeHintNotPositive](#teehintnotpositive) | Error | no |
 | `0x030001F0` | [SemanticDiag::RuleWithArgumentNotConstant](#rulewithargumentnotconstant) | Error | no |
 | `0x030001F1` | [SemanticDiag::UsesPromiseViolated](#usespromiseviolated) | Error | no |
 | `0x030001F2` | [SemanticDiag::TypeAliasRecursionUnrepresented](#typealiasrecursionunrepresented) | Error | no |
@@ -8144,6 +8146,55 @@ func main(): int sync {
 }
 ```
 
+### StreamConsumedInLoop
+
+`0x030001ED` · Error · `SemanticDiag::StreamConsumedInLoop`
+
+**Fix**
+
+None: choice: a stream read once per round is the loop's own state, so which name carries it and how the round writes it are the writer's to write
+
+**Message**
+
+```text
+'{0}' is consumed once per round of this loop.
+```
+
+**Help**
+
+```text
+A loop's condition and its body run again on every round, so a stream named in one of them is read once per round, and under value semantics every round reads the same stream (design principles 5.4). To read one element per round, carry the stream as the loop's own state: `loop acc = 0, rest = s while ... do ...` takes the rest a round's pull answers and hands it back as the next state. To read the stream to its end, write `for x in s`, which is the loop the compiler builds for exactly that.
+```
+
+**Example** (`test/cases/compile/stream/consumed_in_loop.cml`, run as `camel test/cases/compile/stream/consumed_in_loop.cml`)
+
+```camel
+module stream_consumed_in_loop
+
+func count(n: int): int.. {
+    return step(n)
+}
+
+func step(n: int): () => (int, int..)? {
+    return () => if n > 0 then (n, step(n - 1)) else null
+}
+
+func firstOf(p: (int, int..)?): int {
+    return match p {
+        case null => 0
+        case v => v.0
+    }
+}
+
+func twice(s: int..): int {
+    return loop acc = 0 while acc < 2 do acc + firstOf(s())
+}
+
+func main(): int sync {
+    return twice(count(3))
+}
+```
+
 ### BranchElementTypeMismatch
 
 `0x030001EE` · Error · `SemanticDiag::BranchElementTypeMismatch`
@@ -8176,6 +8227,51 @@ func pick(flag: bool, whole: int[], real: f32[]): int[] {
 func main(): int sync {
     let picked = pick(true, new([1, 2, 3] as int[]), new([f32(1.0), f32(2.0), f32(3.0)]))
     return if picked[0] > 0 then 0 else 1
+}
+```
+
+### TeeHintNotPositive
+
+`0x030001EF` · Error · `SemanticDiag::TeeHintNotPositive`
+
+**Fix**
+
+None: choice: how wide the buffer is expected to be is the writer's to say, and any width of 1 or more says it
+
+**Message**
+
+```text
+The `tee` width '{0}' is below 1.
+```
+
+**Help**
+
+```text
+`tee(s, n)` reads `s` once and gives two streams over the same elements, each read once (design principles 5.4). A side that runs ahead of the other buffers the elements the other has not read yet, and `n` says how wide that buffer is expected to be: it is a hint, so the executor grows the buffer rather than make a side wait, and a hint wider than the implementation's cap is clamped to it. What no buffer can be is narrower than the one element being handed over, so write `n` as 1 or more, or leave it out for the default of 8.
+```
+
+**Example** (`test/cases/compile/stream/tee_hint_not_positive.cml`, run as `camel test/cases/compile/stream/tee_hint_not_positive.cml`)
+
+```camel
+module stream_tee_hint_not_positive
+
+import stream
+
+func count(n: int): int.. {
+    return step(n)
+}
+
+func step(n: int): () => (int, int..)? {
+    return () => if n > 0 then (n, step(n - 1)) else null
+}
+
+func total(s: int..): int {
+    return loop acc = 0 for x in s do acc + x
+}
+
+func main(): int sync {
+    let (left, right) = stream::tee(count(3), 0)
+    return total(left) + total(right)
 }
 ```
 

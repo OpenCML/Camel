@@ -1286,6 +1286,8 @@ Builder::arm_ptr_t Builder::buildArm(
     const uint32_t outerRegion = draft.insertRegion();
     arm->graph                 = currGraph_.get();
     arm->region                = draft.addRegion(kind, outerRegion);
+    arm->kind                  = kind;
+    arm->origin                = exec != nullptr ? exec->origin() : camel::source::kInvalidOriginId;
     arm->firstNode             = static_cast<draft_node_ref_t>(draft.nodeSlotCount());
     if (context_ && context_->sourceContext()) {
         const auto origin = deriveGirOrigin(
@@ -3818,15 +3820,46 @@ void Builder::consumeStream(node_handle_t value, const GCT::node_ptr_t &at) {
     if (value == nullptr || currGraph_ == nullptr || at == nullptr) {
         return;
     }
-    std::vector<uint32_t> arms;
-    arms.reserve(armStack_.size());
+    StreamConsumption use;
+    use.graph  = currGraph_.get();
+    use.value  = value;
+    use.origin = at->origin();
+    use.arms.reserve(armStack_.size());
     for (ArmBuild *arm : armStack_) {
-        arms.push_back(arm->region);
+        // A loop's condition and body run again on every round, so a use standing in one of them
+        // consumes the value once per round; the ports of the region are the values the round
+        // starts from (the element, the states), and one of them is the loop's own state, which
+        // is what a value consumed per round has to be.
+        const bool round = arm->kind == runtime::GCRegionKind::LoopCond ||
+                           arm->kind == runtime::GCRegionKind::LoopBody;
+        use.arms.push_back({arm->region, round, round ? arm->ports : std::vector<node_handle_t>{},
+                            arm->origin});
     }
-    streamConsumptions_.push_back({currGraph_.get(), value, std::move(arms), at->origin()});
+    streamConsumptions_.push_back(std::move(use));
 }
 
 void Builder::checkStreamConsumption(DraftGraphBuilder *graph) {
+    // A value consumed in a loop's round region is consumed once per round (design principles
+    // 5.4): under value semantics every round sees the same stream, so the value has to be the
+    // loop's own state -- which the round takes from its port and gives back as the next state --
+    // and a value written outside the loop is consumed again by each round.
+    for (const StreamConsumption &use : streamConsumptions_) {
+        if (use.graph != graph) {
+            continue;
+        }
+        for (const StreamConsumption::ArmUse &arm : use.arms) {
+            if (!arm.round ||
+                std::find(arm.ports.begin(), arm.ports.end(), use.value) != arm.ports.end()) {
+                continue;
+            }
+            Type *valueType = valueTypeOf(nodeTypeOf(use.value));
+            diags_->of(SemanticDiag::StreamConsumedInLoop)
+                .atOrigin(use.origin)
+                .relatedOrigin(arm.origin, "the loop this use stands in")
+                .commit(valueType != nullptr ? valueType->toString() : std::string("a stream"));
+            throw BuildAbortException();
+        }
+    }
     // Two uses of one stream are one consumer when one of them stands in an arm the other does
     // not: only one arm of a branch runs, so the two uses cannot both happen on one path. The arms
     // of a branch are complete only once it is, and the uses stand in the arms while those are
@@ -3836,11 +3869,11 @@ void Builder::checkStreamConsumption(DraftGraphBuilder *graph) {
             if (group.first != graph) {
                 continue;
             }
-            const auto regionOf = [&](const std::vector<uint32_t> &use) -> uint32_t {
-                for (uint32_t region : use) {
-                    if (std::find(group.second.begin(), group.second.end(), region) !=
+            const auto regionOf = [&](const std::vector<StreamConsumption::ArmUse> &use) -> uint32_t {
+                for (const StreamConsumption::ArmUse &arm : use) {
+                    if (std::find(group.second.begin(), group.second.end(), arm.region) !=
                         group.second.end()) {
-                        return region;
+                        return arm.region;
                     }
                 }
                 return 0;
