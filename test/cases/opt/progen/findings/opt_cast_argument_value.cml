@@ -1,7 +1,10 @@
 /**
  * finding F35 ((other) wrong value after a rewrite), found by hand, not by progen. Specialization
- *   bound the constant under an `as` conversion to the parameter without converting it: the
- *   integer 7 passed as `i as float` reached the callee as the float with the bits of 7.
+ *   bound the constant under a converting CAST to the parameter without converting it: the
+ *   integer 7 passed as a float conversion reached the callee as the float with the bits of 7.
+ *   The conversion was written `i as float` when the finding was made; `as` casts dynamically
+ *   now and refuses `int` to `float`, so the program writes the conversion the way the language
+ *   writes it today, `float(i)` -- the spelling SemanticDiag::DynamicCastForbidden names.
  * Pipeline: std::opt std::nvm (also std::opt and std::opt::specialize)
  * Expected output: 7.5, 17.25, 10.75 (three lines)
  * Actual: 0.5, -1.75, 7.75 (node VM; the second line differs between schedulers)
@@ -16,8 +19,8 @@ func main(): int sync {
     let i = 7
     let j = 3
     let d = 3.5
-    println(f(i as float))
-    println(h(i as float, j as float))
-    println(h(d, j as float) + f(0.0))
+    println(f(float(i)))
+    println(h(float(i), float(j)))
+    println(h(d, float(j)) + f(0.0))
     return 0
 }
