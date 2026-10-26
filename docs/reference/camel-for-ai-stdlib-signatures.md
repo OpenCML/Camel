@@ -513,22 +513,23 @@ strftime: <format: string> (timestamp: float) => string
 strptime: <format: string> (text: string) => float!
 ```
 
-**`fs`** — import { ... } from fs — 15 name(s)
+**`fs`** — import { ... } from fs — 16 name(s)
 
 ```text
-read_text: (path: string) => string
-try_read_text: (path: string) => string!
-read_chunk: (path: string, offset: int, size: int) => Bytes
-read_bytes: (path: string) => Bytes
-write_bytes: (path: string, content: Bytes) => void
-replace: (path: string, content: Bytes) => void
-write_text: (path: string, content: string) => void
+read_text: (path: string) => string!
+read_bytes: (path: string) => Bytes!
+read_chunk: <offset: int, size: int> (path: string) => Bytes!
+write_text: <path: string, atomic: bool = false> (content: string) => void!
+write_bytes: <path: string, atomic: bool = false> (content: Bytes) => void!
+append_text: <path: string> (content: string) => void!
+append_bytes: <path: string> (content: Bytes) => void!
 exists: (path: string) => bool
 is_file: (path: string) => bool
 is_dir: (path: string) => bool
-file_size: (path: string) => int
-mkdir: (path: string) => bool
-mkdirs: (path: string) => bool
+file_size: (path: string) => int!
+list_dir: (path: string) => string[]!
+mkdir: (path: string) => void!
+mkdirs: (path: string) => void!
 remove: (path: string) => void!
 remove_dir: (path: string) => void!
 ```

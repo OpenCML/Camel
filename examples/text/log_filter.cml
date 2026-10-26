@@ -7,7 +7,7 @@ module log_filter
 import { test } from re
 import { split, trim, index_of } from str
 import { count } from array
-import { mkdirs, write_text, try_read_text } from fs
+import { mkdirs, write_text, read_text } from fs
 import { get_env } from env
 
 type Entry = { time: string, level: string, message: string }
@@ -37,18 +37,18 @@ func main(): int sync {
     let root = get_env('CAMEL_TEST_TMPDIR') ?? ''
     let dir = if root == '' then 'tmp/examples' else root
     let path = dir + '/service.log'
-    mkdirs(dir)
-    write_text(path, '09:00:01 INFO  service started
+    let _ = dir->mkdirs
+    let _ = '09:00:01 INFO  service started
 09:00:07 WARN  disk usage at 81%
 09:01:12 ERROR cannot open cache.db
 
 09:01:13 INFO  retrying in 5s
 09:01:18 ERROR cannot open cache.db
 09:02:00 INFO  shutdown requested
-')
+'->write_text<path>
 
     // The file ends with a line feed and has an empty line: both give empty pieces.
-    let lines = (try_read_text(path) !! '')->split<'\n'>
+    let lines = (path->read_text !! '')->split<'\n'>
         ->map<(l: string): string => trim(l)>
         ->filter<(l: string): bool => len(l) > 0>
     let entries = lines->map<parse>

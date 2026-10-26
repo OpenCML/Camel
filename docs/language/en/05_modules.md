@@ -54,7 +54,7 @@ Names that can be used without an import (global built-ins): `print`, `println`,
 | `math` | The constants `pi`, `e`, `inf`, `nan` (values); elementary functions, rounding, `min`/`max`/`clamp`, `gcd`/`lcm`, base conversion, bit operations such as `bit_and` |
 | `random` | The type `Key`; `seed`, `rand`, `randint`, `randn`, `choice`, `sample`, `shuffle`, and the pure keyed `key`, `split`, `permutation` |
 | `time` | `now`, `strftime`, `strptime` |
-| `fs` | `exists`, `is_file`, `is_dir`, `mkdir`, `mkdirs`, `remove`, `remove_dir`, `read_text`, `try_read_text`, `write_text`, `file_size`, `read_chunk`, `read_bytes`, `write_bytes`, `replace` |
+| `fs` | `exists`, `is_file`, `is_dir`, `mkdir`, `mkdirs`, `remove`, `remove_dir`, `list_dir`, `read_text`, `write_text`, `append_text`, `file_size`, `read_chunk`, `read_bytes`, `write_bytes`, `append_bytes` |
 | `json` | the type `Json`; `encode`, `decode`, `decode_as`; `kind`, `is_null`, `get`, `as_bool`, `as_int`, `as_float`, `as_string`, `as_array`, `as_object` |
 | `process`, `env` | `user_name`, `cpu_count`, terminal input; `get_cwd`, `get_env` |
 | `re` | `test` |

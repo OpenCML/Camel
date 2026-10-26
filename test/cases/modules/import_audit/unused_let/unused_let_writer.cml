@@ -8,4 +8,4 @@ import { get_env } from env
 import { write_text } from fs
 
 let path = (get_env('CAMEL_TEST_TMPDIR') ?? '') + '/h222_unused_let_flag.txt'
-export let wrote = write_text(path, 'the root graph of an unused import ran')
+export let wrote = 'the root graph of an unused import ran'->write_text<path>

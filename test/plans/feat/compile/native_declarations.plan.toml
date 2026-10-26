@@ -738,7 +738,7 @@ kind = "behavior"
 case = "../../../cases/compile/native/fs_declaration_import.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_exact = "true\nfalse\ntrue\ntrue\n26\nhello from the declaration\nhello\nhello from the declaration\nok\nNotFound\nok\nok\nfalse\n"
+expect_stdout_exact = "ok\nfalse\ntrue\ntrue\n26\nhello from the declaration\nhello\nhello from the declaration\nok\nNotFound\nok\nok\nfalse\n"
 
 [[tests]]
 name = "native.fs_wrong_arity"

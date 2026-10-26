@@ -14,7 +14,7 @@ func tally(words: string[]): Map<string, int> {
 }
 
 func main(path: string): int sync {
-    let words = words_of(read_text(path))
+    let words = words_of(path->read_text !! '')
     let counts = tally(words)
     println(len(words))
     println(encode(counts))

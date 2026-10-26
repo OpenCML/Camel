@@ -3696,93 +3696,120 @@ The moment a text gives when read with a strptime format; the fields are taken a
 
 ## `fs`: files
 
-The file system: the content of a file, writing and atomically replacing it, the few questions
-about a path, and the two removals. Every operator of the module touches the file system, which
-the program cannot see from its arguments, so every one has an effect and a call runs only when
-it is reachable from a sync block; no pass folds or merges one. A declaration carries a
-signature, not an effect: the resource facts stay in the C++ module (`modules/fs`), where only
-C++ knows them.
+The file system. A file is read and written either as text (`string`, always UTF-8) or as
+`Bytes`; the two sets of functions are separate and meet only in `bytes::encode` and
+`bytes::decode`, so a text file is never half-read as binary and the bytes written for a text are
+the same on every platform. What the file system can refuse -- a missing file, a permission, a
+full disk -- is an error value (`T!`) whose kind says which; a wrong argument, such as a negative
+size, is a fault.
+
+Every function here uses the resource `fs`: a call runs only when its result is needed or it is
+written in a `sync` block, and calls on the file system keep their written order. A path is the
+data a reader works on (`'notes.txt'->read_text`) and the destination a writer is configured with
+(`text->write_text<'out/log.txt'>`), so `write_text<'out/log.txt'>` is itself the function that
+writes that file. Relative paths start at the working directory (`env::get_cwd`).
+
+### Reading
 
 #### `read_text`
 
 ```camel
-read_text: (path: string) => string
+read_text: (path: string) => string!
 ```
 
-The whole content of the file.
+The whole content of a file, as text.
 
-- With effects: reads a file.
-- Failure: fault `FileOpenFailed` when the file cannot be opened; fault `InvalidArgument` for malformed UTF-8; use read_bytes for binary files.
-- Example: `read_text('notes.txt')` gives `the text of the file`
-
-#### `try_read_text`
-
-```camel
-try_read_text: (path: string) => string!
-```
-
-The whole content of the file, or an error value.
-
-- With effects: reads a file.
-- Failure: error `IOError` when the path is a directory, or the file cannot be opened or read; error `EncodingError` for malformed UTF-8.
-- Example: `try_read_text('notes.txt') !! ''` gives `the text, or '' when it cannot be read`
-
-#### `read_chunk`
-
-```camel
-read_chunk: (path: string, offset: int, size: int) => Bytes
-```
-
-Up to size bytes of the file starting at byte offset; fewer at the end of the file.
-
-- With effects: reads a file.
-- Failure: fault `InvalidArgument` when offset or size is negative; fault `FileOpenFailed` or `FileSystemError` when the file cannot be opened or read.
-- Example: `read_chunk('notes.txt', 0, 16)` gives `the first 16 bytes`
+- With effects: not pure.
+- Failure: error value `NotFound` when nothing exists at the path; error value `PermissionDenied` when the file system refuses the read; error value `IOError` when the path is a directory or the read fails for another reason; error value `EncodingError` when the content is not valid UTF-8.
+- Example: `'notes.txt'->read_text !! ''` gives `the text of the file, or '' when it cannot be read`
 
 #### `read_bytes`
 
 ```camel
-read_bytes: (path: string) => Bytes
+read_bytes: (path: string) => Bytes!
 ```
 
-The complete binary content, preserving every byte.
+The whole content of a file, every byte preserved.
 
 - With effects: reads a file.
-- Example: `read_bytes('pixels.bin')`
+- Failure: error value `NotFound` when nothing exists at the path; error value `PermissionDenied` when the file system refuses the read; error value `IOError` when the path is a directory or the read fails for another reason.
+- Example (a fragment, not compiled): `'pixels.bin'->read_bytes !! encode('')` gives `the bytes of the file`
+- Why it is not compiled: the example builds its default `Bytes` with `encode` from the `bytes` module, which this page does not import
 
-#### `write_bytes`
-
-```camel
-write_bytes: (path: string, content: Bytes) => void
-```
-
-Writes binary content, creating parent directories when needed.
-
-- With effects: writes a file.
-- Example: `write_bytes('pixels.bin', payload)`
-
-#### `replace`
+#### `read_chunk`
 
 ```camel
-replace: (path: string, content: Bytes) => void
+read_chunk: <offset: int, size: int> (path: string) => Bytes!
 ```
 
-Flushes a temporary in the same directory and atomically replaces the destination.
+Up to size bytes of a file from byte offset on; fewer at the end of the file, none at or past
+it. Reading a large file piece by piece is `read_chunk` with a growing offset.
 
-- With effects: writes and replaces a file.
-- Example: `replace('checkpoint.bin', payload)`
+- With effects: reads a file.
+- Failure: fault `InvalidArgument` when offset or size is negative; error value `NotFound`, `PermissionDenied` or `IOError` as for `read_bytes`.
+- Example (a fragment, not compiled): `'notes.txt'->read_chunk<0, 16> !! encode('')` gives `the first 16 bytes`
+- Why it is not compiled: the example builds its default `Bytes` with `encode` from the `bytes` module, which this page does not import
+
+### Writing
 
 #### `write_text`
 
 ```camel
-write_text: (path: string, content: string) => void
+write_text: <path: string, atomic: bool = false> (content: string) => void!
 ```
 
-Replaces the content of the file, creating it and its parent directories when needed.
+Replaces the content of the file at path with a text, creating the file and its parent
+directories when they are not there. With atomic the content is first written to a temporary
+file in the same directory and then renamed over the destination, so a reader sees the old
+content or the new, never half of it.
+
+- With effects: not pure.
+- Failure: error value `PermissionDenied` when the file system refuses the write; error value `IOError` when the path is a directory or the write fails for another reason (no space left included).
+- Example (a fragment, not compiled): `'done'->write_text<'out/log.txt'>`
+- Why it is not compiled: writes the file system when it runs, and the example only has the `void!` result to show
+
+#### `write_bytes`
+
+```camel
+write_bytes: <path: string, atomic: bool = false> (content: Bytes) => void!
+```
+
+Replaces the content of the file at path with bytes; creating, atomic and errors as for
+`write_text`.
 
 - With effects: writes a file.
-- Failure: fault `FileSystemError` when a directory cannot be created; fault `FileOpenFailed` when the file cannot be opened.
-- Example: `write_text('out/log.txt', 'done')`
+- Failure: error value `PermissionDenied` when the file system refuses the write; error value `IOError` when the path is a directory or the write fails for another reason (no space left included).
+- Example (a fragment, not compiled): `encode('abc')->write_bytes<'payload.bin', atomic: true>`
+- Why it is not compiled: writes the file system when it runs, and the example only has the `void!` result to show
+
+#### `append_text`
+
+```camel
+append_text: <path: string> (content: string) => void!
+```
+
+Adds a text to the end of the file at path, creating the file and its parent directories when
+they are not there.
+
+- With effects: not pure.
+- Failure: error value `PermissionDenied` when the file system refuses the write; error value `IOError` when the path is a directory or the write fails for another reason.
+- Example (a fragment, not compiled): `'one more line\n'->append_text<'out/log.txt'>`
+- Why it is not compiled: writes the file system when it runs, and the example only has the `void!` result to show
+
+#### `append_bytes`
+
+```camel
+append_bytes: <path: string> (content: Bytes) => void!
+```
+
+Adds bytes to the end of the file at path; creating and errors as for `append_text`.
+
+- With effects: writes a file.
+- Failure: error value `PermissionDenied` when the file system refuses the write; error value `IOError` when the path is a directory or the write fails for another reason.
+- Example (a fragment, not compiled): `encode('abc')->append_bytes<'payload.bin'>`
+- Why it is not compiled: writes the file system when it runs, and the example only has the `void!` result to show
+
+### Questions about a path
 
 #### `exists`
 
@@ -3790,10 +3817,11 @@ Replaces the content of the file, creating it and its parent directories when ne
 exists: (path: string) => bool
 ```
 
-Whether something exists at the path.
+Whether anything exists at the path. A path that cannot be looked at (a directory that may not
+be searched) is reported as not existing.
 
 - With effects: reads the file system.
-- Example: `exists('notes.txt')` gives `true or false`
+- Example: `'notes.txt'->exists` gives `true or false`
 
 #### `is_file`
 
@@ -3804,7 +3832,7 @@ is_file: (path: string) => bool
 Whether the path names a regular file.
 
 - With effects: reads the file system.
-- Example: `is_file('notes.txt')` gives `true or false`
+- Example: `'notes.txt'->is_file` gives `true or false`
 
 #### `is_dir`
 
@@ -3815,43 +3843,61 @@ is_dir: (path: string) => bool
 Whether the path names a directory.
 
 - With effects: reads the file system.
-- Example: `is_dir('out')` gives `true or false`
+- Example: `'out'->is_dir` gives `true or false`
 
 #### `file_size`
 
 ```camel
-file_size: (path: string) => int
+file_size: (path: string) => int!
 ```
 
-The size of the file in bytes.
+The size of a file in bytes.
 
 - With effects: reads the file system.
-- Failure: fault `FileSystemError` when the size cannot be read (no such file).
-- Example: `file_size('notes.txt')` gives `1024`
+- Failure: error value `NotFound` when nothing exists at the path; error value `PermissionDenied` when the file system refuses the question; error value `IOError` otherwise.
+- Example: `'notes.txt'->file_size !! 0` gives `1024`
+
+#### `list_dir`
+
+```camel
+list_dir: (path: string) => string[]!
+```
+
+The names of what a directory holds, without the path in front of them, in the byte order of
+the names (so the order is the same on every platform). `.` and `..` are not listed.
+
+- With effects: reads the file system.
+- Failure: error value `NotFound` when nothing exists at the path; error value `PermissionDenied` when the file system refuses the listing; error value `IOError` when the path is not a directory.
+- Example: `'out'->list_dir !! []` gives `['log.txt', 'today']`
+
+### Creating and removing
 
 #### `mkdir`
 
 ```camel
-mkdir: (path: string) => bool
+mkdir: (path: string) => void!
 ```
 
-Creates one directory; false when it already exists.
+Creates one directory. The parent directory must exist, and the directory must not.
 
 - With effects: changes the file system.
-- Failure: fault `FileSystemError` when it cannot be created (no parent directory).
-- Example: `mkdir('out')` gives `true`
+- Failure: error value `AlreadyExists` when something exists at the path; error value `NotFound` when the parent directory does not exist; error value `PermissionDenied` when the file system refuses; error value `IOError` otherwise.
+- Example (a fragment, not compiled): `'out'->mkdir`
+- Why it is not compiled: creates a directory when it runs, and the example only has the `void!` result to show
 
 #### `mkdirs`
 
 ```camel
-mkdirs: (path: string) => bool
+mkdirs: (path: string) => void!
 ```
 
-Creates a directory and every missing parent; false when it already exists.
+Creates a directory and every missing parent. A directory that is already there is not an
+error, so the call can be repeated.
 
 - With effects: changes the file system.
-- Failure: fault `FileSystemError` when it cannot be created.
-- Example: `mkdirs('out/logs/today')` gives `true`
+- Failure: error value `AlreadyExists` when a file, not a directory, exists at the path; error value `PermissionDenied` when the file system refuses; error value `IOError` otherwise.
+- Example (a fragment, not compiled): `'out/logs/today'->mkdirs`
+- Why it is not compiled: creates a directory when it runs, and the example only has the `void!` result to show
 
 #### `remove`
 
@@ -3860,11 +3906,12 @@ remove: (path: string) => void!
 ```
 
 Removes a file or a symbolic link; a directory, even an empty one, is an error (use
-`remove_dir`). Removing a path that is not there is an error value, not a silent success.
+`remove_dir`). Removing a path that is not there is an error, not a silent success.
 
 - With effects: removes a file.
-- Failure: error `NotFound` when nothing exists at the path; error `PermissionDenied` when the file system refuses the removal; error `IOError` when the path is a directory or the removal fails for another reason.
-- Example: `remove('notes.txt')`
+- Failure: error value `NotFound` when nothing exists at the path; error value `PermissionDenied` when the file system refuses the removal; error value `IOError` when the path is a directory or the removal fails for another reason.
+- Example (a fragment, not compiled): `'notes.txt'->remove`
+- Why it is not compiled: removes a file when it runs, and the example only has the `void!` result to show
 
 #### `remove_dir`
 
@@ -3876,8 +3923,9 @@ Removes one empty directory. A directory that is not empty is an error, not a re
 delete; a file or a symbolic link is an error too.
 
 - With effects: removes a directory.
-- Failure: error `NotFound` when nothing exists at the path; error `PermissionDenied` when the file system refuses the removal; error `IOError` when the path is a file, a symbolic link, or a directory that is not empty.
-- Example: `remove_dir('out/old')`
+- Failure: error value `NotFound` when nothing exists at the path; error value `PermissionDenied` when the file system refuses the removal; error value `IOError` when the path is a file, a symbolic link, or a directory that is not empty.
+- Example (a fragment, not compiled): `'out/old'->remove_dir`
+- Why it is not compiled: removes a directory when it runs, and the example only has the `void!` result to show
 
 <a id="io"></a>
 

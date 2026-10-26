@@ -34,10 +34,10 @@ func main(): int sync {
     let root = get_env('CAMEL_TEST_TMPDIR') ?? ''
     let dir = if root == '' then 'tmp/examples' else root
     let path = dir + '/tiny_model.onnx'
-    mkdirs(dir)
+    let _ = dir->mkdirs
     // The closure captures the weights, so they are stored in the model; `[0]` leaves the
     // first axis (the batch size) open.
     export_model((t: f32[..]): f32[..] => forward(t, w), x, path, [0])
-    println('model file written:', file_size(path) > 0)
+    println('model file written:', (path->file_size !! 0) > 0)
     return 0
 }

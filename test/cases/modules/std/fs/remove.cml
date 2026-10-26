@@ -50,9 +50,9 @@ func main(mode: int, path: string): int sync {
     } else sync {
         let root = get_env('CAMEL_TEST_TMPDIR') ?? ''
         let dir = if root == '' then 'test/tmp/fs_remove' else root + '/fs_remove'
-        mkdirs(dir)
+        let _ = dir->mkdirs
         let file = dir + '/file.txt'
-        write_text(file, 'x')
+        let _ = 'x'->write_text<file>
         // A file: removed once, then not found.
         let _ = line(remove(file))
         println('exists after remove =', exists(file))
@@ -61,18 +61,18 @@ func main(mode: int, path: string): int sync {
         // A directory is not a file; an empty directory can be removed by remove_dir.
         let _ = line(remove(dir))
         let _ = line(remove_dir(dir + '/missing'))
-        mkdirs(dir + '/empty')
+        let _ = (dir + '/empty')->mkdirs
         let _ = line(remove_dir(dir + '/empty'))
         let _ = line(remove_dir(dir + '/empty'))
         // A directory that is not empty is refused, and its contents survive.
-        mkdirs(dir + '/full')
-        write_text(dir + '/full/inside.txt', 'y')
+        let _ = (dir + '/full')->mkdirs
+        let _ = 'y'->write_text<dir + '/full/inside.txt'>
         let _ = line(remove_dir(dir + '/full'))
         println('not-empty contents survive =', exists(dir + '/full/inside.txt'))
         let _ = line(remove(dir + '/full/inside.txt'))
         let _ = line(remove_dir(dir + '/full'))
         // remove_dir on a file is refused; remove on the file then works.
-        write_text(dir + '/other.txt', 'z')
+        let _ = 'z'->write_text<dir + '/other.txt'>
         let _ = line(remove_dir(dir + '/other.txt'))
         let _ = line(remove(dir + '/other.txt'))
         let _ = line(remove_dir(dir))

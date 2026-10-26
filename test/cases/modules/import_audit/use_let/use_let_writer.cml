@@ -9,4 +9,4 @@ import { get_env } from env
 import { write_text } from fs
 
 let path = (get_env('CAMEL_TEST_TMPDIR') ?? '') + '/h222_use_let_flag.txt'
-export let wrote = write_text(path, 'evaluated because the program depended on it')
+export let wrote = 'evaluated because the program depended on it'->write_text<path>

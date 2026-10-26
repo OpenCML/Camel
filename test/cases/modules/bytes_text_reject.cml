@@ -7,7 +7,11 @@ func main(): int sync {
     let scratch = get_env('CAMEL_TEST_TMPDIR') ?? ''
     let dir = if scratch == '' then (get_env('TEMP') ?? '') else scratch
     let path = dir + '/camel-bytes-invalid-text.bin'
-    write_bytes(path, from_array([255]))
-    println(read_text(path))
+    let _ = (from_array([255]))->write_bytes<path>
+    // A text file holds UTF-8: bytes that are not are an error value, not a text.
+    println(match path->read_text {
+        case error e => e.kind + ': ' + e.message
+        case text => text
+    })
     return 0
 }

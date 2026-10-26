@@ -1,0 +1,9 @@
+module runtime_chunk_range
+
+import { read_chunk } from fs
+import { size } from bytes
+
+func main(): int sync {
+    println('some/file.bin'->read_chunk<-1, 4> ?-> size !! 0)
+    return 0
+}
