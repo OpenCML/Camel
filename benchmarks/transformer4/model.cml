@@ -43,7 +43,7 @@ func attention(x: f32[..]): f32[..] {
     let q = split_heads(x @ m.q_w + m.q_b, heads)
     let k = split_heads(x @ m.k_w + m.k_b, heads)
     let v = split_heads(x @ m.v_w + m.v_b, heads)
-    let scale = 1.0 / sqrt(float(shape(q)[3]))
+    let scale = f32(1.0 / sqrt(float(shape(q)[3])))
     let weights = softmax((q @ transpose(k)) * scale)
     return merge_heads(weights @ v) @ m.o_w + m.o_b
 }
