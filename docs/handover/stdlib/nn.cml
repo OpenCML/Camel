@@ -2,31 +2,120 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * The building blocks of neural networks on arrays: convolution and pooling, normalization, the
- * embedding lookup and the classification loss. A model is a function of its parameters, which are
- * plain values (a struct of arrays) in its `with` parameter, and a layer is an ordinary call of the
- * functions here on the arrays it holds:
+ * The building blocks of neural networks on arrays: the activations, the layers (linear,
+ * convolution, pooling, normalization, embedding) and the classification loss.
  *
- *     with <m: Cnn>
- *     func logits(x: f32[b, 1, 28, 28]): f32[b, 10] {
- *         let h = x->conv2d<stride: 1, padding: 1>(m.conv.kernel, m.conv.bias)->tensor::relu->max_pool2d<kernel: 2>
- *         return tensor::reshape(h, [b, 3136]) @ m.fc.weight + m.fc.bias
+ * A layer is a functor: its weights are its `this`, bound once in the angle brackets, and the data
+ * that flows through is its only ordinary argument, so `->` (which passes exactly one value)
+ * strings a model into one pipeline:
+ *
+ *     with <m: Mlp>
+ *     func logits(x: f32[b, 784]): f32[b, 10] {
+ *         return x->linear<m.w1, m.b1>->relu->linear<m.w2, m.b2>
  *     }
  *
- * The data of a function is its ordinary argument and the weights it uses are further ordinary
- * arguments (`conv2d(x, kernel, bias)`, like `x @ w`: the weights are arrays like any other). The
- * configuration that fixes the shape of the work -- stride, padding, window, epsilon, momentum --
- * is in the angle brackets. The gradients are not functions of this module: they come from
- * `grad` and `with_grad`, which differentiate the definitions below and the three native kernels
+ *     with <m: Cnn>
+ *     func features(x: f32[b, 1, 28, 28]): f32[b, 3136] {
+ *         return x->conv2d<m.kernel, m.bias, padding: 1>->relu->max_pool2d<kernel: 2>->reshape<[-1, 3136]>
+ *     }
+ *
+ * `linear<m.w1, m.b1>` is itself a function from an array to an array and can be bound once and
+ * used again. What shapes the work (stride, padding, window, epsilon, momentum) is in the angle
+ * brackets as well. The gradients are not functions of this module: they come from `grad` and
+ * `with_grad`, which differentiate the definitions below and the three native kernels
  * (convolution and the two poolings), whose derivatives the compiler knows.
  *
- * The convolution and pooling kernels are `f32`; the normalization is written for any floating
- * element type, and its kernel serves `f32`.
- * The optimizers are `optim`'s.
+ * The convolution and pooling kernels are `f32`; the rest is written for any floating element type,
+ * and its kernels serve `f32`. The optimizers are `optim`'s.
  */
 
-import tensor
+import { exp, log, sqrt, tanh } from math
+import { dim, max, mean, numel, shape, sum } from array
+import { matmul, maximum, one_hot, reshape } from tensor
 import { is_float, is_numeric, is_same } from types
+
+// ---- activations ----
+
+/// max(x, +0) per element (IEEE maximum: a NaN gives NaN, -0 gives +0; design principles 7.7).
+/// @example [-1.0, 2.0] as float[2]->relu    // [0.0, 2.0]
+#impl(relu_kernel)
+export func relu::<T>(x: T[..]): T[..] when is_float::<T>() {
+    return maximum(x, 0)
+}
+
+/// 1 / (1 + exp(-x)) per element, each step in the element type.
+/// @example [0.0] as float[1]->sigmoid    // [0.5]
+#impl(sigmoid_kernel)
+export func sigmoid::<T>(x: T[..]): T[..] when is_float::<T>() {
+    return 1 / (1 + exp(-x))
+}
+
+/// The GELU activation per element, by its tanh approximation:
+/// 0.5 x (1 + tanh(sqrt(2 / pi) (x + 0.044715 x^3))).
+/// @example [0.0] as float[1]->gelu    // [0.0]
+#impl(gelu_kernel)
+export func gelu::<T>(x: T[..]): T[..] when is_float::<T>() {
+    return 0.5 * x * (1 + tanh(0.7978845608028654 * (x + 0.044715 * x * x * x)))
+}
+
+/// The softmax along an axis (the last by default), made stable by subtracting the maximum:
+/// m = max over the axis (IEEE maximum: a NaN gives NaN), e = exp(x - m), s = sum of e over the
+/// axis (from +0 in f64, rounded to the element type once), and e / s (a division, not a
+/// multiplication by 1 / s). An array without elements is its own result.
+/// @fails fault `InvalidArgument` when the axis is outside the rank
+/// @example [[1.0, 1.0]] as float[1, 2]->softmax    // [[0.5, 0.5]]
+#impl(softmax_kernel)
+with <axis: int = -1>
+export func softmax::<T>(x: T[..]): T[..] when is_float::<T>() {
+    if numel(x) == 0 then {
+        return x
+    } else {
+        let e = exp(x - x->max<axis, keepdims: true>)
+        return e / e->sum<axis, keepdims: true>
+    }
+}
+
+/// The logarithm of the softmax along an axis (the last by default): (x - m) - log(s) with m the
+/// maximum and s the sum of exp(x - m) as in `softmax`. An array without elements is its own
+/// result.
+/// @fails fault `InvalidArgument` when the axis is outside the rank
+/// @example [[1.0, 1.0]] as float[1, 2]->log_softmax    // [[-0.6931472, -0.6931472]]
+#impl(log_softmax_kernel)
+with <axis: int = -1>
+export func log_softmax::<T>(x: T[..]): T[..] when is_float::<T>() {
+    if numel(x) == 0 then {
+        return x
+    } else {
+        let d = x - x->max<axis, keepdims: true>
+        return d - log(exp(d)->sum<axis, keepdims: true>)
+    }
+}
+
+// ---- linear and layer normalization ----
+
+/// The affine transform of the last axis of x by a weight matrix `[in, out]` whose rows are the
+/// features of x, plus a bias `[out]` when one is given: `matmul(x, weight) + bias`.
+/// @fails fault `TensorDimensionMismatch` when the features of x are not the rows of weight
+/// @example-fragment the arrays come from the caller
+/// @example x->linear<weight, bias>
+with <weight: T[i, o], bias: T[o]? = null>
+export func linear::<T>(x: T[..s, i]): T[..s, o] when is_float::<T>() {
+    let y = matmul(x, weight)
+    return if bias != null then y + bias else y
+}
+
+/// Layer normalization of x over its last axis: the mean and the variance (divisor n) of that
+/// axis, `(x - mean) / sqrt(variance + eps)`, times gamma, plus beta. gamma and beta have the
+/// extent of the last axis.
+/// @example-fragment the arrays come from the caller
+/// @example x->layer_norm<gamma, beta>
+#impl(layer_norm_kernel)
+with <gamma: T[d], beta: T[d], eps: T = 1e-5>
+export func layer_norm::<T>(x: T[..s, d]): T[..s, d] when is_float::<T>() {
+    let centred = x - x->mean<-1, keepdims: true>
+    let spread = sqrt((centred * centred)->mean<-1, keepdims: true> + eps)
+    return centred / spread * gamma + beta
+}
 
 // ---- convolution and pooling ----
 
@@ -34,9 +123,9 @@ import { is_float, is_numeric, is_same } from types
 /// result is `[N, O, OH, OW]` with `OH = (H + 2 * padding - KH) / stride + 1` and `OW` likewise.
 /// @fails fault `RuntimeError` when the window does not fit in the padded input
 /// @example-fragment the arrays come from the caller
-/// @example input->conv2d<stride: 1, padding: 1>(kernel, bias)    // [N, O, H, W] for a 3 by 3 kernel
-with <stride: int = 1, padding: int = 0>
-export func conv2d(input: f32[n, c, ?, ?], kernel: f32[o, c, ?, ?], bias: f32[o]): f32[n, o, ?, ?] pure
+/// @example input->conv2d<kernel, bias, padding: 1>    // [N, O, H, W] for a 3 by 3 kernel
+with <kernel: f32[o, c, ?, ?], bias: f32[o], stride: int = 1, padding: int = 0>
+export func conv2d(input: f32[n, c, ?, ?]): f32[n, o, ?, ?] pure
 
 /// Max pooling over a square window of `kernel` on `input` `[N, C, H, W]`. The stride is the
 /// window unless given. A window that lies entirely in the padding contributes -inf, the identity
@@ -62,13 +151,13 @@ export func avg_pool2d(input: f32[n, c, ?, ?]): f32[n, c, ?, ?] pure
 /// gamma + beta`, the statistics and the scale and shift taken per channel (axis 1), over an input
 /// of any rank of at least two (`[N, C]`, `[N, C, L]`, `[N, C, H, W]`, ...).
 /// @example-fragment the arrays come from the caller
-/// @example input->batch_norm(mean, variance, gamma, beta)
-with <eps: T = 1e-5>
-export func batch_norm::<T>(input: T[n, c, ..s], mean: T[c], variance: T[c], gamma: T[c], beta: T[c]): T[n, c, ..s] when is_float::<T>() {
-    let at = channel_shape(tensor::shape(input))
-    let centred = input - tensor::reshape(mean, at)
-    let spread = tensor::sqrt(tensor::reshape(variance, at) + eps)
-    return centred / spread * tensor::reshape(gamma, at) + tensor::reshape(beta, at)
+/// @example input->batch_norm<mean, variance, gamma, beta>
+with <mean: T[c], variance: T[c], gamma: T[c], beta: T[c], eps: T = 1e-5>
+export func batch_norm::<T>(input: T[n, c, ..s]): T[n, c, ..s] when is_float::<T>() {
+    let at = channel_shape(shape(input))
+    let centred = input - (mean->reshape<at>)
+    let spread = sqrt((variance->reshape<at>) + eps)
+    return centred / spread * (gamma->reshape<at>) + (beta->reshape<at>)
 }
 
 /// Batch normalization with the statistics of the batch (training): `input` is normalized with the
@@ -77,20 +166,20 @@ export func batch_norm::<T>(input: T[n, c, ..s], mean: T[c], variance: T[c], gam
 /// `momentum` (the variance in the blend is the unbiased one, `count / (count - 1)` times the
 /// biased). Only `y` carries gradient.
 /// @example-fragment the arrays come from the caller
-/// @example input->batch_norm_train(gamma, beta, running_mean, running_var)
+/// @example input->batch_norm_train<gamma, beta, running_mean, running_var>
 #impl(batch_norm_train_kernel)
-with <momentum: T = 0.1, eps: T = 1e-5>
-export func batch_norm_train::<T>(input: T[n, c, ..s], gamma: T[c], beta: T[c], running_mean: T[c], running_var: T[c]): (T[n, c, ..s], T[c], T[c]) when is_float::<T>() {
-    let at = channel_shape(tensor::shape(input))
-    let mean = channel_mean(input)
-    let centred = input - tensor::reshape(mean, at)
+with <gamma: T[c], beta: T[c], running_mean: T[c], running_var: T[c], momentum: T = 0.1, eps: T = 1e-5>
+export func batch_norm_train::<T>(input: T[n, c, ..s]): (T[n, c, ..s], T[c], T[c]) when is_float::<T>() {
+    let at = channel_shape(shape(input))
+    let batch_mean = channel_mean(input)
+    let centred = input - (batch_mean->reshape<at>)
     let biased = channel_mean(centred * centred)
-    let count = tensor::numel(input) / tensor::numel(mean)
+    let count = numel(input) / numel(batch_mean)
     let unbiased = biased * (T(count) / T(count - 1))
-    let y = centred / tensor::sqrt(tensor::reshape(biased, at) + eps) * tensor::reshape(gamma, at) + tensor::reshape(beta, at)
+    let y = centred / sqrt((biased->reshape<at>) + eps) * (gamma->reshape<at>) + (beta->reshape<at>)
     return (
         y,
-        (T(1.0) - momentum) * running_mean + momentum * mean,
+        (T(1.0) - momentum) * running_mean + momentum * batch_mean,
         (T(1.0) - momentum) * running_var + momentum * unbiased
     )
 }
@@ -105,9 +194,9 @@ func channel_shape(shape: int[]): int[] {
 // then the batch axis. Every axis has the same number of elements for every position, so the mean
 // of means is the mean.
 func channel_mean::<T>(x: T[n, c, ..s]): T[c] {
-    let rank = len(tensor::shape(x))
-    let spatial = loop acc = x as T[..] for i in 0..(rank - 2) do tensor::mean(acc, rank - 1 - i)
-    return tensor::mean(spatial, 0) as T[c]
+    let rank = len(shape(x))
+    let spatial = loop acc = x as T[..] for i in 0..(rank - 2) do acc->mean<rank - 1 - i>
+    return spatial->mean<0> as T[c]
 }
 
 // ---- embedding and loss ----
@@ -116,8 +205,10 @@ func channel_mean::<T>(x: T[n, c, ..s]): T[c] {
 /// every index, repeated indices repeating the row. Its gradient is the scatter-add into the rows
 /// that were read.
 /// @fails fault `IndexOutOfRange` when an index is outside `[0, rows)`
-/// @example tensor::reshape(tensor::range(6), [3, 2])->embedding([2, 0])    // [[4, 5], [0, 1]]
-export func embedding::<T>(table: T[?, dim], indices: int[k]): T[k, dim] when is_numeric::<T>() {
+/// @example-fragment the table comes from the caller
+/// @example [2, 0]->embedding<table>    // rows 2 and 0 of table
+with <table: T[?, dim]>
+export func embedding::<T>(indices: int[k]): T[k, dim] when is_numeric::<T>() {
     return table[indices]
 }
 
@@ -127,8 +218,8 @@ export func embedding::<T>(table: T[?, dim], indices: int[k]): T[k, dim] when is
 /// @example logits->softmax_cross_entropy(target)    // a float
 #impl(softmax_cross_entropy_kernel)
 export func softmax_cross_entropy(logits: f32[batch, classes], target: f32[batch, classes]): float {
-    let rows = float(tensor::sum(target * tensor::log_softmax(logits, 1), 1))
-    return -(tensor::sum(rows) / float(tensor::numel(rows)))
+    let rows = float((target * logits->log_softmax<1>)->sum<1>)
+    return -(sum(rows) / float(numel(rows)))
 }
 
 /// The same loss against integer class labels, one for each row: the target is the one-hot
@@ -138,8 +229,8 @@ export func softmax_cross_entropy(logits: f32[batch, classes], target: f32[batch
 /// @example logits->softmax_cross_entropy(labels)    // a float
 #impl(softmax_cross_entropy_labels_kernel)
 export func softmax_cross_entropy(logits: f32[batch, classes], labels: int[batch]): float {
-    let target = f32(tensor::one_hot(labels, tensor::dim(logits, 1)))
-    return softmax_cross_entropy(logits, target)
+    let classes = logits->dim<1>
+    return softmax_cross_entropy(logits, labels->one_hot::<f32><classes>)
 }
 
 // ---- kernels ----
@@ -147,7 +238,25 @@ export func softmax_cross_entropy(logits: f32[batch, classes], labels: int[batch
 // The native kernels of the two Camel definitions above that are hot enough to keep one: the
 // definition is the meaning, the kernel the speed, and a differential test holds them equal. A
 // kernel has exactly the signature of its definition, `with` parameters included.
-with <momentum: T = 0.1, eps: T = 1e-5>
-func batch_norm_train_kernel::<T>(input: T[n, c, ..s], gamma: T[c], beta: T[c], running_mean: T[c], running_var: T[c]): (T[n, c, ..s], T[c], T[c]) when is_same::<T, f32>() pure
+with <gamma: T[c], beta: T[c], running_mean: T[c], running_var: T[c], momentum: T = 0.1, eps: T = 1e-5>
+func batch_norm_train_kernel::<T>(input: T[n, c, ..s]): (T[n, c, ..s], T[c], T[c]) when is_same::<T, f32>() pure
 func softmax_cross_entropy_kernel(logits: f32[batch, classes], target: f32[batch, classes]): float pure
 func softmax_cross_entropy_labels_kernel(logits: f32[batch, classes], labels: int[batch]): float pure
+
+// The activations and layers: the C++ operators `modules/tensor` had under these names, moved to
+// `modules/nn`. Each runs for the element types its executor serves.
+#op('nn:relu')
+func relu_kernel::<T>(x: T[..]): T[..] when is_float::<T>() pure
+#op('nn:sigmoid')
+func sigmoid_kernel::<T>(x: T[..]): T[..] when is_float::<T>() pure
+#op('nn:gelu')
+func gelu_kernel::<T>(x: T[..]): T[..] when is_float::<T>() pure
+#op('nn:softmax')
+with <axis: int = -1>
+func softmax_kernel::<T>(x: T[..]): T[..] when is_float::<T>() pure
+#op('nn:log_softmax')
+with <axis: int = -1>
+func log_softmax_kernel::<T>(x: T[..]): T[..] when is_float::<T>() pure
+#op('nn:layer_norm')
+with <gamma: T[d], beta: T[d], eps: T = 1e-5>
+func layer_norm_kernel::<T>(x: T[..s, d]): T[..s, d] when is_float::<T>() pure

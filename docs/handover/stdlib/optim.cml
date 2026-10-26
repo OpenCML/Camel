@@ -33,7 +33,9 @@
  */
 
 import math
-import { sqrt, zeros_like } from tensor
+import { sqrt } from math
+import { shape } from array
+import { zeros } from tensor
 import { is_bool, is_float, is_integer } from types
 import { tree_unzip } from tree
 
@@ -179,7 +181,7 @@ func zero_leaf::<T>(x: T): T when is_float::<T>() {
 }
 
 func zero_leaf::<T>(x: T[..]): T[..] when is_float::<T>() {
-    return zeros_like(x)
+    return zeros::<T>(shape(x))
 }
 
 func zero_leaf::<T>(x: T): T when untrained::<T>() {
@@ -212,7 +214,7 @@ func adam_leaf::<T>(p: T, g: T, m: T, v: T, c: Rates): (T, T, T) when is_float::
     let moved = float(T(float(p) * c.keep))
     let nm = c.beta1 * float(m) + (1.0 - c.beta1) * float(g)
     let nv = c.beta2 * float(v) + (1.0 - c.beta2) * float(g) * float(g)
-    let np = moved - c.rate * (nm / c.correct1) / (math::sqrt(nv / c.correct2) + c.eps)
+    let np = moved - c.rate * (nm / c.correct1) / (sqrt(nv / c.correct2) + c.eps)
     return (T(np), T(nm), T(nv))
 }
 

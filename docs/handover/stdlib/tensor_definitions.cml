@@ -1,4 +1,0 @@
-// This file is deleted: the definitions it held (softmax, log_softmax, relu, sigmoid; the mean of
-// a whole array went to `array` earlier) moved with their functions to `nn`
-// (docs/handover/stdlib/nn.additions.cml), and `OperatorTable::declareDefinition` names the `nn`
-// functions as the definitions of the kernels.
