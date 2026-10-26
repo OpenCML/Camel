@@ -1,0 +1,14 @@
+/**
+ * A name that stands for a decorated function and for another function of the same name has no
+ * single function value: a position that needs one reports the diagnostic the declaring module
+ * reports of the same name, listing both functions.
+ */
+module err_no_function_value
+
+import lib
+
+func main(): int sync {
+    let vs = [1, 2, 3]->map<lib::bump>
+    println(vs)
+    return 0
+}

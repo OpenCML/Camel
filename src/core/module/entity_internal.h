@@ -23,6 +23,14 @@ class EntityAccess {
     static Entity makeNode(node_handle_t node) { return Entity(node); }
     static Entity makeGraphSet(graph_set_ptr_t graphs) { return Entity(std::move(graphs)); }
     static Entity makeDecoratedGraph(graph_handle_t graph) { return Entity(std::move(graph)); }
+    /// A decorated function together with the other functions of its name: the name stands for
+    /// both at once, so they are exported and imported as one entity. `isGraphSet` and
+    /// `isDecoratedGraph` both hold of it, and `graphSet` / `decoratedGraph` give each: an
+    /// importing module then resolves the name exactly as the module that declared it does.
+    static Entity makeDecoratedOverloads(graph_handle_t decorated, graph_set_ptr_t overloads) {
+        return Entity(Entity::decorated_overloads_payload_t{
+            std::move(decorated), std::move(overloads)});
+    }
     /// A tag declared by the module (design principles 6.2): its id, later resolved through
     /// camel/core/tags.h.
     static Entity makeTag(uint32_t tag) { return Entity(tag); }
@@ -60,19 +68,26 @@ class EntityAccess {
         return std::holds_alternative<node_handle_t>(entity.storage_);
     }
     static bool isGraphSet(const Entity &entity) {
-        return std::holds_alternative<graph_set_ptr_t>(entity.storage_);
+        return std::holds_alternative<graph_set_ptr_t>(entity.storage_) ||
+               std::holds_alternative<Entity::decorated_overloads_payload_t>(entity.storage_);
     }
     static bool isDecoratedGraph(const Entity &entity) {
-        return std::holds_alternative<graph_handle_t>(entity.storage_);
+        return std::holds_alternative<graph_handle_t>(entity.storage_) ||
+               std::holds_alternative<Entity::decorated_overloads_payload_t>(entity.storage_);
     }
-
     static node_handle_t node(const Entity &entity) {
         return std::get<node_handle_t>(entity.storage_);
     }
     static const graph_set_ptr_t &graphSet(const Entity &entity) {
+        if (const auto *pair = std::get_if<Entity::decorated_overloads_payload_t>(&entity.storage_)) {
+            return pair->overloads;
+        }
         return std::get<graph_set_ptr_t>(entity.storage_);
     }
     static const graph_handle_t &decoratedGraph(const Entity &entity) {
+        if (const auto *pair = std::get_if<Entity::decorated_overloads_payload_t>(&entity.storage_)) {
+            return pair->decorated;
+        }
         return std::get<graph_handle_t>(entity.storage_);
     }
 };
