@@ -169,10 +169,10 @@
             "plans": ["feat/modules/tiles.plan.toml", "feat/modules/ddpm_primitives.plan.toml", "gpu/profile.plan.toml", { "plan": "gpu/tiles.plan.toml", "ownCases": true }, { "plan": "gpu/tiles_rows.plan.toml", "ownCases": true }, { "plan": "gpu/tiles_transfer.plan.toml", "ownCases": true }]
         },
         {
-            "comment": "The ONNX exporter. `layer` is true because the plan's four slow cases are ONNX Runtime and PyTorch comparisons: under --tier fast the fast exporter tests run and those are filtered; --tier all runs them. `feat/trans` holds the dumps that print the exported graph.",
+            "comment": "The ONNX exporter. `layer` is true because the plan's four slow cases are ONNX Runtime and PyTorch comparisons: under --tier fast the fast exporter tests run and those are filtered; --tier all runs them. `feat/trans` holds the dumps that print the exported graph. `onnx_with_forms` pins the three call forms of `export_model`'s `with` list (only `out`; `out` with `target`; `out` with `dynamic_axes`), one case under `test/cases/modules/onnx/with_forms/` each.",
             "paths": ["modules/onnx/", "test/cases/modules/onnx/"],
             "layer": true,
-            "plans": ["feat/modules/onnx.plan.toml", "feat/trans", "feat/compile/enum.plan.toml"]
+            "plans": ["feat/modules/onnx.plan.toml", "feat/modules/onnx_with_forms.plan.toml", "feat/trans", "feat/compile/enum.plan.toml"]
         },
         {
             "comment": "Neural-network operators: the nn plan and the plans that train with them.",
