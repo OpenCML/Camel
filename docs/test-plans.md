@@ -519,9 +519,13 @@ Every `[[tests]]` entry may use these common fields:
   measured number and the wall clock beside it. The quantity is the work's, not the host's: on a
   shared host a passing test's wall clock is who else is running, and a rule that read it failed the
   plan runner's own self-test at random. A host whose kernel reports no CPU time (no
-  `/proc/self/stat`) has no such reading, so there the rule falls back to the wall clock and the run
-  says so once; a host that has the reading and does not get one for a test fails that test, because
-  a margin nobody can read is not a margin. A test that legitimately needs a large bound states the
+  `/proc/self/stat`) has no such reading, so there the rule is **skipped** with that reason
+  (`skipped: this host reports no CPU time`, said once at the start of the run and counted at the
+  end), never read off the wall clock, which on such a host measures the load as much as the test;
+  a host that has the reading and does not get one for a test fails that test, because
+  a margin nobody can read is not a margin. The timeout itself is unaffected either way: the runner
+  kills a child at its `timeout_ms` on every platform, so a test that really runs too long still
+  fails. A test that legitimately needs a large bound states the
   measurement in a comment next to the value ("20 s: 2.1 s alone, 4.2 s at `-Jobs 8`"); a test that
   sits at its bound on a quiet machine has no margin for a busy one and is fixed, not raised. A fast
   case with no reason for a special bound uses the runner default (`10000`): a 4 s bound is a speed
