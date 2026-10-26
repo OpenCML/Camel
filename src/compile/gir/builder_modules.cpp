@@ -1168,14 +1168,17 @@ void Builder::exportDeclarations(const GCT::node_ptr_t &gct, bool decorated) {
             if (!optDecorated.has_value()) {
                 continue; // its body is in error, which was reported
             }
-            if (overloadsOfDecorated(name, *optDecorated) != nullptr) {
-                // An exported name is one decorated function or a set of plain ones; the set
-                // of both has no exported form yet. Exporting the decorated one alone dropped
-                // the others without a word.
-                diags_->of(SemanticDiag::ConstructNotSupported)
-                    .atOrigin(gct->origin())
-                    .commit(name, "a decorated function that has overloads cannot be exported yet");
-                failed = true;
+            if (const graph_set_ptr_t overloads = overloadsOfDecorated(name, *optDecorated);
+                overloads != nullptr) {
+                // The name stands for the decorated function and for the other functions of it
+                // at once -- a call chooses among them by the parameters of what the decorators
+                // returned (design principles 4.4) -- so both are exported as one entity.
+                // Exporting the decorated one alone dropped the others without a word.
+                exports_->exportEntity(
+                    *module_,
+                    ref,
+                    camel::core::module::detail::EntityAccess::makeDecoratedOverloads(
+                        eraseCompileGraph(optDecorated.value()), eraseCompileGraphSet(overloads)));
                 continue;
             }
             exports_->exportEntity(

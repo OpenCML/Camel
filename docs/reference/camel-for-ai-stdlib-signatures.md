@@ -330,6 +330,12 @@ sort_by: <key: (x: T) => K> (xs: T[]) => T[]
 zip_with: <f: (a: T, b: U) => V> (xs: T[], ys: U[]) => V[]
 ```
 
+**`stream`** — import { ... } from stream — 1 name(s)
+
+```text
+unfold: (state: S, step: (state: S) => (T, S)?) => T..
+```
+
 **`math`** — import { ... } from math — 48 name(s)
 
 ```text

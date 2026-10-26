@@ -945,7 +945,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         }
     }
 
-// A `with` parameter of a rule is a compile-time value the rule is specialised by: every
+    // A `with` parameter of a rule is a compile-time value the rule is specialised by: every
     // function the declaration becomes -- the two sides and the condition -- takes it as a
     // `constas` parameter, so the instance an application makes reads it from a static slot and
     // both sides may write it (design principles 5.4, 5.5). The grammar writes the type of a `with`
@@ -1401,9 +1401,10 @@ resolved where the fact's type is known.
 The declaration's `with` parameters are the arguments the query is written with
 (`depth<8>(x)`, and one with a default may be left out). They are copied onto the query function
 and marked `constas` there: the compiler must compute the argument, since the argument is part of
-which fact this is, and the engine computes and caches one fact per argument. A case or a trailing
-clause cannot name one: the engine calls those functions with the value the fact is about, without
-the arguments the query was written with (the refusal below says so).
+which fact this is, and the engine computes and caches one fact per argument. Every function the
+declaration becomes carries them as well, so a case or a trailing clause names one and reads the
+value: on the query they are `constas`, and on the functions the engine calls they are plain
+`with` parameters, which the engine fills with the arguments the query was written with.
 
 The head parameters are the parts of a value the query is written on
 (`aligned(x, y)` for `fact aligned(a: int, b: int)`), and are typed `Node` in the generated
