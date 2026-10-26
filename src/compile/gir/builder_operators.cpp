@@ -3646,6 +3646,24 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         // call hands on. A call whose value nothing wants builds no access node for it.
         return callValuePartOf(targetNode, 0);
     }
+    if (writtenMask != 0 && !valueWanted && !unusedStatement && expectedResult != nullptr &&
+        isVoidGraphExitType(expectedResult)) {
+        // A position that expects `void` takes no value, and a branch joins the value that
+        // stands here with the values of its other arms: what the call hands on beside its
+        // return value is the new version of each captured variable it writes, and a version is
+        // a `var` cell -- a place, not a value a position takes. It is taken only where a
+        // reader takes it, through the access node of the call (Builder::valueVersionOf). What
+        // stands here is the callee's own value -- nothing -- after the call, so an arm joining
+        // this call with a `void` one stays `void` and not a `var T?` (design principles 190,
+        // 189: the join of such arms takes no value). The value is handed on behind a gate whose
+        // other input is the call, which is what the position does (`setArmResult`).
+        node_handle_t empty = currGraph_->addStaticDataNode(Data::null());
+        node_handle_t gate  = currGraph_->addGateNode(nodeTypeOf(empty));
+        linkNodes(LinkType::Norm, empty, gate);
+        linkNodes(LinkType::Ctrl, targetNode, gate);
+        LEAVE("LINK");
+        return gate;
+    }
     return targetNode;
 }
 
