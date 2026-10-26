@@ -12,6 +12,8 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/utils/type.h"
 
+#include <algorithm>
+#include <format>
 #include <mutex>
 #include <stdexcept>
 #include <string>
@@ -39,6 +41,23 @@ DerivativeRegistry &DerivativeRegistry::instance() {
     return registry;
 }
 
+std::vector<std::string> DerivativeRegistry::tangentSpaceDescriptions() const {
+    std::shared_lock lock(mutex_);
+    std::vector<std::string> lines;
+    for (const auto &[code, spaces] : tangents_) {
+        for (const TangentSpace &space : spaces) {
+            lines.push_back(std::format(
+                "code={} owns={} add={}",
+                static_cast<int>(code),
+                space.owns == nullptr ? "all" : "subset",
+                space.addUri));
+        }
+    }
+    // One order, whatever the map did: the readers are diagnostics and tests (C24, AD/H1).
+    std::sort(lines.begin(), lines.end());
+    return lines;
+}
+
 void DerivativeRegistry::setRule(std::string_view uri, VjpRule rule) {
     std::unique_lock lock(mutex_);
     rules_.insert_or_assign(std::string(uri), rule);
@@ -53,13 +72,12 @@ VjpRule DerivativeRegistry::findRule(std::string_view uri) const {
 void DerivativeRegistry::setTangentSpace(type::TypeCode code, TangentSpace space) {
     std::unique_lock lock(mutex_);
     auto &spaces = tangents_[code];
-    if (space.owns == nullptr) {
-        // A space that owns every value of the code replaces the code's space: nothing else has
-        // to answer for it. A subset space is kept, and still answers for the values it owns.
-        spaces.clear();
-        spaces.push_back(std::move(space));
-        return;
-    }
+    // One entry per owner, replaced in place. A registration used to clear the whole code when it
+    // owned every value of it, which took a module's subset entry (a narrower `owns`) with it: the
+    // registry is one per process, a second `Context` registers the core's spaces again, and the
+    // module registers its own once, so the values that module owns fell back to the generic space
+    // for the rest of the process (C24, AD/H1). Replacement keeps the registration order the
+    // lookup reads.
     for (TangentSpace &existing : spaces) {
         if (existing.owns == space.owns) {
             existing = std::move(space);
