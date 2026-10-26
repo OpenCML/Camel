@@ -185,7 +185,7 @@ load_tree: (dir: string, dataset_manifest_sha256?: string) => T!
 **`tree`** — import { ... } from tree — 4 name(s)
 
 ```text
-tree_paths: (t: T) => ?
+tree_paths: (t: T, here: string = '') => ?
 tree_map: <f: F> (t: T, ..ts) => ?
 tree_reduce: <f: (acc: R, leaf: A) => R> (t: T, init: R) => R
 tree_unzip: (r: R, s: S) => ?

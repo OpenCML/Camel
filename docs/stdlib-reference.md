@@ -1269,10 +1269,9 @@ of nested structs and tuples, and everything else is a leaf.
 `tree_paths`, `tree_map`, `tree_reduce` and `tree_unzip` are written here, with `match type`,
 `static for`/`static loop`, `fields`, `indices`, `typeof` and rest parameters: the walk is
 expanded at each call into ordinary access and fill nodes, with no function of its own per
-leaf type. Each exported function recurses itself. `paths_at` and `unzip_at` stay because
-they carry a value the exported signature does not have (the path built so far, the component
-of the leaf tuple): a default argument would fold the first one into `tree_paths` (the
-language has none yet), and the second is not a hand-off but the walk of one component.
+leaf type. Each exported function recurses itself. `unzip_at` stays: it is not a hand-off but
+the walk of one component of the leaf tuple. Nothing here inspects a type when the program
+runs: the fields of a type are walked while the call is compiled.
 
 `tree_leaves` is not here yet. The leaves are one flat tuple whose length is the sum of the
 leaves of every field, and Camel cannot splice a tuple value's elements into a tuple being
@@ -1287,10 +1286,11 @@ the same tree with a `string` at every leaf.
 #### `tree_paths`
 
 ```camel
-tree_paths: (t: T) => ?
+tree_paths: (t: T, here: string = '') => ?
 ```
 
-The path of every leaf, as a tree of the same shape.
+The path of every leaf, as a tree of the same shape. `here` is the path of `t` itself; the
+caller leaves it out.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `tree_paths({ a: 1, b: (2, 3) })` gives `{ a: 'a', b: ('b.0', 'b.1') }`
