@@ -371,6 +371,10 @@ void Builder::reportDroppedEffectsOfBodies() {
         reportDroppedEffects(graph, true);
     }
     unit_->builtBodies.clear();
+    // Every body of this unit has been reported: what a `fail` left behind is answered, and the
+    // entries of a graph nothing reports (a body of a library that was not built here) are not
+    // this unit's to keep.
+    statementsAfterFail_.clear();
 }
 
 void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report) {
@@ -511,6 +515,51 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
                 subject, inUnusedSyncBlock(id)
                              ? std::string("the sync block it is in is not used")
                              : std::string("nothing depends on it and it is not in a sync block"));
+    }
+    // A `fail` written as a statement whose value nothing takes (design principles 3.9; the
+    // author's ruling of 2026-10-26 on a `fail` on a line of its own). It gives no value and is no
+    // effect of its own, so where its value is not wanted nothing runs it and the fault is never
+    // raised -- which is what the writer has to be told, because the program was meant to stop
+    // there. Inside a `sync` block the statement is on the chain and runs; on the path the data
+    // takes its value is wanted; the two ways it can be left unrun are the two the effect rule
+    // already tells apart (inUnusedSyncBlock), and the warning is its own so that a `fail` is not
+    // read as a call with an effect.
+    for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        if (!draft.alive(id) || needed.contains(id)) {
+            continue;
+        }
+        if (graph == rootGraph_ && !(id < rootNodeOwners_.size() && rootNodeOwners_[id] == unit_)) {
+            continue; // another module's top-level `fail`, reported by that module's own pass
+        }
+        node_handle_t node = draft.ref(id);
+        if (!isFailCall(node)) {
+            continue;
+        }
+        camel::source::origin_id_t origin = nodeDraftOf(node)->nodeOrigin(nodeIdOf(node));
+        if (origin == camel::source::kInvalidOriginId && sourceContext) {
+            origin = sourceContext->debugMap().graphOrigin(graph->graphId());
+        }
+        diags_->of(SemanticDiag::FailNotExecuted)
+            .atOrigin(origin)
+            .commit(
+                inUnusedSyncBlock(id) ? std::string("the sync block it is in is not used")
+                                      : std::string("nothing needs it and it is not in a sync block"));
+    }
+    // The statements a `fail` of this block leaves behind (design principles 3.9; the author's
+    // ruling of 2026-10-26): they are reached only if the `fail` is not run at all, which the walk
+    // over `needed` above has just answered -- a `fail` nothing needs does not run, and then these
+    // statements do run (FailNotExecuted tells the writer why). Where the `fail` is needed, it
+    // raises its fault first and nothing after it is reached, whatever the statements are.
+    for (const StatementsAfterFail &after : statementsAfterFail_) {
+        if (after.fail == nullptr || after.statements.empty() || after.graph != graph) {
+            continue;
+        }
+        if (!needed.contains(nodeIdOf(after.fail))) {
+            continue;
+        }
+        for (camel::source::origin_id_t origin : after.statements) {
+            diags_->of(SemanticDiag::StatementAfterFail).atOrigin(origin).commit();
+        }
     }
 }
 
@@ -1155,6 +1204,14 @@ void Builder::rejectUnusedPureResult(const GCT::node_ptr_t &stmt, node_handle_t 
     if (node == nullptr || !nodeIsKind(node, runtime::GCNodeKind::Oper) ||
         discardedValues_.contains(node)) {
         return; // not an operator, or dropped on purpose (`let _`), or reported already
+    }
+    if (valueTypeOf(nodeTypeOf(node))->code() == TypeCode::Never) {
+        // A statement of the bottom type `never` is not a value somebody forgot to bind (design
+        // principles 3.9; the author's ruling of 2026-10-26 on a `fail` written as a statement of
+        // its own): it gives no value at all, so there is nothing to use and no "it changes
+        // nothing" to say either. Whether it is executed at all is the effect rule's question,
+        // and a `fail` nobody needs has a warning of its own (FailNotExecuted).
+        return;
     }
     const auto op = nodeGraphOf(node)->operTarget(node);
     if (op == nullptr || !camel::core::OperatorTable::instance().isPure(op->uri())) {

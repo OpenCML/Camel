@@ -1796,6 +1796,30 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "A type parameter is one the declaration uses in a parameter or result type; a declaration that writes it nowhere can never take a type for it. Write it in a type, or remove it from '::<...>'.",
             },
         },
+        {
+            SemanticDiag::NeverArgumentCall,
+            {
+                "NeverArgumentCall",
+                "This call never runs: {0} has type 'never', and an argument is evaluated before the call it is written in.",
+                "A value of type 'never' is never handed out: what gives it -- a fault, 'fail', or 'exit' -- ends the program before the call. The call is typed 'never' for that reason and no overload is chosen for it. If the call is meant to run, the argument it is written with is what to look at.",
+            },
+        },
+        {
+            SemanticDiag::FailNotExecuted,
+            {
+                "FailNotExecuted",
+                "This 'fail' is not executed: {0}.",
+                "A 'fail' raises its fault where its value is wanted, and it is no effect of its own: nothing else runs it. Put it in a sync block ('sync {{ ... }}', or a function body 'func f(): T sync {{ ... }}'), or write it where the data passes, so that the value it gives is the one that is needed.",
+            },
+        },
+        {
+            SemanticDiag::StatementAfterFail,
+            {
+                "StatementAfterFail",
+                "This statement cannot run: the 'fail' written before it never returns.",
+                "A 'fail' raises its fault and gives no value, so the statements written after it in the same block are never reached. Move them before the 'fail', or delete them.",
+            },
+        },
     };
     return infoMap;
 }
