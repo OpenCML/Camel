@@ -202,12 +202,11 @@ bool isNumericArrayType(const Type *type);
 /// principles 5.1, 5.2).
 bool isUntypedArrayType(const Type *type);
 
-/// True for an open-rank array whose element type nobody stated: `Void[..]`. A program writes an
-/// open rank only with an element type (`f32[..]`), and the empty literal leaves one unknown
-/// dimension rather than an open rank, so this type arises where a type variable is bound to
-/// `Void` (`func f::<T>(x: T[..])` at a call whose argument is the empty literal). No value has
-/// it — the element type of a value is always in its type — so nothing is assignable to it and
-/// nothing converts into it.
-bool isElementTypeUnstatedOpenArray(const Type *type);
+/// True for `Void` itself and for an array whose element type nobody wrote (`Void[]`, `Void[..]`
+/// and the further dimensions of one): what a type is left with where an element type is not
+/// stated. `Void` is the "no value" marker rather than an element type, so a type variable takes
+/// no such type: the empty literal `[]` is one, states no element type, and leaves the position it
+/// stands in to state one — and a generic parameter states none (design principles 5.1, 5.2).
+bool isElementTypeUnstated(const Type *type);
 
 } // namespace camel::core::type

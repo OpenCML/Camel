@@ -464,11 +464,6 @@ bool ArrayType::assignableFrom(Type *sourceType) const {
     if (this == sourceType) {
         return true;
     }
-    if (isElementTypeUnstatedOpenArray(this)) {
-        // No value has this type: it is an open-rank array whose element type nobody stated, and
-        // it takes nothing (design principles 5.1: the element type of a value is in its type).
-        return false;
-    }
     if (!sourceType || sourceType->code() != TypeCode::Array) {
         return false;
     }
@@ -601,14 +596,13 @@ bool isUntypedArrayType(const Type *type) {
     return array->elemType()->code() == TypeCode::Void;
 }
 
-bool isElementTypeUnstatedOpenArray(const Type *type) {
-    const ArrayType *array = asArrayType(type);
-    if (array == nullptr || !isUntypedArrayType(array)) {
+bool isElementTypeUnstated(const Type *type) {
+    if (type == nullptr) {
         return false;
     }
-    // The empty literal states one unknown dimension (`Void[]`); the open rank with no prefix and
-    // no pack is what a type variable bound to `Void` leaves behind.
-    return array->anyRank() && array->extents().empty() && array->packName().empty();
+    // `Void` itself is the "no value" marker: `null`, an expression that gives nothing. An array
+    // whose element type is `Void` is the empty literal in one or more dimensions.
+    return type->code() == TypeCode::Void || isUntypedArrayType(type);
 }
 
 } // namespace camel::core::type

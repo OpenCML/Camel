@@ -27,6 +27,7 @@
 
 #include "camel/core/operator_traits.h"
 #include "camel/core/type/collection.h"
+#include "camel/core/type/composite/array.h"
 #include "camel/core/type/other.h"
 
 #include <algorithm>
@@ -894,6 +895,42 @@ std::optional<oper_idx_ptr_t> Builder::resolveGroupedCall(
         *ambiguous = std::move(holding);
     }
     return chosen;
+}
+
+std::string Builder::unstatedBindingForCall(
+    const oper_group_ptr_t &ops, const type_vec_t &explicitTypes, const type_vec_t &normTypes) {
+    // A call that writes its type arguments has already fixed the variables they name, so an
+    // empty literal among its arguments is an argument the call answered for itself: what it
+    // said is what the argument takes, and the type it takes is not one the call infers.
+    if (std::ranges::any_of(explicitTypes, [](Type *type) {
+            return type != nullptr && type->code() != TypeCode::Void;
+        })) {
+        return {};
+    }
+    for (const auto &[uri, resolver] : ops->resolvers()) {
+        (void)uri;
+        // The signature the rule declares, with its type variables still in it: a rule that
+        // computes its signature from the arguments writes no variable a call could leave open.
+        FunctionType *declared = resolver->declaredSignature();
+        if (declared == nullptr) {
+            continue;
+        }
+        // The arguments are matched to the parameters the way the call wrote them: a `constas`
+        // parameter is written at its own position and is not a runtime argument.
+        size_t written = 0;
+        for (size_t i = 0; i < declared->normTypesCount() && written < normTypes.size(); ++i) {
+            if (declared->normIsConstasAt(i)) {
+                continue;
+            }
+            const std::string name =
+                unstatedBindingOf(declared->normTypeAt(i), valueTypeOf(normTypes[written]));
+            ++written;
+            if (!name.empty()) {
+                return name;
+            }
+        }
+    }
+    return {};
 }
 
 bool Builder::plainOperatorAvailableFor(
@@ -2844,6 +2881,19 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                         .commit(ops->name(), argTypes, conditions);
                     throw BuildAbortException();
                 }
+                // An argument that states no element type (`[]`, an array whose element type
+                // nobody wrote) is not a mismatch of types: the type variable of the parameter it
+                // stands at can be fixed by nothing, and the call is reported as the type argument
+                // it cannot infer (design principles 5.1, 5.2). The candidate that would have
+                // taken the argument names the variable.
+                if (const std::string name =
+                        unstatedBindingForCall(ops, explicitTypes, normInputTypes);
+                    !name.empty()) {
+                    diags_->of(SemanticDiag::FunctionTypeArgumentNotInferred)
+                        .atOrigin(gct->origin())
+                        .commit(name, ops->name());
+                    throw BuildAbortException();
+                }
                 // A bf16 or f16 operand (or an array of one) that no overload can take: the
                 // operation is one the element type does not have (`%` is an integer operation,
                 // and a function with a fixed set of parameter types has no overload for it).
@@ -3035,6 +3085,29 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     *form);
             }
             rejectLiteralConversion(ops->name(), targetOperator->funcType(), normInputs, gct);
+            // The empty literal `[]` stated no element type where it was written, and the type
+            // argument the call wrote is what fixes it now (`show::<f32>([])` has an `f32[]`
+            // argument, not the `void[]` it was built as): it takes the type of the parameter it
+            // stands at, the way it takes the type of any other position it stands in (design
+            // principles 3.8, 5.1). An argument already of the parameter's type is left as it is.
+            if (!explicitTypes.empty()) {
+                for (size_t i = 0; i < normInputs.size(); ++i) {
+                    if (i >= targetOperator->funcType()->normTypesCount()) {
+                        break;
+                    }
+                    Type *parameter = targetOperator->funcType()->normTypeAt(i);
+                    if (Type *type = valueTypeOf(nodeTypeOf(normInputs[i].node));
+                        type != nullptr && type->equals(parameter)) {
+                        continue;
+                    }
+                    if (node_handle_t typed =
+                            checkValue(normInputs[i].node, parameter, normInputs[i].expr);
+                        typed != nullptr) {
+                        normInputs[i].node = typed;
+                        normInputTypes[i]  = parameter;
+                    }
+                }
+            }
             // `foreach` drops what its element function gives: the value of the body of a
             // function written in place here is a value nothing takes (design principles
             // 11.3). A function named here may be used elsewhere, where its value counts.

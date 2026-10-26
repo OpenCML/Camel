@@ -8,6 +8,7 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/func.h"
+#include "camel/core/type/composite/stream.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/intern.h"
 #include "camel/core/type/storage.h"
@@ -385,7 +386,86 @@ namespace {
 
 bool isEmptyArrayLiteralType(Type *type) { return isUntypedArrayType(type); }
 
+/// The walk `unstatedBindingOf` is, named apart from it: a variable a position of the parameters
+/// writes stands where a type is stated, and the argument there describes it as `void` -- the "no
+/// value" marker rather than an element type -- so it is not a type the call can be made at until
+/// something else fixes the variable (design principles 5.1, 5.2). Nesting is followed through
+/// arrays, streams, tuples and structs, so the variable named is the one at the position the
+/// argument's unstated type stands in.
+std::string unstatedBindingIn(Type *pattern, Type *actual) {
+    if (pattern == nullptr || actual == nullptr) {
+        return {};
+    }
+    if (pattern->code() == TypeCode::TypeVar) {
+        const auto *var = static_cast<const TypeVarType *>(pattern);
+        return actual->code() == TypeCode::Void ? var->name() : std::string();
+    }
+    if (pattern->code() != actual->code()) {
+        return {};
+    }
+    switch (pattern->code()) {
+    case TypeCode::Array:
+        // An array with no element type in the argument (`[]`, `void[]`): the element type is
+        // what the variable would take, and the argument states none.
+        if (isUntypedArrayType(actual)) {
+            const auto *want = static_cast<const ArrayType *>(pattern);
+            std::vector<std::string> here;
+            collectTypeVars(const_cast<ArrayType *>(want), here);
+            return here.empty() ? std::string() : here.front();
+        }
+        return unstatedBindingIn(
+            static_cast<const ArrayType *>(pattern)->elemType(),
+            static_cast<const ArrayType *>(actual)->elemType());
+    case TypeCode::Stream:
+        if (isUntypedArrayType(actual)) {
+            return {};
+        }
+        return unstatedBindingIn(
+            static_cast<const StreamType *>(pattern)->elemType(),
+            static_cast<const StreamType *>(actual)->elemType());
+    case TypeCode::Tuple: {
+        const auto *want = static_cast<const TupleType *>(pattern);
+        const auto *have = static_cast<const TupleType *>(actual);
+        if (want->size() != have->size()) {
+            return {};
+        }
+        for (size_t i = 0; i < want->size(); ++i) {
+            if (std::string name = unstatedBindingIn(want->typeAt(i), have->typeAt(i));
+                !name.empty()) {
+                return name;
+            }
+        }
+        return {};
+    }
+    case TypeCode::Struct: {
+        const auto *want = static_cast<const StructType *>(pattern);
+        const auto *have = static_cast<const StructType *>(actual);
+        if (want->named() && have->named() &&
+            (want->decl() != have->decl() || want->typeArgCount() != have->typeArgCount())) {
+            return {};
+        }
+        const std::span<Type *const> wantArgs = want->named() ? want->typeArgs() : want->types();
+        const std::span<Type *const> haveArgs = have->named() ? have->typeArgs() : have->types();
+        if (wantArgs.size() != haveArgs.size()) {
+            return {};
+        }
+        for (size_t i = 0; i < wantArgs.size(); ++i) {
+            if (std::string name = unstatedBindingIn(wantArgs[i], haveArgs[i]); !name.empty()) {
+                return name;
+            }
+        }
+        return {};
+    }
+    default:
+        return {};
+    }
+}
+
 } // namespace
+
+std::string camel::core::type::unstatedBindingOf(Type *pattern, Type *actual) {
+    return unstatedBindingIn(pattern, actual);
+}
 
 bool camel::core::type::entersImplicitly(Type *target, Type *source) {
     if (target == nullptr || source == nullptr) {

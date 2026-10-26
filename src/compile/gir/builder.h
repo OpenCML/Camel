@@ -1619,6 +1619,14 @@ class Builder {
         camel::core::type::static_args_t normStatics,
         std::vector<std::pair<std::string, std::string>> &unmet,
         std::vector<std::string> *ambiguous = nullptr);
+    /// The type variable `ops` leaves without a type for these arguments, or an empty string when
+    /// none is: an argument that states no element type (`[]`) cannot fix the variable of the
+    /// parameter it stands at, so the call has a type argument nobody can infer (design
+    /// principles 5.1, 5.2). Asked where a call reaches no candidate at all, to report it as that
+    /// rather than as a mismatch of types.
+    std::string unstatedBindingForCall(
+        const oper_group_ptr_t &ops, const camel::core::type::type_vec_t &explicitTypes,
+        const camel::core::type::type_vec_t &normTypes);
     /// The kernel of `graphs` when they are exactly the one `#impl` body: what a call of the
     /// function is, instead of a call of the body (design principles 10.4).
     std::optional<ImplKernel> implKernelOf(const graph_set_ptr_t &graphs) const;

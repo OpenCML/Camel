@@ -1,11 +1,10 @@
 /**
- * The boundary of the umbrella parameter: `show([])` holds an empty array, whose element type is
- * `void` and binds no type variable, so no candidate of the declaration applies and the call is
- * refused when the program is compiled.
- *
- * The C++ `TensorLike` resolver accepted it and the kernel then faulted ("Unsupported array element type
- * dtype."); the declaration refuses it earlier and names the candidate it could not match, which is
- * the answer this case pins (docs/stdlib-conventions.cn.md 第 8 节).
+ * The empty literal states no element type, so the type variable of the parameter it stands at
+ * cannot be inferred from it: `show([])` is refused at the call as the type argument of `show`
+ * that nobody can infer, and the message says which argument left it open (design principles 5.1,
+ * 5.2). The C++ `TensorLike` resolver accepted it and left the kernel to fault; the refusal is
+ * now at the inference, where `T := Void` is not a type a call can be made at, and the kernel
+ * never meets such a value (docs/stdlib-conventions.cn.md 第 8 节).
  */
 module tensor_show_empty_array
 

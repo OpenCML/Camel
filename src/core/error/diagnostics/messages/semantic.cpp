@@ -661,6 +661,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::FunctionTypeArgumentNotInferred,
+            {
+                "FunctionTypeArgumentNotInferred",
+                "Cannot infer the type argument '{0}' of '{1}': the empty literal '[]' states no element type.",
+                "A variable takes its type from where it stands, and an empty literal states no element type, so the position '[]' is written in is the only thing that can fix the variable - and a generic parameter states none (design principles 5.1, 5.2). Write the type argument ('show::<f32>([])'), or give the literal a position whose type it can take ('let e: f32[] = []').",
+            },
+        },
+        {
             SemanticDiag::EnumFieldTypeMismatch,
             {
                 "EnumFieldTypeMismatch",
