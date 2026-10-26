@@ -1564,3 +1564,31 @@ Linux 包在 manylinux 里构建，用 auditwheel 修正标签，并在构建时
 3. **大小写转换**：`to_upper`、`to_lower` 的文档按完整 Unicode 写，实现还只转 ASCII 字母。补上 Unicode 的大小写表（C++）。在此之前，这两个函数的文档例子只用 ASCII。
 4. **草稿文件是 CRLF 换行**，换进 `stdlib/` 时转成 LF。
 5. 编译输出里有几处未使用变量的警告：`enum.cpp:140`、`builder_generics.cpp:801`、`graphviz.cpp:711/748`。清掉。
+
+## 代码审查：内存与原地更新（返工，第 1、2 条最先做）
+
+完整报告：`docs/handover/reports/code-review-memory.md`（14 条）。
+1. **槽数组的原地写破坏值语义**（高，我核对过）：`set_value.cpp:173` 的 `ownStorage = array->isSlots() || array->canWriteInPlace()`，元素按槽存放的数组（`string[]`、结构体数组）一律原地写。另一个名字持有同一个数组时，它会看到这次修改。`append`、`sort` 复制得对，只有 `set_index` 错。槽数组也要问引用计数，同一条规则。先写一条用例（`let a = xs; var b = xs; b[0] = 'x'; println(a)`）确认，再修。
+2. **`cellEscapes` 的上限不可靠**（高）：`exec_plan.cpp:463` 数到 256 个节点就答"不逃逸"，于是计划选了不检查的原地写。数到上限必须当作逃逸。
+3. **内联数组"唯一持有"这个前提没人检查**：`canWriteInPlace()` 对内联数组永远为真，这只在每个第二持有者都经过 `shareForSecondName` 时才成立；元组、实参、闭包捕获都不经过它。要么让所有产生第二持有者的路径都经过它，要么按实际的引用计数判断。原地更新的规则是"引用计数如实"，不能靠约定。
+4. **DLPack 导出的块可写**：NumPy、PyTorch 能写进 Camel 其他持有者看得到的块。导出时设置 DLPack 1.0 的只读标志。
+5. 元素视图是裸指针、不保持它的块，块移动或释放后会悬空，跨线程有竞态；`deferRelease` 用一把全局锁，分配失败时在分配器锁里释放；延迟释放在退出时不执行。其余各条（`array.cpp` 里重复的装块逻辑、循环里构造计划是平方级、`foreign_handle.cpp` 里带着自测代码、讲历史的注释）照报告改。
+
+## 代码审查：自动微分（返工）
+
+完整报告：`docs/handover/reports/code-review-autodiff.md`。我手算过的 VJP 数学都对，问题在注册与精度：
+1. **每建一个 Context 就重新注册一遍导数**（`globals.cpp:2993`）：`setTangentSpace` 把张量的切空间清掉（`src/core/derivative.cpp:56`），核心 `:op/idx_take` 的规则又覆盖了张量的那条。导数规则在进程里注册一次。
+2. `:op/idx_take` 两个模块各注册一条，后注册的静默胜出（和下标审查第 2 条是同一件事）：只留一条。
+3. **`gelu_grad`、`erf_grad`、`layer_norm_grad` 把 f64 张量当 f32 读**（`gradient.cpp:380-417`）：f64 模型的梯度是错的，而且不报错。按元素类型读写。
+4. **沿轴 `max`/`min` 的梯度给每个并列的最值都传了完整的 `dy`**（`reduction_ops.cpp:381`），总梯度被放大。按 7.7 的 `argmax` 规则只给第一个，或者平分，二者选一并写进原则 9.x；我倾向只给第一个，与 `argmax` 一致。
+5. 其余照报告：规则漏掉的情况要拒绝，不能静默；梯度类型检查要比较形状；标量 `pow` 拒绝数据指数；标量 `math` 只有 `sqrt` 有规则（要补齐）；`sum_to` 在 f32 下累加（违反 7.3，按元素类型并在 f64 下累加）；引擎里写死的模块 URI；ONNX 的梯度算子缺降低；`pullback.cpp` 4738 行要拆；补有限差分用例（f64、并列最值、标量数学）。
+
+## 代码审查：改写引擎（返工，第 1 条最先做）
+
+完整报告：`docs/handover/reports/code-review-rewrite.md`。
+1. **丢掉的部分会出故障也照丢**（高）：原则 9.7 和 v2 设计稿要求丢掉的部分"纯且不会出故障"，而 `pureComputation`（`writings.cpp:1864`）和 `OperatorTable::mayBeRecomputed` 只查效应，`Cast`、`Accs` 一律算可以丢。于是 `(a / b) * 0 => 0` 把除零的故障丢了。"会不会出故障"是算子的标准性质（6.6），按它判；补一条反例用例。
+2. **事实的 `meet`、`widen`、`narrow` 存了但从不调用**，环里的值取 `initial` 并缓存，没有不动点迭代。先确认数据边能不能成环：能成环就按格的规则实现迭代；不能就从语法里删掉这三个（没有含义的写法不留）。
+3. **事实定义的缓存键是"名字 + `with` 文本"**：两个模块的同名事实会相撞，`f16`/`bf16`/数组的 `with` 值也会相撞，而且缓存从不失效。键用"声明的身份 + 类型实参 + `with` 值的规范形式"，与规则实例同一个通道（原则 9.11）。
+4. **普通规则和泛型规则的实例共用一个 `uint16_t` 编号空间**，`explain` 可能把一步算到错的规则头上。分开编号或加宽。
+5. **泛型规则提前枚举程序里的所有类型，上限 64 个，第 65 个起静默跳过**：按原则在匹配处实例化，不设静默上限；`check` 用同一套类型范围。
+6. 其余照报告：`check` 用 `std::shuffle`（各家标准库结果不同，换成自己的确定性洗牌）；一条坏规则让整份报告中止；任何 `std::invalid_argument` 都报成 `RuleTwoWay`；条件抛异常没被接住；`greedy_` 不复位；`rewrite` 不报告是否到了不动点；`saturate` 预算用尽和正常完成看起来一样；`carriesOrdering`、`declaredCommutative` 和三个匹配器重复；`module.cpp` 4179 行要拆。
