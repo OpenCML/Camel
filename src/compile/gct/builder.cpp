@@ -3017,7 +3017,19 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         if (dataNode->type() == NodeKind::DATA && !containsTypeVar(dstType) &&
             asTagged(dstType) == nullptr && !intoCollection) {
             const auto &data = dataNode->data();
-            if (dstType->castSafetyFrom(data->type()) != CastSafety::Safe) {
+            const CastSafety safety = dstType->castSafetyFrom(data->type());
+            if (safety == CastSafety::Forbidden && data->type()->isPrimitive() &&
+                dstType->isPrimitive()) {
+                // The one table of `as` (Type::castSafetyFrom) refuses a literal as it refuses a
+                // variable: `5 as float` and `n as float` are the same answer (design principles
+                // 5.1). A literal takes the type of its position; a number of another type is made
+                // by the conversion function.
+                diags_->of(SemanticDiag::DynamicCastForbidden)
+                    .at(ast->load()->tokenRange())
+                    .commit(data->type()->toString(), dstType->toString());
+                throw BuildAbortException();
+            }
+            if (safety != CastSafety::Safe) {
                 reportLiteralCastFailure(
                     diags_,
                     ast->load()->tokenRange(),
@@ -5594,7 +5606,6 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
 
     FunctionTypeFactory factory;
 
-    factory.setModifiers(typeLoad->modifiers());
 
     std::unordered_set<string> paramNames;
 

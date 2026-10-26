@@ -1,0 +1,7 @@
+// A number is not a bool by `as`; write the comparison.
+func main(): int sync {
+    let n = 5
+    let b = n as bool
+    println(b)
+    return 0
+}

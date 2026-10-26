@@ -5167,11 +5167,11 @@ A module declares only the operators it implements: a body-less declaration stan
 
 ```camel
 import bytes
-import { size } from bytes_tag
+import { to_array } from bytes_tag
 
 func main(): int sync {
     let b = bytes::encode('abc')
-    println(size(b))
+    println(to_array(b))
     return 0
 }
 ```

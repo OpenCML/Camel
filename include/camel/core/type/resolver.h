@@ -184,10 +184,9 @@ class StaticFuncTypeResolver : public FuncTypeResolver {
         return std::make_unique<StaticFuncTypeResolver>(funcType);
     }
     static resolver_ptr_t create(
-        const param_init_list_t &withTypes, const param_init_list_t &normTypes, Type *returnType,
-        const ModifierSet &modifiers = Modifier::None) {
+        const param_init_list_t &withTypes, const param_init_list_t &normTypes, Type *returnType) {
         return std::make_unique<StaticFuncTypeResolver>(
-            FunctionType::create(withTypes, normTypes, returnType, modifiers));
+            FunctionType::create(withTypes, normTypes, returnType));
     }
 
     std::optional<FunctionType *> resolve(

@@ -706,7 +706,6 @@ Builder::operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &o
     }
     // Its own type object (a graph completes its function type in place).
     FunctionTypeFactory factory;
-    factory.setModifiers(opType->modifiers());
     factory.setExitType(opType->exitType());
     // The function value promises what the operator's type promises (effects plan 2.3): a call
     // through this value takes its footprint from the type, not by walking the one-node body.
@@ -1439,7 +1438,6 @@ node_handle_t Builder::buildComposition(const GCT::node_ptr_t &gct, Type *expect
     FunctionType *lhsExpected = nullptr;
     if (expectedFunc != nullptr) {
         FunctionTypeFactory factory;
-        factory.setModifiers(expectedFunc->modifiers());
         factory.addNormArg(
             std::string(kCompParameter), expectedFunc->normTypeAt(0), expectedFunc->normIsVarAt(0));
         lhsExpected = factory.build();
@@ -1467,7 +1465,6 @@ node_handle_t Builder::buildComposition(const GCT::node_ptr_t &gct, Type *expect
             if (lhsFunc->withTypesCount() == 0 && lhsFunc->normTypesCount() == 1 &&
                 lhsFunc->hasExitType()) {
                 FunctionTypeFactory factory;
-                factory.setModifiers(expectedFunc->modifiers());
                 factory.addNormArg(std::string(kCompParameter), lhsFunc->exitType(), false);
                 if (expectedFunc->hasExitType()) {
                     factory.setExitType(expectedFunc->exitType());

@@ -1590,7 +1590,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "fold_cast.rewrites"
-desc = "A conversion (`e as T`, a CAST node) of a constant is a constant: after std::opt no CAST is left, for a conversion to the shape the compiler already knew, for one checked against the value (the source is declared a plain Tensor) and for a number converted to another primitive type. Folding used to leave every CAST, so nothing under `as` was a constant."
+desc = "A conversion (`e as T`, a CAST node) of a constant is a constant: after std::opt no CAST is left, for a conversion to the shape the compiler already knew, for one checked against the value (the source is declared a plain Tensor); a number converted by the conversion function is folded as any call of constants is. Folding used to leave every CAST, so nothing under `as` was a constant."
 kind = "behavior"
 case = "../../../cases/opt/generic/fold_cast.cml"
 args = ["${case}", "std::opt", "std::gir"]

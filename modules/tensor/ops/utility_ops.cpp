@@ -201,7 +201,7 @@ class LoadNpyResolver final : public FuncTypeResolver {
         if (!requested || *requested != dtype_) {
             return std::nullopt;
         }
-        return FunctionType::create({}, {{Type::String(), false}}, npyTensorType(dtype_), modifiers);
+        return FunctionType::create({}, {{Type::String(), false}}, npyTensorType(dtype_));
     }
 
     /// The candidate line a failed resolution prints (`NoMatchingFunction`): the element type the

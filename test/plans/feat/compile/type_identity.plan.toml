@@ -1,0 +1,90 @@
+id = "compile.type_identity"
+order = 925
+tier = "fast"
+tags = ["feat", "compile", "types", "identity", "casts"]
+desc = "One identity per type and one table for `as` (design principles 5.1, 5.2): `equals`, assignability and the canonical id agree; `void` discards only in the result of a function; the common type of two branch arms exists for tuples, structs, `T?` and functions; `as` converts a type to itself and never a number to a number."
+
+[defaults]
+kind = "behavior"
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 60000
+
+[[tests]]
+name = "type_identity.selftest"
+desc = "Over a corpus of every type constructor: equality is reflexive and symmetric, equal types are assignable both ways and share a canonical id, nothing is assignable from an unknown source, `void` takes only `void` outside a function result, a `with` parameter that records a value tells two signatures apart, the least common type of two arms exists for tuples, structs, `T?`, `T!` and functions, and `as` between two different primitive types is refused."
+case = "../../../cases/compile/type_array/selftest.cml"
+args = ["${case}", "std::identitytype", "std::nvm"]
+expect_stdout_contains = ["TYPE_IDENTITY_SELFTEST ok"]
+expect_output_not_contains = ["error", "Segmentation fault"]
+
+[[tests]]
+name = "type_identity.corpus"
+desc = "Every spelling of the shared corpus is accepted where itself is written, and a list of pairs says which spellings are one type (by the identity the graph compares: parameter and dimension names and `sync` are not part of it) and in which directions a value of one is accepted where the other is written."
+tool = "node"
+case = "../../../cases/compile/type_identity/identity.mjs"
+args = ["${case}", "--camel", "${camel}"]
+expect_stdout_contains = ["0 that fail"]
+expect_output_not_contains = ["FAIL"]
+timeout_ms = 600000
+
+[[tests]]
+name = "type_identity.branch_unify"
+desc = "The two arms of a branch have the type they have in common: arrays of different lengths are an array, and so are the same arrays inside a tuple, a struct, a nullable and the result of a function."
+case = "../../../cases/compile/type_identity/branch_unify.cml"
+args = ["${case}"]
+expect_stdout_exact = "([1, 2], 0) ([1, 2, 3], 0)\n[1, 2] [1, 2, 3]\n[1, 2] [1, 2, 3]\n[7, 7] [7, 7, 7]\n"
+
+[[tests]]
+name = "type_identity.void_member"
+desc = "`void` takes `void` and nothing else: a tuple member written `void` does not accept a string."
+kind = "negative"
+case = "../../../cases/compile/type_identity/void_member.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["not the declared type 'void'"]
+
+[[tests]]
+name = "type_identity.numeric_as_variable"
+desc = "`n as float` with `n` an int is refused: `as` does not convert a number to a number."
+kind = "negative"
+case = "../../../cases/compile/casts/numeric_as_variable.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DynamicCastForbidden"
+expect_output_contains = ["Dynamic cast from 'int' to 'float' is not allowed"]
+
+[[tests]]
+name = "type_identity.numeric_as_literal"
+desc = "`5 as float` is the same answer as `n as float`: one table decides, for a literal as for a variable."
+kind = "negative"
+case = "../../../cases/compile/casts/numeric_as_literal.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DynamicCastForbidden"
+expect_output_contains = ["Dynamic cast from 'int' to 'float' is not allowed"]
+
+[[tests]]
+name = "type_identity.bool_as_int"
+desc = "`true as int` is refused: a bool is not a number by `as`."
+kind = "negative"
+case = "../../../cases/compile/casts/bool_as_int.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DynamicCastForbidden"
+
+[[tests]]
+name = "type_identity.int_as_bool"
+desc = "`n as bool` is refused: a number is not a bool by `as`."
+kind = "negative"
+case = "../../../cases/compile/casts/int_as_bool.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DynamicCastForbidden"
+
+[[tests]]
+name = "type_identity.conversion_functions"
+desc = "The conversion functions convert numbers (`float(n)`, `int(x)`, `i32(n)`, `f64(f)`, `f32(x)`), and `as` is the identity on a type and the entrance into `T?`."
+case = "../../../cases/compile/casts/conversion_functions.cml"
+args = ["${case}"]
+expect_stdout_exact = "5.0 2 5 1.5 2.75\n5 2.75 1.5\n5 null\n"

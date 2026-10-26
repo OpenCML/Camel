@@ -4,8 +4,7 @@
 /*
  * Function types: the signature of a function, and the type of a function value.
  *
- * A signature is the implementation mark, the modifiers (`sync`, `macro`), the `with` and the
- * ordinary parameters (each a type and a `var` mark), the parameter names and the result
+ * A signature is the `with` and the ordinary parameters (each a type and a `var` mark), the parameter names and the result
  * type. It is an immutable object, interned in the type table (camel/core/type/intern.h):
  * equal signatures are one object. Parameter names do not take part in compatibility (equals
  * and assignableFrom ignore them); they are part of the interning key because a type prints
@@ -61,7 +60,6 @@ class FunctionTypeFactory {
   public:
     FunctionTypeFactory() = default;
 
-    void setModifiers(ModifierSet mod) { modifiers_ = mod; }
     void setExitType(Type *type) { exitType_ = type; }
     /// The resources the signature publishes (design effects plan 2.2); Generic when not set.
     void setResources(const sem::ResourceSignature &resources) { resources_ = resources; }
@@ -116,7 +114,6 @@ class FunctionTypeFactory {
     OpenFunctionType *buildOpen();
 
   private:
-    ModifierSet modifiers_ = Modifier::None;
     std::vector<param_t> withTypes_;
     std::vector<param_t> normTypes_;
     Type *exitType_ = nullptr;
@@ -143,11 +140,9 @@ class FunctionType : public CompositeType {
     static FunctionType *create();
     /// The interned signature with these parameters and result type, without names.
     static FunctionType *create(
-        const param_init_list_t &withTypes, const param_init_list_t &normTypes, Type *returnType,
-        const ModifierSet &modifiers = Modifier::None);
+        const param_init_list_t &withTypes, const param_init_list_t &normTypes, Type *returnType);
     static FunctionType *create(
-        const param_vec_t &withTypes, const param_vec_t &normTypes, Type *returnType,
-        const ModifierSet &modifiers = Modifier::None);
+        const param_vec_t &withTypes, const param_vec_t &normTypes, Type *returnType);
 
     /// The interned signature equal to this one in everything but the result type.
     FunctionType *withExitType(Type *exitType) const;
@@ -160,10 +155,6 @@ class FunctionType : public CompositeType {
     /// This signature as an OpenFunctionType, or nullptr when it is not open.
     OpenFunctionType *asOpen() const;
     bool isOpen() const { return open_; }
-
-    ModifierSet modifiers() const { return modifiers_; }
-    bool hasModifier(Modifier mod) const { return modifiers_.has(mod); }
-    bool checkModifiers() const;
 
     size_t withTypesCount() const { return withCount_; }
     size_t normTypesCount() const { return normCount_; }
@@ -244,6 +235,7 @@ class FunctionType : public CompositeType {
     /// object a compiler is still writing) the interned signature of its parts as they stand.
     virtual Type *closed() const override;
     virtual bool equals(Type *type) const override;
+    virtual Type *unify(Type *other) const override;
     virtual CastSafety castSafetyFrom(Type *sourceType) const override;
     virtual bool assignableFrom(Type *sourceType) const override;
 
@@ -251,7 +243,6 @@ class FunctionType : public CompositeType {
     /// Everything a signature consists of. `names` has one entry per parameter (`with` first)
     /// when `hasNames`, and is empty otherwise.
     struct Parts {
-        ModifierSet modifiers = Modifier::None;
         std::vector<param_t> params; // `with` parameters first
         size_t withCount = 0;
         Type *exitType   = nullptr;
@@ -299,7 +290,6 @@ class FunctionType : public CompositeType {
             paramCount() * (sizeof(Type *) + sizeof(TypeCode) + (hasNames_ ? sizeof(SymId) : 0)));
     }
 
-    ModifierSet modifiers_;
     uint16_t withCount_ = 0;
     uint16_t normCount_ = 0;
     bool hasNames_      = false;
@@ -335,5 +325,13 @@ class OpenFunctionType final : public FunctionType {
   private:
     OpenFunctionType(const Parts &parts) : FunctionType(parts, true) {}
 };
+
+/// Whether a value of type `value` may be the result of a function declared to give `declared`.
+/// A function declared `void` discards whatever its body ends with; this is the one position
+/// where `void` takes any type (`Type::assignableFrom` gives `void` to `void` only).
+inline bool acceptsAsResult(Type *declared, Type *value) {
+    return declared != nullptr &&
+           (declared->code() == TypeCode::Void || declared->assignableFrom(value));
+}
 
 } // namespace camel::core::type

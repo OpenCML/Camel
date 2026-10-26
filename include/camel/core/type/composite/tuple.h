@@ -162,6 +162,7 @@ class TupleType : public CompositeType {
     /// Widens every element type, so `var` bindings never hold refined aggregates (mutation
     /// through `var` parameters would otherwise break covariant assignability).
     virtual Type *widened() const override;
+    virtual Type *unify(Type *other) const override;
 
   private:
     // Fill in one pass from vector<Type*>.

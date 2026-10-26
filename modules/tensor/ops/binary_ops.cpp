@@ -92,8 +92,7 @@ class FromBytesResolver final : public FuncTypeResolver {
                 return FunctionType::create(
                     {},
                     {{norm[0], false}, {norm[1], false}},
-                    aggregateResultType(types[0]),
-                    modifiers);
+                    aggregateResultType(types[0]));
             }
         }
         std::optional<TypeCode> requested;
@@ -111,8 +110,7 @@ class FromBytesResolver final : public FuncTypeResolver {
             return FunctionType::create(
                 {},
                 {{norm[0], false}, {norm[1], false}},
-                result,
-                modifiers);
+                result);
         } catch (const std::invalid_argument &) {
             return std::nullopt;
         }
