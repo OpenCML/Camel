@@ -257,11 +257,11 @@ const out = input.normalized.stdout
 const line = (l) => assert(out.includes(l + '\n'), `missing: ${l}`)
 for (const l of [
   'FACTS exported core.shape 18', 'FACTS exported core.reorder 2', 'FACTS exported core.effects 6',
-  'FACTS exported core.permissions 1', 'FACTS text round trip 27/27',
-  'FACTS imported stored 26', 'FACTS imported matches the graph 1',
+  'FACTS exported core.permissions 2', 'FACTS text round trip 28/28',
+  'FACTS imported stored 26', 'FACTS imported matches the graph 2',
   'FACTS loaded equal to a fresh computation 26/26',
   'FACTS reloaded main graph changed 10', 'FACTS reloaded __root__ graph changed 1',
-  'FACTS reloaded layer stored 5', 'FACTS reloaded total stored 3', 'FACTS reloaded total matches the graph 1',
+  'FACTS reloaded layer stored 5', 'FACTS reloaded total stored 3', 'FACTS reloaded total matches the graph 2',
   'FACTS reloaded twice stored 6', 'FACTS reloaded count stored 1',
   '60.0',
 ]) line(l)

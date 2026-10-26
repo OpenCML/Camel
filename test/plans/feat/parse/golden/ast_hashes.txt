@@ -1,6 +1,7 @@
+6b1cd17fb651d89f ok test/cases/parse/repeated_type_marks.cml
 8964908a12661168 ok test/cases/parse/constructs/comprehensions.cml
-394dac63d54e1369 ok test/cases/parse/constructs/constas.cml
-d9d098e434889eb7 ok test/cases/parse/constructs/constas_param.cml
+f3b57ba938b834dc ok test/cases/parse/constructs/constas.cml
+ff1270d0eec88fb7 ok test/cases/parse/constructs/constas_param.cml
 394b0953c7a9de39 ok test/cases/parse/constructs/enum.cml
 00333688365c1dd8 ok test/cases/parse/constructs/fact.cml
 43208d9d90200f52 ok test/cases/parse/constructs/fstring.cml
@@ -15,7 +16,6 @@ a5e9896ce55676d8 ok test/cases/parse/constructs/operator_name.cml
 2fe3134d6fc3e87e no test/cases/parse/numbers/leading_zero.cml
 bb3a3b0b4dee2801 no test/cases/parse/numbers/member_index_exponent.cml
 c5022509189bc12b ok test/cases/parse/numbers/tokens.cml
-6b1cd17fb651d89f ok test/cases/parse/repeated_type_marks.cml
 f455edf98cd3b734 no test/cases/parse/rules/declared.cml
 f08458d0aadece4e ok test/cases/parse/rules/generic_head.cml
 1f3c1a8083859602 ok test/cases/parse/rules/names.cml

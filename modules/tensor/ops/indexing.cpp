@@ -589,6 +589,17 @@ std::optional<IndexedInstance> unsqueezeIndexing(const InferContext &ctx) {
     return b.finish(allDims(b));
 }
 
+/// The two parameters of `sum_to` and `broadcast_like` are one element type:
+/// `::<T>(g: T[..], like: T[..])` (modules/tensor/ops/gradient_ops.cpp declares it, and the index
+/// declaration has to accept the same calls the signature does). A call whose two known element
+/// types differ is not a call the operator accepts, and a numeric conversion does not reach one
+/// (design principles 5.1). An element type that is not known on one side is not a disagreement.
+bool sameElementType(const InferContext &ctx) {
+    const auto lhs = ctx.facts(0).dtype;
+    const auto rhs = ctx.facts(1).dtype;
+    return !lhs || !rhs || *lhs == *rhs;
+}
+
 /**
  * broadcast_like(g, like): g (a tensor, or a number) broadcast to like's shape; like's
  * elements are not read. g's extent-1 axes read 0. No instance when an axis of g may or may
@@ -599,6 +610,9 @@ std::optional<IndexedInstance> broadcastLikeIndexing(const InferContext &ctx) {
     const auto like = shapeOf(ctx, 1);
     if (!g || !like || g->size() > like->size()) {
         return std::nullopt;
+    }
+    if (!sameElementType(ctx)) {
+        return std::nullopt; // ::<T>(g: T[..], like: T[..]): no conversion between two of them
     }
     IndexBuilder b;
     const size_t shift = like->size() - g->size();
@@ -799,6 +813,9 @@ std::optional<IndexedInstance> sumToIndexing(const InferContext &ctx) {
     if (!g || !like || !fullyKnown(*g) || !fullyKnown(*like) || like->size() > g->size()) {
         return std::nullopt;
     }
+    if (!sameElementType(ctx)) {
+        return std::nullopt; // ::<T>(g: T[..], like: T[..]): no conversion between two of them
+    }
     IndexBuilder b;
     if (*g == *like) {
         // Equal shapes: the kernel returns its input itself, so every element type is carried
@@ -919,23 +936,24 @@ const std::unordered_map<std::string_view, Indexing> &indexings() {
         t.emplace("broadcast_like", Indexing{broadcastLikeIndexing, {}});
         t.emplace("expand_axis", Indexing{expandAxisIndexing, {}});
 
-        // sum and mean of everything: f32 elements are added in f64; int64 and bool elements
-        // exactly in int64, wrapping (design principles 7.7), and the result converted to f64
-        // once (mean divides in f64 first).
+        // sum and mean of everything: f32 elements are added in f64 and rounded into the
+        // element type once; int64 and bool elements exactly in int64, wrapping (design
+        // principles 7.7), an int64 or bool sum answering that exact value and a mean of
+        // them dividing it in f64 before the one rounding to f32.
         t.emplace(
             "sum",
             Indexing{
                 reduceAllIndexing,
-                {sumLaw("sum_f32", f32, f64, f64),
-                 sumLaw("sum_i64", i64, i64, f64),
-                 sumLaw("sum_bool", boolean, i64, f64)}});
+                {sumLaw("sum_f32", f32, f64, f32),
+                 sumLaw("sum_i64", i64, i64, i64),
+                 sumLaw("sum_bool", boolean, i64, i64)}});
         t.emplace(
             "mean",
             Indexing{
                 reduceAllIndexing,
-                {meanLaw("mean_f32", f32, f64, f64, LawEmpty::Fault),
-                 meanLaw("mean_i64", i64, i64, f64, LawEmpty::Fault),
-                 meanLaw("mean_bool", boolean, i64, f64, LawEmpty::Fault)}});
+                {meanLaw("mean_f32", f32, f64, f32, LawEmpty::Fault),
+                 meanLaw("mean_i64", i64, i64, f32, LawEmpty::Fault),
+                 meanLaw("mean_bool", boolean, i64, f32, LawEmpty::Fault)}});
         // By axis: floats in f64 rounded once to f32, integers and bools exactly in int64.
         t.emplace(
             "sum_axis",

@@ -649,7 +649,10 @@ int main() {
         schedule(scalar);
         validatePlan(scalar);
         rejects(scalar, [](auto &x) { x.storage.bytes[x.storage.slots[1]] = 4; }, "undersized/missing allocation");
-        rejects(scalar, [](auto &x) { x.nodes[1].dtype = DType::F32; }, "scalar reduction type");
+        // The annotation is the elements' own type (design principles 7.3), so an f32 scalar
+        // reduction is now a valid plan: what the schedule still refuses is one that is not a
+        // scalar at all.
+        rejects(scalar, [](auto &x) { x.nodes[1].shape = {1}; }, "scalar reduction type");
         rejects(scalar, [](auto &x) { x.nodes[1].op = "relu"; }, "unsupported operation dtype");
         auto borrowed = indexed;
         auto resident = std::make_shared<DeviceValue>();
@@ -681,7 +684,11 @@ int main() {
         schedule(scalarOps);
         if (scalarOps.launches.size() != 1 || scalarOps.storage.bytes != std::vector<size_t>{8})
             throw std::runtime_error("scalar chain did not fuse into one f64 result");
-        rejects(scalarOps, [](auto &x) { x.nodes[2].dtype = DType::F32; }, "scalar arithmetic type or arity");
+        // The device's widths are f32 and f64 and a scalar operation now takes either (the element
+        // type a whole-tensor reduction answers divides a gradient by a count), so what this
+        // mutation can still pin is the shape half of the rule: an operation that is not a scalar
+        // at all is refused, and so is one whose operands are at another width (below).
+        rejects(scalarOps, [](auto &x) { x.nodes[2].shape = {1}; }, "scalar arithmetic type or arity");
         rejects(scalarOps, [](auto &x) { x.nodes[2].inputs = {0}; }, "scalar arithmetic type or arity");
         rejects(scalarOps, [](auto &x) { x.nodes[0] = Node{.op="input", .data={1}}; }, "scalar operand type");
         std::cout << "tiles plan validation: 33 rejected mutations\n";

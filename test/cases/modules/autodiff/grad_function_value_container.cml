@@ -5,10 +5,10 @@ import { grad } from autodiff
 // Refused: the function called is read from a tuple.
 with <p: f64[..]>
 func loss(): float {
-    let s = sum(p)
+    let s = float(sum(p))
     let fs = ((t: f64[..]): f64[..] => tanh(t * s), (t: f64[..]): f64[..] => t * s)
     let f = fs.0
-    return sum(f(p))
+    return float(sum(f(p)))
 }
 
 func main(): int sync {

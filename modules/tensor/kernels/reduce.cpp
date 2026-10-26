@@ -236,9 +236,9 @@ Array *reduceAxis(
 
 double sumAll(const Array *input) {
     // Accumulation type: f64 for every floating element type, in row-major order from +0. The
-    // result is the f64 answer itself, so there is no rounding back into a narrow element type
-    // here (the whole-tensor `sum` answers f64, reduction_ops.cpp); the axis `sum` above is the
-    // one that rounds once into the input's element type.
+    // whole-tensor `sum` and `mean` answer the element type now, so their kernel converts this
+    // value into it once (reduction_ops.cpp); the axis `sum` above is the one that rounds once
+    // into the result's element type.
     return dispatchDType(input->dtype(), [&]<typename T>() {
         const T *src = input->dataAs<T>();
         if constexpr (camel::core::rtdata::is_ieee_float_v<T>) {
@@ -249,13 +249,23 @@ double sumAll(const Array *input) {
             return acc;
         } else {
             // int64 and bool: exactly in int64, wrapping on overflow (design principles 5.1,
-            // 7.7), then converted to the float result once.
-            uint64_t acc = 0;
-            for (uint64_t i = 0; i < input->numel(); ++i) {
-                acc += static_cast<uint64_t>(static_cast<int64_t>(src[i]));
-            }
-            return static_cast<double>(static_cast<int64_t>(acc));
+            // 7.7), then the one conversion to the double answer.
+            return static_cast<double>(sumAllInt64(input));
         }
+    });
+}
+
+int64_t sumAllInt64(const Array *input) {
+    // The exact int64 accumulator of an int64 or bool tensor: the addition is done on uint64_t,
+    // where wrapping is defined (design principles 5.1, 7.7). An int64 result is this value as
+    // it is; `sumAll` converts it to double once for the callers that answer f64.
+    return dispatchDType(input->dtype(), [&]<typename T>() -> int64_t {
+        uint64_t acc = 0;
+        const T *src  = input->dataAs<T>();
+        for (uint64_t i = 0; i < input->numel(); ++i) {
+            acc += static_cast<uint64_t>(static_cast<int64_t>(src[i]));
+        }
+        return static_cast<int64_t>(acc);
     });
 }
 

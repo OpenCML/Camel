@@ -6,9 +6,9 @@ import { grad } from autodiff
 // still chooses the function by a branch (nothing folds it before grad runs).
 with <p: f64[..]>
 func loss(): float {
-    let s = sum(p)
+    let s = float(sum(p))
     let g = if 1 > 0 then (t: f64[..]): f64[..] => tanh(t * s) else (t: f64[..]): f64[..] => t * s
-    return sum(g(p))
+    return float(sum(g(p)))
 }
 
 func main(): int sync {

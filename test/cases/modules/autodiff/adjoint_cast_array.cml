@@ -23,14 +23,14 @@ import { grad } from autodiff
 with <xs: float[]>
 func plain(): float {
     let t = cast(xs, 'float32')
-    return sum(t)
+    return float(sum(t))
 }
 
 with <w: float[]>
 func weighted(): float {
     let t = cast(w, 'float32')
     let c = cast([2.0, 3.0, 4.0] as f64[], 'float32')
-    return sum(t * c)
+    return float(sum(t * c))
 }
 
 func main(): int sync {

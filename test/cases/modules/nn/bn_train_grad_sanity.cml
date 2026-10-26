@@ -48,7 +48,7 @@ func reference(t: f32[..], g: f32[..], b: f32[..], rm: f32[..], rv: f32[..], m: 
 
 func loss_at(t: f32[..], g: f32[..], b: f32[..], rm: f32[..], rv: f32[..]): float {
     let r = batch_norm_train(t, g, b, rm, rv, 0.1, 0.00001)
-    return sum(r.0 * w())
+    return float(sum(r.0 * w()))
 }
 
 with <p: Inputs>

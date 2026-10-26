@@ -6,7 +6,7 @@ import { reshape, mean, abs, sum } from tensor
 import { grad } from autodiff
 import { source, run_preferred_resident, download } from tiles
 with <x: f32[..]>
-func mse(): float { return mean(x * x) }
+func mse(): float { return float(mean(x * x)) }
 func main(run_gpu: bool): int sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3])
     let derivative = (v: f32[..]): f32[..] => grad(mse)<v>()

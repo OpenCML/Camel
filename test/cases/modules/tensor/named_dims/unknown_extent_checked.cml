@@ -3,7 +3,7 @@ import { ones, sum, load_npy } from tensor
 // The first argument's extent is not known statically (`f32[?]`): the call is
 // accepted, and the extent the second argument binds is checked when the call runs.
 func fit(a: f32[n], b: f32[n]): float {
-    return sum(a) + sum(b)
+    return float(sum(a)) + float(sum(b))
 }
 func main(): int sync {
     let t = load_npy::<f32>('test/cases/modules/tensor/shape_types/x3.npy') as f32[?]

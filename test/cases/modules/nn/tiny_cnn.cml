@@ -29,7 +29,7 @@ func predict(x: f32[..]): f32[..] {
 
 func mse_loss(pred: f32[..], target: f32[..]): float {
     let diff = pred - target
-    return sum(diff * diff) / float(shape(pred)[0])
+    return float(sum(diff * diff)) / float(shape(pred)[0])
 }
 
 with <model: TinyCnn>

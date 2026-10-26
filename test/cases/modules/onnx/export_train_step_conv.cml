@@ -23,7 +23,7 @@ func loss(x: float[..]): float {
     let c1 = relu(conv2d(x, m.conv1_w, m.conv1_b, 1, 1))
     let c2 = max_pool2d(relu(conv2d(c1, m.conv2_w, m.conv2_b)), 2)
     let y = flatten(c2) @ m.fc_w + m.fc_b
-    return mean(y * y)
+    return float(mean(y * y))
 }
 
 func step(m: Cnn, x: float[..]): (float, Cnn) {

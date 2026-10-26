@@ -113,7 +113,7 @@ enum DataType {
     Ref
 }
 
-Data(DataType type, bool notNull)
+Data(DataType type)
     := UnaryExpr | BinaryExpr | ReservedExpr
     | IfExpr | MatchExpr | TryExpr
     | Literal | ListData | StructData | TupleData | IndexData | FuncData | RefData ;

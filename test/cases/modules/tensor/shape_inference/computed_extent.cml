@@ -2,10 +2,10 @@ module shape_inference_computed_extent
 import { reshape, zeros, sum, dim } from tensor
 // A shape written in place with a computed extent keeps its rank and its constant extents.
 func rows(a: f32[?, 3]): float {
-    return sum(a)
+    return float(sum(a))
 }
 func exact(a: f32[2, 3]): float {
-    return sum(a)
+    return float(sum(a))
 }
 func f(x: f32[?, 3], n: int): float {
     return rows(zeros([n, 3]) + 1.0) + rows(reshape(x, [n, 3]))
