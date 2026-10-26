@@ -1192,7 +1192,7 @@ bool hasWritings(const Program &program) {
 
 const Program *extractWritings(
     const std::shared_ptr<camel::core::context::Context> &context, const Program *program,
-    const CostModel &model) {
+    const CostModel &model, bool detached) {
     if (program == nullptr || !hasWritings(*program)) {
         return program;
     }
@@ -1205,7 +1205,7 @@ const Program *extractWritings(
         DraftWritings writings(draft);
         writings.extract(model, context.get());
     }
-    return session.commit();
+    return session.commit(detached);
 }
 
 gc_node_ref_t DraftWritings::find(gc_node_ref_t node) { return store_.find(contextOf(node), node); }

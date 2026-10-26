@@ -928,7 +928,9 @@ Application applyRewrite(
         total.erased += stats.erased;
         total.fixpoint = total.fixpoint && stats.fixpoint;
     }
-    return {session.commitChecked(), total};
+    // A detached commit: the result is a value the caller holds, and the context's program stays
+    // as it is (design principles 9.1); the pass driver installs what a pass hands on.
+    return {session.commit(true), total};
 }
 
 /// `rewrite(p, rules)` and `rewrite(p, rules, strict)`: the program with the rules applied one way,
@@ -1516,7 +1518,8 @@ slot_t saturateKernel(ArgsView &, ArgsView &norm, Context &ctx) {
             writings.saturate(compiled, budget);
             writings.save();
         }
-        const camel::runtime::Program *committed = session.commitChecked();
+        // Detached, as `rewrite`: the result is a value, the context's program is left alone.
+        const camel::runtime::Program *committed = session.commit(true);
         return makeOk(toSlot(const_cast<camel::runtime::Program *>(committed)), resultType);
     } catch (const camel::runtime::RuleCompileError &e) {
         return makeError("RuleInvalid", e.what(), "<rewrite::saturate>");
@@ -1538,7 +1541,7 @@ slot_t extractKernel(ArgsView &, ArgsView &norm, Context &ctx) {
             "<rewrite::extract>");
     }
     const camel::runtime::Program *extracted =
-        camel::runtime::extractWritings(ctx.shared_from_this(), base, *model);
+        camel::runtime::extractWritings(ctx.shared_from_this(), base, *model, /*detached=*/true);
     return makeOk(toSlot(const_cast<camel::runtime::Program *>(extracted)), resultType);
 }
 

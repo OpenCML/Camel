@@ -33,13 +33,11 @@ timeout_ms = 20000
 
 [[tests]]
 name = "program_txn_does_not_republish_current"
-desc = "A commit made by the program itself gives a value and changes nothing another holder sees (design principles 9.1), so current() still names the running program afterwards. Known failing: commit installs the committed Program as the context's (modules/graph/txn.cpp, commitChecked), so current() then names the result; see docs/handover/reports/graph-values-audit.md."
+desc = "A commit made by the program itself gives a value and changes nothing another holder sees (design principles 9.1), so current() still names the running program afterwards."
 kind = "behavior"
 case = "../../../cases/modules/graph_values/program_txn.cml"
 backends = ["nvm", "fvm", "jit"]
 args = ["${case}", "${backend}"]
-known_fail = ["nvm", "fvm", "jit"]
-known_fail_note = "commit(t) publishes its Program into the context (modules/graph/txn.cpp commitKernel -> RuntimeGraphDraftSession::commitChecked), so current() names the committed Program after the call; the fix is a detached commit, with publishing left to the pass driver (src/execute/camel_pass.cpp installRuntimeProgramIfCurrent)."
 expect_exit = 0
 expect_stdout_contains = ["current: 1\n"]
 timeout_ms = 20000
@@ -57,13 +55,11 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rewrite_does_not_republish_current"
-desc = "rewrite(p, rules) gives a Program and changes nothing another holder sees (design principles 9.1), so current() still names the running program afterwards. Known failing: the rewrite engine commits with commitChecked and installs its result as the context's program."
+desc = "rewrite(p, rules) gives a Program and changes nothing another holder sees (design principles 9.1), so current() still names the running program afterwards."
 kind = "behavior"
 case = "../../../cases/modules/graph_values/rewrite_rule.cml"
 backends = ["nvm", "fvm", "jit"]
 args = ["${case}", "${backend}"]
-known_fail = ["nvm", "fvm", "jit"]
-known_fail_note = "rewrite/saturate publish their Program into the context (modules/rewrite/module.cpp applyRewrite and saturateKernel -> commitChecked), so current() names the result after the call; the fix is a detached commit."
 expect_exit = 0
 expect_stdout_contains = ["current: 1\n"]
 timeout_ms = 20000
@@ -135,13 +131,11 @@ timeout_ms = 20000
 
 [[tests]]
 name = "discarded_rewrite_does_not_become_current"
-desc = "The same run: the rewrite the pass threw away is no holder's value, so current() inside the run still names the Program the pass returned, with the `+ 1`. Known failing: rewrite installed its result as the context's program when it was made."
+desc = "The same run: the rewrite the pass threw away is no holder's value, so current() inside the run still names the Program the pass returned, with the `+ 1`."
 kind = "behavior"
 case = "../../../cases/modules/graph_values/discard_target.cml"
 backends = ["nvm", "fvm", "jit"]
 args = ["${case}", "discard_pass::discard", "${backend}"]
-known_fail = ["nvm", "fvm", "jit"]
-known_fail_note = "The rewrite engine's commit installs its Program into the context although the pass discards it (modules/rewrite/module.cpp applyRewrite -> commitChecked); the driver then sees the returned Program unchanged and installs nothing (src/execute/camel_pass.cpp, produced == program), so current() keeps naming the discarded result."
 expect_exit = 0
 expect_stdout_contains = ["current: 1\n"]
 timeout_ms = 20000
