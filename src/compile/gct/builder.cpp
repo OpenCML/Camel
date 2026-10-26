@@ -1479,6 +1479,10 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
         signature.params.clear();
         signature.ambient.clear();
     }
+    // The resources the clause wrote are what it promises, and a resource the program does not own
+    // brings its effect on the world with it (design principles 3.3): a clause that names one
+    // covers the body that reaches it, and one that leaves it out does not.
+    sem::ambientCarriesExternal(signature);
     return signature;
 }
 

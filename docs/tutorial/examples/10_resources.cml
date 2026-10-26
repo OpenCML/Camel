@@ -1,5 +1,5 @@
 // What a call touches: a resource of the module, a group of them, a handle type and `uses` on a
-// parameter. The bodies touch nothing -- a clause is a promise the compiler checks where it can.
+// parameter. The bodies touch nothing, so every clause here names exactly what its body reaches.
 // Run: camel docs/tutorial/examples/10_resources.cml
 
 resource db

@@ -365,6 +365,7 @@ ResourceSignature signatureOf(const ResourceSpec &spec, size_t withCount) {
     });
     std::sort(sig.captures.begin(), sig.captures.end());
     sig.captures.erase(std::unique(sig.captures.begin(), sig.captures.end()), sig.captures.end());
+    ambientCarriesExternal(sig);
     return sig;
 }
 
