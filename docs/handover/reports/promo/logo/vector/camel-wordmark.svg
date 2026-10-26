@@ -23,43 +23,39 @@
       <path id="body-13" d="M303.5 535.5L319 543.2L331.5 554.5"/>
       <path id="body-14" d="M408 328L453 243.5"/>
       <path id="body-15" d="M501.8 383L548.5 351"/>
-      <path id="body-16" d="M497.5 492L497.5 578"/>
+      <path id="body-16" d="M497.5 492L498.8 588.5"/>
       <path id="body-17" d="M276 308L368.5 234"/>
       <path id="body-18" d="M497.5 492L624.6 421.9"/>
       <path id="body-19" d="M501.8 383L624.6 421.9"/>
       <path id="body-20" d="M548.5 351L453 243.5"/>
       <path id="body-21" d="M368.5 234L453 243.5"/>
       <path id="body-22" d="M276 308L175.1 390C170.7 417.6 172.4 452.2 191.3 474.6"/>
-      <path id="body-23" d="M578.5 508C555.5 519.2 555.6 544.1 558 564.5"/>
+      <path id="body-23" d="M578.5 508L554.8 582.5"/>
       <path id="body-24" d="M548.5 351C580.5 355.2 621 389 624.6 421.9"/>
       <path id="body-25" d="M191.3 474.6C187 516.5 226.3 544.3 244 577.5"/>
       <circle id="node-2" cx="368.5" cy="234" r="18" fill="currentColor" stroke="none"/>
       <circle id="node-3" cx="453" cy="243.5" r="18" fill="currentColor" stroke="none"/>
       <circle id="node-6" cx="276" cy="308" r="18" fill="currentColor" stroke="none"/>
       <circle id="node-8" cx="408" cy="328" r="18" fill="currentColor" stroke="none"/>
-      <circle id="node-9" cx="548.5" cy="351" r="21" fill="currentColor" stroke="none"/>
       <circle id="node-18" cx="459.5" cy="407.5" r="18" fill="currentColor" stroke="none"/>
       <circle id="node-21" cx="624.6" cy="421.9" r="18" fill="currentColor" stroke="none"/>
       <circle id="node-22" cx="191.3" cy="474.6" r="21" fill="currentColor" stroke="none"/>
       <circle id="node-23" cx="343.9" cy="481.1" r="21" fill="currentColor" stroke="none"/>
       <circle id="node-26" cx="497.5" cy="492" r="18" fill="currentColor" stroke="none"/>
-      <circle id="node-27" cx="578.5" cy="508" r="21" fill="currentColor" stroke="none"/>
       <circle id="node-29" cx="331.5" cy="554.5" r="18" fill="currentColor" stroke="none"/>
-      <circle id="node-30" cx="558" cy="564.5" r="18" fill="currentColor" stroke="none"/>
       <circle id="node-31" cx="244" cy="577.5" r="18" fill="currentColor" stroke="none"/>
-      <circle id="node-32" cx="497.5" cy="578" r="21" fill="currentColor" stroke="none"/>
+      <circle id="node-33" cx="498.8" cy="588.5" r="21" fill="currentColor" stroke="none"/>
+      <circle id="node-34" cx="554.8" cy="582.5" r="18" fill="currentColor" stroke="none"/>
     </g>
     <g id="legs">
       <path id="legs-26" d="M303.5 535.5L244 577.5"/>
-      <path id="legs-27" d="M331.5 554.5L497.5 578"/>
-      <path id="legs-28" d="M558 564.5L551.5 600.5"/>
+      <path id="legs-27" d="M331.5 554.5L498.8 588.5"/>
       <path id="legs-29" d="M331.5 554.5L290.5 617.5"/>
-      <path id="legs-30" d="M497.5 578L500 599"/>
-      <path id="legs-31" d="M500 599L524.5 616.5"/>
-      <path id="legs-32" d="M524.5 616.5L551.5 600.5"/>
+      <path id="legs-31" d="M498.8 588.5L524.5 616.5"/>
+      <path id="legs-32" d="M524.5 616.5L554.8 582.5"/>
       <path id="legs-33" d="M244 577.5L221.4 640L227 672.5"/>
-      <path id="legs-34" d="M500 599L497.5 675"/>
-      <path id="legs-35" d="M551.5 600.5L550 680"/>
+      <path id="legs-34" d="M498.8 588.5L497.5 675"/>
+      <path id="legs-35" d="M554.8 582.5L550 680"/>
       <path id="legs-36" d="M290.5 617.5L227 672.5"/>
       <path id="legs-37" d="M524.5 616.5L524.5 663"/>
       <path id="legs-38" d="M497.5 675L524.5 663"/>
@@ -72,8 +68,6 @@
       <path id="legs-45" d="M290.5 722.5C306.5 774.2 324.5 826.1 374.5 853"/>
       <path id="legs-46" d="M450 859.5L427 870"/>
       <path id="legs-47" d="M450 859.5L507.5 879"/>
-      <circle id="node-33" cx="500" cy="599" r="18" fill="currentColor" stroke="none"/>
-      <circle id="node-34" cx="551.5" cy="600.5" r="18" fill="currentColor" stroke="none"/>
       <circle id="node-36" cx="290.5" cy="617.5" r="18" fill="currentColor" stroke="none"/>
       <circle id="node-38" cx="227" cy="672.5" r="18" fill="currentColor" stroke="none"/>
       <circle id="node-39" cx="497.5" cy="675" r="18" fill="currentColor" stroke="none"/>
@@ -83,7 +77,7 @@
     <g id="neck">
       <path id="neck-48" d="M578.5 508L624.6 421.9"/>
       <path id="neck-49" d="M578.5 508L723.5 419.5"/>
-      <path id="neck-50" d="M558 564.5C650.2 548.6 760.1 494 770 390.5"/>
+      <path id="neck-50" d="M554.8 582.5C650.2 548.6 760.1 494 770 390.5"/>
       <path id="neck-51" d="M624.6 421.9C668.2 416.5 689.9 384.7 717 355.5"/>
       <path id="neck-52" d="M723.5 419.5L717 355.5"/>
       <path id="neck-53" d="M723.5 419.5L770 390.5"/>
