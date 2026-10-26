@@ -463,8 +463,6 @@ runtime	UnhandledError	0x000051	error	An error value reached the exit of 'main' 
 runtime	SliceOutOfRange	0x000052	error	The range {0} to {1} is out of range for {2} of length {3}.	A bound of 'slice' is a position from 0 to the length; the end is one past the last element taken. A range that leaves the sequence is a fault, as an index out of range is. To take or leave out at most n elements, use 'take' and 'drop' of the module 'array', which cut by definition.	none: runtime: the bounds are computed at run time, and the repair is in the program's logic
 # The pipeline's pass specifications: the pass name, then `key=value` words (design principles 9.3).
 runtime	InvalidPassParameter	0x000060	error	Invalid pass specification '{0}': {1}.	A pass is written on the pipeline as its name followed by its parameters as key=value words, never in parentheses: `std::opt safe_fp=true growth_budget=8192`. The values are constant expressions (bool, int, float or string). The message names the parameter, the type it has and the parameters the pass declares.	none: runtime: the fault is raised while the program runs, and the repair is in the program's logic
-# A pass written in Camel gave an error value instead of a program.
-runtime	GraphPassFailed	0x000061	error	Pass '{0}' failed: {1}.	A pass written in Camel returned an error value instead of a program, and the message is the error's kind and text. The program is left as the previous pass produced it, and the pipeline stops.	none: runtime: the fault is raised while the program runs, and the repair is in the program's logic
 # A pass that does not know values with several writings was given a program that has them
 # (graph store design 3.7); an extraction before it fixes the pipeline.
 runtime	PassNeedsExtraction	0x000062	error	Pass '{0}' cannot take the program: some values of it have several writings.	An earlier pass (a saturation) left values with several writings, which only the passes that work on them and the passes that run or translate the program accept. Put 'std::opt::extract' before '{0}': it chooses one writing for every value by a cost model (its parameter 'cost', 'weighted' by default).	none: runtime: the fault is raised while the program runs, and the repair is in the program's logic
@@ -479,22 +477,25 @@ runtime	PassNotExportedByModule	0x000187	error	Module '{0}' declares '{1}' but d
 # naming a device that must exist (design principles 13.4).
 runtime	DeviceUnavailable	0x000070	error	CUDA device {0} was named by --devices but is not available: {1}.	Name a device this machine has (--devices <ordinal>), or run on the host with --devices cpu. Without --devices a missing device is not an error: the program runs on the host.	none: runtime: the machine has no such device; nothing in the program is wrong
 # An operator written inside a `#gpu` scope (design principles 13.4) has no device
-# implementation: the scope promises the device runs it, so the compiler refuses the program
-# instead of leaving the operator on the host (GPU design 6.1).
-runtime	GpuScopeUnsupported	0x000071	error	`#gpu` scope '{0}': {1} cannot run on the device ({2}).	The `#gpu` tag promises that the device runs everything written in the function or block. Remove the tag, write the part the device cannot run under `#cpu`, or rewrite the scope so that every operator in it has a device implementation; `--devices cpu` runs the whole program on the host.	none: runtime: the fault is raised while the program runs, and the repair is in the program's logic
-# A `#gpu` scope whose program the device back end cannot build, even though the operator is
-# one it may run: the shape or the calling convention of this use has no device program, or
-# the graph the scope calls brings an operator that has none. The scope promises the device
-# runs everything it contains, and GPU design 6.1 makes that a compile-time error rather than
-# a host execution; unlike GpuScopeUnsupported this is about the use, not the operator.
-runtime	GpuScopeNoDeviceProgram	0x0001A7	error	`#gpu` scope '{0}': {1} ({2}).	The `#gpu` tag promises that the device runs everything written in the scope, including the functions it calls; an operator the device back end cannot build a program for is a compile-time error there, never a host execution. Change the operator, its shape or the function it is written in, put it under `#cpu` where the scope allows that, or remove the tag; `--devices cpu` runs the whole program on the host.	none: runtime: the fault is raised while the program runs, and the repair is in the program's logic
-# A graph the device back end has no program for, asked for by an operator that needs one
-# (`inspect`, `source`, `benchmark`, `regions`, `run_preferred_resident`, `run_compiled`). No
-# `#gpu` scope is claimed: the graph may be a function no tag covers (`source<noisy>`) or one
-# segment of a scope the pass has cut, and a capability miss is a scheduling decision rather
-# than a fault (`tiles/internal/capability.h`). Unlike GpuScopeUnsupported and
-# GpuScopeNoDeviceProgram, which answer for a scope's promise at compile time, this one says
-# what the call that asked was refused, and leaves the graph to the host where no scope covers it.
+# implementation, and a `#gpu` scope whose device program the back end cannot build -- the shape
+# or the calling convention of this use, or an operator the graph the scope calls brings that has
+# none. Both are one refusal of one promise, found by the pass `tiles::compile` while it runs; the
+# pass is `(f: F) => F!` (design principles 9.1), so the failure is the error value
+# `GpuScopeUnsupported`, which names the scope, every such operator and the reason each one gives
+# (docs/handover/stdlib/error-kinds.md). It is not a diagnostic: what a scope can run is only
+# known once the pass has looked at the graph, and the report is then the one an error value
+# nobody handled gets.
+# The same promise refused while the program runs, because the pass deferred the shape to the
+# actual arguments and the device turns them down: the operator that asked for the device program
+# of a graph a `#gpu` scope covers (`run_compiled`, `run_preferred_resident`) reports it instead
+# of replaying the graph on the host (GPU design 6.1). That discovery is the run's own, so it is a
+# runtime fault and stays a diagnostic.
+runtime	GpuScopeNoDeviceProgram	0x0001A7	error	`#gpu` scope '{0}': {1} ({2}).	The `#gpu` tag promises that the device runs everything written in the scope, including the functions it calls; an operator the device back end cannot build a program for is never replayed on the host. Change the operator, its shape or the function it is written in, put it under `#cpu` where the scope allows that, or remove the tag; `--devices cpu` runs the whole program on the host.	none: runtime: the fault is raised while the program runs, and the repair is in the program's logic
+# An operator the device back end has no use of, asked for by an operator that needs one
+# (`inspect`, `source`, `benchmark`, `regions`). No `#gpu` scope is claimed: the graph may be a
+# function no tag covers (`source<noisy>`) or one segment of a scope the pass has cut, and a
+# capability miss is a scheduling decision rather than a fault
+# (`tiles/internal/capability.h`).
 runtime	GraphNoDeviceProgram	0x0001AA	error	'{0}' has no device program for '{1}': {2}.	The device back end has no program for this graph, so the operator that asked for one cannot be served by it. Name a graph the device can serve, or let the host run it: outside a `#gpu` scope a graph the device cannot serve is the host's, and `--devices cpu` runs the whole program there.	none: runtime: the report is raised while the program runs, and the repair is in the program's logic
 # A run that selected no device at all (`--devices cpu`, or no `--devices` on a machine whose
 # driver the back end cannot use) while the operator needs one. DeviceUnavailable is the other

@@ -229,14 +229,6 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
-            RuntimeDiag::GraphPassFailed,
-            {
-                "GraphPassFailed",
-                "Pass '{0}' failed: {1}.",
-                "A pass written in Camel returned an error value instead of a program, and the message is the error's kind and text. The program is left as the previous pass produced it, and the pipeline stops.",
-            },
-        },
-        {
             RuntimeDiag::PassNeedsExtraction,
             {
                 "PassNeedsExtraction",
@@ -269,19 +261,11 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
-            RuntimeDiag::GpuScopeUnsupported,
-            {
-                "GpuScopeUnsupported",
-                "`#gpu` scope '{0}': {1} cannot run on the device ({2}).",
-                "The `#gpu` tag promises that the device runs everything written in the function or block. Remove the tag, write the part the device cannot run under `#cpu`, or rewrite the scope so that every operator in it has a device implementation; `--devices cpu` runs the whole program on the host.",
-            },
-        },
-        {
             RuntimeDiag::GpuScopeNoDeviceProgram,
             {
                 "GpuScopeNoDeviceProgram",
                 "`#gpu` scope '{0}': {1} ({2}).",
-                "The `#gpu` tag promises that the device runs everything written in the scope, including the functions it calls; an operator the device back end cannot build a program for is a compile-time error there, never a host execution. Change the operator, its shape or the function it is written in, put it under `#cpu` where the scope allows that, or remove the tag; `--devices cpu` runs the whole program on the host.",
+                "The `#gpu` tag promises that the device runs everything written in the scope, including the functions it calls; an operator the device back end cannot build a program for is never replayed on the host. Change the operator, its shape or the function it is written in, put it under `#cpu` where the scope allows that, or remove the tag; `--devices cpu` runs the whole program on the host.",
             },
         },
         {

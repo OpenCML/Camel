@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-290 diagnostics: 273 errors, 17 warnings. 15 carry a machine-applicable edit, 275 say why they carry none.
+288 diagnostics: 271 errors, 17 warnings. 15 carry a machine-applicable edit, 273 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -295,10 +295,8 @@ prints one entry.
 | `0x04000051` | [RuntimeDiag::UnhandledError](#unhandlederror) | Error | no |
 | `0x04000052` | [RuntimeDiag::SliceOutOfRange](#sliceoutofrange) | Error | no |
 | `0x04000060` | [RuntimeDiag::InvalidPassParameter](#invalidpassparameter) | Error | no |
-| `0x04000061` | [RuntimeDiag::GraphPassFailed](#graphpassfailed) | Error | no |
 | `0x04000062` | [RuntimeDiag::PassNeedsExtraction](#passneedsextraction) | Error | no |
 | `0x04000070` | [RuntimeDiag::DeviceUnavailable](#deviceunavailable) | Error | no |
-| `0x04000071` | [RuntimeDiag::GpuScopeUnsupported](#gpuscopeunsupported) | Error | no |
 | `0x04000186` | [RuntimeDiag::PassNotProvidedByModule](#passnotprovidedbymodule) | Error | no |
 | `0x04000187` | [RuntimeDiag::PassNotExportedByModule](#passnotexportedbymodule) | Error | no |
 | `0x040001A7` | [RuntimeDiag::GpuScopeNoDeviceProgram](#gpuscopenodeviceprogram) | Error | no |
@@ -10098,36 +10096,6 @@ func main(): int sync {
 }
 ```
 
-### GraphPassFailed
-
-`0x04000061` · Error · `RuntimeDiag::GraphPassFailed`
-
-**Fix**
-
-None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
-
-**Message**
-
-```text
-Pass '{0}' failed: {1}.
-```
-
-**Help**
-
-```text
-A pass written in Camel returned an error value instead of a program, and the message is the error's kind and text. The program is left as the previous pass produced it, and the pipeline stops.
-```
-
-**Example** (`test/cases/modules/graph_pass/tiny.cml`, run as `camel test/cases/modules/graph_pass/tiny.cml identity::refuse std::nvm`)
-
-```camel
-module tiny
-func main(): int sync {
-    println(21 * 2)
-    return 0
-}
-```
-
 ### PassNeedsExtraction
 
 `0x04000062` · Error · `RuntimeDiag::PassNeedsExtraction`
@@ -10214,44 +10182,6 @@ func main(): int sync {
 }
 ```
 
-### GpuScopeUnsupported
-
-`0x04000071` · Error · `RuntimeDiag::GpuScopeUnsupported`
-
-**Fix**
-
-None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
-
-**Message**
-
-```text
-`#gpu` scope '{0}': {1} cannot run on the device ({2}).
-```
-
-**Help**
-
-```text
-The `#gpu` tag promises that the device runs everything written in the function or block. Remove the tag, write the part the device cannot run under `#cpu`, or rewrite the scope so that every operator in it has a device implementation; `--devices cpu` runs the whole program on the host.
-```
-
-**Example** (`test/cases/modules/tiles/gpu_scope_refusal.cml`, run as `CUDA_VISIBLE_DEVICES=-1 camel test/cases/modules/tiles/gpu_scope_refusal.cml tiles::compile std::nvm`)
-
-```camel
-module tiles_gpu_scope_refusal
-import { reshape, tanh, sum } from tensor
-
-// `tanh` is a pure tensor operator that the device back end does not lower. Inside a `#gpu`
-// scope that is a compile error, not a silent fallback to the host.
-#gpu
-func activate(x: f32[..]): f32[..] { return tanh(x) }
-
-func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
-    println(sum(activate(x)))
-    return 0
-}
-```
-
 ### PassNotProvidedByModule
 
 `0x04000186` · Error · `RuntimeDiag::PassNotProvidedByModule`
@@ -10332,32 +10262,31 @@ None: runtime: the fault is raised while the program runs, and the repair is in 
 **Help**
 
 ```text
-The `#gpu` tag promises that the device runs everything written in the scope, including the functions it calls; an operator the device back end cannot build a program for is a compile-time error there, never a host execution. Change the operator, its shape or the function it is written in, put it under `#cpu` where the scope allows that, or remove the tag; `--devices cpu` runs the whole program on the host.
+The `#gpu` tag promises that the device runs everything written in the scope, including the functions it calls; an operator the device back end cannot build a program for is never replayed on the host. Change the operator, its shape or the function it is written in, put it under `#cpu` where the scope allows that, or remove the tag; `--devices cpu` runs the whole program on the host.
 ```
 
-**Example** (`test/cases/gpu/nofallback/refused_operator.cml`, run as `CUDA_VISIBLE_DEVICES=-1 camel test/cases/gpu/nofallback/refused_operator.cml tiles::compile std::nvm`)
+**Example** (`test/cases/gpu/nofallback/runtime_refusal.cml`, run as `camel test/cases/gpu/nofallback/runtime_refusal.cml tiles::compile std::nvm`)
 
 ```camel
-/// (b) An operator without a device program, written in a function a `#gpu` scope calls. The
-/// scope covers the functions it calls (GPU design 2.3), so `tanh` here is inside it; `tanh` has
-/// no device implementation, and the compiler refuses the program instead of running it on the
-/// host. `test/cases/gpu/nofallback/host.cml` is the same program without the tag.
-module gpu_nofallback_refused_operator
+/// (e) The runtime side of the same promise: `product` is `#gpu` but its signature is generic,
+/// so the compile pass cannot see the rank until the call site. The actual arguments are rank 1,
+/// the device back end refuses the shape, and the run reports it instead of replaying the graph
+/// on the host (GPU design 6.1). The compile pass defers this case on purpose: shows that a
+/// shape the types do not fix may still compile with the actual arguments.
+module gpu_nofallback_runtime
 
-import { tanh, reshape } from tensor
-
-func activate(x: f32[..]): f32[..] {
-    return tanh(x)
-}
+import { reshape } from tensor
+import { run_preferred_resident, download } from tiles
 
 #gpu
-func step(x: f32[..]): f32[..] {
-    return activate(x)
+func product(a: f32[..], b: f32[..]): f32[..] {
+    return a @ b
 }
 
 func main() {
-    let x = reshape([1.0, 2.0] as f32[], [2])
-    println(step(x))
+    let a = reshape([1.0, 2.0, 3.0] as f32[], [3])
+    let b = reshape([1.0, 1.0, 1.0] as f32[], [3])
+    println(download(run_preferred_resident<product>((a, b))))
 }
 ```
 

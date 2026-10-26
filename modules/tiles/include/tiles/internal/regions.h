@@ -5,6 +5,7 @@
 
 #pragma once
 #include "camel/core/operator.h"
+#include "camel/core/slot.h"
 #include "camel/runtime/draft.h"
 #include "tiles/internal/residency.h"
 #include <cstddef>
@@ -96,13 +97,17 @@ void registerRegionPass(SegmentDeviceOps preferred);
 // Rewrites the graphs reachable from `root`, a graph of `program`, and returns the program of
 // the rewritten graphs (`program` itself when no region was outlined, `count` is 0 then); null
 // executor produces ordinary CPU CALL nodes. Non-null executors use the supplied stable
-// operator URI and packed arguments. With `refuseGpuScopes`, a node carrying the `gpu`
-// tag whose operator is outside `deviceCapable` is reported as `GpuScopeUnsupported` and the
-// graphs are left unrewritten (the pass then fails on the diagnostic).
+// operator URI and packed arguments. With `refuseGpuScopes`, everything a `#gpu` scope holds that
+// the device cannot run leaves the graphs unrewritten, and `error` receives the error value that
+// names the scope and every such operator (NullSlot when nothing was refused): a scope is
+// `(f: F) => F!` (design principles 9.1), so the refusal is the pass's error value
+// (`GpuScopeUnsupported`), not a diagnostic. A scope holding a macro operator no pass expanded is
+// still a diagnostic (9.2: the repair is a pass), and `error` stays NullSlot for it.
 const runtime::Program *outlineRegions(
     core::context::Context &context, const runtime::Program *program, runtime::GCGraph *root,
     operator_t executor, const std::string &uri, size_t &count,
-    const SegmentDeviceOps *device = nullptr, bool refuseGpuScopes = false);
+    const SegmentDeviceOps *device = nullptr, bool refuseGpuScopes = false,
+    slot_t *error = nullptr);
 // Register semantic-equivalence checks by naming them in a pipeline; no variable gates them.
 void registerRegionTestPasses(
     operator_t run, SegmentDeviceOps device, SegmentDeviceOps host, SegmentDeviceOps preferred);
