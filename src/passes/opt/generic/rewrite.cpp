@@ -10,6 +10,7 @@
 
 #include "camel/core/operator_traits.h"
 #include "camel/runtime/draft_session.h"
+#include "camel/runtime/draft_writes.h"
 #include "camel/utils/log.h"
 
 #include "camel/core/type/intern.h"
@@ -127,6 +128,32 @@ bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t id) {
     default:
         return false;
     }
+}
+
+bool readsNoWrittenSlot(const GraphDraft &draft, gc_node_ref_t id) {
+    std::vector<gc_node_ref_t> work{id};
+    std::vector<bool> seen(draft.nodeSlotCount(), false);
+    while (!work.empty()) {
+        const gc_node_ref_t at = work.back();
+        work.pop_back();
+        if (at >= seen.size() || seen[at] || draft.header(at) == nullptr) {
+            continue;
+        }
+        seen[at] = true;
+        // A node written in place is not one value: the slot holds what each write put there, so a
+        // computation that reads it is the value of one read, not of the graph.
+        if (camel::runtime::isWrittenInPlace(draft, at)) {
+            return false;
+        }
+        // The walk follows what the value is computed from: the node's own inputs, and the waits
+        // that order them, because a node on the way may read the written slot itself.
+        for (auto inputs :
+             {draft.normInputsOf(at), draft.withInputsOf(at), draft.ctrlInputsOf(at),
+              draft.syncInputsOf(at)}) {
+            work.insert(work.end(), inputs.begin(), inputs.end());
+        }
+    }
+    return true;
 }
 
 std::vector<gc_node_ref_t> orderedSources(const GraphDraft &draft, gc_node_ref_t id) {

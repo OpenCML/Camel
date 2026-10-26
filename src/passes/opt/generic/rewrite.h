@@ -71,6 +71,14 @@ std::vector<gc_node_ref_t> orderedSources(const GraphDraft &draft, gc_node_ref_t
 bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t id);
 
 /**
+ * True when nothing the value of `id` is computed from reads a slot the program writes: walking up
+ * its value inputs -- and the waits of the nodes on the way, which is what orders a computation
+ * inside a `sync` block -- the walk meets no node written in place. Replacing such a computation by
+ * one value gives every reader the value of a single read of that slot.
+ */
+bool readsNoWrittenSlot(const GraphDraft &draft, gc_node_ref_t id);
+
+/**
  * Replaces node `id` by `replacement` (or just removes it when `replacement` is invalid, which
  * requires `id` to have no value users) and erases it. Ordering is preserved: every user of
  * `id`, value or control, inherits `id`'s control predecessors, because a pure node on a
