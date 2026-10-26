@@ -118,10 +118,8 @@ semantic	ExportedVariable	0x0000D0	error	The variable '{0}' cannot be exported.	
 semantic	ModuleValueCycle	0x0000D1	error	The value '{0}' depends on itself: {1}.	The values of the top level of modules are computed before 'main' starts, each from the values it uses: directly, through the functions its initializer calls, and through the values those use, in any module. A value cannot be computed from itself. Compute one of the values in the chain without the other, or turn it into a function.	none: choice: the repair is a decision only the writer can make
 semantic	CaptureAfterRecursiveCall	0x0000D2	error	The function '{1}' uses '{0}' only after it is called in its own recursion, where the call could not pass it.	A function that calls itself, directly or through other functions, must use a variable it captures, or be complete, before the recursive call that would pass it: a call is ordered among the uses of the variables it was known to use, and a function value holds what the function captured when it was made. Use '{0}' before the recursive call, or pass it as a parameter.	none: choice: the repair is a decision only the writer can make
 semantic	AmbiguousName	0x0000D3	error	The name '{0}' is ambiguous here: {1}.	Two 'using namespace' in force bring something of this name that cannot be told apart: a value or a type from each, or functions of the same parameter types. Write the qualified name of the one meant.	none: choice: the repair is a decision only the writer can make
-# `any` (design principles 5.10), 0xE0 and up. 0xE0 (AnyUncheckedCast), 0xE1
-# (AnyBranchSubject) and 0xE2 (AnyNotAllowed) are retired: there is no `any` type, and
-# writing it is an ordinary unknown name. Their codes are not reused.
-# The condition and the cases of a branch (found with the `any` cases above).
+# 0xE0-0xE2: empty. The numbers are not reused.
+# The condition and the cases of a branch.
 semantic	ConditionNotBool	0x0000E3	error	The condition of this 'if' has type '{0}'; a condition is a 'bool'.	There is no truth-value conversion: compare explicitly ('n != 0', 'len(s) > 0', 'x != null').	none: choice: the repair is a decision only the writer can make
 semantic	MatchCaseTypeMismatch	0x0000E4	error	This case of a 'match' on a value of type '{0}' is a value of type '{1}'.	A case is compared with the value matched, so the type of that value must accept it. Write the case as a value of that type, or convert the value matched first.	none: choice: the repair is a decision only the writer can make
 # Rules (design principles log 2.12) on operators and on collections that
@@ -153,8 +151,7 @@ semantic	EnumVariantFieldCount	0x000133	error	The variant '{0}' of enum '{1}' ta
 semantic	EnumPatternMismatch	0x000134	error	The pattern '{0}' does not match a value of type '{1}': {2}.	A pattern names a variant of the enum it matches and, if that variant has fields, binds each of them by its position ('Shape::Circle(r)') or by the name its declaration gives ('Shape::Rect {{ w, h }}').	none: choice: the pattern has to name the variants the enum has
 semantic	EnumMatchNotExhaustive	0x000135	error	The match over '{0}' has no case for {1}, and no 'case _'.	Every variant of an enum is a value of it, so a match that names variants must name all of them or end with 'case _'. The compiler adds no arm the program does not show.	none: context: the match is missing a case, and writing it means deciding what it yields
 semantic	EnumFieldAccess	0x000136	error	'{0}' is a value of enum '{1}': its fields are not read by name or index.	A field of a variant is taken out by matching the value and binding it in the arm of that variant: 'match v {{ case {2} => ... }}'.	none: choice: the repair is a decision only the writer can make
-# 0x137 and 0x138 reported the retired forms `A | B` and `T ? U`; the parser no longer reads
-# either, so they are gone and their codes are not reused.
+# 0x137-0x138: empty. The numbers are not reused.
 semantic	EnumTypeArgumentNotInferred	0x000139	error	Cannot infer the type argument '{0}' of enum '{1}' from the fields of '{2}'.	The fields of the variant do not say what the argument is; where the value is used the expected type does: 'let x: Option<int> = Option::None'.	none: choice: the repair is a decision only the writer can make
 #/ A type variable that a call's arguments leave without a type, because the only argument that
 #/ mentions it is an empty literal, which states no element type.
@@ -266,14 +263,13 @@ semantic	HandleTypeNotNominal	0x0001A3	error	'{0}' is not a nominal type declara
 semantic	NativeResourceMismatch	0x0001A4	error	The declaration '{0}' says '{1}', but the operator '{2}' declares '{3}'.	A body-less declaration is the whole signature of a C++ operator, its resources included: write the clause the operator declares, or remove the clause and let the operator's declaration be the one the module publishes.	none: choice: the repair is a decision only the writer can make
 #
 # `std::cml`, the source printer (step S1). 0x1A5 and up.
-#/ A graph holds a construct the printer does not turn into source (yet).
+#/ A graph holds a construct the printer does not turn into source.
 semantic	CmlUnsupportedConstruct	0x0001A5	error	std::cml cannot print {0}: {1}.	This version prints expressions, `let` and `var`, branches, loops, closures, `with` and `var` parameters, and `sync` blocks. Tags, named types, generic instances and the other region kinds are refused.	none: choice: the repair is a decision only the writer can make
 #/ A constant is larger than the printer's max_literal_bytes.
 semantic	CmlBigConstant	0x0001A6	error	std::cml refused the constant '{0}' of type {1} in {2}: {3} bytes, over max_literal_bytes ({4}).	Raise the limit with `std::cml max_literal_bytes=...`, or keep the value in a module the printed program imports.	none: choice: the repair is a decision only the writer can make
 #
-# Array element types (design/arrays-memory, P4 "element type exact"). 0x1A7 is retired: a
-# tensor keeps the element type it is written with, so nothing rewrites it and there is no
-# such diagnostic. The code is not reused.
+# Array element types (design/arrays-memory, P4 "element type exact"). 0x1A7: empty. The
+# number is not reused.
 #
 # Applicability conditions (`when`, design principles 4.4). 0x1A8 and up.
 #/ The condition's value is not a bool.
@@ -559,7 +555,7 @@ semantic	RuleWithArgumentNotConstant	0x0001F0	error	The value bound to the `with
 #
 # The resource clause's promise (design effects plan 4.3, step 5): the resources a body infers
 # have to be within what its signature promises. The resource group above is 0x1A0-0x1A4, and
-# 0x1A5-0x1A6 are `std::cml` and 0x1A7 is retired, so this one is appended at the end of the
+# 0x1A5-0x1A6 are `std::cml` and 0x1A7 is empty, so this one is appended at the end of the
 # semantic space instead of being placed next to a group that has no room left.
 #/ The resources a body uses are not within what its `pure`/`uses` signature promises.
 semantic	UsesPromiseViolated	0x0001F1	error	'{0}' does not keep its resource promise: {1}.	A signature is a promise the compiler checks against the resources the function uses. 'uses' is an upper bound, so every resource the body uses must be named there, and 'pure' promises the empty set; a 'var' parameter is a resource by itself, and so is a capture. Change the body so that it no longer reaches for it, or change the signature to name it. When the use is a call through a parameter of function type, what the call reaches is the instantiation's: write 'pure' on the parameter to promise the empty set, or write there the resources the values it takes reach.	none: choice: the repair is a decision only the writer can make

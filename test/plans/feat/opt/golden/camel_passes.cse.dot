@@ -110,7 +110,7 @@ digraph GraphIR {
         N23 -> N25 [label="0|0", type="CTRL"];
     }
     O00 [label="EXIT", type="EXIT"];
-    N26 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="36:0-42:1", srcfile="<ROOT>/test/cases/opt/camel_passes/cse_subject.cml", value_type="() => int"];
+    N26 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="36:0-42:1", srcfile="<ROOT>/test/cases/opt/camel_passes/cse_subject.cml", value_type="() => int uses stdout"];
     N27 [label="CALL", type="CALL", value_type="int"];
     N27 -> O00 [label="0", type="EXIT"];
     N26 -> N27 [label="0|0", type="WITH"];
