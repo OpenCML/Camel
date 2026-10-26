@@ -264,7 +264,7 @@ expect_output_not_contains = ["Segmentation fault", "dumped core"]
 verify_script = """
 const out = input.normalized.stdout + input.normalized.stderr
 assert(out.split('name=SemanticDiag::NoMatchingFunction').length === 6, 'five NoMatchingFunction diagnostics expected: ' + out)
-for (const line of [13, 14, 15, 16, 17]) assert(out.includes(`bad_calls.cml:${line}:20: `), `no diagnostic at line ${line}`)
+for (const line of [12, 13, 14, 15, 16]) assert(out.includes(`bad_calls.cml:${line}:20: `), `no diagnostic at line ${line}`)
 """
 
 # --- optimisation pipelines ---------------------------------------------------------------
