@@ -324,6 +324,47 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
         }
     }
     const auto removed = [&](gc_node_ref_t n) { return static_cast<bool>(dropped[n]); };
+    // The taken arm's chain tail: the statement the arm's block value reads -- the sync predecessor
+    // of the value the arm gives, when that value is the gate forwarding it -- or, when the block's
+    // value carries no chain of its own (a void block, whose value is a constant), the last
+    // statement of the arm's chain: the node of the arm that nothing of the arm follows
+    // (docs/design/effects/edges.cn.md 5.3: the chain's tail is what the block's value reads).
+    //
+    // With the branch gone the taken arm's code is code of this block, so the statements written
+    // after the branch wait on this node and the arm's code stands in the chain in the branch's
+    // place. The chain is what says which statements are reached from the graph's result and run
+    // (docs/design/effects/edges.cn.md 2): waiting on the arm's value alone instead steps over the
+    // arm's code whenever that value is not a statement of it. `opt_lambda_effect_lost` is the
+    // counterexample -- a `null` arm value with a lambda call in the arm, whose effect stopped
+    // running -- and it is why both ends are written and not just the one at the value.
+    const std::vector<gc_node_ref_t> armNodes(regions[*arm]);
+    const auto inArm = [&](gc_node_ref_t n) {
+        return std::ranges::find(armNodes, n) != armNodes.end();
+    };
+    gc_node_ref_t armTail = kInvalidNodeRef;
+    for (gc_node_ref_t pred : draft.syncInputsOf(result)) {
+        if (inArm(pred)) {
+            armTail = pred;
+        }
+    }
+    if (armTail == kInvalidNodeRef) {
+        for (gc_node_ref_t n : armNodes) {
+            if (!carriesOrdering(draft, n)) {
+                continue;
+            }
+            bool followed = false;
+            for (gc_node_ref_t user : draft.syncUsersOf(n)) {
+                if (inArm(user)) {
+                    followed = true;
+                    break;
+                }
+            }
+            if (!followed) {
+                armTail = n;
+                break;
+            }
+        }
+    }
     const auto &preds = brchPreds;
     const std::vector<gc_node_ref_t> brchCtrlUsers(
         draft.ctrlUsersOf(brch).begin(),
@@ -388,6 +429,17 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
     }
     if (draft.returnNode() == join) {
         draft.setReturnNode(result, draft.returnKind());
+    }
+
+    // 5.7: the branch's place in the block's chain is handed to the taken arm's chain tail --
+    // the arm's code is the block's code once the branch is dissolved (eraseNode re-parents its
+    // regions) -- and the arm's chain is entered from where the branch stood. Both ends are written:
+    // waiting on the arm's value alone steps over the arm's code whenever that value is not a
+    // statement of it, which is what the counterexample `opt_lambda_effect_lost` is (a `null` arm
+    // value with a lambda call in the arm, whose effect stopped running). The call runs before the
+    // erases so that eraseNode's own chain closing finds no successor left to close over.
+    if (armTail != kInvalidNodeRef && draft.alive(armTail) && draft.alive(join)) {
+        draft.handChainPlaceTo(join, armTail);
     }
 
     draft.eraseNode(join);
