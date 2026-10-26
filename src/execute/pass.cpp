@@ -1894,6 +1894,19 @@ PassApplyResult applyPassesDetailed(
                 CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (internal error)", p);
                 return {nullptr, PassApplyStatus::Failed};
             }
+            // A pass is `(f: F) => F!` (design principles 9.1): a pass that cannot produce the
+            // program ends with an error value instead of a diagnostic. The pipeline stops at that
+            // pass -- nothing after it runs, the fallback list included -- and the value is handed
+            // to the driver that ran the list, which reports it the way an error value nobody
+            // handled is (3.9): on standard error, with the exit code the run ends with
+            // (reportPassErrorValue). The value is read here, inside the same safepoint window as
+            // `apply`, and the driver reports it before the next one, so nothing collects it in
+            // between.
+            if (pass->hasErrorValue()) {
+                const slot_t error = pass->errorValue();
+                CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (error value)", p);
+                return {nullptr, PassApplyStatus::Errored, error};
+            }
             camel::core::mm::autoSpace().safepoint(std::format("after pass {}", p));
             // What the pass had to say about the program, before the next pass runs it.
             deliverPassWarnings(*ctx, p);

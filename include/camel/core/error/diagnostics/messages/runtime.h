@@ -50,8 +50,6 @@ enum class RuntimeDiag : uint32_t {
     SliceOutOfRange      = 0x000052,
     // The pipeline's pass specifications: the pass name, then `key=value` words (design principles 9.3).
     InvalidPassParameter = 0x000060,
-    // A pass written in Camel gave an error value instead of a program.
-    GraphPassFailed = 0x000061,
     // A pass that does not know values with several writings was given a program that has them
     // (graph store design 3.7); an extraction before it fixes the pipeline.
     PassNeedsExtraction = 0x000062,
@@ -66,22 +64,25 @@ enum class RuntimeDiag : uint32_t {
     // naming a device that must exist (design principles 13.4).
     DeviceUnavailable = 0x000070,
     // An operator written inside a `#gpu` scope (design principles 13.4) has no device
-    // implementation: the scope promises the device runs it, so the compiler refuses the program
-    // instead of leaving the operator on the host (GPU design 6.1).
-    GpuScopeUnsupported = 0x000071,
-    // A `#gpu` scope whose program the device back end cannot build, even though the operator is
-    // one it may run: the shape or the calling convention of this use has no device program, or
-    // the graph the scope calls brings an operator that has none. The scope promises the device
-    // runs everything it contains, and GPU design 6.1 makes that a compile-time error rather than
-    // a host execution; unlike GpuScopeUnsupported this is about the use, not the operator.
+    // implementation, and a `#gpu` scope whose device program the back end cannot build -- the shape
+    // or the calling convention of this use, or an operator the graph the scope calls brings that has
+    // none. Both are one refusal of one promise, found by the pass `tiles::compile` while it runs; the
+    // pass is `(f: F) => F!` (design principles 9.1), so the failure is the error value
+    // `GpuScopeUnsupported`, which names the scope, every such operator and the reason each one gives
+    // (docs/handover/stdlib/error-kinds.md). It is not a diagnostic: what a scope can run is only
+    // known once the pass has looked at the graph, and the report is then the one an error value
+    // nobody handled gets.
+    // The same promise refused while the program runs, because the pass deferred the shape to the
+    // actual arguments and the device turns them down: the operator that asked for the device program
+    // of a graph a `#gpu` scope covers (`run_compiled`, `run_preferred_resident`) reports it instead
+    // of replaying the graph on the host (GPU design 6.1). That discovery is the run's own, so it is a
+    // runtime fault and stays a diagnostic.
     GpuScopeNoDeviceProgram = 0x0001A7,
-    // A graph the device back end has no program for, asked for by an operator that needs one
-    // (`inspect`, `source`, `benchmark`, `regions`, `run_preferred_resident`, `run_compiled`). No
-    // `#gpu` scope is claimed: the graph may be a function no tag covers (`source<noisy>`) or one
-    // segment of a scope the pass has cut, and a capability miss is a scheduling decision rather
-    // than a fault (`tiles/internal/capability.h`). Unlike GpuScopeUnsupported and
-    // GpuScopeNoDeviceProgram, which answer for a scope's promise at compile time, this one says
-    // what the call that asked was refused, and leaves the graph to the host where no scope covers it.
+    // An operator the device back end has no use of, asked for by an operator that needs one
+    // (`inspect`, `source`, `benchmark`, `regions`). No `#gpu` scope is claimed: the graph may be a
+    // function no tag covers (`source<noisy>`) or one segment of a scope the pass has cut, and a
+    // capability miss is a scheduling decision rather than a fault
+    // (`tiles/internal/capability.h`).
     GraphNoDeviceProgram = 0x0001AA,
     // A run that selected no device at all (`--devices cpu`, or no `--devices` on a machine whose
     // driver the back end cannot use) while the operator needs one. DeviceUnavailable is the other

@@ -70,8 +70,9 @@ template <class F> slot_t checked(Ask ask, F &&body) {
         // the back end has no program for this graph, and whether a shape or the operator itself
         // is missing is what the miss says. `RuntimeError` would tell the user the runtime broke.
         // No `#gpu` scope is claimed here: the graph may be one no tag covers, or one segment of
-        // a scope the pass has cut. The diagnostic a scope's own promise gets at compile time is
-        // `GpuScopeNoDeviceProgram`.
+        // a scope the pass has cut. A scope's own promise refused while it runs is
+        // `GpuScopeNoDeviceProgram`; the pass refuses one while it compiles, with the error value
+        // `GpuScopeUnsupported`.
         core::error::throwRuntimeFault(
             core::error::RuntimeDiag::GraphNoDeviceProgram,
             ask.oper,
