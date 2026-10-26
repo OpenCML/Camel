@@ -332,7 +332,6 @@ The compiler reached a state it has no code for, so nothing in the program is kn
 **Example** (`test/cases/compile/collections/err_key_float.cml`, run as `camel test/cases/compile/collections/err_key_float.cml`)
 
 ```camel
-
 // A floating-point number is not a key type (NaN, and 0.0 == -0.0).
 
 func main(): int sync {
@@ -1116,7 +1115,6 @@ Each identifier must be declared only once in its scope.
 **Example** (`test/cases/compile/generics/err_redecl.cml`, run as `camel test/cases/compile/generics/err_redecl.cml`)
 
 ```camel
-
 func id::<T>(x: T): T {
     return x
 }
@@ -1217,7 +1215,6 @@ Ensure the number of variables matches the number of unpacked data elements, or 
 **Example** (`test/cases/compile/err_lambda_tuple_arity.cml`, run as `camel test/cases/compile/err_lambda_tuple_arity.cml`)
 
 ```camel
-
 // More names than the tuple has elements is refused, not read past the end.
 with <f: (p: (int, int)) => int>
 func apply_all(ps: (int, int)[]): int[] {
@@ -1313,7 +1310,6 @@ Remove or rename the duplicated parameter.
 **Example** (`test/cases/compile/generics/err_tf_dup.cml`, run as `camel test/cases/compile/generics/err_tf_dup.cml`)
 
 ```camel
-
 type Two<T, T> = (T, T)
 
 func main(): int sync {
@@ -1739,7 +1735,6 @@ A literal the type cannot hold is not wrapped around or cut off, and a value is 
 **Example** (`test/cases/compile/generics/err_literal.cml`, run as `camel test/cases/compile/generics/err_literal.cml`)
 
 ```camel
-
 func zero_of::<T>(x: T): T {
     let z: T = 0.5
     return z
@@ -1775,7 +1770,6 @@ Use types that allow safe conversion, or ensure the conversion is valid. Nothing
 **Example** (`test/cases/compile/collections/err_value_type.cml`, run as `camel test/cases/compile/collections/err_value_type.cml`)
 
 ```camel
-
 // Nothing is converted implicitly: an int is not the float the map holds.
 
 func main(): int sync {
@@ -2045,7 +2039,6 @@ What a type takes between '<' and '>' is defined by the type itself (a type argu
 **Example** (`test/cases/compile/collections/err_bare_name.cml`, run as `camel test/cases/compile/collections/err_bare_name.cml`)
 
 ```camel
-
 // `Map` is always written with its key and value types.
 
 func size(m: Map): int {
@@ -2258,7 +2251,6 @@ A type variable must remain present in a parameter or result type. Its position 
 **Example** (`test/cases/compile/generics/err_tf_unused.cml`, run as `camel test/cases/compile/generics/err_tf_unused.cml`)
 
 ```camel
-
 type Tag<T> = int
 
 func f::<T>(p: Tag<T>): int {
@@ -2329,7 +2321,6 @@ A generic function may stand wherever a function is expected, also as an argumen
 **Example** (`test/cases/compile/generics/err_as_value.cml`, run as `camel test/cases/compile/generics/err_as_value.cml`)
 
 ```camel
-
 func id::<T>(x: T): T {
     return x
 }
@@ -2417,7 +2408,6 @@ A type declared with parameters, e.g. 'type Pair<T> = (T, T)', is used with one 
 **Example** (`test/cases/compile/generics/err_tf_count.cml`, run as `camel test/cases/compile/generics/err_tf_count.cml`)
 
 ```camel
-
 type Pair<T> = (T, T)
 
 func f(p: Pair<int, string>): int {
@@ -2452,7 +2442,6 @@ A decorator is applied where the declaration is: '@d func f' is 'let f = d(f0)',
 **Example** (`test/cases/compile/generics/err_decorated.cml`, run as `camel test/cases/compile/generics/err_decorated.cml`)
 
 ```camel
-
 func deco(f: (x: int) => int): (x: int) => int {
     return f
 }
@@ -2762,7 +2751,6 @@ A key of a Map and an element of a Set must have an order and an equality that c
 **Example** (`test/cases/compile/collections/err_key_float.cml`, run as `camel test/cases/compile/collections/err_key_float.cml`)
 
 ```camel
-
 // A floating-point number is not a key type (NaN, and 0.0 == -0.0).
 
 func main(): int sync {
@@ -2795,7 +2783,6 @@ A map holds one value per key. In an array computed when the program runs the la
 **Example** (`test/cases/compile/collections/err_duplicate_key.cml`, run as `camel test/cases/compile/collections/err_duplicate_key.cml`)
 
 ```camel
-
 // Two equal constant keys in a literal converted to a map are taken for a mistake.
 
 func main(): int sync {
@@ -3150,7 +3137,6 @@ There is no truth-value conversion: compare explicitly ('n != 0', 'len(s) > 0', 
 **Example** (`test/cases/compile/any_typing/if_condition.cml`, run as `camel test/cases/compile/any_typing/if_condition.cml`)
 
 ```camel
-
 import { Json, decode } from json
 
 // A decoded value as the condition of an `if`: it used to be an `any` whose slot was read as a
@@ -4659,7 +4645,6 @@ A recursive generic call can be built only after the return type is known. Write
 **Example** (`test/cases/compile/generics/err_recursive_untyped.cml`, run as `camel test/cases/compile/generics/err_recursive_untyped.cml`)
 
 ```camel
-
 func count::<T>(xs: T[], i: int) {
     return if i >= len(xs) then 0 else 1 + count(xs, i + 1)
 }
@@ -4693,7 +4678,6 @@ A 'static for' walks a struct or an ordinary tuple. A 'T?' or 'T!' and a mutable
 **Example** (`test/cases/compile/static_expansion/static_for_not_composite.cml`, run as `camel test/cases/compile/static_expansion/static_for_not_composite.cml`)
 
 ```camel
-
 func walk(t: int) {
     static for n, F in fields int => {
         println(n, t)
@@ -4759,7 +4743,6 @@ The struct '{1}' has no field '{0}'.
 **Example** (`test/cases/compile/static_expansion/static_access_unknown_field.cml`, run as `camel test/cases/compile/static_expansion/static_access_unknown_field.cml`)
 
 ```camel
-
 func field(t: {a: int, b: int}): int {
     return t.["c"]
 }
@@ -4792,7 +4775,6 @@ A tuple element is named by its index from 0; a 'static for' gives the decimal i
 **Example** (`test/cases/compile/static_expansion/static_access_out_of_range.cml`, run as `camel test/cases/compile/static_expansion/static_access_out_of_range.cml`)
 
 ```camel
-
 func element(t: (int, int)): int {
     return t.[2]
 }
@@ -4825,7 +4807,6 @@ The key is a string or integer literal, the 'n' of an enclosing 'static for', or
 **Example** (`test/cases/compile/static_expansion/static_access_not_constant.cml`, run as `camel test/cases/compile/static_expansion/static_access_not_constant.cml`)
 
 ```camel
-
 func field(t: {a: int, b: int}, k: string): int {
     return t.[k]
 }
@@ -5085,7 +5066,6 @@ A rest parameter stands for every argument left over, so no parameter can follow
 **Example** (`test/cases/compile/rest_params/rest_param_not_last.cml`, run as `camel test/cases/compile/rest_params/rest_param_not_last.cml`)
 
 ```camel
-
 func bad(..ts, x: int): int {
     return x
 }
@@ -5118,7 +5098,6 @@ A rest parameter is untyped: the tuple of the arguments left over is made at the
 **Example** (`test/cases/compile/rest_params/rest_param_typed.cml`, run as `camel test/cases/compile/rest_params/rest_param_typed.cml`)
 
 ```camel
-
 func bad(..ts: int): int {
     return 0
 }
@@ -5151,7 +5130,6 @@ The rest argument '..{0}' must be the last positional argument.
 **Example** (`test/cases/compile/rest_params/rest_arg_not_last.cml`, run as `camel test/cases/compile/rest_params/rest_arg_not_last.cml`)
 
 ```camel
-
 func sum(..ts): int {
     return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
@@ -5184,7 +5162,6 @@ The rest argument '..{0}' is not a compile-time tuple.
 **Example** (`test/cases/compile/rest_params/rest_arg_not_tuple.cml`, run as `camel test/cases/compile/rest_params/rest_arg_not_tuple.cml`)
 
 ```camel
-
 func sum(..ts): int {
     return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
@@ -5217,7 +5194,6 @@ A function with a rest parameter has no runtime arity, so it has no function val
 **Example** (`test/cases/compile/rest_params/rest_as_value.cml`, run as `camel test/cases/compile/rest_params/rest_as_value.cml`)
 
 ```camel
-
 func sum(..ts): int {
     return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
@@ -5251,7 +5227,6 @@ A rest parameter only stands for the arguments after the fixed ones. Give at lea
 **Example** (`test/cases/compile/rest_params/rest_too_few.cml`, run as `camel test/cases/compile/rest_params/rest_too_few.cml`)
 
 ```camel
-
 func first(a: int, ..ts): int {
     return a
 }
@@ -5284,7 +5259,6 @@ A 'constas' parameter is a compile-time value and its type is part of the declar
 **Example** (`test/cases/compile/constas/constas_no_type.cml`, run as `camel test/cases/compile/constas/constas_no_type.cml`)
 
 ```camel
-
 // A `constas` parameter writes its type; only `int` is supported.
 func bad(constas n): int {
     return n
@@ -7858,7 +7832,6 @@ The type arguments of a generic function are its instance key, so a call that ha
 **Example** (`test/cases/compile/generics/err_deep.cml`, run as `camel test/cases/compile/generics/err_deep.cml`)
 
 ```camel
-
 func grow::<T>(x: T, n: int): int {
     return if n <= 0 then 0 else grow([x], n - 1)
 }
@@ -7892,8 +7865,6 @@ A loop's condition and its body run again on every round, so a stream named in o
 **Example** (`test/cases/compile/stream/consumed_in_loop.cml`, run as `camel test/cases/compile/stream/consumed_in_loop.cml`)
 
 ```camel
-module stream_consumed_in_loop
-
 func count(n: int): int.. {
     return step(n)
 }
@@ -7974,8 +7945,6 @@ The `tee` width '{0}' is below 1.
 **Example** (`test/cases/compile/stream/tee_hint_not_positive.cml`, run as `camel test/cases/compile/stream/tee_hint_not_positive.cml`)
 
 ```camel
-module stream_tee_hint_not_positive
-
 import stream
 
 func count(n: int): int.. {
@@ -8718,7 +8687,6 @@ Check the runtime environment and input data for unexpected issues.
 **Example** (`test/cases/compile/collections/refuse_grad.cml`, run as `camel test/cases/compile/collections/refuse_grad.cml`)
 
 ```camel
-
 import { grad } from autodiff
 
 // The value to differentiate flows through a map (x is stored in it and read back), and
@@ -8955,7 +8923,6 @@ A translation pass only translates the graph the preceding passes left. Run the 
 **Example** (`test/cases/compile/collections/refuse_export.cml`, run as `camel test/cases/compile/collections/refuse_export.cml std::cpp`)
 
 ```camel
-
 // A pure `main` that goes through a set: what the translation passes (std::cpp,
 // onnx::export) are asked to translate and must refuse with a position.
 
@@ -8988,7 +8955,6 @@ The pass gave up without a diagnostic of its own: it built or was given a graph 
 **Example** (`test/cases/opt/generic/broken_graph.cml`, run as `camel --output-format json test/cases/opt/generic/broken_graph.cml test::drop_call_argument std::fvm`)
 
 ```camel
-
 // Used with the test-only pass test::drop_call_argument, which removes the argument of the call
 // below and commits the broken program. Structural validation at commit must reject it before
 // anything runs.
@@ -9026,7 +8992,6 @@ Every argument of this macro call is a constant, so std::macro evaluates it ahea
 **Example** (`test/cases/compile/collections/refuse_grad.cml`, run as `camel test/cases/compile/collections/refuse_grad.cml std::macro`)
 
 ```camel
-
 import { grad } from autodiff
 
 // The value to differentiate flows through a map (x is stored in it and read back), and
@@ -9332,7 +9297,6 @@ The operator was given an argument it cannot take; the message names the argumen
 **Example** (`test/cases/compile/collections/fault_untyped_array.cml`, run as `camel test/cases/compile/collections/fault_untyped_array.cml ${backend}`)
 
 ```camel
-
 // An array without an element type (`[]`) converts only while it is empty: this one was
 // appended to, so the conversion is a fault with its position, on every back end.
 

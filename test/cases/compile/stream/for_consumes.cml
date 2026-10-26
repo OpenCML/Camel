@@ -3,7 +3,6 @@
  * write `for x in s`. The stream stands outside the loop the `for` builds -- that loop is the one
  * that pulls it, once per round -- so this is one consumer, and the elements come out in order.
  */
-module stream_for_consumes
 
 func count(n: int): int.. {
     return step(n)

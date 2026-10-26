@@ -5,7 +5,6 @@
  * told to expect and not what it needed; a width wider than the implementation honours is clamped
  * to its cap; and a `tee` called with no width takes the default.
  */
-module stream_tee_report
 
 import stream
 
