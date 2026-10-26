@@ -15,8 +15,9 @@
 // a second copy of the signature from C++ all leave `--verify-ops` green, because the second
 // copy agrees with the declaration. This script is the guard for those shapes.
 //
-// A module is a *declaration module* when `stdlib/<module>.cml` exists, its header says
-// `module <module>`, and a C++ module of that name registers itself with `BuiltinModule`. The
+// A module is a *declaration module* when `stdlib/<module>.cml` exists and a C++ module of that
+// name registers itself with `BuiltinModule`: a module is a file there, and its name is its
+// file's. The
 // set is read from the tree, not from a list in this script: the next batch (`time`,
 // `statistics`, `tree`/`ckpt`) is covered the day its `.cml` lands.
 //
@@ -508,14 +509,12 @@ function declarationModules() {
     const modules = []
     for (const file of fs.readdirSync(STDLIB_DIR).sort()) {
         if (!file.endsWith('.cml')) continue
+        // A module's name is its file's (design principles 10.2): the files under stdlib/ that a
+        // C++ module registers are the declaration modules, and the file's text says nothing more.
         const name = file.slice(0, -'.cml'.length)
         const dir = cppModuleDir(name)
         if (!dir) continue
-        const source = path.join(STDLIB_DIR, file)
-        const header = read(source).match(/^\s*module\s+([A-Za-z_]\w*)\s*$/m)
-        // `stdlib/perf.cml` says `module util`: it is not the module named after its file.
-        if (!header || header[1] !== name) continue
-        modules.push({ name, cppDir: dir, source })
+        modules.push({ name, cppDir: dir, source: path.join(STDLIB_DIR, file) })
     }
     return modules
 }
