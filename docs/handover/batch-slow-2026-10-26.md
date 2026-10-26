@@ -36,11 +36,27 @@ per-item attribution and bisect logs; the rows it named and this run shares are 
 | `small` ×4 | budgets 13 s / 23 s / 15 s / 17 s, 860 ms–6.00 s cpu, red | four perf entries share the name `small`; the capturing filter kept the entry name without its plan, so they are recorded by budget |
 | `device_parameter_tree_training` | 224 ms, red | pre-existing and independent of this line: the tiles lane reports it red on plain `develop` too (`device_tree.cml:11` `f32`/`float`) |
 
+### Plan identities
+
+The capture kept an entry's name without its plan, and this is what each row above is, read from this
+tree's `test/plans/`: `progen_check` and `progen_fixed` are `feat/opt/progen`; `benchmark_gradients_vs_torch`
+is `feat/modules/autodiff`; `pass_export_equals_export_model` is `feat/modules/onnx`;
+`gc.runtime_graph_constants.moving.nvm` / `.fvm` and `gc.macro_round_lifetime.moving_stress.*` are
+`feat/mm/gc`; `stream.tee_report` and `stream.tee_report_element_size_unknown` are `feat/compile/stream`;
+`startup.cost` is `perf/startup`; `mlp_step.nvm` and `transformer_step.nvm` are `perf/training_steps`;
+`curve` is `perf/gemm_threads`; `reduce_layout.ops` is `perf/reduce_layout` and `reduce_layout.count` is
+`perf/reduce_layout_counts`; `device_parameter_tree_training` is `gpu/tiles_transfer`. The four `small`
+entries are told apart by the budget their plan declares: `perf/showcase_c2` (`cpu_budget_ms = 13000`,
+C2 MLP/MNIST), `perf/showcase_c1` (23000, C1 linear+logistic), `perf/showcase_c6` (15000, C6 VAE) and
+`perf/showcase_d5` (17000, D5 Tree-LSTM); a fifth entry of the same name, `perf/showcase_d4` (6000,
+D4 MCTS), is not among them. `shapes` is the one name three plans carry (`feat/compile/enum`,
+`feat/para/handoff`, `perf/gemm_canonical_shapes`); the two `feat` entries of that name ran green in the
+fast layer of the same period, so this row is the `perf/gemm_canonical_shapes` one.
+
 ## What this run does not establish
 
 - Attribution for the twelve rows marked unattributed: they need the same treatment the 10-24 record
   gave its rows (a quiet-host re-run, then a bisect against `origin/develop`), which this run did not do.
-- The four `small` entries' plan identities.
 - The whole layer ran under a loaded host (two lanes gating, `-Jobs 8`): the CPU-time margin rules the
   10-24 record discusses are exactly the ones that flip under load, so the perf rows above are the
   least trustworthy part of this table.
