@@ -2016,21 +2016,32 @@ class Builder {
     // nothing, so the call is read conservatively (any class, any ambient resource) rather than
     // as touching nothing: a body is never measured as pure because the measurement gave up.
     // `nullopt` when something in the body cannot be determined at all -- a resource the walk
-    // cannot place.
-    std::optional<camel::core::sem::ResourceSignature> footprintOf(DraftGraphBuilder *graph) const;
+    // cannot place. With `only`, one node's own reach, which is what tells apart a use the clause
+    // names from one it does not.
+    std::optional<camel::core::sem::ResourceSignature>
+    footprintOf(DraftGraphBuilder *graph, std::optional<draft_node_ref_t> only = std::nullopt) const;
     // Once every body is built: measures each one and settles the measurements against each other
-    // (a callee may be written after its caller, in another module). This reports nothing: it runs
-    // before the module-by-module reporting begins.
+    // (a callee may be written after its caller, in another module). A settled measurement is also
+    // published on the signature of a function that wrote no clause, so that the signature stays
+    // the one place a function's resources are read from. This reports nothing: it runs before the
+    // module-by-module reporting begins.
     void measureInferredResources();
     // Then holds each declaration of the current module to the clause it wrote: `uses` is an
     // upper bound and `pure` promises the empty set, so a body that reaches past its clause is
     // UsesPromiseViolated at the declaration. Reported with the other per-module diagnostics,
     // while the bodies are still in hand.
     void checkInferredResources();
-    // The report of one declaration whose body reaches past the clause it wrote.
+    // The first node of `graph` whose own reach the clause does not cover: the use where the body
+    // stopped matching it, which is what the report points at. 0 when no such node is found.
+    camel::source::origin_id_t firstUnpromisedEffectOrigin(
+        const compile_graph_ptr_t &graph,
+        const camel::core::sem::ResourceSignature &promised) const;
+    // The report of one declaration whose body reaches past the clause it wrote, at the use
+    // `noteOrigin` names.
     void reportResourceViolation(
         const compile_graph_ptr_t &graph, const camel::core::sem::ResourceSignature &promised,
-        const camel::core::sem::ResourceSignature &measured);
+        const camel::core::sem::ResourceSignature &measured,
+        camel::source::origin_id_t noteOrigin);
     // Then warns for each body of the current module.
     void reportDroppedEffectsOfBodies();
     // Reports EffectInRuleCondition: a rule's condition may not have an effect. The condition is

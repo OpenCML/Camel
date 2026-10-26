@@ -30,7 +30,7 @@ namespace sem = camel::core::sem;
 namespace camel::compile::gir {
 
 std::optional<camel::core::sem::ResourceSignature>
-Builder::footprintOf(DraftGraphBuilder *graph) const {
+Builder::footprintOf(DraftGraphBuilder *graph, std::optional<draft_node_ref_t> only) const {
     using sem::ResourceSignature;
     const runtime::GraphDraft &draft = graph->draft();
     FunctionType *type               = graph->funcType();
@@ -155,9 +155,27 @@ Builder::footprintOf(DraftGraphBuilder *graph) const {
         out.external = out.external || sig.external;
         return true;
     };
+    // A signature that says nothing promises nothing: what the call reaches is the instantiation's,
+    // and any instantiation may write a cell or print. Read conservatively (resource_semantics.h,
+    // `Generic`) rather than as touching nothing -- a body is never measured as pure because the
+    // walk found a signature it could not read. A call through a value and a call of a function
+    // that wrote no clause and whose reach is not expressible as one are both this case.
+    const auto readUnknownValue = [&]() {
+        for (sem::ResourceClass cls : {sem::ResourceClass::Variable,
+                                       sem::ResourceClass::Object,
+                                       sem::ResourceClass::Foreign,
+                                       sem::ResourceClass::Ambient,
+                                       sem::ResourceClass::Handle}) {
+            out.anyOf.push_back(cls);
+        }
+        out.external = true;
+    };
     for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
         if (!draft.alive(id)) {
             continue;
+        }
+        if (only.has_value() && id != *only) {
+            continue; // one node's own reach, asked for by the report of a violation
         }
         const node_handle_t node = draft.ref(id);
         switch (nodeKindOf(node)) {
@@ -218,26 +236,28 @@ Builder::footprintOf(DraftGraphBuilder *graph) const {
             if (callee == nullptr) {
                 return std::nullopt;
             }
-            const auto measured = inferredResources_.find(callee.get());
-            if (measured == inferredResources_.end()) {
-                return std::nullopt; // the callee is not measured yet
-            }
             const FunctionType *calleeType = callee->funcType();
             if (calleeType == nullptr) {
                 return std::nullopt;
             }
-            if (!readSignature(
-                    measured->second, calleeType->withTypesCount(), false, id)) {
+            // A call reads the signature of the function it calls -- the clause it wrote, or, when
+            // it wrote none, the set its body was measured to reach, which is published on that
+            // signature. A call through a value reads the same signature below, so a function's
+            // resources have one reading and both paths take it (design principles 3.3). A
+            // signature that says nothing is read the way an unwritten one is at a call through a
+            // value: what it reaches is not known here.
+            if (calleeType->resources().mode != sem::ResourceSignature::Mode::Concrete) {
+                readUnknownValue();
+                break;
+            }
+            if (!readSignature(calleeType->resources(), calleeType->withTypesCount(), false, id)) {
                 return std::nullopt;
             }
             break;
         }
         case runtime::GCNodeKind::Call: {
             // A call through a function value: what it runs is the value's signature, which is
-            // the first `with` input of the call (isEffectNode reads it the same way). A value
-            // that writes no clause promises nothing -- what it reaches is the instantiation's,
-            // and any instantiation may write a cell or print -- so nothing in this body proves
-            // the call pure and it is read conservatively (resource_semantics.h, `Generic`).
+            // the first `with` input of the call (isEffectNode reads it the same way).
             const auto callee = draft.withInputsOf(id);
             if (callee.empty()) {
                 return std::nullopt;
@@ -248,15 +268,7 @@ Builder::footprintOf(DraftGraphBuilder *graph) const {
             }
             const auto *calleeFunc = tt::as_ptr<FunctionType>(calleeType);
             if (calleeFunc->resources().mode != sem::ResourceSignature::Mode::Concrete) {
-                for (sem::ResourceClass cls :
-                     {sem::ResourceClass::Variable,
-                      sem::ResourceClass::Object,
-                      sem::ResourceClass::Foreign,
-                      sem::ResourceClass::Ambient,
-                      sem::ResourceClass::Handle}) {
-                    out.anyOf.push_back(cls);
-                }
-                out.external = true;
+                readUnknownValue();
                 break;
             }
             if (!readSignature(calleeFunc->resources(), calleeFunc->withTypesCount(), true, id)) {
@@ -269,8 +281,9 @@ Builder::footprintOf(DraftGraphBuilder *graph) const {
         }
     }
     // The declaration's own `var` parameters: a `var` parameter is a resource by itself, whether
-    // or not the body reaches it (design principles 3.3).
-    {
+    // or not the body reaches it (design principles 3.3). A parameter is not a node, so it is part
+    // of the body's reach and not of any one node's.
+    if (!only.has_value()) {
         const size_t withCount = type->withTypesCount();
         size_t index           = 0;
         for (size_t i = 0; i < withCount + type->normTypesCount(); ++i) {
@@ -313,9 +326,41 @@ void Builder::measureInferredResources() {
                     inferredResources_[graph.get()] = *measured;
                     changed                        = true;
                 }
+                // The settled measurement is published on the signature of a function that wrote
+                // no clause, which keeps the signature the one place a function's resources are
+                // read from: a caller that calls it directly reads the same thing a caller taking
+                // one of its values reads (design principles 3.3, effects plan 5). A function that
+                // wrote a clause keeps the clause: that is its contract with its callers.
+                FunctionType *type = graph->funcType();
+                if (type != nullptr && measured->anyOf.empty() &&
+                    type->resources().mode == sem::ResourceSignature::Mode::Generic) {
+                    graph->setResources(*measured);
+                }
             }
         }
     }
+}
+
+camel::source::origin_id_t Builder::firstUnpromisedEffectOrigin(
+    const compile_graph_ptr_t &graph, const camel::core::sem::ResourceSignature &promised) const {
+    // The first use the clause does not name is what the writer has to look at: the declaration
+    // says what a caller may assume, and this is where the body stopped matching it. A use the
+    // clause does name is not that place, so it is skipped rather than reported.
+    for (draft_node_ref_t id = 0; id < graph->draft().nodeSlotCount(); ++id) {
+        if (!graph->draft().alive(id)) {
+            continue;
+        }
+        const node_handle_t node = graph->draft().ref(id);
+        if (!isEffectNode(graph.get(), node)) {
+            continue;
+        }
+        const auto reach = footprintOf(graph.get(), id);
+        if (!reach.has_value() || sem::covers(promised, *reach)) {
+            continue; // promised, or not placeable: not what the clause left out
+        }
+        return nodeDraftOf(node)->nodeOrigin(nodeIdOf(node));
+    }
+    return 0;
 }
 
 void Builder::checkInferredResources() {
@@ -336,7 +381,9 @@ void Builder::checkInferredResources() {
         if (sem::covers(promised, measured->second)) {
             continue;
         }
-        reportResourceViolation(graph, promised, measured->second);
+        reportResourceViolation(
+            graph, promised, measured->second,
+            firstUnpromisedEffectOrigin(graph, promised));
     }
 }
 } // namespace camel::compile::gir
