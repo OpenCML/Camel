@@ -25,18 +25,49 @@ using namespace camel::execute::detail;
 // PassArgs
 // -----------------------------------------------------------------------------
 
-const char *passParamTypeName(PassParamType type) {
+std::string passParamTypeName(PassParamType type, bool nullable) {
+    const char *base = "?";
     switch (type) {
     case PassParamType::Bool:
-        return "bool";
+        base = "bool";
+        break;
     case PassParamType::Int:
-        return "int";
+        base = "int";
+        break;
     case PassParamType::Float:
-        return "float";
+        base = "float";
+        break;
     case PassParamType::String:
-        return "string";
+        base = "string";
+        break;
+    case PassParamType::IntArray:
+        base = "int[]";
+        break;
     }
-    return "?";
+    return nullable ? std::string(base) + "?" : std::string(base);
+}
+
+std::string passParamValueText(const PassParamValue &value) {
+    if (std::holds_alternative<std::monostate>(value)) {
+        return "null";
+    }
+    if (const auto *b = std::get_if<bool>(&value)) {
+        return *b ? "true" : "false";
+    }
+    if (const auto *i = std::get_if<int64_t>(&value)) {
+        return std::to_string(*i);
+    }
+    if (const auto *d = std::get_if<double>(&value)) {
+        return std::format("{}", *d);
+    }
+    if (const auto *a = std::get_if<std::vector<int64_t>>(&value)) {
+        std::string text = "[";
+        for (size_t i = 0; i < a->size(); ++i) {
+            text += (i == 0 ? "" : ", ") + std::to_string((*a)[i]);
+        }
+        return text + "]";
+    }
+    return "\"" + std::get<std::string>(value) + "\"";
 }
 
 void PassArgs::set(const std::string &name, PassParamValue value, bool written) {
@@ -64,6 +95,23 @@ int64_t PassArgs::getInt(const std::string &name) const { return getAs<int64_t>(
 double PassArgs::getFloat(const std::string &name) const { return getAs<double>(at(name), name); }
 const std::string &PassArgs::getString(const std::string &name) const {
     return getAs<std::string>(at(name), name);
+}
+const std::vector<int64_t> &PassArgs::getIntArray(const std::string &name) const {
+    return getAs<std::vector<int64_t>>(at(name), name);
+}
+bool PassArgs::isNull(const std::string &name) const {
+    return std::holds_alternative<std::monostate>(at(name));
+}
+std::vector<std::string> PassArgs::names() const {
+    std::vector<std::string> out;
+    out.reserve(values_.size());
+    for (const auto &[name, value] : values_) {
+        out.push_back(name);
+    }
+    return out;
+}
+std::string PassArgs::text(const std::string &name) const {
+    return passParamValueText(at(name));
 }
 bool PassArgs::given(const std::string &name) const {
     auto it = written_.find(name);
@@ -157,16 +205,22 @@ double asDouble(const PassParamValue &v) {
                                               : std::get<double>(v);
 }
 const char *kindOf(const PassParamValue &v) {
-    switch (v.index()) {
-    case 0:
+    if (std::holds_alternative<bool>(v)) {
         return "bool";
-    case 1:
-        return "int";
-    case 2:
-        return "float";
-    default:
-        return "string";
     }
+    if (std::holds_alternative<int64_t>(v)) {
+        return "int";
+    }
+    if (std::holds_alternative<double>(v)) {
+        return "float";
+    }
+    if (std::holds_alternative<std::vector<int64_t>>(v)) {
+        return "int[]";
+    }
+    if (std::holds_alternative<std::monostate>(v)) {
+        return "null";
+    }
+    return "string";
 }
 
 PassParamValue evalLiteral(const Literal &lit) {
@@ -197,7 +251,9 @@ PassParamValue evalLiteral(const Literal &lit) {
     case LiteralType::Imaginary:
         throw EvalError{"a complex number is not a parameter value"};
     case LiteralType::Null:
-        throw EvalError{"null is not a parameter value"};
+        // `null` is the value of a nullable parameter, and of nothing else: whether the
+        // declaration allows it is `fits`, not this reader.
+        return std::monostate{};
     }
     throw EvalError{"unsupported literal"};
 }
@@ -374,13 +430,35 @@ PassParamValue evalNode(const ast::node_ptr_t &node) {
         throw EvalError{std::format(
             "'{}' is not a constant (only literals and operators on them are allowed)",
             node->loadAs<ast::RefDataLoad>()->ref().toString())};
+    case ast::DataType::Array: {
+        // `[0,1]`: one element per item, and an element of a constant array is an int. This is
+        // how a declared `int[]` parameter is written (`axes=[0,1]`), the same array constant the
+        // language writes in source; the declaration's type gives it its element type, so `[]` is
+        // the empty array of the declared element type.
+        std::vector<int64_t> elements;
+        const auto &items = node->atAs<ast::RepeatedLoad>(0);
+        for (const auto &item : *items) {
+            const PassParamValue element = evalNode(item);
+            const auto *number            = std::get_if<int64_t>(&element);
+            if (number == nullptr) {
+                throw EvalError{std::format(
+                    "an array element is {}, and an array constant is one of ints", kindOf(element))};
+            }
+            elements.push_back(*number);
+        }
+        return elements;
+    }
     default:
-        throw EvalError{"only bool, int, float and string constants are allowed"};
+        throw EvalError{"only bool, int, float, string, int[] and null constants are allowed"};
     }
 }
 
-std::string withArticle(const char *type) {
-    return (type[0] == 'i' ? "an " : "a ") + std::string(type);
+std::string kindWithArticle(const PassParamValue &value) {
+    if (std::holds_alternative<std::monostate>(value)) {
+        return "null";
+    }
+    const char *kind = kindOf(value);
+    return (kind[0] == 'i' ? "an " : "a ") + std::string(kind);
 }
 
 bool isIdentifierChar(char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; }
@@ -393,26 +471,106 @@ bool isIdentifierChar(char c) { return std::isalnum(static_cast<unsigned char>(c
 
 namespace {
 
-PassParamType declarationType(const std::string &written, const std::string &parameter) {
+const char *scalarTypeName(const std::string &written) {
     if (written == "bool") {
-        return PassParamType::Bool;
+        return "bool";
     }
     if (written == "int" || written == "i32" || written == "i64" || written == "int32" ||
         written == "int64") {
-        return PassParamType::Int;
+        return "int";
     }
     if (written == "float" || written == "f32" || written == "f64" || written == "float32" ||
         written == "float64") {
-        return PassParamType::Float;
+        return "float";
     }
     if (written == "string" || written == "str") {
-        return PassParamType::String;
+        return "string";
+    }
+    return nullptr;
+}
+
+/// What a declaration writes for one parameter: the type the word is read by, whether `null` is a
+/// value of it, and the type as the declaration wrote it (for a message).
+struct DeclaredParamType {
+    PassParamType type = PassParamType::Bool;
+    bool nullable      = false;
+    std::string written;
+};
+
+/// The type of one `with` parameter, read from the type the declaration wrote. A pass parameter
+/// is a bool, an int, a float, a string, or an `int[]`; any of them may carry the `?` that says
+/// `null` is a value of it (design principles 9.3: the declared type decides how the value is
+/// read). Every other type is refused: the pipeline can only read a value for these.
+DeclaredParamType declaredParamType(
+    const ast::node_ptr_t &typeNode, const std::string &parameter) {
+    const ast::node_ptr_t *node = &typeNode;
+    ast::node_ptr_t inner; // the type under a `T?`, kept alive while it is read
+    bool nullable = false;
+    std::string written;
+    if (const auto load = std::dynamic_pointer_cast<ast::TypeLoad>((*node)->load());
+        load != nullptr && load->typeType() == ast::TypeType::Null) {
+        const auto nullableType = std::dynamic_pointer_cast<ast::NullableTypeLoad>(load);
+        if (nullableType == nullptr || nullableType->fallible()) {
+            throw std::runtime_error(std::format(
+                "the parameter '{}' has a type that is not a pass parameter type", parameter));
+        }
+        nullable = true;
+        if ((*node)->size() == 0) {
+            throw std::runtime_error(std::format(
+                "the parameter '{}' has a type that is not a pass parameter type", parameter));
+        }
+        inner = (*node)->at(0);
+        node  = &inner;
+    }
+    const auto load = std::dynamic_pointer_cast<ast::TypeLoad>((*node)->load());
+    if (load == nullptr) {
+        throw std::runtime_error(std::format(
+            "the parameter '{}' has a type that is not a pass parameter type", parameter));
+    }
+    DeclaredParamType declared;
+    if (load->typeType() == ast::TypeType::Ref) {
+        const std::string ref = (*node)->loadAs<ast::RefTypeLoad>()->ref().toString();
+        const char *scalar    = scalarTypeName(ref);
+        if (scalar == nullptr) {
+            throw std::runtime_error(std::format(
+                "the parameter '{}' has the type '{}'; a pass parameter is bool, int, float, "
+                "string or int[]",
+                parameter,
+                ref));
+        }
+        declared.written = nullable ? ref + "?" : ref;
+        declared.type    = scalar[0] == 'b'   ? PassParamType::Bool
+                           : scalar[0] == 'i' ? PassParamType::Int
+                           : scalar[0] == 'f' ? PassParamType::Float
+                                              : PassParamType::String;
+        declared.nullable = nullable;
+        return declared;
+    }
+    if (load->typeType() == ast::TypeType::Array) {
+        // `int[]`: exactly one dimension, written without an extent (`[?]` fixes one and
+        // `int[][]` is an array of arrays; neither is a value the pipeline reads).
+        const auto array  = std::dynamic_pointer_cast<ast::ArrayTypeLoad>(load);
+        const auto &dims  = array->dims();
+        const bool bareDim =
+            dims.size() == 1 && dims[0].pack == ast::DimPack::None && dims[0].extents.empty();
+        const auto element = (*node)->size() > 0
+                                 ? declaredParamType((*node)->at(0), parameter)
+                                 : DeclaredParamType{};
+        if (!bareDim || element.type != PassParamType::Int || element.nullable) {
+            const std::string elementText =
+                element.written.empty() ? "that" : element.written;
+            throw std::runtime_error(std::format(
+                "the parameter '{}' has the type '{}'; an array parameter is `int[]`",
+                parameter,
+                elementText + "[]" + (nullable ? "?" : "")));
+        }
+        declared.type     = PassParamType::IntArray;
+        declared.nullable = nullable;
+        declared.written  = nullable ? "int[]?" : "int[]";
+        return declared;
     }
     throw std::runtime_error(std::format(
-        "pass declaration: the parameter '{}' has the type '{}'; a pass parameter is bool, int, "
-        "float or string",
-        parameter,
-        written));
+        "the parameter '{}' has a type that is not a pass parameter type", parameter));
 }
 
 PassParamValue zeroValue(PassParamType type) {
@@ -425,11 +583,17 @@ PassParamValue zeroValue(PassParamType type) {
         return 0.0;
     case PassParamType::String:
         return std::string();
+    case PassParamType::IntArray:
+        return std::vector<int64_t>();
     }
     return false;
 }
 
-bool fits(PassParamType type, const PassParamValue &value) {
+bool fits(PassParamType type, bool nullable, const PassParamValue &value) {
+    if (std::holds_alternative<std::monostate>(value)) {
+        // `null` is a value only where the declaration wrote `T?`.
+        return nullable;
+    }
     switch (type) {
     case PassParamType::Bool:
         return std::holds_alternative<bool>(value);
@@ -439,6 +603,8 @@ bool fits(PassParamType type, const PassParamValue &value) {
         return std::holds_alternative<double>(value);
     case PassParamType::String:
         return std::holds_alternative<std::string>(value);
+    case PassParamType::IntArray:
+        return std::holds_alternative<std::vector<int64_t>>(value);
     }
     return false;
 }
@@ -491,19 +657,16 @@ std::vector<PassParam> camel::execute::detail::readPassParams(
                 throw std::runtime_error(std::format(
                     "pass declaration '{}': the parameter '{}' has no type", passName, name));
             }
-            const auto typeLoad =
-                std::dynamic_pointer_cast<ast::TypeLoad>(pair->at(0)->load());
-            if (!typeLoad || typeLoad->typeType() != ast::TypeType::Ref) {
-                throw std::runtime_error(std::format(
-                    "pass declaration '{}': the parameter '{}' has a type that is not a pass "
-                    "parameter type",
-                    passName,
-                    name));
-            }
             PassParam param;
             param.name = name;
-            param.type = declarationType(
-                pair->at(0)->loadAs<ast::RefTypeLoad>()->ref().toString(), name);
+            try {
+                const DeclaredParamType declared = declaredParamType(pair->at(0), name);
+                param.type                       = declared.type;
+                param.nullable                   = declared.nullable;
+            } catch (const std::exception &e) {
+                throw std::runtime_error(
+                    std::format("pass declaration '{}': {}", passName, e.what()));
+            }
             if (pair->size() > 1 && pair->at(1)->size() > 0) {
                 const auto &expr = pair->at(1)->at(0);
                 PassParamValue value;
@@ -520,13 +683,13 @@ std::vector<PassParam> camel::execute::detail::readPassParams(
                     std::holds_alternative<int64_t>(value)) {
                     value = static_cast<double>(std::get<int64_t>(value));
                 }
-                if (!fits(param.type, value)) {
+                if (!fits(param.type, param.nullable, value)) {
                     throw std::runtime_error(std::format(
                         "pass declaration '{}': the default of '{}' is {}, not {}",
                         passName,
                         name,
-                        withArticle(kindOf(value)),
-                        withArticle(passParamTypeName(param.type))));
+                        kindWithArticle(value),
+                        passParamTypeName(param.type, param.nullable)));
                 }
                 param.defaultValue = std::move(value);
                 param.required     = false;
@@ -714,20 +877,12 @@ std::string camel::execute::detail::describeParams(const std::vector<PassParam> 
     for (const auto &p : declared) {
         if (!text.empty())
             text += ", ";
-        text += p.name + ": " + passParamTypeName(p.type);
+        text += p.name + ": " + passParamTypeName(p.type, p.nullable);
         if (p.required) {
             text += " (required)";
             continue;
         }
-        text += " = ";
-        if (auto *b = std::get_if<bool>(&p.defaultValue))
-            text += *b ? "true" : "false";
-        else if (auto *i = std::get_if<int64_t>(&p.defaultValue))
-            text += std::to_string(*i);
-        else if (auto *d = std::get_if<double>(&p.defaultValue))
-            text += std::format("{}", *d);
-        else
-            text += "\"" + std::get<std::string>(p.defaultValue) + "\"";
+        text += " = " + passParamValueText(p.defaultValue);
     }
     return text;
 }
@@ -761,11 +916,17 @@ std::optional<ParamProblem> camel::execute::detail::bindArgs(
         }
         // How the word is read is the declared type's business, not the text's (design
         // principles 9.3): a string parameter takes the word as written, so `out=model.onnx` names
-        // that file, while a bool, int or float parameter takes a constant of its type and refuses
-        // a bare word. A value the language read as a string constant keeps that reading, which is
-        // how a quoted value with a space (`out="a b.onnx"`) arrives whole.
+        // that file, while a bool, int, float or `int[]` parameter takes a constant of its type
+        // and refuses a bare word. A value the language read as a string constant keeps that
+        // reading, which is how a quoted value with a space (`out="a b.onnx"`) arrives whole, and
+        // `null` written for a nullable parameter is that parameter's null value.
         PassParamValue value;
         if (it->type == PassParamType::String) {
+            if (it->nullable && w.isConstant &&
+                std::holds_alternative<std::monostate>(w.value)) {
+                args.set(w.key, std::monostate{}, true);
+                continue;
+            }
             value = (w.isConstant && std::holds_alternative<std::string>(w.value)) ? w.value
                                                                                  : w.raw;
             args.set(w.key, std::move(value), true);
@@ -784,12 +945,12 @@ std::optional<ParamProblem> camel::execute::detail::bindArgs(
         if (it->type == PassParamType::Float && std::holds_alternative<int64_t>(value)) {
             value = static_cast<double>(std::get<int64_t>(value));
         }
-        if (!fits(it->type, value)) {
+        if (!fits(it->type, it->nullable, value)) {
             ParamProblem problem;
             problem.kind     = ParamProblemKind::WrongType;
             problem.name     = w.key;
             problem.found    = kindOf(value);
-            problem.expected = passParamTypeName(it->type);
+            problem.expected = passParamTypeName(it->type, it->nullable);
             problem.column   = w.column;
             problem.length   = w.key.size();
             return problem;

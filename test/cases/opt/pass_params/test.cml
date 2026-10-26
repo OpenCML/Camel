@@ -1,0 +1,21 @@
+/**
+ * The declaration of `test::declared`, a pass that exists for the tests only: its kernel is in
+ * `src/execute/pass.cpp` and it declares no parameters of its own, so the names, types and
+ * defaults the pipeline binds are exactly the ones written here (design principles 9.3). A case
+ * that checks how a declared type reads a word runs with `-I .`, which puts this directory on the
+ * module search path, so `test.cml` is found the way `stdlib/<module>.cml` is.
+ *
+ * `flag` has no default, so it is required. `axes` is an `int[]?` and `target` is a `string?`,
+ * both with the default `null`, so leaving either out is `null`; `axes` takes an array constant
+ * (`axes=[0,1]`) and `target` takes the word as written.
+ */
+module test
+
+with <
+    flag: bool,
+    n: int = 5,
+    label: string = "x",
+    axes: int[]? = null,
+    target: string? = null
+>
+export func declared::<F>(f: F): F! when is_function::<F>()
