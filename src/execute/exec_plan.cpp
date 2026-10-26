@@ -704,10 +704,17 @@ std::unique_ptr<ExecPlan> buildExecPlan(const GCGraph &graph) {
         for (gc_node_ref_t argRef : graph.withInputsOf(ref)) {
             plan->directCallArgSlots.push_back(dataIndexOf(graph, argRef));
         }
-        plan->directCallTailEligible[idx]  = anchorOk && (ref == plan->tailValueRef);
+        // A call that writes captured variables hands on a tuple of the result and their new
+        // versions, which are the values of its With inputs: it is never a tail call, whose value
+        // the caller takes for the callee's own.
+        const bool writesCaptures =
+            node != nullptr && funcWriteMaskOf(graph, ref) != 0;
+        plan->directCallTailEligible[idx] =
+            anchorOk && (ref == plan->tailValueRef) && !writesCaptures;
         plan->directCallFeedsTailJoin[idx] =
+            !writesCaptures &&
             std::find(tailJoinArmValues.begin(), tailJoinArmValues.end(), ref) !=
-            tailJoinArmValues.end();
+                tailJoinArmValues.end();
     }
     plan->tailAnchorOk = anchorOk;
     if (anchorOk) {
