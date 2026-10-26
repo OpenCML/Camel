@@ -4308,17 +4308,108 @@ SHA-256 applied rounds times, each round to the hexadecimal text of the one befo
 
 ## `re`: regular expressions
 
-#### `test`
+Regular expressions (ECMAScript syntax) over strings. A position is an index in code points,
+as everywhere in a string, so `text[m.start, m.end>` is `m.text`.
+
+- The text a function works on is its ordinary argument; the pattern is a with-argument (it
+  decides which function this is), so calls chain: `line->find_all<'[0-9]+'>`.
+- A pattern that is not a regular expression is a fault of the call that meets it, as a wrong
+  index is. A pattern that comes from the outside world goes through `validate` first.
+- The only native pieces are the search itself (`find`), a test for a match
+  (`has_match_kernel`) and the check of a pattern; the rest is written here on top of them.
+
+### Native primitives
+
+#### `validate`
 
 ```camel
-test: (pattern: string, text: string) => bool
+validate: (pattern: string) => string!
 ```
 
-Whether the regular expression (ECMAScript syntax) matches somewhere in text.
+The pattern itself when it is a regular expression.
+
+- Pure.
+- Failure: error `RegexInvalid` when pattern is not a regular expression.
+- Example: `validate('[0-9]+') !! ''` gives `'[0-9]+'`
+
+### Matching
+
+#### `find`
+
+```camel
+find: <pattern: string, start: int = 0> (text: string) => Match?
+```
+
+The first match of pattern in text that starts at or after start, or null. Native: the kernel
+builds the `Match`, compiling each pattern once per run.
 
 - Pure.
 - Failure: fault `RegexInvalid` when pattern is not a regular expression.
-- Example: `test('[0-9]+', 'room 42')` gives `true`
+- Example: `'room 42'->find<'[0-9]+', 6> != null` gives `true`
+
+#### `has_match`
+
+```camel
+has_match: <pattern: string> (text: string) => bool
+```
+
+Whether pattern matches somewhere in text.
+
+- With effects: not pure.
+- Failure: fault `RegexInvalid` when pattern is not a regular expression.
+- Example: `'room 42'->has_match<'[0-9]+'>` gives `true`
+
+#### `find_all`
+
+```camel
+find_all: <pattern: string> (text: string) => Match[]
+```
+
+Every match of pattern in text, left to right, without overlap. After an empty match the
+search goes on one code point further.
+
+- With effects: not pure.
+- Failure: fault `RegexInvalid` when pattern is not a regular expression.
+- Example: `'a1b22'->find_all<'[0-9]+'>->map<(m: Match): string => m.text>` gives `['1', '22']`
+
+### Rewriting
+
+#### `replace_with`
+
+```camel
+replace_with: <pattern: string, by: (m: Match) => string> (text: string) => string
+```
+
+text with every match of pattern replaced by what by makes of it.
+
+- With effects: not pure.
+- Failure: fault `RegexInvalid` when pattern is not a regular expression.
+- Example: `'a1b22'->replace_with<'[0-9]+', (m: Match): string => '<' + m.text + '>'>` gives `'a<1>b<22>'`
+
+#### `replace`
+
+```camel
+replace: <pattern: string, new: string> (text: string) => string
+```
+
+text with every match of pattern replaced by the text new, which is taken literally.
+
+- With effects: not pure.
+- Failure: fault `RegexInvalid` when pattern is not a regular expression.
+- Example: `'a1b22'->replace<'[0-9]+', '#'>` gives `'a#b#'`
+
+#### `split`
+
+```camel
+split: <pattern: string> (text: string) => string[]
+```
+
+The pieces of text between the matches of pattern; one piece, the whole text, when there is
+no match.
+
+- With effects: not pure.
+- Failure: fault `RegexInvalid` when pattern is not a regular expression.
+- Example: `'a1b22c'->split<'[0-9]+'>` gives `['a', 'b', 'c']`
 
 <a id="para"></a>
 

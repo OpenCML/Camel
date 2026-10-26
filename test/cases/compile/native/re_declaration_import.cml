@@ -1,15 +1,15 @@
 /**
- * The declaration of `re:test` is what an importer sees: two string arguments and a bool result
+ * The declaration of `re::has_match` is what an importer sees: a with-argument, a string argument and a bool result
  * are read from `stdlib/re.cml`, and the calls
  * reach the operator the C++ module runs.
  */
 module re_declaration_import
 
-import { test } from re
+import { has_match } from re
 
 func main(): int sync {
-    println(test('[0-9]+', 'room 42'))
-    println(test('^hello', 'hello world'))
-    println(test('xyz', 'hello'))
+    println('room 42'->has_match<'[0-9]+'>)
+    println('hello world'->has_match<'^hello'>)
+    println('hello'->has_match<'xyz'>)
     return 0
 }

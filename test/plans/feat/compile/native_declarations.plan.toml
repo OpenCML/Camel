@@ -638,7 +638,7 @@ expect_stdout_exact = "0\n"
 
 [[tests]]
 name = "native.re_declaration_import"
-desc = "`re`'s declaration is the module's signature: an importer calls `test` with two strings and reads its bool result from `stdlib/re.cml`, and every call reaches the C++ operator."
+desc = "`re`'s declaration is the module's signature: an importer calls `has_match<pattern>` with a string and reads its bool result from `stdlib/re.cml`, and every call reaches the C++ operator."
 kind = "behavior"
 case = "../../../cases/compile/native/re_declaration_import.cml"
 args = ["${case}"]
@@ -647,21 +647,21 @@ expect_stdout_exact = "true\ntrue\nfalse\n"
 
 [[tests]]
 name = "native.re_wrong_arity"
-desc = "`re:test` is declared with two ordinary arguments: a single one is refused at the call, and the overload the message lists is the declaration's, parameter names included."
+desc = "`re::has_match` is declared with one ordinary argument and a with-argument: two ordinary ones are refused at the call, and the overload the message lists is the declaration's, parameter names included."
 kind = "negative"
 case = "../../../cases/compile/native/re_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "re_arity.cml:10:17", "(string)", "<re:test>: (pattern: string, text: string) => bool"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "re_arity.cml:10:27", "argument types: <string> (string, string)", "<re:test>: <pattern: string> (text: string) => bool"]
 
 [[tests]]
 name = "native.re_wrong_type"
-desc = "An `int` where the declaration says `string`: refused at the call, and the signature in the message has the parameter names the declaration gave it — `stdlib/re.cml`, not the C++, is the source."
+desc = "An `int` where the declaration says `string`: refused at the call, and the signature in the message has the parameter names the declaration gave it (with-parameter included) — `stdlib/re.cml`, not the C++, is the source."
 kind = "negative"
 case = "../../../cases/compile/native/re_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "re_type.cml:11:17", "argument types: <> (int, string)", "<re:test>: (pattern: string, text: string) => bool"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "re_type.cml:11:29", "argument types: <string> (int)", "<re:test>: <pattern: string> (text: string) => bool"]
 
 #  ---- The declarations of `time`: the clock and its text forms ----
 

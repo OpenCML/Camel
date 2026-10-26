@@ -19,7 +19,7 @@ Source: `docs/stdlib-reference.md`, generated from the declarations in `stdlib/*
 `node scripts/stdlib-reference.mjs --write`.
 
 <!-- camel-for-ai region: stdlib-signatures (generated from docs/stdlib-reference.md; node scripts/camel-for-ai.mjs --write) -->
-**`Built-in functions`** — no import — 60 name(s)
+**`Built-in functions`** — no import — 62 name(s)
 
 ```text
 std::mem::blocks: () => { allocs: int, frees: int, live: int, bytes: int }
@@ -109,6 +109,8 @@ last: (xs: T[]) => T
 tail: (xs: T[]) => T[]
 slice: <start: int, end: int> (xs: T[]) => T[]
 slice: (t: T[], axis: int, start: int, end: int, step: int = 1, written: int = 3) => T[]
+slice: (s: string, axis: int, start: int, end: int, step: int = 1, written: int = 3) => string
+slice: (b: Bytes, axis: int, start: int, end: int, step: int = 1, written: int = 3) => Bytes
 concat: (xs: T[], ys: T[]) => T[]
 contains: <value: T> (xs: T[]) => bool
 contains: <sub: string> (s: string) => bool
@@ -144,34 +146,34 @@ is_subset: (s: Set<T>, other: Set<T>) => bool
 tee_note: (hint: int, cap: int, elements: int, peak: int, s: T..) => void
 ```
 
-**`str`** — import { ... } from str — 14 name(s)
+**`str`** — import { ... } from str — 16 name(s)
 
 ```text
-split: <sep: string> (s: string) => string[]
-trim: (s: string) => string
-trim_start: (s: string) => string
-trim_end: (s: string) => string
-to_upper: (s: string) => string
-to_lower: (s: string) => string
-replace: <from_: string, to: string> (s: string) => string
-find: <sub: string> (s: string) => int?
-substr: <start: int, length: int> (s: string) => string
-starts_with: <prefix: string> (s: string) => bool
-ends_with: <suffix: string> (s: string) => bool
-repeat: <count: int> (s: string) => string
 codepoints: (s: string) => int[]
 from_codepoints: (xs: int[]) => string!
+to_upper: (s: string) => string
+to_lower: (s: string) => string
+index_of: <sub: string> (s: string) => int?
+starts_with: <prefix: string> (s: string) => bool
+ends_with: <suffix: string> (s: string) => bool
+strip_prefix: <prefix: string> (s: string) => string?
+strip_suffix: <suffix: string> (s: string) => string?
+split: <sep: string> (s: string) => string[]
+lines: (s: string) => string[]
+replace: <old: string, new: string> (s: string) => string
+repeat: <count: int> (s: string) => string
+trim_start: (s: string) => string
+trim_end: (s: string) => string
+trim: (s: string) => string
 ```
 
-**`bytes`** — import { ... } from bytes — 6 name(s)
+**`bytes`** — import { ... } from bytes — 4 name(s)
 
 ```text
 encode: (text: string) => Bytes
 decode: (content: Bytes) => string!
 from_array: (values: int[]) => Bytes
 to_array: (content: Bytes) => int[]
-size: (content: Bytes) => int
-concat: (left: Bytes, right: Bytes) => Bytes
 ```
 
 **`ckpt`** — import { ... } from ckpt — 3 name(s)
@@ -610,10 +612,16 @@ sha256: (s: Bytes) => string
 sha256_rounds: (s: string, rounds: int) => string
 ```
 
-**`re`** — import { ... } from re — 1 name(s)
+**`re`** — import { ... } from re — 7 name(s)
 
 ```text
-test: (pattern: string, text: string) => bool
+validate: (pattern: string) => string!
+find: <pattern: string, start: int = 0> (text: string) => Match?
+has_match: <pattern: string> (text: string) => bool
+find_all: <pattern: string> (text: string) => Match[]
+replace_with: <pattern: string, by: (m: Match) => string> (text: string) => string
+replace: <pattern: string, new: string> (text: string) => string
+split: <pattern: string> (text: string) => string[]
 ```
 
 **`para`** — import { ... } from para — 3 name(s)
