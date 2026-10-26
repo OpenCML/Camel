@@ -4,18 +4,20 @@ import { grad } from autodiff
 import { run_preferred_resident, download } from tiles
 // The differentiated value is the first `with` parameter; the derivative wrappers are ordinary
 // functions so that tiles::run can hand them a device argument.
+// A whole-tensor reduction answers the operand's element type (design principles 7.3), so the
+// f64 reading this loss is written at is the conversion the call site writes.
 with <x: f32[..]>
-func square(): float { return sum(x * x) }
+func square(): float { return float(sum(x * x)) }
 with <x: f32[..]>
-func rows(): float { let r = sum(x, 1); return sum(r * r) }
+func rows(): float { let r = sum(x, 1); return float(sum(r * r)) }
 type Dense = { x: f32[..], w: f32[..], b: f32[..] }
 with <p: Dense>
-func dense(): float { let y = p.x @ p.w + p.b; return sum(y * y) }
+func dense(): float { let y = p.x @ p.w + p.b; return float(sum(y * y)) }
 type Broadcast = { a: f32[..], b: f32[..] }
 with <p: Broadcast>
-func broadcast_loss(): float { return sum(p.a + p.b) }
+func broadcast_loss(): float { return float(sum(p.a + p.b)) }
 with <p: Broadcast>
-func weighted_loss(): float { return sum(p.a * p.b) }
+func weighted_loss(): float { return float(sum(p.a * p.b)) }
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3])
     let derivative = (v: f32[..]): f32[..] => grad(square)<v>()
