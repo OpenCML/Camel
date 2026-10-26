@@ -109,7 +109,7 @@ sequence, as for any operator, so the builder names no type and each module owns
 | `string` | `:struct/iter_str` | `string` (one code point each, as `s[i]`) | code points |
 | `Map<K, V>` | `:coll/map_items` | `(K, V)` | keys ascending (11.3) |
 
-A `Set` has no overload (it is not iterated by `for` today; the question is in the H4b report).
+A `Set` has no overload (it is not iterated by `for` today; the question is still open).
 A sequence whose declared type is an array but whose value has no dimension is refused where the
 loop reads it (`loopTest`: a value with no dimension has no first dimension to iterate over); a
 `Tensor` whose rank is unknown gives elements of the same open-rank array, one dimension fewer.
@@ -164,7 +164,7 @@ the array types and the body's exit to be the state types followed by their elem
 ### 3.2 The tape of a differentiated loop
 
 autodiff (`modules/autodiff/pullback.cpp`) uses the collection slots as its tape
-(the second step of H4d). The rewrite decodes the loop's body graph and
+(the second step of the rewrite). The rewrite decodes the loop's body graph and
 differentiates it as a function of the captures and the state, as it differentiates any other
 graph, keeping the values its pullback reads as *residual ports*: the operands of every rule, and
 for a call inside the body the callee's pullback closure. The body of the loop node becomes that
@@ -239,7 +239,7 @@ range: its condition, its body and the LOOP node. The arm's entry in the plan is
 node of the range, not the first node of it that does something: a loop's first position is the
 first node of its regions, which is usually a port of the body, and the `Begin`/`Test` events of
 the first round sit at that position. An entry chosen past it would skip the events, so the first
-round would run with unbound ports and the loop would lose it (the bug H45 fixed). Every back end
+round would run with unbound ports and the loop would lose it (a bug since fixed). Every back end
 that jumps to an arm entry — NodeVM, FastVM/JIT, Taskflow, the macro evaluator — starts at the
 range's first node, so a loop in an arm gives the value of the same loop in the function body.
 A loop inside another loop's body that is itself in an arm, and an arm that holds a loop and
@@ -325,7 +325,7 @@ move in the interpreter and one helper call in compiled code. A compiled graph t
 or `LMOD` runs that bytecode in the helper that the other runtime constructs use
 (`jitHelperBytecode`, and `collectRuntimeConstructs` keeps such a graph framed for it).
 
-H43 item 2 (`48345984`, merged into this branch) makes the JIT compile a loop of regions: `LBEG`,
+A merged change (`48345984`) makes the JIT compile a loop of regions: `LBEG`,
 `LTST` and `LEND` run the interpreters' own `loop_frame.h` functions on the frame through helpers
 (`07_jit_architecture.md`, 17.9), and a graph with a loop is compiled at its first call under the
 default threshold (14.1). The same measurement on the merged tree (median of five interleaved runs,
@@ -333,17 +333,17 @@ whole-process CPU time, load average 60 to 75):
 
 | | `std::nvm` | `std::fvm` | `std::jit` | tail recursion, `std::fvm` | tail recursion, `std::jit` |
 |---|---|---|---|---|---|
-| H43-perf build (loop interpreted) | 1.571 s | 0.436 s | 0.435 s | 0.310 s | — |
+| perf build (loop interpreted) | 1.571 s | 0.436 s | 0.435 s | 0.310 s | — |
 | merged tree (loop compiled) | 1.611 s | 0.457 s | **0.363 s** | 0.309 s | 0.084 s |
 
 `std::jit` is 20% faster than the interpreter in the same batch (0.363 against 0.457 s) and 16%
-faster than its own H43-perf number; `std::jit hot_threshold=0` gives the same 0.363 s, and
+faster than its own earlier number; `std::jit hot_threshold=0` gives the same 0.363 s, and
 `std::jit` without a parameter now compiles the loop too — the entry function `main` is called once,
 which the call-count threshold used to leave interpreted. The compiled round is 36.3 ns against
 8.4 ns for the same work as a compiled tail recursion; the difference is the two helper calls and
 the frame traffic of every round. The target 0.155 s is therefore still 2.3 times away.
 
-H56  took the interpreter's own round down, without changing the
+A later change took the interpreter's own round down, without changing the
 bytecode or the plan: the state bindings (`bindLoopState`) are copied in place and inline for the
 shapes a loop actually has — the components of a multi-value state (`ExecLoop::stateComponents`),
 and the one value that is the state itself — instead of running every component through
@@ -355,8 +355,8 @@ loop and the tail recursion in the same minutes, whole-process CPU time, core 3 
 
 | | `std::fvm` loop | tail recursion, `std::fvm` | the loop per round |
 |---|---|---|---|
-| H43 tree | 44.9 ns | 30.3 ns | 14.7 ns slower |
-| H56 | 28.4–30.2 ns | 30.0–32.1 ns | 0.1–3.8 ns faster (never slower, five batches) |
+| earlier tree | 44.9 ns | 30.3 ns | 14.7 ns slower |
+| later tree | 28.4–30.2 ns | 30.0–32.1 ns | 0.1–3.8 ns faster (never slower, five batches) |
 
 An event now costs 8.1 ns against 3.3 for an ordinary bytecode (it was 15.8), so a round of this
 shape is four bytecodes (13.6 ns) and the two events (16.3 ns). What an event still does: two
@@ -365,22 +365,22 @@ next step is the round as one superinstruction (`LTST`, the straight-line body, 
 worth an estimated 3–5 ns; `std::jit` gains from the same shared helpers (35.0 → 21.6 ns a round),
 and a `for` loop is 32.6 ns a round because its `LTST` also fetches the element from the array.
 
-What is left, and why the targets of H43 are not met yet:
+What is left, and why the earlier targets are not met yet:
 
 - `std::nvm` is at 152 ns a round against a target of 70. NodeVM runs a node at a time: 23 ns a
   node here, so the six or seven nodes of a round are the round. Trimming the events further does
   not pay; the executor that runs these graphs at interpreter speed is FastVM, which is what
   `std::fvm` is (40.9 ns a round, and 7.8 ns when the same work is compiled).
-- `std::fvm` is at 40.9 ns against 24.5 (half of the 0.49 s the tail recursion took when H43 was
-  written; that recursion is 30.4 ns today, so half of it is 15.2 ns). Each bytecode of the round
+- `std::fvm` is at 40.9 ns against 24.5 (half of the 0.49 s the tail recursion took when the first reading was taken
+  that recursion is 30.4 ns today, so half of it is 15.2 ns). Each bytecode of the round
   costs about 6.8 ns of dispatch and handler, and a round is six of them; a loop cannot be twice as
   fast as the same work written as a recursion over parameters, both being interpreted. Reaching
   24.5 ns needs fewer round trips through the dispatch loop: a compiled loop (next item), or a
-  superinstruction that runs a round inside one bytecode. After H56 the round is 28.4–30.2 ns
+  superinstruction that runs a round inside one bytecode. After that change the round is 28.4–30.2 ns
   against a 31 ns tail recursion — the rule's bar (no slower than the tail recursion of the same
   work) is met; 24.5 ns still needs the round as one instruction, which is the next step.
 - `std::jit` now runs the rounds of the loop in compiled code (21.6 ns a round against 35.0 in the
-  interpreter after H56; measured 36.3 in the interpreter when H43 wrote this), but each round is
+  interpreter after that change; measured 36.3 when this was first written), but each round is
   still two calls of the helpers that run `loop_frame.h`, and the state is read from and written to
   the frame on both sides of them. The same work as a tail recursion is 8.4 ns a round when
   compiled; closing the gap needs the common shape lowered natively (the test and the end of the
@@ -435,5 +435,5 @@ empty loop (zero gradient), a captured array that does not depend on the paramet
 stops at the read), and the two refusals — an iterated and a captured array that does depend on it
 — reported at the loop. `linear.loops` `loops.grad_through_loop` and
 `loops.grad_through_loop_fvm` are the source-level check under `std::macro` and `std::fvm` that
-a loop of the program's own graph is differentiated (they replace the two refusals that H4d 第一步
+a loop of the program's own graph is differentiated (they replace the two refusals that the first step of that work
 left).

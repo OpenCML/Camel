@@ -1,10 +1,10 @@
 # 50 `pyplot` 的 CPython 初始化：从导入期移到首次使用
 
-**结论**（H221 实现）：`import` 不执行代码（设计原则 3.1），所以
+**结论**（已实现）：`import` 不执行代码（设计原则 3.1），所以
 `PyplotModule::load()` 在导入期初始化 CPython 是**违规**，**可以优化掉**——在第一次真正使用时初始化，
 不在导入时。已按此实现：`pyplot` 与 `python` 的 `load()` 只注册执行器与算子的纯度，解释器由第一次
 `plot` 或 `py_*` 调用创建。本页记录这笔成本的测量、裁定、实现、改动后的数字和把这条规则钉住的测试；
-H203 那一版"能否推迟"的论证到此为止（原文在 git 历史里）。
+早先那一版"能否推迟"的论证到此为止（原文在 git 历史里）。
 
 ## 1. 改动前：钱花在哪
 
@@ -15,7 +15,7 @@ Release 构建，主机 `88zjwei`。墙钟用 `process.hrtime.bigint()` 包住�
 安装**在同一窗口内交错**跑（每个 rep 两边各一次，并交替谁先），所以负载对两边一样；窗口的
 `/proc/loadavg` 记在每张表下。每组 3 次预热 + 21 次计时（`startup-cost` 那组 41 次）。
 
-### 1.2 数字：9.x ms 落在 `cmo_load` 的 `pyplot` 一项（H203 主窗口，load 44.18 → 41.92）
+### 1.2 数字：9.x ms 落在 `cmo_load` 的 `pyplot` 一项（主窗口，load 44.18 → 41.92）
 
 | 命令 | 墙钟中位 (p10–p90) | `cmo_load` | `pyplot` | `python` |
 |---|---:|---:|---:|---:|
@@ -46,7 +46,7 @@ Release 构建，主机 `88zjwei`。墙钟用 `process.hrtime.bigint()` 包住�
 - **共享初始化入口** `modules/python/embed.h`（`camel::pyembed::ensureInitialized()`）：env guard →
   `promote_libpython_to_global()` → `PYTHONHOME`（venv）→ `py::initialize_interpreter()` → Python 输出的
   行缓冲与退出 flush → site-packages → extra 路径（`CAMEL_PYTHONPATH`）→ `PyEval_SaveThread()`。它先看
-  `Py_IsInitialized()`：已经初始化就什么都不做。于是"谁先创建"不再决定解释器的设置——H203 §3.2 里
+  `Py_IsInitialized()`：已经初始化就什么都不做。于是"谁先创建"不再决定解释器的设置——§3.2 里
   `pyplot` 先创建、`_ssl` 因缺 promote 而 exit 1 的那个程序，现在是 exit 0。这是有意的结果：`pyplot`
   单独使用也获得了 promote、输出顺序与 venv site-packages。
 - **进程级一次**：模块是各自独立的 `.cmo`（RTLD_LOCAL），每个都有自己的静态变量，所以守卫放在 libcamel
@@ -82,7 +82,7 @@ Release 构建，主机 `88zjwei`。墙钟用 `process.hrtime.bigint()` 包住�
 | `import python` | 17.94 | **10.40** | **−7.54** | 同上 |
 | `import python` + 一次 `py_exec` | 17.69 | 18.02 | +0.33 | 同上 |
 | 全注册表（`registry_all` + `std::nvm`） | 39.29 | **30.54** | **−8.75** | 两个模块都导入、只付一次初始化的那条路径 |
-| `inspect --ops registry_all` | 42.67 | **34.34** | **−8.33** | H203 的主测量 |
+| `inspect --ops registry_all` | 42.67 | **34.34** | **−8.33** | 这一项的主测量 |
 
 把 `imports_nothing` 减掉（它是量具的零点，不是改动的一部分），`import pyplot` 的边际成本 8.4 → 1.4 ms，
 `import python` 8.0 → 1.7 ms；一次 `plot` 的边际 8.5 → 10.7 ms——那 8 毫秒没有蒸发，它在调用处。
@@ -123,7 +123,7 @@ Release 构建，主机 `88zjwei`。墙钟用 `process.hrtime.bigint()` 包住�
 
 **后记：这一节的口径已被规则取代，表格按原样保留为记录。** 规则把四条命令的天花板改成
 **CPU 时间**（安静主机中位数加余量，仍是不收紧的烟雾报警，数字为 12 / 18 / 95 / 90 ms），并回答
-H177 §5.3 的候选："选 3 + 2"——加"每个（阶段, 模块）每轮恰好出现一次"的结构断言、加绝对的 CPU 总量
+§5.3 的候选："选 3 + 2"——加"每个（阶段, 模块）每轮恰好出现一次"的结构断言、加绝对的 CPU 总量
 （12 ms），**30% 共享率这条线退休**（比例是在墙钟口径下绕开负载的替代品，CPU 时间不再需要它）。
 `declaration.cost` 的两个读数也换成 CPU：`--time-phases` 的每个阶段多写一个 `cpu_ns`
 （`src/utils/phase_timer.cpp`），因为同一批阶段在 load 21 读 21 us/条、在 load 106–112 读 75–104 us/条
@@ -137,7 +137,7 @@ H177 §5.3 的候选："选 3 + 2"——加"每个（阶段, 模块）每轮恰�
 
 - `CAMEL_PYTHON_INHERIT_HOST_ENV=1` + `PYTHONHOME=<空目录>`：CPython 在这个环境下根本起不来（它自己打印
   `Python path configuration`，pybind11 抛异常）。此时**只导入** `pyplot` / `python` 的程序必须 exit 0
-  且什么都不打印；把初始化放回 `load()` 会让它们 exit 1——正是 H203 量的第一个可观察量。
+  且什么都不打印；把初始化放回 `load()` 会让它们 exit 1——正是最先量到的可观察量。
 - 同一环境 `inspect --ops` 必须 exit 0 并列出 `pyplot:plot`（H203：exit 1、不列算子）。
 - 同一环境一次 `plot` / 一次 `py_exec` 必须 exit 1，诊断是 `RuntimeDiag::RuntimeError`、位置指向调用、
   消息写明 first use，并带上 CPython 自己的原因：失败是搬了家，没有消失。

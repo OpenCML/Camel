@@ -88,7 +88,7 @@ always produces the `Rule` value; a program that only wants the two sides can st
 declaration, not the rule's public surface.
 
 The context of a rule (`rule fuse<f, g>(...)`) is read by the grammar and refused by the compiler
-(`ConstructNotSupported`) until generics land (H38 item 5).
+(`ConstructNotSupported`) until generics land.
 
 A rule may state the numeric permissions it needs with `#requires(...)` before the declaration
 (design principles 7.2): a rule that rewrites `x * c1 + x * c2` into `x * (c1 + c2)` is only
@@ -204,7 +204,7 @@ each rewrite it appends one `RewriteStep` with:
 
 The text is taken at recording time because a node that is erased or renumbered has no later text
 to read. With a null log the engine allocates nothing and takes no branch in the per-node match:
-`rewrite` and `saturate` keep their H226 cost, which `bench::compare` measures side by side with
+`rewrite` and `saturate` keep their measured cost, which `bench::compare` measures side by side with
 the recording on.
 
 `run`'s `explain` parameter decides whether the application passes a log. With it, the kernel
@@ -308,10 +308,10 @@ permission (`x*c1 + x*c2`, `(x*c1)*c2`) can now be written with `#requires`; the
 condition (`x*c + x*c` for a whole `c`) still wait for `when`; `std::opt::algebra` keeps doing
 them.
 
-## 6. The rest of the engine (H38)
+## 6. The rest of the engine
 
-The rule declaration, the engines and the check are the first step; `when` is implemented (H38
-item 1), the rest is planned in the H38 report (section 1). In
+The rule declaration, the engines and the check are the first step; `when` is implemented (
+item 1), the rest is planned (section 1). In
 short:
 
 **`when` (implemented).** `rule … when expr { lhs => rhs }` compiles to a third function
@@ -333,7 +333,7 @@ engine for a conditional rule. Tests: `test/cases/modules/rules/when_rules.cml` 
 saturation), `when_values.cml` (a `const` parameter read as a value), `const_type.cml` (the
 matcher checking a `const` parameter's declared type) and `check_when.cml`. A rule, its target and the pass that applies it may also live
 in one module (`same_module_pass.cml`): the pass module is a program of its own, and the program
-it is also part of is built afterwards (H38 report §2.5).
+it is also part of is built afterwards (§2.5).
 
 **`fact`.** `fact range: Interval match v { case const c => …; case x + y => range(x) + range(y);
 case _ => … } join Interval::union` declares a lattice and how a value's fact is read off the way it
@@ -348,7 +348,7 @@ nodes and across the writings of a value, cached per graph revision and per draf
 of a case's variables are values and which are facts was the open question the design's example
 left ambiguous; they are `Node`s.
 
-**`fact` with parameters (H61).** `fact pair(a: Node, b: Node): bool match (a, b) { … }` is the same
+**`fact` with parameters.** `fact pair(a: Node, b: Node): bool match (a, b) { … }` is the same
 declaration with a parameter list: the parameters are pattern variables, so a rule's condition
 writes `pair(x, y)` and hands it the parts of the compound it is rewriting. The query compiles to
 `func pair(a: Node, b: Node): bool => __fact('pair', …)` with one node argument per parameter; the
@@ -369,7 +369,7 @@ parameters, so a clause or a case names one and reads the value the query wrote 
 (`join Interval::widen_after<widen_after>`), and the engine passes the query's arguments to them
 as the `with` arguments of the call.
 
-**`#requires` (implemented, H2b).** `#requires(reassociate, finite_math)` before a rule resolves the
+**`#requires` (implemented).** `#requires(reassociate, finite_math)` before a rule resolves the
 names to `sem::PermissionMask` -- `finite_math` expands to its four bits -- and fills the `needs`
 slot `Rule` already carries, so the engine and the check gate on it with no engine change. A name
 that is not a permission is a located `TagNotAPermission`, another tag before a rule is
@@ -385,13 +385,13 @@ native pass); it waits for `where` and the first stage of generics.
 native walk applies today (float coefficient folding needs the permissions). The bar: identical
 output and `std::jgir` structure on the algebra corpus and on generated 10k/40k/80k programs, on
 all four backends, and every test of `opt.algebra` passing with the rules pass substituted; then
-the pass is deleted and its name becomes the Camel pass. The order the author set (H61): first
+the pass is deleted and its name becomes the Camel pass. The order the author set: first
 the laws that differ by element type (int32/float32 overflow and rounding), then the tensor laws;
 `safe_fp` is **not** a separate mode to reproduce — it is the strict numeric policy, which holds
 no permission at all (`#strict`, design principles 7.4), so the laws that require a permission
 are exactly the ones that do not apply under it, and no separate semantics is added for it.
 
-**The export list.** It is generated from the modules' undefined symbols (H36/H40), so a new
+**The export list.** It is generated from the modules' undefined symbols, so a new
 libcamel function the module calls is exported without a hand edit; `rewrite` links the sibling
 `graph.cmo` for the handle constructors. A link failure is a defect of the generator.
 
@@ -408,9 +408,9 @@ libcamel function the module calls is exported without a hand edit; `rewrite` li
   declared numeric contract of each operator.
 - The condition is a function of the rule's parameters, not of the whole matched pattern: in
   `x + (a * b)` the parameter `a` is the multiplication's operand, not the multiplication node.
-  A fact about a compound is read by declaring a `fact` over its parts (H61): `pair(x, y)`
+  A fact about a compound is read by declaring a `fact` over its parts: `pair(x, y)`
   answers the fact of the value those parts belong to.
-- `fact`: are a case's variables values or nodes? They are `Node`s (implemented in H38b).
+- `fact`: are a case's variables values or nodes? They are `Node`s (implemented).
 
 
 
