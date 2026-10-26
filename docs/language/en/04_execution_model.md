@@ -153,7 +153,7 @@ g
 3
 ```
 
-To make a function body execute in order, write the `sync` in the function body position; the `sync` prefix of a lambda (`sync (x: int) => ...`) is the same modifier written on a lambda.
+To make a function body execute in order, write the `sync` in the function body position; the body of a lambda is a block, and the `sync` is written before it: `(x: int) => sync { ... }`. A lambda head has no modifier (`sync (x: int) => ...` is a syntax error), and neither has a function type: `sync` is a property of a block, not of a type.
 
 ## 4.4 `var` and the order of writes
 

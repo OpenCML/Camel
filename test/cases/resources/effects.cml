@@ -23,7 +23,7 @@ func main(): int sync {
     c = c + 2
     bump(c)
     countdown(d, 3)
-    let inc = sync () => { c += 1 }
+    let inc = () => sync { c += 1 }
     inc()
     var xs = [3, 1, 2]
     xs = xs->sort

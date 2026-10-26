@@ -25,7 +25,7 @@ func main(): int sync {
     s += 'c'
     println(s)
     var acc = 0
-    let add = sync (x: int): int => sync {
+    let add = (x: int): int => sync {
         acc += x
         return acc
     }
