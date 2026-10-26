@@ -1175,9 +1175,13 @@ node_handle_t Builder::readVariableThrough(
     node_handle_t variable, camel::core::OperId oper) {
     // The version of the variable the last write made: that write's own value. A write never
     // gives anything but the cell it wrote into, so the read may take its data port from the
-    // write. A writer whose value is not that cell -- a call the variable was passed to, a loop
-    // that wrote it -- only orders the read: the read keeps the cell as its data port, and the
-    // writer is a Ctrl edge. Before any write the version is the cell :var/new made.
+    // write, and that edge is the read's whole tie to the write -- it orders the read after it
+    // and it is what makes the write execute (docs/design/effects/edges.cn.md 1, 5.6;
+    // docs/design-principles.cn.md 3.5). A writer whose value is not that cell -- a call the
+    // variable was passed to, a branch whose writes meet at a JOIN -- gives the cell and no
+    // version of its own: the read keeps the cell as its data port and the write orders it,
+    // which a control input stands in for until the call's capture port carries that data edge
+    // (Builder::orderAfterLastWriter). Before any write the version is the cell :var/new made.
     node_handle_t version = variable;
     if (auto modifier = modifierOf(variable);
         modifier.has_value() && sameGraph(*modifier, currGraph_) &&
@@ -1186,9 +1190,11 @@ node_handle_t Builder::readVariableThrough(
     }
     node_handle_t value = variableOperator(oper, version);
     pendingUsesOf(variable).push_back({value, true});
-    if (auto modifier = modifierOf(variable); modifier.has_value()) {
-        if (sameGraph(*modifier, currGraph_) && linkCheek(*modifier, value)) {
-            linkNodes(LinkType::Ctrl, *modifier, value);
+    if (version == variable) {
+        if (auto modifier = modifierOf(variable); modifier.has_value()) {
+            if (sameGraph(*modifier, currGraph_) && linkCheek(*modifier, value)) {
+                linkNodes(LinkType::Ctrl, *modifier, value);
+            }
         }
     }
     // SSA (collapseNonEscapingVariableReads): this read may later take its value from the write that

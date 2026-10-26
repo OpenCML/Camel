@@ -145,13 +145,7 @@
 <polygon fill="black" stroke="black" points="261.24,-305.35 257.89,-295.3 254.24,-305.25 261.24,-305.35"/>
 <text text-anchor="middle" x="269.5" y="-320.89" font-family="Times,serif" font-size="14.00">0|0</text>
 </g>
-<!-- N04&#45;&gt;N05 -->
-<g id="edge9" class="edge">
-<title>N04&#45;&gt;N05</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M286.87,-356.8C284.33,-344.36 281.23,-330.01 278,-317.09 276.64,-311.67 275.11,-305.97 273.54,-300.38"/>
-<polygon fill="none" stroke="black" points="276.84,-299.18 270.72,-290.53 270.11,-301.11 276.84,-299.18"/>
-<text text-anchor="middle" x="289.5" y="-320.89" font-family="Times,serif" font-size="14.00">0|0</text>
-</g>
+
 <!-- N06 -->
 <g id="node9" class="node">
 <title>N06</title>
