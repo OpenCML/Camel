@@ -143,21 +143,58 @@ bool GenerationalAllocatorWithGC::isObjectAddressStable(rtdata::Object *object) 
     return graphSpace().contains(object) || permSpace().contains(object);
 }
 
-void GenerationalAllocatorWithGC::setObjectRootSet(std::vector<rtdata::Object *> *rootSet) {
+void GenerationalAllocatorWithGC::registerObjectRootSet(
+    const void *owner, std::string name, std::vector<rtdata::Object *> *rootSet) {
     std::lock_guard<std::mutex> lock(mutex_);
-    rootObjectSet_ = rootSet;
+    ASSERT(owner != nullptr, "An object root set must name its owner.");
+    ASSERT(!name.empty(), "An object root set must have a name.");
+    auto it = std::find_if(
+        objectRootSets_.begin(),
+        objectRootSets_.end(),
+        [owner](const auto &entry) { return entry.owner == owner; });
+    if (it != objectRootSets_.end()) {
+        // The same owner re-registering: its entry is updated, nobody else's is touched.
+        it->name = std::move(name);
+        it->set  = rootSet;
+        return;
+    }
+    objectRootSets_.push_back(ObjectRootSetEntry{owner, std::move(name), rootSet});
 }
 
-void GenerationalAllocatorWithGC::setGraphSweeper(std::function<void()> sweeper) {
+void GenerationalAllocatorWithGC::unregisterObjectRootSet(const void *owner) {
     std::lock_guard<std::mutex> lock(mutex_);
-    graphSweeper_ = std::move(sweeper);
+    std::erase_if(
+        objectRootSets_, [owner](const auto &entry) { return entry.owner == owner; });
+}
+
+void GenerationalAllocatorWithGC::registerGraphSweeper(
+    const void *owner, std::string name, std::function<void()> sweeper) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    ASSERT(owner != nullptr, "A graph sweeper must name its owner.");
+    ASSERT(!name.empty(), "A graph sweeper must have a name.");
+    ASSERT(static_cast<bool>(sweeper), "A graph sweeper cannot be empty.");
+    auto it = std::find_if(
+        graphSweepers_.begin(),
+        graphSweepers_.end(),
+        [owner](const auto &entry) { return entry.owner == owner; });
+    if (it != graphSweepers_.end()) {
+        it->name    = std::move(name);
+        it->sweeper = std::move(sweeper);
+        return;
+    }
+    graphSweepers_.push_back(GraphSweeperEntry{owner, std::move(name), std::move(sweeper)});
+}
+
+void GenerationalAllocatorWithGC::unregisterGraphSweeper(const void *owner) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::erase_if(graphSweepers_, [owner](const auto &entry) { return entry.owner == owner; });
 }
 
 void GenerationalAllocatorWithGC::collectGraphSpace() {
     std::lock_guard<std::mutex> lock(mutex_);
     markPhase();
-    if (graphSweeper_) {
-        graphSweeper_();
+    for (const auto &entry : graphSweepers_) {
+        entry.sweeper();
     }
 }
 
@@ -883,15 +920,20 @@ void GenerationalAllocatorWithGC::minorGCUnlocked() {
         // 2. Forward young-gen objects referenced from roots. The root set currently stores
         // runtime GCGraph carriers, which live in graphSpace rather than autoSpace; tracing the
         // root object's fields is therefore required to update static data roots.
-        if (rootObjectSet_) {
-            for (rtdata::Object *&rootObj : *rootObjectSet_) {
-                if (!rootObj) {
+        if (!objectRootSets_.empty()) {
+            for (const ObjectRootSetEntry &entry : objectRootSets_) {
+                if (entry.set == nullptr) {
                     continue;
                 }
+                for (rtdata::Object *&rootObj : *entry.set) {
+                    if (!rootObj) {
+                        continue;
+                    }
 
-                rootObj = forwardYoungRef(rootObj, nullptr);
-                if (minorTracedGraphs_.insert(rootObj).second) {
-                    rootObj->updateRefs(relocateYoung, nullptr);
+                    rootObj = forwardYoungRef(rootObj, nullptr);
+                    if (minorTracedGraphs_.insert(rootObj).second) {
+                        rootObj->updateRefs(relocateYoung, nullptr);
+                    }
                 }
             }
         }
@@ -986,9 +1028,10 @@ void GenerationalAllocatorWithGC::majorGCUnlocked() {
     // Mark all reachable objects in their final locations for this major cycle.
     markPhase();
 
-    // The graph space holds Programs and graph versions: the unmarked ones are freed.
-    if (graphSweeper_) {
-        graphSweeper_();
+    // The graph space holds Programs and graph versions: the unmarked ones are freed, by every
+    // owner that registered a sweeper (one context's collection keeps every context's graphs).
+    for (const GraphSweeperEntry &entry : graphSweepers_) {
+        entry.sweeper();
     }
 
     // Sweep old generation (mark-sweep; no compaction here).
@@ -1336,10 +1379,15 @@ void GenerationalAllocatorWithGC::scanRelocatedObjects() {
 void GenerationalAllocatorWithGC::markPhase() {
     clearMarks();
 
-    if (rootObjectSet_) {
-        for (rtdata::Object *root : *rootObjectSet_) {
-            if (root) {
-                markObject(root, nullptr);
+    if (!objectRootSets_.empty()) {
+        for (const ObjectRootSetEntry &entry : objectRootSets_) {
+            if (entry.set == nullptr) {
+                continue;
+            }
+            for (rtdata::Object *root : *entry.set) {
+                if (root) {
+                    markObject(root, nullptr);
+                }
             }
         }
     }
@@ -1372,12 +1420,15 @@ void GenerationalAllocatorWithGC::clearMarks() {
 
     // Graph carriers are also traced through Function values (Function::updateRefs traces the
     // runtime graph so runtime-created graphs keep their static constants alive). Those graphs
-    // are not necessarily in rootObjectSet_, so unmark the whole graph space instead of only
+    // are not necessarily in a registered root set, so unmark the whole graph space instead of only
     // the registered roots, or a later collection would skip them and miss their edges.
     graphSpace().iterateAllocated([](ObjectHeader *header) { header->unmark(); });
 
-    if (rootObjectSet_) {
-        for (rtdata::Object *root : *rootObjectSet_) {
+    for (const ObjectRootSetEntry &entry : objectRootSets_) {
+        if (entry.set == nullptr) {
+            continue;
+        }
+        for (rtdata::Object *root : *entry.set) {
             if (!root) {
                 continue;
             }
