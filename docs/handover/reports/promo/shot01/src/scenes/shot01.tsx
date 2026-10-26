@@ -495,7 +495,7 @@ export default makeScene2D(function* (view) {
 
   // ---- 4.4 - 4.7: one node, used twice ---------------------------------------------------------
   // The stroke that came from the second `×` stays: it is the second use of the same node.
-  yield* all(spread(18, 0.3, easeOutCubic), caption().opacity(1, 0.3), underA().opacity(0.5, 0.3));
+  yield* all(spread(30, 0.3, easeOutCubic), caption().opacity(1, 0.3), underA().opacity(0.5, 0.3));
 
   // ---- 4.7 - 6.4: x = 3 flows through -----------------------------------------------------------
   port.value().text('3');
@@ -514,7 +514,7 @@ export default makeScene2D(function* (view) {
   );
   yield* mul1.value().opacity(1, 0.15);
 
-  const apart = new Vector2(0, 9);
+  const apart = new Vector2(0, 15);
   yield* travel(
     [
       [pMul1().sub(apart), pPlus().sub(apart)],

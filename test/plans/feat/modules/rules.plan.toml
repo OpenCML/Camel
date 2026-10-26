@@ -1843,3 +1843,24 @@ args = ["${case}", "std::opt::saturate", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "saturated false true false\n"
 timeout_ms = 20000
+
+[[tests]]
+name = "opt_saturate_loop_with_an_unread_state"
+desc = "A loop whose condition reads one of two states, in a graph with classes of writings: the pipeline's saturation and the extraction the next pass makes keep the condition's port for the unread state, so the run gives the loop's value."
+kind = "behavior"
+case = "../../../cases/modules/rules/saturate_loop_unread_state.cml"
+backends = ["nvm", "fvm"]
+args = ["${case}", "std::opt::saturate", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "3\n"
+timeout_ms = 20000
+
+[[tests]]
+name = "opt_saturate_program_importing_str"
+desc = "A program that imports str (whose cut has a loop of that shape) goes through the pipeline's saturation and runs."
+kind = "behavior"
+case = "../../../cases/modules/rules/saturate_imports_str.cml"
+args = ["${case}", "std::opt::saturate", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "true\n"
+timeout_ms = 20000

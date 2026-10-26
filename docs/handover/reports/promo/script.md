@@ -111,28 +111,30 @@ func f(x: int): int {
 
 **Out:** the mint ring slides left and becomes the input `x` of shot 2.
 
-### Shot 2 · 0:13–0:22 · Order comes from dependency; `sync` is a thread
+### Shot 2 · 0:13–0:22 · Order comes from dependency; `sync` is a thread (rendered: `shot02/out/`)
 
-**Idea:** nothing waits unless it depends on something. Effects run when needed, and `sync` gives
-order exactly where it is written.
+**Idea:** effects run when needed, `sync` gives order exactly where it is written, and nothing waits
+unless it depends on something.
 
 **Picture:**
 
-- 0–3.5 s: `x` feeds two `encode` operators, with weights `wa` and `wb` docked on top. Two sand
-  beads leave `x` **in the same frame** and arrive together, then converge on `cosine`. There is no
-  label: the simultaneity is the claim.
-- 3.5–5 s: the header has no `sync` yet. The effect nodes `println` and `write_text` (notched
-  operators) stay chalk-dim and receive no bead. A dim label reads `EffectNotExecuted`.
-- 5 s: ` sync` is typed into the header. A **thread** is stitched through the notches in written
-  order: `println → write_text → return`. The pure nodes `encode` and `cosine` are not stitched.
-  The effect nodes light up, and beads pass through them one after the other.
+- 0–2.5 s: the header has no `sync`. The graph is drawn dim; only `return 0` runs (its bead reaches
+  the ring, which turns mint). The effect nodes `println` and `write_text` (operators with a notch)
+  receive nothing, and a dim label `EffectNotExecuted` appears under them. Nothing needs `cosine` or
+  the two `encode`s either, so they stay dim as well (design principles 3.1: a node runs if and only
+  if this run uses it).
+- 3–4 s: ` sync` is typed into the header. A **thread** is stitched through the notches in written
+  order: `println → write_text → result`. The pure `let`s are not stitched.
+- 5–6.5 s: two sand beads leave `x` **in the same frame** and reach the two `encode`s together (they
+  do not depend on each other), then converge on `cosine`. No label: the simultaneity is the claim.
+- 6.5–8 s: `println` runs, then `write_text`, in written order; the thread carries on to the result.
 
 **Colour:** sand, thread.
 
-**Narration:** "Nothing waits unless it depends on something. Effects run when they're needed — sync
-threads them in order."
+**Narration:** "Effects run when they're needed; sync threads them in order — and nothing waits unless
+it depends on something."
 
-**Subtitle:** 不依赖，就不等待。效果在被需要时才执行——sync 把它们按顺序串起来。
+**Subtitle:** 效果在被需要时才执行；sync 把它们按顺序串起来——不依赖，就不等待。
 
 **Code (final):**
 
@@ -148,7 +150,7 @@ func main(): int sync {
 
 **Out:** the camera dives into one `encode` node, and its inside is shot 3.
 
-### Shot 3 · 0:22–0:30 · A layer is a function with its weights bound
+### Shot 3 · 0:22–0:30 · A layer is a function with its weights bound (rendered: `shot03/out/`)
 
 **Idea:** `with` parameters are what a function is configured with, so a model reads as a pipeline.
 
@@ -178,9 +180,9 @@ func mlp(x: f32[b, 784]): f32[b, 10] {
 }
 ```
 
-**Out:** the pipeline folds into a `loss` frame that rises to the upper half of the screen.
+**Out:** the pipeline folds into the frame of `mlp`; shot 4 opens on `loss`, which calls it.
 
-### Shot 4 · 0:30–0:39 · A gradient is a reflection; a pass is a sweep
+### Shot 4 · 0:30–0:39 · A gradient is a reflection; a pass is a sweep (rendered: `shot04/out/`)
 
 **Idea:** differentiation and optimization are functions from graph to graph. The derivative is an
 ordinary graph, so the optimizer sees all of it.
@@ -193,9 +195,9 @@ ordinary graph, so the optimizer sees all of it.
 - 3–4 s: beside the baseline, the label flicks through `grad`, `vjp` and `jvp`. For `jvp`, a violet
   twin flashes *above* the line, running the same way. Then it settles on `with_grad`.
 - 4–7.5 s: a cyan **sweep line** (`std::opt`) crosses both graphs. Behind it, nodes slide in
-  straight lines to their new places. Duplicates shared by the forward graph and its mirror merge,
-  and a constant chain folds. A dim counter reads `nodes 46 → 29` (take the real figure from
-  `std::stats`).
+  straight lines to their new places. A value read in both halves (`x`) becomes one node, and a
+  constant chain folds (`1.0`, `×2` → `2.0`). No node count is shown: the drawing is a sketch of the
+  graph, not a measurement of it.
 - 7.5–9 s: a second sweep (`std::jit`), and beads run through both halves as one program.
 
 **Colour:** violet, cyan, sand.
