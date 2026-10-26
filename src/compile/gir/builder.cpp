@@ -160,13 +160,11 @@ void Builder::buildEntryCall() {
 
 void Builder::registerBuiltBody(const compile_graph_ptr_t &graph) {
     ASSERT(graph != nullptr, "A built body is a graph.");
-    ++tempRegistrations; // TEMP
     // A body is registered where it finishes, and a graph that is registered twice would be judged
     // twice by a pass over the built bodies (settleStreamLinearity counts the reads of each graph):
     // one graph is one body, once.
     for (const compile_graph_ptr_t &known : unit_->builtBodies) {
         if (known.get() == graph.get()) {
-            ++tempDuplicates; // TEMP
             return;
         }
     }

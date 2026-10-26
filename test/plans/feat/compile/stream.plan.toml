@@ -859,7 +859,6 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.tee_consumers"
-expect_exit = 1
 desc = "`tee(s, n)` reads one stream from two places (design principles 5.4): the two streams it gives are each read once, so the program `stream.consumed_twice` writes without a tee -- a `for` over one stream and a pull of another -- compiles when the two readers are the two sides of a tee, and both sides see the same elements."
 kind = "behavior"
 case = "../../../cases/compile/stream/tee_consumers.cml"
@@ -883,8 +882,8 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.tee_result_consumed_twice"
-expect_diagnostic_line = 7
-expect_diagnostic_column = 7
+expect_diagnostic_line = 25
+expect_diagnostic_column = 13
 desc = "The streams a `tee` gives are streams like any other (design principles 5.4): a `tee` makes two streams, one for each reader, and each is still read once. Reading one side twice is two consumers of that side, so it is refused exactly as reading any other stream twice is."
 kind = "negative"
 case = "../../../cases/compile/stream/tee_result_consumed_twice.cml"

@@ -25,7 +25,6 @@
 #include "camel/runtime/graph.h"
 
 #include <algorithm>
-#include <cstdio> // TEMP
 
 namespace camel::compile::gir {
 
@@ -122,17 +121,6 @@ bool streamReadOnce(const Type *type) {
 }
 
 void Builder::settleStreamLinearity() {
-    { // TEMP
-        size_t entries = 0;
-        for (const ModuleUnit *unit : unitOrder_) {
-            entries += unit->builtBodies.size();
-        }
-        std::fprintf(stderr,
-                     "[BLD] registrations=%zu duplicates=%zu entries=%zu\n",
-                     Builder::tempRegistrations,
-                     Builder::tempDuplicates,
-                     entries);
-    }
     // A value a closure captured is the same value inside the closure: a capture port stands for
     // what it captured, and one value stays one value however deep the closures nest. The reads of
     // one value are counted once, over the graphs of the whole program, so a stream read inside a
