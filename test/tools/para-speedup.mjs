@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 // The parallel-versus-serial speed-up of the cheap parallel workload, asserted as a property of one
-// run (docs/handover/reviews/questions-2026-10-23.md,
-// "perf-para-gate"):
+// run:
 //
 //   "选 B：把已量过的便宜子集（monte_carlo_pi.prl，约 1.6 s）立成可进闸门的计划。度量取同一次运行里
 //    并行对串行的加速比（与绝对墙钟相比对负载不那么敏感），并记 CPU 时间；整条 perf.para 仍在发布前跑。"
@@ -173,7 +172,7 @@ function cpuUnavailableReason() {
     return (
         `the CPU time of a child cannot be read on this platform (${process.platform}): the core ` +
         'property is read from it, so this measurement has no reading here ' +
-        '(docs/handover/reviews/questions-2026-10-23.md, perf-para-gate)'
+        ''
     )
 }
 

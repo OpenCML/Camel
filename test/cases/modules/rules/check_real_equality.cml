@@ -1,9 +1,9 @@
 /**
  * What a `reassociate` rule is checked against: real equality on the finite values, and IEEE
- * equality, bit for bit, on the special ones (the rule on
- * `verification-report-surface-s0`, which corrected the method the library's
- * `tensor_combine_mixed` was refused by) -- over the points the rule's own licences claim, which is
- * the second half of the same ruling: `no_infs` and `no_nans` assume that no value is an infinity or
+ * equality, bit for bit, on the special ones (which corrected the method the
+ * library's `tensor_combine_mixed` was refused by) -- over the points the rule's
+ * own licences claim, which is
+ * the second half of that rule: `no_infs` and `no_nans` assume that no value is an infinity or
  * a NaN, the intermediate results of the two sides included (design principles 7.2), so a point
  * where a step leaves the element type's range is outside the domain the rule claims and is not a
  * counterexample to it.

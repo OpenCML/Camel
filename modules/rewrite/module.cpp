@@ -182,9 +182,7 @@ slot_t ruleWhenKernel(ArgsView &, ArgsView &norm, Context &) {
 /// given is the id the rule's templates were registered under (the front end registers them while it
 /// builds this call) and the value of each `with` parameter, in the order the declaration writes
 /// them: such a rule has no function values to hold, so it keeps the id and the values, and the
-/// engine makes its sides where it matches, one instance per type tuple and set of values (the
-/// ruling of 2026-10-23 on generic-rule-instantiation, and the ruling of 2026-10-25 on the one
-/// instantiation channel).
+/// engine makes its sides where it matches, one instance per type tuple and set of values.
 slot_t genericRuleKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto name = camel::core::internSymbol(norm.get<String *>(0)->view());
     std::vector<data::data_ptr_t> withValues;
@@ -483,14 +481,12 @@ camel::runtime::RuleSource instanceOf(
 /// How many type tuples of one generic rule are enumerated at most, wherever a set of tuples is
 /// built (the engine's own tuple list, `why_not`'s candidates, and `check`'s instance walk). A law
 /// of one type parameter over the registered types is far below it; the product for a law of two is
-/// not, and it is capped rather than instantiated body by body (the ruling of 2026-10-24 on
-/// `generic-rule-check-surface-and-multi-parameter-instances`).
+/// not, and it is capped rather than instantiated body by body.
 constexpr size_t kCheckTupleCap = 64;
 
 /// The types of every value the program has, each once, in the order the graphs write them. Two
 /// things ask for them: the tuples a generic rule is instantiated at where the engine walks the
-/// program's own side, and the types a `check` given a program adds to its candidate set (the
-/// ruling of 2026-10-24 on `generic-rule-check-surface-and-multi-parameter-instances`, §1).
+/// program's own side, and the types a `check` given a program adds to its candidate set.
 std::vector<Type *> programValueTypes(const camel::runtime::Program &program) {
     std::vector<Type *> types;
     for (const camel::runtime::GCGraph *graph : program.graphs()) {
@@ -521,8 +517,7 @@ std::vector<Type *> programValueTypes(const camel::runtime::Program &program) {
 /// The type tuples a generic rule is instantiated at, one per type parameter: for a rule of one
 /// parameter the types themselves, and for a rule of more the product of the types over its
 /// parameters, capped at `kCheckTupleCap` tuples in a fixed order. The types are those of every
-/// value the program being rewritten has, each once, in the order the graphs write them. The ruling
-/// of 2026-10-23 on generic-rule-instantiation binds the rule's type variables from the nodes it
+/// value the program being rewritten has, each once, in the order the graphs write them. It binds the rule's type variables from the nodes it
 /// matches, so the types are the program's own (not the registered meta-types `check` adds).
 ///
 /// A tuple is kept only when the rule's condition admits it at the type level (`ruleConditionAt`),
@@ -623,8 +618,7 @@ std::vector<std::vector<Type *>> tuplesHolding(const Type *type, size_t arity) {
 
 /// The compiled rules of one instance of a generic rule, made now if this is the first read and
 /// kept in the entry: the instance is compiled once, so a second application of the same rule at
-/// the same types pays nothing (the ruling of 2026-10-23 on generic-rule-instantiation: the type
-/// part is folded once per tuple and cached).
+/// the same types pays nothing.
 const std::vector<camel::runtime::Rule> &instanceRules(
     Context &ctx, const RuleObject &rule, GenericRuleEntry &entry, size_t index) {
     static const std::vector<camel::runtime::Rule> none;
@@ -681,8 +675,7 @@ std::vector<camel::runtime::Rule> engineRules(
                 continue;
             }
             // The rule's own number of type parameters decides how many types a tuple has: a law of
-            // two is instantiated at a pair of the program's types, not at one of them (the ruling
-            // of 2026-10-23 on generic-rule-instantiation assumes one type per value, and asking a
+            // two is instantiated at a pair of the program's types, not at one of them (the ruleeneric-rule-instantiation assumes one type per value, and asking a
             // two-parameter rule for one type is what left such a law with no instance at all).
             GenericRuleEntry *entry = camel::compile::gir::genericRuleEntry(ctx, ruleId);
             const size_t arity      = entry != nullptr ? entry->typeParams.size() : 1;
@@ -694,8 +687,7 @@ std::vector<camel::runtime::Rule> engineRules(
                 entry = camel::compile::gir::genericRuleEntry(ctx, ruleId);
                 if (entry == nullptr || index >= entry->instances.size() ||
                     !entry->instances[index].made) {
-                    // A type tuple the rule cannot be written for says nothing: the ruling of
-                    // 2026-10-23 keeps a failed instantiation quiet, and `why_not` is where the
+                    // A type tuple the rule cannot be written for says nothing: the rule keeps a failed instantiation quiet, and `why_not` is where the
                     // reason is read.
                     continue;
                 }
@@ -842,11 +834,10 @@ bool CheckReportType::assignableFrom(Type *source) const { return is(source); }
 
 OtherType *CheckReportType::cloneWithParams(std::span<Type *const>) const { return get(); }
 
-/// What a verdict is about, read off the permissions the rule asks for (the ruling of 2026-10-24 on
-/// `verification-licence-to-precondition`):
+/// What a verdict is about, read off the permissions the rule asks for:
 ///
 ///   * `reassociate` and `contract` let the rewriting change the rounding, so the proposition is
-///     the two halves the ruling gives it: real equality on the finite inputs and IEEE equality,
+///     the two halves the rule gives it: real equality on the finite inputs and IEEE equality,
 ///     bit for bit, on the values a real model does not have (NaN, the infinities, -0) -- unless
 ///     the rule asks for `no_nans` / `no_infs` / `no_signed_zeros`, which narrow the domain the
 ///     assumptions cover rather than change what is claimed.
@@ -872,8 +863,7 @@ std::string propositionOf(camel::core::sem::PermissionMask needs) {
     return kPropositionEquality;
 }
 
-/// The stream one rule's samples are drawn from (the ruling of 2026-10-24 on
-/// `accuracy-check-sampling`, 1): the seed is derived from the rule's identity -- its name together
+/// The stream one rule's samples are drawn from: the seed is derived from the rule's identity -- its name together
 /// with the type tuple of the instance, `add_zero<i32>` -- and not from its place in the array the
 /// caller passed, so the same rule draws the same samples in any call, whatever else is checked
 /// beside it. `seed` stays the caller's knob: the identity decides *which* stream, the seed *where*
@@ -1353,7 +1343,7 @@ slot_t whyNotKernel(ArgsView &, ArgsView &norm, Context &ctx) {
             if (step.rule.starts_with(std::string(ruleNow()->name()) + "<")) {
                 // The step came from an instance of this generic rule: the answer names it, since
                 // which types an instance was made for is the one thing a generic rule's report
-                // has to say (the ruling of 2026-10-23 on generic-rule-instantiation).
+                // has to say.
                 return answer(std::format(
                     "the rule fired here in round {} of graph {} as `{}`: {} was made from {}",
                     step.round, step.graph, step.rule, step.producedText, before));
@@ -1371,8 +1361,7 @@ slot_t whyNotKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     try {
         if (ruleNow()->ruleId() != 0) {
             // A generic rule has no sides of its own: what the value's type has is an instance,
-            // and the question is about it (the ruling of 2026-10-23 on
-            // generic-rule-instantiation). Which types the rule was instantiated at, and what came
+            // and the question is about it. Which types the rule was instantiated at, and what came
             // of each, is what a reader of a generic rule needs to know.
             const camel::runtime::GCGraph *graph = programNow()->graph(graphId);
             const Type *type =
@@ -1392,9 +1381,7 @@ const uint64_t ruleId = ruleNow()->ruleId();
             // (one candidate per position the value's type can stand at). The reason a candidate
             // could not be made is then the body's own reason -- `genericRuleInstance` asked for
             // one type where the rule writes two says only that the numbers differ, which is not
-            // what a reader of a failed law needs to hear (the ruling of 2026-10-23 on
-            // generic-rule-instantiation-set-and-predicate, §3: `why_not` is where the reason is
-            // read).
+            // what a reader of a failed law needs to hear.
             GenericRuleEntry *entry = camel::compile::gir::genericRuleEntry(ctx, ruleId);
             // The rule's own number of type parameters: a rule that declares none is asked at the
             // empty tuple, and the values it was bound to are the rest of its key.
@@ -1654,8 +1641,7 @@ double elementOfBytes(TypeCode dtype, const uint8_t *at) {
 }
 
 /// The text of one element of a bf16 or an f16 tensor sample: the element type's own shortest
-/// text (camel/core/rtdata/half.h, `halfText`), never the f32 text of the value it widens to
-/// (design principles 7.7; the ruling of 2026-10-23 on `reduced-precision-text`).
+/// text (camel/core/rtdata/half.h, `halfText`), never the f32 text of the value it widens to.
 std::string halfTextOf(const TensorSample &t, size_t at) {
     uint16_t bits = 0;
     std::memcpy(&bits, t.bytes.data() + at * 2, sizeof(bits));
@@ -2814,11 +2800,11 @@ bool agree(
 
 // ---- the proposition of a `reassociate` / `contract` rule ------------------------------------
 //
-// The ruling of 2026-10-24 on `verification-report-surface-s0` corrects what these rules are
+// The rule corrects what these rules are
 // checked against. `reassociate` licenses a different rounding, and a different rounding may differ
 // from the written one by far more than one rounding step when the expression cancels -- the right
 // side is then the *more* accurate one -- so "the two sides differ by less than a rounding bound"
-// is not the proposition. The proposition is the two halves the ruling gives it: real equality on
+// is not the proposition. The proposition is the two halves the rule gives it: real equality on
 // the finite values, and IEEE equality, bit for bit, on the values the real model does not have
 // (NaN, the infinities, a signed zero) -- unless the rule asked for `no_nans` / `no_infs` /
 // `no_signed_zeros`, which narrow its domain.
@@ -2966,7 +2952,7 @@ bool outsideLicensedDomain(const camel::runtime::GCGraph &leftGraph,
 struct RealComparison {
     /// Whether the two values agree under that proposition (meaningless when `compared` is false).
     bool agree = true;
-    /// True when the higher-precision reference decided the comparison. False when the ruling's
+    /// True when the higher-precision reference decided the comparison. False when the rule's
     /// method does not apply to this rule -- its proposition is not real equality, or its element
     /// type is not one the reference reads -- or when the reference cannot evaluate a side; the
     /// caller then compares the two element-type values as it did before.
@@ -2978,7 +2964,7 @@ struct RealComparison {
     std::string why;
 };
 
-/// The comparison the ruling gives a rule of this proposition: real equality on the finite values,
+/// The comparison the rule gives a rule of this proposition: real equality on the finite values,
 /// bit for bit on a special value. `leftGraph` and `rightGraph` are the two sides over the same
 /// arguments (`values`), and `leftValue` / `rightValue` the two element-type results the VM made of
 /// them -- the special half is read off those, the finite half off the reference.
@@ -3053,8 +3039,7 @@ std::string sampleText(const Sample &s) {
                 break;
             case TypeCode::BFloat16:
             case TypeCode::Float16:
-                // The text of the element is the element type's own (design principles 7.7 and
-                // the ruling of 2026-10-23 on `reduced-precision-text`): the shortest digits that
+                // The text of the element is the element type's own (design principles 7.7): the shortest digits that
                 // read back as the same bf16 or f16, not the f32 text of the value it widens to.
                 text += halfTextOf(t, i);
                 break;
@@ -3234,14 +3219,13 @@ uint64_t constMaskOf(const camel::runtime::RuleSource &source) {
 /// its own left side and agree too. A rule that asks for `refine_accuracy` is compared by its error
 /// against a higher-precision reference instead, sample by sample, and the worst error ratio is
 /// reported. `stream` picks the samples; the caller derives it from the rule's identity, not from
-/// its place in the array (the ruling of 2026-10-24 on `accuracy-check-sampling`, 1).
+/// its place in the array.
 ///
 /// The rows this appends are the verdict table `check` answers
 /// (docs/design/rewrite/plan-verification.cn.md, S0): the verdict, what it is about, and the
 /// evidence or the reason it is what it is. With no solver in the build a rule
 /// whose two sides agree on every sample is `sampled`, never `proved`: the check compared samples,
-/// and `proved` is reserved for a licence's proposition being established (the ruling of
-/// 2026-10-24 on `verification-licence-to-precondition`).
+/// and `proved` is reserved for a licence's proposition being established (the rule on `verification-licence-to-precondition`).
 void checkOneRule(
     Context &ctx, const camel::runtime::RuleSource &source, int64_t samples, uint64_t stream,
     std::string_view instance, std::vector<CheckRow> &rows) {
@@ -3260,8 +3244,7 @@ void checkOneRule(
     // What the translation layer made of this rule's two sides
     // (docs/design/rewrite/plan-verification.cn.md, S1). The sides are read once, here: the same
     // two sides are the rule's own graphs, whatever the instance. A rule the
-    // layer cannot translate is `sampled` with the reason written in the coverage column (the ruling
-    // of 2026-10-24 on `verification-verdict-surface`, 3).
+    // layer cannot translate is `sampled` with the reason written in the coverage column (the rule on `verification-verdict-surface`, 3).
     const std::string coverage = camel::verify::translate(source).column();
     const auto addRow = [&](std::string_view verdict, std::string evidence, std::string reason,
                             std::string detail) {
@@ -3341,7 +3324,7 @@ void checkOneRule(
     NodeVMSchedPass vm(ctx.shared_from_this());
     // What went wrong, in the shape a row wants it: the `detail` line, the `evidence` the verdict
     // rests on ("counterexample" when a value is the witness, "none" when nothing could be
-    // compared), and the `reason` the ruling has written apart from the verdict.
+    // compared), and the `reason` the rule has written apart from the verdict.
     std::string failure;
     std::string failureEvidence;
     std::string failureReason;
@@ -3352,8 +3335,7 @@ void checkOneRule(
         // `nondeterministic` has no numeric contract: there is nothing to compare against, so
         // nothing was examined. The verdict stays `sampled` -- the three words are closed and the
         // fourth the check used to write is gone -- but the reason is written in its own column and
-        // is never left out, so a reader cannot take this `sampled` for one that sampled (the
-        // ruling of 2026-10-24 on `verification-licence-to-precondition`, licence 3, option A).
+        // is never left out, so a reader cannot take this `sampled` for one that sampled.
         addRow(kVerdictSampled, "none", "no numeric bound", "");
         return;
     }
@@ -3415,7 +3397,7 @@ void checkOneRule(
                         checked.ratio);
                 } else {
                     // Nothing could be compared: the rule is outside what the check can examine,
-                    // and the ruling has that said out loud rather than reported as a failure.
+                    // and the rule has that said out loud rather than reported as a failure.
                     failureEvidence = "none";
                     failureReason   = checked.reason;
                     failure         = std::format("the check cannot examine this rule at ({})", at);
@@ -3634,17 +3616,16 @@ void checkOneRule(
     }
 }
 
-/// The instances of one generic rule, checked one by one (the ruling of 2026-10-24 on
-/// `generic-rule-check-surface-and-multi-parameter-instances`).
+/// The instances of one generic rule, checked one by one.
 ///
 /// The candidate tuples are the product of the types the operator groups registered
 /// (`compile::gir::ruleInstanceTypes`) over the rule's type parameters, each tuple filtered by the
 /// rule's condition at the type level: a tuple the condition rejects is not an instance of the law
 /// and says nothing. A tuple the pattern cannot be written for is not an instance either, and is
-/// quiet as well (the ruling of 2026-10-23 on `generic-rule-instantiation-set-and-predicate` §3);
+/// quiet as well;
 /// `why_not` is where that reason is read. An instance that was made but whose values the check
 /// cannot draw is `sampled` with that reason: that is the one place where the check covers less
-/// than the law says, and the reason column is where the ruling has it written.
+/// than the law says, and the reason column is where the rule has it written.
 void checkGenericRule(
     Context &ctx, RuleObject &rule, int64_t samples, uint64_t seed,
     const std::vector<Type *> &programTypes, std::vector<CheckRow> &rows) {
@@ -3683,7 +3664,7 @@ void checkGenericRule(
     // to: what its instances are made at is the pair (type tuple, values), and the values are the
     // rule value's own (design principles 5.4, 5.5).
     // The types the operator groups registered, and then the types a program the call was given
-    // has (the ruling of 2026-10-24 on `check-program-parameter`): a call that leaves the
+    // has: a call that leaves the
     // parameter out reads its null and the candidate set is the registered types alone, which is
     // every reading the check had before the parameter existed.
     std::vector<Type *> universe = camel::compile::gir::ruleInstanceTypes();
@@ -3769,8 +3750,7 @@ void checkGenericRule(
         const GenericRuleInstance &instance = current->instances[place];
         const std::string instanceName = std::format("{}<{}>", name, instance.typeText);
         const auto *lhsType = instance.lhs->funcType();
-        // The seed follows the instance's identity, not its place in the array the caller passed
-        // (the ruling of 2026-10-24 on `accuracy-check-sampling`, 1).
+        // The seed follows the instance's identity, not its place in the array the caller passed.
         const uint64_t stream = sampleStreamOf(seed, instanceName);
         Sampler probe(stream, live()->needs());
         std::string cannot;
@@ -3817,20 +3797,18 @@ void checkGenericRule(
 /// A rule that asks for `refine_accuracy` is compared by its error against a higher-precision
 /// reference instead, sample by sample, and the worst error ratio is reported.
 /// A generic rule is checked once per instance its condition admits over the types the operator
-/// groups registered (the ruling of 2026-10-24 on
-/// `generic-rule-check-surface-and-multi-parameter-instances`).
+/// groups registered.
 ///
 /// It answers a `CheckReport` (docs/design/rewrite/plan-verification.cn.md, S0): the verdict
 /// table, one row per rule or per instance of a generic law, each row carrying the rule, the
-/// instance, the verdict, what the verdict is about and the evidence or the reason (the ruling
-/// of 2026-10-24 on `verification-verdict-surface`, 2: the verdict is published by `check` and
+/// instance, the verdict, what the verdict is about and the evidence or the reason (the rule on `verification-verdict-surface`, 2: the verdict is published by `check` and
 /// the text output is the fixed rendering of that table, which is what a reader -- and the
 /// acceptance -- reads).
 slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     const int64_t samples = std::max<int64_t>(1, norm.get<Int64>(1));
     const uint64_t seed   = static_cast<uint64_t>(norm.get<Int64>(2));
     // The program the call was given, or none: the parameter is a `Program?` whose default is
-    // `null` (design principles 4.4; the ruling of 2026-10-24 on `check-program-parameter`), so a
+    // `null` (design principles 4.4), so a
     // call that leaves it out reads the null constant of the type and has no types of its own to
     // add. Its types join the candidate set of every generic rule below.
     std::vector<Type *> programTypes;
@@ -3853,8 +3831,7 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         RuleObject *made = norm.get<Array *>(0)->get<RuleObject *>(index);
         if (made->ruleId() != 0) {
             // A generic rule has no two sides of its own: it is checked once per instance its
-            // condition admits over the types the operator groups registered (the ruling of
-            // 2026-10-24 on `generic-rule-check-surface-and-multi-parameter-instances`). The index
+            // condition admits over the types the operator groups registered (the rule on `generic-rule-check-surface-and-multi-parameter-instances`). The index
             // is not passed: the seed of a rule follows its identity, not its place in this array.
             checkGenericRule(ctx, *made, samples, seed, programTypes, rows);
             continue;
@@ -3876,8 +3853,7 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         const RuleObject *rule = ruleRoot ? ruleRoot->getAs<RuleObject>() : made;
         // The rule object is read now and not again: a function runs below, and objects move.
         const camel::runtime::RuleSource source = sourceOf(*rule, 1, call);
-        // The seed follows the rule's own name (the ruling of 2026-10-24 on
-        // `accuracy-check-sampling`, 1).
+        // The seed follows the rule's own name.
         checkOneRule(
             ctx, source, samples, sampleStreamOf(seed, std::string_view(source.name)), "", rows);
     }
@@ -3951,8 +3927,7 @@ slot_t checkReasonKernel(ArgsView &, ArgsView &norm, Context &) {
 /// What the translation layer made of one row's rule
 /// (docs/design/rewrite/plan-verification.cn.md, S1): the proposition read out of the two sides,
 /// or `beyond translation coverage` with the reason it refused. A rule outside
-/// the coverage is `sampled` and this is where the reason is written (the ruling of 2026-10-24 on
-/// `verification-verdict-surface`, 3).
+/// the coverage is `sampled` and this is where the reason is written.
 slot_t checkCoverageKernel(ArgsView &, ArgsView &norm, Context &) {
     return rowColumnKernel(norm, "<rewrite::check_coverage>", &CheckRow::coverage);
 }
@@ -4056,9 +4031,7 @@ class RewriteModule final : public BuiltinModule {
         // parameters or `with` parameters. The front end writes it instead of `__rule` /
         // `__rule_when`: the sides are generic functions (or functions of a `constas` parameter),
         // which have no value, so the maker is given the id of their templates after `consts`, and
-        // then the value of each `with` parameter, one argument per parameter (the ruling of
-        // 2026-10-23 on generic-rule-instantiation, and the ruling of 2026-10-25 on the one
-        // instantiation channel).
+        // then the value of each `with` parameter, one argument per parameter.
         exportEntity(
             "__rule_generic",
             OperatorGroup::create(

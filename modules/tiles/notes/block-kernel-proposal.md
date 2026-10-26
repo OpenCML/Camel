@@ -30,7 +30,7 @@ there is no need to introduce an independent kernel-language parser.
 - Is differentiation defined for the logical value graph only? Physical barriers
   and address layouts should not acquire accidental differentiation rules.
 
-The existing lexical numeric-permission ruling remains authoritative: permission
+The existing lexical numeric-permission rule remains authoritative: permission
 does not propagate implicitly into called functions and must survive expansion.
 
 ## Execution and checking

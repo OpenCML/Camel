@@ -1601,8 +1601,7 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
     // only after this returns.
     const failures = await validateTest(test, result, { ...logContext, scope })
     // The cost judgement of a test that declares `cpu_budget_ms`, in the unit
-    // of 2026-10-23 asks for (docs/handover/reviews/questions-2026-10-23.md,
-    // "declaration-cost-gate" (a)):
+    // the rule asks for:
     //
     //   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移 ... 进程的 CPU 时间（用户态 + 内核态）
     //    基本不随负载变"

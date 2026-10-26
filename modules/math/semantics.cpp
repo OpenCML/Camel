@@ -70,8 +70,7 @@ constexpr FloatType kFloatTypes[] = {{"_f", TypeCode::Float32}, {"_d", TypeCode:
 
 /// The two reduced-precision floating types, under the on-disk names of their operators (`_bf` is
 /// bf16 and `_f6` is f16: `b` is already bool). They are declared the same way as the float
-/// widths where the operation is theirs at all, which is `min`, `max` and `abs` (the ruling
-/// docs/handover/reviews/reduced-precision.md item 2).
+/// widths where the operation is theirs at all, which is `min`, `max` and `abs`.
 constexpr FloatType kHalfTypes[] = {{"_bf", TypeCode::BFloat16}, {"_f6", TypeCode::Float16}};
 
 /// approx_math, change_precision and the finite_math assumptions are the permissions that can
@@ -354,7 +353,7 @@ void declareElementaryFunctions() {
     // The two reduced-precision floating types take `abs`, `min` and `max` and nothing else of
     // this module: every one of the three is the exact operation of its value, computed on the f32
     // the operand widens to, so it is Exact in the element type's own width and `compute` is that
-    // type (design principles 7.3; the ruling's item 2). `abs` clears the sign, so both zeros are
+    // type (design principles 7.3; the rule). `abs` clears the sign, so both zeros are
     // one value: the arithmetic is exact and only the finite_math assumptions about a special
     // value can change what the reader sees.
     for (const FloatType &type : kHalfTypes) {

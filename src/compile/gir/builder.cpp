@@ -314,10 +314,9 @@ void Builder::rejectRedeclaredFunction(
             // Two declarations of one name with the same parameters are told apart by their
             // conditions, if they write any: `when` is the applicability condition of an
             // overload (design principles 4.4), so two whose conditions exclude each other cover
-            // one family of argument types each and are overloads (
-            // of 2026-10-24 on `impl-declaration-arms`,
-            // docs/handover/reviews/questions-2026-10-23.md: the same check applies to every
-            // same-named overload that has `when`, ordinary functions with bodies included).
+            // one family of argument types each and are overloads (design principles 4.4: the same
+            // check applies to every same-named overload that has `when`, ordinary functions with
+            // bodies included).
             if (const auto *ownWhen = GCT::Tree::of(gct)->whenOf(gct)) {
                 const auto other = whenClauses_.find(graph.get());
                 if (other != whenClauses_.end()) {
@@ -784,7 +783,7 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     if (const auto *when = GCT::Tree::of(gct)->whenOf(gct)) {
         // The condition belongs to the function, not to its instance: it is evaluated when
         // this graph is selected by a call, where the types and the `with` arguments of the
-        // call are known (design principles 5.13).
+        // call are known (design principles 4.4).
         whenClauses_[graph.get()] = *when;
         // A condition that is malformed -- not a bool, a name the declaration does not make
         // visible, a query an open type cannot answer -- is a declaration-site error, and is

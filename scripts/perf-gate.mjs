@@ -108,10 +108,10 @@ const PLANS = [
             'program, inspect --ops over the whole standard library, and the same imports on the run path',
         cost: 'a few seconds per repetition: the whole plan is 2.1 s',
         own:
-            'yes: four CPU-time ceilings (the ruling of 2026-10-23: CPU time, not the ' +
+            'yes: four CPU-time ceilings (the rule: CPU time, not the ' +
             'wall clock) and declaration.cost -- per declaration, absolute CPU total and the ' +
             'structural assertion that no (phase, module) repeats in a round; the ' +
-            'compile-work share retired with that ruling',
+            'compile-work share retired with that rule',
         cases: [
             {
                 name: 'startup.version',
@@ -179,7 +179,7 @@ const PLANS = [
             'the cheap half of the parallel benchmark, as a property: monte_carlo_pi timed once on ' +
             'std::nvm and once on std::prl in the same run, asserting the speed-up of the parallel ' +
             'side, that it really used more than one core and that the serial side did not (the ' +
-            '2026-10-23 ruling, "perf-para-gate")',
+            'rule, "perf-para-gate")',
         cost:
             '68.1-112.7 s for one run on the reference host on 2026-10-23, tracking the serial ' +
             "side's share of a loaded host: the serial side is 63.5-77.2 s of that and the parallel " +
@@ -187,7 +187,7 @@ const PLANS = [
         own:
             'yes, and it is the only reader that must be: the assertion is the ratio of the two ' +
             'sides measured in the run, with each side\'s CPU time printed and not gated. A stored ' +
-            'baseline is what the ruling replaced, so this gate compares nothing here',
+            'baseline is what the rule replaced, so this gate compares nothing here',
     },
     {
         id: 'perf.gemm_threads',

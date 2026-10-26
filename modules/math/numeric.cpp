@@ -337,7 +337,7 @@ std::unordered_map<std::string, operator_t> getMathNumericOpsMap() {
     ops["min_b"] = __math_min__;
     ops["max_b"] = __math_max__;
     // The two reduced-precision floating types take the same IEEE 754-2019 minimum and maximum,
-    // computed on the value each operand widens to exactly (operators.cpp, ruling item 2).
+    // computed on the value each operand widens to exactly (operators.cpp).
     ops["min_bf"] = __math_min_bf__;
     ops["max_bf"] = __math_max_bf__;
     ops["min_f6"] = __math_min_f6__;

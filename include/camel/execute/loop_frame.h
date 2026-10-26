@@ -181,8 +181,8 @@ inline bool loopTest(camel::core::context::Frame &frame, const camel::runtime::E
             ::Array *array = frame.get<::Array *>(loop.iterableSlot);
             // The sequence is an array, or it is not. The slot's declared type says `Array` for a
             // `Tensor` whose rank is not fixed, and such a value may turn out to have no
-            // dimension: a value with no dimension is the element itself (the rank-zero ruling,
-            // docs/handover/reviews/questions-2026-10-23.md), stored as the scalar it is rather
+            // dimension: a value with no dimension is the element itself, stored as the scalar it is
+            // rather
             // than as an array, and the round an array of open rank hands over is the array of no
             // dimension holding the element (loopRoundValue). Neither has a first dimension to
             // take elements from, so neither is a sequence: refused here, where the loop reads its

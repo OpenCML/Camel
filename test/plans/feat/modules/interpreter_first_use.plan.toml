@@ -1,6 +1,6 @@
 # `import` executes no code: `pyplot` and `python` must not create the embedded CPython at import
 # (design principles 3.1, in answer to
-# docs/technical/50_pyplot_cpython_init.md; handover).
+# docs/technical/50_pyplot_cpython_init.md).
 #
 # The rule is a property of the language, not of one module, so it is pinned from the outside:
 # under `CAMEL_PYTHON_INHERIT_HOST_ENV=1` with `PYTHONHOME` pointing at an empty directory, CPython

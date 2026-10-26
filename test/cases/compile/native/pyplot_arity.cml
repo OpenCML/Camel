@@ -1,8 +1,8 @@
 /**
  * The declaration of `pyplot:plot` takes one or two ordinary arguments: a third is refused at
  * the call, and the overloads the message lists are the declarations' two arities from
- * `stdlib/pyplot.cml`, not the C++ module's `(data: T[], filename?: string)` (handover
- * 
+ * `stdlib/pyplot.cml`, not the C++ module's
+ * `(data: T[], filename?: string)`.
  */
 module pyplot_arity
 

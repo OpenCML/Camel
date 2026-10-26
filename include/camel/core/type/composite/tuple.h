@@ -237,6 +237,16 @@ inline Type *determinedByPosition(Type *target) {
 /// and `int!` give `int!`). nullptr when there is none.
 Type *joinTypes(Type *a, Type *b);
 
+/// The type variable of the parameter `pattern` that the argument `actual` leaves without a type,
+/// or an empty string when it leaves none: an argument that states no element type (`[]`, whose
+/// type is an array of `void`) says nothing about the element type a parameter writes, so a
+/// variable that would take its type from there is not inferred from it (design principles 5.1,
+/// 5.2). The two types are walked together, so the variable named is the one at the position the
+/// argument's unstated type stands in; nesting is followed through arrays, streams, tuples and
+/// structs, and a variable the parameter writes on its own is described by the `void` the
+/// argument's type has where a type is stated.
+std::string unstatedBindingOf(Type *pattern, Type *actual);
+
 /// The type of the value an argument of type `type` carries: the content type of a variable
 /// cell, `type` itself otherwise. Overloads are resolved on value types.
 inline Type *valueTypeOf(Type *type) {

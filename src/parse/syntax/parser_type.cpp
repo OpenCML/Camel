@@ -55,7 +55,7 @@ bool ParserImpl::typeStartsAt(uint32_t n) const {
 /// still a syntax error, and only the mark that was just read reopens the bracket.
 ///
 /// `A of B` used to be read here and reported as not implemented; `of` is not a keyword of the
-/// language, so the form is an ordinary syntax error (handover 5.00 "语法层收口" item 5). The type
+/// language, so the form is an ordinary syntax error. The type
 /// operators `A & B`, `A \ B`, `A + B` and `A ^ B` left the grammar the same way.
 void ParserImpl::parseType() {
     Depth depth(*this);

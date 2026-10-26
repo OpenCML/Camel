@@ -8,9 +8,8 @@ desc = "Every plan file under test/plans has a layer -- a fast target reaches it
 # belongs to a layer; `scripts/release-gate.mjs` imports the same module, so this entry and the
 # gate's own first check are one implementation, not two.
 #
-# Why it is a fast-layer entry and not only a release-gate check: eight perf plans landed between
-# 2026-10-23 and 2026-10-24 without a layer, and the gate was unrunnable from then until the
-# inventory stopped dying on the first problem (the 2026-10-25 rule). A plan that lands without a
+# Why it is a fast-layer entry and not only a release-gate check: eight perf plans landed without a layer, and the gate was unrunnable until the
+# inventory stopped dying on the first problem (the rule that a plan carries its layer). A plan that lands without a
 # layer must redden the commit that lands it, not the next release run weeks later. The check needs
 # no compiler and no install: it reads the tree and the tables.
 #

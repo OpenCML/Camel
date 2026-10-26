@@ -3,7 +3,7 @@ order = 424
 tier = "milestone"
 tags = ["perf", "training", "budget"]
 
-# The measured half of the plan. The 2026-10-25 rule on the eight perf plans that no layer
+# The measured half of the plan. The rule on the eight perf plans that no layer
 # reached split the plan in two: the guards (`step.count` and `step.elementwise`, which assert
 # counts and properties and no duration) are `perf.step_counts`, in the release gate's slow layer,
 # and this file keeps the budget and is in that gate's FORBIDDEN list -- it runs before a release.
@@ -35,8 +35,7 @@ expect_stdout_contains = ["step budget: PASS", "matmul", "residual"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # The cost bound is this test's own CPU time (user + system), and the timeout below is its liveness
-# bound, by the rule (docs/handover/reviews/questions-2026-10-23.md,
-# "declaration-cost-gate" (a)):
+# bound, by the rule:
 #
 #   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移 ... 进程的 CPU 时间（用户态 + 内核态）基本
 #    不随负载变"

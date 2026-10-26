@@ -192,8 +192,7 @@ void walk(Type *type, std::span<const slot_t> in, std::span<slot_t> out, const L
 /// whose type states an element type and its value always agree (the slot refuses a value of
 /// another type), and a leaf whose type states none has its element type written in its value
 /// alone -- `full([3, 2], 0.1)` is an f64 tensor, and "unstated" means the type does not say it,
-/// not that the value is f32 (docs/handover/reviews/questions-2026-10-23.md, section
-/// `f64-tensor-leaf`). A written element type is kept exactly and is never narrowed either (design
+/// not that the value is f32. A written element type is kept exactly and is never narrowed either (design
 /// principles 7.4: the element type is exact; computing at a lower precision than the program
 /// wrote would need the `change_precision` permission of 7.2-7.3).
 TypeCode leafElementType(const Array *t) {

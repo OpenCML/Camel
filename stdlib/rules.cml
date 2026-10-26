@@ -30,8 +30,8 @@ import { is_float, is_integer } from types
 // head declares the type parameter (`rule int_add_zero::<T>`) and the condition names the family
 // (`when is_integer::<T>()`), so the maker makes one instance per integer element type --
 // `int_add_zero<int>` and `int_add_zero<i32>` -- and the engine fires the instance whose type the
-// matched node has (design principles 5.5; the rule on `generic-rule-instantiation`,
-// whose acceptance of 2026-10-24 reads: one instance per type tuple, visible in `explain`). Before
+// matched node has (design principles 5.5: one instance per type tuple, visible in `explain`).
+// Before
 // the fold the two families were two blocks of thirteen rules, `int_*` and `int32_*`, and the second
 // block said the same facts again; the facts are the same because two's-complement wraparound is a
 // ring, so the neutral elements, the inverse laws, association, commutation and distribution hold at
@@ -41,8 +41,8 @@ import { is_float, is_integer } from types
 // A rule reads a coefficient only where the pattern's operators accept its type, and the instance is
 // what makes that type concrete: `const c1: T` at `T = i32` matches an i32 constant and nothing
 // else, so a malformed graph (an `add_i` with an `int` constant, the case algebra.cpp's typed scalar
-// lookup also refuses) matches nothing here (rewrite design 2 (second version) 1;
-// reviews/stdlib-rules.md item 2: the `isI32` helpers a rule used to guard itself with are deleted).
+// lookup also refuses) matches nothing here (rewrite design 2 (second version) 1): the `isI32`
+// helpers a rule used to guard itself with are deleted.
 //
 // The zero of `int_mul_zero` and `int_sub_self` is written `0 as T`. A literal inside a generic body
 // takes the type of the instance (`literal-inside-a-generic-body`), and a literal beside an operator
@@ -120,7 +120,7 @@ export rule float_add_self::<T>(x: T) when is_float::<T>() { x + x => x * 2.0 }
 // two sides with the error bound of that permission (camel/core/operator_semantics.h,
 // rewriteErrorBound). The conditions are functions of the matched constants' values: a `const`
 // parameter of a rule is the constant itself, of its declared type (rewrite design 2 (second
-// version) 1; reviews/stdlib-rules.md item 5), so a guard is arithmetic on that value and needs
+// version) 1), so a guard is arithmetic on that value and needs
 // neither `constant(node, sample)` nor a `match … case null` around every read.
 //
 // The guards are generic for the same reason the laws are. A guard is arithmetic on the matched

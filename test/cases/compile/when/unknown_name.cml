@@ -1,6 +1,6 @@
 /**
  * A `when` that names an ordinary parameter: the condition is evaluated at instantiation,
- * where ordinary parameters do not exist yet (design principles 5.13). It is reported, not
+ * where ordinary parameters do not exist yet (design principles 4.4). It is reported, not
  * treated as false.
  */
 module when_unknown_name

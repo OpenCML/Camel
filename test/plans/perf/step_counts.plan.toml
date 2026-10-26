@@ -3,7 +3,7 @@ order = 427
 tier = "slow"
 tags = ["perf", "training", "budget", "counts"]
 
-# The guard half of `perf.step_budget`, split out by the 2026-10-25 rule on the eight perf plans
+# The guard half of `perf.step_budget`, split out by the rule on the eight perf plans
 # that no layer reached: the guards that only assert counts and properties stay gate-able, and the
 # half that measures runs before a release. Nothing here is asserted on a duration; the plan keeps
 # the budget itself (`step.budget`) in `perf.step_budget`, which is in the release gate's FORBIDDEN

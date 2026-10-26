@@ -1,7 +1,7 @@
 /**
  * A declaration that names an operator no loaded module implements. The mistake is reported where
- * the declaration is written, when the module is loaded, not when a call reaches it (handover
- * step 1).
+ * the declaration is written, when the module
+ * is loaded, not when a call reaches it.
  */
 module missing_module
 

@@ -1,7 +1,7 @@
 /**
  * A guarded case does not count towards the exhaustiveness of a `match`: `case 1 when c` is
- * taken only where `c` holds, so the values it does not take have no case at all (review
- * 「when-placement-and-match-guards」, and Rust the same).
+ * taken only where `c` holds, so the values it does not take have no case at all (and Rust
+ * is the same).
  *
  * The match below has one case and it carries a guard: the report is the one a match with no
  * `case _` gets, rather than the syntax error the case was before the guard was part of a

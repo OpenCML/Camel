@@ -7,7 +7,7 @@ for the language author. The normative text is `docs/design-principles.cn.md` se
 
 Choices the design principles do not make are collected in section 10. Each is implemented
 the way that section recommends and marked in the code with `DESIGN-QUESTION(<tag>)`, so that
-a ruling can be applied in one place.
+a rule can be applied in one place.
 
 ## 1. What they are on the graph
 
@@ -211,7 +211,7 @@ side across a safepoint.
 
 **HAMT** is the structure for a map that has no order or keeps a separate one. Under key
 order it would need either a sort at every `keys`/`items`/print/`==`, or a second ordered
-index, which is the balanced tree again. It would fit if the ruling on `map-order` became "no
+index, which is the balanced tree again. It would fit if the rule became "no
 defined order", which section 4 excludes (output must not depend on a hash function).
 
 **Binary trees** have the right order and the textbook persistence, but the wrong constants
@@ -334,7 +334,7 @@ A tree ordered by key yields key order and nothing else. Insertion order would n
   above the two trees would carry the next sequence number;
 - every `put` of a new key and every `remove` to update both trees: twice the allocation and
   about twice the time, and about twice the memory per entry;
-- rulings on what `put` of an existing key does to its position, on the order of `merge`
+- rules on what `put` of an existing key does to its position, on the order of `merge`
   and of the set operations, and on whether `==` looks at the order;
 - giving up that a collection is determined by its entries (section 4): two equal maps could
   print differently, and a pass could no longer reorder independent `put`s.

@@ -257,9 +257,7 @@ ArrayType *ArrayType::withElementType(Type *elemType) const {
 
 Type *ArrayType::firstDimensionElement() const {
     // One dimension fewer: the extents after the first, which is what `t[i]` takes for every
-    // rank (design principles 5.4) and what the tensor module's `iterInfer` stated while a `for`
-    // over a numeric array went through its `iter` (the ruling of 2026-10-24 makes it the core's
-    // for every array, so the rule lives here, in one place).
+    // rank (design principles 5.4), for every array: the rule lives here, in one place.
     const std::span<const ExtentForm> extents(extents_);
     const std::span<const ExtentForm> rest = extents.empty() ? extents : extents.subspan(1);
     if (anyRank_) {
@@ -269,7 +267,7 @@ Type *ArrayType::firstDimensionElement() const {
     }
     if (rest.empty()) {
         // Rank 1: the first dimension's elements are the elements themselves — a scalar is not a
-        // rank-0 array, it is the element type (questions-2026-10-23.md, rank-zero-tensor). A
+        // rank-0 array, it is the element type. A
         // nested array's `T[][]` is one dimension of `T[]`.
         return elemType_;
     }
@@ -466,11 +464,6 @@ bool ArrayType::assignableFrom(Type *sourceType) const {
     if (this == sourceType) {
         return true;
     }
-    if (isElementTypeUnstatedOpenArray(this)) {
-        // No value has this type: it is an open-rank array whose element type nobody stated, and
-        // it takes nothing (design principles 5.1: the element type of a value is in its type).
-        return false;
-    }
     if (!sourceType || sourceType->code() != TypeCode::Array) {
         return false;
     }
@@ -603,14 +596,13 @@ bool isUntypedArrayType(const Type *type) {
     return array->elemType()->code() == TypeCode::Void;
 }
 
-bool isElementTypeUnstatedOpenArray(const Type *type) {
-    const ArrayType *array = asArrayType(type);
-    if (array == nullptr || !isUntypedArrayType(array)) {
+bool isElementTypeUnstated(const Type *type) {
+    if (type == nullptr) {
         return false;
     }
-    // The empty literal states one unknown dimension (`Void[]`); the open rank with no prefix and
-    // no pack is what a type variable bound to `Void` leaves behind.
-    return array->anyRank() && array->extents().empty() && array->packName().empty();
+    // `Void` itself is the "no value" marker: `null`, an expression that gives nothing. An array
+    // whose element type is `Void` is the empty literal in one or more dimensions.
+    return type->code() == TypeCode::Void || isUntypedArrayType(type);
 }
 
 } // namespace camel::core::type

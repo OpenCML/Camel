@@ -877,7 +877,7 @@ void writeRuntimeFillSlots(
         ASSERT(closureData != nullptr, "Runtime FILL function closure storage is null.");
         const auto *tupleType = func->tupleType();
         for (size_t i = 0; i < values.size(); ++i) {
-            // A closure capture is a stored value (review item 1): a view must have been
+            // A closure capture is a stored value: a view must have been
             // materialised before it is captured.
             CAMEL_ASSERT_NOT_VIEW(
                 values[i], tupleType->typeAt(slots[i]), "a closure capture");

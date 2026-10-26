@@ -13,7 +13,7 @@ run length; the program's own `naive config` line is checked against the cell be
 accepted, and the generated text's SHA-256 is recorded so two builds can be shown to have run the
 same text.
 
-`/usr/bin/perf stat -e instructions:u` is the counter the ruling names.  On this host
+`/usr/bin/perf stat -e instructions:u` is the counter the rule names.  On this host
 `kernel.perf_event_paranoid` is 4, so an unprivileged `perf` is refused; the counter therefore runs
 inside a privileged container that chroots into the host root (`--privileged -v /:/host`), where
 perf holds CAP_PERFMON and measures the same host process without changing any host-wide setting.

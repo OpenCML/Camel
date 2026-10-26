@@ -4,8 +4,7 @@ tier = "fast"
 tags = ["feat", "docs", "tutorial"]
 desc = "Every picture in docs/tutorial/images is the graph this tree draws for the example beside it: the check re-dumps each example's graph and compares it with the DOT the picture was drawn from"
 
-# The tutorial shows pictures instead of pasting DOT (the review of the sample chapter asked for
-# them: a page-sized DOT block, with `origin`, `span` and `tupleSlots` in it, is a poor first
+# The tutorial shows pictures instead of pasting DOT (a page-sized DOT block, with `origin`, `span` and `tupleSlots` in it, is a poor first
 # frame). docs/tutorial/tools/render-graphs.mjs draws them: for each picture it runs
 # `camel <example> <passes...>`, keeps the part of the dump the picture is about, drops the
 # attributes that move with the source positions, and writes `images/<name>.dot` (what the

@@ -1,12 +1,12 @@
 # 第 7 节第 9 步的续篇：`std::cml` 往返（S3 之后的剩余工作）——实施计划
 
-**这是第二份计划。** 第一份是 [plan.cn.md](plan.cn.md)（决策者 2026-10-22 已批复，答复见 [`reviews/std-cml-plan.md`](../../handover/reviews/std-cml-plan.md)），它已经定下：`std::cml` 是翻译遍、打印的是当前的图而不是原始源码；`canon(P)` 的等价定义（§2.2）；S0–S5 的划分；§7 七问的答案（`let` 名字用源码名、声明标签用程序级事实表、`#tag { }` 建 `Block` 区域、泛型实例打印成具体函数、v1 一个文件摊平、大常量超限拒绝、打印抽取后的可执行图）。本文件不重复那些结论，只写**剩余工作**、**随仓库变化的修订**与**实测证据**；与第一份冲突的地方以本文件为准并写明原因。
+**这是第二份计划。** 第一份是 [plan.cn.md](plan.cn.md)（决策者 2026-10-22 已批复，答复见任务书），它已经定下：`std::cml` 是翻译遍、打印的是当前的图而不是原始源码；`canon(P)` 的等价定义（§2.2）；S0–S5 的划分；§7 七问的答案（`let` 名字用源码名、声明标签用程序级事实表、`#tag { }` 建 `Block` 区域、泛型实例打印成具体函数、v1 一个文件摊平、大常量超限拒绝、打印抽取后的可执行图）。本文件不重复那些结论，只写**剩余工作**、**随仓库变化的修订**与**实测证据**；与第一份冲突的地方以本文件为准并写明原因。
 
 实测基线：`develop 102dbc5d1`（本计划的提交基底），在 88zjwei 上构建后的 `out/latest/bin/camel`。下面每个数字、每条诊断都是这一版跑出来的；测量脚本是本次临时加入、**不提交**的 `test/cases/trans/cml_probe.py`（11 个探针），命令形式是 `camel <file> std::cml [passes]`。反例程序都写在下文里，可逐条重跑。
 
 **基线与移动的目标**：写这份文件时 `origin/develop` 已经前进到 `38fbbb7b1`（H242 的数据边与顺序边语义、两份裁定——《一元算子比 `->` 结合得松》与《改写保持源码程序运行的每个效应》、数组归约内核，以及 `h242a-*` 两份问题文件）。本计划依据的文件在这段区间里**只有一处变化**：`src/compile/gir/builder_expr.cpp#Builder::orderAfterLastWriter` 的注释（把待办指向裁定后的说明），行为没有变；`src/passes/trans/json/**`、`src/passes/trans/cml/**`、`test/tools/cml_roundtrip.py`、`include/camel/runtime/graph.h` 都没有改动。所以下面的数字与缺口在新基线上同样成立；实施 S3a 时以当时的 `develop` 为准，并注意 §8 第 5 问已经由那份裁定回答了一半。
 
-**第一份计划里已经过期的一条事实**：`docs/handover/README.cn.md:218` 的表格仍写「S0（规范转储与等价匹配器，不改语言与流水线）在跑」。S0 已经合入 develop：`77bb8b124`（canonical GIR 与独立等价检查器）、`5815e6802` + `684ecc6ca`（S1 打印机）、`14b43005b`（分支、循环、闭包、`with`/`var` 参数），测试在 `test/plans/feat/trans/cml.plan.toml`。那行是作者的表，本计划不改。
+**第一份计划里已经过期的一条事实**：任务书第 218 行的表格仍写「S0（规范转储与等价匹配器，不改语言与流水线）在跑」。S0 已经合入 develop：`77bb8b124`（canonical GIR 与独立等价检查器）、`5815e6802` + `684ecc6ca`（S1 打印机）、`14b43005b`（分支、循环、闭包、`with`/`var` 参数），测试在 `test/plans/feat/trans/cml.plan.toml`。那行是作者的表，本计划不改。
 
 ## 0. 结论摘要
 
@@ -117,7 +117,7 @@ func main(): int sync { var x = 1
 - **检查器**：`test/tools/cml_roundtrip.py`。它对整份结构做颜色细化 + 互异个体化，比较结构类；预算用尽是 exit 2，**不会**被读成等价（`cml_roundtrip.py#equivalent`、`cml_roundtrip.py#main`）。
 - **共享比较工具（不对往返负责）**：`test/tools/gir-dot.mjs#compareGirDotIsomorphic` + `test/tools/normalizers.mjs#applyNormalizers`，在 `graph_equal.mjs#GOLDENS` 记的那几条上用于「Camel 遍 vs C++ 遍」的语料对照（`graph_equal.mjs#NORMALIZERS` 是它用的规范化器）。它比的是 **GIR DOT**：节点签名是 `type|shape|style|in|out 度`，边签名是两端签名 + `linktype` + `label`（`gir-dot.mjs#nodeSignature`、`gir-dot.mjs#edgeType`），所以它**看不到算子身份、静态值、区域的 index/params/attrs**，而且它依赖显示转储的边类型——H242 正改这个（`gir.cpp#dumpJsonRuntimeGraph` 今天写 `control`）。结论：往返的判据仍是 v2 文档 + `cml_roundtrip.py`；`graph_equal.mjs` 只在它现有的语料里用，**不搬到往返上**，代价是同一个仓库里有两套图比较工具（比把它们合并便宜：合并要先让 DOT 携带算子身份与静态值，那是另一个任务）。
 - **今天的实测结果**：348 个能打印的程序里 **309 等价 / 35 不等价 / 4 个打印不出 canonical**（`SWEEP files=2387 printed=348 refused=1338 frontend=701`、`ROUNDTRIP checked=348 equivalent=309 not_equivalent=35 unfaithful=4`）。
-- **执行对照**：`cml_contract.py` 已经把「打印后重新编译的程序 stdout 与退出码相同」钉住（`cml_contract.py#check_round_trip`）。它与裁决 9.7（改写必须保持源码程序运行的每个效应，`design-principles.cn.md:556-558`）的关系：**必须在同一次构建里对照**。理由是 H242 自己的验收用例 `func f(): int { let a = println(1); let b = println(2); return b }` 在重构前打印 `1`、重构后只打印 `2`（`reviews/questions-2026-10-23.md` 的 h241-limits 第 2 条）——同一段源码的执行结果会随边的模型变，所以「和昨天记录的 stdout 一样」不是判据，「这一次构建里原程序与打印后程序一样」才是。
+- **执行对照**：`cml_contract.py` 已经把「打印后重新编译的程序 stdout 与退出码相同」钉住（`cml_contract.py#check_round_trip`）。它与设计原则 9.7（改写必须保持源码程序运行的每个效应）的关系：**必须在同一次构建里对照**。理由是这条规则自己的验收用例 `func f(): int { let a = println(1); let b = println(2); return b }` 在重构前打印 `1`、重构后只打印 `2`——同一段源码的执行结果会随边的模型变，所以「和昨天记录的 stdout 一样」不是判据，「这一次构建里原程序与打印后程序一样」才是。
 - **名字**：不进等价（第一份计划 §2.3 第 5 条），由 `cml_contract.py#check_names` 的名字检查单独钉。
 
 ## 5. 三种边与 H242：怎么做到不针对今天的表示
