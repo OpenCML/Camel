@@ -3044,14 +3044,15 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             // range, refused where the step is written (design principles 5.4 for the slice, 4.2
             // for the range). The two spellings of the node are one node -- the subscript's
             // `__slice__` and the function form's `slice(t, axis, start, end, step, written)`, both
-            // the core's `:op/slice_sub` -- so the check reads the node and not the spelling: one
+            // the core's `:op/slice_sub`, or `:op/slice_str` on a string -- so the check reads the node and not the spelling: one
             // fault has one answer, the catalog's `SliceStepZero`, with the caret under the step.
             // The step is the node's fifth ordinary argument (the value, the axis, the two bounds,
             // the step; the sixth is the mask that says which of the two bounds were written, and a
             // call that stops at five words wrote no mask, so it is read as "both bounds", 3). A
             // step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument,
             // and a tensor's own slice checks its step with the shape facts it holds).
-            if (targetOperator->uri() == ":op/slice_sub" && normInputs.size() >= 5 &&
+            if ((targetOperator->uri() == ":op/slice_sub" || targetOperator->uri() == ":op/slice_str") &&
+                normInputs.size() >= 5 &&
                 normInputs.size() <= 6 && withInputs.empty() && gct->size() >= 1 &&
                 gct->at(0)->type() == GCT::NodeKind::DREF) {
                 const auto stepIsZero = [](const data_ptr_t &data) {

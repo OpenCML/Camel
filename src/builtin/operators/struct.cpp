@@ -215,7 +215,9 @@ struct SliceRange {
     Int64 step  = 1; // the distance between two positions taken
 };
 
-SliceRange sliceRange(Int64 extent, Int64 startRaw, Int64 endRaw, Int64 step, Int64 written) {
+SliceRange sliceRange(
+    Int64 extent, Int64 startRaw, Int64 endRaw, Int64 step, Int64 written,
+    std::string_view what = "an array") {
     const bool wroteEnd   = (written & 1) != 0;
     const bool wroteStart = (written & 2) != 0;
     if (step == 0) {
@@ -228,7 +230,7 @@ SliceRange sliceRange(Int64 extent, Int64 startRaw, Int64 endRaw, Int64 step, In
         const Int64 end = wroteEnd ? endRaw : extent;
         if (range.start < 0 || range.start > extent || end < 0 || end > extent) {
             throwRuntimeFault(
-                RuntimeDiag::SliceOutOfRange, range.start, end, "an array", extent);
+                RuntimeDiag::SliceOutOfRange, range.start, end, what, extent);
         }
         range.count = range.start < end ? (end - range.start + step - 1) / step : 0;
         return range;
@@ -237,7 +239,7 @@ SliceRange sliceRange(Int64 extent, Int64 startRaw, Int64 endRaw, Int64 step, In
     const Int64 end = wroteEnd ? endRaw : -1;
     if ((wroteStart && (range.start < 0 || range.start >= extent)) ||
         (wroteEnd && (end < 0 || end > extent))) {
-        throwRuntimeFault(RuntimeDiag::SliceOutOfRange, range.start, end, "an array", extent);
+        throwRuntimeFault(RuntimeDiag::SliceOutOfRange, range.start, end, what, extent);
     }
     range.count = range.start > end ? (range.start - end + (-step) - 1) / (-step) : 0;
     return range;
@@ -380,6 +382,50 @@ slot_t __slice_sub__(ArgsView &with, ArgsView &norm, Context &ctx) {
         res->set<slot_t>(i, arr->get<slot_t>(static_cast<uint64_t>(src)), arrType);
     }
     return rtdata::toSlot(res);
+}
+
+// `s[a:b]`, `s[a:b:s]` and `slice(s, 0, a, b, s)` on a string: the same slice as an array's, over
+// the string's code points (design principles 5.4, 11.1), so `'中文字'[1:3]` is `'文字'`. A string
+// has one axis; naming another is the same fault an array of rank 1 gives.
+slot_t __slice_str__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    (void)with;
+    (void)ctx;
+    const std::string_view text = norm.get<String *>(0)->view();
+    const size_t words          = norm.size();
+    const Int64 axisArg         = norm.get<Int64>(1);
+    if (axisArg != 0) {
+        throwRuntimeFault(
+            RuntimeDiag::InvalidArgument,
+            "[]",
+            std::format("a slice axis must be between 0 and 0, not {}", axisArg));
+    }
+    const Int64 step    = words >= 5 ? norm.get<Int64>(4) : 1;
+    const Int64 written = words >= 6 ? norm.get<Int64>(5) : 3;
+    // The byte offset of every code point, and of the end: a slice takes code points by position.
+    std::vector<size_t> offsets;
+    offsets.reserve(text.size() + 1);
+    for (size_t at = 0; at < text.size();
+         at += camel::utf8::sequenceLength(static_cast<unsigned char>(text[at]))) {
+        offsets.push_back(at);
+    }
+    const auto count = static_cast<Int64>(offsets.size());
+    offsets.push_back(text.size());
+    const SliceRange range = sliceRange(
+        count, norm.get<Int64>(2), norm.get<Int64>(3), step, written, "a string");
+    std::string out;
+    if (range.step == 1) {
+        out.assign(
+            text.substr(
+                offsets[static_cast<size_t>(range.start)],
+                offsets[static_cast<size_t>(range.start + range.count)] -
+                    offsets[static_cast<size_t>(range.start)]));
+    } else {
+        for (Int64 k = 0; k < range.count; ++k) {
+            const auto at = static_cast<size_t>(range.start + k * range.step);
+            out.append(text.substr(offsets[at], offsets[at + 1] - offsets[at]));
+        }
+    }
+    return rtdata::toSlot(String::from(std::move(out), mm::autoSpace()));
 }
 
 namespace {
