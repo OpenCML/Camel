@@ -1,0 +1,49 @@
+/**
+ * When the condition of `for x in s while c` is asked, and how often: `c` stands in the loop's
+ * condition after the test that this round's pull has an element, so it is asked once per round
+ * that has an element, with the state of that round -- and never for the round the stream ends on,
+ * nor at all for an empty stream. The array form is written beside it and the two answer alike, so
+ * the reading is the shared one rather than the stream's own.
+ *
+ * The condition prints the state it is asked with, so every line below is a count of evaluations
+ * and the value it saw, not a belief. The two forms differ on one point, and the case pins both
+ * readings: the stream form tests the pull before it asks `c`, so the stream ending costs no ask
+ * and an empty stream costs none at all (three asks for three elements), while the array form asks
+ * `c` before the loop learns that the sequence is at its end (four asks for three elements, and
+ * one for an empty array). Which order the stream form takes is on the language author.
+ */
+module stream_while_effects
+
+func count(n: int): int.. {
+    return step(n)
+}
+
+func step(n: int): () => (int, int..)? {
+    return () => if n > 0 then (n, step(n - 1)) else null
+}
+
+func asked(acc: int): bool sync {
+    println("c", acc)
+    return acc < 100
+}
+
+func drain(s: int..): int {
+    return loop acc = 0 for x in s while asked(acc) do acc + x
+}
+
+func drainArray(xs: int[]): int {
+    return loop acc = 0 for x in xs while asked(acc) do acc + x
+}
+
+func main(): int sync {
+    println("stream-drain")
+    println(drain(count(3)))
+    println("array-drain")
+    println(drainArray([1, 2, 3]))
+    println("stream-empty")
+    println(drain(count(0)))
+    println("array-empty")
+    println(drainArray([]))
+    println("done")
+    return 0
+}

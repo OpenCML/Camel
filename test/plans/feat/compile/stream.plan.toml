@@ -740,3 +740,13 @@ expect_stdout_contains = ["6"]
 expect_output_not_contains = ["UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
+[[tests]]
+name = "stream.while_effects"
+desc = "When the condition `c` of `for x in s while c` is asked, and how often: the condition prints the state it is asked with, so the exact output is the reading. The stream form tests the pull before it asks `c` (three asks for three elements, none for an empty stream), the array form written beside it asks `c` before the loop learns the sequence is at its end (four asks for three elements, one for an empty array), and both pins stand until the author rules which order the stream form takes."
+kind = "behavior"
+case = "../../../cases/compile/stream/while_effects.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "stream-drain\nc 0\nc 3\nc 5\n6\narray-drain\nc 0\nc 1\nc 3\nc 6\n6\nstream-empty\n0\narray-empty\nc 0\n0\ndone\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
