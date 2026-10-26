@@ -36,7 +36,7 @@ func main(): int sync {
     let x = reshape([0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0] as f32[], [8]) as f32[8]
     // SLICE_FAULT=1 slices with a bound the axis cannot hold: the run faults with the interval
     // the declaration states for a bound only the run knows.
-    let fault = get_env('SLICE_FAULT') == '1'
+    let fault = (get_env('SLICE_FAULT') ?? '') == '1'
     let lo = if fault then -1 else 1
     let hi = if fault then 3 else 7
     println('window', window(x))

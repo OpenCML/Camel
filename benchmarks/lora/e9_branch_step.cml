@@ -41,7 +41,7 @@ func load(): Mlp {
 }
 
 func do_export(m: Mlp): int sync {
-    export_model(step, (m, reshape([1.0, 2.0, -1.0, 0.5], [2, 2])), get_env('ONNX_OUT'))
+    export_model(step, (m, reshape([1.0, 2.0, -1.0, 0.5], [2, 2])), get_env('ONNX_OUT') ?? '')
     println('exported')
     return 0
 }
@@ -53,12 +53,12 @@ func do_run(m: Mlp): int sync {
     let la = step(m, xa)
     let lb = step(m, xb)
     'loss_a={} loss_b={}'->format<la.0, lb.0>->println
-    save_params(la.1, get_env('DUMP') + '/arm_a')
-    save_params(lb.1, get_env('DUMP') + '/arm_b')
+    save_params(la.1, (get_env('DUMP') ?? '') + '/arm_a')
+    save_params(lb.1, (get_env('DUMP') ?? '') + '/arm_b')
     return 0
 }
 
 func main(): int sync {
     let m = load()
-    return if get_env('MODE') == 'export' then do_export(m) else do_run(m)
+    return if (get_env('MODE') ?? '') == 'export' then do_export(m) else do_run(m)
 }

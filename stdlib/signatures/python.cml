@@ -23,16 +23,17 @@
 /// Calls the Python callable `fn` -- a `PyObject`, or a dotted name such as `"math.sqrt"` -- with
 /// the `PyObject` arguments `args`, and returns its result. Any number of arguments is accepted.
 /// @effect runs arbitrary Python code
-/// @fails fault `RuntimeError` when the call raises
+/// @fails error `PythonError` when the call raises; the message starts with the exception class
 /// @example py_call("math.sqrt", py_wrap(2.0))
 #op('python:py_call')
-export func py_call(fn: string | PyObject, ...args: PyObject[]): PyObject
+export func py_call(fn: string | PyObject, ...args: PyObject[]): PyObject!
 
 /// Calls `fn` with a tuple (or an array) of positional arguments and a struct of keyword
 /// arguments. Both collections are optional; every element is a `PyObject`.
+/// @fails error `PythonError` when the call raises; the message starts with the exception class
 /// @example py_call(fn, (py_wrap(2.0),), {x: py_wrap(1)})
 #op('python:py_call_kw')
-export func py_call(fn: string | PyObject, args?: (...PyObject) | PyObject[], kwargs?: Struct<...PyObject>): PyObject
+export func py_call(fn: string | PyObject, args?: (...PyObject) | PyObject[], kwargs?: Struct<...PyObject>): PyObject!
 
 /// Writes the printed form of every `PyObject` argument to Python's standard output, with no
 /// separator and no newline, and returns the last argument (or `void` when there is none).
@@ -43,7 +44,7 @@ export func py_print(...objs: PyObject[]): PyObject?
 /// Writes the printed form of every `PyObject` argument and a newline, as `py_print` does, and
 /// returns the last argument (or `void` when there is none).
 /// @effect writes the interpreter's standard output
-/// @example py_println(py_eval("1 + 1"))
+/// @example py_eval("1 + 1") ?-> (o: PyObject): PyObject? => py_println(o)
 export func py_println(...objs: PyObject[]): PyObject?
 
 /// Wraps the value `x` in a new Python object, keeping its Camel type as the type argument of
@@ -52,8 +53,12 @@ export func py_println(...objs: PyObject[]): PyObject?
 /// @example py_wrap(2.0)    // a PyObject<float>
 export func py_wrap(x: T): PyObject<T>
 
-/// Unwraps a Python object wrapped from a value of type `T` and returns that value. An object
-/// that did not come from `py_wrap` has no type argument and is refused when the call is compiled.
+/// Unwraps a Python object into a value of type `T`. An object that did not come from `py_wrap`
+/// has no type argument and is refused when the call is compiled. The object must be of the kind
+/// `T` names: a `bool` takes a bool only (not `5`), an `int` an int that fits (not a bool or a
+/// float), a `float` a float or an int, a `string` a str (not bytes), `Bytes` bytes, an array a
+/// list, a tuple a tuple or list of its length, a struct a dict with its fields.
 /// @effect reads an interpreter object
-/// @example py_unwrap(py_wrap(2.0))    // 2.0
-export func py_unwrap(obj: PyObject<T>): T
+/// @fails error `PythonTypeError` when the object is not of the kind `T` names; the message gives the path and what was found
+/// @example py_unwrap(py_wrap(2.0)) !! 0.0    // 2.0
+export func py_unwrap(obj: PyObject<T>): T!

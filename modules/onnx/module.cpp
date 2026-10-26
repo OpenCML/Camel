@@ -140,7 +140,7 @@ OnnxModule::OnnxModule(context_ptr_t ctx) : BuiltinModule("onnx", ctx) {
                   {{0, {}}, {-1, {}}},
                   "(fn: (...) => R, example: Tensor | tuple | struct, path: string, "
                   "dynamic_axes?: int[], target?: string) => void",
-                  [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                  [](const type_vec_t &, const type_vec_t &norm)
                       -> std::optional<Type *> {
                       if (norm.size() < 3 || norm.size() > 5 ||
                           norm[0]->code() != TypeCode::Function ||

@@ -561,14 +561,11 @@ node_handle_t Builder::convertStructValue(
         return nullptr;
     }
     auto *source = tt::as_ptr<StructType>(sourceType);
-    if (source == nullptr || source->size() != target->size()) {
+    // The fields must be the same ones, by name, before anything is copied: the relation of the
+    // type layer (relateStructs) says so, as it does for every other conversion of a struct.
+    if (source == nullptr ||
+        relateStructs(target, source) == StructRelation::None) {
         return nullptr;
-    }
-    // The fields must be the same ones, by name, before anything is copied.
-    for (size_t i = 0; i < target->size(); ++i) {
-        if (!source->findField(target->fieldName(i)).has_value()) {
-            return nullptr;
-        }
     }
     // A struct of `target`'s shape, its slots filled from the source's fields in the target's
     // order: the copy is what makes `{ y: 1, x: 2 }` a `Point` (fields by name, declaration
@@ -2820,7 +2817,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             // looked up by the group's name.
             if (const auto group = importedEntity("__iter__");
                 group.has_value() && group->isOperGroup()) {
-                elements = group->operGroup()->resolve({}, {type}, statics, Modifier::None);
+                elements = group->operGroup()->resolve({}, {type}, statics);
             }
             if (!elements.has_value()) {
                 diags_->of(SemanticDiag::LoopSequenceNotIterable)
@@ -3987,7 +3984,7 @@ bool Builder::inferLoopStateFromAppend(
     const auto group = importedOperatorGroupNamed("append");
     if (group != nullptr) {
         const std::vector<StaticArg> statics(1);
-        const auto resolved = group->resolve({element}, {newType}, statics, Modifier::None);
+        const auto resolved = group->resolve({element}, {newType}, statics);
         if (resolved.has_value()) {
             graph->retargetOperNode(next, *resolved);
         }
@@ -4247,7 +4244,7 @@ void Builder::markLoopStateInPlaceOne(
         return;
     }
     const std::vector<StaticArg> statics(1);
-    const auto owned = group->resolve({valueType}, {nodeTypeOf(port)}, statics, Modifier::None);
+    const auto owned = group->resolve({valueType}, {nodeTypeOf(port)}, statics);
     if (!owned.has_value()) {
         return;
     }
@@ -4260,7 +4257,7 @@ void Builder::markLoopStateInPlaceOne(
         return;
     }
     const auto copyOp =
-        copyGroup->resolve({}, {nodeTypeOf(initial[index])}, statics, Modifier::None);
+        copyGroup->resolve({}, {nodeTypeOf(initial[index])}, statics);
     if (!copyOp.has_value()) {
         return;
     }

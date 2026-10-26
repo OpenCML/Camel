@@ -33,23 +33,20 @@ class EnumOpTypeResolver final : public FuncTypeResolver {
         : kind_(kind), signature_(std::move(signature)), normCount_(normCount) {}
 
     std::optional<FunctionType *> resolve(
-        const type_vec_t &with, const type_vec_t &norm,
-        const ModifierSet &modifiers) const override {
-        return decide({}, with, norm, {}, modifiers);
+        const type_vec_t &with, const type_vec_t &norm) const override {
+        return decide({}, with, norm, {});
     }
 
     std::optional<FunctionType *> resolveWith(
-        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics,
-        const ModifierSet &modifiers) const override {
-        return decide({}, with, norm, normStatics, modifiers);
+        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics) const override {
+        return decide({}, with, norm, normStatics);
     }
 
     std::optional<FunctionType *> resolveForCall(
         const type_vec_t &types, Type *expectedResult, const type_vec_t &with,
-        const type_vec_t &norm, static_args_t normStatics,
-        const ModifierSet &modifiers) const override {
+        const type_vec_t &norm, static_args_t normStatics) const override {
         (void)expectedResult;
-        return decide(types, with, norm, normStatics, modifiers);
+        return decide(types, with, norm, normStatics);
     }
 
     std::string signature() const override { return signature_; }
@@ -57,7 +54,7 @@ class EnumOpTypeResolver final : public FuncTypeResolver {
   private:
     std::optional<FunctionType *> decide(
         const type_vec_t &types, const type_vec_t &with, const type_vec_t &norm,
-        static_args_t normStatics, const ModifierSet &modifiers) const {
+        static_args_t normStatics) const {
         if (!with.empty() || (normCount_ == 0 ? norm.empty() : norm.size() != normCount_)) {
             return std::nullopt;
         }
@@ -105,7 +102,6 @@ class EnumOpTypeResolver final : public FuncTypeResolver {
             return std::nullopt;
         }
         FunctionTypeFactory factory;
-        factory.setModifiers(modifiers);
         factory.setExitType(result);
         for (size_t i = 0; i < norm.size(); ++i) {
             factory.addNormArg(std::format("__n{}", i), norm[i], false);

@@ -139,6 +139,15 @@ void Builder::numberBodyPorts(BodyReach &walk, const runtime::GraphDraft &draft,
         }
         ++index;
     }
+    // A `with` port the type does not count is a value the function captured from the one around
+    // it; so is a closure node. A use through one is not a use of a parameter of this function, and
+    // which resource of the enclosing function it is cannot be read from here.
+    for (; withAt < withPorts.size(); ++withAt) {
+        walk.captured.insert(withPorts[withAt]);
+    }
+    for (draft_node_ref_t node : draft.closureNodes()) {
+        walk.captured.insert(node);
+    }
 }
 
 void Builder::addParamUse(BodyReach &walk, size_t index, sem::ResourceClass cls,
@@ -218,6 +227,9 @@ bool Builder::readCalleeSignature(BodyReach &walk, const runtime::GraphDraft &dr
             }
             operand = norm[at];
         }
+        if (walk.captured.contains(operand)) {
+            return false; // a resource of the function around this one
+        }
         const auto port = walk.ports.find(operand);
         if (port == walk.ports.end()) {
             // The operand is a value the body computed, not one of its caller's: a use through it
@@ -296,6 +308,9 @@ bool Builder::reachOfOper(DraftGraphBuilder *graph, const runtime::GraphDraft &d
         const size_t at = size_t(access.binding.index) + (isWith ? 1 : 0);
         if (at >= inputs.size()) {
             return false;
+        }
+        if (walk.captured.contains(inputs[at])) {
+            return false; // a resource of the function around this one
         }
         const auto port = walk.ports.find(inputs[at]);
         if (port == walk.ports.end()) {

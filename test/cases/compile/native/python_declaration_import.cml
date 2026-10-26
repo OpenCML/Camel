@@ -6,14 +6,14 @@
  */
 module python_declaration_import
 
-import { py_exec, py_eval, py_run, py_attr, py_import, py_dispose } from python
+import { py_exec, py_eval, py_run, py_attr, py_import, py_dispose, py_wrap } from python
 
 func fixed_signatures(): void sync {
-    py_exec("x = 1")
-    py_eval("1 + 2")
-    py_run("script.py")
-    let math = py_import("math")
-    let sqrt = py_attr(math, "sqrt")
+    let _ = py_exec("x = 1")
+    let _ = py_eval("1 + 2")
+    let _ = py_run("script.py")
+    let math = py_import("math") !! py_wrap(0)
+    let sqrt = py_attr(math, "sqrt") !! py_wrap(0)
     py_dispose(sqrt)
 }
 

@@ -27,8 +27,8 @@ fb04505767c1cb83 no test/cases/parse/rules/when_after_body.cml
 40ed85c8acdca49e ok test/cases/parse/rulings/eager_logic.cml
 9fbee2e0b11e29af ok test/cases/parse/rulings/exponent.cml
 fc8c008e7651d6b1 ok test/cases/parse/rulings/if_statement.cml
-554d142911fdc00e ok test/cases/parse/rulings/import_rename.cml
-34438d163ab3dfc2 ok test/cases/parse/rulings/import_rename_hides.cml
+2a5e278b7bd16d03 ok test/cases/parse/rulings/import_rename.cml
+c1735f8f328ae58c ok test/cases/parse/rulings/import_rename_hides.cml
 6d44b624e338a9da ok test/cases/parse/rulings/imports_with_comments.cml
 ee32bfc8973342f9 no test/cases/parse/rulings/lambda_without_parentheses.cml
 8480c0dccf1c1a2e ok test/cases/parse/rulings/loop_forms.cml
@@ -263,7 +263,7 @@ ceed05b8369c6253 ok probes/probe_s155.cml
 6ba39c6ee57d19a0 ok probes/probe_s157.cml
 c4b4c604ec658dc0 ok probes/probe_s158.cml
 a8322d430d5100cc ok probes/probe_s159.cml
-02594589576121c7 ok probes/probe_s160.cml
+f489da665059f75e no probes/probe_s160.cml
 19dd7a5f601d0ea1 no probes/probe_s161.cml
 18668aa08d1fbfcf no probes/probe_s162.cml
 19dd7a5f601d0ea1 no probes/probe_s163.cml

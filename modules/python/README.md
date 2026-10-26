@@ -24,19 +24,19 @@
 
 | 算子 | 签名 | 说明 |
 |------|------|------|
-| `py_call` | `(fn: string \| PyObject, ...args: PyObject[]) => PyObject` | 调用 Python 函数。**重载 1**：`fn` + 可变数量位置参数，所有 `args` 必须为 `PyObject`。 |
-| | `(fn: string \| PyObject, args?: (...PyObject) \| PyObject[], kwargs?: Struct<...PyObject>) => PyObject` | **重载 2**：支持命名参数。`args` 为 `Tuple` 或 `Array<PyObject>` 传 `*args`；`kwargs` 为 `Struct`（字段值全为 `PyObject`）传 `**kwargs`。1–3 参均可，`args`/`kwargs` 可选。 |
+| `py_call` | `(fn: string \| PyObject, ...args: PyObject[]) => PyObject!` | 调用 Python 函数。**重载 1**：`fn` + 可变数量位置参数，所有 `args` 必须为 `PyObject`。 |
+| | `(fn: string \| PyObject, args?: (...PyObject) \| PyObject[], kwargs?: Struct<...PyObject>) => PyObject!` | **重载 2**：支持命名参数。`args` 为 `Tuple` 或 `Array<PyObject>` 传 `*args`；`kwargs` 为 `Struct`（字段值全为 `PyObject`）传 `**kwargs`。1–3 参均可，`args`/`kwargs` 可选。 |
 | | | `fn` 为字符串时：单标识符（如 `"print"`）解析为 `builtins.print`；含 `.` 时（如 `"math.sqrt"`）按 `module.attr` 解析。也可传入 `PyObject` 作为可调用对象。 |
-| `py_exec` | `(code: string) => PyObject` | 执行任意 Python 代码（语句），返回 `None`。 |
-| `py_eval` | `(expr: string) => PyObject` | 计算表达式并返回结果。 |
-| `py_run` | `(file_path: string) => PyObject` | 执行指定路径的 Python 脚本文件，返回 `None`。 |
+| `py_exec` | `(code: string) => PyObject!` | 执行任意 Python 代码（语句），返回 `None`。 |
+| `py_eval` | `(expr: string) => PyObject!` | 计算表达式并返回结果。 |
+| `py_run` | `(file_path: string) => PyObject!` | 执行指定路径的 Python 脚本文件，返回 `None`。 |
 
 ### 模块与属性
 
 | 算子 | 签名 | 说明 |
 |------|------|------|
-| `py_import` | `(module_name: string) => PyObject` | 导入 Python 模块，返回模块对象。 |
-| `py_attr` | `(obj: PyObject, attr: string) => PyObject` | 获取对象属性。`attr` 可含 `.` 表示链式访问（如 `"a.b.c"`）。 |
+| `py_import` | `(module_name: string) => PyObject!` | 导入 Python 模块，返回模块对象。 |
+| `py_attr` | `(obj: PyObject, attr: string) => PyObject!` | 获取对象属性。`attr` 可含 `.` 表示链式访问（如 `"a.b.c"`）。 |
 | `py_print` | `(...objs: PyObject[]) => PyObject?` | 调用 Python `print(..., end='')` 输出，不换行；透传首个参数。 |
 | `py_println` | `(...objs: PyObject[]) => PyObject?` | 调用 Python `print(...)` 输出并换行；透传首个参数。 |
 
@@ -45,13 +45,15 @@
 | 算子 | 签名 | 说明 |
 |------|------|------|
 | `py_wrap` | `(x: T) => PyObject<T>` | Camel → Python：将 Camel 值转为 Python 对象。支持 Int/Float/Bool/String/Array/Tuple/Struct 及嵌套。 |
-| `py_unwrap` | `(obj: PyObject<T>) => T` | Python → Camel：将 Python 对象按目标类型转回 Camel。**必须**通过 `as PyObject<T>` 指定目标类型。 |
+| `py_unwrap` | `(obj: PyObject<T>) => T!` | Python → Camel：将 Python 对象按目标类型转回 Camel。**必须**通过 `as PyObject<T>` 指定目标类型；对象不是 `T` 所要的那种就是 `PythonTypeError`（`bool` 只收 bool，不收 `5`；`int` 不收 bool 与 float；`string` 不收 bytes；`f32` 放不下 `1e300`），消息给出路径与所见的类型。 |
+
+**Python 一侧的失败是错误值，不是故障**：调用、求值、导入、取属性的结果是 `PyObject!`，Python 抛出的异常是种类 `PythonError` 的错误值，消息以异常类名开头（`KeyError: ...`），后接回溯；用 `!!`、`?->` 或 `match` 拆开。参数个数、类型不对仍是故障。
 
 **`py_unwrap` 必须配合 `as` 使用**：`py_eval` / `py_call` 返回的是裸 `PyObject`（无类型参数），而 `py_unwrap` 需根据 `PyObject<T>` 的 `T` 决定返回类型并完成转换。因此必须先将结果用 `as PyObject<T>` 转为带泛型参数的 `PyObject<T>` 再传给 `py_unwrap`，例如：
 
 ```cml
-let obj = py_call(some_fn, py_wrap(42))   // 返回 PyObject
-let val = py_unwrap(obj as PyObject<int>) // 指定 T=int，返回 int
+let obj = py_call(some_fn, py_wrap(42)) !! py_wrap(0)   // PyObject
+let val = py_unwrap(obj as PyObject<int>) !! 0          // 指定 T=int，返回 int
 ```
 
 ## 示例
@@ -59,31 +61,36 @@ let val = py_unwrap(obj as PyObject<int>) // 指定 T=int，返回 int
 ```cml
 import { py_call, py_eval, py_import, py_attr, py_exec, py_run, py_wrap, py_unwrap } from python
 
+// 这里的程序认为每次调用都成功；失败的是错误值，见上
+func must(r: PyObject!): PyObject {
+    return r !! py_wrap("python failed")
+}
+
 func main() sync {
     // 调用 builtins.print
-    py_call("print", py_wrap("Hello from Camel!"))
+    let _ = py_call("print", py_wrap("Hello from Camel!"))
 
     // 表达式求值
-    let sum_obj = py_eval("1 + 2 * 3")
-    py_call("print", sum_obj)  // 7
+    let sum_obj = must(py_eval("1 + 2 * 3"))
+    let _ = py_call("print", sum_obj)  // 7
 
     // 导入模块并获取属性
-    let math = py_import("math")
-    let sqrt = py_attr(math, "sqrt")
-    let result = py_call(sqrt, py_wrap(16))
+    let math = must(py_import("math"))
+    let sqrt = must(py_attr(math, "sqrt"))
+    let result = must(py_call(sqrt, py_wrap(16)))
 
     // 执行代码字符串
-    py_exec("print('Exec: Hello!')")
+    let _ = py_exec("print('Exec: Hello!')")
 
     // 执行脚本文件
-    py_run("scripts/hello.py")
+    let _ = py_run("scripts/hello.py")
 
     // 类型互转：py_unwrap 需配合 as PyObject<T> 指定目标类型
-    let val = py_unwrap(py_eval("1+1") as PyObject<int>)
+    let val = py_unwrap(must(py_eval("1+1")) as PyObject<int>) !! 0
 
     // 命名参数：py_call(fn, args_tuple, kwargs_struct) 支持 *args 与 **kwargs
-    py_exec("def _greet(name, greeting='Hello'): print(f'{greeting}, {name}!')")
-    py_call("_greet", (py_wrap("World"),), { greeting: py_wrap("Hi") })  // 输出 Hi, World!
+    let _ = py_exec("def _greet(name, greeting='Hello'): print(f'{greeting}, {name}!')")
+    let _ = py_call("_greet", (py_wrap("World"),), { greeting: py_wrap("Hi") })  // 输出 Hi, World!
     return 0
 }
 ```

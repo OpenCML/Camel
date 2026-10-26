@@ -430,6 +430,11 @@ class Builder {
     // principles 10.4): a direct call of the function is a call of the kernel instead; the
     // graph is kept for what asks to look inside (autodiff, fusion, export, a rule).
     std::unordered_map<DraftGraphBuilder *, ImplKernel> implKernels_;
+    // The name the function of an `#impl` kernel is declared under, by the URI of the kernel
+    // operator (`str:split` -> `split`): a message about a call that resolves in the kernel says
+    // the declaration's name, because the kernel is private to the module that writes it (design
+    // principles 10.4).
+    std::unordered_map<std::string, std::string> implDeclaredNames_;
     // The kernel a generic `#impl` function declares, by its template (rule impl-kernel-site;
     // design principles 10.4, one operator, per-type executors). A generic function's
     // instances have signatures of their own, so which rule of the kernel's declaration is the
@@ -1686,6 +1691,10 @@ class Builder {
     /// The kernel of the one graph `graph`, when it is an `#impl` body an executor was found
     /// for (a generic function's instance, adoptImplKernel).
     std::optional<ImplKernel> implKernelOfGraph(const compile_graph_ptr_t &graph) const;
+    /// The name the function of the `#impl` kernel group `ops` is declared under, or an empty
+    /// string when `ops` is not such a group: what a message about a call that resolves in the
+    /// kernel says, in place of the kernel's own name (design principles 10.4).
+    std::string declaredNameOfKernelGroup(const oper_group_ptr_t &ops) const;
     /// Whether the graph being built is an `#impl` body or nested in one (a lambda in the
     /// body). A call written there stays a call of the function's semantic graph, so that the
     /// body the expansion reads is the body without the tag; the kernel is for callers.
@@ -1736,8 +1745,36 @@ class Builder {
     /// prefix, then the prelude. `problem` is set when the name exists but cannot be called at
     /// compile time (imported and not a generic function, or two imports that both bring it).
     /// nullopt with `problem` still NotEvaluable when the name is not found by those layers.
-    std::optional<generic_template_ptr_t> whenPredicateNamed(
+    std::optional<generic_ref_t> whenPredicateNamed(
         const std::string &written, const GCT::node_ptr_t &at, WhenResult &problem);
+    // ---- evaluateWhenCondition, in the steps it is made of ----
+    /// What a condition is read against: the declaration's signature, the bindings of its type
+    /// variables and the `with` values the call gave.
+    struct WhenFrame {
+        FunctionType *signature;
+        const camel::core::type::type_bindings_t &bindings;
+        const std::unordered_map<std::string, data_ptr_t> &withValues;
+    };
+    WhenResult whenOf(const WhenFrame &frame, const GCT::node_ptr_t &node);
+    /// `&&`, `||` and a conditional expression.
+    WhenResult whenOfBranch(const WhenFrame &frame, const GCT::node_ptr_t &node);
+    WhenResult whenOfCall(const WhenFrame &frame, const GCT::node_ptr_t &node);
+    /// `p::<T>(...)`: a predicate of the library, resolved where the declaration is written.
+    WhenResult whenOfPredicateCall(const WhenFrame &frame, const GCT::node_ptr_t &node);
+    /// The answer of one chosen predicate: its instance's graph, or its body read over constants.
+    WhenResult whenOfPredicateInstance(
+        const generic_template_ptr_t &tmpl, const camel::core::type::type_bindings_t &callBindings,
+        const std::vector<data_ptr_t> &valueArguments, const GCT::node_ptr_t &callee,
+        const std::string &written);
+    /// `!`, `&&`, `||` and an ordinary function of constants.
+    WhenResult whenOfOperatorCall(const WhenFrame &frame, const GCT::node_ptr_t &node);
+    /// A `with` parameter used as a bool.
+    WhenResult whenOfParameter(const WhenFrame &frame, const GCT::node_ptr_t &node);
+    /// The declaration of an overloaded predicate a call means, by its type arguments and the
+    /// values it passes. `fitting` is how many declarations fit: none or several give nullptr.
+    generic_template_ptr_t pickPredicateOverload(
+        const generic_ref_t &named, const std::vector<camel::core::type::Type *> &typeArguments,
+        const std::vector<data_ptr_t> &valueArguments, size_t &fitting);
     /// Whether two selective imports bring a predicate of the name, in which case `problem`
     /// says so and neither is chosen.
     bool whenPredicateAmbiguous(const std::string &written, WhenResult &problem);
@@ -1793,6 +1830,51 @@ class Builder {
         const std::vector<data_ptr_t> &arguments,
         const std::function<data_ptr_t(const GCT::node_ptr_t &)> &evalArgument,
         const camel::core::type::type_bindings_t &vars, size_t depth, bool buildFirst);
+    // ---- evaluateCallAtBuildTime, in the steps it is made of ----
+    /// The callee of a call, once its `with` applications are taken off.
+    struct FoldRequest {
+        GCT::node_ptr_t callee;
+        bool typeApplied = false;
+        std::string name;
+        const std::vector<data_ptr_t> *arguments = nullptr;
+        std::vector<data_ptr_t> withArguments;
+        const camel::core::type::type_bindings_t *vars = nullptr;
+        size_t depth                                    = 0;
+        bool buildFirst                                 = false;
+    };
+    /// What a call names, ready to be read: the body, the signature with the types bound, and
+    /// where the declaration's own `when` is answered.
+    struct FoldTarget {
+        GCT::node_ptr_t func;
+        FunctionType *signature = nullptr;
+        camel::core::type::type_bindings_t bindings;
+        generic_template_ptr_t declaring;
+        const ModuleUnit *declaringUnit = nullptr;
+    };
+    /// Records why a call was not folded and answers false, for the step that returns it.
+    static bool refuseFold(FoldedCall &result, FoldRefusal refusal, std::string reason);
+    bool foldNameCallee(
+        GCT::node_ptr_t callee,
+        const std::function<data_ptr_t(const GCT::node_ptr_t &)> &evalArgument,
+        FoldRequest &request, FoldedCall &result);
+    bool foldBuiltinOperator(const FoldRequest &request, FoldedCall &result);
+    std::optional<FoldTarget> bindFoldTemplate(
+        const generic_template_ptr_t &tmpl, const FoldRequest &request, bool checkTypes,
+        std::string &why);
+    bool foldTargetOfGeneric(
+        const generic_ref_t &named, const FoldRequest &request, FoldTarget &target,
+        FoldedCall &result);
+    bool buildFoldInstance(
+        const FoldTarget &target, const FoldRequest &request, FoldedCall &result);
+    bool foldTargetOfFunction(const FoldRequest &request, FoldTarget &target, FoldedCall &result);
+    bool foldCheckPurity(const FunctionType &signature, FoldedCall &result);
+    bool foldCheckCondition(
+        const FoldTarget &target, const std::unordered_map<std::string, data_ptr_t> &withValues,
+        FoldedCall &result);
+    bool foldCheckResultType(const FoldTarget &target, FoldedCall &result);
+    void foldRunBody(const FoldTarget &target, const FoldRequest &request, FoldedCall &result);
+    /// The functions whose body reported errors when it was built for a fold: not folded again.
+    std::unordered_set<const DraftGraphBuilder *> brokenBodies_;
     /// evaluateCallAtBuildTime for a call inside a body being evaluated: a refusal becomes an
     /// exception carrying the matching problem.
     data_ptr_t evaluateCallInsideBody(
@@ -2070,6 +2152,9 @@ class Builder {
     struct BodyReach {
         camel::core::sem::ResourceSignature reach;
         std::unordered_map<draft_node_ref_t, size_t> ports;
+        // Values the function captured from the one around it: a `with` port its type does not
+        // count, and the closure nodes. Their resources are that function's, not a parameter's.
+        std::unordered_set<draft_node_ref_t> captured;
         bool unplaceable = false;
     };
     // The walk of one body, in the named steps it is made of: the body's ports, the uses one node

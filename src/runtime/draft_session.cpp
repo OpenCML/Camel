@@ -1138,6 +1138,10 @@ RuntimeGraphDraftSession::RootScope::~RootScope() {
 void RuntimeGraphDraftSession::traceStaticSlots(
     const camel::core::rtdata::Object::RefRelocator &relocate, const Type *ownerType,
     std::string_view ownerKind) {
+    // The objects the collector moved, old slot to new: a specialization is cached under the
+    // value it binds, and for an object that is the slot (its address), which must follow the
+    // object. Without it a key names whatever is at the old address next.
+    std::vector<std::pair<slot_t, slot_t>> moves;
     for (auto &[graph, entry] : drafts_) {
         GraphDraft &draft        = *entry->draft;
         const auto slots         = draft.staticSlots();
@@ -1165,9 +1169,33 @@ void RuntimeGraphDraftSession::traceStaticSlots(
                     .slotName  = "draft",
                     .slotIndex = i,
                 });
+            if (moved != value) {
+                moves.emplace_back(slots[i], toSlot<Object *>(moved));
+            }
             draft.relocateStaticSlot(i, toSlot<Object *>(moved));
         }
     }
+    if (moves.empty() || specializationCache_.empty()) {
+        return;
+    }
+    std::unordered_map<RuntimeSpecializationKey, GCGraph *, RuntimeSpecializationKeyHasher> kept;
+    kept.reserve(specializationCache_.size());
+    for (auto &[key, graph] : specializationCache_) {
+        RuntimeSpecializationKey retargeted = key;
+        for (RuntimeSpecializationBindingKey &binding : retargeted.bindings) {
+            if (binding.value == NullSlot || binding.type == nullptr || !binding.type->isGCTraced()) {
+                continue;
+            }
+            for (const auto &[from, to] : moves) {
+                if (binding.value == from) {
+                    binding.value = to;
+                    break;
+                }
+            }
+        }
+        kept.insert_or_assign(std::move(retargeted), graph);
+    }
+    specializationCache_ = std::move(kept);
 }
 
 bool RuntimeGraphDraftSession::specializationLivesInProgram(

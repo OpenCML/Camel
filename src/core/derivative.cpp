@@ -8,6 +8,7 @@
 #include "camel/core/derivative.h"
 
 #include "camel/core/type/composite/array.h"
+#include "camel/core/type/intern.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/utils/type.h"
@@ -244,26 +245,32 @@ Type *computeTangent(Type *primal, Audience audience) {
 
 namespace {
 
-/// The answer of `computeTangent` for one audience, cached. Types are immutable and long-lived, so
-/// the mapping is cached by identity; the two audiences keep separate tables, since one type
-/// answers two different questions.
+/// The answer of `computeTangent` for one audience, cached. A type is its structure (design
+/// principles 5.2): the mapping is cached by canonical id, so `f32[n]` and `f32[m]` are one entry
+/// and one answer, and a comparison of a gradient type with a parameter type never meets two
+/// objects of one type. The two audiences keep separate tables, since one type answers two
+/// different questions. A type the table does not hold is computed each time.
 Type *cachedTangent(Type *primal, Audience audience) {
     if (primal == nullptr) {
         return nullptr;
     }
+    const type::TypeId key = type::TypeTable::instance().canonicalId(primal);
+    if (key == type::kNoTypeId) {
+        return computeTangent(primal, audience);
+    }
     static std::mutex mutex;
-    static std::unordered_map<Type *, Type *> forUser;
-    static std::unordered_map<Type *, Type *> forMachinery;
+    static std::unordered_map<type::TypeId, Type *> forUser;
+    static std::unordered_map<type::TypeId, Type *> forMachinery;
     auto &cache = audience == Audience::User ? forUser : forMachinery;
     {
         std::lock_guard lock(mutex);
-        if (auto it = cache.find(primal); it != cache.end()) {
+        if (auto it = cache.find(key); it != cache.end()) {
             return it->second;
         }
     }
     Type *tangent = computeTangent(primal, audience);
     std::lock_guard lock(mutex);
-    cache.emplace(primal, tangent);
+    cache.emplace(key, tangent);
     return tangent;
 }
 

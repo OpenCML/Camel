@@ -349,7 +349,7 @@ save_npy(download(y), p)   // N3 :tiles/download (B2)     → 块 B3: device=-1
 - `#cpu` 块：入口一个 `download`、出口一个 `upload`（显式节点），每轮两次传输——测试**钉住这个数**，不让它悄悄变成每算子一次；
 - 传输合批：沿用已有的聚合（元组/结构体按叶子 `ACCS` 拆、再装回），一次调用最多一对整块传输。
 
-**落地状态**：驻留结论就是唯一的传输表。`modules/tiles/src/residency.cpp` 的 `planResidency` 读放置事实后逐段回答入口上传、出口下载与段间驻留交接，`modules/tiles/src/region_outline.cpp` 只按这张结论插节点，区域分析原先自己算的那张并存的表（`planRegionTransfers`，按"是不是段成员"作答）已删除。新口径只在块**改变**的地方写传输：段成员按段算设备值，其余值按产生它的节点算，已经落在设备上的值不再被上传（旧表把段外读到的每个值都上传一次，即使它本来就在设备上），段与段之间是驻留交接（同一块，不拷贝）。签名的声明也参与判块：`Device<T>` 形参/返回类型断言这个值本来就在设备上，因此不产生入口上传、出口也不下载；普通声明断言宿主值，调用点与 callee 入口各写一次。`inspectRegions` 的 JSON 把三个答案放进每个 `region`（`uploads`/`downloads`/`resident`，`schema` 升到 2），图级汇总仍写在 `transfers`。
+**落地状态**：驻留结论就是唯一的传输表。`modules/tiles/src/residency.cpp` 的 `planResidency` 读放置事实后逐段回答入口上传、出口下载与段间驻留交接，`modules/tiles/src/region_outline.cpp` 只按这张结论插节点，区域分析原先自己算的那张并存的表（`planRegionTransfers`，按"是不是段成员"作答）已删除。新口径只在块**改变**的地方写传输：段成员按段算设备值，其余值按产生它的节点算，已经落在设备上的值不再被上传（旧表把段外读到的每个值都上传一次，即使它本来就在设备上），段与段之间是驻留交接（同一块，不拷贝）。签名的声明也参与判块：`Device<T>` 形参/返回类型断言这个值本来就在设备上，因此不产生入口上传、出口也不下载；普通声明断言宿主值，调用点与 callee 入口各写一次。`inspectRegions` 的 JSON 把三个答案放进每个 `region`（`uploads`/`downloads`/`resident`；`schema` 仍是 1——报告的号只在**已有字段改了含义或被删掉**时升，只加字段不升号），图级汇总仍写在 `transfers`。
 
 **还没落地的观察点**：`#cpu` 块（入口一次 `download`、出口一次 `upload`）与 `LoopCond` 读设备张量（每轮一次主机观察）。两条都要求宿主块、循环条件成为**独立的段**，而今天的段划分把 `#cpu` 块和循环的条件、体一并放进它们所在的那个段（`graph_regions.cpp` 的 `insideLoop`），边界不存在，因此没有可钉的读数；它们随"把宿主块与条件拆成段"的那一步落地。
 

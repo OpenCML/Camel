@@ -11,6 +11,6 @@ import { get_chars, set_terminal_raw_mode } from io
 
 func main(): int sync {
     let typed = get_chars(1)
-    set_terminal_raw_mode(false)
+    let _ = set_terminal_raw_mode(false)
     return len(typed)
 }

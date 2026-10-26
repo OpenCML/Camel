@@ -1,0 +1,9 @@
+// A search that starts outside the text is a fault, as an index outside a string is.
+
+import { find } from re
+
+func main(): int sync {
+    println('abc'->find<'b', 9> == null)
+    println('not reached')
+    return 0
+}

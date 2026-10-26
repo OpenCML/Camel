@@ -1,0 +1,179 @@
+id = "modules.module_resolution"
+order = 379
+tier = "fast"
+tags = ["feat", "modules", "import", "resolution", "diagnostics"]
+desc = "One lookup for a module name: only `.cml` and `.cmo` are a module file, a file that was found is what the name stands for (a `.cmo` the loader refuses ends the import instead of the lookup going on to another candidate name), and the entry module is named by its file."
+
+# The lookup of a module name has one order (design principles 10.2): the importing module's own
+# directory, then the module roots (`-I` in the order given, `CAMEL_PACKAGES`), then the standard
+# library. What counts as a module file, and what a hit means, is asked once and not again per
+# candidate:
+#
+#   * only `.cml` and `.cmo` name a module file. Any same-stem file used to be taken as source
+#     (`D/xx.*`, in the order the directory listed them), so a Markdown document, a text file or an
+#     editor's leftover could be compiled as the module `foo`, or shadow the real `foo.cml`.
+#   * a `.cmo` that was found and refused by the loader (ABI mismatch, missing symbol, a missing
+#     dependency, or a file that is not a library at all) is a module that is there and cannot be
+#     used: the import fails with the loader's reason. The lookup used to `continue` to the next
+#     candidate name, so a program could silently get a module of another name, or a working file
+#     of the same name from a root further down.
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The `.cmo` fixtures stay text (a compiled object would quietly make the refused-load cases pass
+# on a real module): this runs before them and says so.
+
+[[tests]]
+name = "broken_cmo_fixtures_are_text"
+desc = "The two `.cmo` fixtures hold no NUL byte and are valid UTF-8: they are text the loader refuses, not a compiled module that happens to be there."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/modules/module_resolution/broken_cmo_is_text.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["cmo_hit_stops/level/foo.cmo is text", "only_cml_and_cmo/cmo_beside_cml/thing.cmo is text"]
+timeout_ms = 20000
+
+# `import foo` in `level/helper.cml` finds `level/foo.cmo` in the library's own directory and the
+# loader refuses it. The `-I` root holds `level/helper/foo.cml`, which is the candidate name
+# `level.helper.foo` (the importing module's name prefixed to the import). The import must fail at
+# the refused `.cmo`; a lookup that keeps going prints 7, the value of that other module.
+
+[[tests]]
+name = "cmo_hit_ends_the_import"
+desc = "A `.cmo` found in the importing module's own directory and refused by the loader ends the import: ModuleNotFound carries the loader's reason and the `.cmo` path, the candidate `level.helper.foo` (a working module under the `-I` root) is not tried, and the program does not run."
+kind = "negative"
+case = "../../../cases/modules/module_resolution/cmo_hit_stops/main.cml"
+args = ["-E", "short", "-I", "roots/one", "${case}"]
+expect_exit = 1
+expect_output_contains = ["Module 'foo' not found", "name=SemanticDiag::ModuleNotFound", "Found .cmo but load failed", "foo.cmo"]
+
+# A Markdown document named after the module, and no `thing.cml`: a document is not a module file,
+# whatever it holds.
+
+[[tests]]
+name = "markdown_is_not_a_module_file"
+desc = "`import thing` with `thing.md` beside the program and no `thing.cml`: ModuleNotFound, and the reason says which two file names name a module. The Markdown file is valid Camel text, so a lookup that accepted it would print 7."
+kind = "negative"
+case = "../../../cases/modules/module_resolution/only_cml_and_cmo/markdown_only/main.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_output_contains = ["Module 'thing' not found", "name=SemanticDiag::ModuleNotFound", "no file 'thing.cml' or 'thing.cmo'"]
+
+[[tests]]
+name = "text_file_is_not_a_module_file"
+desc = "The same for `thing.txt`: the extension is not `.cml` or `.cmo`, so the file is not the module and the program does not run."
+kind = "negative"
+case = "../../../cases/modules/module_resolution/only_cml_and_cmo/txt_only/main.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+# 700 is what the text file holds: a run that read it as the module printed that and no diagnostic.
+expect_stdout_not_contains = ["700"]
+expect_output_contains = ["Module 'thing' not found", "no file 'thing.cml' or 'thing.cmo'"]
+
+[[tests]]
+name = "cml_wins_over_another_extension"
+desc = "`thing.cml` (3) and `thing.md` (300) beside the program: the `.cml` is the module, so the value does not depend on the order the directory is listed in."
+kind = "behavior"
+case = "../../../cases/modules/module_resolution/only_cml_and_cmo/md_and_cml/main.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_exact = "3\n"
+
+# The same rule where it was seen first, on the Python boundary: a package's `python_boundary.py`
+# beside `python_boundary.cml` was read as the Camel module `python_boundary`, and the run reported
+# a syntax error from the Python file's own copyright line rather than running the program
+# (`python_boundary.py:2:17 error[SyntaxDiag::UnexpectedToken]: Unexpected 'the'; expected 'func'`,
+# from the Python binding's `load`, which resolves the module name in the file's directory). A `.py`
+# file with a `.cml`'s stem is the extreme case of "any same-stem file": it is not merely a wrong
+# module, it is a file of another language.
+
+[[tests]]
+name = "python_file_beside_the_cml_is_not_the_module"
+desc = "`thing.cml` (3) and `thing.py` beside the program: the `.cml` is the module `thing`, so the program prints 3. Which file the name resolves to does not depend on the order the directory lists it in, and a Python file is never read as Camel source."
+kind = "behavior"
+case = "../../../cases/modules/module_resolution/only_cml_and_cmo/py_beside_cml/main.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_exact = "3\n"
+expect_output_not_contains = ["SyntaxDiag::UnexpectedToken", "thing.py"]
+
+[[tests]]
+name = "python_file_alone_is_not_a_module_file"
+desc = "`thing.py` and no `thing.cml`: only `.cml` and `.cmo` name a module file, so the import is ModuleNotFound and the reason names the two file names. The Python file is not read as source: a lookup that accepted it reported a syntax error inside it instead."
+kind = "negative"
+case = "../../../cases/modules/module_resolution/only_cml_and_cmo/py_only/main.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_output_contains = ["Module 'thing' not found", "name=SemanticDiag::ModuleNotFound", "no file 'thing.cml' or 'thing.cmo'"]
+expect_output_not_contains = ["SyntaxDiag::UnexpectedToken", "thing.py"]
+
+# The other half of the pair: `.cmo` and `.cml` of one name, and the `.cmo` is what the name
+# stands for (the `.cml` beside it is its declaration module, design principles 6.4).
+
+[[tests]]
+name = "cmo_beside_cml_is_the_module"
+desc = "`thing.cmo` (a file the loader refuses) and `thing.cml` (3) beside the program: the name resolves to the `.cmo`, so the import fails with the loader's reason and the `.cml` is not used instead. The `.cml` beside a `.cmo` is its declaration module (design principles 6.4) and never replaces it."
+kind = "negative"
+case = "../../../cases/modules/module_resolution/only_cml_and_cmo/cmo_beside_cml/main.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_output_contains = ["Module 'thing' not found", "Found .cmo but load failed", "thing.cmo"]
+
+# A file is a module and the module's name is the file's name, for the entry file too (design
+# principles 10.2): `counts.cml` is the module `counts`, so `counts::twice` is that module's own
+# function. With the placeholder name `main` the qualified reference resolved to nothing.
+
+[[tests]]
+name = "entry_module_is_named_by_its_file"
+desc = "`counts.cml` writes `counts::twice(21)` and prints 42: the entry module's name is its file's name, so the module can qualify its own function, with no `module` declaration and no placeholder name."
+kind = "behavior"
+case = "../../../cases/modules/module_resolution/entry_name_is_file_name/counts.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_exact = "42\n"
+
+#  ---- what may add a module root, and which values are checked ----
+# A root comes from the command line (`-I`, read back from the run that used it) or from
+# `CAMEL_PACKAGES`; `CAMEL_MODULE_PATH` used to be read as a third list of roots, so the same
+# program resolved differently depending on the environment it was started in. It is gone: the
+# option is the switch, and the two cases below are the pair that says so (with the variable the
+# program prints 101, with `-I` it prints 101, without either it does not run).
+#
+# `CAMEL_HOME` is the one variable that stays -- it names the installation, not a root -- and it is
+# checked: a value that names nothing used to be used anyway, and every import of the run then
+# failed with "not found", long after anything mentioned `CAMEL_HOME`.
+
+[[tests]]
+name = "env_var_does_not_add_a_module_root"
+desc = "`CAMEL_MODULE_PATH` naming the directory that holds `only_here` is not searched: the variable adds no module root, so the import fails with ModuleNotFound, and the root is added by `-I` (the next case)."
+kind = "negative"
+case = "../../../cases/compile/module_imports/include_path/prog/only_from_include.cml"
+args = ["-E", "short", "${case}"]
+envs = ["CAMEL_MODULE_PATH=../roots/one"]
+expect_exit = 1
+# 101 is what `only_here` returns: the variable used to add the root, and the run printed that.
+expect_stdout_not_contains = ["101"]
+expect_output_contains = ["Module 'only_here' not found", "name=SemanticDiag::ModuleNotFound"]
+
+[[tests]]
+name = "include_option_adds_the_root"
+desc = "The same directory given with `-I` is a module root: the option is what adds one, in the order it is given, and the value is written in the command that used it."
+kind = "behavior"
+case = "../../../cases/compile/module_imports/include_path/prog/only_from_include.cml"
+args = ["-E", "short", "-I", "../roots/one", "${case}"]
+expect_exit = 0
+expect_stdout_exact = "101\n"
+
+[[tests]]
+name = "camel_home_that_names_nothing_is_an_error"
+desc = "`CAMEL_HOME` pointing at a path that does not exist ends the run with an error naming the variable and the path, before anything is loaded: the run does not search a directory that is not there and fail later with 'module not found'. A checker of its own, because the runner sets `CAMEL_HOME` for every child it starts; the second half of it runs the same program with the installation root the run measures, which must still print 3."
+kind = "negative"
+tool = "node"
+case = "../../../cases/modules/module_resolution/camel_home_is_checked.mjs"
+args = ["${case}", "${camel}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS a CAMEL_HOME that names nothing is refused", "PASS the installation root the run measures still runs the program"]
+timeout_ms = 30000

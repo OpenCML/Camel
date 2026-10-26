@@ -83,8 +83,8 @@ func w29(a30: int, var c31: int): int sync {
 }
 
 func main(): int sync {
-    let n35 = int(get_env('PROGEN_I0'));
-    let n36 = int(get_env('PROGEN_I1'));
+    let n35 = int(get_env('PROGEN_I0') ?? '');
+    let n36 = int(get_env('PROGEN_I1') ?? '');
     let n38 = (if (if false then true else false) then concat([n36, 5, n36, n35], [n35]) else concat([n35, n36, -7, n36], [n35, n36]))->map<(p37: int): int => -2>;
     var v41 = (match n36 {
         case -1 => 4

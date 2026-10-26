@@ -1,0 +1,18 @@
+// fail reports a broken precondition and attempt turns a fault into an error value, at the edge of a call.
+// Run: camel docs/tutorial/examples/07_attempt.cml
+
+func share(whole: int): int {
+    return if whole <= 0 then fail<'InvalidArgument'>('whole must be positive') else 100 / whole
+}
+
+func main(): int sync {
+    println(share(4))
+    println(attempt(share)(0) !! -1)
+    let all = [4, 0, 10]->map<attempt(share)>
+    println(all->map<(r: int!): int => r !! -1>)
+    println(match attempt(share)(0) {
+        case error e => e.kind + ': ' + e.message
+        case v => 'ok ' + string(v)
+    })
+    return 0
+}

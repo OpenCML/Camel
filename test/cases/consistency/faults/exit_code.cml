@@ -4,6 +4,8 @@
  */
 module exit_code
 
+import { exit } from process
+
 func stop(code: int): int sync {
     println('stopping')
     exit(code)

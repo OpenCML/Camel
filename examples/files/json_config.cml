@@ -4,18 +4,17 @@
 module json_config
 
 import json
-import { mkdirs, write_text, try_read_text } from fs
+import { mkdirs, write_text, read_text } from fs
 import { get_env } from env
 
 type Config = { host: string, port: int, verbose: bool }
 
 func decode(text: string): Config! {
-    let shape: Config = { host: '', port: 0, verbose: false }
-    return json::decode_as(text, shape)
+    return json::decode_as::<Config>(text)
 }
 
 func load(path: string, defaults: Config): Config {
-    return try_read_text(path) ?-> decode !! defaults
+    return path->read_text ?-> decode !! defaults
 }
 
 func show(c: Config): string {
@@ -27,17 +26,17 @@ func main(): int sync {
     // The test runner gives every test its own scratch directory (CAMEL_TEST_TMPDIR), so the
     // four back ends (and two runs) do not share these files. A direct run keeps the path the
     // header names.
-    let root = get_env('CAMEL_TEST_TMPDIR')
+    let root = get_env('CAMEL_TEST_TMPDIR') ?? ''
     let dir = if root == '' then 'tmp/examples' else root
-    mkdirs(dir)
+    let _ = dir->mkdirs
 
     let path = dir + '/config.json'
     let custom: Config = { host: 'example.org', port: 443, verbose: true }
-    write_text(path, json::encode(custom, 2))
+    let _ = (custom->json::encode<indent: 2>)->write_text<path>
     println('from file:    ', show(load(path, defaults)))
 
     let broken = dir + '/broken.json'
-    write_text(broken, '{"host": "example.org", "port": "https"}')
+    let _ = '{"host": "example.org", "port": "https"}'->write_text<broken>
     println('wrong shape:  ', show(load(broken, defaults)))
 
     println('missing file: ', show(load(dir + '/absent.json', defaults)))

@@ -2,8 +2,8 @@ module main
 
 import json
 
-// json::decode_as: decoding to a given type. The type is that of the shape argument (its
-// value is not read); the result is a `T!`, so text that is not JSON and JSON of another
+// json::decode_as: decoding to a given type. The type is the one the call names
+// (`decode_as::<T>`); the result is a `T!`, so text that is not JSON and JSON of another
 // shape are error values to handle with `!!` or `match`, not faults.
 
 type Point = { x: int, y: int }
@@ -16,37 +16,37 @@ func describe::<T>(r: T!): string {
 }
 
 func main(): int sync {
-    let r = json::decode_as<[] as Map<string, int>>('{"b": 2, "a": 1}')
+    let r = json::decode_as::<Map<string, int>>('{"b": 2, "a": 1}')
     println(r)
     let m = r !! ([] as Map<string, int>)
     println(m['a'] ?? 0, len(m), keys(m))
 
-    println(json::decode_as('[3, 1, 2]', [0]))
-    println(json::decode_as('[3, 1, 3]', [] as Set<int>))
-    println(json::decode_as('{"a": [1, 2], "b": []}', [] as Map<string, int[]>))
-    println(json::decode_as('{"k": {"x": 1, "y": 2}}', [] as Map<string, Map<string, int>>))
-    println(json::decode_as('{"a": null, "b": 3}', [] as Map<string, int?>))
-    println(json::decode_as('{"x": 1, "y": 2}', { x: 0, y: 0 }))
-    println(json::decode_as('[1, "one"]', (0, '')))
-    println(json::decode_as('[1.5, 2]', [0.0]))
-    println(json::decode_as('"s"', ''), json::decode_as('true', false), json::decode_as('{}', [] as Map<string, int>))
+    println(json::decode_as::<int[]>('[3, 1, 2]'))
+    println(json::decode_as::<Set<int>>('[3, 1, 3]'))
+    println(json::decode_as::<Map<string, int[]>>('{"a": [1, 2], "b": []}'))
+    println(json::decode_as::<Map<string, Map<string, int>>>('{"k": {"x": 1, "y": 2}}'))
+    println(json::decode_as::<Map<string, int?>>('{"a": null, "b": 3}'))
+    println(json::decode_as::<Point>('{"x": 1, "y": 2}'))
+    println(json::decode_as::<(int, string)>('[1, "one"]'))
+    println(json::decode_as::<float[]>('[1.5, 2]'))
+    println(json::decode_as::<string>('"s"'), json::decode_as::<bool>('true'), json::decode_as::<Map<string, int>>('{}'))
 
-    println(json::decode_as('{"a": 1, "b": "two"}', [] as Map<string, int>))
-    println(json::decode_as('{"a": 1', [] as Map<string, int>))
-    println(json::decode_as('[1, 2]', [] as Map<string, int>))
-    println(json::decode_as('{"k": {"x": 1.5}}', [] as Map<string, Map<string, int>>))
-    println(json::decode_as('{"x": 1}', { x: 0, y: 0 }))
-    println(json::decode_as('{"x": 1, "y": 2, "z": 3}', { x: 0, y: 0 }))
-    println(json::decode_as('[1, 2, 3]', (0, 0)))
-    println(json::decode_as('null', 0))
-    println(describe(json::decode_as('[1, "x"]', [0])), describe(json::decode_as('[1, 2]', [0])))
-    let bad = json::decode_as('[1, "x"]', [0])
+    println(json::decode_as::<Map<string, int>>('{"a": 1, "b": "two"}'))
+    println(json::decode_as::<Map<string, int>>('{"a": 1'))
+    println(json::decode_as::<Map<string, int>>('[1, 2]'))
+    println(json::decode_as::<Map<string, Map<string, int>>>('{"k": {"x": 1.5}}'))
+    println(json::decode_as::<Point>('{"x": 1}'))
+    println(json::decode_as::<Point>('{"x": 1, "y": 2, "z": 3}'))
+    println(json::decode_as::<(int, int)>('[1, 2, 3]'))
+    println(json::decode_as::<int>('null'))
+    println(describe(json::decode_as::<int[]>('[1, "x"]')), describe(json::decode_as::<int[]>('[1, 2]')))
+    let bad = json::decode_as::<int[]>('[1, "x"]')
     println(match bad { case error e => e.location  case v => 'ok' })
-    println(len(json::decode_as('nonsense', [] as Set<string>) !! (['fallback'] as Set<string>)))
+    println(len(json::decode_as::<Set<string>>('nonsense') !! (['fallback'] as Set<string>)))
 
     println(json::encode(m), json::encode([2, 1, 2] as Set<int>))
     println(json::encode([('k', [('x', 1.5)] as Map<string, float>)] as Map<string, Map<string, float>>))
-    let round = json::decode_as(json::encode(m), [] as Map<string, int>) !! ([] as Map<string, int>)
+    let round = json::decode_as::<Map<string, int>>(json::encode(m)) !! ([] as Map<string, int>)
     println(round == m)
     return 0
 }

@@ -182,9 +182,6 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
                !func->resources().pure();
     };
     const auto shapeSaysEffect = [](const FunctionType *func) {
-        if (func->modifiers().sync()) {
-            return true;
-        }
         for (size_t i = 0; i < func->normTypesCount(); ++i) {
             if (func->normIsVarAt(i)) {
                 return true;
@@ -1141,7 +1138,7 @@ void Builder::markNonRetainingReads() {
             continue;
         }
         node_handle_t cell = draft->ref(normInputsOf(read).front());
-        const auto peek    = peekGroup->resolve({}, {nodeTypeOf(cell)}, statics, Modifier::None);
+        const auto peek    = peekGroup->resolve({}, {nodeTypeOf(cell)}, statics);
         ASSERT(peek.has_value(), "__var_peek__ rejected a variable.");
         nodeGraphOf(read)->retargetOperNode(read, *peek);
     }
@@ -1780,7 +1777,7 @@ void Builder::checkDeclaredReturn(
         declared->code() == TypeCode::Ref || resultType->code() == TypeCode::Ref) {
         return;
     }
-    if (declared->assignableFrom(resultType)) {
+    if (acceptsAsResult(declared, resultType)) {
         return;
     }
     std::vector<ConversionGap> gaps;

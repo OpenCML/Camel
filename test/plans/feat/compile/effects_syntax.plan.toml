@@ -349,3 +349,58 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
 expect_output_contains = ["err_wide_parameters.cml:11:", "does not keep its resource promise"]
+
+# ---- The measurement is a fixed point, and a use it cannot place is never dropped ----
+
+[[tests]]
+name = "err.recursive_pure"
+desc = "A recursive function is measured from the empty set and iterated to stability: `count_down` prints and calls itself, so its `pure` is refused where it is written. It used to be accepted, because a body that calls itself was never measured."
+kind = "negative"
+case = "../../../cases/effects/err_recursive_pure.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_diagnostic_code = "0x030001F1"
+expect_output_contains = ["err_recursive_pure.cml:8:", "pure", "stdout"]
+
+[[tests]]
+name = "err.mutual_recursive_pure"
+desc = "Two functions that call each other settle against each other: `ping` calls only `pong`, `pong` prints, and the cycle carries `stdout` back to `ping`, whose `pure` is refused."
+kind = "negative"
+case = "../../../cases/effects/err_mutual_recursive_pure.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_diagnostic_code = "0x030001F1"
+expect_output_contains = ["err_mutual_recursive_pure.cml:6:", "pure", "stdout"]
+
+[[tests]]
+name = "err.closure_capture_pure"
+desc = "A function declared inside another one writes a variable of the function around it. Which capture that is cannot be read from its own body; the use is read as touching any variable, not skipped, so the `pure` it wrote is refused and the report says what could not be determined."
+kind = "negative"
+case = "../../../cases/effects/err_closure_capture_pure.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_diagnostic_code = "0x030001F1"
+expect_output_contains = ["err_closure_capture_pure.cml:9:", "pure"]
+
+[[tests]]
+name = "err.many_parameters_pure"
+desc = "A parameter index is a byte in a signature. A use through the 300th parameter used to be dropped, so a `pure` that cannot hold passed; the use is now read as touching any handle and the clause is refused, with the reason."
+kind = "negative"
+case = "../../../cases/effects/err_many_parameters_pure.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_diagnostic_code = "0x030001F1"
+expect_output_contains = ["err_many_parameters_pure.cml:15:", "pure"]
+
+[[tests]]
+name = "ok.recursive_pure"
+desc = "A recursion that touches nothing keeps its `pure` (the fixed point only grows from the empty set), two functions that call only each other too, and a recursion whose clause names what it does touch, or that writes none, stays accepted."
+kind = "behavior"
+case = "../../../cases/effects/ok_recursive_pure.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["120 true true"]

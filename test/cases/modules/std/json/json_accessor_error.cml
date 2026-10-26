@@ -98,7 +98,7 @@ func main(): int sync {
     }
     println(deep.kind, deep.location)
     println(deep.message)
-    let typed = match (decode_as(tooDeep, 0)) {
+    let typed = match (decode_as::<int>(tooDeep)) {
         case error e => e
         case v => error('NoError', 'the deep document decoded')
     }

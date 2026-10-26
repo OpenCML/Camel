@@ -1,0 +1,9 @@
+/// `import foo` finds `level/foo.cmo` in this library's own directory, and the loader refuses it.
+/// The lookup must end there: the import fails with the loader's reason, it does not go on to
+/// another candidate name. The candidate `level.helper.foo` exists under the `-I` root and is a
+/// working module, so a lookup that keeps going would silently use it and print 7.
+module helper
+
+import { value } from foo
+
+export let answer = value

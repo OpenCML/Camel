@@ -178,13 +178,13 @@ expect_output_not_contains = ["126"]
 timeout_ms = 10000
 
 [[tests]]
-name = "txn_conflict"
-desc = "Two transactions edit one graph; the second commit gives the error GraphConflict."
+name = "txn_two_commits_are_two_values"
+desc = "Two transactions edit one graph of the same Program; each commit makes a Program of its own (design principles 9.1), so the second succeeds too."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/edits.cml"
 args = ["${case}", "probes::conflict", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "GraphConflict\n126\ntext\n"
+expect_stdout_exact = "ok\n126\ntext\n"
 timeout_ms = 10000
 
 [[tests]]
@@ -695,7 +695,7 @@ kind = "negative"
 case = "../../../cases/modules/graph_pass/imports_unparsable.cml"
 args = ["--error-format", "text", "${case}", "unparsable_pass_lib::run", "std::nvm"]
 expect_exit = 1
-expect_output_contains = ["[imported by main]", "unparsable_pass.cml:8:5", "camel: 2 errors"]
+expect_output_contains = ["[imported by imports_unparsable]", "unparsable_pass.cml:8:5", "camel: 2 errors"]
 expect_output_not_contains = ["unparsable_pass_lib.cml", "camel: 3 errors"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
 timeout_ms = 10000

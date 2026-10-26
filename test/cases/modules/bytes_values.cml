@@ -1,30 +1,30 @@
 module bytes_values
-import { from_array, to_array, encode, decode, size, concat } from bytes
-import { read_bytes, write_bytes, read_chunk, replace, file_size } from fs
+import { from_array, to_array, encode, decode } from bytes
+import { read_bytes, write_bytes, read_chunk, file_size } from fs
 import { sha256 } from hash
 import { get_env } from env
 import { tree_map } from tree
-func count(b: Bytes): int { return size(b) }
+func count(b: Bytes): int { return len(b) }
 func main(): int sync {
     // The runner gives every test its own scratch directory (CAMEL_TEST_TMPDIR) and the OS
     // temp is not writable on every runner; a direct run keeps the older fixed path.
-    let scratch = get_env('CAMEL_TEST_TMPDIR')
-    let dir = if scratch == '' then get_env('TEMP') else scratch
+    let scratch = get_env('CAMEL_TEST_TMPDIR') ?? ''
+    let dir = if scratch == '' then (get_env('TEMP') ?? '') else scratch
     let path = dir + '/camel-bytes-values.bin'
     let binary = from_array([0, 65, 0, 255, 13, 10, 128, 0])
-    write_bytes(path, binary)
-    println(to_array(read_bytes(path)))
-    println(to_array(read_chunk(path, 1, 6)))
-    println(size(read_chunk(path, 100, 4)))
-    println(sha256(read_bytes(path)))
+    let _ = binary->write_bytes<path>
+    println(path->read_bytes ?-> to_array !! [])
+    println(path->read_chunk<1, 6> ?-> to_array !! [])
+    println(path->read_chunk<100, 4> ?-> len !! -1)
+    println(path->read_bytes ?-> sha256 !! '')
     println(decode(from_array([255])) !! 'invalid UTF-8')
     println(decode(encode('中文 UTF-8')) !! 'unexpected decode failure')
     println(to_array(encode(decode(from_array([65, 0, 66])) !! '')))
-    replace(path, concat(encode('ok:'), binary))
-    println(file_size(path))
-    println(to_array(read_bytes(path)))
+    let _ = (encode('ok:') + binary)->write_bytes<path, true>
+    println(path->file_size !! 0)
+    println(path->read_bytes ?-> to_array !! [])
     println(tree_map<count>({ raw: binary, more: (encode('abc'), binary) }))
-    replace(path, from_array(0..0))
-    println(file_size(path))
+    let _ = (from_array(0..0))->write_bytes<path, true>
+    println(path->file_size !! 0)
     return 0
 }

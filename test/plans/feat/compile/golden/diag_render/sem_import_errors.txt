@@ -1,4 +1,4 @@
-[imported by main]
+[imported by sem_import_errors]
 error[SemanticDiag::UnresolvedReference]: Unresolved reference: 'missing_in_lib'.
   --> <ROOT>/test/cases/compile/diag_render/broken_lib.cml:3:39
    |

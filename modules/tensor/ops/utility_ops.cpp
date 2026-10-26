@@ -176,7 +176,7 @@ class LoadNpyResolver final : public FuncTypeResolver {
     explicit LoadNpyResolver(TypeCode dtype) : dtype_(dtype) {}
 
     std::optional<FunctionType *>
-    resolve(const type_vec_t &, const type_vec_t &, const ModifierSet &) const override {
+    resolve(const type_vec_t &, const type_vec_t &) const override {
         return std::nullopt;
     }
 
@@ -185,8 +185,7 @@ class LoadNpyResolver final : public FuncTypeResolver {
         Type *expected,
         const type_vec_t &with,
         const type_vec_t &norm,
-        static_args_t,
-        const ModifierSet &modifiers) const override {
+        static_args_t) const override {
         if (!with.empty() || norm.size() != 1 || norm[0]->code() != TypeCode::String) {
             return std::nullopt;
         }
@@ -201,7 +200,7 @@ class LoadNpyResolver final : public FuncTypeResolver {
         if (!requested || *requested != dtype_) {
             return std::nullopt;
         }
-        return FunctionType::create({}, {{Type::String(), false}}, npyTensorType(dtype_), modifiers);
+        return FunctionType::create({}, {{Type::String(), false}}, npyTensorType(dtype_));
     }
 
     /// The candidate line a failed resolution prints (`NoMatchingFunction`): the element type the

@@ -770,7 +770,7 @@ class Compiler {
             statics.emplace_back(arg.staticSlot);
         }
         try {
-            const auto resolved = resolver->resolveWith({}, types, statics, ModifierSet{});
+            const auto resolved = resolver->resolveWith({}, types, statics);
             if (!resolved || !*resolved)
                 return nullptr;
             return (*resolved)->exitType();
@@ -795,7 +795,7 @@ class Compiler {
             statics.emplace_back(arg.staticSlot);
         }
         try {
-            const auto reason = resolver->explainRejection({}, types, statics, ModifierSet{});
+            const auto reason = resolver->explainRejection({}, types, statics);
             return reason ? *reason : std::string();
         } catch (const std::exception &) {
             return {};

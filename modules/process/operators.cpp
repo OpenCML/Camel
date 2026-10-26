@@ -9,6 +9,8 @@
 #include "camel/core/process_exit.h"
 #include "camel/core/rtdata/bytes.h"
 #include "camel/core/rtdata/string.h"
+#include "camel/core/rtdata/tagged.h"
+#include "camel/core/type/composite/tuple.h"
 #include <format>
 
 #include <memory>
@@ -17,70 +19,72 @@ namespace mm = camel::core::mm;
 using namespace camel::core::error;
 using namespace camel::core::context;
 using namespace camel::core::rtdata;
+using namespace camel::core::type;
+#include <algorithm>
 #include <chrono>
 #include <thread>
 
 #ifdef _WIN32
-// `windows.h` first: `Lmcons.h` and `tlhelp32.h` use HANDLE, BOOL, DWORD, SIZE_T and ULONG_PTR
-// without declaring them, and no header this file includes before them reaches windows.h.
+// `windows.h` first: `Lmcons.h` uses DWORD and friends without declaring them, and no header
+// this file includes before it reaches windows.h.
 #include <windows.h>
 #include <Lmcons.h>
-#include <tlhelp32.h>
-#elif defined(__APPLE__)
-#include <mach/mach.h>
 #else
 #include <pwd.h>
 #include <unistd.h>
 #endif
 
-#include <fstream>
 #include <string>
 
 std::unordered_map<std::string, operator_t> getProcessOpsMap() {
     return {
         {"exit", __process_exit__},
         {"sleep", __process_sleep__},
-        {"whoami", __process_whoami__},
+        {"user_name", __process_user_name__},
         {"cpu_count", __process_cpu_count__},
-        {"thread_count", __process_thread_count__},
     };
 }
 
 slot_t __process_sleep__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Int64 ms = norm.get<Int64>(0);
-    if (ms < 0) {
+    const Float64 seconds = norm.get<Float64>(0);
+    if (!(seconds >= 0.0)) {
         throwRuntimeFault(
             RuntimeDiag::InvalidArgument,
             "process.sleep",
-            std::format("the duration is {} ms; it must not be negative", ms));
+            std::format("the duration is {} s; it must be a number that is not negative", seconds));
     }
+    // About 285 years is the longest wait a steady clock can hold; a longer one is that long.
+    constexpr double kLongestSeconds = 9.0e9;
     try {
-        std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+        std::this_thread::sleep_for(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::duration<double>(std::min(seconds, kLongestSeconds))));
     } catch (const std::exception &e) {
         throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("<sleep> ") + e.what());
     }
     return NullSlot;
 }
 
-slot_t __process_whoami__(ArgsView &with, ArgsView &norm, Context &ctx) {
+slot_t __process_user_name__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    static const TupleType *resultType = TupleType::fallible(Type::String());
     std::string username;
 #ifdef _WIN32
     char buffer[UNLEN + 1];
     DWORD len = UNLEN + 1;
-    if (GetUserNameA(buffer, &len)) {
-        username = buffer;
-    } else {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<whoami> failed");
+    if (!GetUserNameA(buffer, &len)) {
+        return makeError("NotFound", "the system has no name for the user", "<process::user_name>");
     }
+    username = buffer;
 #else
     struct passwd *pw = getpwuid(getuid());
-    if (pw) {
-        username = pw->pw_name;
-    } else {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<whoami> failed");
+    if (!pw) {
+        return makeError("NotFound", "the system has no name for the user", "<process::user_name>");
     }
+    username = pw->pw_name;
 #endif
-    return toSlot(checkedString(username, mm::autoSpace(), "process.whoami"));
+    return makeOk(
+        toSlot(checkedString(username, mm::autoSpace(), "process.user_name")),
+        resultType);
 }
 
 slot_t __process_cpu_count__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -89,52 +93,6 @@ slot_t __process_cpu_count__(ArgsView &with, ArgsView &norm, Context &ctx) {
         count = 1;
     }
     return toSlot(static_cast<Int64>(count));
-}
-
-// The threads of this process, the caller included: the count `/proc/self/status` reports as
-// `Threads:`, not the process's CPU count. A test that reads it pins how many threads a run
-// creates, which is how a second worker pool is detected without timing anything.
-slot_t __process_thread_count__(ArgsView &with, ArgsView &norm, Context &ctx) {
-#if defined(_WIN32)
-    const DWORD pid = GetCurrentProcessId();
-    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-    if (snapshot == INVALID_HANDLE_VALUE) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<thread_count> failed");
-    }
-    THREADENTRY32 entry;
-    entry.dwSize = sizeof(entry);
-    Int64 count  = 0;
-    if (Thread32First(snapshot, &entry)) {
-        do {
-            if (entry.th32OwnerProcessID == pid) {
-                ++count;
-            }
-        } while (Thread32Next(snapshot, &entry));
-    }
-    CloseHandle(snapshot);
-    return toSlot(count);
-#elif defined(__APPLE__)
-    thread_act_array_t threads = nullptr;
-    mach_msg_type_number_t count = 0;
-    if (task_threads(mach_task_self(), &threads, &count) != KERN_SUCCESS) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "<thread_count> failed");
-    }
-    for (mach_msg_type_number_t i = 0; i < count; ++i) {
-        mach_port_deallocate(mach_task_self(), threads[i]);
-    }
-    vm_deallocate(
-        mach_task_self(), reinterpret_cast<vm_address_t>(threads), count * sizeof(thread_act_t));
-    return toSlot(static_cast<Int64>(count));
-#else
-    std::ifstream status("/proc/self/status");
-    std::string line;
-    while (std::getline(status, line)) {
-        if (line.compare(0, 8, "Threads:") == 0) {
-            return toSlot(static_cast<Int64>(std::stoll(line.substr(8))));
-        }
-    }
-    throwRuntimeFault(RuntimeDiag::RuntimeError, "<thread_count> failed");
-#endif
 }
 
 // Ends the program with the given exit code: see camel/core/process_exit.h for how the run is

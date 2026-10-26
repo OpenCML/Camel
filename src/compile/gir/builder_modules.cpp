@@ -743,6 +743,21 @@ std::optional<Builder::ImplKernel> Builder::implKernelOfGraph(
     return found->second;
 }
 
+// The kernel group of an `#impl` function holds exactly the one rule a direct call of the
+// function resolves in, and its key is the kernel operator's URI: the declared name is what the
+// group says about the call, and the kernel's own name stays where it is written.
+std::string Builder::declaredNameOfKernelGroup(const oper_group_ptr_t &ops) const {
+    if (ops == nullptr) {
+        return {};
+    }
+    for (const auto &[uri, resolver] : ops->resolvers()) {
+        if (const auto found = implDeclaredNames_.find(uri); found != implDeclaredNames_.end()) {
+            return found->second;
+        }
+    }
+    return {};
+}
+
 bool Builder::sameImplSignature(FunctionType *function, FunctionType *kernel) {
     if (function == nullptr || kernel == nullptr ||
         function->withTypesCount() != kernel->withTypesCount() ||
@@ -862,7 +877,7 @@ void Builder::adoptImplKernel(
         if (executor != nullptr) {
             continue;
         }
-        if (resolver->resolve(withTypes, normTypes, Modifier::None).has_value() &&
+        if (resolver->resolve(withTypes, normTypes).has_value() &&
             declaredRuleApplies(resolver, kernel.name, withTypes, normTypes)) {
             uri      = ruleUri;
             executor = resolver;
@@ -887,6 +902,8 @@ void Builder::adoptImplKernel(
         kernel.group->name(),
         std::vector<std::pair<std::string, camel::core::type::resolver_ptr_t>>{
             {uri, executor}});
+    // A call of the instance resolves in this group, and what it says is the function's name.
+    implDeclaredNames_[uri] = tmpl->name;
     implKernels_[graph.get()] = std::move(adopted);
 }
 
@@ -1114,6 +1131,10 @@ void Builder::resolveImplDeclarations(const GCT::node_ptr_t &root) {
                 group->name(),
                 std::vector<std::pair<std::string, camel::core::type::resolver_ptr_t>>{
                     {uri, executor}});
+            // A call of the function is a call of this kernel, so a message about the call says
+            // the name the function is declared under, never the kernel's own (design principles
+            // 10.4: the kernel is private to the module that writes it).
+            implDeclaredNames_[uri] = functionName;
             implKernels_[body.get()] = std::move(record);
             // The graph stays the semantic body: expanding the function means reading this
             // graph, and a consumer that asks for it (autodiff, fusion, export, a rule) gets

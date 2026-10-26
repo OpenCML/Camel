@@ -1,0 +1,9 @@
+// `void` takes `void` and nothing else: a tuple member written `void` does not accept a string.
+// The result of a function is the one place that discards (design principles 5.1).
+func take(p: (void, int)): int {
+    return 0
+}
+
+func main(): int sync {
+    return take(('a', 1))
+}

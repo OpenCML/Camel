@@ -243,8 +243,13 @@ class EdgeChecker {
 
     /// Two types a value can pass between: equal, or one refines the other (a tensor of a known
     /// shape and the tensor of the same element type whose shape is not known), or either may
-    /// be assigned to the other. Names of parameters and fields do not matter.
+    /// be assigned to the other. Names of parameters and fields do not matter. A node typed `void`
+    /// is a value nobody reads (the arms of a branch used as a statement, a discarded result),
+    /// which takes whatever reaches it.
     static bool compatible(Type *a, Type *b) {
+        if (a->code() == TypeCode::Void || b->code() == TypeCode::Void) {
+            return true;
+        }
         return a == b || a->equals(b) || a->unify(b) != nullptr || a->assignableFrom(b) ||
                b->assignableFrom(a);
     }

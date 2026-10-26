@@ -36,7 +36,7 @@ func w28(a29: int, var c30: int, a31: int): int sync {
 }
 
 func main(): int sync {
-    let n33 = int(get_env('PROGEN_I0'));
+    let n33 = int(get_env('PROGEN_I0') ?? '');
     var v49 = 1;
     let n50 = w28(n33, v49, r10(4, 0, 4));
     return 0;

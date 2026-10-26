@@ -4099,7 +4099,7 @@ const PullbackPlan &Engine::planForClosure(GCGraph *graph) {
         portTypes.push_back(captured);
     }
     lifted->setFuncType(
-        FunctionType::create(withParams, normParams, type->exitType(), type->modifiers()));
+        FunctionType::create(withParams, normParams, type->exitType()));
     lifted->setClosureType(nullptr);
     PullbackPlan plan =
         reserve(graph->name(), makePlanTypes(std::move(portTypes), type->exitType()));
@@ -4268,8 +4268,7 @@ void Engine::build(Pending &pending) {
         FunctionType::create(
             withParams,
             normParams,
-            plan.forwardValueType,
-            sourceType->modifiers()));
+            plan.forwardValueType));
 
     group_.define(plan.forward, std::move(pending.source));
     group_.define(plan.pullback, std::move(pullback));

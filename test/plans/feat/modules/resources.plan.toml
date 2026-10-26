@@ -239,8 +239,8 @@ const expect = {
   ':io/println': 'write ambient stdout; external',
   ':io/eprintln': 'write ambient stderr; external',
   ':io/input': 'rmw ambient stdin; external',
-  'fs:read_text': 'read ambient fs; external',
-  'fs:write_text': 'rmw ambient fs; external',
+  'fs:read_bytes': 'read ambient fs; external',
+  'fs:write_bytes': 'rmw ambient fs; external',
   'rand:seed': 'write ambient rng; external',
   'rand:rand': 'rmw ambient rng; external',
 }
@@ -275,7 +275,7 @@ for (const op of ops) {
   for (const m of text.matchAll(/(?:ambient|foreign) ([^\s;]+)/g)) names.add(m[1])
 }
 const expected = [
-  'clock', 'env', 'fs', 'process', 'rendezvous_point', 'rng', 'stderr',
+  'clock', 'env', 'fs', 'process::process', 'rendezvous_point', 'rng', 'stderr',
   'stdin', 'stdout', 'tensor:generator', 'tensor:threads', 'tiles:device', 'tiles:driver',
 ]
 const got = [...names].sort()
@@ -290,20 +290,18 @@ const expect = {
   ':io/eprintln': 'write ambient stderr; external',
   ':io/input': 'rmw ambient stdin; external',
   'io:has_input': 'read ambient stdin; external',
-  'io:get_char': 'rmw ambient stdin; external',
   'io:set_terminal_raw_mode': 'write ambient stdin; external',
-  'fs:read_text': 'read ambient fs; external',
-  'fs:write_text': 'rmw ambient fs; external',
+  'fs:read_bytes': 'read ambient fs; external',
+  'fs:write_bytes': 'rmw ambient fs; external',
   'rand:seed': 'write ambient rng; external',
   'rand:rand': 'rmw ambient rng; external',
   'time:now': 'read ambient clock; external',
-  'time:strftime': 'read ambient env; external',
   'env:get_env': 'read ambient env; external',
   'process:sleep': 'read ambient clock; external',
-  'process:whoami': 'read ambient env; external',
-  'process:exit': 'rmw ambient process; external',
+  'process:user_name': 'read ambient env; external',
+  'process:exit': 'rmw ambient process::process; external',
   'test_support:rendezvous': 'rmw ambient rendezvous_point; external',
-  'test_support:thread_count': 'read ambient process; external',
+  'test_support:thread_count': 'read ambient process::process; external',
   'ckpt:load_tree': 'read ambient fs; write ambient stderr; external',
   'ckpt:save_tree': 'rmw ambient fs; external',
   'tensor:show': 'write ambient stdout; external',

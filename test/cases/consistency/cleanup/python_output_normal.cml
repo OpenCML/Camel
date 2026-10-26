@@ -7,10 +7,10 @@ import { py_call, py_wrap, py_eval, py_unwrap, PyObject } from python
 
 func main(): int sync {
     println('camel 1')
-    py_call('print', py_wrap('python 1'))
-    let held = py_eval('[1, 2, 3]')
+    let _ = py_call('print', py_wrap('python 1'))
+    let held = py_eval('[1, 2, 3]') !! py_wrap(0)
     println('camel 2')
-    py_call('print', py_wrap('python 2'))
+    let _ = py_call('print', py_wrap('python 2'))
     println('camel 3')
     return 0
 }

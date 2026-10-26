@@ -16,7 +16,6 @@ module tensor_generic_signature_element_type
 
 import { ones, shape, numel, dim, to_bytes } from tensor
 import { is_numeric } from types
-import { size } from bytes
 
 /// The element type of the parameter, taken from the call site: `t[0]` is a `T`, so this compiles
 /// for `f32` and for `int`, and the result is a value of that element type.
@@ -42,7 +41,7 @@ func main(): int sync {
     // The other operators of the same signature source.
     println(numel(a))
     println(dim(a, 0))
-    println(size(to_bytes(a)))
+    println(len(to_bytes(a)))
 
     // The declaration's own parameter: `t[0]` is the element type the call bound.
     let first: f32 = firstElement(a)

@@ -25,37 +25,37 @@ module python
 /// Runs Python statements `code` in the interpreter and returns its `None`. Definitions and
 /// assignments stay visible to later calls, as in a Python session.
 /// @effect runs arbitrary Python code
-/// @fails fault `RuntimeError` when the code raises
+/// @fails error `PythonError` when the code raises; the message starts with the exception class
 /// @example py_exec("x = 1")
-export func py_exec(code: string): PyObject
+export func py_exec(code: string): PyObject!
 
 /// Evaluates the Python expression `expr` and returns its value as a `PyObject`.
 /// @effect runs arbitrary Python code
-/// @fails fault `RuntimeError` when the expression raises
+/// @fails error `PythonError` when the expression raises; the message starts with the exception class
 /// @example py_eval("1 + 2 * 3")    // 7
-export func py_eval(expr: string): PyObject
+export func py_eval(expr: string): PyObject!
 
 /// Runs the Python script at `file_path` and returns its `None`.
 /// @effect runs arbitrary Python code
-/// @fails fault `RuntimeError` when the file cannot be read or the script raises
+/// @fails error `PythonError` when the file cannot be read or the script raises; the message starts with the exception class
 /// @example py_run("scripts/hello.py")
-export func py_run(file_path: string): PyObject
+export func py_run(file_path: string): PyObject!
 
 /// The attribute `attr` of the Python object `obj`; a dotted `attr` walks the chain. Asking may
 /// run a property or a descriptor, so the read is an effect.
 /// @effect reads interpreter state and may run Python code
-/// @fails fault `RuntimeError` when the attribute does not exist
-/// @example py_attr(py_import("math"), "sqrt")
-export func py_attr(obj: PyObject, attr: string): PyObject
+/// @fails error `PythonError` when the attribute does not exist; the message starts with the exception class
+/// @example py_import("math") ?-> (m: PyObject): PyObject! => py_attr(m, "sqrt")
+export func py_attr(obj: PyObject, attr: string): PyObject!
 
 /// Imports the Python module `module_name` and returns it. Importing runs the module body and
 /// records the module in `sys.modules`.
 /// @effect imports a module and runs its body
-/// @fails fault `RuntimeError` when the import raises
+/// @fails error `PythonError` when the import raises; the message starts with the exception class
 /// @example py_import("math")
-export func py_import(module_name: string): PyObject
+export func py_import(module_name: string): PyObject!
 
 /// Drops this program's reference to the Python object `obj`.
 /// @effect advances the interpreter's reference counts
-/// @example py_dispose(py_import("math"))
+/// @example py_import("math") ?-> py_dispose
 export func py_dispose(obj: PyObject): void

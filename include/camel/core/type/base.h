@@ -172,8 +172,6 @@ std::string typeCodeToString(TypeCode code);
 /// by hand as text (the type rules of built-in operators); a Type prints itself that way.
 std::string sourceTypeSpelling(std::string_view text);
 
-extern const signed char primitiveTypeConvMatrix[6][6];
-
 class Type;
 using type_vec_t = std::vector<Type *>;
 

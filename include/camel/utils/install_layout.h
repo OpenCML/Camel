@@ -7,6 +7,7 @@
 #include "camel/utils/path.h"
 
 #include <filesystem>
+#include <stdexcept>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -120,11 +121,56 @@ struct ModuleSearchPathOptions {
     bool includeInstallRoot       = true;
     bool includeExecutableRelated = true;
     bool includeCamelPackages     = true;
-    bool includeCamelModulePath   = true;
 };
 
-inline std::filesystem::path resolveInstallRoot() {
+/// What is wrong with `CAMEL_HOME`, or an empty string when the variable is unset or names a
+/// usable installation root.
+///
+/// The variable is the one way a user says which installation to run, and it is a switch of the
+/// environment that *is* a switch of behaviour (design principles: a switch becomes an option, and
+/// an illegal value is an error). It used to be taken as given: a path that does not exist, or a
+/// directory that is not an installation, silently produced a run whose module roots point nowhere,
+/// and every import failed with "not found" long after anything mentioned `CAMEL_HOME`. The
+/// directory must exist and hold at least one of the directories an installation has (`bin`,
+/// `stdlib`, `libs`, `include`); the message names the variable and the path, so the run that
+/// refuses says what to fix.
+inline std::string camelHomeProblem() {
     namespace fs        = std::filesystem;
+    std::string envRoot = getEnv("CAMEL_HOME");
+    if (envRoot.empty()) {
+        return {};
+    }
+    const fs::path dir = fs::absolute(pathFromUtf8(envRoot)).lexically_normal();
+    std::error_code ec;
+    if (!fs::exists(dir, ec) || ec) {
+        return "CAMEL_HOME points to '" + pathToUtf8(dir) + "', which does not exist";
+    }
+    if (!fs::is_directory(dir, ec) || ec) {
+        return "CAMEL_HOME points to '" + pathToUtf8(dir) + "', which is not a directory";
+    }
+    for (const char *part : {"bin", "stdlib", "libs", "include"}) {
+        if (fs::is_directory(dir / part, ec) && !ec) {
+            return {};
+        }
+    }
+    return "CAMEL_HOME points to '" + pathToUtf8(dir) +
+           "', which holds none of the directories of an installation (bin, stdlib, libs, "
+           "include)";
+}
+
+/// The installation root a run reads its standard library and its runtime from: `CAMEL_HOME` when
+/// it is set (and valid: see camelHomeProblem), else the directory above the running executable
+/// when that is an installation's `bin`.
+///
+/// Neither fallback is the current directory any more: when the executable's directory cannot be
+/// read there is nothing to derive an installation from, and a run in whatever directory the shell
+/// happened to be in would silently take that directory for the installation root. It throws
+/// instead, and the caller reports the message.
+inline std::filesystem::path resolveInstallRoot() {
+    namespace fs = std::filesystem;
+    if (const std::string problem = camelHomeProblem(); !problem.empty()) {
+        throw std::runtime_error(problem);
+    }
     std::string envRoot = getEnv("CAMEL_HOME");
     if (!envRoot.empty()) {
         return fs::absolute(pathFromUtf8(envRoot)).lexically_normal();
@@ -138,7 +184,9 @@ inline std::filesystem::path resolveInstallRoot() {
         }
         return norm;
     }
-    return fs::absolute(fs::current_path()).lexically_normal();
+    throw std::runtime_error(
+        "the directory of the running executable cannot be read, so the installation root cannot "
+        "be found; set CAMEL_HOME to the installation root");
 }
 
 inline std::vector<std::string> buildModuleSearchPaths(
@@ -172,9 +220,6 @@ inline std::vector<std::string> buildModuleSearchPaths(
     if (opts.includeCamelPackages) {
         appendEnvList("CAMEL_PACKAGES");
     }
-    if (opts.includeCamelModulePath) {
-        appendEnvList("CAMEL_MODULE_PATH");
-    }
 
     std::string stdlib =
         opts.stdlibOverride.empty() ? getEnv("CAMEL_STD_LIB") : opts.stdlibOverride;
@@ -185,7 +230,12 @@ inline std::vector<std::string> buildModuleSearchPaths(
     fs::path exeDir = detail::executableDirectoryRaw();
     if (opts.includeExecutableRelated) {
         if (exeDir.empty()) {
-            exeDir = fs::current_path();
+            // The roots next to the running executable are where an installation is found; without
+            // the executable's directory they cannot be determined, and guessing the current
+            // directory would make the roots depend on where the shell stood.
+            throw std::runtime_error(
+                "the directory of the running executable cannot be read, so the module roots next "
+                "to it cannot be determined; set CAMEL_HOME to the installation root");
         }
         detail::pushUniquePath(paths, seen, exeDir);
         detail::pushUniquePath(paths, seen, exeDir / "stdlib");

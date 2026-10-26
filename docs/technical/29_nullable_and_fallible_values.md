@@ -296,7 +296,7 @@ Three operators that can fail, added without changing an existing signature:
 |---|---|---|
 | `parse_int(s)` | `(string) => int!` | `ParseError` |
 | `parse_float(s)` | `(string) => float!` | `ParseError` |
-| `fs::try_read_text(path)` | `(string) => string!` | `IOError` |
+| `fs::read_text(path)` | `(string) => string!` | `IOError` |
 
 An operator written in C++ builds its result with `rtdata::makeOk` / `rtdata::makeError`
 (`include/camel/core/rtdata/tagged.h`); the position of an error raised by an operator is the
@@ -314,7 +314,7 @@ affected, with or without the tagged forms:
 func f(x: float): float { return x + 0.5 }
 func main(): int sync {
     let i = 7
-    println(f(i as float))     // 7.5; under std::opt or std::opt: 0.5
+    println(f(float(i)))     // 7.5; under std::opt or std::opt: 0.5
     return 0
 }
 ```

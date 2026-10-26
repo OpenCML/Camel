@@ -381,15 +381,15 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
-name = "render.runtime_file_open"
-desc = "A file that cannot be opened, with the path and the reason."
+name = "render.runtime_chunk_range"
+desc = "A wrong argument of a library function is a fault: a negative offset, with the function and the values."
 kind = "snapshot"
-case = "../../../cases/compile/diag_render/runtime_file_open.cml"
+case = "../../../cases/compile/diag_render/runtime_chunk_range.cml"
 args = ["--error-format", "text", "${case}"]
 expect_exit = 1
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
-golden = "golden/diag_render/runtime_file_open.txt"
+golden = "golden/diag_render/runtime_chunk_range.txt"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -460,7 +460,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "render.runtime_time_format"
-desc = "Text that does not match the time format, with both."
+desc = "A timestamp outside the range of calendar time: the fault is rendered with its message, its position and its help line."
 kind = "snapshot"
 case = "../../../cases/compile/diag_render/runtime_time_format.cml"
 args = ["--error-format", "text", "${case}"]
