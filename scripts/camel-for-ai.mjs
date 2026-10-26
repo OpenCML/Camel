@@ -14,6 +14,9 @@
 //   --document REL                                 check REL as one document holding every region,
 //                                                  with no budget: the reduced documents the proof
 //                                                  cases run
+//   --budget N                                     replace the page's stated total with N
+//                                                  characters, so the proof case pins the red
+//                                                  condition on a page small enough to carry
 //   --camel PATH                                   the binary the counter-examples are compiled
 //                                                  with, for --verify-errors; this tree's
 //                                                  `out/latest/bin/camel` without it
@@ -54,7 +57,8 @@
 //     `docs/...` path; a note that points nowhere is a defect;
 //   * the document names no task number: the public documents describe the language, not the work
 //     that produced it;
-//   * each document, its hand-written part and each region stay within the budget it states.
+//   * the page stays within the one total it states. There is no budget part by part: how the
+//     prose is divided is the writer's, and the total is what a reader pays.
 //
 // Exit status: 0 when everything agrees, 1 when a check failed, 2 when a scope is empty or the
 // usage is wrong.
@@ -91,118 +95,50 @@ const LAYOUT = [
     { rel: SIGNATURES_REL, regions: ['stdlib-signatures'] },
 ]
 
-// What each document may cost, in characters. The document states these numbers itself, in its own
-// prose, and the check enforces them so it cannot grow past what one read holds.
+// What the page may cost, in characters. The page states its own number in its prose and the check
+// enforces it, so the page cannot grow past what one read holds.
 //
 // The page's budget is the cost of reading the page: its hand-written part and the two regions it
-// holds, and nothing else. The catalogues are not counted in it -- that is the point of their being
-// files -- and each has a budget of its own, so a name added to the library or a message changed in
-// the registry lands in an appendix against the appendix's budget instead of against the page's.
+// holds, and nothing else. It is small on purpose, because this page is what an AI reads before
+// writing rather than a rule book: why the language is what it is, the mental model, the idioms, how
+// to read the compiler, and where to look everything else up. A rule that does not fit belongs in
+// the language reference, which the page points at. The check therefore holds the page to one total
+// and to its examples compiling; it does not budget the page part by part, because how the prose is
+// divided is the writer's to decide and the total is the thing a reader pays.
+//
+// The catalogues are not counted in the page's budget -- that is the point of their being files --
+// and they carry no budget of their own either: a name added to the library or a message changed in
+// the registry lands in a document a reader looks up rather than reads, so the room it takes is not
+// the page's room and there is nothing to hold it against. The one number here is the page's.
 //
 // The regions keep every entry of their source: a name left out is a name the reader has to look up
-// elsewhere, so they are not trimmed. An appendix that is generated, and looked up by name, has no
-// budget of its own: every language rule added to the language adds a line to it, so its size grows
-// with the language itself, and a ceiling on it would only push the wording of the rule around.
-// What is held to a budget is the page one reads from end to end. A region that is still bounded
-// here is one whose growth is a choice rather than a consequence of the language.
+// elsewhere, so they are not trimmed, and the pages that carry them are the ones that grow. The
+// numbers do not rise with the language: a page whose diagnostics keep arriving would keep pushing
+// a growing budget ahead of itself. The lane that adds an entry owns fitting it into the room its
+// own document has, or tightening the wording around it. When the only way to make room would be to
+// drop something a reader needs, that is not a call for the lane that hit it: it opens a question
+// page under docs/handover/questions/ instead of deleting the information or editing a number here.
 //
 // Nothing in this check warns that the room is nearly gone. Over budget is a failure and the merge
 // gate reports it; a warning that is not a failure is a warning readers learn to scroll past.
-const BUDGET = {
-    [PAGE_REL]: { total: 59000, written: 52000 },
-    [DIAGNOSTICS_REL]: { total: 30500, written: 2000 },
-    [SIGNATURES_REL]: { total: 30000, written: 2000 },
-}
+const PAGE_REL_TOTAL = 20000
 
-// What one generated region may cost, whichever document holds it. A region absent from this table
-// has no ceiling: the diagnostics appendix is looked up by name and gains a line with every language
-// rule, so its size follows the language and is not something a lane can fit into a stated room.
-const REGION_BUDGET = {
-    lexical: 4000,
-    precedence: 3000,
-    'stdlib-signatures': 28000,
-}
-
-// Each chapter's own budget, read out of the table the document carries ("What each part costs"):
-// the number in the last cell of a row whose first cell starts with the chapter's number. The table
-// is therefore not a comment on the file, it is the file's promise about itself, and a chapter that
-// grows past its row is a problem. A row for a chapter the document does not have is a problem too.
-const BUDGET_ROW = /^\|\s*(\d{1,2}|Appendix [A-C])\.\s*(.+?)\s*\|[^|]*\|\s*([\d,]+)\s*\|$/
-
-function chapterBudgets(document) {
-    const rows = []
-    for (const line of document.split('\n')) {
-        const match = BUDGET_ROW.exec(line)
-        if (match) rows.push({ key: match[1], title: match[2], budget: Number(match[3].replace(/,/g, '')) })
-    }
-    return rows
-}
-
-function chapterSizes(document) {
-    const lines = document.split('\n')
-    const sizes = new Map()
-    let current = null
-    let chars = 0
-    const close = () => {
-        if (current) sizes.set(current, chars)
-    }
-    for (const line of lines) {
-        const heading = /^##\s+(\d{1,2}|Appendix [A-C])\./.exec(line)
-        if (heading) {
-            close()
-            current = heading[1]
-            chars = 0
-            continue
-        }
-        if (/^##\s/.test(line)) {
-            close()
-            current = null
-            chars = 0
-            continue
-        }
-        chars += line.length + 1
-    }
-    close()
-    return sizes
-}
+// The stated total, or the number the proof case names: `--budget N` replaces it for one run so the
+// red condition can be pinned on a reduced page instead of on a page that has to be 20,000
+// characters long to fail.
+let pageTotal = PAGE_REL_TOTAL
+let budgetOverridden = false
 
 function budgetProblems(document, entry) {
     const problems = []
     const { per, total } = countRegionChars(document, entry.regions)
     const written = document.trim().length - total
     const size = document.trim().length
-    const budget = entry.budget
-    for (const name of entry.regions) {
-        const cap = REGION_BUDGET[name]
-        if (cap !== undefined && per[name] > cap) {
-            problems.push(`${entry.rel}: the '${name}' region is ${per[name]} characters; its budget is ${cap}`)
-        }
+    const stated = entry.budget ? (budgetOverridden ? pageTotal : entry.budget) : null
+    if (stated !== null && size > stated) {
+        problems.push(`${entry.rel}: the document is ${size} characters; its budget is ${stated}`)
     }
-    if (budget) {
-        if (written > budget.written) {
-            problems.push(
-                `${entry.rel}: the hand-written part is ${written} characters; its budget is ${budget.written}`,
-            )
-        }
-        if (size > budget.total) {
-            problems.push(`${entry.rel}: the document is ${size} characters; its budget is ${budget.total}`)
-        }
-    }
-    // A document that carries a budget table is held to the rows of that table, wherever it is:
-    // the table is the document's promise about itself and is read out of the document, not here.
-    const sizes = chapterSizes(document)
-    const chapters = []
-    for (const row of chapterBudgets(document)) {
-        const chapterSize = sizes.get(row.key) ?? 0
-        chapters.push({ ...row, size: chapterSize })
-        if (chapterSize > row.budget) {
-            problems.push(
-                `${entry.rel}: the chapter '${row.key}. ${row.title}' is ${chapterSize} characters; ` +
-                    `the budget it states is ${row.budget}`,
-            )
-        }
-    }
-    return { problems, per, total, written, size, chapters, budget }
+    return { problems, per, total, written, size, stated }
 }
 
 const SECTIONS = [
@@ -224,8 +160,11 @@ function read(root, rel) {
 // The keyword table of `docs/language/02_lexical.md` §2.4 -- the page the token table's own comment
 // names as the source of its `Group` field -- plus the operators of `token_kinds.def`.
 //
-// The table has one row per group of `token_kinds.def`; the `Reserved` row is gone with the words
-// that were in it, and `enum` and `typeof` now stand with the types, as the token table groups them.
+// The two files disagree about one word: `enum` is grouped under `Type` by the reference (the
+// language has nominal enums; §6 and §12 use them) and under `Reserved` by the token table, which
+// did not move when the language gained them. The page follows the reference and says so, and the
+// note is generated, so fixing the token table removes the note by itself instead of leaving a
+// stale claim behind.
 const KEYWORD_GROUPS = [
     ['声明', 'Declaration'],
     ['控制', 'Control'],
@@ -729,7 +668,7 @@ function usage(message) {
     if (message) console.log(`camel-for-ai: ${message}`)
     console.log(
         'usage: node scripts/camel-for-ai.mjs --check | --write | --report | --verify-errors ' +
-            '[--root DIR] [--document REL] [--camel PATH]',
+            '[--root DIR] [--document REL] [--budget N] [--camel PATH]',
     )
     process.exit(2)
 }
@@ -739,23 +678,30 @@ CAMEL = camel
 let mode = '--check'
 let root = REPO_ROOT
 let documentRel = null
+let budgetArg = null
 for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--root') root = path.resolve(argv[++i] || '')
     else if (argv[i] === '--document') documentRel = argv[++i] || ''
+    else if (argv[i] === '--budget') budgetArg = argv[++i] || ''
     else mode = argv[i]
 }
 if (!['--check', '--write', '--report', '--verify-errors'].includes(mode)) {
     usage(`unknown mode "${mode}"`)
 }
 if (documentRel === '') usage('--document needs a path')
+if (budgetArg !== null) {
+    if (!/^\d+$/.test(budgetArg)) usage('--budget needs a whole number of characters')
+    pageTotal = Number(budgetArg)
+    budgetOverridden = true
+}
 
-// A run without `--document` reads the tree's own layout: each document holds the regions listed
-// for it and is measured against the budget it states. `--document REL` reads one reduced document
-// that holds every region -- the proof cases, which pin how a region is verified whichever document
-// holds it; such a document states no budget, so none is enforced there.
+// A run without `--document` reads the tree's own layout: each document holds the regions listed for
+// it and is measured against the total it states. `--document REL` reads one reduced document that
+// holds every region -- the proof cases, which pin how a region is verified whichever document holds
+// it; such a document states no total of its own unless `--budget` names one.
 const documents = documentRel
-    ? [{ rel: documentRel, regions: REGIONS, budget: null }]
-    : LAYOUT.map((entry) => ({ ...entry, budget: BUDGET[entry.rel] }))
+    ? [{ rel: documentRel, regions: REGIONS, budget: budgetOverridden ? pageTotal : null }]
+    : LAYOUT.map((entry) => ({ ...entry, budget: entry.rel === PAGE_REL ? pageTotal : null }))
 const scope = documentRel || 'the AI reference'
 
 const generated = generateAll(root)
@@ -788,29 +734,17 @@ if (mode === '--report') {
         const budget = budgetProblems(document, entry)
         console.log(
             `document       ${String(budget.size).padStart(7)}  ` +
-                (budget.budget ? `budget ${budget.budget.total}` : 'no budget stated'),
+                (budget.stated !== null ? `budget ${budget.stated}` : 'no budget stated'),
         )
-        console.log(
-            `hand-written   ${String(budget.written).padStart(7)}  ` +
-                (budget.budget ? `budget ${budget.budget.written}` : 'no budget stated'),
-        )
+        console.log(`hand-written   ${String(budget.written).padStart(7)}  no budget: the total is the one number`)
         for (const name of entry.regions) {
-            const cap = REGION_BUDGET[name]
-            console.log(
-                `${name.padEnd(14)} ${String(budget.per[name]).padStart(7)}  ` +
-                    (cap === undefined ? 'no budget' : `budget ${cap}`),
-            )
+            console.log(`${name.padEnd(14)} ${String(budget.per[name]).padStart(7)}  no budget of its own`)
         }
         for (const name of entry.regions) {
             const region = generated[name]
             console.log(
                 `${name.padEnd(14)} source entries: ` +
                     (region.text === null ? `none (${region.problem})` : region.count),
-            )
-        }
-        for (const chapter of budget.chapters) {
-            console.log(
-                `section ${String(chapter.key).padStart(2)}      ${String(chapter.size).padStart(7)}  budget ${chapter.budget}`,
             )
         }
         for (const problem of budget.problems) console.log(`OVER BUDGET: ${problem}`)
@@ -902,7 +836,7 @@ for (const { entry, document, entries } of checkedDocuments) {
     summaries.push(
         `${entry.rel} is what its sources produce: ${entry.regions.length} generated region(s), ` +
             `${entries} entries, ${diagnostics.count} diagnostics, ${cited} diagnostic name(s) cited by the prose, ` +
-            `${budget.size} characters${budget.budget ? ` (budget ${budget.budget.total})` : ''}`,
+            `${budget.size} characters${budget.stated !== null ? ` (budget ${budget.stated})` : ''}`,
     )
 }
 
