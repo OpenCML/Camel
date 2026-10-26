@@ -4,9 +4,10 @@
 /*
  * Elementwise kernel implementations.
  *
- * Every kernel works in a single "compute dtype": mixed-dtype operands are
- * first converted (cast to a temporary buffer), so each operation is
- * instantiated once per element type instead of once per operand-type pair.
+ * Every kernel works in a single "compute dtype". Two data operands state that one element type -
+ * a pair of different ones is refused before the kernel runs - and a scalar operand is converted
+ * into it (cast to a temporary buffer), so each operation is instantiated once per element type
+ * instead of once per operand-type pair.
  *
  * Broadcast iteration (`BroadcastPlan`) right-aligns the operand shapes,
  * assigns stride 0 to broadcast dimensions, and merges adjacent dimensions
@@ -27,6 +28,7 @@
 #include <cstring>
 #include <memory>
 #include <numbers>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -209,9 +211,12 @@ struct TypedBuffer {
 /// A Camel scalar is a value, not a tensor of some element type: when it meets a tensor it
 /// takes that tensor's element type (design principles 5.1, a literal takes its context), so
 /// `x * 2.0` keeps an f32 tensor f32 and an f64 tensor f64. A float scalar meeting an integer
-/// tensor computes in f32, the way the operator has always returned a float. Two tensors keep
-/// their written element types and promote only by widening (`promoteTensorTypes`), so no
-/// tensor is converted to a type it was not written with.
+/// tensor computes in f32, the way the operator has always returned a float.
+/// Two data operands are computed in the one element type they state: the operator refuses a pair
+/// that states different element types before it answers a type (ops/elementwise_ops.cpp,
+/// refuseMixedElementTypes), so a graph that reaches this kernel with such a pair was built
+/// without the operator's inference, and running it would read one operand at a type the program
+/// did not write. The kernel reports that rather than converting silently.
 TypeCode operandType(const Operand &lhs, const Operand &rhs) {
     if (lhs.scalar != rhs.scalar) {
         const Operand &tensor = lhs.scalar ? rhs : lhs;
@@ -221,7 +226,14 @@ TypeCode operandType(const Operand &lhs, const Operand &rhs) {
         }
         return isFloatingTensorType(scalar.dtype) ? TypeCode::Float32 : tensor.dtype;
     }
-    return promoteTensorTypes(lhs.dtype, rhs.dtype);
+    if (lhs.dtype != rhs.dtype) {
+        throw std::invalid_argument(
+            "the two operands have different element types ('" + elementTypeSpelling(lhs.dtype) +
+            "' and '" + elementTypeSpelling(rhs.dtype) +
+            "'): a tensor operator computes in one element type, and there is no implicit "
+            "conversion between numeric types");
+    }
+    return lhs.dtype;
 }
 
 /// Result type of a binary operator: `Div` and `Pow` produce a float, f64 when an operand's

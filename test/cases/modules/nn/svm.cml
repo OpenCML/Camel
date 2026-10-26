@@ -3,7 +3,7 @@
  */
 module svm
 
-import { add, subtract, multiply, matmul, ones, zeros, sum, eye, transpose, show, pow, shape, concat, range, reshape } from tensor
+import { add, subtract, multiply, matmul, ones, zeros, sum, eye, transpose, show, pow, shape, concat, range, reshape, where } from tensor
 
 func svm_train(X: f32[..], y: f32[..], learning_rate: float, epochs: int, lambda: float): f32[..] sync {
     let m = shape(X)[0]
@@ -19,7 +19,10 @@ func svm_train(X: f32[..], y: f32[..], learning_rate: float, epochs: int, lambda
             let predictions = matmul(X_bias, weights)
             let margins = multiply(y_col, predictions)
             let active = (subtract(1.0, margins) > 0)
-            let grad = transpose(X_bias) @ multiply(multiply(y_col, -1.0), active)
+            // The mask selects which rows update: a bool array times a float one is a pair no
+            // operator computes in (design principles 5.1), so the selection is written with
+            // `where`.
+            let grad = transpose(X_bias) @ where(active, multiply(y_col, -1.0), 0.0)
             let reg = multiply(weights, f32(lambda))
             let step = multiply(add(grad, reg), f32(1.0 / float(m)))
             let new_weights = subtract(weights, multiply(step, f32(learning_rate)))

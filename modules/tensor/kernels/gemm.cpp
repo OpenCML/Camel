@@ -396,7 +396,18 @@ Array *matmul(
     const Array *lhs, const Array *rhs, mm::IAllocator &allocator, bool library) {
     const auto gemm = library ? &sgemmLibrary : &sgemm;
     const MatmulPlan plan  = planMatmul(lhs->shapeSpan(), rhs->shapeSpan());
-    const TypeCode outType = promoteTensorTypes(lhs->dtype(), rhs->dtype());
+    // The product of two arrays is computed in the one element type they state: matmul refuses a
+    // pair of different element types before it answers a type (ops/linalg_ops.cpp,
+    // refuseMixedElementTypes), so a graph reaching this kernel with such a pair was built
+    // without the operator's inference. The kernel reports that rather than converting silently.
+    if (lhs->dtype() != rhs->dtype()) {
+        throw std::invalid_argument(
+            "the two operands have different element types ('" +
+            elementTypeSpelling(lhs->dtype()) + "' and '" + elementTypeSpelling(rhs->dtype()) +
+            "'): a tensor operator computes in one element type, and there is no implicit "
+            "conversion between numeric types");
+    }
+    const TypeCode outType = lhs->dtype();
     // A bf16 or f16 matmul is the f32 multiplication of the exactly widened operands, rounded
     // once into the element type when the result is stored: the same one arithmetic path as
     // the elementwise operators (dtype.h), with f32 as the accumulator the declaration states.
