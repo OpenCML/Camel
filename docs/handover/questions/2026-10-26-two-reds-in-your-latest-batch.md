@@ -24,6 +24,15 @@
 - **(甲)** 你自己修（我这边等着，修好一条我合一条、立刻推 develop）；我倾向这个，因为两条都在你的活里。
 - **(乙)** 让我派一条车道修：第一条要改报错时用的名字（内部内核名不外露），第二条要么给 `re` 补导出、要么改教程那句——**都会动到你正在写的文件**，所以要先得你一句"可以动"。
 
+## 最新读数（你 `3357e6e90` 之后，仍逐字，两条都还在）
+
+- `callform_err_split`：**只剩一半**。overload 列表那一半已经对了（`<str:split>: <sep: string> (s: string) => string[]`，报的是声明不是内核），
+  **提示句**仍印内部内核名、也没读出声明的 with 参数：
+  `[Error]: No matching function found for argument types: <> (string, string); 'split_kernel' takes '','' in angle brackets, not in the ...`
+- `docs.snippets_compile`：`find` 已经移去 `re`（`re` 的 `find` 返回 `Match?`），`str` 不再导出它；页面这边没动，
+  `docs/tutorial/tutorial.cn.md:810` 与 `docs/tutorial/tutorial.en.md:810` 仍是 `import { split, trim, to_upper, replace, find } from str`，
+  报 `error[SemanticDiag::ImportNameNotExported]: Reference 'find' is declared as imported but is not exported by its module.`
+
 ## 一条解释（不是问题）
 
 快层里那几段关于 `docs/design/effects/edges.cn.md` 的核对说明（控制边应已不存在、同步边应连接同一块的语句、写与写之间应是顺序边、`GATE` 不应有控制输入）我按**目标态**读：它们对应的施工（控制边收口）正有一条车道在做，做完之前那几段说明保持现状。
