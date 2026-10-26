@@ -106,7 +106,7 @@ expect_output_contains = ["name=SemanticDiag::PartialApplicationRefused", "err_c
 
 [[tests]]
 name = "partial_application.var_parameter"
-desc = "A function with a `var` context parameter can be partially applied (graph model Q9, `partial-application-var`): `add<t>` is a function value that captured the cell of `t`, and each call writes it through the capture, so the calls accumulate. `sync` stands on the value's type because calling it writes the captured variable, and the function the value makes writes the capture the way the forwarder does."
+desc = "A function with a `var` context parameter can be partially applied (graph model Q9, `partial-application-var`): `add<t>` is a function value that captured the cell of `t`, and each call writes it through the capture, so the calls accumulate. The write lands on the variable the value was bound to, which the reads after the calls show."
 kind = "behavior"
 case = "../../../cases/consistency/partial_application/var_parameter.cml"
 args = ["${case}", "${backend}"]
