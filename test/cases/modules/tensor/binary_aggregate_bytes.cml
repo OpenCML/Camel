@@ -1,0 +1,20 @@
+module binary_aggregate_bytes
+import { to_bytes } from tensor
+import { to_array } from bytes
+
+// A struct whose fields are pure data is a compact element type: an array of it is one run of
+// bytes, each element laid out field by field. `x` is an 8-byte int at offset 0, `y` an f32 at
+// offset 8, and the write is the fields' own little-endian bytes with the padding the layout keeps
+// left as zeros. The bytes are the whole element, so a field and its padding are both there and
+// the run is the array's own, element after element.
+type P = { x: int, y: f32 }
+
+func main(): int sync {
+    let ps: P[] = [{ x: 1, y: 2.0 }, { x: 258, y: 3.0 }]
+    println(to_array(to_bytes(ps)))
+    // A struct whose only field is one int: the element is that field and the padding the layout
+    // rounds it up with, so the payload holds both.
+    let q: { n: int }[] = [{ n: 7 }]
+    println(to_array(to_bytes(q)))
+    return 0
+}

@@ -141,6 +141,14 @@ const MODULES = [
         native: true,
     },
     {
+        name: 'stream',
+        title: '`stream`: producing and consuming streams',
+        kind: 'camel',
+        // A stream is an ordinary function value (its step function together with its state), so
+        // its producers here are ordinary Camel functions that return one, and the consumer is
+        // `for x in s`: no part of the module is a native operator of its own.
+    },
+    {
         name: 'math',
         title: '`math`: numbers and bits',
         kind: 'cpp',

@@ -1,0 +1,24 @@
+/**
+ * `stream::unfold` produces a stream from a state and a step, and `for x in s` consumes it (design
+ * principles 5.4: a simple generator is the library's `unfold`, and the consumer is the loop the
+ * graph already has). The step answers `(element, state after it)` or `null`; the stream pulls
+ * once per round, so the whole path from the standard library to the four back ends runs without
+ * a `yield` anywhere in the program.
+ */
+module stream_unfold
+
+import stream
+
+func down(n: int): (int, int)? {
+    return if n > 0 then (n, n - 1) else null
+}
+
+func total(s: int..): int {
+    return loop acc = 0 for x in s do acc + x
+}
+
+func main(): int sync {
+    println(total(stream::unfold(3, down)))
+    println(total(stream::unfold(0, down)))
+    return 0
+}

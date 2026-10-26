@@ -76,15 +76,25 @@ class Entity {
     struct generic_payload_t {
         std::shared_ptr<void> tmpls;
     };
+    /// The name of a decorated function that shares its name with other functions of the module:
+    /// what the decorators made of the declaration, and the functions of the name it stands
+    /// beside. An importer receives both -- a name stands for the decorated function and its
+    /// overloads at once, and a call of it chooses among them (`docs/design-principles.cn.md`
+    /// 4.4) -- so the two travel together.
+    struct decorated_overloads_payload_t {
+        graph_payload_t decorated;
+        graph_set_ptr_t overloads;
+    };
     using storage_t = std::variant<
         node_payload_t, graph_set_ptr_t, oper_group_ptr_t, graph_payload_t, generic_payload_t,
-        camel::core::data::data_ptr_t, tag_payload_t>;
+        camel::core::data::data_ptr_t, tag_payload_t, decorated_overloads_payload_t>;
 
     explicit Entity(node_payload_t node) : storage_(node) {}
     explicit Entity(tag_payload_t tag) : storage_(tag) {}
     explicit Entity(graph_set_ptr_t graphs) : storage_(std::move(graphs)) {}
     explicit Entity(graph_payload_t graph) : storage_(std::move(graph)) {}
     explicit Entity(generic_payload_t generic) : storage_(std::move(generic)) {}
+    explicit Entity(decorated_overloads_payload_t overloads) : storage_(std::move(overloads)) {}
 
     storage_t storage_;
 };

@@ -1,0 +1,13 @@
+/**
+ * The step signature is the only function value that is a stream (design principles 5.4): a
+ * stream holds a function value of `() => (T, T..)?`, so a function value of any other
+ * signature is not one, and the seam between a function value and a stream is exactly one
+ * signature wide.
+ */
+module stream_step_value_signature
+
+func main(): int sync {
+    let s: int.. = (x: int) => x
+    println(0)
+    return 0
+}

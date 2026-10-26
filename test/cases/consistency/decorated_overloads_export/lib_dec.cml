@@ -1,0 +1,8 @@
+module lib_dec
+
+export func once(f: (x: int) => int): (x: int) => int {
+    return f
+}
+
+@once
+export func bump(x: int): int { return x + 1 }

@@ -1,0 +1,30 @@
+/**
+ * A stream's value is its step function with its state (design principles 5.4): `T..` holds a
+ * function value of the step signature `() => (T, T..)?`, which answers the next element
+ * together with the rest of the stream, and `null` when the stream is over. A function value
+ * of that signature is a stream wherever a stream is expected, and a stream is read through
+ * the signature: the consumer threads the rest of the stream it was handed, never a state of
+ * its own, and the same closure called twice answers the same element.
+ */
+module stream_step_value
+
+func count(n: int): int.. {
+    return step(n)
+}
+
+func step(n: int): () => (int, int..)? {
+    return () => if n > 0 then (n, step(n - 1)) else null
+}
+
+func total(s: int.., acc: int): int {
+    let pull = s as (() => (int, int..)?)
+    return match pull() {
+        case null => acc
+        case v => total(v.1, acc + v.0)
+    }
+}
+
+func main(): int sync {
+    println(total(count(3), 0))
+    return 0
+}

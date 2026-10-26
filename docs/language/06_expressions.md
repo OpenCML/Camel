@@ -96,8 +96,9 @@ func main(): int sync {
   - 只配了前几个上下文参数时，剩下的仍是结果的上下文参数：`let above = clamp<0>` 之后写 `above<5>(9)`。已经配齐的函数不能再配（`g<2>` 是错误）。
   - `f` 必须是能由这些实参确定的一个函数。同名函数有多个时，取唯一一个接受这些上下文实参的；仍有多个时由所在位置的函数类型（形参）决定，都定不下来是 `SemanticDiag::PartialApplicationRefused`。
   - 图上它是一个携带了捕获值的函数值，与闭包同构：自己的一张子图，配好的实参通过端口进入，没有新增节点种类。
-  - 带 `var` 上下文参数的函数（`SemanticDiag::ConstructNotSupported`）、类型规则随实参变化的内建算子（如 `len`；`SemanticDiag::FunctionNameAsValue`）。这两种情形把调用写在 lambda 里。
-- 关键字实参 `f(a: 1)` 报 `SemanticDiag::FeatureNotSupported`。
+  - 把 `with` 形参声明成 `var` 的函数照样能部分应用：`f<w>` 捕获的是那个变量本身，不是它的值，所以调用它时函数对这个变量做的写落在原来的变量上（[3.5](03_data_model.md)）；这样的调用是一次有副作用的调用，写在 `sync` 块里才运行。
+  - 名字下不止一个函数时没有函数值：重载的内建算子（如 `len` 有三个签名）就是这样，报 `SemanticDiag::FunctionNameAsValue`。把调用写在 lambda 里。
+- 实参可以按名字给（`f(x: 1)`）：位置实参写在前面，按名字给的写在后面；名字不是被调函数声明的形参时是 `SemanticDiag::ParamArgumentUnknown`。
 - 同一个实参表里写两个带尖括号的调用（`f<a>(x), g<b>(y)`）会被读成比较；带尖括号的调用后面再接带尖括号的管道（`f<a>(x)->g<b>`）也可能如此。把它们分成两条语句。
 - 写在括号里的 lambda 可以直接调用：`((x: int): int => x + 1)(3)`；也可以直接写在 `->`、`?->` 的右边：`3->(x: int): int => x + 1`、`parse_int(s) ?-> (x: int): int => x * 2`。
 

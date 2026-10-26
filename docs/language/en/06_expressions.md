@@ -96,8 +96,9 @@ func main(): int sync {
   - When only the first context parameters are given, the rest remain context parameters of the result: after `let above = clamp<0>`, write `above<5>(9)`. A function that has all of them cannot be given more (`g<2>` is an error).
   - `f` must be one function that these arguments determine. Among several functions of one name, the only one that takes these context arguments is meant; if several do, the function type of the position (a parameter) decides, and when nothing does it is `SemanticDiag::PartialApplicationRefused`.
   - On the graph it is a function value that carries the captured arguments, the shape a closure has: a subgraph of its own which the bound arguments enter through ports. No node kind is added.
-  - Functions with a `var` context parameter (`SemanticDiag::ConstructNotSupported`) and built-in operators whose type rule depends on their arguments (such as `len`; `SemanticDiag::FunctionNameAsValue`). Write the call in a lambda there.
-- Keyword arguments `f(a: 1)` are `SemanticDiag::FeatureNotSupported`.
+  - A function whose `with` parameter is declared `var` can be partially applied too: `f<w>` captures the variable itself and not its value, so a call of it makes the write the function makes to that variable land on the variable it was bound to ([3.5](03_data_model.md)); such a call is a call with an effect, and runs only in a `sync` block.
+  - A name that stands for more than one function has no function value: an overloaded built-in operator (such as `len`, which has three signatures) is one, and the refusal is `SemanticDiag::FunctionNameAsValue`. Write the call in a lambda there.
+- Arguments may be given by name (`f(x: 1)`): positional arguments first, named ones after; a name the callee does not declare as a parameter is `SemanticDiag::ParamArgumentUnknown`.
 - Two calls with angle brackets in one argument list (`f<a>(x), g<b>(y)`) are read as comparisons; a call with angle brackets followed by a pipe with angle brackets (`f<a>(x)->g<b>`) may be too. Write them as two statements.
 - A lambda written in parentheses can be called directly: `((x: int): int => x + 1)(3)`; it can also be written on the right of `->` and `?->`: `3->(x: int): int => x + 1`, `parse_int(s) ?-> (x: int): int => x * 2`.
 
