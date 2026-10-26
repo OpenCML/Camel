@@ -118,13 +118,8 @@ export func apply(p: Program): Program! {
 - When every parameter has a default, the rule's name alone is a `Rule`; whether a binding is written is visible in the declaration.
 - A parameter with no default that is not bound where the rule set is written is a compile error (`SemanticDiag::RuleWithParameterUnbound`): no value in that rule value is there for its condition to read.
 - **Type arguments and `with` arguments go through the same instantiation channel, and the key of an instance is that pair**: the same pair hits the same instance, and different bindings are different instances. This is the same thing as the instantiation of a generic function, and with both written the spelling is the function's too: `name::<T><value>`.
-
-**Not implemented.** These two forms are ruled, and do not compile today:
-
-- **The right side of a rule reading a `with` parameter** (`x + 0 => x + shift`): refused today with `SemanticDiag::RuleWithParameterOnASide`. The ruled target is that **both sides** — `when` and the right side — can read it.
-- **Type parameters and `with` parameters on one rule** (`with <tile: int> rule tiled::<T>(...)`): refused today with `SemanticDiag::RuleWithParameterGenericHead`.
-
-The acceptance form of this rule is `tile_matmul` in [rules language v2, section 1](../../design/rewrite/v2.cn.md): `with <tile: int> rule tile_matmul::<T>(a: T[m, k], b: T[k, n]) when m % tile == 0 { a @ b => tiled_matmul<tile>(a, b) }`. What can be written today is each half of the two layers — the scheduling parameter as a `with` parameter bound by whoever chooses the rule (`add_zero_tiled<1>` above), and the type as a generic head instantiated by the matched type (`rule add_zero::<T>(x: T) when is_integer::<T>() { x + 0 => x }`) — and both keys on one rule are the ruled target form.
+- **Both sides of a rule and its condition read the `with` parameters**: the left side, the right side and the `when` are all functions of them and read them by name -- `{ x + 0 => x + shift }` and `when shift > 0` are the two halves of one rule and the same value is bound to both, so the `shift` of the right side is the one this instance was bound to.
+- The bullet above and this one are one thing: a rule may write `::<T>` and `with <tile: int>` together, the type half comes from the matched type, the scheduling half is bound where the rule is used, and together they are the key of the instance. The acceptance form is `tile_matmul` in [rules language v2, section 1](../../design/rewrite/v2.cn.md): `with <tile: int> rule tile_matmul::<T>(a: T[m, k], b: T[k, n]) when m % tile == 0 { a @ b => tiled_matmul<tile>(a, b) }`.
 
 ## 9.4 A rule set is handed over explicitly
 

@@ -107,7 +107,7 @@ func main(): int sync {
 ```
 
 - `export` is written before a `func`, `type` or `let`/`var` declaration, or in the form `export { a, b }` listing names already declared.
-- Generic functions can be exported ([7.5](07_statements.md#75-generic-functions)). A name that has both an annotated function and other overloads currently cannot be exported (`SemanticDiag::ConstructNotSupported`).
+- Generic functions can be exported ([7.5](07_statements.md#75-generic-functions)). A name that has both an annotated function (`@d<a> func f`) and other functions of the same name can be exported too: the exported name carries both, and the importing module selects among them by the overloading rules, as the module that declares them does.
 
 **An exported function can use the `let` and `var` values of the top level of its own module**, directly or through functions of its module that it calls (design principles 10.1):
 
