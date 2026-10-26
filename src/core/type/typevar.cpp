@@ -9,6 +9,7 @@
 
 #include "camel/core/mm.h"
 #include "camel/core/type/composite/array.h"
+#include "camel/core/type/composite/stream.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/intern.h"
@@ -299,6 +300,9 @@ bool containsTypeVar(Type *type) {
         return false;
     case TypeCode::Array:
         return containsTypeVar(static_cast<ArrayType *>(type)->elemType());
+    case TypeCode::Stream:
+        // A stream's type has one component, its element type, exactly as an array does.
+        return containsTypeVar(static_cast<StreamType *>(type)->elemType());
     case TypeCode::Tuple: {
         const auto types = static_cast<TupleType *>(type)->types();
         return std::any_of(types.begin(), types.end(), containsTypeVar);
@@ -337,6 +341,8 @@ bool containsTypeOf(Type *type) {
         return false;
     case TypeCode::Array:
         return containsTypeOf(static_cast<ArrayType *>(type)->elemType());
+    case TypeCode::Stream:
+        return containsTypeOf(static_cast<StreamType *>(type)->elemType());
     case TypeCode::Tuple: {
         const auto types = static_cast<TupleType *>(type)->types();
         return std::any_of(types.begin(), types.end(), containsTypeOf);
@@ -379,6 +385,13 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
         // The shape belongs to the type: substituting the element type keeps the dimensions,
         // the pack and the open rank.
         return elem == array->elemType() ? type : array->withElementType(elem);
+    }
+    case TypeCode::Stream: {
+        // `T..` with `T` bound is the stream of what `T` became: the element type is what the
+        // stream's type is keyed by, so this is the whole of the substitution.
+        auto *stream = static_cast<StreamType *>(type);
+        Type *elem   = substituteTypeVars(stream->elemType(), bindings);
+        return elem == stream->elemType() ? type : StreamType::create(elem);
     }
     case TypeCode::Tuple: {
         auto *tuple  = static_cast<TupleType *>(type);
@@ -477,6 +490,12 @@ Type *substituteExtentValues(Type *type, const ExtentValues &values, const Exten
         }
         return elem == array->elemType() ? array : array->withElementType(elem);
     }
+    case TypeCode::Stream: {
+        // A stream's type holds no extent of its own: its element type may.
+        auto *stream = static_cast<StreamType *>(type);
+        Type *elem   = substituteExtentValues(stream->elemType(), values, packs);
+        return elem == stream->elemType() ? type : StreamType::create(elem);
+    }
     case TypeCode::Tuple: {
         auto *tuple  = static_cast<TupleType *>(type);
         bool changed = false;
@@ -563,6 +582,11 @@ bool bindTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
         return bindTypeVars(
             static_cast<ArrayType *>(pattern)->elemType(),
             static_cast<ArrayType *>(actual)->elemType(),
+            bindings);
+    case TypeCode::Stream:
+        return bindTypeVars(
+            static_cast<StreamType *>(pattern)->elemType(),
+            static_cast<StreamType *>(actual)->elemType(),
             bindings);
     case TypeCode::Tuple: {
         auto *want = static_cast<TupleType *>(pattern);
@@ -669,6 +693,9 @@ void collectTypeVars(Type *type, std::vector<std::string> &names) {
     case TypeCode::Array:
         collectTypeVars(static_cast<ArrayType *>(type)->elemType(), names);
         return;
+    case TypeCode::Stream:
+        collectTypeVars(static_cast<StreamType *>(type)->elemType(), names);
+        return;
     case TypeCode::Tuple:
         among(static_cast<TupleType *>(type)->types());
         return;
@@ -737,6 +764,11 @@ bool unifyTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
         return unifyTypeVars(
             static_cast<ArrayType *>(pattern)->elemType(),
             static_cast<ArrayType *>(actual)->elemType(),
+            bindings);
+    case TypeCode::Stream:
+        return unifyTypeVars(
+            static_cast<StreamType *>(pattern)->elemType(),
+            static_cast<StreamType *>(actual)->elemType(),
             bindings);
     case TypeCode::Tuple: {
         auto *want = static_cast<TupleType *>(pattern);
@@ -824,6 +856,9 @@ void collectBindableTypeVars(Type *pattern, std::vector<std::string> &names) {
     }
     case TypeCode::Array:
         collectBindableTypeVars(static_cast<ArrayType *>(pattern)->elemType(), names);
+        return;
+    case TypeCode::Stream:
+        collectBindableTypeVars(static_cast<StreamType *>(pattern)->elemType(), names);
         return;
     case TypeCode::Tuple:
         for (Type *elem : static_cast<TupleType *>(pattern)->types()) {

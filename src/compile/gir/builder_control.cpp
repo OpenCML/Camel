@@ -17,6 +17,7 @@
 #include "camel/core/operator_names.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/struct.h"
+#include "camel/core/type/composite/stream.h"
 #include "camel/execute/entry_args.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/graph.h"
@@ -127,8 +128,6 @@ bool isEmptyArrayLiteral(node_handle_t node) {
 
 /// The type of the untyped empty array literal `[]`: an array whose element type nobody wrote.
 /// Its element type is the only thing it leaves open, so every position it stands in fixes it.
-/// (An array whose element type nobody stated is not one of these when its rank is open;
-/// isElementTypeOpenArray tells them apart.)
 bool isEmptyArrayLiteralType(const Type *type) { return isUntypedArrayType(type); }
 
 /// Whether a value of this type is a struct or tuple whose parts can be the components of a
@@ -2864,6 +2863,14 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     } else if (hasIterable) {
         const auto &expr = gct->loopSequence();
         sequence         = valueOf(functionValueOf(valueNodeOf(visit(expr)), expr));
+        Type *sequenceType = valueTypeOf(nodeTypeOf(sequence));
+        // `for x in s` where `s` is a stream: the rounds are the pulls of the stream's step
+        // function, and the graph already has the loop for that (the `while`, with a condition
+        // and no iterable), so nothing about the driver or a back end is new.
+        if (sequenceType != nullptr && sequenceType->code() == TypeCode::Stream && k > 0) {
+            LEAVE("LOOP");
+            return buildStreamLoop(gct, sequence, initial, stateTypes);
+        }
         elementType      = iterableElementType(sequence, expr);
     }
     Type *stateType =
@@ -3453,6 +3460,323 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         loopValue = rebuildPart(splitRoot);
     }
     LEAVE("LOOP");
+    return loopValue;
+}
+
+// `for x in s` where `s` is a stream. The stream's value is its step function
+// (StreamType::stepType), so a round is one pull of it, and the graph already has the loop that
+// takes one step per round: the `while`, whose condition and body are regions and whose state is
+// what the next round starts from. The loop is therefore written here as that `while`, with the
+// state the program wrote carried beside the pull:
+//
+//   state (next, acc); next is the last pull, acc the program's state
+//   entering:   (s(), a0)
+//   condition:  next != null, and the condition the head wrote after it
+//   body:       the element is next.0, the program's body gives acc', and the round ends by
+//               pulling next.1() into the next next
+//
+// `next` is the last pull -- the element with the rest of the stream, or `null` -- and the body
+// reads the element out of it and pulls the next one from the rest at its end, after the
+// statements it wrote ran. `for ... while c` folds `c` into the condition, after the test that
+// the pull has a value: the stream ending is the loop ending, and `c` is asked only while there
+// is something to iterate. Nothing here is a new node kind, a new region kind or a new loop
+// form: a back end sees the LOOP node it always did, and the driver the same.
+node_handle_t Builder::buildStreamLoop(
+    const GCT::node_ptr_t &gct, node_handle_t sequence,
+    const std::vector<node_handle_t> &initial, const std::vector<Type *> &stateTypes) {
+    using camel::core::LoopKind;
+    using camel::core::oper::TagIsNull;
+    using camel::core::oper::TagNullValue;
+    const LoopKind kind    = gct->loopKind();
+    const size_t k         = initial.size();
+    StreamType *stream     = tt::as_ptr<StreamType>(valueTypeOf(nodeTypeOf(sequence)));
+    FunctionType *stepType = stream->stepType();
+    Type *pullType         = stepType->exitType();
+    Type *elementType      = stream->elemType();
+
+    // The name of the pull in the parts of the loop. It is no name a program writes -- the names
+    // of the head are the states and the element -- and the parts read the round through it: the
+    // element it carries is taken out of it inside the body, where the element's name is bound.
+    const std::string pullName = "$pull";
+    std::vector<std::string> stateNames(k);
+    for (size_t j = 0; j < k; ++j) {
+        stateNames[j] = gct->loopStateName(j);
+    }
+
+    // The state of the loop: the pull, then the state the program wrote. One pull carries the
+    // element and the rest of the stream, so a round reads the element out of the pull the last
+    // round left and pulls the next one from the rest.
+    std::vector<Type *> machineTypes{pullType};
+    machineTypes.insert(machineTypes.end(), stateTypes.begin(), stateTypes.end());
+    Type *machineType = static_cast<Type *>(TupleType::create(machineTypes));
+    Type *stateType =
+        k == 1 ? stateTypes.front() : static_cast<Type *>(TupleType::create(stateTypes));
+
+    // One pull, where the round stands. The value of `T..` is that function value, so the call
+    // reads the step signature and nothing is converted.
+    const auto pullOf = [&](node_handle_t value, const GCT::node_ptr_t &at) {
+        node_handle_t call = currGraph_->addCallNode(pullType);
+        linkNodes(LinkType::With, value, call);
+        registerNodeOrigin(context_, call, at, "gir.loop.pull");
+        return call;
+    };
+    // A value on its way into the loop's state: one of the state's type as it is, a value that
+    // enters it (an `int` where the state is an `int?`, design principles 3.8) converted, and
+    // anything else the body's mismatch.
+    const auto intoState = [&](node_handle_t value, Type *type) {
+        if (value == nullptr || type == nullptr) {
+            return value;
+        }
+        Type *valueType = valueTypeOf(nodeTypeOf(value));
+        if (valueType != nullptr && type->assignableFrom(valueType)) {
+            return value;
+        }
+        if (valueType != nullptr && entersImplicitly(type, valueType)) {
+            if (node_handle_t coerced = coerceTo(value, type, gct->loopBody());
+                coerced != nullptr) {
+                return coerced;
+            }
+        }
+        diags_->of(SemanticDiag::LoopBodyTypeMismatch)
+            .atOrigin(gct->loopBody()->origin())
+            .commit(valueType ? valueType->toString() : std::string("void"), type->toString());
+        throw BuildAbortException();
+    };
+    // The state the next round starts from, in the order the loop's state holds it.
+    const auto machineStateOf = [&](const std::vector<node_handle_t> &components) {
+        std::vector<size_t> slots(components.size());
+        std::iota(slots.begin(), slots.end(), size_t{0});
+        node_handle_t fill = currGraph_->addFillNode(
+            machineType, runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
+        const slot_t empty = camel::core::rtdata::toSlot(
+            ::Tuple::create(components.size(), camel::core::mm::autoSpace()));
+        node_handle_t source = currGraph_->draft().ref(
+            currGraph_->draft().materializeStaticValue(empty, machineType));
+        linkNodes(LinkType::Norm, source, fill);
+        for (node_handle_t component : components) {
+            linkNodes(LinkType::With, component, fill);
+        }
+        registerNodeOrigin(context_, fill, gct, "gir.loop.state");
+        return fill;
+    };
+    const auto booleanConstant = [&](bool each) {
+        node_handle_t node = currGraph_->addStaticDataNode(
+            tt::as_shared<Data>(std::make_shared<PrimaryData<bool>>(each)));
+        registerNodeOrigin(context_, node, gct, "gir.data");
+        return node;
+    };
+
+    // Entering the loop pulls the first element: the first values stand where the loop is.
+    node_handle_t firstPull = pullOf(sequence, gct);
+    std::vector<node_handle_t> machineInitial{firstPull};
+    machineInitial.insert(machineInitial.end(), initial.begin(), initial.end());
+
+    // The parts declare the pull and the states they read; the element is bound inside the body,
+    // out of the pull, so that the body reads it as the name the program wrote.
+    const auto refreshPorts = [&](ArmBuild &part) {
+        FunctionTypeFactory params;
+        std::vector<runtime::gc_node_ref_t> ids;
+        for (size_t i = 0; i < part.ports.size(); ++i) {
+            params.addNormArg(
+                i == 0 ? pullName : stateNames[i - 1], nodeTypeOf(part.ports[i]), false);
+            ids.push_back(nodeIdOf(part.ports[i]));
+        }
+        params.setExitType(Type::Void());
+        part.graph->draft().setRegionPorts(part.region, ids);
+        part.graph->draft().setRegionParams(part.region, params.build());
+    };
+    const auto declarePorts = [&](ArmBuild &part, const GCT::node_ptr_t &exec) {
+        const auto add = [&](const std::string &name, Type *type) {
+            node_handle_t port = currGraph_->addRegionPortNode(type, name);
+            part.graph->draft().setNodeRegion(nodeIdOf(port), part.region);
+            insertNode(name, port);
+            if (recorder_) {
+                recordDeclaration(name, port, exec);
+            }
+            part.ports.push_back(port);
+        };
+        add(pullName, pullType);
+        for (size_t j = 0; j < k; ++j) {
+            add(stateNames[j], stateTypes[j]);
+        }
+        refreshPorts(part);
+    };
+
+    arm_ptr_t condPart;
+    arm_ptr_t bodyPart;
+    {
+        ExpectedValueScope partScope(expectedValueType_, nullptr);
+        // The condition of the loop: the pull has a value, and -- where the head wrote one --
+        // the condition of the head holds. The head's condition is asked only where the stream
+        // still has an element, so the stream ending ends the loop without asking it, as the
+        // `while` of the array form asks the head's condition per round.
+        //
+        // The parts the condition is made of stand where the loop is: a `for` head wrote no
+        // condition, so the body is what they take their position from.
+        const GCT::node_ptr_t condExec =
+            camel::core::loopHasCondition(kind) ? gct->loopCondition() : gct->loopBody();
+        const auto conditionArms = [&]() -> node_handle_t {
+            node_handle_t isNull = applyTagOperator(TagIsNull, pullName, condExec);
+            std::vector<arm_ptr_t> arms(2);
+            // The pull is `null`: the stream is over, and the loop ends without asking the
+            // condition the head wrote.
+            arms[0] = buildArm(condExec, [&] { return booleanConstant(false); });
+            arms[1] = buildArm(condExec, [&] {
+                return camel::core::loopHasCondition(kind) ? visitBodyNode(gct->loopCondition())
+                                                           : booleanConstant(true);
+            });
+            return buildBranch(condExec, isNull, &arms);
+        };
+        condPart = buildArm(
+            condExec,
+            conditionArms,
+            runtime::GCRegionKind::LoopCond,
+            [&](ArmBuild &part) { declarePorts(part, condExec); });
+        Type *condType = condPart->exitType();
+        if (condType == nullptr || condType->code() != TypeCode::Bool) {
+            diags_->of(SemanticDiag::LoopConditionNotBool)
+                .atOrigin(condExec->origin())
+                .commit(condType ? condType->toString() : std::string("void"));
+            throw BuildAbortException();
+        }
+        // The body of the loop: the element of the round, the program's body, and the next pull.
+        bodyPart = buildArm(
+            gct->loopBody(),
+            [&]() -> node_handle_t {
+                // The element this round is about and the rest of the stream, taken out of the
+                // pull the condition has already said has a value.
+                node_handle_t pair =
+                    applyTagOperator(TagNullValue, pullName, gct->loopBody());
+                node_handle_t element = currGraph_->addAccsNode(elementType, 0);
+                linkNodes(LinkType::Norm, pair, element);
+                registerNodeOrigin(context_, element, gct->loopBody(), "gir.loop.element");
+                insertNode(gct->loopElementName(), element);
+                if (recorder_) {
+                    recordDeclaration(gct->loopElementName(), element, gct->loopBody());
+                }
+                node_handle_t rest = currGraph_->addAccsNode(stream, 1);
+                linkNodes(LinkType::Norm, pair, rest);
+                registerNodeOrigin(context_, rest, gct->loopBody(), "gir.loop.rest");
+
+                // What the program's body gives is the state of the next round.
+                node_handle_t state = intoState(
+                    loopStateValueOf(visitBodyNode(gct->loopBody())), stateType);
+                if (state == nullptr) {
+                    diags_->of(SemanticDiag::LoopBodyTypeMismatch)
+                        .atOrigin(gct->loopBody()->origin())
+                        .commit(std::string("void"), stateType->toString());
+                    throw BuildAbortException();
+                }
+                std::vector<node_handle_t> next{nullptr};
+                if (k == 1) {
+                    next.push_back(state);
+                } else {
+                    for (size_t j = 0; j < k; ++j) {
+                        node_handle_t component =
+                            currGraph_->addAccsNode(stateTypes[j], static_cast<uint32_t>(j));
+                        linkNodes(LinkType::Norm, state, component);
+                        registerNodeOrigin(
+                            context_, component, gct->loopBody(), "gir.loop.state");
+                        next.push_back(component);
+                    }
+                }
+                // The pull of the element after this one, after everything the body wrote ran: a
+                // stream is pulled for the element that follows the one this round is about.
+                node_handle_t pull = pullOf(rest, gct->loopBody());
+                linkNodes(LinkType::Ctrl, state, pull);
+                next[0] = pull;
+                return machineStateOf(next);
+            },
+            runtime::GCRegionKind::LoopBody,
+            [&](ArmBuild &part) { declarePorts(part, gct->loopBody()); });
+    }
+
+    node_handle_t loopNode = currGraph_->addRegionLoopNode(LoopKind::While, machineType);
+    registerNodeOrigin(context_, loopNode, gct, "gir.loop");
+    stampPermissions(loopNode);
+    for (node_handle_t value : machineInitial) {
+        linkNodes(LinkType::Norm, value, loopNode);
+    }
+    // The With inputs of the node are the results of its parts (the body's, then the
+    // condition's) and the slot the rounds are counted in; the parts are its regions.
+    std::vector<arm_ptr_t> parts{bodyPart};
+    linkNodes(LinkType::With, bodyPart->output, loopNode);
+    if (condPart) {
+        parts.push_back(condPart);
+        linkNodes(LinkType::With, condPart->output, loopNode);
+    }
+    linkNodes(LinkType::With, currGraph_->addRegionPortNode(Type::Int64(), ""), loopNode);
+    runtime::GraphDraft &draft = currGraph_->draft();
+    draft.setRegionOwner(bodyPart->region, nodeIdOf(loopNode), 1);
+    draft.setRegionResult(bodyPart->region, nodeIdOf(bodyPart->output));
+    if (condPart) {
+        draft.setRegionOwner(condPart->region, nodeIdOf(loopNode), 0);
+        draft.setRegionResult(condPart->region, nodeIdOf(condPart->output));
+    }
+
+    // Running the loop is like entering an arm: it uses every variable its parts used and
+    // writes those they wrote.
+    std::vector<node_handle_t> capturedWrites;
+    mergeArmVariables(parts, loopNode, capturedWrites);
+    const auto originOf = [&](node_handle_t variable) {
+        const auto origin = captureOriginOf_.find(variable);
+        return origin != captureOriginOf_.end() ? origin->second : variable;
+    };
+    std::vector<DraftGraphBuilder *> callees;
+    std::set<node_handle_t> directWrites;
+    for (const arm_ptr_t &part : parts) {
+        callees.insert(callees.end(), part->callees.begin(), part->callees.end());
+        for (node_handle_t variable : part->directWrites) {
+            directWrites.insert(originOf(variable));
+        }
+    }
+    if (ArmBuild *outer = activeArm()) {
+        outer->callees.insert(outer->callees.end(), callees.begin(), callees.end());
+        for (const arm_ptr_t &part : parts) {
+            outer->directWrites.insert(part->directWrites.begin(), part->directWrites.end());
+        }
+    }
+    if (!capturedWrites.empty() && !synced_) {
+        std::vector<node_handle_t> origins;
+        for (node_handle_t variable : capturedWrites) {
+            origins.push_back(originOf(variable));
+        }
+        unit_->pendingIgnoredWrites.push_back(
+            {callees, origins, directWrites, gct->origin(), "The loop", "its body writes"});
+    }
+    if (synced_) {
+        if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, loopNode)) {
+            linkNodes(LinkType::Ctrl, lastSyncedNode_, loopNode);
+        }
+        lastSyncedNode_ = loopNode;
+        chainedNodes_.insert(loopNode);
+    }
+
+    // The program sees the state it wrote, not the pull beside it: one state is its own value,
+    // several are a tuple of them.
+    node_handle_t loopValue = nullptr;
+    if (k == 1) {
+        loopValue = currGraph_->addAccsNode(stateTypes.front(), 1);
+        linkNodes(LinkType::Norm, loopNode, loopValue);
+        registerNodeOrigin(context_, loopValue, gct, "gir.loop.value");
+    } else {
+        std::vector<size_t> slots(k);
+        std::iota(slots.begin(), slots.end(), size_t{0});
+        loopValue = currGraph_->addFillNode(
+            stateType, runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
+        const slot_t empty = camel::core::rtdata::toSlot(
+            ::Tuple::create(k, camel::core::mm::autoSpace()));
+        node_handle_t source =
+            currGraph_->draft().ref(currGraph_->draft().materializeStaticValue(empty, stateType));
+        linkNodes(LinkType::Norm, source, loopValue);
+        for (size_t j = 0; j < k; ++j) {
+            node_handle_t component =
+                currGraph_->addAccsNode(stateTypes[j], static_cast<uint32_t>(j + 1));
+            linkNodes(LinkType::Norm, loopNode, component);
+            linkNodes(LinkType::With, component, loopValue);
+        }
+        registerNodeOrigin(context_, loopValue, gct, "gir.loop.value");
+    }
     return loopValue;
 }
 

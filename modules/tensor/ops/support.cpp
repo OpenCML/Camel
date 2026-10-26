@@ -191,7 +191,7 @@ type::Type *tensorOf(const TensorFacts &facts) {
     // function, not something a program can leave out.
     ASSERT(facts.dtype.has_value(), "a tensor's element type is always in its type");
     if (!isSupportedTensorScalar(*facts.dtype)) {
-        throw std::invalid_argument("Unsupported Tensor element type");
+        throw std::invalid_argument("Unsupported array element type");
     }
     type::Type *elem = type::Type::create(*facts.dtype);
     if (!facts.shape) {
