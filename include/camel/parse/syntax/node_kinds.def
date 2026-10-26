@@ -41,8 +41,7 @@ CAMEL_NODE(FuncDecl, Other)            // frontMatter? ('with' angledParams)? 'e
 CAMEL_NODE(ResourceClause, Other)      // 'uses' identRef (',' identRef)* | 'pure'
 CAMEL_NODE(WhenClause, Other)          // 'when' logicalOrExpr: a declaration's applicability condition (design principles 5.13)
 CAMEL_NODE(OperatorName, Other)        // IDENTIFIER (OPERATOR | '[' ']'): the name `operator`, read so only after 'func' (provisional notation)
-CAMEL_NODE(RuleDecl, Other)            // ('with' angledParams)? 'export'? IDENTIFIER identDef ruleContext? parentParams whenClause? '{' ruleBody '}'
-CAMEL_NODE(RuleContext, Other)         // '<' identDef (',' identDef)* ','? '>'
+CAMEL_NODE(RuleDecl, Other)            // ('with' angledParams)? 'export'? IDENTIFIER identDef parentParams whenClause? '{' ruleBody '}'
 CAMEL_NODE(RuleBody, Other)            // dataExpr ('=>' | '<=>') dataExpr
 CAMEL_NODE(FactDecl, Other)            // ('with' angledParams)? 'export'? IDENTIFIER identDef typeParams? parentParams? ':' typeExpr factBody factClause*
 CAMEL_NODE(FactBody, Other)            // 'match' logicalOrExpr '{' factCase* '}'
