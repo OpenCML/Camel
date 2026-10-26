@@ -284,52 +284,6 @@ std::optional<SliceRange> normalizeSliceBounds(int64_t extent, int64_t start, in
     return SliceRange{*s, *e};
 }
 
-Array *slice(
-    const Array *input, int64_t axisArg, int64_t start, int64_t end, int64_t step,
-    mm::IAllocator &allocator) {
-    if (step <= 0) {
-        throw std::invalid_argument("slice step must be positive");
-    }
-    const int64_t rank = static_cast<int64_t>(input->rank());
-    const int64_t axis = axisArg < 0 ? axisArg + rank : axisArg;
-    if (axis < 0 || axis >= rank) {
-        throw std::invalid_argument("slice axis out of range");
-    }
-    const int64_t extent = input->dim(static_cast<size_t>(axis));
-    const auto range     = normalizeSliceBounds(extent, start, end);
-    if (!range) {
-        throw std::out_of_range("slice bounds out of range");
-    }
-    start = range->start;
-    end   = range->end;
-    const int64_t count                 = end > start ? (end - start + step - 1) / step : 0;
-    Shape outShape                      = input->shapeVector();
-    outShape[static_cast<size_t>(axis)] = count;
-    Array *out                   = createTensor(input->dtype(), outShape, allocator);
-    uint64_t outer = 1, inner = 1;
-    for (int64_t d = 0; d < axis; ++d) {
-        outer *= static_cast<uint64_t>(outShape[static_cast<size_t>(d)]);
-    }
-    for (int64_t d = axis + 1; d < rank; ++d) {
-        inner *= static_cast<uint64_t>(outShape[static_cast<size_t>(d)]);
-    }
-    const size_t itemSize = elementSize(input->dtype());
-    for (uint64_t o = 0; o < outer; ++o) {
-        for (int64_t k = 0; k < count; ++k) {
-            const uint64_t srcIndex =
-                (o * static_cast<uint64_t>(extent) + static_cast<uint64_t>(start + k * step)) *
-                inner;
-            const uint64_t dstIndex =
-                (o * static_cast<uint64_t>(count) + static_cast<uint64_t>(k)) * inner;
-            std::memcpy(
-                out->rawData() + dstIndex * itemSize,
-                input->rawData() + srcIndex * itemSize,
-                inner * itemSize);
-        }
-    }
-    return out;
-}
-
 SubscriptSliceRange
 subscriptSliceRange(int64_t extent, int64_t start, int64_t end, int64_t step, int64_t written) {
     const bool wroteEnd   = (written & 1) != 0;

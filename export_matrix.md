@@ -9,6 +9,7 @@
 | `:op/not` | ✓ | ✗ |
 | `:op/or` | ✓ | ✗ |
 | `:op/slice_sub` | ✓ ≥10 | ✗ |
+| `:tangent/scatter_slice_arr` | ✓ ≥10 | ✗ |
 | `autodiff:stop_gradient` | ✗ | ✓ |
 | `math:sqrt` | ✓ | ✗ |
 | `nn:adam` | ✗ | ✓ ≥7 |
@@ -104,7 +105,6 @@
 | `tensor:shape` | ✓ | ✗ |
 | `tensor:show` | ✗ | ✗ |
 | `tensor:sigmoid` | ✓ | ✗ |
-| `tensor:slice` | ✓ ≥10 | ✗ |
 | `tensor:slice_grad` | ✗ | ✓ ≥11 |
 | `tensor:softmax` | ✓ ≥13 | ✗ |
 | `tensor:softmax_grad` | ✗ | ✓ ≥13 |

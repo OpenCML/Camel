@@ -108,7 +108,6 @@ const expect = {
   'tensor:reshape': ['exact', undefined, []],
   'tensor:transpose': ['exact', undefined, []],
   'tensor:permute': ['exact', undefined, []],
-  'tensor:slice': ['exact', undefined, []],
   ':op/add_i': ['exact', undefined, []],
   ':op/add_d': ['correctly_rounded', 'f64', ['reassociate', 'contract', 'change_precision', 'finite_math']],
   ':op/mul_f': ['correctly_rounded', 'f32', ['reassociate', 'contract', 'change_precision', 'finite_math']],

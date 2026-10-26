@@ -756,6 +756,52 @@ class Compiler {
         return result;
     }
 
+    /// The result type of an operator the core answers itself, from its resolver: the type rule
+    /// the front end ran and a rewrite re-runs the same way (draft_types.cpp, operResultType).
+    /// Null when the rule is missing or the arguments do not fix a type.
+    ty::Type *coreResult(core::OperId id, const std::vector<Value> &args) {
+        const auto resolver = core::OperatorTable::instance().resolver(id);
+        if (!resolver)
+            return nullptr;
+        std::vector<ty::Type *> types;
+        std::vector<ty::StaticArg> statics;
+        for (const auto &arg : args) {
+            types.push_back(arg.type);
+            statics.emplace_back(arg.staticSlot);
+        }
+        try {
+            const auto resolved = resolver->resolveWith({}, types, statics, ModifierSet{});
+            if (!resolved || !*resolved)
+                return nullptr;
+            return (*resolved)->exitType();
+        } catch (const std::exception &) {
+            return nullptr; // the region stays on the CPU, where the call's own check runs
+        }
+    }
+
+    /// Why the core's rule for these arguments says the call can never be right -- a bound outside
+    /// the axis of an extent the value states, a slice axis the rank does not have -- with the
+    /// empty string when it has no such reason to give (globals.cpp, the checked slice rules).
+    /// The region cannot be mapped in either case; this is what tells the program which of the two
+    /// it is looking at.
+    std::string coreRejection(core::OperId id, const std::vector<Value> &args) {
+        const auto resolver = core::OperatorTable::instance().resolver(id);
+        if (!resolver)
+            return {};
+        std::vector<ty::Type *> types;
+        std::vector<ty::StaticArg> statics;
+        for (const auto &arg : args) {
+            types.push_back(arg.type);
+            statics.emplace_back(arg.staticSlot);
+        }
+        try {
+            const auto reason = resolver->explainRejection({}, types, statics, ModifierSet{});
+            return reason ? *reason : std::string();
+        } catch (const std::exception &) {
+            return {};
+        }
+    }
+
     Value operation(
         core::OperId id, const std::vector<Value> &args,
         const std::optional<core::sem::IndexedInstance> &indexed, ty::Type *knownResult = nullptr) {
@@ -895,6 +941,54 @@ class Compiler {
             return {
                 .type   = width == DType::F32 ? ty::Type::Float32() : ty::Type::Float64(),
                 .tensor = append(std::move(node))};
+        }
+        // The core's own slice node -- `:op/slice_sub`, the one node `t[a:b:s]` and
+        // `slice(t, axis, a, b, s)` both build (design principles 5.4) -- is a view of one axis
+        // of its input, mapped as the layout operators below are. It is no module's definition:
+        // what it is comes from the core's table, where the tensor module publishes its index
+        // declaration, and its result type from the core's own resolver.
+        static const auto coreSlice = core::OperatorTable::instance().intern(":op/slice_sub");
+        if (id == coreSlice) {
+            const auto declared = core::OperatorTable::instance().find(id);
+            if (!declared || !declared->pure)
+                throw UnsupportedComputation("'slice' is not declared pure", uri());
+            ty::Type *inferred = knownResult != nullptr ? knownResult : coreResult(id, args);
+            const tensor::TensorFacts result =
+                inferred != nullptr ? tensor::tensorFactsOf(inferred) : tensor::TensorFacts{};
+            if (inferred == nullptr || result.dtype != ty::TypeCode::Float32 ||
+                !result.isStaticShape()) {
+                // A call the core's rule refuses is a defect of the program, and its reason is
+                // what the program must hear; only a call that is right, whose shape this
+                // backend cannot see, is the shape refusal below.
+                const std::string why = coreRejection(id, args);
+                if (!why.empty())
+                    throw UnsupportedComputation(why, uri(), UnsupportedComputation::Reason::Shape);
+                throw UnsupportedComputation(
+                    "operator '" + uri() + "' needs a statically known f32 tensor result",
+                    uri(),
+                    UnsupportedComputation::Reason::Shape);
+            }
+            Node n{.op = "reindex", .shape = tensor::extentsOf(*result.shape)};
+            n.inputs   = {tensorValue(args.at(0))};
+            n.indexing = indexed;
+            if (!n.indexing)
+                throw UnsupportedComputation(
+                    "slice lacks a concrete core index instance",
+                    uri(),
+                    UnsupportedComputation::Reason::Shape);
+            try {
+                (void)kernel::coreViewAddress(program, n, kernel::IndexExpr(0));
+            } catch (const std::exception &e) {
+                // The core's own refusal -- a negative coordinate, a map this backend cannot
+                // emit an address for -- is not a defect of the program: the region stays on the
+                // CPU, where the slice kernel takes the positions the declaration states. A
+                // backward slice (a negative step) is one such map.
+                throw UnsupportedComputation(
+                    "slice is not a representable view: " + std::string(e.what()),
+                    uri(),
+                    UnsupportedComputation::Reason::Shape);
+            }
+            return {.type = inferred, .tensor = append(std::move(n))};
         }
         const auto *def = tensor::ops::OpRegistry::instance().find(id);
         if (!def || !def->traits.pure)

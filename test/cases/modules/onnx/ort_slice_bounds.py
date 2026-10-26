@@ -1,9 +1,10 @@
 """A slice with a model-dependent end exported to ONNX faults on ONNX Runtime where Camel faults.
 
-ort_slice_bounds.cml slices x[0 : int(sum(x))]. Camel faults when the end is outside [-n, n]
-(design principles 3.9); the ONNX Slice alone would clamp it and return a result. Each model
-(the slice alone, and inside a branch on the data) is run on ONNX Runtime: in-range ends give
-the NumPy slice, out-of-range ends must make the run fail.
+ort_slice_bounds.cml slices x[0 : int(sum(x))]. A bound of that slice node is a position from 0 to
+the length, so a negative one is the fault `SliceOutOfRange`, as an end past the length is (design
+principles 3.9, 5.4). Each model (the slice alone, and inside a branch on the data) is run on ONNX
+Runtime: in-range ends give the NumPy slice, out-of-range and negative ends must make the run
+fail.
 
 Usage: python ort_slice_bounds.py   (needs numpy, onnx and onnxruntime)
 """
@@ -25,8 +26,8 @@ PROGRAM = HERE / "ort_slice_bounds.cml"
 CASES = [
     ([1.0, 1.0, 1.0], 3),        # end 3 = n: the whole axis
     ([0.5, 0.5, 0.5], 1),        # end 1
-    ([-0.5, -0.5, -1.0], -2),    # end -2 counts from the end: 1
-    ([-1.0, -1.0, -1.0], -3),    # end -3 = -n: empty
+    ([-0.5, -0.5, -1.0], None),  # end -2 is a negative bound: Camel faults
+    ([-1.0, -1.0, -1.0], None),  # end -3 is a negative bound: Camel faults
     ([2.0, 2.0, 2.0], None),     # end 6 > n: Camel faults
     ([-2.0, -2.0, -1.0], None),  # end -5 < -n: Camel faults
     ([1.5, 1.5, 1.0], None),     # end 4 = n + 1: Camel faults

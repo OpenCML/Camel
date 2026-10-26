@@ -9,7 +9,7 @@
  * twice, and a gradient shifted by the constant part changes both). An array part that depends
  * on the parameter used to have its gradient dropped and be refused by name at the concat call;
  * the refusal was removed with this case, which now asserts the adjoint the tensor rule builds
- * for both parts (`tensor:slice` of the upstream gradient). The distance to [1, 1] is 0.0 only
+ * for both parts (`:op/slice_sub` of the upstream gradient). The distance to [1, 1] is 0.0 only
  * for that adjoint, and its sum, 2.0, is not the dropped zero.
  */
 module concat_array_part

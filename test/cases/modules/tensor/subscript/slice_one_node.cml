@@ -8,9 +8,8 @@
  *   slice(x, 0, 1, 4) the function form of the same node
  *   x[[0, 2]]        `t[idx]`, the rows the indices name
  *
- * Red when: one of the three slice spellings lands on another operator (the tensor module's
- * `tensor:slice` answered the function form and the subscript before), or the row form lands on
- * the module's `tensor:idx_take`.
+ * Red when: one of the three slice spellings lands on another operator, or the row form lands on
+ * the module's `tensor:idx_take` instead of the core's take.
  */
 module slice_one_node
 

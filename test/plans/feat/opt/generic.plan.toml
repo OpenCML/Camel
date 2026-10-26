@@ -945,7 +945,9 @@ const out = input.normalized.stdout.trim()
 const stats = JSON.parse(out.match(/GRAPH_STATS (\{.*\})/)[1])
 assert(stats.graphs === 4, `unexpected graph count: ${stats.graphs}`)
 assert(stats.specializations === 1, `unexpected specialization count: ${stats.specializations}`)
-assert(stats.nodes === 48, `unexpected node count: ${stats.nodes}`)
+// 50, not 48: every interval in the program is the call `range(a, b, 1)`, and that
+// call has one node the retired two-argument spelling did not -- the constant `1`.
+assert(stats.nodes === 50, `unexpected node count: ${stats.nodes}`)
 assert(out.endsWith('4.0'), `unexpected output: ${out}`)
 }
 """
