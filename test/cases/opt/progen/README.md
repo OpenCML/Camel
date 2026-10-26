@@ -548,15 +548,15 @@ B, and the seed is back in the batch): `func e23(...): float` contains
 arm gives the value of that arm, not of the function (language reference 7.3), so the arm's value
 is an `int` and joins the `int` arms; the position it takes its type from is the arm's, never the
 declared `float` of the function around it.
-- Reading A (what was implemented before H24): the declared return type is the expected type of
+- Reading A (what the compiler did before): the declared return type is the expected type of
   every `return`, including one in an arm, so the arm's value is a `float` and the match's other
   arms must be `float` too. The seed's program was then ill-typed, and it had compiled only
   because an `int` under a declared `float` was neither converted nor reported.
-- Reading B (implemented since H24): the value of an arm-local `return` is the arm's value, so
+- Reading B (what the compiler does now): the value of an arm-local `return` is the arm's value, so
   its expected type is the arm's position — the type the branch itself is expected to give
   (`let v: float = match …` makes the arm a `float`), else the other arms, through the join.
   The declared `float` of the function is only checked, with a located diagnostic when the
   value the body hands on does not fit.
 The generator's reference evaluator types the arm `int` (reading B's value), and the program runs
-again: H24 put seed 16 back in `CHECK_EXCLUDED = {}`.
+again: seed 16 is back in `CHECK_EXCLUDED = {}`.
 

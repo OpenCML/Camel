@@ -9,14 +9,14 @@
 
 ## 范围
 
-H13 的 D4（`docs/design/showcase/README.cn.md`）写的是 **AlphaZero 简化版：MCTS + policy/value
+展示设计里的 D4（`docs/design/showcase/README.cn.md`）写的是 **AlphaZero 简化版：MCTS + policy/value
 网络 + self-play**。这里只做其中**确定的那一半**，并且做完整：
 
 - 做了：UCT 树搜索、试走、浅策略（能赢就赢 → 挡对方 → 否则按生成器选空位）、四个后端可复现；
 - 没做：policy/value 网络与 self-play。这是**范围（算力与篇幅）上的缩小，不是语言缺陷**：
   `modules/nn` + autodiff 已经能训练小网络，树搜索这一半可以直接复用，只是把示例做大到
   需要训练就不适合放进 showcase 的秒级计划里。搜索这一半也不需要"运行期数组变成张量"
-  （H13 的 Q7 / H17 的 P2–P4），所以它不依赖那些还没落地的步骤。
+  （展示设计的问题 7 / 原生数组计划的第 2–4 步），所以它不依赖那些还没落地的步骤。
 
 ## 目录
 

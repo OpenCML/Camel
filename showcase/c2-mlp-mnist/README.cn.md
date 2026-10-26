@@ -144,9 +144,9 @@ python showcase\c2-mlp-mnist\baseline\train_torch.py `
 ## 遇到的问题
 
 写这个示例时真正别扭的地方；每条都附了问题，按交接任务书第 4 节的格式写进
-`handover note ⟨9981995⟩ (H13)` 的“待决问题”。
+`handover note ⟨9981995⟩` 的“待决问题”。
 
-1. **下标与切片语法尚未实现。** 设计原则 5.4 与 H21 描述了 `t[i]`、`t[a:b]`、`t[idx]`；
+1. **下标与切片语法尚未实现。** 设计原则 5.4 与下标切片计划描述了 `t[i]`、`t[a:b]`、`t[idx]`；
    语言参考（`docs/language/06_expressions.md`）仍写着切片写法保留、报 `NoMatchingFunction`。于是最自然
    的 `train_x[order[offset : offset + batch]]` 只能写成
    `take(train_x, slice(order, 0, offset, offset + batch))`。能跑，但读者要把设计里当作
@@ -173,20 +173,20 @@ python showcase\c2-mlp-mnist\baseline\train_torch.py `
    写六行和一个 `sync` 闭包。不是阻塞问题，记下来因为它正是示例要暴露的仪式感。
 5. **`take` 拷贝行。** 打乱后的采样器需要 gather；连续的批本可以是 `slice` 视图。拷贝是每步
    的成本，不是峰值的来源：**更正（H40b）** 本示例原先写“标准配置的内存比用连续切片时高”，
-   H40 查明那一轮 262 MiB 的峰值来自回收的节奏（数据块释放后取基线的顺序），与 `take` 无关；
-   修正后 `take` 与连续切片 `slice` 的峰值相同（H40 第 3 节），standard 运行的峰值内存是
+   复核查明那一轮 262 MiB 的峰值来自回收的节奏（数据块释放后取基线的顺序），与 `take` 无关；
+   修正后 `take` 与连续切片 `slice` 的峰值相同（复核第 3 节），standard 运行的峰值内存是
    74.7 MiB（`RESULTS.md`）。这是 `take` 的既定语义（5.4），不是缺陷，随其他数字一并报出。
 
 ## 测试
 
-第一次检查提出的问题已由 H20/H21 回答，示例现在用的是答案：`save_tree` 整体替换目录
+第一次检查提出的问题已由后续的实现回答，示例现在用的是答案：`save_tree` 整体替换目录
 （Python 侧不再清理）、`take` 取行、`softmax_cross_entropy` 接受整数标签，也不再需要
-`one_hot`。H21 第 3 项已撤回（见 H25）：`with <m: Mlp>` 与 `with_grad(loss)<m>(x, y)` 是
+`one_hot`。下标切片计划的第 3 项已撤回：`with <m: Mlp>` 与 `with_grad(loss)<m>(x, y)` 是
 最终形态。本示例把 `with_grad(loss)` 绑定在循环外，循环内
 `let (value, gradient) = loss_with_grad<m>(x, y)`。
 
 小规模配置已进计划 `test/plans/perf/showcase_c2.plan.toml`（`tier = "milestone"`）：它用合成替身
-跑 200 步、跑两边、检查上面那组容差，几秒完成（记录的那次 3.3 秒）。H10 的 fast/slow 分层
+跑 200 步、跑两边、检查上面那组容差，几秒完成（记录的那次 3.3 秒）。fast/slow 分层
 已经落地，默认的 `npm run test` 跳过 slow 层，`npm run test:all`（或 `--tier all`）会跑到它。
 
 ## 不入库的东西
