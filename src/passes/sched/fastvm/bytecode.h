@@ -301,11 +301,9 @@ struct BytecodeHeader {                  // 16 bytes
         case OpCode::FUNC:
             [[fallthrough]];
         case OpCode::TAIL:
-#if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
-            return 3;
-#else
-            return 2;
-#endif
+            // The runtime callee graph, [targetPc | callCount], the JIT entry pointer, and the
+            // written-capture mask. The count must equal directCallExtraWordCount().
+            return 4;
         default:
             return 0;
         }
@@ -333,8 +331,7 @@ struct BytecodeHeader {                  // 16 bytes
 
     // FILL uses two extra words. OPER uses three: its function pointer, its OperId, and the
     // attribute set of the node it runs (camel/core/operator.h, ArgsView::attrs). FUNC/TAIL use
-    // two extra words in non-JIT builds and three extra words in JIT builds. extra() returns the
-    // first word.
+    // four, in every build. extra() returns the first word.
     inline uint64_t *extra2() {
         const size_t extraWords = extraWordCount();
         ASSERT(extraWords >= 2, "Bytecode has no second extra payload word.");
@@ -369,13 +366,10 @@ struct BytecodeHeader {                  // 16 bytes
         return reinterpret_cast<const camel::core::attr::AttrSetId *>(extra2() + 1);
     }
 
-    static constexpr size_t directCallExtraWordCount() {
-#if defined(ENABLE_FASTVM_JIT) && ENABLE_FASTVM_JIT
-        return 3;
-#else
-        return 2;
-#endif
-    }
+    // FUNC/TAIL use four extra words, whether or not this build has a JIT: the runtime callee
+    // graph, [targetPc:32 | callCount:32], the JIT entry pointer (0 without a JIT) and the
+    // written-capture mask. It must equal the FUNC/TAIL case of extraWordCount().
+    static constexpr size_t directCallExtraWordCount() { return 4; }
 
     // FUNC/TAIL are the tightest recursive-call path. Their payload layout is fixed by
     // appendBytecode(..., extraUnits), so use constant-offset accessors instead of extra(), whose
@@ -408,6 +402,14 @@ struct BytecodeHeader {                  // 16 bytes
         return reinterpret_cast<const uint64_t *>(this + opsize) - directCallExtraWordCount() + 2;
     }
 #endif
+    inline uint64_t *directCallExtraWriteMask() {
+        ASSERT(isDirectCallOpcode(opcode), "Bytecode is not a direct call.");
+        return reinterpret_cast<uint64_t *>(this + opsize) - directCallExtraWordCount() + 3;
+    }
+    inline const uint64_t *directCallExtraWriteMask() const {
+        ASSERT(isDirectCallOpcode(opcode), "Bytecode is not a direct call.");
+        return reinterpret_cast<const uint64_t *>(this + opsize) - directCallExtraWordCount() + 3;
+    }
 };
 
 using Bytecode = BytecodeHeader;
@@ -436,11 +438,24 @@ inline const camel::runtime::ExecLoop *BytecodeHeader::loopPayload() const {
 // - extra()  : runtime callee graph pointer
 // - extra2() : [targetPc:32 | directCallCount:32]
 // - extra3() : JIT entry pointer (JIT builds only; 0 means interpreter entry)
+// - extra4() : which captured variables the callee writes, as a bitmask over its capture ports,
+//              which is what the call hands on the new version of beside its return value
 inline camel::runtime::GCGraph *getFuncExtraRuntimeGraph(const BytecodeHeader *bc) {
     return bc->directCallExtra()->runtimeGraph;
 }
 inline void setFuncExtraRuntimeGraph(BytecodeHeader *bc, camel::runtime::GCGraph *graph) {
     bc->directCallExtra()->runtimeGraph = graph;
+}
+
+// The captured variables the callee writes: bit k is the callee's k-th capture, in capture-table
+// order. The call's value is a tuple of its return value and the new version of each of them, so
+// the mask says both which with-inputs are handed the versions and how many items the call's
+// value has. A callee that writes none has 0 and its call's value is the return value alone.
+inline uint32_t getFuncExtraWriteMask(const BytecodeHeader *bc) {
+    return static_cast<uint32_t>(*bc->directCallExtraWriteMask());
+}
+inline void setFuncExtraWriteMask(BytecodeHeader *bc, uint32_t writeMask) {
+    *bc->directCallExtraWriteMask() = writeMask;
 }
 
 // JUMP: the target pc. Inside one graph, before linking, it is graph-relative and fits fastop[0]
