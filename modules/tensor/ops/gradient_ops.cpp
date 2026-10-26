@@ -194,31 +194,20 @@ std::optional<Type *> intScalar(const InferContext &) { return Type::Int64(); }
 /// gradient is read at the width of the value it is the gradient of (design principles 9.9): an
 /// f32 fill read as f64 is 0.0078125, not the derivative.
 ///
-/// These operators used to declare f32 whatever the value's own width was, from the time their
-/// kernels were written for f32. An f64 training step then built `sum_to(<f32 gradient>, <f64
-/// like>)` -- the mixed pair below -- the call was refused, and the node that fed it reached the
-/// exporter with no rank facts (feat/modules/onnx, the train-step cases). The declaration follows
-/// the value's own width instead, and a kernel that takes no other width says so at the call,
-/// naming the operator, the argument type and the set it takes (feat.modules.tensor.dtype).
-///
-/// Two *tensors* whose element types disagree match no arm -- there is no conversion between
-/// numeric types to reach one (design principles 5.1) -- so the call is refused by the signature,
-/// not narrowed into an arm.
-///
-/// A *number* on the other side is not such a pair: a number has no element type of its own and is
-/// read at the width of the tensor it meets, the same rule every elementwise operator follows
-/// (`x * 0.5` with an f32 `x` computes at f32), and `index_eval.cpp` reads it that way. The
-/// gradient of a broadcast is the case that needs it: `broadcast_like(0.5, y)` with an f32 `y`
-/// carries an f64 number, and the gradient that comes back must be read at y's width.
+/// Two operands whose element types differ match no arm -- there is no conversion between numeric
+/// types to reach one (design principles 5.1) -- so the call is refused by the signature, not
+/// narrowed into an arm. The element type is the one the type carries, so it is read whatever is
+/// known about the shapes: an operand whose extents no fact pins down still has its own element
+/// type, and an f64 array of unknown shape beside an f32 one is as mixed as a known one. Only a
+/// *literal* takes its element type from the context it is written in, and that is the caller's
+/// rule, not an allowance of this operator: a value that carries an element type of its own -- a
+/// variable, a parameter, a tensor of another width -- is that type, and a rule that needs a
+/// constant writes it at the element type of the value it is made like.
 InferFn gradientLikeTyped(size_t index) {
     return [index](const InferContext &ctx) -> std::optional<Type *> {
         const auto &like  = ctx.facts(index);
         const auto &other = ctx.facts(index == 0 ? 1 : 0);
-        // A number is an operand with no shape to spread: a rank-0 value, or one whose shape the
-        // facts do not pin down. Only a pair of tensors with known shapes of different element
-        // types is provably mixed.
-        const bool otherIsNumber = !other.shape || other.shape->empty();
-        if (like.dtype && other.dtype && *like.dtype != *other.dtype && !otherIsNumber) {
+        if (like.dtype && other.dtype && *like.dtype != *other.dtype) {
             return std::nullopt;
         }
         return tensorOf(like.dtype, like.shape);

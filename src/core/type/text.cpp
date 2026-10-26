@@ -430,15 +430,6 @@ std::vector<TextItem> typeParts(const Type *type, bool mangle) {
     switch (type->code()) {
     case TypeCode::Array: {
         const auto *array = static_cast<const ArrayType *>(type);
-        // The array a module's operator takes before its argument states the element type: no
-        // element type is written, so no source spelling of it exists. It prints as the element
-        // family the positions that fix it draw from (`number[..]`), and its mangled name says
-        // the same without claiming an element type (`Array_open_any`); a program cannot write
-        // either, because every position that takes one writes its own element type
-        // (docs/design/arrays-memory/plan.cn.md section 5.1a).
-        if (isElementTypeOpenArray(array)) {
-            return {literal(mangle ? "Array_open_any" : "number[..]")};
-        }
         if (mangle) {
             return {
                 literal("Array_"),
