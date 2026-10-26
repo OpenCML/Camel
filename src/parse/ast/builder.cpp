@@ -1177,17 +1177,43 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         // order. `node_of(c)` becomes the name of that parameter, and the map is what refuses a
         // name that is not one of this rule's own `const` parameters.
         std::vector<std::string> whenNodeNames;
+        // Each hidden parameter is the node of a `const` parameter, so its value type is the
+        // declared type of that parameter (`node_of(c)` with `const c: int` is a `Node<int>`).
+        std::vector<std::pair<std::string, syn::Node>> whenNodeTypes;
         if (params) {
             for (const auto pair : paired->all<cst::KeyParamPair>()) {
                 if (constValueParam(pair)) {
                     whenNodeNames.emplace_back(
                         std::string(pair->get<cst::IdentDef>()->text()) + "__node");
+                    whenNodeTypes.emplace_back(whenNodeNames.back(), pair->type());
                 }
             }
         }
         for (const std::string &nodeName : whenNodeNames) {
             ruleWhenNodeParams_.emplace(nodeName.substr(0, nodeName.size() - 6), nodeName);
         }
+        // A rule's parameter as the condition reads it: the declaration's type is the type of the
+        // value the node stands for, so the parameter is a node whose value type is that type
+        // (`x: T` is `Node<T>`, `x: int` is `Node<int>`), and a parameter written without a type is
+        // a node whose value type the declaration does not state (design principles 5.9). The node
+        // of a value the condition is handed carries the same type, so a query in the condition
+        // reads the fact of a value of the type the rule declared.
+        const auto nodeParamType = [&](cst::KeyParamPair at) -> node_ptr_t {
+            if (!at->type()) {
+                node_ptr_t bare = createNodeAs<RefTypeLoad>(Reference("Node"));
+                setNodeTokenRangeByContext(bare, at);
+                return bare;
+            }
+            node_ptr_t applied = createNodeAs<SpecTypeLoad>();
+            setNodeTokenRangeByContext(applied, at);
+            node_ptr_t arguments = createNodeAs<RepeatedLoad>("TypeOrData");
+            setNodeTokenRangeByContext(arguments, at);
+            *arguments << any2node(visitType(at->type()));
+            node_ptr_t head = createNodeAs<RefTypeLoad>(Reference("Node"));
+            setNodeTokenRangeByContext(head, at);
+            *applied << head << arguments;
+            return applied;
+        };
         node_ptr_t whenParams   = createNodeAs<RepeatedLoad>("NamedPair");
         setNodeTokenRangeByContext(whenParams, context);
         if (params) {
@@ -1201,18 +1227,29 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
                 if (constValueParam(pair)) {
                     paramType = any2node(visitType(pair->type()));
                 } else {
-                    paramType = createNodeAs<RefTypeLoad>(Reference("Node"));
-                    setNodeTokenRangeByContext(paramType, pair);
+                    paramType = nodeParamType(pair);
                 }
                 *named << paramType << createNodeAs<OptionalLoad>("DataExpr");
                 *whenParams << named;
             }
         }
-        for (const std::string &nodeName : whenNodeNames) {
+        for (const auto &[nodeName, nodeValueType] : whenNodeTypes) {
             node_ptr_t named = createNodeAs<NamedPairLoad>(Reference(nodeName), false, false);
             setNodeTokenRangeByContext(named, context);
-            node_ptr_t paramType = createNodeAs<RefTypeLoad>(Reference("Node"));
-            setNodeTokenRangeByContext(paramType, context);
+            node_ptr_t paramType;
+            if (nodeValueType) {
+                paramType = createNodeAs<SpecTypeLoad>();
+                setNodeTokenRangeByContext(paramType, context);
+                node_ptr_t arguments = createNodeAs<RepeatedLoad>("TypeOrData");
+                setNodeTokenRangeByContext(arguments, context);
+                *arguments << any2node(visitType(nodeValueType));
+                node_ptr_t head = createNodeAs<RefTypeLoad>(Reference("Node"));
+                setNodeTokenRangeByContext(head, context);
+                *paramType << head << arguments;
+            } else {
+                paramType = createNodeAs<RefTypeLoad>(Reference("Node"));
+                setNodeTokenRangeByContext(paramType, context);
+            }
             *named << paramType << createNodeAs<OptionalLoad>("DataExpr");
             *whenParams << named;
         }
@@ -1407,8 +1444,9 @@ A fact is compiled to plain functions and one call of `__fact`:
     func depth__case0(c: int) => c                      (a `const` case: the matcher binds the
     func depth__case0_fact(c: int) => 1                  value, not a node)
     func depth__case1(x: int, y: int) => x + y          (a case over the construction: the
-    func depth__case1_fact(x: Node, y: Node) => max(depth(x), depth(y)) + 1   matcher reads it,
-    func depth(n: Node): int => __fact('depth', depth__initial, depth__join, ...)  nothing runs it)
+    func depth__case1_fact(x: Node, y: Node) => max(depth::<int>(x), depth::<int>(y)) + 1
+    func depth(v: Node<int>): int => __fact('depth', depth__initial, depth__join, ...)     matcher reads it,
+                                                          nothing runs it)
 
 The cases are the engine's clauses: a pattern function carries the shape the matcher reads (its
 parameters are the pattern variables, typed `int`; a `const` case declares the type of its
@@ -1432,9 +1470,10 @@ value: on the query they are `constas`, and on the functions the engine calls th
 `with` parameters, which the engine fills with the arguments the query was written with.
 
 The head parameters are the parts of a value the query is written on
-(`aligned(x, y)` for `fact aligned(a: int, b: int)`), and are typed `Node` in the generated
-function: the head's types say what a `const` case's constant is. A declaration with none is the
-one-value form (`depth(n)`).
+(`aligned(x, y)` for `fact aligned(a: int, b: int)`), and are `Node` in the generated function; a
+parameter whose type the head writes is a node of that value type (`Node<T>`, `Node<int>`), so a
+caller's node gives the query its type arguments and a `const` case's constant is the head's type.
+A declaration with none is the one-value form (`depth(n)`).
 
 A fact may declare type parameters (`fact range::<T>(v: T): Interval`, rewrite design 7.5): every
 function the declaration becomes is generic over them, so an instance of the query is an instance
@@ -1694,9 +1733,22 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
         declarations.push_back(mergeFunc("__narrow", narrowClause));
     }
 
-    // The head parameters: what the query is written on. Their types are not read here -- the
-    // pattern variables are nodes, or `int` where the pattern reads a shape -- but the first one
-    // gives a `const` case the type of its constant when the case writes none.
+    // The head parameters: what the query is written on. A parameter's declared type is the type
+    // of the value the node stands for, so the query's parameter is `Node<T>` -- a node whose
+    // value type is `T` -- and `T` is inferred from a caller's node the way any generic call infers
+    // its type arguments (design principles 5.9). Parameters written without a type are nodes
+    // whose value type the declaration does not state. The first one gives a `const` case the type
+    // of its constant when the case writes none.
+    const auto nodeOfType = [&](syn::Node valueType, cst::KeyParamPair at) -> node_ptr_t {
+        node_ptr_t applied = createNodeAs<SpecTypeLoad>();
+        setNodeTokenRangeByContext(applied, at);
+        node_ptr_t arguments = createNodeAs<RepeatedLoad>("TypeOrData");
+        setNodeTokenRangeByContext(arguments, at);
+        *arguments << any2node(visitType(valueType));
+        *applied << refType("Node") << arguments;
+        return applied;
+    };
+    std::vector<std::pair<std::string, node_ptr_t>> queryParams;
     std::vector<std::string> queryArgs;
     syn::Node firstHeadType;
     if (const auto params = context->get<cst::ParentParams>()) {
@@ -1706,6 +1758,9 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
                     continue;
                 }
                 queryArgs.push_back(std::string(pair->get<cst::IdentDef>()->text()));
+                queryParams.emplace_back(
+                    queryArgs.back(),
+                    pair->type() ? nodeOfType(pair->type(), pair) : refType("Node"));
                 if (!firstHeadType && pair->type()) {
                     firstHeadType = pair->type();
                 }
@@ -1713,16 +1768,10 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
         }
     }
     if (queryArgs.empty()) {
+        // The one-value form: the query is written on the value itself, as a node whose value type
+        // the declaration does not state.
         queryArgs.push_back("n");
-    }
-    // The query's parameters take nodes: what a query is asked about is a value of the program
-    // being rewritten, which is the node it is the node of, and every caller of a fact holds one
-    // (a rule's condition, another fact's body, a pass that walked to a node). A node determines
-    // no type parameter, so the type arguments of a fact whose head declares them are written at
-    // the query (`range::<int>(n)`); the diagnostic of a query that writes none asks for them.
-    std::vector<std::pair<std::string, node_ptr_t>> queryParams;
-    for (const std::string &arg : queryArgs) {
-        queryParams.emplace_back(arg, refType("Node"));
+        queryParams.emplace_back("n", refType("Node"));
     }
 
     // The names bound by a case's pattern. A bare reference is a variable; the callee of a call is

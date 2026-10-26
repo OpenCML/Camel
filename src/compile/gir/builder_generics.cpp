@@ -641,14 +641,20 @@ void Builder::settleGenericFactMaker(
     if (normInputs.size() <= kInitial) {
         return;
     }
-    // The fact's functions, as the front end named them: they are the leading arguments that are
-    // generic, and the first that is not ends them (the `with` count and the values follow).
+    // The fact's functions, as the front end named them: every argument of the call that is one is
+    // generic, and each is instantiated at the types the query was resolved with. They are not all
+    // of them leading -- the `with` count, the `with` values and the queried nodes sit between the
+    // fact's clauses and its cases (`__fact('range', 'int', initial, join, ..., 0, n, case0,
+    // case0_fact, ...)`, modules/rewrite/fact.h), and a generic function left uninstantiated in an
+    // argument position is a function value the operator cannot take.
+    std::vector<size_t> at;
     std::vector<generic_template_ptr_t> made;
     for (size_t i = kInitial; i < normInputs.size(); ++i) {
         const auto found = genericDrefs_.find(normInputs[i].node);
         if (found == genericDrefs_.end()) {
-            break;
+            continue;
         }
+        at.push_back(i);
         made.push_back(found->second.one());
     }
     if (made.empty()) {
@@ -700,8 +706,8 @@ void Builder::settleGenericFactMaker(
         if (instance == nullptr) {
             return; // the instance reported its own reason, at the declaration
         }
-        normInputs[kInitial + i] = Argument{createFuncDataNode(instance, true, false), call, std::nullopt};
-        normTypes[kInitial + i]  = valueTypeOf(nodeTypeOf(normInputs[kInitial + i].node));
+        normInputs[at[i]] = Argument{createFuncDataNode(instance, true, false), call, std::nullopt};
+        normTypes[at[i]]  = valueTypeOf(nodeTypeOf(normInputs[at[i]].node));
     }
     // What the type arguments are: the fact's key reads them, and the engine makes one fact per
     // key (`buildDefinition`), so the instances of two types never share a value or a kind.
