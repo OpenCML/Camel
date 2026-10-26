@@ -314,7 +314,7 @@ affected, with or without the tagged forms:
 func f(x: float): float { return x + 0.5 }
 func main(): int sync {
     let i = 7
-    println(f(i as float))     // 7.5; under std::opt or std::opt: 0.5
+    println(f(float(i)))     // 7.5; under std::opt or std::opt: 0.5
     return 0
 }
 ```
