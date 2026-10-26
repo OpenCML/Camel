@@ -158,7 +158,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.output
-assert(/failed_evaluation\.cml:19:13: \[Error\]: 'boom' could not be evaluated by std::macro: DivisionByZero: Attempted division by zero\./.test(out), `error missing: ${out}`)
+assert(/failed_evaluation\.cml:17:13: \[Error\]: 'boom' could not be evaluated by std::macro: DivisionByZero: Attempted division by zero\./.test(out), `error missing: ${out}`)
 assert(!out.includes('main start'), `the program must not run: ${out}`)
 assert(!out.includes("'fine'"), `a call that evaluated was reported: ${out}`)
 assert(!out.includes('[Warn]'), `no warning is left: ${out}`)
@@ -182,7 +182,7 @@ assert(diags.length === 1, `one diagnostic: ${out}`)
 const d = diags[0]
 assert(d.data.name === 'RuntimeDiag::MacroEvaluationFailed' && d.severity === 'Error' && d.code === '0x0400000E', `name/severity/code: ${JSON.stringify(d)}`)
 assert(d.data.stage === 'pass:std::macro', `stage: ${d.data.stage}`)
-assert(d.range.start.line === 18 && d.range.start.character === 12, `range: ${JSON.stringify(d.range)}`)
+assert(d.range.start.line === 16 && d.range.start.character === 12, `range: ${JSON.stringify(d.range)}`)
 assert(d.message === "'boom' could not be evaluated by std::macro: DivisionByZero: Attempted division by zero.", `message: ${d.message}`)
 }
 """
@@ -240,7 +240,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.output
-assert(/failed_depth\.cml:17:13: \[Error\]: 'count' could not be evaluated by std::macro: the evaluation needs more than 64 nested calls \(at 'count'\)\./.test(out), `error missing: ${out}`)
+assert(/failed_depth\.cml:15:13: \[Error\]: 'count' could not be evaluated by std::macro: the evaluation needs more than 64 nested calls \(at 'count'\)\./.test(out), `error missing: ${out}`)
 assert((out.match(/MacroEvaluationFailed/g) || []).length === 1, `expected one error: ${out}`)
 assert(!/^20$/m.test(input.normalized.stdout), `the program must not run: ${input.normalized.stdout}`)
 }
@@ -307,7 +307,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 verify_script = """
 ({ input, assert }) => {
 const err = input.normalized.stderr
-assert(/<Macro> 'count' at .*not_static\.cml:10:12 stays a run-time call: argument 1 is not a constant\./.test(err), `note missing: ${err}`)
+assert(/<Macro> 'count' at .*not_static\.cml:8:12 stays a run-time call: argument 1 is not a constant\./.test(err), `note missing: ${err}`)
 assert(!input.normalized.output.includes('MacroEvaluationFailed'), 'not a failure')
 assert(input.normalized.stdout.trim() === '20\n7', `unexpected stdout: ${input.normalized.stdout}`)
 }

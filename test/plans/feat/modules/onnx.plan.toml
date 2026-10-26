@@ -873,7 +873,7 @@ const fs = await import('fs')
 const path = await import('path')
 const text = input.normalized.output
 assert(text.includes("impure operator ':io/println' cannot be exported"), 'missing impure-operator detail')
-assert(/at [^ ]*export_ctrl_effect[.]cml:14:5[)]/.test(text), 'missing source position of the println')
+assert(/at [^ ]*export_ctrl_effect[.]cml:13:5[)]/.test(text), 'missing source position of the println')
 assert(!text.includes('unreachable'), 'export must fail before the next statement')
 assert(!text.includes('EFFECT'), 'the exported function must not be executed')
 assert(!fs.existsSync(path.join(input.test_tmp, 'export_ctrl_effect.onnx')), 'a refused export must not write a model')
@@ -898,7 +898,7 @@ assert(diags.length === 1, `expected one diagnostic, got ${diags.length}`)
 const d = diags[0]
 assert(d.data.name === 'RuntimeDiag::TranslationRefused' && d.data.stage === 'pass:onnx::export', `unexpected diagnostic ${d.data.name} at stage ${d.data.stage}`)
 assert(d.message.includes("impure operator ':io/println' cannot be exported"), `unexpected message: ${d.message}`)
-assert(d.range.start.line === 13 && d.range.start.character === 4 && d.range.end.character > d.range.start.character, `unexpected range ${JSON.stringify(d.range)}`)
+assert(d.range.start.line === 12 && d.range.start.character === 4 && d.range.end.character > d.range.start.character, `unexpected range ${JSON.stringify(d.range)}`)
 assert(!fs.existsSync(path.join(input.test_tmp, 'pass_export_ctrl_effect.onnx')), 'a refused export must not write a model')
 }
 """
@@ -919,7 +919,7 @@ const fs = await import('fs')
 const path = await import('path')
 const text = input.normalized.output
 assert(text.includes("impure operator ':io/println' cannot be exported"), 'missing impure-operator detail')
-assert(/at [^ ]*export_ctrl_effect_callee[.]cml:14:5[)]/.test(text), 'missing source position of the println')
+assert(/at [^ ]*export_ctrl_effect_callee[.]cml:13:5[)]/.test(text), 'missing source position of the println')
 assert(!text.includes('unreachable') && !text.includes('EFFECT'), 'neither the statement after the export nor the exported function may run')
 assert(!fs.existsSync(path.join(input.test_tmp, 'export_ctrl_effect_callee.onnx')), 'a refused export must not write a model')
 }
@@ -943,7 +943,7 @@ assert(diags.length === 1, `expected one diagnostic, got ${diags.length}`)
 const d = diags[0]
 assert(d.data.name === 'RuntimeDiag::TranslationRefused' && d.data.stage === 'pass:onnx::export', `unexpected diagnostic ${d.data.name} at stage ${d.data.stage}`)
 assert(d.message.includes("impure operator ':io/println' cannot be exported"), `unexpected message: ${d.message}`)
-assert(d.range.start.line === 13 && d.range.start.character === 4, `unexpected range ${JSON.stringify(d.range)}`)
+assert(d.range.start.line === 12 && d.range.start.character === 4, `unexpected range ${JSON.stringify(d.range)}`)
 assert(!fs.existsSync(path.join(input.test_tmp, 'pass_export_ctrl_effect_callee.onnx')), 'a refused export must not write a model')
 }
 """

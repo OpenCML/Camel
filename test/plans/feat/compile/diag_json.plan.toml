@@ -220,7 +220,7 @@ assert(diags.length === 2, 'two warnings, got ' + diags.length)
 assert(diags.every(d => d.severity === 'Warn'), 'severity Warn')
 assert(diags.every(d => d.data.stage === 'typecheck'), 'stage typecheck')
 const got = diags.map(d => d.data.name + '@' + (d.range.start.line + 1) + ':' + (d.range.start.character + 1))
-const want = ['SemanticDiag::IgnoredSideEffect@17:5', 'SemanticDiag::IgnoredSideEffect@18:13']
+const want = ['SemanticDiag::IgnoredSideEffect@16:5', 'SemanticDiag::IgnoredSideEffect@17:13']
 assert(JSON.stringify(got) === JSON.stringify(want), 'names and positions: ' + got.join(' '))
 assert(diags.every(d => d.data.modulePath.endsWith('warnings_visible.cml')), 'each names its file')
 """
@@ -251,7 +251,7 @@ expect_exit = 1
 verify_script = """
 const diags = JSON.parse(input.stdout)
 const got = diags.map(d => d.severity + ' ' + d.data.name + '@' + (d.range.start.line + 1) + ':' + (d.range.start.character + 1))
-const want = ['Warn SemanticDiag::ExitInUnusedBranch@12:9', 'Error SemanticDiag::UnresolvedReference@19:12']
+const want = ['Warn SemanticDiag::ExitInUnusedBranch@11:9', 'Error SemanticDiag::UnresolvedReference@18:12']
 assert(JSON.stringify(got) === JSON.stringify(want), 'diagnostics on stdout: ' + got.join(' | '))
 assert(input.stderr === '', 'nothing on stderr: ' + JSON.stringify(input.stderr))
 """
@@ -272,13 +272,13 @@ assert(diags.every(d => d.severity === 'Warn'), 'warnings only')
 const dropped = diags.filter(d => d.data.name === 'SemanticDiag::EffectNotExecuted')
 const got = dropped.map(d => (d.range.start.line + 1) + ' ' + d.message.replace(/ has side effects.*/, ''))
 const want = [
-    "31 The call of 'println'",
+    "30 The call of 'println'",
+    "31 The call of 'noisy'",
     "32 The call of 'noisy'",
-    "33 The call of 'noisy'",
-    "34 The call of 'modify'",
-    "35 The assignment",
-    "36 The call of 'println'",
-    "37 The branch",
+    "33 The call of 'modify'",
+    "34 The assignment",
+    "35 The call of 'println'",
+    "36 The branch",
 ]
 assert(JSON.stringify(got) === JSON.stringify(want), 'dropped effects: ' + got.join(' | '))
 assert(dropped.every(d => d.message.endsWith('has side effects but is never executed: nothing depends on it and it is not in a sync block.')), 'message text')
@@ -297,7 +297,7 @@ expect_exit = 0
 verify_script = """
 const diags = JSON.parse(input.stderr)
 const got = diags.map(d => d.data.name + '@' + (d.range.start.line + 1))
-const want = [13, 22, 35].map(line => 'SemanticDiag::EffectNotExecuted@' + line)
+const want = [11, 20, 33].map(line => 'SemanticDiag::EffectNotExecuted@' + line)
 assert(JSON.stringify(got) === JSON.stringify(want), 'warnings: ' + got.join(' '))
 assert(!input.stdout.includes('DROPPED'), 'no dropped line is printed')
 """
@@ -449,7 +449,7 @@ verify_script = """
 assert(input.normalized.stdout.trim() === '2', 'program output: ' + JSON.stringify(input.normalized.stdout))
 const diags = JSON.parse(input.stderr)
 const got = diags.map(d => d.data.name + '@' + (d.range.start.line + 1))
-const want = [8, 9].map(line => 'SemanticDiag::EffectNotExecuted@' + line)
+const want = [7, 8].map(line => 'SemanticDiag::EffectNotExecuted@' + line)
 assert(JSON.stringify(got) === JSON.stringify(want), 'warnings: ' + got.join(' '))
 """
 normalizers = ["strip_ansi", "normalize_newlines"]

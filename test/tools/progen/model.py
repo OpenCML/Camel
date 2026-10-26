@@ -375,7 +375,7 @@ def module_names(prog: N):
 def emit(prog: N) -> str:
     """The source of the entry module."""
     split = prog.a.get("split")
-    out = [f"module {prog.a['module']}", ""]
+    out = []
     if prog.a.get("env"):
         out += ["import { get_env } from env", ""]
     if split is None:
@@ -406,9 +406,9 @@ def emit_modules(prog: N) -> dict:
     if split is None:
         return {}
     vals, funcs = module_names(prog)
-    out_vals = [f"module {vals}", ""] + type_decls_src(prog, True) + globals_src(prog, True)
+    out_vals = type_decls_src(prog, True) + globals_src(prog, True)
     names = list(prog.a.get("types", {})) + [g.a["name"] for g in prog_globals(prog)]
-    out_funcs = [f"module {funcs}", ""]
+    out_funcs = []
     if names:
         out_funcs += ["import { " + ", ".join(names) + " } from " + vals, ""]
     for f in prog.c[0]:

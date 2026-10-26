@@ -2032,7 +2032,7 @@ const alsoRefused = text.match(/\[[^\]]*the function is chosen by a branch[^\]]*
 assert(alsoRefused.length === 1, 'the second refused call is not named with its own position and its own reason: ' + text)
 assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
-assert(/the macro call is at [^ ]*[.]cml:17:13/.test(text), 'macro call not named: ' + text)
+assert(/the macro call is at [^ ]*[.]cml:16:13/.test(text), 'macro call not named: ' + text)
 }
 """
 timeout_ms = 12000
@@ -2077,7 +2077,7 @@ assert(!/[(]at [^)]*grad_function_value_static_branch[.]cml:11:22[)]/.test(text)
 assert(text.includes('[the function value is chosen here at 9:13]'), 'missing the related position of the branch that chooses the function: ' + text)
 assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
-assert(/the macro call is at [^ ]*[.]cml:15:13/.test(text), 'macro call not named: ' + text)
+assert(/the macro call is at [^ ]*[.]cml:14:13/.test(text), 'macro call not named: ' + text)
 }
 """
 timeout_ms = 12000
@@ -2123,7 +2123,7 @@ assert(text.split('[the function value is chosen here at 9:11]').length === 3, '
 const alsoRefused = text.match(/\[[^\]]*the function is a parameter[^\]]*at 11:22\]/g) || []
 assert(alsoRefused.length === 1, 'the second refused call is not named with its own position and its own reason: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
-assert(/the macro call is at [^ ]*[.]cml:17:13/.test(text), 'macro call not named: ' + text)
+assert(/the macro call is at [^ ]*[.]cml:16:13/.test(text), 'macro call not named: ' + text)
 assert(text.includes('[the function value is chosen here at 9:11]'), 'missing the related position of the parameter the function value came in through: ' + text)
 }
 """
@@ -2168,7 +2168,7 @@ assert(!/[(]at [^)]*grad_function_value_container[.]cml:11:22[)]/.test(text), 't
 assert(text.includes('[the function value is chosen here at 9:13]'), 'missing the related position of the read that selects the function: ' + text)
 assert(text.includes('the function is read from a tuple, a struct or an array'), 'missing: the function is read from a tuple, a struct or an array in: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
-assert(/the macro call is at [^ ]*[.]cml:15:13/.test(text), 'macro call not named: ' + text)
+assert(/the macro call is at [^ ]*[.]cml:14:13/.test(text), 'macro call not named: ' + text)
 }
 """
 timeout_ms = 12000
@@ -2279,7 +2279,7 @@ assert(text.includes('the function is a parameter of'), 'missing: the function i
 assert(text.includes('iterate'), 'missing: iterate in: ' + text)
 assert(text.includes('a recursive function that passes it on to itself'), 'missing: a recursive function that passes it on to itself in: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
-assert(/the macro call is at [^ ]*[.]cml:17:13/.test(text), 'macro call not named: ' + text)
+assert(/the macro call is at [^ ]*[.]cml:16:13/.test(text), 'macro call not named: ' + text)
 assert(text.includes('[the function value is chosen here at 5:14]'), 'missing the related position of the parameter the function value came in through: ' + text)
 }
 """
@@ -2330,7 +2330,7 @@ assert(text.includes('call0'), 'missing: call0 in: ' + text)
 assert(text.includes('a function value that depends on a differentiated parameter'), 'missing: a function value that depends on a differentiated parameter in: ' + text)
 assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
-assert(/the macro call is at [^ ]*[.]cml:19:13/.test(text), 'macro call not named: ' + text)
+assert(/the macro call is at [^ ]*[.]cml:18:13/.test(text), 'macro call not named: ' + text)
 }
 """
 timeout_ms = 12000
