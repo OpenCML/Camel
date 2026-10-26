@@ -564,7 +564,7 @@ verify_script = """
 const lines = input.stdout.trim().split(/\r?\n/)
 assert(lines.length === 11 && lines.slice(0,9).every(x => Number(x) === 0), 'scalar precision or mixed output reconstruction failed')
 const p = JSON.parse(lines[9]), b = JSON.parse(lines[10])
-assert(p.logical_bytes === 36 && p.allocated_bytes === 28, 'typed allocation size mismatch')
+assert(p.logical_bytes === 56 && p.allocated_bytes === 48, 'typed allocation size mismatch')
 assert(JSON.stringify(b.output_dtypes) === '["f64","f32"]', 'loss/gradient dtypes mismatch')
 assert(b.correctness_before.mismatches === 0 && b.correctness_after.mismatches === 0, 'value-and-grad benchmark mismatch')
 }
@@ -583,7 +583,7 @@ verify_script = """
 const lines = input.stdout.trim().split(/\r?\n/)
 assert(lines.length === 11 && lines.slice(0,9).every(x => Number(x) === 0), 'scalar precision or mixed output reconstruction failed')
 const p = JSON.parse(lines[9]), b = JSON.parse(lines[10])
-assert(p.logical_bytes === 36 && p.allocated_bytes === 28, 'typed allocation size mismatch')
+assert(p.logical_bytes === 56 && p.allocated_bytes === 48, 'typed allocation size mismatch')
 assert(JSON.stringify(b.output_dtypes) === '["f64","f32"]', 'loss/gradient dtypes mismatch')
 assert(b.correctness_before.mismatches === 0 && b.correctness_after.mismatches === 0, 'value-and-grad benchmark mismatch')
 }
@@ -602,7 +602,7 @@ verify_script = """
 const lines = input.stdout.trim().split(/\r?\n/)
 assert(lines.length === 11 && lines.slice(0,9).every(x => Number(x) === 0), 'scalar precision or mixed output reconstruction failed')
 const p = JSON.parse(lines[9]), b = JSON.parse(lines[10])
-assert(p.logical_bytes === 36 && p.allocated_bytes === 28, 'typed allocation size mismatch')
+assert(p.logical_bytes === 56 && p.allocated_bytes === 48, 'typed allocation size mismatch')
 assert(JSON.stringify(b.output_dtypes) === '["f64","f32"]', 'loss/gradient dtypes mismatch')
 assert(b.correctness_before.mismatches === 0 && b.correctness_after.mismatches === 0, 'value-and-grad benchmark mismatch')
 }
@@ -1341,7 +1341,7 @@ expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.stdout
-const at = text.indexOf('{"schema":2')
+const at = text.indexOf('{"schema":1')
 assert(at >= 0, `no region table in: ${text}`)
 let depth = 0, end = -1
 for (let i = at; i < text.length; i++) {
@@ -1427,7 +1427,7 @@ verify_script = """
 ({ input, assert }) => {
 const NL = String.fromCharCode(10)
 const text = input.normalized.stdout
-const at = text.indexOf('{"schema":2')
+const at = text.indexOf('{"schema":1')
 assert(at >= 0, `no region table in: ${text}`)
 let depth = 0, end = -1
 for (let i = at; i < text.length; i++) {
@@ -1607,14 +1607,16 @@ name = "grad_expand.untagged_graph_keeps_the_runtime_operator"
 kind = "negative"
 case = "../../cases/gpu/nofallback/grad_expand_plain.cml"
 # The same program without the dump: the reading is that the pass is silent where no scope covers
-# the call site, and that the run then reaches the runtime operator. What that operator answers is
-# its own business and is the same with or without `tiles::compile` in the pipeline: it refuses a
-# `Device<Tensor>` parameter, which is a value that carries no gradient channel. The pass may
-# neither expand the call site nor refuse it, so neither of its two messages may appear.
+# the call site -- it neither expands the operator nor refuses it, so neither of its two messages
+# may appear -- and that the run then reaches the runtime operator, whose refusal is its own. The
+# value it names is the one the compiled region hands back: `tiles::compile` cut `loss` into a
+# region and the region's result is an f32 scalar, so the resident value that reaches
+# `tiles:download` and carries no gradient channel is `Device<f32>` (a resident tensor keeps its
+# extents in the name: the same dump prints the parameters as `(Device<f32[2, 3]>, Device<f32[3]>)`).
 args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 1
-expect_output_contains = ["RuntimeDiag::RuntimeError", "depends on a differentiated parameter", "Device<float32[2, 3]>"]
+expect_output_contains = ["RuntimeDiag::RuntimeError", "depends on a differentiated parameter", "Device<f32>"]
 expect_output_not_contains = ["macro operator no pass has expanded", "cannot run on the device", "has no device program"]
 timeout_ms = 30000
 

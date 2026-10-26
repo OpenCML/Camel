@@ -10,9 +10,10 @@
  * The entries this pairs with (`grad_expand.untagged_graph_unchanged` and
  * `grad_expand.untagged_graph_keeps_the_runtime_operator`) read that the operator is still in the
  * dumped graph, and that the pipeline adds no message of its own. What the run then answers is the
- * runtime's own: the derivative of `loss` turns on `m.x`, which `tiles::compile` has made a
- * resident value, and a resident value carries no gradient channel - the same answer the run gives
- * with the pass absent from the pipeline.
+ * runtime's own: `tiles::compile` cuts `loss` into a region, so the derivative meets the region's
+ * resident result -- an f32 scalar, `Device<f32>` -- which carries no gradient channel and is
+ * refused where the `tiles:download` reads it as data. Without the pass the same program runs and
+ * prints the gradient, so the refusal is the pass's rewrite and not the operator's own answer.
  */
 module gpu_grad_expand_plain
 
