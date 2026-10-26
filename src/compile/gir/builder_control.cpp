@@ -1148,7 +1148,21 @@ void Builder::coerceArmExit(const arm_ptr_t &arm, Type *target, const GCT::node_
     draft.setInsertRegion(arm->region);
     node_handle_t output  = arm->output;
     node_handle_t coerced = coerceTo(output, target, origin);
-    ASSERT(coerced != nullptr, "A branch arm is joined only with a type its value enters.");
+    if (coerced == nullptr) {
+        // The caller asks with `entersImplicitly`, which is the check `coerceTo` makes last, so
+        // this is a compiler defect and not an error in the program: the assertion below is the
+        // debug build's, and a release build reports it at the branch instead of handing a null
+        // node to `normInputsOf` and the join (that was a segmentation fault).
+        ASSERT(coerced != nullptr, "A branch arm is joined only with a type its value enters.");
+        diags_->of(InternalDiag::UnknownInternalError)
+            .atOrigin(origin != nullptr ? origin->origin() : arm->origin)
+            .commit(
+                "the value of a branch arm is not joined: the arm gives '" +
+                (exitType != nullptr ? exitType->toString() : std::string("?")) +
+                "' and the join takes '" + (target != nullptr ? target->toString() : std::string("?")) +
+                "', which the value does not enter");
+        throw BuildAbortException();
+    }
     if (normInputsOf(coerced).empty() && !ctrlInputsOf(output).empty()) {
         // A literal took the place of the output (`[]`): what the output waited for (the
         // statements of a sync arm) is still waited for.
@@ -1161,6 +1175,57 @@ void Builder::coerceArmExit(const arm_ptr_t &arm, Type *target, const GCT::node_
     arm->output = coerced;
     arm->value  = coerced;
     arm->type   = target;
+}
+
+bool Builder::branchTakesNoValue(const GCT::node_ptr_t &gct) const {
+    // A `return` in a function declared `: void`, and the tail of such a body, stand in a
+    // position whose type is `void`: nothing takes what the branch gives there (design
+    // principles 3.7, and the ruling on the arm of a branch at a position that takes no value).
+    if (expectedValueType_ != nullptr && expectedValueType_->code() == TypeCode::Void) {
+        return true;
+    }
+    // A branch written as a statement is the statement whose value the block drops
+    // (visitExecNode): the same position.
+    return gct != nullptr && unusedStatement_ == gct;
+}
+
+void Builder::readArmCellValue(const arm_ptr_t &arm) {
+    Type *type = arm->type;
+    if (type == nullptr || valueTypeOf(type) == type) {
+        return;
+    }
+    // A cell is not a value: an arm that gives one gives the value the cell holds, and the
+    // cell's type never reaches the join (the ruling on the cell-typed arm of a branch). The
+    // read takes the data edge every read has -- the version the last write made, or the cell
+    // itself before any write (`valueVersionOf`), and the cell itself for a write that gives
+    // the cell it wrote into (`__assn__`) -- and nothing else: it stands in the arm's region,
+    // behind the GATE an arm with statements hands its value on through, so the arm's own chain
+    // carries the order and the block's chain is not moved by a read that belongs to the arm
+    // (readVariable would make this read the block's last node).
+    node_handle_t cell = arm->output;
+    node_handle_t version{};
+    if (isVariable(cell)) {
+        version = valueVersionOf(cell);
+    }
+    runtime::GraphDraft &draft = arm->graph->draft();
+    const uint32_t outerRegion = draft.insertRegion();
+    draft.setInsertRegion(arm->region);
+    node_handle_t read = variableOperator(
+        camel::core::oper::VarGet, version != nullptr ? version : cell);
+    if (version == nullptr) {
+        // The write gave no version of the cell, so the cell is the read's data port and the
+        // write that must execute first is what a control input stands for (readVariableThrough,
+        // orderAfterLastWriter; design principles 3.5, F3).
+        if (auto modifier = modifierOf(cell); modifier.has_value()) {
+            if (sameGraph(*modifier, currGraph_) && linkCheek(*modifier, read)) {
+                linkNodes(LinkType::Ctrl, *modifier, read);
+            }
+        }
+    }
+    draft.setInsertRegion(outerRegion);
+    arm->output = read;
+    arm->value  = read;
+    arm->type   = valueTypeOf(type);
 }
 
 Type *Builder::declaredExitTypeHere() const {
@@ -2349,6 +2414,13 @@ node_handle_t Builder::buildBranch(
                             last->caseType() == GCT::CaseType::Else && last->size() == 1 &&
                             last->at(0)->size() == 0;
     }
+    // A position that takes no value joins nothing: an `if` without `else` is one (`valueless`,
+    // `dropsArmValues`), and so is a branch at a `void` position or written as a statement whose
+    // value the block drops. One rule (design principles 3.7, and the ruling on the arm of a
+    // branch at a position that takes no value): the arms' effects happen, no value is joined,
+    // and what the arms give is dropped. It is known before the arms are added, and an `if` that
+    // does write an `else` does not undo it.
+    const bool joinsNoValue = dropsArmValues || branchTakesNoValue(gct);
 
     linkNodes(LinkType::Norm, condNode, brchNode);
     std::vector<arm_ptr_t> armList;
@@ -2361,12 +2433,19 @@ node_handle_t Builder::buildBranch(
         }
         bodyValueStatement_.erase(arm.get());
         armList.push_back(arm);
+        if (!joinsNoValue && !absentElse) {
+            // A position that takes a value reads a cell out before the arms are joined: an arm
+            // of `var T` joins as its `T` (design principles 3.8, and the ruling on the
+            // cell-typed arm). Nothing is read where the join takes no value.
+            readArmCellValue(arm);
+        }
         Type *exitType = arm->exitType();
 
-        if (absentElse) {
-            // Design principles 3.7: an `if` without `else` has no value. Its arm may be of
-            // any type and what the arm gives is dropped: the join takes nothing. The arm
-            // written is evaluated as any arm is; the one not written is an empty arm.
+        if (absentElse || joinsNoValue) {
+            // Design principles 3.7: an `if` without `else` has no value, and neither has a
+            // branch at a position that takes no value. Its arm may be of any type and what the
+            // arm gives is dropped: the join takes nothing. The arm written is evaluated as any
+            // arm is; the one not written is an empty arm.
             joinType = Type::Void();
             setNodeType(joinNode, joinType);
         } else if (joinType == nullptr) {
@@ -2474,7 +2553,7 @@ node_handle_t Builder::buildBranch(
         }
         addArm(subGraph);
     }
-    if (joinType != nullptr && !absentElse) {
+    if (joinType != nullptr && !absentElse && !joinsNoValue) {
         for (const arm_ptr_t &arm : armList) {
             Type *exitType = arm->exitType();
             if (exitType != nullptr && !joinType->assignableFrom(exitType) &&
