@@ -1022,11 +1022,14 @@ The string made of the given code points.
 to_upper: (s: string) => string
 ```
 
-s with every letter in upper case, by the Unicode simple (one code point to one code point)
-case mapping; a letter without one is kept as it is.
+s with every letter in upper case, by the Unicode case mapping that does not depend on a
+language or on the context: a letter may become several (`'ß'` is `'SS'`), and a letter
+without a mapping, such as a CJK character or an emoji, is kept. The language-specific rules
+are not applied: `'i'` is `'I'` and a dotless `'ı'` is also `'I'`, and Greek `'Σ'` is always `'σ'` in lower case,
+even at the end of a word.
 
 - Pure.
-- Example: `to_upper('héllo')` gives `'HÉLLO'`
+- Example: `to_upper('straße')` gives `'STRASSE'`
 
 #### `to_lower`
 
@@ -1034,10 +1037,11 @@ case mapping; a letter without one is kept as it is.
 to_lower: (s: string) => string
 ```
 
-s with every letter in lower case, by the Unicode simple case mapping.
+s with every letter in lower case, by the same mapping as `to_upper`: `'İ'` is `'i'` followed
+by a combining dot above, and `'I'` is `'i'`.
 
 - Pure.
-- Example: `to_lower('HeLLo')` gives `'hello'`
+- Example: `to_lower('ÀÉÎ Привет')` gives `'àéî привет'`
 
 ### Searching
 

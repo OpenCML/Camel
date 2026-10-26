@@ -15,8 +15,8 @@ trim none [hi] 2
 trim nbsp [ x ] 3
 upper [HELLO, WORLD 123] 16
 lower [hello, world 123] 16
-upper non-ascii [HéLLO üNï STRAßE] 16
-lower non-ascii [hÉllo ÜnÏ] 9
+upper non-ascii [HÉLLO ÜNÏ STRASSE] 17
+lower non-ascii [héllo ünï] 9
 upper empty [] 0
 replace [a+b+c] 5
 replace none [abc] 3
