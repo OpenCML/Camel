@@ -9,7 +9,7 @@
 | `:op/not` | ✓ | ✗ |
 | `:op/or` | ✓ | ✗ |
 | `:op/slice_sub` | ✓ ≥10 | ✗ |
-| `:tangent/scatter_slice_arr` | ✓ ≥10 | ✗ |
+| `:tangent/scatter_slice_arr` | ✓ ≥13 | ✗ |
 | `autodiff:stop_gradient` | ✗ | ✓ |
 | `math:sqrt` | ✓ | ✗ |
 | `nn:adam` | ✗ | ✓ ≥7 |
