@@ -747,6 +747,15 @@ bool bindTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
         // The same type code was checked above; an argument list of another length is the
         // prototype of the name (`Map` written without arguments).
         auto *have = static_cast<OtherType *>(actual);
+        if (have->paramCount() == 0 && want->paramCount() > 0) {
+            // The bare name states no argument, so it fixes no type variable, and it is not of the
+            // wrong form either: whether it is accepted where the arguments are wanted is the
+            // assignment rule's business (`Node` is a node whose value type the program did not
+            // state, so it is taken where a node of a stated value type is and leaves that type
+            // open -- language reference 9.6, design principles 5.9). A parameter whose variables
+            // no argument fixes is then refused by name, with the type arguments to write.
+            return true;
+        }
         if (have->paramCount() != want->paramCount()) {
             return false;
         }

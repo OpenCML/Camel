@@ -40,27 +40,52 @@ const char *handleKindName(HandleKind kind);
 class HandleType final : public type::OtherType {
   public:
     static HandleType *get(HandleKind kind);
+    /// `Node<T>`: a node of the graph whose value type is `T`. A node read in a program is a node
+    /// without one (a bare `Node`), and a declaration that states the type of the value a node
+    /// stands for -- a rule's or a fact's parameter (`v: T`) -- states this type (design principles
+    /// 5.9).
+    static HandleType *ofValueType(type::Type *valueType);
     static bool is(const type::Type *type, HandleKind kind);
 
     HandleKind kind() const { return kind_; }
+
+    /// The type of the value this node stands for, or nullptr when it is written without one.
+    type::Type *valueType() const { return paramCount_ == 1 ? params_[0] : nullptr; }
 
     /// A handle is not the value it stands for: it determines no type parameter of a generic
     /// function (design principles 5.9).
     bool determinesTypeParameters() const override { return false; }
 
+    /// A node's argument is the type of the value it stands for, so the algebra reads it (design
+    /// principles 5.9): `Node<T>` against `Node<int>` binds `T` to `int`. The other handle kinds
+    /// take no argument.
+    bool typeArguments() const override { return kind_ == HandleKind::Node; }
+
     std::string toString() const override;
     std::string mangle() const override;
     type::Type *clone(bool deep = false) const override;
+    type::Type *unify(type::Type *other) const override;
     bool equals(type::Type *other) const override;
     type::CastSafety castSafetyFrom(type::Type *source) const override;
     bool assignableFrom(type::Type *source) const override;
     type::OtherType *cloneWithParams(std::span<type::Type *const> params) const override;
+    type::Type *cloneWithArguments(
+        std::span<const type::TypeArgument> arguments, std::string &error) const override;
 
   private:
-    HandleType(type::TypeCode code, HandleKind kind) : OtherType(code), kind_(kind) {}
+    HandleType(type::TypeCode code, HandleKind kind, type::Type *valueType)
+        : OtherType(
+              code, valueType == nullptr ? 0 : 1,
+              valueType == nullptr
+                  ? nullptr
+                  : copyParams(std::span<type::Type *const>(&valueType, 1))),
+          kind_(kind) {}
 
     HandleKind kind_;
 };
+
+/// `type` as the handle type of `kind`, or nullptr when it is another type.
+const HandleType *asHandleType(const type::Type *type, HandleKind kind);
 
 class Handle final : public rtdata::Object {
   public:
