@@ -1101,6 +1101,10 @@ void Builder::buildFuncBody(
         // writes no clause) leaves the signature as it is rather than promising too little.
         if (graph->funcType() != nullptr &&
             graph->funcType()->resources().mode == camel::core::sem::ResourceSignature::Mode::Generic) {
+            // Its signature carries an inferred set from here on: this is what the settled
+            // measurement is written onto once every body has been measured. A measurement that
+            // cannot be written as a clause is not written now, and is not written then either.
+            inferredSignatures_.insert(graph.get());
             if (const auto measured = footprintOf(graph.get());
                 measured.has_value() && measured->anyOf.empty()) {
                 graph->setResources(*measured);

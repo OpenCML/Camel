@@ -131,6 +131,23 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_exact = "x\n1\n"
 
+[[tests]]
+name = "inferred.recursive_is_empty"
+desc = "A recursive function that wrote no clause settles at the set its body reaches: the measurement starts every body at the empty set and grows it round by round, so the call to itself reads the round before and `step` ends at the empty set -- its type says `pure`, and a caller taking its value reads that, not `Generic`."
+kind = "behavior"
+case = "../../../cases/effects/inferred_recursive_is_empty.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+expect_output_contains = ["Function(graph=step", "value_type=\"(n: int) => int pure\""]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+const step = lines.filter((l) => l.includes('Function(graph=step')).join(' | ')
+assert(step.includes('(n: int) => int pure'), `step's value carries the set its body settled at, not nothing: ${step}`)
+assert(!step.includes('(n: int) => int"'), `step's value is not read as a signature that says nothing: ${step}`)
+}
+"""
+
 # ---- Refusals ----
 
 [[tests]]
@@ -274,3 +291,25 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
 expect_output_contains = ["err_promise_note.cml:8:", "stdout", "at 10:5]"]
+
+[[tests]]
+name = "err.pure_recursive"
+desc = "A recursive `pure` function is held to its clause like any other: the body prints, and the call to itself is a use like any other call, so the declaration is refused and the use is named."
+kind = "negative"
+case = "../../../cases/effects/err_pure_recursive.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_diagnostic_code = "0x030001F1"
+expect_output_contains = ["err_pure_recursive.cml:9:", "(n: int) => int pure", "stdout"]
+
+[[tests]]
+name = "err.wide_parameters"
+desc = "A use through a parameter the signature cannot number (the 257th) is not dropped: the measurement gives up on the body and records it as reaching something unknown, so a declaration whose clause cannot be shown to cover it is refused rather than passing on a use nobody recorded."
+kind = "negative"
+case = "../../../cases/effects/err_wide_parameters.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_diagnostic_code = "0x030001F1"
+expect_output_contains = ["err_wide_parameters.cml:11:", "does not keep its resource promise"]

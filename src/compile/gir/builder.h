@@ -1207,13 +1207,18 @@ class Builder {
     //
     // The resources each body was found to touch (design effects plan, step 5). A declaration's
     // own clause is a promise, not a measurement: it is what the declaration asked its callers to
-    // believe, and the body is held to it. This is the measurement, kept here rather than written
-    // onto the signature, because a function type's resources take part in its text form and in
-    // its mangled name (core/type/text.cpp), so completing one after the bodies are built would
-    // change names that were already computed. What reads it is the promise check below and,
-    // through a callee, the next round of the measurement.
+    // believe, and the body is held to it. This is the measurement. Every body of every module unit
+    // has an entry for as long as the measurement runs, starting at the empty set, so that a body
+    // whose walk reads a callee -- its own call included -- has something to read; a body the walk
+    // cannot place ends at the conservative reading rather than at nothing. The settled value is
+    // written onto the signature of the bodies in `inferredSignatures_`, and this map is what the
+    // promise check below reads a body's own reach from.
     std::unordered_map<DraftGraphBuilder *, camel::core::sem::ResourceSignature>
         inferredResources_;
+    // The bodies whose signature carries an inferred set rather than a clause: a declaration that
+    // wrote `uses`/`pure` keeps the clause (its contract with its callers), and one that wrote no
+    // clause carries what its body was measured to reach (design principles 3.3).
+    std::unordered_set<DraftGraphBuilder *> inferredSignatures_;
     node_handle_t lastSyncedNode_{};
     size_t syntheticRefIndex_ = 0;
 
@@ -2030,16 +2035,19 @@ class Builder {
     // when the body touches nothing. A call through a value that writes no clause promises
     // nothing, so the call is read conservatively (any class, any ambient resource) rather than
     // as touching nothing: a body is never measured as pure because the measurement gave up.
-    // `nullopt` when something in the body cannot be determined at all -- a resource the walk
-    // cannot place. With `only`, one node's own reach, which is what tells apart a use the clause
-    // names from one it does not.
+    // `nullopt` when something in the body cannot be placed at all -- a resource the walk cannot
+    // name, which the measurement records as reaching anything rather than as reaching nothing.
+    // With `only`, one node's own reach, which is what tells apart a use the clause names from one
+    // it does not.
     std::optional<camel::core::sem::ResourceSignature>
     footprintOf(DraftGraphBuilder *graph, std::optional<draft_node_ref_t> only = std::nullopt) const;
     // Once every body is built: measures each one and settles the measurements against each other
-    // (a callee may be written after its caller, in another module). A settled measurement is also
-    // published on the signature of a function that wrote no clause, so that the signature stays
-    // the one place a function's resources are read from. This reports nothing: it runs before the
-    // module-by-module reporting begins.
+    // (a callee may be written after its caller, in another module, and a body may call itself).
+    // The measurements start empty and grow, so a recursive function settles at the least set its
+    // body satisfies rather than never settling. The settled measurement is also published on the
+    // signature of a function that wrote no clause, so that the signature stays the one place a
+    // function's resources are read from. This reports nothing: it runs before the module-by-module
+    // reporting begins.
     void measureInferredResources();
     // Then holds each declaration of the current module to the clause it wrote: `uses` is an
     // upper bound and `pure` promises the empty set, so a body that reaches past its clause is

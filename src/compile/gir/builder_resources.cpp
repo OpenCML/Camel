@@ -29,6 +29,87 @@ namespace sem = camel::core::sem;
 
 namespace camel::compile::gir {
 
+namespace {
+
+using sem::AccessMode;
+using sem::ResourceClass;
+using sem::ResourceSignature;
+
+// The bottom of a measurement: a body recorded as reaching nothing. Every body starts here, and no
+// body is ever below it.
+ResourceSignature emptyReach() {
+    ResourceSignature reach;
+    reach.mode = ResourceSignature::Mode::Concrete;
+    return reach;
+}
+
+// What a body reaches when the walk cannot place one of its nodes. Reaching *something* unknown is
+// the honest reading (a class the clause has no name for, an ambient resource that could be any),
+// and recording it is what lets the clause a declaration wrote still be judged: skipping the body
+// would leave the promise unchecked and unsaid (design principles 3.3).
+ResourceSignature unplaceableReach() {
+    ResourceSignature reach = emptyReach();
+    for (ResourceClass cls : {ResourceClass::Variable, ResourceClass::Object, ResourceClass::Foreign,
+                              ResourceClass::Ambient, ResourceClass::Handle}) {
+        reach.anyOf.push_back(cls);
+    }
+    reach.external = true;
+    return reach;
+}
+
+// What two readings of one body amount to: a resource either of them reaches is reached. The mode
+// widens the same way, and the parameter and ambient uses keep the wider access.
+ResourceSignature uniteReach(const ResourceSignature &a, const ResourceSignature &b) {
+    ResourceSignature united = a;
+    const auto uniteMode      = [](AccessMode left, AccessMode right) {
+        return sem::writes(left) || sem::writes(right) ? AccessMode::ReadModifyWrite
+                                                       : AccessMode::Read;
+    };
+    for (const auto &use : b.params) {
+        const auto found = std::find_if(united.params.begin(), united.params.end(),
+                                        [&](const auto &other) { return other.index == use.index; });
+        if (found == united.params.end()) {
+            united.params.push_back(use);
+            continue;
+        }
+        if (found->cls != use.cls) {
+            found->cls = ResourceClass::Unknown;
+        }
+        if (found->name.empty()) {
+            found->name = use.name;
+        }
+        found->mode = uniteMode(found->mode, use.mode);
+    }
+    for (const auto &use : b.ambient) {
+        const auto found = std::find_if(united.ambient.begin(), united.ambient.end(),
+                                        [&](const auto &other) { return other.name == use.name; });
+        if (found == united.ambient.end()) {
+            united.ambient.push_back(use);
+            continue;
+        }
+        found->mode = uniteMode(found->mode, use.mode);
+    }
+    united.captures.insert(united.captures.end(), b.captures.begin(), b.captures.end());
+    united.anyOf.insert(united.anyOf.end(), b.anyOf.begin(), b.anyOf.end());
+    united.result = b.result;
+    if (!united.allocates && b.allocates.has_value()) {
+        united.allocates = b.allocates;
+    }
+    united.external = united.external || b.external;
+    std::sort(united.params.begin(), united.params.end(),
+              [](const auto &left, const auto &right) { return left.index < right.index; });
+    std::sort(united.ambient.begin(), united.ambient.end(),
+              [](const auto &left, const auto &right) { return left.name < right.name; });
+    std::sort(united.captures.begin(), united.captures.end());
+    united.captures.erase(std::unique(united.captures.begin(), united.captures.end()),
+                          united.captures.end());
+    std::sort(united.anyOf.begin(), united.anyOf.end());
+    united.anyOf.erase(std::unique(united.anyOf.begin(), united.anyOf.end()), united.anyOf.end());
+    return united;
+}
+
+} // namespace
+
 std::optional<camel::core::sem::ResourceSignature>
 Builder::footprintOf(DraftGraphBuilder *graph, std::optional<draft_node_ref_t> only) const {
     using sem::ResourceSignature;
@@ -43,9 +124,15 @@ Builder::footprintOf(DraftGraphBuilder *graph, std::optional<draft_node_ref_t> o
         return sem::writes(a) || sem::writes(b) ? sem::AccessMode::ReadModifyWrite
                                                 : sem::AccessMode::Read;
     };
+    bool unplaceable = false;
     const auto addParam = [&](size_t index, sem::ResourceClass cls, const std::string &name,
                               sem::AccessMode mode) {
         if (index > 0xFF) {
+            // A signature numbers its parameters in one byte, so a use through the 256th parameter
+            // has no way to be written down. Dropping it would measure the body as reaching less
+            // than it does, and a `pure` body would pass on a use nobody recorded. Nothing here is
+            // measured instead.
+            unplaceable = true;
             return;
         }
         const auto found = std::find_if(out.params.begin(), out.params.end(), [&](const auto &use) {
@@ -155,11 +242,13 @@ Builder::footprintOf(DraftGraphBuilder *graph, std::optional<draft_node_ref_t> o
         out.external = out.external || sig.external;
         return true;
     };
-    // A signature that says nothing promises nothing: what the call reaches is the instantiation's,
-    // and any instantiation may write a cell or print. Read conservatively (resource_semantics.h,
-    // `Generic`) rather than as touching nothing -- a body is never measured as pure because the
-    // walk found a signature it could not read. A call through a value and a call of a function
-    // that wrote no clause and whose reach is not expressible as one are both this case.
+    // A signature that says nothing promises nothing, and what a call through it reaches is the
+    // instantiation's: any instantiation may write a cell or print. Read conservatively
+    // (resource_semantics.h, `Generic`) rather than as touching nothing -- a body is never measured
+    // as pure because the walk found a signature it could not read. What has such a signature is a
+    // parameter of function type that writes no clause of its own (resource-generic, design
+    // principles 3.3): a function that wrote a clause carries the clause, and a function that wrote
+    // none carries the set its own body was measured to reach, so those two are read above.
     const auto readUnknownValue = [&]() {
         for (sem::ResourceClass cls : {sem::ResourceClass::Variable,
                                        sem::ResourceClass::Object,
@@ -241,11 +330,22 @@ Builder::footprintOf(DraftGraphBuilder *graph, std::optional<draft_node_ref_t> o
                 return std::nullopt;
             }
             // A call reads the signature of the function it calls -- the clause it wrote, or, when
-            // it wrote none, the set its body was measured to reach, which is published on that
-            // signature. A call through a value reads the same signature below, so a function's
-            // resources have one reading and both paths take it (design principles 3.3). A
-            // signature that says nothing is read the way an unwritten one is at a call through a
-            // value: what it reaches is not known here.
+            // it wrote none, the set its body was measured to reach (design principles 3.3). A
+            // call through a value reads the same signature below, so a function's resources have
+            // one reading and both paths take it. A function that wrote no clause keeps its
+            // measurement in the fixpoint while that is still running, which is what a caller has
+            // to read then; a signature that says nothing at all is the one a function-type
+            // parameter has, and what the call reaches is the instantiation's, so it is read
+            // conservatively rather than as reaching nothing.
+            const auto inferred =
+                inferredSignatures_.contains(callee.get()) ? inferredResources_.find(callee.get())
+                                                           : inferredResources_.end();
+            if (inferred != inferredResources_.end()) {
+                if (!readSignature(inferred->second, calleeType->withTypesCount(), false, id)) {
+                    return std::nullopt;
+                }
+                break;
+            }
             if (calleeType->resources().mode != sem::ResourceSignature::Mode::Concrete) {
                 readUnknownValue();
                 break;
@@ -257,7 +357,10 @@ Builder::footprintOf(DraftGraphBuilder *graph, std::optional<draft_node_ref_t> o
         }
         case runtime::GCNodeKind::Call: {
             // A call through a function value: what it runs is the value's signature, which is
-            // the first `with` input of the call (isEffectNode reads it the same way).
+            // the first `with` input of the call (isEffectNode reads it the same way). A value of
+            // a function that wrote no clause carries the set its body was measured to reach; the
+            // only function type that says nothing is a parameter of function type, whose clause
+            // the callee writes at each instantiation -- so this is read conservatively.
             const auto callee = draft.withInputsOf(id);
             if (callee.empty()) {
                 return std::nullopt;
@@ -279,6 +382,9 @@ Builder::footprintOf(DraftGraphBuilder *graph, std::optional<draft_node_ref_t> o
         default:
             break;
         }
+    }
+    if (unplaceable) {
+        return std::nullopt; // see addParam: nothing here is measured, rather than too little
     }
     // The declaration's own `var` parameters: a `var` parameter is a resource by itself, whether
     // or not the body reaches it (design principles 3.3). A parameter is not a node, so it is part
@@ -311,32 +417,69 @@ Builder::footprintOf(DraftGraphBuilder *graph, std::optional<draft_node_ref_t> o
 
 void Builder::measureInferredResources() {
     // What a body touches depends on its callees, which may be written after their caller and in
-    // another module, so the measurements settle against each other first. A body whose walk met
-    // something it cannot place is absent from the map, and stays absent.
+    // another module, so the measurements settle against each other first -- and a body may call
+    // itself, so they settle from the bottom: every body is recorded as reaching nothing, and each
+    // round recomputes every body from what its callees currently reach, taking the union with what
+    // that body reached before. A recursive function therefore reads its own reach from the round
+    // before, and the answer it settles at is the least one its body satisfies. The sets only grow,
+    // so the rounds end.
+    std::vector<compile_graph_ptr_t> bodies;
+    for (const ModuleUnit *unit : unitOrder_) {
+        for (const compile_graph_ptr_t &graph : unit->builtBodies) {
+            bodies.push_back(graph);
+            inferredResources_[graph.get()] = emptyReach();
+        }
+    }
+    // The bodies whose walk reads another body's signature: a direct call or a call through a
+    // function value. Everything else is settled by its first walk, so only these are walked again.
+    std::vector<DraftGraphBuilder *> unsettled;
+    for (const auto &graph : bodies) {
+        bool readsAnother = false;
+        for (draft_node_ref_t id = 0; id < graph->draft().nodeSlotCount() && !readsAnother; ++id) {
+            if (!graph->draft().alive(id)) {
+                continue;
+            }
+            const auto kind = nodeKindOf(graph->draft().ref(id));
+            readsAnother    = kind == runtime::GCNodeKind::Func || kind == runtime::GCNodeKind::Call;
+        }
+        if (readsAnother) {
+            unsettled.push_back(graph.get());
+        }
+    }
+    const auto walk = [&](DraftGraphBuilder *body) {
+        const auto measured = footprintOf(body);
+        // A body the walk cannot place reaches something unknown rather than nothing, so a clause
+        // it wrote is still judged against it instead of passing unchecked.
+        const auto settled =
+            measured.has_value() ? uniteReach(inferredResources_[body], *measured)
+                                 : unplaceableReach();
+        const bool grew = !(settled == inferredResources_[body]);
+        inferredResources_[body] = settled;
+        return grew;
+    };
+    for (const auto &graph : bodies) {
+        walk(graph.get());
+    }
     for (bool changed = true; changed;) {
         changed = false;
-        for (const ModuleUnit *unit : unitOrder_) {
-            for (const compile_graph_ptr_t &graph : unit->builtBodies) {
-                const auto measured = footprintOf(graph.get());
-                if (!measured.has_value()) {
-                    continue;
-                }
-                const auto known = inferredResources_.find(graph.get());
-                if (known == inferredResources_.end() || !(known->second == *measured)) {
-                    inferredResources_[graph.get()] = *measured;
-                    changed                        = true;
-                }
-                // The settled measurement is published on the signature of a function that wrote
-                // no clause, which keeps the signature the one place a function's resources are
-                // read from: a caller that calls it directly reads the same thing a caller taking
-                // one of its values reads (design principles 3.3, effects plan 5). A function that
-                // wrote a clause keeps the clause: that is its contract with its callers.
-                FunctionType *type = graph->funcType();
-                if (type != nullptr && measured->anyOf.empty() &&
-                    type->resources().mode == sem::ResourceSignature::Mode::Generic) {
-                    graph->setResources(*measured);
-                }
-            }
+        for (DraftGraphBuilder *body : unsettled) {
+            changed = walk(body) || changed;
+        }
+    }
+    // The settled measurement is published on the signature of the bodies that carry an inferred
+    // set rather than a clause, which keeps the signature the one place a function's resources are
+    // read from: a caller that calls it directly reads the same thing a caller taking one of its
+    // values reads (design principles 3.3, effects plan 5). A function that wrote a clause keeps
+    // the clause: that is its contract with its callers. A set that cannot be written as a clause
+    // (`anyOf`: a class the clause has no name for) leaves the signature as it is rather than
+    // promising too little; a call through it is read conservatively.
+    for (const auto &graph : bodies) {
+        if (!inferredSignatures_.contains(graph.get())) {
+            continue;
+        }
+        const auto &settled = inferredResources_[graph.get()];
+        if (settled.anyOf.empty()) {
+            graph->setResources(settled);
         }
     }
 }
