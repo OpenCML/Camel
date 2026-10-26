@@ -79,10 +79,12 @@ def run(args):
 
 
 def repository_files():
-    """Every .cml file of the repository: the input of the format and fuzz checks, which are not
-    snapshots and gain from the breadth (H188 kept them as they were)."""
+    """Every .cml file of the repository, the handover directory aside: the input of the format and
+    fuzz checks, which are not snapshots and gain from the breadth (H188 kept them as they were).
+    The handover directory holds the drafts and the tombstones the language author works from, and
+    a module is part of the corpus where it is integrated into stdlib/ (corpus.HANDOVER)."""
     os.chdir(ROOT)
-    return [str(p).replace("\\", "/") for p in corpus.walk(Path("."), ".cml")]
+    return [str(p).replace("\\", "/") for p in corpus.repository_sources()]
 
 
 def parse_cases():
