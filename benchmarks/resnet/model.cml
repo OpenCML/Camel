@@ -69,7 +69,7 @@ func step(m: Resnet, x: f32[..]): (float, Resnet) {
 
 /// Exports `step` to ONNX: the parameters and the input become graph inputs.
 func export_step(m: Resnet, path: string): int sync {
-    export_model(step, (m, bench_input()), path)
+    let _ = export_model<out: path>(step, (m, bench_input()))
     return 0
 }
 

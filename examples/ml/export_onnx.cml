@@ -37,7 +37,7 @@ func main(): int sync {
     let _ = dir->mkdirs
     // The closure captures the weights, so they are stored in the model; `[0]` leaves the
     // first axis (the batch size) open.
-    export_model((t: f32[..]): f32[..] => forward(t, w), x, path, [0])
+    let _ = export_model<out: path, dynamic_axes: [0]>((t: f32[..]): f32[..] => forward(t, w), x)
     println('model file written:', (path->file_size !! 0) > 0)
     return 0
 }

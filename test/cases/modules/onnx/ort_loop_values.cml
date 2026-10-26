@@ -95,19 +95,19 @@ func main(): int sync {
     let out = get_env('ONNX_OUT') ?? ''
     let which = get_env('MODEL') ?? ''
     let exported = if out == '' then 0 else if which == 'pair' then sync {
-        export_model((x: f32[..]): (f32[..], int) => pair(x), (x), out)
+        let _ = export_model<out: out>((x: f32[..]): (f32[..], int) => pair(x), (x))
         1
     } else if which == 'tree' then sync {
-        export_model((x: f32[..]): (f32[..], int) => tree(x), (x), out)
+        let _ = export_model<out: out>((x: f32[..]): (f32[..], int) => tree(x), (x))
         1
     } else if which == 'rec' then sync {
-        export_model((x: f32[..]): Run => rec(x), (x), out)
+        let _ = export_model<out: out>((x: f32[..]): Run => rec(x), (x))
         1
     } else if which == 'three' then sync {
-        export_model((x: f32[..]): (f32[..], int, f32[..]) => three(x), (x), out)
+        let _ = export_model<out: out>((x: f32[..]): (f32[..], int, f32[..]) => three(x), (x))
         1
     } else sync {
-        export_model((x: f32[..]): ((f32[..], int), (float, bool)) => nested(x), (x), out)
+        let _ = export_model<out: out>((x: f32[..]): ((f32[..], int), (float, bool)) => nested(x), (x))
         1
     }
     println(exported)

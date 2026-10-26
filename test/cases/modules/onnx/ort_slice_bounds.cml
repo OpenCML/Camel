@@ -22,9 +22,9 @@ func main(): int sync {
     let x = reshape([1.0, 1.0, 1.0] as f32[], [3])
     println(head(x))
     if (get_env('MODE') ?? '') == 'branch' then {
-        export_model((x: f32[..]): f32[..] => branch(x), x, get_env('ONNX_OUT') ?? '')
+        let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((x: f32[..]): f32[..] => branch(x), x)
     } else {
-        export_model((x: f32[..]): f32[..] => head(x), x, get_env('ONNX_OUT') ?? '')
+        let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((x: f32[..]): f32[..] => head(x), x)
     }
     println('exported')
     return 0

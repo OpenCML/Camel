@@ -160,7 +160,7 @@ func step(m: Resnet, x: f32[..], s: BnStats): (float, Resnet, BnStats) {
 /// Exports `step` to ONNX: the parameters, the input and the running statistics become
 /// graph inputs; the loss, the updated parameters and the updated statistics the outputs.
 func export_step(m: Resnet, s: BnStats, path: string): int sync {
-    export_model(step, (m, bench_input(), s), path)
+    let _ = export_model<out: path>(step, (m, bench_input(), s))
     return 0
 }
 

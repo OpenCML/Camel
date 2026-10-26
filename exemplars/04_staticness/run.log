@@ -23,5 +23,5 @@ exported pile
 $ MODE=nontail ONNX_OUT=<tmp>/settle.onnx camel exemplars/04_staticness/program.cml
 exit 1
 [[3.0, 3.0, 3.0, 3.0], [3.0, 3.0, 3.0, 3.0]]
-(program)exemplars/04_staticness/program.cml:64:9: [Error]: An error has occurred: onnx.export_model: in 'settle': several branches decide whether a function calls itself outside tail position; a linear recursion can be exported only when one if / else decides it (at exemplars/04_staticness/program.cml:44:73). Check the runtime environment and input data for unexpected issues. (name=RuntimeDiag::RuntimeError, code=0x04000000)
+(program)exemplars/04_staticness/program.cml:44:73: [Error]: An error value reached the exit of 'main' without being handled: ExportUnsupported: in 'settle': several branches decide whether a function calls itself outside tail position; a linear recursion can be exported only when one if / else decides it. A value of type T! that has failed must be opened before the program ends: give a replacement with '!!', pass it on with '?->', or take it apart with 'match ... case error e'. The position is where the error was made (the definition of 'main' when the error records none). (name=RuntimeDiag::UnhandledError, code=0x04000051)
 

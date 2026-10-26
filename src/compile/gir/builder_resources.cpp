@@ -296,9 +296,14 @@ bool Builder::reachOfOper(DraftGraphBuilder *graph, const runtime::GraphDraft &d
         }
         const bool isWith = access.binding.kind == sem::ResourceBinding::Kind::With;
         const auto inputs = isWith ? draft.withInputsOf(id) : draft.normInputsOf(id);
-        // A call through a value keeps the value itself as its first `with` input, so an operator
-        // value's `with` operands start after it.
-        const size_t at = size_t(access.binding.index) + (isWith ? 1 : 0);
+        // A call through a value keeps the value itself as its first `with` input, so its `with`
+        // operands start after it. An operator node has no callee among its inputs -- what it calls
+        // is the operator the table holds -- and its `with` operands are the call's `with` arguments
+        // as written. Reading the node's kind is what runtime/resources.cpp does for the same
+        // mapping; counting the callee on an operator node costs the whole body its measurement
+        // (the operand lands past the last `with` input and the walk gives up).
+        const bool isCall = nodeKindOf(draft.ref(id)) == runtime::GCNodeKind::Call;
+        const size_t at = size_t(access.binding.index) + (isWith && isCall ? 1 : 0);
         if (at >= inputs.size()) {
             return false;
         }
