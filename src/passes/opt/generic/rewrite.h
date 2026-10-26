@@ -64,7 +64,7 @@ std::vector<gc_node_ref_t> orderedSources(const GraphDraft &draft, gc_node_ref_t
 /**
  * True for nodes that run in order with effects: calls, branches, effectful operators, and gates
  * or joins that wait on something -- on a control input, or on the sync edge the chain of a `sync`
- * block is written as (docs/design/effects/edges.cn.md 5.3; H242). The chain of a block names its
+ * block is written as (docs/design/effects/edges.cn.md 5.3). The chain of a block names its
  * statements with this predicate: the nodes it holds are the ones a rewrite may not step over
  * without handing their ordering on.
  */
