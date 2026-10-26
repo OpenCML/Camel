@@ -869,7 +869,7 @@ funcDecl   :
 */
 /*
 ruleDecl : frontMatter? ('with' angledParams)? 'export'? IDENTIFIER identDef typeParams?
-           ruleContext? parentParams whenClause? '{' ruleBody '}' ;
+           parentParams whenClause? '{' ruleBody '}' ;
 ruleBody : dataExpr ('=>' | '<=>') dataExpr ;
 
 A rule is the shorthand of a pair of functions with the same parameters, the left one the pattern
@@ -904,11 +904,6 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     const Reference ref    = qualifyRef(Reference(name));
     if (context->has(TK::KwExport)) {
         export_->addRef(ref);
-    }
-    if (context->get<cst::RuleContext>()) {
-        diags_->of(SemanticDiag::ConstructNotSupported)
-            .at(rangeOf(context->get<cst::RuleContext>()->firstToken()))
-            .commit("rule<...>", "a rule over functions is not implemented");
     }
     const auto body   = context->get<cst::RuleBody>();
     const auto sides  = body->exprs();

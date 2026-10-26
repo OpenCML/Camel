@@ -237,8 +237,7 @@ enumType           : 'enum' '{' (enumVariant (',' enumVariant)*)? ','? '}'
 enumVariant        : identDef ('(' typeList? ','? ')' | '{' (enumField (',' enumField)*)? ','? '}')?
 enumField          : identDef ':' typeExpr
 ruleDecl           : frontMatter? ('with' angledParams)? 'export'? IDENTIFIER identDef typeParams?
-                     ruleContext? parentParams whenClause? '{' ruleBody '}'
-ruleContext        : '<' identDef (',' identDef)* ','? '>'
+                     parentParams whenClause? '{' ruleBody '}'
 ruleBody           : dataExpr ('=>' | '<=>') dataExpr
 factDecl           : frontMatter? ('with' angledParams)? 'export'? IDENTIFIER identDef typeParams?
                      parentParams? ':' typeExpr factBody factClause*
