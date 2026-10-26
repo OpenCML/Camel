@@ -29,11 +29,10 @@ syntax	EmptyInterpolation	0x00000F	error	An interpolation has no expression to f
 # did not fit.
 syntax	AsRightSideIsType	0x000011	error	The right side of '{0}' is a type; write the interval as '(a..b)'.	'T..' is the stream type (design principles 5.4): the elements of 'T' that arrive one after another. An interval is an expression, and it is written in parentheses: (1..5).	none: choice: the right side of an 'as' is a type, and whether an interval belongs in parentheses here is the writer's to write
 syntax	WhenAfterBody	0x000010	error	A 'when' condition comes before what it guards, so {0} cannot follow it.	Write it between the parameters and the body: rule add_zero::<T>(x: T) when is_integer::<T>() {{ x + 0 => x }}, or between the patterns of a match case and its arm: case n when n > 0 => n. The trailing form is not read as a condition.	edit
-# A lambda's parameters are written in parentheses (design principles 5.9): the rule of
-# 2026-10-24 on `composition-expected-type-edges`, item 4. An unparenthesised `x => e` is not a
-# lambda at all -- inside a rule body the `=>` is the rule's own arrow -- so naming the
-# parentheses is what keeps the program from being told only that a token did not fit.
-syntax	LambdaParametersNeedParentheses	0x000012	error	A lambda's parameters need their parentheses: write '(x) => e', not 'x => e'.	A lambda's parameters are written in parentheses, and a parameter list destructured as a tuple is written '((a, b)) => e' (design principles 5.9). An unparenthesised 'x => e' is not a lambda: inside a rule body the '=>' is the rule's own arrow (rule r(x: int) {{ x => x }}), so the two readings would collide and no unparenthesised spelling is added (the author's ruling of 2026-10-24). What is written here is an expression followed by an arrow that fits nothing; if a rewrite was meant, it is declared with 'rule'.	edit
+# A lambda's parameters are written in parentheses (design principles 5.9). An unparenthesised
+# `x => e` is not a lambda at all -- inside a rule body the `=>` is the rule's own arrow -- so
+# naming the parentheses is what keeps the program from being told only that a token did not fit.
+syntax	LambdaParametersNeedParentheses	0x000012	error	A lambda's parameters need their parentheses: write '(x) => e', not 'x => e'.	A lambda's parameters are written in parentheses, and a parameter list destructured as a tuple is written '((a, b)) => e' (design principles 5.9). An unparenthesised 'x => e' is not a lambda: inside a rule body the '=>' is the rule's own arrow (rule r(x: int) {{ x => x }}), so the two readings would collide and no unparenthesised spelling is added. What is written here is an expression followed by an arrow that fits nothing; if a rewrite was meant, it is declared with 'rule'.	edit
 #
 # Warnings (severity bits = Warn).
 syntax	ComparisonAcrossLines	0x100001	warn	This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one.	A '>' after a space, at the end of a line, is the comparison operator, and the expression goes on with the next line. The '>' that closes '<...>' arguments touches the last argument; a chain of comparisons (a < b > c) is never what a program means.	none: choice: the text to write instead is the writer's
@@ -273,7 +272,7 @@ semantic	CmlBigConstant	0x0001A6	error	std::cml refused the constant '{0}' of ty
 # tensor keeps the element type it is written with, so nothing rewrites it and there is no
 # such diagnostic. The code is not reused.
 #
-# Applicability conditions (`when`, design principles 5.13; handover). 0x1A8 and up.
+# Applicability conditions (`when`, design principles 4.4). 0x1A8 and up.
 #/ The condition's value is not a bool.
 semantic	WhenConditionNotBool	0x0001A8	error	The 'when' condition of '{0}' is not a bool (it is '{1}').	A 'when' is a compile-time predicate over the declaration's type parameters and 'with' parameters: call a generic function this module declares that reduces to a constant over its type arguments ('is_numeric::<T>()' is one, written in the standard module 'types'), possibly combined with '!', '&&' and '||'. It is not a runtime value.	none: choice: the repair is a decision only the writer can make
 #/ The condition is not a compile-time predicate the compiler can evaluate.
@@ -286,8 +285,8 @@ semantic	WhenTypeQueryNotConcrete	0x0001AB	error	The type query '{0}' cannot be 
 semantic	WhenConditionUnmet	0x0001AC	error	No candidate of '{0}' applies to ({1}): every candidate's 'when' condition is false. Candidates: {2}	A 'when' that is false makes its declaration inapplicable, not erroneous, and the call goes on to the other candidates. Pass an argument or a type that satisfies a condition, or write another overload for this call.	none: choice: the repair is a decision only the writer can make
 semantic	EffectInRuleCondition	0x0001AD	error	{0} has an effect, and it is inside the condition of the rule '{1}'.	A rule's condition decides whether the rule applies to a redex, and the engine evaluates it while it holds a session on the program being rewritten: a commit or a rewrite there acts inside that session, and a commit replaces the program the engine is reading. Keep the condition a predicate over the values the rule matched, and write the effect in the rule's right side or in the program around the rewrite.	none: choice: the repair is a decision only the writer can make
 #
-# Defaults of `with` parameters and `with` arguments given by name (design principles 4.4,
-# handover). 0x1B7 to 0x1BE; 0x1BF and up belong to `when` predicate lookup.
+# Defaults of `with` parameters and `with` arguments given by name (design principles 4.4).
+# 0x1B7 to 0x1BE; 0x1BF and up belong to `when` predicate lookup.
 #/ A named `with` argument does not name a `with` parameter of the callee.
 semantic	WithArgumentUnknown	0x0001B7	error	'{0}' is not a 'with' parameter of '{1}'.	A name in a 'with' argument is written as in a struct literal, 'name: value', and must be one of the callee's 'with' parameters.	none: choice: the repair is a decision only the writer can make
 #/ A `with` parameter is given twice, once by position and once by name.
@@ -305,7 +304,7 @@ semantic	WithArgumentCallee	0x0001BD	error	The 'with' argument '{0}' is given by
 #/ A `with` argument is given by name in a binding used as a function value.
 semantic	WithArgumentInValue	0x0001BE	error	The 'with' argument '{0}' is given by name, and this binding is used as a function value.	A function value binds the 'with' arguments it is given in order; name a parameter only in a call, 'f<name: value>(x)'.	none: choice: the repair is a decision only the writer can make
 #
-# Predicate lookup in a `when` condition (design principles 5.13, 10.2). 0x1BF and up.
+# Predicate lookup in a `when` condition (design principles 4.4, 10.2). 0x1BF and up.
 #/ A predicate another module declares, but this module does not import it.
 semantic	WhenPredicateNotImported	0x0001BF	error	'{1}' is declared in module '{2}', but that name is not imported where the 'when' condition of '{0}' is written.	A condition resolves names where its declaration is written, as a call in its body does: the module's own names, then what it imports by name, selectively or as a module prefix, then the prelude. Import the module that declares the predicate, or move the predicate into the module that uses it.	none: choice: the repair is a decision only the writer can make
 #/ A name an import brings exists, but it is not a generic function answered at compile time.
@@ -320,8 +319,7 @@ semantic	NativeDeclarationNotLoaded	0x00017C	error	The declaration '{0}' names t
 # Body-less declarations: 0x17E and up.
 #/ Two generic declarations of one name can take the same call (rule 2).
 semantic	NativeDeclarationOverlap	0x000180	error	Two declarations of '{0}' can take the same call: '{1}' and '{2}'.	An operator has one meaning for one call: which rule applies must be decided by the types of the arguments, never by the order the declarations are written in. Give the declarations parameter types that cannot both accept one argument list, or keep one of them.	none: choice: the repair is a decision only the writer can make
-# The rule on same-named `#impl` declarations split by their
-# conditions (`docs/handover/reviews/questions-2026-10-23.md`, "impl-declaration-arms"): two
+# Same-named `#impl` declarations split by their conditions (design principles 4.4): two
 # same-named declarations whose `when` conditions are mutually exclusive are overloads and may
 # stand side by side; a type that satisfies both is this overlap. The conditions are asked about
 # every type the compiler registers, and a condition it cannot answer leaves the pair refused by
@@ -391,20 +389,18 @@ semantic	ParamAfterDefault	0x0001D4	error	The parameter '{0}' has no default and
 #/ An argument at a call has a type the parameter it fills does not take.
 semantic	ParamArgumentWrongType	0x0001D6	error	The argument '{0}' of '{1}' has type '{2}', not '{3}'.	Write a value of the parameter's type; an integer may be given where a float is declared.	none: choice: the argument has to be written as the type the parameter declares
 #
-# Composition and the interval (`..`, design principles 4.2
-# on ` -generator-and-composition`). 0x1D7 and up.
+# Composition and the interval (`..`, design principles 4.2). 0x1D7 and up.
 #/ Neither reading of `..` takes these operands: they are not two functions and not two integers.
 semantic	CompOperandMismatch	0x0001E1	error	'..' takes two functions or two integers; the left operand is '{0}' and the right one '{1}'.	'..' has two readings (design principles 4.2). Between two functions it is the composition `f..g`, the lambda `(x) => g(f(x))`: 'f' is unary and 'g' takes what 'f' returns, so a call of `f..g` is a call of that lambda and nothing more. Between two integers it is the interval `a..b`: the integers from 'a' to 'b - 1' as the array 'int[]', left closed and right open, as the slice 't[a:b]' is. Nothing else is composed.	none: choice: the repair is a decision only the writer can make
 #/ The left operand of `..` is a function that takes more or fewer than one parameter.
 semantic	CompOperandNotUnary	0x0001E2	error	'..' composes a unary function on the left; '{0}' takes {1} parameters.	The composition `f..g` is the lambda `(x) => g(f(x))` (design principles 4.2): 'f' takes the one argument the composed function takes, and 'g' takes the result of 'f'. Write the lambda with the parameters you mean.	none: choice: the repair is a decision only the writer can make
-#/ An operand of `..` is the name of a generic function, and nothing at this position says which instance it stands for. The refusal names the operand and both ways to settle it (section generic-operands-of-composition of docs/handover/reviews/questions-2026-10-23.md).
+#/ An operand of `..` is the name of a generic function, and nothing at this position says which instance it stands for. The refusal names the operand and both ways to settle it (design principles 5.5).
 semantic	CompOperandGenericWithoutType	0x0001E4	error	'..' composes two functions, and its {0} operand, the generic function '{1}', has no instance here: write its type arguments ('{1}::<int>'), or give the whole expression an expected function type.	The name of a generic function stands for no one function until a position fixes its types (design principles 5.5). The composition `f..g` is the lambda `(x) => g(f(x))` (design principles 4.2), and the type the whole expression is expected to have is what gives that lambda its parameter type and instantiates what it calls: `let h: (x: int) => int = ident..ident` composes `ident::<int>`, as `(x) => ident(ident(x))` does under the same type. With no expected function type, write the instance each operand is: `ident::<int>..ident::<int>`. Only a name that is generic is refused here; an operand of a type `..` cannot take stays CompOperandMismatch.	none: choice: which instance the operand stands for is the writer's to say, and the help names both ways to settle it
 #/ The interval of two integers is written `a..b` and nothing else: the two-parameter `range(a, b)`
 #/ the language used to have is gone (design principles 4.2).
-#/ `range(a, b, 0)` is no sequence at all: the step never moves (design principles 4.2; the
-#/ rule on ` -interval-step-form`, which makes a step of 0 a fault
-#/ and a constant one a compile-time error).
-semantic	RangeStepZero	0x0001E6	error	The range 'range({0}, {1}, 0)' has a step of 0, so it is no sequence of integers.	The integers of `range(a, b, step)` are `a`, `a + step`, ... below `b`, so the step decides which integers the range holds: a step that does not move names no one sequence, whatever the bounds are (design principles 4.2; the author's ruling of 2026-10-24 on `h426-interval-step-form`). The step is a constant here, so the call can never be right and the refusal is at the call, where the step is written. Give a non-zero step, or write the interval `a..b` when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).	none: choice: which step the range takes is the writer's to say, and the message names both a stepped range and the interval
+#/ `range(a, b, 0)` is no sequence at all: the step never moves (design principles 4.2,
+#/ which makes a step of 0 a fault and a constant one a compile-time error).
+semantic	RangeStepZero	0x0001E6	error	The range 'range({0}, {1}, 0)' has a step of 0, so it is no sequence of integers.	The integers of `range(a, b, step)` are `a`, `a + step`, ... below `b`, so the step decides which integers the range holds: a step that does not move names no one sequence, whatever the bounds are (design principles 4.2). The step is a constant here, so the call can never be right and the refusal is at the call, where the step is written. Give a non-zero step, or write the interval `a..b` when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).	none: choice: which step the range takes is the writer's to say, and the message names both a stepped range and the interval
 #/ A subscript slice with a constant step of 0 takes no element: `t[a:b:0]` (design principles 5.4;
 #/ the step of a slice follows the same rule the step of a range does).
 semantic	SliceStepZero	0x0001E9	error	The slice 't[a:b:s]' has a step of 0, so it takes no element at all, whatever its bounds are.	A slice takes every step-th element from its start, so the step decides which elements it has: with a positive step 'a', 'a + step', ... below 'b', and with a negative one backwards from the start. A step that does not move names no slice, so a constant step of 0 is refused where it is written (design principles 5.4). Give a non-zero step, or write 't[a:b]' when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).	none: choice: which step the slice takes is the writer's to say, and the message names both the stepped slice and the plain one
@@ -554,9 +550,9 @@ semantic	RuleWithArgumentNotConstant	0x0001F0	error	The value bound to the `with
 # semantic space instead of being placed next to a group that has no room left.
 #/ The resources a body uses are not within what its `pure`/`uses` signature promises.
 semantic	UsesPromiseViolated	0x0001F1	error	'{0}' does not keep its resource promise: {1}.	A signature is a promise the compiler checks against the resources the function uses. 'uses' is an upper bound, so every resource the body uses must be named there, and 'pure' promises the empty set; a 'var' parameter is a resource by itself, and so is a capture. Change the body so that it no longer reaches for it, or change the signature to name it.	none: choice: the repair is a decision only the writer can make
-# What the item-5 clearance named, where the rule itself can be said: 0x1F2 and up. The
-# constructs with no ruling left the grammar and are ordinary syntax errors instead; these four
-# are language rules, so each one names the rule rather than saying "not supported".
+# Where the rule itself can be said: 0x1F2 and up. Constructs that left the grammar are
+# ordinary syntax errors instead; these four are language rules, so each one names the rule
+# rather than saying "not supported".
 #/ A type that mentions itself through a collection.
 semantic	TypeAliasRecursionUnrepresented	0x0001F2	error	The type '{0}' mentions itself through a collection: recursion through an array, a map, a set or an enum is admitted by the language, and this compiler does not have that representation.	A type may reach itself indirectly, through an array, a map, a set or an enum (design principles 5.2), and the shape that needs is not built here: write the type without mentioning itself. Containing itself directly, as a struct field of its own type, is a different error: `ModuleTypeCycle`.	none: context: the repair is a second declaration, or a shape spread over more than one type
 #/ An `enum` written where a type is expected.

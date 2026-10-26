@@ -252,7 +252,7 @@ enum class SemanticDiag : uint32_t {
     // tensor keeps the element type it is written with, so nothing rewrites it and there is no
     // such diagnostic. The code is not reused.
 
-    // Applicability conditions (`when`, design principles 5.13; handover). 0x1A8 and up.
+    // Applicability conditions (`when`, design principles 4.4). 0x1A8 and up.
     /// The condition's value is not a bool.
     WhenConditionNotBool = 0x0001A8,
     /// The condition is not a compile-time predicate the compiler can evaluate.
@@ -265,8 +265,8 @@ enum class SemanticDiag : uint32_t {
     WhenConditionUnmet    = 0x0001AC,
     EffectInRuleCondition = 0x0001AD,
 
-    // Defaults of `with` parameters and `with` arguments given by name (design principles 4.4,
-    // handover). 0x1B7 to 0x1BE; 0x1BF and up belong to `when` predicate lookup.
+    // Defaults of `with` parameters and `with` arguments given by name (design principles 4.4).
+    // 0x1B7 to 0x1BE; 0x1BF and up belong to `when` predicate lookup.
     /// A named `with` argument does not name a `with` parameter of the callee.
     WithArgumentUnknown = 0x0001B7,
     /// A `with` parameter is given twice, once by position and once by name.
@@ -284,7 +284,7 @@ enum class SemanticDiag : uint32_t {
     /// A `with` argument is given by name in a binding used as a function value.
     WithArgumentInValue = 0x0001BE,
 
-    // Predicate lookup in a `when` condition (design principles 5.13, 10.2). 0x1BF and up.
+    // Predicate lookup in a `when` condition (design principles 4.4, 10.2). 0x1BF and up.
     /// A predicate another module declares, but this module does not import it.
     WhenPredicateNotImported = 0x0001BF,
     /// A name an import brings exists, but it is not a generic function answered at compile time.
@@ -299,8 +299,7 @@ enum class SemanticDiag : uint32_t {
     // Body-less declarations: 0x17E and up.
     /// Two generic declarations of one name can take the same call (rule 2).
     NativeDeclarationOverlap = 0x000180,
-    // The rule on same-named `#impl` declarations split by their
-    // conditions (`docs/handover/reviews/questions-2026-10-23.md`, "impl-declaration-arms"): two
+    // Same-named `#impl` declarations split by their conditions (design principles 4.4): two
     // same-named declarations whose `when` conditions are mutually exclusive are overloads and may
     // stand side by side; a type that satisfies both is this overlap. The conditions are asked about
     // every type the compiler registers, and a condition it cannot answer leaves the pair refused by
@@ -370,19 +369,17 @@ enum class SemanticDiag : uint32_t {
     /// An argument at a call has a type the parameter it fills does not take.
     ParamArgumentWrongType = 0x0001D6,
 
-    // Composition and the interval (`..`, design principles 4.2
-    // on ` -generator-and-composition`). 0x1D7 and up.
+    // Composition and the interval (`..`, design principles 4.2). 0x1D7 and up.
     /// Neither reading of `..` takes these operands: they are not two functions and not two integers.
     CompOperandMismatch = 0x0001E1,
     /// The left operand of `..` is a function that takes more or fewer than one parameter.
     CompOperandNotUnary = 0x0001E2,
-    /// An operand of `..` is the name of a generic function, and nothing at this position says which instance it stands for. The refusal names the operand and both ways to settle it (section generic-operands-of-composition of docs/handover/reviews/questions-2026-10-23.md).
+    /// An operand of `..` is the name of a generic function, and nothing at this position says which instance it stands for. The refusal names the operand and both ways to settle it (design principles 5.5).
     CompOperandGenericWithoutType = 0x0001E4,
     /// The interval of two integers is written `a..b` and nothing else: the two-parameter `range(a, b)`
     /// the language used to have is gone (design principles 4.2).
-    /// `range(a, b, 0)` is no sequence at all: the step never moves (design principles 4.2; the
-    /// rule on ` -interval-step-form`, which makes a step of 0 a fault
-    /// and a constant one a compile-time error).
+    /// `range(a, b, 0)` is no sequence at all: the step never moves (design principles 4.2,
+    /// which makes a step of 0 a fault and a constant one a compile-time error).
     RangeStepZero = 0x0001E6,
     /// A subscript slice with a constant step of 0 takes no element: `t[a:b:0]` (design principles 5.4;
     /// the step of a slice follows the same rule the step of a range does).
@@ -424,9 +421,9 @@ enum class SemanticDiag : uint32_t {
     // semantic space instead of being placed next to a group that has no room left.
     /// The resources a body uses are not within what its `pure`/`uses` signature promises.
     UsesPromiseViolated = 0x0001F1,
-    // What the item-5 clearance named, where the rule itself can be said: 0x1F2 and up. The
-    // constructs with no ruling left the grammar and are ordinary syntax errors instead; these four
-    // are language rules, so each one names the rule rather than saying "not supported".
+    // Where the rule itself can be said: 0x1F2 and up. Constructs that left the grammar are
+    // ordinary syntax errors instead; these four are language rules, so each one names the rule
+    // rather than saying "not supported".
     /// A type that mentions itself through a collection.
     TypeAliasRecursionUnrepresented = 0x0001F2,
     /// An `enum` written where a type is expected.
