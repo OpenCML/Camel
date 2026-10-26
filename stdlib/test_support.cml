@@ -25,3 +25,17 @@ export func rendezvous(parties: int, timeout: float): int uses rendezvous_point
 /// threads a run creates.
 /// @example thread_count()    // 1 at -t 1
 export func thread_count(): int uses process
+
+/// `base * 10000 + step * 100 + mode`: the three `with` values the call ended with, the defaults of
+/// the parameters it left out among them. A native operator with a generic declaration, for the
+/// tests that pin where the names and the defaults of a call come from.
+/// @example with_probe<1>(0)    // 11000
+with <base: int, step: int = 10, mode: int = 0>
+export func with_probe::<T>(x: T): int
+
+/// The same for an array: the number plus the length of the array, so a test reads which of the two
+/// declarations of the name a call reached.
+/// @example with_probe<1>([5, 6])    // 11002
+#op('test_support:with_probe_array')
+with <base: int, step: int = 10, mode: int = 0>
+export func with_probe(xs: int[]): int

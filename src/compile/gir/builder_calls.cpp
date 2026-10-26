@@ -1036,6 +1036,9 @@ const std::vector<std::optional<Builder::ParameterDefaultValue>> *Builder::defau
         for (const auto &[entryUri, resolver] :
              std::get<oper_group_ptr_t>(target)->resolvers()) {
             FunctionType *fixed = resolver ? resolver->fixedSignature() : nullptr;
+            if (fixed == nullptr && resolver) {
+                fixed = resolver->declaredSignature(); // a generic declaration is one too
+            }
             if (fixed == nullptr) {
                 continue;
             }
@@ -1299,6 +1302,11 @@ void Builder::bindNamedArgumentsToDeclarations(
             continue;
         }
         const std::optional<std::string> name = agreedName(p);
+        if (name.has_value() && isWith && anyDeclarationDefaults(set, p, isWith)) {
+            // A position a declaration of the set defaults: the call leaves it out, and the
+            // declaration the arguments choose gives it its default (completeWithFor).
+            continue;
+        }
         if (!name.has_value() || anyDeclarationDefaults(set, p, isWith)) {
             const Argument &input = firstNamed();
             diags_->of(calleeDiag).atOrigin(input.expr->origin()).commit(*input.name, label);
@@ -1311,10 +1319,67 @@ void Builder::bindNamedArgumentsToDeclarations(
         throw BuildAbortException();
     }
     std::vector<Argument> ordered(slots);
+    for (size_t p = 0; p < slots; ++p) {
+        if (!taken[p]) {
+            // A stand-in of type void until the declaration is known (completeWithFor).
+            node_handle_t none = currGraph_->addStaticDataNode(Data::null());
+            registerNodeOrigin(context_, none, call, "gir.data.static.paramdefault");
+            ordered[p] = Argument{none, call, std::nullopt, true};
+        }
+    }
     for (size_t at = 0; at < written; ++at) {
         ordered[position[at]] = inputs[at];
     }
     inputs = std::move(ordered);
+}
+
+bool Builder::completeWithFor(
+    const void *owner, const std::string &uri, FunctionType *signature,
+    std::vector<Argument> &inputs, camel::core::type::type_vec_t &types) {
+    const size_t arity = signature->withTypesCount();
+    if (inputs.size() > arity) {
+        return false;
+    }
+    const std::vector<std::optional<ParameterDefaultValue>> *defaults = nullptr;
+    if (const auto found = defaults_.find(owner); found != defaults_.end()) {
+        defaults = &found->second.with;
+    } else if (const auto native = nativeDefaults_.find(uri); native != nativeDefaults_.end()) {
+        defaults = &native->second.with;
+    }
+    std::vector<Argument> completed(inputs);
+    completed.resize(arity);
+    for (size_t i = 0; i < arity; ++i) {
+        const bool written = i < inputs.size() && !inputs[i].left;
+        if (written) {
+            continue;
+        }
+        if (defaults == nullptr || i >= defaults->size() || !(*defaults)[i].has_value()) {
+            return false;
+        }
+        // The default is one constant of the declaration: a static node holding it, shared by the
+        // calls of one graph that leave the parameter out (as bindArguments makes it).
+        const ParameterDefaultValue &value = *(*defaults)[i];
+        node_handle_t dataNode{};
+        if (const auto graph = defaultNodes_.find(currGraph_.get()); graph != defaultNodes_.end()) {
+            if (const auto found = graph->second.find(value.expr); found != graph->second.end()) {
+                dataNode = found->second;
+            }
+        }
+        if (dataNode == nullptr) {
+            dataNode = currGraph_->addStaticDataNode(value.data);
+            rememberConstant(dataNode, value.data);
+            registerNodeOrigin(context_, dataNode, value.expr, "gir.data.static.paramdefault");
+            defaultNodes_[currGraph_.get()][value.expr] = dataNode;
+        }
+        completed[i] = Argument{dataNode, value.expr, std::nullopt, false};
+    }
+    types.clear();
+    for (const Argument &input : completed) {
+        types.push_back(input.node == nullptr ? Type::Void()
+                                              : valueTypeOf(nodeTypeOf(input.node)));
+    }
+    inputs = std::move(completed);
+    return true;
 }
 
 void Builder::bindArguments(

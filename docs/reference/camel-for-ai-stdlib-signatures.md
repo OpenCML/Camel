@@ -291,7 +291,7 @@ is_bool: () => bool
 is_plain: () => bool
 ```
 
-**`array`** — import { ... } from array — 39 name(s)
+**`array`** — import { ... } from array — 33 name(s)
 
 ```text
 argsort: (keys: i32[]) => int[]
@@ -339,18 +339,12 @@ max: (xs: T[]) => T? when is_ordered::<T>()
 flat_map: <f: (x: T) => U[]> (xs: T[]) => U[]
 sort_by: <key: (x: T) => K> (xs: T[]) => T[]
 zip_with: <f: (a: T, b: U) => V> (xs: T[], ys: U[]) => V[]
-sum: <axis: int> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
-sum: <axis: int, keepdims: bool> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
-mean: <axis: int> (xs: T[..]) => T[..] when is_float::<T>()
-mean: <axis: int, keepdims: bool> (xs: T[..]) => T[..] when is_float::<T>()
-min: <axis: int> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
-min: <axis: int, keepdims: bool> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
-max: <axis: int> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
-max: <axis: int, keepdims: bool> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
-argmax: <axis: int> (xs: T[..]) => int[..] when is_integer::<T>() || is_float::<T>()
-argmax: <axis: int, keepdims: bool> (xs: T[..]) => int[..] when is_integer::<T>() || is_float::<T>()
-argmin: <axis: int> (xs: T[..]) => int[..] when is_integer::<T>() || is_float::<T>()
-argmin: <axis: int, keepdims: bool> (xs: T[..]) => int[..] when is_integer::<T>() || is_float::<T>()
+sum: <axis: int, keepdims: bool = false> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
+mean: <axis: int, keepdims: bool = false> (xs: T[..]) => T[..] when is_float::<T>()
+min: <axis: int, keepdims: bool = false> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
+max: <axis: int, keepdims: bool = false> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
+argmax: <axis: int, keepdims: bool = false> (xs: T[..]) => int[..] when is_integer::<T>() || is_float::<T>()
+argmin: <axis: int, keepdims: bool = false> (xs: T[..]) => int[..] when is_integer::<T>() || is_float::<T>()
 shape: (xs: T[..]) => int[]
 numel: (xs: T[..]) => int
 dim: <axis: int> (xs: T[..]) => int
@@ -656,11 +650,13 @@ unordered_foreach: <f: (item: T) => void> (xs: T[]) => void
 unordered_reduce: <f: (acc: T, item: T) => T, initial: T> (xs: T[]) => T
 ```
 
-**`test_support`** — import { ... } from test_support — 2 name(s)
+**`test_support`** — import { ... } from test_support — 4 name(s)
 
 ```text
 rendezvous: (parties: int, timeout: float) => int uses rendezvous_point
 thread_count: () => int uses process
+with_probe: <base: int, step: int = 10, mode: int = 0> (x: T) => int
+with_probe: <base: int, step: int = 10, mode: int = 0> (xs: int[]) => int
 ```
 
 **`this`** — import { ... } from this — 1 name(s)

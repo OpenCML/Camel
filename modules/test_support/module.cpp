@@ -41,6 +41,9 @@ bool TestSupportModule::load() {
             {"rendezvous", false},
             // Reads the threads of this process.
             {"thread_count", false},
+            // Reads its with arguments and nothing else.
+            {"with_probe", true},
+            {"with_probe_array", true},
         });
     // What each touches (docs/design/op-semantics 8): the one meeting point of the process, and
     // the process itself. The declaration module names the same two resources.

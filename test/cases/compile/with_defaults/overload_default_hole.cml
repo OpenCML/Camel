@@ -1,8 +1,7 @@
 /**
- * A call of several declarations fills no default, and the rule is one rule for the two lists:
- * `rounds` has a default in both declarations of `show`, but a default is written by one
- * declaration, and `show<label: 'p'>` does not
- * say which one it means (design principles 4.4).
+ * A parameter a call leaves out between named ones takes the default of the declaration the call
+ * means, for the two lists alike: `rounds` has a default in both declarations of `show`, and
+ * `show<label: 'p'>(3)` reaches the one whose ordinary parameter takes the 3 (design principles 4.4).
  */
 module with_overload_default_hole
 
