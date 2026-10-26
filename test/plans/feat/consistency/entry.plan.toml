@@ -125,7 +125,7 @@ assert(diags.length === 1, input.stderr)
 const d = diags[0]
 assert(d.data.name === 'RuntimeDiag::UnhandledError' && d.code === '0x04000051', input.stderr)
 assert(d.severity === 'Error' && d.data.stage === 'run', input.stderr)
-assert(d.range.start.line === 8 && d.range.start.character === 14, JSON.stringify(d.range))
+assert(d.range.start.line === 7 && d.range.start.character === 14, JSON.stringify(d.range))
 assert(d.data.modulePath.endsWith('error_thrown.cml'), d.data.modulePath)
 """
 

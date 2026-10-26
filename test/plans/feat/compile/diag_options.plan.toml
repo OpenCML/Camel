@@ -174,7 +174,7 @@ verify_script = """
 const diags = JSON.parse(input.stdout)
 assert(diags.length === 4, '4 diagnostics, got ' + diags.length)
 assert(diags.every((d) => d.data.name === 'SemanticDiag::UnresolvedReference'), 'all unresolved references')
-assert(diags[3].range.start.line === 9, 'fourth error on line 10, got ' + (diags[3].range.start.line + 1))
+assert(diags[3].range.start.line === 8, 'fourth error on line 9, got ' + (diags[3].range.start.line + 1))
 """
 timeout_ms = 8000
 
@@ -209,7 +209,7 @@ assert(Array.isArray(d.relatedInformation) && d.relatedInformation.length === 1,
 const r = d.relatedInformation[0]
 assert(r.message.includes("in the instance 'twice<int[]>' of the generic function 'twice' with T = int[]"), r.message)
 assert(r.location.path.endsWith('sem_generic_instance.cml'), r.location.path)
-assert(r.location.range.start.line === 9 && r.location.range.start.character === 17, JSON.stringify(r.location.range))
+assert(r.location.range.start.line === 7 && r.location.range.start.character === 17, JSON.stringify(r.location.range))
 assert(typeof d.data.suggestion === 'string' && d.data.suggestion.length > 0, 'the suggestion is in data')
 """
 timeout_ms = 8000

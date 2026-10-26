@@ -192,7 +192,7 @@ expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
 expect_stdout_starts_with = "before\n"
 verify_script = """
 assert(input.diagnostics.length === 1, `one diagnostic expected, got ${input.diagnostics.length}`)
-assert([10, 11].includes(input.diagnostics[0].line), `line ${input.diagnostics[0].line}`)
+assert([9, 10].includes(input.diagnostics[0].line), `line ${input.diagnostics[0].line}`)
 """
 
 # --- indexing -----------------------------------------------------------------------------

@@ -1395,7 +1395,7 @@ const lines = out.split('\n')
 const nulls = lines.filter((l) => l.includes('label="null"') && l.includes('type="DATA"'))
 const typed = nulls.filter((l) => l.includes('value_type="int?"'))
 assert(typed.length === 1, 'one null constant of the position\'s type, got ' + typed.length + ': ' + nulls.join(' | '))
-assert(typed[0].includes('span="16:16-16:20"'), "the constant stands where the default is written: " + typed[0])
+assert(typed[0].includes('span="15:16-15:20"'), "the constant stands where the default is written: " + typed[0])
 const id = typed[0].trim().split(' ')[0]
 assert(out.split(id + ' ->').length - 1 === 2, 'both calls that leave the parameter out read that one node')
 }

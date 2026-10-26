@@ -110,7 +110,7 @@ const d = diags[0]
 assert(d.data.name === 'RuntimeDiag::TranslationRefused' && d.data.stage === 'pass:std::cpp', `unexpected diagnostic ${d.data.name} at stage ${d.data.stage}`)
 assert(d.code === '0x0400000B', `code ${d.code}`)
 assert(d.message.includes("function 'main' uses the operator 'tensor:ones' on a value of type 'int[]'"), `unexpected message: ${d.message}`)
-assert(d.range.start.line === 15 && d.range.start.character === 18 && d.range.end.line === 15, `unexpected range ${JSON.stringify(d.range)}`)
+assert(d.range.start.line === 14 && d.range.start.character === 18 && d.range.end.line === 14, `unexpected range ${JSON.stringify(d.range)}`)
 }
 """
 timeout_ms = 8000
