@@ -987,6 +987,22 @@ class GCGraph : public camel::core::rtdata::Object {
     mutable std::atomic<class ExecPlan *> execPlan_{nullptr};
 };
 
+/// Which of a FUNC node's callee's captured variables the call writes, as a bit per capture of
+/// the callee's capture table in the order its captures were made (GCFuncRef::reserved). It is
+/// what the value the call hands on carries the new version of, so the builder that made the
+/// node and every reader of it agree on the same set. 0 for a node without a FUNC payload.
+uint32_t funcWriteMaskOf(const GCGraph &graph, gc_node_ref_t ref);
+
+/// The type of the value a FUNC node hands on: the callee's exit type alone when the callee
+/// writes no captured variable, and otherwise the tuple of the exit value (absent for a `void`
+/// exit) and the new version of each written variable, in the callee's capture order (the
+/// callee's capture ports, after its declared `with` ports). A `void` callee that writes
+/// exactly one variable has that version for its value, not a tuple of one element: the version
+/// of a variable is a cell, and that is what a read of it takes. Builder::callValueTypeOf
+/// decides the same thing where the node is made; this is the same rule read back from a
+/// frozen graph, which is what the box check and the backends have.
+camel::core::type::Type *callValueTypeOf(const GCGraph &callee, uint32_t writtenCaptures);
+
 /// The draft payload of the LOOP node `ref` of a frozen graph: the graphs its GCLoopRef names.
 inline GCLoopBody loopBodyOf(const GCGraph &graph, gc_node_ref_t ref) {
     return GCLoopBody{
