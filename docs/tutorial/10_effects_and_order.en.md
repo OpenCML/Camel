@@ -407,7 +407,7 @@ camel docs/tutorial/examples/10_uses_beyond.cml
 ```
 
 ```text
-error[SemanticDiag::UsesPromiseViolated]: '() => int uses db' does not keep its resource promise: an effect outside the program, stdout.
+error[SemanticDiag::UsesPromiseViolated]: '() => int uses db' does not keep its resource promise: stdout.
    --> docs/tutorial/examples/10_uses_beyond.cml:8:1
     |
   8 | func stamp(): int uses db sync {
