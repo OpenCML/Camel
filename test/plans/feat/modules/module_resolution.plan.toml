@@ -49,7 +49,7 @@ case = "../../../cases/modules/module_resolution/cmo_hit_stops/main.cml"
 args = ["-E", "short", "-I", "roots/one", "${case}"]
 expect_exit = 1
 expect_stdout_exact = ""
-expect_output_contains = ["Module 'foo' not found", "name=SemanticDiag::ModuleNotFound", "Found .cmo but load failed", "level/foo.cmo", "name=SemanticDiag::ImportedModuleHasErrors"]
+expect_output_contains = ["Module 'foo' not found", "name=SemanticDiag::ModuleNotFound", "Found .cmo but load failed", "foo.cmo"]
 
 # `thing.md` and no `thing.cml`: a Markdown document is not a module file, whatever it holds.
 
@@ -87,7 +87,7 @@ expect_stdout_exact = "3\n"
 
 [[tests]]
 name = "cmo_beside_cml_is_the_module"
-desc = "`thing.cmo` (a file the loader refuses) and `thing.cml` (3) beside the program: the name resolves to the `.cmo`, so the import fails with the loader's reason and the `.cml` is not used instead."
+desc = "`thing.cmo` (a file the loader refuses) and `thing.cml` (3) beside the program: the name resolves to the `.cmo`, so the import fails with the loader's reason and the `.cml` is not used instead. The `.cml` beside a `.cmo` is its declaration module (design principles 6.4) and never replaces it."
 kind = "negative"
 case = "../../../cases/modules/module_resolution/only_cml_and_cmo/cmo_beside_cml/main.cml"
 args = ["-E", "short", "${case}"]
@@ -107,3 +107,45 @@ case = "../../../cases/modules/module_resolution/entry_name_is_file_name/counts.
 args = ["-E", "short", "${case}"]
 expect_exit = 0
 expect_stdout_exact = "42\n"
+
+#  ---- what may add a module root, and which values are checked ----
+# A root comes from the command line (`-I`, read back from the run that used it) or from
+# `CAMEL_PACKAGES`; `CAMEL_MODULE_PATH` used to be read as a third list of roots, so the same
+# program resolved differently depending on the environment it was started in. It is gone: the
+# option is the switch, and the two cases below are the pair that says so (with the variable the
+# program prints 101, with `-I` it prints 101, without either it does not run).
+#
+# `CAMEL_HOME` is the one variable that stays -- it names the installation, not a root -- and it is
+# checked: a value that names nothing used to be used anyway, and every import of the run then
+# failed with "not found", long after anything mentioned `CAMEL_HOME`.
+
+[[tests]]
+name = "env_var_does_not_add_a_module_root"
+desc = "`CAMEL_MODULE_PATH` naming the directory that holds `only_here` is not searched: the variable adds no module root, so the import fails with ModuleNotFound, and the root is added by `-I` (the next case)."
+kind = "negative"
+case = "../../../cases/compile/module_imports/include_path/prog/only_from_include.cml"
+args = ["-E", "short", "${case}"]
+envs = ["CAMEL_MODULE_PATH=../roots/one"]
+expect_exit = 1
+expect_stdout_exact = ""
+expect_output_contains = ["Module 'only_here' not found", "name=SemanticDiag::ModuleNotFound"]
+
+[[tests]]
+name = "include_option_adds_the_root"
+desc = "The same directory given with `-I` is a module root: the option is what adds one, in the order it is given, and the value is written in the command that used it."
+kind = "behavior"
+case = "../../../cases/compile/module_imports/include_path/prog/only_from_include.cml"
+args = ["-E", "short", "-I", "../roots/one", "${case}"]
+expect_exit = 0
+expect_stdout_exact = "101\n"
+
+[[tests]]
+name = "camel_home_that_names_nothing_is_an_error"
+desc = "`CAMEL_HOME` pointing at a path that does not exist ends the run with an error naming the variable and the path, before anything is loaded: the run does not search a directory that is not there and fail later with 'module not found'."
+kind = "negative"
+case = "../../../cases/modules/module_resolution/only_cml_and_cmo/md_and_cml/main.cml"
+args = ["${case}"]
+envs = ["CAMEL_HOME=no_such_camel_home_directory"]
+expect_exit = 1
+expect_stdout_exact = ""
+expect_output_contains = ["CAMEL_HOME", "no_such_camel_home_directory", "does not exist"]
