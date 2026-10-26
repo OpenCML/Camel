@@ -24,6 +24,7 @@
 
 #include <algorithm>
 #include <format>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
@@ -2965,7 +2966,14 @@ std::make_shared<StaticCheckedResolver>(
 
 GlobalsBuiltinModule::GlobalsBuiltinModule(context_ptr_t ctx) : BuiltinModule("", ctx) {
     registerBuiltinOperatorTraits();
-    registerBuiltinDerivatives();
+    // The core's reverse-mode rules and tangent spaces are the same in every context, and the
+    // registry is one per process: registering them on every construction rewrote what the modules
+    // already put there. In particular a second context in the same process used to clear the
+    // tensor module's subset tangent space (and to overwrite its `:op/idx_take` rule), which the
+    // module registers once and can never take back (C24, AD/H1). Once per process, like the
+    // modules' own registration.
+    static std::once_flag builtinDerivatives;
+    std::call_once(builtinDerivatives, [] { registerBuiltinDerivatives(); });
     // The operators over Map and Set (design principles 11.3). Those named like a group of
     // this module (`len`, `contains`, `__idx__`, `__eq__`, `__neq__`) are further overloads
     // of it: one group is exported per name, the existing overloads first.
