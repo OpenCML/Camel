@@ -75,6 +75,30 @@ inline const GCNode *requireNode(const GCGraph *graph, gc_node_ref_t nodeRef) {
     return node;
 }
 
+/// What a FUNC node hands on: the callee's result alone, unless the callee writes captured
+/// variables, and then the tuple of the result and the new version of each of them, in the
+/// callee's capture order. The versions are the call's With inputs, which the caller passes after
+/// the callee's declared `with` arguments; which captures those are is `GCFuncRef::reserved`.
+inline slot_t funcValueOf(
+    const GCGraph *graph, gc_node_ref_t nodeRef, const GCNode *node, GCGraph *calleeGraph,
+    Frame *callerFrame, slot_t result) {
+    if (node == nullptr || node->dataIndex == 0) {
+        return result;
+    }
+    const uint32_t written = funcWriteMaskOf(*graph, nodeRef);
+    if (written == 0) {
+        return result;
+    }
+    std::vector<slot_t> withValues;
+    const auto withInputs = graph->withInputsOf(nodeRef);
+    withValues.reserve(withInputs.size());
+    for (gc_node_ref_t input : withInputs) {
+        withValues.push_back(callerFrame->get<slot_t>(dataIndexOf(graph, input)));
+    }
+    return camel::execute::runtimeFuncValue(
+        node->dataType(), calleeGraph, written, withValues, result);
+}
+
 slot_t readForwardedRuntimeValue(GCGraph *graph, gc_node_ref_t nodeRef, Frame *frame) {
     ASSERT(graph != nullptr, "Taskflow forwarded-value read requires a graph.");
     ASSERT(frame != nullptr, "Taskflow forwarded-value read requires a frame.");
@@ -1560,7 +1584,7 @@ void TaskflowExecSchedPass::executeCallNode(
             camel::execute::fillFrameForDirectInvoke(frame, dest, graph, nodeRef);
         }
     });
-    frame->set(node->dataIndex, result);
+    frame->set(node->dataIndex, funcValueOf(graph, nodeRef, node, targetGraph, frame, result));
 }
 
 template <typename Fill>
@@ -2175,6 +2199,7 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
         ASSERT(targetGraph != nullptr, "Taskflow FUNC target graph is null.");
         Frame *calleeFrame = acquirePreparedRuntimeCallFrame(targetGraph, nodeRef, frame);
         slot_t result      = runPreparedSubgraph(sf, targetGraph, calleeFrame);
+        result             = funcValueOf(graph, nodeRef, node, targetGraph, frame, result);
         frame->set(node->dataIndex, result);
         return result;
     }
