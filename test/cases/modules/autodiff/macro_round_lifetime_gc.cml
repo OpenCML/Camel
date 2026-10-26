@@ -3,7 +3,7 @@
 // The differentiated tensor is the first `with` parameter of every loss.
 module autodiff_macro_round_lifetime_gc
 import { reshape, shape, sum, zeros } from tensor
-import { grad } from autodiff
+import { grad, vjp } from autodiff
 
 let weights = reshape([1.0, -2.0, 3.0, -4.0, 5.0, -6.0], [2, 3])
 func rule(x: f32[..], dy: f32[..]): f32[..] { return reshape(dy, [3, 2]) }

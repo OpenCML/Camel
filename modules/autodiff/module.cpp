@@ -27,21 +27,6 @@ namespace {
 /// module.
 constexpr std::string_view kVjpTag = "autodiff::vjp";
 
-void declareVjpTag() {
-    camel::core::attr::registerKey(kVjpTag, {.kind = camel::core::attr::ValueKind::Graph});
-    camel::core::tag::Decl decl;
-    decl.module = "autodiff";
-    decl.ident  = "vjp";
-    decl.name   = std::string(kVjpTag);
-    decl.on     = camel::core::tag::Func;
-    // The rule's signature is not fixed: the tag carries whatever function the rule name
-    // denotes, and this module's operators are what read it, in the shape they build.
-    decl.typeParams.push_back("F");
-    decl.when = "is_function::<F>()";
-    decl.params.push_back({"rule", "F"});
-    camel::core::tag::declare(std::move(decl));
-}
-
 class AutodiffExecutor : public Executor {
   public:
     explicit AutodiffExecutor(context_ptr_t ctx)
@@ -55,8 +40,10 @@ AutodiffModule::AutodiffModule(context_ptr_t ctx) : BuiltinModule("autodiff", ct
     for (const auto &group : camel::autodiff::operatorGroups()) {
         exportEntity(group->name(), group);
     }
-    declareVjpTag();
-    exportTag(std::string(kVjpTag));
+    // The tag is declared and exported by stdlib/autodiff.cml
+    // (`export tag vjp::<F>(rule: F) on func when is_function::<F>()`); what stays here is the
+    // fact the module reads it as, which a tag declaration cannot carry: the rule is a graph.
+    camel::core::attr::registerKey(kVjpTag, {.kind = camel::core::attr::ValueKind::Graph});
 }
 
 module_ptr_t AutodiffModule::create(context_ptr_t ctx) {

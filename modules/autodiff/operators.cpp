@@ -167,6 +167,12 @@ void registerOperatorMetadata() {
     camel::core::OperatorTable::instance().set(
         "autodiff:stop_gradient",
         {.pure = true, .elementwise = false});
+    // `stop_gradient` is declared in `stdlib/autodiff.cml`, and its clause (`pure`) is what the
+    // declaration says it touches: nothing. A native operator has to say the same thing here, so
+    // the two are compared instead of one being taken on faith (design principles 3.3).
+    camel::core::OperatorTable::instance().declareResources(
+        "autodiff",
+        {{"stop_gradient", camel::core::sem::ResourceSpec{}}});
     camel::core::DerivativeRegistry::instance().setRule(
         "autodiff:stop_gradient",
         camel::core::noGradient);

@@ -724,8 +724,11 @@ function readDeclarations(file, module) {
             // A pass declaration (design principles 9.3): a body-less function whose condition
             // is the pass applicability. A pass is a function the pipeline applies to the
             // program, not an operator the module registers; it is documented in docs/cli.md,
-            // and its parameters are the declaration's `with` list.
-            if (!declarationBody(after, lines, i) &&
+            // and its parameters are the declaration's `with` list. Only a compiled declaration
+            // can declare a pass: a file under stdlib/signatures/ is reference text that is never
+            // compiled, and describes operators the C++ resolver gives a computed type, where the
+            // same condition is the type's (`grad::<F>(f: F): Gradient<F> when is_function::<F>()`).
+            if (!relative.startsWith('stdlib/signatures/') && !declarationBody(after, lines, i) &&
                 /\bwhen\s+is_function::<\w+>\(\)\s*$/.test(after)) {
                 doc = []
                 withText = ''
