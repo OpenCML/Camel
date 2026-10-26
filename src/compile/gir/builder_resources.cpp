@@ -35,13 +35,6 @@ using sem::AccessMode;
 using sem::ResourceClass;
 using sem::ResourceSignature;
 
-// Two uses of one resource amount to the wider access: the same access stays itself, and Read with
-// Write is covered by no single access but ReadModifyWrite. Widening two writes into a
-// read-modify-write would make a measured set harder to cover than the uses it stands for.
-AccessMode uniteAccess(AccessMode left, AccessMode right) {
-    return left == right ? left : AccessMode::ReadModifyWrite;
-}
-
 // The bottom of a measurement: a body recorded as reaching nothing. Every body starts here, and no
 // body is ever below it. What a call answers about its result stays the conservative one: the walk
 // says which resources a body reaches, not what its result aliases.
@@ -83,7 +76,7 @@ ResourceSignature uniteReach(const ResourceSignature &a, const ResourceSignature
         if (found->name.empty()) {
             found->name = use.name;
         }
-        found->mode = uniteAccess(found->mode, use.mode);
+        found->mode = sem::uniteAccess(found->mode, use.mode);
     }
     for (const auto &use : b.ambient) {
         const auto found = std::find_if(united.ambient.begin(), united.ambient.end(),
@@ -92,7 +85,7 @@ ResourceSignature uniteReach(const ResourceSignature &a, const ResourceSignature
             united.ambient.push_back(use);
             continue;
         }
-        found->mode = uniteAccess(found->mode, use.mode);
+        found->mode = sem::uniteAccess(found->mode, use.mode);
     }
     united.captures.insert(united.captures.end(), b.captures.begin(), b.captures.end());
     united.anyOf.insert(united.anyOf.end(), b.anyOf.begin(), b.anyOf.end());
@@ -176,7 +169,7 @@ void Builder::addParamUse(BodyReach &walk, size_t index, sem::ResourceClass cls,
     if (found->name.empty()) {
         found->name = name;
     }
-    found->mode = uniteAccess(found->mode, mode);
+    found->mode = sem::uniteAccess(found->mode, mode);
 }
 
 void Builder::addAmbientUse(BodyReach &walk, const std::string &name, sem::AccessMode mode) const {
@@ -189,7 +182,7 @@ void Builder::addAmbientUse(BodyReach &walk, const std::string &name, sem::Acces
         out.ambient.push_back(ResourceSignature::AmbientUse{.name = name, .mode = mode});
         return;
     }
-    found->mode = uniteAccess(found->mode, mode);
+    found->mode = sem::uniteAccess(found->mode, mode);
 }
 
 bool Builder::readCalleeSignature(BodyReach &walk, const runtime::GraphDraft &draft,
