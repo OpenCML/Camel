@@ -327,6 +327,9 @@ void permuteInverseVjp(VjpBuilder &b, const VjpCall &call) {
 }
 
 /// slice_grad(dy, like, axis, start, end, step) pads dy into place; its gradient slices it out.
+/// The cut is the core's own slice node, the one `t[a:b:s]` and `slice(t, axis, a, b, s)` both
+/// build: a slice is a selection of positions along its axis, and cutting the padded value with
+/// the same bounds takes exactly the part the forward pass padded.
 void sliceGradVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 5, 6);
     if (auto g = b.gradientOf(call.output)) {
@@ -335,7 +338,7 @@ void sliceGradVjp(VjpBuilder &b, const VjpCall &call) {
             call.inputs[0],
             addTensorOper(
                 b,
-                "tensor:slice",
+                ":op/slice_sub",
                 {*g, call.inputs[2], call.inputs[3], call.inputs[4], step}));
     }
 }

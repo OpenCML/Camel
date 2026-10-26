@@ -99,7 +99,6 @@ tensor:set_num_threads,,
 tensor:shape,1,
 tensor:show,,
 tensor:sigmoid,1,
-tensor:slice,10,
 tensor:slice_grad,,11
 tensor:softmax,13,
 tensor:softmax_grad,,13

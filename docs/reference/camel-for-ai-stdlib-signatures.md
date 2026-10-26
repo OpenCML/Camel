@@ -190,7 +190,7 @@ tree_reduce: <f: (acc: R, leaf: A) => R> (t: T, init: R) => R
 tree_unzip: (r: R, s: S) => ?
 ```
 
-**`tensor`** — import { ... } from tensor — 70 name(s)
+**`tensor`** — import { ... } from tensor — 69 name(s)
 
 ```text
 new: (values: float[..] | number[]) => float[..]
@@ -228,7 +228,6 @@ unsqueeze: (t: float[..], axis: int) => float[..]
 transpose: (t: float[..]) => float[..]
 permute: (t: float[..], perm: int[]) => float[..]
 concat: (a: float[..] | number[], b: float[..] | number[], axis: int) => float[..]
-slice: (t: float[..], axis: int, start: int, end: int, step?: int) => float[..]
 take: (t: float[..], indices: int64[..] | number[]) => float[..]
 one_hot: (labels: int64[..] | number[], classes: int) => int64[..]
 shape: (t: T[..]) => int[] when is_numeric::<T>()

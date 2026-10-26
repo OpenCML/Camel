@@ -9,7 +9,7 @@
  */
 module index_semantics
 
-import { ones, reshape, transpose, permute, slice, sum, max, matmul, relu } from tensor
+import { ones, reshape, transpose, permute, sum, max, matmul, relu } from tensor
 import { max_pool2d } from nn
 import { unordered_reduce } from para
 

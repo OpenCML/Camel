@@ -1,13 +1,13 @@
 """A slice whose start depends on the model input faults on ONNX Runtime where Camel faults.
 
-ort_slice_start.cml slices x[int(sum(x)) : 3] on an axis of extent 3. The start is normalized
-from the end when it is negative, the accepted values are exactly [-3, 3], and the end before
-the start (or equal to it) is the empty range, not a fault (design principles 3.9). ONNX Slice
-alone clamps out-of-range bounds, so the exporter guards the interval it reads from the
-operator's index semantics declaration. This script checks every value at and just outside both
-edges, which separates the rule from an off-by-one interval or a clamped one, and checks the
-constant-bound path (where the declaration proves the bounds in range, so the bounds the
-program wrote go to a plain ONNX Slice).
+ort_slice_start.cml slices x[int(sum(x)) : 3] on an axis of extent 3. A bound is a position of
+the axis: the accepted values are 0 to 3, where 3 is the end and takes nothing, and a negative
+bound is a fault rather than a count from the end (design principles 3.9, the core's reading of
+its own slice node). ONNX Slice alone clamps out-of-range bounds, so the exporter guards the
+interval it reads from the operator's index semantics declaration. This script checks every
+value at and just outside both edges, which separates the rule from an off-by-one interval or a
+clamped one, and checks the constant-bound path (where the declaration proves the bounds in
+range, so the bounds the program wrote go to a plain ONNX Slice).
 
 Usage: python ort_slice_start.py   (needs numpy, onnx and onnxruntime)
 """
@@ -26,14 +26,14 @@ HERE = Path(__file__).resolve().parent
 REPO_ROOT = HERE.parents[3]
 PROGRAM = HERE / "ort_slice_start.cml"
 
-# (input, what the start becomes). n = 3, end = 3: the result is x[start:3], start negative
-# counting from the end. None: the start leaves [-3, 3] and Camel faults.
+# (input, what the start becomes). n = 3, end = 3: the result is x[start:3], a position from 0
+# to 3. None: the start leaves [0, 3] -- a negative one included -- and Camel faults.
 START_CASES = [
     ([3.0, 0.0, 0.0], 3),     # start = n: empty range at the end, not a fault
     ([1.0, 0.0, 0.0], 1),     # start = 1
     ([0.0, 0.0, 0.0], 0),     # start = 0
-    ([-2.0, 0.0, 0.0], -2),   # start = -2: 1 from the end
-    ([-3.0, 0.0, 0.0], -3),   # start = -n: the whole axis
+    ([-2.0, 0.0, 0.0], None),  # start = -2: a negative bound is a fault, not 1 from the end
+    ([-3.0, 0.0, 0.0], None),  # start = -3: the same, not the whole axis
     ([-4.0, 0.0, 0.0], None),  # start = -4 = -n - 1: Camel faults
     ([4.0, 0.0, 0.0], None),   # start = n + 1: Camel faults
     ([-5.0, 0.0, 0.0], None),  # start = -5: Camel faults
@@ -66,7 +66,7 @@ def main() -> int:
                 ok = got is None
                 what = "fails" if ok else f"returned {got.tolist()} where Camel faults"
             else:
-                want = x[start if start >= 0 else start + x.shape[0]:3]
+                want = x[start:3]
                 ok = got is not None and np.array_equal(got, want)
                 what = f"{None if got is None else got.tolist()}"
             print(f"start {values[0]}: {what} {'ok' if ok else 'FAIL'}")

@@ -1741,17 +1741,6 @@ a and b joined along axis; every other extent must agree.
 - Pure.
 - Example: `concat(new([[1.0]]), new([[2.0]]), 0)` gives `shape [2, 1]`
 
-#### `slice`
-
-```camel
-slice: (t: float[..], axis: int, start: int, end: int, step?: int) => float[..]
-```
-
-The elements start, start + step, ... of one axis before end; step is 1 by default.
-
-- Pure.
-- Example: `slice(new([1.0, 2.0, 3.0, 4.0]), 0, 1, 3)` gives `[2.0, 3.0]`
-
 #### `take`
 
 ```camel

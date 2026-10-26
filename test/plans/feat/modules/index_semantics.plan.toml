@@ -83,7 +83,7 @@ expect_output_not_contains = ["INDEX "]
 
 [[tests]]
 name = "instances"
-desc = "`camel inspect --instances` prints the instance of every operator node whose operator declares index semantics (runtime::instanceOf on the frozen graph: input types and static inputs). Shapes fixed by the types: matmul's (m, n, k) with k the reduction, fma_f32 and the K extents required equal; the broadcast bias reads (d1); transpose reads (d1, d0); a slice reads start + d0; reshape across axes linearizes and delinearizes; max with keepdims writes 0 on the reduced axis. An open extent is a parameter without a value; an unknown rank or two open extents that may broadcast give no instance (Q9). The sum in a function with @numeric(reassociate) may be regrouped and permuted, not without it; unordered_reduce's own Unordered law allows regrouping; max_pool2d excludes the window's elements outside the input."
+desc = "`camel inspect --instances` prints the instance of every operator node whose operator declares index semantics (runtime::instanceOf on the frozen graph: input types and static inputs). Shapes fixed by the types: matmul's (m, n, k) with k the reduction, fma_f32 and the K extents required equal; the broadcast bias reads (d1); transpose reads (d1, d0); the core's slice node reads start + d0; reshape across axes linearizes and delinearizes; max with keepdims writes 0 on the reduced axis. An open extent is a parameter without a value; an unknown rank or two open extents that may broadcast give no instance (Q9). The sum in a function with @numeric(reassociate) may be regrouped and permuted, not without it; unordered_reduce's own Unordered law allows regrouping; max_pool2d excludes the window's elements outside the input."
 kind = "behavior"
 case = "../../../cases/modules/tensor/index_semantics.cml"
 args = ["inspect", "--instances", "${case}"]
@@ -102,7 +102,7 @@ has(mm, 'norm 0   (d0, d2)'); has(mm, 'norm 1   (d2, d1)')
 has(mm, 'write    (d0, d1) combine law fma_f32')
 has(one('layers', 'tensor:add'), 'norm 1   (d1)')
 has(one('layers', 'tensor:transpose'), 'norm 0   (d1, d0)')
-has(one('layers', 'tensor:slice'), 'norm 0   (start + d0, d1)')
+has(one('layers', ':op/slice_sub'), 'norm 0   (start + d0, d1)')
 has(one('layers', 'tensor:reshape'), 'norm 0   ((2*d0 + d1) floordiv 4, (2*d0 + d1) mod 4)')
 has(one('layers', 'tensor:permute'), 'norm 0   (d1, d0)')
 const mx = one('layers', 'tensor:max_axis')
@@ -122,9 +122,12 @@ has(one('pooled', 'nn:max_pool2d'), 'norm 0   (d0, d1, stride*d2 + d4 - pad, str
 }
 """
 
+# 32 operators, not 33: the entry that cross-checked the module's slice kernel is gone with the
+# operator, and there is no module definition of the core's own slice node to compare a
+# declaration with. The core's slice is covered by the queries below and by the core's own cases.
 [[tests]]
 name = "declaration_evaluator"
-desc = "tensor::test_index_eval (test-only), the declaration evaluator of design section 12: for every declared tensor operator and nn's pooling, deterministic pseudo-random calls (empty, size-1 and broadcast axes, negative axes, absent optional arguments, NaN, infinities, signed zeros, subnormals, int64 and bool elements) are executed from the declaration alone (domain, access maps with their validity policies, write map, reduction law) and compared with the CPU kernel: the same bits (exp and log within their declared 2 ulp), or both faulting. Every map is checked for soundness on the way (reads in range, writes inside the result, a unique write written exactly once). The facts that give no instance are queried too: unknown rank, Q9 broadcasts, constants that are not constant, a slice step of 0, a slice bound out of range (a fault, design principles 3.9), mixed matmul dtypes. A slice whose bounds are known but whose axis extent is not now has an instance: its bounds enter the declaration as checks against [-n, n] (H4f), where it used to give none until the extent was known."
+desc = "tensor::test_index_eval (test-only), the declaration evaluator of design section 12: for every declared tensor operator and nn's pooling, deterministic pseudo-random calls (empty, size-1 and broadcast axes, negative axes, absent optional arguments, NaN, infinities, signed zeros, subnormals, int64 and bool elements) are executed from the declaration alone (domain, access maps with their validity policies, write map, reduction law) and compared with the CPU kernel: the same bits (exp and log within their declared 2 ulp), or both faulting. Every map is checked for soundness on the way (reads in range, writes inside the result, a unique write written exactly once). The facts that give no instance are queried too: unknown rank, Q9 broadcasts, constants that are not constant, a slice step of 0, a slice bound out of range or negative (a fault, design principles 3.9), mixed matmul dtypes. The core's own slice node, `:op/slice_sub`, has no module kernel left to be executed here (the module's slice is gone with its operator, and the query list below is what covers its declaration): a slice whose axis extent is not known still has an instance, its written bounds entering the declaration as checks against [0, n], and so does a backward one, which the core's reading accepts."
 kind = "behavior"
 case = "../../../cases/modules/tensor/index_semantics.cml"
 args = ["${case}", "tensor::test_index_eval"]
@@ -137,7 +140,7 @@ const out = input.normalized.stdout
 const lines = out.split('\n')
 assert(!out.includes('EVAL_MISMATCH'), lines.filter((l) => l.startsWith('EVAL_MISMATCH')).join(' | '))
 const ops = lines.filter((l) => l.startsWith('EVAL op='))
-assert(ops.length === 33, `${ops.length} operators evaluated`)
+assert(ops.length === 32, `${ops.length} operators evaluated`)
 for (const l of ops) {
   const f = Object.fromEntries(l.slice(5).split(' ').map((kv) => kv.split('=')))
   assert(f.cases === f.agree && f.unsound === '0' && Number(f.cases) >= 40, `${f.op}: ${l}`)
@@ -145,13 +148,13 @@ for (const l of ops) {
 const total = lines.find((l) => l.startsWith('EVAL total '))
 assert(total, 'no total line')
 const t = Object.fromEntries(total.slice(11).split(' ').map((kv) => kv.split('=')))
-assert(t.operators === '33' && t.cases === t.agree && Number(t.cases) >= 2500 && Number(t.points) >= 30000, total)
+assert(t.operators === '32' && t.cases === t.agree && Number(t.cases) >= 2500 && Number(t.points) >= 30000, total)
 assert(t.unsound === '0' && t.mismatches === '0' && t.undeclared === '0', total)
 for (const [check, result] of [
   ['broadcast_unknown_both', 'none'], ['broadcast_unknown_vs_known', 'none'], ['show_broadcast_unknown_alone', 'instance'],
   ['show_broadcast_unknown_vs_one', 'instance'], ['unknown_rank', 'none'], ['show_relu_unknown_extents', 'instance'],
   ['sum_axis_axis_not_constant', 'none'], ['show_sum_axis_unknown_extents', 'instance'], ['permute_not_constant', 'none'],
-  ['slice_unknown_extent', 'instance'], ['slice_unknown_extent_negative', 'instance'], ['show_slice', 'instance'], ['slice_out_of_range', 'none'], ['slice_step_zero', 'none'], ['reshape_unknown_input', 'none'],
+  ['slice_unknown_extent', 'instance'], ['slice_unknown_extent_negative', 'none'], ['show_slice', 'none'], ['show_slice_written', 'instance'], ['slice_out_of_range', 'none'], ['slice_backward', 'instance'], ['slice_step_zero', 'none'], ['reshape_unknown_input', 'none'],
   ['show_reshape', 'instance'], ['show_reshape_unit_axes', 'instance'], ['show_matmul_batched', 'instance'],
   ['matmul_batch_q9', 'none'], ['matmul_mixed_dtypes', 'none'], ['show_transpose', 'instance'], ['show_sum_to', 'instance'],
   ['show_max_pool2d', 'instance'], ['show_avg_pool2d_unknown_extents', 'instance'],

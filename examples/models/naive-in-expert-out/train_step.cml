@@ -23,7 +23,7 @@
 // the program itself reads no environment variable.
 module naive_in_expert_out
 
-import { argmax, exp, gelu, log, mean, one_hot, permute, randn, reshape, seed, shape, slice, sqrt as tensor_sqrt, sum, transpose } from tensor
+import { argmax, exp, gelu, log, mean, one_hot, permute, randn, reshape, seed, shape, sqrt as tensor_sqrt, sum, transpose } from tensor
 import { sqrt as scalar_sqrt } from math
 import { with_grad } from autodiff
 import { adam, adam_state, save_params } from nn

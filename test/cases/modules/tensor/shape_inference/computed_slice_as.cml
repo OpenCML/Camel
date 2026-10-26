@@ -1,5 +1,5 @@
 module shape_inference_computed_slice_as
-import { slice, reshape, sum } from tensor
+import { reshape, sum } from tensor
 func row(a: f32[1, 3]): float {
     return sum(a)
 }

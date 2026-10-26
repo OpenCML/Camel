@@ -9,7 +9,7 @@
  */
 module export_gated_gru_step
 
-import { sigmoid, tanh, slice, reshape, shape, zeros, mean, abs } from tensor
+import { sigmoid, tanh, reshape, shape, zeros, mean, abs } from tensor
 import { with_grad } from autodiff
 import { sgd } from nn
 import { export_model } from onnx

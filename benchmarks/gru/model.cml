@@ -6,7 +6,7 @@
  */
 module gru
 
-import { sigmoid, tanh, slice, reshape, shape, zeros, mean } from tensor
+import { sigmoid, tanh, reshape, shape, zeros, mean } from tensor
 import { grad, with_grad } from autodiff
 import { sgd, save_params } from nn
 import { get_env } from env
