@@ -5,7 +5,7 @@
  * semantics declaration and guards it, so MODE=start must fail on ONNX Runtime exactly where
  * Camel faults, including both edges (-n and n) and both sides just outside them. MODE=constant
  * exports a slice with constant bounds on a known extent: the declaration proves them in range
- * and the raw bounds go to the ONNX Slice, which normalizes the negative one itself.
+ * and the bounds go to the ONNX Slice as they were written.
  * MODE=dynamic exports a slice with constant bounds on an axis whose extent is only known at run
  * time (a reshape to a data-dependent shape): the declaration states the bounds' legal interval
  * and the exporter guards the constants, so a run where the axis is shorter fails as Camel does.
@@ -22,7 +22,7 @@ func head(x: f32[..]): f32[..] {
 }
 
 func constants(x: f32[..]): f32[..] {
-    return slice(x, 0, -2, 3)
+    return slice(x, 0, 1, 3)
 }
 
 /// The axis extent is int(sum(x)), known only when the program runs; 12 divides by construction

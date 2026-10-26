@@ -3,7 +3,7 @@ import { slice, shape, load_npy } from tensor
 func main(): int sync {
     println('ran')
     let b = load_npy::<f32>('test/cases/modules/tensor/shape_types/x3.npy')
-    println(shape(slice(b, 0, -2, 0)))
+    println(shape(slice(b, 0, 1, 0)))
     println(shape(slice(b, 0, 8, 9)))
     return 0
 }

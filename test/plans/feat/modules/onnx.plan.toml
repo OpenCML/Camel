@@ -1865,7 +1865,7 @@ timeout_ms = 240000
 
 [[tests]]
 name = "ort_slice_start"
-desc = "A slice whose start depends on the model input (x[int(sum(x)) : 3]) exported to ONNX: the start is normalized from the end when negative, the accepted values are exactly [-n, n], and an end at or before the start is the empty range. On ONNX Runtime every value at and just outside both edges gives the NumPy slice or fails where Camel faults, which separates the exporter's guard from an off-by-one interval or a clamp; a slice with constant bounds (x[-2 : 3]) exports as a plain ONNX Slice because the operator's index semantics declaration proves the bounds in range; and constant bounds on an axis whose extent is data-dependent (a reshape to a runtime shape) are guarded from the same declared interval, so runs with an axis too short for [1 : 3] fail where Camel faults."
+desc = "A slice whose start depends on the model input (x[int(sum(x)) : 3]) exported to ONNX: the start is normalized from the end when negative, the accepted values are exactly [-n, n], and an end at or before the start is the empty range. On ONNX Runtime every value at and just outside both edges gives the NumPy slice or fails where Camel faults, which separates the exporter's guard from an off-by-one interval or a clamp; a slice with constant bounds (x[1 : 3]) exports as a plain ONNX Slice because the operator's index semantics declaration proves the bounds in range; and constant bounds on an axis whose extent is data-dependent (a reshape to a runtime shape) are guarded from the same declared interval, so runs with an axis too short for [1 : 3] fail where Camel faults."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/modules/onnx/ort_slice_start.py"

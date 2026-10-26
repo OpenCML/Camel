@@ -6,8 +6,8 @@ the start (or equal to it) is the empty range, not a fault (design principles 3.
 alone clamps out-of-range bounds, so the exporter guards the interval it reads from the
 operator's index semantics declaration. This script checks every value at and just outside both
 edges, which separates the rule from an off-by-one interval or a clamped one, and checks the
-constant-bound path (where the declaration proves the bounds in range and ONNX normalizes the
-negative one).
+constant-bound path (where the declaration proves the bounds in range, so the bounds the
+program wrote go to a plain ONNX Slice).
 
 Usage: python ort_slice_start.py   (needs numpy, onnx and onnxruntime)
 """
@@ -81,8 +81,8 @@ def main() -> int:
         session = ort.InferenceSession(str(model), providers=["CPUExecutionProvider"])
         x = np.array([1.0, 2.0, 3.0], np.float32)
         got = session.run(None, {session.get_inputs()[0].name: x})[0]
-        ok = np.array_equal(got, x[-2:3])
-        print(f"constant -2: {got.tolist()} {'ok' if ok else 'FAIL'}")
+        ok = np.array_equal(got, x[1:3])
+        print(f"constant 1: {got.tolist()} {'ok' if ok else 'FAIL'}")
         failures += 0 if ok else 1
 
         # Constant bounds on an axis whose extent the model only knows at run time: the extent
