@@ -1,0 +1,16 @@
+module when_overloads_err_overlap
+
+import { is_float, is_numeric } from types
+
+func kind::<T>(x: T): string when is_float::<T>() {
+    return 'float'
+}
+
+func kind::<T>(x: T): string when is_numeric::<T>() {
+    return 'number'
+}
+
+func main(): int sync {
+    println(kind(1.5))
+    return 0
+}

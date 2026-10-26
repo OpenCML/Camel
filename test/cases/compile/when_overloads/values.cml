@@ -1,0 +1,20 @@
+/**
+ * Overloads whose conditions read a `with` value: no registered type separates them, so they are
+ * both declared, and a call where one condition holds takes that overload (design principles 4.4).
+ */
+module when_overloads_values
+
+with <fast: bool, wide: bool>
+func pick(x: int): string when fast {
+    return 'fast'
+}
+
+with <fast: bool, wide: bool>
+func pick(x: int): string when wide {
+    return 'wide'
+}
+
+func main(): int sync {
+    println(pick<true, false>(1), pick<false, true>(1))
+    return 0
+}

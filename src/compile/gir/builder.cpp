@@ -288,6 +288,57 @@ void Builder::rejectRedeclaredFunction(
         !genericGroupOf(group.value())->empty()) {
         for (const auto &other : *genericGroupOf(group.value())) {
             if (other != nullptr && sameGenericSignature(other->funcType, funcType)) {
+                // Two declarations of one signature are told apart by their conditions, if both
+                // write one (design principles 4.4): where a condition does not hold the overload
+                // does not apply. Conditions that exclude each other make two overloads; ones that
+                // can both hold are WhenDeclarationOverlap, and ones no registered type decides
+                // are left to the call, which reports the ambiguity if two apply.
+                const auto *ownWhen   = GCT::Tree::of(gct)->whenOf(gct);
+                const auto *otherWhen = other->func != nullptr
+                                            ? GCT::Tree::of(other->func)->whenOf(other->func)
+                                            : nullptr;
+                if (ownWhen != nullptr && otherWhen != nullptr) {
+                    SpeculativeInstantiation quiet(*this);
+                    std::string overlappingType;
+                    const ConditionSeparation separation = separateWhenConditions(
+                        ownWhen->condition,
+                        otherWhen->condition,
+                        [&](const camel::core::type::type_bindings_t &bindings) {
+                            return evaluateWhenCondition(
+                                ownWhen->condition, funcType, bindings, {}, nullptr, unit_);
+                        },
+                        [&](const camel::core::type::type_bindings_t &bindings) {
+                            return evaluateWhenCondition(
+                                otherWhen->condition,
+                                other->funcType,
+                                bindings,
+                                {},
+                                nullptr,
+                                unit_);
+                        },
+                        overlappingType);
+                    if (separation == ConditionSeparation::Disjoint) {
+                        continue;
+                    }
+                    // No registered type decides two conditions that read a value: they are two
+                    // overloads, and a call to which both apply is the ambiguity (design
+                    // principles 4.4). The same condition written twice is a redeclaration.
+                    if (separation == ConditionSeparation::NotComputable &&
+                        ownWhen->text != otherWhen->text) {
+                        continue;
+                    }
+                    if (separation == ConditionSeparation::Overlapping) {
+                        redeclaredFuncTypes_.insert(funcType);
+                        diags_->of(SemanticDiag::WhenDeclarationOverlap)
+                            .atOrigin(gct->origin())
+                            .commit(
+                                name,
+                                overlappingType,
+                                other->funcType->toString() + " — when " + otherWhen->text,
+                                funcType->toString() + " — when " + ownWhen->text);
+                        throw BuildAbortException();
+                    }
+                }
                 redeclaredFuncTypes_.insert(funcType);
                 diags_->of(SemanticDiag::Redeclaration).atOrigin(gct->origin()).commit(name);
                 throw BuildAbortException();
@@ -354,6 +405,10 @@ void Builder::rejectRedeclaredFunction(
                         overlappingType);
                     if (separation == ConditionSeparation::Disjoint) {
                         continue; // one family of argument types each
+                    }
+                    if (separation == ConditionSeparation::NotComputable &&
+                        ownWhen->text != other->second.text) {
+                        continue; // two conditions on a value: the call that meets both is ambiguous
                     }
                     if (separation == ConditionSeparation::Overlapping) {
                         redeclaredFuncTypes_.insert(funcType);

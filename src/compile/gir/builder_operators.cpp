@@ -2835,6 +2835,22 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     // Both (or more) take the arguments in this pass: no declaration order
                     // chooses between them. The signatures shown are the ones the call would
                     // be made with, decorated forms included.
+                    // Overloads told apart by their conditions are listed each with the condition
+                    // it wrote (design principles 4.4).
+                    const bool allConditioned =
+                        std::all_of(fitted.begin(), fitted.end(), [&](const auto &g) {
+                            return whenClauses_.contains(g.get());
+                        });
+                    if (allConditioned) {
+                        std::vector<std::string> listed;
+                        for (const auto &g : fitted) {
+                            listed.push_back(
+                                signatureOf(g)->toString() + " — when " +
+                                whenClauses_.at(g.get()).text);
+                        }
+                        std::ranges::sort(listed);
+                        rejectAmbiguousCall(graphs->front()->name(), argumentTypes, listed, gct);
+                    }
                     std::vector<FunctionType *> candidates;
                     candidates.reserve(fitted.size());
                     for (const auto &g : fitted) {

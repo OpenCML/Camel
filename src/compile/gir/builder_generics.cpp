@@ -1136,7 +1136,8 @@ generic_template_ptr_t Builder::chooseGenericOverload(
     // arguments, with the argument types first exactly as they are, and then with the literals
     // entering the parameter types. Two that fit are an ambiguity, not a matter of the order
     // they are declared in.
-    const auto binds = [&](const generic_template_ptr_t &tmpl) {
+    const auto binds = [&](const generic_template_ptr_t &tmpl,
+                           type_bindings_t *bound = nullptr) {
         FunctionType *signature = tmpl->funcType;
         if (signature->hasRest() || withTypes.size() > signature->withTypesCount()) {
             return false;
@@ -1197,6 +1198,9 @@ generic_template_ptr_t Builder::chooseGenericOverload(
             }
             return false;
         }
+        if (bound != nullptr) {
+            *bound = bindings;
+        }
         return true;
     };
     // A name with one generic function keeps it, and its own report when the arguments do not
@@ -1205,13 +1209,80 @@ generic_template_ptr_t Builder::chooseGenericOverload(
         return candidates.front();
     }
     std::vector<generic_template_ptr_t> fits;
+    std::unordered_map<const void *, type_bindings_t> fitBindings;
     for (const auto &candidate : candidates) {
-        if (binds(candidate)) {
+        type_bindings_t bound;
+        if (binds(candidate, &bound)) {
             fits.push_back(candidate);
+            fitBindings[candidate.get()] = std::move(bound);
         }
     }
     if (fits.size() == 1) {
         return fits.front();
+    }
+    // Overloads that differ only in their `when` (design principles 4.4): the condition of each
+    // is asked about these arguments, and the ones where it does not hold do not apply. One left
+    // is the call; several are an ambiguity at the call, listing each condition; none is a call
+    // whose conditions are all unmet.
+    if (fits.size() > 1) {
+        const auto conditionOf = [](const generic_template_ptr_t &tmpl) {
+            return GCT::Tree::of(tmpl->func)->whenOf(tmpl->func);
+        };
+        if (std::all_of(fits.begin(), fits.end(), [&](const auto &t) {
+                return conditionOf(t) != nullptr;
+            })) {
+            std::vector<generic_template_ptr_t> holding;
+            std::vector<std::string> unmet;
+            for (const auto &candidate : fits) {
+                const auto *when = conditionOf(candidate);
+                std::unordered_map<std::string, data_ptr_t> withValues;
+                const size_t withCount = candidate->funcType->withTypesCount();
+                for (size_t i = 0; i < withCount && i < withInputs.size(); ++i) {
+                    data_ptr_t value = constantOfNode(withInputs[i].node);
+                    if (value != nullptr) {
+                        withValues.emplace(std::string(candidate->funcType->argNameAt(i)), value);
+                    }
+                }
+                const WhenResult verdict = evaluateWhenCondition(
+                    when->condition,
+                    candidate->funcType,
+                    fitBindings[candidate.get()],
+                    withValues,
+                    candidate);
+                if (verdict.fails()) {
+                    unmet.push_back(candidate->name + " — when " + when->text);
+                    continue;
+                }
+                if (!verdict.holds()) {
+                    reportWhenProblem(verdict, candidate->name, when->condition);
+                }
+                holding.push_back(candidate);
+            }
+            if (holding.size() == 1) {
+                return holding.front();
+            }
+            std::string argTypes;
+            for (const auto &type : normTypes) {
+                argTypes += (argTypes.empty() ? "" : ", ") + type->toString();
+            }
+            if (holding.size() > 1) {
+                std::vector<std::string> also;
+                for (const auto &candidate : holding) {
+                    also.push_back(
+                        candidate->name + ": " + candidate->funcType->toString() + " — when " +
+                        conditionOf(candidate)->text);
+                }
+                rejectAmbiguousCall(holding.front()->name, argTypes, also, call);
+            }
+            yieldToPipe(call);
+            diags_->of(SemanticDiag::WhenConditionUnmet)
+                .atOrigin(call->origin())
+                .commit(
+                    fits.front()->name,
+                    argTypes,
+                    strutil::join(unmet, "; ", [](const std::string &s) { return s; }));
+            throw BuildAbortException();
+        }
     }
     std::string argTypes;
     for (const auto &type : normTypes) {
