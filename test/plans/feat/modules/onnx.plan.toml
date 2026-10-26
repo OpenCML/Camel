@@ -65,13 +65,13 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::UnhandledError"
 expect_diagnostic_code = "0x04000051"
 expect_diagnostic_line = 15
-expect_diagnostic_column = 77
+expect_diagnostic_column = 83
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
 assert(text.includes("operator 'nn:softmax_cross_entropy' has no ONNX lowering at opset 17"), 'missing unsupported-operator detail')
-assert(/[^ ]*export_unsupported[.]cml:15:77:/.test(text), 'missing source position of the unsupported call')
+assert(/[^ ]*export_unsupported[.]cml:15:83:/.test(text), 'missing source position of the unsupported call')
 assert(text.includes('ExportUnsupported'), 'the refusal must be the error value of the export_model call')
 }
 """
@@ -88,13 +88,13 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::UnhandledError"
 expect_diagnostic_code = "0x04000051"
 expect_diagnostic_line = 13
-expect_diagnostic_column = 82
+expect_diagnostic_column = 88
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
 assert(text.includes("impure operator 'tensor:randn' cannot be exported"), 'missing impure-operator detail')
-assert(/[^ ]*export_impure[.]cml:13:82:/.test(text), 'missing source position of the impure call')
+assert(/[^ ]*export_impure[.]cml:13:88:/.test(text), 'missing source position of the impure call')
 assert(text.includes('ExportUnsupported'), 'the refusal must be the error value of the export_model call')
 }
 """
@@ -2147,7 +2147,7 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::UnhandledError"
 expect_diagnostic_code = "0x04000051"
 expect_diagnostic_line = 23
-expect_diagnostic_column = 73
+expect_diagnostic_column = 79
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 async ({ input, assert }) => {
