@@ -226,6 +226,12 @@ any Formatter::visitProgram(cst::Program context) {
                 previousEnd = line + std::count(tokens[i].text().begin(), tokens[i].text().end(), '\n');
             }
         }
+        // The blank line the file leaves between its comments and the first declaration is kept: a
+        // doc comment standing against a declaration belongs to it, and one separated from it does
+        // not, so writing them together would change the tree.
+        if (previousEnd != 0 && limit < tokens.size() && tokens[limit].line() > previousEnd + 1) {
+            headStr += lineEnd();
+        }
     }
     // pass nullptr to avoid auto comment processing for empty head
     headStr += formatList(
