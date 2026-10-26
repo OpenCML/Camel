@@ -87,6 +87,41 @@ TextItem typeItem(const Type *type) {
     return item;
 }
 
+/// Whether the text of a function type ends in a `uses` clause, of its own or of the function it
+/// returns. The clause reads on through a comma and an identifier, so a type that ends in one is
+/// written between parentheses wherever something can follow it in the same list.
+bool endsInUses(const Type *type) {
+    while (type != nullptr && type->code() == TypeCode::Function) {
+        const auto *fn                    = static_cast<const FunctionType *>(type);
+        const sem::ResourceSignature &sig = fn->resources();
+        if (sig.mode != sem::ResourceSignature::Mode::Generic) {
+            return !sig.pure();
+        }
+        if (!fn->hasExitType()) {
+            return false;
+        }
+        type = fn->exitType();
+    }
+    return false;
+}
+
+/// Whether the element of an array is written between parentheses: a tagged type and a function
+/// type reach past the dimensions that follow (`T?[3]` is not in the grammar, and
+/// `(x: int) => int[]` is a function returning an array).
+bool needsParensAsElement(const Type *type) {
+    if (type == nullptr) {
+        return false;
+    }
+    if (type->code() == TypeCode::Function) {
+        return true;
+    }
+    if (type->code() == TypeCode::Tuple) {
+        const auto *tuple = static_cast<const TupleType *>(type);
+        return tuple->isTagged();
+    }
+    return false;
+}
+
 /// Appends `parts`, in order, onto a work list that is read from the back.
 void pushParts(std::vector<TextItem> &stack, std::vector<TextItem> parts) {
     for (size_t i = parts.size(); i-- > 0;) {
@@ -96,6 +131,23 @@ void pushParts(std::vector<TextItem> &stack, std::vector<TextItem> parts) {
 
 /// `parts` for one type in output order; `mangle` selects the mangled name instead of the text.
 std::vector<TextItem> typeParts(const Type *type, bool mangle);
+
+/// A type that stands as a member of a list (a tuple, a struct, a parameter list, type
+/// arguments): between parentheses when it ends in a `uses` clause, which would take the next
+/// member for one more resource.
+void pushChild(std::vector<TextItem> &parts, const Type *type, const char *absent) {
+    if (type == nullptr) {
+        parts.push_back(literal(absent));
+        return;
+    }
+    if (endsInUses(type)) {
+        parts.push_back(literal("("));
+        parts.push_back(typeItem(type));
+        parts.push_back(literal(")"));
+        return;
+    }
+    parts.push_back(typeItem(type));
+}
 
 std::vector<TextItem> tupleParts(const TupleType *tuple, bool mangle) {
     std::vector<TextItem> parts;
@@ -138,8 +190,11 @@ std::vector<TextItem> tupleParts(const TupleType *tuple, bool mangle) {
         if (i > 0) {
             parts.push_back(literal(", "));
         }
-        Type *member = tuple->typeAt(i);
-        parts.push_back(member != nullptr ? typeItem(member) : literal("null"));
+        pushChild(parts, tuple->typeAt(i), "null");
+    }
+    if (tuple->size() == 1) {
+        // `(T)` is the parenthesized type; the one-tuple has the comma.
+        parts.push_back(literal(","));
     }
     parts.push_back(literal(")"));
     return parts;
@@ -173,8 +228,7 @@ std::vector<TextItem> structParts(const StructType *record, bool mangle) {
             if (i > 0) {
                 parts.push_back(literal(", "));
             }
-            Type *argument = record->typeArgAt(i);
-            parts.push_back(argument != nullptr ? typeItem(argument) : literal("_"));
+            pushChild(parts, record->typeArgAt(i), "_");
         }
         parts.push_back(literal(">"));
         return parts;
@@ -195,8 +249,7 @@ std::vector<TextItem> structParts(const StructType *record, bool mangle) {
             parts.push_back(literal(", "));
         }
         parts.push_back(literal(std::string(record->fieldName(i)) + ": "));
-        Type *member = record->typeAt(i);
-        parts.push_back(member != nullptr ? typeItem(member) : literal("<null>"));
+        pushChild(parts, record->typeAt(i), "<null>");
     }
     parts.push_back(literal(" }"));
     return parts;
@@ -330,7 +383,7 @@ std::vector<TextItem> functionParts(const FunctionType *fn, bool mangle) {
             if (fn->hasArgNames()) {
                 parts.push_back(literal(std::string(fn->argNameAt(i)) + ": "));
             }
-            parts.push_back(typeItem(fn->withTypeAt(i)));
+            pushChild(parts, fn->withTypeAt(i), "<null>");
         }
         parts.push_back(literal("> "));
     }
@@ -355,11 +408,20 @@ std::vector<TextItem> functionParts(const FunctionType *fn, bool mangle) {
         if (fn->hasArgNames()) {
             parts.push_back(literal(std::string(fn->argNameAt(withCount + i)) + ": "));
         }
-        parts.push_back(typeItem(fn->normTypeAt(i)));
+        pushChild(parts, fn->normTypeAt(i), "<null>");
     }
     parts.push_back(literal(") => "));
-    parts.push_back(fn->hasExitType() ? typeItem(fn->exitType()) : literal("<null>"));
     const std::string resources = resourceClause(fn, false);
+    if (fn->hasExitType() && !resources.empty() && fn->exitType()->code() == TypeCode::Function) {
+        // The clause after a returned function type would be read as the returned type's.
+        parts.push_back(literal("("));
+        parts.push_back(typeItem(fn->exitType()));
+        parts.push_back(literal(")"));
+    } else if (fn->hasExitType()) {
+        parts.push_back(typeItem(fn->exitType()));
+    } else {
+        parts.push_back(literal("<null>"));
+    }
     if (!resources.empty()) {
         parts.push_back(literal(" " + resources));
     }
@@ -386,10 +448,10 @@ std::vector<TextItem> collectionParts(const CollectionType *coll, bool mangle) {
         return parts;
     }
     parts.push_back(literal(isMap ? "Map<" : "Set<"));
-    parts.push_back(typeItem(coll->keyType()));
+    pushChild(parts, coll->keyType(), "<null>");
     if (isMap) {
         parts.push_back(literal(", "));
-        parts.push_back(typeItem(coll->valueType()));
+        pushChild(parts, coll->valueType(), "<null>");
     }
     parts.push_back(literal(">"));
     return parts;
@@ -419,8 +481,7 @@ std::vector<TextItem> enumParts(const EnumType *enumType, bool mangle) {
         if (i > 0) {
             parts.push_back(literal(", "));
         }
-        Type *argument = enumType->params()[i];
-        parts.push_back(argument != nullptr ? typeItem(argument) : literal("_"));
+        pushChild(parts, enumType->params()[i], "_");
     }
     parts.push_back(literal(">"));
     return parts;
@@ -443,6 +504,10 @@ std::vector<TextItem> typeParts(const Type *type, bool mangle) {
         // what a reader of a message is given to write.
         if (array->elemType() != nullptr && array->elemType()->code() == TypeCode::Void) {
             return {literal("[]")};
+        }
+        if (needsParensAsElement(array->elemType())) {
+            return {
+                literal("("), typeItem(array->elemType()), literal(")" + array->shapeText())};
         }
         return {typeItem(array->elemType()), literal(array->shapeText())};
     }

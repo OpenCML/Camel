@@ -1,0 +1,18 @@
+id = "compile.type_text"
+order = 924
+tier = "fast"
+tags = ["feat", "compile", "types", "print"]
+desc = "A printed type is a spelling a program can write, and it reads back as the same type (design principles 5.1)."
+
+[[tests]]
+name = "type_text.roundtrip"
+desc = "Every type constructor (scalars, arrays of each extent form with names and packs, tuples including the one-tuple, structs, enums, generic structs, `T?`/`T!`, streams, functions with `with` parameters, modifiers and `pure`/`uses` clauses, Map and Set) is built from its source spelling, printed with `graph.type_name`, and the printed text is written back in a program that also holds the original: it must compile and have the same type."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/compile/type_text/roundtrip.mjs"
+args = ["${case}", "--camel", "${camel}"]
+expect_exit = 0
+expect_stdout_contains = ["0 that do not round-trip"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 300000
