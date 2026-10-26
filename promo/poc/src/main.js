@@ -30,28 +30,12 @@ const Grade = {
     fragmentShader: `
         uniform sampler2D tDiffuse; uniform float uGlitch; uniform float uSeed; uniform float uTime; uniform float uFade;
         varying vec2 vUv;
-        float h(float n) { return fract(sin(n) * 43758.5453123); }
         void main() {
-            vec2 uv = vUv;
-            float band = floor(uv.y * 26.0 + h(uSeed) * 9.0);
-            float on = step(1.0 - uGlitch * 0.6, h(band * 13.17 + uSeed * 1.31));
-            uv.x += on * (h(band + uSeed * 3.7) - 0.5) * 0.14 * uGlitch;
-            float row = floor(uv.y * 270.0);
-            uv.x += (h(row + uSeed * 11.0) - 0.5) * 0.007 * uGlitch;
-            vec2 d = uv - 0.5;
-            float ca = 0.0012 + uGlitch * 0.02;
-            vec3 col;
-            col.r = texture2D(tDiffuse, uv + d * ca + vec2(ca * 0.7, 0.0)).r;
-            col.g = texture2D(tDiffuse, uv).g;
-            col.b = texture2D(tDiffuse, uv - d * ca - vec2(ca * 0.7, 0.0)).b;
-            // a torn frame flashes brighter for an instant
-            col *= 1.0 + uGlitch * 0.35 * step(0.5, h(uSeed * 2.3));
-            vec3 bg = mix(vec3(0.004, 0.006, 0.014), vec3(0.012, 0.018, 0.04), vUv.y);
-            col += bg;
-            float v = smoothstep(1.15, 0.3, length((vUv - 0.5) * vec2(1.0, 0.82)) * 1.3);
-            col *= mix(0.5, 1.0, v);
-            float g = h(dot(floor(vUv * vec2(1920.0, 1080.0)), vec2(1.0, 57.0)) + fract(uTime * 7.31) * 113.0) - 0.5;
-            col += g * 0.018;
+            vec3 col = texture2D(tDiffuse, vUv).rgb;
+            // a plain dark ground, and a very slight vignette
+            col += vec3(0.010, 0.012, 0.018);
+            float v = smoothstep(1.2, 0.45, length((vUv - 0.5) * vec2(1.0, 0.82)) * 1.2);
+            col *= mix(0.86, 1.0, v);
             gl_FragColor = vec4(col * uFade, 1.0);
         }`,
 };
@@ -112,7 +96,8 @@ async function boot() {
     const hudPass = new RenderPass(hud, first.hudCam);
     hudPass.clear = false;
     hudPass.clearDepth = true;
-    const bloom = new UnrealBloomPass(new THREE.Vector2(W, H), 1.05, 0.55, 0.82);
+    // bloom only where meaning is: values above 1 (the running light, the region as it closes)
+    const bloom = new UnrealBloomPass(new THREE.Vector2(W, H), 0.42, 0.3, 1.02);
     const grade = new ShaderPass(Grade);
     composer.addPass(worldPass);
     composer.addPass(hudPass);
@@ -152,6 +137,10 @@ async function boot() {
 
     window.renderAt = (t) => {
         frame(t);
+        // the grade paints the ground in every corner: pure black there is a canvas that drew
+        // nothing (outside the fade in and out)
+        const c = g.getImageData(4, 4, 1, 1).data;
+        if (t > 0.4 && t < DURATION - 0.4 && c[0] + c[1] + c[2] === 0) throw new Error(`frame at ${t}s is blank`);
         return out.toDataURL('image/png');
     };
     window.cues = film.cues;
@@ -180,19 +169,15 @@ function overlay(g, t, T, glitch) {
     for (const L of lines) {
         const a = ease(lin(t, L.t0, L.t0 + 0.5)) * (1 - ease(lin(t, L.t1 - 0.45, L.t1)));
         if (a <= 0) continue;
-        const rise = (1 - ease(lin(t, L.t0, L.t0 + 0.8))) * 14;
+        const rise = (1 - ease(lin(t, L.t0, L.t0 + 0.8))) * 6;
         g.save();
         g.textAlign = 'center';
         g.textBaseline = 'alphabetic';
         g.globalAlpha = a;
-        g.shadowColor = 'rgba(120,170,255,0.45)';
-        g.shadowBlur = 18;
         g.fillStyle = '#EEF3FF';
         g.font = `300 ${L.size}px "Noto Sans"`;
         g.letterSpacing = '0.5px';
-        const jitter = glitch > 0.05 ? Math.sin(t * 997.0) * 8 * glitch : 0;
-        g.fillText(L.en, 960 + jitter, L.y + rise);
-        g.shadowBlur = 0;
+        g.fillText(L.en, 960, L.y + rise);
         g.globalAlpha = a * 0.72;
         g.fillStyle = '#B8C4E0';
         g.font = `400 ${Math.round(L.size * 0.6)}px "Noto Sans CJK SC"`;

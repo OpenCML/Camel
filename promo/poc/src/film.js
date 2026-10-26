@@ -51,19 +51,18 @@ const C = {
     deco: [1.0, 0.68, 0.38, 1],
     ty: [0.5, 0.84, 0.92, 1],
     punct: [0.45, 0.5, 0.64, 1],
-    trace: [1.25, 1.55, 2.1, 1],
-    traceLabel: [0.86, 0.9, 1.0, 1],
-    tear: [3.4, 0.32, 0.42, 1],
-    tearText: [1.0, 0.36, 0.42, 1],
-    tearDim: [0.62, 0.3, 0.36, 1],
-    camel: [1.2, 2.0, 2.1, 1],
-    camelLabel: [0.95, 1.0, 1.0, 1],
-    region: [0.45, 1.6, 1.4, 1],
-    regionFill: [0.04, 0.2, 0.19, 0.38],
-    data: [3.6, 2.1, 0.7, 1],
+    trace: [0.74, 0.8, 0.92, 1],
+    traceLabel: [0.8, 0.84, 0.92, 1],
+    tear: [0.92, 0.36, 0.36, 1],
+    tearText: [0.9, 0.42, 0.42, 1],
+    tearDim: [0.62, 0.38, 0.4, 1],
+    camel: [0.78, 0.92, 0.9, 1],
+    camelLabel: [0.9, 0.95, 0.95, 1],
+    region: [0.5, 0.9, 0.82, 1],
+    regionFill: [0.03, 0.1, 0.095, 0.4],
+    data: [2.2, 1.35, 0.45, 1],
     dataText: [1.0, 0.8, 0.45, 1],
     mint: [0.5, 1.0, 0.76, 1],
-    dust: [0.35, 0.5, 0.9, 1],
 };
 
 // ---- code --------------------------------------------------------------------------------------
@@ -138,7 +137,7 @@ function spanTime(code, sp) {
 const TR = { nodes: {}, edges: [] };
 function trNode(id, label, p, t, kind = 'op', group = 1) {
     const w = kind === 'value' ? Math.max(48, label.length * 12 + 26) : Math.max(64, label.length * 12 + 34);
-    TR.nodes[id] = { id, label, p, t, kind, w, h: 44, group, shardStep: 40 };
+    TR.nodes[id] = { id, label, p, t, kind, w, h: 44, group };
 }
 function trEdge(a, b, t, opts = {}) {
     TR.edges.push({ a, b, t, ...opts });
@@ -306,60 +305,28 @@ const camW = new THREE.PerspectiveCamera(35, 16 / 9, 5, 20000);
 const hudCam = new THREE.OrthographicCamera(-960, 960, 540, -540, -2000, 2000);
 hudCam.position.z = 1000;
 
-// beat 3 follows the newest node: the largest x spawned, smoothed over 0.9 s
-const FOLLOW = [];
-{
-    const ids = Object.keys(CG.nodes);
-    const raw = (t) => {
-        let x = -40;
-        for (const id of ids) if (CG.nodes[id].t <= t && id !== 'best') x = Math.max(x, CG.nodes[id].p[0]);
-        return x;
-    };
-    for (let i = 0; i <= 1400; i++) {
-        const t = T.camType0 + i * 0.01;
-        let s = 0;
-        for (let k = 0; k < 18; k++) s += raw(t - k * 0.05);
-        FOLLOW.push(s / 18);
-    }
-}
-function follow(t) {
-    const i = clamp((t - T.camType0) / 0.01, 0, FOLLOW.length - 1);
-    const a = Math.floor(i);
-    return mix(FOLLOW[a], FOLLOW[Math.min(a + 1, FOLLOW.length - 1)], i - a);
-}
-
 function cameraAt(t, cam = camW) {
-    let pos;
-    let tgt;
-    if (t < T.turn) {
-        // beat 1: a slow push on the traced graph, on the right of the screen
-        const k = ease(lin(t, 0, T.turn));
-        tgt = [mix(-140, -120, k), mix(95, 85, k), 0];
-        pos = [mix(-40, -10, k), mix(-110, -90, k), mix(1360, 1240, k)];
-    } else if (t < T.gather) {
-        // beat 2: drifting forward through the fragments
+    // beat 1 holds still on the traced graph; beat 2 drifts a little through the fragments; beat 3
+    // holds a wide shot of the whole graph while it is written, and moves in to the branch only for
+    // the payoff
+    const B1 = { tgt: [-130, 95, 0], pos: [-90, -40, 1300] };
+    const B2 = { tgt: [-60, 90, 0], pos: [-20, -20, 1120] };
+    const WIDE = { tgt: [930, 40, 0], pos: [930, -110, 2080] };
+    const BRANCH = { tgt: [1420, 10, 0], pos: [1420, -70, 1250] };
+    let v;
+    if (t < T.turn) v = B1;
+    else if (t < T.gather) {
         const k = ease(lin(t, T.turn, T.gather));
-        tgt = [mix(-120, 40, k), mix(85, 80, k), 0];
-        pos = [mix(-10, 220, k), mix(-90, -40, k), mix(1240, 820, k)];
+        v = { tgt: mix3(B1.tgt, B2.tgt, k), pos: mix3(B1.pos, B2.pos, k) };
     } else if (t < T.pull) {
-        // beat 3: follow the graph as it is written
-        const enter = ease(lin(t, T.gather, T.camType0 + 0.6));
-        const fx = follow(t) - 380;
-        const from = { tgt: [40, 80, 0], pos: [220, -40, 820] };
-        const to = { tgt: [fx, 50, 0], pos: [fx + 150, -170, 1700] };
-        tgt = mix3(from.tgt, to.tgt, enter);
-        pos = mix3(from.pos, to.pos, enter);
+        const k = ease(lin(t, T.gather, T.camType0 + 0.5));
+        v = { tgt: mix3(B2.tgt, WIDE.tgt, k), pos: mix3(B2.pos, WIDE.pos, k) };
     } else {
-        const k = ease(lin(t, T.pull, T.pull + 1.3));
-        const fx = follow(T.pull) - 380;
-        const orbit = Math.sin((t - T.pull) * 0.42) * 260 * lin(t, T.pull, T.run0 + 1);
-        tgt = mix3([fx, 50, 0], [930, 20, 0], k);
-        pos = mix3([fx + 150, -170, 1700], [930 + 120 + orbit, -360, 2150 - 140 * lin(t, T.pull + 1.3, DURATION)], k);
+        const k = ease(lin(t, T.pull, T.run0 - 0.1));
+        v = { tgt: mix3(WIDE.tgt, BRANCH.tgt, k), pos: mix3(WIDE.pos, BRANCH.pos, k) };
     }
-    // a breath of handheld drift
-    pos = add3(pos, [Math.sin(t * 0.7) * 6, Math.sin(t * 0.53 + 1) * 5, 0]);
-    cam.position.set(...pos);
-    cam.lookAt(...tgt);
+    cam.position.set(...v.pos);
+    cam.lookAt(...v.tgt);
     cam.updateMatrixWorld();
     return cam;
 }
@@ -381,22 +348,35 @@ const GATHER = hudToWorld(CARET_HUD, cameraAt(T.camType0 - 0.02, new THREE.Persp
 
 // ---- the shatters ------------------------------------------------------------------------------
 
-const SH4 = { t0: T.tear4, centre: [230, 120, 0], strength: 230, g0: T.gather, g1: T.camType0 - 0.05, point: GATHER };
+const SH4 = { t0: T.tear4, centre: [230, 120, 0], strength: 60, g0: T.gather, g1: T.camType0 - 0.05, point: GATHER };
 // a shard after tear 4 also takes part in the big shatter
-function shardLife(a, b, key, s) {
+function shardLife(a, b, key, s, pivot) {
     if (TNOW < s.t0) return [a, b, null];
-    const [pa, pb] = shard(a, b, key, s, TNOW);
-    const [qa, qb] = TNOW > SH4.t0 && s !== SH4 ? shard(pa, pb, key + 77777, { ...SH4 }, TNOW) : [pa, pb];
-    return [qa, qb, shardColour(key, s.t0)];
+    const [pa, pb] = shard(a, b, key, s, TNOW, pivot);
+    let q = [pa, pb];
+    if (TNOW > SH4.t0 && s !== SH4) {
+        // a piece that broke off earlier joins the recompile's shatter as one fragment
+        const moved = shard(pivot, add3(pivot, [1, 0, 0]), key, s, TNOW)[0];
+        q = shard(pa, pb, key + 77777, SH4, TNOW, moved);
+    }
+    return [q[0], q[1], shardColour(key, s.t0)];
+}
+
+/** The fragment a segment of a polyline belongs to: the polyline cut into `n` pieces. */
+function piece(pts, i, n) {
+    const L = pts.length - 1;
+    const k = i > L ? n - 1 : Math.min(n - 1, Math.floor(((i - 1) / L) * n));
+    const at = Math.min(L, Math.round(((k + 0.5) / n) * L));
+    return { k, pivot: pts[at] };
 }
 function shardColour(key, t0) {
     const dt = TNOW - t0;
-    const hot = Math.exp(-dt * 2.2);
-    const cool = withA(C.trace, 0.45 + 0.4 * rand(key * 31));
+    const hot = Math.exp(-dt * 1.2);
+    const cool = withA(C.trace, 0.42 + 0.2 * rand(key * 31));
     const c = mixCol(cool, C.tear, hot);
-    // the turn: hanging in the dark, dim; gathering: brighten into the caret
-    const dim = TNOW > T.turn ? 0.55 + 0.25 * Math.sin(TNOW * 1.3 + key) : 1;
-    const g = TNOW > T.gather ? 1 + 2 * ease(lin(TNOW, T.gather, T.camType0)) : 1;
+    // the turn: hanging in the dark, dim; gathering: a little brighter into the caret
+    const dim = TNOW > T.turn ? 0.6 : 1;
+    const g = TNOW > T.gather ? 1 + 0.3 * ease(lin(TNOW, T.gather, T.camType0)) : 1;
     return [c[0] * g, c[1] * g, c[2] * g, c[3] * dim];
 }
 let TNOW = 0;
@@ -408,15 +388,13 @@ function codeColour(cls) {
 }
 
 /** Draw typed code into the HUD glyph layer; `dim` scales its alpha. */
-function drawCode(L, code, t, alpha, hot = null, glitch = 0) {
+function drawCode(L, code, t, alpha, hot = null) {
     for (const c of code.chars) {
         if (t < c.t) continue;
-        const fresh = Math.exp(-(t - c.t) * 9);
         let col = codeColour(c.cls);
-        col = [col[0] + fresh * 0.8, col[1] + fresh * 0.8, col[2] + fresh * 0.8, col[3] * alpha];
+        col = [col[0], col[1], col[2], col[3] * alpha];
         if (hot) col = hot(c, col);
         let x = c.x;
-        if (glitch > 0) x += srand(c.li * 97 + Math.floor(t * 30)) * 18 * glitch * (rand(c.li * 7 + Math.floor(t * 24)) > 0.6 ? 1 : 0);
         L.glyph(c.ch, x, c.y, 0, code.size, col);
     }
 }
@@ -434,7 +412,7 @@ function caret(seg, code, t, tStart, tEnd, alpha = 1) {
     // solid while typing, blinking before and after
     const typing = t >= code.chars[0].t && t <= tEnd;
     const blink = typing ? 1 : Math.floor(t * 2.4) % 2 ? 0.15 : 1;
-    seg.seg([x, y - code.size * 0.55, 0], [x, y + code.size * 0.6, 0], 3, [1.6, 1.3, 0.8, alpha * blink]);
+    seg.seg([x, y - code.size * 0.55, 0], [x, y + code.size * 0.6, 0], 2.5, [0.9, 0.82, 0.62, alpha * blink]);
 }
 
 /** A node of either graph: its outline traced from `t0` over `dur`, with its label. */
@@ -446,7 +424,7 @@ function drawNode(S, G, n, t, col, labelCol, fx = null, labelFx = null, drawT = 
         return;
     }
     const pts = densify(nodeShape(n), n.shardStep ?? 14);
-    drawPoly(S, pts, n.kind === 'ring' ? 3.4 : 2.6, col, 0, easeOut(p), fx);
+    drawPoly(S, pts, n.kind === 'ring' ? 2.4 : 1.8, col, 0, easeOut(p), fx);
     if (n.label) {
         const size = n.labelSize ?? 22;
         const adv = size * 0.6;
@@ -465,13 +443,11 @@ function drawNode(S, G, n, t, col, labelCol, fx = null, labelFx = null, drawT = 
     }
 }
 
-function labelShard(key, t0, centre, strength) {
-    return (pos, k) => {
+function labelShard(key, t0) {
+    return (pos) => {
         if (TNOW < t0) return [pos];
-        const s = { t0, centre, strength, g0: T.gather, g1: T.camType0 - 0.05, point: GATHER };
-        const a = shard(pos, add3(pos, [1, 0, 0]), key + k * 13, s, TNOW);
-        const rot = (TNOW - t0) * 2.0 * srand(key + k);
-        return [a[0], shardColour(key + k, t0), rot];
+        const a = 1 - lin(TNOW, t0, t0 + 0.6);
+        return a > 0 ? [pos, withA(C.traceLabel, a)] : null;
     };
 }
 
@@ -487,7 +463,6 @@ export function makeFilm(layers) {
         for (const L of [segW, glyphW, glowW, fillW, segH, glyphH, glowH]) L.begin();
         const fx = { glitch: 0, fade: 1, seed: 0, backing: 0 };
 
-        dust(glowW, t);
         if (t < T.camType0 + 0.1) beatOne(t, cam, fx);
         if (t >= T.gather) beatThree(t, cam, fx);
 
@@ -495,33 +470,10 @@ export function makeFilm(layers) {
         return { cam, hudCam, fx };
     }
 
-    function dust(G, t) {
-        for (let i = 0; i < 900; i++) {
-            const p = [srand(i * 5 + 1) * 2600 + 700, srand(i * 5 + 2) * 1500, -1800 + rand(i * 5 + 3) * 2300];
-            p[0] += Math.sin(t * 0.07 + i) * 30;
-            p[1] += ((t * (6 + rand(i) * 10) + rand(i * 9) * 3000) % 3000) - 1500;
-            const tw = 0.5 + 0.5 * Math.sin(t * (0.8 + rand(i * 7)) + i);
-            const a = (0.18 + 0.4 * rand(i * 11)) * tw;
-            G.dot(p, 3 + rand(i * 13) * 7, withA(C.dust, a));
-        }
-        // a few large, soft out-of-focus lights for depth
-        for (let i = 0; i < 26; i++) {
-            const p = [srand(i * 3 + 900) * 2400 + 700, srand(i * 3 + 901) * 1100, 700 + rand(i * 3 + 902) * 500];
-            G.dot(p, 120 + rand(i) * 220, withA([0.12, 0.2, 0.45, 1], 0.12));
-        }
-    }
-
     // ---- beat 1 ----------------------------------------------------------------------------------
     function beatOne(t, cam, fx) {
         const cut = t >= T.turn;
         const codeAlpha = t < T.tear4 ? 1 : mix(1, 0.0, ease(lin(t, T.tear4 + 0.4, T.turn - 0.1)));
-        // the tears: glitch spikes
-        for (const tt of [T.tear1, T.tear2, T.tear3]) {
-            const d = t - tt;
-            if (d >= 0 && d < 0.5) fx.glitch = Math.max(fx.glitch, Math.exp(-d * 9) * 0.85);
-        }
-        if (t >= T.tear4 && t < T.tear4 + 1.2) fx.glitch = Math.max(fx.glitch, Math.exp(-(t - T.tear4) * 4.5));
-        fx.seed = Math.floor(t * 24);
 
         if (!cut) {
             // the active line of the trace
@@ -532,7 +484,7 @@ export function makeFilm(layers) {
                 const c = red ? withA(C.tear, 0.11) : [0.5, 0.65, 1.0, 0.06];
                 segH.seg([py.x0 - 20, y, -1], [py.x0 + 600, y, -1], py.lh * 0.92, c);
             }
-            drawCode(glyphH, py, t, codeAlpha, (c, col) => hotCode(c, col, t), fx.glitch);
+            drawCode(glyphH, py, t, codeAlpha, (c, col) => hotCode(c, col, t));
             caret(segH, py, t, 0, T.pyType1);
             if (t > T.call2 - 0.2 && t < T.turn) drawCall2(glyphH, t, codeAlpha);
             drawLog(glyphH, segH, t);
@@ -548,14 +500,13 @@ export function makeFilm(layers) {
             if (t < n.t + 0.1) continue;
             const torn = n.id === 'item' ? T.tear2 : n.id === 'print' ? T.tear3 : null;
             const key = 10000 + hash(n.id) * 100;
-            const shFx = (a, b, i) => {
-                if (torn !== null && t >= torn) return shardLife(a, b, key + i, { t0: torn, centre: n.p, strength: 90 });
-                if (t >= T.tear4) return shardLife(a, b, key + i, SH4);
+            // a node is one fragment
+            const shFx = (a, b) => {
+                if (torn !== null && t >= torn) return shardLife(a, b, key, { t0: torn, centre: add3(n.p, [-60, 30, 0]), strength: 22 }, n.p);
+                if (t >= T.tear4) return shardLife(a, b, key, SH4, n.p);
                 return [a, b, null];
             };
-            const lblFx = torn !== null && t >= torn
-                ? labelShard(key, torn, n.p, 90)
-                : t >= T.tear4 ? labelShard(key, T.tear4, SH4.centre, SH4.strength) : null;
+            const lblFx = torn !== null && t >= torn ? labelShard(key, torn) : t >= T.tear4 ? labelShard(key, T.tear4) : null;
             const col = n.group === 2 && t >= T.tear2 && t < T.tear4 ? withA(C.trace, 0.75) : C.trace;
             drawNode(segW, glyphW, n, t, col, C.traceLabel, shFx, lblFx, 0.22);
         }
@@ -564,70 +515,57 @@ export function makeFilm(layers) {
             const B = TR.nodes[e.b];
             const p = lin(t, e.t, e.t + 0.18);
             if (p <= 0) return;
-            const pts = densify(edgePath(A, B), 34);
+            const pts = densify(edgePath(A, B), 12);
             const key = 50000 + ei * 500;
             const torn = e.tearAt ?? null;
+            // an edge is one fragment; a torn edge breaks cleanly in two
             const efx = (a, b, i) => {
-                if (torn !== null && t >= torn) return shardLife(a, b, key + i, { t0: torn, centre: B.p, strength: 110 });
-                if (t >= T.tear4) return shardLife(a, b, key + i, SH4);
+                if (torn !== null && t >= torn) {
+                    const h = piece(pts, i, 2);
+                    return shardLife(a, b, key + h.k, { t0: torn, centre: mix3(A.p, B.p, 0.5), strength: 26 }, h.pivot);
+                }
+                if (t >= T.tear4) return shardLife(a, b, key, SH4, pts[Math.floor(pts.length / 2)]);
                 return [a, b, null];
             };
             const col = torn !== null && t < torn ? mixCol(C.trace, C.tear, lin(t, torn - 0.2, torn)) : C.trace;
-            drawPoly(segW, pts, 2.2, col, 0, p, efx);
-            if (p >= 1) arrowHead(segW, pts, 2.2, col, 11, efx);
+            drawPoly(segW, pts, 1.6, col, 0, p, efx);
+            if (p >= 1) arrowHead(segW, pts, 1.6, col, 10, efx);
         });
-        // tear 1: the branch the trace tried to follow, and the crack
+        // tear 1: the branch the trace tried to follow breaks off
         if (t > T.tear1 - 0.32) {
             ARMS.forEach((arm, k) => {
                 const pts = densify(arm, 10);
                 const p = lin(t, T.tear1 - 0.32, T.tear1 - 0.05);
-                const col = mixCol([1.2, 1.4, 2.0, 0.7], C.tear, lin(t, T.tear1 - 0.1, T.tear1));
-                drawPoly(segW, pts, 2.2, col, 0, p, (a, b, i) => (t >= T.tear1 ? shardLife(a, b, 70000 + k * 300 + i, { t0: T.tear1, centre: [440, -30, 0], strength: 150 }) : [a, b, null]));
+                const col = mixCol(withA(C.trace, 0.7), C.tear, lin(t, T.tear1 - 0.1, T.tear1));
+                const pv = pts[Math.floor(pts.length / 2)];
+                drawPoly(segW, pts, 1.6, col, 0, p, (a, b) => (t >= T.tear1 ? shardLife(a, b, 70000 + k, { t0: T.tear1, centre: [400, -30, 0], strength: 70 }, pv) : [a, b, null]));
             });
-        }
-        for (const [tt, c, k0] of [[T.tear1, [420, -30, 0], 80000], [T.tear2, [210, -160, 30], 81000], [T.tear3, [360, -160, 30], 82000], [T.tear4, [230, 120, 0], 83000]]) {
-            if (t < tt) continue;
-            crack(segW, glowW, t, tt, c, k0, tt === T.tear4 ? 2.4 : 1);
         }
         // the compiled graphs close round what they caught
         for (const box of [BOX1, BOX2]) {
             const p = lin(t, box.t, box.t + 0.45);
             if (p <= 0) continue;
             const key = box === BOX1 ? 90000 : 91000;
-            const pts = densify(roundRect(box.c[0], box.c[1], box.w, box.h, 26, box.c[2], 8), 60);
+            const pts = densify(roundRect(box.c[0], box.c[1], box.w, box.h, 26, box.c[2], 8), 30);
             const col = withA(mixCol(C.tear, [0.7, 0.8, 1.2, 1], lin(t, box.t + 0.2, box.t + 1.2)), 0.65);
-            drawPoly(segW, pts, 1.6, col, 0, ease(p), (a, b, i) => (t >= T.tear4 ? shardLife(a, b, key + i, SH4) : [a, b, null]));
+            // a box breaks into six fragments
+            drawPoly(segW, pts, 1.6, col, 0, ease(p), (a, b, i) => {
+                if (t < T.tear4) return [a, b, null];
+                const f = piece(pts, i, 6);
+                return shardLife(a, b, key + f.k, SH4, f.pivot);
+            });
             const lbl = [box.c[0] - box.w / 2 + 18, box.c[1] + box.h / 2 - 22, box.c[2]];
             for (let k = 0; k < box.label.length; k++) {
                 let pos = [lbl[0] + 9.6 * k, lbl[1], lbl[2]];
                 let c = withA([0.75, 0.6, 0.7, 1], lin(t, box.t + 0.25, box.t + 0.6));
                 let rot = 0;
-                if (t >= T.tear4) [pos, c, rot] = labelShard(key, T.tear4, SH4.centre, SH4.strength)(pos, k);
+                if (t >= T.tear4) {
+                    const r = labelShard(key, T.tear4)(pos);
+                    if (!r) continue;
+                    [pos, c] = r;
+                }
                 glyphW.glyph(box.label[k], pos[0], pos[1], pos[2], 16, c, rot);
             }
-        }
-    }
-
-    function crack(S, G, t, tt, c, key, scale) {
-        const dt = t - tt;
-        if (dt > 1.8 && tt !== T.tear4) return;
-        // a jagged bolt through the tear, white-hot, cooling to red, then gone
-        const pts = [];
-        const n = 9;
-        for (let i = 0; i <= n; i++) {
-            const k = i / n;
-            pts.push([c[0] + srand(key + i * 3) * 26 * scale + (k - 0.5) * 10, c[1] + (k - 0.5) * 150 * scale, c[2] + 5]);
-        }
-        const a = Math.exp(-dt * 3.0);
-        const col = mixCol([3.0, 0.3, 0.4, a], [4, 3, 3, a], Math.exp(-dt * 12));
-        drawPoly(S, pts, 3.2 * scale, col);
-        G.dot(c, 260 * scale, withA([3.0, 0.4, 0.5, 1], 0.55 * Math.exp(-dt * 4)));
-        // sparks
-        for (let i = 0; i < 26 * scale; i++) {
-            const dir = [srand(key + i * 7 + 1), srand(key + i * 7 + 2), srand(key + i * 7 + 3) * 0.6];
-            const sp = 160 + 260 * rand(key + i * 7 + 4);
-            const p = add3(c, scale3(dir, sp * (1 - Math.exp(-dt * 3))));
-            G.dot(p, 7 + 6 * rand(key + i), withA([3.0, 0.9, 0.6, 1], Math.exp(-dt * 2.8)));
         }
     }
 
@@ -663,12 +601,11 @@ export function makeFilm(layers) {
             const age = t - tt;
             const latest = !entries[ei + 1] || t < entries[ei + 1][0];
             lines.forEach((line, li) => {
-                const n = Math.floor(clamp(age * 140 - li * 8, 0, line.length));
+                const n = Math.floor(clamp(age * 90 - li * 12, 0, line.length));
                 let col = li === 0 ? C.tearText : C.tearDim;
                 if (!latest) col = withA(col, 0.45);
                 const fade = 1 - lin(t, T.tear4 + 0.5, T.tear4 + 1.1);
-                const g = age < 0.25 ? srand(ei * 31 + Math.floor(t * 40)) * 10 : 0;
-                G.text(line.slice(0, n), x + g, y, 0, 19, withA(col, fade));
+                G.text(line.slice(0, n), x, y, 0, 19, withA(col, fade));
                 y -= 25;
             });
             y -= 9;
@@ -685,7 +622,7 @@ export function makeFilm(layers) {
         // the caret, born where the fragments gathered
         if (t < T.camType0 + 0.1) {
             const k = ease(lin(t, T.camType0 - 0.25, T.camType0));
-            glowH.dot(CARET_HUD, 40 + 30 * k, withA([3, 2.2, 1.0, 1], 0.5 * k));
+            glowH.dot(CARET_HUD, 26, withA([1.4, 1.1, 0.6, 1], 0.35 * k));
         }
         caret(segH, cm, t, T.camType0 - 0.1, cm.end, codeAlpha);
         // the code; the characters that have flown into the graph keep a bright afterimage briefly
@@ -723,8 +660,8 @@ export function makeFilm(layers) {
             }
             pts = densify(pts, 12);
             const col = withA(C.camel, 0.85);
-            drawPoly(segW, pts, 2.0, col, 0, easeOut(p));
-            if (p >= 1) arrowHead(segW, pts, 2.0, col, 11);
+            drawPoly(segW, pts, 1.6, col, 0, easeOut(p));
+            if (p >= 1) arrowHead(segW, pts, 1.6, col, 10);
             pulses(t, e, pts);
         }
         // the paths into and through the region
@@ -752,7 +689,6 @@ export function makeFilm(layers) {
             const resT = r.t + 13 * HOP;
             const resA = keep * lin(t, resT, resT + 0.12);
             glyphW.text(r.result, 1860 - (r.result.length * 26 * 0.6) / 2, -62, 0, 26, withA(C.mint, resA));
-            if (resA > 0) glowW.dot([1860, 0, 0], 180, withA(C.data, 0.35 * Math.exp(-(t - resT) * 3)));
         }
 
         // the closing line comes from the overlay
@@ -768,10 +704,10 @@ export function makeFilm(layers) {
             const c = [REGION.c[0] - REGION.w / 2 + 70, REGION.c[1], 5];
             const bolt = [];
             for (let i = 0; i <= 9; i++) bolt.push([c[0] + srand(83000 + i * 3) * 26 + (i / 9 - 0.5) * 10, c[1] + (i / 9 - 0.5) * 300, 5]);
-            const col = mixCol([3.0, 0.3, 0.4, 1], [0.6, 2.2, 1.9, 1], ease(heal));
-            drawPoly(segW, bolt, 3.0 * (1 - heal) + 0.5, withA(col, 1 - ease(heal)), 0, 1);
+            const col = mixCol(C.tear, C.region, ease(heal));
+            drawPoly(segW, bolt, 1.6, withA(col, 0.8 * (1 - ease(heal))), 0, 1);
         }
-        const glow = 1 + 0.9 * Math.exp(-(t - REGION.t - 0.6) * 3) * (t > REGION.t + 0.6 ? 1 : 0);
+        const glow = 1 + 0.7 * Math.exp(-(t - REGION.t - 0.6) * 3) * (t > REGION.t + 0.6 ? 1 : 0);
         drawPoly(segW, pts, 2.4, [C.region[0] * glow, C.region[1] * glow, C.region[2] * glow, 1], 0, ease(p));
         fillW.rect(REGION.c, REGION.w, REGION.h, 34, withA(C.regionFill, ease(p)));
         // BRCH: the diamond at the region's door
@@ -834,9 +770,9 @@ export function makeFilm(layers) {
             const f = head - j * 0.05;
             if (f < 0) break;
             const { p } = pointAt(pts, f);
-            glowW.dot(p, j === 0 ? 46 : 30 - j * 3, withA(C.data, fade * (j === 0 ? 1 : 0.5 - j * 0.06)));
+            glowW.dot(p, j === 0 ? 22 : 14 - j, withA(C.data, fade * (j === 0 ? 0.9 : 0.35 - j * 0.04)));
         }
-        drawPoly(segW, pts, 3.2, withA(C.data, 0.9 * fade), Math.max(0, head - 0.3), head);
+        drawPoly(segW, pts, 2.2, withA(C.data, 0.85 * fade), Math.max(0, head - 0.25), head);
     }
 
     function runGlow(id, t) {
@@ -874,15 +810,13 @@ export function makeFilm(layers) {
                 const f = ease(lin(t, t0, t0 + flyT));
                 const end = toHud(wp, cam);
                 const start = [s.x, s.y, 0];
-                const lift = Math.sin(f * Math.PI) * 60;
+                const lift = Math.sin(f * Math.PI) * 30;
                 const pos = [mix(start[0], end[0], f), mix(start[1], end[1], f) + lift, 0];
                 const projSize = size * (worldScale(wp, cam));
                 const sz = mix(cm.size, projSize, f);
-                glyphH.glyph(label[k], pos[0], pos[1], 0, sz, [1.6, 1.5, 1.2, 1], (1 - f) * srand(k + sp[1]) * 0.6);
-                glowH.dot(pos, 26, withA([2.5, 1.8, 0.8, 1], 0.4 * Math.sin(f * Math.PI)));
+                glyphH.glyph(label[k], pos[0], pos[1], 0, sz, [0.98, 0.94, 0.86, 1], 0);
             } else {
-                const settle = Math.exp(-(t - t0 - flyT) * 6);
-                glyphW.glyph(label[k], wp[0], wp[1], wp[2], size, [col[0] + settle, col[1] + settle, col[2] + settle * 0.6, col[3]]);
+                glyphW.glyph(label[k], wp[0], wp[1], wp[2], size, col);
             }
         }
     }

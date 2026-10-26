@@ -160,20 +160,21 @@ export function rotateAbout(p, c, axis, a) {
 }
 
 /**
- * Shards: a segment of a shattered shape, `key` its identity. It bursts away from `centre` at
- * `t0`, hangs and drifts, and from `g0` to `g1` gathers into `point` (shrinking to nothing).
+ * Shards: a segment of a shattered shape, `key` the identity of the fragment it belongs to. The
+ * fragment is rigid: every segment with the same key moves and turns about the same `pivot`. It
+ * drifts away from `centre` from `t0`, hangs, and from `g0` to `g1` gathers into `point`.
  */
-export function shard(a, b, key, s, now) {
+export function shard(a, b, key, s, now, pivot = null) {
     const dt = now - s.t0;
     if (dt <= 0) return [a, b];
-    const mid = mix3(a, b, 0.5);
+    const mid = pivot ?? mix3(a, b, 0.5);
     const out = norm3(add3(sub3(mid, s.centre), [srand(key * 3 + 1) * 120, srand(key * 3 + 2) * 120, srand(key * 3 + 3) * 420]));
     const burst = s.strength * (0.25 + 1.0 * Math.pow(rand(key * 7 + 5), 2));
-    const k = 1 - Math.exp(-dt * 2.6);
-    const drift = [srand(key * 11 + 1) * 7, srand(key * 11 + 2) * 7 + 2, srand(key * 11 + 3) * 16];
+    const k = 1 - Math.exp(-dt * 0.9);
+    const drift = [srand(key * 11 + 1) * 4, srand(key * 11 + 2) * 4 + 1, srand(key * 11 + 3) * 7];
     let m = add3(mid, add3(scale3(out, burst * k), scale3(drift, dt)));
     const axis = norm3([srand(key * 13 + 1), srand(key * 13 + 2), srand(key * 13 + 3)]);
-    const spin = (0.6 + 2.2 * rand(key * 17 + 4)) * (1 - Math.exp(-dt * 2)) * 2.4 + dt * 0.35 * srand(key * 19);
+    const spin = (0.2 + 0.5 * rand(key * 17 + 4)) * (1 - Math.exp(-dt * 1.2)) + dt * 0.06 * srand(key * 19);
     let pa = rotateAbout(a, mid, axis, spin);
     let pb = rotateAbout(b, mid, axis, spin);
     pa = add3(pa, sub3(m, mid));

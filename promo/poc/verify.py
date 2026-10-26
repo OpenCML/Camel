@@ -3,9 +3,9 @@
 
 """Checks every rendered frame before it is encoded, and makes a contact sheet to look at.
 
-A frame is good when it exists, is 1920x1080 and opaque, and carries the grade's film grain, which
-only a working WebGL canvas draws: a frame whose canvas was lost shows the text overlay on flat
-black. The first and last 0.4 s fade from and to black and are exempt from the grain test.
+A frame is good when it exists, is 1920x1080 and opaque, and shows the ground the grade paints in
+every corner, which only a working WebGL canvas draws: a frame whose canvas was lost is pure black
+there. The first and last 0.4 s fade from and to black and are exempt from that test.
 Usage: python verify.py FRAMES_DIR FPS SECONDS SHEET_PNG [t1,t2,...]
 """
 import os
@@ -30,8 +30,8 @@ for i in range(int(round(fps * secs))):
         problems.append(f"{i}: not opaque")
     g = im.convert("L")
     t = i / fps
-    if 0.4 < t < secs - 0.4 and ImageStat.Stat(g.crop((0, 0, 240, 240))).stddev[0] < 0.3:
-        problems.append(f"{i}: no grain (a lost canvas)")
+    if 0.4 < t < secs - 0.4 and max(im.convert("RGB").getpixel((4, 4))) == 0:
+        problems.append(f"{i}: no ground (a lost canvas)")
     luma.append(ImageStat.Stat(g.reduce(8)).mean[0])
 
 print(f"{len(problems)} problems in {int(round(fps * secs))} frames")

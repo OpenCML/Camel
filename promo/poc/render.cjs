@@ -33,14 +33,10 @@ async function page(browser) {
     return p;
 }
 
-// a 1080p frame of this film is never this small: a smaller one is a blank canvas
-const MIN_BYTES = 150000;
-
 async function save(p, t, file) {
+    // renderAt throws when the WebGL canvas is lost or drew nothing
     const data = await p.evaluate((tt) => window.renderAt(tt), t);
-    const png = Buffer.from(data.split(',')[1], 'base64');
-    if (png.length < MIN_BYTES && t > 0.4 && t < 29.6) throw new Error(`frame at ${t}s is ${png.length} bytes: blank`);
-    fs.writeFileSync(file, png);
+    fs.writeFileSync(file, Buffer.from(data.split(',')[1], 'base64'));
 }
 
 (async () => {

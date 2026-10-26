@@ -51,12 +51,12 @@ grid, and the picture and the score are built from the same cue sheet (`poc/rend
   ```
 
 - A trace line walks down the code (3.2 s). Behind it, in depth on the right, the framework rebuilds
-  the graph it is tracing as cold white light. The Python loop unrolls into three rows.
-- At each construct the trace cannot follow, the graph tears:
-  - the offending code burns red;
-  - the frame glitches;
-  - a crack runs through the graph and a piece shatters;
-  - the compiler's own message types into a log under the code.
+  the graph it is tracing in thin grey-white lines. The Python loop unrolls into three rows. The
+  camera holds still.
+- At each construct the trace cannot follow, the graph breaks:
+  - the offending code turns the break colour;
+  - the edge parts cleanly in two, and the failing piece drifts a little;
+  - the compiler's own message types into a log under the code, calm and legible.
 
   | Beat | Code | `torch.compile` (2.14.1) | `jax.jit` (0.12) |
   |---|---|---|---|
@@ -68,30 +68,27 @@ grid, and the picture and the score are built from the same cue sheet (`poc/rend
 - **Splitting:** after the first tear, what was caught closes into a box labelled `graph 1`. After
   the second, `graph 2` closes around `l * 0.5`. A graph break splits the program into separate
   graphs with Python between them, and the picture shows exactly that.
-- **The recompile:** at 10.0 s everything shatters at once. The fragments hang in the dark.
+- **The recompile:** at 10.0 s the whole traced graph comes apart: a few dozen fragments (each node,
+  edge and box) drift slowly away and hang in the dark.
 - **The line (11.25 s):** *AI compilers trace Python to recover a graph the language threw away.*
   Its subtitle is 「AI 编译器追踪 Python，想找回语言丢掉的那张图。」
 
 **Sound.**
 
-- A low drone tightens; a soft pulse runs from bar 2; hats tick under the trace; each typed
-  character clicks.
-- Each tear is a glitch hit: a sub drop, a bit-crushed burst and a stutter. The recompile is the
-  largest.
-- A riser pulls up under the line and is cut dead on the downbeat of bar 6.
+- A quiet low drone.
+- Each break is a soft low knock with a dry tick. The recompile is a deeper knock with a short wash.
+- Everything is cut dead on the downbeat of bar 6.
 
 ## 2. The turn (0:12.5–0:17.5)
 
 **Picture.**
 
-- Silence. The fragments of the torn graph hang and drift, and the camera moves slowly through
-  them.
+- Silence. The fragments of the broken graph hang and drift, and the camera drifts a little.
 - At 13.75 s: *What if the language never threw it away?* Its subtitle is 「如果语言从未丢掉它呢？」
 - At 17.5 s the fragments fall together into one point of light, which becomes the caret of the
   Camel code.
 
-**Sound.** Nothing at first. Then one high shimmer under the question, and a reverse swell into
-the caret.
+**Sound.** Silence, real silence, until a faint swell rises into the caret.
 
 ## 3. The reveal: code is graph (0:17.5–0:30)
 
@@ -114,9 +111,10 @@ the caret.
   same thing seen two ways.
 - **The function:** `func loss` draws the frame of the function.
 - **The branch:** the `if` that tore the trace now draws a whole branch region. It has a door
-  (the branch), both arms (`then` through `* 0.5`, `else` straight on) and the join. A red crack
-  flickers across it once and heals.
-- **The camera** follows the graph as it grows, then pulls back to show it whole.
+  (the branch), both arms (`then` through `* 0.5`, `else` straight on) and the join. A thin break
+  line crosses it once and heals.
+- **The camera** holds a still wide shot of the whole graph while it is written, then moves in
+  slowly to the branch for the payoff.
 - **Data runs as light** (24.4 s): an amber pulse runs from the inputs through every edge, hop by
   hop on the beat.
   - With `best = 0.5`, the comparison is `true`: the `then` arm lights, and the result reads
@@ -128,11 +126,9 @@ the caret.
 
 **Sound.**
 
-- A soft bell for every node the code folds into, rising through A major pentatonic on the
-  sixteenths.
-- A warm chord opens when the branch region closes whole.
-- A pulse returns with the pull-back, and an arpeggio follows each run of light.
-- A chime marks each result, and the last chord resolves under the line.
+- A quiet bell for every node the code folds into, rising through A major pentatonic.
+- A soft chord opens when the branch region closes whole.
+- A chime marks each run reaching its result, and the last chord resolves under the line.
 
 ## 4. Pull back: the camel of light (0:30–0:40, planned)
 
