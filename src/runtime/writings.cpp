@@ -451,7 +451,7 @@ bool readsVariable(
 /// Whether a node carries the program's order instead of being a value a pass may compute for
 /// itself: a call runs a graph, a branch, join, sync or loop runs (or orders) what it holds, a
 /// gate waits -- for its control inputs, or for the sync edge the chain of a `sync` block is
-/// written as (docs/design/effects/edges.cn.md 5.3, H242) -- and an operator that has an effect, or
+/// written as (docs/design/effects/edges.cn.md 5.3) -- and an operator that has an effect, or
 /// that must run where the program writes it, is not one a pass may recompute (design principles
 /// 3.3).
 /// This is the rule the generic rewrite pass uses to decide what it may not reorder
@@ -471,8 +471,7 @@ bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node) {
         return true;
     case GCNodeKind::Gate:
         // Either kind of wait is what makes a gate more than plain forwarding: the sync edge is
-        // what the chain of a `sync` block writes (docs/design/effects/edges.cn.md 5.3), and the
-        // control edge is the kind it was written as until H242 moved the chain onto it.
+        // what the chain of a `sync` block writes (docs/design/effects/edges.cn.md 5.3).
         return !draft.ctrlInputsOf(node).empty() || !draft.syncInputsOf(node).empty();
     case GCNodeKind::Oper: {
         const std::span<const std::byte> payload = draft.payloadOf(node);
@@ -1079,17 +1078,20 @@ DraftWritings::extract(const CostModel &model, camel::core::context::Context *co
         select(regionResults.back());
     }
     for (size_t at = 0; at < work.size(); ++at) {
-        // The other writings of this value that waited for something (control inputs): the
-        // writing that stays waits for it too.
+        // The other writings of this value that waited for something: the writing that stays waits
+        // for it too, in whichever kind the chain of its block is written (a control input, or the
+        // sync edge of a `sync` block's chain; docs/design/effects/edges.cn.md 1.5 and 5.3).
         if (multi[work[at]]) {
             for (gc_node_ref_t member : store_.members(contextOf(work[at]), work[at])) {
-                for (gc_node_ref_t wait : draft_.ctrlInputsOf(member)) {
-                    const gc_node_ref_t pick = chosen[classOf[wait]];
-                    if (pick == kInvalidNodeRef) {
-                        throw std::logic_error(
-                            "A control input has no writing that does not read itself.");
+                for (auto waits : {draft_.ctrlInputsOf(member), draft_.syncInputsOf(member)}) {
+                    for (gc_node_ref_t wait : waits) {
+                        const gc_node_ref_t pick = chosen[classOf[wait]];
+                        if (pick == kInvalidNodeRef) {
+                            throw std::logic_error(
+                                "A control input has no writing that does not read itself.");
+                        }
+                        select(pick);
                     }
-                    select(pick);
                 }
             }
         }
@@ -2055,7 +2057,7 @@ RewriteStats DraftWritings::rewrite(
                 std::vector<gc_node_ref_t> matchedWaits(
                     draft_.ctrlInputsOf(node).begin(), draft_.ctrlInputsOf(node).end());
                 // A statement of a `sync` block is ordered by the statement written before it, and
-                // that edge is a sync edge (docs/design/effects/edges.cn.md 1.5; H242) -- the
+                // that edge is a sync edge (docs/design/effects/edges.cn.md 1.5) -- the
                 // control edge is the kind it was written as until the chain moved onto it. Both
                 // are "everything the match read that ordered it" (below): a law over data inputs
                 // is sound whatever the node is ordered after, and the writing that replaces it
