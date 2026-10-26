@@ -394,7 +394,7 @@ Invalid number format: '{0}'.
 **Help**
 
 ```text
-A number is decimal digits without a leading zero in its whole part (an integer or a real: '0.5' is a number, '007' and '007.5' are not), or '0x', '0b' or '0o' followed by digits of that base: octal 63 is '0o77', not '077'; '09' and '077' are not number tokens. In an entry argument and a conversion text a leading zero is decimal ('077' is 77).
+A number is decimal digits without a leading zero in its whole part (an integer or a real: '0.5' is a number, '007' and '007.5' are not), or '0x', '0b' or '0o' followed by digits of that base: octal 63 is '0o77', not '077'; '09' and '077' are not number tokens. An entry argument is read by the same rule; a conversion text is data, and reads '077' as 77.
 ```
 
 **Example** (`test/cases/compile/precedence/leading_zero_real.cml`, run as `camel test/cases/compile/precedence/leading_zero_real.cml`)

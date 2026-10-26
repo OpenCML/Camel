@@ -217,8 +217,8 @@ std::pair<T, T> complexFromText(
 Loaded loadValue(const std::string &text, Type *declared, const std::string &what);
 
 /// One integer parameter, read at the width it is declared with, as one whole number token of
-/// the language (parseNumberToken: decimal, `0x`, `0b` or `0o` octal; a leading zero is decimal
-/// data text): `i32` is an int32 all the way, so a text outside that range is refused with
+/// the language (parseNumberToken: decimal, `0x`, `0b` or `0o` octal; a leading zero before another digit is no
+/// token): `i32` is an int32 all the way, so a text outside that range is refused with
 /// the range of `i32` rather than read as an int64 and narrowed (design principles 5.1: a value
 /// is never cut to fit a type). `target` is the declared type's name in the message.
 template <std::signed_integral T>

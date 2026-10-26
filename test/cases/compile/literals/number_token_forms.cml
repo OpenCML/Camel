@@ -1,9 +1,8 @@
 /**
  * The number tokens a literal and an entry argument share: an integer token is decimal,
- * hexadecimal (`0x`), binary (`0b`) or octal (`0o`), and a real token may carry leading zeros
- * (`077.5`) because its point makes it unambiguous. A float position takes an integer token and
- * converts it to its width, as a command-line argument of that type is read. A leading-zero
- * decimal integer (`077`) is no longer a source token: octal is `0o77`.
+ * hexadecimal (`0x`), binary (`0b`) or octal (`0o`). A float position takes an integer token and
+ * converts it to its width, as a command-line argument of that type is read. A leading zero
+ * before another digit (`077`, `077.5`) is no token, in source or at the entry: octal is `0o77`.
  */
 module number_token_forms
 
@@ -11,8 +10,7 @@ func main(): int sync {
     let h: float = 0xFF
     let b: f32 = 0b1010
     let o: float = 0o77
-    let r: float = 077.5
-    println(h, b, o, r)
+    println(h, b, o)
     println(0xFF, 0b1010, 0o77)
     return 0
 }
