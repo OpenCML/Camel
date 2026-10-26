@@ -653,13 +653,16 @@ name = "gpu_scope.unsupported_operator_is_a_compile_error"
 kind = "negative"
 case = "../../../cases/modules/tiles/gpu_scope_refusal.cml"
 # `tanh` is pure, but the device back end does not lower it. A `#gpu` scope promises the device
-# runs everything written in it, so the pass refuses instead of falling back silently: the
-# report names the scope and the operator, and no CUDA device is needed to produce it.
+# runs everything written in it, so the pass fails instead of falling back silently: `compile` is
+# `(f: F) => F!` (design principles 9.1), and its failure is the error value `GpuScopeUnsupported`,
+# which names the scope and the operator. It reaches the exit unhandled, so it is reported on
+# standard error, and no CUDA device is needed to produce it.
 args = ["${case}", "tiles::compile", "std::nvm"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::GpuScopeUnsupported"
-expect_output_contains = ["`#gpu` scope 'activate'", "operator 'tensor:tanh'", "no device implementation"]
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_stderr_contains = ["GpuScopeUnsupported", "`#gpu` scope 'activate'", "operator 'tensor:tanh'", "no device implementation"]
+expect_stdout_not_contains = ["`#gpu` scope 'activate'"]
 timeout_ms = 30000
 
 [[tests]]
@@ -1097,8 +1100,8 @@ case = "../../../cases/gpu/nofallback/grad_dynamic.cml"
 args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::GpuScopeUnsupported"
-expect_output_contains = ["`#gpu` scope 'step'", "operator 'autodiff:with_grad'", "needs a function known at compile time"]
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_stderr_contains = ["GpuScopeUnsupported", "`#gpu` scope 'step'", "operator 'autodiff:with_grad'", "needs a function known at compile time"]
 expect_output_not_contains = ["is a macro operator no pass has expanded"]
 timeout_ms = 30000
 
@@ -1167,7 +1170,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "gpu_scope.report_without_a_pass_reads_the_whole_graph"
-desc = "The same program without `tiles::compile`: no pass has cut anything, so the same three operators read the whole graph — one plan (`values:7`, `kernels:1`, no `segments` reading), one region whose three members are the scope's statements, one upload and one download, and one generated program with no segment header. Red when the segment reading is taken without a cut scope (it would have nothing to read), or when the whole-graph reading is lost."
+desc = "The same program without `tiles::compile`: no pass has cut anything, so the same three operators read the whole graph — one plan (`values:7`, `kernels:1`, no `segments` reading), one region whose three members are the scope's statements, one upload and one download, and one generated program with no segment header. The report's `schema` is 1, and stays 1 while fields are only added: it goes up when a field that is already there changes meaning or is removed, so a reader finds the reading by its leading `{\"schema\":1,`. Red when the segment reading is taken without a cut scope (it would have nothing to read), when the whole-graph reading is lost, or when the number moves for a field that was only added."
 kind = "behavior"
 case = "../../../cases/modules/tiles/gpu_scope_report.cml"
 args = ["--devices", "cpu", "${case}"]
@@ -1185,6 +1188,13 @@ const plan = JSON.parse(inspect.slice('inspect '.length))
 assert(plan.segments === undefined, inspect)
 assert(plan.values === 7 && plan.kernels === 1, JSON.stringify(plan))
 const analysis = JSON.parse(regions)
+// The number says when the report's meaning changed, not how many fields it has: a field that is
+// only added leaves it where it is, so the documented keys are all present and none of them had to
+// be paid for with a new number (docs/design/gpu/plan.cn.md, section on the residency conclusion).
+assert(analysis.schema === 1, `the regions report says schema ${analysis.schema}`)
+for (const key of ['segments', 'regions', 'transfers']) {
+assert(key in analysis, `the regions report has no ${key}`)
+}
 assert(analysis.segments.length === 0, regions)
 assert(analysis.regions.length === 1 && analysis.regions[0].members.length === 3, regions)
 assert(analysis.transfers.uploads.length === 1 && analysis.transfers.downloads.length === 1, regions)

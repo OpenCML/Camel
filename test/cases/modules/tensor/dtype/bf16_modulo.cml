@@ -33,20 +33,20 @@
 module tensor_dtype_bf16_modulo
 
 import { new, to_bytes } from tensor
-import { to_array, size } from bytes
+import { to_array } from bytes
 
 func main(): int sync {
     let bfLeftValue: bf16[] = [7.5, -7.5, 7.5, 1.0]
     let bfRightValue: bf16[] = [2.0, 2.0, -2.0, 4.0]
     let bf = new(bfLeftValue) % new(bfRightValue)
     println('bf16 values:', bf[0], bf[1], bf[2], bf[3])
-    println('bf16 bytes:', size(to_bytes(bf)), to_array(to_bytes(bf)))
+    println('bf16 bytes:', len(to_bytes(bf)), to_array(to_bytes(bf)))
 
     let halfLeftValue: f16[] = [7.5, -7.5, 7.5, 1.0]
     let halfRightValue: f16[] = [2.0, 2.0, -2.0, 4.0]
     let half = new(halfLeftValue) % new(halfRightValue)
     println('f16 values:', half[0], half[1], half[2], half[3])
-    println('f16 bytes:', size(to_bytes(half)), to_array(to_bytes(half)))
+    println('f16 bytes:', len(to_bytes(half)), to_array(to_bytes(half)))
 
     let wideLeftValue: f64[] = [-7.5]
     let wideRightValue: f64[] = [2.0]

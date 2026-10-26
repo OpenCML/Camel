@@ -553,6 +553,14 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
                     auto prefixResult =
                         applyPassesDetailed(program, prefixPasses, invocation->ctx, execOs);
                     program = prefixResult.program;
+                    if (prefixResult.errored()) {
+                        // A pass ended with an error value (design principles 9.1): it is reported
+                        // where the iteration's own output goes, after the redirection is undone,
+                        // so the report is not lost with the captured iteration.
+                        restoreOutput();
+                        return camel::execute::reportPassErrorValue(
+                            invocation->ctx, prefixResult.errorValue, useJsonFormat);
+                    }
                     if (prefixResult.failed()) {
                         return failIteration("execution failed before the timed pass.");
                     }
@@ -573,6 +581,11 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
                 const double elapsedMs =
                     std::chrono::duration<double, std::milli>(endedAt - startedAt).count();
 
+                if (timedResult.errored()) {
+                    restoreOutput();
+                    return camel::execute::reportPassErrorValue(
+                        invocation->ctx, timedResult.errorValue, useJsonFormat);
+                }
                 if (timedResult.failed()) {
                     return failIteration("timed pass execution failed without diagnostics.");
                 }
@@ -582,6 +595,11 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
                     auto suffixResult =
                         applyPassesDetailed(program, suffixPasses, invocation->ctx, execOs);
                     program = suffixResult.program;
+                    if (suffixResult.errored()) {
+                        restoreOutput();
+                        return camel::execute::reportPassErrorValue(
+                            invocation->ctx, suffixResult.errorValue, useJsonFormat);
+                    }
                     if (suffixResult.failed()) {
                         return failIteration("execution failed after the timed pass.");
                     }
@@ -590,6 +608,11 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
                 if (program != nullptr) {
                     auto fallbackResult =
                         applyPassesDetailed(program, Run::fallbackPasses, invocation->ctx, execOs);
+                    if (fallbackResult.errored()) {
+                        restoreOutput();
+                        return camel::execute::reportPassErrorValue(
+                            invocation->ctx, fallbackResult.errorValue, useJsonFormat);
+                    }
                     if (fallbackResult.failed()) {
                         return failIteration("fallback execution failed after the timed pass.");
                     }

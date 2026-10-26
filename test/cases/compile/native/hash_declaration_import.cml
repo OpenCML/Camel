@@ -1,12 +1,18 @@
 /**
  * The declarations of `hash` are what an importer sees: `sha256` accepts a `string` and a `Bytes`
- * value (two operators, `hash:sha256_str` and `hash:sha256_bytes`), and `sha256_rounds` takes the
- * declared `string` and `int`. Every call reaches the C++ operator.
+ * value (a text is encoded first, then one operator, `hash:sha256_bytes`, digests the bytes). Every
+ * call reaches the C++ operator.
  */
 module hash_declaration_import
 
-import { sha256, sha256_rounds } from hash
+import { sha256 } from hash
 import { encode } from bytes
+
+// SHA-256 applied `rounds` times, each to the hexadecimal text of the one before.
+func sha256_rounds(s: string, rounds: int): string {
+    let (digest, done) = loop digest = s, done = 0 while done < rounds do (sha256(digest), done + 1)
+    return digest
+}
 
 func main(): int sync {
     let expected = 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'

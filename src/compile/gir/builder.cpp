@@ -158,6 +158,19 @@ void Builder::buildEntryCall() {
     }
 }
 
+void Builder::registerBuiltBody(const compile_graph_ptr_t &graph) {
+    ASSERT(graph != nullptr, "A built body is a graph.");
+    // A body is registered where it finishes, and a graph that is registered twice would be judged
+    // twice by a pass over the built bodies (settleStreamLinearity counts the reads of each graph):
+    // one graph is one body, once.
+    for (const compile_graph_ptr_t &known : unit_->builtBodies) {
+        if (known.get() == graph.get()) {
+            return;
+        }
+    }
+    unit_->builtBodies.push_back(graph);
+}
+
 compile_graph_ptr_t Builder::enterScope(
     FunctionType *funcType, const std::string &name,
     const std::vector<camel::source::origin_id_t> &parameterOrigins) {
@@ -376,11 +389,6 @@ void Builder::enterGraphScope(const compile_graph_ptr_t &graph, const std::strin
 }
 
 void Builder::leaveScope() {
-    // A stream is read once on each execution path (design principles 5.4). The arms of this graph
-    // are complete here, so its consumers of one stream can be told apart from one another.
-    if (currGraph_ != nullptr) {
-        checkStreamConsumption(currGraph_.get());
-    }
     // The body of this graph is complete, so its captures and its calls are known: a `var` of it
     // that no closure captured, no call was handed and that is not its own parameter becomes SSA
     // here (collapseNonEscapingVariableReads).
@@ -894,7 +902,6 @@ FunctionType *Builder::completeLambdaSignature(
         return funcType->hasArgNames() ? std::string(funcType->argNameAt(index)) : std::string{};
     };
     FunctionTypeFactory factory;
-    factory.setModifiers(funcType->modifiers());
     factory.setHasCompileInfo(funcType->hasArgNames());
     // The result type: the one written, or the one the expected function type gives. An
     // expected result that still holds a type variable says nothing, and the body decides.
@@ -1090,7 +1097,7 @@ void Builder::buildFuncBody(
             rejectDiscardedValue(graph.get());
         }
         bodyStates_[graph.get()] = BodyState::Built;
-        unit_->builtBodies.push_back(graph);
+        registerBuiltBody(graph);
         // A function that wrote no clause about resources promises what its body reaches
         // (design principles 3.3, effects plan 5). What it reaches is measured here, while the
         // body is in hand, and written onto its own signature -- the open one, which no other

@@ -138,7 +138,7 @@ bool isIntArray(Type *type) {
 /// a rule whose count is unconstrained places no name, and one such rule refuses every call that
 /// gives an argument by name (design principles 6.4, builder_calls.cpp#withNamesOf).
 std::optional<Type *> resolveExportModel(
-    const type_vec_t &with, const type_vec_t &norm, const ModifierSet &) {
+    const type_vec_t &with, const type_vec_t &norm) {
     if (with.size() < 1 || with.size() > 3 || norm.size() != 2) {
         return std::nullopt;
     }

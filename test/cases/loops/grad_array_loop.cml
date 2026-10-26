@@ -25,7 +25,7 @@ func state(): float {
 with <w: float>
 func state_struct(): float {
     let empty: P[] = []
-    let ps = loop acc = empty for i in [1, 2] do acc->append<{ x: (i as float) * w, y: 0.0 }>
+    let ps = loop acc = empty for i in [1, 2] do acc->append<{ x: float(i) * w, y: 0.0 }>
     return ps[0].x + ps[1].x
 }
 

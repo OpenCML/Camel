@@ -411,7 +411,10 @@ bool applyDiagnosticOptions() {
                   << "'. Expected auto, always or never." << std::endl;
         return false;
     }
-    setDiagnosticRenderConfig(format == "short" ? DiagFormat::Short : DiagFormat::Rich, color);
+    setDiagnosticRenderConfig(
+        format == "short" ? DiagFormat::Short : DiagFormat::Rich,
+        color,
+        format == "json");
 
     if (Diag::maxErrors < 0 || Diag::maxWarnings < 0) {
         std::cerr << "Error: --max-errors and --max-warning take a non-negative number."

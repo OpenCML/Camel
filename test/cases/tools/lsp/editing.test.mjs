@@ -115,8 +115,8 @@ await withServer(async (ls) => {
         'a declared member carries its declared overloads', constant)
     // A module whose every name is declared: no `exportEntity` answers for it any more.
     items = await membersOf('import re', 're')
-    checkEq(labels(items), ['test'], 'the members of a module that is all declarations')
-    checkEq(items[0].detail, '(pattern: string, text: string) => bool', 'with the declared signature')
+    checkEq(labels(items), ['Match', 'find', 'find_all', 'has_match', 'replace', 'replace_with', 'split', 'validate'], 'the members of a module that is all declarations')
+    checkEq(items.find((i) => i.label === 'validate').detail, '(pattern: string) => string!', 'with the declared signature')
 
     // ---- hover: the same module members ----
     const hoverMember = async (imports, call, needle, delta) => {
@@ -131,8 +131,8 @@ await withServer(async (ls) => {
     check(h !== null && h.includes('program_of: (f: F) => Program'),
         'hover on a computed member of a migrated module', h)
     check(h.includes('Function of module `graph`'), 'naming the module it comes from', h)
-    h = await hoverMember('import re', 're::test("a", "b")', 're::test', 5)
-    check(h !== null && h.includes('test: (pattern: string, text: string) => bool'),
+    h = await hoverMember('import re', 're::has_match<"a">("b")', 're::has_match', 5)
+    check(h !== null && h.includes('func has_match(text: string): bool'),
         'hover on a declared member of a migrated module', h)
 
     // ---- completion: the variants of an enum after `Type::` ----

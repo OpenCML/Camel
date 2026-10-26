@@ -126,8 +126,8 @@ func main(): int sync {
     let four = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [4])
     let six = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [6])
     let eight = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0] as f32[], [8])
-    let out = get_env('ONNX_OUT')
-    let mode = get_env('MODE')
+    let out = get_env('ONNX_OUT') ?? ''
+    let mode = get_env('MODE') ?? ''
     if mode == 'open' then {
         let _ = export_model<out: out>((x: f32[..]): f32[..] => openEnd(x), four)
     } else if mode == 'start' then {

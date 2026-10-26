@@ -70,8 +70,9 @@ template <class F> slot_t checked(Ask ask, F &&body) {
         // the back end has no program for this graph, and whether a shape or the operator itself
         // is missing is what the miss says. `RuntimeError` would tell the user the runtime broke.
         // No `#gpu` scope is claimed here: the graph may be one no tag covers, or one segment of
-        // a scope the pass has cut. The diagnostic a scope's own promise gets at compile time is
-        // `GpuScopeNoDeviceProgram`.
+        // a scope the pass has cut. A scope's own promise refused while it runs is
+        // `GpuScopeNoDeviceProgram`; the pass refuses one while it compiles, with the error value
+        // `GpuScopeUnsupported`.
         core::error::throwRuntimeFault(
             core::error::RuntimeDiag::GraphNoDeviceProgram,
             ask.oper,
@@ -670,7 +671,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
               DynamicFuncTypeResolver::create(
                   {{0, {}}, {1, {false}}},
                   "(T: Tensor, float, struct or tuple) => Device<T>",
-                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                  [](const type_vec_t &with, const type_vec_t &norm)
                       -> std::optional<Type *> {
                       if (!with.empty() || norm.size() != 1)
                           return std::nullopt;
@@ -683,7 +684,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
               DynamicFuncTypeResolver::create(
                   {{0, {}}, {1, {false}}},
                   "(Device<T>) => T",
-                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                  [](const type_vec_t &with, const type_vec_t &norm)
                       -> std::optional<Type *> {
                       if (!with.empty() || norm.size() != 1)
                           return std::nullopt;
@@ -696,7 +697,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
               DynamicFuncTypeResolver::create(
                   {{1, {false}}, {1, {false}}},
                   "<fn: (...) => NumericAggregate>(inputs: NumericAggregate) => DeviceAggregate",
-                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                  [](const type_vec_t &with, const type_vec_t &norm)
                       -> std::optional<Type *> {
                       auto result = resolve(with, norm, false);
                       if (!result)
@@ -710,7 +711,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
               DynamicFuncTypeResolver::create(
                   {{1, {false}}, {1, {false}}},
                   "<fn: (...) => NumericAggregate>(inputs: NumericAggregate) => string",
-                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                  [](const type_vec_t &with, const type_vec_t &norm)
                       -> std::optional<Type *> { return resolve(with, norm, true); })}}),
         OperatorGroup::create(
             "inspect",
@@ -718,7 +719,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
               DynamicFuncTypeResolver::create(
                   {{1, {false}}, {1, {false}}},
                   "<fn: (...) => NumericAggregate>(inputs: NumericAggregate) => string",
-                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                  [](const type_vec_t &with, const type_vec_t &norm)
                       -> std::optional<Type *> { return resolve(with, norm, true); })}}),
         OperatorGroup::create(
             "benchmark",
@@ -726,7 +727,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
               DynamicFuncTypeResolver::create(
                   {{1, {false}}, {1, {false}}},
                   "<fn: (...) => NumericAggregate>(inputs: NumericAggregate) => string",
-                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                  [](const type_vec_t &with, const type_vec_t &norm)
                       -> std::optional<Type *> { return resolve(with, norm, true); })}}),
         OperatorGroup::create(
             "regions",
@@ -734,7 +735,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
               DynamicFuncTypeResolver::create(
                   {{1, {false}}, {0, {}}},
                   "<fn: Function>() => string",
-                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                  [](const type_vec_t &with, const type_vec_t &norm)
                       -> std::optional<Type *> {
                       if (with.size() != 1 || !norm.empty() ||
                           with[0]->code() != TypeCode::Function)

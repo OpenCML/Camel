@@ -49,7 +49,6 @@ using camel::runtime::GCGraph;
 using camel::runtime::gc_node_ref_t;
 using camel::runtime::GCNodeKind;
 using camel::runtime::GCOperBody;
-using camel::runtime::GraphCommitConflict;
 using camel::runtime::GraphDraft;
 using camel::runtime::kInvalidNodeRef;
 using camel::runtime::Program;
@@ -337,9 +336,11 @@ slot_t evalKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         TupleType::nullable(HandleType::get(HandleKind::Node)));
 }
 
-/// The new Program, or an error value: `GraphConflict` when a graph the transaction read or
-/// wrote has another version in the context's program since, `GraphInvalid` when a graph it
-/// edited breaks an invariant (the message names it). The transaction is over either way.
+/// The new Program, or the error value `GraphInvalid` when a graph it edited breaks an invariant
+/// (the message names it). The transaction is over either way. The commit is a value: it never
+/// installs the context's program, whoever the transaction was opened on (design principles 9.1:
+/// a transform gives a new value and changes nothing another holder sees). Only the pass driver
+/// installs a program, the one a pass hands on (src/execute/camel_pass.cpp).
 slot_t commitKernel(ArgsView &, ArgsView &norm, Context &) {
     auto *wrapper = norm.get<ForeignResourceObject *>(0);
     if (wrapper->disposed()) {
@@ -352,11 +353,8 @@ slot_t commitKernel(ArgsView &, ArgsView &norm, Context &) {
     static const TupleType *resultType = TupleType::fallible(HandleType::get(HandleKind::Program));
     slot_t result;
     try {
-        const Program *committed =
-            state->detached ? state->session.commit(true) : state->session.commitChecked();
+        const Program *committed = state->session.commit(true);
         result = makeOk(toSlot(const_cast<Program *>(committed)), resultType);
-    } catch (const GraphCommitConflict &conflict) {
-        result = makeError("GraphConflict", conflict.what(), "<graph::commit>");
     } catch (const mm::MemoryExhausted &) {
         throw;
     } catch (const std::exception &failure) {
@@ -480,7 +478,7 @@ resolver_ptr_t functionRule(size_t operands, std::string text, Type *(*make)(Typ
     return DynamicFuncTypeResolver::create(
         {{0, {}}, {static_cast<int>(operands), std::vector<bool>(operands, false)}},
         std::move(text),
-        [operands, make](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+        [operands, make](const type_vec_t &, const type_vec_t &norm)
             -> std::optional<Type *> {
             const bool first = operands == 1 ? norm[0]->code() == TypeCode::Function
                                              : HandleType::is(norm[0], HandleKind::Txn);

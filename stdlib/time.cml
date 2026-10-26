@@ -2,31 +2,26 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * All three are declared with effects: `now` reads the clock, and `strptime` reads the time zone
- * of the process. `strftime` formats in UTC and is kept with them.
+ * A moment is a `float`: seconds since 1970-01-01 00:00 UTC, with a fraction. Reading the clock is
+ * an effect (`now`); turning a moment into text and back is pure and always in UTC, so the same
+ * moment gives the same text on every machine.
  */
 
-// The declarations of the operators of the C++ module `modules/time` (design principles 6.4).
-// This file is the one source of their signatures; the C++ side keeps
-// the kernels, the executor, the operator traits and the resources. A declaration names
-// `time:<function>` by convention, so no `#op` tag is needed.
-
-module time
-
-/// The current time in seconds since 1970-01-01 00:00 UTC, with a fraction.
+/// The current time, in seconds since the epoch.
 /// @effect reads the clock
 /// @example now()    // 1791806400.25
 export func now(): float
 
-/// The time `timestamp` (seconds since the epoch) written with a strftime format, in UTC.
-/// @effect declared with effects together with the rest of the module
-/// @fails fault `TimeFormatFailed` when the time or the format cannot be used
-/// @example strftime(0.0, '%Y-%m-%d')    // '1970-01-01'
-export func strftime(timestamp: float, format: string): string
+/// The moment written with a strftime format, in UTC.
+/// @pure
+/// @fails fault `TimeFormatFailed` when the moment is outside the range of calendar time, or the format gives no text
+/// @example 0.0->strftime<'%Y-%m-%d'>    // '1970-01-01'
+with <format: string>
+export func strftime(timestamp: float): string
 
-/// The time, in seconds since the epoch, that text gives when read with a strptime format; the
-/// fields are taken as local time.
-/// @effect reads the time zone
-/// @fails fault `TimeFormatFailed` when text does not have the format
-/// @example strptime('1970-01-02', '%Y-%m-%d')    // 86400 in UTC
-export func strptime(text: string, format: string): float
+/// The moment a text gives when read with a strptime format; the fields are taken as UTC.
+/// @pure
+/// @fails error value `ParseError` when the text does not have the format, or gives a moment outside the range of calendar time
+/// @example '1970-01-02'->strptime<'%Y-%m-%d'> !! 0.0    // 86400.0
+with <format: string>
+export func strptime(text: string): float!

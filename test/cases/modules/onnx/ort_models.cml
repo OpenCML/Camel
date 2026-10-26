@@ -27,12 +27,12 @@ func forward(x: f32[..], w: f32[..]): f32[..] {
 }
 
 func main(): int sync {
-let x = load_npy::<f32>(get_env('X'))
+let x = load_npy::<f32>(get_env('X') ?? '')
     let w = reshape([1.0, 0.0, 2.0, 0.0, 1.0, -1.0] as f32[], [2, 3])
-    let isGate = get_env('MODEL') == 'gate'
+    let isGate = (get_env('MODEL') ?? '') == 'gate'
     let y = if isGate then gate(x) else forward(x, w)
-    save_npy(y, get_env('Y'))
-    let out = get_env('ONNX_OUT')
+    save_npy(y, get_env('Y') ?? '')
+    let out = get_env('ONNX_OUT') ?? ''
     return if out == '' then 0 else if isGate then sync {
         let _ = export_model<out: out>(gate, x)
         return 0

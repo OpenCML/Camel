@@ -56,7 +56,7 @@ func input_a(): f32[..] {
 }
 
 func do_run(m: Sc): int sync {
-    let dump = get_env('DUMP')
+    let dump = get_env('DUMP') ?? ''
     let xa = input_a()
     let xb = reshape([100.0], [1])
     let x0 = reshape([2.0], [1])
@@ -78,8 +78,8 @@ func do_run(m: Sc): int sync {
 }
 
 func do_export(m: Sc): int sync {
-    let out = get_env('ONNX_OUT')
-    return if get_env('WHAT') == 'fwd' then sync {
+    let out = get_env('ONNX_OUT') ?? ''
+    return if (get_env('WHAT') ?? '') == 'fwd' then sync {
         let _ = export_model<out: out>(fwd, (m, input_a()))
         println('exported fwd')
         return 0
@@ -92,5 +92,5 @@ func do_export(m: Sc): int sync {
 
 func main(): int sync {
     let m = load()
-    return if get_env('MODE') == 'export' then do_export(m) else do_run(m)
+    return if (get_env('MODE') ?? '') == 'export' then do_export(m) else do_run(m)
 }

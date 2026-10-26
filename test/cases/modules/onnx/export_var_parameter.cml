@@ -24,7 +24,7 @@ func main(): int sync {
         let o = step(x, acc)
         return (o, acc)
     }
-    let _ = export_model<out: get_env('EXPORT_VAR_PARAMETER_OUT')>(f, (ex, es))
+    let _ = export_model<out: get_env('EXPORT_VAR_PARAMETER_OUT') ?? ''>(f, (ex, es))
     println('exported')
     return 0
 }

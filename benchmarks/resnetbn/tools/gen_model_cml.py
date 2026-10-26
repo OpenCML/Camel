@@ -197,7 +197,7 @@ func save_trained(m: Resnet, s: BnStats, dir: string): int sync {
 func train_stateful(m: Resnet, s: BnStats, x: f32[..]): int sync {
     let trained = train_loop(m, s, x, 0, warm_count(), step_count(), now())
     let reported = log_final(loss<trained.0>(x, trained.1))
-    let dir = get_env('CAMEL_BENCH_PARAMS')
+    let dir = get_env('CAMEL_BENCH_PARAMS') ?? ''
     return if dir != '' then save_trained(trained.0, trained.1, dir) else 0
 }
 """)
@@ -215,8 +215,8 @@ func train_stateful(m: Resnet, s: BnStats, x: f32[..]): int sync {
     p("    let s = {")
     p(",\n".join(f"        {bn}_bn_rm: weight('{bn}_bn_rm'), {bn}_bn_rv: weight('{bn}_bn_rv')" for bn in BN_NAMES))
     p("    }")
-    p("""    let workload = get_env('CAMEL_BENCH_WORKLOAD')
-    return if workload == 'train_export' then export_step(m, s, get_env('CAMEL_BENCH_EXPORT')) else if workload == 'train' then run_training(
+    p("""    let workload = get_env('CAMEL_BENCH_WORKLOAD') ?? ''
+    return if workload == 'train_export' then export_step(m, s, get_env('CAMEL_BENCH_EXPORT') ?? '') else if workload == 'train' then run_training(
 (x: f32[..]): float => { return train_step(m, s, x) },
         (x: f32[..], dir: string): int => { return dump_grads(m, s, x, dir) },
         (x: f32[..]): int => { return train_stateful(m, s, x) }

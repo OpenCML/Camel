@@ -8,7 +8,6 @@
 module mask_written_conversion
 
 import { reshape, cast, where, sum, to_bytes } from tensor
-import { size } from bytes
 
 func selected(x: f32[4], mask: bool[4]): float {
     return float(sum(where(mask, x, 0.0)))
@@ -23,7 +22,7 @@ func main(): int sync {
     let mask = x > 0.0
     println(selected(x, mask))
     println(converted(x, mask))
-    println(size(to_bytes(where(mask, x, 0.0))))
-    println(size(to_bytes(x * cast(mask, "f32"))))
+    println(len(to_bytes(where(mask, x, 0.0))))
+    println(len(to_bytes(x * cast(mask, "f32"))))
     return 0
 }

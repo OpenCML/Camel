@@ -4,17 +4,17 @@
  */
 module utf8_string
 
-import { split, trim, replace, find, substr, starts_with, repeat, codepoints, to_upper } from str
-import { encode, decode, from_array, size } from bytes
+import { split, trim, replace, index_of, starts_with, repeat, codepoints, to_upper } from str
+import { encode, decode, from_array } from bytes
 import { sha256 } from hash
-import { test } from re
+import { has_match } from re
 
 func main(): int sync {
     let s = '中文x😀'
     println(len(s), s[0], s[1], s[2], s[3], '中'[0] == '中')
     println(len(''), len('abc'), len('é'), len('\u{1F600}'), '\u{4E2D}\u{6587}' == '中文')
-    println(s->find<'x'> ?? -1, s->find<'😀'> ?? -1, s->find<'z'> ?? -1)
-    println(s->substr<1, 2>, s->substr<2, 2>, s->substr<0, 0>)
+    println(s->index_of<'x'> ?? -1, s->index_of<'😀'> ?? -1, s->index_of<'z'> ?? -1)
+    println(s[1:3], s[2:4], s[0:0])
     println(s->split<'文'>, s->replace<'文', 'W'>, s->starts_with<'中'>, '中'->repeat<3>)
     println(len('é中😀'->to_upper), 'é中x'->to_upper)
 
@@ -24,12 +24,12 @@ func main(): int sync {
 
     // the bytes of a string, and back: `bytes::encode` and `bytes::decode` are the one conversion
     let b = encode(s)
-    println(size(b), size(encode(s)), decode(b) !! 'bad')
+    println(len(b), len(encode(s)), decode(b) !! 'bad')
     println(decode(encode('héllo')) !! 'bad', len(decode(from_array([228, 184, 173])) !! 'bad'))
     println(codepoints(s))
     println(sha256('abc') == sha256(encode('abc')), sha256('中') == sha256(encode('中')))
 
     // regular expressions: `.` is one character
-    println(test('^.$', '中'), test('^.{2}$', '中文'), test('^.$', 'ab'), test('文', 'a文b'))
+    println('中'->has_match<'^.$'>, '中文'->has_match<'^.{2}$'>, 'ab'->has_match<'^.$'>, 'a文b'->has_match<'文'>)
     return 0
 }

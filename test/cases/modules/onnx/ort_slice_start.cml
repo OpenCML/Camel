@@ -34,17 +34,17 @@ func dynamic(x: f32[..]): f32[..] {
 }
 
 func main(): int sync {
-    if get_env('MODE') == 'constant' then {
+    if (get_env('MODE') ?? '') == 'constant' then {
         let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
-        let _ = export_model<out: get_env('ONNX_OUT')>((x: f32[..]): f32[..] => constants(x), x)
-    } else if get_env('MODE') == 'dynamic' then {
+        let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((x: f32[..]): f32[..] => constants(x), x)
+    } else if (get_env('MODE') ?? '') == 'dynamic' then {
         let x = reshape([12.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] as f32[],
             [1, 12]
         )
-        let _ = export_model<out: get_env('ONNX_OUT')>((x: f32[..]): f32[..] => dynamic(x), x)
+        let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((x: f32[..]): f32[..] => dynamic(x), x)
     } else {
         let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
-        let _ = export_model<out: get_env('ONNX_OUT')>((x: f32[..]): f32[..] => head(x), x)
+        let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((x: f32[..]): f32[..] => head(x), x)
     }
     println('exported')
     return 0

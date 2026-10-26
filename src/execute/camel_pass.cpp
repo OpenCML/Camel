@@ -25,7 +25,6 @@
 #include <vector>
 
 using camel::core::context::context_ptr_t;
-using camel::core::error::RuntimeDiag;
 using camel::core::rtdata::Bool;
 using camel::core::rtdata::Float32;
 using camel::core::rtdata::Float64;
@@ -237,12 +236,12 @@ class CamelPass final : public GraphIRPass {
             std::span(&argument, 1),
             std::span<const slot_t>(withArgs));
         if (camel::core::rtdata::isErrorValue(result)) {
-            std::ostringstream text;
-            camel::core::rtdata::printTaggedSlots(
-                text,
-                camel::core::rtdata::fromSlot<::Tuple *>(result)->data(),
-                camel::core::type::asFallible(tool->graph->funcType()->exitType()));
-            context_->rtmDiags()->of(RuntimeDiag::GraphPassFailed).commit(module_ + "::" + function_, text.str());
+            // The pass is `(p: Program) => Program!` (design principles 9.1): it failed, and what
+            // it returned is an error value like any other. It is handed to the driver, which
+            // stops the pipeline there and reports it the way an error value nobody handled is
+            // (3.9) -- the same report the value an entry graph returns gets. The module and the
+            // function are in the error the pass made, not in a diagnostic of our own.
+            failWithErrorValue(result);
             return nullptr;
         }
         const auto *produced = camel::core::rtdata::fromSlot<const Program *>(

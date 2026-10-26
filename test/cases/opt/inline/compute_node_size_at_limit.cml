@@ -10,7 +10,7 @@ module compute_node_size_at_limit
 
 import { reshape } from tensor
 import { export_model } from onnx
-import { get_env } from env
+import { cpu_count } from process
 
 func double(t: f32[..]): f32[..] {
     return t * 2.0
@@ -23,7 +23,8 @@ func spin(n: int): int sync {
 
 func main(): int sync {
     let _ = export_model<out: 'tmp/test/onnx/compute_node_size_at_limit.onnx'>(double, reshape([1.0, 2.0], [2]))
-    let x = int(get_env('H434_STEPS'))
+    let x = cpu_count()
+    println(x)
     println(x)
     println(x)
     println(x)

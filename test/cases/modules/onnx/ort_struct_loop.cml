@@ -100,8 +100,8 @@ func main(): int sync {
     let f = startE(x)
     save_npy(f.h, 'empt_0.npy')
     save_npy(reshape([f.k], [1]), 'empt_1.npy')
-    let out = get_env('ONNX_OUT')
-    let which = get_env('MODEL')
+    let out = get_env('ONNX_OUT') ?? ''
+    let which = get_env('MODEL') ?? ''
     let exported = if out == '' then 0 else if which == 'rec' then sync {
         let _ = export_model<out: out>((x: f32[..]): Run => start(x), (x))
         1

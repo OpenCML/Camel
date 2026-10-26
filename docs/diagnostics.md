@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-290 diagnostics: 273 errors, 17 warnings. 15 carry a machine-applicable edit, 275 say why they carry none.
+288 diagnostics: 271 errors, 17 warnings. 15 carry a machine-applicable edit, 273 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -256,6 +256,7 @@ prints one entry.
 | `0x030001F7` | [SemanticDiag::FactConstCaseTypeRequired](#factconstcasetyperequired) | Error | no |
 | `0x030001F8` | [SemanticDiag::FactCaseBindsNoVariable](#factcasebindsnovariable) | Error | no |
 | `0x030001F9` | [SemanticDiag::FactJoinRequired](#factjoinrequired) | Error | no |
+| `0x030001FA` | [SemanticDiag::StreamCaptured](#streamcaptured) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -286,7 +287,6 @@ prints one entry.
 | `0x04000032` | [RuntimeDiag::OperandTypeUnsupported](#operandtypeunsupported) | Error | no |
 | `0x04000033` | [RuntimeDiag::FieldNotFound](#fieldnotfound) | Error | no |
 | `0x04000034` | [RuntimeDiag::InvalidArgument](#invalidargument) | Error | no |
-| `0x04000035` | [RuntimeDiag::FileOpenFailed](#fileopenfailed) | Error | no |
 | `0x04000036` | [RuntimeDiag::FileSystemError](#filesystemerror) | Error | no |
 | `0x04000039` | [RuntimeDiag::RegexInvalid](#regexinvalid) | Error | no |
 | `0x0400003A` | [RuntimeDiag::TimeFormatFailed](#timeformatfailed) | Error | no |
@@ -295,10 +295,8 @@ prints one entry.
 | `0x04000051` | [RuntimeDiag::UnhandledError](#unhandlederror) | Error | no |
 | `0x04000052` | [RuntimeDiag::SliceOutOfRange](#sliceoutofrange) | Error | no |
 | `0x04000060` | [RuntimeDiag::InvalidPassParameter](#invalidpassparameter) | Error | no |
-| `0x04000061` | [RuntimeDiag::GraphPassFailed](#graphpassfailed) | Error | no |
 | `0x04000062` | [RuntimeDiag::PassNeedsExtraction](#passneedsextraction) | Error | no |
 | `0x04000070` | [RuntimeDiag::DeviceUnavailable](#deviceunavailable) | Error | no |
-| `0x04000071` | [RuntimeDiag::GpuScopeUnsupported](#gpuscopeunsupported) | Error | no |
 | `0x04000186` | [RuntimeDiag::PassNotProvidedByModule](#passnotprovidedbymodule) | Error | no |
 | `0x04000187` | [RuntimeDiag::PassNotExportedByModule](#passnotexportedbymodule) | Error | no |
 | `0x040001A7` | [RuntimeDiag::GpuScopeNoDeviceProgram](#gpuscopenodeviceprogram) | Error | no |
@@ -5171,11 +5169,11 @@ A module declares only the operators it implements: a body-less declaration stan
 
 ```camel
 import bytes
-import { size } from bytes_tag
+import { to_array } from bytes_tag
 
 func main(): int sync {
     let b = bytes::encode('abc')
-    println(size(b))
+    println(to_array(b))
     return 0
 }
 ```
@@ -6984,8 +6982,8 @@ The body of a folded call is read from the same constructs a 'when' condition re
 module fold_call_not_evaluable
 
 func first_of_list(): int {
-    let xs = [1, 2, 3]
-    return xs.[0]
+    let step = (n: int): int => n + 1
+    return step(1)
 }
 
 func main(): int {
@@ -8642,6 +8640,59 @@ func main(): int sync {
 }
 ```
 
+### StreamCaptured
+
+`0x030001FA` · Error · `SemanticDiag::StreamCaptured`
+
+**Fix**
+
+None: choice: where the stream is read instead is the writer's to write
+
+**Message**
+
+```text
+'{0}' cannot be captured: a stream is read once, and a closure outlives the read.
+```
+
+**Help**
+
+```text
+A stream is read one element at a time and is done when it ends, so on each execution path its value has one consumer (design principles 5.4). The body of a closure runs after the path that made the closure has finished, so the read a capture would make is not that path's one read: write the stream where it is consumed -- as the argument of a call that reads it, or as the subject of a loop -- and let a closure that needs a stream open one of its own.
+```
+
+**Example** (`test/cases/compile/stream/capture_stream.cml`, run as `camel test/cases/compile/stream/capture_stream.cml`)
+
+```camel
+module stream_capture_stream
+
+let source: int.. = count(3)
+
+func count(n: int): int.. {
+    return step(n)
+}
+
+func step(n: int): () => (int, int..)? {
+    return () => if n > 0 then (n, step(n - 1)) else null
+}
+
+func firstOf(p: (int, int..)?): int {
+    return match p {
+        case null => 0
+        case v => v.0
+    }
+}
+
+func read(): () => int {
+    return () => firstOf(source())
+}
+
+func main(): int sync {
+    let take = read()
+    println(take())
+    return 0
+}
+```
+
 ### IgnoredSideEffect
 
 `0x03100002` · Warn · `SemanticDiag::IgnoredSideEffect`
@@ -9267,7 +9318,7 @@ func depth(n: int): int {
 }
 
 func main(): int sync {
-    let n = int(get_env('N'))
+    let n = int(get_env('N') ?? '')
     println('start')
     println(depth(n))
     println('done')
@@ -9785,28 +9836,6 @@ func main(): int sync {
 }
 ```
 
-### FileOpenFailed
-
-`0x04000035` · Error · `RuntimeDiag::FileOpenFailed`
-
-**Fix**
-
-None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
-
-**Message**
-
-```text
-'{0}' cannot open the file '{1}': {2}.
-```
-
-**Help**
-
-```text
-Check that the path exists and that the program may access it; a relative path is taken from the directory the program is run in. Where a missing file is expected, fs.try_read_text returns an error value instead of ending the program.
-```
-
-*No example: no test small enough to show raises it.*
-
 ### FileSystemError
 
 `0x04000036` · Error · `RuntimeDiag::FileSystemError`
@@ -9898,7 +9927,7 @@ A derivative rule returns a gradient of the parameter's element type. Convert th
 ```camel
 module refuse_gradient_element_type_rule
 
-import { grad } from autodiff
+import { grad, vjp } from autodiff
 
 func pick_rule(xs: float[], i: int, dy: float): f32 {
     return f32(0.0)
@@ -10067,36 +10096,6 @@ func main(): int sync {
 }
 ```
 
-### GraphPassFailed
-
-`0x04000061` · Error · `RuntimeDiag::GraphPassFailed`
-
-**Fix**
-
-None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
-
-**Message**
-
-```text
-Pass '{0}' failed: {1}.
-```
-
-**Help**
-
-```text
-A pass written in Camel returned an error value instead of a program, and the message is the error's kind and text. The program is left as the previous pass produced it, and the pipeline stops.
-```
-
-**Example** (`test/cases/modules/graph_pass/tiny.cml`, run as `camel test/cases/modules/graph_pass/tiny.cml identity::refuse std::nvm`)
-
-```camel
-module tiny
-func main(): int sync {
-    println(21 * 2)
-    return 0
-}
-```
-
 ### PassNeedsExtraction
 
 `0x04000062` · Error · `RuntimeDiag::PassNeedsExtraction`
@@ -10183,44 +10182,6 @@ func main(): int sync {
 }
 ```
 
-### GpuScopeUnsupported
-
-`0x04000071` · Error · `RuntimeDiag::GpuScopeUnsupported`
-
-**Fix**
-
-None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
-
-**Message**
-
-```text
-`#gpu` scope '{0}': {1} cannot run on the device ({2}).
-```
-
-**Help**
-
-```text
-The `#gpu` tag promises that the device runs everything written in the function or block. Remove the tag, write the part the device cannot run under `#cpu`, or rewrite the scope so that every operator in it has a device implementation; `--devices cpu` runs the whole program on the host.
-```
-
-**Example** (`test/cases/modules/tiles/gpu_scope_refusal.cml`, run as `CUDA_VISIBLE_DEVICES=-1 camel test/cases/modules/tiles/gpu_scope_refusal.cml tiles::compile std::nvm`)
-
-```camel
-module tiles_gpu_scope_refusal
-import { reshape, tanh, sum } from tensor
-
-// `tanh` is a pure tensor operator that the device back end does not lower. Inside a `#gpu`
-// scope that is a compile error, not a silent fallback to the host.
-#gpu
-func activate(x: f32[..]): f32[..] { return tanh(x) }
-
-func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
-    println(sum(activate(x)))
-    return 0
-}
-```
-
 ### PassNotProvidedByModule
 
 `0x04000186` · Error · `RuntimeDiag::PassNotProvidedByModule`
@@ -10301,32 +10262,31 @@ None: runtime: the fault is raised while the program runs, and the repair is in 
 **Help**
 
 ```text
-The `#gpu` tag promises that the device runs everything written in the scope, including the functions it calls; an operator the device back end cannot build a program for is a compile-time error there, never a host execution. Change the operator, its shape or the function it is written in, put it under `#cpu` where the scope allows that, or remove the tag; `--devices cpu` runs the whole program on the host.
+The `#gpu` tag promises that the device runs everything written in the scope, including the functions it calls; an operator the device back end cannot build a program for is never replayed on the host. Change the operator, its shape or the function it is written in, put it under `#cpu` where the scope allows that, or remove the tag; `--devices cpu` runs the whole program on the host.
 ```
 
-**Example** (`test/cases/gpu/nofallback/refused_operator.cml`, run as `CUDA_VISIBLE_DEVICES=-1 camel test/cases/gpu/nofallback/refused_operator.cml tiles::compile std::nvm`)
+**Example** (`test/cases/gpu/nofallback/runtime_refusal.cml`, run as `camel test/cases/gpu/nofallback/runtime_refusal.cml tiles::compile std::nvm`)
 
 ```camel
-/// (b) An operator without a device program, written in a function a `#gpu` scope calls. The
-/// scope covers the functions it calls (GPU design 2.3), so `tanh` here is inside it; `tanh` has
-/// no device implementation, and the compiler refuses the program instead of running it on the
-/// host. `test/cases/gpu/nofallback/host.cml` is the same program without the tag.
-module gpu_nofallback_refused_operator
+/// (e) The runtime side of the same promise: `product` is `#gpu` but its signature is generic,
+/// so the compile pass cannot see the rank until the call site. The actual arguments are rank 1,
+/// the device back end refuses the shape, and the run reports it instead of replaying the graph
+/// on the host (GPU design 6.1). The compile pass defers this case on purpose: shows that a
+/// shape the types do not fix may still compile with the actual arguments.
+module gpu_nofallback_runtime
 
-import { tanh, reshape } from tensor
-
-func activate(x: f32[..]): f32[..] {
-    return tanh(x)
-}
+import { reshape } from tensor
+import { run_preferred_resident, download } from tiles
 
 #gpu
-func step(x: f32[..]): f32[..] {
-    return activate(x)
+func product(a: f32[..], b: f32[..]): f32[..] {
+    return a @ b
 }
 
 func main() {
-    let x = reshape([1.0, 2.0] as f32[], [2])
-    println(step(x))
+    let a = reshape([1.0, 2.0, 3.0] as f32[], [3])
+    let b = reshape([1.0, 1.0, 1.0] as f32[], [3])
+    println(download(run_preferred_resident<product>((a, b))))
 }
 ```
 
@@ -10585,16 +10545,16 @@ std::cpp has no standalone translation of {0}: the program it writes calls the C
 Every other operator is translated into C++ that needs only the standard library (docs/cpp_export_build.md). The comment at the top of the C++ file gives the command that builds it with the runtime.
 ```
 
-**Example** (`test/cases/trans/cpp/hash_bridge.cml`, run as `camel test/cases/trans/cpp/hash_bridge.cml std::cpp`)
+**Example** (`test/cases/trans/cpp/runtime_bridge.cml`, run as `camel test/cases/trans/cpp/runtime_bridge.cml std::cpp`)
 
 ```camel
-/// std::cpp has no standalone translation of a hash operator: the program links the runtime.
-module cpp_hash_bridge
+/// std::cpp has no standalone translation of a string operator: the program links the runtime.
+module cpp_runtime_bridge
 
-import hash
+import str
 
 func main(): int sync {
-    println(hash::sha256('a'))
+    println(str::to_upper('a'))
     return 0
 }
 ```

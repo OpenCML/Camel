@@ -16,6 +16,6 @@ func pick(flag: bool): f32[..] {
 
 func main(): int sync {
     let w = ones([3, 4])
-    println(pick(get_env('FLAG') == 'true') @ w)
+    println(pick((get_env('FLAG') ?? '') == 'true') @ w)
     return 0
 }

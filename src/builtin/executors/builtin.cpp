@@ -327,6 +327,12 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/idx_str", __builtin__idx__},
         {"op/idx_take", __idx_take_arr__},
         {"op/slice_sub", __slice_sub__},
+        {"op/slice_str", __slice_str__},
+        {"op/slice_bytes", __slice_bytes__},
+        {"struct/len_bytes", __len_bytes__},
+        {"op/add_bytes", __add_bytes__},
+        {"op/eq_bytes", __eq_bytes__},
+        {"op/ne_bytes", __ne_bytes__},
 
         {"op/not", __builtin__not__},
 
@@ -464,6 +470,12 @@ void registerBuiltinOperatorTraits() {
         "struct/last_arr",
         "op/idx_take",
         "op/slice_sub",
+        "op/slice_str",
+        "op/slice_bytes",
+        "struct/len_bytes",
+        "op/add_bytes",
+        "op/eq_bytes",
+        "op/ne_bytes",
         "struct/tail_arr",
         "struct/range",
         "struct/slice_arr",
@@ -565,7 +577,6 @@ void registerBuiltinOperatorTraits() {
     registry.set(
         std::string(camel::execute::kFaultIsolationUri),
         {.pure = false, .callsGraphs = true});
-    registry.declare("process", {{"exit", false}, {"sleep", false}});
     // The block counters are ambient state: two calls with the same arguments can return
     // different structs, so the call must not be folded, merged or dropped as a pure one.
     registry.set(":op/mem_blocks", {.pure = false});

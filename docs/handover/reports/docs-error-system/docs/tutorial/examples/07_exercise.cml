@@ -1,0 +1,20 @@
+// The answer to the exercises of chapter 7: the values that are there, and 0 for the ones that are not.
+// Run: camel docs/tutorial/examples/07_exercise.cml
+
+func sum_ints(words: string[]): int {
+    return words->map<(s: string): int => parse_int(s) !! 0>->reduce<(acc: int, x: int): int => acc + x, 0>
+}
+
+func in_range(n: int): int! {
+    return if n < 0 || n > 100 then error('OutOfRange', 'not between 0 and 100') else n
+}
+
+func score(s: string): int {
+    return s->parse_int->in_range !! 0
+}
+
+func main(): int sync {
+    println(sum_ints(['12', 'x', '7']))
+    println(['50', 'x', '700', '7', '-3']->map<score>->reduce<(acc: int, x: int): int => acc + x, 0>)
+    return 0
+}

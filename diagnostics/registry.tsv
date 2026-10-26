@@ -37,7 +37,7 @@ syntax	LambdaParametersNeedParentheses	0x000012	error	A lambda's parameters need
 # Warnings (severity bits = Warn).
 syntax	ComparisonAcrossLines	0x100001	warn	This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one.	A '>' after a space, at the end of a line, is the comparison operator, and the expression goes on with the next line. The '>' that closes '<...>' arguments touches the last argument; a chain of comparisons (a < b > c) is never what a program means.	none: choice: the text to write instead is the writer's
 # Errors
-# 0x0001F6 vacant
+# 0x0001F8 vacant
 semantic	Redeclaration	0x000001	error	Redeclaration of reference: '{0}'.	Each identifier must be declared only once in its scope.	none: choice: the second declaration or the first has to be renamed or removed
 semantic	ModuleNotFound	0x000002	error	Module '{0}' not found. {1}	Check if the module path is correct or add the directory to search paths.	none: choice: the module path and the search roots are the writer's
 semantic	ReservedIdentifier	0x000003	error	Identifiers starting and ending with double underscores are reserved for internal use.	Avoid using names like '__example__'; choose different identifiers. To overload an operator, write 'func operator +(a: V, b: V): V'.	none: choice: the reserved word cannot be used as a name, and the name to use instead is the writer's
@@ -451,7 +451,6 @@ runtime	FormatFailed	0x000031	error	Cannot format with the format string '{0}': 
 runtime	OperandTypeUnsupported	0x000032	error	'{0}' does not support a value of type '{1}'; it takes {2}.	Convert the value to a supported type before the call.	none: runtime: the fault is raised while the program runs, and the repair is in the program's logic
 runtime	FieldNotFound	0x000033	error	The struct has no field '{0}'.	A struct is indexed by the name of one of its fields.	none: runtime: the fault is raised while the program runs, and the repair is in the program's logic
 runtime	InvalidArgument	0x000034	error	Invalid argument of '{0}': {1}.	The operator was given an argument it cannot take; the message names the argument and why. The value comes from the program, so what to change is where it was made.	none: runtime: the fault is raised while the program runs, and the repair is in the program's logic
-runtime	FileOpenFailed	0x000035	error	'{0}' cannot open the file '{1}': {2}.	Check that the path exists and that the program may access it; a relative path is taken from the directory the program is run in. Where a missing file is expected, fs.try_read_text returns an error value instead of ending the program.	none: runtime: the fault is raised while the program runs, and the repair is in the program's logic
 runtime	FileSystemError	0x000036	error	'{0}' failed for '{1}': {2}.	Check the path and the permissions of the directories on it.	none: runtime: the fault is raised while the program runs, and the repair is in the program's logic
 # 0x000037: empty. The number is not reused.
 runtime	RegexInvalid	0x000039	error	'{0}': '{1}' is not a valid regular expression: {2}.	Patterns use the ECMAScript syntax. A character with a special meaning is matched literally when it is written with a backslash.	none: runtime: the fault is raised while the program runs, and the repair is in the program's logic
@@ -464,8 +463,6 @@ runtime	UnhandledError	0x000051	error	An error value reached the exit of 'main' 
 runtime	SliceOutOfRange	0x000052	error	The range {0} to {1} is out of range for {2} of length {3}.	A bound of 'slice' is a position from 0 to the length; the end is one past the last element taken. A range that leaves the sequence is a fault, as an index out of range is. To take or leave out at most n elements, use 'take' and 'drop' of the module 'array', which cut by definition.	none: runtime: the bounds are computed at run time, and the repair is in the program's logic
 # The pipeline's pass specifications: the pass name, then `key=value` words (design principles 9.3).
 runtime	InvalidPassParameter	0x000060	error	Invalid pass specification '{0}': {1}.	A pass is written on the pipeline as its name followed by its parameters as key=value words, never in parentheses: `std::opt safe_fp=true growth_budget=8192`. The values are constant expressions (bool, int, float or string). The message names the parameter, the type it has and the parameters the pass declares.	none: runtime: the fault is raised while the program runs, and the repair is in the program's logic
-# A pass written in Camel gave an error value instead of a program.
-runtime	GraphPassFailed	0x000061	error	Pass '{0}' failed: {1}.	A pass written in Camel returned an error value instead of a program, and the message is the error's kind and text. The program is left as the previous pass produced it, and the pipeline stops.	none: runtime: the fault is raised while the program runs, and the repair is in the program's logic
 # A pass that does not know values with several writings was given a program that has them
 # (graph store design 3.7); an extraction before it fixes the pipeline.
 runtime	PassNeedsExtraction	0x000062	error	Pass '{0}' cannot take the program: some values of it have several writings.	An earlier pass (a saturation) left values with several writings, which only the passes that work on them and the passes that run or translate the program accept. Put 'std::opt::extract' before '{0}': it chooses one writing for every value by a cost model (its parameter 'cost', 'weighted' by default).	none: runtime: the fault is raised while the program runs, and the repair is in the program's logic
@@ -480,22 +477,25 @@ runtime	PassNotExportedByModule	0x000187	error	Module '{0}' declares '{1}' but d
 # naming a device that must exist (design principles 13.4).
 runtime	DeviceUnavailable	0x000070	error	CUDA device {0} was named by --devices but is not available: {1}.	Name a device this machine has (--devices <ordinal>), or run on the host with --devices cpu. Without --devices a missing device is not an error: the program runs on the host.	none: runtime: the machine has no such device; nothing in the program is wrong
 # An operator written inside a `#gpu` scope (design principles 13.4) has no device
-# implementation: the scope promises the device runs it, so the compiler refuses the program
-# instead of leaving the operator on the host (GPU design 6.1).
-runtime	GpuScopeUnsupported	0x000071	error	`#gpu` scope '{0}': {1} cannot run on the device ({2}).	The `#gpu` tag promises that the device runs everything written in the function or block. Remove the tag, write the part the device cannot run under `#cpu`, or rewrite the scope so that every operator in it has a device implementation; `--devices cpu` runs the whole program on the host.	none: runtime: the fault is raised while the program runs, and the repair is in the program's logic
-# A `#gpu` scope whose program the device back end cannot build, even though the operator is
-# one it may run: the shape or the calling convention of this use has no device program, or
-# the graph the scope calls brings an operator that has none. The scope promises the device
-# runs everything it contains, and GPU design 6.1 makes that a compile-time error rather than
-# a host execution; unlike GpuScopeUnsupported this is about the use, not the operator.
-runtime	GpuScopeNoDeviceProgram	0x0001A7	error	`#gpu` scope '{0}': {1} ({2}).	The `#gpu` tag promises that the device runs everything written in the scope, including the functions it calls; an operator the device back end cannot build a program for is a compile-time error there, never a host execution. Change the operator, its shape or the function it is written in, put it under `#cpu` where the scope allows that, or remove the tag; `--devices cpu` runs the whole program on the host.	none: runtime: the fault is raised while the program runs, and the repair is in the program's logic
-# A graph the device back end has no program for, asked for by an operator that needs one
-# (`inspect`, `source`, `benchmark`, `regions`, `run_preferred_resident`, `run_compiled`). No
-# `#gpu` scope is claimed: the graph may be a function no tag covers (`source<noisy>`) or one
-# segment of a scope the pass has cut, and a capability miss is a scheduling decision rather
-# than a fault (`tiles/internal/capability.h`). Unlike GpuScopeUnsupported and
-# GpuScopeNoDeviceProgram, which answer for a scope's promise at compile time, this one says
-# what the call that asked was refused, and leaves the graph to the host where no scope covers it.
+# implementation, and a `#gpu` scope whose device program the back end cannot build -- the shape
+# or the calling convention of this use, or an operator the graph the scope calls brings that has
+# none. Both are one refusal of one promise, found by the pass `tiles::compile` while it runs; the
+# pass is `(f: F) => F!` (design principles 9.1), so the failure is the error value
+# `GpuScopeUnsupported`, which names the scope, every such operator and the reason each one gives
+# (docs/handover/stdlib/error-kinds.md). It is not a diagnostic: what a scope can run is only
+# known once the pass has looked at the graph, and the report is then the one an error value
+# nobody handled gets.
+# The same promise refused while the program runs, because the pass deferred the shape to the
+# actual arguments and the device turns them down: the operator that asked for the device program
+# of a graph a `#gpu` scope covers (`run_compiled`, `run_preferred_resident`) reports it instead
+# of replaying the graph on the host (GPU design 6.1). That discovery is the run's own, so it is a
+# runtime fault and stays a diagnostic.
+runtime	GpuScopeNoDeviceProgram	0x0001A7	error	`#gpu` scope '{0}': {1} ({2}).	The `#gpu` tag promises that the device runs everything written in the scope, including the functions it calls; an operator the device back end cannot build a program for is never replayed on the host. Change the operator, its shape or the function it is written in, put it under `#cpu` where the scope allows that, or remove the tag; `--devices cpu` runs the whole program on the host.	none: runtime: the fault is raised while the program runs, and the repair is in the program's logic
+# An operator the device back end has no use of, asked for by an operator that needs one
+# (`inspect`, `source`, `benchmark`, `regions`). No `#gpu` scope is claimed: the graph may be a
+# function no tag covers (`source<noisy>`) or one segment of a scope the pass has cut, and a
+# capability miss is a scheduling decision rather than a fault
+# (`tiles/internal/capability.h`).
 runtime	GraphNoDeviceProgram	0x0001AA	error	'{0}' has no device program for '{1}': {2}.	The device back end has no program for this graph, so the operator that asked for one cannot be served by it. Name a graph the device can serve, or let the host run it: outside a `#gpu` scope a graph the device cannot serve is the host's, and `--devices cpu` runs the whole program there.	none: runtime: the report is raised while the program runs, and the repair is in the program's logic
 # A run that selected no device at all (`--devices cpu`, or no `--devices` on a machine whose
 # driver the back end cannot use) while the operator needs one. DeviceUnavailable is the other
@@ -542,6 +542,7 @@ semantic	StreamConsumedInLoop	0x0001ED	error	'{0}' is consumed once per round of
 # rather than block the side that runs ahead -- but no buffer holds fewer than the one element
 # being handed over, so a constant width below 1 is refused where it is written.
 semantic	TeeHintNotPositive	0x0001EF	error	The `tee` width '{0}' is below 1.	`tee(s, n)` reads `s` once and gives two streams over the same elements, each read once (design principles 5.4). A side that runs ahead of the other buffers the elements the other has not read yet, and `n` says how wide that buffer is expected to be: it is a hint, so the executor grows the buffer rather than make a side wait, and a hint wider than the implementation's cap is clamped to it. What no buffer can be is narrower than the one element being handed over, so write `n` as 1 or more, or leave it out for the default of 8.	none: choice: how wide the buffer is expected to be is the writer's to say, and any width of 1 or more says it
+semantic	StreamCaptured	0x0001FA	error	'{0}' cannot be captured: a stream is read once, and a closure outlives the read.	A stream is read one element at a time and is done when it ends, so on each execution path its value has one consumer (design principles 5.4). The body of a closure runs after the path that made the closure has finished, so the read a capture would make is not that path's one read: write the stream where it is consumed -- as the argument of a call that reads it, or as the subject of a loop -- and let a closure that needs a stream open one of its own.	none: choice: where the stream is read instead is the writer's to write
 semantic	NodeOfNotAParameter	0x0001DE	error	'{0}' is not a const parameter of the rule '{1}', so node_of({0}) names no node.	node_of reaches the node of a const parameter, so that a condition can read a fact or a shape of the constant: write it over a name the rule declares const, as in the condition sign(node_of(c)) == 1 of the rule r(x: int, const c: float) whose sides are x * c and x. A parameter that is not const is a node of the draft already, so the condition names it directly, and a name that is not a parameter of this rule has no node here.	none: choice: the repair is a decision only the writer can make
 # The element type of a value is in its type (design principles 5.1), so an array type writes one:
 # a shape with no element type in front of it asks a question the type of a value answers. A

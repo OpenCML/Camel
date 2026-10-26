@@ -11,6 +11,7 @@
 #include "camel/core/rtdata/foreign.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/struct.h"
+#include "camel/core/rtdata/tagged.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/base.h"
 #include "camel/core/type/bytes.h"
@@ -20,6 +21,8 @@
 #include "camel/core/type/other.h"
 #include "ensure.h"
 
+#include <cmath>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <pybind11/embed.h>
@@ -178,7 +181,42 @@ py::object camelToPy(ArgsView &norm, size_t index, camel::core::context::Context
     return camelToPy(norm.type(index), norm.slot(index), ctx);
 }
 
-// 解析 norm[0] 为可调用对象（PyObject 或字符串路径），失败时返回 nullptr 并报告诊断
+// The text of a Python exception: its class and what it says, then the traceback. The class name
+// is what a program tells `KeyError` from `ImportError` by, so it comes first.
+std::string pythonErrorMessage(const py::error_already_set &e) {
+    std::string summary = "Python exception";
+    try {
+        const std::string cls = py::str(e.type().attr("__name__")).cast<std::string>();
+        const std::string text = py::str(e.value()).cast<std::string>();
+        summary = text.empty() ? cls : cls + ": " + text;
+    } catch (...) {
+    }
+    std::string trace = e.what();
+    // pybind11 ends its rendering with the same "Class: text" line.
+    if (trace.size() >= summary.size() &&
+        trace.compare(trace.size() - summary.size(), summary.size(), summary) == 0) {
+        trace.resize(trace.size() - summary.size());
+    }
+    while (!trace.empty() && (trace.back() == '\n' || trace.back() == ' ')) {
+        trace.pop_back();
+    }
+    return trace.empty() ? summary : summary + "\n" + trace;
+}
+
+// A Python exception is the failure of an external system: the call's result is an error value of
+// kind `PythonError` (stdlib conventions 5.1), and the program decides what to do with it.
+slot_t pythonFailure(std::string_view who, const py::error_already_set &e) {
+    return makeError("PythonError", pythonErrorMessage(e), "<python::" + std::string(who) + ">");
+}
+
+// A successful result of an operator whose result type is `PyObject!`.
+slot_t pythonOk(ArgsView &norm, py::object value) {
+    const auto *resultType = static_cast<const TupleType *>(norm.resultType());
+    return makeOk(wrapPyObject(std::move(value)), resultType);
+}
+
+// 解析 norm[0] 为可调用对象（PyObject 或字符串路径）。Python 一侧的异常（找不到模块或属性）原样
+// 抛出，由调用的算子变成错误值。
 py::object resolveCallable(ArgsView &norm, camel::core::context::Context &ctx) {
     if (norm.size() < 1) {
         throwRuntimeFault(
@@ -195,33 +233,26 @@ py::object resolveCallable(ArgsView &norm, camel::core::context::Context &ctx) {
         if (path.empty()) {
             throwRuntimeFault(RuntimeDiag::RuntimeError, "python: empty path");
         }
-        try {
-            std::vector<std::string> parts;
-            for (size_t i = 0; i < path.size();) {
-                size_t j = path.find('.', i);
-                if (j == std::string::npos) {
-                    parts.push_back(path.substr(i));
-                    break;
-                }
-                parts.push_back(path.substr(i, j - i));
-                i = j + 1;
+        std::vector<std::string> parts;
+        for (size_t i = 0; i < path.size();) {
+            size_t j = path.find('.', i);
+            if (j == std::string::npos) {
+                parts.push_back(path.substr(i));
+                break;
             }
-            if (parts.empty()) {
-                throwRuntimeFault(RuntimeDiag::RuntimeError, "python: invalid path");
-            }
-            if (parts.size() == 1) {
-                py::object main = py::module_::import("__main__");
-                if (py::hasattr(main, parts[0].c_str()))
-                    return main.attr(parts[0].c_str());
-                return py::module_::import("builtins").attr(parts[0].c_str());
-            }
-            py::object obj = py::module_::import(parts[0].c_str());
-            for (size_t k = 1; k < parts.size(); ++k)
-                obj = obj.attr(parts[k].c_str());
-            return obj;
-        } catch (const py::error_already_set &e) {
-            throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("python: \n") + e.what());
+            parts.push_back(path.substr(i, j - i));
+            i = j + 1;
         }
+        if (parts.size() == 1) {
+            py::object main = py::module_::import("__main__");
+            if (py::hasattr(main, parts[0].c_str()))
+                return main.attr(parts[0].c_str());
+            return py::module_::import("builtins").attr(parts[0].c_str());
+        }
+        py::object obj = py::module_::import(parts[0].c_str());
+        for (size_t k = 1; k < parts.size(); ++k)
+            obj = obj.attr(parts[k].c_str());
+        return obj;
     }
     throwRuntimeFault(
         RuntimeDiag::RuntimeError,
@@ -252,21 +283,18 @@ slot_t __python_py_call__(ArgsView &with, ArgsView &norm, camel::core::context::
     // The interpreter is created at the operator's first use, not by `import python`.
     ensurePythonInterpreter(ctx);
     py::gil_scoped_acquire gil;
-    py::object callable = resolveCallable(norm, ctx);
-    if (callable.is_none())
-        return NullSlot;
-
     try {
+        py::object callable = resolveCallable(norm, ctx);
+        if (callable.is_none()) {
+            return makeError("PythonError", "the callable is None", "<python::py_call>");
+        }
         py::tuple argTuple(norm.size() > 1 ? static_cast<size_t>(norm.size() - 1) : 0);
         for (size_t i = 1; i < norm.size(); ++i)
             argTuple[i - 1] = camelToPy(norm, i, ctx);
 
-        py::object result = callable(*argTuple);
-        return wrapPyObject(result);
+        return pythonOk(norm, callable(*argTuple));
     } catch (const py::error_already_set &e) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("python.py_call: \n") + e.what());
-    } catch (const std::exception &e) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("python.py_call: \n") + e.what());
+        return pythonFailure("py_call", e);
     }
 }
 
@@ -276,11 +304,12 @@ slot_t __python_py_call_kw__(ArgsView &with, ArgsView &norm, camel::core::contex
     // The interpreter is created at the operator's first use, not by `import python`.
     ensurePythonInterpreter(ctx);
     py::gil_scoped_acquire gil;
-    py::object callable = resolveCallable(norm, ctx);
-    if (callable.is_none())
-        return NullSlot;
-
     try {
+        py::object callable = resolveCallable(norm, ctx);
+        if (callable.is_none()) {
+            return makeError("PythonError", "the callable is None", "<python::py_call_kw>");
+        }
+
         py::tuple args;
         if (norm.size() >= 2 && norm.type(1)->code() == TypeCode::Array) {
             Array *arr = norm.get<Array *>(1);
@@ -288,9 +317,7 @@ slot_t __python_py_call_kw__(ArgsView &with, ArgsView &norm, camel::core::contex
                 args = py::tuple(arr->size());
                 for (size_t i = 0; i < arr->size(); ++i) {
                     PythonObjectHolder *h = unwrapPyObject(arr->getSlot(i), ctx);
-                    if (!h)
-                        return NullSlot;
-                    args[i] = py::reinterpret_borrow<py::object>(h->obj);
+                    args[i]               = py::reinterpret_borrow<py::object>(h->obj);
                 }
             }
         } else if (norm.size() >= 2 && norm.type(1)->code() == TypeCode::Tuple) {
@@ -300,9 +327,7 @@ slot_t __python_py_call_kw__(ArgsView &with, ArgsView &norm, camel::core::contex
                 args                       = py::tuple(tupleType->size());
                 for (size_t i = 0; i < tupleType->size(); ++i) {
                     PythonObjectHolder *h = unwrapPyObject(tuple->data()[i], ctx);
-                    if (!h)
-                        return NullSlot;
-                    args[i] = py::reinterpret_borrow<py::object>(h->obj);
+                    args[i]               = py::reinterpret_borrow<py::object>(h->obj);
                 }
             }
         }
@@ -314,25 +339,32 @@ slot_t __python_py_call_kw__(ArgsView &with, ArgsView &norm, camel::core::contex
             if (st && structType) {
                 for (size_t i = 0; i < structType->size(); ++i) {
                     PythonObjectHolder *h = unwrapPyObject(st->data()[i], ctx);
-                    if (!h)
-                        return NullSlot;
                     kwargs[py::str(std::string(structType->fieldName(i)))] =
                         py::reinterpret_borrow<py::object>(h->obj);
                 }
             }
         }
 
-        py::object result = kwargs.empty() ? callable(*args) : callable(*args, **kwargs);
-        return wrapPyObject(result);
+        return pythonOk(norm, kwargs.empty() ? callable(*args) : callable(*args, **kwargs));
     } catch (const py::error_already_set &e) {
-        throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            std::string("python.py_call_kw: \n") + e.what());
-    } catch (const std::exception &e) {
-        throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            std::string("python.py_call_kw: \n") + e.what());
+        return pythonFailure("py_call_kw", e);
     }
+}
+
+// The text argument `index` of an operator, or a fault when the call did not pass one.
+static std::string textArgument(ArgsView &norm, const char *who, const char *what) {
+    if (norm.size() < 1) {
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            std::string("python.") + who + ": one argument (" + what + ") required");
+    }
+    if (norm.type(0)->code() != TypeCode::String) {
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            std::string("python.") + who + ": argument must be string (" + what + ")");
+    }
+    String *strObj = norm.get<String *>(0);
+    return strObj ? strObj->toString() : "";
 }
 
 // py_exec: 执行任意 Python 代码（语句），返回 None
@@ -340,25 +372,12 @@ slot_t __python_py_exec__(ArgsView &with, ArgsView &norm, camel::core::context::
     // The interpreter is created at the operator's first use, not by `import python`.
     ensurePythonInterpreter(ctx);
     py::gil_scoped_acquire gil;
-    if (norm.size() < 1) {
-        throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "python.py_exec: one argument (code string) required");
-    }
-    if (norm.type(0)->code() != TypeCode::String) {
-        throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "python.py_exec: argument must be string (Python code)");
-    }
-    String *strObj   = norm.get<String *>(0);
-    std::string code = strObj ? strObj->toString() : "";
+    const std::string code = textArgument(norm, "py_exec", "code string");
     try {
         py::exec(code);
-        return wrapPyObject(py::none());
+        return pythonOk(norm, py::none());
     } catch (const py::error_already_set &e) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("python.py_exec: \n") + e.what());
-    } catch (const std::exception &e) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("python.py_exec: \n") + e.what());
+        return pythonFailure("py_exec", e);
     }
 }
 
@@ -367,25 +386,11 @@ slot_t __python_py_eval__(ArgsView &with, ArgsView &norm, camel::core::context::
     // The interpreter is created at the operator's first use, not by `import python`.
     ensurePythonInterpreter(ctx);
     py::gil_scoped_acquire gil;
-    if (norm.size() < 1) {
-        throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "python.py_eval: one argument (expression string) required");
-    }
-    if (norm.type(0)->code() != TypeCode::String) {
-        throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "python.py_eval: argument must be string (Python expression)");
-    }
-    String *strObj   = norm.get<String *>(0);
-    std::string expr = strObj ? strObj->toString() : "";
+    const std::string expr = textArgument(norm, "py_eval", "expression string");
     try {
-        py::object result = py::eval(expr);
-        return wrapPyObject(result);
+        return pythonOk(norm, py::eval(expr));
     } catch (const py::error_already_set &e) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("python.py_eval: \n") + e.what());
-    } catch (const std::exception &e) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("python.py_eval: \n") + e.what());
+        return pythonFailure("py_eval", e);
     }
 }
 
@@ -394,29 +399,16 @@ slot_t __python_py_run__(ArgsView &with, ArgsView &norm, camel::core::context::C
     // The interpreter is created at the operator's first use, not by `import python`.
     ensurePythonInterpreter(ctx);
     py::gil_scoped_acquire gil;
-    if (norm.size() < 1) {
-        throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "python.py_run: one argument (file path string) required");
-    }
-    if (norm.type(0)->code() != TypeCode::String) {
-        throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "python.py_run: argument must be string (file path)");
-    }
-    String *pathObj  = norm.get<String *>(0);
-    std::string path = pathObj ? pathObj->toString() : "";
+    const std::string path = textArgument(norm, "py_run", "file path string");
     if (path.empty()) {
         throwRuntimeFault(RuntimeDiag::RuntimeError, "python.py_run: empty file path");
     }
     try {
         py::object scope = py::module_::import("__main__").attr("__dict__");
         py::eval_file(path, scope);
-        return wrapPyObject(py::none());
+        return pythonOk(norm, py::none());
     } catch (const py::error_already_set &e) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("python.py_run: \n") + e.what());
-    } catch (const std::exception &e) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("python.py_run: \n") + e.what());
+        return pythonFailure("py_run", e);
     }
 }
 
@@ -441,32 +433,25 @@ slot_t __python_py_attr__(ArgsView &with, ArgsView &norm, camel::core::context::
             "python.py_attr: second argument must be string (attribute name)");
     }
     PythonObjectHolder *h = unwrapPyObject(norm.slot(0), ctx);
-    if (!h)
-        return NullSlot;
-    String *attrObj  = norm.get<String *>(1);
-    std::string attr = attrObj ? attrObj->toString() : "";
+    String *attrObj       = norm.get<String *>(1);
+    std::string attr      = attrObj ? attrObj->toString() : "";
     if (attr.empty()) {
         throwRuntimeFault(RuntimeDiag::RuntimeError, "python.py_attr: empty attribute name");
     }
     try {
         py::object obj = py::reinterpret_borrow<py::object>(h->obj);
-        std::vector<std::string> parts;
         for (size_t i = 0; i < attr.size();) {
             size_t j = attr.find('.', i);
             if (j == std::string::npos) {
-                parts.push_back(attr.substr(i));
+                obj = obj.attr(attr.substr(i).c_str());
                 break;
             }
-            parts.push_back(attr.substr(i, j - i));
-            i = j + 1;
+            obj = obj.attr(attr.substr(i, j - i).c_str());
+            i   = j + 1;
         }
-        for (const auto &p : parts)
-            obj = obj.attr(p.c_str());
-        return wrapPyObject(obj);
+        return pythonOk(norm, obj);
     } catch (const py::error_already_set &e) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("python.py_attr: \n") + e.what());
-    } catch (const std::exception &e) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("python.py_attr: \n") + e.what());
+        return pythonFailure("py_attr", e);
     }
 }
 
@@ -475,32 +460,14 @@ slot_t __python_py_import__(ArgsView &with, ArgsView &norm, camel::core::context
     // The interpreter is created at the operator's first use, not by `import python`.
     ensurePythonInterpreter(ctx);
     py::gil_scoped_acquire gil;
-    if (norm.size() < 1) {
-        throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "python.py_import: one argument (module name string) required");
-    }
-    if (norm.type(0)->code() != TypeCode::String) {
-        throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "python.py_import: argument must be string (module name)");
-    }
-    String *strObj   = norm.get<String *>(0);
-    std::string name = strObj ? strObj->toString() : "";
+    const std::string name = textArgument(norm, "py_import", "module name string");
     if (name.empty()) {
         throwRuntimeFault(RuntimeDiag::RuntimeError, "python.py_import: empty module name");
     }
     try {
-        py::object mod = py::module_::import(name.c_str());
-        return wrapPyObject(mod);
+        return pythonOk(norm, py::module_::import(name.c_str()));
     } catch (const py::error_already_set &e) {
-        throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            std::string("python.py_import: \n") + e.what());
-    } catch (const std::exception &e) {
-        throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            std::string("python.py_import: \n") + e.what());
+        return pythonFailure("py_import", e);
     }
 }
 
@@ -522,7 +489,7 @@ slot_t __python_py_print__(ArgsView &with, ArgsView &norm, camel::core::context:
         print_fn(*args, py::arg("end") = "", py::arg("flush") = true); // 不换行，立即刷新
         return norm.size() == 0 ? NullSlot : norm.slot(0);
     } catch (const py::error_already_set &e) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("python.py_print: \n") + e.what());
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "python.py_print: " + pythonErrorMessage(e));
     }
 }
 slot_t __python_py_println__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
@@ -544,7 +511,7 @@ slot_t __python_py_println__(ArgsView &with, ArgsView &norm, camel::core::contex
     } catch (const py::error_already_set &e) {
         throwRuntimeFault(
             RuntimeDiag::RuntimeError,
-            std::string("python.py_println: \n") + e.what());
+            "python.py_println: " + pythonErrorMessage(e));
     }
 }
 
@@ -559,24 +526,40 @@ slot_t __python_wrap__(ArgsView &with, ArgsView &norm, camel::core::context::Con
     return wrapPyObject(o);
 }
 
+// The Python type of an object, for a message.
+static std::string pythonTypeName(const py::handle &obj) {
+    try {
+        return py::str(py::type::of(obj).attr("__name__")).cast<std::string>();
+    } catch (...) {
+        return "an object";
+    }
+}
+
 // 递归：将 Python 对象按目标类型转为 Camel slot（支持复合类型与嵌套）。
-// 成功返回 optional(slot)，失败返回 nullopt。注意不能用 slot==NullSlot 判失败，因整数 0 等的 slot
-// 也为 0。
-static std::optional<slot_t>
-pyToCamel(py::object obj, Type *targetType, camel::core::context::Context &ctx) {
+//
+// What converts is a table, not whatever pybind11 would accept: a Camel value is not made from a
+// Python object of another kind (design principles 5.1). `bool` takes a bool only (not `5`), the
+// integers take an int that fits and not a bool or a float, the floats take a float or an int and
+// refuse a number the type cannot hold (`1e300` for an f32), `string` takes a str (not bytes), and
+// `Bytes` takes bytes. On failure `problem` says where (a path from the root) and what was found.
+static bool pyToCamel(
+    py::object obj, Type *targetType, camel::core::context::Context &ctx, const std::string &path,
+    slot_t &out, std::string &problem) {
+    const auto mismatch = [&](const std::string &expected) {
+        problem = path + ": expected " + expected + ", found " + pythonTypeName(obj);
+        return false;
+    };
     try {
         if (isBytesType(targetType)) {
             if (!py::isinstance<py::bytes>(obj)) {
-                throwRuntimeFault(
-                    RuntimeDiag::RuntimeError,
-                    "python.unwrap: Bytes target requires Python bytes");
+                return mismatch("bytes");
             }
-            char *data    = nullptr;
-            Py_ssize_t n  = 0;
+            char *data   = nullptr;
+            Py_ssize_t n = 0;
             if (PyBytes_AsStringAndSize(obj.ptr(), &data, &n) != 0) {
                 throw py::error_already_set();
             }
-            auto *holder = new PythonObjectHolder{obj};
+            auto *holder     = new PythonObjectHolder{obj};
             mm::Block *block = nullptr;
             try {
                 block = mm::Block::adoptExternal(
@@ -587,28 +570,79 @@ pyToCamel(py::object obj, Type *targetType, camel::core::context::Context &ctx) 
             }
             // The value adopts the block without copying; the holder keeps the Python bytes
             // object alive until the block's last reference is gone.
-            return toSlot(BytesObject::adopt(block, static_cast<size_t>(n), mm::autoSpace()));
+            out = toSlot(BytesObject::adopt(block, static_cast<size_t>(n), mm::autoSpace()));
+            return true;
         }
         switch (targetType->code()) {
         case TypeCode::Int32:
-            return toSlot(py::cast<Int32>(obj));
-        case TypeCode::Int64:
-            return toSlot(py::cast<Int64>(obj));
+        case TypeCode::Int64: {
+            if (PyBool_Check(obj.ptr()) || !PyLong_Check(obj.ptr())) {
+                return mismatch("an int");
+            }
+            int overflow          = 0;
+            const long long value = PyLong_AsLongLongAndOverflow(obj.ptr(), &overflow);
+            if (overflow != 0 || (value == -1 && PyErr_Occurred())) {
+                PyErr_Clear();
+                problem = path + ": the int does not fit a 64-bit integer";
+                return false;
+            }
+            if (targetType->code() == TypeCode::Int32) {
+                if (value < INT32_MIN || value > INT32_MAX) {
+                    problem = path + ": the int " + std::to_string(value) + " does not fit an i32";
+                    return false;
+                }
+                out = toSlot(static_cast<Int32>(value));
+            } else {
+                out = toSlot(static_cast<Int64>(value));
+            }
+            return true;
+        }
         case TypeCode::Float32:
-            return toSlot(py::cast<Float32>(obj));
-        case TypeCode::Float64:
-            return toSlot(py::cast<Float64>(obj));
+        case TypeCode::Float64: {
+            if (PyBool_Check(obj.ptr()) || (!PyFloat_Check(obj.ptr()) && !PyLong_Check(obj.ptr()))) {
+                return mismatch("a float");
+            }
+            const double value = PyFloat_AsDouble(obj.ptr());
+            if (value == -1.0 && PyErr_Occurred()) {
+                PyErr_Clear();
+                problem = path + ": the int is too large for a float";
+                return false;
+            }
+            if (targetType->code() == TypeCode::Float32) {
+                if (std::isfinite(value) && std::fabs(value) > std::numeric_limits<float>::max()) {
+                    problem = path + ": the number " + py::str(obj).cast<std::string>() +
+                              " does not fit an f32";
+                    return false;
+                }
+                out = toSlot(static_cast<Float32>(value));
+            } else {
+                out = toSlot(static_cast<Float64>(value));
+            }
+            return true;
+        }
         case TypeCode::Bool:
-            return toSlot(py::cast<Bool>(obj));
+            if (!PyBool_Check(obj.ptr())) {
+                return mismatch("a bool");
+            }
+            out = toSlot(obj.ptr() == Py_True);
+            return true;
         case TypeCode::String: {
-            std::string str = py::cast<std::string>(obj);
-            return toSlot(String::from(str, mm::autoSpace()));
+            if (!PyUnicode_Check(obj.ptr())) {
+                return mismatch("a str");
+            }
+            Py_ssize_t size       = 0;
+            const char *utf8      = PyUnicode_AsUTF8AndSize(obj.ptr(), &size);
+            if (utf8 == nullptr) {
+                PyErr_Clear();
+                problem = path + ": the str is not valid UTF-8";
+                return false;
+            }
+            out = toSlot(String::from(std::string(utf8, static_cast<size_t>(size)), mm::autoSpace()));
+            return true;
         }
         case TypeCode::Array: {
             if (!py::isinstance<py::list>(obj)) {
-                throwRuntimeFault(
-                    RuntimeDiag::RuntimeError,
-                    "python.unwrap: array target requires Python list");
+                return mismatch("a list");
             }
             py::list lst               = obj.cast<py::list>();
             const ArrayType *arrayType = static_cast<const ArrayType *>(targetType);
@@ -616,40 +650,43 @@ pyToCamel(py::object obj, Type *targetType, camel::core::context::Context &ctx) 
             size_t n                   = lst.size();
             Array *arr                 = Array::create(mm::autoSpace(), n);
             for (size_t i = 0; i < n; ++i) {
-                auto s = pyToCamel(lst[i], elemType, ctx);
-                if (!s)
-                    return std::nullopt;
-                arr->set(i, *s, arrayType);
+                slot_t element = NullSlot;
+                if (!pyToCamel(
+                        lst[i], elemType, ctx, path + "[" + std::to_string(i) + "]", element,
+                        problem))
+                    return false;
+                arr->set(i, element, arrayType);
             }
-            return toSlot(arr);
+            out = toSlot(arr);
+            return true;
         }
         case TypeCode::Tuple: {
             if (!py::isinstance<py::tuple>(obj) && !py::isinstance<py::list>(obj)) {
-                throwRuntimeFault(
-                    RuntimeDiag::RuntimeError,
-                    "python.unwrap: tuple target requires Python tuple or list");
+                return mismatch("a tuple");
             }
             const TupleType *tupleType = static_cast<const TupleType *>(targetType);
             size_t n                   = tupleType->size();
-            if (obj.attr("__len__")().cast<py::ssize_t>() != static_cast<py::ssize_t>(n)) {
-                throwRuntimeFault(
-                    RuntimeDiag::RuntimeError,
-                    "python.unwrap: tuple length mismatch");
+            const auto length          = static_cast<size_t>(py::len(obj));
+            if (length != n) {
+                problem = path + ": expected a tuple of " + std::to_string(n) + " element(s), found " +
+                          std::to_string(length);
+                return false;
             }
             Tuple *tuple = Tuple::create(n, mm::autoSpace());
             for (size_t i = 0; i < n; ++i) {
-                auto s = pyToCamel(obj[py::int_(i)], tupleType->typeAt(i), ctx);
-                if (!s)
-                    return std::nullopt;
-                tuple->set(i, *s, tupleType);
+                slot_t element = NullSlot;
+                if (!pyToCamel(
+                        obj[py::int_(i)], tupleType->typeAt(i), ctx,
+                        path + "[" + std::to_string(i) + "]", element, problem))
+                    return false;
+                tuple->set(i, element, tupleType);
             }
-            return toSlot(tuple);
+            out = toSlot(tuple);
+            return true;
         }
         case TypeCode::Struct: {
             if (!py::isinstance<py::dict>(obj)) {
-                throwRuntimeFault(
-                    RuntimeDiag::RuntimeError,
-                    "python.unwrap: struct target requires Python dict");
+                return mismatch("a dict");
             }
             py::dict d                   = obj.cast<py::dict>();
             const StructType *structType = static_cast<const StructType *>(targetType);
@@ -659,26 +696,28 @@ pyToCamel(py::object obj, Type *targetType, camel::core::context::Context &ctx) 
                 std::string key = std::string(structType->fieldName(i));
                 py::str keyObj(key);
                 if (!d.contains(keyObj)) {
-                    throwRuntimeFault(
-                        RuntimeDiag::RuntimeError,
-                        "python.unwrap: struct missing field '" + key + "'");
+                    problem = path + ": missing field '" + key + "'";
+                    return false;
                 }
-                auto s = pyToCamel(d[keyObj], structType->typeAt(i), ctx);
-                if (!s)
-                    return std::nullopt;
-                st->set(i, *s, structType);
+                slot_t field = NullSlot;
+                if (!pyToCamel(d[keyObj], structType->typeAt(i), ctx, path + "." + key, field, problem))
+                    return false;
+                st->set(i, field, structType);
             }
-            return toSlot(st);
+            out = toSlot(st);
+            return true;
         }
         default:
-            if (targetType->code() == getPyObjectType()->code())
-                return wrapPyObject(obj);
-            throwRuntimeFault(
-                RuntimeDiag::RuntimeError,
-                "python.unwrap: unsupported target type " + targetType->toString());
+            if (targetType->code() == getPyObjectType()->code()) {
+                out = wrapPyObject(obj);
+                return true;
+            }
+            problem = path + ": a Python value cannot become " + targetType->toString();
+            return false;
         }
-    } catch (...) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "python.unwrap: conversion failed");
+    } catch (const py::error_already_set &e) {
+        problem = path + ": " + pythonErrorMessage(e);
+        return false;
     }
 }
 
@@ -687,9 +726,7 @@ slot_t __python_upwrap__(ArgsView &with, ArgsView &norm, camel::core::context::C
     ensurePythonInterpreter(ctx);
     py::gil_scoped_acquire gil;
     PythonObjectHolder *h = unwrapPyObject(norm.slot(0), ctx);
-    if (!h)
-        return NullSlot;
-    Type *argType = norm.type(0);
+    Type *argType         = norm.type(0);
     if (!argType->isOtherType() || argType->code() != getPyObjectType()->code()) {
         throwRuntimeFault(
             RuntimeDiag::RuntimeError,
@@ -702,8 +739,12 @@ slot_t __python_upwrap__(ArgsView &with, ArgsView &norm, camel::core::context::C
             "python.unwrap: PyObject must have one type parameter");
     }
     Type *targetType = o->params()[0];
-    auto result      = pyToCamel(h->obj, targetType, ctx);
-    return result ? *result : NullSlot;
+    slot_t converted = NullSlot;
+    std::string problem;
+    if (!pyToCamel(h->obj, targetType, ctx, "value", converted, problem)) {
+        return makeError("PythonTypeError", problem, "<python::py_unwrap>");
+    }
+    return makeOk(converted, static_cast<const TupleType *>(norm.resultType()));
 }
 
 slot_t __python_py_dispose__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {

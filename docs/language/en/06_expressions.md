@@ -231,8 +231,11 @@ false
 - constructing maps and sets: `[...] as Map<K, V>`, `[...] as Set<T>`;
 - checked conversion of module types: the type's own condition is checked at the conversion.
 - checked conversion of arrays: `a as f32[4]`, where the shape is checked at the conversion; `f32[3]` is another spelling of a numeric array (kept during the transition), and `t as f32[3]` is the same conversion.
+- converting a value to its own type, which does nothing (`n as int`).
 
-`as` never changes the type of a value unchecked. The result of `json::decode` is a `Json`, which does not convert to another type with `as`; JSON of a known shape is decoded with `json::decode_as(s, [0])`, which checks the shape while decoding and gives a `T!`.
+`as` does not convert between numbers, for a literal as for a variable: `5 as float` and `n as float` are both `SemanticDiag::DynamicCastForbidden`, and so are `true as int` and `n as bool`. A number of another type is made by the conversion function of the target (`float(n)`, `int(x)`, `i32(n)`, `f32(x)`), whose loss rule (a value that does not fit is a fault) is in design principles 5.1.
+
+`as` never changes the type of a value unchecked. The result of `json::decode` is a `Json`, which does not convert to another type with `as`; JSON of a known shape is decoded with `json::decode_as::<int[]>(s)`, which checks the shape while decoding and gives a `T!`.
 
 Conversions between numbers use functions such as `float(x)` ([3.2](03_data_model.md#32-numbers)). `is` is not a keyword: the `is` of `e is T` is an ordinary name, and writing it is a syntax error (there is no type information at run time). A postfix `!` is not a form of the language: the `!` of `T!` belongs to the type, and the value of a `T?` is taken out with `x ?? default`, so `x!` is an ordinary syntax error (at the `!`).
 

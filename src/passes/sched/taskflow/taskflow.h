@@ -107,10 +107,14 @@ namespace ctx = camel::core::context;
 // So every piece of work that can hold such a value runs inside a *region*, and a deferred
 // collection runs only while no other thread is inside one. Regions are leaf work (a few
 // operators, a frame fill, a result store): a thread never waits for another task while it
-// holds one, so the collector waits no longer than the longest operator. If an operator
-// blocks (a sleep, a rendezvous) the collector gives up after a short wait and the collection
-// is retried at a later poll, so the tasks such an operator may be waiting for keep running.
-// After a collection the next one starts no sooner than twice the time it took.
+// holds one, so the collector waits no longer than the longest operator. An operator that does
+// wait (a sleep, a device synchronise) says so around the wait (`mm::BlockingWaitScope`) and the
+// scheduler leaves the thread's region for it: the wait runs outside the world, so a blocked
+// worker does not stop the world. A thread that stays inside a region anyway (native code that
+// does not announce its wait) still blocks the collector, which gives up after 500 ms and retries
+// at a later poll, so the tasks such an operator may be waiting for keep running -- and once that
+// refusal repeats, it is reported as what it is (`consecutiveGiveUps_`: the heap is not being
+// collected). After a collection the next one starts no sooner than twice the time it took.
 //
 // Not covered (as before graphs ran as tasks): the collection the allocator runs inside an
 // allocation that finds the heap full; it does not go through a poll.
@@ -217,6 +221,9 @@ class TaskflowGcGate {
     // off (`gc_stress=true`; the head of test/plans/feat/mm/gc_collections.plan.toml says what
     // that cost).
     std::atomic<bool> collectionsPaced_{true};
+    // Give-ups in a row: reset by a collection, raised by every refusal. The escalation
+    // diagnostic reads it (C24, MG/R5/BE/6).
+    std::atomic<uint64_t> consecutiveGiveUps_{0};
     std::atomic<int64_t> flowsRunning_{0};
     Stats stats_;
     std::mutex collectorMutex_;
@@ -293,6 +300,11 @@ struct TaskflowOptions {
     /// the next collection no sooner than twice the time the last one took, which holds the
     /// collector at a third of a production run.
     bool gcStress = false;
+    /// A blocking operator leaves its GC region for the wait (`blocking_leaves=true`, the
+    /// default), so that a worker inside a sleep or a device synchronise does not stop the
+    /// world; off: the wait holds the region, the collector gives up waiting for it, and the
+    /// escalation diagnostic reports the refusals (C24, MG/R5/BE/6).
+    bool blockingLeaves = true;
 };
 
 class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {

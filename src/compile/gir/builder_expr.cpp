@@ -461,6 +461,114 @@ void Builder::recordWrite(node_handle_t variable, node_handle_t exit, bool throu
     }
 }
 
+uint32_t Builder::captureWriteMaskOf(const compile_graph_ptr_t &callee) const {
+    const auto table = capturedValues_.find(callee.get());
+    if (table == capturedValues_.end() || table->second.empty()) {
+        return 0;
+    }
+    // In the mask, bit k is the callee's k-th capture, in the order its ports were made: that is
+    // the order linkCaptureSites passes them in, after the declared `with` arguments, and what
+    // the run time reads the versions from (GCFuncRef::reserved). Only a variable is written, so
+    // a capture of anything else never has its bit set.
+    const std::set<node_handle_t> written = capturedWritesOf(callee.get());
+    uint32_t mask                        = 0;
+    for (size_t k = 0; k < table->second.size(); ++k) {
+        if (!written.contains(table->second[k].origin)) {
+            continue;
+        }
+        // One word of payload carries the mask. A function that captures more than this and
+        // writes one of the later captures cannot hand its versions on: loud, not silent.
+        ASSERT(
+            k < 32,
+            "A call can carry the new version of at most 32 captured variables; this callee "
+            "captures more.");
+        mask |= uint32_t{1} << k;
+    }
+    return mask;
+}
+
+Type *Builder::callValueTypeOf(const compile_graph_ptr_t &callee, uint32_t written) const {
+    Type *exit = callee->funcType()->exitType();
+    if (written == 0) {
+        return exit;
+    }
+    // The value is a tuple: the return value first, then the new version of each written
+    // variable, in the callee's capture order. A `void` callee has no return value to put
+    // first, and one that writes exactly one variable hands that version on directly, not
+    // wrapped in a tuple of one element (the value of a captured cell is a cell, which is what
+    // a read of the variable takes).
+    const bool hasExit = !isVoidGraphExitType(exit);
+    std::vector<Type *> parts;
+    if (hasExit) {
+        parts.push_back(exit);
+    }
+    const auto table = capturedValues_.find(callee.get());
+    if (table != capturedValues_.end()) {
+        for (size_t k = 0; k < table->second.size(); ++k) {
+            if ((written & (uint32_t{1} << k)) == 0) {
+                continue;
+            }
+            parts.push_back(nodeTypeOf(table->second[k].port));
+        }
+    }
+    if (parts.size() == 1) {
+        return parts.front();
+    }
+    return TupleType::create(parts);
+}
+
+node_handle_t Builder::callValuePartOf(node_handle_t call, uint32_t part) {
+    CallValue &value = callValues_[call];
+    if (part < value.parts.size() && value.parts[part] != nullptr) {
+        return value.parts[part];
+    }
+    // The part's type is the tuple's element; a call whose value is one variable's version (a
+    // `void` callee writing one) hands that version on itself and needs no access node.
+    Type *type     = nodeTypeOf(call);
+    Type *partType = type;
+    if (type != nullptr && type->code() == TypeCode::Tuple) {
+        partType = static_cast<const TupleType *>(type)->typeAt(part);
+    }
+    node_handle_t node = currGraph_->addAccsNode(partType, part);
+    if (value.parts.size() <= part) {
+        value.parts.resize(part + 1, nullptr);
+    }
+    value.parts[part] = node;
+    linkNodes(LinkType::Norm, call, node);
+    return node;
+}
+
+node_handle_t Builder::valueVersionOf(node_handle_t variable) {
+    const auto modifier = modifierOf(variable);
+    if (!modifier.has_value() || !sameGraph(*modifier, currGraph_)) {
+        return nullptr;
+    }
+    // A write whose value is not the cell it wrote into gives that value: the assignment of a
+    // variable, or a call whose value is one variable's version.
+    Type *type = nodeTypeOf(*modifier);
+    if (type != nullptr && valueTypeOf(type) != type) {
+        return *modifier;
+    }
+    // A call writes captured variables by writing into the cells it was given; its value is the
+    // tuple its parts are taken from (callValueTypeOf), and the part of the variable it wrote is
+    // the version of it.
+    const auto value = callValues_.find(*modifier);
+    if (value == callValues_.end()) {
+        return nullptr;
+    }
+    const bool wrapped = value->second.hasReturn || value->second.variables.size() > 1;
+    for (size_t k = 0; k < value->second.variables.size(); ++k) {
+        if (value->second.variables[k] != variable) {
+            continue;
+        }
+        if (!wrapped) {
+            return *modifier;
+        }
+        return callValuePartOf(*modifier, static_cast<uint32_t>(value->second.hasReturn ? 1 + k : k));
+    }
+    return nullptr;
+}
+
 void Builder::orderAfterLastWriter(node_handle_t variable, node_handle_t node) {
     // A control input, and it has to stay one until the read gets the data edge it is owed: for
     // a call that reads a captured `var` this is the edge that makes the write the read uses
@@ -469,6 +577,13 @@ void Builder::orderAfterLastWriter(node_handle_t variable, node_handle_t node) {
     // needs that data edge. The read is a data edge from the nearest write and writes are
     // ordered by order edges -- design principles 3.5 (a write through a captured variable is a
     // write to that cell, tracked where it happens).
+    //
+    // A write that produced a version of its own has that data edge already: the read takes the
+    // version, and the control input this helper used to stand in for it is gone with it
+    // (Builder::valueVersionOf).
+    if (valueVersionOf(variable) != nullptr) {
+        return;
+    }
     if (auto modifier = modifierOf(variable); modifier.has_value()) {
         if (sameGraph(*modifier, currGraph_) && shouldAddSyncCtrlLink(*modifier, node)) {
             linkNodes(LinkType::Ctrl, *modifier, node);
@@ -1164,7 +1279,7 @@ GCT::node_ptr_t Builder::internalOperatorDref(camel::core::OperId oper) {
 node_handle_t Builder::variableOperator(camel::core::OperId oper, node_handle_t input) {
     const auto group = internalOperatorGroup(oper);
     const std::vector<StaticArg> statics(1);
-    const auto op = group->resolve({}, {nodeTypeOf(input)}, statics, Modifier::None);
+    const auto op = group->resolve({}, {nodeTypeOf(input)}, statics);
     ASSERT(op.has_value(), "Variable operator rejected its operand.");
     node_handle_t node = currGraph_->addOperNode(*op, 0);
     stampPermissions(node);
@@ -1186,20 +1301,19 @@ node_handle_t Builder::readVariable(node_handle_t variable) {
 
 node_handle_t Builder::readVariableThrough(
     node_handle_t variable, camel::core::OperId oper) {
-    // The version of the variable the last write made: that write's own value. A write never
-    // gives anything but the cell it wrote into, so the read may take its data port from the
-    // write, and that edge is the read's whole tie to the write -- it orders the read after it
-    // and it is what makes the write execute (docs/design/effects/edges.cn.md 1, 5.6;
-    // docs/design-principles.cn.md 3.5). A writer whose value is not that cell -- a call the
-    // variable was passed to, a branch whose writes meet at a JOIN -- gives the cell and no
-    // version of its own: the read keeps the cell as its data port and the write orders it,
-    // which a control input stands in for until the call's capture port carries that data edge
+    // The version of the variable the last write made: that write's own value. Every write
+    // produces one (valueVersionOf): an assignment gives the cell it wrote into, and a call that
+    // wrote a captured variable gives the access node of the part of its value that is that
+    // variable's new version. The read takes it as its data port, and that edge is the read's
+    // whole tie to the write -- it orders the read after it and it is what makes the write
+    // execute (docs/design/effects/edges.cn.md 1, 5.6; docs/design-principles.cn.md 3.5). A
+    // writer whose value holds no version of this variable -- a branch whose writes meet at a
+    // JOIN, an indirect call -- gives the cell and no version of its own: the read keeps the
+    // cell as its data port and the write orders it, which a control input stands in for
     // (Builder::orderAfterLastWriter). Before any write the version is the cell :var/new made.
-    node_handle_t version = variable;
-    if (auto modifier = modifierOf(variable);
-        modifier.has_value() && sameGraph(*modifier, currGraph_) &&
-        valueTypeOf(nodeTypeOf(*modifier)) != nodeTypeOf(*modifier)) {
-        version = *modifier;
+    node_handle_t version = valueVersionOf(variable);
+    if (version == nullptr) {
+        version = variable;
     }
     node_handle_t value = variableOperator(oper, version);
     pendingUsesOf(variable).push_back({value, true});

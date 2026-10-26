@@ -122,6 +122,12 @@ std::string_view accessModeName(AccessMode mode);
 /// True for Write and ReadModifyWrite.
 inline bool writes(AccessMode mode) { return mode != AccessMode::Read; }
 
+/// The access two uses of one resource amount to: the wider one. The same access stays itself, and
+/// Read with Write is covered by no single access but ReadModifyWrite. Two writes are one write:
+/// widening them into a read-modify-write would make the reading harder to cover than the uses it
+/// stands for. Every place that unites two uses of one resource reads this one rule.
+AccessMode uniteAccess(AccessMode left, AccessMode right);
+
 struct ResourceAccess {
     Resource resource;
     ResourceBinding binding;

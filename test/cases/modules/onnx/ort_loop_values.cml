@@ -92,8 +92,8 @@ func main(): int sync {
     save_npy(reshape([p.1], [1]), 'nested_1.npy')
     save_npy(reshape([q.0], [1]), 'nested_2.npy')
     save_npy(reshape([flag(q.1)], [1]), 'nested_3.npy')
-    let out = get_env('ONNX_OUT')
-    let which = get_env('MODEL')
+    let out = get_env('ONNX_OUT') ?? ''
+    let which = get_env('MODEL') ?? ''
     let exported = if out == '' then 0 else if which == 'pair' then sync {
         let _ = export_model<out: out>((x: f32[..]): (f32[..], int) => pair(x), (x))
         1

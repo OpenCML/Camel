@@ -143,6 +143,90 @@ void releaseImport(void *raw) noexcept {
 
 } // namespace
 
+namespace {
+
+/// The shape and the block an export holds: what both structures' deleters give back.
+ExportContext *exportContext(Array *tensor) {
+    ASSERT(tensor != nullptr, "Cannot export a null array");
+    ASSERT(tensor->isCompact(), "Only a compact pure-data array can be exported through DLPack");
+    ASSERT(
+        camel::core::type::isCompactElementType(tensor->dtype()),
+        "Only an array of numeric scalars can be exported through DLPack");
+    tensor->ensureBlock();
+    Block *block = tensor->block();
+    ASSERT(block != nullptr, "A block-backed array has a block");
+    auto *context  = new ExportContext();
+    context->block = block;
+    block->retain();
+    const size_t rank = tensor->rank();
+    context->shape    = rank > 0 ? new int64_t[rank] : nullptr;
+    for (size_t i = 0; i < rank; ++i) {
+        context->shape[i] = tensor->dim(i);
+    }
+    return context;
+}
+
+void releaseVersionedExport(DLManagedTensorVersioned *self) {
+    if (self == nullptr) {
+        return;
+    }
+    auto *context = static_cast<ExportContext *>(self->manager_ctx);
+    if (context != nullptr) {
+        if (context->block != nullptr) {
+            context->block->release();
+        }
+        delete[] context->shape;
+        delete context;
+    }
+    delete self;
+}
+
+struct LegacyOfVersioned {
+    DLManagedTensorVersioned *versioned;
+};
+
+void releaseLegacyOfVersioned(DLManagedTensor *self) {
+    if (self == nullptr) {
+        return;
+    }
+    auto *context = static_cast<LegacyOfVersioned *>(self->manager_ctx);
+    if (context != nullptr) {
+        if (context->versioned != nullptr && context->versioned->deleter != nullptr) {
+            context->versioned->deleter(context->versioned);
+        }
+        delete context;
+    }
+    delete self;
+}
+
+} // namespace
+
+DLManagedTensorVersioned *toDLPackVersioned(Array *tensor) {
+    ExportContext *context = exportContext(tensor);
+    auto *managed          = new DLManagedTensorVersioned{};
+    managed->version       = DLPackVersion{1, 0};
+    managed->manager_ctx   = context;
+    managed->deleter       = &releaseVersionedExport;
+    managed->flags         = kDLPackFlagBitmaskReadOnly;
+    managed->dl_tensor.data        = tensor->rawData();
+    managed->dl_tensor.device      = DLDevice{kDLCPU, 0};
+    managed->dl_tensor.ndim        = static_cast<int32_t>(tensor->rank());
+    managed->dl_tensor.dtype       = toDLPackType(tensor->dtype());
+    managed->dl_tensor.shape       = context->shape;
+    managed->dl_tensor.strides     = nullptr;
+    managed->dl_tensor.byte_offset = 0;
+    return managed;
+}
+
+DLManagedTensor *toLegacyDLPack(DLManagedTensorVersioned *versioned) {
+    ASSERT(versioned != nullptr, "Cannot convert a null tensor");
+    auto *managed        = new DLManagedTensor{};
+    managed->dl_tensor   = versioned->dl_tensor;
+    managed->manager_ctx = new LegacyOfVersioned{versioned};
+    managed->deleter     = &releaseLegacyOfVersioned;
+    return managed;
+}
+
 DLManagedTensor *toDLPack(Array *tensor) {
     ASSERT(tensor != nullptr, "Cannot export a null array");
     ASSERT(tensor->isCompact(), "Only a compact pure-data array can be exported through DLPack");

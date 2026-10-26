@@ -43,9 +43,7 @@ bool TestSupportModule::load() {
             {"thread_count", false},
         });
     // What each touches (docs/design/op-semantics 8): the one meeting point of the process, and
-    // the process itself. The declaration module names the same two resources: `rendezvous_point`
-    // is declared here, and the process resource is the one `stdlib/process.cml` exports
-    // (`process:process`), which the declaration imports.
+    // the process itself. The declaration module names the same two resources.
     {
         using camel::core::sem::AccessMode;
         using camel::core::sem::externalAmbient;
@@ -53,7 +51,7 @@ bool TestSupportModule::load() {
             "test_support",
             {
                 {"rendezvous", externalAmbient("rendezvous_point", AccessMode::ReadModifyWrite)},
-                {"thread_count", externalAmbient("process:process", AccessMode::Read)},
+                {"thread_count", externalAmbient("process::process", AccessMode::Read)},
             });
     }
     loaded_ = true;

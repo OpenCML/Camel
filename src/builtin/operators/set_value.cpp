@@ -44,31 +44,27 @@ std::optional<Int64> constantOf(static_args_t statics, size_t index) {
 class SetFieldTypeResolver final : public FuncTypeResolver {
   public:
     std::optional<FunctionType *> resolve(
-        const type_vec_t &with, const type_vec_t &norm,
-        const ModifierSet &modifiers) const override {
-        return decide(with, norm, {}, modifiers);
+        const type_vec_t &with, const type_vec_t &norm) const override {
+        return decide(with, norm, {});
     }
 
     std::optional<FunctionType *> resolveWith(
-        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics,
-        const ModifierSet &modifiers) const override {
-        return decide(with, norm, normStatics, modifiers);
+        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics) const override {
+        return decide(with, norm, normStatics);
     }
 
     std::optional<FunctionType *> resolveForCall(
         const type_vec_t &types, Type *expectedResult, const type_vec_t &with,
-        const type_vec_t &norm, static_args_t normStatics,
-        const ModifierSet &modifiers) const override {
+        const type_vec_t &norm, static_args_t normStatics) const override {
         (void)expectedResult;
-        return types.empty() ? decide(with, norm, normStatics, modifiers) : std::nullopt;
+        return types.empty() ? decide(with, norm, normStatics) : std::nullopt;
     }
 
     std::string signature() const override { return "(aggregate: A, field: int, value: V) => A"; }
 
   private:
     std::optional<FunctionType *> decide(
-        const type_vec_t &with, const type_vec_t &norm, static_args_t statics,
-        const ModifierSet &modifiers) const {
+        const type_vec_t &with, const type_vec_t &norm, static_args_t statics) const {
         if (!with.empty() || norm.size() != 3 || norm[0] == nullptr || norm[1] == nullptr ||
             norm[1]->code() != TypeCode::Int64) {
             return std::nullopt;
@@ -97,7 +93,6 @@ class SetFieldTypeResolver final : public FuncTypeResolver {
             return std::nullopt;
         }
         FunctionTypeFactory factory;
-        factory.setModifiers(modifiers);
         factory.setExitType(result);
         for (size_t i = 0; i < norm.size(); ++i) {
             factory.addNormArg(std::format("__n{}", i), norm[i], false);
@@ -192,7 +187,7 @@ const std::vector<oper_group_ptr_t> &getSetValueOperatorGroups() {
               DynamicFuncTypeResolver::create(
                   {{0, {}}, {3, {false, false, false}}},
                   "(array: T[], index: int, value: T) => T[]",
-                  [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                  [](const type_vec_t &, const type_vec_t &norm)
                       -> std::optional<Type *> {
                       if (norm.size() != 3 || norm[0] == nullptr ||
                           norm[0]->code() != TypeCode::Array || norm[1] == nullptr ||

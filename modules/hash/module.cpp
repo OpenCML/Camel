@@ -2,14 +2,13 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * SHA-256 of text and of binary values. `sha256` is two operators (`hash:sha256_str` and
- * `hash:sha256_bytes`), chosen by the argument type; `sha256_rounds` applies the digest to its own
- * hexadecimal text a number of times.
+ * SHA-256 of a binary value: the one operator `hash:sha256_bytes`. `sha256` of a text is written in
+ * Camel in `stdlib/hash.cml`, as the digest of the text's UTF-8 bytes.
  *
  * The signatures are written once, in the declaration module `stdlib/hash.cml` (design principles
  * 6.4). What is left here is what only C++ knows: the kernels in
- * operators.cpp, the executor that runs them, and the purity declared at load. The three
- * operators are pure: they read no clock, no file and no generator.
+ * operators.cpp, the executor that runs them, and the purity declared at load. The
+ * operator is pure: they read no clock, no file and no generator.
  */
 
 #include "module.h"
@@ -34,9 +33,7 @@ bool HashModule::load() {
     camel::core::OperatorTable::instance().declare(
         "hash",
         {
-            {"sha256_str", true},
             {"sha256_bytes", true},
-            {"sha256_rounds", true},
         });
     loaded_ = true;
     return true;
