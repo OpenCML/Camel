@@ -141,6 +141,10 @@ void Builder::addCaptureSite(node_handle_t call, const compile_graph_ptr_t &call
     for (const CapturedValue &value : captured) {
         node_handle_t here = captureInto(currGraph_, value.origin, value.name);
         site.values.push_back(here);
+        // What the capture is worth as of this call: a capture of a variable already written
+        // here passes that write's version on, not the cell. The call is linked to it later
+        // (linkCaptureSites), when the caller may already have written again.
+        site.versions.push_back(valueVersionOf(here));
     }
     captureSites_.push_back(std::move(site));
 }
@@ -157,7 +161,7 @@ void Builder::linkCaptureSites() {
                 CaptureSite &site = captureSites_[i];
                 node_handle_t value = nullptr;
                 if (k < site.values.size()) {
-                    value = site.values[k];
+                    value = site.versions[k] != nullptr ? site.versions[k] : site.values[k];
                 } else {
                     const size_t before = capturedValues_[site.caller.get()].size();
                     value = captureInto(site.caller, captured[k].origin, captured[k].name);
@@ -167,7 +171,9 @@ void Builder::linkCaptureSites() {
                 }
                 // The With inputs of a FUNC node are its callee's with-ports in order: the
                 // declared `with` arguments, linked where the call was built, then the
-                // captures, linked here.
+                // captures, linked here. A capture of a variable this caller wrote is that
+                // write's version, which is also what the call's value carries it as
+                // (callValueTypeOf, Builder::valueVersionOf).
                 tryRemoveCtrlLink(value, site.call);
                 linkNodes(LinkType::With, value, site.call);
                 site.linked = k + 1;

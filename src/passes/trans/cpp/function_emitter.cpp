@@ -707,6 +707,19 @@ void FunctionEmitter::lowerCall(
     if (callee == nullptr) {
         refuse(g, ref, std::format("a call in {} has no callee", describeFunction(g)));
     }
+    if (camel::runtime::funcWriteMaskOf(*g, ref) != 0) {
+        // The call hands on the tuple of the callee's result and the new versions of the captured
+        // variables it writes, and its ACCS nodes read its parts; this emitter translates the
+        // callee's result alone.
+        refuse(
+            g,
+            ref,
+            std::format(
+                "{} calls {}, which writes captured variables, and std::cpp does not translate "
+                "their new versions yet",
+                describeFunction(g),
+                describeFunction(callee)));
+    }
     auto name = program_.functionNames.find(callee);
     if (name == program_.functionNames.end()) {
         refuse(

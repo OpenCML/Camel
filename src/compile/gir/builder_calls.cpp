@@ -149,6 +149,19 @@ node_handle_t Builder::functionValueOf(node_handle_t node, const GCT::node_ptr_t
     return node;
 }
 
+node_handle_t Builder::addCallNodeOf(const compile_graph_ptr_t &callee) {
+    // The value the call hands on, and the mask the run time packs it from, are decided here,
+    // once: a callee's writes are only exact once every body is built, and its callers' types
+    // cannot wait for that (Builder::captureWriteMaskOf).
+    const uint32_t writtenCaptures = captureWriteMaskOf(callee);
+    node_handle_t call =
+        currGraph_->addFuncNode(callee, callValueTypeOf(callee, writtenCaptures), writtenCaptures);
+    if (writtenCaptures != 0) {
+        callWriteMasks_[call] = writtenCaptures;
+    }
+    return call;
+}
+
 node_handle_t Builder::createFuncDataNode(
     const graph_ptr_t &graph, bool callableAsResult, bool allowParameterization) {
     ASSERT(
@@ -192,7 +205,7 @@ node_handle_t Builder::createFuncDataNode(
             }
             graph->setParameterized(true);
         }
-        node_handle_t funcNode = currGraph_->addFuncNode(graph, 0);
+        node_handle_t funcNode = addCallNodeOf(graph);
         markMacroNode(funcNode);
         addCaptureSite(funcNode, graph);
         bindGraphScopedFuncNodeDebug(sourceContext, graphOrigin, graph, funcNode);
@@ -758,7 +771,7 @@ compile_graph_ptr_t Builder::forwardingGraphOf(const compile_graph_ptr_t &target
         graph->addDependencyGraph(target);
         // The call the target's direct callers make: the arguments, then the target's
         // captures, which become captures of this graph (passed by the link step).
-        node_handle_t call = graph->addFuncNode(target, 0);
+        node_handle_t call = addCallNodeOf(target);
         if (isMacroGraph(target)) {
             setNodeMacro(call, true);
         }
@@ -773,7 +786,14 @@ compile_graph_ptr_t Builder::forwardingGraphOf(const compile_graph_ptr_t &target
         // The summaries see the target as a function this graph calls: what the target
         // writes of the captured variables, this graph writes.
         (void)capturedUsesOf(target);
-        setGraphReturnFromResult(graph, nodeIdOf(call), nodeIdOf(call), targetType->exitType());
+        // What the forwarder returns is the target's return value: the first part of what the
+        // call hands on, which is the call itself when the target writes no captured variable.
+        draft_node_ref_t returned = nodeIdOf(call);
+        if (callWriteMasks_.contains(call) && targetType->hasExitType() &&
+            !isVoidGraphExitType(targetType->exitType())) {
+            returned = nodeIdOf(callValuePartOf(call, 0));
+        }
+        setGraphReturnFromResult(graph, nodeIdOf(call), returned, targetType->exitType());
         bodyStates_[graph.get()] = BodyState::Built;
         registerBuiltBody(graph);
     } catch (...) {

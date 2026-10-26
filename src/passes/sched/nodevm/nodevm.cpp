@@ -635,7 +635,24 @@ slot_t NodeVMSchedPass::call(
                 slot_t callResult = call(runtimeTarget, funcFrame, currProgram);
 
                 if (n->dataIndex != 0) {
-                    currFrame->set(n->dataIndex, callResult);
+                    slot_t value = callResult;
+                    const uint32_t written =
+                        camel::runtime::funcWriteMaskOf(*currRuntimeGraph, nodeRef);
+                    if (written != 0) {
+                        // The call hands on the new version of each captured variable it wrote
+                        // beside the return value: its With inputs are the callee's declared
+                        // `with` arguments and then those captures.
+                        std::vector<slot_t> withValues;
+                        const auto withInputs = en.withInputs();
+                        withValues.reserve(withInputs.size());
+                        for (auto input : withInputs) {
+                            withValues.push_back(
+                                currFrame->get<slot_t>(planDataIndex(*currPlan, input)));
+                        }
+                        value = camel::execute::runtimeFuncValue(
+                            n->dataType(), runtimeTarget, written, withValues, callResult);
+                    }
+                    currFrame->set(n->dataIndex, value);
                 }
             } break;
 
