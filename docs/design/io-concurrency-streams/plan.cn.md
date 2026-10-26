@@ -315,7 +315,7 @@ G5/G7/G8 + GPU/H246 ── G11 ── G12
 
 #### 片 F：`for x in s`
 
-- **落地方式已改（2026-10-26 的裁定，[评审文件](../../handover/reviews/questions-2026-10-24-evening.md)）**：流的消费不走 `__iter__` 的新重载，而在图上展开成已有的 `while`——`for x in s` 的每一轮是一次拉取，循环的状态是那次拉取加上程序写的状态，元素从这次拉取里取出、下一轮的拉取在本轮体末。这条与下一段「`__iter__` 加一个流的重载」是同一个功能的另一条路，已被裁定取代；`LoopSequenceNotIterable` 的消息确实把「流」补进了那几类（见 `diagnostics/registry.tsv`）。
+- **落地方式已改（2026-10-26 的裁定，[评审文件](../../handover/reviews/questions-2026-10-24-evening.md)）**：流的消费不走 `__iter__` 的新重载，而在图上展开成已有的 `while`——`for x in s` 的每一轮是一次拉取，循环的状态是流加上程序写的状态，每一轮**先判断条件、再取元素**（和数组同一个顺序，作者 2026-10-26 又裁了一次）：`c` 成立才调用步进函数，拉到空就结束，所以 `for line in read_lines(f) while n < 10` 不会读第 11 行。这条与下一段「`__iter__` 加一个流的重载」是同一个功能的另一条路，已被裁定取代；`LoopSequenceNotIterable` 的消息确实把「流」补进了那几类（见 `diagnostics/registry.tsv`）。
 - `src/builtin/modules/globals.cpp#__iter__` 加一个流的重载；`LoopSequenceNotIterable` 的消息文本要把「流」补进那四类里（今天的原文只列数组、字符串、映射、张量）。
 - 红前用例（附录 A 的 t5，**反例**：今天编译失败）
   <!-- camel-snippet: counter-example: 反例：`for x in <int>` 今天报 LoopSequenceNotIterable，逐字诊断见附录 A 的 t5 -->

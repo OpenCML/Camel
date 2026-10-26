@@ -1,0 +1,46 @@
+/**
+ * When the condition of `for x in s while c` is asked, and how often: the condition is judged
+ * first and the step function is called only where it holds, which is the array's order (the
+ * language author, 2026-10-26). A pull may have effects and consumes the stream, so the round that
+ * finds the stream over costs one last ask and no pull, and an empty stream costs one ask. The
+ * array form is written beside it: the two read the same.
+ *
+ * The condition prints the state it is asked with, so every line below is a count of evaluations
+ * and the value it saw, not a belief: four asks for a three-element stream (`c 6` is the ask of the
+ * round that finds the end) and one for an empty one, exactly as for an array.
+ */
+module stream_while_effects
+
+func count(n: int): int.. {
+    return step(n)
+}
+
+func step(n: int): () => (int, int..)? {
+    return () => if n > 0 then (n, step(n - 1)) else null
+}
+
+func asked(acc: int): bool sync {
+    println("c", acc)
+    return acc < 100
+}
+
+func drain(s: int..): int {
+    return loop acc = 0 for x in s while asked(acc) do acc + x
+}
+
+func drainArray(xs: int[]): int {
+    return loop acc = 0 for x in xs while asked(acc) do acc + x
+}
+
+func main(): int sync {
+    println("stream-drain")
+    println(drain(count(3)))
+    println("array-drain")
+    println(drainArray([1, 2, 3]))
+    println("stream-empty")
+    println(drain(count(0)))
+    println("array-empty")
+    println(drainArray([]))
+    println("done")
+    return 0
+}

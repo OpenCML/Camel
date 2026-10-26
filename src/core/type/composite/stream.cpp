@@ -105,7 +105,15 @@ bool StreamType::assignableFrom(Type *sourceType) const {
     if (sourceType->code() == TypeCode::Stream) {
         return typeEquals(this, sourceType);
     }
-    return sourceType->code() == TypeCode::Function && sourceType->equals(stepType());
+    if (sourceType->code() != TypeCode::Function) {
+        return false;
+    }
+    // A stream is its step function: a value of that signature is a value of this type, and the
+    // step signature is asked whether it accepts the function rather than compared with it. The
+    // rest of a stream is a stream, so the same value is written two ways -- `(n, step(n - 1))`
+    // gives `(int, () => (int, int..)?)`, whose second component is the step signature of `int..`
+    // and stands where `int..` does -- and a comparison by equality refused the written form.
+    return stepType()->assignableFrom(sourceType);
 }
 
 } // namespace camel::core::type

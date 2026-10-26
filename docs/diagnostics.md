@@ -2058,14 +2058,14 @@ None: context: the construct is not built here, so the program has to be restruc
 The grammar accepts this construct, but the compiler does not implement it. Remove it; nothing in the language replaces it yet.
 ```
 
-**Example** (`test/cases/modules/tensor/subscript/slice_multidim.cml`, run as `camel test/cases/modules/tensor/subscript/slice_multidim.cml`)
+**Example** (`test/cases/modules/tensor/subscript/index_other_dimension.cml`, run as `camel test/cases/modules/tensor/subscript/index_other_dimension.cml`)
 
 ```camel
-module subscript_multidim
+module subscript_index_other_dimension
 import { reshape, shape } from tensor
 
 func main(): int sync {
-    println('ran')
+    println('reached')
     let m = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3])
     let column = m[:, 0]
     println(shape(column))

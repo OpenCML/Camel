@@ -50,13 +50,36 @@ timeout_ms = 10000
 
 [[tests]]
 name = "slice_multidim"
-desc = "A subscript that slices one dimension and indexes another (`m[:, 0]`) is a view with strides: the syntax is accepted and the form is refused with a located ConstructNotSupported that names H17 (design principles 5.4)."
-kind = "negative"
+desc = "A subscript that writes its bounds on a dimension other than the first (`m[:, 1:3]`) is the core's one slice with that dimension as its axis (design principles 5.4): the shape keeps the first extent and the second one becomes the range's, the sum of the elements is 16.0, and the distance to the same elements written out by hand is 0.0, so bounds read on the first dimension instead fail on all three readings."
+kind = "behavior"
 case = "../../../../cases/modules/tensor/subscript/slice_multidim.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "ran\n[2, 2]\nsum=16.0\nd=0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "slice_multidim_rank3"
+desc = "The same on a tensor of rank 3, on two different dimensions (design principles 5.4): `c[:, :, 3:0:-1]` writes a negative step on the last dimension and `c[:, 1:3, :]` a range on the middle one. Each is the core's slice with that axis, so the shapes are [2, 3, 3] and [2, 2, 4], the sums are 234.0 and 232.0, and both distances to the elements written out by hand are 0.0. A step of 1 shares the block and a step of -1 does not, and the value and the shape are the readings either way."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/subscript/slice_multidim_rank3.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "ran\n[2, 3, 3]\nback=234.0\nback_d=0.0\n[2, 2, 4]\nmid=232.0\nmid_d=0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "index_other_dimension"
+desc = "A subscript that names a range on one dimension and a position on another (`m[:, 0]`) is refused at the bracket: the slice operator takes one axis and keeps every other dimension, and the index operator takes the first dimension and drops it, so neither reads a position on a later dimension (design principles 5.4). The message names the two forms the operators do take."
+kind = "negative"
+case = "../../../../cases/modules/tensor/subscript/index_other_dimension.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
-expect_output_contains = ["a subscript that slices a dimension other than the first", "H17"]
+expect_output_contains = ["a subscript that names a range or a position on more than one dimension", "the slice operator takes one axis, and the index operator takes the first dimension"]
+expect_output_not_contains = ["reached"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 

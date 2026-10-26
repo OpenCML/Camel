@@ -1,0 +1,35 @@
+/**
+ * A subscript on a dimension other than the first on a tensor of rank 3 (design principles 5.4):
+ * `c[:, :, 3:0:-1]` writes its bounds on the last dimension and `c[:, 1:3, :]` on the middle one,
+ * and each is the core's slice with that dimension as its axis, the others taken whole. A step of
+ * 1 is a run of the block and a step of -1 is not, so one of the two is a view and the other a
+ * copy; the value and the shape below are the same either way, which is what the readings pin.
+ */
+module subscript_slice_multidim_rank3
+import { abs, reshape, shape, sum } from tensor
+
+func main(): int sync {
+    println('ran')
+    let values = [
+        1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
+        13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0
+    ]
+    let c = reshape(values, [2, 3, 4])
+    let back = c[:, :, 3:0:-1]
+    println(shape(back))
+    println("back={}"->format<sum(back)>)
+    let wantBack = reshape(
+        [4.0, 3.0, 2.0, 8.0, 7.0, 6.0, 12.0, 11.0, 10.0,
+         16.0, 15.0, 14.0, 20.0, 19.0, 18.0, 24.0, 23.0, 22.0] as f64[],
+        [2, 3, 3])
+    println("back_d={}"->format<sum(abs(back - wantBack))>)
+    let mid = c[:, 1:3, :]
+    println(shape(mid))
+    println("mid={}"->format<sum(mid)>)
+    let wantMid = reshape(
+        [5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
+         17.0, 18.0, 19.0, 20.0, 21.0, 22.0, 23.0, 24.0] as f64[],
+        [2, 2, 4])
+    println("mid_d={}"->format<sum(abs(mid - wantMid))>)
+    return 0
+}
