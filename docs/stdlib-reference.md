@@ -4101,52 +4101,50 @@ The current working directory, the directory relative paths start at.
 
 ## `json`
 
-A Json is a JSON value whose shape is known only when the program runs: `decode` reads a
-text, or gives an error value when the text is not JSON, and the accessors below look into
-it, each giving a value of a definite type. `encode` writes the JSON text of a value, and
-`decode_as` decodes to the type of a shape; both are computed signatures that a declaration
-cannot express, so they are not declared here (see `stdlib/signatures/json.cml`).
+A Json is a JSON value whose shape is known only when the program runs: `decode` reads a text,
+or gives an error value when the text is not JSON, and the accessors look into it, each giving
+a value of a definite type. To read a part whose shape is known, `decode_as::<T>` decodes
+straight to the type T, and `encode` writes the JSON text of a value; both have a result type
+that a declaration cannot express, so they are not declared here (see
+`stdlib/signatures/json.cml`). Everything here is pure.
+
+The data an accessor works on is its ordinary argument; the key or the index is its
+with-argument, so calls chain: `decode(text)->get<key: 'port'>->as_int`. An accessor has one
+declaration for each tagged form of its argument -- `Json`, `Json?`, `Json!` and `Json!?` --
+written from the most specific to the widest, which give the result `R?`, `R?`, `R!?` and
+`R!?`: an absent part is the null, and the error of a text that failed to decode is passed on
+unchanged, so one `!!` or `??` at the end of a chain settles it.
 
 #### `encode`
 
 ```camel
 encode: (value: T) => string
+encode: <indent: int?> (value: T) => string
 ```
 
-The JSON text of a value, on one line. The type of the value must have a JSON form:
-numbers, bool, string, null, and arrays, tuples, structs, sets and maps with string keys
-of those; a function or a tensor is refused when the call is compiled.
+The JSON text of a value, on one line. The type of the value must have a JSON form: numbers,
+bool, string, null, a Json, and arrays, tuples, structs, sets and maps with string keys of
+those; a function or a tensor is refused when the call is compiled. A map is written with its
+keys in order, a struct with its fields in the order of its type, so the same value gives the
+same text.
 
 - Pure.
-- Example: `encode([1, 2])` gives `'[1,2]'`
-
-#### `encode`
-
-```camel
-encode: (value: T, indent: int) => string
-```
-
-The JSON text of a value, indented by indent spaces per level; a negative indent gives one
-line.
-
-- Pure.
-- Example: `encode([1, 2], 2)` gives `'[\n  1,\n  2\n]'`
+- Example: `[1, 2]->encode` gives `'[1,2]'`
 
 #### `decode_as`
 
 ```camel
-decode_as: <shape: T> (text: string) => T!
-decode_as: <shape: T> (text: Json) => T!
+decode_as: (source: string) => T!
+decode_as: (source: Json) => T!
 ```
 
-The value a JSON text (or a Json decoded before) describes, decoded to the type of shape;
-the value of shape is not read. The result is an error value when the JSON does not have
-that type, or when the text nests deeper than the limit. A part of the shape typed `Json`
-takes whatever is there.
+The value a JSON text (or a Json decoded before) describes, decoded to the type T. A part of
+T typed `Json` takes whatever is there. T is given where the call is written or taken from
+where the result goes (`let cfg: Config! = text->decode_as`).
 
 - Pure.
 - Failure: error value `JsonTypeError` when the text is JSON of another type (the message gives the path of the mismatch); error value `JsonParseError` when the text is not JSON; error value `JsonTooDeep` when the document nests deeper than the limit.
-- Example: `decode_as<[] as Map<string, int>>('{"a": 1}')` gives `{a: 1}`
+- Example: `decode_as::<Map<string, int>>('{"a": 1}')` gives `{a: 1}`
 
 #### `decode`
 
@@ -4155,16 +4153,12 @@ decode: (text: string) => Json!
 ```
 
 The value a JSON text describes, as a `Json`: a value of a definite type whose content is
-known only when the program runs; an error value when the text is not JSON or nests deeper
-than the limit (design principles 11.2). Look into a Json with get, as_int, as_array and the
-other operators below, each of which gives a value of a definite type and takes a `Json?`, a
-`Json!` or a `Json!?` as well, so that calls chain (a `Json!` gives the two-layer result and
-its error is passed on unchanged); read a part whose shape is known with decode_as. Prints as
-its JSON text. In the examples below, `j` is a Json decoded so.
+known only when the program runs. Look into it with `get`, `as_int`, `as_array` and the other
+accessors below.
 
 - Pure.
 - Failure: error value `JsonParseError` when the text is not JSON (the message gives the position in the text and its beginning); error value `JsonTooDeep` when the document nests deeper than the limit (10000 levels; the message gives the line and column of the bracket that goes too deep).
-- Example: `decode('{"port": 80}') ?-> ((j: Json): int => j->get<'port'>->as_int ?? 0) !! -1` gives `80`
+- Example: `(decode('{"port": 80}')->get<key: 'port'>->as_int ?? 0) !! -1` gives `80`
 
 #### `kind`
 
@@ -4175,7 +4169,7 @@ kind: (j: Json) => string
 The kind of a Json: 'null', 'bool', 'int', 'float', 'string', 'array' or 'object'.
 
 - Pure.
-- Example: `kind(j)` gives `'array', for j of '[1]'`
+- Example: `decode('[1]') ?-> kind !! ''` gives `'array'`
 
 #### `is_null`
 
@@ -4185,8 +4179,8 @@ is_null: (j: Json) => bool
 
 Whether a Json is the JSON null.
 
-- Pure.
-- Example: `is_null(j)` gives `true, for j of 'null'`
+- With effects: not pure.
+- Example: `decode('null') ?-> is_null !! false` gives `true`
 
 #### `get`
 
@@ -4198,11 +4192,10 @@ get: <key: string> (j: Json!?) => Json!?
 ```
 
 The member key of an object; null when j is not an object, has no such member, or is null
-itself (so that calls chain: j->get<'a'>->get<'b'>). A `Json!` gives a `Json!?`: the null is
-the nullable layer, and the error of a document that had failed is passed on unchanged.
+itself (so that calls chain: `j->get<key: 'a'>->get<key: 'b'>`).
 
 - Pure.
-- Example: `j->get<'a'>` gives `1, a Json?, for j of '{"a": 1}'`
+- Example: `(decode('{"a": 1}')->get<key: 'a'>->as_int ?? 0) !! -1` gives `1`
 
 #### `get`
 
@@ -4213,15 +4206,12 @@ get: <key: int> (j: Json!) => Json!?
 get: <key: int> (j: Json!?) => Json!?
 ```
 
-The element index of an array; null when j is not an array, the index is out of range, or j
-is null itself. The with-parameter is `key`, the name the member-key declarations above use:
-the position means which member of the Json to take, and the argument's type says whether it
-is written as a string or as an integer, so `get<key: 'a'>` and `get<key: 0>` name the same
-position of every declaration of `get`. A `Json!` gives a `Json!?`, as the member-key form
-does.
+The element key of an array; null when j is not an array, the index is out of range, or j is
+null itself. The with-parameter is called `key` as in the member form above: which member of
+the Json to take is written as a string or as an integer, and the argument's type says which.
 
 - Pure.
-- Example: `j->get<1>->as_int ?? 0` gives `6, for j of '[5, 6]'`
+- Example: `(decode('[5, 6]')->get<key: 1>->as_int ?? 0) !! -1` gives `6`
 
 #### `as_bool`
 
@@ -4232,11 +4222,10 @@ as_bool: (j: Json!) => bool!?
 as_bool: (j: Json!?) => bool!?
 ```
 
-The bool a Json holds; null for any other kind (and a `Json!` gives a `bool!?`, the error of
-the document passed on unchanged).
+The bool a Json holds; null for any other kind.
 
 - Pure.
-- Example: `j->as_bool ?? false` gives `true, for j of 'true'`
+- Example: `(decode('true')->as_bool ?? false) !! false` gives `true`
 
 #### `as_int`
 
@@ -4247,11 +4236,10 @@ as_int: (j: Json!) => int!?
 as_int: (j: Json!?) => int!?
 ```
 
-The integer a Json holds; null for any other kind (a number with a fraction is not an int),
-and a `Json!` gives an `int!?` with the error of the document passed on unchanged.
+The integer a Json holds; null for any other kind (a number with a fraction is not an int).
 
 - Pure.
-- Example: `j->as_int ?? 0` gives `42, for j of '42'`
+- Example: `(decode('42')->as_int ?? 0) !! 0` gives `42`
 
 #### `as_float`
 
@@ -4262,11 +4250,10 @@ as_float: (j: Json!) => float!?
 as_float: (j: Json!?) => float!?
 ```
 
-The number a Json holds, an integer included; null for any other kind, and a `Json!` gives a
-`float!?` with the error of the document passed on unchanged.
+The number a Json holds, an integer included; null for any other kind.
 
 - Pure.
-- Example: `j->as_float ?? 0.0` gives `2.0, for j of '2'`
+- Example: `(decode('2')->as_float ?? 0.0) !! 0.0` gives `2.0`
 
 #### `as_string`
 
@@ -4277,11 +4264,10 @@ as_string: (j: Json!) => string!?
 as_string: (j: Json!?) => string!?
 ```
 
-The string a Json holds; null for any other kind, and a `Json!` gives a `string!?` with the
-error of the document passed on unchanged.
+The string a Json holds; null for any other kind.
 
 - Pure.
-- Example: `j->as_string ?? ''` gives `'hi', for j of '"hi"'`
+- Example: `(decode('"hi"')->as_string ?? '') !! ''` gives `'hi'`
 
 #### `as_array`
 
@@ -4292,11 +4278,10 @@ as_array: (j: Json!) => Json[]!?
 as_array: (j: Json!?) => Json[]!?
 ```
 
-The elements of a JSON array; null for any other kind, and a `Json!` gives a `Json[]!?` with
-the error of the document passed on unchanged.
+The elements of a JSON array; null for any other kind.
 
 - Pure.
-- Example: `len(j->as_array ?? [])` gives `2, for j of '[1, "a"]'`
+- Example: `len((decode('[1, "a"]')->as_array ?? []) !! [])` gives `2`
 
 #### `as_object`
 
@@ -4307,11 +4292,10 @@ as_object: (j: Json!) => Map<string, Json>!?
 as_object: (j: Json!?) => Map<string, Json>!?
 ```
 
-The members of a JSON object, by name; null for any other kind, and a `Json!` gives a
-`Map<string, Json>!?` with the error of the document passed on unchanged.
+The members of a JSON object, by name; null for any other kind.
 
 - Pure.
-- Example: `keys(j->as_object ?? ([] as Map<string, Json>))` gives `['a', 'b'], for j of '{"b": 1, "a": 2}'`
+- Example: `len((decode('{"b": 1, "a": 2}')->as_object ?? ([] as Map<string, Json>)) !! ([] as Map<string, Json>))` gives `2`
 
 <a id="hash"></a>
 

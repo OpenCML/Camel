@@ -8,7 +8,8 @@
  * two type rules a declaration cannot express:
  *
  *   - `encode`: the value's type must have a JSON form, a condition on the argument type;
- *   - `decode_as`: the result type is the type of the `shape` argument.
+ *   - `decode_as`: the result type is the type the call names (`decode_as::<T>`) or the one
+ *     its position determines.
  *
  * Their resolvers below are the one source of those two signatures; the rest come from the
  * declarations.
@@ -32,6 +33,53 @@ using namespace camel::core::type;
 using camel::json::isJsonType;
 using camel::json::JsonType;
 
+namespace {
+
+/// `decode_as::<T>(source)`: the type T is named at the call, or determined by the position the
+/// call stands in (`let cfg: Config! = text->decode_as`); the result is a `T!`. A call that names
+/// no type and stands where none is determined is refused, and so is a type with no JSON form.
+class DecodeAsResolver final : public FuncTypeResolver {
+  public:
+    std::optional<FunctionType *>
+    resolve(const type_vec_t &, const type_vec_t &, const ModifierSet &) const override {
+        return std::nullopt;
+    }
+
+    std::optional<FunctionType *> resolveForCall(
+        const type_vec_t &types, Type *expected, const type_vec_t &with, const type_vec_t &norm,
+        static_args_t, const ModifierSet &modifiers) const override {
+        if (!with.empty() || norm.size() != 1 ||
+            (norm[0]->code() != TypeCode::String && !isJsonType(norm[0]))) {
+            return std::nullopt;
+        }
+        Type *target = nullptr;
+        if (types.size() == 1) {
+            target = types[0];
+        } else if (types.empty() && expected != nullptr) {
+            target = determinedByPosition(expected);
+        }
+        if (target == nullptr || !jsonTypeHasForm(target)) {
+            return std::nullopt;
+        }
+        return FunctionType::create(
+            {},
+            {{norm[0], false}},
+            TupleType::fallible(target),
+            modifiers);
+    }
+
+    std::string signature() const override { return "::<T>(source: string | Json) => T!"; }
+
+    bool parameterNames(std::vector<std::string> &with, std::vector<std::string> &norm)
+        const override {
+        with.clear();
+        norm = {"source"};
+        return true;
+    }
+};
+
+} // namespace
+
 JsonModule::JsonModule(context_ptr_t ctx) : BuiltinModule("json", ctx) {
     // `Json`: a JSON value whose shape is known only when the program runs (value.h). Its
     // static type is definite; a program looks into it through the operators below (design
@@ -40,12 +88,13 @@ JsonModule::JsonModule(context_ptr_t ctx) : BuiltinModule("json", ctx) {
     exportType(Reference("Json"), JsonType::get());
 
     // encode takes a value of every type that has a JSON form, a Json among them (a type
-    // rule, not a parameter of type `any`). A function or a tensor is refused when the call
-    // is compiled.
-    const auto encodable = [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+    // rule, not a parameter of type `any`), and an indent that may be absent or null. A function
+    // or a tensor is refused when the call is compiled.
+    const auto encodable = [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
         -> std::optional<Type *> {
         if (!jsonTypeEncodable(norm[0]) ||
-            (norm.size() == 2 && norm[1]->code() != TypeCode::Int64)) {
+            (with.size() == 1 &&
+             !entersImplicitly(TupleType::nullable(Type::Int64()), with[0]))) {
             return std::nullopt;
         }
         return Type::String();
@@ -59,38 +108,12 @@ JsonModule::JsonModule(context_ptr_t ctx) : BuiltinModule("json", ctx) {
                   {{0, {}}, {1, {false}}}, "(value: T) => string", encodable)},
              {"json:encode",
               DynamicFuncTypeResolver::create(
-                  {{0, {}}, {2, {false, false}}},
-                  "(value: T, indent: int) => string",
+                  {{1, {false}}, {1, {false}}},
+                  "<indent: int?> (value: T) => string",
                   encodable)}}));
     exportEntity(
         "decode_as",
-        OperatorGroup::create(
-            "decode_as",
-            {{"json:decode_as",
-              DynamicFuncTypeResolver::create(
-                  {{-1, {}}, {-1, {}}},
-                  "<shape: T> (text: string | Json) => T!",
-                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                      -> std::optional<Type *> {
-                      Type *shape = nullptr;
-                      if (with.size() == 1 && norm.size() == 1) {
-                          shape = with[0];
-                      } else if (with.empty() && norm.size() == 2) {
-                          shape = norm[1];
-                      }
-                      if (shape == nullptr ||
-                          (norm[0]->code() != TypeCode::String && !isJsonType(norm[0])) ||
-                          !jsonTypeHasForm(shape)) {
-                          return std::nullopt;
-                      }
-                      return TupleType::fallible(shape);
-                  })}}));
-    // DESIGN-QUESTION(json-typed-decode): decoding to a given type. A call cannot be handed a
-    // type, so the type is that of a `shape` argument whose value is not read:
-    // `decode_as<[] as Map<string, int>>(text)` or `decode_as(text, [] as Map<string, int>)`.
-    // The result is a `T!`. What is decoded is a text, or a Json decoded before (a member of
-    // it whose shape is known). The result type comes from the shape argument, which a
-    // declaration cannot express, so the resolver here is the one source.
+        OperatorGroup::create("decode_as", {{"json:decode_as", std::make_shared<DecodeAsResolver>()}}));
 }
 
 module_ptr_t JsonModule::create(context_ptr_t ctx) { return std::make_shared<JsonModule>(ctx); }
@@ -110,7 +133,6 @@ bool JsonModule::load() {
             {"decode", true},
             {"decode_as", true},
             {"kind", true},
-            {"is_null", true},
             {"as_bool", true},
             {"as_int", true},
             {"as_float", true},

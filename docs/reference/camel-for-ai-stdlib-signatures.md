@@ -561,13 +561,13 @@ get_env: (name: string) => string?
 get_cwd: () => string!
 ```
 
-**`json`** — import { ... } from json — 14 name(s)
+**`json`** — import { ... } from json — 13 name(s)
 
 ```text
 encode: (value: T) => string
-encode: (value: T, indent: int) => string
-decode_as: <shape: T> (text: string) => T!
-decode_as: <shape: T> (text: Json) => T!
+encode: <indent: int?> (value: T) => string
+decode_as: (source: string) => T!
+decode_as: (source: Json) => T!
 decode: (text: string) => Json!
 kind: (j: Json) => string
 is_null: (j: Json) => bool
