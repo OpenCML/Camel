@@ -1,9 +1,9 @@
 /**
  * A model whose every field is discrete gets a gradient of its own type, all zeros. The tangent
  * space of a struct is taken field by field, and a number (an integer included) and a boolean
- * each have one, which is the value's own type with the value zero (the author's ruling of
- * 2026-10-25 on discrete-gradient-and-rank-one-slice-ownership: "numbers, integers included, and
- * booleans have a tangent space, which is their own type, with the value zero"). There is no
+ * each have one, which is the value's own type with the value zero: numbers, integers
+ * included, and booleans have a tangent space, which is their own type, with the value
+ * zero. There is no
  * "at least one trainable field" exception, so `Plain = {n: int, flag: bool}` is differentiable
  * and `grad` answers `{n: 0, flag: false}`.
  *

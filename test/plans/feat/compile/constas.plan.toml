@@ -2,7 +2,7 @@ id = "compile.constas"
 order = 341
 tier = "fast"
 tags = ["feat", "compile", "generics", "constas"]
-desc = "'constas' value parameters (design principles 5.4, H51 ruling 2026-10-22): a value of any compile-time type, any number of them in any position; the value is part of the instance key, is read by the body as a static value (extents, `t.[n]`, conditions), may be handed on to another such parameter, and is not a runtime parameter. Refusals cover only the value being absent or not a constant, a body-less declaration, and a declaration used as a value."
+desc = "'constas' value parameters (design principles 5.4): a value of any compile-time type, any number of them in any position; the value is part of the instance key, is read by the body as a static value (extents, `t.[n]`, conditions), may be handed on to another such parameter, and is not a runtime parameter. Refusals cover only the value being absent or not a constant, a body-less declaration, and a declaration used as a value."
 
 [[tests]]
 name = "constas_instances"

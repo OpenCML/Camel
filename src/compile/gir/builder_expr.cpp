@@ -454,8 +454,8 @@ void Builder::orderAfterLastWriter(node_handle_t variable, node_handle_t node) {
     // execute (design principles 3.5, F3), and an order edge would leave the read with the value
     // from before it. The two uses of this helper are one link today, and telling them apart
     // needs that data edge. The read is a data edge from the nearest write and writes are
-    // ordered by order edges -- docs/handover/reviews/questions-2026-10-23.md,
-    // " -capture-order-edge".
+    // ordered by order edges -- design principles 3.5 (a write through a captured variable is a
+    // write to that cell, tracked where it happens).
     if (auto modifier = modifierOf(variable); modifier.has_value()) {
         if (sameGraph(*modifier, currGraph_) && shouldAddSyncCtrlLink(*modifier, node)) {
             linkNodes(LinkType::Ctrl, *modifier, node);

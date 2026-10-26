@@ -18,14 +18,14 @@
 // Every entry says where it is a keyword (`zh`, `en`) and carries the verbatim line of
 // `src/parse/syntax/parser*.cpp` that reads it as one. `--check` requires each of those lines to be
 // in the parser still, so a reading that disappears takes the word off the page instead of leaving a
-// sentence behind that nothing implements (design principles 6.4; handover 5.00 "语法层收口" 7).
+// sentence behind that nothing implements (design principles 6.4).
 //
 // Not here, and not in this form:
 //   * `func`, `type` and `field` are reserved keywords (token_kinds.def) that the parser also reads
 //     as tag position names after `on`, and `func` also names the shape of a function type in a
 //     `match type` case (`typeCasePattern`); they are listed in the reserved table, not here;
-//   * `yield` was listed as a contextual keyword by handover 5.00 item 7, and the author corrected
-//     that (`questions-2026-10-24-evening.md`, 「2026-10-26-yield-keyword-or-context-keyword」): it
+//   * `yield` was listed as a contextual keyword by, and the author corrected
+//     that: it
 //     is an ordinary keyword, in the Control row with `return` and `throw`. Its lexical half is not
 //     on develop (no `KwYield` in token_kinds.def).
 

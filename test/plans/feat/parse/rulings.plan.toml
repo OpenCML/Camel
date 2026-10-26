@@ -2,7 +2,7 @@ id = "parse.rulings"
 order = 306
 tier = "fast"
 tags = ["feat", "parse", "syntax"]
-desc = "The syntax rulings of design principles 4.2: the precedence of `^`, literals with an exponent, renamed imports, documentation comments, an `if` statement without a block, and the postfix marks of a type (`?`, `!` and the stream's `..`, read left to right). Two rulings of 2026-10-24 are read here: the right side of `as` is a type, and a lambda's parameters are written in parentheses (5.9). The head of `static for` is read here too: it is the `for ... in ...` of `static loop`, without parentheses."
+desc = "The syntax rules of design principles 4.2: the precedence of `^`, literals with an exponent, renamed imports, documentation comments, an `if` statement without a block, and the postfix marks of a type (`?`, `!` and the stream's `..`, read left to right). The right side of `as` is a type, and a lambda's parameters are written in parentheses (5.9). The head of `static for` is read here too: it is the `for ... in ...` of `static loop`, without parentheses."
 
 [[tests]]
 name = "rulings.power"
@@ -149,7 +149,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rulings.minus_by_precedence"
-desc = "The minus is always an operator (ruling of October 13): looser than `^`, tighter than `->` and the other binary operators, the same before a literal and a name. `-2 ^ 2` and `-x ^ 2` are -4, `-2->inc` and `-x->inc` are -1; the smallest int and i32 can still be written; `2.0 ^ -1.0 ^ 2.0` has a signed exponent."
+desc = "The minus is always an operator (design principles 4.2): looser than `^`, tighter than `->` and the other binary operators, the same before a literal and a name. `-2 ^ 2` and `-x ^ 2` are -4, `-2->inc` and `-x->inc` are -1; the smallest int and i32 can still be written; `2.0 ^ -1.0 ^ 2.0` has a signed exponent."
 kind = "behavior"
 case = "../../../cases/parse/rulings/minus.cml"
 args = ["${case}", "${backend}"]
@@ -208,7 +208,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rulings.not_by_precedence"
-desc = "`!` and `~` are at the level of the unary minus (ruling of October 14): looser than `^`, tighter than `->` and the other binary operators. `!t->show` is `(!t)->show`, `~n->inc` is `(~n)->inc`, `~n * 3` is `(~n) * 3`."
+desc = "`!` and `~` are at the level of the unary minus (design principles 4.2): looser than `^`, tighter than `->` and the other binary operators. `!t->show` is `(!t)->show`, `~n->inc` is `(~n)->inc`, `~n * 3` is `(~n) * 3`."
 kind = "behavior"
 case = "../../../cases/parse/rulings/not_by_precedence.cml"
 args = ["${case}", "${backend}"]
@@ -221,7 +221,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rulings.optional_comp_removed"
-desc = "`?..` is not in the language (the ruling of 2026-10-24): the lexer no longer knows the token, so `inc?..dbl` is a syntax error at the `?` rather than a construct the compiler refuses."
+desc = "`?..` is not in the language: the lexer no longer knows the token, so `inc?..dbl` is a syntax error at the `?` rather than a construct the compiler refuses."
 kind = "negative"
 case = "../../../cases/parse/rulings/optional_comp_removed.cml"
 args = ["${case}"]
@@ -237,7 +237,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rulings.stream_type_marks"
-desc = "`..` is a postfix mark of a type beside `?` and `!`, and the marks are read left to right with no special case (the author's ruling of 2026-10-24): `T..` is the stream of T, `T?..` the stream of a nullable T, `T!..` the stream of a fallible T, `T..?` the possibly absent stream, `T[3]..` the stream of three-element arrays, `T[..]..` the stream of open-rank arrays, and an item of a tuple takes one. `T[..]` keeps its own reading: an array whose extents are a prefix, which is not a stream. The tree is locked by feat/parse/frontend's snapshot; this test runs the program."
+desc = "`..` is a postfix mark of a type beside `?` and `!`, and the marks are read left to right with no special case: `T..` is the stream of T, `T?..` the stream of a nullable T, `T!..` the stream of a fallible T, `T..?` the possibly absent stream, `T[3]..` the stream of three-element arrays, `T[..]..` the stream of open-rank arrays, and an item of a tuple takes one. `T[..]` keeps its own reading: an array whose extents are a prefix, which is not a stream. The tree is locked by feat/parse/frontend's snapshot; this test runs the program."
 kind = "behavior"
 case = "../../../cases/parse/rulings/stream_type_marks.cml"
 args = ["${case}"]
@@ -249,7 +249,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rulings.stream_type_as_interval"
-desc = "The right side of `as` is a type (the author's ruling of 2026-10-24): `..` after a type there is the stream suffix. A number written directly after the `..` is the interval reading in a place where a type stands, and the refusal is named and says how to write it - the message the ruling asked for, at the `..`, with the operator of the `as` quoted. It used to be `Unexpected '..'; expected '}'.` at the `..`."
+desc = "The right side of `as` is a type: `..` after a type there is the stream suffix. A number written directly after the `..` is the interval reading in a place where a type stands, and the refusal is named and says how to write it - the message the ruling asked for, at the `..`, with the operator of the `as` quoted. It used to be `Unexpected '..'; expected '}'.` at the `..`."
 kind = "negative"
 case = "../../../cases/parse/rulings/stream_type_as_interval.cml"
 args = ["${case}"]
@@ -265,7 +265,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rulings.lambda_needs_parentheses"
-desc = "A lambda's parameters are written in parentheses (the author's ruling of 2026-10-24, on `composition-expected-type-edges` item 4): `x => e` is not a lambda, because a rule body's `x => x` already spends that arrow, so the unparenthesised spelling is named - SyntaxDiag::LambdaParametersNeedParentheses, at the `=>`, saying which parentheses to write. The composition `f..g`, which is the lambda `(x) => g(f(x))`, is accepted in the line above it, so the two spellings are told apart in one program. It used to be `Unexpected '=>'; expected '}'.` at the `=>`."
+desc = "A lambda's parameters are written in parentheses: `x => e` is not a lambda, because a rule body's `x => x` already spends that arrow, so the unparenthesised spelling is named - SyntaxDiag::LambdaParametersNeedParentheses, at the `=>`, saying which parentheses to write. The composition `f..g`, which is the lambda `(x) => g(f(x))`, is accepted in the line above it, so the two spellings are told apart in one program. It used to be `Unexpected '=>'; expected '}'.` at the `=>`."
 kind = "negative"
 case = "../../../cases/parse/rulings/lambda_without_parentheses.cml"
 args = ["${case}"]

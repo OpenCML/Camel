@@ -3,7 +3,7 @@
  * tensors, so `for row in rows` takes one of those tensors each round (design principles 5.4), and
  * that round's gradient is itself a tensor. The reverse pass has no scatter for that: the array's
  * tangent is the array of its elements' tangents, and the element's tangent is a tensor whose place
- * in it is not a slot of the value's own dtype. The author's ruling of 2026-10-25 refuses a
+ * in it is not a slot of the value's own dtype. The author's rule refuses a
  * differentiated value that cannot get the right derivative -- a program that runs and gives a
  * wrong
  * value is not allowed -- so the loop is refused, naming the `for`'s sequence by type and by where

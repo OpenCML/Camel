@@ -2,8 +2,8 @@
  * The parameter at a position carries the same name in every overload of `init` and of `update`,
  * so one named argument means the same parameter in each of them: `init(opt: ..., params: ...)` and
  * `update(opt: ..., params: ..., grads: ..., state: ...)` reach the `sgd` overload and the `adam`
- * overload alike, and the name, not the place the argument is written in, says where it goes
- * (docs/handover/reviews/questions-2026-10-23.md, 复核：optim 返工与泛型重载).
+ * overload alike, and the name, not the place the argument is written in,
+ * says where it goes
  *
  * The two states tell the overloads apart: the state of `adam` carries the two moment trees and
  * the state of `sgd` carries only the step, so reading `state.m` is what a call that reached the

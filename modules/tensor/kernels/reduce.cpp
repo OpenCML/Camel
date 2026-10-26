@@ -157,7 +157,7 @@ Array *reduceAxis(
                 // Accumulation type: `double` for every floating element type (f32, f64, bf16,
                 // f16), from +0 in ascending order, with one rounding when the element is stored
                 // into the result — never an f32 accumulator and never a rounding per step
-                // (design principles 7.3, ruling reduced-precision.md (d); stdlib/array.cml
+                // (design principles 7.3; stdlib/array.cml
                 // `sum` follows the same rule, so the two paths agree bit for bit). Integers and
                 // bools have no float accumulator: they accumulate exactly in int64, wrapping on
                 // overflow as integer arithmetic does (design principles 5.1, 7.7): the

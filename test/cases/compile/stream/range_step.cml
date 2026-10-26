@@ -1,6 +1,6 @@
 // `range(a, b, step)` is the integers `a`, `a + step`, ... below `b`, and above `b` when the step
 // is negative (design principles 4.2; the rule on
-// ` -interval-step-form`). It is the array form of `a..b` with a step: `a..b` stays the one
+// the rule). It is the array form of `a..b` with a step: `a..b` stays the one
 // spelling of unit step, and the stepped sequence is this call.
 module h426_range_step
 

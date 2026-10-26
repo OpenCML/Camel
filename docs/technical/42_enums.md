@@ -56,4 +56,4 @@ type Tree<T> = enum { Leaf, Node(Tree<T>, T, Tree<T>) }
 
 ## 留给语言作者的问题
 
-见 `handover note ⟨d80a283⟩ (H1)` 的"待决问题"：变体跨模块的可见性、`T?`/`T!` 是否改由 `enum` 实现、泛型实参的推断范围、`json` 访问器是否接受 `Json!`。枚举作为 `Map` 键与 `Set` 元素已定（设计原则 11.3，H16 第 3 项）：所有字段都可作键时允许，顺序按变体声明顺序、再逐字段；实现见 `camel/core/type/collection.cpp` 的 `collectionKeyProblem`、`camel/core/rtdata/collection.cpp` 的 `compareKeys` 与 `docs/technical/31_map_and_set.md` 第 3.1 节。
+见 `` 的"待决问题"：变体跨模块的可见性、`T?`/`T!` 是否改由 `enum` 实现、泛型实参的推断范围、`json` 访问器是否接受 `Json!`。枚举作为 `Map` 键与 `Set` 元素已定（设计原则 11.3，H16 第 3 项）：所有字段都可作键时允许，顺序按变体声明顺序、再逐字段；实现见 `camel/core/type/collection.cpp` 的 `collectionKeyProblem`、`camel/core/rtdata/collection.cpp` 的 `compareKeys` 与 `docs/technical/31_map_and_set.md` 第 3.1 节。

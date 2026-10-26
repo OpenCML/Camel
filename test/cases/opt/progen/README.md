@@ -87,8 +87,8 @@ under `std::opt::inline std::jit` (`L8 -nan` where `L8 -2` is expected; the othe
 ## Fixed in the JIT (branch `lane/jit-fixes`)
 
 The JIT compiles a graph made of arithmetic, branches and calls to itself, which is what
-`std::opt::inline` leaves of a small recursive function. Its findings had two causes, and the review
-of the encoder found more defects of the second kind than the findings showed:
+`std::opt::inline` leaves of a small recursive function. Its findings had two causes, and the encoder turned out to have more defects of the second kind
+than the findings showed:
 
 - **J-A: the JOIN of a fused compare-branch took the wrong arm (F17, F37, and seeds 5254,
   47 and 187 of the larger batches).** `cmp` + `jcc` replaces the comparison and its BRCH, and
@@ -504,7 +504,7 @@ reported as a defect:
 at the call (`MacroEvaluationFailed`: "Operator ':mark/reduce_arr' is unavailable in macro
 execution"). 87 cells of the batches are this refusal; the generator now avoids declaring such
 functions `macro`.
-- Reading A: it is the ruling of 8 ("a failed macro evaluation is a run-time fault of the
+- Reading A: it is the rule of 8 ("a failed macro evaluation is a run-time fault of the
   pass"), and the diagnostic is located, so this is a legal refusal.
 - Reading B: the evaluation did not fail because of the program (as a division by zero would);
   the evaluator lacks an operator. Section 3 says a macro function *may* be evaluated ahead of
@@ -542,7 +542,7 @@ now discards a program whose skipped operand would fault (one program of 1200, s
 7001-7600 and 8001-8600; it was the only disagreement of the run without passes), so no
 finding depends on this.
 
-**J5. Which type should a `return` inside a branch arm have?** Decided in handover H24 (reading
+**J5. Which type should a `return` inside a branch arm have?** Decided  (reading
 B, and the seed is back in the batch): `func e23(...): float` contains
 `let v = match a { case 'm' => { return 5 - 10 } case 'yz' => 0 case _ => 100 }`. `return` in an
 arm gives the value of that arm, not of the function (language reference 7.3), so the arm's value

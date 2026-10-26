@@ -311,7 +311,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
     }
     // The compact view prints the fact of each tagged region as a line of its own. A cluster is
     // a layout (`std::gir_regions` draws it); the fact is graph content and must be visible in
-    // the view used for review and goldens too (review, rule 4). A region without a fact
+    // the view used for review and goldens too. A region without a fact
     // prints nothing, so existing output is unchanged.
     if (!config_.regions) {
         for (uint32_t region = 1; region < graph->regionCount(); ++region) {

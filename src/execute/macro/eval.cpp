@@ -320,9 +320,9 @@ MacroEvaluator::tryEvaluate(const MacroCandidate &candidate, std::ostream &os) {
         // run would report it, at the place the fault names when it names one. A fault that
         // refused several places carries one report per place (see CarriedReport), and each of
         // them is collected as a refusal of its own: an expansion happens at compile time, where
-        // the ruling of 2026-10-24 collects every refusal in one round instead of stopping at the
-        // first. What a run shows of the collected ones is one fault, the first in source order,
-        // with the rest as its related positions (the ruling of 2026-10-26; `reportFailures`).
+        // every refusal is collected in one round instead of stopping at the first (design
+        // principles 8). What a run shows of the collected ones is one fault, the first in source
+        // order, with the rest as its related positions (`reportFailures`).
         const DiagInfo info  = getDiagInfo(fault.diag());
         const auto rendered = [&](const std::vector<std::string> &args) {
             std::string message = info.message;
@@ -436,8 +436,8 @@ void MacroEvaluator::reportFailures() {
     // Every call this expansion refused is collected here. What a run shows of them is one fault:
     // a refusal is a fault like a fault during the run of any pass (design principles 8), and a
     // fault during the run ends the run, so the run-time sink still ends it at the first. The
-    // ruling of 2026-10-26 (`how-many-macro-refusals-the-user-sees`) says what that one fault
-    // carries: the first refusal in source order is its own place and reason, and every other
+    // one fault carries what was collected: the first refusal in source order is its own place
+    // and reason, and every other
     // refusal the expansion collected is a related position of it, one entry each, with its own
     // position and its own reason -- never a count of the rest, and never a rule of its own in the
     // CLI. The macro call and the stage of the pass that was running are recorded with it.

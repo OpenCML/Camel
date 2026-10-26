@@ -86,9 +86,8 @@ bool nodeCameFromInlineSplice(const GCGraph *graph, uint32_t region) {
 /// bookkeeping an inline splice adds (a GATE per argument, a SYNC, the nodes of a function the
 /// splice copied in) are not counted. This is the measure of "how small is the function"
 /// (InlineRewriteConfig::smallSubgraphMaxComputeNodes) and what a message about a callee's size
-/// reports; the same function answers the same whatever the splice implementation does (review
-/// 2026-10-24: "how small is a function" measures the compute nodes of the function being
-/// inlined).
+/// reports; the same function answers the same whatever the splice implementation does, and
+/// the count is the compute nodes of the function being inlined.
 size_t inlinedComputeNodeCount(const GCGraph *graph) {
     size_t count = 0;
     for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {

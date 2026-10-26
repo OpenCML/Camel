@@ -28,8 +28,8 @@ class FunctionType;
  * printed form follow from that one object.
  *
  * A stream is a value like any other: its value is its step function together with its state,
- * the closure that answers the next element (the ruling of 2026-10-26 that keeps streams first
- * class). So it is written in a signature, passed, returned and `tee`d, and it needs no runtime
+ * the closure that answers the next element (design principles 5.4: a stream is a value). So it
+ * is written in a signature, passed, returned and `tee`d, and it needs no runtime
  * representation of its own for that, and no node kind of its own. What consumes it -- a `for`
  * that calls the step function once per round and stops when it comes back empty -- reads the
  * same whether the producer is fused into the consumer's loop (an optimisation, taken where

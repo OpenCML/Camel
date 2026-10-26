@@ -97,7 +97,7 @@ Builder::OperatorOverloads Builder::operatorOverloadsOf(const std::string &group
     }
     set.ops = imported.ops;
     // The rules of this module's own body-less declarations are its operator overloads too
-    // (design principles 10.2; handover): a call written here reaches them, and
+    // (design principles 10.2): a call written here reaches them, and
     // the comparison of the candidates counts them. They come before what an import brings, and
     // a fixed rule before a generic one (a call both accept is the more specific rule's).
     if (module_ != nullptr) {
@@ -930,7 +930,7 @@ node_handle_t Builder::compoundAssignmentByRebinding(
     // `a op= b` is `a = a op b` (design principles 4.2): one rule for every type, whoever
     // declared it — a number's built-in `+`, a `+` the tensor module declares for a numeric
     // array, an `operator +` of the program. What the compound assignment follows is that
-    // operator, so what is asked of it is what the ruling of 2026-10-24 says: that `a op b` be
+    // operator, so what is asked of it is what design principles 4.2 says: that `a op b` be
     // defined for these operands, and that `a = a op b` be a legal assignment — the value the
     // operator gives fits `a`'s type where the assignment would put it (an addition broadcasts
     // `f32[]` and `f32[2]` to `f32[2]`, which a `var` holding `f32[]` takes). `int[]` has no
@@ -1385,8 +1385,7 @@ node_handle_t Builder::buildComposition(const GCT::node_ptr_t &gct, Type *expect
     // it is typed exactly as that lambda is typed: the function type the position expects gives
     // the composed function its input - the parameter of `f` - and its output - the result of
     // `g` - and it instantiates the operands where they stand, as the lambda's two calls are
-    // instantiated (design principles 5.9). The rule is
-    // docs/handover/reviews/questions-2026-10-23.md, section generic-operands-of-composition.
+    // instantiated (design principles 5.9, 5.5).
     FunctionType *expectedFunc = nullptr;
     if (expected != nullptr && expected->code() == TypeCode::Function) {
         auto *candidate = tt::as_ptr<FunctionType>(expected);
@@ -1525,8 +1524,8 @@ Builder::buildCompositionWith(const GCT::node_ptr_t &gct, node_handle_t lhs, nod
 node_handle_t Builder::composeFunctionValue(
     node_handle_t lhs, node_handle_t rhs, FunctionType *lhsType, FunctionType *rhsType,
     const GCT::node_ptr_t &gct) {
-    // The composition is the lambda `(x) => g(f(x))` and nothing else (design principles 4.2; the
-    // rule on ` -generator-and-composition`): it has the parameter
+    // The composition is the lambda `(x) => g(f(x))` and nothing else (design principles 4.2):
+    // it has the parameter
     // of `f`, the result of `g`, and the two functions as its captures. Its type, its generic
     // instantiation and its overloads are the ones that lambda has, because it is built as one.
     FunctionTypeFactory factory;
@@ -1643,9 +1642,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         }
     }
     // `a..b` (gct.comp): one construct of two readings, told apart by the types of its two
-    // operands, and they are known only here (design principles 4.2; the rule of
-    //  2026-10-24 on ` -generator-and-composition`). The type this position expects is what a
-    // generic operand is instantiated from (section generic-operands-of-composition).
+    // operands, and they are known only here (design principles 4.2). The type this position
+    // expects is what a generic operand is instantiated from (design principles 5.5).
     if (gct->size() == 3 && gct->at(0)->type() == GCT::NodeKind::DREF &&
         gct->at(0)->name() == camel::core::kCompositionCall) {
         node_handle_t composed = buildComposition(gct, expectedResult);
@@ -2480,7 +2478,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             compile_graph_ptr_t chosenDecorated = nullptr;
             // Candidates that took the arguments but whose `when` condition is false: if no
             // other candidate applies, the call is reported as one whose conditions are unmet
-            // (design principles 5.13), not as an ordinary mismatch.
+            // (design principles 4.4), not as an ordinary mismatch.
             std::vector<std::pair<std::string, std::string>> unmetConditions;
             const auto signatureOf = [&](const compile_graph_ptr_t &g) -> FunctionType * {
                 if (auto it = decoratedOf_.find(g.get()); it != decoratedOf_.end()) {
@@ -2578,7 +2576,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 if (!unmetConditions.empty()) {
                     // Every candidate that took the arguments was made inapplicable by its
                     // condition. The report names each candidate and the condition it wrote
-                    // (design principles 5.13: the call-site error lists the unmet conditions).
+                    // (design principles 4.4: the call-site error lists the unmet conditions).
                     std::map<std::string, std::string> listed;
                     for (const auto &[name, text] : unmetConditions) {
                         listed.emplace(name, text);
@@ -2732,9 +2730,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 return strutil::join(written, ", ", [](const std::string &s) { return s; });
             };
             // Candidates whose own `when` holds for these arguments: one of them is the call,
-            // and more than one is a call with no answer (design principles 4.4; the language
-            // rule on `two-when-conditions-hold`,
-            // docs/handover/reviews/questions-2026-10-23.md: "带 `when` 的候选都适用时，调用处报
+            // and more than one is a call with no answer (design principles 4.4:
+            // "带 `when` 的候选都适用时，调用处报
             // 歧义，列出两条候选与各自成立的条件"). The declaration-time check asks about one type
             // at a time, so this is the first place the pair can be seen.
             std::vector<std::string> ambiguousConditions;
@@ -2963,7 +2960,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
             targetOperator = *res;
             // `range(a, b, step)` is the integers `a`, `a + step`, ... below `b` (design
-            // principles 4.2; the rule on ` -interval-step-form`), so
+            // principles 4.2), so
             // a step of 0 names no sequence at all: a fault when the step is known only at the
             // run, and the refusal here when it is a constant, where the step is written. A
             // constant step that is not 0 is left to the call: the array it builds is the value
@@ -3467,7 +3464,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         return negation;
     }
     // What an assignment gives where a value is wanted is the value it wrote: the write's second
-    // operand, one data edge, and no `:var/get` (the ruling on the var version node: the value
+    // operand, one data edge, and no `:var/get` (design principles 2.1: the value
     // and the version are two, and the write itself gives the version -- the cell it writes
     // into). Written as a statement, or where the position wants no value at all (the last
     // statement of a `: void` body), the write stands for it: the write is what the statement

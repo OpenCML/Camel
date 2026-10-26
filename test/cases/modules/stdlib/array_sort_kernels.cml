@@ -1,7 +1,7 @@
 /**
- * The sorting family of `array` after the per-element split (
- * docs/handover/reviews/questions-2026-10-23.md, section 「复核：归约按元素类型分臂」: the sorts
- * still read the element type code, and become what the reductions became).
+ * The sorting family of `array` after the per-element split: the sorts read the
+ * element type code and become what the reductions became, one arm per element
+ * type.
  *
  * One body-less declaration per element type, each naming its own element type's operator
  * (`#op('array:sort_i')` for `i32`, `#op('array:sort_d')` for `float`, ...) and taking that

@@ -460,7 +460,7 @@ class FuncDataLoad : public DataLoad {
     /// The declaration's applicability condition: the expression after `when`, or null. It is
     /// not one of the node's children (a body-less declaration has one child), because it is
     /// not part of the signature or the body: it is evaluated when the declaration is
-    /// instantiated (design principles 5.13).
+    /// instantiated (design principles 4.4).
     const node_ptr_t &when() const { return when_; }
     void setWhen(const node_ptr_t &when) { when_ = when; }
     const std::string &whenText() const { return whenText_; }

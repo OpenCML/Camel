@@ -137,8 +137,7 @@ class ArrayType : public CompositeType {
     /// One dimension fewer: the element itself for a rank-1 array, `T[d1, ...]` for `T[d0, d1,
     /// ...]`, the element type for a nested array (`T[]` of `T[][]`), and the same open-rank
     /// array when the rank is open. `for x in xs` takes these for every array of every rank, and
-    /// the core owns the rule (the ruling of 2026-10-24, docs/handover/reviews/questions-2026-10-24-evening.md
-    /// section loop-domain-through-the-tensor-iterator): the builder states the element port with
+    /// the core owns the rule (design principles 5.4): the builder states the element port with
     /// it, the loop interface checks the port against it, and the executors take one of these a
     /// round.
     Type *firstDimensionElement() const;

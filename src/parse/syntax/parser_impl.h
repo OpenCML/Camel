@@ -254,7 +254,7 @@ class ParserImpl {
     /// touches. `uses` and `pure` are contextual keywords.
     void parseResourceClause();
     /// whenClause : 'when' logicalOrExpr
-    /// A declaration's applicability condition, after its signature (design principles 5.13).
+    /// A declaration's applicability condition, after its signature (design principles 4.4).
     void parseWhenClause();
     void parseRetStmt();
 

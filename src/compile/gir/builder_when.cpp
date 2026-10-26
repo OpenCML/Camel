@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The applicability condition of a declaration (design principles 5.13; handover).
+ * The applicability condition of a declaration (design principles 4.4).
  *
  * `func f(...): T when p { ... }` is selected only where `p` holds. The condition is a
  * compile-time predicate over the declaration's type parameters and its `with` parameters; it

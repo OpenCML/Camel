@@ -57,7 +57,7 @@ namespace {
 /// are compared exactly.
 ///
 /// The answer is used to refuse two generic declarations of one name that one call could enter
-/// (design principles 4.3, 5.1; handover). Where this does not look into a type
+/// (design principles 4.3, 5.1). Where this does not look into a type
 /// (an application of a type function, for one) it says they can agree: refusing a pair that
 /// cannot overlap is a diagnostic to remove, while letting one through is a call whose meaning
 /// the declaration order decides.
@@ -483,7 +483,7 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
             *declaredFacts->resources, funcType->withTypesCount()));
     }
     // A declaration may give its parameters defaults, exactly as a function with a body does
-    // (design principles 4.4; handover): the declaration is where they are written, and the
+    // (design principles 4.4): the declaration is where they are written, and the
     // rule the call resolves to is what names them. Evaluated here, once, so that a call that
     // leaves a parameter out takes the one value. The owner is the declared signature: a call to
     // a native operator recovers it from the operator group, which is all a `#op` line leaves.
@@ -497,8 +497,8 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
         }
     }
     auto resolver = camel::core::type::DeclaredFuncTypeResolver::create(funcType);
-    // A declaration stands for an operator of this module (design principles 10.1; handover
-    // rule 5): the prefix of its URI is the name the module declares, or one of the
+    // A declaration stands for an operator of this module (design principles 10.1): the prefix
+    // of its URI is the name the module declares, or one of the
     // protocols the module answers on (a module whose operators are not named after it, like
     // `random`, answers on `rand:`), or empty for an operator the compiler itself names
     // (`:op/...`). The protocols are the module's own statement, not the groups it exported: a
@@ -537,13 +537,12 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
     // group refuses them the same way); nor may a declaration repeat a function of the module.
     // Two *generic* declarations are checked alike, by what a call of the name could enter: a
     // call both accept would be decided by the order the declarations are written in, which no
-    // rule of the language allows (design principles 4.3, 5.1; handover). A fixed
+    // rule of the language allows (design principles 4.3, 5.1). A fixed
     // declaration beside a generic one is no such pair: the fixed one is the more specific, and
     // a call it accepts is its own.
     //
-    // Two generic declarations whose `when` conditions exclude each other are the exception the
-    // language author ruled on (2026-10-24, "impl-declaration-arms",
-    // docs/handover/reviews/questions-2026-10-23.md): "同名声明按 `when` 互斥分臂就是重载，
+    // Two generic declarations whose `when` conditions exclude each other are the exception
+    // (design principles 4.4): "同名声明按 `when` 互斥分臂就是重载，
     // `signaturesCanAgree` 忽略 `when` 是缺陷" -- `when` is the applicability condition of an
     // overload (design principles 4.4), so each declaration covers one family of types and the
     // two may stand side by side. The conditions are asked about the types the compiler
@@ -676,7 +675,7 @@ void Builder::exportNativeOperators(const GCT::node_ptr_t &exportList) {
             }
         }
         // A fixed declaration is the more specific rule: a call that both it and a generic
-        // declaration accept is its own (design principles 4.3; handover). The
+        // declaration accept is its own (design principles 4.3). The
         // group answers in the order of its rules, so the fixed ones come first.
         std::stable_sort(
             group.rules.begin(), group.rules.end(), [](const auto &a, const auto &b) {
@@ -693,7 +692,7 @@ void Builder::exportNativeOperators(const GCT::node_ptr_t &exportList) {
         if (existing.has_value()) {
             // The C++ module exports an operator group of this name too: the declaration is the
             // module's signature for it, so it replaces the group instead of being a second
-            // entity beside it (design principles 6.4; handover).
+            // entity beside it (design principles 6.4).
             unit_->module->replaceEntity(ref, ops);
         } else {
             unit_->module->exportEntity(ref, ops);

@@ -1371,7 +1371,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 
 [[tests]]
 name = "nullable_positions"
-desc = "`null` is a compile-time constant of the nullable type it stands in (design principles 4.4, 5.1, the ruling of 2026-10-24 on `check-program-parameter`): a `let` whose declared type is a `T?` gives the literal that type, a `return` under a declared `T?` does the same, and the default of a `with` parameter of a nullable type takes this constant. The graph of the declaration is what says the value is a constant of the type: the node of the default is a DATA node labelled `null` of type `int?`, not a CAST of a `void` one."
+desc = "`null` is a compile-time constant of the nullable type it stands in (design principles 4.4, 5.1): a `let` whose declared type is a `T?` gives the literal that type, a `return` under a declared `T?` does the same, and the default of a `with` parameter of a nullable type takes this constant. The graph of the declaration is what says the value is a constant of the type: the node of the default is a DATA node labelled `null` of type `int?`, not a CAST of a `void` one."
 kind = "behavior"
 case = "../../../cases/compile/tagged/nullable_positions.cml"
 args = ["${case}"]

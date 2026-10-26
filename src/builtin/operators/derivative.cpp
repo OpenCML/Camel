@@ -312,8 +312,8 @@ void sliceArrayVjp(VjpBuilder &b, const VjpCall &call) {
 }
 
 // `xs[a:b:s]` and `slice(xs, axis, a, b, s)`: the value, the axis, the two bounds, the step and
-// the mask, in that order -- the one parameter table both spellings write (design principles 5.4;
-// the author's ruling of 2026-10-25: both spellings are one node with one adjoint rule). The axis
+// the mask, in that order -- the one parameter table both spellings write (design principles 5.4:
+// both spellings are one node with one adjoint rule). The axis
 // travels with the rest, so the adjoint scatters along the axis the forward took the elements
 // from, whatever the rank.
 //

@@ -82,9 +82,7 @@ using type::TupleType;
 using type::Type;
 using type::TypeCode;
 
-/// Which of the two answers of the core's tangent query a node's tangent is built for (the
-/// author's ruling of 2026-10-25 on discrete-tuple-tangent-space-and-machinery-aggregates; see
-/// `gradientTypeOf` and `machineryTangentTypeOf`). `Machinery` is the tangent of a value the
+/// Which of the two answers of the core's tangent query a node's tangent is built for. `Machinery` is the tangent of a value the
 /// transform carries itself -- a loop's state, a captured tuple, an aggregate on the reverse tape
 /// -- and `User` is the gradient `grad`/`with_grad` hands back, which is the parameter's own
 /// gradient type. The same program value is asked about for either audience; what differs is who
@@ -3653,7 +3651,7 @@ void Backward::checkVariableReads(const std::vector<gc_node_ref_t> &order) {
         }
         gc_node_ref_t cell = forward_.normInputsOf(read).front();
         // A read of a cell takes the version it reads from -- the write that made it, whose own
-        // first input is the cell (the var version node ruling) -- so a read written after an
+        // first input is the cell (the rule on the var version node) -- so a read written after an
         // assignment names that assignment here, not the cell. What the checks below are about is
         // the cell: the write it reads is one of the cell's users either way.
         if (kindOf(forward_, cell) == GCNodeKind::Oper &&
@@ -4125,11 +4123,10 @@ PullbackPlan Engine::planForDraft(
 }
 
 // Reports the calls of function values the gradient has to pass and cannot. Every one of them is
-// a report of its own (the ruling of 2026-10-24, `gradient-refusal-named-call`): the one at the
+// a report of its own: the one at the
 // first call in source order is the fault's own and the rest are carried beside it, and each
 // names where the function value was chosen as related information. Which of them a reader sees
-// is the reader's business: a run-time fault stops at the first (the ruling
-// `refusal-run-time-or-compile-time`), and the macro evaluator reports every one of them, because
+// is the reader's business: a run-time fault stops at the first, and the macro evaluator reports every one of them, because
 // a compile-time expansion collects all the mistakes in one round.
 void Engine::refuse() {
     struct Place {
@@ -4604,9 +4601,7 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
 namespace {
 
 /// The member of `type` that has no gradient, by the path to it inside the value and its type. A
-/// struct or a tuple has a gradient exactly when every member has one (the author's rulings of
-/// 2026-10-25, on discrete-gradient-and-rank-one-slice-ownership and on
-/// discrete-tuple-tangent-space-and-machinery-aggregates), so the reason a whole value is refused
+/// struct or a tuple has a gradient exactly when every member has one, so the reason a whole value is refused
 /// is always one member: the refusal names that member -- "field `s` has type string", "element 1
 /// has type string" -- and not only the value's own type. The path is the member's field name, or
 /// its position where the member is a tuple's element: it is the refusal that says "field" or
@@ -4683,11 +4678,7 @@ std::string differentiationRefusal(FunctionType *function) {
     }
     if (gradientTypeOf(first) == nullptr) {
         // Name the member that fails: a struct or a tuple has a gradient exactly when every
-        // member has one, so the author is told which field has the type that has none (the
-        // ruling of 2026-10-25 on discrete-gradient-and-rank-one-slice-ownership: "the diagnostic
-        // names that field"; and the one on
-        // discrete-tuple-tangent-space-and-machinery-aggregates, which gives a tuple the same
-        // rule -- a member is named by its position there).
+        // member has one, so the author is told which field has the type that has none.
         if (auto member = memberWithoutTangent(first, "")) {
             return std::format(
                 "its first `with` parameter has type {}, whose {} has type {}, which has no "

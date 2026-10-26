@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * A `.cml` beside a `.cmo` of the same name is that C++ module, not a second module beside it
- * (design principles 6.4; handover):
+ * (design principles 6.4):
  *
  *   - a type the C++ module exports (`Json`) is written in the `.cml` without an import;
  *   - a constant it exports (`pi`) is written there without an import;

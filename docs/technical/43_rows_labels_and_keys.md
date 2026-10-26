@@ -3,8 +3,7 @@
 H20-2 and H20-3. This note records what the new operators do, the representation each one chose,
 the reverse rule and the export mapping, the keyed random algorithm, and the points left open. The
 authoritative semantic statements are in [design principles](../design-principles.cn.md) 5.4 and
-13.5; the review that ordered the work is
-[H13-H14](../handover/reviews/H13-H14.md).
+13.5.
 
 ## 1. `take`: rows along the first dimension
 
@@ -181,7 +180,7 @@ Python packages.
 3. **`std::cpp` and tensors**: `take`, `one_hot` and the cross-entropy forms are refused until the
    standalone tensor bridge (phase 5) exists; only the keyed random operators are translated
    today. The report records this rather than adding a tensor representation to `std::cpp` in this
-   handover.
+   change.
 4. **`one_hot` element type**: fixed to f32 because H15 has not landed. If H15 defines a context
    type for numeric array literals, `one_hot` should follow it; the labels-cross-entropy math
    already works in the logits' dtype.

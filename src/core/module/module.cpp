@@ -416,8 +416,7 @@ void Module::inheritExportsFrom(const Module &other) {
     // export the same operator under a type-qualified alias too (`Tensor.shape` beside
     // `shape`), and an alias that just arrived with those exports would otherwise be the last
     // write, pointing at the C++ group the declaration replaced. Whichever of the two names is
-    // written last, the declaration is the one signature (design principles 6.4; handover
-    // 
+    // written last, the declaration is the one signature (design principles 6.4).
     std::vector<std::string> plainGroups;
     nativeEntityNS_->forEach([&](const Reference &ref, const entity &ent) {
         if (ref.plain() && ent.isOperGroup() && ent.operGroup() != nullptr) {

@@ -318,11 +318,11 @@ class Module : public std::enable_shared_from_this<Module> {
     /// becomes the module's signature for `ident`, every qualified entity whose identifier is
     /// `ident` and whose group answers for one of the same URIs resolves to that same entity: the
     /// alias is the declaration under another name, not a second entity beside it (design
-    /// principles 6.4; handover). Returns how many aliases were replaced.
+    /// principles 6.4). Returns how many aliases were replaced.
     size_t replaceTypeQualifiedAliases(const std::string &ident, const entity &ent);
     /// Adds every name `other` exports to this module's own tables: its types, its entities
     /// (operator groups, constants, tags) and the names it brings along. The two objects are one
-    /// module (design principles 6.4; handover): the C++ module implements, the
+    /// module (design principles 6.4): the C++ module implements, the
     /// `.cml` declares, and both are read under the one name the import found.
     void inheritExportsFrom(const Module &other);
     /// Exports the constant `value` under `ref` (a C++ module's `math::pi`; design principles

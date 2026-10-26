@@ -5,8 +5,7 @@
 // CPU time (user + system) instead of the wall clock, and the cost of the declaration modules
 // 
 //
-// The unit is the rule (docs/handover/reviews/questions-2026-10-23.md,
-// "declaration-cost-gate" (a)):
+// The unit is the rule:
 //
 //   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移，这正是 40/45/100/90 ms 在负载 106–130
 //     下报红的原因；进程的 CPU 时间（用户态 + 内核态）基本不随负载变（该判定已经用 CPU 中位数）。
@@ -162,7 +161,7 @@ function cpuUnavailableReason() {
     return (
         `the CPU time of a child cannot be read on this platform (${process.platform}): ` +
         'the ceilings are CPU-time ceilings, not wall-clock ones ' +
-        '(docs/handover/reviews/questions-2026-10-23.md, declaration-cost-gate (a)), so this ' +
+        '(the rule, declaration-cost-gate (a)), so this ' +
         'command has no reading here'
     )
 }

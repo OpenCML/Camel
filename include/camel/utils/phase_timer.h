@@ -15,8 +15,7 @@
  * The two times answer different questions. The wall clock is what a user waits for and what the
  * host's load stretches: a CPU-bound phase reads several times longer on a busy host without
  * having used more CPU. CPU time is what the phase itself cost, and it is what a ceiling that
- * should mean a regression is read against (
- * docs/handover/reviews/questions-2026-10-23.md, "declaration-cost-gate").
+ * should mean a regression is read against.
  *
  * Cost when off: a Scope is one load of a global flag and one branch at each end, and scopes
  * are only placed around whole phases (a module, a pass), never inside a loop over nodes.

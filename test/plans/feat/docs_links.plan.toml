@@ -159,7 +159,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "docs.snippets_dump_excerpt_matches_up_to_renumbering"
-desc = "An excerpt does not compare node numbers (the author, 2026-10-25): the block below names the dump's nodes and its cluster differently, and one one-to-one renaming makes it a run of the dump, so the page holds."
+desc = "An excerpt does not compare node numbers: the block below names the dump's nodes and its cluster differently, and one one-to-one renaming makes it a run of the dump, so the page holds."
 kind = "behavior"
 tool = "node"
 case = "../../../scripts/check-doc-snippets.mjs"

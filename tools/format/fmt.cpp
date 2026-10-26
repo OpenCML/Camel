@@ -485,8 +485,7 @@ tagDecl    : 'export'? 'tag' identDef typeParams? parentParams? 'on' tagPosition
 */
 any Formatter::visitTagDecl(cst::TagDecl context) {
     string result = context->tok(TK::KwExport) ? "export tag " : "tag ";
-    // The head is measured once and written once, as a function's is (the wrap rule of the
-    // handover's formatter item, 2026-10-25); `on` and `read_by` belong to the signature and
+    // The head is measured once and written once, as a function's is; `on` and `read_by` belong to the signature and
     // the `when` clause is the one that moves.
     const auto buildHead = [&](bool splitParams) {
         string head;
@@ -577,7 +576,7 @@ any Formatter::visitTagRef(cst::TagRef context) {
 /// The head of a declaration: the signature, then its clauses. A head wider than `wrapWidth`
 /// puts every clause on a line of its own, indented one level, and leaves the opening brace of
 /// the body at the end of the last clause's line; a head that fits keeps them on one line, one
-/// space after the signature (handover 5.00 "格式化器", the ruling of 2026-10-25).
+/// space after the signature.
 std::string Formatter::joinDeclClauses(
     const std::string &signature, const std::vector<std::string> &clauses) {
     if (clauses.empty()) {
@@ -676,7 +675,7 @@ any Formatter::visitFuncDecl(cst::FuncDecl context) {
         }
         if (const auto whenClause = context->get<cst::WhenClause>()) {
             // The declaration's applicability condition, after the signature and before the body
-            // (design principles 5.13): it is part of the declaration, so leaving it out changes
+            // (design principles 4.4): it is part of the declaration, so leaving it out changes
             // the AST the text parses to and, with it, the names synthesized from positions.
             clauses.push_back(any_cast<string>(visitWhenClause(whenClause)));
         }
@@ -704,7 +703,7 @@ any Formatter::visitFuncDecl(cst::FuncDecl context) {
 whenClause : IDENTIFIER logicalOrExpr
 */
 any Formatter::visitWhenClause(cst::WhenClause context) {
-    // The applicability condition of a declaration (design principles 5.13): `when` and the
+    // The applicability condition of a declaration (design principles 4.4): `when` and the
     // expression, as written, after the signature and before the body.
     return "when " + any_cast<string>(visitExpr(context->expr()));
 }
@@ -730,7 +729,7 @@ any Formatter::visitRuleDecl(cst::RuleDecl context) {
     }
     result += context->has(TK::KwExport) ? "export rule " : "rule ";
     // The head - `rule name::<T>(params) when cond` - is measured once and written once, as a
-    // function's is (the wrap rule of the handover's formatter item, 2026-10-25). The rule body
+    // function's is. The rule body
     // is one line, so the opening brace stays at the end of the `when` line.
     const auto buildHead = [&](bool splitParams) {
         string head;
@@ -778,8 +777,7 @@ any Formatter::visitFactDecl(cst::FactDecl context) {
     }
     result += context->tok(TK::KwExport) ? "export fact " : "fact ";
     // The head is `fact name(params): Type`; a fact has no `when`/`uses`/`pure` clause, so the
-    // half of the wrap rule that applies to it is the parameters going one per line (handover
-    // 5.00 "格式化器", 2026-10-25). It is measured once and written once, as a function's is.
+    // half of the wrap rule that applies to it is the parameters going one per line. It is measured once and written once, as a function's is.
     const auto buildHead = [&](bool splitParams) {
         string head = any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
         if (const auto typeParams = context->get<cst::TypeParams>()) {
@@ -1140,8 +1138,7 @@ any Formatter::visitPairedParams(cst::PairedParams context) {
             params.push_back(child);
         }
     }
-    // A declaration head too wide to fit writes its parameters one per line (the wrap rule of the
-    // handover's formatter item, 2026-10-25); the declaration sets the flag before it builds its
+    // A declaration head too wide to fit writes its parameters one per line; the declaration sets the flag before it builds its
     // head, and it is false for every other parameter list (a lambda's, a call's).
     const int flags = PaddingNL | PushScope | (onePerLine ? Multiline : 0);
     return formatList(params, context, ", ", ",", flags);
@@ -1501,8 +1498,7 @@ any Formatter::visitCtrlExpr(syn::Node context) {
 
     default:
         // `try`/`catch`/`finally` are not part of the language (design principles 3.9) and are not
-        // tokens any more, so the parser never builds a control expression for them (handover
-        // 5.00 "语法层收口" item 5).
+        // tokens any more, so the parser never builds a control expression for them.
         throw runtime_error("Invalid structExpr context");
     }
 }

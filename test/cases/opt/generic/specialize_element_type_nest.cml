@@ -4,7 +4,7 @@
  * wrapped in one more array, so the element type of the argument is a different concrete type at
  * every level (`f32[2]`, then `f32[2][1]`, then `f32[2][1][1]`, ...).
  *
- * The ruling of 2026-10-24 evening (recursion-specialization-fixed-point-followups, item 2):
+ * The rule evening (recursion-specialization-fixed-point-followups, item 2):
  * along a call cycle whose key differs, an extent and a dimension name are widened to `?`, but a
  * different element type cannot be instantiated into infinitely many concrete types and is
  * reported as a compile error (design principles 5.5).

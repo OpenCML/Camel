@@ -4,7 +4,7 @@ tier = "fast"
 tags = ["feat", "compile", "calls", "pipelines"]
 desc = "The forms a call is written in: `x->f(a, b)` is `f(x, a, b)` (design principles 4.4)"
 
-# Handover: the arrow puts the value on its left in front of the arguments written after
+# the arrow puts the value on its left in front of the arguments written after
 # it. It used to make the value the whole call's only argument — `1->add(2)` became
 # `add(2)(1)`, which no function of one argument could take — so the forms below are held
 # against the four back ends.

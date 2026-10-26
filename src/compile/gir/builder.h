@@ -186,7 +186,7 @@ inline std::vector<std::shared_ptr<void>> genericTemplatePayloadOf(const generic
     return payload;
 }
 
-/// What a declaration's `when` condition says at one instantiation (design principles 5.13).
+/// What a declaration's `when` condition says at one instantiation (design principles 4.4).
 /// The condition is a compile-time predicate over the declaration's type parameters and `with`
 /// parameters; it is evaluated when the declaration is instantiated or selected, never when it
 /// is parsed. A condition the compiler cannot answer is never taken for `true`.
@@ -553,7 +553,7 @@ class Builder {
     void exportNativeOperators(const GCT::node_ptr_t &exportList);
     // The entity `ref` names in the module whose code is being built: one of its body-less
     // declarations (exported or private) or a name the C++ module it declares brings, before
-    // what an import brings under the same name (design principles 10.1, 10.2; handover).
+    // what an import brings under the same name (design principles 10.1, 10.2).
     std::optional<camel::core::module::entity> ownNativeEntity(const Reference &ref);
     // The operator URI a body-less declaration names, from its `#op('...')` tag when it has one.
     std::optional<std::string> nativeOperatorUri(const GCT::node_ptr_t &gct);
@@ -895,8 +895,7 @@ class Builder {
     // (`let`, a parameter without `var`).
     std::unordered_set<node_handle_t> variables_;
 
-    /// A `var` that does not escape becomes SSA (docs/handover/reviews/questions-2026-10-24-evening.md,
-    /// "var-version-node"): every read takes the value of the write that made it, and no read node is
+    /// A `var` that does not escape becomes SSA: every read takes the value of the write that made it, and no read node is
     /// left reading the cell. A `var` that escapes -- captured by a closure, handed out as a `var`
     /// argument, or a `var` parameter of this graph -- is a resource and keeps its cell.
     /// `variableReadSource_` records, per read node, the writer it reads from (the cell itself when
@@ -1601,9 +1600,7 @@ class Builder {
     /// compile-time values of constant arguments, as for `OperatorGroup::resolveForCall`.
     ///
     /// Two candidates that both write `when` and both hold for the arguments are an ambiguity,
-    /// not a choice: the order two declarations of one name are written in decides nothing (the
-    /// language rule on `two-when-conditions-hold`,
-    /// docs/handover/reviews/questions-2026-10-23.md), and the declaration-time check asks about
+    /// not a choice: the order two declarations of one name are written in decides nothing, and the declaration-time check asks about
     /// one type at a time, so the call site is the first place that can see the pair. Every such
     /// candidate is recorded in `ambiguous` as `signature — when condition`, sorted and without
     /// repeats, so that the report is the same whichever order the declarations are written in;
@@ -2170,7 +2167,7 @@ class Builder {
     node_handle_t visitLinkNode(const GCT::node_ptr_t &gct);
     /// `a..b` (the GCT link of `kCompositionCall`): the composition of two functions, or the
     /// interval of two integers, told apart by the types of the two operands (design principles
-    ///  4.2; the rule on ` -generator-and-composition`). `expected`
+    ///  4.2; the rule). `expected`
     /// is the type of the position the whole expression stands in: a function type there is the
     /// type the lambda `(x) => g(f(x))` would have and instantiates the operands (
     /// section generic-operands-of-composition).
@@ -2243,8 +2240,7 @@ class Builder {
     /// Resolve the names of a case body that is not selected: its own `let`/`var` names bind,
     /// and every other name must exist. No graph node is made and no type is checked.
     void resolveStaticBodyNames(const GCT::node_ptr_t &body);
-    /// Resolve the names of a generic declaration where it is declared (
-    /// on `generic-rule-condition-unresolved-name`, docs/handover/reviews/questions-2026-10-23.md):
+    /// Resolve the names of a generic declaration where it is declared:
     /// the parameters bind, every other name its body writes must exist, and the declaration-site
     /// half of its `when` clause is answered. No graph node is made and no type is read, so what
     /// the check needs from the type parameters -- an operator overload, a field, the argument of
@@ -2268,8 +2264,7 @@ class Builder {
     /// where the loop is, its condition and its body as regions of the current graph (built where
     /// they are written, like the arms of a branch), and one LOOP node that has them.
     node_handle_t visitLoopNode(const GCT::node_ptr_t &gct);
-    /// `for x in s` where `s` is a stream (design principles 5.4; the shape the ruling of
-    /// 2026-10-26 gives): the rounds are the pulls of the stream's step function, so the loop is
+    /// `for x in s` where `s` is a stream (design principles 5.4; the shape the rule gives): the rounds are the pulls of the stream's step function, so the loop is
     /// the `while` the graph already has, whose state is the pull together with the state the
     /// program wrote. `sequence` is the stream value, `initial` the program's first values (in
     /// the head's order) and `stateTypes` their types.
@@ -2336,7 +2331,7 @@ class Builder {
     /// where the test of its pattern holds and, when it has one, its guard holds as well; the
     /// guard of a case whose pattern matched decides whether that case is taken at all, and the
     /// cases written after it are the `else` of its step, so a guard that does not hold leaves
-    /// the value to them (review 「when-placement-and-match-guards」). The last step is the case
+    /// the value to them. The last step is the case
     /// that ends the list: it has no test of its own.
     node_handle_t buildCaseChain(std::vector<CaseStep> &steps, const GCT::node_ptr_t &origin);
     /// The general `match` `gct`, when its cases carry guards. It cannot be dispatched by case

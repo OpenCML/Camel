@@ -164,7 +164,7 @@ timeout_ms = 120000
 
 [[tests]]
 name = "registry.migrations_stay_migrated"
-desc = "A module that has moved to a declaration module stays migrated: C++ has no StaticFuncTypeResolver for a name the declaration fixes, no stray stdlib/signatures/<module>.cml survives unless the reference generator names it in computed:, every declaration is behind a registered operator (--verify-ops, reused), the C++ export groups are the declaration's plus the computed signatures, and a computed name has exactly one recorded place (its computed: signature file, never an inline // dynamic func; handover H180)."
+desc = "A module that has moved to a declaration module stays migrated: C++ has no StaticFuncTypeResolver for a name the declaration fixes, no stray stdlib/signatures/<module>.cml survives unless the reference generator names it in computed:, every declaration is behind a registered operator (--verify-ops, reused), the C++ export groups are the declaration's plus the computed signatures, and a computed name has exactly one recorded place ."
 kind = "behavior"
 tool = "node"
 case = "../../../../scripts/stdlib-declarations.mjs"

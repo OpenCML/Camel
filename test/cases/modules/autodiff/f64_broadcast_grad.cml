@@ -8,11 +8,11 @@
  *
  * the direction is to support f64 (and bf16 and f16) rather than refuse it, and the element
  * type of a value is always determined, so the missing arm is a hole and not a rule: a float
- * reduction returns its input's element type and accumulates in f64, rounding once
- * (docs/handover/reviews/reduced-precision.md section 4).
+ * reduction returns its input's element type
+ * and accumulates in f64, rounding once
  *
  * Both gradients are printed element by element and every value below is written out by hand
- * from the forward expression, with the parameters the handover note names (x = 1..6 as a
+ * from the forward expression, with the parameters written here (x = 1..6 as a
  * [2, 3] f64 tensor, p0 = [0.5, 0.25, 2.0]):
  *
  *   loss  = sum(x * p0) = sum([[0.5, 0.5, 6.0], [2.0, 1.25, 12.0]]) = 22.25
