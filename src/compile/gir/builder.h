@@ -2034,6 +2034,11 @@ class Builder {
     // such function (it changes an argument in place).
     compile_graph_ptr_t
     operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &origin);
+    /// `attempt(f)` (design principles 3.9): the function value whose parameters are `f`'s and
+    /// whose result is `f`'s result plus `!`. It is a closure -- a graph of its own that captures
+    /// `f` and whose body is one marked call of it -- so no node of the calling graph stands for
+    /// the transform. `f` is the resolved argument: a function value.
+    node_handle_t attemptFunctionValue(const Argument &f, const GCT::node_ptr_t &origin);
     // The one function of the name `node` (a DREF to several overloads or to an operator
     // group) that has exactly the parameters and the result of `expected`, as a value; null
     // when none or several do.

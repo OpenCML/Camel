@@ -26,7 +26,7 @@ func main(): int sync {
     println(xs->drop<0>)
     println(xs->drop<0 - 3>)
     // a fault inside a boundary becomes an error value
-    println(attempt(cut, xs, 2, 9))
-    println(attempt(cut, xs, 5, 5))
+    println(attempt(cut)(xs, 2, 9))
+    println(attempt(cut)(xs, 5, 5))
     return 0
 }

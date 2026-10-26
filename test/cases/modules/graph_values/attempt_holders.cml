@@ -1,5 +1,5 @@
 /**
- * `attempt(f, x)` isolates a fault of `f` at the call; `f` itself still faults when called
+ * `attempt(f)(x)` isolates a fault of `f` at the call; `f` itself still faults when called
  * directly afterwards, and its graph is the same (design principles 3.9, 9.1).
  */
 module attempt_holders
@@ -45,7 +45,7 @@ func ratio(x: int): int {
 
 func main(): int sync {
     let before = size(graph_of(ratio))
-    println(`isolated: ${attempt(ratio, 4) !! -1} ${attempt(ratio, 0) !! -1}`)
+    println(`isolated: ${attempt(ratio)(4) !! -1} ${attempt(ratio)(0) !! -1}`)
     println(`same: ${ratio(4)} ${size(graph_of(ratio)) == before}`)
     println(ratio(0))
     return 0

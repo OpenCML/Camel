@@ -722,23 +722,28 @@ type. The calls have no order among them, as for `map`.
 
 A fault (a division by zero, an index out of range, a recursion that is too deep, ...) ends
 the program with a located diagnostic. `attempt` isolates it at the boundary of one call
-(design principles 3.9; docs/technical/33_fault_isolation.md). The name is provisional.
+(design principles 3.9; docs/technical/33_fault_isolation.md). It is a function transform:
+`attempt(f)` is the function whose parameters are f's and whose calls are calls of f made
+inside the boundary. The name is provisional.
 
 #### `attempt`
 
 ```camel
-attempt: (f: (...args: A) => T, ...args: A) => T!
+attempt: (f: (...args: A) => T) => (...args: A) => T!
 ```
 
-Calls f with the arguments. A fault raised inside the call becomes an error value whose kind
-is the name of the fault (`DivisionByZero`, ...), with the fault's message and position;
-otherwise the result of f. When f itself returns `U!`, so does attempt. What the call did
-before the fault is not undone; exit() and the failures of the compiler itself are not
-isolated.
+The function f with the faults of its calls turned into error values: `attempt(f)` takes the
+parameters of f and gives the result of f plus `!`. A fault raised inside a call becomes an
+error value whose kind is the name of the fault (`DivisionByZero`, ...), with the fault's
+message and position; otherwise the call gives the result of f. When f itself returns `U!`,
+so does `attempt(f)`. What the call did before the fault is not undone; exit() and the
+failures of the compiler itself are not isolated. `attempt(f)` itself calls nothing: the
+faults are those of a call of the value.
 
 - With effects: what f does.
-- Example: `attempt((x: int) => 10 / x, 0) !! -1` gives `-1: the division fault becomes an error value`
-- Example: `attempt((x: int) => 10 / x, 2) !! -1` gives `5`
+- Failure: fault `DivisionByZero` and every other fault of a call of f: the call gives an error value whose kind is the fault's name, with the fault's message and position; an error value f itself returns is handed on unchanged.
+- Example: `attempt((x: int) => 10 / x)(2) !! -1` gives `5`
+- Example: `attempt((x: int) => 10 / x)(0) !! -1` gives `-1: the division fault becomes an error value`
 
 #### `len`
 

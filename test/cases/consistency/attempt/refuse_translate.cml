@@ -8,7 +8,7 @@ module refuse_translate
 func risky(x: float): float { return 6.0 / x }
 
 func safe(x: float): float {
-    return attempt(risky, x) !! 0.0
+    return attempt(risky)(x) !! 0.0
 }
 
 func main(): float {

@@ -32,25 +32,25 @@ func kind(r: int!): string {
 }
 
 func main(): int sync {
-    println(kind(attempt(top, 4)))
-    println(kind(attempt(top, 0)))
-    println(kind(attempt(arm, 9)))
-    println(kind(attempt(arm, 0)))
+    println(kind(attempt(top)(4)))
+    println(kind(attempt(top)(0)))
+    println(kind(attempt(arm)(9)))
+    println(kind(attempt(arm)(0)))
     let by2 = divider(2)
     let by0 = divider(0)
-    println(kind(attempt(by2, 10)))
-    println(kind(attempt(by0, 10)))
-    println(kind(attempt((x: int): int => x / (x - x), 5)))
+    println(kind(attempt(by2)(10)))
+    println(kind(attempt(by0)(10)))
+    println(kind(attempt((x: int): int => x / (x - x))(5)))
 
-    println(attempt(() => 4..8->map<inv>) !! [-1])
-    println(attempt(() => 0..8->map<inv>) !! [-1])
-    println(attempt(() => 3..8->filter<keep>) !! [-2])
-    println(attempt(() => 0..8->filter<keep>) !! [-2])
-    println(attempt(() => 4..8->reduce<step, 0>) !! -3)
-    println(attempt(() => 0..8->reduce<step, 0>) !! -3)
+    println(attempt(() => 4..8->map<inv>)() !! [-1])
+    println(attempt(() => 0..8->map<inv>)() !! [-1])
+    println(attempt(() => 3..8->filter<keep>)() !! [-2])
+    println(attempt(() => 0..8->filter<keep>)() !! [-2])
+    println(attempt(() => 4..8->reduce<step, 0>)() !! -3)
+    println(attempt(() => 0..8->reduce<step, 0>)() !! -3)
 
-    println(kind(attempt(spin, 0, 400, 0)))
-    println(kind(attempt(spin, 0, 1000, 0)))
+    println(kind(attempt(spin)(0, 400, 0)))
+    println(kind(attempt(spin)(0, 1000, 0)))
     println('end')
     return 0
 }

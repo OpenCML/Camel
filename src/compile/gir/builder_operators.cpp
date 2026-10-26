@@ -17,6 +17,7 @@
 #include "camel/core/rtdata/string.h"
 #include "camel/core/type/composite/stream.h"
 #include "camel/execute/entry_args.h"
+#include "camel/execute/fault_isolation.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/graph.h"
 #include "camel/utils/log.h"
@@ -757,6 +758,74 @@ Builder::operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &o
     leaveScope();
     operatorValueGraphs_[key] = graph;
     return graph;
+}
+
+node_handle_t
+Builder::attemptFunctionValue(const Argument &f, const GCT::node_ptr_t &origin) {
+    // The argument is what the call would pass: a variable is read here, once, and the value
+    // read is what the function captures.
+    node_handle_t fValue = valueOf(f.node);
+    Type *fType          = valueTypeOf(nodeTypeOf(fValue));
+    ASSERT(
+        fType != nullptr && fType->code() == TypeCode::Function,
+        "The transform is given a function value.");
+    FunctionType *type = camel::execute::attemptFunctionType(tt::as_ptr<FunctionType>(fType));
+    ASSERT(type != nullptr, "The resolver accepted a function the transform cannot take.");
+
+    // The captured function is bound to a name no program can write, in the scope the call
+    // stands in, so that the new graph captures it the way any closure captures a name
+    // (captureInto).
+    const std::string fName = bindTemporary(fValue);
+
+    compile_graph_ptr_t graph = enterScope(type);
+    registerGraphOrigin(context_, graph, origin, "gir.attempt.graph");
+    const bool outerSynced        = synced_;
+    const node_handle_t outerLast = lastSyncedNode_;
+    const auto restore            = [&] {
+        synced_                  = outerSynced;
+        lastSyncedNode_          = outerLast;
+        bodyStates_[graph.get()] = BodyState::Built;
+    };
+    const auto make = [&](GCT::node_ptr_t node) {
+        node->setOrigin(origin->origin());
+        return node;
+    };
+    // The marked call stands where the program wrote the transform: a node of a call takes the
+    // origin of the callee the program wrote (`gir.link.oper` reads gct->at(0)), so the call
+    // inside the new graph is given the name's origin rather than the argument list's.
+    const auto nameOrigin = [&] {
+        return origin != nullptr && !origin->empty() ? origin->at(0)->origin() : origin->origin();
+    }();
+    try {
+        bodyStates_[graph.get()] = BodyState::Open;
+        // Its body is the one marked call `attempt's function(f, args...)`, built from
+        // a synthesized GCT so that resolution, the argument checks and the origins are what
+        // they are for any call.
+        GCT::node_ptr_t callee =
+            make(tree_->makeDRef(std::string(camel::execute::kFaultIsolationOperatorName)));
+        callee->setOrigin(nameOrigin);
+        GCT::node_ptr_t call = make(tree_->makeLink(1 + type->normTypesCount()));
+        *call << callee << make(tree_->makeDRef(fName));
+        size_t index = 0;
+        for (draft_node_ref_t port : graph->draft().normPorts()) {
+            const std::string name = "$attempt" + std::to_string(index++);
+            nodeScope_->insert(name, graph->draft().ref(port));
+            *call << make(tree_->makeDRef(name));
+        }
+        // The call is the value of the function, so it runs whenever the function is called.
+        synced_             = true;
+        lastSyncedNode_     = {};
+        node_handle_t value = visitLinkNode(call);
+        setGraphReturnFromResult(graph, nodeIdOf(value), nodeIdOf(value), nodeTypeOf(value));
+        restore();
+        registerBuiltBody(graph);
+    } catch (...) {
+        restore();
+        leaveScope();
+        throw;
+    }
+    leaveScope();
+    return createFuncDataNode(graph, true, false);
 }
 
 node_handle_t Builder::overloadValueFor(
@@ -3245,6 +3314,14 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
                         throw BuildAbortException();
                     }
                 }
+            }
+            if (targetOperator->uri() == camel::execute::kAttemptTransformUri) {
+                // `attempt(f)` (design principles 3.9) is a function transform and not a node:
+                // the call gives a function value whose body is the marked call of `f`. What the
+                // value captures is the argument, so no operand of this graph stands for it.
+                node_handle_t transformed = attemptFunctionValue(normInputs[0], gct);
+                LEAVE("LINK");
+                return transformed;
             }
             targetNode = currGraph_->addOperNode(targetOperator, 0);
             stampPermissions(targetNode);
