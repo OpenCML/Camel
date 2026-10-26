@@ -1690,14 +1690,22 @@ Cannot insert data of type '{1}' into a(n) {0} with element type '{2}'.
 Ensure the data type matches the {0}'s element type, or convert the data to the appropriate type before inserting.
 ```
 
-**Example** (`test/cases/compile/surface/array_element_type.cml`, run as `camel -E short test/cases/compile/surface/array_element_type.cml`)
+**Example** (`test/cases/compile/literals/context_composite_holes_positions_mismatch.cml`, run as `camel -E short test/cases/compile/literals/context_composite_holes_positions_mismatch.cml`)
 
 ```camel
-func main(): int sync {
-    println([1, 2,
-        'x', 4])
-    return 0
+module literal_context_composite_holes_positions_mismatch
+
+func first(xs: f32[]): f32 { return xs[0] }
+
+// the argument position
+func argumentPosition(n: float): f32 { return first([1.0, float(n)]) }
+// the declaration position
+func declarationPosition(n: float): f32 {
+    let xs: f32[] = [1.0, float(n)]
+    return xs[0]
 }
+// the receiver of `->`
+func receiverPosition(n: float): f32 { return [1.0, float(n)]->first }
 ```
 
 ### CallingIncompleteFunction
