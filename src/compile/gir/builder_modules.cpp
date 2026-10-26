@@ -353,26 +353,21 @@ std::optional<std::string> Builder::nativeOperatorUri(const GCT::node_ptr_t &gct
 }
 
 namespace {
-/// The identity of a resource in one spelling: the module that declares it together with its
-/// name (design principles 10.2). A module names its own resource bare (`r`), a module that
-/// imports it through the module (`m::r`), and the C++ module declares it with one colon
-/// (`m:r`); the three spellings name one resource, so the module of the declaration is dropped
-/// where it is written and the separator is made the same on both sides before two identities
-/// are compared.
+/// The identity of a resource, as `module:name`: the module that declares it together with its
+/// name (design principles 10.2). A clause names a resource of its own module bare (`r`), one of
+/// another module through that module (`m::r`), and the C++ module declares it with the module
+/// separator written as one colon (`m:r`); the three spellings name one resource, so the identity
+/// is read from whichever of them is written, and a name that leaves the module out is taken to
+/// be one of `declaring`, the module whose declaration it is compared with.
 std::string resourceIdentity(std::string_view name, std::string_view declaring) {
-    std::string identity(name);
-    for (const std::string_view separator : {"::", ":"}) {
-        const std::string prefix = std::string(declaring) + std::string(separator);
-        if (identity.size() > prefix.size() && identity.starts_with(prefix)) {
-            identity.erase(0, prefix.size());
-            break;
-        }
+    const size_t separator = name.find("::");
+    if (separator != std::string_view::npos) {
+        return std::string(name.substr(0, separator)) + ":" + std::string(name.substr(separator + 2));
     }
-    if (const size_t sep = identity.find(':');
-        sep != std::string::npos && identity.compare(sep, 2, "::") != 0) {
-        identity.insert(sep, 1, ':');
+    if (const size_t colon = name.find(':'); colon != std::string_view::npos) {
+        return std::string(name.substr(0, colon)) + ":" + std::string(name.substr(colon + 1));
     }
-    return identity;
+    return std::string(declaring) + ":" + std::string(name);
 }
 
 /// The accesses a clause writes, as the identity of the resource: the operand an access is

@@ -43,7 +43,7 @@ const cells = nodes(/^RESOURCES node \S+ (\d+) FUNC bump: rmw variable \(node (\
 pair('bump', cells)
 assert(cells[0][2] === cells[1][2], `bump: the two calls name different cells: ${cells[0][0]} | ${cells[1][0]}`)
 
-const ambient = nodes(/^RESOURCES node \S+ (\d+) FUNC tick: rmw ambient main::db; rmw ambient stdout; external$/)
+const ambient = nodes(/^RESOURCES node \S+ (\d+) FUNC tick: rmw ambient db; rmw ambient stdout; external$/)
 assert(ambient.length === 2, `tick: expected two calls of the group, got ${ambient.map((m) => m[0]).join(' | ')}; all nodes: ${allNodes}`)
 pair('tick', ambient)
 
@@ -315,7 +315,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["err_callee_clause_reaches.cml:16:", "uses main::db", "cache"]
+expect_output_contains = ["err_callee_clause_reaches.cml:16:", "uses db", "cache"]
 
 [[tests]]
 name = "err.promise_note"
