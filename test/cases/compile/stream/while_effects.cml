@@ -1,16 +1,13 @@
 /**
- * When the condition of `for x in s while c` is asked, and how often: `c` stands in the loop's
- * condition after the test that this round's pull has an element, so it is asked once per round
- * that has an element, with the state of that round -- and never for the round the stream ends on,
- * nor at all for an empty stream. The array form is written beside it and the two answer alike, so
- * the reading is the shared one rather than the stream's own.
+ * When the condition of `for x in s while c` is asked, and how often: the condition is judged
+ * first and the step function is called only where it holds, which is the array's order (the
+ * language author, 2026-10-26). A pull may have effects and consumes the stream, so the round that
+ * finds the stream over costs one last ask and no pull, and an empty stream costs one ask. The
+ * array form is written beside it: the two read the same.
  *
  * The condition prints the state it is asked with, so every line below is a count of evaluations
- * and the value it saw, not a belief. The two forms differ on one point, and the case pins both
- * readings: the stream form tests the pull before it asks `c`, so the stream ending costs no ask
- * and an empty stream costs none at all (three asks for three elements), while the array form asks
- * `c` before the loop learns that the sequence is at its end (four asks for three elements, and
- * one for an empty array). Which order the stream form takes is on the language author.
+ * and the value it saw, not a belief: four asks for a three-element stream (`c 6` is the ask of the
+ * round that finds the end) and one for an empty one, exactly as for an array.
  */
 module stream_while_effects
 

@@ -742,11 +742,21 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 [[tests]]
 name = "stream.while_effects"
-desc = "When the condition `c` of `for x in s while c` is asked, and how often: the condition prints the state it is asked with, so the exact output is the reading. The stream form tests the pull before it asks `c` (three asks for three elements, none for an empty stream), the array form written beside it asks `c` before the loop learns the sequence is at its end (four asks for three elements, one for an empty array), and both pins stand until the author rules which order the stream form takes."
+desc = "When the condition `c` of `for x in s while c` is asked, and how often: the condition prints the state it is asked with, so the exact output is the reading. The stream and the array read the same -- four asks for three elements, one for an empty one -- because the condition is judged first and the step function is called only where it holds."
 kind = "behavior"
 case = "../../../cases/compile/stream/while_effects.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_exact = "stream-drain\nc 0\nc 3\nc 5\n6\narray-drain\nc 0\nc 1\nc 3\nc 6\n6\nstream-empty\n0\narray-empty\nc 0\n0\ndone\n"
+expect_stdout_exact = "stream-drain\nc 0\nc 3\nc 5\nc 6\n6\narray-drain\nc 0\nc 1\nc 3\nc 6\n6\nstream-empty\nc 0\n0\narray-empty\nc 0\n0\ndone\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+[[tests]]
+name = "stream.pull_order"
+desc = "The order of a round is the array`s: `c` is judged first and the step function is called only where it holds. The step prints on every call, so the reading counts calls: a condition that accepts ten rounds reads ten elements and not eleven, and the plain `for` reads one per round plus the call that answers the stream is over."
+kind = "behavior"
+case = "../../../cases/compile/stream/pull_order.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "ten\nread 10\nread 9\nread 8\nread 7\nread 6\nread 5\nread 4\nread 3\nread 2\nread 1\n10\ntwo\nread 3\nread 2\n2\ntotal\nread 3\nread 2\nread 1\nread 0\n6\ndone\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
