@@ -1,0 +1,29 @@
+/**
+ * The expected type of a position reaches a composite literal with a computed element in the
+ * three positions alike (design principles 5.1): as an ordinary argument, in a declaration and
+ * as the receiver of `->`. The elements the literal did write take the element type the position
+ * gives them, and the computed element is checked against that type rather than converted --
+ * `f32(n)` already is the element type, so each of the three is an `f32[]`. The value just above
+ * the f32 midpoint prints 1.00000012, not its float64 1.00000006: it became f32 where it was
+ * written, converted once from the value written.
+ */
+module literal_context_composite_holes_positions
+
+func first(xs: f32[]): f32 { return xs[0] }
+
+// the argument position
+func argumentPosition(n: float): f32 { return first([1.0000000596046447753906251, f32(n)]) }
+// the declaration position
+func declarationPosition(n: float): f32 {
+    let xs: f32[] = [1.0000000596046447753906251, f32(n)]
+    return xs[0]
+}
+// the receiver of `->`
+func receiverPosition(n: float): f32 { return [1.0000000596046447753906251, f32(n)]->first }
+
+func main(): int sync {
+    println('{:.9g}'->format<argumentPosition(2.0)>)
+    println('{:.9g}'->format<declarationPosition(2.0)>)
+    println('{:.9g}'->format<receiverPosition(2.0)>)
+    return 0
+}

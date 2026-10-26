@@ -194,13 +194,38 @@ std::string TokenBuffer::docAbove(size_t index) const {
     if (index >= tokens_.size()) {
         return {};
     }
-    std::vector<std::string_view> lines;
-    size_t expectLine = lineOf(tokens_[index].begin);
-    for (size_t i = index; i-- > 0;) {
-        const Token &token = tokens_[i];
-        const size_t line  = lineOf(token.begin);
-        if (token.kind != TokenKind::DocComment || line + 1 != expectLine) {
-            break;
+    // The documentation of a declaration is decided by syntax, not by white space: the `///`
+    // lines written above it belong to it, and a blank line between the last of them and the
+    // declaration changes nothing (the author's ruling of 2026-10-26). A blank line is the
+    // absence of a token, so the run of comments is read back from the declaration in the token
+    // stream, which is what makes a blank line inside a block of `///` lines part of the block
+    // rather than a gap in it.
+    //
+    // What does end the run is a declaration: the `///` lines below a declaration describe what
+    // comes next, never what came before, so the run may not reach back over code. The token
+    // before the first comment is therefore the boundary: an ordinary `//` comment there ends the
+    // run as well, because what stands above it is not documentation of this declaration.
+    size_t i = index;
+    while (i > 0 && isTrivia(tokens_[i - 1].kind)) {
+        --i;
+    }
+    // A blank line stands between the declaration before and the first comment of the run: the
+    // comment is below a declaration, so the run starts here and not above it.
+    if (i < index && i > 0 && lineOf(tokens_[i].begin) > lineOf(tokens_[i - 1].begin) + 1) {
+        size_t first = i;
+        while (first < index && tokens_[first].kind != TokenKind::DocComment) {
+            ++first;
+        }
+        i = first;
+    }
+    if (i < index && tokens_[i].kind == TokenKind::LineComment) {
+        i = index; // the run is ended by a comment that documents nothing
+    }
+    std::string doc;
+    for (size_t j = i; j < index; ++j) {
+        const Token &token = tokens_[j];
+        if (token.kind != TokenKind::DocComment) {
+            continue;
         }
         std::string_view body = text(token).substr(3);
         if (!body.empty() && body.front() == ' ') {
@@ -209,15 +234,10 @@ std::string TokenBuffer::docAbove(size_t index) const {
         while (!body.empty() && (body.back() == '\r' || body.back() == ' ')) {
             body.remove_suffix(1);
         }
-        lines.push_back(body);
-        expectLine = line;
-    }
-    std::string doc;
-    for (auto it = lines.rbegin(); it != lines.rend(); ++it) {
         if (!doc.empty()) {
             doc += '\n';
         }
-        doc.append(*it);
+        doc.append(body);
     }
     return doc;
 }
