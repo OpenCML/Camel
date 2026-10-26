@@ -1646,3 +1646,12 @@ Linux 包在 manylinux 里构建，用 auditwheel 修正标签，并在构建时
 3. **退出码**：用法错误统一为 2；`parseArgs` 里九处 `std::exit(1)` 跳过了运行时清理，改成返回；`runCommand`（670 行）里 `catch (Diagnostic &d)` 之后没有 `return`，一个 persisted 诊断会什么都不打印就退出 0。
 4. **语言服务器**：`parametersIn`（`queries.cpp:1244`）把 `=>` 的 `>` 当成括号，`map`、`filter`、`sort_by` 的签名提示坏掉；内建类型表缺 `bf16`、`f16`；取消打断不了 `analyze`；`catch (...) {}` 静默吞错；`--dump-model` 没给文件时开始读标准输入，改成报错。
 5. 测试运行器 2877 行（约 400 行是时间槽记账）拆开；`known_fail` 没有使用者，删掉；指向仓库外脚本的错误信息改正；`tools/debugger/` 的 5 个 `DESIGN-QUESTION` 并进上一节要求的问题页。
+
+## 代码审查：优化遍与图存储（返工，与改写引擎第 1 条合并做）
+
+完整报告：`docs/handover/reports/code-review-passes.md`。
+1. **"能不能丢、能不能挪"只有一条判据，而且必须问"会不会出故障"**：现在有六个各自写的谓词（`isValueOnly`、`mayBeRecomputed`、`nodeIsFreelySchedulable`、`mayHaveEffects`、改写引擎的 `pureComputation` 等），都只问效应、不问故障，`Cast` 还被当成不会失败（`as_shape_fault.cml` 说明它会）。于是 `std::opt::dce` 会丢掉 `let r = 5 / z` 的故障，内联时一个会出故障的纯被调者不加顺序边。原则 3.4、9.7 的判据是"纯且不会出故障"。合成核心里的**一个**谓词，读算子的标准性质（效应、可能故障），DCE、CSE、内联、改写、调度全部调用它，那六个删掉。`consistency/faults` 的用例加上带遍流水线的跑法。
+2. 同步边处理不一致：`findCycle`、`reaches`、`upstreamOf`、`gateInputsSurvive` 和特化的等待转移有的跳过同步边。随 H242 删控制边那一步统一成只读同步边和顺序边。
+3. **折叠没有大小和时间上限**：`'ab'->repeat<1000000000>`、巨大的 `zeros` 在编译期算出来、塞进图里。结果超过一个阈值就不折叠，留到运行时。
+4. **静默截断**：内联 256 次、32 个会话、16 轮的上限只写日志；特化保护在 4096 个实例后抛没有位置的 `runtime_error`（违反 5.11）。达到上限时给一条带位置的警告。`ASSERT` 在 release 下是空的，却守着 `graph.cpp:976` 的越界写，改成真正的检查。另加一个检查：遍做完之后，效应节点和可能故障的节点都还在（除非证明了不会执行）。
+5. 平方级算法（CSE 的 `reaches` 每个候选都分配、DCE 按死链的每一层重扫、`upstreamOf` 每个调用者都跑一遍、递归的 SCC 深搜、特化候选里的 `insideBranchArm`/`onCallCycle`）、`applyRuntimeOptimizeRewrite` 约 360 行、过时与讲历史的注释，照报告改。
