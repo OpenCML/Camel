@@ -2495,6 +2495,15 @@ SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget 
             } catch (const RuleSkipped &) {
                 continue;
             }
+            // The writings of one value share a region: extraction may put any writing of a class
+            // in the place of any other, and a node of an arm cannot stand for a value read outside
+            // the arm. A right side that is a node of another region -- a bound variable from an
+            // enclosing region, as `x + 1 => x` with `x` outside the arm of `&&` -- is therefore
+            // no writing of this value, and the equivalence is not recorded. The one-way rewrite
+            // still makes the replacement: reading an enclosing value inside an arm is a plain edge.
+            if (made != match.root && draft_.nodeRegion(made) != draft_.nodeRegion(match.root)) {
+                continue;
+            }
             stats.newWritings += draft_.nodeSlotCount() - before;
             if (draft_.nodeSlotCount() != before) {
                 progress = true;
