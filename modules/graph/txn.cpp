@@ -480,7 +480,7 @@ resolver_ptr_t functionRule(size_t operands, std::string text, Type *(*make)(Typ
     return DynamicFuncTypeResolver::create(
         {{0, {}}, {static_cast<int>(operands), std::vector<bool>(operands, false)}},
         std::move(text),
-        [operands, make](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+        [operands, make](const type_vec_t &, const type_vec_t &norm)
             -> std::optional<Type *> {
             const bool first = operands == 1 ? norm[0]->code() == TypeCode::Function
                                              : HandleType::is(norm[0], HandleKind::Txn);

@@ -343,7 +343,7 @@ std::optional<std::string> unsupportedLeaf(Type *tree) {
 class SaveResolver final : public FuncTypeResolver {
   public:
     std::optional<FunctionType *> resolve(
-        const type_vec_t &with, const type_vec_t &norm, const ModifierSet &mods) const override {
+        const type_vec_t &with, const type_vec_t &norm) const override {
         if (!fits(with, norm) || unsupportedLeaf(norm[1]))
             return std::nullopt;
         param_vec_t args;
@@ -352,8 +352,7 @@ class SaveResolver final : public FuncTypeResolver {
         return FunctionType::create({}, args, Type::Void());
     }
     std::optional<std::string> explainRejection(
-        const type_vec_t &with, const type_vec_t &norm, static_args_t,
-        const ModifierSet &) const override {
+        const type_vec_t &with, const type_vec_t &norm, static_args_t) const override {
         return fits(with, norm) ? unsupportedLeaf(norm[1]) : std::nullopt;
     }
     std::string signature() const override {
@@ -370,12 +369,12 @@ class SaveResolver final : public FuncTypeResolver {
 class LoadResolver final : public FuncTypeResolver {
   public:
     std::optional<FunctionType *>
-    resolve(const type_vec_t &, const type_vec_t &, const ModifierSet &) const override {
+    resolve(const type_vec_t &, const type_vec_t &) const override {
         return std::nullopt;
     }
     std::optional<FunctionType *> resolveForCall(
         const type_vec_t &types, Type *expected, const type_vec_t &with, const type_vec_t &norm,
-        static_args_t, const ModifierSet &mods) const override {
+        static_args_t) const override {
         Type *target = targetOf(types, expected);
         if (!fits(with, norm) || !target || containsTypeVar(target) || unsupportedLeaf(target))
             return std::nullopt;
@@ -386,7 +385,7 @@ class LoadResolver final : public FuncTypeResolver {
     }
     std::optional<std::string> explainCallRejection(
         const type_vec_t &types, Type *expected, const type_vec_t &with, const type_vec_t &norm,
-        static_args_t, const ModifierSet &) const override {
+        static_args_t) const override {
         Type *target = targetOf(types, expected);
         return fits(with, norm) && target && !containsTypeVar(target) ? unsupportedLeaf(target)
                                                                       : std::nullopt;

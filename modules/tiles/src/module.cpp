@@ -661,7 +661,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
               DynamicFuncTypeResolver::create(
                   {{0, {}}, {1, {false}}},
                   "(T: Tensor, float, struct or tuple) => Device<T>",
-                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                  [](const type_vec_t &with, const type_vec_t &norm)
                       -> std::optional<Type *> {
                       if (!with.empty() || norm.size() != 1)
                           return std::nullopt;
@@ -674,7 +674,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
               DynamicFuncTypeResolver::create(
                   {{0, {}}, {1, {false}}},
                   "(Device<T>) => T",
-                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                  [](const type_vec_t &with, const type_vec_t &norm)
                       -> std::optional<Type *> {
                       if (!with.empty() || norm.size() != 1)
                           return std::nullopt;
@@ -687,7 +687,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
               DynamicFuncTypeResolver::create(
                   {{1, {false}}, {1, {false}}},
                   "<fn: (...) => NumericAggregate>(inputs: NumericAggregate) => DeviceAggregate",
-                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                  [](const type_vec_t &with, const type_vec_t &norm)
                       -> std::optional<Type *> {
                       auto result = resolve(with, norm, false);
                       if (!result)
@@ -701,7 +701,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
               DynamicFuncTypeResolver::create(
                   {{1, {false}}, {1, {false}}},
                   "<fn: (...) => NumericAggregate>(inputs: NumericAggregate) => string",
-                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                  [](const type_vec_t &with, const type_vec_t &norm)
                       -> std::optional<Type *> { return resolve(with, norm, true); })}}),
         OperatorGroup::create(
             "inspect",
@@ -709,7 +709,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
               DynamicFuncTypeResolver::create(
                   {{1, {false}}, {1, {false}}},
                   "<fn: (...) => NumericAggregate>(inputs: NumericAggregate) => string",
-                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                  [](const type_vec_t &with, const type_vec_t &norm)
                       -> std::optional<Type *> { return resolve(with, norm, true); })}}),
         OperatorGroup::create(
             "benchmark",
@@ -717,7 +717,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
               DynamicFuncTypeResolver::create(
                   {{1, {false}}, {1, {false}}},
                   "<fn: (...) => NumericAggregate>(inputs: NumericAggregate) => string",
-                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                  [](const type_vec_t &with, const type_vec_t &norm)
                       -> std::optional<Type *> { return resolve(with, norm, true); })}}),
         OperatorGroup::create(
             "regions",
@@ -725,7 +725,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
               DynamicFuncTypeResolver::create(
                   {{1, {false}}, {0, {}}},
                   "<fn: Function>() => string",
-                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                  [](const type_vec_t &with, const type_vec_t &norm)
                       -> std::optional<Type *> {
                       if (with.size() != 1 || !norm.empty() ||
                           with[0]->code() != TypeCode::Function)

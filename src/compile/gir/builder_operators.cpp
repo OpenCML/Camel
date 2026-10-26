@@ -440,7 +440,7 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
         statics.push_back(staticArgOf(input.node));
     }
     const bool builtinAccepts =
-        set.ops->resolve(withTypes, normTypes, statics, Modifier::None).has_value();
+        set.ops->resolve(withTypes, normTypes, statics).has_value();
     // Design principles 4.3: an overload of the program is preferred where it is more
     // specific than the others that take the arguments. "More specific" is exact: its
     // parameter types are the argument types themselves (as written, without a value entering
@@ -464,7 +464,7 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
     const bool builtinExact = std::ranges::any_of(set.ops->resolvers(), [&](const auto &entry) {
         FunctionType *fixed = entry.second->fixedSignature();
         return fixed != nullptr && exactFor(fixed) &&
-               entry.second->resolve(withTypes, normTypes, Modifier::None).has_value();
+               entry.second->resolve(withTypes, normTypes).has_value();
     });
     const auto where        = [&](const void *overload) {
         const auto it = set.moduleOf.find(overload);
@@ -529,7 +529,7 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
             }
             if (builtinAccepts && !entering) {
                 for (const auto &[uri, resolver] : set.ops->resolvers()) {
-                    if (resolver->resolve(withTypes, normTypes, Modifier::None).has_value()) {
+                    if (resolver->resolve(withTypes, normTypes).has_value()) {
                         overloads.push_back(
                             std::format(
                                 "the built-in or module operator <{}>: {}",
@@ -813,8 +813,7 @@ node_handle_t Builder::overloadValueFor(
                 expected->exitType(),
                 withTypes,
                 normTypes,
-                statics,
-                Modifier::None);
+                statics);
             if (!type || !(*type)->hasExitType() ||
                 !(*type)->exitType()->equals(expected->exitType())) {
                 continue;
@@ -854,7 +853,7 @@ std::optional<oper_idx_ptr_t> Builder::resolveGroupedCall(
     std::vector<std::string> holding;
     for (const auto &[uri, resolver] : ops->resolvers()) {
         auto result = resolver->resolveForCall(
-            explicitTypes, expectedResult, withTypes, normTypes, normStatics, Modifier::None);
+            explicitTypes, expectedResult, withTypes, normTypes, normStatics);
         if (!result) {
             // The rule's parameters do not take these arguments: it was never a candidate for
             // this call, and its condition is not asked about a call it does not fit.
@@ -946,7 +945,7 @@ bool Builder::plainOperatorAvailableFor(
     // tensor module declares for a numeric array): the group answers for the operand types
     // alone (design principles 4.3).
     if (operatorOverloadsOf(group)
-            .ops->resolve({}, normTypes, statics, Modifier::None)
+            .ops->resolve({}, normTypes, statics)
             .has_value()) {
         return true;
     }
@@ -1139,7 +1138,7 @@ node_handle_t Builder::inPlaceRebindingOf(const GCT::node_ptr_t &gct) {
     // The overload the call resolves to, as visitLinkNode will resolve it: rewritten only when
     // it has an in-place form and gives an array of the variable's own type.
     const std::vector<StaticArg> statics(1);
-    const auto resolved       = group->resolve(withTypes, {arrayType}, statics, Modifier::None);
+    const auto resolved       = group->resolve(withTypes, {arrayType}, statics);
     const bool inPlace        = resolved.has_value() &&
                                 table.inPlaceForm((*resolved)->uri()).has_value() &&
                                 (*resolved)->funcType()->exitType() != nullptr &&
@@ -2246,13 +2245,12 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     const auto accepts = [&](FunctionType *funcType, bool entering) {
         StaticFuncTypeResolver resolver(funcType);
         if (!entering) {
-            return resolver.resolve(withInputTypes, normInputTypes, Modifier::None).has_value();
+            return resolver.resolve(withInputTypes, normInputTypes).has_value();
         }
         return resolver
             .resolve(
                 enteringTypes(funcType, withInputs, withInputTypes, true),
-                enteringTypes(funcType, normInputs, normInputTypes, false),
-                Modifier::None)
+                enteringTypes(funcType, normInputs, normInputTypes, false))
             .has_value();
     };
     // The dimension names a call binds (design principles 5.4), remembered for the checked
@@ -2479,8 +2477,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     expectedResult,
                     withInputTypes,
                     normInputTypes,
-                    kernelStatics,
-                    Modifier::None);
+                    kernelStatics);
                 resolved.has_value()) {
                 targetOperator = *resolved;
                 targetNode     = currGraph_->addOperNode(targetOperator, 0);
@@ -2927,8 +2924,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                             expectedResult,
                             withInputTypes,
                             normInputTypes,
-                            normStatics,
-                            Modifier::None)) {
+                            normStatics)) {
                         if (std::ranges::find(reasons, *reason) == reasons.end()) {
                             if (auto diag = resolver->rejectionDiag()) {
                                 if (dedicated.has_value() && *dedicated != *diag) {
@@ -2980,7 +2976,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                         const std::vector<StaticArg> statics(
                             normStatics.begin(),
                             normStatics.begin() + static_cast<std::ptrdiff_t>(normCount));
-                        if (ops->resolve(asWith, asNorm, statics, Modifier::None).has_value()) {
+                        if (ops->resolve(asWith, asNorm, statics).has_value()) {
                             argTypesStr += withArgumentsHint(ops->name(), normInputs, normCount);
                             break;
                         }

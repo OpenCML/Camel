@@ -20,16 +20,10 @@
 
 namespace camel::parse::syntax {
 
-/// Whether a type can start at the `n`-th token from the current one. A modifier starts one
-/// only as the head of a function type (`sync (x: int) => int`).
+/// Whether a type can start at the `n`-th token from the current one. A modifier does not: `sync`
+/// is a property of a block, and a function type has none (design principles 3.3).
 bool ParserImpl::typeStartsAt(uint32_t n) const {
-    TK kind = peek(n);
-    while (isModifier(kind)) {
-        kind = peek(++n);
-        if (kind != TK::LParen && kind != TK::Lt && !isModifier(kind)) {
-            return false;
-        }
-    }
+    const TK kind = peek(n);
     switch (kind) {
     case TK::Identifier:
     case TK::LParen:
@@ -214,8 +208,10 @@ void ParserImpl::parsePrimaryType() {
     case TK::KwEnum:
         return parseEnumType();
     case TK::Lt:
-    case TK::KwSync:
         return parseFuncType();
+    case TK::KwSync:
+        // A function type has no modifiers: `sync` belongs to a block (design principles 3.3).
+        return unexpected({SyntaxError::TypeExpression});
     case TK::KwTypeof: {
         // The operand stops before an assignment: `let v: typeof a = b` declares `v`.
         const size_t m = mark();
@@ -301,12 +297,9 @@ void ParserImpl::parseStructType() {
     close(m, NK::StructType);
 }
 
-/// funcType : modifiers? angledParams? parentParams '=>' typeExpr resourceClause?
+/// funcType : angledParams? parentParams '=>' typeExpr resourceClause?
 void ParserImpl::parseFuncType() {
     const size_t m = mark();
-    if (isModifier(cur_)) {
-        parseModifiers();
-    }
     if (cur_ == TK::Lt || cur_ == TK::LAngle) {
         parseAngledParams();
     }

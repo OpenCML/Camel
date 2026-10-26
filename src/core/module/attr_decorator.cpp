@@ -19,8 +19,7 @@ oper_group_ptr_t attrDecoratorGroup(
               std::move(signature),
               [withCount, acceptsWith = std::move(acceptsWith)](
                   const type::type_vec_t &with,
-                  const type::type_vec_t &norm,
-                  const ModifierSet &) -> std::optional<type::Type *> {
+                  const type::type_vec_t &norm) -> std::optional<type::Type *> {
                   if (norm.size() != 1 || norm[0]->code() != type::TypeCode::Function) {
                       return std::nullopt;
                   }

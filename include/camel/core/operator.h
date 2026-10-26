@@ -125,10 +125,9 @@ class OperatorGroup {
     const auto &resolvers() const { return resolvers_; }
 
     std::optional<oper_idx_ptr_t> resolve(
-        const type::type_vec_t &with, const type::type_vec_t &norm,
-        const ModifierSet &modifiers) const {
+        const type::type_vec_t &with, const type::type_vec_t &norm) const {
         for (const auto &[uri, resolver] : resolvers_) {
-            auto optType = resolver->resolve(with, norm, modifiers);
+            auto optType = resolver->resolve(with, norm);
             if (optType) {
                 return std::make_shared<OperatorIndex>(name_, std::move(*optType), uri);
             }
@@ -138,10 +137,9 @@ class OperatorGroup {
 
     /// Like resolve(), also passing the compile-time values of constant norm arguments.
     std::optional<oper_idx_ptr_t> resolve(
-        const type::type_vec_t &with, const type::type_vec_t &norm, type::static_args_t normStatics,
-        const ModifierSet &modifiers) const {
+        const type::type_vec_t &with, const type::type_vec_t &norm, type::static_args_t normStatics) const {
         for (const auto &[uri, resolver] : resolvers_) {
-            auto optType = resolver->resolveWith(with, norm, normStatics, modifiers);
+            auto optType = resolver->resolveWith(with, norm, normStatics);
             if (optType) {
                 return std::make_shared<OperatorIndex>(name_, std::move(*optType), uri);
             }
@@ -152,11 +150,10 @@ class OperatorGroup {
     /// A typed call: the type context is consumed by the resolver before a node is made.
     std::optional<oper_idx_ptr_t> resolveForCall(
         const type::type_vec_t &types, type::Type *expectedResult, const type::type_vec_t &with,
-        const type::type_vec_t &norm, type::static_args_t normStatics,
-        const ModifierSet &modifiers) const {
+        const type::type_vec_t &norm, type::static_args_t normStatics) const {
         for (const auto &[uri, resolver] : resolvers_) {
             auto result =
-                resolver->resolveForCall(types, expectedResult, with, norm, normStatics, modifiers);
+                resolver->resolveForCall(types, expectedResult, with, norm, normStatics);
             if (result) {
                 return std::make_shared<OperatorIndex>(name_, *result, uri);
             }

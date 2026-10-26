@@ -344,7 +344,7 @@ DebugCore::callAtFrame(ShadowFrame &f, const std::string &uri, const std::vector
     }
     type::FunctionType *signature = nullptr;
     try {
-        signature = resolver->resolve({}, norm, ModifierSet{}).value_or(nullptr);
+        signature = resolver->resolve({}, norm).value_or(nullptr);
     } catch (const std::exception &e) {
         answer.diagnostic = locatedDiagnostic(f, e.what());
         return answer;

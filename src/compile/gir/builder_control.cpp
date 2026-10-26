@@ -2817,7 +2817,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             // looked up by the group's name.
             if (const auto group = importedEntity("__iter__");
                 group.has_value() && group->isOperGroup()) {
-                elements = group->operGroup()->resolve({}, {type}, statics, Modifier::None);
+                elements = group->operGroup()->resolve({}, {type}, statics);
             }
             if (!elements.has_value()) {
                 diags_->of(SemanticDiag::LoopSequenceNotIterable)
@@ -4072,7 +4072,7 @@ bool Builder::inferLoopStateFromAppend(
     const auto group = importedOperatorGroupNamed("append");
     if (group != nullptr) {
         const std::vector<StaticArg> statics(1);
-        const auto resolved = group->resolve({element}, {newType}, statics, Modifier::None);
+        const auto resolved = group->resolve({element}, {newType}, statics);
         if (resolved.has_value()) {
             graph->retargetOperNode(next, *resolved);
         }
@@ -4332,7 +4332,7 @@ void Builder::markLoopStateInPlaceOne(
         return;
     }
     const std::vector<StaticArg> statics(1);
-    const auto owned = group->resolve({valueType}, {nodeTypeOf(port)}, statics, Modifier::None);
+    const auto owned = group->resolve({valueType}, {nodeTypeOf(port)}, statics);
     if (!owned.has_value()) {
         return;
     }
@@ -4345,7 +4345,7 @@ void Builder::markLoopStateInPlaceOne(
         return;
     }
     const auto copyOp =
-        copyGroup->resolve({}, {nodeTypeOf(initial[index])}, statics, Modifier::None);
+        copyGroup->resolve({}, {nodeTypeOf(initial[index])}, statics);
     if (!copyOp.has_value()) {
         return;
     }

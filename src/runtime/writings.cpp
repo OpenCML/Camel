@@ -6,6 +6,7 @@
 #include "camel/core/operator_table.h"
 #include "camel/core/tags.h"
 #include "camel/core/type/intern.h"
+#include "camel/core/type/text.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/draft_writes.h"
 
@@ -179,6 +180,15 @@ slot_t canonicalConstant(slot_t value, const camel::core::type::Type *type) {
     default:
         return value;
     }
+}
+
+/// Whether two constants are the same: the same type -- the same `Type`, by its canonical id, not
+/// by the address of whichever object states it, as the rest of this file compares types -- and the
+/// same value bits (see canonicalConstant). One predicate for every place a constant is compared.
+bool sameConstantValue(
+    slot_t a, const camel::core::type::Type *ta, slot_t b, const camel::core::type::Type *tb) {
+    return camel::core::type::sameCanonicalType(ta, tb) &&
+           canonicalConstant(a, ta) == canonicalConstant(b, tb);
 }
 
 /// The bytes a constant is keyed and compared by: its value's bits, with the bits that are not the
@@ -1440,9 +1450,7 @@ bool DraftWritings::matchFrom(
                 // `x * 3.0 + x * 3.0` has two DATA nodes of the same value.
                 const auto a = constantOf(bind[p.var]);
                 const auto b = constantOf(item.node);
-                same = a && b && a->second == b->second &&
-                       canonicalConstant(a->first, a->second) ==
-                           canonicalConstant(b->first, b->second);
+                same = a && b && sameConstantValue(a->first, a->second, b->first, b->second);
             }
             return same && matchFrom(context, work, at + 1, bind, bound, waits, commuted, emit);
         }
@@ -1455,8 +1463,7 @@ bool DraftWritings::matchFrom(
         }
     case Pattern::Kind::Constant: {
         const auto found = constantOf(item.node);
-        if (!found || found->second != p.type ||
-            canonicalConstant(found->first, p.type) != canonicalConstant(p.value, p.type)) {
+        if (!found || !sameConstantValue(found->first, found->second, p.value, p.type)) {
             return false;
         }
         return matchFrom(context, work, at + 1, bind, bound, waits, commuted, emit);
@@ -1654,9 +1661,8 @@ bool DraftWritings::matchFrom(
                         return acceptsType(q.type, th->dataType);
                     case Pattern::Kind::Constant: {
                         const auto found = constantOf(term);
-                        return found && found->second == q.type &&
-                               canonicalConstant(found->first, q.type) ==
-                                   canonicalConstant(q.value, q.type);
+                        return found &&
+                               sameConstantValue(found->first, found->second, q.value, q.type);
                     }
                     case Pattern::Kind::Op: {
                         // A term stands for its whole class: any writing of it is a candidate,
@@ -2281,8 +2287,7 @@ RuleMiss DraftWritings::whyNot(const Rule &rule, gc_node_ref_t node) {
         }
         case Pattern::Kind::Constant: {
             const auto found = constantOf(at);
-            if (!found || found->second != p.type ||
-                canonicalConstant(found->first, p.type) != canonicalConstant(p.value, p.type)) {
+            if (!found || !sameConstantValue(found->first, found->second, p.value, p.type)) {
                 return std::format(
                     "{} is {} where the pattern writes a constant", where, nodeText(draft_, at));
             }
