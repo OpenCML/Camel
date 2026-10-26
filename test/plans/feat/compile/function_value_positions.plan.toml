@@ -91,7 +91,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "partial_application_span"
-desc = "A partial application is a function value located at the expression itself: in `let g = inc<1>` both the FUNC node the value calls and the value node cover `inc<1>` (9:12-9:18), not the whole `let` statement (H9 1.6, H16 item 4)."
+desc = "A partial application is a function value located at the expression itself: in `let g = inc<1>` both the FUNC node the value calls and the value node cover `inc<1>` (9:12-9:18), not the whole `let` statement."
 kind = "behavior"
 case = "../../../cases/compile/function_values/partial_application_span.cml"
 args = ["${case}", "std::gir"]

@@ -70,7 +70,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "reduced_sort_refused"
-desc = "`sort` over an `f16[]` is refused where the call is written, not at run time (H393): the sorts have one declaration per element type and none takes a reduced-precision element type, so the call has nothing to compile through. SemanticDiag::ReducedPrecisionUnsupported names `sort` and `f16`, and the help says to read the value as f32 first; bf16 and f16 are numbers, and the old wording claimed to take what it refuses. The old spelling declared one generic `sort::<T>(xs: T[]): T[]` and refused the element type inside the C++ kernel (RuntimeDiag::OperandTypeUnsupported, 'an array of i32, i64, f32 or f64 values')."
+desc = "`sort` over an `f16[]` is refused where the call is written, not at run time : the sorts have one declaration per element type and none takes a reduced-precision element type, so the call has nothing to compile through. SemanticDiag::ReducedPrecisionUnsupported names `sort` and `f16`, and the help says to read the value as f32 first; bf16 and f16 are numbers, and the old wording claimed to take what it refuses. The old spelling declared one generic `sort::<T>(xs: T[]): T[]` and refused the element type inside the C++ kernel (RuntimeDiag::OperandTypeUnsupported, 'an array of i32, i64, f32 or f64 values')."
 kind = "negative"
 case = "../../../cases/modules/stdlib/reduced_sort_refused.cml"
 args = ["${case}"]

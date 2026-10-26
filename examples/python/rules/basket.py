@@ -2,7 +2,7 @@
 # Copyright (c) the OpenCML Organization
 # SPDX-License-Identifier: MIT
 
-"""A Python project whose pricing rules are a Camel module (H253).
+"""A Python project whose pricing rules are a Camel module.
 
 The Python side keeps everything that is Python's job -- the batches, the report, NumPy -- and the
 rules live in `rules.cml`: one function per tier, checked when the module loads rather than when a

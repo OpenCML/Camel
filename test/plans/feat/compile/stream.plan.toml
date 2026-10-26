@@ -2,7 +2,7 @@ id = "compile.stream"
 order = 336
 tier = "fast"
 tags = ["feat", "compile", "stream"]
-desc = "The stream surface of H248: `f..g` and the interval `a..b` (H248 group 1, slice A: the ruled readings of `..`, and the removal of `?..`); and the interval line of H426: the two-parameter `range(a, b)` is deleted, and `for i in 0..n` is fused by the compiler rather than materialised."
+desc = "The stream surface: `f..g` and the interval `a..b` (slice A of the stream plan: the ruled readings of `..`, and the removal of `?..`); and the interval line: the two-parameter `range(a, b)` is deleted, and `for i in 0..n` is fused by the compiler rather than materialised."
 
 [[tests]]
 name = "stream.composition"
@@ -497,7 +497,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.yield_keyword"
-desc = "`yield` is a control keyword: the token table lists it and `retStmt` reads it, so a program can no longer use it as a name. The H248 plan's negative acceptance for the generator slice (`docs/design/io-concurrency-streams/plan.cn.md:307`) is this program, its t9, which compiled and printed `1` while `yield` was an ordinary identifier."
+desc = "`yield` is a control keyword: the token table lists it and `retStmt` reads it, so a program can no longer use it as a name. The stream plan's negative acceptance for the generator slice (`docs/design/io-concurrency-streams/plan.cn.md:307`) is this program, its t9, which compiled and printed `1` while `yield` was an ordinary identifier."
 kind = "negative"
 case = "../../../cases/compile/stream/yield_keyword.cml"
 args = ["${case}"]
@@ -786,3 +786,126 @@ expect_exit = 0
 expect_stdout_exact = "3\n3\n3\n3\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
+
+[[tests]]
+name = "stream.consumed_in_loop"
+desc = "A stream written outside a loop and consumed in its body is consumed once per round (design principles 5.4): every round sees the same stream, so the pull is refused, and the diagnostic names the two writings that read it once -- the stream carried as the loop's state, and `for x in s`."
+kind = "negative"
+case = "../../../cases/compile/stream/consumed_in_loop.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StreamConsumedInLoop"
+expect_diagnostic_code = "0x030001ED"
+expect_diagnostic_line = 26
+expect_diagnostic_column = 57
+expect_output_contains = ["consumed once per round of this loop", "the loop this use stands in", "loop acc = 0, rest = s while", "for x in s"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.loop_state_consumes"
+desc = "The first writing the diagnostic names: the stream is the loop's own state, so each round pulls the port it was given and hands back the rest a pull answers. Two rounds of `count(3)` leave one element, which the `for` after the loop reads."
+kind = "behavior"
+case = "../../../cases/compile/stream/loop_state_consumes.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "2\n1\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.for_consumes"
+desc = "The second writing the diagnostic names: `for x in s` is the consumer a stream written outside a loop takes, and the loop it builds is the one that pulls it."
+kind = "behavior"
+case = "../../../cases/compile/stream/for_consumes.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "6\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.tee_consumers"
+desc = "`tee(s, n)` reads one stream from two places (design principles 5.4): the two streams it gives are each read once, so the program `stream.consumed_twice` writes without a tee -- a `for` over one stream and a pull of another -- compiles when the two readers are the two sides of a tee, and both sides see the same elements."
+kind = "behavior"
+case = "../../../cases/compile/stream/tee_consumers.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "9\n"
+expect_output_not_contains = ["[Warn]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.tee_result_is_tuple"
+desc = "The result of `tee` is a tuple: it crosses a function's signature as one value and taking it apart is what consumes the two streams, so a stream travels where a container cannot hold one and each side still reads every element."
+kind = "behavior"
+case = "../../../cases/compile/stream/tee_result_is_tuple.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "6\n6\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.tee_of_tee"
+desc = "A stream a `tee` gives is a stream like any other, so it may be split again: three readers of two tees see the same three elements, and the source is pulled once per element."
+kind = "behavior"
+case = "../../../cases/compile/stream/tee_of_tee.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "6\n6\n6\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.tee_hint_not_positive"
+desc = "`n` is a hint at how wide the buffer of a `tee` is expected to be -- the executor grows it rather than make a side wait -- so the only width that is no hint at all is refused where it is written: a constant `n` below 1, with the caret under the argument."
+kind = "negative"
+case = "../../../cases/compile/stream/tee_hint_not_positive.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TeeHintNotPositive"
+expect_diagnostic_code = "0x030001EF"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 47
+expect_output_contains = ["width '0' is below 1", "buffers the elements the other has not read yet", "the default of 8"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.tee_report"
+desc = "A profile session prints one `STREAM_TEE` line per tee, counting elements (and bytes where one element's size is known): the first tee is given a hint of 2 and its side reads 20 elements before the other reads any, so its peak is 20 and shows that the hint is not a bound; the second is given a hint wider than the implementation honours and reports the cap it was clamped to; the third is given no hint and reports the default."
+kind = "behavior"
+case = "../../../cases/compile/stream/tee_report.cml"
+args = ["${case}", "std::profile"]
+expect_exit = 0
+expect_stdout_contains = ["PROFILE camel", "streams - one line per tee", "STREAM_TEE {\"tee\":1,\"elem\":\"int\",\"elements\":20,\"peak\":20,\"elem_bytes\":8,\"bytes\":160,\"hint\":2,\"cap\":64}", "STREAM_TEE {\"tee\":2,\"elem\":\"int\",\"elements\":3,\"peak\":3,\"elem_bytes\":8,\"bytes\":24,\"hint\":64,\"cap\":64}", "STREAM_TEE {\"tee\":3,\"elem\":\"int\",\"elements\":3,\"peak\":3,\"elem_bytes\":8,\"bytes\":24,\"hint\":8,\"cap\":64}"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "stream.tee_report_element_size_unknown"
+desc = "A `tee` of a stream whose elements are not one fixed number of bytes reports the elements it pulled and the most it buffered, and leaves the bytes out (design principles 5.4): a string's length is part of its value, so a peak in bytes would state a number the tee never held."
+kind = "behavior"
+case = "../../../cases/compile/stream/tee_element_size_unknown.cml"
+args = ["${case}", "std::profile"]
+expect_exit = 0
+expect_stdout_contains = ["PROFILE camel", "streams - one line per tee", "STREAM_TEE {\"tee\":1,\"elem\":\"string\",\"elements\":3,\"peak\":3,\"hint\":8,\"cap\":64}"]
+expect_stdout_not_contains = ["elem_bytes"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "stream.tee_report_absent"
+desc = "A program with no tee is reported as it was: the same profile session, the same program shape as `stream.tee_report` without a tee, asserts the report and no line about a tee -- so what the change added is printed only where a tee is written."
+kind = "behavior"
+case = "../../../cases/compile/stream/tee_no_report.cml"
+args = ["${case}", "std::profile"]
+expect_exit = 0
+expect_stdout_contains = ["PROFILE camel", "operator calls", "6"]
+expect_stdout_not_contains = ["STREAM_TEE", "streams - one line per tee"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000

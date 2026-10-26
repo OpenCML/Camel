@@ -1346,7 +1346,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 
 [[tests]]
 name = "optional_logic"
-desc = "A `bool?` position applies to the whole `&&` / `||` / `??` / `!!` expression, once: the operands of `&&` / `||` are `bool` (4.2), the sides of `??` / `!!` are a `T?` and a `T` or the same `T?` (3.8), and a statement whose value nothing takes has no position of the enclosing arm (H119)."
+desc = "A `bool?` position applies to the whole `&&` / `||` / `??` / `!!` expression, once: the operands of `&&` / `||` are `bool` (4.2), the sides of `??` / `!!` are a `T?` and a `T` or the same `T?` (3.8), and a statement whose value nothing takes has no position of the enclosing arm."
 kind = "behavior"
 case = "../../../cases/compile/tagged/optional_logic.cml"
 args = ["${case}"]

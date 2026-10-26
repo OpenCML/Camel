@@ -354,7 +354,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "literal_range.exponent_is_float"
-desc = "A literal with an exponent is a floating-point number (design principles 5.1): `1e-2` is 0.01 and `15e-1` is 1.5; nothing is truncated and nothing is warned about. The warning the old reading used here (`IntegerLiteralTruncated`) was unreachable after H15h and is deleted (H15i)."
+desc = "A literal with an exponent is a floating-point number (design principles 5.1): `1e-2` is 0.01 and `15e-1` is 1.5; nothing is truncated and nothing is warned about. The warning the old reading used here (`IntegerLiteralTruncated`) is unreachable now and is deleted."
 kind = "behavior"
 case = "../../../cases/compile/literals/int_negative_exponent.cml"
 args = ["-E", "short", "${case}"]
@@ -431,7 +431,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "number_token_forms"
-desc = "The number tokens a literal and an entry argument share (H15i): hexadecimal, binary and `0o` octal integer tokens take a float position (`0xFF` is 255.0, `0b1010` 10.0, `0o77` 63.0), and a real token with leading zeros is unambiguous (`077.5` is 77.5). A leading-zero decimal integer (`077`) is a lexical error in source, while an entry argument reads it as 77 (entry_args.integer_leading_zero_is_decimal). The translated program is compared with camel on all of them (test/tools/cppexec/expect.txt)."
+desc = "The number tokens a literal and an entry argument share: hexadecimal, binary and `0o` octal integer tokens take a float position (`0xFF` is 255.0, `0b1010` 10.0, `0o77` 63.0), and a real token with leading zeros is unambiguous (`077.5` is 77.5). A leading-zero decimal integer (`077`) is a lexical error in source, while an entry argument reads it as 77 (entry_args.integer_leading_zero_is_decimal). The translated program is compared with camel on all of them (test/tools/cppexec/expect.txt)."
 kind = "behavior"
 case = "../../../cases/compile/literals/number_token_forms.cml"
 args = ["${case}", "${backend}"]

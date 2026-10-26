@@ -13,7 +13,7 @@ tags = ["feat", "modules", "io", "terminal"]
 
 [[tests]]
 name = "eprintln_without_import"
-desc = "`eprintln` is in the prelude (H134 question 2), so a program calls it without an import; it has println's declaration shape — it returns its first argument — and writes standard error, while the value printed by println goes to standard output."
+desc = "`eprintln` is in the prelude , so a program calls it without an import; it has println's declaration shape — it returns its first argument — and writes standard error, while the value printed by println goes to standard output."
 kind = "behavior"
 case = "../../../cases/modules/io/eprintln.cml"
 args = ["${case}", "${backend}"]
@@ -88,7 +88,7 @@ assert(resources('io:clear_input_buffer') === 'rmw ambient stdin; external', res
 
 [[tests]]
 name = "terminal_mode_and_a_read_are_ordered"
-desc = "Raw mode and reading input name the same `stdin` resource (H134 question 1), so a terminal-mode call and a stdin read in one body must keep their order: `test::resources` reports both nodes as touching `stdin` and reports the pair as ordered. The case would be red if raw mode went back to a resource of its own, because its node line would name that resource instead."
+desc = "Raw mode and reading input name the same `stdin` resource , so a terminal-mode call and a stdin read in one body must keep their order: `test::resources` reports both nodes as touching `stdin` and reports the pair as ordered. The case would be red if raw mode went back to a resource of its own, because its node line would name that resource instead."
 kind = "behavior"
 case = "../../../cases/modules/io/ordering.cml"
 args = ["${case}", "test::resources", "std::gir"]

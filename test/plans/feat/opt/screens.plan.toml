@@ -625,36 +625,36 @@ args = ["${case}", "std::opt check_screens=true", "std::null"]
 # the acceptance inputs for the contract above: the effects model's frozen graph, the `var`
 # cases the read/write model is measured on, and the two libraries the batch watches end to end.
 [[tests]]
-name = "h242.effects_model_edges"
+name = "screens.effects_model_edges"
 case = "../../../cases/linear/runtime/effects_model_edges.cml"
 args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
-name = "h242.order_edges"
+name = "screens.order_edges"
 case = "../../../cases/linear/runtime/order_edges.cml"
 args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
-name = "h242.sync_block_order"
+name = "screens.sync_block_order"
 case = "../../../cases/linear/runtime/sync_block_order.cml"
 args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
-name = "h242.var_read_before_callee_write"
+name = "screens.var_read_before_callee_write"
 case = "../../../cases/linear/byref/var_read_before_callee_write.cml"
 args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
-name = "h242.library_gemm"
+name = "screens.library_gemm"
 case = "../../../cases/compile/numeric/library_gemm.cml"
 args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
-name = "h242.grad_library"
+name = "screens.grad_library"
 case = "../../../cases/compile/numeric/grad_library.cml"
 args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
-name = "h242.gemm_library"
+name = "screens.gemm_library"
 case = "../../../cases/compile/numeric/gemm_library.cml"
 args = ["${case}", "std::opt check_screens=true", "std::null"]

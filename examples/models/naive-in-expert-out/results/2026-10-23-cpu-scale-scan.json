@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "what": "H240: the d=64/256/1024 scale scan re-measured with the system CBLAS as the default, in CPU time, with the kernel each run used and the decomposition of the d=1024 gap",
+  "what": "The d=64/256/1024 scale scan re-measured with the system CBLAS as the default, in CPU time, with the kernel each run used and the decomposition of the d=1024 gap",
   "generated_at": "2026-10-23T13:20:00+08:00",
   "machine": {
     "host": "tangshan88",

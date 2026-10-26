@@ -123,7 +123,7 @@ func loss(x: TokenStates, labels: i64[8, 16]): float {
     // one_hot reads a rank-1 index tensor, so flatten the labels and restore the position grid.
     let oh = reshape(one_hot(reshape(labels, [batch * sequence]), vocab),
                      [batch, sequence, vocab])
-    // `oh` is int64 and `p` is f32: the product's numeric promotion gives f32.  H17 has no dtype
+    // `oh` is int64 and `p` is f32: the product's numeric promotion gives f32.  There is no dtype
     // conversion written as a type (`f32(oh)` and `oh as f32[...]` are both refused), so this is
     // the typed form available today; no stringly `cast` is needed.
     let picked = sum(log(p) * oh, -1)

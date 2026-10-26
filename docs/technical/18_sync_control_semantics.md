@@ -233,19 +233,19 @@ func main(): int sync {
 以及建图器按 `synced_` 在相邻语句之间连控制边（3.3）。还没有接上的一处见 2.5：函数体不是同步块时嵌套的
 `sync { ... }` 块，它的块尾没有接到外层出口。
 
-### 3.5 控制边约简现在在哪（H95 结论）
+### 3.5 控制边约简现在在哪（本轮复核的结论）
 
 控制边的传递约简只有一个入口：`std::opt::order`（`OrderReductionPass::apply`，预算 `250000`）。建图器不做传递约简：`shouldAddSyncCtrlLink` 只在“同一前驱已经是直接值输入”时跳过一次控制边（`hasDirectDataDependency`），这是精确、局部的去重，不查路径。编码前的 `reduceControlDependencies(*prepared.draft, 8192)` 已删除。`include/camel/runtime/control.h` 的规则不变：删除 Port/Data 控制输入和值已蕴含的边，保留 BRCH/JOIN 边界与 GATE 的第一条 CTRL。
 
-H95 复测 H85 对比过的 6 个程序：带不带 `std::opt::order` 都与改动前逐字节相同，唯一例外是 `test/cases/linear/byref/element_assigned.cml` 在不带 `std::opt::order` 时多一条 `:var/take -> :op/assn_owned` 的 CTRL 边。那是 `:var/take` 与随后 `:op/assn_owned` 之间真实的顺序要求（`assn_owned` 要排在取出之后），`std::opt::order` 的传递约简会把它删掉；它不是使用关系，见下。
+本轮复核复测了上一轮对比过的 6 个程序：带不带 `std::opt::order` 都与改动前逐字节相同，唯一例外是 `test/cases/linear/byref/element_assigned.cml` 在不带 `std::opt::order` 时多一条 `:var/take -> :op/assn_owned` 的 CTRL 边。那是 `:var/take` 与随后 `:op/assn_owned` 之间真实的顺序要求（`assn_owned` 要排在取出之后），`std::opt::order` 的传递约简会把它删掉；它不是使用关系，见下。
 
-H85 把 `path_assigned_allocs.cml` 的 `2 0 0` 读成“多出的控制边让 `:var/take` 的结果多了一个使用者，原地改写因此又复制了一次”。H95 用分配计数和运行轨迹复核，结论不同：
+上一轮把 `path_assigned_allocs.cml` 的 `2 0 0` 读成“多出的控制边让 `:var/take` 的结果多了一个使用者，原地改写因此又复制了一次”。本轮用分配计数和运行轨迹复核，结论不同：
 
 1. 两个图（有/无约简）里 `:var/take` 都只复制一次，`path_assigned_allocs.cml` 的整段复制序列完全相同，计数差不在复制上。
 2. 第一个测量窗口里多出的 320 字节块是**数组字面量自己的构造**：GIR 是 `字面量(Data) -> COPY -> :var/new`，`COPY` 在无约简的图里被排在第一个 `std::mem::blocks()` 之后，在基线的图里排在它之前。
 3. 原因不在共享判定，而在顺序没有被写进图：`:op/mem::blocks()` 这个语句节点没有任何输入（jgir 里是根），`var v = [...]` 的声明也不进入同步链（`lastSyncedNode_` 只由读、调用、分支、循环更新），所以“先构造还是先测量”不受边约束；`computeExecutionOrder` 是从出口出发的 DFS 后序，边集一变，两个互不约束的节点就换了位置。字面量的构造除了这一次分配没有可观察效应，因此图没有违反 3.3/3.4，是测量窗口写得过宽。
 
-H95 把该用例改成用调用构造数组（`make_array()`）：调用是同步链上的语句，构造稳定地落在第一个窗口之前。四个后端在有/无 `std::opt::order` 时都是 `1 0 0`。
+本轮把该用例改成用调用构造数组（`make_array()`）：调用是同步链上的语句，构造稳定地落在第一个窗口之前。四个后端在有/无 `std::opt::order` 时都是 `1 0 0`。
 
 原地改写的共享判定不数使用者：它在建执行计划时按图定下来（`buildExecPlan`），随计划一起交给各后端执行。把值取走的读（`let y = xs`、传参、放进容器：`:var/get`）结束“旧值没有别的观察者”的证明，变量自己原地改写后的存储（`:op/assn_owned`）建立它，只喂给留不下引用的算子的读（`:var/peek`）不结束它；证明不了的格子（`var` 形参、被捕获的格子）交给更新算子在运行时问数组自己的计数（`Array::canWriteInPlace`）。控制边只表达顺序、不读值（3.3、3.4），所以加一条控制边不会让这条语句复制。
 

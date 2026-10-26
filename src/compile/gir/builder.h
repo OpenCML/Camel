@@ -973,6 +973,12 @@ class Builder {
     struct ArmBuild {
         DraftGraphBuilder *graph = nullptr;
         uint32_t region          = 0;
+        /// What the region is: a branch's arm, or the condition or the body of a loop. A loop's
+        /// round regions are the ones that run again on every round, which is what a stream
+        /// written outside the loop is consumed by.
+        runtime::GCRegionKind kind = runtime::GCRegionKind::Arm;
+        /// Where the region's own construct is written (the `if`, the loop).
+        camel::source::origin_id_t origin = camel::source::kInvalidOriginId;
         /// The first node the draft had room for when the arm began.
         draft_node_ref_t firstNode = 0;
         /// What the JOIN takes from the arm: its value, behind a GATE that waits for the
@@ -1012,9 +1018,18 @@ class Builder {
     /// principles 5.4), so two uses of one value are refused unless they stand in different arms
     /// of one branch.
     struct StreamConsumption {
-        DraftGraphBuilder *graph         = nullptr;
-        node_handle_t value              = 0;
-        std::vector<uint32_t> arms;
+        /// One region the use stands in: a branch's arm (only one of a branch runs, so two uses
+        /// in two of them are one consumer), or the condition or body of a loop (which runs on
+        /// every round, so a use in one of them consumes the value once per round).
+        struct ArmUse {
+            uint32_t region                   = 0;
+            bool round                        = false;
+            std::vector<node_handle_t> ports;
+            camel::source::origin_id_t origin = camel::source::kInvalidOriginId;
+        };
+        DraftGraphBuilder *graph          = nullptr;
+        node_handle_t value               = 0;
+        std::vector<ArmUse> arms;
         camel::source::origin_id_t origin = camel::source::kInvalidOriginId;
     };
     std::vector<StreamConsumption> streamConsumptions_;

@@ -196,7 +196,7 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F",
 
 [[tests]]
 name = "native.math_on_the_graph"
-desc = "A call of a per-type declaration of `math` is an OPER of the concrete URI (`math:abs_l`, `math:min_l`), not a CALL of the name and not a graph of the declaration; `sqrt` and `shl`, whose declaration is per spelling too, are OPERs of their C++ operators. This is the H19 trap-2 answer: the declarations are per-type overloads, not a generic family, so nothing is instantiated into a CALL."
+desc = "A call of a per-type declaration of `math` is an OPER of the concrete URI (`math:abs_l`, `math:min_l`), not a CALL of the name and not a graph of the declaration; `sqrt` and `shl`, whose declaration is per spelling too, are OPERs of their C++ operators. The declarations are per-type overloads, not a generic family, so nothing is instantiated into a CALL."
 kind = "behavior"
 case = "../../../cases/compile/native/math_declaration_import.cml"
 args = ["${case}", "std::gir"]
@@ -279,7 +279,7 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F",
 
 [[tests]]
 name = "native.random_sample_count_type"
-desc = "`rand:sample` declares its count as `int`: a `float` count is refused at the call, and the message lists the declaration's signature. The old C++ resolver checked only the array argument, so H202's count narrowing is pinned here ."
+desc = "`rand:sample` declares its count as `int`: a `float` count is refused at the call, and the message lists the declaration's signature. The old C++ resolver checked only the array argument, so the count narrowing is pinned here ."
 kind = "negative"
 case = "../../../cases/compile/native/random_sample_count_type.cml"
 args = ["${case}"]
@@ -813,7 +813,7 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F",
 
 [[tests]]
 name = "native.para_unordered_reduce_callback_arity"
-desc = "`para:unordered_reduce` declares its callback with exactly two ordinary parameters: a third one is refused at the call. The old C++ resolver checked only that the callback had at least two, so H202's callback-arity narrowing is pinned here ."
+desc = "`para:unordered_reduce` declares its callback with exactly two ordinary parameters: a third one is refused at the call. The old C++ resolver checked only that the callback had at least two, so the callback-arity narrowing is pinned here ."
 kind = "negative"
 case = "../../../cases/compile/native/para_unordered_reduce_callback_arity.cml"
 args = ["${case}"]

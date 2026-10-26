@@ -1,0 +1,95 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * Numeric operations on arrays of any rank that need more than one array or a change of layout:
+ * creation, reshaping, joining, matrix products, the operators between arrays, and the NumPy
+ * file form.
+ *
+ * There is no tensor type: a multi-dimensional array is `T[3, 4]` and an array of any rank is
+ * `T[..]`, and the element type `T` is part of the type. An operator takes arrays of one element
+ * type; there is no conversion between element types (integers and bools included), and a
+ * literal takes the type of the other operand. A conversion is written as the type, applied to
+ * every element: `f32(xs)`.
+ *
+ * - The array is the ordinary argument; the axis, the shape and the other settings that decide
+ *   which function it is are in angle brackets: `x->reshape<[2, 3]>`, `x->permute<[1, 0]>`.
+ * - Arithmetic and comparison of arrays are the operators `+ - * / % ^ < <= > >= === !==`,
+ *   elementwise with broadcasting; there are no functions of those names.
+ * - What lives elsewhere: the functions of one array that apply a scalar function to every
+ *   element (`exp`, `sqrt`, ...) are in `math`; reductions, `shape`, `numel` and the bytes of an
+ *   array are in `array`; activations and layers are in `nn`.
+ * - The functions whose result shape follows their arguments are written in
+ *   `stdlib/signatures/tensor.cml`; the ones whose signature is fixed are declared here.
+ */
+
+import { is_float, is_function, is_numeric, is_plain } from types
+import { any, drop } from array
+
+// ---- creation ----
+
+/// An array of the given extents whose elements are all value.
+/// @fails fault `InvalidArgument` when an extent is negative
+/// @example full([2, 2], -1.0)    // [[-1.0, -1.0], [-1.0, -1.0]]
+export func full::<T>(shape: int[], value: T): T[..] when is_plain::<T>()
+
+/// An array of the given extents whose elements are all 0. The element type is written
+/// (`zeros::<f32>([2, 3])`) or comes from the position of the call.
+/// @example zeros::<f32>([2, 3])    // [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
+export func zeros::<T>(shape: int[]): T[..] when is_numeric::<T>() {
+    return full(shape, T(0))
+}
+
+/// An array of the given extents whose elements are all 1.
+/// @example ones::<i32>([2])    // [1, 1]
+export func ones::<T>(shape: int[]): T[..] when is_numeric::<T>() {
+    return full(shape, T(1))
+}
+
+/// The n by n identity matrix.
+/// @example eye::<f32>(2)    // [[1.0, 0.0], [0.0, 1.0]]
+export func eye::<T>(n: int): T[..] when is_numeric::<T>() {
+    let row = (0..n)->reshape<[n, 1]>
+    let col = (0..n)->reshape<[1, n]>
+    return where(row === col, T(1), T(0))
+}
+
+/// Each label (an integer from 0 to classes - 1) as a row of classes with a 1 at its position:
+/// an array of shape [labels, classes].
+/// @fails fault `IndexOutOfRange` when a label is outside [0, classes)
+/// @example [0, 2]->one_hot::<f32><3>    // [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]
+with <classes: int>
+export func one_hot::<T>(labels: int[]): T[..] when is_numeric::<T>() {
+    let row = labels->reshape<[len(labels), 1]>
+    let col = (0..classes)->reshape<[1, classes]>
+    return if labels->any<(l) => l < 0 || l >= classes>
+        then fail<'IndexOutOfRange'>('a label is outside the classes')
+        else where(row === col, T(1), T(0))
+}
+
+/// The arrays joined along a new axis (axis 0 by default): all must have one shape and one
+/// element type.
+/// @fails fault `IndexOutOfRange` when there is no array; fault `TensorDimensionMismatch` when the shapes differ
+/// @example [[1.0, 2.0], [3.0, 4.0]]->stack<1>    // [[1.0, 3.0], [2.0, 4.0]]
+with <axis: int = 0>
+export func stack::<T>(parts: T[..][]): T[..] when is_numeric::<T>() {
+    let first = unsqueeze<axis>(parts[0])
+    return parts->drop<1>->reduce<(acc, p) => concat<axis>(acc, unsqueeze<axis>(p)), first>
+}
+
+// ---- files ----
+
+/// Writes an array to a NumPy `.npy` file, replacing it.
+/// @fails error value `PermissionDenied` when the file system refuses the write; error value `IOError` when the path is a directory or the write fails for another reason
+/// @example-fragment writes the file system when it runs, and the example only has the `void!` result to show
+/// @example [1.0, 2.0] as f32[2]->save_npy<'x.npy'>
+with <path: string>
+export func save_npy::<T>(t: T[..]): void! when is_numeric::<T>() uses fs
+
+// ---- passes ----
+
+/// Writes the implementation choices of the array operators as node attributes, changing no
+/// operator (design principles 9.3). `safe_fp` keeps a matmul on the canonical algorithm (design
+/// principles 7.4); the default lets a matmul the 7.3 rule permits use the library GEMM.
+with <safe_fp: bool = false>
+export func fuse::<F>(f: F): F! when is_function::<F>()

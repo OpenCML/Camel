@@ -1,0 +1,123 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * The computed signatures of the `tensor` module: the operators whose result shape or element
+ * type follows their arguments (broadcasting, the extents a layout change gives), so a
+ * declaration cannot state them. The C++ operators in `modules/tensor` are the one source of
+ * these types; this file is for reference only (it is not compiled) and feeds
+ * `docs/stdlib-reference.md` and the `--verify-ops` check. The fixed signatures, and the
+ * functions written in Camel, are in `stdlib/tensor.cml`.
+ *
+ * Every signature names the element type as a type variable of its head, with the condition the
+ * operation asks of it, and every array parameter of one operation shares that variable: an
+ * operator takes arrays of one element type, and a pair of different element types matches no
+ * signature (`f32[..] * f64[..]`, `f32[..] * bool[..]`). A scalar operand takes the element type
+ * (a literal adapts to it). Elementwise functions of one array (`exp`, `sqrt`, ...) and the
+ * conversions (`f32(xs)`) are the scalar functions of `math` and the core applied to every
+ * element; they are not repeated here.
+ */
+
+import { is_float, is_integer, is_numeric, is_plain } from types
+
+// ---- the operators of arrays ----
+
+// `+ - * / % ^` take two arrays of one numeric element type, or an array and a scalar of that
+// type, and give an array of that type; the extents broadcast as NumPy's do (axes are aligned
+// from the last, an extent of 1 stretches, anything else must agree: otherwise fault
+// `TensorDimensionMismatch`). `/` and `%` of floats are IEEE (x / 0 is an infinity or NaN); `%`
+// is the truncated remainder, with the sign of the left operand. Integer `/` and `%` by zero are
+// faults, as on scalars. `-x` flips the sign. `< <= > >=` and `=== !==` compare two arrays (or an
+// array and a scalar) of one element type and give a `bool` array of the broadcast shape.
+// `a == b` is one `bool`: the shapes agree and `a === b` holds everywhere.
+//
+// func operator +(a: T[..], b: T[..]): T[..] when is_numeric::<T>()
+// func operator -(a: T[..], b: T[..]): T[..] when is_numeric::<T>()
+// func operator *(a: T[..], b: T[..]): T[..] when is_numeric::<T>()
+// func operator /(a: T[..], b: T[..]): T[..] when is_numeric::<T>()
+// func operator %(a: T[..], b: T[..]): T[..] when is_integer::<T>() || is_float::<T>()
+// func operator ^(a: T[..], b: T[..]): T[..] when is_integer::<T>() || is_float::<T>()
+// func operator <(a: T[..], b: T[..]): bool[..] when is_integer::<T>() || is_float::<T>()
+// func operator ===(a: T[..], b: T[..]): bool[..] when is_plain::<T>()
+// func operator -(a: T[..]): T[..] when is_numeric::<T>()
+// func operator @(a: T[..], b: T[..]): T[..] when is_float::<T>()    // matmul
+
+// ---- elementwise, two arrays ----
+
+/// IEEE 754-2019 maximum per element, with broadcasting: NaN on either side gives the
+/// canonical quiet NaN, and -0 is below +0.
+/// @example maximum([1.0, -0.0] as float[2], 0.0)    // [1.0, 0.0]
+export func maximum::<T>(a: T[..], b: T[..]): T[..] when is_integer::<T>() || is_float::<T>()
+
+/// IEEE 754-2019 minimum per element, with broadcasting: NaN on either side gives the
+/// canonical quiet NaN, and -0 is below +0.
+/// @example minimum([1.0, -0.0] as float[2], 0.0)    // [0.0, -0.0]
+export func minimum::<T>(a: T[..], b: T[..]): T[..] when is_integer::<T>() || is_float::<T>()
+
+/// a where cond holds, b elsewhere, broadcast to one shape; a and b have one element type. A
+/// mask is never turned into a number by arithmetic: this is how it selects.
+/// @example where([true, false] as bool[2], [1.0, 2.0] as float[2], 0.0)    // [1.0, 0.0]
+export func where::<T>(cond: bool[..], a: T[..], b: T[..]): T[..] when is_plain::<T>()
+export func where::<T>(cond: bool[..], a: T[..], b: T): T[..] when is_plain::<T>()
+export func where::<T>(cond: bool[..], a: T, b: T[..]): T[..] when is_plain::<T>()
+export func where::<T>(cond: bool[..], a: T, b: T): T[..] when is_plain::<T>()
+
+// ---- shape and layout ----
+
+/// The elements in row-major order in a new shape; one extent may be -1, which the element count
+/// fills. When the shape is a constant the result type states its extents.
+/// @fails fault `TensorDimensionMismatch` when the extents do not multiply to the element count
+/// @example [1.0, 2.0, 3.0, 4.0]->reshape<[2, 2]>    // [[1.0, 2.0], [3.0, 4.0]]
+with <shape: int[]>
+export func reshape::<T>(x: T[..]): T[..] when is_plain::<T>()
+
+/// The elements unchanged, with an axis of extent 1 added at axis (negative counts from the end
+/// of the result).
+/// @fails fault `InvalidArgument` when the axis is outside the rank of the result
+/// @example [1.0, 2.0]->unsqueeze<0>    // [[1.0, 2.0]]
+with <axis: int>
+export func unsqueeze::<T>(x: T[..]): T[..] when is_plain::<T>()
+
+/// The last two axes swapped: a matrix becomes its transpose.
+/// @fails fault `TensorDimensionMismatch` when the rank is below 2
+/// @example [[1.0, 2.0], [3.0, 4.0]]->transpose    // [[1.0, 3.0], [2.0, 4.0]]
+export func transpose::<T>(x: T[..]): T[..] when is_plain::<T>()
+
+/// The axes reordered as perm lists them: axis i of the result is axis perm[i] of x.
+/// @fails fault `InvalidArgument` when perm is not a permutation of the axes
+/// @example [[1.0, 2.0], [3.0, 4.0]]->permute<[1, 0]>    // [[1.0, 3.0], [2.0, 4.0]]
+with <perm: int[]>
+export func permute::<T>(x: T[..]): T[..] when is_plain::<T>()
+
+/// a and b joined along axis (axis 0 by default, which for arrays of one dimension is the join
+/// `concat(a, b)` of the language); every other extent must agree.
+/// @fails fault `TensorDimensionMismatch` when an extent other than the axis differs
+/// @example concat<1>([[1.0]] as float[1, 1], [[2.0]] as float[1, 1])    // [[1.0, 2.0]]
+with <axis: int = 0>
+export func concat::<T>(a: T[..], b: T[..]): T[..] when is_plain::<T>()
+
+// ---- linear algebra ----
+
+/// The matrix product of a and b, batched over the leading axes: per output element acc = +0,
+/// then acc = fma(a[i][k], b[k][j], acc) for k ascending, every fused multiply-add rounded once
+/// in the element type (design principles 7.1). It is also the operator `@`.
+/// @fails fault `TensorDimensionMismatch` when the inner extents do not agree
+/// @example matmul([[1.0, 2.0]] as float[1, 2], [[3.0], [4.0]] as float[2, 1])    // [[11.0]]
+export func matmul::<T>(a: T[..], b: T[..]): T[..] when is_float::<T>()
+
+// ---- files ----
+
+// `load_npy` is computed: the element type of the result is the one the call declares, and a
+// declaration's parameters cannot mention a type variable that only the result mentions. Its
+// group is `loadNpyOperatorGroup` in `modules/tensor`.
+
+/// The array a NumPy `.npy` file holds, as the element type the program declares: the extents are
+/// the file's, and the file's element type must be `T` -- a file of another element type is an
+/// error, never a conversion (design principles 5.1, 5.5). `T` is `f32`, `f64`, `i32`, `i64` or
+/// `bool`, the element types the format's storage types map to. It is written at the call
+/// (`load_npy::<f32>`) or taken from the type of the position the call stands in.
+/// @fails error value `NotFound` or `PermissionDenied` or `IOError` as for `fs::read_bytes`; error value `ParseError` when the file is not a NumPy file, holds a storage type the module does not read, or holds another element type than `T`
+/// @example-fragment reads the file system when it runs
+/// @example 'x.npy'->load_npy::<f32>
+#op('tensor:load_npy_*')
+export func load_npy::<T>(path: string): T[..]! when is_numeric::<T>() uses fs

@@ -1,13 +1,13 @@
 # Rows, class labels and keys
 
-H20-2 and H20-3. This note records what the new operators do, the representation each one chose,
+The rows, labels and keys operators. This note records what the new operators do, the representation each one chose,
 the reverse rule and the export mapping, the keyed random algorithm, and the points left open. The
 authoritative semantic statements are in [design principles](../design-principles.cn.md) 5.4 and
 13.5.
 
 ## 1. `take`: rows along the first dimension
 
-`tensor::take(t, indices)` is the function form of `t[idx]` (design principles 5.4) until the H21
+`tensor::take(t, indices)` is the function form of `t[idx]` (design principles 5.4) until the
 indexing syntax lands. It takes rows along the first dimension:
 
 - `indices` is an `int[]` or a rank-1 integer tensor (`int64`, or `int32` from the array
@@ -60,7 +60,7 @@ the refusal is covered by the existing `trans.cpp` tests, not by the new plan.
 `tensor::one_hot(labels, classes)` accepts the same label forms as `take`'s indices and returns a
 2-D numeric tensor `[len(labels), classes]`, one 1.0 per row at its label and 0.0 elsewhere.
 
-- The element type is **f32**. H15 (literal context typing) has not landed, so there is no
+- The element type is **f32**. Literal context typing has not landed, so there is no
   per-element type annotation to choose e.g. f64; f32 is the tensor stack's default numeric type
   and what `nn` losses expect.
 - `classes < 0` is reported at compile time as `SemanticDiag::ArgumentsRejected` when constant
@@ -111,7 +111,7 @@ A key is 128 bits, represented as the struct
 type Key = { hi: int, lo: int }      // the value is (hi << 64) | lo, halves as unsigned bits
 ```
 
-Both fields are signed int64. This is the representation until nominal types (H5) exist; it
+Both fields are signed int64. This is the representation until nominal types exist; it
 prints deterministically as `{ hi: 1350887118657991639, lo: -7139630017956984517 }`, compares by
 content, and can be stored in trees/arrays like any struct. `random` exports the type, so
 `random.Key` names it. The interpreter and the generated C++ struct use the same field order, so
@@ -159,7 +159,7 @@ Commands and counts from this worktree (`out/latest`, Windows, clang 20):
 |---|---|
 | `node scripts/test.js test/plans/feat/modules/random.plan.toml --tier all --jobs 2` | 11/11 pass (four schedulers, generator independence, negative length, `std::cpp` agreement) |
 | `node scripts/test.js test/plans/feat/modules/tensor.plan.toml --jobs 6` | 50/50 pass, including the five new `take`/`one_hot` tests (the runtime and fault tests run on all four schedulers) |
-| `node scripts/test.js test/plans/feat/modules/nn.plan.toml --jobs 4` | 64/67 pass; the 3 failures are `mnist_py*`, which need the Python module's DLL (`python.cmo` loads but `python313.dll` is absent in this worktree), unrelated to H20; the two labels tests pass on all four schedulers (the three `mnist_py` cases were deleted on 2026-10-23: an early example that needed a network download for its data set and skipped silently when it could not get one) |
+| `node scripts/test.js test/plans/feat/modules/nn.plan.toml --jobs 4` | 64/67 pass; the 3 failures are `mnist_py*`, which need the Python module's DLL (`python.cmo` loads but `python313.dll` is absent in this worktree), unrelated to this work; the two labels tests pass on all four schedulers (the three `mnist_py` cases were deleted on 2026-10-23: an early example that needed a network download for its data set and skipped silently when it could not get one) |
 | `node scripts/test.js test/plans/feat/modules/onnx.plan.toml --jobs 4` | 102 pass, 0 fail, 19 skipped (no `onnx`/`onnxruntime`/`torch` Python packages) — `export_take` passes and checks one `Gather` + i64 initializer |
 | `node scripts/test.js test/plans/feat/modules/stdlib_registry.plan.toml --jobs 2` | 4/4 pass (purity, signatures, generated reference) |
 
@@ -170,17 +170,17 @@ Python packages.
 ## 5. Open questions
 
 1. **A bare `Tensor` target** cannot be classified at compile time, so `softmax_cross_entropy`
-   keeps the one-hot form for it. Once H15 literal/dtype refinements or a labels-typed view exists,
+   keeps the one-hot form for it. Once literal/dtype refinements or a labels-typed view exist,
    the overloads could be selected by the element type even when the caller only says `Tensor`.
    Passing integer labels through such a parameter is a type error the current compiler cannot
    report; it is not made a runtime branch because that would cost a dtype test per call.
-2. **`Key` as a struct** is a stopgap. H5 (nominal types) should make it opaque so that
+2. **`Key` as a struct** is a stopgap. Nominal types should make it opaque so that
    `hi`/`lo` are not names user code can rely on, while keeping the same printed form and bit
    layout for compatibility with existing keys.
 3. **`std::cpp` and tensors**: `take`, `one_hot` and the cross-entropy forms are refused until the
    standalone tensor bridge (phase 5) exists; only the keyed random operators are translated
    today. The report records this rather than adding a tensor representation to `std::cpp` in this
    change.
-4. **`one_hot` element type**: fixed to f32 because H15 has not landed. If H15 defines a context
+4. **`one_hot` element type**: fixed to f32 because literal context typing has not landed. If that lands and defines a context
    type for numeric array literals, `one_hot` should follow it; the labels-cross-entropy math
    already works in the logits' dtype.

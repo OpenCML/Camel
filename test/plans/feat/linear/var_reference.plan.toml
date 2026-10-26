@@ -1271,7 +1271,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "field_assigned"
-desc = "A store into a field of a `var` struct: the whole variable is rebound to the struct with that field changed (design principles 3.5, 6.11). It was an error before H23."
+desc = "A store into a field of a `var` struct: the whole variable is rebound to the struct with that field changed (design principles 3.5, 6.11). It used to be an error."
 kind = "behavior"
 case = "../../../cases/linear/byref/field_assigned.cml"
 args = ["${case}"]
@@ -1282,7 +1282,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "element_assigned"
-desc = "A store into an element of a `var` array: the whole variable is rebound to the array with that element changed, in place when it is not shared (design principles 3.5, 6.11). It was an error before H23."
+desc = "A store into an element of a `var` array: the whole variable is rebound to the array with that element changed, in place when it is not shared (design principles 3.5, 6.11). It used to be an error."
 kind = "behavior"
 case = "../../../cases/linear/byref/element_assigned.cml"
 args = ["${case}"]

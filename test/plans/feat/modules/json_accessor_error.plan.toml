@@ -37,7 +37,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "json.depth_limit"
-desc = "The depth limit is a fixed constant, not an environment variable (H16 question 4): the case decodes a document of exactly 10000 levels and gets JsonTooDeep for one of 10001 levels, at line 1, column 10001, naming the limit of 10000. The constant is named once, as kJsonMaxDepth in modules/json/operators.cpp; raising it makes the 10001-level document decode, lowering it makes the 10000-level one fail, so either change turns this case red."
+desc = "The depth limit is a fixed constant, not an environment variable : the case decodes a document of exactly 10000 levels and gets JsonTooDeep for one of 10001 levels, at line 1, column 10001, naming the limit of 10000. The constant is named once, as kJsonMaxDepth in modules/json/operators.cpp; raising it makes the 10001-level document decode, lowering it makes the 10000-level one fail, so either change turns this case red."
 kind = "behavior"
 case = "../../../cases/modules/std/json/depth_limit.cml"
 args = ["${case}", "${backend}"]

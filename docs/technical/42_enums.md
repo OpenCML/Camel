@@ -52,8 +52,8 @@ type Tree<T> = enum { Leaf, Node(Tree<T>, T, Tree<T>) }
 
 `std::nvm`、`std::fvm`、`std::jit`、`std::prl` 都只看见普通的构造、`__enum_*__` 调用、`BRCH`/`JOIN`，不需要为枚举加分支。`std::macro` 遇到能求值的部分照常求值，枚举值可以成为宏的结果并物化为常量。
 
-`onnx::export` 与 autodiff 拒绝：ONNX 是翻译目标还没有枚举的表示，autodiff 是"把依赖微分参数的值放进枚举"没有导数规则。两者都给出带位置的 `RuntimeDiag::TranslationRefused` / `MacroEvaluationFailed`，而不是返回 0 或崩溃。`std::cpp` 已经支持枚举（H8）：每个枚举生成一个带 `tag` 与 `std::variant` 载荷的 `struct`，构造与读取由声明生成的 `make<Tag>` / `get<Tag, Index>` 完成，打印与解释器逐字一致；实现见 `include/camel/standalone/enum.h`、`cpp_types.cpp` 与 `operator_rules.cpp`，测试见 `trans/cpp.plan.toml` 的 `enum_types` 与 `test/tools/cppexec/expect.txt`。
+`onnx::export` 与 autodiff 拒绝：ONNX 是翻译目标还没有枚举的表示，autodiff 是"把依赖微分参数的值放进枚举"没有导数规则。两者都给出带位置的 `RuntimeDiag::TranslationRefused` / `MacroEvaluationFailed`，而不是返回 0 或崩溃。`std::cpp` 已经支持枚举：每个枚举生成一个带 `tag` 与 `std::variant` 载荷的 `struct`，构造与读取由声明生成的 `make<Tag>` / `get<Tag, Index>` 完成，打印与解释器逐字一致；实现见 `include/camel/standalone/enum.h`、`cpp_types.cpp` 与 `operator_rules.cpp`，测试见 `trans/cpp.plan.toml` 的 `enum_types` 与 `test/tools/cppexec/expect.txt`。
 
 ## 留给语言作者的问题
 
-见 `` 的"待决问题"：变体跨模块的可见性、`T?`/`T!` 是否改由 `enum` 实现、泛型实参的推断范围、`json` 访问器是否接受 `Json!`。枚举作为 `Map` 键与 `Set` 元素已定（设计原则 11.3，H16 第 3 项）：所有字段都可作键时允许，顺序按变体声明顺序、再逐字段；实现见 `camel/core/type/collection.cpp` 的 `collectionKeyProblem`、`camel/core/rtdata/collection.cpp` 的 `compareKeys` 与 `docs/technical/31_map_and_set.md` 第 3.1 节。
+见 `` 的"待决问题"：变体跨模块的可见性、`T?`/`T!` 是否改由 `enum` 实现、泛型实参的推断范围、`json` 访问器是否接受 `Json!`。枚举作为 `Map` 键与 `Set` 元素已定（设计原则 11.3）：所有字段都可作键时允许，顺序按变体声明顺序、再逐字段；实现见 `camel/core/type/collection.cpp` 的 `collectionKeyProblem`、`camel/core/rtdata/collection.cpp` 的 `compareKeys` 与 `docs/technical/31_map_and_set.md` 第 3.1 节。

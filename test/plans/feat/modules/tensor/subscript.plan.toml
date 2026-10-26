@@ -39,7 +39,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "slice_rank2"
-desc = "A subscript slice of the first dimension of a tensor of rank 2 or more is the core's one slice (design principles 5.4: every `slice(...)` call is the core's): the rows the range names, every element of the other dimensions taken at the coordinate it has. A step of 1 along the first dimension of a compact array is a run of the block, so the slice is a view sharing it (design principles 5.4); it no longer waits for H17."
+desc = "A subscript slice of the first dimension of a tensor of rank 2 or more is the core's one slice (design principles 5.4: every `slice(...)` call is the core's): the rows the range names, every element of the other dimensions taken at the coordinate it has. A step of 1 along the first dimension of a compact array is a run of the block, so the slice is a view sharing it (design principles 5.4); it no longer waits for the native array work."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/subscript/slice_rank2.cml"
 args = ["${case}"]
@@ -85,7 +85,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "slice_step"
-desc = "A step other than 1 is the core's slice too: the positions the step names, as a copy that does not share the parent's block -- the deviation the flip line records for a stepped slice, the view with strides waiting for H17."
+desc = "A step other than 1 is the core's slice too: the positions the step names, as a copy that does not share the parent's block -- the deviation the flip line records for a stepped slice, the view with strides waiting for the native array work."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/subscript/slice_step.cml"
 args = ["${case}"]
@@ -200,7 +200,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "slice_step_negative"
-desc = "A negative step runs backwards on the core's one slice: `t[3:0:-1]` takes positions 3, 2 and 1 -- the end is where the walk stops -- and `t[3::-1]` takes all four, an end left out standing for the position before the first. A copy, not a view, as for any stepped slice; no gradient is built from a view with strides until H17."
+desc = "A negative step runs backwards on the core's one slice: `t[3:0:-1]` takes positions 3, 2 and 1 -- the end is where the walk stops -- and `t[3::-1]` takes all four, an end left out standing for the position before the first. A copy, not a view, as for any stepped slice; no gradient is built from a view with strides until the native array work lands."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/subscript/slice_step_negative.cml"
 args = ["${case}"]

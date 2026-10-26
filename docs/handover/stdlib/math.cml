@@ -1,0 +1,587 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * Scalar mathematics. One definition covers every type that has the operation: a function of
+ * floats is written once for `f32`, `float`, `bf16` and `f16` and answers the type it was given;
+ * a function of several numbers takes numbers of one type. Numeric types are not converted
+ * implicitly: `sqrt(4)` is refused, write `sqrt(4.0)` or `sqrt(float(n))`.
+ *
+ * - Outside its domain a float function gives the IEEE result (NaN or an infinity), not a fault.
+ *   Special values (zeros, infinities, NaN) are exact.
+ * - The transcendental functions are computed in f64 and rounded once into the type asked for.
+ *   They promise an error of at most 2 ulp (of the type's own precision, for `float`), not the
+ *   same bits on every device (design principles 7.1). `sqrt`, the rounding functions, `min` and
+ *   `max` are exact: the result is the correctly rounded or the selected operand.
+ * - `min` and `max` are the IEEE 754-2019 `minimum` and `maximum`: a NaN on either side gives
+ *   NaN, and -0 is below +0 (design principles 7.7).
+ * - Over an array the same function is applied to every element (last section): one definition,
+ *   `exp(xs)` is `xs->map<exp>`. The conversions `f32(xs)`, `float(xs)` are elementwise by the
+ *   same rule (core). `sum`, `mean`, `min`, `max` of a whole array belong to `array`.
+ * - Only what a program cannot compute from the language is native: the f64 kernels of the
+ *   elementary functions, the sign-exact selection of `min` and `max`, the parts of a complex
+ *   number, and the bit operations of an integer width.
+ */
+
+import { is_complex, is_float, is_integer, is_ordered, is_real, is_same } from types
+
+// ---- constants ----
+
+/// The ratio of a circle's circumference to its diameter.
+/// @example pi    // 3.14159...
+export let pi: float = 3.141592653589793
+
+/// The base of the natural logarithm.
+/// @example log(e)    // 1
+export let e: float = 2.718281828459045
+
+// Values the C++ module exports; a value has no declaration to write (stdlib-conventions 1).
+
+/// Positive infinity; negative infinity is -inf.
+/// @example is_inf(-inf)    // true
+// value inf: float
+
+/// A NaN. It equals nothing, itself included: test with is_nan.
+/// @example is_nan(nan)    // true
+// value nan: float
+
+// ---- the f64 kernels ----
+// The elementary functions in f64, one operator each. Every float type goes through them: the
+// operand widens to f64 exactly, and the result is rounded once into the type asked for.
+
+#op('math:sqrt_d')
+func sqrt_kernel(x: float): float
+#op('math:exp_d')
+func exp_kernel(x: float): float
+#op('math:expm1_d')
+func expm1_kernel(x: float): float
+#op('math:log_d')
+func log_kernel(x: float): float
+#op('math:log2_d')
+func log2_kernel(x: float): float
+#op('math:log10_d')
+func log10_kernel(x: float): float
+#op('math:log1p_d')
+func log1p_kernel(x: float): float
+#op('math:sin_d')
+func sin_kernel(x: float): float
+#op('math:cos_d')
+func cos_kernel(x: float): float
+#op('math:tan_d')
+func tan_kernel(x: float): float
+#op('math:asin_d')
+func asin_kernel(x: float): float
+#op('math:acos_d')
+func acos_kernel(x: float): float
+#op('math:atan_d')
+func atan_kernel(x: float): float
+#op('math:sinh_d')
+func sinh_kernel(x: float): float
+#op('math:cosh_d')
+func cosh_kernel(x: float): float
+#op('math:tanh_d')
+func tanh_kernel(x: float): float
+#op('math:floor_d')
+func floor_kernel(x: float): float
+#op('math:ceil_d')
+func ceil_kernel(x: float): float
+#op('math:round_d')
+func round_kernel(x: float): float
+#op('math:trunc_d')
+func trunc_kernel(x: float): float
+#op('math:pow_d')
+func pow_kernel(x: float, y: float): float
+#op('math:hypot_d')
+func hypot_kernel(x: float, y: float): float
+#op('math:atan2_d')
+func atan2_kernel(y: float, x: float): float
+// The IEEE 754-2019 minimum and maximum: a NaN gives NaN, -0 is below +0.
+#op('math:min_d')
+func min_kernel(a: float, b: float): float
+#op('math:max_d')
+func max_kernel(a: float, b: float): float
+
+// ---- elementary functions ----
+
+/// The square root; NaN for a negative x, and the square root of -0 is -0.
+/// @example sqrt(9.0)    // 3
+export func sqrt::<T>(x: T): T when is_float::<T>() {
+    return T(sqrt_kernel(float(x)))
+}
+
+/// e raised to the power x.
+/// @example exp(0.0)    // 1
+export func exp::<T>(x: T): T when is_float::<T>() {
+    return T(exp_kernel(float(x)))
+}
+
+/// e raised to the power of a complex number.
+/// @example exp(0.0+0.0i)    // 1+0i
+export func exp::<T>(z: T): T when is_complex::<T>() {
+    let r = exp(re(z))
+    let t = im(z)
+    return T(r * cos(t)) + T(r * sin(t)) * 1i
+}
+
+/// exp(x) - 1, accurate for x near 0.
+/// @example expm1(0.0)    // 0
+export func expm1::<T>(x: T): T when is_float::<T>() {
+    return T(expm1_kernel(float(x)))
+}
+
+/// The natural logarithm. log(0.0) is -inf, the logarithm of a negative number is NaN.
+/// @example log(1.0)    // 0
+export func log::<T>(x: T): T when is_float::<T>() {
+    return T(log_kernel(float(x)))
+}
+
+/// The logarithm to base 2.
+/// @example log2(8.0)    // 3
+export func log2::<T>(x: T): T when is_float::<T>() {
+    return T(log2_kernel(float(x)))
+}
+
+/// The logarithm to base 10.
+/// @example log10(1000.0)    // 3
+export func log10::<T>(x: T): T when is_float::<T>() {
+    return T(log10_kernel(float(x)))
+}
+
+/// log(1 + x), accurate for x near 0.
+/// @example log1p(0.0)    // 0
+export func log1p::<T>(x: T): T when is_float::<T>() {
+    return T(log1p_kernel(float(x)))
+}
+
+/// x raised to the power y. pow(0.0, 0.0) is 1; a negative x with a fractional y gives NaN.
+/// @example pow(2.0, 10.0)    // 1024
+export func pow::<T>(x: T, y: T): T when is_float::<T>() {
+    return T(pow_kernel(float(x), float(y)))
+}
+
+/// The square root of x*x + y*y, without overflow in the squares.
+/// @example hypot(3.0, 4.0)    // 5
+export func hypot::<T>(x: T, y: T): T when is_float::<T>() {
+    return T(hypot_kernel(float(x), float(y)))
+}
+
+/// The sine of x, x in radians.
+/// @example sin(0.0)    // 0
+export func sin::<T>(x: T): T when is_float::<T>() {
+    return T(sin_kernel(float(x)))
+}
+
+/// The cosine of x, x in radians.
+/// @example cos(0.0)    // 1
+export func cos::<T>(x: T): T when is_float::<T>() {
+    return T(cos_kernel(float(x)))
+}
+
+/// The tangent of x, x in radians.
+/// @example tan(0.0)    // 0
+export func tan::<T>(x: T): T when is_float::<T>() {
+    return T(tan_kernel(float(x)))
+}
+
+/// The arc sine, in radians; NaN outside -1 to 1.
+/// @example asin(1.0)    // 1.5708
+export func asin::<T>(x: T): T when is_float::<T>() {
+    return T(asin_kernel(float(x)))
+}
+
+/// The arc cosine, in radians; NaN outside -1 to 1.
+/// @example acos(1.0)    // 0
+export func acos::<T>(x: T): T when is_float::<T>() {
+    return T(acos_kernel(float(x)))
+}
+
+/// The arc tangent, in radians.
+/// @example atan(1.0)    // 0.785398
+export func atan::<T>(x: T): T when is_float::<T>() {
+    return T(atan_kernel(float(x)))
+}
+
+/// The angle of the point (x, y) in radians, between -pi and pi. Note the order: y first.
+/// @example atan2(1.0, 1.0)    // 0.785398
+export func atan2::<T>(y: T, x: T): T when is_float::<T>() {
+    return T(atan2_kernel(float(y), float(x)))
+}
+
+/// The hyperbolic sine.
+/// @example sinh(0.0)    // 0
+export func sinh::<T>(x: T): T when is_float::<T>() {
+    return T(sinh_kernel(float(x)))
+}
+
+/// The hyperbolic cosine.
+/// @example cosh(0.0)    // 1
+export func cosh::<T>(x: T): T when is_float::<T>() {
+    return T(cosh_kernel(float(x)))
+}
+
+/// The hyperbolic tangent.
+/// @example tanh(0.0)    // 0
+export func tanh::<T>(x: T): T when is_float::<T>() {
+    return T(tanh_kernel(float(x)))
+}
+
+// ---- rounding ----
+
+/// The largest whole number not above x, as a float.
+/// @example floor(-2.5)    // -3
+export func floor::<T>(x: T): T when is_float::<T>() {
+    return T(floor_kernel(float(x)))
+}
+
+/// The smallest whole number not below x, as a float.
+/// @example ceil(2.1)    // 3
+export func ceil::<T>(x: T): T when is_float::<T>() {
+    return T(ceil_kernel(float(x)))
+}
+
+/// The nearest whole number, halves away from zero, as a float.
+/// @example round(2.5)    // 3
+export func round::<T>(x: T): T when is_float::<T>() {
+    return T(round_kernel(float(x)))
+}
+
+/// x without its fraction (rounded toward zero), as a float.
+/// @example trunc(-2.7)    // -2
+export func trunc::<T>(x: T): T when is_float::<T>() {
+    return T(trunc_kernel(float(x)))
+}
+
+// ---- comparing ----
+
+/// The smaller of two values of one ordered type. For numbers this is the IEEE 754 minimum: a
+/// NaN on either side gives NaN, and -0 is below +0. Strings compare by code point (a proper
+/// prefix first), and false is below true.
+/// @example min(3, 5)    // 3
+/// @example min('b', 'a')    // 'a'
+export func min::<T>(a: T, b: T): T when is_ordered::<T>() {
+    return match type T {
+        case float | f32 | bf16 | f16 => T(min_kernel(float(a), float(b)))
+        case bool => a & b
+        case _ => if b < a then b else a
+    }
+}
+
+/// The larger of two values of one ordered type. For numbers this is the IEEE 754 maximum: a
+/// NaN on either side gives NaN, and -0 is below +0. Strings compare by code point (a proper
+/// prefix first), and false is below true.
+/// @example max(3, 5)    // 5
+/// @example max('a', 'b')    // 'b'
+export func max::<T>(a: T, b: T): T when is_ordered::<T>() {
+    return match type T {
+        case float | f32 | bf16 | f16 => T(max_kernel(float(a), float(b)))
+        case bool => a | b
+        case _ => if a < b then b else a
+    }
+}
+
+/// x held between lo and hi: lo when x is below, hi when above. A NaN x stays NaN.
+/// @fails fault `InvalidArgument` when lo is above hi, or a bound is NaN
+/// @example clamp(15, 0, 10)    // 10
+export func clamp::<T>(x: T, lo: T, hi: T): T when is_real::<T>() {
+    return if !(lo <= hi) then fail<'InvalidArgument'>('clamp needs lo <= hi') else min(max(x, lo), hi)
+}
+
+/// The absolute value of an integer or a float. The sign of a zero is cleared, a NaN stays a NaN,
+/// and the smallest integer is its own absolute value (negation wraps, as it does in `-x`).
+/// @example abs(-3)    // 3
+export func abs::<T>(x: T): T when is_real::<T>() {
+    return max(x, -x)
+}
+
+/// The modulus of a single-precision complex number.
+/// @example abs(c64(3.0)+4.0i)    // 5
+export func abs(z: c64): f32 {
+    return hypot(re(z), im(z))
+}
+
+/// The modulus of a double-precision complex number.
+/// @example abs(3.0+4.0i)    // 5
+export func abs(z: c128): float {
+    return hypot(re(z), im(z))
+}
+
+/// -1, 0 or 1 by the sign of x, in the type of x. A zero and a NaN are returned as they are.
+/// @example sign(-2.5)    // -1
+export func sign::<T>(x: T): T when is_real::<T>() {
+    return if x > 0 then 1 else if x < 0 then -1 else x
+}
+
+/// Whether x is a NaN.
+/// @example is_nan(inf - inf)    // true
+export func is_nan::<T>(x: T): bool when is_float::<T>() {
+    return x != x
+}
+
+/// Whether x is positive or negative infinity.
+/// @example is_inf(1.0)    // false
+export func is_inf::<T>(x: T): bool when is_float::<T>() {
+    return abs(float(x)) == inf
+}
+
+/// Whether x is neither a NaN nor an infinity.
+/// @example is_finite(1.0)    // true
+export func is_finite::<T>(x: T): bool when is_float::<T>() {
+    return abs(float(x)) < inf
+}
+
+// ---- complex numbers ----
+// The parts of a complex number are native: the result type is not the argument's.
+
+/// The real part of a complex number.
+/// @example re(3.0+4.0i)    // 3.0
+#op('math:re_c')
+export func re(z: c64): f32
+#op('math:re_z')
+export func re(z: c128): float
+
+/// The imaginary part of a complex number.
+/// @example im(3.0+4.0i)    // 4.0
+#op('math:im_c')
+export func im(z: c64): f32
+#op('math:im_z')
+export func im(z: c128): float
+
+/// The conjugate of a complex number: the imaginary part is negated, a zero's sign included.
+/// @example conj(3.0+4.0i)    // 3-4i
+#op('math:conj_c')
+export func conj::<T>(z: T): T when is_same::<T, c64>()
+#op('math:conj_z')
+export func conj::<T>(z: T): T when is_same::<T, c128>()
+
+// ---- integers ----
+
+/// The greatest common divisor, never negative; gcd(0, 0) is 0. The smallest integer, which has
+/// no positive counterpart, is not accepted.
+/// @fails fault `InvalidArgument` when an argument is the smallest integer of its type
+/// @example gcd(12, 18)    // 6
+export func gcd::<T>(a: T, b: T): T when is_integer::<T>() {
+    return if abs(a) < 0 || abs(b) < 0
+        then fail<'InvalidArgument'>('gcd does not accept the smallest integer')
+        else gcd_of(abs(a), abs(b))
+}
+
+// Euclid's algorithm on non-negative numbers; a tail call.
+func gcd_of::<T>(a: T, b: T): T {
+    return if b == 0 then a else gcd_of(b, a % b)
+}
+
+/// The least common multiple, never negative; 0 when either argument is 0.
+/// @fails fault `InvalidArgument` when an argument is the smallest integer, or the result does not fit the type
+/// @example lcm(4, 6)    // 12
+export func lcm::<T>(a: T, b: T): T when is_integer::<T>() {
+    let g = gcd(a, b)
+    let q = if g == 0 then 0 else abs(a) / g
+    let r = q * abs(b)
+    return if q != 0 && (r < 0 || r / q != abs(b)) then fail<'InvalidArgument'>('lcm does not fit the type') else r
+}
+
+// ---- bits ----
+//
+// Bit operations are functions, not operators (`&` and `|` are logical). Integers are two's
+// complement: `int` has 64 bits, `i32` has 32. One declaration per width, because the operator
+// that runs differs; the name and the signature are one generic.
+
+/// The bits set in both a and b.
+/// @example bit_and(12, 10)    // 8
+#op('math:bit_and_i')
+export func bit_and::<T>(a: T, b: T): T when is_same::<T, i32>()
+#op('math:bit_and_l')
+export func bit_and::<T>(a: T, b: T): T when is_same::<T, int>()
+
+/// The bits set in a or in b.
+/// @example bit_or(12, 10)    // 14
+#op('math:bit_or_i')
+export func bit_or::<T>(a: T, b: T): T when is_same::<T, i32>()
+#op('math:bit_or_l')
+export func bit_or::<T>(a: T, b: T): T when is_same::<T, int>()
+
+/// The bits set in exactly one of a and b.
+/// @example bit_xor(12, 10)    // 6
+#op('math:bit_xor_i')
+export func bit_xor::<T>(a: T, b: T): T when is_same::<T, i32>()
+#op('math:bit_xor_l')
+export func bit_xor::<T>(a: T, b: T): T when is_same::<T, int>()
+
+/// x shifted left by count bits: bits shifted out are lost and zeros come in, so the sign may
+/// change.
+/// @fails fault `InvalidArgument` when count is negative or not below the width of x (64 for int, 32 for i32)
+/// @example 1->shl<4>    // 16
+#op('math:shl_i')
+with <count: int>
+export func shl::<T>(x: T): T when is_same::<T, i32>()
+#op('math:shl_l')
+with <count: int>
+export func shl::<T>(x: T): T when is_same::<T, int>()
+
+/// x shifted right by count bits, keeping the sign (an arithmetic shift): `-8->shr<1>` is -4.
+/// @fails fault `InvalidArgument` when count is negative or not below the width of x
+/// @example 256->shr<4>    // 16
+#op('math:shr_i')
+with <count: int>
+export func shr::<T>(x: T): T when is_same::<T, i32>()
+#op('math:shr_l')
+with <count: int>
+export func shr::<T>(x: T): T when is_same::<T, int>()
+
+// ---- over arrays ----
+//
+// A function of one number is also a function of an array of numbers, by the same definition:
+// the scalar function applied to every element (`map`), the shape kept. There is no second
+// semantics for arrays, so a tensor library does not define `exp` again; it only supplies a
+// faster kernel for this definition under `#impl`. Functions of two numbers (`pow`, `min`, ...)
+// are `zip_with` of the scalar one; broadcasting is the business of the arithmetic operators.
+
+/// `sqrt` of every element, in an array of the same shape.
+/// @example [0.5, 1.0]->sqrt
+export func sqrt::<T>(x: T[..]): T[..] when is_float::<T>() {
+    return x->map<sqrt>
+}
+
+/// `exp` of every element, in an array of the same shape.
+/// @example [0.5, 1.0]->exp
+export func exp::<T>(x: T[..]): T[..] when is_float::<T>() {
+    return x->map<exp>
+}
+
+/// `expm1` of every element, in an array of the same shape.
+/// @example [0.5, 1.0]->expm1
+export func expm1::<T>(x: T[..]): T[..] when is_float::<T>() {
+    return x->map<expm1>
+}
+
+/// `log` of every element, in an array of the same shape.
+/// @example [0.5, 1.0]->log
+export func log::<T>(x: T[..]): T[..] when is_float::<T>() {
+    return x->map<log>
+}
+
+/// `log2` of every element, in an array of the same shape.
+/// @example [0.5, 1.0]->log2
+export func log2::<T>(x: T[..]): T[..] when is_float::<T>() {
+    return x->map<log2>
+}
+
+/// `log10` of every element, in an array of the same shape.
+/// @example [0.5, 1.0]->log10
+export func log10::<T>(x: T[..]): T[..] when is_float::<T>() {
+    return x->map<log10>
+}
+
+/// `log1p` of every element, in an array of the same shape.
+/// @example [0.5, 1.0]->log1p
+export func log1p::<T>(x: T[..]): T[..] when is_float::<T>() {
+    return x->map<log1p>
+}
+
+/// `sin` of every element, in an array of the same shape.
+/// @example [0.5, 1.0]->sin
+export func sin::<T>(x: T[..]): T[..] when is_float::<T>() {
+    return x->map<sin>
+}
+
+/// `cos` of every element, in an array of the same shape.
+/// @example [0.5, 1.0]->cos
+export func cos::<T>(x: T[..]): T[..] when is_float::<T>() {
+    return x->map<cos>
+}
+
+/// `tan` of every element, in an array of the same shape.
+/// @example [0.5, 1.0]->tan
+export func tan::<T>(x: T[..]): T[..] when is_float::<T>() {
+    return x->map<tan>
+}
+
+/// `asin` of every element, in an array of the same shape.
+/// @example [0.5, 1.0]->asin
+export func asin::<T>(x: T[..]): T[..] when is_float::<T>() {
+    return x->map<asin>
+}
+
+/// `acos` of every element, in an array of the same shape.
+/// @example [0.5, 1.0]->acos
+export func acos::<T>(x: T[..]): T[..] when is_float::<T>() {
+    return x->map<acos>
+}
+
+/// `atan` of every element, in an array of the same shape.
+/// @example [0.5, 1.0]->atan
+export func atan::<T>(x: T[..]): T[..] when is_float::<T>() {
+    return x->map<atan>
+}
+
+/// `sinh` of every element, in an array of the same shape.
+/// @example [0.5, 1.0]->sinh
+export func sinh::<T>(x: T[..]): T[..] when is_float::<T>() {
+    return x->map<sinh>
+}
+
+/// `cosh` of every element, in an array of the same shape.
+/// @example [0.5, 1.0]->cosh
+export func cosh::<T>(x: T[..]): T[..] when is_float::<T>() {
+    return x->map<cosh>
+}
+
+/// `tanh` of every element, in an array of the same shape.
+/// @example [0.5, 1.0]->tanh
+export func tanh::<T>(x: T[..]): T[..] when is_float::<T>() {
+    return x->map<tanh>
+}
+
+/// `floor` of every element, in an array of the same shape.
+/// @example [0.5, 1.0]->floor
+export func floor::<T>(x: T[..]): T[..] when is_float::<T>() {
+    return x->map<floor>
+}
+
+/// `ceil` of every element, in an array of the same shape.
+/// @example [0.5, 1.0]->ceil
+export func ceil::<T>(x: T[..]): T[..] when is_float::<T>() {
+    return x->map<ceil>
+}
+
+/// `round` of every element, in an array of the same shape.
+/// @example [0.5, 1.0]->round
+export func round::<T>(x: T[..]): T[..] when is_float::<T>() {
+    return x->map<round>
+}
+
+/// `trunc` of every element, in an array of the same shape.
+/// @example [0.5, 1.0]->trunc
+export func trunc::<T>(x: T[..]): T[..] when is_float::<T>() {
+    return x->map<trunc>
+}
+
+/// `abs` of every element, in an array of the same shape.
+/// @example [-1.5, 2.0]->abs
+export func abs::<T>(x: T[..]): T[..] when is_real::<T>() {
+    return x->map<abs>
+}
+
+/// `sign` of every element, in an array of the same shape.
+/// @example [-1.5, 2.0]->sign
+export func sign::<T>(x: T[..]): T[..] when is_real::<T>() {
+    return x->map<sign>
+}
+
+/// `is_nan` of every element, as a `bool` array of the same shape.
+/// @example [1.0, nan]->is_nan
+export func is_nan::<T>(x: T[..]): bool[..] when is_float::<T>() {
+    return x->map<is_nan>
+}
+
+/// `is_inf` of every element, as a `bool` array of the same shape.
+/// @example [1.0, nan]->is_inf
+export func is_inf::<T>(x: T[..]): bool[..] when is_float::<T>() {
+    return x->map<is_inf>
+}
+
+/// `is_finite` of every element, as a `bool` array of the same shape.
+/// @example [1.0, nan]->is_finite
+export func is_finite::<T>(x: T[..]): bool[..] when is_float::<T>() {
+    return x->map<is_finite>
+}

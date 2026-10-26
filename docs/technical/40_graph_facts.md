@@ -87,12 +87,12 @@ A pass can also change declarations: loading a module declares its operators, an
 declaration increments `OperatorTable::declarationEpoch()` (`operator_table.h`). A fact of a kind
 that reads declarations is therefore stale after any module load, even when the graph it is about
 did not change. `std::opt` does this: its algebra phase resolves `rules::simplify`, which imports
-the `rules` library, and that imports `math` (H100, `resolvePassWithModule` in
+the `rules` library, and that imports `math` (`resolvePassWithModule` in
 `src/execute/pass.cpp`); the epoch moves on its first run. The stamp is conservative by design
 (10.3 lists the declaration epoch beside the graph revision, and a kind opts in with
 `readsDeclarations`), so this is invalidation, not a defect: the recompute path is reached and the
 facts are rebuilt. A case must not turn the resulting totals into the property — `FACTS epoch` and
-`FACTS revision` say *why* a fact went stale, and the per-kind lines say which facts did (H121).
+`FACTS revision` say *why* a fact went stale, and the per-kind lines say which facts did.
 
 A detached copy (the working copy of autodiff) keeps the GraphId of its graphs; the graph that held a loop gets a new revision, so facts computed on the program are valid on the copy where nothing changed.
 

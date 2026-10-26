@@ -1461,7 +1461,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "loop_grad_struct_state"
-desc = "A struct loop state is differentiable: the state is one struct, its tangent is the same struct, and the reverse pass reads the fields it needs. Before this, the forward rewrite took the programme's field read (`q.a`) for the loop's state projection, and the graph crashed while being scheduled (SIGSEGV: a struct access on a tuple). The shapes: a struct state the body also uses as a whole (`sumP(q)`, so H71's split into fields does not apply), a nested struct state, a struct state with an int field (its tangent is `{a}`), a one-field struct state, and a state whose struct part stays whole beside a counter. Every gradient is 24 (a·(1 + d) over d = 1, 2, 3), the same as the tuple-state reference; `mixedPart` adds b·d with b = 1, so its gradient is 1; a struct state whose array field is appended gives 2 in place and 6 when the round must be taped; a struct parameter tree differentiates to `{p: {a: 4, b: 4}, c: 4}`."
+desc = "A struct loop state is differentiable: the state is one struct, its tangent is the same struct, and the reverse pass reads the fields it needs. Before this, the forward rewrite took the programme's field read (`q.a`) for the loop's state projection, and the graph crashed while being scheduled (SIGSEGV: a struct access on a tuple). The shapes: a struct state the body also uses as a whole (`sumP(q)`, so the split into fields does not apply), a nested struct state, a struct state with an int field (its tangent is `{a}`), a one-field struct state, and a state whose struct part stays whole beside a counter. Every gradient is 24 (a·(1 + d) over d = 1, 2, 3), the same as the tuple-state reference; `mixedPart` adds b·d with b = 1, so its gradient is 1; a struct state whose array field is appended gives 2 in place and 6 when the round must be taped; a struct parameter tree differentiates to `{p: {a: 4, b: 4}, c: 4}`."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/loop_grad_struct_state.cml"
 args = ["${case}", "${backend}"]
@@ -1750,7 +1750,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "loop_grad_capture_active"
-desc = "A loop whose body reads an element of a captured array that depends on the differentiated parameter: arrays have tangents (the array of their elements' tangents), so the read scatters each round's element gradient back into the capture. f(w) = ys[0] twice with ys = [w, 2.0] gives the gradient 2 (H22; this used to be refused as an array without a cotangent)."
+desc = "A loop whose body reads an element of a captured array that depends on the differentiated parameter: arrays have tangents (the array of their elements' tangents), so the read scatters each round's element gradient back into the capture. f(w) = ys[0] twice with ys = [w, 2.0] gives the gradient 2 (this used to be refused as an array without a cotangent)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/loop_grad_refuse_capture.cml"
 args = ["${case}", "${run_nvm}"]
