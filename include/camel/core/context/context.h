@@ -207,6 +207,23 @@ class Context : public std::enable_shared_from_this<Context> {
         const EntryConfig &entryConf       = EntryConfig(),
         const error::DiagsConfig &diagConf = error::DiagsConfig());
 
+    /**
+     * A handle to this context that does not keep it alive.
+     *
+     * The context owns the modules, the executor manager and the builders it made, and those
+     * objects refer back to it (a module registers its executors and compiles its programs on the
+     * context it belongs to, and a pass compiles on the context whose graph it is rewriting). The
+     * reference they hold must not be an owning one: a context whose own members hold it is kept
+     * alive by itself, never reaches its destructor, and a context that is not the last one of the
+     * process is then never destroyed -- neither the allocator registration it gives back nor the
+     * deferred releases it drains ever happen, and a run that builds a context per iteration keeps
+     * every one of them. A caller that holds an owning `context_ptr_t` passes `handle()` to what
+     * the context will own, and the object that receives it must not outlive the context (design
+     * principles 10.5: how the registration of an object root set is held is implementation, not
+     * semantics).
+     */
+    context_ptr_t handle() const;
+
     bool requireEntry() const { return entryConfig_.requireEntry; }
     /// The command that does not execute the program (an inspection or a translation pass)
     /// lifts the entry requirement after the context is created, before the program is built.

@@ -55,6 +55,14 @@ size_t liveContextCount() noexcept {
     return gLiveContexts.load(std::memory_order_acquire);
 }
 
+context_ptr_t Context::handle() const {
+    // A control block of this object's own with a deleter that does nothing: the handle never
+    // keeps the context alive and never frees it, and it is not the control block of the owning
+    // pointer, so taking one changes no reference count and the context keeps whatever lifetime
+    // its owner gave it (see the declaration in context.h).
+    return context_ptr_t(const_cast<Context *>(this), [](Context *) noexcept {});
+}
+
 namespace {
 
 /// The exit code the value returned by the entry graph stands for. Only a declared return
