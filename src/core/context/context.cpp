@@ -103,8 +103,11 @@ Context::~Context() {
     builtinModules_.clear();
     exeMgr_.reset();
     if (runtimeGraphMgr_) {
-        camel::core::mm::autoSpace().setObjectRootSet(nullptr);
-        camel::core::mm::autoSpace().setGraphSweeper(nullptr);
+        // The allocator is one per process and holds one root set and one sweeper per context:
+        // this destructor gives back its own, and only its own, so a context that keeps running
+        // beside this one keeps its graph roots marked and its graph space swept.
+        camel::core::mm::autoSpace().unregisterObjectRootSet(this);
+        camel::core::mm::autoSpace().unregisterGraphSweeper(this);
     }
     runtimeGraphMgr_.reset();
 }
@@ -225,9 +228,15 @@ context_ptr_t Context::create(const EntryConfig &entryConf, const DiagsConfig &d
     context_ptr_t ctx     = std::shared_ptr<Context>(new Context(entryConf, diagConf));
     ctx->exeMgr_          = std::make_unique<ExecutorManager>(ctx);
     ctx->runtimeGraphMgr_ = std::make_unique<camel::runtime::GCGraphManager>();
-    camel::core::mm::autoSpace().setObjectRootSet(&ctx->runtimeGraphMgr_->gcRoots());
-    camel::core::mm::autoSpace().setGraphSweeper(
-        [manager = ctx->runtimeGraphMgr_.get()] { manager->sweepMarked(); });
+    // Registered under this context's address, so a second context beside this one (a language
+    // server, a tool's second context, the Python binding) adds its roots instead of replacing
+    // them, and destroying either one gives back only its own.
+    camel::core::mm::autoSpace().registerObjectRootSet(
+        ctx.get(), "runtimeGraphRoots", &ctx->runtimeGraphMgr_->gcRoots());
+    camel::core::mm::autoSpace().registerGraphSweeper(
+        ctx.get(), "runtimeGraphSweeper", [manager = ctx->runtimeGraphMgr_.get()] {
+            manager->sweepMarked();
+        });
     ctx->sourceContext_   = std::make_shared<camel::source::SourceContext>();
     ctx->runtimeDiagSink_ = std::make_shared<DiagnosticSink>("", "", ctx->sourceContext_);
     ctx->runtimeDiagSink_->setConfig(diagConf);
