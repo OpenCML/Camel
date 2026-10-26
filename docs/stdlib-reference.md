@@ -54,6 +54,7 @@ Not in this reference: the profiler (`perf`).
 | [tensor](#tensor) | `import { ... } from tensor` | C++ |
 | [types](#types) | `import { ... } from types` | Camel |
 | [array](#array) | `import { ... } from array` | Camel |
+| [stream](#stream) | `import { ... } from stream` | Camel |
 | [math](#math) | `import { ... } from math` | C++ |
 | [statistics](#statistics) | `import { ... } from statistics` | C++ |
 | [random](#random) | `import { ... } from random` | C++ |
@@ -85,6 +86,7 @@ Not in this reference: the profiler (`perf`).
 | [tensor](#tensor) | `import { ... } from tensor` |  |
 | [types](#types) | `import { ... } from types` |  |
 | [array](#array) | `import { ... } from array` |  |
+| [stream](#stream) | `import { ... } from stream` |  |
 | [math](#math) | `import { ... } from math` |  |
 | [statistics](#statistics) | `import { ... } from statistics` |  |
 | [random](#random) | `import { ... } from random` |  |
@@ -2692,6 +2694,41 @@ f(xs[i], ys[i]) for every i.
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Failure: fault `InvalidArgument` (of zip) when the two arrays differ in length.
 - Example: `zip_with<(a: int, b: int) => a + b>([1, 2], [10, 20])` gives `[11, 22]`
+
+<a id="stream"></a>
+
+## `stream`: producing and consuming streams
+
+Streams, written in Camel. A stream's value is its step function together with its state (design
+principles 5.4, and the reading of 2026-10-26): `T..` is an ordinary function value of the
+signature `() => (T, T..)?`, one call is one pull, and a pull answers the next element together
+with the rest of the stream -- `null` when the stream is over. So the producers here are
+ordinary functions that return such a closure, and the consumer is `for x in s`, which the
+compiler expands on the graph into the `while` it already has (language reference 7.3.2). No
+part of this module needs a new node kind, and none of it runs anything by itself: pulling is
+what runs, one element at a time.
+
+- `unfold(state, step)` is the smallest producer: a state and a step that answers the next
+  element with the state after it, or `null` when the stream is over. A `yield` generator
+  compiles to the same kind of value, and one written `#op` source can hand one out too.
+- A stream is a value and is pure, so pulling the same stream value twice answers the same
+  element; the rest a pull hands out is what threads the stream, and the consumer passes it on.
+  One stream value has one consumer per execution path (design principles 5.4).
+
+### Producing
+
+#### `unfold`
+
+```camel
+unfold: (state: S, step: (state: S) => (T, S)?) => T..
+```
+
+The stream of what `step` answers from `state` on: one element with the state after it, or
+`null` when there is nothing more. The first round of `for x in s` over it is `step(state)`,
+and every later round is a pull of the rest, so the states are threaded rather than repeated.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `loop acc = 0 for x in unfold(3, (n: int) => if n > 0 then (n, n - 1) else null) do acc + x` gives `6`
 
 <a id="math"></a>
 

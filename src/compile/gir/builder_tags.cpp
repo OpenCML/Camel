@@ -577,6 +577,9 @@ std::optional<compile_graph_ptr_t> Builder::functionGraphNamed(const std::string
                 return set->front();
             }
         } else if (EntityAccess::isDecoratedGraph(*entity)) {
+            // A name that is a decorated function and other functions of the same name stands
+            // for all of them, and the one function a tag reaches is what the decorators made
+            // (overloadsOfDecorated refuses a decorated function that has overloads).
             return EntityAccess::decoratedGraph(*entity);
         }
     }

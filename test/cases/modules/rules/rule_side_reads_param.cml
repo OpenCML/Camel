@@ -1,0 +1,33 @@
+/**
+ * The right side of a rule reads the rule's `with` parameters (rewrite design 2 (second version)
+ * 1, design principles 5.5).
+ *
+ * `add_shift` writes the pattern `x + 0` on the left and `x + shift` on the right, so the rewrite
+ * is a function of the binding: `left(3)` becomes `3 + 1` under the rule's default and `3 + 7`
+ * under `add_shift<7>`. The value printed is the value the side read, which the program as
+ * written -- 3 -- does not have.
+ */
+module rule_side_reads_param
+
+import { Program } from graph
+import { rewrite } from rewrite
+
+with <shift: int = 1>
+rule add_shift(x: int) when shift > 0 { x + 0 => x + shift }
+
+/// The rule at its default, `shift = 1`.
+export func apply_default(p: Program): Program! {
+    return rewrite(p, [add_shift])
+}
+
+/// The same rule bound to 7: another instance, whose right side adds 7.
+export func apply_seven(p: Program): Program! {
+    return rewrite(p, [add_shift<7>])
+}
+
+func left(x: int): int { return x + 0 }
+
+func main(): int sync {
+    println(left(3))
+    return 0
+}
