@@ -228,7 +228,8 @@ RunInvocation makeRunInvocation(const std::string &inputPath) {
     invocation.input = std::move(file);
     CAMEL_LOG_INFO_S("Main", "Reading from file '{}'.", inputPath);
 
-    invocation.diagnostics = make_shared<Diagnostics>("main", inputPath);
+    invocation.diagnostics = make_shared<Diagnostics>(
+        camel::utils::pathToUtf8(camel::utils::pathFromUtf8(inputPath).stem()), inputPath);
     invocation.diagnostics->setConfig(
         DiagsConfig{
             .total_limit         = -1,

@@ -191,7 +191,8 @@ int runCommand(int argc, char *argv[]) {
         .total_limit         = -1,
         .per_severity_limits = {{Severity::Error, 0}},
     };
-    diagnostics_ptr_t diagnostics = make_shared<Diagnostics>("main", targetFile);
+    diagnostics_ptr_t diagnostics = make_shared<Diagnostics>(
+        camel::utils::pathToUtf8(camel::utils::pathFromUtf8(targetFile).stem()), targetFile);
     diagnostics->setConfig(compileDiagsConfig);
 
     bool useJsonFormat = (errorFormat == "json");

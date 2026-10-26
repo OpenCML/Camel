@@ -61,7 +61,8 @@ CompilationState createCompilationStateForPath(const std::string &path) {
     // its first error like the command line's.
     ctx->runtimeDiagSink()->setConfig(runtimeDiagsConfig());
     GlobalConfig::SetInspectionMode(true);
-    auto diagnostics = std::make_shared<Diagnostics>("main", path, ctx->sourceContext());
+    auto diagnostics = std::make_shared<Diagnostics>(
+        camel::utils::pathToUtf8(camel::utils::pathFromUtf8(path).stem()), path, ctx->sourceContext());
     diagnostics->setConfig(compileDiags);
     auto parser = std::make_shared<CamelParser>(diagnostics);
     parser->setSourceContext(ctx->sourceContext());
