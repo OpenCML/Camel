@@ -31,7 +31,7 @@ import {
   VIOLET,
   addNode,
   at,
-  beads,
+  beadsAlong,
   ch,
   code,
   edge,
@@ -69,41 +69,46 @@ export default makeScene2D(function* (view) {
   );
   const active = (i: number) => all(...passes.map((p, k) => p().fill(k === i ? CYAN : CHALK_DIM, 0.3)));
 
+  // The graph layer: offset so that the graph sits to the right of the code and clear of it.
+  const graphLayer = createRef<Node>();
+  w.add(<Node ref={graphLayer} x={230} y={40} />);
+  const gw = graphLayer();
+
   // ---- the forward graph of loss ----------------------------------------------------------------
   const FY = -160;
-  const x = addNode(w, at(-600, FY), 'x', {kind: 'value'});
-  const mlp = addNode(w, at(-320, FY), 'mlp', {width: 120});
-  const m = addNode(w, at(-320, FY - 36 - 23), 'm', {kind: 'weight'});
-  const y = addNode(w, at(-60, FY - 140), 'y', {kind: 'value'});
-  const mse = addNode(w, at(-60, FY), 'mse', {width: 110});
-  const l = addNode(w, at(220, FY), '', {kind: 'ring'});
-  const fEdges = [edge(w, x, mlp), edge(w, mlp, mse), edge(w, y, mse), edge(w, mse, l)];
+  const x = addNode(gw, at(-600, FY), 'x', {kind: 'value'});
+  const mlp = addNode(gw, at(-320, FY), 'mlp');
+  const m = addNode(gw, at(-320, FY - 36 - 23), 'm', {kind: 'weight'});
+  const y = addNode(gw, at(-60, FY - 140), 'y', {kind: 'value'});
+  const mse = addNode(gw, at(-60, FY), 'mse');
+  const l = addNode(gw, at(220, FY), '', {kind: 'ring'});
+  const fEdges = [edge(gw, x, mlp), edge(gw, mlp, mse), edge(gw, y, mse), edge(gw, mse, l)];
   const frame = createRef<Rect>();
-  w.add(<Rect ref={frame} x={-190} y={FY - 60} width={1000} height={290} radius={28} stroke={CHALK_DIM} lineWidth={2} lineDash={[14, 10]} end={0} zIndex={0} />);
+  gw.add(<Rect ref={frame} x={-190} y={FY - 60} width={1000} height={290} radius={28} stroke={CHALK_DIM} lineWidth={2} lineDash={[14, 10]} end={0} zIndex={0} />);
   const frameName = createRef<Txt>();
-  w.add(<Txt ref={frameName} text="loss" x={-655} y={FY - 180} fontFamily={MONO} fontSize={26} fill={CHALK_DIM} opacity={0} />);
+  gw.add(<Txt ref={frameName} text="loss" x={-655} y={FY - 180} fontFamily={MONO} fontSize={26} fill={CHALK_DIM} opacity={0} />);
 
   // ---- the reflection: the reverse graph, edges reversed -------------------------------------------
-  const xB = addNode(w, at(-600, -FY), 'x', {kind: 'value', stroke: VIOLET});
-  const mlpB = addNode(w, at(-320, -FY), 'mlp', {width: 120, stroke: VIOLET});
-  const mseB = addNode(w, at(-60, -FY), 'mse', {width: 110, stroke: VIOLET});
-  const times2 = addNode(w, at(80, -FY), '×2', {width: 90, stroke: VIOLET});
-  const seed = addNode(w, at(220, -FY), '1.0', {kind: 'value', stroke: VIOLET, glyphSize: 26});
-  const g = addNode(w, at(-320, -FY + 36 + 70), 'g', {kind: 'ring', stroke: VIOLET});
+  const xB = addNode(gw, at(-600, -FY), 'x', {kind: 'value', stroke: VIOLET});
+  const mlpB = addNode(gw, at(-320, -FY), 'mlp', {stroke: VIOLET});
+  const mseB = addNode(gw, at(-60, -FY), 'mse', {stroke: VIOLET});
+  const times2 = addNode(gw, at(80, -FY), '×2', {stroke: VIOLET});
+  const seed = addNode(gw, at(220, -FY), '1.0', {kind: 'value', stroke: VIOLET, glyphSize: 26});
+  const g = addNode(gw, at(-320, -FY + 36 + 70), 'g', {kind: 'ring', stroke: VIOLET});
   const mirrorNodes = [seed, times2, mseB, mlpB, xB, g];
-  const eSeed = edge(w, seed, times2, {color: VIOLET});
-  const eTimes = edge(w, times2, mseB, {color: VIOLET});
-  const eMse = edge(w, mseB, mlpB, {color: VIOLET});
-  const eXB = edge(w, xB, mlpB, {color: VIOLET});
-  const eG = edge(w, mlpB, g, {color: VIOLET});
+  const eSeed = edge(gw, seed, times2, {color: VIOLET});
+  const eTimes = edge(gw, times2, mseB, {color: VIOLET});
+  const eMse = edge(gw, mseB, mlpB, {color: VIOLET});
+  const eXB = edge(gw, xB, mlpB, {color: VIOLET});
+  const eG = edge(gw, mlpB, g, {color: VIOLET});
   const mEdges = [eSeed, eTimes, eMse, eXB, eG];
   const baseline = createRef<Line>();
-  w.add(<Line ref={baseline} points={[[-720, BASE], [380, BASE]]} stroke={VIOLET} lineWidth={2} opacity={0.8} end={0} />);
+  gw.add(<Line ref={baseline} points={[[-720, BASE], [380, BASE]]} stroke={VIOLET} lineWidth={2} opacity={0.8} end={0} />);
   const tag = createRef<Txt>();
-  w.add(<Txt ref={tag} text="with_grad" x={520} y={BASE} fontFamily={MONO} fontSize={30} fill={VIOLET} opacity={0} />);
+  gw.add(<Txt ref={tag} text="with_grad" x={520} y={BASE} fontFamily={MONO} fontSize={30} fill={VIOLET} opacity={0} />);
   // jvp's twin: the forward graph again, violet, above it and the same way round
   const twin = createRef<Node>();
-  w.add(<Node ref={twin} opacity={0} y={-26} />);
+  gw.add(<Node ref={twin} opacity={0} y={-26} />);
   for (const [a, b] of [[x, mlp], [mlp, mse], [mse, l]] as const) {
     twin().add(<Line points={[a.pos().add(new Vector2(a.hw + 4, 0)), b.pos().sub(new Vector2(b.hw + 10, 0))]} stroke={VIOLET} lineWidth={3} endArrow arrowSize={9} />);
   }
@@ -151,11 +156,11 @@ export default makeScene2D(function* (view) {
   yield* active(1);
   const sweep = createRef<Line>();
   const sx = createSignal(-860);
-  w.add(<Line ref={sweep} points={() => [[sx(), -340], [sx(), 340]]} stroke={CYAN} lineWidth={4} opacity={0} zIndex={8} shadowColor={CYAN} shadowBlur={16} />);
+  gw.add(<Line ref={sweep} points={() => [[sx(), -340], [sx(), 340]]} stroke={CYAN} lineWidth={4} opacity={0} zIndex={8} shadowColor={CYAN} shadowBlur={16} />);
   sweep().opacity(1);
-  const fold = addNode(w, at(150, -FY), '2.0', {kind: 'value', stroke: VIOLET, glyphSize: 26});
-  const eFold = edge(w, fold, mseB, {color: VIOLET});
-  const eShared = edge(w, x, mlpB, {color: VIOLET, bend: -40});
+  const fold = addNode(gw, at(150, -FY), '2.0', {kind: 'value', stroke: VIOLET, glyphSize: 26});
+  const eFold = edge(gw, fold, mseB, {color: VIOLET});
+  const eShared = edge(gw, x, mlpB, {color: VIOLET, bend: -40});
   yield* all(
     sx(860, 2.2, linear),
     // x is read in both halves: one node (the sweep passes it first)
@@ -185,13 +190,13 @@ export default makeScene2D(function* (view) {
   sweep().opacity(1);
   yield* sx(860, 0.5, linear);
   sweep().opacity(0);
-  yield* beads(w, [[x.pos(), mlp.pos()]], 0.25);
-  yield* beads(w, [[mlp.pos(), mse.pos()], [y.pos(), mse.pos()]], 0.25);
-  yield* beads(w, [[mse.pos(), l.pos()]], 0.2);
+  yield* beadsAlong(gw, [fEdges[0]], 0.25);
+  yield* beadsAlong(gw, [fEdges[1], fEdges[2]], 0.25);
+  yield* beadsAlong(gw, [fEdges[3]], 0.2);
   yield* l.shape().stroke(MINT, 0.2);
-  yield* beads(w, [[fold.pos(), mseB.pos()]], 0.22, VIOLET);
-  yield* beads(w, [[mseB.pos(), mlpB.pos()]], 0.22, VIOLET);
-  yield* beads(w, [[mlpB.pos(), g.pos()]], 0.2, VIOLET);
+  yield* beadsAlong(gw, [eFold], 0.22, VIOLET);
+  yield* beadsAlong(gw, [eMse], 0.22, VIOLET);
+  yield* beadsAlong(gw, [eG], 0.2, VIOLET);
   yield* g.shape().stroke(MINT, 0.25);
   yield* waitFor(0.4);
 });

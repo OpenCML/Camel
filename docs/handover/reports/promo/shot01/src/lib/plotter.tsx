@@ -30,7 +30,8 @@ export const MINT = '#7BE8B0';
 export const THREAD = '#F7E3B5';
 export const CORAL = '#FF7A70';
 
-export const MONO = 'JetBrains Mono, Cascadia Mono, Consolas, monospace';
+// Without ligatures: the code shows the characters a viewer types (`->` is two characters).
+export const MONO = 'JetBrains Mono NL, JetBrains Mono, Cascadia Mono, Consolas, monospace';
 export const CJK = 'Noto Sans SC, Noto Sans CJK SC, Microsoft YaHei, PingFang SC, sans-serif';
 
 export const STROKE = 4;
@@ -89,8 +90,12 @@ export interface NodeOptions {
 export function addNode(parent: Node, pos: P, text: string, options: NodeOptions = {}): GNode {
   const kind = options.kind ?? 'op';
   const round = kind === 'value' || kind === 'ring' || kind === 'weight';
-  const size = kind === 'weight' ? 46 : R * 2;
-  const width = options.width ?? size;
+  const size = kind === 'weight' ? 40 : R * 2;
+  const glyphSize = options.glyphSize ?? (kind === 'weight' ? 20 : round ? 32 : 30);
+  // Wide enough that the label never touches the border: the glyphs plus padding on each side.
+  const textWidth = text.length * glyphSize * 0.6;
+  const padding = kind === 'weight' ? 14 : kind === 'value' ? 20 : 26;
+  const width = options.width ?? Math.max(size, Math.ceil(textWidth + 2 * padding));
   const root = createRef<Node>();
   const shape = createRef<Rect>();
   const notch = createRef<Rect>();
@@ -123,7 +128,7 @@ export function addNode(parent: Node, pos: P, text: string, options: NodeOptions
         ref={glyph}
         text={text}
         fontFamily={MONO}
-        fontSize={options.glyphSize ?? (kind === 'weight' ? 20 : round ? 34 : 30)}
+        fontSize={glyphSize}
         fill={kind === 'weight' ? CHALK_DIM : CHALK}
         opacity={0}
       />
@@ -183,7 +188,7 @@ function exitPoint(n: GNode | null, centre: Vector2, toward: Vector2, gap: numbe
     return centre;
   }
   const u = d.normalized;
-  if (n.kind !== 'op' && n.kind !== 'effect') {
+  if (n.kind !== 'op' && n.kind !== 'effect' && Math.abs(n.hw - n.hh) < 1) {
     return centre.add(u.scale(n.hh + gap));
   }
   const tx = Math.abs(u.x) > 1e-6 ? n.hw / Math.abs(u.x) : Infinity;
@@ -262,6 +267,18 @@ export function* beads(parent: Node, paths: [Vector2, Vector2][], duration: numb
   });
   yield* all(...refs.map((ref, i) => ref().position(paths[i][1], duration, easeInOutCubic)));
   refs.forEach((ref) => ref().remove());
+}
+
+/**
+ * Beads along drawn edges, from the edge's start to its arrowhead, all in the same frames: a value
+ * travels beside the labels, never over them.
+ */
+export function* beadsAlong(parent: Node, edges: Reference<Line>[], duration: number, color = SAND): ThreadGenerator {
+  const paths = edges.map((e): [Vector2, Vector2] => {
+    const pts = e().points();
+    return [new Vector2(pts[0] as any), new Vector2(pts[pts.length - 1] as any)];
+  });
+  yield* beads(parent, paths, duration, color);
 }
 
 // ---- code on the ground ---------------------------------------------------------------------

@@ -45,7 +45,7 @@ const KEYWORD = '#AEB9DE';
 const SAND = '#F2B35B';
 const MINT = '#7BE8B0';
 
-const MONO = 'JetBrains Mono, Cascadia Mono, Consolas, monospace';
+const MONO = 'JetBrains Mono NL, JetBrains Mono, Cascadia Mono, Consolas, monospace';
 const CJK = 'Noto Sans SC, Noto Sans CJK SC, Microsoft YaHei, PingFang SC, sans-serif';
 
 // ---- geometry (scene coordinates, origin at the centre of 1920x1080) -------------------------

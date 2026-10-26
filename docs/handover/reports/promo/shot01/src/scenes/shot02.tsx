@@ -11,16 +11,18 @@
  * - `println` needs `cosine`, which needs `a` and `b`; `a` and `b` do not depend on each other,
  *   so they may run at the same time: the two beads leave `x` in the same frame.
  *
+ * Layout: the computation across the top, the two effects down the middle (the path of the write
+ * docked between them), the text written to the left of the write, the result on the right.
+ *
  * Timeline (seconds)
  *   0.0 - 0.9   code without `sync`; the graph is traced, dim except the result
- *   0.9 - 2.6   only `return 0` runs; EffectNotExecuted appears by the effects
- *   3.2 - 3.9   ` sync` is typed into the header
- *   3.9 - 5.0   the thread is stitched through the effects: println -> write_text -> result
- *   5.0 - 5.7   two beads leave x together: the two encodes run side by side
- *   5.7 - 6.4   they meet at cosine
- *   6.4 - 7.0   println runs
- *   7.0 - 7.7   then write_text, in written order
- *   7.7 - 9.0   the result; hold
+ *   0.9 - 2.4   only `return 0` runs; EffectNotExecuted appears by the effects
+ *   2.6 - 3.3   ` sync` is typed into the header
+ *   3.3 - 4.4   the thread is stitched through the effects: println -> write_text -> result
+ *   4.4 - 5.1   two beads leave x together: the two encodes run side by side
+ *   5.1 - 5.8   they meet at cosine
+ *   5.8 - 7.6   println runs, then write_text, in written order; the thread reaches the result
+ *   7.6 - 9.0   hold
  */
 import {Line, Node, makeScene2D} from '@motion-canvas/2d';
 import {Vector2, all, chain, createRef, easeInOutCubic, linear, sequence, waitFor} from '@motion-canvas/core';
@@ -31,7 +33,7 @@ import {
   THREAD,
   addNode,
   at,
-  beads,
+  beadsAlong,
   ch,
   code,
   dim,
@@ -60,7 +62,7 @@ export default makeScene2D(function* (view) {
   const say = subtitles(view, SHOW_SUBTITLE);
 
   // ---- the code ------------------------------------------------------------------------------
-  const src = code(w, -890, -200, [
+  const src = code(w, -900, -200, [
     [kw('func'), ch(' main(): '), kw('int'), kw(' sync', true), ch(' {')],
     [ch('    '), kw('let'), ch(' a = x'), dm('->'), ch('encode<wa>')],
     [ch('    '), kw('let'), ch(' b = x'), dm('->'), ch('encode<wb>')],
@@ -71,18 +73,18 @@ export default makeScene2D(function* (view) {
   ]);
 
   // ---- the graph -----------------------------------------------------------------------------
-  const x = addNode(w, at(80, -70), 'x', {kind: 'value'});
-  const encA = addNode(w, at(320, -210), 'encode', {width: 150});
-  const encB = addNode(w, at(320, 70), 'encode', {width: 150});
-  const wa = addNode(w, at(320, -210 - 36 - 23), 'wa', {kind: 'weight'});
-  const wb = addNode(w, at(320, 70 - 36 - 23), 'wb', {kind: 'weight'});
-  const cos = addNode(w, at(560, -70), 'cosine', {width: 150});
-  const pr = addNode(w, at(470, 230), 'println', {kind: 'effect', width: 150});
-  const wt = addNode(w, at(700, 230), 'write_text', {kind: 'effect', width: 190});
-  const path = addNode(w, at(700, 230 - 36 - 23), "'run.log'", {kind: 'weight', width: 120});
-  const done = addNode(w, at(700, 350), "'done'", {kind: 'value', width: 110});
-  const zero = addNode(w, at(850, 350), '0', {kind: 'value'});
-  const result = addNode(w, at(850, 230), '', {kind: 'ring'});
+  const x = addNode(w, at(60, -290), 'x', {kind: 'value'});
+  const encA = addNode(w, at(320, -400), 'encode');
+  const encB = addNode(w, at(320, -180), 'encode');
+  const wa = addNode(w, at(320, -400 - 36 - 20), 'wa', {kind: 'weight'});
+  const wb = addNode(w, at(320, -180 - 36 - 20), 'wb', {kind: 'weight'});
+  const cos = addNode(w, at(590, -290), 'cosine');
+  const pr = addNode(w, at(590, -40), 'println', {kind: 'effect'});
+  const wt = addNode(w, at(590, 200), 'write_text', {kind: 'effect'});
+  const path = addNode(w, at(590, 200 - 36 - 20), "'run.log'", {kind: 'weight'});
+  const done = addNode(w, at(300, 200), "'done'", {kind: 'value'});
+  const zero = addNode(w, at(830, -40), '0', {kind: 'value'});
+  const result = addNode(w, at(830, 200), '', {kind: 'ring'});
 
   const eXA = edge(w, x, encA);
   const eXB = edge(w, x, encB);
@@ -93,19 +95,19 @@ export default makeScene2D(function* (view) {
   const eZR = edge(w, zero, result);
   const dataEdges = [eXA, eXB, eAC, eBC, eCP, eDW, eZR];
 
-  // The thread: dashed, sagging under the effects, through their notches in written order.
-  const notchOf = (n: typeof pr) => () => n.pos().add(new Vector2(n.hw - 6, n.hh - 6));
+  // The thread: dashed, through the notches of the effects in written order, then to the result.
+  const notchOf = (n: typeof pr) => n.pos().add(new Vector2(n.hw - 6, n.hh - 6));
   const thread = createRef<Line>();
   w.add(
     <Line
       ref={thread}
       points={() => {
-        const a = notchOf(pr)();
-        const b = notchOf(wt)();
-        const c = result.pos().add(new Vector2(-26, 26));
-        return [a, a.add(b).scale(0.5).add(new Vector2(0, 30)), b, b.add(c).scale(0.5).add(new Vector2(0, 24)), c];
+        const a = notchOf(pr);
+        const b = notchOf(wt);
+        const c = result.pos().add(new Vector2(-36, 6));
+        return [a, a.add(b).scale(0.5).add(new Vector2(70, 0)), b, b.add(c).scale(0.5).add(new Vector2(0, 40)), c];
       }}
-      radius={60}
+      radius={70}
       stroke={THREAD}
       lineWidth={4}
       lineDash={[12, 9]}
@@ -115,14 +117,13 @@ export default makeScene2D(function* (view) {
       zIndex={4}
     />,
   );
-  yield loop();
-  function* loop() {
+  yield (function* drift() {
     while (true) {
       yield* thread().lineDashOffset(thread().lineDashOffset() - 21, 0.6, linear);
     }
-  }
+  })();
 
-  const unrun = label(w, 470, 300, 'EffectNotExecuted');
+  const unrun = label(w, 300, -40, 'EffectNotExecuted');
 
   // ---- 0.0 - 0.9: the code and the graph, everything dim but the result ------------------------
   const computeNodes = [x, encA, encB, wa, wb, cos, pr, wt, path, done];
@@ -134,18 +135,17 @@ export default makeScene2D(function* (view) {
   );
   yield* all(...computeNodes.map((n) => dim(n, true, 0.3)), ...[eXA, eXB, eAC, eBC, eCP, eDW].map((e) => e().opacity(0.35, 0.3)));
 
-  // ---- 0.9 - 2.6: only `return 0` runs ----------------------------------------------------------
-  yield* beads(w, [[zero.pos(), result.pos()]], 0.5);
+  // ---- 0.9 - 2.4: only `return 0` runs ----------------------------------------------------------
+  yield* beadsAlong(w, [eZR], 0.5);
   yield* all(result.shape().stroke(MINT, 0.3), showValue(result, '0'));
   yield* unrun().opacity(1, 0.3);
-  yield* waitFor(0.6);
+  yield* waitFor(0.7);
 
-  // ---- 3.2 - 3.9: sync ------------------------------------------------------------------------
-  yield* waitFor(0.2);
+  // ---- 2.6 - 3.3: sync ------------------------------------------------------------------------
   yield say('sync 把它们按顺序串起来——');
   yield* all(typeLine(src, 0, 12), unrun().opacity(0, 0.4));
 
-  // ---- 3.9 - 5.0: the thread through the effects ----------------------------------------------
+  // ---- 3.3 - 4.4: the thread through the effects ----------------------------------------------
   thread().opacity(1);
   yield* all(
     thread().end(1, 1.0, easeInOutCubic),
@@ -157,24 +157,24 @@ export default makeScene2D(function* (view) {
     eCP().opacity(1, 0.4),
   );
 
-  // ---- 5.0 - 5.7: the two encodes, side by side -----------------------------------------------
+  // ---- 4.4 - 5.1: the two encodes, side by side -----------------------------------------------
   yield say('不依赖，就不等待。');
   yield* all(dim(x, false, 0.2), dim(encA, false, 0.2), dim(encB, false, 0.2), dim(wa, false, 0.2), dim(wb, false, 0.2), eXA().opacity(1, 0.2), eXB().opacity(1, 0.2));
-  yield* beads(w, [[x.pos(), encA.pos()], [x.pos(), encB.pos()]], 0.6);
+  yield* beadsAlong(w, [eXA, eXB], 0.6);
   yield* all(flash(encA), flash(encB));
 
-  // ---- 5.7 - 6.4: they meet at cosine ---------------------------------------------------------
+  // ---- 5.1 - 5.8: they meet at cosine ---------------------------------------------------------
   yield* all(dim(cos, false, 0.2), eAC().opacity(1, 0.2), eBC().opacity(1, 0.2));
-  yield* beads(w, [[encA.pos(), cos.pos()], [encB.pos(), cos.pos()]], 0.5);
+  yield* beadsAlong(w, [eAC, eBC], 0.5);
   yield* flash(cos);
 
-  // ---- 6.4 - 7.7: the effects, in written order -----------------------------------------------
-  yield* beads(w, [[cos.pos(), pr.pos()]], 0.45);
+  // ---- 5.8 - 7.6: the effects, in written order -----------------------------------------------
+  yield* beadsAlong(w, [eCP], 0.45);
   yield* all(flash(pr), pr.shape().stroke(SAND, 0.15).to(CHALK, 0.4));
-  yield* beads(w, [[done.pos(), wt.pos()]], 0.45);
+  yield* beadsAlong(w, [eDW], 0.45);
   yield* flash(wt);
   yield* result.shape().stroke(SAND, 0.15).to(MINT, 0.3);
 
   // ---- hold ------------------------------------------------------------------------------------
-  yield* waitFor(0.6);
+  yield* waitFor(0.8);
 });

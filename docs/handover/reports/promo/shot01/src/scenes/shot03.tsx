@@ -22,7 +22,7 @@ import {
   MONO,
   addNode,
   at,
-  beads,
+  beadsAlong,
   ch,
   code,
   dm,
@@ -62,9 +62,9 @@ export default makeScene2D(function* (view) {
   // ---- the pipeline, full width -------------------------------------------------------------------
   const Y = 170;
   const x = addNode(w, at(-720, Y), 'x', {kind: 'value'});
-  const l1 = addNode(w, at(-360, Y), 'linear', {width: 150});
-  const relu = addNode(w, at(0, Y), 'relu', {width: 120});
-  const l2 = addNode(w, at(360, Y), 'linear', {width: 150});
+  const l1 = addNode(w, at(-360, Y), 'linear');
+  const relu = addNode(w, at(0, Y), 'relu');
+  const l2 = addNode(w, at(360, Y), 'linear');
   const out = addNode(w, at(720, Y), '', {kind: 'ring'});
   const dock = Y - 36 - 23;
   const w1 = addNode(w, at(-395, dock - 260), 'w1', {kind: 'weight'});
@@ -104,7 +104,7 @@ export default makeScene2D(function* (view) {
   const stages = [x, l1, relu, l2, out];
   for (let i = 0; i < 4; i++) {
     yield shapes[i]().opacity(1, 0.3);
-    yield* beads(w, [[stages[i].pos(), stages[i + 1].pos()]], 0.45);
+    yield* beadsAlong(w, [[e1, e2, e3, e4][i]], 0.45);
   }
   yield* out.shape().stroke(MINT, 0.3);
 

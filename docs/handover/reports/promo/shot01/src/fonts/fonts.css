@@ -1,0 +1,12 @@
+/* JetBrains Mono without its ligatures ("JetBrains Mono NL", derived from JetBrains Mono, OFL):
+   the code on screen shows the characters a viewer types, so `->` stays two characters. */
+@font-face {
+  font-family: 'JetBrains Mono NL';
+  src: url('./JetBrainsMonoNL-Regular.ttf') format('truetype');
+  font-weight: 400;
+}
+@font-face {
+  font-family: 'JetBrains Mono NL';
+  src: url('./JetBrainsMonoNL-Medium.ttf') format('truetype');
+  font-weight: 500;
+}
