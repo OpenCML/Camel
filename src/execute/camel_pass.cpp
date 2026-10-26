@@ -47,9 +47,12 @@ struct CamelParam {
 };
 
 /// The pass parameters of `type`, in declaration order, or why it has none this pipeline can
-/// supply. A pass parameter is a bool, an int, a float or a string: the values the pipeline
-/// parses. The function's `with` parameters are its pass parameters (design principles 4.4,
-/// 9.3); they have no default in source, so the pipeline has to write each of them.
+/// supply. A pass whose declaration is its own `with` list takes a bool, an int, a float or a
+/// string: those are the values the pipeline can put into a `with` argument, and a `with`
+/// parameter has no default in source, so the pipeline has to write each of them (design
+/// principles 4.4, 9.3). A parameter of another type — `int[]`, or a nullable `T?`, which a
+/// default of `null` makes omittable — belongs to a declaration in the module's `.cml`, where the
+/// declaration holds its type and its default together.
 std::optional<std::string>
 passParamsOf(const camel::core::type::FunctionType &type, std::vector<CamelParam> &params) {
     if (!type.hasArgNames()) {
@@ -78,8 +81,9 @@ passParamsOf(const camel::core::type::FunctionType &type, std::vector<CamelParam
             break;
         default:
             return std::format(
-                "its `with` parameter '{}' has type {}, and a pass parameter is a bool, an int, "
-                "a float or a string",
+                "its `with` parameter '{}' has type {}, and a pass written in Camel takes a bool, "
+                "an int, a float or a string; a parameter of another type, with the default that "
+                "makes it optional, is declared in the module's `.cml`",
                 param.name,
                 type.withTypeAt(i)->toString());
         }
@@ -172,6 +176,11 @@ PassParamValue zeroOf(PassParamType type) {
         return 0.0;
     case PassParamType::String:
         return std::string();
+    case PassParamType::IntArray:
+        // A pass written in Camel declares no `int[]` parameter: `passParamsOf` refuses one, so
+        // no parameter of this pass ever arrives here. The case is here so the switch covers every
+        // type a parameter may have.
+        return std::vector<int64_t>();
     }
     return false;
 }

@@ -253,6 +253,100 @@ expect_diagnostic_name = "SemanticDiag::ParamArgumentMissing"
 expect_diagnostic_line = 1
 expect_output_contains = ["The call gives no value for the parameter 'flag' of 'test::params', and it has no default."]
 
+# --- the declared type decides how a word is read (design principles 9.3), `int[]`, a nullable
+# `T?` and a default of `null` included. The declaration is `test.cml` beside the case, put on the
+# module search path with `-I .`; `test::declared` has no parameter list of its own, so every name,
+# type and default the pipeline binds is the one that file writes.
+
+[[tests]]
+name = "declared.int_array_written"
+desc = "An `int[]` parameter takes an array constant, the same array the language writes in source: `axes=[0,1]`. The line pins the value the declared type read and every other parameter, the default `null` of the two nullable ones included; the parameters are printed in name order."
+args = ["-I", ".", "${case}", "test::declared flag=true axes=[0,1]", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["test::declared axes=[0, 1] (given) flag=true (given) label=\"x\" (default) n=5 (default) target=null (default) declared=5", "camel-ran-marker"]
+
+[[tests]]
+name = "declared.null_default_is_omitted"
+desc = "A nullable parameter whose default is `null` may be left out, and leaving it out is `null`, not a missing value: the same declaration still makes `flag` required, and `axes` and `target` read `null`."
+args = ["-I", ".", "${case}", "test::declared flag=true", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["test::declared axes=null (default) flag=true (given) label=\"x\" (default) n=5 (default) target=null (default) declared=5"]
+
+[[tests]]
+name = "declared.null_written"
+desc = "`null` written for a nullable parameter is a value the pipeline read, not a word taken as written: it is marked given and its value is `null`."
+args = ["-I", ".", "${case}", "test::declared flag=true axes=null target=null", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["test::declared axes=null (given) flag=true (given) label=\"x\" (default) n=5 (default) target=null (given) declared=5"]
+
+[[tests]]
+name = "declared.empty_array"
+desc = "`[]` is the empty array of the declared element type: the declaration gives an array constant its element type, so no element is needed to say which one it is."
+args = ["-I", ".", "${case}", "test::declared flag=true axes=[]", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["test::declared axes=[] (given) flag=true (given)", "camel-ran-marker"]
+
+[[tests]]
+name = "declared.nullable_string_takes_the_word"
+desc = "A `string?` parameter keeps the reading of a `string` one: the word as written, no constant expression and no quotes (`target=report.onnx`), while `null` remains the value that says there is none."
+args = ["-I", ".", "${case}", "test::declared flag=true target=report.onnx", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["target=\"report.onnx\" (given)"]
+
+[[tests]]
+name = "error.int_where_int_array_declared"
+desc = "The declared type is what a word is checked against, not its own text: an `int` written where the declaration says `int[]?` is refused at the call, in the pipeline's own line and column."
+args = ["-I", ".", "${case}", "test::declared flag=true axes=1", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ParamArgumentWrongType"
+expect_diagnostic_line = 1
+expect_diagnostic_column = 26
+expect_output_contains = ["The argument 'axes' of 'test::declared' has type 'int', not 'int[]?'."]
+expect_output_not_contains = ["camel-ran-marker"]
+
+[[tests]]
+name = "error.null_where_not_nullable"
+desc = "`null` fits only a parameter the declaration wrote `T?` for: the same declaration writes `n: int`, and the word is refused there."
+args = ["-I", ".", "${case}", "test::declared flag=true n=null", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ParamArgumentWrongType"
+expect_output_contains = ["The argument 'n' of 'test::declared' has type 'null', not 'int'."]
+
+[[tests]]
+name = "error.array_element_not_int"
+desc = "An array constant is one of ints: an element of another type is refused as a value that is not a constant, before any pass runs."
+args = ["-I", ".", "${case}", "test::declared flag=true axes=[1,1.5]", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["InvalidPassParameter", "an array constant is one of ints"]
+expect_output_not_contains = ["camel-ran-marker"]
+
+[[tests]]
+name = "error.array_value_for_int_parameter"
+desc = "The same reading on a core pass: an array constant written for `growth_budget: int` of `std::opt` is the wrong type for the declaration, not a value the pipeline cannot read (it used to be 'only bool, int, float and string constants are allowed')."
+args = ["${case}", "std::opt growth_budget=[1,2]", "std::fvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ParamArgumentWrongType"
+expect_diagnostic_line = 1
+expect_diagnostic_column = 10
+expect_output_contains = ["The argument 'growth_budget' of 'std::opt' has type 'int[]', not 'int'."]
+expect_output_not_contains = ["camel-ran-marker"]
+
+[[tests]]
+name = "error.null_value_for_int_parameter"
+desc = "`null` written for a parameter that is not nullable, on a core pass: the refusal is the declared type it does not fit (it used to be 'null is not a parameter value', a value the pipeline could not read at all)."
+args = ["${case}", "std::opt growth_budget=null", "std::fvm"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ParamArgumentWrongType"
+expect_output_contains = ["The argument 'growth_budget' of 'std::opt' has type 'null', not 'int'."]
+expect_output_not_contains = ["camel-ran-marker"]
+
+[[tests]]
+name = "declaration.lists_array_and_nullable_types"
+desc = "The listing of an unknown pass reads the declaration, so the types it writes are listed as it writes them: `int[]?` and `string?`, each with the default `null` that makes it omittable."
+args = ["-I", ".", "${case}", "test::declared flag=true", "std::zzz_unknown"]
+expect_exit = 1
+expect_output_contains = ["axes: int[]? = null", "target: string? = null"]
+
 [[tests]]
 name = "timeit.adds_no_module_pass"
 desc = "--timeit is a CLI measurement option, not a pass and not a place where a module's registered passes join: timing std::fvm on a case that imports tensor with the test passes enabled prints no test_echo output."

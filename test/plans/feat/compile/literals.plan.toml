@@ -431,7 +431,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "number_token_forms"
-desc = "The number tokens a literal and an entry argument share: hexadecimal, binary and `0o` octal integer tokens take a float position (`0xFF` is 255.0, `0b1010` 10.0, `0o77` 63.0), A leading zero before another digit (`077`, `077.5`) is a lexical error in source and is refused at the entry too (entry_args.integer_leading_zero_refused). The translated program is compared with camel on all of them (test/tools/cppexec/expect.txt)."
+desc = "The number tokens a literal and an entry argument share: hexadecimal, binary and `0o` octal integer tokens take a float position (`0xFF` is 255.0, `0b1010` 10.0, `0o77` 63.0). A leading zero before another digit (`077`, `077.5`) is a lexical error in source and is refused at the entry too (entry_args.integer_leading_zero_refused). The translated program is compared with camel on all of them (test/tools/cppexec/expect.txt)."
 kind = "behavior"
 case = "../../../cases/compile/literals/number_token_forms.cml"
 args = ["${case}", "${backend}"]
@@ -440,5 +440,17 @@ backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout = "255.0 10.0 63.0\n255 10 63\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "real_leading_zero"
+desc = "A number has no leading zero in its whole part, a real as an integer: `077.5` is refused as `007.5` is (compile.precedence.leading_zero_real), and the point does not make it unambiguous nor read it as an octal number."
+kind = "negative"
+case = "../../../cases/compile/literals/real_leading_zero.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "LexicalDiag::InvalidNumberFormat"
+expect_output_contains = ["real_leading_zero.cml:7:13", "'077.5'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
