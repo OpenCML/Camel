@@ -1678,3 +1678,4 @@ Linux 包在 manylinux 里构建，用 auditwheel 修正标签，并在构建时
 6. 宏：把内部错误（`logic_error`、`MemoryExhausted`）报成用户的宏失败，内部错误照内部错误报；选出的主故障不是源码顺序上的第一个（与注释不符），按注释改；宏求值器是第四个图解释器，跨轮不缓存。它应当复用一个后端（随执行后端审查的"收成一份"一起考虑）。
 
 **`bytes`、`re` 已接入**（`286f5c213`、`9b66e728c`、`46638cbc0`）。`Bytes` 的长度、`+`、`==`/`!=`、范围下标归核心；`re` 的查找返回 `Match?`，带编译缓存，`re::test(pattern, text)` 删掉，模式是 `with` 参数。剩一处诊断小问题交给施工方：重载列表里 `has_match` 打印的是核函数的名字 `<re:test>`，应当打印 Camel 声明的名字和签名（`has_match: <pattern: string> (text: string) => bool`）。凡是带 `#impl` 的函数都按声明打印，核函数是私有的。
+`str` 的 Unicode 大小写表由决策者这边做（收回"`str` 接入完成"一节第 3 条），施工方不用做。
