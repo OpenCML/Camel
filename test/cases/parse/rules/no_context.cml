@@ -1,0 +1,11 @@
+/** The rule head of the older shape: `rule fuse<f, g>` (design principles 5.5). */
+module no_context
+
+// A rule declares what it is parameterized over after its name, the way a function does and the
+// way `rule keep::<T>(x: T, y: T)` writes it. Names written directly after the rule's name have
+// no reading, so the head is an ordinary syntax error. It names the `(` the head needs.
+rule fuse<f, g>(xs: int) { xs->f->g => xs->g }
+
+func main(): int sync {
+    return 0
+}

@@ -738,15 +738,12 @@ any Formatter::visitRuleDecl(cst::RuleDecl context) {
         if (const auto typeParams = context->get<cst::TypeParams>()) {
             head += any_cast<string>(visitTypeParams(typeParams));
         }
-        if (const auto ruleContext = context->get<cst::RuleContext>()) {
-            head += any_cast<string>(visitRuleContext(ruleContext));
-        }
         paramsOnePerLine = splitParams;
         head += any_cast<string>(visitParentParams(context->get<cst::ParentParams>()));
         paramsOnePerLine = false;
         std::vector<string> clauses;
         // The rule's condition is part of its signature, so it is written between the parameters
-        // and the body, as a function writes it (design principles 4.4; the ruling of 2026-10-24).
+        // and the body, as a function writes it (design principles 4.4).
         if (const auto whenClause = context->get<cst::WhenClause>()) {
             clauses.push_back(any_cast<string>(visitWhenClause(whenClause)));
         }
@@ -853,19 +850,6 @@ factClause : IDENTIFIER dataExpr
 any Formatter::visitFactClause(cst::FactClause context) {
     return string(context->tok(TK::Identifier).text()) + " " +
            any_cast<string>(visitExpr(context->expr()));
-}
-
-/*
-ruleContext : '<' identDef (',' identDef)* ','? '>' ;
-*/
-any Formatter::visitRuleContext(cst::RuleContext context) {
-    string result = "<";
-    bool first    = true;
-    for (const auto name : context->all<cst::IdentDef>()) {
-        result += (first ? "" : ", ") + any_cast<string>(visitIdentDef(name));
-        first = false;
-    }
-    return result + ">";
 }
 
 /*
@@ -2118,7 +2102,6 @@ any Formatter::dispatch(syn::Node context) {
         CAMEL_FORMAT(FactCase)
         CAMEL_FORMAT(FactPattern)
         CAMEL_FORMAT(FactClause)
-        CAMEL_FORMAT(RuleContext)
         CAMEL_FORMAT(TypeParams)
         CAMEL_FORMAT(RuleBody)
         CAMEL_FORMAT(DataDecl)

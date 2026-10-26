@@ -321,7 +321,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "GenericFunctionUnsupported",
                 "The generic function '{0}' cannot be {1}.",
-                "This use of a generic function is not supported.",
+                "A decorator is applied where the declaration is: '@d func f' is 'let f = d(f0)', and d takes the function as its value (design principles 6.1). A function that declares type parameters is instantiated where a call fixes them (design principles 5.5); a decorated declaration fixes none, so the decorator has no instance to take.",
             },
         },
         {

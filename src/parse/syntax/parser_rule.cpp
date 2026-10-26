@@ -37,7 +37,7 @@ bool ParserImpl::atRuleDecl(uint32_t n) const {
 }
 
 /// ruleDecl : frontMatter? ('with' angledParams)? 'export'? IDENTIFIER identDef typeParams?
-///            ruleContext? parentParams whenClause? '{' ruleBody '}'
+///            parentParams whenClause? '{' ruleBody '}'
 /// The first IDENTIFIER is the name `rule`; the condition, when there is one, is the `whenClause`
 /// between the parameters and the body. The parameters are the pattern variables; `const x: T`
 /// only matches a constant. The tags before it are the rule's requirements (`#requires(reassociate)`,
@@ -45,8 +45,7 @@ bool ParserImpl::atRuleDecl(uint32_t n) const {
 /// where a function writes its own, before `export` (design principles 4.4, 5.5): the rule's
 /// context parameters, with the same defaults a function's have.
 /// The condition is part of the signature, so it is written between the parameters and the body,
-/// in the one position the parser reads it in (design principles 4.4; 
-/// `docs/handover/reviews/questions-2026-10-23.md`, 「复核：泛型规则族落地」): a `when` after
+/// in the one position the parser reads it in (design principles 4.4): a `when` after
 /// the closing brace is not kept as a second spelling of the same thing, and is reported by name
 /// (`SyntaxDiag::WhenAfterBody`) rather than as a token that did not fit.
 void ParserImpl::parseRuleDecl() {
@@ -64,9 +63,6 @@ void ParserImpl::parseRuleDeclRest(size_t m) {
     parseIdentDef();
     if (cur_ == TK::ColonColon && (peek(1) == TK::Lt || peek(1) == TK::LAngle)) {
         parseTypeParams();
-    }
-    if (cur_ == TK::Lt || cur_ == TK::LAngle) {
-        parseRuleContext();
     }
     parseParentParams();
     // The applicability condition, between the parameters and the body: it is part of the
@@ -90,21 +86,6 @@ void ParserImpl::parseRuleDeclRest(size_t m) {
         parseExpr();
     }
     close(m, NK::RuleDecl);
-}
-
-/// ruleContext : '<' identDef (',' identDef)* ','? '>'
-/// The names a rule is generic over besides its parameters (`rule fuse<f, g>(xs: int[])`).
-void ParserImpl::parseRuleContext() {
-    const size_t m = mark();
-    bump(); // `<`
-    parseIdentDef();
-    while (eat(TK::Comma) && cur_ == TK::Identifier) {
-        parseIdentDef();
-    }
-    if (!panic_ && !eat(TK::Gt)) {
-        unexpected({e(TK::Comma), e(TK::Gt)});
-    }
-    close(m, NK::RuleContext);
 }
 
 /// ruleBody : dataExpr ('=>' | '<=>') dataExpr

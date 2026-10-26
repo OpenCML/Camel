@@ -2042,11 +2042,10 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
         // The syntax reads `yield` (design principles 5.4: a function whose body writes it
         // produces a stream, and its head writes the stream type). What produces that stream is
         // the generator state machine of docs/design/io-concurrency-streams/plan.cn.md slice E,
-        // which is not built yet; the ruling on what it means is
-        // docs/handover/reviews/questions-2026-10-23.md:394 (several `yield`s a round, any
-        // nesting, `match` arms and `sync` blocks, per-element faults, linear values). Refusing
-        // it by name here is what keeps a `yield` from running as a `return`: a wrong value
-        // would be worse than a named gap.
+        // which is not built yet: several `yield`s in one round, any nesting, `match` arms and
+        // `sync` blocks, per-element faults and linear values are all things that machine has to
+        // produce. Refusing it by name here is what keeps a `yield` from running as a `return`:
+        // a wrong value would be worse than a named gap.
         diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("generators");
         throw BuildAbortException();
     }
