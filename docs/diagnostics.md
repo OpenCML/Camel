@@ -7837,7 +7837,35 @@ None: choice: a stream has one consumer on each path, so which place reads it an
 A stream is read one element at a time and is done when it ends, so on each execution path its value has one consumer (design principles 5.4). The second consumer is here and the first is here. To read one stream from two places, write `tee(s, n)`: it gives two streams, each read once, and both see the same elements.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/stream/consumed_twice.cml`, run as `camel test/cases/compile/stream/consumed_twice.cml`)
+
+```camel
+module stream_consumed_twice
+
+func count(n: int): int.. {
+    return step(n)
+}
+
+func step(n: int): () => (int, int..)? {
+    return () => if n > 0 then (n, step(n - 1)) else null
+}
+
+func firstOf(p: (int, int..)?): int {
+    return match p {
+        case null => 0
+        case v => v.0
+    }
+}
+
+func twice(s: int..): int {
+    let first = loop acc = 0 for x in s do acc + x
+    return first + firstOf(s())
+}
+
+func main(): int sync {
+    return twice(count(3))
+}
+```
 
 ### RangeStepZero
 
