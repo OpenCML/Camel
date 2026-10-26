@@ -18,7 +18,7 @@ error[SemanticDiag::NoMatchingFunction]: No matching function found for argument
  11 |     println(add(1))
     |                ^^^
 help: Check the number and types of arguments to ensure they match one of the available overloaded function signatures. Available overloads:
-          add: (a: int, b: int) => int
+          add: (a: int, b: int) => int pure
 
 error[SemanticDiag::NoMatchingFunction]: No matching function found for argument types: <> (int, string).
    --> <ROOT>/test/cases/compile/diag_render/sem_independent.cml:12:16
@@ -26,6 +26,6 @@ error[SemanticDiag::NoMatchingFunction]: No matching function found for argument
  12 |     println(add(1, 'x'))
     |                ^^^^^^^^
 help: Check the number and types of arguments to ensure they match one of the available overloaded function signatures. Available overloads:
-          add: (a: int, b: int) => int
+          add: (a: int, b: int) => int pure
 
 camel: 4 errors

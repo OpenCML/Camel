@@ -412,7 +412,7 @@
       "normalPorts": [
         "g2n0"
       ],
-      "signature": "(x: int) => int"
+      "signature": "(x: int) => int pure"
     },
     {
       "capturePorts": [],
@@ -504,7 +504,7 @@
       "normalPorts": [
         "g3n0"
       ],
-      "signature": "(x: i32) => i32"
+      "signature": "(x: i32) => i32 pure"
     },
     {
       "capturePorts": [],
@@ -686,7 +686,7 @@
         }
       ],
       "normalPorts": [],
-      "signature": "() => int"
+      "signature": "() => int uses stdout"
     }
   ],
   "root": "g0",
