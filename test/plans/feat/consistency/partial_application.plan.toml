@@ -133,7 +133,7 @@ backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_output_not_contains = ["[Error]", "error[", "Segmentation fault", "dumped core"]
-expect_output_contains = ["SemanticDiag::EffectNotExecuted", "var_parameter_effect.cml:34:"]
+expect_output_contains = ["SemanticDiag::EffectNotExecuted", "var_parameter_effect.cml:33:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 verify_script = """
 ({ input, assert }) => {
@@ -227,7 +227,7 @@ backends = ["nvm"]
 backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
-expect_output_contains = ["name=SemanticDiag::PartialApplicationRefused", "err_context_argument_name.cml:13:"]
+expect_output_contains = ["name=SemanticDiag::PartialApplicationRefused", "err_context_argument_name.cml:12:"]
 
 [[tests]]
 name = "partial_application.err_context_argument_out_of_range"

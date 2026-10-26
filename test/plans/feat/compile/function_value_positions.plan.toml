@@ -85,7 +85,7 @@ case = "../../../cases/compile/function_values/map_callback_not_same_type.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
-expect_output_contains = ["map_callback_not_same_type.cml:15:", "map_callback_not_same_type.cml:16:", "map", "(s: string) => int", "(a: int, b: int) => int"]
+expect_output_contains = ["map_callback_not_same_type.cml:14:", "map_callback_not_same_type.cml:15:", "map", "(s: string) => int", "(a: int, b: int) => int"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

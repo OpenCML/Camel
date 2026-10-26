@@ -132,7 +132,7 @@ kind = "negative"
 case = "../../../cases/compile/decorators/block_mismatch.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["NoMatchingFunction", "block_mismatch.cml:12:"]
+expect_output_contains = ["NoMatchingFunction", "block_mismatch.cml:11:"]
 
 [[tests]]
 name = "test_module_exported"

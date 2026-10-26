@@ -282,7 +282,7 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
 expect_diagnostic_line = 12
 expect_diagnostic_column = 14
-expect_output_contains = ["a value with no dimension has no first dimension to iterate over", "open_rank_round_iterate_round.cml:13:"]
+expect_output_contains = ["a value with no dimension has no first dimension to iterate over", "open_rank_round_iterate_round.cml:12:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

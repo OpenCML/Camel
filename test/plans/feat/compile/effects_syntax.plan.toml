@@ -100,7 +100,7 @@ kind = "behavior"
 case = "../../../cases/effects/effect_through_parameter.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_output_contains = ["SemanticDiag::EffectNotExecuted", "effect_through_parameter.cml:21:", "0 0 1 2"]
+expect_output_contains = ["SemanticDiag::EffectNotExecuted", "effect_through_parameter.cml:20:", "0 0 1 2"]
 
 [[tests]]
 name = "effect.parameter_promises_pure"
@@ -123,7 +123,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
 expect_diagnostic_code = "0x0300000F"
-expect_output_contains = ["err_inferred_not_pure.cml:19:", "uses stdout", "(x: int) => int pure"]
+expect_output_contains = ["err_inferred_not_pure.cml:18:", "uses stdout", "(x: int) => int pure"]
 
 [[tests]]
 name = "err.pure_parameter_write"
@@ -134,7 +134,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
 expect_diagnostic_code = "0x0300000F"
-expect_output_contains = ["err_pure_parameter_write.cml:21:", "usePure: (f: (x: int) => int pure) => int pure"]
+expect_output_contains = ["err_pure_parameter_write.cml:20:", "usePure: (f: (x: int) => int pure) => int pure"]
 
 [[tests]]
 name = "err.promise_through_parameter"
@@ -144,7 +144,7 @@ case = "../../../cases/effects/err_promise_through_parameter.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
-expect_output_contains = ["err_promise_through_parameter.cml:9:", "write 'pure' on the parameter", "an effect outside the program"]
+expect_output_contains = ["err_promise_through_parameter.cml:8:", "write 'pure' on the parameter", "an effect outside the program"]
 
 [[tests]]
 name = "err.unknown_resource"
@@ -188,7 +188,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["err_pure_body.cml:7:", "pure", "stdout"]
+expect_output_contains = ["err_pure_body.cml:6:", "pure", "stdout"]
 
 [[tests]]
 name = "err.pure_body2"
@@ -199,7 +199,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["err_pure_body2.cml:13:", "(x: int) => int pure", "stdout", "err_pure_body2.cml:14:"]
+expect_output_contains = ["err_pure_body2.cml:12:", "(x: int) => int pure", "stdout", "err_pure_body2.cml:13:"]
 
 [[tests]]
 name = "err.uses_live"
@@ -210,7 +210,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["err_uses_live.cml:8:", "uses fs", "stdout"]
+expect_output_contains = ["err_uses_live.cml:7:", "uses fs", "stdout"]
 
 [[tests]]
 name = "err.group_cycle"
