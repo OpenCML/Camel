@@ -522,46 +522,55 @@ export let rules: Rule[] = [rms_fuse, swiglu_fuse]
 
 ### L5 · 0:44–0:59 · The jam
 
-**Idea:** the compiler is not taught a false law. Every rule passes `check` before admission, a
-refuted rule cannot stay in a library, and the refutation carries its counter-example.
+**Idea:** the compiler is not taught a law that does not hold. Every rule passes `check` before
+admission, and a refuted rule cannot stay in a library. Even the "obvious" improvement is measured:
+the textbook rewrite of the naive softmax into the stable one is refused, because on f32 there are
+inputs where the stable form is the less accurate one.
 
 **Picture:**
 
-- A new stencil is laid down: `(a + b) + c ⇒ a + (b + c)` on `f32`. Random inputs fall through it as
-  small beads.
-- 4 s: one bead **jams** the stencil. A coral cross and a felt thud follow. The card flips to show
-  two tiny graphs evaluating `1e16, -1e16, 1`: one side gives `1`, the other `0`.
-- 9 s: `#requires(reassociate, no_infs)` is typed above the rule. The stencil re-enters, and its
-  proposition label changes to `real equality`. Beads flow freely, a mint tick appears, and the
-  verdict reads `sampled`.
+- A stencil is laid down. Its cut-out is the naive softmax `exp(x) / sum(exp(x))`, and its
+  replacement is `softmax(x)`.
+- For about 1 s a small cyan tab on the stencil reads `#requires(refine_accuracy)`, glossed in dim
+  as `may change the bits, never for the worse`. It is not explained further.
+- Random f32 vectors fall through the stencil as beads. Most pass.
+- 5 s: one bead **jams** the stencil, with a coral cross and the felt thud. The bead opens into the
+  vector `[-1e-16, 27.004, -33.563]`.
+- The card flips and shows two bars for the smallest probability's error against a high-precision
+  reference: naive `7.76e-8` (short, chalk) and stable `1.91e-6` (long, coral). Beneath, a dim
+  footnote: `x − max ≈ −27: exp's error grows with |x|`.
+- The verdict line types, and the stencil is lifted off the library row and set aside.
+- 11 s: the neighbouring stencil, `log(softmax(x)) ⇒ log_softmax(x)` (the one the standard library
+  keeps), runs the same gauntlet and gets a mint tick with `sampled`. Laws that hold get in.
 
-**Narration:** "And the compiler won't learn a false law. check tries to break every rule — and shows
-the input that does. Name the permission it needs, and it passes."
+**Colour:** cyan stencil, coral jam, mint for the law that passes.
 
-**Subtitle:** 编译器也不会学到错误的定律。check 会试着推翻每一条规则，并给出推翻它的输入。写明它需要的数值许可，它才通过。
+**Narration:** "And the compiler won't learn a false law. Even the stable-softmax rewrite: check found
+the input where it is less accurate, and refused it. Only laws that hold get in."
 
-**Code:**
+**Subtitle:** 编译器也不会学到错误的定律。连"更稳定"的 softmax 改写也不例外：check 找到了让它更不准的输入，并拒绝了它。只有成立的定律才能进来。
+
+**Code (top of frame, supporting size):**
 
 ```camel
-rule regroup(a: f32, b: f32, c: f32) {
-    (a + b) + c => a + (b + c)
+#requires(refine_accuracy)
+rule tensor_softmax_naive(x: f32[3], const axis: int) {
+    exp(x) / sum(exp(x), axis, true) =>
+        softmax(x, axis)
 }
 
-println(check([regroup]))
+println(check([tensor_softmax_naive], 100, 7))
 ```
 
-**Report, in the form `check` prints:**
+**Report (what `check` prints for this rule):**
 
 ```text
-refuted regroup: proposition equality, evidence counterexample,
-  the two sides differ at (1e+16, -1e+16, 1): 1 and 0
+refuted tensor_softmax_naive: proposition error bound, evidence counterexample,
+  the right side is worse at (tensor<f32> [3] {-1e-16, 27.004, -33.563}, 0)
 ```
 
-**After the tag:**
-
-```text
-sampled regroup: proposition real equality + IEEE on special values, evidence samples 200
-```
+The error figures `1.91128e-06` and `7.75714e-08` come from the same output and are shown as the two
+bars.
 
 ## Act III · Ship it
 
@@ -669,8 +678,9 @@ same section numbers.
 | L2 | A Camel definition is visible to the compiler: fusion, differentiation, export and rules apply without per-op rules | DP 10.4 |
 | L3 | `#impl(f)` names a native kernel; not expanded by default; expanded on demand; a differential test keeps the two in agreement | DP 10.4; `stdlib/array.cml` (`#impl(sum_kernel)`) |
 | L4 | A `rule` is a `Rule` value; a rule set is a `Rule[]` | DP 9.11; `stdlib/rules.cml` header |
-| L5 | Verdicts `proved`, `refuted`, `sampled`; a refuted rule may not stay in a library; refutations give a counter-example | DP 9.11; DP 1, red line 4; the report form is from `test/plans/feat/modules/rules.plan.toml` |
-| L5 | Under `reassociate`, the proposition is real equality on finite values | DP 9.11, 7 |
+| L5 | Verdicts `proved`, `refuted`, `sampled`; a refuted rule may not stay in a library; a refutation gives its counter-example | DP 9.11; DP 1, red line 4 |
+| L5 | The naive-to-stable softmax rewrite is refused on f32 `[-1e-16, 27.004, -33.563]`: the stable form's error on the smallest probability is 1.91e-6 against the naive form's 7.76e-8, because `exp(x - max)` at about -27 carries more argument-scaling error | `test/cases/modules/rules/check_rejected_softmax.cml`; expected output in `test/plans/feat/modules/rules.plan.toml` (case `check_rejected_softmax`); `stdlib/rules.cml` comment above `tensor_log_softmax_of_softmax` |
+| L5 | `refine_accuracy` permits replacing a form with one whose error is not larger; `check` measures it against a higher-precision reference; `log(softmax(x)) => log_softmax(x)` is accepted | DP 7.2, 9.11; `stdlib/rules.cml` (accuracy rules) |
 | L6 | Rule sets are handed to passes explicitly; importing changes nothing; `std::opt<rules: …>` | DP 9.3, 9.11 |
 | L7 | A pass is `(f: F) => F!`; a pipeline is function composition used by name; module passes carry the module name | DP 9.1, 9.2, 9.3 |
 | L7 | `F!` passing into a pass that requires `is_function::<F>()` carries the error on | DP 3.9 |

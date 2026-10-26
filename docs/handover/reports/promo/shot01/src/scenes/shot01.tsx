@@ -52,7 +52,7 @@ const CJK = 'Noto Sans SC, Noto Sans CJK SC, Microsoft YaHei, PingFang SC, sans-
 const R = 36; // half size of every node (72 px)
 const STROKE = 4;
 const CODE_SIZE = 52;
-const FRAME = {x: 450, width: 860, height: 560}; // the frame of `f`
+const FRAME = {x: 420, width: 820, height: 560}; // the frame of `f`, inside the safe margin
 const LEFT = FRAME.x - FRAME.width / 2; // port `x` sits on this edge
 const RIGHT = FRAME.x + FRAME.width / 2; // the result ring sits on this edge
 const GUTTER_X = -960 + 112;
@@ -239,6 +239,7 @@ export default makeScene2D(function* (view) {
         endArrow
         arrowSize={10}
         end={0}
+        opacity={0} // a zero-length stroke with round caps would still show a dot
       />,
     );
     return ref;
@@ -356,6 +357,7 @@ export default makeScene2D(function* (view) {
     yield* all(n.shape().end(1, duration, easeInOutCubic), n.glyph().opacity(1, 0.1));
   };
   const stroke = function* (e: Reference<Line>) {
+    e().opacity(1);
     yield* e().end(1, 0.25, easeOutCubic);
   };
   const pulse = function* (n: GraphNode) {

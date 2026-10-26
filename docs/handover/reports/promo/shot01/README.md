@@ -14,21 +14,28 @@ This is shot 1 of the main film ([../script.md](../script.md)), "One ink". It ru
 
 The beats and their times are listed at the top of `src/scenes/shot01.tsx`.
 
-## Status
+## Status: rendered
 
-The scene was type-checked and rendered with Motion Canvas 3.17.2, in a scratch copy outside the
-repository:
+`out/shot01.mp4` is the render: 1920×1080, 60 fps, 7.07 s, H.264. Three stills sit beside it:
 
-- `tsc` reports no errors.
-- The editor's built-in **Image sequence** exporter rendered 424 PNG frames at 60 fps (7.07 s),
-  driven through headless Edge.
-- The frames were reviewed. One fix came out of that review: the glyph flight path now curves
-  instead of crossing the header line.
+| File | Moment |
+|---|---|
+| `out/still-1-start.png` | the start (1.0 s) |
+| `out/still-2-merge.png` | the merge (4.1 s) |
+| `out/still-3-end.png` | the end |
 
-No video file was encoded, because ffmpeg is not installed on this host. Fonts fell back to the
-system faces during that render. With JetBrains Mono and Noto Sans SC installed, the code spacing
-changes slightly, and the underlines follow it because they are laid out from the text's measured
-width.
+**How it was rendered.** In the Docker container `camel-lanes` (Ubuntu 24.04), under
+`/work/promo/shot01`:
+
+1. Install the fonts with `apt`: `fonts-jetbrains-mono` and `fonts-noto-cjk`.
+2. Start the editor with `npx vite --port 9000`.
+3. Drive the editor's built-in **Image sequence** exporter with headless Chromium through Puppeteer
+   (`/work/promo/render.cjs`). This produces 424 PNG frames.
+4. Encode with
+   `ffmpeg -framerate 60 -i %06d.png -c:v libx264 -crf 16 -pix_fmt yuv420p out/shot01.mp4`.
+
+`npx tsc --noEmit --skipLibCheck` passes. The `--skipLibCheck` flag is only needed in that container,
+because installing Puppeteer there also installs a newer `@types/node`.
 
 ## Preview
 
