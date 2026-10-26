@@ -221,6 +221,14 @@ std::string constasKeyOf(const camel::core::data::data_ptr_t &data);
 /// `f<"w">`.
 std::string constasTextOf(const camel::core::data::data_ptr_t &data);
 
+/// Whether a value of this type is read once on each execution path: a stream is (design
+/// principles 5.4), and so is the step function of a stream -- a function taking nothing whose
+/// answer carries one, which is how a stream's value is spelled. A tuple or a struct that holds a
+/// stream is not a value of this kind: reading two of its members reads two members, not the
+/// stream twice. Used where a capture is made (a captured stream is refused) and by the check that
+/// counts the reads of the built graphs, so both read one rule.
+bool streamReadOnce(const camel::core::type::Type *type);
+
 /// The graph builder of a program (design principles 10.1, "模块"; the graph model,
 /// docs/design/graph-model/README.cn.md 3.9). One builder serves every module of the program:
 /// the functions of all modules are graphs of their own, and the values of the top level of
@@ -735,6 +743,16 @@ class Builder {
     // variable is named by it in diagnostics).
     std::unordered_map<node_handle_t, node_handle_t> captureOriginOf_;
     std::unordered_map<node_handle_t, std::string> originNames_;
+    // The value the port of a machine's region stands for: a round takes the sequence it iterates
+    // and the states it starts from out of its ports, so the port is that value inside the round,
+    // exactly as a capture port is what it captured (design principles 3.7, rule C1). The machine
+    // records it here, where a capture origin is recorded, so one answer says what value a port is
+    // and the linearity check reads one identity for a loop's state slot and the value handed to it.
+    //
+    // It is a table of its own rather than `captureOriginOf_`, which also says what a WRITE to the
+    // port writes (builder_expr.cpp, `recordWrite`): a write to a round's port writes the round's
+    // state, not the value the state started from.
+    std::unordered_map<node_handle_t, node_handle_t> machinePortOrigin_;
     // Graphs whose function value has been made (a DATA node of the function, or a FILL of it
     // with its captures). The value holds the captures the graph had then, so the graph
     // cannot take one more.
@@ -764,6 +782,11 @@ class Builder {
     /// The name a capture of `origin` is shown with: the qualified name of a top-level value
     /// (with its module when it is not the current module's), `fallback` otherwise.
     std::string captureNameOf(node_handle_t origin, const std::string &fallback) const;
+    /// Records that the port `port`, made by a machine for a region of a loop, stands for the
+    /// value `origin` the machine was handed (the sequence it iterates, the state it starts
+    /// from). Written where a capture origin is written, so one table says what value a port is
+    /// (`machinePortOrigin_`).
+    void noteMachinePortOrigin(node_handle_t port, node_handle_t origin);
     /// Registers the direct call `call` of `callee` in the current graph: its captures, as
     /// the current graph sees them now, to be linked by linkCaptureSites.
     void addCaptureSite(node_handle_t call, const compile_graph_ptr_t &callee);
@@ -1013,35 +1036,34 @@ class Builder {
     using arm_ptr_t = std::shared_ptr<ArmBuild>;
     /// The arms being built, outermost first.
     std::vector<ArmBuild *> armStack_;
-    /// One place a stream value is consumed: which value, the arms the use stands in (outermost
-    /// first), and where it was written. A stream is read once on each execution path (design
-    /// principles 5.4), so two uses of one value are refused unless they stand in different arms
-    /// of one branch.
-    struct StreamConsumption {
-        /// One region the use stands in: a branch's arm (only one of a branch runs, so two uses
-        /// in two of them are one consumer), or the condition or body of a loop (which runs on
-        /// every round, so a use in one of them consumes the value once per round).
-        struct ArmUse {
-            uint32_t region                   = 0;
-            bool round                        = false;
-            std::vector<node_handle_t> ports;
-            camel::source::origin_id_t origin = camel::source::kInvalidOriginId;
-        };
-        DraftGraphBuilder *graph          = nullptr;
-        node_handle_t value               = 0;
-        std::vector<ArmUse> arms;
+    /// Refuses the second reader of one stream on one execution path (design principles 5.4: a stream
+    /// is read once on each path). The check measures the built graphs of the whole program -- a
+    /// value handed to a function is read where that call stands -- and records what it finds below;
+    /// the report names them per module, with the module's other diagnostics (program.cpp).
+    struct StreamViolation {
+        /// What is wrong with the read, which is the diagnostic it is reported as.
+        enum class Kind { Captured, ConsumedInLoop, ConsumedTwice };
+        Kind kind                = Kind::ConsumedTwice;
+        DraftGraphBuilder *graph = nullptr;
+        /// The capture port a capture stands for, in the graph that captured it: the way to ask,
+        /// once the body is built, whether the closure reads what it captured.
+        node_handle_t port = nullptr;
+        /// Where the read is written.
         camel::source::origin_id_t origin = camel::source::kInvalidOriginId;
+        /// The other place the message points at: the loop a round read stands in, or the read
+        /// before this one; none for a capture.
+        camel::source::origin_id_t related = camel::source::kInvalidOriginId;
+        std::string relatedText;
+        /// The value's type, as the message names it.
+        std::string what;
     };
-    std::vector<StreamConsumption> streamConsumptions_;
-    /// The arms of one branch, with the graph they belong to: a use in one of them excludes a use
-    /// in another, which is what makes `if c then s() else s()` one consumer rather than two.
-    std::vector<std::pair<DraftGraphBuilder *, std::vector<uint32_t>>> armGroups_;
-    /// Remembers the arms of one branch, so a later use can tell exclusion from a second consumer.
-    void noteArmGroup(const std::vector<arm_ptr_t> &arms);
-    /// Records that `value` is consumed at `at`, and refuses the second consumer of one path.
-    void consumeStream(node_handle_t value, const GCT::node_ptr_t &at);
-    /// Refuses two consumers of one stream on one execution path, once the graph's arms are known.
-    void checkStreamConsumption(DraftGraphBuilder *graph);
+    std::vector<StreamViolation> streamViolations_;
+    /// Measures the built graphs for the stream rule, over the whole program, and records what it
+    /// finds. Runs with the other passes that settle a program, so every body is in hand and every
+    /// read is a data edge of the graph it was written in.
+    void settleStreamLinearity();
+    /// Reports the recorded stream violations of the module being reported.
+    void reportStreamLinearity();
     /// The `match type` arm being built: its cases are not regions (only one is selected),
     /// but a `return` written in the selected body still gives the value of the match, not of
     /// the function around it.
@@ -1178,6 +1200,10 @@ class Builder {
     enum class BodyState { Open, Built };
     std::unordered_map<DraftGraphBuilder *, CaptureSummary> captures_;
     std::unordered_map<DraftGraphBuilder *, BodyState> bodyStates_;
+    /// Registers a built body with the module that owns it, once: a graph built once is one body,
+    /// and a pass that judges every built body (the stream rule) judges it once, counts its readers
+    /// once and asks about its loops once.
+    void registerBuiltBody(const compile_graph_ptr_t &graph);
     // A captured variable as the current graph sees it at a call or branch: the node of the
     // current graph that holds it, and the variable itself (its origin).
     struct CapturedUse {

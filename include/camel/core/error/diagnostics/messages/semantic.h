@@ -17,7 +17,7 @@ namespace camel::core::error {
 
 enum class SemanticDiag : uint32_t {
     // Errors
-    // 0x0001F6 vacant
+    // 0x0001F8 vacant
     Redeclaration               = 0x000001,
     ModuleNotFound              = 0x000002,
     ReservedIdentifier          = 0x000003,
@@ -413,6 +413,7 @@ enum class SemanticDiag : uint32_t {
     // rather than block the side that runs ahead -- but no buffer holds fewer than the one element
     // being handed over, so a constant width below 1 is refused where it is written.
     TeeHintNotPositive  = 0x0001EF,
+    StreamCaptured      = 0x0001FA,
     NodeOfNotAParameter = 0x0001DE,
     // The element type of a value is in its type (design principles 5.1), so an array type writes one:
     // a shape with no element type in front of it asks a question the type of a value answers. A

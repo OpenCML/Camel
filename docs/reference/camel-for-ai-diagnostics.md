@@ -59,7 +59,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 212
+**Semantic — errors** (`SemanticDiag`) — 213
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -260,6 +260,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `StreamConsumedTwice` | '{0}' is consumed twice: a stream is read once on each execution path. |
 | `StreamConsumedInLoop` | '{0}' is consumed once per round of this loop. |
 | `TeeHintNotPositive` | The `tee` width '{0}' is below 1. |
+| `StreamCaptured` | '{0}' cannot be captured: a stream is read once, and a closure outlives the read. |
 | `NodeOfNotAParameter` | '{0}' is not a const parameter of the rule '{1}', so node_of({0}) names no node. |
 | `BranchElementTypeMismatch` | The two arms of the branch have different element types: '{0}' and '{1}'. An array's element type is part of its type, and a number of one element type does not become a number of another by itself. |
 | `RuleConstParamNotMatched` | '{0}' is a `const` parameter of the rule '{1}', and the left side matches no constant for it. |

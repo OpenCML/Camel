@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-290 diagnostics: 273 errors, 17 warnings. 15 carry a machine-applicable edit, 275 say why they carry none.
+291 diagnostics: 274 errors, 17 warnings. 15 carry a machine-applicable edit, 276 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -256,6 +256,7 @@ prints one entry.
 | `0x030001F7` | [SemanticDiag::FactConstCaseTypeRequired](#factconstcasetyperequired) | Error | no |
 | `0x030001F8` | [SemanticDiag::FactCaseBindsNoVariable](#factcasebindsnovariable) | Error | no |
 | `0x030001F9` | [SemanticDiag::FactJoinRequired](#factjoinrequired) | Error | no |
+| `0x030001FA` | [SemanticDiag::StreamCaptured](#streamcaptured) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -8638,6 +8639,59 @@ fact sign(v: int): int match v {
 }
 
 func main(): int sync {
+    return 0
+}
+```
+
+### StreamCaptured
+
+`0x030001FA` · Error · `SemanticDiag::StreamCaptured`
+
+**Fix**
+
+None: choice: where the stream is read instead is the writer's to write
+
+**Message**
+
+```text
+'{0}' cannot be captured: a stream is read once, and a closure outlives the read.
+```
+
+**Help**
+
+```text
+A stream is read one element at a time and is done when it ends, so on each execution path its value has one consumer (design principles 5.4). The body of a closure runs after the path that made the closure has finished, so the read a capture would make is not that path's one read: write the stream where it is consumed -- as the argument of a call that reads it, or as the subject of a loop -- and let a closure that needs a stream open one of its own.
+```
+
+**Example** (`test/cases/compile/stream/capture_stream.cml`, run as `camel test/cases/compile/stream/capture_stream.cml`)
+
+```camel
+module stream_capture_stream
+
+let source: int.. = count(3)
+
+func count(n: int): int.. {
+    return step(n)
+}
+
+func step(n: int): () => (int, int..)? {
+    return () => if n > 0 then (n, step(n - 1)) else null
+}
+
+func firstOf(p: (int, int..)?): int {
+    return match p {
+        case null => 0
+        case v => v.0
+    }
+}
+
+func read(): () => int {
+    return () => firstOf(source())
+}
+
+func main(): int sync {
+    let take = read()
+    println(take())
     return 0
 }
 ```

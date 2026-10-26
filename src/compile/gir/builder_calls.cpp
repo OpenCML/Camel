@@ -562,7 +562,7 @@ node_handle_t Builder::partialApplicationOf(
         node_handle_t value = visitLinkNode(call);
         setGraphReturnFromResult(graph, nodeIdOf(value), nodeIdOf(value), nodeTypeOf(value));
         restore();
-        unit_->builtBodies.push_back(graph);
+        registerBuiltBody(graph);
     } catch (...) {
         restore();
         leaveScope();
@@ -777,7 +777,7 @@ compile_graph_ptr_t Builder::forwardingGraphOf(const compile_graph_ptr_t &target
         (void)capturedUsesOf(target);
         setGraphReturnFromResult(graph, nodeIdOf(call), nodeIdOf(call), targetType->exitType());
         bodyStates_[graph.get()] = BodyState::Built;
-        unit_->builtBodies.push_back(graph);
+        registerBuiltBody(graph);
     } catch (...) {
         bodyStates_[graph.get()] = BodyState::Built;
         leaveScope();

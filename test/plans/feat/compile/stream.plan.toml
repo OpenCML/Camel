@@ -770,7 +770,23 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::StreamConsumedTwice"
 expect_diagnostic_code = "0x030001E5"
 expect_diagnostic_line = 25
-expect_diagnostic_column = 29
+expect_diagnostic_column = 28
+expect_output_contains = ["consumed twice", "the stream is consumed here first", "tee(s, n)"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.two_loops_consume"
+expect_diagnostic_line = 19
+expect_diagnostic_column = 45
+desc = "Two `for`s over one stream are two consumers (design principles 5.4). One `for` is one consumer however many edges the machine it builds reads the value on -- the sequence it is handed and the slot of its state that holds it back are one read -- but a second `for` pulls the same stream again, so it is refused with both places named."
+kind = "negative"
+case = "../../../cases/compile/stream/two_loops_consume.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StreamConsumedTwice"
+expect_diagnostic_code = "0x030001E5"
 expect_output_contains = ["consumed twice", "the stream is consumed here first", "tee(s, n)"]
 expect_output_not_contains = ["UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -797,8 +813,24 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::StreamConsumedInLoop"
 expect_diagnostic_code = "0x030001ED"
 expect_diagnostic_line = 26
-expect_diagnostic_column = 57
+expect_diagnostic_column = 56
 expect_output_contains = ["consumed once per round of this loop", "the loop this use stands in", "loop acc = 0, rest = s while", "for x in s"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.capture_stream"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 21
+desc = "A lambda cannot capture a stream (design principles 5.4): it may be called any number of times, so the read it makes is not the one read the path that made it allows. The lambda here pulls the stream it captured, so its capture is refused; a closure that only hands a stream on is not refused."
+kind = "negative"
+case = "../../../cases/compile/stream/capture_stream.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StreamCaptured"
+expect_diagnostic_code = "0x030001FA"
+expect_output_contains = ["cannot be captured", "a closure outlives the read"]
 expect_output_not_contains = ["UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -846,6 +878,22 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_exact = "6\n6\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.tee_result_consumed_twice"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 13
+desc = "The streams a `tee` gives are streams like any other (design principles 5.4): a `tee` makes two streams, one for each reader, and each is still read once. Reading one side twice is two consumers of that side, so it is refused exactly as reading any other stream twice is."
+kind = "negative"
+case = "../../../cases/compile/stream/tee_result_consumed_twice.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StreamConsumedTwice"
+expect_diagnostic_code = "0x030001E5"
+expect_output_contains = ["consumed twice", "the stream is consumed here first", "tee(s, n)"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
 [[tests]]
@@ -909,3 +957,15 @@ expect_stdout_contains = ["PROFILE camel", "operator calls", "6"]
 expect_stdout_not_contains = ["STREAM_TEE", "streams - one line per tee"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
+
+[[tests]]
+name = "stream.arm_error_keeps_its_diagnosis"
+desc = "A stream read in each arm of a branch is one consumer per path; an arm given up over a mistake in it reports that mistake, and not a second consumer of the stream."
+kind = "behavior"
+case = "../../../cases/compile/stream/arm_error_keeps_its_diagnosis.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_stdout_contains = ["nowhere_name"]
+expect_stdout_not_contains = ["consumed twice", "consumed once per round"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
