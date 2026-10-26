@@ -1,262 +1,181 @@
-# Visual language
+# Visual language: "Plotter on navy"
 
 Used by both films. The audience is AI researchers and engineers, so the frames should look like a
-technical figure drawn with care, not like a product ad. That means a dark ground, few colours, and
-motion that always shows a cause. The graph carries the film, the code supports it, and the subtitles
-come third.
+technical drawing being made in front of them, not like a product ad.
 
-**The one idea behind every choice:** in Camel the program *is* the graph. So the film never leaves
-the graph. There are no hard cuts and no cutaways to logos or stock footage. Every shot continues the
-canvas of the shot before it (see 6.3, match cuts). The code panel is a window onto that same canvas,
-not a separate slide.
+## 0. The idea
 
----
+Camel's logo is a camel drawn as a graph: monoline cells and joints inside a circle, on deep navy.
+The film takes its whole look from that drawing.
 
-## 1. Palette (dark ground)
+- **One ink.** Code and graph are drawn with the same pen, on the same ground. There is no panel box
+  around the code: it is written straight on the navy, with a thin gutter rule. When a token is
+  typed, its glyph **lifts off the line and flies into the graph** to become a node. That is the
+  claim, "the program is the graph", shown and not said.
+- **Plotter, not pop.** Things are drawn, not spawned. A node's outline is traced by a pen (stroke
+  0 → 100 %). An edge is one stroke from source to target. Nothing bounces.
+- **The ending is the logo.** In the last shot the camera pulls back and every graph drawn in the
+  film turns out to sit inside one outline: the camel. The logo is literally a graph, so the film
+  closes on the brand without leaving its own vocabulary.
 
-Each colour means one thing, and that meaning holds for both films.
+## 1. Palette
+
+The ground comes from the logo. Every accent colour has exactly one meaning in both films.
 
 | Role | Hex | Meaning, and only this |
 |---|---|---|
-| ink | `#0D1117` | background, flat (no gradients; a 3 % dot grid when depth is needed, 7.4) |
-| panel | `#141B26` | code panel, node fill, cards |
-| line | `#2A3445` | panel borders, grid, separators |
-| text | `#E6EDF3` | code, glyphs inside nodes |
-| dim | `#7D8CA3` | labels, secondary text, ghosted (not-running) nodes |
-| steel | `#6C86B0` (lit `#8FB3FF`) | data edges and ordinary node outlines |
-| **sand** | `#E0A94B` | the brand colour and "look here": the current value travelling, equality, focus |
-| **cyan** | `#4DD0E1` | passes (graph → graph functions) and rewriting in progress; rule cards |
-| **violet** | `#B388FF` | everything a derivative transform makes (`grad`, `vjp`, `jvp`): reverse graph, tangents |
-| **mint** | `#6EE7A8` | computed results, `pure`, a check that passed |
-| **coral** | `#FF6B6B` | failure: error values on the side track, faults, a broken promise, a refuted law |
-| **cream** | `#F5E6C8` (dashed) | order: `sync` edges and order edges between effects |
-| **rose** | `#F28FB0`, region fill at 8 % | device placement (`#gpu`) |
+| ground (top → bottom) | `#2D3968` → `#242946` | vertical gradient, the logo's navy; never changes |
+| grid | `#FFFFFF` at 4 % | 48 px drafting grid; only in shots that need space |
+| chalk | `#D8DEF5` | the pen: node outlines, data edges, code text |
+| chalk-dim | `#8E9AC0` | gutter, labels, ghosted (not-running) nodes |
+| keyword | `#AEB9DE` | keywords in code |
+| **sand** | `#F2B35B` | the brand colour and "the value, now": the travelling value, equality, focus |
+| **cyan** | `#5EE0F0` | passes and rewriting: the sweep line, rule stencils |
+| **violet** | `#C3A6FF` | what derivative transforms make: the reflected (reverse) graph, tangents |
+| **mint** | `#7BE8B0` | right and computed: results, a passed check, the `pure` seal |
+| **coral** | `#FF7A70` | failure: the error side track, faults, a broken seal, a refuted law |
+| **thread** | `#F7E3B5` | order: the `sync` thread and order edges |
+| **rose** | `#FF9CC2`, region fill at 10 % | device placement (`#gpu`) |
 
 Rules:
 
-- A shot uses at most two accent colours besides sand.
-- Mint means only "right, and computed". Coral means only "failed", and it always comes with a
-  location or a reason on screen.
-- Contrast: text on ink is above 12:1, and dim on ink is at least 4.5:1.
-- Rose (device) is deliberately far from mint (success), so that placement is never read as "passed".
+- At most two accents per shot, besides sand.
+- Mint never means "placed" or "fast", only "right and computed". Coral always comes with a reason or
+  a location.
+- Contrast: chalk on the ground is about 9:1, and chalk-dim is at least 4.5:1.
 
 ## 2. Type
 
-- **Code and node glyphs:** JetBrains Mono (fallbacks Cascadia Mono, Consolas). 56–64 px at 1080p for
-  code that is the subject of the shot, 44–48 px for supporting code, with line height 1.35. A code
-  line has at most 34 characters, and a panel holds at most 6 lines.
-- **Titles and labels:** Inter (fallbacks Segoe UI, Noto Sans). Titles are 72–96 px Semibold with
-  −1 % tracking. Labels are 26–30 px Regular in dim.
-- **Chinese subtitles:** Noto Sans SC Medium, 40 px, centred 8 % above the bottom edge. At most two
-  lines, and at most 22 characters per line. Code terms (`grad`, `->`, `sync`) stay in English in
-  the monospace face.
-- **English narration is not printed on screen.** Viewers hear it. Only key terms appear, as labels on
-  the graph.
-- **Syntax colour** (used sparingly, and only when the code is the subject):
+- **JetBrains Mono for everything on screen.** That covers code, node glyphs, labels, report lines
+  and the end card. A film about a language set entirely in a monospace face reads as one voice.
+  Weights: 400 for code, 500 for labels, and 700 for the end line only.
+- **Sizes at 1080p:** subject code 52–56 px, supporting code 40–44 px, labels 26 px, end line 88 px.
+  Code is at most 6 lines and 34 characters per line at subject size.
+- **Chinese subtitles:** Noto Sans SC Medium, 40 px, centred 86 px above the bottom edge, in a band
+  that never moves. At most two lines of at most 22 characters each. Code terms stay in English
+  monospace.
+- **English narration is never printed.** Only terms that label something on the graph appear.
+- **Syntax colour, sparingly:**
 
   | Token | Colour |
   |---|---|
-  | keywords | `#B7C4D8` |
-  | operators and `->` | dim |
+  | keywords | keyword |
+  | operators and `->` | chalk-dim |
   | numbers | mint |
   | strings | sand |
-  | tags (`#gpu`, `#impl`) | rose for placement, cyan otherwise |
-  | everything else | text |
+  | `#gpu` | rose |
+  | other tags | cyan |
+  | everything else | chalk |
 
-  Glyphs inside nodes are never coloured.
+## 3. The pen: how the graph is drawn
 
-## 3. How the graph is drawn
-
-There is one vocabulary for the whole film. By its third appearance, a shape needs no explanation.
+All strokes are 4 px with round caps and joins, the same weight as the logo's lines. Fills are the
+ground colour, so a node hides the edges beneath it but adds no colour.
 
 ### 3.1 Nodes
 
-Shape gives the kind of node, never its size.
-
-| Kind | Shape |
+| Kind | Drawing |
 |---|---|
-| Value, constant, port | Circle, 72 px, panel fill, steel outline 4 px, one glyph (`x`, `2`). A port sits on the frame edge of its function. |
-| Operator | Rounded square, 72 px, radius 16, with one glyph (`×`, `+`, `relu`). Wide operators (`linear`, `matmul`) are 132 px wide. |
-| Function or subgraph | Rounded frame, dashed steel 2 px, name top-left in dim. A call is one node. Opening a call means the frame grows and its inside fades in (a continuous zoom, never a cut). |
-| Native kernel (`#impl`) | The same frame, filled solid panel with a small chip glyph in the corner. It is closed by default and opens only when a pass needs to see inside. |
+| Value, constant, port | Circle, 72 px. The glyph inside it is the glyph that flew from the code. A port sits on its function's frame. |
+| Operator | Rounded square, 72 px, radius 18; wide operators (`linear`, `rms_norm`) are 140 px. |
+| Function | Rounded frame, dashed chalk-dim 2 px, name top-left. A call is one node. Opening a call is a camera dive through it. |
+| Native kernel (`#impl`) | A frame drawn twice: glass (dashed, contents visible) and solid (hatched with 45° chalk-dim lines). |
+| Effect | An operator with a small notch cut in its top-right corner, where the `sync` thread passes. |
 | Branch and join | Diamond. The arm not taken fades to 25 %. |
-| Loop | Frame with a return arrow. Its state is a small dot riding the arrow. |
-| Result | Hollow ring. When a value arrives, the outline turns mint and the value is printed below it. |
+| Loop | Frame with a return arc. The state is a bead on the arc. |
+| Result | Hollow ring. When reached, it is re-traced in mint and the value is written beneath it. |
 
 ### 3.2 Edges
 
-- **Data edge:** steel, 5 px, solid, with a small arrowhead. It is trimmed at node borders and never
-  enters a node. A node used twice gets two parallel edges 18 px apart, not one thick line. This is
-  how "one node, used twice" reads.
-- **Order edge (`sync` and effects):** cream, 3 px, dashed, with the dashes drifting slowly toward the
-  target. **Pure computation never has a dashed edge.** That contrast is the whole argument for
-  "order comes from dependencies", so a dashed line never appears in a pure graph.
-- **`with` binding (weights, configuration):** a small value circle that docks onto the *top* edge of
-  its operator, with no edge drawn. Data flows left to right; configuration sits on top. This is
-  `x->linear<w, b>` drawn literally.
+- **Data:** one chalk stroke with a small arrowhead, trimmed at node borders. A node used twice has
+  two parallel strokes 18 px apart, never one thick one.
+- **With-binding (weights, configuration):** a small circle that docks onto the top of its operator,
+  with no edge. Data runs left to right; configuration sits on top. This is `x->linear<w, b>`
+  drawn literally.
 
-### 3.3 Values, evaluation and parallelism
+### 3.3 Values and parallelism
 
-- **Evaluation:** a sand dot, 20 px with a 24 px glow, moves along a data edge. The node's value
-  appears 34 px below it in mint monospace.
-- **"Runs only if needed":** a node that nothing reaches stays dim at 40 % and never receives a dot.
-- **Parallelism:** dots advance on independent branches at the same time. There is no label and no
-  thread icon. The simultaneity is the claim.
-- **Arrays:** a small 3×3 dot badge at the top-right of the node. A shape label such as `f32[b, 784]`
-  is shown in dim, and only when the shape is the point of the shot.
-- **Streams `T..`:** a horizontal pipe holding a small step-function block and a state dot. An element
-  (a sand dot) leaves the pipe only when the consumer pulls. There is no gush of elements. A second
-  consumer of the same stream gets a coral cross (it is a compile-time error).
+- **A value** is a sand bead (18 px, soft 22 px glow) moving along a stroke. Its number is written
+  beneath the node in mint.
+- **Parallelism:** two beads moving in the same frames. No label. The simultaneity is the claim.
+- **Not run:** a node nothing reaches stays chalk-dim and never gets a bead.
 
-## 4. The special things
+## 4. Metaphors, one per idea
 
-### 4.1 Passes, the cyan gate
+Each idea has one image, and the image never changes between shots or between films.
 
-A pass is a vertical rounded gate, taller than the graph, outlined in cyan, with its name on top
-(`std::opt`). The graph slides through it. On the far side the nodes rearrange (see 6.2): the graph
-is visibly the *same graph changing*, not a new picture. A pipeline is several gates on one
-horizontal cyan rule, labelled like the command line: `std::macro → std::opt → std::jit`. Gates hold
-no gears and no sparkles. If one is opened, a graph is inside, because a pass is a function and a
-function is a graph.
+| Idea | Image |
+|---|---|
+| The program is the graph | glyphs lift off the code line and become nodes (0) |
+| One value, one node | equal subgraphs slide together and become one; their uses become parallel strokes |
+| Order comes from dependency | beads move only when their inputs have arrived; independent beads move together |
+| `sync` | **a thread** (thread colour, dashed, slight sag) stitched through the notches of the effect nodes, in written order. Pure nodes are never stitched. |
+| An effect nothing needs | an un-stitched effect node stays dim; a small `EffectNotExecuted` label in chalk-dim |
+| A layer | an operator with its weights docked on top |
+| A pass | **a sweep line**: a vertical cyan line crosses the graph left to right; behind it the graph is redrawn in its new form, and nodes slide straight to their new places. A pipeline is several sweeps in a row, named on a strip like the command line. |
+| A derivative | **a reflection**: `grad` draws a horizontal baseline, and the graph is reflected beneath it in violet with every edge reversed (the reverse pass is the mirror). `jvp` draws its violet twin above the line, running the same way. |
+| Placement | a rose region; where edges cross its edge, small ↑ ↓ marks appear, drawn by the compiler and not the user |
+| Export | the graph folds into a bundle and fans out into cards (`model.onnx`, `model.cpp`) that hold the same drawing; one mint tick spans them all |
+| A stream | a pipe. A bead leaves it only when the consumer **pulls** a short thread from the pipe's mouth. A second consumer's thread snaps (coral). |
+| An error | **the railway**: the happy path is a chalk rail with switch points at each step that can fail; a coral side track runs beneath; a failed bead switches onto it and passes under every later step; it rejoins at the single `!!` and turns sand again |
+| A fault | the pen jerks: a coral blot appears on the node, every other stroke freezes and dims to 25 %, and a location is stamped beside the blot |
+| `attempt` | **a fence**: a thin coral frame around one call; a blot inside it stays inside, and at the fence it becomes a bead on a small side track; the rest keeps moving |
+| `pure` and `uses` | **a seal**: a mint line drawn around the function frame, closed with a small `pure` tab; a resource line (labelled `stdout`) that pierces the seal tears a coral notch in it, and the diagnostic is stamped there. `uses fs` is a seal with one labelled gate in it. |
+| A rule (sequel) | **a stencil**: a card with a cut-out pattern on the left and the replacement on the right; laid over the graph, it glows cyan where it fits, and the sweep redraws that spot |
+| `check` (sequel) | random inputs fall through the stencil as small beads; a counter-example **jams** it (coral), and the card flips to show the inputs and the two values that differ |
+| A rule set (sequel) | stencils fanned in square brackets, `[ … ]`, because a rule set is an ordinary array value; it is handed to a pass by sliding into the `rules:` slot on the sweep's strip |
 
-### 4.2 Derivatives
+## 5. Motion
 
-`grad(f)` is a gate whose output is the original graph (steel) plus a mirror image below it. The
-mirror has its edges reversed and its nodes violet, with faint violet ticks joining corresponding
-nodes. Every later gate acts on both graphs at once. `vjp` and `jvp` are the same gate with a
-different label: `vjp` adds a pullback (the reverse graph), and `jvp` adds a forward tangent (a
-violet twin running in the *same* direction).
+1. **Every movement has a cause on screen.** A node is traced because its glyph just arrived. Nodes
+   merge because they are equal. A bead moves because its inputs are ready.
+2. **Drawing timings:**
 
-### 4.3 Rules and checking
-
-A rule is a small card: panel fill, cyan outline, a mini-pattern on the left, `⇒`, and a
-mini-pattern on the right. Applying it rings the match in the big graph in cyan for 0.3 s, then
-swaps the subgraph. Under `check`:
-
-- A passed law gets a mint tick on the card's corner with the verdict word (`sampled` or `proved`).
-- A refuted law gets a coral cross, and the card turns over to show the counter-example in monospace:
-  the inputs, and the two values that differ.
-
-Saturation shows one value splitting into a short column of equivalent writings. The chosen one turns
-sand.
-
-### 4.4 Effects and order
-
-An effect node is a normal operator with a small cream corner notch. In a non-`sync` body, an effect
-nothing needs stays dim, and the `EffectNotExecuted` label appears in dim. When `sync` is typed, a
-pale cream bracket encloses the block, and dashed cream edges link the effect statements in written
-order. Pure nodes inside the bracket stay unlinked.
-
-### 4.5 Errors: the railway
-
-Errors are values, so they travel on a second track.
-
-- **Main track:** the pipeline is drawn as a straight steel rail. Each step that can fail (`T!`) is a
-  switch point on that rail.
-- **Side track:** a thinner coral rail runs parallel, below the main one.
-- **Propagation with `->`:** when a step fails, the value dot (now coral) slides onto the side track.
-  It rides past every later step, which dims to 40 % and is not entered.
-- **Handling with `!!` and `??`:** the side track merges back into the main rail. The dot turns sand
-  again and takes the fallback value, which appears in mint.
-- One `!!` at the end, and one merge. That is the visual of "write the happy path, handle once".
-
-### 4.6 Faults and `attempt`
-
-- **A fault (a bug, not an error)** is a coral flash on the node. The whole canvas then freezes:
-  dots stop and every other node dims to 25 %. A location label appears next to the node in coral
-  monospace (`data.cml:12:9`). No side track is involved: a fault is not a value.
-- **`attempt(f)`** draws a thin coral frame around the call of `f`. A fault inside flashes, but at the
-  frame boundary it becomes a dot on the side track: the fault has become an error value. The rest
-  of the canvas keeps running. Inside `map<attempt(parse_row)>`, each element has its own small frame.
-
-### 4.7 Resources and promises
-
-- **`pure`:** a small mint shield on top of the function frame.
-- **`uses fs`:** a cream tag with the resource name on top of the frame.
-- **A broken promise:** the shield turns coral and splits. The offending node's outline turns coral,
-  and a thin coral line runs from it to the shield, with the real diagnostic name
-  `UsesPromiseViolated` beside it.
-
-### 4.8 Placement and destinations
-
-- **`#gpu`** is a rose rounded region (8 % fill, 2 px outline, `gpu` label top-left) around the
-  nodes of the tagged function. Where an edge crosses the boundary, a small upload (↑) or download
-  (↓) marker appears in dim, because the compiler derived it and the user did not write it. Dots
-  inside the region travel twice as fast.
-- **Export:** the graph folds into a thin bundle, then fans out into cards (`model.onnx`,
-  `model.cpp`, `jit`). Each card holds a static thumbnail of the same graph, and one mint tick spans
-  all the cards: same meaning. No third-party logos.
-
-## 5. Library-author film additions
-
-- **Native kernel beside its definition:** two stacked lanes. The top lane is the Camel body (an open
-  graph) and the bottom lane is the solid `#impl` block. Between them, an `≡` sign pulses each time a
-  differential test sample passes, as a small mint tick counter.
-- **A rule set:** a short row of rule cards with array brackets drawn around it (`[ … ]`), because a
-  rule set is a `Rule[]`, an ordinary value. It is handed to the gate by sliding into a slot in the
-  gate labelled `rules:`. It never enters on its own.
-- **A library pass:** a gate whose label is the library's name (`mylib::compile`). Opening it
-  reveals the smaller gates it composes.
-
-## 6. Motion
-
-1. **Every movement answers a "because".** A node appears because its token was just typed. Nodes
-   merge because they are equal. A dot advances because its inputs are ready. No movement is
-   decorative.
-2. **Rewriting is rearrangement.** Under a pass, each node moves in a straight line from its old place
-   to its new place over 1.0 s with easeInOutCubic. Merged nodes fade at the end of the move
-   (0.3 s, linear). A replaced subgraph glows cyan for 0.3 s before it is swapped.
-3. **Match cuts only.** The last shape of a shot is the first shape of the next one (for example, the
-   result ring of shot 1 becomes the `x` input of shot 2). Camera moves carry the eye from one to
-   the next. There are no cross-dissolves to unrelated imagery and no hard cuts except to the end
-   card.
-4. **Rhythm inside a shot:** appear (0.3–0.5 s), then change (0.8–1.2 s), then hold (at least 0.5 s,
-   so the frame can be read). One claim per shot.
-5. **Easing:**
-
-   | Motion | Easing |
+   | Motion | Time and easing |
    |---|---|
-   | pops | easeOutBack (a slight overshoot, pops only) |
-   | moves and re-layouts | easeInOutCubic |
-   | fades | linear |
-   | glows and pulses | sine |
+   | node trace | 0.30 s, easeInOutCubic |
+   | edge stroke | 0.25 s, easeOutCubic |
+   | glyph flight | 0.40 s, easeInOutCubic, with a slight 12 px arc upward |
+   | rearrangement under a sweep | 0.9 s along straight lines, easeInOutCubic |
+   | merged nodes fading | 0.3 s, linear |
 
-   No bounces, shakes, spins, flying-in text or camera wobble.
-6. **Camera:** it does two things only. It pushes in slowly (3–5 % over 5 s), and it pans or zooms
-   along the graph to the next point of interest (1.0 s, easeInOutCubic). Zoom is how a call opens
-   into its subgraph.
-7. **Code and graph are linked.** Typing a token pops its node from the code side of the frame (scale
-   0 → 1, 0.35 s), and the edge follows (0.3 s). Highlighting a node underlines its token in sand.
-8. **What never moves:** the ink background, the subtitle band, the position of the code panel within
-   a shot, and the meaning of a colour. A sand dot stays sand when it passes through a cyan gate.
-   Text never moves while it is being read.
-9. **Density:** at most 24 nodes visible at once. Beyond that, collapse a part into a function frame
-   that shows only its ports.
+3. **Rhythm:** draw (0.3–0.6 s), then change (0.8–1.2 s), then hold (at least 0.6 s, enough to read
+   the frame). One claim per shot.
+4. **Continuity:** match cuts only. The last shape of each shot is the first shape of the next. The
+   only hard cut is into the end card's black-out pause, and even that resolves back to the logo.
+5. **Camera:** a slow push (3 % over a shot), pans and dives at 1.0 s easeInOutCubic. The camera
+   never shakes, spins or rolls.
+6. **What never moves:** the ground, the subtitle band, code text while it is being read, and the
+   meaning of a colour (a sand bead stays sand through a cyan sweep).
+7. **Density:** at most 24 nodes on screen. Beyond that, fold a part into a function frame showing
+   only its ports.
 
-## 7. Layout
+## 6. Layout
 
-- Canvas 1920×1080, 30 fps (60 fps for the final master), with 96 px safe margins.
-- **Split shots:** code on the left 40 % (panel 780 px wide, centred at x = −520) and the graph on
-  the right 60 %.
-- **Full-graph shots:** the whole frame. **Before/after shots:** top and bottom halves.
-- **Code panel:** panel fill, radius 22, 2 px line border, file name top-left in dim 22 px, 56 px
-  inner padding.
-- **Background:** flat ink. When depth is wanted, a 3 % dot grid at 48 px pitch with 0.5× parallax.
-- **Title and end card:** ink, one line of Inter Semibold at 96 px, with a 6 px sand underline drawn
-  left to right over 0.5 s. End card: **Let the graph speak.**, and 0.8 s later
-  `pip install camel-lang` (monospace 44 px, dim). Nothing else on the card.
+- 1920×1080 with 96 px safe margins. 30 fps for review, 60 fps for the master.
+- **Split shots:** code on the left, starting at x = 136 px, with a 1 px chalk-dim gutter rule at
+  x = 112 and line numbers in chalk-dim. The graph is on the right 58 %.
+- **Full-graph shots** use the whole frame. **Before/after shots** are separated by the reflection
+  baseline itself.
+- **End card:**
+  1. The logo outline is traced in chalk (1.2 s).
+  2. `Let the graph speak.` appears in JetBrains Mono 700, 88 px, and a sand underline is drawn
+     beneath it.
+  3. 0.8 s later, `pip install camel-lang` appears in 40 px chalk-dim.
 
-## 8. Sound
+## 7. Sound
 
-- **Narration:** calm and slightly slow, about 2.3 English words per second, leaving a 0.3 s breath
-  between shots.
-- **Score:** a minimal low pulse with a slow ascending figure, kept under the voice.
-- **Effects:** only three, each aligned to its motion within ±1 frame.
+- **Narration:** calm, unhurried, at most 2.3 words per second, with a 0.3 s breath per shot.
+- **Score:** a soft low pulse that ticks at the tempo of the beads, plus one slow rising line that
+  resolves on the logo.
+- **Effects:** only five, each aligned to its motion within ±1 frame.
 
   | Sound | When |
   |---|---|
-  | a very soft tick | node pop |
-  | a falling minor third | merge |
-  | a short low thud | fault or refutation |
+  | a dry pen scratch | a node is traced |
+  | a falling minor third | a merge |
+  | a low felt thud | a fault, a jam, or a torn seal |
+  | a soft pull-click | a stream pull |
+  | a single bell | on the logo |
 
-- **Subtitles:** they fade in and out over 0.15 s and follow the narration line by line.
+- **Subtitles:** they fade in and out over 0.15 s.

@@ -328,6 +328,11 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/idx_take", __idx_take_arr__},
         {"op/slice_sub", __slice_sub__},
         {"op/slice_str", __slice_str__},
+        {"op/slice_bytes", __slice_bytes__},
+        {"struct/len_bytes", __len_bytes__},
+        {"op/add_bytes", __add_bytes__},
+        {"op/eq_bytes", __eq_bytes__},
+        {"op/ne_bytes", __ne_bytes__},
 
         {"op/not", __builtin__not__},
 
@@ -466,6 +471,11 @@ void registerBuiltinOperatorTraits() {
         "op/idx_take",
         "op/slice_sub",
         "op/slice_str",
+        "op/slice_bytes",
+        "struct/len_bytes",
+        "op/add_bytes",
+        "op/eq_bytes",
+        "op/ne_bytes",
         "struct/tail_arr",
         "struct/range",
         "struct/slice_arr",

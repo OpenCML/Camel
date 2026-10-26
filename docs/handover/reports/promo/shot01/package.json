@@ -2,7 +2,6 @@
   "name": "camel-promo-shot01",
   "version": "0.0.0",
   "private": true,
-  "type": "module",
   "scripts": {
     "serve": "vite",
     "check": "tsc --noEmit"

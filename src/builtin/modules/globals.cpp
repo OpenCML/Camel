@@ -1,6 +1,7 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
+#include "camel/core/type/bytes.h"
 #include "globals.h"
 #include "builtin/executors/builtin.h"
 #include "builtin/operators/array.h"
@@ -520,15 +521,17 @@ FunctionType *sliceParameterTable() {
 /// faults with the core's one wording. The result type reads those same constants: the axis this
 /// call names and the length its bounds and step give it, with every other axis at the length the
 /// value's type states (sliceResultType, reached through the rule's statics path).
-/// `s[a:b]` and `slice(s, 0, a, b, s)` on a string: the slice of its code points, a string again.
-/// The words after the string are the axis, the two bounds, the step and the mask, as for an
-/// array (coreSliceFunctionResolver); a short function-form call is read as step 1, both written.
-resolver_ptr_t stringSliceResolver() {
+/// `s[a:b]` and `slice(s, 0, a, b, s)` on a sequence of rank 1 that is not an array -- a string
+/// (by code point) or a `Bytes` (by byte) -- giving the same kind of value. The words after the
+/// value are the axis, the two bounds, the step and the mask, as for an array
+/// (coreSliceFunctionResolver); a short function-form call is read as step 1, both written.
+resolver_ptr_t sequenceSliceResolver(Type *sequence, std::string signature) {
     return std::make_shared<StaticCheckedResolver>(DynamicFuncTypeResolver::create(
         {{0, {}}, {-1, {}}},
-        "(s: string, axis: int, start: int, end: int, step: int, written: int) => string",
-        [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &) -> optional<Type *> {
-            if (norm.size() < 4 || norm.size() > 6 || norm[0]->code() != TypeCode::String) {
+        std::move(signature),
+        [sequence](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+            -> optional<Type *> {
+            if (norm.size() < 4 || norm.size() > 6 || !norm[0]->equals(sequence)) {
                 return nullopt;
             }
             for (size_t i = 1; i < norm.size(); ++i) {
@@ -536,8 +539,20 @@ resolver_ptr_t stringSliceResolver() {
                     return nullopt;
                 }
             }
-            return Type::String();
+            return sequence;
         }), staticSliceRejection);
+}
+
+resolver_ptr_t stringSliceResolver() {
+    return sequenceSliceResolver(
+        Type::String(),
+        "(s: string, axis: int, start: int, end: int, step: int, written: int) => string");
+}
+
+resolver_ptr_t bytesSliceResolver() {
+    return sequenceSliceResolver(
+        BytesType::get(),
+        "(b: Bytes, axis: int, start: int, end: int, step: int, written: int) => Bytes");
 }
 
 resolver_ptr_t coreSliceFunctionResolver() {
@@ -1525,6 +1540,13 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         Type::Bool()),
                 },
                 {
+                    ":op/eq_bytes",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{BytesType::get(), false}, {BytesType::get(), false}},
+                        Type::Bool()),
+                },
+                {
                     ":op/eq_c",
                     StaticFuncTypeResolver::create(
                         {},
@@ -1610,6 +1632,13 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     StaticFuncTypeResolver::create(
                         {},
                         {{Type::String(), false}, {Type::String(), false}},
+                        Type::Bool()),
+                },
+                {
+                    ":op/ne_bytes",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{BytesType::get(), false}, {BytesType::get(), false}},
                         Type::Bool()),
                 },
                 {
@@ -1859,6 +1888,13 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         {},
                         {{Type::String(), false}, {Type::String(), false}},
                         Type::String()),
+                },
+                {
+                    ":op/add_bytes",
+                    StaticFuncTypeResolver::create(
+                        {},
+                        {{BytesType::get(), false}, {BytesType::get(), false}},
+                        BytesType::get()),
                 },
                 {
                     ":op/add_c",
@@ -2396,6 +2432,10 @@ std::make_shared<StaticCheckedResolver>(
                     namedStaticSignature("x", Type::String(), Type::Int64()),
                 },
                 {
+                    ":struct/len_bytes",
+                    namedStaticSignature("x", BytesType::get(), Type::Int64()),
+                },
+                {
                     ":struct/len_arr",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
@@ -2563,9 +2603,13 @@ std::make_shared<StaticCheckedResolver>(
                     coreSliceFunctionResolver(),
                 },
                 {
-                    // The same slice over a string's code points; a string has the one axis 0.
+                    // The same slice over a string's code points or a Bytes' bytes: one axis, 0.
                     ":op/slice_str",
                     stringSliceResolver(),
+                },
+                {
+                    ":op/slice_bytes",
+                    bytesSliceResolver(),
                 },
             }),
         OperatorGroup::create(
@@ -2601,6 +2645,10 @@ std::make_shared<StaticCheckedResolver>(
                 {
                     ":op/slice_str",
                     stringSliceResolver(),
+                },
+                {
+                    ":op/slice_bytes",
+                    bytesSliceResolver(),
                 },
             }),
         OperatorGroup::create(

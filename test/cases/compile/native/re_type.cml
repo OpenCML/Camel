@@ -1,13 +1,13 @@
 /**
  * An integer where the declaration says `string`: the call is refused at the declaration's type,
- * and the message prints the declaration's own parameter names (`pattern`, `text`) — the one
+ * and the message prints the declaration's own parameter names (`text`) — the one
  * source is `stdlib/re.cml`, not the C++ module (step 10).
  */
 module re_type
 
-import { test } from re
+import { has_match } from re
 
 func main(): int sync {
-    println(test(42, 'abc'))
+    println(has_match<'abc'>(42))
     return 0
 }

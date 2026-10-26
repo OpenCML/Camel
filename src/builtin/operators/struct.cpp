@@ -12,6 +12,7 @@
 #include "camel/execute/executor.h"
 #include "camel/profile/profile.h"
 #include "camel/utils/type.h"
+#include "camel/core/rtdata/bytes.h"
 #include "camel/utils/utf8.h"
 #include "ops.h"
 #include <format>
@@ -426,6 +427,64 @@ slot_t __slice_str__(ArgsView &with, ArgsView &norm, Context &ctx) {
         }
     }
     return rtdata::toSlot(String::from(std::move(out), mm::autoSpace()));
+}
+
+// `len(b)` of a `Bytes`: the number of bytes.
+slot_t __len_bytes__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    (void)with;
+    (void)ctx;
+    return rtdata::toSlot(static_cast<Int64>(norm.get<BytesObject *>(0)->view().size()));
+}
+
+// `a == b` and `a != b` of two `Bytes`: the same bytes in the same order.
+slot_t __eq_bytes__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    (void)with;
+    (void)ctx;
+    return rtdata::toSlot(
+        norm.get<BytesObject *>(0)->view() == norm.get<BytesObject *>(1)->view());
+}
+
+slot_t __ne_bytes__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    (void)with;
+    (void)ctx;
+    return rtdata::toSlot(
+        norm.get<BytesObject *>(0)->view() != norm.get<BytesObject *>(1)->view());
+}
+
+// `a + b` of two `Bytes`: the bytes of a followed by those of b, as for two strings.
+slot_t __add_bytes__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    (void)with;
+    (void)ctx;
+    std::string out(norm.get<BytesObject *>(0)->view());
+    out.append(norm.get<BytesObject *>(1)->view());
+    return rtdata::toSlot(BytesObject::from(out, mm::autoSpace()));
+}
+
+// `b[a:b]`, `b[a:b:s]` and `slice(b, 0, a, b, s)` on a `Bytes`: the same slice as an array's of
+// rank 1, by byte, and a `Bytes` again.
+slot_t __slice_bytes__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    (void)with;
+    (void)ctx;
+    const std::string_view data = norm.get<BytesObject *>(0)->view();
+    const size_t words          = norm.size();
+    const Int64 axisArg         = norm.get<Int64>(1);
+    if (axisArg != 0) {
+        throwRuntimeFault(
+            RuntimeDiag::InvalidArgument,
+            "[]",
+            std::format("a slice axis must be between 0 and 0, not {}", axisArg));
+    }
+    const Int64 step       = words >= 5 ? norm.get<Int64>(4) : 1;
+    const Int64 written    = words >= 6 ? norm.get<Int64>(5) : 3;
+    const SliceRange range = sliceRange(
+        static_cast<Int64>(data.size()), norm.get<Int64>(2), norm.get<Int64>(3), step, written,
+        "a Bytes");
+    std::string out;
+    out.reserve(static_cast<size_t>(range.count));
+    for (Int64 k = 0; k < range.count; ++k) {
+        out.push_back(data[static_cast<size_t>(range.start + k * range.step)]);
+    }
+    return rtdata::toSlot(BytesObject::from(out, mm::autoSpace()));
 }
 
 namespace {

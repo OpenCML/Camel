@@ -160,7 +160,7 @@ golden = "golden/examples/text_csv_parse.txt"
 
 [[tests]]
 name = "examples.text.log_filter"
-desc = "A log file split into lines and fields with str; lines selected by str.find and re.test, counted per level."
+desc = "A log file split into lines and fields with str; lines selected by str.find and re::has_match, counted per level."
 case = "../../../examples/text/log_filter.cml"
 golden = "golden/examples/text_log_filter.txt"
 

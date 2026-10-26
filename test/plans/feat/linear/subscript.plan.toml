@@ -213,3 +213,27 @@ expect_output_contains = ["The range 1 to 9 is out of range for a string of leng
 expect_output_not_contains = ["not reached"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "subscript.bytes_slice"
+desc = "A Bytes has a length, concatenates with `+`, compares with `==` and `!=`, and slices by byte like a string: `b[a:b]` and the function form `slice(b, 0, a, b)`, on every back end."
+kind = "behavior"
+case = "../../../cases/linear/subscript/bytes_slice.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+expect_exit = 0
+expect_stdout_exact = "5 11 true true\nell [104, 101] world 0\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "subscript.bytes_slice_out_of_range"
+desc = "A Bytes slice whose end the run computes past the Bytes is SliceOutOfRange at the bracket, naming a Bytes and its length."
+kind = "negative"
+case = "../../../cases/linear/faults/bytes_slice_out_of_range.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::SliceOutOfRange"
+expect_output_contains = ["The range 1 to 9 is out of range for a Bytes of length 5."]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
