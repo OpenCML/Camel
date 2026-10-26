@@ -1,0 +1,102 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * A Json is a JSON value whose shape is known only when the program runs: `decode` reads a text,
+ * or gives an error value when the text is not JSON, and the accessors look into it, each giving
+ * a value of a definite type. To read a part whose shape is known, `decode_as::<T>` decodes
+ * straight to the type T, and `encode` writes the JSON text of a value; both have a result type
+ * that a declaration cannot express, so they are not declared here (see
+ * `stdlib/signatures/json.cml`). Everything here is pure.
+ *
+ * The data an accessor works on is its ordinary argument; the key or the index is its
+ * with-argument, so calls chain: `decode(text)->get<key: 'port'>->as_int`. An accessor has one
+ * declaration for each tagged form of its argument -- `Json`, `Json?`, `Json!` and `Json!?` --
+ * written from the most specific to the widest, which give the result `R?`, `R?`, `R!?` and
+ * `R!?`: an absent part is the null, and the error of a text that failed to decode is passed on
+ * unchanged, so one `!!` or `??` at the end of a chain settles it.
+ */
+
+/// The value a JSON text describes, as a `Json`: a value of a definite type whose content is
+/// known only when the program runs. Look into it with `get`, `as_int`, `as_array` and the other
+/// accessors below.
+/// @fails error value `JsonParseError` when the text is not JSON (the message gives the position in the text and its beginning); error value `JsonTooDeep` when the document nests deeper than the limit (10000 levels; the message gives the line and column of the bracket that goes too deep)
+/// @example (decode('{"port": 80}')->get<key: 'port'>->as_int ?? 0) !! -1    // 80
+export func decode(text: string): Json! pure
+
+/// The kind of a Json: 'null', 'bool', 'int', 'float', 'string', 'array' or 'object'.
+/// @example decode('[1]') ?-> kind !! ''    // 'array'
+export func kind(j: Json): string pure
+
+/// Whether a Json is the JSON null.
+/// @example decode('null') ?-> is_null !! false    // true
+export func is_null(j: Json): bool {
+    return kind(j) == 'null'
+}
+
+/// The member key of an object; null when j is not an object, has no such member, or is null
+/// itself (so that calls chain: `j->get<key: 'a'>->get<key: 'b'>`).
+/// @example (decode('{"a": 1}')->get<key: 'a'>->as_int ?? 0) !! -1    // 1
+with <key: string>
+export func get(j: Json): Json? pure
+with <key: string>
+export func get(j: Json?): Json? pure
+with <key: string>
+export func get(j: Json!): Json!? pure
+with <key: string>
+export func get(j: Json!?): Json!? pure
+
+/// The element key of an array; null when j is not an array, the index is out of range, or j is
+/// null itself. The with-parameter is called `key` as in the member form above: which member of
+/// the Json to take is written as a string or as an integer, and the argument's type says which.
+/// @example (decode('[5, 6]')->get<key: 1>->as_int ?? 0) !! -1    // 6
+with <key: int>
+export func get(j: Json): Json? pure
+with <key: int>
+export func get(j: Json?): Json? pure
+with <key: int>
+export func get(j: Json!): Json!? pure
+with <key: int>
+export func get(j: Json!?): Json!? pure
+
+/// The bool a Json holds; null for any other kind.
+/// @example (decode('true')->as_bool ?? false) !! false    // true
+export func as_bool(j: Json): bool? pure
+export func as_bool(j: Json?): bool? pure
+export func as_bool(j: Json!): bool!? pure
+export func as_bool(j: Json!?): bool!? pure
+
+/// The integer a Json holds; null for any other kind (a number with a fraction is not an int).
+/// @example (decode('42')->as_int ?? 0) !! 0    // 42
+export func as_int(j: Json): int? pure
+export func as_int(j: Json?): int? pure
+export func as_int(j: Json!): int!? pure
+export func as_int(j: Json!?): int!? pure
+
+/// The number a Json holds, an integer included; null for any other kind.
+/// @example (decode('2')->as_float ?? 0.0) !! 0.0    // 2.0
+export func as_float(j: Json): float? pure
+export func as_float(j: Json?): float? pure
+export func as_float(j: Json!): float!? pure
+export func as_float(j: Json!?): float!? pure
+
+/// The string a Json holds; null for any other kind.
+/// @example (decode('"hi"')->as_string ?? '') !! ''    // 'hi'
+export func as_string(j: Json): string? pure
+export func as_string(j: Json?): string? pure
+export func as_string(j: Json!): string!? pure
+export func as_string(j: Json!?): string!? pure
+
+/// The elements of a JSON array; null for any other kind.
+/// @example len((decode('[1, "a"]')->as_array ?? []) !! [])    // 2
+export func as_array(j: Json): Json[]? pure
+export func as_array(j: Json?): Json[]? pure
+export func as_array(j: Json!): Json[]!? pure
+export func as_array(j: Json!?): Json[]!? pure
+
+/// The members of a JSON object, by name; null for any other kind.
+/// @example len((decode('{"b": 1, "a": 2}')->as_object ?? ([] as Map<string, Json>)) !! ([] as Map<string, Json>))    // 2
+export func as_object(j: Json): Map<string, Json>? pure
+export func as_object(j: Json?): Map<string, Json>? pure
+export func as_object(j: Json!): Map<string, Json>!? pure
+export func as_object(j: Json!?): Map<string, Json>!? pure

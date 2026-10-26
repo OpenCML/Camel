@@ -1,0 +1,153 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * The building blocks of neural networks on arrays: convolution and pooling, normalization, the
+ * embedding lookup and the classification loss. A model is a function of its parameters, which are
+ * plain values (a struct of arrays) in its `with` parameter, and a layer is an ordinary call of the
+ * functions here on the arrays it holds:
+ *
+ *     with <m: Cnn>
+ *     func logits(x: f32[b, 1, 28, 28]): f32[b, 10] {
+ *         let h = x->conv2d<stride: 1, padding: 1>(m.conv.kernel, m.conv.bias)->tensor::relu->max_pool2d<kernel: 2>
+ *         return tensor::reshape(h, [b, 3136]) @ m.fc.weight + m.fc.bias
+ *     }
+ *
+ * The data of a function is its ordinary argument and the weights it uses are further ordinary
+ * arguments (`conv2d(x, kernel, bias)`, like `x @ w`: the weights are arrays like any other). The
+ * configuration that fixes the shape of the work -- stride, padding, window, epsilon, momentum --
+ * is in the angle brackets. The gradients are not functions of this module: they come from
+ * `grad` and `with_grad`, which differentiate the definitions below and the three native kernels
+ * (convolution and the two poolings), whose derivatives the compiler knows.
+ *
+ * The convolution and pooling kernels are `f32`; the normalization is written for any floating
+ * element type, and its kernel serves `f32`.
+ * The optimizers are `optim`'s.
+ */
+
+import tensor
+import { is_float, is_numeric, is_same } from types
+
+// ---- convolution and pooling ----
+
+/// 2-D convolution of `input` `[N, C, H, W]` with `kernel` `[O, C, KH, KW]` and `bias` `[O]`. The
+/// result is `[N, O, OH, OW]` with `OH = (H + 2 * padding - KH) / stride + 1` and `OW` likewise.
+/// @fails fault `RuntimeError` when the window does not fit in the padded input
+/// @example-fragment the arrays come from the caller
+/// @example input->conv2d<stride: 1, padding: 1>(kernel, bias)    // [N, O, H, W] for a 3 by 3 kernel
+with <stride: int = 1, padding: int = 0>
+export func conv2d(input: f32[n, c, ?, ?], kernel: f32[o, c, ?, ?], bias: f32[o]): f32[n, o, ?, ?] pure
+
+/// Max pooling over a square window of `kernel` on `input` `[N, C, H, W]`. The stride is the
+/// window unless given. A window that lies entirely in the padding contributes -inf, the identity
+/// of the maximum.
+/// @fails fault `RuntimeError` when the window does not fit in the padded input
+/// @example-fragment the array comes from the caller
+/// @example input->max_pool2d<kernel: 2>    // [N, C, H / 2, W / 2]
+with <kernel: int, stride: int? = null, padding: int = 0>
+export func max_pool2d(input: f32[n, c, ?, ?]): f32[n, c, ?, ?] pure
+
+/// Average pooling over a square window of `kernel`: the window's elements, with +0 for those in
+/// the padding, are summed in f64 and divided by `kernel * kernel`. The stride is the window
+/// unless given.
+/// @fails fault `RuntimeError` when the window does not fit in the padded input
+/// @example-fragment the array comes from the caller
+/// @example input->avg_pool2d<kernel: 2>    // [N, C, H / 2, W / 2]
+with <kernel: int, stride: int? = null, padding: int = 0>
+export func avg_pool2d(input: f32[n, c, ?, ?]): f32[n, c, ?, ?] pure
+
+// ---- normalization ----
+
+/// Batch normalization with fixed statistics (inference): `(input - mean) / sqrt(variance + eps) *
+/// gamma + beta`, the statistics and the scale and shift taken per channel (axis 1), over an input
+/// of any rank of at least two (`[N, C]`, `[N, C, L]`, `[N, C, H, W]`, ...).
+/// @example-fragment the arrays come from the caller
+/// @example input->batch_norm(mean, variance, gamma, beta)
+with <eps: T = 1e-5>
+export func batch_norm::<T>(input: T[n, c, ..s], mean: T[c], variance: T[c], gamma: T[c], beta: T[c]): T[n, c, ..s] when is_float::<T>() {
+    let at = channel_shape(tensor::shape(input))
+    let centred = input - tensor::reshape(mean, at)
+    let spread = tensor::sqrt(tensor::reshape(variance, at) + eps)
+    return centred / spread * tensor::reshape(gamma, at) + tensor::reshape(beta, at)
+}
+
+/// Batch normalization with the statistics of the batch (training): `input` is normalized with the
+/// mean and the biased variance of each channel over every other axis, and the result is
+/// `(y, new_running_mean, new_running_var)`, the running statistics blended with the batch's by
+/// `momentum` (the variance in the blend is the unbiased one, `count / (count - 1)` times the
+/// biased). Only `y` carries gradient.
+/// @example-fragment the arrays come from the caller
+/// @example input->batch_norm_train(gamma, beta, running_mean, running_var)
+#impl(batch_norm_train_kernel)
+with <momentum: T = 0.1, eps: T = 1e-5>
+export func batch_norm_train::<T>(input: T[n, c, ..s], gamma: T[c], beta: T[c], running_mean: T[c], running_var: T[c]): (T[n, c, ..s], T[c], T[c]) when is_float::<T>() {
+    let at = channel_shape(tensor::shape(input))
+    let mean = channel_mean(input)
+    let centred = input - tensor::reshape(mean, at)
+    let biased = channel_mean(centred * centred)
+    let count = tensor::numel(input) / tensor::numel(mean)
+    let unbiased = biased * (T(count) / T(count - 1))
+    let y = centred / tensor::sqrt(tensor::reshape(biased, at) + eps) * tensor::reshape(gamma, at) + tensor::reshape(beta, at)
+    return (
+        y,
+        (T(1.0) - momentum) * running_mean + momentum * mean,
+        (T(1.0) - momentum) * running_var + momentum * unbiased
+    )
+}
+
+// The shape that broadcasts a per-channel vector against an input of this shape: 1 everywhere
+// except the channel axis.
+func channel_shape(shape: int[]): int[] {
+    return loop at = [1, shape[1]] for i in 2..len(shape) do at->append<1>
+}
+
+// The mean of each channel (axis 1) over every other axis: the last axis first, down to axis 2,
+// then the batch axis. Every axis has the same number of elements for every position, so the mean
+// of means is the mean.
+func channel_mean::<T>(x: T[n, c, ..s]): T[c] {
+    let rank = len(tensor::shape(x))
+    let spatial = loop acc = x as T[..] for i in 0..(rank - 2) do tensor::mean(acc, rank - 1 - i)
+    return tensor::mean(spatial, 0) as T[c]
+}
+
+// ---- embedding and loss ----
+
+/// The rows of `table` `[rows, dim]` at the integer `indices`: `[indices.length, dim]`, a row for
+/// every index, repeated indices repeating the row. Its gradient is the scatter-add into the rows
+/// that were read.
+/// @fails fault `IndexOutOfRange` when an index is outside `[0, rows)`
+/// @example tensor::reshape(tensor::range(6), [3, 2])->embedding([2, 0])    // [[4, 5], [0, 1]]
+export func embedding::<T>(table: T[?, dim], indices: int[k]): T[k, dim] when is_numeric::<T>() {
+    return table[indices]
+}
+
+/// The mean softmax cross-entropy of `logits` `[batch, classes]` against a target distribution of
+/// the same shape: `-sum(target * log_softmax(logits)) / batch`, accumulated in f64.
+/// @example-fragment the arrays come from the caller
+/// @example logits->softmax_cross_entropy(target)    // a float
+#impl(softmax_cross_entropy_kernel)
+export func softmax_cross_entropy(logits: f32[batch, classes], target: f32[batch, classes]): float {
+    let rows = float(tensor::sum(target * tensor::log_softmax(logits, 1), 1))
+    return -(tensor::sum(rows) / float(tensor::numel(rows)))
+}
+
+/// The same loss against integer class labels, one for each row: the target is the one-hot
+/// distribution of the labels.
+/// @fails fault `RuntimeError` when a label is outside `[0, classes)`
+/// @example-fragment the arrays come from the caller
+/// @example logits->softmax_cross_entropy(labels)    // a float
+#impl(softmax_cross_entropy_labels_kernel)
+export func softmax_cross_entropy(logits: f32[batch, classes], labels: int[batch]): float {
+    let target = f32(tensor::one_hot(labels, tensor::dim(logits, 1)))
+    return softmax_cross_entropy(logits, target)
+}
+
+// ---- kernels ----
+
+// The native kernels of the two Camel definitions above that are hot enough to keep one: the
+// definition is the meaning, the kernel the speed, and a differential test holds them equal. A
+// kernel has exactly the signature of its definition, `with` parameters included.
+with <momentum: T = 0.1, eps: T = 1e-5>
+func batch_norm_train_kernel::<T>(input: T[n, c, ..s], gamma: T[c], beta: T[c], running_mean: T[c], running_var: T[c]): (T[n, c, ..s], T[c], T[c]) when is_same::<T, f32>() pure
+func softmax_cross_entropy_kernel(logits: f32[batch, classes], target: f32[batch, classes]): float pure
+func softmax_cross_entropy_labels_kernel(logits: f32[batch, classes], labels: int[batch]): float pure
