@@ -1690,3 +1690,94 @@ expect_exit = 0
 expect_stdout_contains = ["kept 1\nkept 1\nkept 14\n"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
+
+[[tests]]
+name = "rules.fact_declaration_without_its_type"
+desc = "A fact declaration writes the type of the fact after its parameters (`fact depth(n): int`, rewrite design 7.5), and that is the only type it writes there: `fact depth(n)` with no type is refused where the `:` belongs, by the parser, and nothing of the declaration is compiled. The compiler's own guard for a declaration that reached it without that type is an assertion, not a diagnostic: a file the parser refused is never given an AST."
+kind = "negative"
+case = "../../../cases/modules/rules/fact_no_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::MissingToken"
+expect_diagnostic_code = "0x02000009"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 13
+expect_output_contains = ["Expected ':' before ')'."]
+expect_output_not_contains = ["UnknownInternalError", "ConstructNotSupported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.fact_body_without_a_case"
+desc = "The cases of a fact say what it is, and a body that writes none is refused where the first case belongs, by the parser (`Expected 'case'`), before any fact is built."
+kind = "negative"
+case = "../../../cases/modules/rules/fact_no_cases.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_code = "0x0200000A"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 1
+expect_output_contains = ["Unexpected '}'; expected 'case'."]
+expect_output_not_contains = ["UnknownInternalError", "ConstructNotSupported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.fact_declaration_without_a_join"
+desc = "`join` is the clause that is required: it says how the facts of two writings of one value are merged, and it is the least upper bound of the two (rewrite design 7.5). A fact that writes none is refused with `SemanticDiag::FactJoinRequired` (name=SemanticDiag::FactJoinRequired, code=0x030001F6) on the `fact` line, which names the rule and the clause to write rather than calling the declaration unsupported."
+kind = "negative"
+case = "../../../cases/modules/rules/fact_no_join.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FactJoinRequired"
+expect_diagnostic_code = "0x030001F6"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 1
+expect_output_contains = ["The fact 'sign' writes no 'join'.", "it says how the facts of two writings of one value are merged", "Write it after the cases, naming one binary function or a lambda"]
+expect_output_not_contains = ["UnknownInternalError", "ConstructNotSupported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.fact_const_case_without_a_type"
+desc = "A `const` case matches one constant and the fact function is given the value itself, so the type of that constant is written somewhere: in the case, or in the head of a fact that declares the value it is about with a type (rewrite design 7.5). A fact with no head parameters whose case writes no type is refused with `SemanticDiag::FactConstCaseTypeRequired` (name=SemanticDiag::FactConstCaseTypeRequired, code=0x030001F7), which names the two places the type can stand."
+kind = "negative"
+case = "../../../cases/modules/rules/fact_const_case_without_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FactConstCaseTypeRequired"
+expect_diagnostic_code = "0x030001F7"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 1
+expect_output_contains = ["The 'const' case 'c' of the fact 'one' writes no type.", "case const c: int => c", "fact sign(v: int): int"]
+expect_output_not_contains = ["UnknownInternalError", "ConstructNotSupported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.fact_case_that_binds_no_variable"
+desc = "The cases read how a value was built, and the parts they read are the variables their patterns name: `case x + y` binds the two operands (rewrite design 7.5). A case whose pattern names none is refused with `SemanticDiag::FactCaseBindsNoVariable` (name=SemanticDiag::FactCaseBindsNoVariable, code=0x030001F8), which says what the case has to name, instead of the case being reported as a construct the compiler does not support."
+kind = "negative"
+case = "../../../cases/modules/rules/fact_case_binds_nothing.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FactCaseBindsNoVariable"
+expect_diagnostic_code = "0x030001F8"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 1
+expect_output_contains = ["This case of the fact 'one' names no variable.", "the parts they read are the variables their patterns name", "bind a part with a name, or write `case _`"]
+expect_output_not_contains = ["UnknownInternalError", "ConstructNotSupported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.fact_legal_forms_stay_compilable"
+desc = "The writings the fact rules leave open stay green, and the fact's value is real: a `const` case whose type comes from the head, a `const` case that writes the type of its constant itself, a case whose pattern binds variables (`case x + y`, which recurses into the same fact), the required `join` and `case _` last all compile in one declaration each. The rule `mul_by_sign` reads `sign(y) == 2` in its `when`, so the product `3 * 2` is rewritten to `3 + 100` and `left(3)` prints 103 rather than 106."
+kind = "behavior"
+case = "../../../cases/modules/rules/fact_legal_forms.cml"
+args = ["${case}", "fact_legal_forms::apply", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["103\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000

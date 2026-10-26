@@ -1463,12 +1463,6 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
         imports_.push_back(graphImport);
     }
 
-    const auto giveUp = [&](const std::string &what) {
-        diags_->of(SemanticDiag::ConstructNotSupported)
-            .at(rangeOf(context->firstToken()))
-            .commit("fact", what);
-        return Value();
-    };
     const std::string name = std::string(context->get<cst::IdentDef>()->text());
     const Reference ref    = qualifyRef(Reference(name));
     if (context->has(TK::KwExport)) {
@@ -1489,8 +1483,14 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
     }
     const auto typeExprs = context->types();
     if (typeExprs.size() != 1) {
+        // A fact declaration writes the type of the fact after its parameters, and that is the
+        // only type it writes here (`fact depth(n): int`): the cases and the `join` all give a
+        // value of it (rewrite design 7.5). The declaration that writes none is refused by the
+        // parser, where the `:` and its type belong, and a file the parser refused is never given
+        // an AST, so no program reaches this; the guard keeps the read below off an empty list.
+        ASSERT(false, "a fact declaration with no single type reached the builder");
         LEAVE("FactDecl");
-        return giveUp("a fact declaration needs the type of its fact");
+        return Value();
     }
     const syn::Node factType = typeExprs[0];
 
@@ -1500,11 +1500,13 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
             cases.push_back(each);
         }
     }
-    if (cases.empty()) {
-        LEAVE("FactDecl");
-        return giveUp("a fact needs the cases that say what it is, and 'case _' last");
-    }
-    const auto lastPattern = cases.back()->get<cst::FactPattern>();
+    // One case takes whatever the others do not, and it is written last: the value of `case _` is
+    // also what a value that depends on itself settles on, so every fact needs it (rewrite design
+    // 7.5). A body that writes no case at all is the same defect -- the parser asks for a case
+    // where the body is empty, before this builder is reached -- and `cases.back()` is only read
+    // once there is one.
+    const syn::Node lastPattern =
+        cases.empty() ? syn::Node() : cases.back()->get<cst::FactPattern>();
     if (!lastPattern || !lastPattern->has(TK::Underscore)) {
         diags_->of(SemanticDiag::FactCaseDefaultMissing)
             .at(rangeOf(context->firstToken()))
@@ -1533,10 +1535,14 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
         }
     }
     if (!joinClause) {
+        // `join` says how the facts of two writings of one value are merged, and it is the one
+        // clause that has no default: a fact without it has no value for a value the program
+        // wrote two ways (rewrite design 7.5).
+        diags_->of(SemanticDiag::FactJoinRequired)
+            .at(rangeOf(context->firstToken()))
+            .commit(name);
         LEAVE("FactDecl");
-        return giveUp(
-            "a fact needs a 'join': it says how the facts of two writings of one value are "
-            "merged");
+        return Value();
     }
 
     // The `with` parameters, as written. Every function that carries them builds its own copy:
@@ -1775,10 +1781,15 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
                 constType = firstHeadType;
             }
             if (!constType) {
+                // A `const` case matches one constant and the fact function is given the value
+                // itself, so the constant needs a type: written in the case, or the head's first
+                // parameter's, which is what the declaration says the value it is about is
+                // (rewrite design 7.5).
+                diags_->of(SemanticDiag::FactConstCaseTypeRequired)
+                    .at(rangeOf(context->firstToken()))
+                    .commit(constName, name);
                 LEAVE("FactDecl");
-                return giveUp(
-                    "a 'const' case needs a type: write the type of the constant, or declare the "
-                    "value the fact is about with a type");
+                return Value();
             }
         }
         std::vector<std::string> vars;
@@ -1788,8 +1799,14 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
             collectVars(patternExpr, vars);
         }
         if (vars.empty()) {
+            // The cases read how a value was built, and the parts they read are the variables
+            // their patterns name (`case x + y` binds the two operands), so a case whose pattern
+            // names none leaves the fact nothing to compute from (rewrite design 7.5).
+            diags_->of(SemanticDiag::FactCaseBindsNoVariable)
+                .at(rangeOf(context->firstToken()))
+                .commit(name);
             LEAVE("FactDecl");
-            return giveUp("a case pattern names no variable, so the case says nothing");
+            return Value();
         }
 
         std::vector<std::pair<std::string, node_ptr_t>> patternParams;

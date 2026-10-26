@@ -59,7 +59,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 205
+**Semantic — errors** (`SemanticDiag`) — 208
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -266,6 +266,9 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `EnumWrittenWhereATypeIsExpected` | An enum is declared in a type declaration ('type Shape = enum ...') and its type is the name that declaration gives it: the variants are written there and nowhere else. |
 | `StructComprehensionWithoutFields` | A struct comprehension takes its field names from 'fields T', and 'indices' walks positions, which have no names: write a tuple comprehension '( static for ... in indices ... )', or walk 'fields T'. |
 | `IdentifierPatternNeedsNullableOrErrorType` | The pattern '{0}' takes a value of type 'T?' or 'T!' apart, and this value has type '{1}': write '??' or '!!', or a 'match' pattern that is a literal or '_'. |
+| `FactJoinRequired` | The fact '{0}' writes no 'join'. |
+| `FactConstCaseTypeRequired` | The 'const' case '{0}' of the fact '{1}' writes no type. |
+| `FactCaseBindsNoVariable` | This case of the fact '{0}' names no variable. |
 
 **Semantic — warnings** (`SemanticDiag`) — 12
 

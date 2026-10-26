@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-283 diagnostics: 266 errors, 17 warnings. 15 carry a machine-applicable edit, 268 say why they carry none.
+286 diagnostics: 269 errors, 17 warnings. 15 carry a machine-applicable edit, 271 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -249,6 +249,9 @@ prints one entry.
 | `0x030001F3` | [SemanticDiag::EnumWrittenWhereATypeIsExpected](#enumwrittenwhereatypeisexpected) | Error | no |
 | `0x030001F4` | [SemanticDiag::StructComprehensionWithoutFields](#structcomprehensionwithoutfields) | Error | no |
 | `0x030001F5` | [SemanticDiag::IdentifierPatternNeedsNullableOrErrorType](#identifierpatternneedsnullableorerrortype) | Error | no |
+| `0x030001F6` | [SemanticDiag::FactJoinRequired](#factjoinrequired) | Error | no |
+| `0x030001F7` | [SemanticDiag::FactConstCaseTypeRequired](#factconstcasetyperequired) | Error | no |
+| `0x030001F8` | [SemanticDiag::FactCaseBindsNoVariable](#factcasebindsnovariable) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -8346,6 +8349,114 @@ func f(n: int): int {
 func main(): int sync {
     println('never printed')
     println(f(1))
+    return 0
+}
+```
+
+### FactJoinRequired
+
+`0x030001F6` · Error · `SemanticDiag::FactJoinRequired`
+
+**Fix**
+
+None: choice: the function that merges the two facts is the writer's to write
+
+**Message**
+
+```text
+The fact '{0}' writes no 'join'.
+```
+
+**Help**
+
+```text
+`join` is the clause that is required: it says how the facts of two writings of one value are merged, and it is the least upper bound of the two (rewrite design 7.5). Write it after the cases, naming one binary function or a lambda: `} join max`, `} join (lhs: int, rhs: int) => lhs | rhs`. Without it a value the program wrote two ways has no fact the engine can settle on.
+```
+
+**Example** (`test/cases/modules/rules/fact_no_join.cml`, run as `camel test/cases/modules/rules/fact_no_join.cml`)
+
+```camel
+module fact_no_join
+import { max } from math
+
+fact sign(v: int): int match v {
+    case const c => c
+    case _       => 0
+}
+
+func main(): int sync {
+    return 0
+}
+```
+
+### FactConstCaseTypeRequired
+
+`0x030001F7` · Error · `SemanticDiag::FactConstCaseTypeRequired`
+
+**Fix**
+
+None: choice: which of the two places writes the constant's type is the writer's to write
+
+**Message**
+
+```text
+The 'const' case '{0}' of the fact '{1}' writes no type.
+```
+
+**Help**
+
+```text
+A `const` case matches one constant, and the fact function is given the value itself, so the type of that constant is written somewhere (rewrite design 7.5): in the case (`case const c: int => c`), or in the head of a fact that declares the value it is about with a type (`fact sign(v: int): int`), whose first parameter's type the case then takes.
+```
+
+**Example** (`test/cases/modules/rules/fact_const_case_without_type.cml`, run as `camel test/cases/modules/rules/fact_const_case_without_type.cml`)
+
+```camel
+module fact_const_case_without_type
+import { max } from math
+
+fact one: int match v {
+    case const c => c
+    case _       => 0
+} join max
+
+func main(): int sync {
+    return 0
+}
+```
+
+### FactCaseBindsNoVariable
+
+`0x030001F8` · Error · `SemanticDiag::FactCaseBindsNoVariable`
+
+**Fix**
+
+None: choice: the part of the value the case reads is the writer's to write
+
+**Message**
+
+```text
+This case of the fact '{0}' names no variable.
+```
+
+**Help**
+
+```text
+The cases read how a value was built, and the parts they read are the variables their patterns name: `case x + y` binds the two operands, and the fact function is computed from them (rewrite design 7.5). A pattern that names no variable leaves the case with nothing to read, so the fact says nothing about the values it matches; bind a part with a name, or write `case _`, which is the last case and says what the fact is for a value no other case matched.
+```
+
+**Example** (`test/cases/modules/rules/fact_case_binds_nothing.cml`, run as `camel test/cases/modules/rules/fact_case_binds_nothing.cml`)
+
+```camel
+module fact_case_binds_nothing
+import { max } from math
+
+fact one(v: int): int match v {
+    case 1 => 1
+    case _ => 0
+} join max
+
+func main(): int sync {
     return 0
 }
 ```

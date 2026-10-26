@@ -1,0 +1,16 @@
+/**
+ * A `const` case matches one constant and the fact function is given the value itself, so the
+ * constant needs a type: the case writes it, or the head declares the value the fact is about with
+ * one (rewrite design 7.5). This fact has no head parameters and its case writes no type.
+ */
+module fact_const_case_without_type
+import { max } from math
+
+fact one: int match v {
+    case const c => c
+    case _       => 0
+} join max
+
+func main(): int sync {
+    return 0
+}
