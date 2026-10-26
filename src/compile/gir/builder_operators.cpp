@@ -1402,6 +1402,15 @@ node_handle_t Builder::pathAssignmentOf(const GCT::node_ptr_t &gct) {
                    << make(tree_->makeDRef(rightName), gct->at(2));
             right = visitLinkNode(plain);
         }
+        // The value enters the place's type as it enters a declaration's and a parameter's
+        // (`acc.best = hi` with `best: float?`): one relation, entersImplicitly.
+        Type *valueType = valueTypeOf(nodeTypeOf(right));
+        if (type != nullptr && valueType != nullptr && !type->equals(valueType) &&
+            entersImplicitly(type, valueType)) {
+            if (node_handle_t entered = checkValue(right, type, gct->at(2))) {
+                right = entered;
+            }
+        }
         assigned = bindTemporary(right);
     }
     // The set chain, from the deepest place to the variable.
@@ -2071,6 +2080,18 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         normInputTypes.reserve(normInputs.size());
         for (const Argument &input : normInputs) {
             normInputTypes.push_back(valueTypeOf(callableValueType(input.node)));
+        }
+    }
+    // `v = e` where `v` is a `T?` or a `T!`: the value enters the place's type as it enters a
+    // declaration's and a parameter's (design principles 3.8, one relation: entersImplicitly).
+    if (isAssignment && normInputs.size() == 2 && normInputTypes.size() == 2) {
+        Type *place = normInputTypes[0];
+        if (asTagged(place) != nullptr && !place->equals(normInputTypes[1]) &&
+            entersImplicitly(place, normInputTypes[1])) {
+            if (node_handle_t entered = checkValue(normInputs[1].node, place, normInputs[1].expr)) {
+                normInputs[1].node = entered;
+                normInputTypes[1]  = place;
+            }
         }
     }
     // A variable passed to a `var` parameter is the variable's cell, and the callee's port holds

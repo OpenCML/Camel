@@ -1,0 +1,18 @@
+id = "compile.nullable_assign"
+order = 935
+tier = "fast"
+tags = ["feat", "compile", "tagged", "types"]
+desc = "A T enters a T? on assignment as it does on binding and argument passing"
+
+[[tests]]
+name = "nullable_assign.enters"
+desc = "`best = hi` with `var best: float?`, a field `acc.best = hi`, an element `xs[0] = hi` and a write from a function that captures the variable all store the value as a `T?`. The path forms stored the bare float into the `float?` slot."
+kind = "behavior"
+case = "../../../cases/compile/nullable_assign.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "2.5 2.5 [2.5, null] 3\n4.5\n2.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
