@@ -623,3 +623,17 @@ export func difference(s: Set<T>, other: Set<T>): Set<T>
 /// @example is_subset([1, 2] as Set<int>, [1, 2, 3] as Set<int>)    // true
 #op(':coll/set_is_subset')
 export func is_subset(s: Set<T>, other: Set<T>): bool
+
+// ---- streams ----
+
+/// Records one `tee` (design principles 5.4) for the report of a profile session: the hint it
+/// took, the widest hint the implementation honours, the elements it has pulled from its source so
+/// far, and the most elements it has buffered at once -- with the stream it reads, whose value
+/// tells one tee from another and whose type the operator takes, and whose elements it does not.
+/// A program does not write this: `tee` calls it once per element it pulls, and `std::profile`
+/// prints what it recorded (`STREAM_TEE`).
+/// @effect records the numbers of the tee
+/// @example tee_note(8, 64, 2, 2, s)    // the tee written `tee(s, 8)` reports itself this way
+/// @example-fragment the last operand is the stream a tee reads, and no example program has one
+#op(':stream/tee_note')
+export func tee_note(hint: int, cap: int, elements: int, peak: int, s: T..): void

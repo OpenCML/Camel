@@ -17,7 +17,7 @@ namespace camel::core::error {
 
 enum class SemanticDiag : uint32_t {
     // Errors
-    // 0x0001E5 vacant
+    // 0x0001F6 vacant
     Redeclaration               = 0x000001,
     ModuleNotFound              = 0x000002,
     ReservedIdentifier          = 0x000003,
@@ -407,6 +407,16 @@ enum class SemanticDiag : uint32_t {
     // may take and give a stream.
     StreamInContainer   = 0x0001E3,
     StreamConsumedTwice = 0x0001E5,
+    // A loop's condition and its body run again on every round, and a stream is a value: a use standing
+    // in one of them consumes the value it names once per round, and under value semantics every round
+    // sees the same stream. A value a round may consume is the loop's own state, which the round takes
+    // from its port and hands back as the next state (design principles 5.4 and 3.10).
+    StreamConsumedInLoop = 0x0001ED,
+    // `tee(s, n)` reads one stream from two places (design principles 5.4): the two streams it gives
+    // share one buffer, and `n` is a hint at the width of that buffer -- the executor grows the buffer
+    // rather than block the side that runs ahead -- but no buffer holds fewer than the one element
+    // being handed over, so a constant width below 1 is refused where it is written.
+    TeeHintNotPositive  = 0x0001EF,
     NodeOfNotAParameter = 0x0001DE,
     // The element type of a value is in its type (design principles 5.1), so an array type writes one:
     // a shape with no element type in front of it asks a question the type of a value answers. A

@@ -1581,6 +1581,22 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::StreamConsumedInLoop,
+            {
+                "StreamConsumedInLoop",
+                "'{0}' is consumed once per round of this loop.",
+                "A loop's condition and its body run again on every round, so a stream named in one of them is read once per round, and under value semantics every round reads the same stream (design principles 5.4). To read one element per round, carry the stream as the loop's own state: `loop acc = 0, rest = s while ... do ...` takes the rest a round's pull answers and hands it back as the next state. To read the stream to its end, write `for x in s`, which is the loop the compiler builds for exactly that.",
+            },
+        },
+        {
+            SemanticDiag::TeeHintNotPositive,
+            {
+                "TeeHintNotPositive",
+                "The `tee` width '{0}' is below 1.",
+                "`tee(s, n)` reads `s` once and gives two streams over the same elements, each read once (design principles 5.4). A side that runs ahead of the other buffers the elements the other has not read yet, and `n` says how wide that buffer is expected to be: it is a hint, so the executor grows the buffer rather than make a side wait, and a hint wider than the implementation's cap is clamped to it. What no buffer can be is narrower than the one element being handed over, so write `n` as 1 or more, or leave it out for the default of 8.",
+            },
+        },
+        {
             SemanticDiag::NodeOfNotAParameter,
             {
                 "NodeOfNotAParameter",
