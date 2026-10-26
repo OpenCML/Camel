@@ -5,6 +5,7 @@
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
+#include "camel/core/mm/blocking.h"
 #include "camel/core/operator.h"
 #include "camel/core/process_exit.h"
 #include "camel/core/rtdata/bytes.h"
@@ -55,6 +56,12 @@ slot_t __process_sleep__(ArgsView &with, ArgsView &norm, Context &ctx) {
             std::format("the duration is {} ms; it must not be negative", ms));
     }
     try {
+        // A sleep is a wait, and a wait is announced: the scheduler takes this thread out of its
+        // GC region for it and puts it back after, so that a sleeping worker is not what makes a
+        // cooperative stop-the-world collection give up (C24, MG/R5/BE/6). Without a scheduler
+        // that registered itself (every other back end, and every serial run) this costs one
+        // relaxed load.
+        camel::core::mm::BlockingWaitScope wait;
         std::this_thread::sleep_for(std::chrono::milliseconds(ms));
     } catch (const std::exception &e) {
         throwRuntimeFault(RuntimeDiag::RuntimeError, std::string("<sleep> ") + e.what());
