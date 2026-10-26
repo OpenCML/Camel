@@ -3,7 +3,7 @@
 // ordinary signature that tiles::run and tiles::source specialize on.
 module tiles_core_views
 import { load_npy, save_npy, reshape, permute, sum, zeros } from tensor
-import { grad } from autodiff
+import { grad, vjp } from autodiff
 import { source, inspect, run_preferred_resident, download } from tiles
 import { get_env } from env
 let weights = reshape([1.0, -2.0, 3.0, -4.0, 5.0, -6.0] as f32[], [2, 3])

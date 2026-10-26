@@ -820,9 +820,9 @@ update: (opt: Adam, params: P, grads: G, state: AdamState<P>) => (P, AdamState<P
 **`autodiff`** — import { ... } from autodiff — 3 name(s)
 
 ```text
-grad: (f: (x: float) => float) => (x: float) => float
-with_grad: (f: (x: float) => float) => (x: float) => (float, float)
-stop_gradient: (x: T) => T
+grad: (f: F) => Gradient<F> when is_function::<F>()
+with_grad: (f: F) => ValueAndGradient<F> when is_function::<F>()
+stop_gradient: (x: T) => T pure
 ```
 
 **`sim`** — import { ... } from sim — 2 name(s)
