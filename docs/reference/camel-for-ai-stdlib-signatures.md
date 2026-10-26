@@ -756,17 +756,17 @@ plot: (data: float[], filename: string) => void
 **`python`** — import { ... } from python — 12 name(s)
 
 ```text
-py_call: (fn: string | PyObject, ...args: PyObject[]) => PyObject
-py_call: (fn: string | PyObject, args?: (...PyObject) | PyObject[], kwargs?: Struct<...PyObject>) => PyObject
+py_call: (fn: string | PyObject, ...args: PyObject[]) => PyObject!
+py_call: (fn: string | PyObject, args?: (...PyObject) | PyObject[], kwargs?: Struct<...PyObject>) => PyObject!
 py_print: (...objs: PyObject[]) => PyObject?
 py_println: (...objs: PyObject[]) => PyObject?
 py_wrap: (x: T) => PyObject<T>
-py_unwrap: (obj: PyObject<T>) => T
-py_exec: (code: string) => PyObject
-py_eval: (expr: string) => PyObject
-py_run: (file_path: string) => PyObject
-py_attr: (obj: PyObject, attr: string) => PyObject
-py_import: (module_name: string) => PyObject
+py_unwrap: (obj: PyObject<T>) => T!
+py_exec: (code: string) => PyObject!
+py_eval: (expr: string) => PyObject!
+py_run: (file_path: string) => PyObject!
+py_attr: (obj: PyObject, attr: string) => PyObject!
+py_import: (module_name: string) => PyObject!
 py_dispose: (obj: PyObject) => void
 ```
 

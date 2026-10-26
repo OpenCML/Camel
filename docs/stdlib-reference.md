@@ -5495,26 +5495,27 @@ Five operators stay in C++ and are recorded as computed signatures in
 #### `py_call`
 
 ```camel
-py_call: (fn: string | PyObject, ...args: PyObject[]) => PyObject
+py_call: (fn: string | PyObject, ...args: PyObject[]) => PyObject!
 ```
 
 Calls the Python callable `fn` -- a `PyObject`, or a dotted name such as `"math.sqrt"` -- with
 the `PyObject` arguments `args`, and returns its result. Any number of arguments is accepted.
 
 - With effects: runs arbitrary Python code.
-- Failure: fault `RuntimeError` when the call raises.
+- Failure: error `PythonError` when the call raises; the message starts with the exception class.
 - Example: `py_call("math.sqrt", py_wrap(2.0))`
 
 #### `py_call`
 
 ```camel
-py_call: (fn: string | PyObject, args?: (...PyObject) | PyObject[], kwargs?: Struct<...PyObject>) => PyObject
+py_call: (fn: string | PyObject, args?: (...PyObject) | PyObject[], kwargs?: Struct<...PyObject>) => PyObject!
 ```
 
 Calls `fn` with a tuple (or an array) of positional arguments and a struct of keyword
 arguments. Both collections are optional; every element is a `PyObject`.
 
 - With effects: not pure.
+- Failure: error `PythonError` when the call raises; the message starts with the exception class.
 - Example: `py_call(fn, (py_wrap(2.0),), {x: py_wrap(1)})`
 
 #### `py_print`
@@ -5539,7 +5540,7 @@ Writes the printed form of every `PyObject` argument and a newline, as `py_print
 returns the last argument (or `void` when there is none).
 
 - With effects: writes the interpreter's standard output.
-- Example: `py_println(py_eval("1 + 1"))`
+- Example: `py_eval("1 + 1") ?-> (o: PyObject): PyObject? => py_println(o)`
 
 #### `py_wrap`
 
@@ -5556,76 +5557,80 @@ Wraps the value `x` in a new Python object, keeping its Camel type as the type a
 #### `py_unwrap`
 
 ```camel
-py_unwrap: (obj: PyObject<T>) => T
+py_unwrap: (obj: PyObject<T>) => T!
 ```
 
-Unwraps a Python object wrapped from a value of type `T` and returns that value. An object
-that did not come from `py_wrap` has no type argument and is refused when the call is compiled.
+Unwraps a Python object into a value of type `T`. An object that did not come from `py_wrap`
+has no type argument and is refused when the call is compiled. The object must be of the kind
+`T` names: a `bool` takes a bool only (not `5`), an `int` an int that fits (not a bool or a
+float), a `float` a float or an int, a `string` a str (not bytes), `Bytes` bytes, an array a
+list, a tuple a tuple or list of its length, a struct a dict with its fields.
 
 - With effects: reads an interpreter object.
-- Example: `py_unwrap(py_wrap(2.0))` gives `2.0`
+- Failure: error `PythonTypeError` when the object is not of the kind `T` names; the message gives the path and what was found.
+- Example: `py_unwrap(py_wrap(2.0)) !! 0.0` gives `2.0`
 
 #### `py_exec`
 
 ```camel
-py_exec: (code: string) => PyObject
+py_exec: (code: string) => PyObject!
 ```
 
 Runs Python statements `code` in the interpreter and returns its `None`. Definitions and
 assignments stay visible to later calls, as in a Python session.
 
 - With effects: runs arbitrary Python code.
-- Failure: fault `RuntimeError` when the code raises.
+- Failure: error `PythonError` when the code raises; the message starts with the exception class.
 - Example: `py_exec("x = 1")`
 
 #### `py_eval`
 
 ```camel
-py_eval: (expr: string) => PyObject
+py_eval: (expr: string) => PyObject!
 ```
 
 Evaluates the Python expression `expr` and returns its value as a `PyObject`.
 
 - With effects: runs arbitrary Python code.
-- Failure: fault `RuntimeError` when the expression raises.
+- Failure: error `PythonError` when the expression raises; the message starts with the exception class.
 - Example: `py_eval("1 + 2 * 3")` gives `7`
 
 #### `py_run`
 
 ```camel
-py_run: (file_path: string) => PyObject
+py_run: (file_path: string) => PyObject!
 ```
 
 Runs the Python script at `file_path` and returns its `None`.
 
 - With effects: runs arbitrary Python code.
-- Failure: fault `RuntimeError` when the file cannot be read or the script raises.
+- Failure: error `PythonError` when the file cannot be read or the script raises; the message starts with the exception class.
 - Example: `py_run("scripts/hello.py")`
 
 #### `py_attr`
 
 ```camel
-py_attr: (obj: PyObject, attr: string) => PyObject
+py_attr: (obj: PyObject, attr: string) => PyObject!
 ```
 
 The attribute `attr` of the Python object `obj`; a dotted `attr` walks the chain. Asking may
 run a property or a descriptor, so the read is an effect.
 
 - With effects: reads interpreter state and may run Python code.
-- Failure: fault `RuntimeError` when the attribute does not exist.
-- Example: `py_attr(py_import("math"), "sqrt")`
+- Failure: error `PythonError` when the attribute does not exist; the message starts with the exception class.
+- Example: `py_import("math") ?-> (m: PyObject): PyObject! => py_attr(m, "sqrt")`
 
 #### `py_import`
 
 ```camel
-py_import: (module_name: string) => PyObject
+py_import: (module_name: string) => PyObject!
 ```
 
 Imports the Python module `module_name` and returns it. Importing runs the module body and
 records the module in `sys.modules`.
 
 - With effects: imports a module and runs its body.
-- Failure: fault `RuntimeError` when the import raises.
+- Failure: error `PythonError` when the import raises; the message starts with the exception class.
 - Example: `py_import("math")`
 
 #### `py_dispose`
@@ -5637,7 +5642,7 @@ py_dispose: (obj: PyObject) => void
 Drops this program's reference to the Python object `obj`.
 
 - With effects: advances the interpreter's reference counts.
-- Example: `py_dispose(py_import("math"))`
+- Example: `py_import("math") ?-> py_dispose`
 
 <a id="nn"></a>
 

@@ -32,3 +32,16 @@ expect_exit = 0
 expect_stdout_contains = ["PASS"]
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 120000
+
+[[tests]]
+name = "python.site_packages"
+desc = "The packages of the active environment (`VIRTUAL_ENV`, `CONDA_PREFIX`) are importable from the embedded interpreter: `lib/python<major>.<minor>/site-packages` for the Python this binary embeds, which one path computation names for both."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/modules/stdlib/python_site_packages.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["with VIRTUAL_ENV its site-packages is on the path", "with CONDA_PREFIX too", "PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 120000
