@@ -76,3 +76,5 @@
 - **位运算的 `is_same` 分臂**：草稿保留泛型写法。集成时的编译期检查：`WhenDeclarationOverlap` 是否判定 `is_same::<T, i32>()` 与 `is_same::<T, int>()` 互斥；若拒绝，退回每个宽度一条固定签名的重载（`bit_and(a: i32, b: i32)`、`bit_and(a: int, b: int)`，`shl`/`shr` 同，`conj(z: c64)`、`conj(z: c128)`）。
 - **复数 `abs`/`re`/`im`**：保持 c64、c128 各一条的固定重载，不引入类型函数（问题 2 作废）。
 - 问题 3、6 已定；问题 1（f32 经 f64）、4、5 按推荐处理，不再需要裁定。
+
+- 批次 3 补充：`types` 新增 `is_real`（整数或浮点），`math.cml` 里的 `is_integer::<T>() || is_float::<T>()` 已换成它。

@@ -8,7 +8,7 @@
 - **`sleep` 与 `exit` 收进本模块**。原先 `process.cml` 注释写着"`sleep` 与 `exit` 也是内建，不用导入"，而 `stdlib/signatures/globals.cml` 里另有 `#op('process:sleep')`、`#op('process:exit')` 的声明：同一个算子两处声明，违反"一个事实只写一处"。`exit` 在 `process.cml` 原来根本没有声明。本稿把两者都声明在这里；前奏里的那两条要删（见开放问题 1）。
 - **`sleep` 的单位改为秒（`float`）**：与 `time::now`（秒，`float`）、3.9 的超时参数（`timeout: 5.0`）、`perf` 的计时一致；原来是毫秒 `int`，一个库里两种时间单位。负数或 NaN 仍是故障。
 - **`whoami` → `user_name`，返回 `string!`**：取值器用名词（conventions 3），不用 shell 命令的名字；系统没有用户名（容器里常见）是环境造成的失败，原先抛 `RuntimeError` 故障，改为 `NotFound` 错误值。
-- `cpu_count`（至少 1，不会失败）、`thread_count` 保留。`thread_count` 是运行时自省，只有测试在用（`test/cases/modules/tensor/{thread_count,gemm_threads,thread_pools}.cml`），留在这里因为"进程有几个线程"本来就是进程的事实。
+- `cpu_count`（至少 1，不会失败）保留。`thread_count` 是测试探针，搬到 `test_support`（见表）。
 
 ## 函数表
 
@@ -18,7 +18,7 @@
 | `exit(code: int)` | **新增到本模块**（从前奏搬来） | 一个算子一处声明 |
 | `whoami` | **改名** `user_name`，返回 `string!` | 名词取值器；环境失败用 `!` |
 | `cpu_count` | 保留 | |
-| `thread_count` | 保留 | |
+| `thread_count` | **搬到 `test_support`** | 只有 `test/cases/modules/tensor/{thread_count,thread_pools}.cml` 与 `test/plans/feat/modules/threads.plan.toml` 在用（已核对，其余命中都是 Python 脚本里同名的局部变量），是测试探针 |
 
 ## C++ 侧改动（`modules/process`）
 

@@ -1,0 +1,25 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * Facilities for tests of the runtime, not for programs: things that make a property of the
+ * scheduler visible.
+ */
+
+/// The one meeting point of the process: calls on it are ordered with one another and with nothing
+/// else.
+export resource rendezvous_point
+
+/// Blocks until `parties` calls are waiting at the meeting point, or until `timeout` seconds have
+/// passed, and gives how many calls met (after a timeout, how many were waiting). A tool for
+/// showing that calls really run at the same time.
+/// @fails fault `InvalidArgument` when parties is below 1 or timeout is negative
+/// @example-fragment waits for another call, which a page cannot supply
+/// @example rendezvous(2, 1.0)    // 2 when another call arrived in time
+export func rendezvous(parties: int, timeout: float): int uses rendezvous_point
+
+/// The number of threads this process has, the caller included: the count the operating system
+/// reports for the process, not the number of processors. A test reads it to pin how many worker
+/// threads a run creates.
+/// @example thread_count()    // 1 at -t 1
+export func thread_count(): int uses process

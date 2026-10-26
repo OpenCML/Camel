@@ -1,0 +1,69 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * Computed signatures of the `tiles` module (C++ operators, modules/tiles).
+ *
+ * `available`, `device` and the pass `compile` are declared in stdlib/tiles.cml. The entries here
+ * take their signature from an argument that a declaration cannot name:
+ *   - `upload` wraps every leaf of its argument in the device handle `Device<...>`, `download`
+ *     strips that handle from every leaf (the handle is exported by C++ and keeps one resource for
+ *     each device value);
+ *   - `run_preferred_resident`, `source`, `inspect` and `benchmark` apply a function, which is
+ *     their `with` argument, to the example inputs, which are their ordinary argument, a tuple with
+ *     one value for each parameter of the function;
+ *   - `regions` takes the function as its `with` argument and no data.
+ * The `DynamicFuncTypeResolver` of modules/tiles is the one source of these signatures. Each entry
+ * below writes one instance of its rule, for functions of two `f32` parameters.
+ *
+ * For reference only: these declarations are not compiled. They are checked against the operators
+ * the module registers, and docs/stdlib-reference.md is generated from them.
+ *
+ * A scalar leaf takes the element type it is written with (design principles 7.3): an f32 scalar is
+ * a four-byte value with an empty shape, so its device leaf is `Device<f32>`, while an f64 scalar's
+ * is `Device<float>`.
+ */
+
+/// Uploads every leaf of the value -- an array, or a scalar of the element type it is written
+/// with, alone or inside a tuple or a struct -- and gives the same tree with each leaf wrapped in
+/// `Device<...>`. A leaf of any other type is refused when the call is compiled.
+/// @example-fragment the value comes from the caller
+/// @example host->upload    // a Device<f32[..]>
+export func upload(value: f32[..]): Device<f32[..]> uses driver
+
+/// Downloads every device leaf of the value and gives the host value it came from. A tree with a
+/// leaf that is not a device value is refused when the call is compiled.
+/// @example-fragment the value comes from the caller
+/// @example resident->download    // the array resident holds
+export func download(value: Device<f32[..]>): f32[..] uses driver
+
+/// Runs the function through the device path the pipeline prepared for it -- the device when a
+/// program can be made for it, the host otherwise -- and gives the resident form of its result.
+/// This is the operator `tiles::compile` inserts for an outlined region and the tests use; a
+/// program asks for the device with `#gpu`, not with this.
+/// @example (f32(2.0), f32(3.0))->run_preferred_resident<(a: f32, b: f32): f32 => a + b>    // a Device<f32>
+with <fn: (a: f32, b: f32) => f32>
+export func run_preferred_resident(inputs: (f32, f32)): Device<f32> uses driver
+
+/// The CUDA source the function compiles to, without running it.
+/// @example (f32(2.0), f32(3.0))->source<(a: f32, b: f32): f32 => a + b>
+with <fn: (a: f32, b: f32) => f32>
+export func source(inputs: (f32, f32)): string uses driver
+
+/// A report on the function's device plan, without running it: the kernel, its launch shape and
+/// the values it would keep on the device.
+/// @example (f32(2.0), f32(3.0))->inspect<(a: f32, b: f32): f32 => a + b>
+with <fn: (a: f32, b: f32) => f32>
+export func inspect(inputs: (f32, f32)): string uses driver
+
+/// Times the function on the device, and on the host for comparison, and gives the report as JSON
+/// text.
+/// @example (f32(2.0), f32(3.0))->benchmark<(a: f32, b: f32): f32 => a + b>
+with <fn: (a: f32, b: f32) => f32>
+export func benchmark(inputs: (f32, f32)): string uses driver
+
+/// The regions the compiler would take for the whole program, as text: which nodes would run on
+/// the device and why the others would not.
+/// @example regions<(a: f32, b: f32): f32 => a + b>()
+with <fn: (a: f32, b: f32) => f32>
+export func regions(): string uses driver

@@ -1,0 +1,36 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * Exporting Camel programs as ONNX models. The export is a pass: a function `(f: F) => F!` that
+ * the pipeline applies (`camel m.cml std::macro std::opt onnx::export out=m.onnx`, or
+ * `f->onnx::export_model<out: 'm.onnx'>` in a program). A program that exports one of its own
+ * functions while it runs calls the same function with an example of the arguments, which fixes
+ * the shapes the graph is translated at (the second signature in `stdlib/signatures/onnx.cml`):
+ * `export_model<out: path>(step, (model, batch))`.
+ *
+ * The module is the exporter, not a runtime: loading it and asking what it can lower needs neither
+ * the ONNX runtime nor a GPU; only an export writes a file. A graph that cannot be translated --
+ * a call that remains, an operator without an ONNX lowering, a dtype or shape the exporter cannot
+ * name -- is reported as an error value of kind `ExportUnsupported` that says which node, and the
+ * file system refusing the file is an `IOError`; neither is a fault.
+ */
+
+/// Lists the operator URIs the ONNX backend can lower at its default opset, in the order the
+/// lowering table reports them. A capability report only: it reads the table compiled into the
+/// module and never touches the file system or the ONNX runtime.
+/// @example supported_operators()
+export func supported_operators(): string[] pure
+
+// -----------------------------------------------------------------------------
+// Passes: functions the pipeline applies to the program
+// -----------------------------------------------------------------------------
+
+/// Writes the model of the program's `main` (or of the one `export_model` call it makes) as an
+/// ONNX file. `out` names the file, and overrides the path of the one `export_model` call the
+/// program makes (exactly one call is allowed then). `dynamic_axes` leaves those axes of the
+/// inputs unknown in the model; `target` names the runtime whose capability data the model is
+/// checked against.
+/// @fails error value `ExportUnsupported` when the graph cannot be translated or the target rejects a node; error value `IOError` when the file cannot be written
+with <out: string = "", dynamic_axes: int[]? = null, target: string? = null>
+export func export_model::<F>(f: F): F! uses fs when is_function::<F>()

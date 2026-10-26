@@ -1,0 +1,40 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * Computed signatures of the `python` module (C++ operators, modules/python).
+ *
+ * The other functions are declared in stdlib/python.cml. The two here move a value across the
+ * boundary, and their type is the type the program names, which a declaration cannot write (the
+ * type is explicit at the call or taken from where the result goes, as for `json::decode_as`):
+ * `to_py::<T>` accepts the types that have a Python form, `from_py::<T>` decodes to the type T and
+ * checks the object against it.
+ *
+ * The Python form of a type:
+ *   - `bool`, the integer types, the float types and `string` are the Python scalars of the same
+ *     name, by value; `Bytes` is `bytes`;
+ *   - a numeric array (`T[..]`) is exchanged through DLPack with no copy, on the device it lives on:
+ *     `to_py` hands out a capsule that NumPy and PyTorch read in place (`from_dlpack`), and
+ *     `from_py` reads an object with a `__dlpack__` method in place; the element type and the
+ *     extents must be those of `T`, and a different element type is an error, never a conversion;
+ *   - a tuple is a `tuple`, a struct a `dict` of its fields by name, an array of any other element
+ *     type a `list`, and a map with string keys a `dict`, each of them by its parts;
+ *   - `PyObject` itself passes through as it is.
+ * A Python float or int that goes into a parameter of a float type takes the type of the parameter
+ * and is rounded once, like a literal.
+ *
+ * For reference only: these declarations are not compiled. They are checked against the operators
+ * the module registers, and docs/stdlib-reference.md is generated from them.
+ */
+
+/// The Python object that stands for a Camel value, in the Python form of its type.
+/// @fails error value `PythonError` when the interpreter cannot make the object (for a device array, the interpreter has no library that reads its DLPack capsule)
+/// @example 2.0->to_py !-> to_string !! ''    // '2.0'
+export func to_py::<T>(x: T): PyObject! when has_python_form::<T>()
+
+/// The Camel value of type T that a Python object holds. T is written at the call
+/// (`from_py::<f32[..]>(obj)`) or taken from the type of the position the call stands in.
+/// @fails error value `PythonTypeError` when the object does not have the type T (the message gives the path of the mismatch and what was found there); error value `PythonError` when reading it raises
+/// @example-fragment the object comes from a Python call
+/// @example obj->from_py::<f32[..]>
+export func from_py::<T>(obj: PyObject): T! when has_python_form::<T>()

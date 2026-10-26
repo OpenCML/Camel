@@ -40,3 +40,14 @@
 - `JsonParseError`/`ParseError` 的区别：前者是 JSON 文本，后者是其他按固定格式读的文本；`strptime` 用 `ParseError`。
 - `IndexError`、图与自动微分各条的归并（例如是否并入通用种类）不在本轮，由对应模块的重写者决定。
 - 新增 `AlreadyExists`、`NotATerminal` 需要在 C++ 侧 `errorKind()`（`modules/fs/operators.cpp`）与 `modules/io` 中实际产生。
+
+## 第三批新增（训练、互操作、设备）
+
+| 种类 | 含义 | 函数 |
+|---|---|---|
+| `PythonError` | Python 一侧失败：异常、缺失的模块或属性；消息含异常类型、文本与回溯 | `python::exec`、`eval`、`run_file`、`import_module`、`attr`、`call`、`to_string`、`to_py` |
+| `PythonTypeError` | Python 对象不是所要的 Camel 类型（消息给出路径与所见） | `python::from_py` |
+| `ExportUnsupported` | 图不能翻译成目标格式（残留的调用、没有降低的算子、说不出名字的 dtype 或形状），或目标运行时拒绝某节点 | `onnx::export_model`（遍与调用形式） |
+| `DeviceUnavailable` | 本构建或本机没有所要的设备 | `tiles::device` |
+| `GpuScopeUnsupported` | `#gpu` 范围里有设备不能运行的算子（消息指出算子与范围） | `tiles::compile` |
+| `CheckpointError` | 目录不是所要类型的检查点，或文件缺失、校验和不符 | `ckpt::load_tree`（已有） |

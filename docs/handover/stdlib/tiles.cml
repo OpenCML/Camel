@@ -1,0 +1,49 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * Programs on a CUDA device. Where a computation runs is asked for in the source with the tags
+ * `#gpu` and `#cpu`, written on a function, a block or a namespace block (design principles 13.4),
+ * and the card is chosen when the program runs, with `--devices`. The pass `tiles::compile` reads
+ * the tags, outlines the regions the device can run, compiles them and runs the program: an
+ * operator the device cannot run inside a `#gpu` scope is a compile error that names the operator
+ * and the scope, never a quiet fall back to the host. An array on the device is an ordinary array
+ * value whose data block lives there; the host reading it (printing, writing a file, turning it
+ * into a host number) downloads it, and the reports of a run list every such transfer.
+ *
+ * What a program does by hand is small: ask whether a device is there (`available`, `device`), move
+ * a value (`upload`, `download`), and look at what would run (`source`, `inspect`, `benchmark`,
+ * `regions`). The device and the driver are one resource, `driver`, so every call here keeps its
+ * written order against the others and is never folded, merged or dropped. The functions to look
+ * at are the `with` argument and the data is the example input, as for `map`:
+ * `inputs->inspect<fn>`.
+ *
+ * The functions that compute their type from an argument (`upload`, `download`, `source`,
+ * `inspect`, `benchmark`, `regions`, and `run_preferred_resident`, the entry `tiles::compile` and
+ * the tests use) are in `stdlib/signatures/tiles.cml`.
+ */
+
+/// The CUDA driver and the devices behind it, as one resource: every use of the device is a use
+/// of this.
+export resource driver
+
+/// Whether this machine can run a program on a CUDA device: false when the driver, the toolkit or
+/// a visible device is missing. A capability question only -- a device the run names with
+/// `--devices` and that is not there is a fault at start-up, never `false`.
+/// @example available()
+export func available(): bool uses driver
+
+/// A description of the CUDA device the run selects: its ordinal, name, compute capability and
+/// memory.
+/// @fails error value `DeviceUnavailable` when this build or this machine has no CUDA device
+/// @example device() !! 'no device'
+export func device(): string! uses driver
+
+// -----------------------------------------------------------------------------
+// Passes: functions the pipeline applies to the program
+// -----------------------------------------------------------------------------
+
+/// Outlines the regions the device can run, compiles them and executes the program; the card is
+/// chosen at run time with `--devices`, never by a pass parameter.
+/// @fails error value `GpuScopeUnsupported` when a `#gpu` scope holds an operator the device cannot run (the error names the operator and the scope)
+export func compile::<F>(f: F): F! uses driver when is_function::<F>()

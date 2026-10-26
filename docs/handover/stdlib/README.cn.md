@@ -30,3 +30,18 @@
 6. **`tensor_definitions.cml` 删除**：规范定义跟着各自的函数走。
 7. 沿轴归约的结果类型暂时写作 `T[..]`，静态形状由以后的类型函数补上（与切片"结果类型保留静态参数能证明的长度"是同一件事），不算缺陷。
 8. `?->` 是否拆成 `?->`（可空）与 `!->`（错误）正在请负责人定。定了以后，草稿里所有用于错误的 `?->` 机械地改。
+
+## 第三批：其余全部模块
+
+`types`、`tree`、`stream`、前奏（`prelude.signatures.cml` 换进 `stdlib/signatures/globals.cml`）、`this`、`graph`、`opt`、`rewrite`、`rules`、`autodiff`、`onnx`、`tiles`、`python`、`ckpt`、`para`、`bench`（`perf` 与 `sim` 合并）、`test_support`；`pyplot` 删除；`*.signatures.cml` 换进 `stdlib/signatures/`，`stdlib/signatures/graph.cml` 删除。接入要求同前，另加：
+1. **核心改动**：
+   - 不同模块里同名、作用于不同类型的函数，同时可见时合成一组重载，不互相遮蔽；只有真正有歧义的调用才报错；
+   - 核心 `slice` 的函数形式作用于数组、字符串和 `Bytes`，它需要 `match type` 能认出数组（`is_array`、`is_sliceable`）；
+   - `unfold` 是用 `(状态, 步进函数)` 构造流的核心原语。
+2. `graph`、`opt`、`rewrite`、`rules` 按 H233 的目标写，与那条车道配合接入，不要两边各改一份。决策者对它们的答复：
+   - 提取的代价是 Camel 函数 `(o: Op, inputs: float[]) => float`。原来按名字登记的 `nodes`、`weighted` 改成导出的 Camel 函数，字符串形式删除，`std::opt::extract` 也改用函数；
+   - 调度组合子放进 `rewrite`。一个模块可以同时有原生声明和 Camel 函数体（`str` 就是这样），不另开 `schedule` 模块；
+   - 翻倍律按各自的类型取精确上界，推广到 `f16`、`bf16`；五条数组律推广到整数数组，接受。`array_double` 的上界跟着 `T` 走，旧的 `tensor_double` 一律用 f32 的上界是缺陷；
+   - `#impl` 可以指向一个原生的遍，签名相同即可。
+3. `autodiff` 的 `vjp`、`jvp` 是目标，随自动微分车道落地，能用之前不合入。函数 `vjp` 与标签 `#vjp` 如果冲突，标签改名 `#vjp_rule`。
+4. 错误传递一律写 `->`（设计原则 3.9 已改）。泛型参数带 `when` 条件时，包着的值匹配不上就拆开，所以 `f->pass` 会把错误照常传下去（原则里已写明）。
