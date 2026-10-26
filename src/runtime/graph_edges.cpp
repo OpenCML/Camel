@@ -450,15 +450,18 @@ class EdgeChecker {
         };
         compare(norm, normPorts, "ordinary");
         compare(with, withPorts, "'with'");
-        const auto *calleeType = callee->funcType();
-        if (calleeType && calleeType->hasExitType() && node.dataType() &&
-            !compatible(calleeType->exitType(), node.dataType())) {
+        // What the call is: the value it hands on. That is the callee's exit type alone, unless
+        // the callee writes captured variables, and then it is the tuple of the exit value and
+        // the new version of each of them, in the callee's capture order (callValueTypeOf).
+        camel::core::type::Type *wanted = callValueTypeOf(*callee, funcWriteMaskOf(graph_, ref));
+        if (wanted != nullptr && node.dataType() != nullptr &&
+            !compatible(wanted, node.dataType())) {
             report(
                 ref,
                 std::format(
-                    "calls '{}', which returns a {}, and is a {}",
+                    "calls '{}', whose value is a {}, and is a {}",
                     callee->name(),
-                    show(calleeType->exitType()),
+                    show(wanted),
                     show(node.dataType())));
         }
     }
