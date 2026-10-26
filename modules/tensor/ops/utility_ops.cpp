@@ -153,7 +153,7 @@ ArrayType *npyTensorType(TypeCode dtype) {
  * The element type of a `load_npy` call's result: the explicit type argument the call writes
  * (`load_npy::<f32>(p)`) or the element type of the position the call stands in (`f32[3]`, `f32[..]`). The result is the concrete element type as an array (`f32[..]`), the concrete element type, so every position
  * that takes a tensor takes the load; the kernel checks the file's own element type against it
- * and a mismatch is a fault at the call (design principles 5.5; handover H466). One resolver per
+ * and a mismatch is a fault at the call (design principles 5.5). One resolver per
  * element type a `.npy` file can hold, and none of them accepts a call that names no element type
  * and stands where none is expected.
  */
@@ -206,7 +206,7 @@ slot_t loadNpyKernel(ArgsView &, ArgsView &norm, context::Context &) {
 // The element type the call declares (`load_npy::<f32>(p)`, or the element type of the
         // position the call stands in): the file's dtype must be that one. The scheduler puts the
         // call's own type here, so a load inside a generic function checks the instance's type,
-        // not the declaration's `T` (design principles 5.5; handover H466). The value carries the
+        // not the declaration's `T` (design principles 5.5). The value carries the
         // declared type too, which is what `wrap` puts on it (the element type follows the value).
         const TensorFacts declared = tensorFactsOf(norm.resultType());
         return wrap(
@@ -309,7 +309,7 @@ std::vector<OpDef> utilityOps() {
     // the call declares, and no parameter can mention a type variable that is the *result's*
     // element type, so the signature is computed rather than declared: the entry in
     // `stdlib/signatures/tensor.cml` is the reference, `LoadNpyResolver` is the source, and the
-    // group below is what a call resolves against (handover H466; design principles 6.4).
+    // group below is what a call resolves against (design principles 6.4).
     for (const auto &[dtype, name] : kNpyElementTypes) {
         defs.push_back(
             OpDef{

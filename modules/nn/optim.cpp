@@ -590,9 +590,8 @@ const std::vector<oper_group_ptr_t> &optimizerOperatorGroups() {
         OperatorGroup::create(
             "adam",
             {{"nn:adam", std::make_shared<OptimizerResolver>(Kind::Adam)}}),
-        // `save_params` is not here: its signature is declared in `stdlib/nn.cml` (handover H19,
-        // step 10; H165), and the C++ side keeps its kernel (`optimizerKernels`) and its
-        // resource and traits (`NnModule::load`).
+        // `save_params` is not here: its signature is declared in `stdlib/nn.cml`, and C++ keeps
+        // only its kernel (`optimizerKernels`) and its resource and traits (`NnModule::load`).
     };
     return groups;
 }

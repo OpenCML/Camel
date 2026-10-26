@@ -23,7 +23,7 @@ std::vector<OpDef> utilityOps();     // indexing, show, threading controls
 /// `load_npy`'s group: one rule per element type a `.npy` file can hold, each taking the element
 /// type the call declares (`load_npy::<f32>(p)`) or the one its position expects. The signature
 /// is computed rather than declared (`stdlib/signatures/tensor.cml`), so the group is exported
-/// from `TensorModule` by hand, like `from_bytes` (handover H466).
+/// from `TensorModule` by hand, like `from_bytes`.
 oper_group_ptr_t loadNpyOperatorGroup();
 std::vector<OpDef> gradientOps();    // operators derivative rules emit; zeros_like, numel, ...
 

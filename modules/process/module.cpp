@@ -5,10 +5,10 @@
  * The process and the machine it runs on: how long to wait, who the user is, how many hardware
  * threads there are, and how many threads the process itself has. `exit` is the built-in operator
  * of `src/builtin/modules/globals.cpp`, so it is not a group of this module; the terminal is
- * `io`'s (H19 step 4).
+ * `io`'s.
  *
  * The signatures are written once, in the declaration module `stdlib/process.cml` (design
- * principles 6.4; handover H19, step 10; H163). What is left here is what only C++ knows: the
+ * principles 6.4). What is left here is what only C++ knows: the
  * kernels in operators.cpp, the executor that runs them, and the operator traits declared at
  * load -- the purity and the resources (`clock`, `env`, `process`).
  */
@@ -34,7 +34,7 @@ bool ProcessModule::load() {
     camel::core::OperatorTable::instance().declare(
         "process",
         {
-            // The process and the machine it runs on. The terminal is `io`'s (H19 step 4).
+            // The process and the machine it runs on. The terminal is `io`'s.
             {"exit", false},
             {"sleep", false},
             {"whoami", false},

@@ -372,7 +372,7 @@ std::vector<int64_t> intListArg(ArgsView &args, size_t index, std::string_view o
     Type *type = args.type(index);
     if (type->code() == TypeCode::Array) {
         ::Array *array = args.get<::Array *>(index);
-        // An empty literal `[]` has no element type to infer from (H15 literal context typing is
+        // An empty literal `[]` has no element type to infer from (literal context typing is
         // not here yet); there are no elements to convert, so it is the empty integer list.
         if (array->size() == 0) {
             return {};

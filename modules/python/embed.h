@@ -27,8 +27,8 @@
 /*
  * The one embedded CPython of the process (`modules/python` and `modules/pyplot` share it).
  *
- * `import` executes no code (design principles 3.1; the language author's ruling of 2026-10-22,
- * handover H221): a module's `load()` registers its executor and its operators and nothing else,
+ * `import` executes no code (design principles 3.1; the language author's ruling of 2026-10-22):
+ * a module's `load()` registers its executor and its operators and nothing else,
  * and the interpreter is created at the first use of an operator that needs it. Whichever module
  * is used first creates it; the other attaches and must not create a second one. The creation is
  * one sequence for both, so "who was first" does not decide how the interpreter is set up: the

@@ -1004,9 +1004,9 @@ const std::unordered_map<std::string_view, Indexing> &indexings() {
         // the tensors it is given: f32 accumulating from +0, and f64 accumulating from +0 as well.
         // An f64 gradient through a broadcast is an f64 result (questions-2026-10-23.md, section
         // f64-tensor-leaf: the element type of a value is always determined), so refusing it is a
-        // missing arm and not a rule -- H238's direction is to support f64 too, and design
-        // principles 5.1 forbids narrowing it to f32 to make the call go through. An int64 or bool
-        // tensor is still refused by the kernel, which says so at the call.
+        // missing arm and not a rule -- design principles 5.1 forbids narrowing it to f32 to
+        // make the call go through. An int64 or bool tensor is still refused by the kernel,
+        // which says so at the call.
         t.emplace(
             "sum_to",
             Indexing{sumToIndexing, {sumLaw("sum_to_f32", f32, f32, f32), sumLaw("sum_to_f64", f64, f64, f64)}});
