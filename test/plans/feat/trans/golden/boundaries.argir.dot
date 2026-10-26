@@ -7,7 +7,7 @@ digraph GraphIR {
         tooltip="() => int";
         subgraph cluster_F02 {
             label="gate";
-            tooltip="(t: f32[4]) => f32[4]";
+            tooltip="(t: f32[4]) => f32[4] pure";
             F02 [label="ARGS", type="ARGS", style=dashed, shape=circle];
             O02 [label="EXIT", type="EXIT", style=dashed, shape=circle];
             N00 [label="t", type="PORT", param_name="t", param_kind="normal", param_index="0", value_type="f32[4]", origin=<ORIGIN>, span="14:10-14:19", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", shape=circle, style=solid, tooltip="t\ngate::node#n0"];

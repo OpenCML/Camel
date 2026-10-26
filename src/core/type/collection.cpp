@@ -193,13 +193,17 @@ Type *CollectionType::clone(bool) const { return const_cast<CollectionType *>(th
 
 bool CollectionType::equals(Type *type) const { return typeEquals(this, type); }
 
-bool CollectionType::assignableFrom(Type *sourceType) const { return equals(sourceType); }
+bool CollectionType::assignableFrom(Type *sourceType) const {
+    // A collection's type arguments are invariant: only a function type's resources may differ,
+    // and an argument type with no resource clause takes them from the one that meets it.
+    return sourceType != nullptr && sameTypeWithUnwrittenResources(this, sourceType);
+}
 
 CastSafety CollectionType::castSafetyFrom(Type *sourceType) const {
     if (sourceType == nullptr || !complete()) {
         return CastSafety::Forbidden;
     }
-    if (equals(sourceType)) {
+    if (assignableFrom(sourceType)) {
         return CastSafety::Safe;
     }
     // `any as Map<...>` is refused: nothing at run time could check it.
@@ -207,7 +211,7 @@ CastSafety CollectionType::castSafetyFrom(Type *sourceType) const {
         return CastSafety::Forbidden;
     }
     Type *elemType = static_cast<ArrayType *>(sourceType)->elemType();
-    if (elemType->equals(sourceArrayType_->elemType())) {
+    if (sameTypeWithUnwrittenResources(sourceArrayType_->elemType(), elemType)) {
         return CastSafety::Safe;
     }
     // The empty literal `[]` has no element type. A variable of that type may have been

@@ -195,7 +195,7 @@ assert(input.normalized.stdout === '11\n', 'stdout is the program output only: '
 const lines = input.normalized.stderr.trim().split('\n')
 assert(lines.length === 2, 'two warnings on stderr, got ' + lines.length + ': ' + input.normalized.stderr)
 const expect = [
-    ['warnings_visible.cml:17:5: [Warn]: The call of \'inc: (var x: int) => int\' is not in a sync block, and it takes a var argument.', 'SemanticDiag::IgnoredSideEffect, code=0x03100002'],
+    ['warnings_visible.cml:17:5: [Warn]: The call of \'inc: (var x: int) => int uses x\' is not in a sync block, and it takes a var argument.', 'SemanticDiag::IgnoredSideEffect, code=0x03100002'],
     ['warnings_visible.cml:18:13: [Warn]: The branch is not in a sync block, and an arm writes the captured variable \'c\'.', 'SemanticDiag::IgnoredSideEffect, code=0x03100002'],
 ]
 expect.forEach(([text, name], i) => {

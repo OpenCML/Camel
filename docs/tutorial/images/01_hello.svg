@@ -12,7 +12,7 @@
 <text text-anchor="middle" x="291.5" y="-303.6" font-family="Times,serif" font-size="18.00">main 的子图与入口对它的调用</text>
 <g id="clust1" class="cluster">
 <title>cluster_F01</title>
-<g id="a_clust1"><a xlink:title="() =&gt; int">
+<g id="a_clust1"><a xlink:title="() =&gt; int uses stdout">
 <polygon fill="none" stroke="black" points="8,-8 8,-214 575,-214 575,-8 8,-8"/>
 <text text-anchor="middle" x="291.5" y="-195.6" font-family="Times,serif" font-size="18.00">main</text>
 </a>

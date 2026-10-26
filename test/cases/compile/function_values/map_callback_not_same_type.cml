@@ -1,0 +1,18 @@
+/**
+ * What a written callback type leaves open is the resources and nothing else. The parameter type
+ * `map` writes states the element type and the shape of the callback, and says nothing about what
+ * the callback touches, so a callback of the element type that touches nothing stands at it (the
+ * `array map` line of value_positions.cml). The element type and the shape it does state are
+ * still its own: `int` is not `string`, and a callback of two parameters is not one of the
+ * element type. Both calls below are refused, each at its own line.
+ */
+module map_callback_not_same_type
+
+func inc(x: int): int { return x + 1 }
+
+func main(): int sync {
+    let fs = [inc]
+    println(fs->map<(s: string) => len(s)>)
+    println(fs->map<(a: int, b: int) => a + b>)
+    return 0
+}

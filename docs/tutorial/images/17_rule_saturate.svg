@@ -12,7 +12,7 @@
 <text text-anchor="middle" x="424.5" y="-647.79" font-family="Times,serif" font-size="14.00">std::opt::saturate：一个值的几种写法都留着</text>
 <g id="clust1" class="cluster">
 <title>cluster_F06</title>
-<g id="a_clust1"><a xlink:title="(x: int) =&gt; int">
+<g id="a_clust1"><a xlink:title="(x: int) =&gt; int pure">
 <polygon fill="none" stroke="black" points="8,-8 8,-631.99 841,-631.99 841,-8 8,-8"/>
 <text text-anchor="middle" x="424.5" y="-616.79" font-family="Times,serif" font-size="14.00">doubled</text>
 </a>
@@ -20,7 +20,7 @@
 </g>
 <g id="clust2" class="cluster">
 <title>cluster_class_C01</title>
-<g id="a_clust2"><a xlink:title="(x: int) =&gt; int">
+<g id="a_clust2"><a xlink:title="(x: int) =&gt; int pure">
 <polygon fill="none" stroke="black" stroke-dasharray="5,2" points="429,-416.09 429,-491.09 613,-491.09 613,-416.09 429,-416.09"/>
 <text text-anchor="middle" x="521" y="-475.89" font-family="Times,serif" font-size="14.00">class c1</text>
 </a>
@@ -28,7 +28,7 @@
 </g>
 <g id="clust3" class="cluster">
 <title>cluster_class_C02</title>
-<g id="a_clust3"><a xlink:title="(x: int) =&gt; int">
+<g id="a_clust3"><a xlink:title="(x: int) =&gt; int pure">
 <polygon fill="none" stroke="black" stroke-dasharray="5,2" points="168,-268.09 168,-383.09 476,-383.09 476,-268.09 168,-268.09"/>
 <text text-anchor="middle" x="322" y="-367.89" font-family="Times,serif" font-size="14.00">class c2</text>
 </a>
@@ -36,7 +36,7 @@
 </g>
 <g id="clust4" class="cluster">
 <title>cluster_class_C03</title>
-<g id="a_clust4"><a xlink:title="(x: int) =&gt; int">
+<g id="a_clust4"><a xlink:title="(x: int) =&gt; int pure">
 <polygon fill="none" stroke="black" stroke-dasharray="5,2" points="73,-120.09 73,-235.09 609,-235.09 609,-120.09 73,-120.09"/>
 <text text-anchor="middle" x="341" y="-219.89" font-family="Times,serif" font-size="14.00">class c5</text>
 </a>
@@ -44,7 +44,7 @@
 </g>
 <g id="clust5" class="cluster">
 <title>cluster_class_C04</title>
-<g id="a_clust5"><a xlink:title="(x: int) =&gt; int">
+<g id="a_clust5"><a xlink:title="(x: int) =&gt; int pure">
 <polygon fill="none" stroke="black" stroke-dasharray="5,2" points="484,-268.09 484,-383.09 788,-383.09 788,-268.09 484,-268.09"/>
 <text text-anchor="middle" x="636" y="-367.89" font-family="Times,serif" font-size="14.00">class c9</text>
 </a>

@@ -109,7 +109,7 @@ backends = ["nvm"]
 backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "live DREF"]
-expect_output_contains = ["name=SemanticDiag::NoMatchingFunction", "<(x: int) => int> (int[])"]
+expect_output_contains = ["name=SemanticDiag::NoMatchingFunction", "<(x: int) => int pure> (int[])"]
 
 [[tests]]
 name = "comprehension.err_element_type"
