@@ -5,11 +5,11 @@ its rules predictable, the idioms, how to read what the compiler answers, and wh
 up. It is deliberately not a rule book: a language is learned by understanding why, by examples and
 by listening to the compiler.
 
-Read it as the language of this tree. It is under 20,000 characters, about 5,000 tokens, and the
-check below keeps it there: `node scripts/camel-for-ai.mjs --check` regenerates the two generated
-tables from their sources and checks every diagnostic named here against the registry, and
-`node scripts/check-doc-snippets.mjs` compiles every `camel` block. A block marked
-`camel-snippet: counter-example` is wrong on purpose and says what the compiler answers.
+Read it as the language of this tree. It is under 20,000 characters, and
+`node scripts/camel-for-ai.mjs --check` regenerates the two generated tables from their sources and
+checks every diagnostic named here against the registry, while `node scripts/check-doc-snippets.mjs`
+compiles every `camel` block. A block marked `camel-snippet: counter-example` is wrong on purpose and
+says what the compiler answers.
 
 ## Why Camel
 
@@ -53,7 +53,7 @@ independent expressions have no order between them and the parallel scheduler ma
 side. A function is a subgraph of its own, so a call is one node pointing at it and there is no call
 stack except for recursion depth.
 
-*Why:* the compiler must have the graph, not recover it. Because the program **is** the graph,
+*Why:* the compiler must have the graph, not recover it — because the program **is** the graph,
 nothing is traced and the passes have a real object to transform.
 
 ### Evaluation is by dependency, and nothing else runs
@@ -92,24 +92,12 @@ arithmetic, comparison or a function that takes a `T` will accept them. Generics
 the name, `func first::<T>(xs: T[]): T?`, and `when <condition>` is a compile-time predicate over the
 type parameters, which is how one generic function gets one body per type. A `match` over an `enum`
 is checked for exhaustiveness, so listing every variant means no `case _` is needed. An empty literal
-takes its element type from its position too, so `let xs = []` has nothing to take it from.
+takes its element type from its position too, so `let xs = []` has nothing to take it from. A stream,
+`T..`, says what does not fit in memory; its form is the language reference's.
 
 *Why:* the passes act on types and the graph holds only concrete types, so a conversion the
 programmer did not write would be a node nobody asked for. Absence and failure are part of the type
 so that "what can go wrong here" is in the signature rather than in a sentinel value.
-
-### Data that does not fit in memory is a stream
-
-`T..` is a stream of `T`; a function whose body writes `yield` produces one, and `tee` splits one. A
-range with `map`/`filter`/`reduce` covers most needs; a stream is for what cannot be held.
-
-```camel
-func pairs(n: int): (int, int).. {
-    var i = 0
-    loop while i < n do
-        yield (i, i + 1)
-}
-```
 
 Sources: `docs/language/en/04_execution_model.md`, `docs/language/en/03_data_model.md`,
 `docs/design-principles.cn.md` §§2–4, 11.3.
@@ -140,8 +128,8 @@ func main(): int sync {
 ```
 
 The rule has a reason: `map` may give `inc` its elements in any order, so `inc` must depend on the
-element alone. Everything the element does not decide is configuration, and configuration is a `with`
-parameter — which is also what makes a model a configured function.
+element alone. Whatever the element does not decide is configuration, written in `with` — which is
+what makes a model a configured function.
 
 ### Ranges and higher-order operators instead of index loops
 
@@ -165,7 +153,7 @@ func main(): int sync {
 
 `loop` states are written `name = start`; `for` and `while` may each be left out, and the body's
 value is the next state. The higher-order operators may take their elements in any order where order
-is not needed; `loop` is the form that carries a value from one round to the next.
+is not needed; `loop` is what carries a value from one round to the next.
 
 ### A model is a configured function
 
@@ -189,9 +177,8 @@ func main(): int sync {
 20.0 12.0
 ```
 
-A parameter that is configuration rather than data is what a weight is, and that is the parameter
-`grad` differentiates with respect to; a function with no `with` parameter is
-`SemanticDiag::NotDifferentiable`.
+A parameter that is configuration rather than data is what a weight is, and it is the parameter `grad`
+differentiates with respect to: a function with none is `SemanticDiag::NotDifferentiable`.
 
 ### Let a value that may be missing say so
 
@@ -214,7 +201,7 @@ func main(): int sync {
 ```
 
 `??` is a node in the graph, so what happens when the value is absent is written where the absence
-can be seen; a sentinel like `-1` travels through the program and is checked nowhere.
+can be seen; a sentinel like `-1` travels on and is checked nowhere.
 
 ### `match` for a value that is one of several things
 
@@ -245,22 +232,20 @@ Sources: `docs/language/en/06_expressions.md`, `docs/language/en/07_statements.m
 
 ## How to use what the compiler answers
 
-The compiler knows this tree, and its answer is half of learning the language.
+Its answer is half of learning the language.
 
-- **A diagnostic is named in full and is looked up in one place.** The compiler prints
-  `warning[SemanticDiag::EffectNotExecuted]`, and [Appendix A](camel-for-ai-diagnostics.md) holds
-  every diagnostic with its message template and its code. `camel --explain <name or code>` prints
-  that entry on the spot; the section prefix may be left out, and case, `-` and `_` do not matter.
-- **When the fix is a known piece of text, the compiler prints it**: as `-`/`+` lines in the text
-  form, as `fixes` with a `replacement` in JSON, and as a code action in the language server. A code
-  that cannot carry a fix says why in the registry's `edit` column, which `docs/diagnostics.md`
-  prints with the diagnostic — so "no fix" is a statement about the diagnostic, not silence.
-- **Warnings are the compiler telling you what the graph does.** `SemanticDiag::EffectNotExecuted`
-  and `SemanticDiag::UnusedFallibleValue` are usually right, and the fix is a `sync` or a use rather
-  than `-Wno-`. `-Werror` makes every warning an error for a run that must be clean.
+- **A diagnostic is named in full.** The compiler prints `warning[SemanticDiag::EffectNotExecuted]`,
+  and [Appendix A](camel-for-ai-diagnostics.md) holds every diagnostic with its message template and
+  its code. `camel --explain <name or code>` prints that entry on the spot; the section prefix may be
+  left out, and case, `-` and `_` do not matter.
+- **A known fix is printed with the diagnostic**: as `-`/`+` lines in the text form, as `fixes` with
+  a `replacement` in JSON, and as a code action in the language server. A code that carries no fix
+  says why in the registry's `edit` column, so "no fix" is a statement about the diagnostic.
+- **A warning is the compiler telling you what the graph does.** `SemanticDiag::EffectNotExecuted`
+  and `SemanticDiag::UnusedFallibleValue` are usually right, and the answer is a `sync` or a use
+  rather than `-Wno-`; `-Werror` makes every warning an error for a run that must be clean.
 - **The editor has the same information.** `camel-ls --stdio` is a language server — diagnostics with
-  their fixes, completion, hover, and the graph of a function — and the VS Code extension in
-  `editors/vscode` wraps it.
+  their fixes, completion, hover, and the graph of a function — and `editors/vscode` wraps it.
 - **`camel check prog.cml`** reports the same diagnostics without running the program, and
   `camel prog.cml std::gir` prints the graph instead of running it.
 
@@ -268,14 +253,14 @@ Sources: `docs/cli.md`, `docs/editor-support.en.md`, `docs/diagnostics.md`.
 
 ## Common errors
 
-Each entry says what a first draft writes, why it is wrong, and what to write instead. Every
-counter-example below is compiled by `node scripts/camel-for-ai.mjs --verify-errors`, which checks
-that the diagnostic named here is the one the compiler reports.
+The first drafts that say something about the language. Each is compiled by
+`node scripts/camel-for-ai.mjs --verify-errors`, which checks that the diagnostic named is the one
+the compiler reports.
 
 ### An effect nothing needs does not run
 
 `println` is an effect, and an effect whose result nothing uses is dropped: the program compiles,
-prints nothing from that line, and the compiler warns `SemanticDiag::EffectNotExecuted`. **Wrong:**
+prints nothing from that line, and warns `SemanticDiag::EffectNotExecuted`. **Wrong:**
 
 <!-- camel-snippet: counter-example: the effect is dropped because nothing needs its result -->
 
@@ -380,18 +365,16 @@ Sources: `diagnostics/registry.tsv`, and the language reference for each rule br
 ## Where to look
 
 - **Appendix A — every diagnostic**: [camel-for-ai-diagnostics.md](camel-for-ai-diagnostics.md)
-  lists each one with its section-qualified name, its code, its message template and whether it
-  carries a fix. A document of its own, because the registry grows and must not push this page past
-  what one read costs.
+  gives each one's section-qualified name, code, message template and whether it carries a fix. A
+  document of its own, because the registry grows and must not push this page past one read.
 - **Appendix B — the standard library**: [camel-for-ai-stdlib-signatures.md](camel-for-ai-stdlib-signatures.md)
-  gives every exported name with its signature, a document of its own for the same reason.
-- **The language reference**, `docs/language/en/`: introduction, lexical, data model, execution
-  model, modules, expressions, statements, top level and grammar, rules and facts. This page distils
-  it; where the two disagree, the reference is right.
-- **The standard library reference**, `docs/stdlib-reference.md`: the same signatures with the prose
+  gives every exported name with its signature, for the same reason.
+- **The language reference**, `docs/language/en/`: the same rules in depth, by topic. This page
+  distils it; where the two disagree, the reference is right.
+- **The standard library reference**, `docs/stdlib-reference.md`: those signatures with the prose
   around them, generated from the declarations.
 - **The design principles**, `docs/design-principles.cn.md`: normative — when it disagrees with
-  anything, including this page, it wins — and it lists the questions that are not decided yet.
+  anything, including this page, it wins — and it lists what is not decided yet.
 - **The command line** `docs/cli.md`, and the editor `docs/editor-support.en.md`.
 
 ## The two generated tables
