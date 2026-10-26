@@ -2838,7 +2838,8 @@ Value Builder::visitPattern(cst::Pattern context) {
         // value taken out of a `T?` / `T!`, `error e` binds the error of a failed `T!`. Both
         // are a reference node; `error e` carries the bound name as its child. Whether the
         // scrutinee has such a type is known to the graph builder only, which reports an
-        // identifier pattern over any other type as not implemented. The parser reads the second
+        // identifier pattern over any other type by the rule itself: only the two marks `T?` and
+        // `T!` can be taken apart (design principles 3.8). The parser reads the second
         // word of a pattern only after `error` (`parsePattern`), so the name here is the error's.
         if (context->get<cst::EnumTuplePattern>() || context->get<cst::EnumStructPattern>() ||
             context->get<cst::IdentRef>()->text().find("::") != std::string::npos) {
