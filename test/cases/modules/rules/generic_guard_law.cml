@@ -39,11 +39,11 @@ func portOf(p: Program, function: string): Node {
 /// so the run shows which types the condition admitted.
 export func counted(p: Program): Program! sync {
     return match p->run<[combine_nonzero], explain: true> {
-        case error e => { throw e }
+        case error e => { return e }
         case r => sync {
             println('rewrites', r.rewrites, 'rule', rule_name(combine_nonzero))
             return match explain_all(r) {
-                case error e => { throw e }
+                case error e => { return e }
                 case proof => sync {
                     println(proof)
                     return r.result
@@ -58,7 +58,7 @@ export func counted(p: Program): Program! sync {
 /// maker guessed about the condition.
 export func why_int(p: Program): Program! sync {
     return match p->run<[combine_nonzero], explain: true> {
-        case error e => { throw e }
+        case error e => { return e }
         case r => sync {
             return match why_not(r, combine_nonzero, portOf(r.result, 'whole')) {
                 case error e => sync { println(e); return r.result }

@@ -138,9 +138,12 @@ class TokenBuffer {
 
     /// Index of the next / previous token that is not trivia; size() / SIZE_MAX if none.
     size_t nextSignificant(size_t index) const;
-    /// The documentation of the declaration whose first token is `index`: the `///` lines
-    /// right above it, one per line without a gap, without the marker and one space after
-    /// it. Empty if there is none.
+    /// The documentation of the declaration whose first token is `index`: the `///` lines above
+    /// it, in source order, without the marker and one space after it. A blank line changes
+    /// nothing: the lines belong to the declaration that follows them, whether the blank line
+    /// stands between the last of them and the declaration or between two of them. What ends the
+    /// run is the declaration above (a `///` line describes what follows, never what came before)
+    /// and an ordinary `//` comment. Empty if there is none.
     std::string docAbove(size_t index) const;
     size_t previousSignificant(size_t index) const;
 

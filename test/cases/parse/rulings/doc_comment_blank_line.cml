@@ -1,0 +1,39 @@
+// Attribution of documentation is a syntax question, not a question of white space: a `///`
+// line belongs to the declaration that follows it, wherever the blank lines fall. The cases
+// below are read by `camel inspect --ast` in `rulings.doc_comment_attribution_is_syntax`.
+
+module doc_comment_blank_line
+
+// An ordinary comment is not documentation, and it ends the documentation of what follows.
+let separated = 1
+
+/// A blank line is not a gap between a declaration and its documentation.
+
+func with_gap(x: int): int {
+    return x
+}
+
+/// Documentation written above an exported name, with a blank line between the two.
+
+export func exported(): int {
+    return with_gap(separated)
+}
+
+/// The answer, written below a blank line.
+
+let gap_constant = 2
+
+/// The first paragraph of the documentation of `two_paragraphs`.
+
+/// The second paragraph, below a blank line inside the block.
+
+func two_paragraphs(): int {
+    return gap_constant
+}
+
+/// The documentation of `two_paragraphs` above is not documentation of `later`: the `///` lines
+/// below a declaration describe what follows, so the run may not reach back over the `}` of the
+/// declaration before it.
+func later(): int {
+    return 3
+}

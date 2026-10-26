@@ -401,8 +401,6 @@ Rules buildRules() {
     // ---- Arrays (struct.cpp, ops.cpp __builtin__idx__) ----
     r[":op/idx_arr"]          = faultingFunction("at", RuntimeDiag::IndexOutOfRange, 3);
     r[":struct/len_arr"]      = runtimeFunction("length");
-    r[":struct/head_arr"]     = faultingFunction("head", RuntimeDiag::IndexOutOfRange, 3);
-    r[":struct/tail_arr"]     = runtimeFunction("tail");
     r[":struct/concat_arr"]   = runtimeFunction("concat");
     r[":struct/append_arr"]   = withArgument("append");
     // The loop-state form (Builder::markLoopStateInPlace): writing in place is an optimisation of
@@ -413,7 +411,6 @@ Rules buildRules() {
     // a block that another holder shares, so the copy itself has nothing to do (rt::append takes
     // the array by value).
     r[":struct/copy_arr"] = identity();
-    r[":struct/extend_arr"]   = withArgument("concat");
     r[":struct/contains_arr"] = withArgument("contains");
     r[":struct/zip"]          = {
         [](OperatorCall &c) -> std::optional<std::string> {
@@ -426,17 +423,6 @@ Rules buildRules() {
                 c.cppType(c.resultType()),
                 c.site(RuntimeDiag::InvalidArgument, marks(2)),
                 args);
-        },
-        false,
-    };
-    r[":struct/slice_arr"] = {
-        [](OperatorCall &c) -> std::optional<std::string> {
-            return std::format(
-                "rt::slice({}, {}, {}, {})",
-                c.norm(0).text,
-                c.with(0).text,
-                c.with(1).text,
-                c.site(RuntimeDiag::SliceOutOfRange, marks(4)));
         },
         false,
     };

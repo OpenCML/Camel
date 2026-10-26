@@ -230,11 +230,20 @@ ModuleFile ModuleResolver::findUnder(const std::string &baseDir, const std::stri
 }
 
 ModuleFile
-ModuleResolver::resolve(const std::string &moduleName, const std::string &importerDir) {
+ModuleResolver::resolve(
+    const std::string &moduleName, const std::string &importerDir, const std::string &exceptFile) {
     camel::utils::phase::Scope phaseScope("resolve", moduleName);
+    const auto same = [&](const std::string &path) {
+        if (exceptFile.empty()) {
+            return false;
+        }
+        std::error_code ec;
+        return fs::equivalent(
+            camel::utils::pathFromUtf8(path), camel::utils::pathFromUtf8(exceptFile), ec);
+    };
     for (const std::string &root : searchRoots(importerDir)) {
         ModuleFile found = findUnder(root, moduleName);
-        if (found.found())
+        if (found.found() && !same(found.path))
             return found;
     }
     return {};
@@ -649,7 +658,8 @@ Context::importModule(const std::string &rawModuleName, const module::Module *im
     const std::string importerDir = importerDirectory(importer);
 
     for (const auto &name : candidates) {
-        auto [path, isCmo] = resolveModulePath(name, importerDir);
+        auto [path, isCmo] =
+            resolveModulePath(name, importerDir, importer != nullptr ? importer->path() : "");
         if (!path.empty()) {
             if (auto cached = moduleAtPath(path)) {
                 EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
@@ -863,11 +873,11 @@ void Context::setModuleSearchPaths(std::vector<std::string> roots) {
 }
 
 std::pair<std::string, bool> Context::resolveModulePath(
-    const std::string &moduleName, const std::string &importerDir) {
+    const std::string &moduleName, const std::string &importerDir, const std::string &exceptFile) {
     // The one lookup: the importing module's own directory, then the module roots, in the order
     // `ModuleResolver::searchRoots` gives (design principles 10.2). A hit is what the name stands
     // for, and only `.cml` and `.cmo` name a module file.
-    ModuleFile found = resolver_.resolve(moduleName, importerDir);
+    ModuleFile found = resolver_.resolve(moduleName, importerDir, exceptFile);
     return {found.path, found.isCmo};
 }
 

@@ -14,7 +14,7 @@
  * resolution of a call recognises an operator by its group name, and the diagnostics and the
  * language server show the symbol instead of the reserved name.
  *
- * Not in the table as overloadable: `&&` and `||` are branches (4.2); `??` and `!!` are
+* Not in the table as overloadable: `&&` and `||` are branches (4.2); `??` and `!!` are
  * branches on the mark of a `T?` / `T!`; `->` passes a value to a function (and carries a null
  * or an error along); `..` composes two
  * functions; `=` and the compound assignments write a variable (`a += b` is `a = a + b`, so it
@@ -50,6 +50,14 @@ std::optional<std::string_view> binaryOperatorGroup(std::string_view symbol);
 /// builder writes the construct as one call of this name and the GIR builder resolves it, since
 /// only there are the types of the two operands known. No program writes the name.
 inline constexpr std::string_view kCompositionCall = "$comp::..";
+
+/// The operator of `fail<'Kind'>(message)` (design principles 3.9), declared in
+/// `stdlib/signatures/globals.cml` and built in as the group `fail`: the program's own premise
+/// check, whose call gives the bottom type `never`. A program never writes the URI; the builder
+/// reads the nodes of the calls back by it, for what a `fail` written as a statement of its own
+/// means (it is no effect, so nothing runs it where its value is not wanted) and for the
+/// statements it leaves unreachable.
+inline constexpr std::string_view kFailOperatorUri = ":op/fail";
 
 /// The plain operator a compound assignment follows: `__add__` for `__assn_add__`; nullopt
 /// for any other group.

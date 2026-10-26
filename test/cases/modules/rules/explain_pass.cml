@@ -50,7 +50,7 @@ func portOf(p: Program): Node {
 /// Prints every rewrite of `r` and gives the program it produced.
 func showAll(r: Run<Program>): Program! sync {
     return match explain_all(r) {
-        case error e => { throw e }
+        case error e => { return e }
         case proof => sync {
             println(proof)
             return r.result
@@ -61,7 +61,7 @@ func showAll(r: Run<Program>): Program! sync {
 /// The first of two rules that match the same site: only `zero_to_one` may be named.
 export func two_rules(p: Program): Program! sync {
     return match p->run<[zero_to_one, zero_to_two], explain: true> {
-        case error e => { throw e }
+        case error e => { return e }
         case r => showAll(r)
     }
 }
@@ -70,13 +70,13 @@ export func two_rules(p: Program): Program! sync {
 /// stage runs to a fixpoint before the next one starts (rewrite design 8.5).
 export func seq_order(p: Program): Program! sync {
     return match p->run<[zero_to_one], explain: true> {
-        case error e => { throw e }
+        case error e => { return e }
         case first => sync {
             match showAll(first) {
-                case error e => { throw e }
+                case error e => { return e }
                 case staged => sync {
                     return match staged->run<[bump_one], explain: true> {
-                        case error e => { throw e }
+                        case error e => { return e }
                         case second => showAll(second)
                     }
                 }
@@ -88,7 +88,7 @@ export func seq_order(p: Program): Program! sync {
 /// One rule, one round, two sites: the proof must carry two steps, both of round 1.
 export func twice_one_round(p: Program): Program! sync {
     return match p->run<[add_zero], explain: true> {
-        case error e => { throw e }
+        case error e => { return e }
         case r => showAll(r)
     }
 }
@@ -96,7 +96,7 @@ export func twice_one_round(p: Program): Program! sync {
 /// A rule set that matches nothing: the proof says so instead of printing an empty table.
 export func nothing(p: Program): Program! sync {
     return match p->run<[mul_zero], explain: true> {
-        case error e => { throw e }
+        case error e => { return e }
         case r => showAll(r)
     }
 }
@@ -105,7 +105,7 @@ export func nothing(p: Program): Program! sync {
 /// optional record: the plain run paid nothing.
 export func without_attribution(p: Program): Program! sync {
     return match p->run<[add_zero]> {
-        case error e => { throw e }
+        case error e => { return e }
         case r => showAll(r)
     }
 }
@@ -114,11 +114,11 @@ export func without_attribution(p: Program): Program! sync {
 export func chain_forward(p: Program): Program! sync {
     let before = addOf(p)
     return match p->run<[zero_to_one], explain: true> {
-        case error e => { throw e }
+        case error e => { return e }
         case r => sync {
             let after = addOf(r.result)
             return match explain(r, before, after) {
-                case error e => { throw e }
+                case error e => { return e }
                 case proof => sync {
                     println(proof)
                     return r.result
@@ -133,11 +133,11 @@ export func chain_forward(p: Program): Program! sync {
 export func chain_through(p: Program): Program! sync {
     let before = addOf(p)
     return match p->run<[zero_to_one, bump_one], explain: true> {
-        case error e => { throw e }
+        case error e => { return e }
         case r => sync {
             let after = addOf(r.result)
             return match explain(r, before, after) {
-                case error e => { throw e }
+                case error e => { return e }
                 case proof => sync {
                     println(proof)
                     return r.result
@@ -151,10 +151,10 @@ export func chain_through(p: Program): Program! sync {
 export func chain_backwards(p: Program): Program! sync {
     let before = addOf(p)
     return match p->run<[zero_to_one, bump_one], explain: true> {
-        case error e => { throw e }
+        case error e => { return e }
         case r => sync {
             return match explain(r, addOf(r.result), before) {
-                case error e => { throw e }
+                case error e => { return e }
                 case proof => sync {
                     println(proof)
                     return r.result
@@ -168,7 +168,7 @@ export func chain_backwards(p: Program): Program! sync {
 /// says why instead of printing an empty chain.
 export func chain_none(p: Program): Program! sync {
     return match p->run<[zero_to_one], explain: true> {
-        case error e => { throw e }
+        case error e => { return e }
         case r => sync {
             return match explain(r, portOf(r.result), addOf(r.result)) {
                 case error e => sync {
@@ -188,7 +188,7 @@ export func chain_none(p: Program): Program! sync {
 /// the pattern writes and the node the program has.
 export func why_not_operator(p: Program): Program! sync {
     return match p->run<[mul_zero], explain: true> {
-        case error e => { throw e }
+        case error e => { return e }
         case r => sync {
             return match why_not(r, mul_zero, addOf(r.result)) {
                 case error e => sync { println(e); return r.result }
@@ -201,7 +201,7 @@ export func why_not_operator(p: Program): Program! sync {
 /// The left side matches and the condition is false: the answer names the values it read.
 export func why_not_condition(p: Program): Program! sync {
     return match p->run<[add_zero_when], explain: true> {
-        case error e => { throw e }
+        case error e => { return e }
         case r => sync {
             return match why_not(r, add_zero_when, addOf(r.result)) {
                 case error e => sync { println(e); return r.result }
@@ -214,7 +214,7 @@ export func why_not_condition(p: Program): Program! sync {
 /// A rule that did fire: the answer says which rewrite it made, not "no chain".
 export func why_not_fired(p: Program): Program! sync {
     return match p->run<[zero_to_one], explain: true> {
-        case error e => { throw e }
+        case error e => { return e }
         case r => sync {
             return match why_not(r, zero_to_one, addOf(r.result)) {
                 case error e => sync { println(e); return r.result }

@@ -1363,7 +1363,11 @@ class Builder {
     // its signature never writes (a predicate such as `is_plain::<T>()` matched in its body),
     // and those are bound by an explicit `::<...>` at the call all the same.
     bool isGenericHere(Type *type, const GCT::node_ptr_t &node) const {
-        if (node != nullptr && node->ruleBinding()) {
+        // The mark is one a FUNC carries (Node::ruleBinding asserts the kind, and a DECL of the
+        // same name is what the module makes of it). A declaration is never a rule's binding
+        // function, so the kind is asked first: asking a DECL for a FUNC's mark was an
+        // assertion failure in a debug build.
+        if (node != nullptr && node->type() == GCT::NodeKind::FUNC && node->ruleBinding()) {
             // The function a rule with `with` parameters is written as is not a template, even when
             // the declaration's head writes type parameters: those belong to the rule's sides, and
             // what the name stands for is the `Rule` calling it with values makes (design
@@ -2620,6 +2624,14 @@ class Builder {
     void setArmResult(ArmBuild &arm, node_handle_t result);
     /// The arm enters the form `target` at its end (the `CAST` is part of the arm).
     void coerceArmExit(const arm_ptr_t &arm, Type *target, const GCT::node_ptr_t &origin);
+    /// Whether the branch `gct` stands where nothing takes its value: the statement whose value
+    /// its block drops (visitExecNode), or a position written `void` (the value of a `return` in
+    /// a function that returns nothing, the tail of such a body). A `let` without a type has no
+    /// expected type either and does take the value, so a missing type is not this position.
+    bool branchTakesNoValue(const GCT::node_ptr_t &gct) const;
+    /// An arm whose value is a cell gives the value the cell holds instead: a cell is not a
+    /// value, and its type never reaches the join. The read is made in the arm's own region.
+    void readArmCellValue(const arm_ptr_t &arm);
     /// The nodes of each arm that read nothing the arm computes wait for the BRCH.
     void linkArmEntries(const std::vector<arm_ptr_t> &arms, node_handle_t brchNode);
     /// After the JOIN is there: the variables the arms changed are changed by the branch.
@@ -2635,6 +2647,8 @@ class Builder {
     // the one-bit tag of a value; nothing here adds a node kind. ----
     /// `a ?? b`, `a !! b`.
     node_handle_t visitTaggedBrchNode(const GCT::node_ptr_t &gct);
+    /// The value a declaration without a right side stands for: the C++ module's registered value.
+    node_handle_t nativeValueNode(const GCT::node_ptr_t &gct, Type *declared);
     /// The pipe `x -> f` (design principles 3.9). The call is built with `x` as it is, and the
     /// overloads of `f` (their `when` conditions included) are asked first; when none takes it and
     /// `x` is a `T?` or a `T!`, the call takes the value out of `x` (peelPipeReceiver).
@@ -2938,6 +2952,19 @@ class Builder {
         bodyValueStatement_;
     /// The last statement of the block visitExecNode finished most recently, and its node.
     std::pair<GCT::node_ptr_t, node_handle_t> lastBlockStatement_{};
+    /// A `fail` written in a block with statements after it, and those statements (design
+    /// principles 3.9; the author's ruling of 2026-10-26): a `fail` never returns, so where it is
+    /// executed nothing after it in the block is reached. Whether it is executed is decided when
+    /// the body is complete, not where the block is built: a `fail` whose value nothing wants
+    /// does not run, and the statements after it are reached then (FailNotExecuted and the walk
+    /// over `needed` in reportDroppedEffects answer that question). Recorded per graph so that
+    /// the decision reads the same walk.
+    struct StatementsAfterFail {
+        compile_graph_ptr_t graph;
+        node_handle_t fail = nullptr;
+        std::vector<camel::source::origin_id_t> statements;
+    };
+    std::vector<StatementsAfterFail> statementsAfterFail_;
     /// UnusedPureResult at the last statement of the body of `graph` when it is a call of a
     /// pure operator: the body's value is dropped where `graph` is used (see above).
     void rejectDiscardedValue(const void *body);
@@ -3031,10 +3058,17 @@ class Builder {
     /// elements are computed (`refNames` / `refTypes` are the names the GCT gave them and the
     /// types of the nodes they stand for, in the literal's reference order), and the elements it
     /// did write take the types `position` states for them — a tuple, array or struct field the
-    /// position does not reach otherwise (design principles 5.1). nullptr when the position does
-    /// not fit the literal: another kind or shape, or a computed element that is not of the type
-    /// the position gives that element — the literal then keeps the type its own elements give
-    /// it, and the place it was written in reports the mismatch. The converted literal is a
+    /// position does not reach otherwise (design principles 5.1). A computed element takes no
+    /// type from the position: it is checked against the type the position gives it, and, where
+    /// the literal wrote an element of its own (one whose elements are all computed has no
+    /// element type of its own and does not fit the position at all), an array element or a
+    /// tuple element that is not of that type is reported at the element
+    /// (`ElementTypeMismatch`) — the argument position, the declaration position and the
+    /// receiver of `->` then name the element the literal computed instead of ending in a call
+    /// without a matching function. nullptr when the position does not fit the literal in any
+    /// other way: another kind or shape, or a struct field the literal computed that is not of
+    /// the type the position gives that field — the literal then keeps the type its own elements
+    /// give it, and the place it was written in reports the mismatch. The converted literal is a
     /// value of `position` itself, a named struct type included (design principles 5.2).
     /// `refHoles` is where the computed elements sit in the literal's own type, parallel to
     /// `refNames`; on success `holeSlots` holds where they sit in `position`, which is what the

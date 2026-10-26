@@ -136,7 +136,7 @@ total = 35
 
 ```cml
 func half(x: int): int! {
-    return if x % 2 == 0 then x / 2 else { throw error('Odd', 'not even') }
+    return if x % 2 == 0 then x / 2 else { return error('Odd', 'not even') }
 }
 
 func main(): int sync {
@@ -282,7 +282,7 @@ func sign(x: int): string {
 
 > **块里的 `return` 给出的是这个块的值，不是离开函数。**
 >
-> 分支的每个臂是它自己的一张子图。臂里的 `return v` 结束的是这条臂，`v` 成为这个 `if`（或 `match`）的值；`throw e` 同理。如果这个 `if` 只是一条语句、它的值没有被使用，那么臂里的 `return` 什么都没做，函数继续执行后面的语句。
+> 分支的每个臂是它自己的一张子图。臂里的 `return v` 结束的是这条臂，`v` 成为这个 `if`（或 `match`）的值；交出一个错误值的 `return e` 同理。如果这个 `if` 只是一条语句、它的值没有被使用，那么臂里的 `return` 什么都没做，函数继续执行后面的语句。
 
 ```cml
 // 错误的写法：if 是一条值没人用的语句，两个 return 都没有效果

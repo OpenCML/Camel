@@ -995,7 +995,7 @@ any Formatter::visitTypeDecl(cst::TypeDecl context) {
 }
 
 /*
-retStmt    : (RETURN | RAISE | THROW) dataList ;
+retStmt    : (RETURN | YIELD) dataList ;
 */
 any Formatter::visitRetStmt(cst::RetStmt context) {
     return context->child(0)->text() + " " +

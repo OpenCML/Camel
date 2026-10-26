@@ -168,7 +168,7 @@ class Builder {
     bool dimBindAllowed_ = false;
 
     // Where the value of what is being lowered goes, as far as the warning
-    // ExitInUnusedBranch needs it. A `return` / `throw` in a branch arm ends the arm and
+    // ExitInUnusedBranch needs it. A `return` in a branch arm ends the arm and
     // gives the value of the `if` / `match` (an arm is a graph of its own); when nothing
     // takes that value the statement has no effect at all, and the program most likely
     // meant to leave the function.
@@ -196,7 +196,7 @@ class Builder {
     std::set<std::pair<size_t, size_t>> reportedExits_;
     // The next block lowered is an arm of `ctrl`, whose value is unused or not.
     void enterArmOf(const AST::node_ptr_t &ctrl, bool valueUnused);
-    void reportExitInUnusedArm(const AST::node_ptr_t &exit, bool isThrow);
+    void reportExitInUnusedArm(const AST::node_ptr_t &exit);
 
     void pushScope() { typeScope_ = std::make_shared<Scope<Reference, Type *>>(typeScope_); }
     void popScope() { typeScope_ = typeScope_->outer(); } // TODO: Shall we free the scope?

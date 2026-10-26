@@ -1,7 +1,0 @@
-// A module that imports itself (design principles 10.1): no effect.
-module self_lib
-
-import self_lib
-
-export func three(): int { return self_lib::one() + 2 }
-export func one(): int { return 1 }

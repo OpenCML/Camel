@@ -1993,7 +1993,13 @@ gc_slot_idx_t GraphDraft::allocateRuntimeSlot(camel::core::type::Type *type) {
     ASSERT(
         slotIndex < static_cast<size_t>(std::numeric_limits<gc_slot_idx_t>::max()),
         "Draft runtime slot count exceeds the data-index range.");
-    runtimeSlotTypes_.push_back(type);
+    // A value of `never` never exists (design principles 3.9): the expression that has this type
+    // gives no value at all, so its slot holds nothing, like the slot of a `void` value. The
+    // graph keeps the name (the type of an `exit` call, the result type of a function that never
+    // returns), and no runtime layout is ever made of it.
+    runtimeSlotTypes_.push_back(
+        type->code() == camel::core::type::TypeCode::Never ? camel::core::type::Type::Void()
+                                                           : type);
     return static_cast<gc_slot_idx_t>(slotIndex);
 }
 

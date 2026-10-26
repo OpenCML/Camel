@@ -31,7 +31,7 @@ The module top level contains only declarations and no executable statements; ex
 
 ```
 stmt      : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | retStmt | blockStmt
-retStmt   : (return | throw) dataList
+retStmt   : (return | yield) dataList
 stmtBlock : sync? '{' (stmt ';'?)* '}'
 blockExpr : stmtBlock | dataExpr            // branch arm, lambda body
 ```
@@ -58,7 +58,7 @@ nullable   : unary (('??' | '!!') dataExpr)?
 unary      : neg (as type)?
 neg        : ('-' | '!' | '~') negPower | link
 negPower   : ('-' | '!' | '~') negPower | link ('^' negPower)?
-link       : comp (('->' | '->') comp)*
+link       : comp ('->' comp)*
 comp       : anno ('..' anno)*
 anno       : primary ( '.'field | '[' subscript ']' | '(' arguments ')' | '<' with arguments '>' )*
 primary    : name | literal | '[' element, ... ']' | '{' key: value, ... '}' | '(' expression, ... ')' | lambda
@@ -136,7 +136,7 @@ typeDecl           : frontMatter? 'type' identRef
                      ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
                      (typeExpr | STRING)
 resourceDecl       : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered')?
-retStmt            : ('return' | 'throw' | 'yield') dataList
+retStmt            : ('return' | 'yield') dataList
 modifiers          : 'sync'+
 identDef           : IDENTIFIER
 identRef           : (IDENTIFIER '::')* IDENTIFIER

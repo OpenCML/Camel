@@ -46,11 +46,11 @@ The following words are reserved and cannot be used as names (using one gives `S
 | Category | Keywords |
 |---|---|
 | Declarations | `let` `var` `func` `type` `with` `module` `import` `export` `from` `namespace` `using` |
-| Control | `if` `then` `else` `match` `case` `return` `throw` `yield` `sync` `loop` `while` `do` `for` `in` `static` |
+| Control | `if` `then` `else` `match` `case` `return` `yield` `sync` `loop` `while` `do` `for` `in` `static` |
 | Types and conversion | `as` `const` `constas` `enum` `typeof` |
 | Literals | `null` `true` `false` |
 
-`is`, `of`, `keyof`, `try`, `catch` and `finally` are not keywords: they are ordinary names, and writing one is an ordinary name or a syntax error (design principles 3.9).
+`is`, `of`, `keyof`, `throw`, `try`, `catch` and `finally` are not keywords: they are ordinary names, and writing one is an ordinary name or a syntax error (design principles 3.9).
 
 
 Names of the form `__x__` (two underscores on each side) are the compiler's own: the operators are functions of such names (`a + b` is `__add__(a, b)`). A variable, a parameter or a function cannot take one (`SemanticDiag::ReservedIdentifier`). To define an operator for a type of the program, write `func operator +(a: V, b: V): V` ([7.4.5](07_statements.md#745-operator-overloading)); `operator` is not a keyword, and is read this way only right after `func` and before an operator.
@@ -177,7 +177,7 @@ The other way round, `func` and `type` among the position names are reserved wor
 
 - **An octal digit is not an escape**: only a bare `\0` is the null byte. A `0` followed by another octal digit is an unknown escape, not a byte: `\01` is `\01`, `\012` is `\012`, and `\101` and `\8` are the same; each is kept as written and warns with `LexicalDiag::InvalidEscapeSequence` (one code and one message shape, with no diagnostic of its own for octal). `\x` with no hexadecimal digit and a `\u{...}` that is not a scalar value are still kept as written by the table above; they are not unknown escapes here.
 - `\$` is a `$` in a formatted string too. The one addition is `\${` (a dollar sign immediately followed by a left brace): in a formatted string it is the **structural escape** that writes a literal `${` and starts no interpolation, see [2.5.4.1](#2541-formatted-strings); an ordinary or a triple-quoted string has no `${` meaning, so `\${` there is the character escape `\$` followed by `{`, which is also `${`.
-- A string is a sequence of bytes. `len` gives the number of bytes: `len('héllo')` is 6, `len('中文')` is 6.
+- A string is valid UTF-8 text, and its length and subscripts count code points: `len('héllo')` is 5, `len('中文')` is 2; a sequence of bytes is `Bytes`.
 
 #### 2.5.4.1 Formatted strings
 

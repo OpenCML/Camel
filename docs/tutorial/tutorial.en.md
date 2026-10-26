@@ -276,8 +276,8 @@ func main(): int sync {
     println(total)
 
     // Arrays are values: slice and concat return new arrays.
-    let ys = concat(xs->slice<0, 3>, [99])
-    println(ys, len(ys), head(ys))
+    let ys = concat(xs[0:3], [99])
+    println(ys, len(ys), ys[0])
 
     // foreach runs its function for each element, in order.
     ['a', 'b', 'c']->foreach<(s: string) => sync { println('item', s) }>
@@ -316,7 +316,7 @@ func main(): int sync {
 
     seed(42)
     // reduce runs in element order on every back end.
-    let ordered = 0..8->reduce<(acc: int[], i: int): int[] => concat(acc, [randint(0, 99)]), [0]->slice<0, 0>>
+    let ordered = 0..8->reduce<(acc: int[], i: int): int[] => concat(acc, [randint(0, 99)]), [0][0:0]>
     println(ordered)
     return 0
 }
@@ -627,7 +627,7 @@ Camel has no exceptions and no `try`/`catch`. A function that may fail declares 
 
 func safe_div(a: int, b: int): int! {
     return if b == 0 then {
-        throw error('DivByZero', 'the divisor is zero')
+        return error('DivByZero', 'the divisor is zero')
     } else {
         return a / b
     }
@@ -662,7 +662,7 @@ DivByZero: the divisor is zero
 error DivByZero: the divisor is zero
 ```
 
-- **`throw e` returns an error value**; it is the same kind of construct as `return`. It does not unwind the call stack; what the caller gets is simply a value of type `int!`.
+- **An error value is handed out by `return e`**: it does not unwind the call stack; what the caller gets is simply a value of type `int!`.
 - An `int!` cannot be used as an `int`; it must be unwrapped first:
   - `a !! b`: takes `b` on an error, otherwise the value inside;
   - `x -> f`: on an error passes the error on unchanged, otherwise calls `f`; these can be chained;

@@ -14,7 +14,7 @@ An array is `T[]`; `a..b` is the range from `a` to `b - 1`, which is shorter to 
 let xs = 1..11        // [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 ```
 
-An array is a **value**, not a container someone else can change: `concat(xs, [11])` and `xs->slice<0, 3>` both
+An array is a **value**, not a container someone else can change: `concat(xs, [11])` and `xs[0:3]` both
 return a new array and leave `xs` alone (chapter 2). An out-of-range index is a fault, and the program stops with
 a location (chapter 7).
 
@@ -38,8 +38,8 @@ func main(): int sync {
     println(total)
 
     // Arrays are values: slice and concat return new arrays.
-    let ys = concat(xs->slice<0, 3>, [99])
-    println(ys, len(ys), head(ys))
+    let ys = concat(xs[0:3], [99])
+    println(ys, len(ys), ys[0])
 
     // foreach runs its function for each element, in order.
     ['a', 'b', 'c']->foreach<(s: string) => sync { println('item', s) }>
@@ -144,7 +144,7 @@ func main(): int sync {
 
     seed(42)
     // reduce runs in element order on every back end.
-    let ordered = 0..8->reduce<(acc: int[], i: int): int[] => concat(acc, [randint(0, 99)]), [0]->slice<0, 0>>
+    let ordered = 0..8->reduce<(acc: int[], i: int): int[] => concat(acc, [randint(0, 99)]), [0][0:0]>
     println(ordered)
     return 0
 }
@@ -179,7 +179,7 @@ func main(): int sync {
 
     seed(42)
     // reduce runs in element order on every back end.
-    let ordered = 0..8->reduce<(acc: int[], i: int): int[] => concat(acc, [randint(0, 99)]), [0]->slice<0, 0>>
+    let ordered = 0..8->reduce<(acc: int[], i: int): int[] => concat(acc, [randint(0, 99)]), [0][0:0]>
     println(ordered)
     return 0
 }

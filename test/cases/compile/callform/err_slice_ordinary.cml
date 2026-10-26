@@ -1,7 +1,0 @@
-module err_slice_ordinary
-
-func main(): int sync {
-    let xs = [1, 2, 3]
-    println(slice(xs, 0, 2))
-    return 0
-}

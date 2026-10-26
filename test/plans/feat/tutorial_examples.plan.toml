@@ -459,7 +459,7 @@ golden = "golden/tutorial_examples/07_nullable.txt"
 # The dropped value at the end of the file warns on standard error, which the page does not show.
 [[tests]]
 name = "tutorial.examples.07_errors"
-desc = "A function that may fail returns `T!`, and `throw` returns an error value. The value dropped at the end of the file is reported as a warning on standard error."
+desc = "A function that may fail returns `T!`, and an error value is handed out by `return`. The value dropped at the end of the file is reported as a warning on standard error."
 case = "../../../docs/tutorial/examples/07_errors.cml"
 golden = "golden/tutorial_examples/07_errors.txt"
 expect_output_contains = ["SemanticDiag::UnusedFallibleValue"]

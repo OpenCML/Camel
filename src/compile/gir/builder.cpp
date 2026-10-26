@@ -288,6 +288,57 @@ void Builder::rejectRedeclaredFunction(
         !genericGroupOf(group.value())->empty()) {
         for (const auto &other : *genericGroupOf(group.value())) {
             if (other != nullptr && sameGenericSignature(other->funcType, funcType)) {
+                // Two declarations of one signature are told apart by their conditions, if both
+                // write one (design principles 4.4): where a condition does not hold the overload
+                // does not apply. Conditions that exclude each other make two overloads; ones that
+                // can both hold are WhenDeclarationOverlap, and ones no registered type decides
+                // are left to the call, which reports the ambiguity if two apply.
+                const auto *ownWhen   = GCT::Tree::of(gct)->whenOf(gct);
+                const auto *otherWhen = other->func != nullptr
+                                            ? GCT::Tree::of(other->func)->whenOf(other->func)
+                                            : nullptr;
+                if (ownWhen != nullptr && otherWhen != nullptr) {
+                    SpeculativeInstantiation quiet(*this);
+                    std::string overlappingType;
+                    const ConditionSeparation separation = separateWhenConditions(
+                        ownWhen->condition,
+                        otherWhen->condition,
+                        [&](const camel::core::type::type_bindings_t &bindings) {
+                            return evaluateWhenCondition(
+                                ownWhen->condition, funcType, bindings, {}, nullptr, unit_);
+                        },
+                        [&](const camel::core::type::type_bindings_t &bindings) {
+                            return evaluateWhenCondition(
+                                otherWhen->condition,
+                                other->funcType,
+                                bindings,
+                                {},
+                                nullptr,
+                                unit_);
+                        },
+                        overlappingType);
+                    if (separation == ConditionSeparation::Disjoint) {
+                        continue;
+                    }
+                    // No registered type decides two conditions that read a value: they are two
+                    // overloads, and a call to which both apply is the ambiguity (design
+                    // principles 4.4). The same condition written twice is a redeclaration.
+                    if (separation == ConditionSeparation::NotComputable &&
+                        ownWhen->text != otherWhen->text) {
+                        continue;
+                    }
+                    if (separation == ConditionSeparation::Overlapping) {
+                        redeclaredFuncTypes_.insert(funcType);
+                        diags_->of(SemanticDiag::WhenDeclarationOverlap)
+                            .atOrigin(gct->origin())
+                            .commit(
+                                name,
+                                overlappingType,
+                                other->funcType->toString() + " — when " + otherWhen->text,
+                                funcType->toString() + " — when " + ownWhen->text);
+                        throw BuildAbortException();
+                    }
+                }
                 redeclaredFuncTypes_.insert(funcType);
                 diags_->of(SemanticDiag::Redeclaration).atOrigin(gct->origin()).commit(name);
                 throw BuildAbortException();
@@ -354,6 +405,10 @@ void Builder::rejectRedeclaredFunction(
                         overlappingType);
                     if (separation == ConditionSeparation::Disjoint) {
                         continue; // one family of argument types each
+                    }
+                    if (separation == ConditionSeparation::NotComputable &&
+                        ownWhen->text != other->second.text) {
+                        continue; // two conditions on a value: the call that meets both is ambiguous
                     }
                     if (separation == ConditionSeparation::Overlapping) {
                         redeclaredFuncTypes_.insert(funcType);
@@ -1243,6 +1298,10 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
     };
     bool failed                     = false;
     const GCT::Node *outerStatement = unusedStatement_;
+    // The statements of this block that a `fail` written in it leaves behind, by the entry they
+    // belong to in statementsAfterFail_ (nothing when the block has met no `fail` yet, or the
+    // entry the last one opened).
+    std::optional<size_t> afterFailEntry;
     // A block that is itself a statement whose value nothing takes drops the value of its last
     // statement too.
     const bool valueDropped = gct == unusedStatement_ || droppedBodies_.contains(gct);
@@ -1289,6 +1348,22 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
             }
             if (unused && result.has_value() && result.type() == typeid(node_handle_t)) {
                 rejectUnusedPureResult(child, any_cast<node_handle_t>(result));
+            }
+            // A statement written after a `fail` in the same block (design principles 3.9; the
+            // author's ruling of 2026-10-26): the `fail` never returns, so where it is executed
+            // nothing written after it in the block is reached. Recorded here and reported when
+            // the body is complete, because whether the `fail` runs at all is a fact about the
+            // whole body: a `fail` whose value nothing wants does not run, and the statements
+            // after it are reached then (FailNotExecuted says so).
+            if (!gct->operands() && result.has_value() && result.type() == typeid(node_handle_t)) {
+                if (afterFailEntry.has_value()) {
+                    statementsAfterFail_[*afterFailEntry].statements.push_back(child->origin());
+                }
+                node_handle_t built = any_cast<node_handle_t>(result);
+                if (isFailCall(built)) {
+                    afterFailEntry = statementsAfterFail_.size();
+                    statementsAfterFail_.push_back({currGraph_, built, {}});
+                }
             }
             if (result.has_value() && result.type() == typeid(node_handle_t)) {
                 res = any_cast<node_handle_t>(result);

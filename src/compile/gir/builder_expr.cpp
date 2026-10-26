@@ -297,6 +297,40 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
     return node;
 }
 
+node_handle_t Builder::nativeValueNode(const GCT::node_ptr_t &gct, Type *declared) {
+    // A value declared without a right side is the one the C++ module of the declaration registers
+    // under its name, of the type the declaration writes, or an error of the same kind as a
+    // body-less function whose operator is missing or has another signature.
+    const std::string &ident = gct->name();
+    auto entity              = module_->getNativeEntity(Reference(ident));
+    if (!entity.has_value()) {
+        // The declaration may be written in a file that is not the C++ module itself (a file named
+        // as the module): the module of that name further along the search order supplies it.
+        try {
+            if (const auto supplier = context_->importModule(module_->name(), module_.get());
+                supplier != nullptr && supplier != module_) {
+                entity = supplier->getNativeEntity(Reference(ident));
+            }
+        } catch (const std::exception &) {
+        }
+    }
+    if (!entity.has_value() || !entity->isValue()) {
+        diags_->of(SemanticDiag::NativeValueNotLoaded).atOrigin(gct->origin()).commit(ident);
+        throw BuildAbortException();
+    }
+    const data_ptr_t &data = entity->value();
+    if (!declared->equals(data->type())) {
+        diags_->of(SemanticDiag::NativeValueMismatch)
+            .atOrigin(gct->origin())
+            .commit(ident, declared->toString(), data->type()->toString());
+        throw BuildAbortException();
+    }
+    node_handle_t node = currGraph_->addStaticDataNode(data);
+    rememberConstant(node, data);
+    registerNodeOrigin(context_, node, gct, "gir.data.native");
+    return node;
+}
+
 node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     ENTER("NREF");
     const string &ident = gct->name();
@@ -309,7 +343,11 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     const node_scope_ptr_t declScope = nodeScope_;
     node_handle_t node{};
     try {
-        node = functionValueOf(valueNodeOf(visit(gct->at(0))), gct);
+        if (Type *declared = GCT::Tree::of(gct)->nativeValueTypeOf(gct)) {
+            node = nativeValueNode(gct, declared);
+        } else {
+            node = functionValueOf(valueNodeOf(visit(gct->at(0))), gct);
+        }
     } catch (const BuildAbortException &) {
         // The initializer is in error, so the name is not declared. Uses of it are
         // consequences of that error, not errors of their own (see poisonedNames_).
@@ -323,10 +361,13 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     // `let g = f<w>` where `f<w>` is not one function: the name would be bound to `f` and the
     // arguments lost.
     try {
-        rejectUnappliedBinding(node, gct->at(0));
-        if (genericDrefs_.contains(node)) {
-            // `let g = id`: no context to take the types from.
-            (void)genericValueFor(node, nullptr, gct->at(0));
+        // A native value has nothing written to the right of the name.
+        if (gct->size() > 0) {
+            rejectUnappliedBinding(node, gct->at(0));
+            if (genericDrefs_.contains(node)) {
+                // `let g = id`: no context to take the types from.
+                (void)genericValueFor(node, nullptr, gct->at(0));
+            }
         }
     } catch (const BuildAbortException &) {
         if (!declScope->has(ident, false)) {
@@ -339,7 +380,7 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     // it without one has no element type; say so here, where the type can be written. (A
     // name the compiler made for an element of a literal starts with a digit.)
     if (Type *type = node != nullptr ? valueTypeOf(nodeTypeOf(node)) : nullptr;
-        type != nullptr && isUntypedArrayType(type) && !ident.empty() &&
+        type != nullptr && gct->size() > 0 && isUntypedArrayType(type) && !ident.empty() &&
         !std::isdigit(static_cast<unsigned char>(ident.front())) && ident.front() != '$') {
         diags_->of(SemanticDiag::EmptyArrayWithoutType)
             .atOrigin(gct->at(0)->origin())
@@ -1225,6 +1266,13 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     }
     ASSERT(valueNode != nullptr, "Cast node value is null.");
     Type *sourceType = nodeTypeOf(valueNode);
+    if (valueTypeOf(sourceType)->code() == TypeCode::Never && asTagged(targetType) == nullptr) {
+        // A value of `never` never exists (design principles 3.9): the position takes the node as
+        // it stands, because there is nothing to convert -- and nothing that could fail to be
+        // what the position asks for. A tagged position still enters its tag below.
+        LEAVE("CAST");
+        return valueNode;
+    }
     if (gct->annotation() && asTagged(targetType) == nullptr) {
         // The type a declaration is written with (`let x: T = e`; GCT Builder::declaredValue):
         // `e` must already have it. A value of that very type passes as it is (converting a

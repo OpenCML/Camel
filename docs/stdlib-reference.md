@@ -134,190 +134,128 @@ The data-block counters: blocks allocated so far, freed so far, live now, and th
 live blocks hold. The call is not pure: it reports process state, so the optimizer must not
 fold, merge or drop it.
 
-- With effects: reads the process-wide data-block counters.
 - Example: `std::mem::blocks().live` gives `0 when no block is alive`
 
 ### Conversions
 
-Numeric types are never converted implicitly; these functions do it. Converting a float to
-an integer drops the fraction.
+Numeric types are never converted implicitly; these functions do it. There is one conversion
+per target type, named by the type: `int`, `i32`, `float`, `f32`, `bf16`, `f16`, `c64`, `c128`
+(and `i64`, `f64`, the spellings of `int` and `float`). Each is one generic declaration over the
+source type. Applied to an array, a conversion converts every element (one rule with arithmetic:
+`f32(xs)` is one node, and `T(xs)` does it for the type a generic function is given); that entry
+comes with the module `tensor` (stdlib/signatures/tensor.cml), read together with these once it
+is imported. Converting a float to an integer drops the fraction.
 
 #### `int`
 
 ```camel
-int: (x: i32) => int
-int: (x: int) => int
-int: (x: f32) => int
-int: (x: float) => int
-int: (x: string) => int
-int: (x: bf16) => int
-int: (x: f16) => int
+int: (x: S) => int when is_real::<S>() || is_string::<S>()
 ```
 
 x as a 64-bit integer.
 
-- Pure.
 - Failure: fault `InvalidNumberText` when x is a string that is not, as a whole, one integer (blanks and a trailing part included); fault `ConversionOutOfRange` when x is a string that is an integer beyond the range, or a float that is NaN, infinite or beyond the range; use parse_int to handle text in the program.
 - Example: `int(2.9)` gives `2`
 
 #### `i64`
 
 ```camel
-i64: (x: i32) => int
-i64: (x: int) => int
-i64: (x: f32) => int
-i64: (x: float) => int
-i64: (x: string) => int
-i64: (x: bf16) => int
-i64: (x: f16) => int
+i64: (x: S) => int when is_real::<S>() || is_string::<S>()
 ```
 
 The same as int.
 
-- Pure.
 - Failure: fault `InvalidNumberText` when x is a string that is not, as a whole, one integer; fault `ConversionOutOfRange` when x is a string that is an integer beyond the range, or an int or a float beyond the range of i32, or NaN.
 - Example: `i64('42')` gives `42`
 
 #### `i32`
 
 ```camel
-i32: (x: i32) => i32
-i32: (x: int) => i32
-i32: (x: f32) => i32
-i32: (x: float) => i32
-i32: (x: string) => i32
-i32: (x: bf16) => i32
-i32: (x: f16) => i32
+i32: (x: S) => i32 when is_real::<S>() || is_string::<S>()
 ```
 
 x as a 32-bit integer.
 
-- Pure.
 - Failure: fault `InvalidNumberText` when x is a string that is not, as a whole, one integer; fault `ConversionOutOfRange` when x is a string that is an integer beyond the range, or an int or a float beyond the range of i32, or NaN.
 - Example: `i32(7)` gives `7`
 
 #### `float`
 
 ```camel
-float: (x: i32) => float
-float: (x: int) => float
-float: (x: f32) => float
-float: (x: float) => float
-float: (x: string) => float
-float: (x: bf16) => float
-float: (x: f16) => float
+float: (x: S) => float when is_real::<S>() || is_string::<S>()
 ```
 
 x as a 64-bit float.
 
-- Pure.
 - Failure: fault `InvalidNumberText` when x is a string that is not, as a whole, one number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of float (overflow or underflow); use parse_float to handle that in the program.
 - Example: `float(3)` gives `3`
 
 #### `f64`
 
 ```camel
-f64: (x: i32) => float
-f64: (x: int) => float
-f64: (x: f32) => float
-f64: (x: float) => float
-f64: (x: string) => float
-f64: (x: bf16) => float
-f64: (x: f16) => float
+f64: (x: S) => float when is_real::<S>() || is_string::<S>()
 ```
 
 The same as float.
 
-- Pure.
 - Failure: fault `InvalidNumberText` when x is a string that is not a number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of float (overflow or underflow).
 - Example: `f64('2.5')` gives `2.5`
 
 #### `f32`
 
 ```camel
-f32: (x: i32) => f32
-f32: (x: int) => f32
-f32: (x: f32) => f32
-f32: (x: float) => f32
-f32: (x: string) => f32
-f32: (x: bf16) => f32
-f32: (x: f16) => f32
+f32: (x: S) => f32 when is_real::<S>() || is_string::<S>()
 ```
 
 x as a 32-bit float.
 
-- Pure.
 - Failure: fault `InvalidNumberText` when x is a string that is not a number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of f32 (overflow or underflow).
 - Example: `f32(0.5)` gives `0.5`
 
 #### `bf16`
 
 ```camel
-bf16: (x: i32) => bf16
-bf16: (x: int) => bf16
-bf16: (x: f32) => bf16
-bf16: (x: float) => bf16
-bf16: (x: bf16) => bf16
-bf16: (x: string) => bf16
+bf16: (x: S) => bf16 when is_real::<S>() || is_string::<S>()
 ```
 
 x as a bf16: the nearest bf16 of x, rounding to nearest with ties to even, once. A bf16 is a
 floating-point type of the language (design principles 7.3), not only a tensor element type,
 and writing the conversion asks for that precision, so no numeric permission is involved.
 
-- Pure.
 - Failure: fault `InvalidNumberText` when x is a string that is not a number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of bf16 (overflow or underflow).
 - Example: `bf16(0.5)` gives `0.5`
 
 #### `f16`
 
 ```camel
-f16: (x: i32) => f16
-f16: (x: int) => f16
-f16: (x: f32) => f16
-f16: (x: float) => f16
-f16: (x: f16) => f16
-f16: (x: string) => f16
+f16: (x: S) => f16 when is_real::<S>() || is_string::<S>()
 ```
 
 x as an f16: the nearest f16 of x, rounding to nearest with ties to even, once. The same
 conversion as bf16, at the other reduced precision (design principles 7.3).
 
-- Pure.
 - Failure: fault `InvalidNumberText` when x is a string that is not a number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of f16 (overflow or underflow).
 - Example: `f16(0.5)` gives `0.5`
 
 #### `c64`
 
 ```camel
-c64: (x: i32) => c64
-c64: (x: int) => c64
-c64: (x: f32) => c64
-c64: (x: float) => c64
-c64: (x: c64) => c64
-c64: (x: c128) => c64
+c64: (x: S) => c64 when is_real::<S>() || is_complex::<S>()
 ```
 
 x as a 64-bit complex number: the real part is x and the imaginary part is zero. A c128
 keeps both parts as they are.
 
-- Pure.
 - Example: `c64(2)` gives `2+0i`
 
 #### `c128`
 
 ```camel
-c128: (x: i32) => c128
-c128: (x: int) => c128
-c128: (x: f32) => c128
-c128: (x: float) => c128
-c128: (x: c64) => c128
-c128: (x: c128) => c128
+c128: (x: S) => c128 when is_real::<S>() || is_complex::<S>()
 ```
 
 x as a 128-bit complex number: the real part is x and the imaginary part is zero.
 
-- Pure.
 - Example: `c128(2)` gives `2+0i`
 
 #### `string`
@@ -329,7 +267,6 @@ string: (x: T) => string
 x as text, as println writes it. A float is written as the shortest text that reads back as
 the same number: string(2.5) is '2.5', string(2.0) is '2.0'.
 
-- Pure.
 - Example: `string(42)` gives `'42'`
 
 #### `parse_int`
@@ -340,7 +277,6 @@ parse_int: (text: string) => int!
 
 The integer a text spells, or an error value.
 
-- Pure.
 - Failure: error `ParseError` when the text is not, as a whole, one integer (blanks are not skipped).
 - Example: `parse_int('42') !! 0` gives `42`
 
@@ -352,7 +288,6 @@ parse_float: (text: string) => float!
 
 The number a text spells, or an error value.
 
-- Pure.
 - Failure: error `ParseError` when the text is not a number.
 - Example: `parse_float('2.5') !! 0.0` gives `2.5`
 
@@ -363,10 +298,9 @@ error: (kind: string, message: string) => Error
 ```
 
 An Error value of the given kind with the given message; the compiler adds the source
-position of the call. `throw error(...)` returns it from a function declared `T!`.
+position of the call. `return error(...)` hands it out of a function declared `T!`.
 
-- Pure.
-- Example: `throw error('RangeError', 'too large')`
+- Example: `return error('RangeError', 'too large')`
 
 ### Input and output
 
@@ -381,7 +315,6 @@ Writes the arguments, separated by spaces, without a line end, and gives back th
 of their own. With a format, print<fmt>(...), writes the format with the arguments put in,
 also without a line end.
 
-- With effects: writes to standard output.
 - Example: `print('a', 1)` gives `a 1`
 
 #### `println`
@@ -395,7 +328,6 @@ that the write can be part of the data flow). The other arguments may each have 
 their own. With a format, println<fmt>(...), writes the format with the arguments put in and
 one line end.
 
-- With effects: writes to standard output.
 - Example: `println('a', 1)` gives `a 1`
 
 #### `eprintln`
@@ -409,19 +341,7 @@ the first one (so that the write can be part of the data flow). The other argume
 have a type of their own. With a format, eprintln<fmt>(...), writes the format with the
 arguments put in and one line end.
 
-- With effects: writes to standard error.
 - Example: `eprintln('a', 1)` gives `a 1`
-
-#### `input`
-
-```camel
-input: (prompt: string) => string
-```
-
-Writes prompt and reads one line from standard input.
-
-- With effects: reads standard input.
-- Example: `input('name: ')` gives `what the user typed`
 
 ### Strings
 
@@ -443,7 +363,6 @@ element and an `f64` element each at two places. An array without a specificatio
 it does everywhere else: every element in the shortest text that reads back as the same
 number, which is `'{}'->format<xs>` giving `[0.7692267, 0.780836, 0.77707076]`.
 
-- Pure.
 - Failure: fault `FormatFailed` when the placeholders and the arguments do not fit.
 - Example: `'{} is {:.2f}'->format<'x', 2.5>` gives `'x is 2.50'`
 
@@ -455,7 +374,6 @@ join: <sep: string> (xs: string[]) => string
 
 The strings of xs joined with sep between them.
 
-- Pure.
 - Example: `['a', 'b']->join<', '>` gives `'a, b'`
 
 #### `len`
@@ -463,12 +381,13 @@ The strings of xs joined with sep between them.
 ```camel
 len: (x: string) => int
 len: (x: T[..]) => int
+len: (x: Bytes) => int
 ```
 
-The number of bytes of a string, or of the first dimension of an array of any rank.
+The number of code points of a string, of bytes of a `Bytes`, or the length of the first
+dimension of an array of any rank.
 
-- Pure.
-- Example: `len('h€')` gives `4`
+- Example: `len('h€')` gives `2`
 
 ### Arrays
 
@@ -485,23 +404,10 @@ with a step of 0 is refused where it is written. The result is empty when the st
 carry `start` towards `end`. A `for` over an interval is fused by the compiler and builds no
 array; this call builds one.
 
-- Pure.
 - Failure: fault `InvalidArgument` when the step is 0.
 - Example (a fragment, not compiled): `range(0, 10, 3)` gives `[0, 3, 6, 9]`
 - Example (a fragment, not compiled): `range(10, 0, -3)` gives `[10, 7, 4, 1]`
 - Why it is not compiled: the interval is written `a..b`; the stepped form is `range(a, b, step)`
-
-#### `head`
-
-```camel
-head: (xs: T[]) => T
-```
-
-The first element. An empty array has none: check len first.
-
-- Pure.
-- Failure: fault `IndexOutOfRange` when the array is empty.
-- Example: `head([1, 2, 3])` gives `1`
 
 #### `last`
 
@@ -513,74 +419,46 @@ The last element. An empty array has none: check len first. Negative indices are
 counted from the end (a negative index is a fault), so this is how the last element is
 written.
 
-- Pure.
 - Failure: fault `IndexOutOfRange` when the array is empty.
 - Example: `last([1, 2, 3])` gives `3`
 
-#### `tail`
+#### `slice`
 
 ```camel
-tail: (xs: T[]) => T[]
+slice: <axis: int, start: int, end: int, step: int = 1> (x: T[]) => T[]
 ```
 
-The elements after the first; empty for an array of fewer than two elements.
+The part of x from start up to, not including, end along one axis, taking every step-th
+position (a step of 1 by default, any non-zero value allowed). x is an array of any rank, a
+string (by code point) or a `Bytes`; this is the same node the subscript `x[a:b:s]` builds, so
+a pipeline can write it: `xs->slice<0, 1, 3>`. A bound outside the value (a negative one
+included) is a fault, as an index out of range is; a start after the end gives the empty
+value. The last element is `last(x)` and the length of an axis `dim(x, axis)`.
 
-- Pure.
-- Example: `tail([1, 2, 3])` gives `[2, 3]`
+- Failure: fault `IndexOutOfRange` when a bound lies outside the axis; fault `InvalidArgument` when the step is 0.
+- Example: `[1, 2, 3, 4]->slice<0, 1, 3>` gives `[2, 3]`
 
 #### `slice`
 
 ```camel
-slice: <start: int, end: int> (xs: T[]) => T[]
-```
-
-The elements from index start up to, not including, end. Both are positions from 0 to the
-length; a bound outside the array (a negative one included) is a fault, as an index out of
-range is. `take` and `drop` of the module `array` cut to the array instead.
-
-- Pure.
-- Example: `[1, 2, 3, 4]->slice<1, 3>` gives `[2, 3]`
-
-#### `slice`
-
-```camel
-slice: (t: T[], axis: int, start: int, end: int, step: int = 1, written: int = 3) => T[]
-```
-
-A slice of one axis of an array of values, written as a call: `slice(t, axis, a, b, s)` is the
-same node the subscript `t[a:b:s]` builds -- the value, the axis, the two bounds, the step and
-the mask saying which bounds were written. The function form writes both, so its mask is 3; any
-axis and any rank are the core's; a negative or out-of-range bound is a fault, with the
-subscript's one wording, and a step may be any non-zero value (the constant 0 is refused).
-The last element is `last(t)` and an axis' length is `dim(t, axis)`, which is how a bound is
-written where it used to count from the end.
-
-- Pure.
-- Example: `[1, 2, 3, 4]->slice(0, 1, 3)` gives `[2, 3]`
-
-#### `slice`
-
-```camel
-slice: (s: string, axis: int, start: int, end: int, step: int = 1, written: int = 3) => string
+slice: <axis: int, start: int, end: int, step: int = 1> (x: string) => string
 ```
 
 The same slice of a string, by code point: a string has the one axis 0, and the result is a
-string. `'中文字'[1:3]` and `slice('中文字', 0, 1, 3)` are both `'文字'`.
+string. `'中文字'[1:3]` and `'中文字'->slice<0, 1, 3>` are both `'文字'`.
 
-- Pure.
-- Example: `slice('hello', 0, 1, 4)` gives `'ell'`
+- Example: `'hello'->slice<0, 1, 4>` gives `'ell'`
 
 #### `slice`
 
 ```camel
-slice: (b: Bytes, axis: int, start: int, end: int, step: int = 1, written: int = 3) => Bytes
+slice: <axis: int, start: int, end: int, step: int = 1> (x: Bytes) => Bytes
 ```
 
 The same slice of a `Bytes`, by byte: it has the one axis 0, and the result is a `Bytes`.
-`b[1:3]` and `slice(b, 0, 1, 3)` are the same bytes.
+`b[1:3]` and `b->slice<0, 1, 3>` are the same bytes.
 
-- Pure.
-- Example: `slice(encode('hello'), 0, 1, 4)` gives `the bytes of 'ell'`
+- Example: `encode('hello')->slice<0, 1, 4>` gives `the bytes of 'ell'`
 
 #### `concat`
 
@@ -590,7 +468,6 @@ concat: (xs: T[], ys: T[]) => T[]
 
 The elements of xs followed by those of ys, as a new array.
 
-- Pure.
 - Example: `concat([1], [2, 3])` gives `[1, 2, 3]`
 
 #### `contains`
@@ -602,7 +479,6 @@ contains: <value: T> (xs: T[]) => bool
 Whether an element of xs equals value, by the `==` of the element type (by content for
 arrays, tuples and structs).
 
-- Pure.
 - Example: `[1, 2, 3]->contains<2>` gives `true`
 
 #### `contains`
@@ -614,7 +490,6 @@ contains: <sub: string> (s: string) => bool
 Whether sub occurs in the string s (bytes are compared). The empty string occurs in every
 string.
 
-- Pure.
 - Example: `'hello'->contains<'ell'>` gives `true`
 
 #### `zip`
@@ -626,7 +501,6 @@ zip: (xs: T[], ys: U[]) => (T, U)[]
 Two arrays combined element by element into pairs. They must have the same length.
 Three or more arrays (`zip(xs, ys, zs)`) give tuples of that many elements.
 
-- Pure.
 - Failure: fault `InvalidArgument` when the lengths differ.
 - Example: `zip([1, 2], ['a', 'b'])` gives `[(1, 'a'), (2, 'b')]`
 
@@ -640,19 +514,7 @@ A new array: the elements of xs, then value. xs is unchanged; to add to a variab
 to the result: `acc = acc->append<4>` (as a statement, that form grows the array in place
 when nothing else refers to it, which cannot be observed).
 
-- Pure.
 - Example: `[1, 2, 3]->append<4>` gives `[1, 2, 3, 4]`
-
-#### `extend`
-
-```camel
-extend: <other: T[]> (xs: T[]) => T[]
-```
-
-A new array: the elements of xs, then those of other. xs is unchanged.
-
-- Pure.
-- Example: `[1, 2, 3]->extend<[4, 5]>` gives `[1, 2, 3, 4, 5]`
 
 ### Higher-order functions
 
@@ -670,7 +532,6 @@ map: <f: (item: T) => U> (xs: T[]) => U[]
 
 f applied to every element; the calls have no order among them.
 
-- With effects: what f does.
 - Example: `[1, 2, 3]->map<(x: int) => x * 2>` gives `[2, 4, 6]`
 
 #### `filter`
@@ -681,7 +542,6 @@ filter: <f: (item: T) => bool> (xs: T[]) => T[]
 
 The elements for which f is true, in order; the calls of f have no order among them.
 
-- With effects: what f does.
 - Example: `[1, 2, 3, 4]->filter<(x: int) => x % 2 == 0>` gives `[2, 4]`
 
 #### `reduce`
@@ -692,7 +552,6 @@ reduce: <f: (acc: U, item: T) => U, initial: U> (xs: T[]) => U
 
 The elements combined from left to right: f(...f(f(initial, xs[0]), xs[1])..., xs[n-1]).
 
-- With effects: what f does.
 - Example: `[1, 2, 3]->reduce<(acc: int, x: int) => acc + x, 0>` gives `6`
 
 #### `foreach`
@@ -703,20 +562,7 @@ foreach: <f: (item: T) => void> (xs: T[]) => void
 
 Calls f for every element, in order.
 
-- With effects: what f does.
 - Example: `[1, 2, 3]->foreach<(x: int) => println(x)>`
-
-#### `apply`
-
-```camel
-apply: <f: (item: T) => T> (xs: T[]) => T[]
-```
-
-A new array: f of every element of xs, which is unchanged; `map` where f keeps the element
-type. The calls have no order among them, as for `map`.
-
-- With effects: what f does.
-- Example: `[1, 2, 3]->apply<(x: int) => x * 2>` gives `[2, 4, 6]`
 
 ### Fault isolation
 
@@ -725,6 +571,21 @@ the program with a located diagnostic. `attempt` isolates it at the boundary of 
 (design principles 3.9; docs/technical/33_fault_isolation.md). It is a function transform:
 `attempt(f)` is the function whose parameters are f's and whose calls are calls of f made
 inside the boundary. The name is provisional.
+
+#### `fail`
+
+```camel
+fail: <Kind: string> (message: string) => never
+```
+
+Raises a fault of the kind the program writes, with the message it gives. The call gives no
+value at all: its type is the bottom type `never` (design principles 3.9), so it may stand
+where any type is expected, and a branch arm that raises the fault leaves the branch's type
+to the other arm. The fault is raised where the call is written, and `attempt` isolates it
+into an error value whose kind is the name in the angle brackets.
+
+- Failure: fault `<Kind>` with the message, which `attempt` isolates.
+- Example: `fail<'BadLimit'>('the limit must be positive')`
 
 #### `attempt`
 
@@ -740,7 +601,6 @@ so does `attempt(f)`. What the call did before the fault is not undone; exit() a
 failures of the compiler itself are not isolated. `attempt(f)` itself calls nothing: the
 faults are those of a call of the value.
 
-- With effects: what f does.
 - Failure: fault `DivisionByZero` and every other fault of a call of f: the call gives an error value whose kind is the fault's name, with the fault's message and position; an error value f itself returns is handed on unchanged.
 - Example: `attempt((x: int) => 10 / x)(2) !! -1` gives `5`
 - Example: `attempt((x: int) => 10 / x)(0) !! -1` gives `-1: the division fault becomes an error value`
@@ -756,7 +616,6 @@ The number of entries of a map or of elements of a set. The collection is `x`, t
 string and array declarations above give their one parameter: the position means the value
 whose length is asked for, whatever its type.
 
-- Pure.
 - Example: `len([('a', 1), ('b', 2)] as Map<string, int>)` gives `2`
 
 #### `get`
@@ -767,7 +626,6 @@ get: <key: K> (m: Map<K, V>) => V?
 
 The value stored under key, or null when the map has no such key. `m[key]` is the same lookup.
 
-- Pure.
 - Example: `([('a', 1)] as Map<string, int>)->get<'z'> ?? 0` gives `0 when the map has no 'z'`
 
 #### `get_or`
@@ -778,7 +636,6 @@ get_or: <key: K, fallback: V> (m: Map<K, V>) => V
 
 The value stored under key, or fallback when the map has no such key.
 
-- Pure.
 - Example: `([('a', 1)] as Map<string, int>)->get_or<'z', -1>` gives `-1 when the map has no 'z'`
 
 #### `put`
@@ -789,7 +646,6 @@ put: <key: K, value: V> (m: Map<K, V>) => Map<K, V>
 
 A map with value stored under key; an existing entry of that key is replaced. m is unchanged.
 
-- Pure.
 - Example: `([('a', 1), ('b', 2)] as Map<string, int>)->put<'c', 3>` gives `{a: 1, b: 2, c: 3}`
 
 #### `remove`
@@ -801,19 +657,16 @@ remove: (c: Set<K>) => Set<K>
 
 A map without the entry of key, or a set without the element; a key or element that is not there changes nothing. The argument is unchanged.
 
-- Pure.
 - Example: `([('a', 1), ('b', 2)] as Map<string, int>)->remove<'a'>` gives `{b: 2}`
 
 #### `has`
 
 ```camel
 has: <key: K> (c: Map<K, V>) => bool
-has: (c: Set<K>) => bool
 ```
 
-Whether a map has an entry of key, or a set has the element.
+Whether a map has an entry of key. (A set is asked with `contains`.)
 
-- Pure.
 - Example: `([('a', 1)] as Map<string, int>)->has<'a'>` gives `true`
 
 #### `keys`
@@ -824,7 +677,6 @@ keys: (m: Map<K, V>) => K[]
 
 The keys of a map, in ascending order.
 
-- Pure.
 - Example: `keys([('b', 2), ('a', 1)] as Map<string, int>)` gives `[a, b]`
 
 #### `values`
@@ -835,7 +687,6 @@ values: (m: Map<K, V>) => V[]
 
 The values of a map, in the ascending order of their keys.
 
-- Pure.
 - Example: `values([('b', 2), ('a', 1)] as Map<string, int>)` gives `[1, 2]`
 
 #### `items`
@@ -846,7 +697,6 @@ items: (m: Map<K, V>) => (K, V)[]
 
 The entries of a map as (key, value) tuples, in ascending order of the keys.
 
-- Pure.
 - Example: `items([('b', 2), ('a', 1)] as Map<string, int>)` gives `[(a, 1), (b, 2)]`
 
 #### `items`
@@ -859,7 +709,6 @@ The elements of a set as an array, in ascending order. The collection is `m`, th
 map declaration above gives its one parameter: the position means the collection whose items
 are listed.
 
-- Pure.
 - Example: `items([3, 1, 2] as Set<int>)` gives `[1, 2, 3]`
 
 #### `merge`
@@ -870,7 +719,6 @@ merge: (m: Map<K, V>, other: Map<K, V>) => Map<K, V>
 
 A map with the entries of both maps; for a key in both, the entry of other is taken. Neither argument is changed.
 
-- Pure.
 - Example: `merge([('a', 1), ('b', 2)] as Map<string, int>, [('b', 20), ('c', 30)] as Map<string, int>)` gives `{a: 1, b: 20, c: 30}`
 
 #### `contains`
@@ -881,7 +729,6 @@ contains: <value: T> (s: Set<T>) => bool
 
 Whether value is an element of the set.
 
-- Pure.
 - Example: `([1, 2, 3] as Set<int>)->contains<9>` gives `false`
 
 #### `add`
@@ -892,7 +739,6 @@ add: <value: T> (s: Set<T>) => Set<T>
 
 A set with value added; s is unchanged.
 
-- Pure.
 - Example: `([1, 2, 3] as Set<int>)->add<9>` gives `{1, 2, 3, 9}`
 
 #### `union`
@@ -903,7 +749,6 @@ union: (s: Set<T>, other: Set<T>) => Set<T>
 
 The set of the elements that are in either set.
 
-- Pure.
 - Example: `union([1, 2, 3] as Set<int>, [3, 4] as Set<int>)` gives `{1, 2, 3, 4}`
 
 #### `intersect`
@@ -914,7 +759,6 @@ intersect: (s: Set<T>, other: Set<T>) => Set<T>
 
 The set of the elements that are in both sets.
 
-- Pure.
 - Example: `intersect([1, 2, 3] as Set<int>, [3, 4] as Set<int>)` gives `{3}`
 
 #### `difference`
@@ -925,7 +769,6 @@ difference: (s: Set<T>, other: Set<T>) => Set<T>
 
 The set of the elements of s that are not in other.
 
-- Pure.
 - Example: `difference([1, 2, 3] as Set<int>, [3, 4] as Set<int>)` gives `{1, 2}`
 
 #### `is_subset`
@@ -936,7 +779,6 @@ is_subset: (s: Set<T>, other: Set<T>) => bool
 
 Whether every element of s is an element of other.
 
-- Pure.
 - Example: `is_subset([1, 2] as Set<int>, [1, 2, 3] as Set<int>)` gives `true`
 
 ### Streams
@@ -954,7 +796,6 @@ tells one tee from another and whose type the operator takes, and whose elements
 A program does not write this: `tee` calls it once per element it pulls, and `std::profile`
 prints what it recorded (`STREAM_TEE`).
 
-- With effects: records the numbers of the tee.
 - Example (a fragment, not compiled): `tee_note(8, 64, 2, 2, s)` gives `the tee written `tee(s, 8)` reports itself this way`
 - Why it is not compiled: the last operand is the stream a tee reads, and no example program has one
 
@@ -2498,7 +2339,7 @@ module (the sorts, argsort, flatten, unique). Every function returns a new value
 its argument.
 
 - The array a function works on is its ordinary argument; a function or a value that
-  configures it is a with-argument, as for the built-in `map<f>(xs)` and `slice<a, b>(xs)`,
+  configures it is a with-argument, as for the built-in `map<f>(xs)` and `filter<f>(xs)`,
   so calls chain: `xs->filter<p>->sort_by<key>->take<3>`.
 - A result that may not exist is `T?` (`find`, `index_of`, `min`, `max`). Nothing here
   returns an error value, and a wrong argument is a fault of the operator that meets it.
@@ -4153,8 +3994,8 @@ delete; a file or a symbolic link is an error too.
 
 The terminal as a keyboard: what has been typed and not yet read, the keys themselves, and raw
 mode. Reading is a use of the resource `stdin`, so reads and the changes of mode keep their
-written order. Writing to the terminal and reading a whole line are the prelude's
-(`print`, `println`, `eprintln`, `input`).
+written order. `input` reads a whole line after writing its prompt; writing to the terminal is
+the prelude's (`print`, `println`, `eprintln`).
 
 #### `set_terminal_raw_mode`
 
@@ -4169,6 +4010,18 @@ off always succeeds. Raw mode is left again when the program ends.
 - Failure: error value `NotATerminal` when raw mode is asked for and standard input is not a terminal (a pipe, a file); error value `IOError` when the terminal refuses.
 - Example (a fragment, not compiled): `set_terminal_raw_mode(true)`
 - Why it is not compiled: changes the terminal when it runs, and the example only has the `void!` result to show
+
+#### `input`
+
+```camel
+input: (prompt: string) => string
+```
+
+Writes prompt to standard output and reads one line from standard input, without its line end.
+
+- With effects: writes standard output, reads standard input.
+- Example (a fragment, not compiled): `input('name: ')`
+- Why it is not compiled: waits for a line the example program is not given
 
 #### `has_input`
 
@@ -4239,11 +4092,12 @@ never folded away and the work of other ready nodes goes on meanwhile.
 #### `exit`
 
 ```camel
-exit: (code: int) => void uses process
+exit: (code: int) => never uses process
 ```
 
 Ends the program with the given exit code, after the buffered output is written and the
-external resources are released. Nothing that is written after the call runs.
+external resources are released. Nothing that is written after the call runs. It gives no
+value at all: its type is the bottom type `never` (design principles 3.9).
 
 - Example: `exit(2)`
 
@@ -6436,49 +6290,6 @@ to an example argument, and `supported_operators` lists the operator URIs the ba
 lower. The module is the ONNX exporter, not a runtime: loading it and asking what it can lower
 needs neither the ONNX runtime nor a GPU; only a run of `export_model` writes a file.
 
-#### `export_model`
-
-```camel
-export_model: <out: string> (fn: (x: f32[..]) => void, example: f32[..]) => void!
-```
-
-Writes the ONNX model of `fn` applied to arguments like `example` to the file `out`, at the
-backend's default opset. `example` is one argument of a one-parameter `fn`, or a tuple with
-one example per parameter; the function's graph is translated after the generic passes, and a
-node the backend cannot lower is refused. The path is a `with` argument because it is a
-runtime value: a literal, a name composed from the environment, or a parameter of the pass.
-
-- With effects: writes a file and reads the function's graph.
-- Failure: error value `ExportUnsupported` when the graph cannot be translated (a call that remains, an operator without an ONNX lowering, a dtype or shape the exporter cannot name), or when the target runtime rejects a node; error value `IOError` when the model cannot be written.
-- Example: `export_model<out: "/tmp/model.onnx">(fn, example)`
-
-#### `export_model`
-
-```camel
-export_model: <out: string, dynamic_axes: int[]> (fn: (x: f32[..]) => void, example: f32[..]) => void!
-```
-
-The same, with `dynamic_axes`: those axes of the tensor inputs are left unknown in the model,
-which is what lets one model run at several shapes (`[0]` is the batch axis).
-
-- With effects: writes a file and reads the function's graph.
-- Failure: error value `ExportUnsupported` when the graph cannot be translated or the target runtime rejects a node, and when an axis is out of range; error value `IOError` when the model cannot be written.
-- Example: `export_model<out: "/tmp/model.onnx", dynamic_axes: [0]>(fn, example)`
-
-#### `export_model`
-
-```camel
-export_model: <out: string, dynamic_axes: int[], target: string> (fn: (x: f32[..]) => void, example: f32[..]) => void!
-```
-
-The same, with `target`: the runtime whose capability data decides whether a node this
-backend lowers is one that runtime has (`'onnxruntime-cpu'`; `'none'` switches the check off,
-and a name that is none of them is refused).
-
-- With effects: writes a file and reads the function's graph.
-- Failure: error value `ExportUnsupported` when the graph cannot be translated, when an axis is out of range, or when `target` names a runtime that has no kernel for a node; error value `IOError` when the model cannot be written.
-- Example: `export_model<out: "/tmp/model.onnx", dynamic_axes: [0], target: "onnxruntime-cpu">(fn, example)`
-
 #### `supported_operators`
 
 ```camel
@@ -6491,3 +6302,25 @@ module and never touches the file system or the ONNX runtime.
 
 - Pure.
 - Example: `let uris = supported_operators()`
+
+#### `export_model`
+
+```camel
+export_model: <out: string, dynamic_axes: void[] = [], target: string = 'onnxruntime-cpu'> (fn: F, example: E) => void!
+```
+
+Writes the ONNX model of `fn` applied to arguments like `example` to the file `out`, at the
+backend's default opset. `example` is one argument of a one-parameter `fn`, or a tuple with
+one example per parameter; the function's graph is translated after the generic passes, and a
+node the backend cannot lower is refused. `out`, `dynamic_axes` and `target` are `with`
+parameters because they are runtime values: `dynamic_axes` names the axes of the tensor inputs
+that are left unknown in the model (which is what lets one model run at several shapes), and
+`target` names the runtime whose capability data decides whether a node this backend lowers is
+one that runtime has (`'none'` switches the check off).
+
+- With effects: writes a file and reads the function's graph.
+- Failure: error value `ExportUnsupported` when `fn` is not a function, when the graph cannot be translated (a call that remains, an operator without an ONNX lowering, a dtype or shape the exporter cannot name), or when the target runtime rejects a node; error value `IOError` when the model cannot be written.
+- Example (a fragment, not compiled): `export_model<out: "/tmp/model.onnx">(fn, example)`
+- Example (a fragment, not compiled): `export_model<out: "/tmp/model.onnx", dynamic_axes: [0]>(fn, example)`
+- Example (a fragment, not compiled): `export_model<out: "/tmp/model.onnx", target: "onnxruntime-cpu">(fn, example)`
+- Why it is not compiled: the call needs a function value and an example of the arguments that function takes, which the description introduces (the exporter reads the function's graph, so no value a fragment can write stands for it)

@@ -45,11 +45,11 @@ func valueOf(p: Program, function: string): Node {
 /// proof, whose steps name the instance each rewrite came from.
 export func counted(p: Program): Program! sync {
     return match p->run<[pair_sum_self], explain: true> {
-        case error e => { throw e }
+        case error e => { return e }
         case r => sync {
             println('rewrites', r.rewrites, 'rule', rule_name(pair_sum_self))
             return match explain_all(r) {
-                case error e => { throw e }
+                case error e => { return e }
                 case proof => sync {
                     println(proof)
                     return r.result
@@ -70,7 +70,7 @@ export func checked(p: Program): Program! sync {
 /// gave (the rule on `generic-rule-instantiation-set-and-predicate`, §3).
 export func why_no_instance(p: Program): Program! sync {
     return match p->run<[pair_sum_self], explain: true> {
-        case error e => { throw e }
+        case error e => { return e }
         case r => sync {
             return match why_not(r, pair_sum_self, valueOf(r.result, 'greet')) {
                 case error e => sync { println(e); return r.result }

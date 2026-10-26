@@ -713,7 +713,7 @@ subgraph "twice" {
 | `a & b`、`a \| b` | 普通的 `OPER`，两边都求值，可重载 | 建议写入 |
 | **`if x != null then A else B`**（`x` 是 `let` 或形参，条件就是这个比较本身） | 与 `match x { case null => B  case v => A }` 同一张图：`OPER :op/tag_is_null` → `BRCH`；臂 0（空）是 `B`；臂 1 的子图以 `OPER :op/tag_null_value` 开头，臂内 `x` 这个名字绑定到拆开后的值 | 建议写入 |
 | 值进入 `T?`/`T!` | 每层一个 `CAST` | 建议写入 |
-| `throw e` | 图的出口，与 `return` 相同 | 已有 |
+| `return e`（错误值） | 图的出口，与 `return` 相同 | 已有 |
 | `attempt(f, args…)` | `OPER :mark/isolate`：`Norm` 第 0 条是函数值，其余是实参；类型 `T!`。算子带 `callsGraphs` 标志 | 已有 |
 | `map`、`filter`、`reduce`、`foreach` | `OPER :mark/…`：`With` 第 0 条是元素函数的函数值，`Norm` 是被处理的值 | 建议写入 |
 | **`f<w>` 作为值（部分应用）** | 一个带捕获槽的函数值：一张 `role = Forwarder` 的图，它的普通形参是 `f` 剩下的参数，捕获是被绑定的 `w`，图体是一个把两者都传给 `f` 的 `FUNC`；使用处是 `DATA` 函数常量 + `FILL` 装入 `w` | 建议写入 |

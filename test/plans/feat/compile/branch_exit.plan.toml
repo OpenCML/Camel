@@ -2,7 +2,7 @@ id = "compile.branch_exit"
 order = 327
 tier = "fast"
 tags = ["feat", "compile", "warnings", "branches"]
-desc = "The warning for a return or throw in an arm of an if / match whose value nothing uses."
+desc = "The warning for a return in an arm of an if / match whose value nothing uses."
 
 # An arm is a graph of its own: `return` in an arm ends the arm and gives the value of the
 # branch (design principles 3.1, 3.2). When the branch is a statement that value goes nowhere
@@ -11,14 +11,14 @@ desc = "The warning for a return or throw in an arm of an if / match whose value
 
 [[tests]]
 name = "unused_arm_exit"
-desc = "Every return and throw in an arm of an unused if / match is warned about at the statement, with the branch as the second location; return null too (it used to be exempt). The program runs as before, alike on the four back ends."
+desc = "Every return in an arm of an unused if / match is warned about at the statement, with the branch as the second location; return null too (it used to be exempt). The program runs as before, alike on the four back ends."
 kind = "behavior"
 case = "../../../cases/compile/branch_exit/unused_arm_exit.cml"
 args = ["-E", "short", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stderr_contains = ["[Warn]: This 'throw' gives the value of the 'if' it is in, and nothing uses that value: it does not leave the function. [the value of this 'if' is not used at 12:5]", "This 'return' gives the value of the 'match' it is in", "[the value of this 'match' is not used at 24:5]", "name=SemanticDiag::ExitInUnusedBranch, code=0x03100090"]
+expect_stderr_contains = ["[Warn]: This 'return' gives the value of the 'if' it is in, and nothing uses that value: it does not leave the function. [the value of this 'if' is not used at 12:5]", "This 'return' gives the value of the 'match' it is in", "[the value of this 'match' is not used at 24:5]", "name=SemanticDiag::ExitInUnusedBranch, code=0x03100090"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 verify_script = """
 ({ input, assert }) => {
@@ -32,7 +32,7 @@ const want = [
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 const at = [...input.stderr.matchAll(/unused_arm_exit[.]cml:([0-9]+):([0-9]+): .Warn/g)].map(m => m[1] + ':' + m[2])
-const expected = '12:27 12:89 18:21 18:39 25:21 26:25 27:21 36:25 36:43 39:9 48:11 59:9'
+const expected = '12:27 12:90 18:21 18:39 25:21 26:25 27:21 36:25 36:43 39:9 48:11 59:9'
 assert(at.join(' ') === expected, `warned at: ${at.join(' ')}`)
 }
 """

@@ -33,10 +33,10 @@ export func measure(p: Program): Program! sync {
 /// The two applications see the same program, so the record is the only difference between them.
 func one_pair(p: Program): Program! sync {
     return match p->run<[int_add_zero, int_mul_one]> {
-        case error e => { throw e }
+        case error e => { return e }
         case off => sync {
             match p->run<[int_add_zero, int_mul_one], explain: true> {
-                case error e => { throw e }
+                case error e => { return e }
                 case on => sync {
                     println(
                         'bench',
@@ -58,7 +58,7 @@ func one_pair(p: Program): Program! sync {
 /// Measures the two modes on the same program and leaves the program as it was.
 export func compare(p: Program): Program! sync {
     return match one_pair(p) {
-        case error e => { throw e }
+        case error e => { return e }
         case done => done
     }
 }

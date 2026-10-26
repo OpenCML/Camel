@@ -268,9 +268,9 @@ const std::vector<oper_group_ptr_t> &getCollectionOperatorGroups() {
             {{":coll/has",
               keyed(
                   1,
-                  "<key: K> (c: Map<K, V> | Set<K>) => bool",
+                  "<key: K> (c: Map<K, V>) => bool",
                   [=](Type *coll, const type_vec_t &config) -> optional<Type *> {
-                      return boolIf(collWithKey(coll, config[0]) != nullptr);
+                      return boolIf(mapWithKey(coll, config[0]) != nullptr);
                   })}}),
         // `contains<x>(s)`, beside the array overload `contains<v>(xs)`.
         OperatorGroup::create(

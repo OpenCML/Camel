@@ -25,6 +25,7 @@ f08458d0aadece4e ok test/cases/parse/rules/generic_head.cml
 286337e9858a3f63 ok test/cases/parse/rules/values.cml
 fb04505767c1cb83 no test/cases/parse/rules/when_after_body.cml
 05dc986d26c5c8b2 ok test/cases/parse/rulings/doc_comment.cml
+e72ca76b129ff3a7 ok test/cases/parse/rulings/doc_comment_blank_line.cml
 40ed85c8acdca49e ok test/cases/parse/rulings/eager_logic.cml
 9fbee2e0b11e29af ok test/cases/parse/rulings/exponent.cml
 fc8c008e7651d6b1 ok test/cases/parse/rulings/if_statement.cml
@@ -282,7 +283,7 @@ f489da665059f75e no probes/probe_s159.cml
 f6bd0b03a31c2701 ok probes/probe_s175.cml
 66159855e4aacd20 no probes/probe_s176.cml
 35e65ffd027b8c07 ok probes/probe_s177.cml
-890afc2a876c4c8d ok probes/probe_s178.cml
+63cf87c2683661bc ok probes/probe_s178.cml
 bb7a89ec33612ac2 ok probes/probe_s179.cml
 4b32ad931a7ee939 ok probes/probe_s180.cml
 b8dc14154a713629 ok probes/probe_s181.cml

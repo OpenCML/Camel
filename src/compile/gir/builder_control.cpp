@@ -669,8 +669,8 @@ node_handle_t Builder::coerceTo(node_handle_t node, Type *target, const GCT::nod
             }
         }
     }
-    // An error value in a position of a `T!` is that type's failed form: the value `throw`
-    // gives (design principles 3.9). It is how `return if c then error(...) else v` is accepted
+    // An error value in a position of a `T!` is that type's failed form: the written failed arm
+    // (design principles 3.9). It is how `return if c then error(...) else v` is accepted
     // under a declared `T!` -- the position's type is what each arm takes, and the error arm is
     // the failing one. Without an expected type nothing joins the error value with the other
     // arm, and the branch is still refused. This is a rule of the position, like the literal
@@ -960,6 +960,34 @@ data_ptr_t Builder::compositeWithHolesInType(
         }
         return types;
     };
+    // A computed element is a value of its own type: it takes no type from the position, it is
+    // checked against the type the position gives that element (design principles 5.1). Failing
+    // that check is reported here, at the element, and not left to the place the literal stands
+    // in: the argument position, the declaration position and the receiver of `->` then report
+    // the same diagnostic, pointing at the computed element, instead of the call ending in "no
+    // matching function" because the literal keeps its own type.
+    const auto rejectHole = [&](const char *kind, size_t index, Type *have, Type *wanted) {
+        const GCT::Tree::LiteralElement *element = literalElementAt(written, index);
+        const bool writtenHere =
+            element != nullptr && element->origin != camel::source::kInvalidOriginId;
+        diags_->of(SemanticDiag::ElementTypeMismatch)
+            .atOrigin(writtenHere ? element->origin : origin->origin())
+            .commit(kind, have->toString(), wanted->toString());
+        throw BuildAbortException();
+    };
+    // Whether the literal wrote an element of its own: a literal whose elements are all computed
+    // has no element type either — nothing in it took the element type this position gives the
+    // elements it wrote — so it does not fit the position at all and stays a name without a
+    // matching function, as `pick([n])` does. Once it wrote one, the elements it wrote take this
+    // element type, and a computed element of another type is the mismatch reported at it.
+    const auto wroteAnElement = [](const std::vector<Type *> &holeTypes) {
+        for (Type *holeType : holeTypes) {
+            if (holeType == nullptr) {
+                return true;
+            }
+        }
+        return false;
+    };
     const auto holeTypeNamed = [&](const data_ptr_t &value) -> Type * {
         // The placeholder a computed element left in the literal: its name is the reference the
         // GCT gave it, and the node it stands for is the one holding that reference's value.
@@ -989,10 +1017,17 @@ data_ptr_t Builder::compositeWithHolesInType(
         }
         ArrayDataFactory factory;
         factory.setElemType(elemType);
+        const bool wrote = wroteAnElement(holeTypes);
         for (size_t i = 0; i < array->raw().size(); ++i) {
             if (holeTypes[i] != nullptr) {
                 if (!elemType->assignableFrom(holeTypes[i])) {
-                    return nullptr;
+                    if (!wrote) {
+                        return nullptr;
+                    }
+                    // The element the literal computed is not of the type this position gives
+                    // that element: the element is checked, not converted, and the mismatch is
+                    // reported at it (design principles 5.1).
+                    rejectHole("array", i, holeTypes[i], elemType);
                 }
                 factory.add(array->raw()[i]);
                 continue;
@@ -1072,11 +1107,20 @@ data_ptr_t Builder::compositeWithHolesInType(
             return nullptr;
         }
         TupleDataFactory factory;
+        const bool wrote = wroteAnElement(holeTypes);
         for (size_t i = 0; i < object->raw().size(); ++i) {
             Type *elemType = tupleType->typeAt(i);
             if (holeTypes[i] != nullptr) {
-                if (elemType == nullptr || !elemType->assignableFrom(holeTypes[i])) {
+                if (elemType == nullptr) {
                     return nullptr;
+                }
+                if (!elemType->assignableFrom(holeTypes[i])) {
+                    if (!wrote) {
+                        return nullptr;
+                    }
+                    // As at an array element: the computed element is checked against the type
+                    // this position gives it, and the mismatch is reported at it.
+                    rejectHole("tuple", i, holeTypes[i], elemType);
                 }
                 factory.add(object->raw()[i]);
                 continue;
@@ -1148,7 +1192,21 @@ void Builder::coerceArmExit(const arm_ptr_t &arm, Type *target, const GCT::node_
     draft.setInsertRegion(arm->region);
     node_handle_t output  = arm->output;
     node_handle_t coerced = coerceTo(output, target, origin);
-    ASSERT(coerced != nullptr, "A branch arm is joined only with a type its value enters.");
+    if (coerced == nullptr) {
+        // The caller asks with `entersImplicitly`, which is the check `coerceTo` makes last, so
+        // this is a compiler defect and not an error in the program: the assertion below is the
+        // debug build's, and a release build reports it at the branch instead of handing a null
+        // node to `normInputsOf` and the join (that was a segmentation fault).
+        ASSERT(coerced != nullptr, "A branch arm is joined only with a type its value enters.");
+        diags_->of(InternalDiag::UnknownInternalError)
+            .atOrigin(origin != nullptr ? origin->origin() : arm->origin)
+            .commit(
+                "the value of a branch arm is not joined: the arm gives '" +
+                (exitType != nullptr ? exitType->toString() : std::string("?")) +
+                "' and the join takes '" + (target != nullptr ? target->toString() : std::string("?")) +
+                "', which the value does not enter");
+        throw BuildAbortException();
+    }
     if (normInputsOf(coerced).empty() && !ctrlInputsOf(output).empty()) {
         // A literal took the place of the output (`[]`): what the output waited for (the
         // statements of a sync arm) is still waited for.
@@ -1161,6 +1219,57 @@ void Builder::coerceArmExit(const arm_ptr_t &arm, Type *target, const GCT::node_
     arm->output = coerced;
     arm->value  = coerced;
     arm->type   = target;
+}
+
+bool Builder::branchTakesNoValue(const GCT::node_ptr_t &gct) const {
+    // A `return` in a function declared `: void`, and the tail of such a body, stand in a
+    // position whose type is `void`: nothing takes what the branch gives there (design
+    // principles 3.7, and the ruling on the arm of a branch at a position that takes no value).
+    if (expectedValueType_ != nullptr && expectedValueType_->code() == TypeCode::Void) {
+        return true;
+    }
+    // A branch written as a statement is the statement whose value the block drops
+    // (visitExecNode): the same position.
+    return gct != nullptr && unusedStatement_ == gct;
+}
+
+void Builder::readArmCellValue(const arm_ptr_t &arm) {
+    Type *type = arm->type;
+    if (type == nullptr || valueTypeOf(type) == type) {
+        return;
+    }
+    // A cell is not a value: an arm that gives one gives the value the cell holds, and the
+    // cell's type never reaches the join (the ruling on the cell-typed arm of a branch). The
+    // read takes the data edge every read has -- the version the last write made, or the cell
+    // itself before any write (`valueVersionOf`), and the cell itself for a write that gives
+    // the cell it wrote into (`__assn__`) -- and nothing else: it stands in the arm's region,
+    // behind the GATE an arm with statements hands its value on through, so the arm's own chain
+    // carries the order and the block's chain is not moved by a read that belongs to the arm
+    // (readVariable would make this read the block's last node).
+    node_handle_t cell = arm->output;
+    node_handle_t version{};
+    if (isVariable(cell)) {
+        version = valueVersionOf(cell);
+    }
+    runtime::GraphDraft &draft = arm->graph->draft();
+    const uint32_t outerRegion = draft.insertRegion();
+    draft.setInsertRegion(arm->region);
+    node_handle_t read = variableOperator(
+        camel::core::oper::VarGet, version != nullptr ? version : cell);
+    if (version == nullptr) {
+        // The write gave no version of the cell, so the cell is the read's data port and the
+        // write that must execute first is what a control input stands for (readVariableThrough,
+        // orderAfterLastWriter; design principles 3.5, F3).
+        if (auto modifier = modifierOf(cell); modifier.has_value()) {
+            if (sameGraph(*modifier, currGraph_) && linkCheek(*modifier, read)) {
+                linkNodes(LinkType::Ctrl, *modifier, read);
+            }
+        }
+    }
+    draft.setInsertRegion(outerRegion);
+    arm->output = read;
+    arm->value  = read;
+    arm->type   = valueTypeOf(type);
 }
 
 Type *Builder::declaredExitTypeHere() const {
@@ -1210,37 +1319,29 @@ Type *Builder::expectedExitTypeHere() const {
 }
 
 node_handle_t Builder::adaptExitValue(const GCT::node_ptr_t &gct, node_handle_t value) {
-    Type *declared   = declaredExitTypeHere();
-    Type *valueType  = valueTypeOf(nodeTypeOf(value));
-    const auto where = gct->origin() != 0 ? gct->origin() : gct->at(0)->origin();
-    if (gct->exitType() == ExitType::Throw) {
-        // `throw e`: the exit `return` is, with the failed form of the declared `T!` as its
-        // value (design principles 3.9). OPER __throw__ makes the failed value, the CAST
-        // gives it the declared type; both are the same object.
-        TupleType *fallible = asFallible(declared);
-        if (fallible == nullptr) {
-            diags_->of(SemanticDiag::ThrowOutsideFallible)
-                .atOrigin(where)
-                .commit(
-                    declared == nullptr
-                        ? "the function around it declares no return type"
-                        : "the function around it returns '" + declared->toString() + "'");
-            throw BuildAbortException();
+    Type *declared  = declaredExitTypeHere();
+    Type *valueType = valueTypeOf(nodeTypeOf(value));
+    if (valueType != nullptr && valueType->equals(errorType())) {
+        // An error value handed out by a function that declares a `T!` is that type's failed
+        // arm (design principles 3.9): `return error('DivByZero', '...')` fails with that
+        // error. This holds wherever the exit stands, an arm of a branch included -- there the
+        // arm's own position may be nothing at all (the branch is a statement whose value
+        // nothing uses), and the function's declaration is what the error value is read
+        // against. OPER __throw__ makes the failed value and the CAST gives it the declared
+        // type; both are the same object. A function that declares no `T!` leaves the value as
+        // it is, and the diagnostic for an exit that does not fit its position is the one the
+        // position gives.
+        if (TupleType *fallible = asFallible(declared); fallible != nullptr) {
+            node_handle_t failed =
+                applyTagOperator(camel::core::oper::TagThrow, bindTemporary(value), gct->at(0));
+            return fallible->equals(nodeTypeOf(failed)) ? failed
+                                                        : castNodeTo(failed, fallible, gct->at(0));
         }
-        // Design principles 3.9: `throw` takes an error value (made by `error(kind,
-        // message)` or bound by `case error e`), nothing else.
-        if (!valueType->equals(errorType())) {
-            diags_->of(SemanticDiag::ThrowNotAnError).atOrigin(where).commit(valueType->toString());
-            throw BuildAbortException();
-        }
-        node_handle_t thrown =
-            applyTagOperator(camel::core::oper::TagThrow, bindTemporary(value), gct->at(0));
-        return fallible->equals(nodeTypeOf(thrown)) ? thrown
-                                                    : castNodeTo(thrown, fallible, gct->at(0));
     }
-    // `return v` under a declared `T?` / `T!` puts `v` into that form: the counterpart of
-    // `throw`, and one of the positions where a value enters by itself (design principles
-    // 3.8; coerceTo). The declared type is also the name the value is used as: an unnamed
+    // `return v` under a declared `T?` / `T!` puts `v` into that form (design principles 3.8;
+    // coerceTo): it is the position a value enters by itself, and an error value written there
+    // becomes the failed arm of that `T!`. The declared type is also the name the value is used
+    // as: an unnamed
     // struct value in a declared named type is given that type here (a CAST that moves
     // nothing, or a copy when the fields are written in another order; design principles
     // 5.1, 5.2), so a named type is never erased to its shape. Applying the position's type
@@ -2349,6 +2450,13 @@ node_handle_t Builder::buildBranch(
                             last->caseType() == GCT::CaseType::Else && last->size() == 1 &&
                             last->at(0)->size() == 0;
     }
+    // A position that takes no value joins nothing: an `if` without `else` is one (`valueless`,
+    // `dropsArmValues`), and so is a branch at a `void` position or written as a statement whose
+    // value the block drops. One rule (design principles 3.7, and the ruling on the arm of a
+    // branch at a position that takes no value): the arms' effects happen, no value is joined,
+    // and what the arms give is dropped. It is known before the arms are added, and an `if` that
+    // does write an `else` does not undo it.
+    const bool joinsNoValue = dropsArmValues || branchTakesNoValue(gct);
 
     linkNodes(LinkType::Norm, condNode, brchNode);
     std::vector<arm_ptr_t> armList;
@@ -2361,12 +2469,19 @@ node_handle_t Builder::buildBranch(
         }
         bodyValueStatement_.erase(arm.get());
         armList.push_back(arm);
+        if (!joinsNoValue && !absentElse) {
+            // A position that takes a value reads a cell out before the arms are joined: an arm
+            // of `var T` joins as its `T` (design principles 3.8, and the ruling on the
+            // cell-typed arm). Nothing is read where the join takes no value.
+            readArmCellValue(arm);
+        }
         Type *exitType = arm->exitType();
 
-        if (absentElse) {
-            // Design principles 3.7: an `if` without `else` has no value. Its arm may be of
-            // any type and what the arm gives is dropped: the join takes nothing. The arm
-            // written is evaluated as any arm is; the one not written is an empty arm.
+        if (absentElse || joinsNoValue) {
+            // Design principles 3.7: an `if` without `else` has no value, and neither has a
+            // branch at a position that takes no value. Its arm may be of any type and what the
+            // arm gives is dropped: the join takes nothing. The arm written is evaluated as any
+            // arm is; the one not written is an empty arm.
             joinType = Type::Void();
             setNodeType(joinNode, joinType);
         } else if (joinType == nullptr) {
@@ -2474,7 +2589,7 @@ node_handle_t Builder::buildBranch(
         }
         addArm(subGraph);
     }
-    if (joinType != nullptr && !absentElse) {
+    if (joinType != nullptr && !absentElse && !joinsNoValue) {
         for (const arm_ptr_t &arm : armList) {
             Type *exitType = arm->exitType();
             if (exitType != nullptr && !joinType->assignableFrom(exitType) &&

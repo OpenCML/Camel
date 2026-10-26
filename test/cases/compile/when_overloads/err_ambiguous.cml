@@ -1,0 +1,16 @@
+module when_overloads_err_ambiguous
+
+with <fast: bool, wide: bool>
+func pick(x: int): string when fast {
+    return 'fast'
+}
+
+with <fast: bool, wide: bool>
+func pick(x: int): string when wide {
+    return 'wide'
+}
+
+func main(): int sync {
+    println(pick<true, true>(1))
+    return 0
+}

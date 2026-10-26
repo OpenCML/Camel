@@ -326,7 +326,6 @@ bool ParserImpl::startsStmt(TK kind) const {
     case TK::KwWith:
     case TK::KwExport:
     case TK::KwReturn:
-    case TK::KwThrow:
     case TK::KwYield:
     case TK::At:
     case TK::Hash:
@@ -461,7 +460,6 @@ void ParserImpl::parseStmt() {
     case TK::KwUsing:
         return parseUsingNamespaceDecl();
     case TK::KwReturn:
-    case TK::KwThrow:
     case TK::KwYield:
         return parseRetStmt();
     case TK::KwFunc:
@@ -678,7 +676,7 @@ void ParserImpl::parseExportDecl() {
     if (cur_ == TK::LBrace) {
         parseBracketedIdents(TK::RBrace, NK::BracedIdents);
     } else if (cur_ == TK::KwLet || cur_ == TK::KwVar) {
-        parseDataDecl();
+        parseDataDecl(true);
     } else {
         parseTypeDecl();
     }
@@ -1086,10 +1084,12 @@ void ParserImpl::parseOperatorName() {
 /// dataDecl : ('let' | 'var') carrier (':' typeList)? '=' dataList
 ///          | 'let' '_' (':' typeList)? '=' dataList
 /// carrier  : identList | parentIdents
+/// After `export`, `let name: type` with no `=` is also a declaration: the value a C++ module
+/// registers under the name (design principles 6.4). Anywhere else the `=` is required.
 /// A destructuring declaration binds the fields of a struct or the elements of an array, and
 /// neither is in the language: `let {x, y} = p` and `let [x, y] = xs` are syntax errors. A
 /// parenthesized carrier (`let (a, b) = t`) destructures a tuple, which the language has.
-void ParserImpl::parseDataDecl() {
+void ParserImpl::parseDataDecl(bool exported) {
     const size_t m   = mark();
     const bool isLet = cur_ == TK::KwLet;
     bump();
@@ -1128,6 +1128,11 @@ void ParserImpl::parseDataDecl() {
         parseTypeList(TK::Eof);
     }
     if (!eat(TK::Assign)) {
+        if (exported && isLet && typed && !panic_) {
+            // `export let inf: float`: a value the C++ module of the declaration supplies, as a
+            // function without a body stands for its operator (design principles 6.4).
+            return close(m, NK::DataDecl);
+        }
         if (!typed && !panic_) {
             error(SyntaxError::Kind::MissingInitializer, {e(TK::Colon), e(TK::Assign)}, prev_);
         } else {
@@ -1213,7 +1218,7 @@ bool ParserImpl::atResourceDecl(uint32_t n) const {
     return atWord(n, "resource") && peek(n + 1) == TK::Identifier;
 }
 
-/// retStmt : ('return' | 'throw' | 'yield') dataList
+/// retStmt : ('return' | 'yield') dataList
 void ParserImpl::parseRetStmt() {
     const size_t m = mark();
     bump();

@@ -41,7 +41,7 @@ func main(): int sync {
     let duration = now() - start
 
     'First 4 chunk hashes:'->println
-    chunk_hashes->slice<0, 4>->println
+    chunk_hashes[0:4]->println
     'Final digest = {}'->format<final_digest>->println
     'Chunk hashing completed in {:.2f} seconds'->format<duration>->println
     return 0

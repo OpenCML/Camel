@@ -1,6 +1,6 @@
 // Every keyword of the lexer in a position the parser accepts it in, where there is one.
-// `inner`, `outer`, `atomic`, `shared`, `is`, `of`, `keyof`, `try`, `catch` and `finally` are
-// not keywords: they are ordinary names, so they appear
+// `inner`, `outer`, `atomic`, `shared`, `is`, `of`, `keyof`, `try`, `catch`, `finally` and
+// `throw` are not keywords: they are ordinary names, so they appear
 // below as values.
 module keywords
 
@@ -48,7 +48,8 @@ func control(dir: string, xs: int[]): int! {
     let try = 11
     let catch = 12
     let finally = 13
-    throw 'failed'
+    let throw = 14
+    return error('Failed', 'failed')
 }
 
 func generic::<T>(x: T, y: T, z: f32[..]): T {

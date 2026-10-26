@@ -1,9 +1,0 @@
-// A module importing itself is not loaded a second time: an error of it is reported once.
-module self_entry_error
-
-import self_entry_error
-
-func main(): int sync {
-    println(nothing_named_so)
-    return 0
-}

@@ -26,6 +26,7 @@
 | 映射、集合 | `Map<K, V>`、`Set<T>` | 见 3.6 |
 | 枚举 | `Shape`，`Option<int>` | 见 3.5 |
 | 无值 | `void` | 没有返回值的函数的返回类型；它唯一的值打印为 `null` |
+| 底类型 | `never` | 没有值的类型：`fail<'Kind'>(message)` 与 `exit(code)` 的类型是它，可以用在任何位置（赋给别的类型、进入分支的合并、被泛型推断），但没有表达式给出它的值 |
 | 模块类型 | 由模块引入的类型名（如 `Json`）；数值数组类型不是模块类型（过渡期的 `Tensor` 名字已删除，写它是未知名字） | 由该模块引入；名字与尖括号里的实参由该类型自己解释，表示由该模块定义 |
 
 没有 `any` 类型：编译之后每个值都有确定的类型（设计原则 5.10）。在任何类型位置写 `any`，与写别的未知类型名一样，是编译期错误 `SemanticDiag::UnresolvedTypeReference`；接受多种类型的形参用类型参数（见 [7.5](07_statements.md#75-泛型函数)），不同类型的值并排放用元组或结构体。
@@ -110,16 +111,15 @@ func main(): int sync {
   | 写法 | 结果 |
   |---|---|
   | `len(xs)` | 长度 |
-  | `head(xs)`、`tail(xs)` | 第一个元素（空数组是故障 `RuntimeDiag::IndexOutOfRange`，与 `xs[0]` 相同）；去掉第一个元素的数组 |
   | `last(xs)` | 最后一个元素（空数组是故障 `RuntimeDiag::IndexOutOfRange`）。负数下标不是从尾部数，所以取末尾元素用它，不写 `xs[-1]` |
   | `a..b` | 区间 `[a, a+1, ..., b-1]`；`a >= b` 时为空。带步长写 `range(a, b, step)` |
-  | `xs->slice<a, b>` | 下标 `a` 到 `b-1` 的新数组。`a`、`b` 是 0 到长度之间的位置；越出数组（包括负数）是故障 `RuntimeDiag::SliceOutOfRange`，与下标越界一致。两端都在数组内而 `b < a` 时结果为空。要“至多取 n 个”用 `array` 模块的 `take`、`drop`，它们按定义截断 |
+  | `xs[a:b]` | 下标 `a` 到 `b-1` 的新数组。`a`、`b` 是 0 到长度之间的位置；越出数组（包括负数）是故障 `RuntimeDiag::SliceOutOfRange`，与下标越界一致。两端都在数组内而 `b < a` 时结果为空。要“至多取 n 个”用 `array` 模块的 `take`、`drop`，它们按定义截断 |
   | `concat(xs, ys)` | 连接成新数组 |
   | `xs->contains<v>` | 是否含有等于 `v` 的元素；“等于”就是元素类型的 `==`（数组、元组、结构体按内容比较，见 [6.7.3](06_expressions.md)） |
   | `zip(xs, ys)` | `(x, y)` 元组的数组；三个或更多数组得到相应元数的元组（`zip(xs, ys, zs)`）；长度必须相同 |
   | `strs->join<sep>` | 把 `string[]` 连成一个字符串 |
   | `map`、`filter`、`reduce`、`foreach` | 见 [6.10](06_expressions.md#610-高阶算子) |
-  | `xs->append<v>`、`xs->extend<ys>` | 在末尾加上 `v`（或 `ys` 的各个元素）的**新数组**，`xs` 不变；要追加到变量上写 `xs = xs->append<v>`（见 3.7） |
+  | `xs->append<v>` | 在末尾加上 `v` 的**新数组**，`xs` 不变；要追加到变量上写 `xs = xs->append<v>`（见 3.7）；连接两个数组用 `concat(xs, ys)` |
 
 - 更多的数组函数在 `array` 模块里，使用前要导入（`import { reverse, sum } from array`）：`reverse`、`take`、`drop`、`enumerate`、`flatten`、`unique`、`index_of`、`find`、`any`、`all`、`count`、`sum`、`min`、`max`、`flat_map`、`sort_by`、`zip_with`，见 [标准库参考](../stdlib-reference.md)。
 
@@ -226,7 +226,7 @@ func positive(x: int): int? {
 }
 
 func safe_div(a: int, b: int): int! {
-    return if b == 0 then { throw error('DivByZero', 'the divisor is zero') } else a / b
+    return if b == 0 then { return error('DivByZero', 'the divisor is zero') } else a / b
 }
 
 func main(): int sync {
@@ -253,7 +253,7 @@ error DivByZero: the divisor is zero
   - 带类型的声明 `let x: T? = v`；
   - 数组的元素：`let xs: (int?)[] = [1, null, 3]`；没有写类型时，元素里有 `null` 的数组字面量是 `T?` 的数组（`[1, null, 3]` 是 `(int?)[]`）；
   - 分支的两条臂：一条臂是 `T`、另一条是 `null` 或 `T?` 时，分支是 `T?`（`if c then 1 else null` 是 `int?`）；`T` 与 `T!` 同理。一条臂根本没有值（`void`：调用了不返回值的函数、空块）时按 `null` 算：分支是 `T?`，那条臂给出 `null`；
-  - 返回类型声明为 `T?`/`T!` 的函数里的 `return v`（`throw e` 给出错误）。
+  - 返回类型声明为 `T?`/`T!` 的函数里的 `return v`（`return e` 交出一个错误值）。
 
   也可以显式写 `v as T?`。可以一次进入多层：`let x: int?! = 5`。图上每装入一层是一个转换节点（`CAST`），自动装入就是由编译器补上这个节点，与手写 `as` 得到的图相同。
 - **反方向永不自动。** `T?`、`T!` 要当 `T` 用，必须拆开；`int?` 也不会变成 `float?`，数值之间仍不做隐式转换。内建算子（`append`、`println` 等）的实参不在此列：它们的形参类型由 C++ 的类型规则从实参算出，没有可供装入的目标类型，需要时写 `as`。
@@ -264,6 +264,8 @@ error DivByZero: the divisor is zero
 - 内建的可能出错的函数：`parse_int(s)`、`parse_float(s)`，`fs` 模块的 `read_text(path)`、`remove(path)`、`remove_dir(path)`，`json` 模块的 `decode`、`decode_as`。`error(kind, message)` 构造错误值并记下调用处的位置。
 
 **错误与故障是两回事。** 只有声明为返回 `T!` 的操作才产生错误值。除零、下标越界、递归过深是故障：程序带位置终止，`!!` 接不住它（见 [4.6](04_execution_model.md#46-故障退出与资源上限)）。
+
+要在函数体里主动产生一个故障，写 `fail<'Kind'>('消息')`：它是类型 `never` 的表达式（没有值），故障的种类由尖括号里的名字给出，`attempt` 能把它隔离成错误值。
 
 **当前实现的行为，尚待确定**：`match` 对这两种值恰好两个分支；它们可以打印，但除了 `T?` 与 `null` 比较之外不能用 `==` 比较。
 
@@ -351,7 +353,7 @@ func main(): int sync {
 | `get_or<k, d>(m)` | `V` | 查不到时为 `d` |
 | `put<k, v>(m)` | `Map<K, V>` | 键已存在则替换 |
 | `remove<k>(m)`、`remove<x>(s)` | 同类型 | 不存在时内容不变 |
-| `has<k>(m)`、`has<x>(s)`、`contains<x>(s)` | `bool` | |
+| `has<k>(m)`、`contains<x>(s)` | `bool` | |
 | `len(m)`、`len(s)` | `int` | |
 | `keys(m)`、`values(m)`、`items(m)` | `K[]`、`V[]`、`(K, V)[]` | 按键的顺序 |
 | `merge(m1, m2)` | `Map<K, V>` | 键相同时取 `m2` 的 |

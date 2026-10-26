@@ -430,7 +430,7 @@ case = "../../../cases/modules/autodiff/pb_statics_gc.cml"
 args = ["--gc", "generational", "${case}", "${run_nvm}"]
 envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
-expect_stdout_contains = ["loss=0.3579342999437358 gqw=0.19846567139029503 gkw=0.0764192040078342", "loss2=0.3579342999437358 gqw2=0.19846567139029503 gkw2=0.0764192040078342"]
+expect_stdout_contains = ["loss=0.35793429613113403 gqw=0.19846568 gkw=0.076419204", "loss2=0.35793429613113403 gqw2=0.19846568 gkw2=0.076419204"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
 
@@ -442,7 +442,7 @@ case = "../../../cases/modules/autodiff/pb_statics_gc.cml"
 args = ["--gc", "generational", "${case}", "${run_fvm}"]
 envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
-expect_stdout_contains = ["loss=0.3579342999437358 gqw=0.19846567139029503 gkw=0.0764192040078342", "loss2=0.3579342999437358 gqw2=0.19846567139029503 gkw2=0.0764192040078342"]
+expect_stdout_contains = ["loss=0.35793429613113403 gqw=0.19846568 gkw=0.076419204", "loss2=0.35793429613113403 gqw2=0.19846568 gkw2=0.076419204"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
 

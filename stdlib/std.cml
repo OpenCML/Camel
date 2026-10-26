@@ -11,7 +11,7 @@
 //
 //     camel m.cml std::opt safe_fp=true growth_budget=8192 std::fvm
 
-module std
+import { is_function } from types
 
 // -----------------------------------------------------------------------------
 // The program itself
@@ -34,10 +34,12 @@ export func gir::<F>(f: F): F! when is_function::<F>()
 /// Prints the rich GIR of the graph, styled for Graphviz, and consumes it.
 export func rgir::<F>(f: F): F! when is_function::<F>()
 
-/// Prints the compact GIR with the boundary roles of every node and consumes the graph.
+/// Prints the compact GIR with the regions (the arms, bodies and areas of a node) drawn as
+/// clusters, and consumes the graph.
 export func gir_regions::<F>(f: F): F! when is_function::<F>()
 
-/// Prints the rich GIR with the boundary roles of every node and consumes the graph.
+/// Prints the rich GIR, styled for Graphviz, with the regions drawn as clusters, and consumes the
+/// graph.
 export func rgir_regions::<F>(f: F): F! when is_function::<F>()
 
 /// Prints the versioned JSON GIR of the graph and consumes it.
@@ -74,16 +76,16 @@ with <
     top: int = 24,
     /// Report the element-wise loops that run on the host, and why they did not go to a device.
     hints: bool = true,
-    /// Also write the report as one JSON object to this file.
-    json: string = "",
+    /// Also write the report as one JSON object to this file; null writes none.
+    json: string? = null,
     /// Print the text report when the run ends.
     report: bool = true,
     /// The allocator's statistics at exit: 1 one line, 2 also one line per collection.
     gc_stats: int = 0,
     /// The type storage's statistics at exit.
     type_stats: bool = false,
-    /// Append one JSON line per executed effectful operator to this file.
-    effect_trace: string = ""
+    /// Append one JSON line per executed effectful operator to this file; null writes none.
+    effect_trace: string? = null
 >
 export func profile::<F>(f: F): F! when is_function::<F>()
 
@@ -161,8 +163,8 @@ export func nvm::<F>(f: F): F! when is_function::<F>()
 
 /// Executes the program on the bytecode interpreter.
 with <
-    /// Append per-graph bytecode and execution counts of the run to this file.
-    stats: string = ""
+    /// Append per-graph bytecode and execution counts of the run to this file; null writes none.
+    stats: string? = null
 >
 export func fvm::<F>(f: F): F! when is_function::<F>()
 
@@ -175,8 +177,8 @@ export func linked_bytecode::<F>(f: F): F! when is_function::<F>()
 
 /// Executes the program on the bytecode interpreter with on-demand native code.
 with <
-    /// Append per-graph bytecode and execution counts of the run to this file.
-    stats: string = "",
+    /// Append per-graph bytecode and execution counts of the run to this file; null writes none.
+    stats: string? = null,
     /// Calls from one call site before a graph is compiled; 0 compiles at the first call.
     hot_threshold: int = 1
 >
@@ -286,7 +288,7 @@ export func algebra::<F>(f: F): F! when is_function::<F>()
 with <
     /// The cost model: 'nodes' (every node costs one), 'weighted' (a division costs more than a
     /// product, a product more than a sum), or one a module registered.
-    cost: string = "weighted"
+    cost: string = 'weighted'
 >
 export func extract::<F>(f: F): F! when is_function::<F>()
 
@@ -316,8 +318,7 @@ export func dce::<F>(f: F): F! when is_function::<F>()
 
 /// The transitive reduction over ordering edges (docs/design/effects/edges.cn.md 5.4): an order
 /// edge A -> C goes away when a path of order edges already orders the two ends. A sync block's
-/// statements are one chain and carry no redundancy. Control edges are still reduced until that
-/// edge kind is gone from the graph.
+/// statements are one chain and carry no redundancy.
 export func order::<F>(f: F): F! when is_function::<F>()
 }
 

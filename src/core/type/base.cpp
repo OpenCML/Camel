@@ -74,6 +74,8 @@ string typeCodeToString(TypeCode code) {
         return "bool";
     case TypeCode::Void:
         return "void";
+    case TypeCode::Never:
+        return "never";
     case TypeCode::String:
         return "string";
     case TypeCode::Complex64:
@@ -269,6 +271,13 @@ CastSafety Type::castSafetyFrom(Type *sourceType) const {
     if (equals(sourceType))
         return CastSafety::Safe;
 
+    // A value of the bottom type `never` never exists (design principles 3.9), and it is
+    // assignable to every type: entering a position of any type is nothing to convert, so the
+    // conversion is safe wherever the value is not (there is no value to lose).
+    if (sourceType->code() == TypeCode::Never) {
+        return CastSafety::Safe;
+    }
+
     // Every other conversion between these types is refused (design principles 5.1): `as` is the
     // checked conversion of module types, shapes and the forms `T?` / `T!`, and never a
     // conversion between numbers, between a number and a bool or a text, or from a text. A number
@@ -305,6 +314,12 @@ bool Type::assignableFrom(Type *from) const {
     // A type variable stands for a type that is not known yet: it only matches itself.
     if (to->code_ == TypeCode::TypeVar || from->code_ == TypeCode::TypeVar)
         return to->equals(from);
+
+    // The bottom type `never` (design principles 3.9): the expression it is the type of gives
+    // the function no value, so there is nothing that could be of a type the target does not
+    // take, and it is assignable to every type.
+    if (from->code_ == TypeCode::Never)
+        return true;
 
     // `void` is a type of its own: it takes `void` and nothing else, and is taken by nothing but
     // itself. A function whose result is discarded (`=> void`) is the one place that takes any
@@ -365,6 +380,7 @@ Type *Type::Float() { return Type::Float64(); }
 Type *Type::Bool() { return Type::create(TypeCode::Bool); }
 
 Type *Type::Void() { return Type::create(TypeCode::Void); }
+Type *Type::Never() { return Type::create(TypeCode::Never); }
 
 Type *Type::String() { return Type::create(TypeCode::String); }
 

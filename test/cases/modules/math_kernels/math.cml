@@ -1,12 +1,15 @@
 /**
  * The kernels of `math` the module of the draft declares (docs/handover/stdlib/math.cml): `sqrt` in
  * f64 and the shifts with their count in angle brackets. This file is named `math`, so it may
- * declare operators of the `math` protocol; it declares each as the module does and runs them. It
- * is run by its path from the root (the plan names it), because `import math` there is the
- * standard library's: an absolute path makes the file its own `math`.
+ * declare operators of the `math` protocol; it declares each as the module does and runs them.
+ * `import math` here is the standard library's, never this file.
  */
 import { is_same } from types
-import { inf } from math
+import { pi } from math
+
+/// Values the C++ module registers, declared without a right side (design principles 6.4).
+export let inf: float
+export let nan: float
 
 #op('math:sqrt_d')
 func sqrt_kernel(x: float): float
@@ -27,7 +30,7 @@ func shr::<T>(x: T): T when is_same::<T, int>()
 func main(): int sync {
     let zero = 0.0
     println(sqrt_kernel(9.0), sqrt_kernel(2.25), sqrt_kernel(zero), sqrt_kernel(-zero))
-    println(sqrt_kernel(inf), sqrt_kernel(-4.0))
+    println(sqrt_kernel(inf), sqrt_kernel(-4.0), nan == nan, inf > 1.0e308)
     let one = 1
     println(one->shl<4>, i32(one)->shl<31>, (-8)->shr<1>, 256->shr<4>, i32(-8)->shr<1>)
     println(one->shl<63>, 1->shl<0>, (-1)->shr<63>)

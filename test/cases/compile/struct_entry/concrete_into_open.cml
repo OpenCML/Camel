@@ -1,0 +1,33 @@
+/**
+ * A struct whose fields have concrete array types enters a parameter whose struct type writes the
+ * open ones: the entry goes by field, through the one relation (`entersImplicitly`), so
+ * `{ w: f32[784, 10], b: f32[10] }` is an `Mlp { w: f32[..], b: f32[..] }` (design principles 5.2).
+ * It does the same for a named struct and for an unnamed one, in a binding, a call and a return.
+ */
+module struct_entry_concrete_into_open
+
+import { ones } from tensor
+
+type Mlp = { w: f32[..], b: f32[..] }
+
+func total(m: Mlp): float {
+    return float(m.w[0, 0]) + float(m.b[0])
+}
+
+func open(p: { w: f32[..], b: f32[..] }): float {
+    return float(p.w[0, 0])
+}
+
+func make(): Mlp {
+    return { w: ones([784, 10]), b: ones([10]) }
+}
+
+func main(): int sync {
+    let w = ones([784, 10])
+    let b = ones([10])
+    let concrete = { w: w, b: b }
+    println(total(concrete), open(concrete), total(make()))
+    let m: Mlp = concrete
+    println(total(m))
+    return 0
+}

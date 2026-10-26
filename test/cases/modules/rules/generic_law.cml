@@ -40,7 +40,7 @@ func valueOf(p: Program, function: string): Node {
 /// Prints the proof of the run, so that every step names the instance that made it.
 func proofOf(r: Run<Program>): Program! sync {
     return match explain_all(r) {
-        case error e => { throw e }
+        case error e => { return e }
         case proof => sync {
             println(proof)
             return r.result
@@ -52,7 +52,7 @@ func proofOf(r: Run<Program>): Program! sync {
 /// proof. The value is the one the module wrote, not a part of any program.
 export func counted(p: Program): Program! sync {
     return match p->run<[add_zero, add_minus_zero], explain: true> {
-        case error e => { throw e }
+        case error e => { return e }
         case r => sync {
             println('rewrites', r.rewrites, 'rule', rule_name(add_zero))
             return proofOf(r)
@@ -64,7 +64,7 @@ export func counted(p: Program): Program! sync {
 /// instance, named with its type.
 export func why_i32(p: Program): Program! sync {
     return match p->run<[add_zero, add_minus_zero], explain: true> {
-        case error e => { throw e }
+        case error e => { return e }
         case r => sync {
             return match why_not(r, add_zero, portOf(r.result, 'i32_zero')) {
                 case error e => sync { println(e); return r.result }
@@ -81,7 +81,7 @@ export func why_i32(p: Program): Program! sync {
 /// `generic-rule-instantiation-set-and-predicate`, §3).
 export func why_no_instance(p: Program): Program! sync {
     return match p->run<[add_zero, add_minus_zero], explain: true> {
-        case error e => { throw e }
+        case error e => { return e }
         case r => sync {
             return match why_not(r, add_minus_zero, valueOf(r.result, 'greet')) {
                 case error e => sync { println(e); return r.result }
@@ -96,7 +96,7 @@ export func why_no_instance(p: Program): Program! sync {
 /// right value is told which instance ran.
 export func why_float(p: Program): Program! sync {
     return match p->run<[add_zero, add_minus_zero], explain: true> {
-        case error e => { throw e }
+        case error e => { return e }
         case r => sync {
             return match why_not(r, add_zero, portOf(r.result, 'f64_minus_zero')) {
                 case error e => sync { println(e); return r.result }
