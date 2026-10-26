@@ -104,7 +104,7 @@ backends = ["nvm", "fvm"]
 args = ["${case}", "${backend}"]
 expect_exit = 1
 expect_stdout_starts_with = "isolated: 3 -1\nsame: 3 true\n"
-expect_output_contains = ["RuntimeDiag::DivisionByZero", "attempt_holders.cml:43:15"]
+expect_output_contains = ["RuntimeDiag::DivisionByZero", "attempt_holders.cml:42:15"]
 timeout_ms = 20000
 
 [[tests]]
