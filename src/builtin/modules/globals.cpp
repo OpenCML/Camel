@@ -16,6 +16,7 @@
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/enum.h"
 #include "camel/core/type/resolver.h"
+#include "camel/core/type/text.h"
 #include "camel/core/type/typevar.h"
 
 #include "camel/utils/assert.h"
@@ -2758,7 +2759,11 @@ std::make_shared<StaticCheckedResolver>(
                                 const auto &funcType = tt::as_ptr<FunctionType>(with[0]);
                                 if (funcType->normTypesCount() != 1)
                                     return nullopt;
-                                if (!funcType->normTypeAt(0)->equals(elemType))
+                                // An element stands at the callback's result, and the callback's
+                                // parameter stands at the element type: each takes the other
+                                // side's resources when its own clause is unwritten.
+                                if (!sameTypeWithUnwrittenResources(
+                                        funcType->normTypeAt(0), elemType))
                                     return nullopt;
                                 ASSERT(funcType->hasExitType(), "Function must have exit type");
                                 return ArrayType::create(funcType->exitType());
@@ -2785,9 +2790,12 @@ std::make_shared<StaticCheckedResolver>(
                             const auto &funcType = tt::as_ptr<FunctionType>(with[0]);
                             if (funcType->normTypesCount() != 1)
                                 return nullopt;
-                            if (!funcType->normTypeAt(0)->equals(elemType))
+                            // An element stands at the callback's result and the callback's
+                            // parameter: each takes the other side's resources when its own
+                            // clause is unwritten.
+                            if (!sameTypeWithUnwrittenResources(funcType->normTypeAt(0), elemType))
                                 return nullopt;
-                            if (!funcType->exitType()->equals(elemType))
+                            if (!sameTypeWithUnwrittenResources(elemType, funcType->exitType()))
                                 return nullopt;
                             return arrType;
                         }),
@@ -2813,7 +2821,10 @@ std::make_shared<StaticCheckedResolver>(
                             const auto &funcType = tt::as_ptr<FunctionType>(with[0]);
                             if (funcType->normTypesCount() != 1)
                                 return nullopt;
-                            if (!funcType->normTypeAt(0)->equals(arrType->elemType()))
+                            // An element stands at the predicate's parameter, which takes the
+                            // element's resources when its own clause is unwritten.
+                            if (!sameTypeWithUnwrittenResources(
+                                    funcType->normTypeAt(0), arrType->elemType()))
                                 return nullopt;
                             if (!funcType->hasExitType() ||
                                 !funcType->exitType()->equals(Type::Bool()))
@@ -2877,7 +2888,10 @@ std::make_shared<StaticCheckedResolver>(
                             const auto &funcType = tt::as_ptr<FunctionType>(with[0]);
                             if (funcType->normTypesCount() != 1)
                                 return nullopt;
-                            if (!funcType->normTypeAt(0)->equals(arrType->elemType()))
+                            // An element stands at the callback's parameter, which takes the
+                            // element's resources when its own clause is unwritten.
+                            if (!sameTypeWithUnwrittenResources(
+                                    funcType->normTypeAt(0), arrType->elemType()))
                                 return nullopt;
                             return Type::Void();
                         }),
@@ -2910,7 +2924,11 @@ std::make_shared<StaticCheckedResolver>(
                             const auto &lhsReturnType = lhsFuncType->exitType();
                             if (rhsFuncType->normTypesCount() != 1)
                                 return nullopt;
-                            if (!rhsFuncType->normTypeAt(0)->equals(lhsReturnType))
+                            // The left rule's result stands at the parameter the right rule
+                            // declares for it, which takes the value's resources when its own
+                            // clause is unwritten.
+                            if (!sameTypeWithUnwrittenResources(
+                                    rhsFuncType->normTypeAt(0), lhsReturnType))
                                 return nullopt;
                             return rhsFuncType->exitType();
                         }),
