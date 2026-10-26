@@ -2,7 +2,7 @@
 
 2026-10-26 · lane `generics`，分支 `lane/graph-values`（基于 fsh-dev `7cb99a8a6`）
 
-> **更新（同日）**：F1 已按下文的修法修好，原来九项 `known_fail` 全部转绿，标记已去掉；附录里 `saturate` 的内部错误也已找到原因并修好。修好之后又暴露出另一个错误，见附录二。
+> **更新（同日）**：F1 已按下文的修法修好，原来九项 `known_fail` 全部转绿，标记已去掉；附录里 `saturate` 的内部错误也已找到原因并修好。修好之后又暴露出另一个错误，见附录二，也已修好。
 
 审计对象是 9.1 新增的两条规则：
 
@@ -167,28 +167,30 @@ GCGraphBuildAccess::addFlags(graph, kGraphFlagGatesDissolved);
 - 用 Camel 的 `saturate` 加 `extract`，nvm、fvm；
 - 走 `std::opt::saturate`。
 
-## 附录二：`std::opt::saturate` 在含 `loop` 的库函数上出错（未修，另行处理）
+## 附录二：`std::opt::saturate` 在含 `loop` 的函数上出错（已修）
 
-**现象**：任何导入了 `str` 的程序，跑 `std::opt::saturate std::nvm` 都报：
+**现象**：任何导入了 `str` 的程序，跑 `std::opt::saturate` 再执行都报：
 
 ```text
-internal error: Runtime graph 'str::cut' has region 1 with a port the graph does not have.
+Runtime graph 'str::cut' has region 1 with a port the graph does not have.
 ```
 
-**最小程序**：
+不需要 `str` 也能复现，只要同时满足下面三个条件：
 
-```camel
-module t
-import { ends_with } from str
+- 一个 `while` 循环有两个状态，条件只读其中一个，例如 `loop a = 0, b = 0 while b < n do (a + 1, b + 1)`；
+- 图里有若干种写法的类，例如两个常量 `0`。有类，提取才会运行；
+- 状态类型相同与否无关，条件读到全部状态（如 `a + b < n`）时不出错。
 
-func main(): int sync {
-    println("abc"->ends_with<"bc">)
-    return 0
-}
-```
+**原因**：问题在提取，不在循环区域的表示。
 
-**观察**
+- `DraftWritings::extract`（`src/runtime/writings.cpp`）保留的东西有：图自己的端口、入口、出口、结果，以及每个区域的结果。
+- 它没有保留区域的端口。
+- 条件区域里那个没人读的状态端口被当成死节点擦掉了。
+- 而控制区域（臂、循环条件、循环体）进入时带着全部端口，图的校验也要求全部端口都在（`src/runtime/graph.cpp:324-327`）。
 
-- 把上面的区域修法临时关掉、重新构建，同样出错，说明这是另一个早已存在的缺陷。
-- `str::cut` 里有一个 `loop`。错误出在饱和或提取之后的图校验，涉及循环区域的端口。
-- 原因比这次的任务深，没有修，只记录在这里。
+**修法**：提取时保留每个控制区域的全部端口。注解区域照旧，可以没有被改写去掉的端口。
+
+**测试**：`rules.plan.toml` 里
+
+- `opt_saturate_loop_with_an_unread_state`：nvm、fvm，用例 `test/cases/modules/rules/saturate_loop_unread_state.cml`；
+- `opt_saturate_program_importing_str`：用例 `saturate_imports_str.cml`。
