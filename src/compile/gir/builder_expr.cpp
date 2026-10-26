@@ -1466,6 +1466,29 @@ void Builder::collapseNonEscapingVariableReads() {
             if (version == cellId || draft.header(version) == nullptr) {
                 continue;
             }
+            // A GATE that waits on this read keeps that wait: the read is the statement the block's
+            // value is handed out after, so folding it away would take the wait with it and leave
+            // the GATE waiting for nothing, which the commit refuses (src/runtime/graph.cpp, the
+            // GATE check; docs/design/effects/edges.cn.md 5.3 gives the GATE the statement before
+            // it as its wait). The read stays, and it reads what it read before.
+            bool waitedOnByGate = false;
+            for (const auto &users :
+                 {draft.ctrlUsersOf(readId), draft.syncUsersOf(readId)}) {
+                for (camel::runtime::gc_node_ref_t user : users) {
+                    const camel::runtime::DraftNodeHeader *userHeader = draft.header(user);
+                    if (userHeader != nullptr &&
+                        userHeader->kind == camel::runtime::GCNodeKind::Gate) {
+                        waitedOnByGate = true;
+                        break;
+                    }
+                }
+                if (waitedOnByGate) {
+                    break;
+                }
+            }
+            if (waitedOnByGate) {
+                continue;
+            }
             // The read's users take the version's value; the read node is not needed any more.
             draft.replaceAllValueUses(readId, version);
             draft.eraseNode(readId);
