@@ -141,11 +141,6 @@ const EXCERPTS = [
 // used, with its reason, so the list can be reviewed from the output without reading this file.
 const PENDING = [
     {
-        file: 'docs/reference/camel-for-ai.md',
-        key: 'fdcec12c6bd9c098',
-        reason: 'streams: `yield` and the stream return type are ruled, and this tree cannot compile them yet',
-    },
-    {
         file: 'docs/tutorial/17_teaching_a_law.cn.md',
         key: '5ffb278a87e871fa',
         reason:
