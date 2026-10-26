@@ -1,0 +1,26 @@
+/**
+ * A stream read in one arm of a branch and again in the other is one consumer per path (design
+ * principles 5.4), so the two reads are legal together. When the second arm is given up because of
+ * a mistake in it, the mistake is what the writer has to see: the report must not turn the two
+ * legal reads into a second consumer, which would name the wrong line and hide the real error.
+ */
+module stream_arm_error_keeps_its_diagnosis
+
+func count(n: int): int.. {
+    return step(n)
+}
+
+func step(n: int): () => (int, int..)? {
+    return () => if n > 0 then (n, step(n - 1)) else null
+}
+
+func main(): int sync {
+    let s = count(2)
+    if true then {
+        println(loop acc = 0 for x in s do acc + x)
+    } else {
+        println(loop acc = 0 for x in s do acc + x)
+        println(nowhere_name)
+    }
+    return 0
+}

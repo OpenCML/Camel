@@ -1605,6 +1605,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::StreamCaptured,
+            {
+                "StreamCaptured",
+                "'{0}' cannot be captured: a stream is read once, and a closure outlives the read.",
+                "A stream is read one element at a time and is done when it ends, so on each execution path its value has one consumer (design principles 5.4). The body of a closure runs after the path that made the closure has finished, so the read a capture would make is not that path's one read: write the stream where it is consumed -- as the argument of a call that reads it, or as the subject of a loop -- and let a closure that needs a stream open one of its own.",
+            },
+        },
+        {
             SemanticDiag::NodeOfNotAParameter,
             {
                 "NodeOfNotAParameter",

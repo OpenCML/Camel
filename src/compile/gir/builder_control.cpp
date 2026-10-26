@@ -2499,9 +2499,9 @@ node_handle_t Builder::buildBranch(
 
     linkNodes(LinkType::Norm, brchNode, joinNode);
     linkArmEntries(armList, brchNode);
-    // The arms of this branch exclude each other: a stream consumed in one of them is not
-    // consumed twice by a use in another (design principles 5.4).
-    noteArmGroup(armList);
+    // The arms of this branch exclude each other (design principles 5.4): the check on the built
+    // graph reads which arm a read stands in from the region of the BRCH node, so nothing is
+    // recorded here.
 
     // The branch is the user of the variables its arms used, and the writer of those they
     // wrote. It begins at BRCH and is complete at JOIN.
@@ -2901,7 +2901,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         part.graph->draft().setRegionParams(part.region, params.build());
     };
     const auto declarePorts = [&](ArmBuild &part, bool withElement, const GCT::node_ptr_t &exec) {
-        const auto add = [&](const std::string &name, Type *type) {
+        const auto add = [&](const std::string &name, Type *type) -> node_handle_t {
             node_handle_t port = currGraph_->addRegionPortNode(type, name);
             // A port belongs to its region, as the nodes that read it do.
             part.graph->draft().setNodeRegion(nodeIdOf(port), part.region);
@@ -2910,12 +2910,19 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                 recordDeclaration(name, port, exec);
             }
             part.ports.push_back(port);
+            return port;
         };
         if (withElement) {
             add(gct->loopElementName(), elementType);
         }
         for (size_t j = 0; j < k; ++j) {
-            add(stateNames[j], stateTypes[j]);
+            node_handle_t port = add(stateNames[j], stateTypes[j]);
+            // The value a state's port stands for: what the round starts from, which is the state's
+            // initial value. A loop that carries a stream is the loop that reads it, so the port and
+            // the value handed to the loop are one value (noteMachinePortOrigin).
+            if (j < initial.size()) {
+                noteMachinePortOrigin(port, initial[j]);
+            }
         }
         refreshPorts(part, withElement);
     };
@@ -3492,8 +3499,8 @@ node_handle_t Builder::buildStreamLoop(
     Type *pullType         = stepType->exitType();
     Type *elementType      = stream->elemType();
     // A `for` over a stream is one consumer of it (design principles 5.4: a stream is read once on
-    // each execution path).
-    consumeStream(sequence, gct);
+    // each execution path), and the loop reads the stream through the data edge the call below
+    // writes, so the check on the built graph sees this read like any other.
 
     // The names of the machine's parts. They are no names a program writes -- the names of the
     // head are the states and the element -- and the parts read the round through them.
@@ -3589,10 +3596,20 @@ node_handle_t Builder::buildStreamLoop(
         part.graph->draft().setRegionParams(part.region, params.build());
     };
     const auto declarePorts = [&](ArmBuild &part, const GCT::node_ptr_t &exec) {
+        // The value each port stands for: the machine is handed the sequence, the flag that says it
+        // is over and the states, in that order (`machineInitial`), and inside a round those values
+        // are the round's ports. The port is recorded against what it stands for, so the value the
+        // program wrote outside and the slot that carries it inside are one value (design principles
+        // 3.7 C1, `noteMachinePortOrigin`).
+        size_t handed = 0;
         const auto add = [&](const std::string &name, Type *type) {
             node_handle_t port = currGraph_->addRegionPortNode(type, name);
             part.graph->draft().setNodeRegion(nodeIdOf(port), part.region);
             insertNode(name, port);
+            if (handed < machineInitial.size()) {
+                noteMachinePortOrigin(port, machineInitial[handed]);
+            }
+            ++handed;
             if (recorder_) {
                 recordDeclaration(name, port, exec);
             }
@@ -3797,111 +3814,6 @@ node_handle_t Builder::buildStreamLoop(
         registerNodeOrigin(context_, loopValue, gct, "gir.loop.value");
     }
     return loopValue;
-}
-
-void Builder::noteArmGroup(const std::vector<arm_ptr_t> &arms) {
-    // One arm excludes nothing: an `if` without `else` has a path where no arm ran and the value
-    // passed on, so only two arms or more say which uses cannot both happen.
-    if (arms.size() < 2 || currGraph_ == nullptr) {
-        return;
-    }
-    std::vector<uint32_t> regions;
-    regions.reserve(arms.size());
-    for (const arm_ptr_t &arm : arms) {
-        regions.push_back(arm->region);
-    }
-    armGroups_.emplace_back(currGraph_.get(), std::move(regions));
-}
-
-void Builder::consumeStream(node_handle_t value, const GCT::node_ptr_t &at) {
-    if (value == nullptr || currGraph_ == nullptr || at == nullptr) {
-        return;
-    }
-    StreamConsumption use;
-    use.graph  = currGraph_.get();
-    use.value  = value;
-    use.origin = at->origin();
-    use.arms.reserve(armStack_.size());
-    for (ArmBuild *arm : armStack_) {
-        // A loop's condition and body run again on every round, so a use standing in one of them
-        // consumes the value once per round; the ports of the region are the values the round
-        // starts from (the element, the states), and one of them is the loop's own state, which
-        // is what a value consumed per round has to be.
-        const bool round = arm->kind == runtime::GCRegionKind::LoopCond ||
-                           arm->kind == runtime::GCRegionKind::LoopBody;
-        use.arms.push_back({arm->region, round, round ? arm->ports : std::vector<node_handle_t>{},
-                            arm->origin});
-    }
-    streamConsumptions_.push_back(std::move(use));
-}
-
-void Builder::checkStreamConsumption(DraftGraphBuilder *graph) {
-    // A value consumed in a loop's round region is consumed once per round (design principles
-    // 5.4): under value semantics every round sees the same stream, so the value has to be the
-    // loop's own state -- which the round takes from its port and gives back as the next state --
-    // and a value written outside the loop is consumed again by each round.
-    for (const StreamConsumption &use : streamConsumptions_) {
-        if (use.graph != graph) {
-            continue;
-        }
-        for (const StreamConsumption::ArmUse &arm : use.arms) {
-            if (!arm.round ||
-                std::find(arm.ports.begin(), arm.ports.end(), use.value) != arm.ports.end()) {
-                continue;
-            }
-            Type *valueType = valueTypeOf(nodeTypeOf(use.value));
-            diags_->of(SemanticDiag::StreamConsumedInLoop)
-                .atOrigin(use.origin)
-                .relatedOrigin(arm.origin, "the loop this use stands in")
-                .commit(valueType != nullptr ? valueType->toString() : std::string("a stream"));
-            throw BuildAbortException();
-        }
-    }
-    // Two uses of one stream are one consumer when one of them stands in an arm the other does
-    // not: only one arm of a branch runs, so the two uses cannot both happen on one path. The arms
-    // of a branch are complete only once it is, and the uses stand in the arms while those are
-    // built, so this runs where the graph is complete.
-    const auto apart = [&](const StreamConsumption &left, const StreamConsumption &right) {
-        for (const auto &group : armGroups_) {
-            if (group.first != graph) {
-                continue;
-            }
-            const auto regionOf = [&](const std::vector<StreamConsumption::ArmUse> &use) -> uint32_t {
-                for (const StreamConsumption::ArmUse &arm : use) {
-                    if (std::find(group.second.begin(), group.second.end(), arm.region) !=
-                        group.second.end()) {
-                        return arm.region;
-                    }
-                }
-                return 0;
-            };
-            const uint32_t mine   = regionOf(left.arms);
-            const uint32_t theirs = regionOf(right.arms);
-            if (mine != 0 && theirs != 0 && mine != theirs) {
-                return true;
-            }
-        }
-        return false;
-    };
-    for (size_t i = 0; i < streamConsumptions_.size(); ++i) {
-        const StreamConsumption &first = streamConsumptions_[i];
-        if (first.graph != graph) {
-            continue;
-        }
-        for (size_t j = i + 1; j < streamConsumptions_.size(); ++j) {
-            const StreamConsumption &second = streamConsumptions_[j];
-            if (second.graph != graph || second.value != first.value || apart(first, second)) {
-                continue;
-            }
-            // The later use is the second consumer, and the first is where the stream was read.
-            Type *valueType = valueTypeOf(nodeTypeOf(second.value));
-            diags_->of(SemanticDiag::StreamConsumedTwice)
-                .atOrigin(second.origin)
-                .relatedOrigin(first.origin, "the stream is consumed here first")
-                .commit(valueType != nullptr ? valueType->toString() : std::string("a stream"));
-            throw BuildAbortException();
-        }
-    }
 }
 
 node_handle_t Builder::visitAnnoNode(const GCT::node_ptr_t &gct) {

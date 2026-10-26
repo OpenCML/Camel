@@ -1,0 +1,16 @@
+id = "probe.machine"
+order = 999
+tier = "fast"
+tags = ["probe"]
+desc = "A probe, removed before the case set is finished."
+
+[[tests]]
+name = "probe.machine"
+desc = "The hand-written shape of the generator state machine for `count(3)`: one struct state, segments that answer the state and the element, and a step function over it."
+kind = "behavior"
+case = "../../../cases/compile/stream/probe_machine.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "3\n3\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000

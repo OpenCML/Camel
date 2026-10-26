@@ -748,7 +748,7 @@ Builder::operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &o
         }
         setGraphReturnFromResult(graph, nodeIdOf(call), nodeIdOf(call), opType->exitType());
         bodyStates_[graph.get()] = BodyState::Built;
-        unit_->builtBodies.push_back(graph);
+        registerBuiltBody(graph);
     } catch (...) {
         bodyStates_[graph.get()] = BodyState::Built;
         leaveScope();
@@ -1603,7 +1603,7 @@ node_handle_t Builder::composeFunctionValue(
         node_handle_t value = visitLinkNode(outer);
         setGraphReturnFromResult(graph, nodeIdOf(value), nodeIdOf(value), nodeTypeOf(value));
         restore();
-        unit_->builtBodies.push_back(graph);
+        registerBuiltBody(graph);
     } catch (...) {
         restore();
         leaveScope();
@@ -3287,8 +3287,8 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
         // is that function value -- so no arguments are taken and `s()` is the form.
         if (dataType != nullptr && dataType->code() == TypeCode::Stream) {
             // A pull is one consumer of the stream (design principles 5.4: a stream is read once on
-            // each execution path), the other being a `for` over it.
-            consumeStream(targetNode, gct);
+            // each execution path), the other being a `for` over it; the check on the built graph
+            // reads this pull from the data edge the call writes.
             dataType = tt::as_ptr<StreamType>(dataType)->stepType();
         }
         ASSERT(
