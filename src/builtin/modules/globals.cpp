@@ -266,10 +266,6 @@ std::optional<std::string> staticSliceRejection(const type_vec_t &norm, static_a
     if (norm.size() < 4 || norm.size() > 6) {
         return std::nullopt;
     }
-    const ArrayType *array = asArrayType(norm[0]);
-    if (array == nullptr) {
-        return std::nullopt;
-    }
     // The constant 0 step is not refused here. The builder's own check refuses it with the named
     // `SemanticDiag::SliceStepZero`, located at the step the program wrote
     // (src/compile/gir/builder_operators.cpp), and a named diagnostic of the catalog outranks a
@@ -295,8 +291,8 @@ std::optional<std::string> staticSliceRejection(const type_vec_t &norm, static_a
             "a slice bound must not be negative, and {} is; the last element is 'last(t)'", *to);
     }
     const std::optional<int64_t> axis = constantArg(statics, 1);
-    if (!axis || !from || !to) {
-        return std::nullopt;
+    if (!axis || !from || !to || asArrayType(norm[0]) == nullptr) {
+        return std::nullopt; // a string's length is never in its type
     }
     const std::optional<int64_t> extent = staticAxisExtent(norm[0], *axis);
     if (!extent) {
@@ -524,6 +520,26 @@ FunctionType *sliceParameterTable() {
 /// faults with the core's one wording. The result type reads those same constants: the axis this
 /// call names and the length its bounds and step give it, with every other axis at the length the
 /// value's type states (sliceResultType, reached through the rule's statics path).
+/// `s[a:b]` and `slice(s, 0, a, b, s)` on a string: the slice of its code points, a string again.
+/// The words after the string are the axis, the two bounds, the step and the mask, as for an
+/// array (coreSliceFunctionResolver); a short function-form call is read as step 1, both written.
+resolver_ptr_t stringSliceResolver() {
+    return std::make_shared<StaticCheckedResolver>(DynamicFuncTypeResolver::create(
+        {{0, {}}, {-1, {}}},
+        "(s: string, axis: int, start: int, end: int, step: int, written: int) => string",
+        [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &) -> optional<Type *> {
+            if (norm.size() < 4 || norm.size() > 6 || norm[0]->code() != TypeCode::String) {
+                return nullopt;
+            }
+            for (size_t i = 1; i < norm.size(); ++i) {
+                if (norm[i]->code() != TypeCode::Int64) {
+                    return nullopt;
+                }
+            }
+            return Type::String();
+        }), staticSliceRejection);
+}
+
 resolver_ptr_t coreSliceFunctionResolver() {
     return std::make_shared<StaticCheckedResolver>(
         withStaticResult(
@@ -2546,6 +2562,11 @@ std::make_shared<StaticCheckedResolver>(
                     ":op/slice_sub",
                     coreSliceFunctionResolver(),
                 },
+                {
+                    // The same slice over a string's code points; a string has the one axis 0.
+                    ":op/slice_str",
+                    stringSliceResolver(),
+                },
             }),
         OperatorGroup::create(
             "__slice__",
@@ -2576,6 +2597,10 @@ std::make_shared<StaticCheckedResolver>(
                                 return coreSliceSubscriptResultType(norm, statics);
                             }),
                         staticSliceRejection),
+                },
+                {
+                    ":op/slice_str",
+                    stringSliceResolver(),
                 },
             }),
         OperatorGroup::create(

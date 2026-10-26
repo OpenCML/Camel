@@ -326,6 +326,7 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/idx_str", __builtin__idx__},
         {"op/idx_take", __idx_take_arr__},
         {"op/slice_sub", __slice_sub__},
+        {"op/slice_str", __slice_str__},
 
         {"op/not", __builtin__not__},
 
@@ -460,6 +461,7 @@ void registerBuiltinOperatorTraits() {
         "struct/last_arr",
         "op/idx_take",
         "op/slice_sub",
+        "op/slice_str",
         "struct/tail_arr",
         "struct/range",
         "struct/slice_arr",
