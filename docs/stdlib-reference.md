@@ -4269,42 +4269,32 @@ The members of a JSON object, by name; null for any other kind, and a `Json!` gi
 
 ## `hash`
 
+Digests. A digest is computed over bytes: the digest of a text is the digest of its UTF-8
+bytes (`bytes::encode`), so a text and its encoding have the same digest on every platform.
+Every function here is pure; the digest is written as lower-case hexadecimal text.
+
 #### `sha256`
 
 ```camel
-sha256: (s: string) => string
+sha256: (data: Bytes) => string
 ```
 
-The SHA-256 digest of the bytes of s, as 64 lower-case hexadecimal digits.
+The SHA-256 digest of a `Bytes` value, as 64 lower-case hexadecimal digits.
 
-- Pure.
+- With effects: not pure.
+- Example (a fragment, not compiled): `sha256(encode('abc'))` gives `'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'`
+- Why it is not compiled: the example builds its `Bytes` value with `encode` from the `bytes` module, which this page does not import
+
+#### `sha256`
+
+```camel
+sha256: (text: string) => string
+```
+
+The SHA-256 digest of the UTF-8 bytes of a text, as 64 lower-case hexadecimal digits.
+
+- With effects: not pure.
 - Example: `sha256('abc')` gives `'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'`
-
-#### `sha256`
-
-```camel
-sha256: (s: Bytes) => string
-```
-
-The SHA-256 digest of a `Bytes` value, as 64 lower-case hexadecimal digits. The two overloads are
-two operators (`hash:sha256_str`, `hash:sha256_bytes`); the one is chosen when the program is
-compiled.
-
-- Pure.
-- Example: `sha256(encode('abc')) == sha256('abc')` gives `true`
-
-#### `sha256_rounds`
-
-```camel
-sha256_rounds: (s: string, rounds: int) => string
-```
-
-SHA-256 applied rounds times, each round to the hexadecimal text of the one before;
-0 rounds gives s itself.
-
-- Pure.
-- Failure: fault `InvalidArgument` when rounds is negative.
-- Example: `sha256_rounds('abc', 1) == sha256('abc')` gives `true`
 
 <a id="re"></a>
 

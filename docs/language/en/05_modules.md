@@ -58,7 +58,7 @@ Names that can be used without an import (global built-ins): `print`, `println`,
 | `json` | the type `Json`; `encode`, `decode`, `decode_as`; `kind`, `is_null`, `get`, `as_bool`, `as_int`, `as_float`, `as_string`, `as_array`, `as_object` |
 | `process`, `env` | `whoami`, `cpu_count`, terminal input; `get_cwd`, `get_env` |
 | `re` | `test` |
-| `hash` | `sha256`, `sha256_rounds` |
+| `hash` | `sha256` |
 | `this` | `zen` |
 | `statistics` | `mean`, `stdev`, `variance`, `median`, `quantile` |
 | `para` | `unordered_foreach`, `unordered_reduce` |

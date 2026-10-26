@@ -10473,16 +10473,16 @@ std::cpp has no standalone translation of {0}: the program it writes calls the C
 Every other operator is translated into C++ that needs only the standard library (docs/cpp_export_build.md). The comment at the top of the C++ file gives the command that builds it with the runtime.
 ```
 
-**Example** (`test/cases/trans/cpp/hash_bridge.cml`, run as `camel test/cases/trans/cpp/hash_bridge.cml std::cpp`)
+**Example** (`test/cases/trans/cpp/runtime_bridge.cml`, run as `camel test/cases/trans/cpp/runtime_bridge.cml std::cpp`)
 
 ```camel
-/// std::cpp has no standalone translation of a hash operator: the program links the runtime.
-module cpp_hash_bridge
+/// std::cpp has no standalone translation of a string operator: the program links the runtime.
+module cpp_runtime_bridge
 
-import hash
+import str
 
 func main(): int sync {
-    println(hash::sha256('a'))
+    println(str::to_upper('a'))
     return 0
 }
 ```

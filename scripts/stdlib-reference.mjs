@@ -234,8 +234,7 @@ const MODULES = [
         name: 'hash',
         title: '`hash`',
         kind: 'cpp',
-        // The declarations, not a signature file: they are what the module compiles (
-        // `sha256` is two declarations with two `#op` URIs.
+        // Written in Camel over one private native kernel: no exported declaration is an operator.
         source: 'hash.cml',
         declaration: true,
     },
@@ -1573,6 +1572,8 @@ function verifyOps() {
         )
         const ops = allOps.filter((op) => !op.name.includes('::'))
         if (allOps.length === 0) {
+            // A module whose only native kernels are private exports no operator to verify.
+            if (!parseDeclarations(module).some((e) => !e.value && e.native)) continue
             problems.push(`${file}: the module '${registeredName}' registers no operator (is it imported by ${path.relative(REPO_ROOT, PROBE)}?)`)
             continue
         }

@@ -1307,7 +1307,7 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F",
 
 [[tests]]
 name = "native.hash_declaration_import"
-desc = "`hash`'s declarations are what an importer sees: `sha256` accepts a `string` and a `Bytes` value (two declarations with `hash:sha256_str` and `hash:sha256_bytes`), `sha256_rounds` takes the declared `string` and `int`, and every call reaches the C++ kernel and prints the declared `string`."
+desc = "`hash`'s declarations are what an importer sees: `sha256` accepts a `string` and a `Bytes` value (two functions written in Camel over the one kernel `hash:sha256_bytes`), and every call reaches the C++ kernel and prints the declared `string`."
 kind = "behavior"
 case = "../../../cases/compile/native/hash_declaration_import.cml"
 args = ["${case}"]
@@ -1316,21 +1316,21 @@ expect_stdout_exact = "true\ntrue\ntrue\ntrue\n"
 
 [[tests]]
 name = "native.hash_wrong_arity"
-desc = "Both declarations of `hash:sha256` take one ordinary argument: a second one is refused at the call, and the overloads the message lists are the two declarations, under the two operator URIs the `#op` tags name (`hash:sha256_str`, `hash:sha256_bytes`) — `stdlib/hash.cml`, not the C++ module."
+desc = "Both `sha256` functions take one ordinary argument: a second one is refused at the call, and the overloads the message lists are the two functions of `stdlib/hash.cml`, with the parameter names it gave."
 kind = "negative"
 case = "../../../cases/compile/native/hash_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "hash_arity.cml:10:19", "argument types: <> (string, string)", "<hash:sha256_str>: (s: string) => string", "<hash:sha256_bytes>: (s: Bytes) => string"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "hash_arity.cml:10:19", "argument types: <> (string, string)", "hash::sha256: (data: Bytes) => string", "hash::sha256: (text: string) => string"]
 
 [[tests]]
 name = "native.hash_wrong_type"
-desc = "Neither declaration of `hash:sha256` accepts an `int`: the call is refused against both, and the signatures in the message carry the parameter name the declarations gave (`s`) under the two operator URIs — `stdlib/hash.cml`, not the C++ module."
+desc = "Neither `sha256` accepts an `int`: the call is refused against both, and the signatures in the message carry the parameter names `stdlib/hash.cml` gave (`data`, `text`)."
 kind = "negative"
 case = "../../../cases/compile/native/hash_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "hash_type.cml:11:19", "argument types: <> (int)", "<hash:sha256_str>: (s: string) => string", "<hash:sha256_bytes>: (s: Bytes) => string"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "hash_type.cml:11:19", "argument types: <> (int)", "hash::sha256: (data: Bytes) => string", "hash::sha256: (text: string) => string"]
 
 #  ---- The declarations of `graph`: `constant` per sample type ----
 #

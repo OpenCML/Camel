@@ -43,12 +43,6 @@ const CASES = {
         file: 'process_identity.cml',
         expected: 'd08da5491e23d6999032d46e703435cb17e8973fe45327eba4ca6dfe218d7c49',
     },
-    hash: {
-        old: 'crypto',
-        now: 'hash',
-        file: 'hash_identity.cml',
-        expected: '4e3858820c04c8b127d8e2caa79f29f95fd79e523755f6df257b545fb9a7b700',
-    },
 }
 
 // A sweep copy is named `<sweep>:<source plan>:<test name>`, so the last dot-segment is
