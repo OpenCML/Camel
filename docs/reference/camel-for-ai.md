@@ -387,14 +387,11 @@ These two come from the sources the compiler itself reads, so they cannot drift 
 | Group | Words |
 |---|---|
 | Declaration | `let` `var` `func` `type` `with` `module` `import` `export` `from` `namespace` `using` |
-| Control | `if` `then` `else` `match` `case` `return` `throw` `sync` `loop` `while` `do` `for` `in` `static` |
-| Type and conversion | `as` `const` `constas` `enum` |
+| Control | `if` `then` `else` `match` `case` `return` `throw` `yield` `sync` `loop` `while` `do` `for` `in` `static` |
+| Type and conversion | `as` `const` `constas` `enum` `typeof` |
 | Literal | `null` `true` `false` |
-| Reserved | `is` `of` `try` `catch` `finally` `typeof` `keyof` |
 
-**Operators and separators** (55): `;` `,` `:` `::` `.` `..` `...` `(` `)` `[` `]` `{` `}` `<` `<` `>` `<=` `<=>` `>=` `==` `!=` `===` `!==` `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `|=` `+` `-` `*` `/` `%` `^` `@` `#` `&` `|` `&&` `||` `!` `!!` `~` `?` `??` `->` `?->` `=>` `\\` `_`
-
-The token table `include/camel/parse/syntax/token_kinds.def` groups `enum` (token table: `Reserved`; reference: Type and conversion). This file follows the reference.
+**Operators and separators** (54): `;` `,` `:` `::` `.` `..` `...` `(` `)` `[` `]` `{` `}` `<` `<` `>` `<=` `<=>` `>=` `==` `!=` `===` `!==` `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `|=` `+` `-` `*` `/` `%` `^` `@` `#` `&` `|` `&&` `||` `!` `!!` `~` `?` `??` `->` `?->` `=>` `_`
 <!-- camel-for-ai end: lexical -->
 
 ### Precedence (generated)
@@ -414,12 +411,12 @@ The token table `include/camel/parse/syntax/token_kinds.def` groups `enum` (toke
 11  multiplicativeExpr  * / @ %                            repeat, left
 12  powerExpr           ^                                  right, one
 13  nullableExpr        ?? !!                              right (a whole expression on the right)
-14  unaryExpr           as is                              one
+14  unaryExpr           as                                 one
 15  linkExpr            -> ?->                             repeat, left
 16  negExpr             - ! ~                              prefix
 17  negPower            - ! ~ ^                            prefix, right
 18  compExpr            ..                                 repeat, left
-19  annoExpr            !                                  repeat, left
+19  annoExpr            -                                  repeat, left
 ```
 
 The production of each level, as `src/parse/syntax/parser_expr.cpp` writes it above the
@@ -439,11 +436,11 @@ additiveExpr       : multiplicativeExpr (('+' | '-') multiplicativeExpr)*
 multiplicativeExpr : powerExpr (('*' | '/' | '@' | '%') powerExpr)*
 powerExpr          : nullableExpr ('^' powerExpr)?
 nullableExpr       : unaryExpr (('??' | '!!') dataExpr)?
-unaryExpr          : linkExpr (('as' | 'is') typeExpr)?
+unaryExpr          : linkExpr ('as' typeExpr)?
 linkExpr           : negExpr (('->' | '?->') compExpr)*
 negExpr            : ('-' | '!' | '~') negPower | compExpr
 negPower           : ('-' | '!' | '~') negPower | compExpr ('^' negPower)?
 compExpr           : annoExpr ('..' annoExpr)*
-annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | '!' | memberAccess)*
+annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | memberAccess)*
 ```
 <!-- camel-for-ai end: precedence -->
