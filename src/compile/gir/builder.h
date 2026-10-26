@@ -2030,6 +2030,39 @@ class Builder {
     // Once every body of the program is built: settles which graphs are effectful (a callee
     // may be written after its caller, in another module).
     void settleEffectfulGraphs();
+    // One body's measurement as it is being walked: what it has been found to reach so far, which
+    // parameter each of its ports is (the numbering a call uses), and whether a use was found that
+    // the numbering cannot name at all. A body with such a use is recorded as reaching anything
+    // rather than as reaching less than it does.
+    struct BodyReach {
+        camel::core::sem::ResourceSignature reach;
+        std::unordered_map<draft_node_ref_t, size_t> ports;
+        bool unplaceable = false;
+    };
+    // The walk of one body, in the named steps it is made of: the body's ports, the uses one node
+    // adds, and the three node kinds whose resources are not their own type's -- an operator, a
+    // direct call and a call through a value. Each step says whether the node could be placed.
+    void numberBodyPorts(
+        BodyReach &walk, const runtime::GraphDraft &draft, const FunctionType &type) const;
+    void addParamUse(
+        BodyReach &walk, size_t index, camel::core::sem::ResourceClass cls, const std::string &name,
+        camel::core::sem::AccessMode mode) const;
+    void addAmbientUse(
+        BodyReach &walk, const std::string &name, camel::core::sem::AccessMode mode) const;
+    bool readCalleeSignature(
+        BodyReach &walk, const runtime::GraphDraft &draft,
+        const camel::core::sem::ResourceSignature &sig, size_t calleeWithCount, bool isCall,
+        draft_node_ref_t id) const;
+    void readUnknownValue(BodyReach &walk) const;
+    bool reachOfOper(
+        DraftGraphBuilder *graph, const runtime::GraphDraft &draft, BodyReach &walk,
+        draft_node_ref_t id) const;
+    bool reachOfFunc(
+        DraftGraphBuilder *graph, const runtime::GraphDraft &draft, BodyReach &walk,
+        draft_node_ref_t id) const;
+    bool reachOfCall(
+        const runtime::GraphDraft &draft, BodyReach &walk, draft_node_ref_t id) const;
+    void addVarParameters(BodyReach &walk, const FunctionType &type) const;
     // The resources a body touches, from what its nodes already publish: an operator's own
     // signature, a callee's, and the signature of the function value a call goes through. Empty
     // when the body touches nothing. A call through a value that writes no clause promises
