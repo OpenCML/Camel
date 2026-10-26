@@ -52,8 +52,9 @@ docs/
                              CLI 参考、诊断目录
   internals/                 编译器与运行时：每个模块一篇（见下）
   design.md                  设计取舍：语言的定位与原则（设计原则的公开版，不含裁定记录与内部措辞）
-  reference/camel-for-ai.md  给 AI 的精炼语言参考（必读的一页：规则、惯用法、常见错误；根目录 `llms.txt`
-                             指向它）；生成的诊断目录与标准库签名各成一个查阅文件，与它同目录：
+  reference/camel-for-ai.md  给 AI 的精炼语言参考（必读的一页：为什么是 Camel、心智模型、惯用法、怎么看
+                             编译器的反馈、到哪里查；先讲为什么，其余的去语言参考与标准库参考里查；根目录
+                             `llms.txt` 指向它）；生成的诊断目录与标准库签名各成一个查阅文件，与它同目录：
                              reference/camel-for-ai-diagnostics.md、reference/camel-for-ai-stdlib-signatures.md
   assets/
 ```
