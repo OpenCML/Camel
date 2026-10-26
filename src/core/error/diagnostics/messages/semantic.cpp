@@ -1629,6 +1629,38 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::TypeAliasRecursionUnrepresented,
+            {
+                "TypeAliasRecursionUnrepresented",
+                "The type '{0}' mentions itself through a collection: recursion through an array, a map, a set or an enum is admitted by the language, and this compiler does not have that representation.",
+                "A type may reach itself indirectly, through an array, a map, a set or an enum (design principles 5.2), and the shape that needs is not built here: write the type without mentioning itself. Containing itself directly, as a struct field of its own type, is a different error: `ModuleTypeCycle`.",
+            },
+        },
+        {
+            SemanticDiag::EnumWrittenWhereATypeIsExpected,
+            {
+                "EnumWrittenWhereATypeIsExpected",
+                "An enum is declared in a type declaration ('type Shape = enum ...') and its type is the name that declaration gives it: the variants are written there and nowhere else.",
+                "An enum is a named type (design principles 5.3): `type Shape = enum {{ Circle(float), Dot }}` declares it, and `Shape` is what is written where a value of it is expected. The variants are written in the `type` declaration and nowhere else.",
+            },
+        },
+        {
+            SemanticDiag::StructComprehensionWithoutFields,
+            {
+                "StructComprehensionWithoutFields",
+                "A struct comprehension takes its field names from 'fields T', and 'indices' walks positions, which have no names: write a tuple comprehension '( static for ... in indices ... )', or walk 'fields T'.",
+                "A struct value is written as one value per field name, and `indices` walks the positions of a tuple, so a struct comprehension over it would have nothing to name its fields with (design principles 5.2). A tuple comprehension has one element per position, which is what `indices` gives.",
+            },
+        },
+        {
+            SemanticDiag::IdentifierPatternNeedsNullableOrErrorType,
+            {
+                "IdentifierPatternNeedsNullableOrErrorType",
+                "The pattern '{0}' takes a value of type 'T?' or 'T!' apart, and this value has type '{1}': write '?\?' or '!!', or a 'match' pattern that is a literal or '_'.",
+                "The patterns that bind are the fixed forms of the two marks (design principles 3.8): `error e` reads the error out of a `T!`, and a plain name reads the value out of a `T?` or a `T!`. Over any other type there is no mark to take apart, so the value is read with a literal pattern or '_'.",
+            },
+        },
+        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",

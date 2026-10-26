@@ -39,8 +39,7 @@ enum class RuntimeDiag : uint32_t {
     InvalidArgument        = 0x000034,
     FileOpenFailed         = 0x000035,
     FileSystemError        = 0x000036,
-    // 0x37 (JsonDecodeFailed) was the fault of json.decode on text that is not JSON; decode
-    // returns an error value instead (design principles 11.2). The code is not reused.
+    // 0x000037: empty. The number is not reused.
     RegexInvalid                = 0x000039,
     TimeFormatFailed            = 0x00003A,
     GradientElementTypeMismatch = 0x00003C,

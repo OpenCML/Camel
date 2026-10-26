@@ -13,7 +13,7 @@ import { export_model } from onnx
 import { get_env } from env
 
 func walk(x: float[..], xs: int[], k: int): float[..] {
-    return if k >= 3 || sum(x * x) < 1.0 then x * 2.0 else walk(x, [k], k + 1)
+    return if k >= 3 || float(sum(x * x)) < 1.0 then x * 2.0 else walk(x, [k], k + 1)
 }
 
 func main(): int sync {

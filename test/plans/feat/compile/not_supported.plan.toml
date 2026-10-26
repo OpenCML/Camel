@@ -17,16 +17,16 @@ timeout_ms = 10000
 
 [[tests]]
 name = "not_supported.pattern_identifier"
-desc = "An identifier pattern over a plain value is rejected at the case, instead of an internal error without a position. (Over a `T?` / `T!` it binds the value: tagged.plan.toml.)"
+desc = "An identifier pattern over a plain value is rejected at the case, instead of an internal error without a position: the patterns that bind are the fixed forms of `T?` / `T!` (design principles 3.8). (Over a `T?` / `T!` it binds the value: tagged.plan.toml.)"
 kind = "negative"
 case = "../../../cases/compile/not_supported/pattern_identifier.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
-expect_diagnostic_code = "0x0300001F"
-expect_diagnostic_line = 9
+expect_diagnostic_name = "SemanticDiag::IdentifierPatternNeedsNullableOrErrorType"
+expect_diagnostic_code = "0x030001F5"
+expect_diagnostic_line = 10
 expect_diagnostic_column = 9
-expect_output_contains = ["'other' is not supported: an identifier pattern is implemented only for a value of type 'T?' or 'T!'; over 'int' only literal patterns and '_' are."]
+expect_output_contains = ["takes a value of type 'T?' or 'T!' apart", "has type 'int'"]
 expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000

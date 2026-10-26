@@ -137,7 +137,8 @@ kind = "behavior"
 case = "../../../cases/compile/numeric/fuse.cml"
 args = ["${case}", "tensor::fuse"]
 expect_exit = 0
-expect_stdout_exact = "fuse split=-12.825000286102295 tight=-12.825000286102295\n"
+expect_stdout_exact = """fuse split=-12.825001 tight=-12.825001
+"""
 
 [[tests]]
 name = "invalid"

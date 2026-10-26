@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-280 diagnostics: 263 errors, 17 warnings. 15 carry a machine-applicable edit, 265 say why they carry none.
+284 diagnostics: 267 errors, 17 warnings. 15 carry a machine-applicable edit, 269 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -246,6 +246,10 @@ prints one entry.
 | `0x030001EE` | [SemanticDiag::BranchElementTypeMismatch](#branchelementtypemismatch) | Error | no |
 | `0x030001F0` | [SemanticDiag::RuleWithArgumentNotConstant](#rulewithargumentnotconstant) | Error | no |
 | `0x030001F1` | [SemanticDiag::UsesPromiseViolated](#usespromiseviolated) | Error | no |
+| `0x030001F2` | [SemanticDiag::TypeAliasRecursionUnrepresented](#typealiasrecursionunrepresented) | Error | no |
+| `0x030001F3` | [SemanticDiag::EnumWrittenWhereATypeIsExpected](#enumwrittenwhereatypeisexpected) | Error | no |
+| `0x030001F4` | [SemanticDiag::StructComprehensionWithoutFields](#structcomprehensionwithoutfields) | Error | no |
+| `0x030001F5` | [SemanticDiag::IdentifierPatternNeedsNullableOrErrorType](#identifierpatternneedsnullableorerrortype) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -2055,21 +2059,17 @@ None: context: the construct is not built here, so the program has to be restruc
 The grammar accepts this construct, but the compiler does not implement it. Remove it; nothing in the language replaces it yet.
 ```
 
-**Example** (`test/cases/compile/not_supported/pattern_identifier.cml`, run as `camel test/cases/compile/not_supported/pattern_identifier.cml`)
+**Example** (`test/cases/modules/tensor/subscript/slice_multidim.cml`, run as `camel test/cases/modules/tensor/subscript/slice_multidim.cml`)
 
 ```camel
-module pattern_identifier
-
-func f(n: int): int {
-    return match n {
-        case other => 1
-        case _ => 0
-    }
-}
+module subscript_multidim
+import { reshape, shape } from tensor
 
 func main(): int sync {
-    println('never printed')
-    println(f(1))
+    println('ran')
+    let m = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3])
+    let column = m[:, 0]
+    println(shape(column))
     return 0
 }
 ```
@@ -2138,7 +2138,7 @@ module shape_inference_computed_extent_stays_open
 import { reshape, sum } from tensor
 // The computed extent itself is not known: [?, 3] does not enter a [2, 3] parameter.
 func exact(a: f32[2, 3]): float {
-    return sum(a)
+    return float(sum(a))
 }
 func f(x: f32[?, 3], n: int): float {
     return exact(reshape(x, [n, 3]))
@@ -2355,7 +2355,7 @@ module constas_argument_shape
 import { ones, sum } from tensor
 
 func total(constas n: int, x: f32[n]): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func main(): int sync {
@@ -5475,7 +5475,7 @@ module constas_value_not_constant
 import { ones, sum } from tensor
 
 func total(constas n: int, x: f32[n]): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func use(m: int): float {
@@ -5515,7 +5515,7 @@ module constas_as_value
 import { ones, sum } from tensor
 
 func total(constas n: int, x: f32[n]): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func apply(f: (x: f32[..]) => float, x: f32[..]): float {
@@ -5592,7 +5592,7 @@ module constas_missing_argument
 import { ones, sum } from tensor
 
 func total(constas n: int, x: f32[n]): float {
-    return sum(x)
+    return float(sum(x))
 }
 
 func main(): int sync {
@@ -8239,6 +8239,148 @@ func bump(var c: int): int pure sync {
 func main(): int sync {
     var n = 1
     println(bump(n))
+    return 0
+}
+```
+
+### TypeAliasRecursionUnrepresented
+
+`0x030001F2` · Error · `SemanticDiag::TypeAliasRecursionUnrepresented`
+
+**Fix**
+
+None: context: the repair is a second declaration, or a shape spread over more than one type
+
+**Message**
+
+```text
+The type '{0}' mentions itself through a collection: recursion through an array, a map, a set or an enum is admitted by the language, and this compiler does not have that representation.
+```
+
+**Help**
+
+```text
+A type may reach itself indirectly, through an array, a map, a set or an enum (design principles 5.2), and the shape that needs is not built here: write the type without mentioning itself. Containing itself directly, as a struct field of its own type, is a different error: `ModuleTypeCycle`.
+```
+
+**Example** (`test/cases/compile/semantic/type_recursion_through_map.cml`, run as `camel -E short test/cases/compile/semantic/type_recursion_through_map.cml`)
+
+```camel
+module type_recursion_through_map
+
+type Node = { children: Map<int, Node> }
+
+func main(): int {
+    return 0
+}
+```
+
+### EnumWrittenWhereATypeIsExpected
+
+`0x030001F3` · Error · `SemanticDiag::EnumWrittenWhereATypeIsExpected`
+
+**Fix**
+
+None: choice: the name the declaration gives the enum is the writer's to write
+
+**Message**
+
+```text
+An enum is declared in a type declaration ('type Shape = enum ...') and its type is the name that declaration gives it: the variants are written there and nowhere else.
+```
+
+**Help**
+
+```text
+An enum is a named type (design principles 5.3): `type Shape = enum { Circle(float), Dot }` declares it, and `Shape` is what is written where a value of it is expected. The variants are written in the `type` declaration and nowhere else.
+```
+
+**Example** (`test/cases/compile/semantic/enum_where_type_expected.cml`, run as `camel -E short test/cases/compile/semantic/enum_where_type_expected.cml`)
+
+```camel
+module enum_where_type_expected
+
+type Shape = enum { Dot, Circle(float) }
+
+func take(s: enum { Dot }): int {
+    return 0
+}
+
+func main(): int {
+    return 0
+}
+```
+
+### StructComprehensionWithoutFields
+
+`0x030001F4` · Error · `SemanticDiag::StructComprehensionWithoutFields`
+
+**Fix**
+
+None: choice: whether the value is a struct or a tuple is the writer's to write
+
+**Message**
+
+```text
+A struct comprehension takes its field names from 'fields T', and 'indices' walks positions, which have no names: write a tuple comprehension '( static for ... in indices ... )', or walk 'fields T'.
+```
+
+**Help**
+
+```text
+A struct value is written as one value per field name, and `indices` walks the positions of a tuple, so a struct comprehension over it would have nothing to name its fields with (design principles 5.2). A tuple comprehension has one element per position, which is what `indices` gives.
+```
+
+**Example** (`test/cases/compile/static_expansion/indices_struct_comprehension.cml`, run as `camel test/cases/compile/static_expansion/indices_struct_comprehension.cml`)
+
+```camel
+module indices_struct_comprehension
+
+func bad(t: (int, int)): {a: int, b: int} {
+    return { static for j in indices t => t.[j] }
+}
+
+func main(): int {
+    let v = bad((1, 2))
+    return v.a
+}
+```
+
+### IdentifierPatternNeedsNullableOrErrorType
+
+`0x030001F5` · Error · `SemanticDiag::IdentifierPatternNeedsNullableOrErrorType`
+
+**Fix**
+
+None: choice: either the pattern or the type of the value has to change
+
+**Message**
+
+```text
+The pattern '{0}' takes a value of type 'T?' or 'T!' apart, and this value has type '{1}': write '??' or '!!', or a 'match' pattern that is a literal or '_'.
+```
+
+**Help**
+
+```text
+The patterns that bind are the fixed forms of the two marks (design principles 3.8): `error e` reads the error out of a `T!`, and a plain name reads the value out of a `T?` or a `T!`. Over any other type there is no mark to take apart, so the value is read with a literal pattern or '_'.
+```
+
+**Example** (`test/cases/compile/not_supported/pattern_identifier.cml`, run as `camel test/cases/compile/not_supported/pattern_identifier.cml`)
+
+```camel
+module pattern_identifier
+
+func f(n: int): int {
+    return match n {
+        case other => 1
+        case _ => 0
+    }
+}
+
+func main(): int sync {
+    println('never printed')
+    println(f(1))
     return 0
 }
 ```

@@ -6,7 +6,7 @@ func chain(x: f32[2,3]): f32[2,3] {
 }
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2,3]) as f32[2,3]
-    let results = 0..64->map<(i: int): float => sum(chain(x))>
+    let results = 0..64->map<(i: int): float => float(sum(chain(x)))>
     println(results->reduce<(a: float, b: float): float => a + b, 0.0>)
     return 0
 }

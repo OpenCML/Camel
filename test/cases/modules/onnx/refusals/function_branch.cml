@@ -11,7 +11,7 @@ import { reshape, sum } from tensor
 import { export_model } from onnx
 
 func build(h: float[..]): (x: float[..]) => float[..] {
-    return if sum(h * h) < 1.0 then (x: float[..]): float[..] => x + h else (x: float[..]): float[..] => x * h
+    return if float(sum(h * h)) < 1.0 then (x: float[..]): float[..] => x + h else (x: float[..]): float[..] => x * h
 }
 
 func twice(h: float[..], g: (x: float[..]) => float[..]): (x: float[..]) => float[..] {

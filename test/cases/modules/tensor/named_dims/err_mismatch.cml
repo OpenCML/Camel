@@ -1,7 +1,7 @@
 module named_dims_err_mismatch
 import { ones, sum } from tensor
 func pair(a: f32[n], b: f32[n]): float {
-    return sum(a) + sum(b)
+    return float(sum(a)) + float(sum(b))
 }
 func main(): int sync {
     println(pair(ones([3]), ones([4])))

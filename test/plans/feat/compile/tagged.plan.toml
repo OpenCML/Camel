@@ -1318,16 +1318,16 @@ timeout_ms = 8000
 
 [[tests]]
 name = "bind_pattern_plain_scrutinee"
-desc = "`case error e` over an `int`: the patterns that bind are defined over `T?` / `T!` only."
+desc = "`case error e` over an `int`: the patterns that bind are the fixed forms of `T?` / `T!` (design principles 3.8), so there is no mark to take apart here."
 kind = "negative"
 case = "../../../cases/compile/tagged/err_bind_plain.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
-expect_diagnostic_code = "0x0300001F"
-expect_diagnostic_line = 8
+expect_diagnostic_name = "SemanticDiag::IdentifierPatternNeedsNullableOrErrorType"
+expect_diagnostic_code = "0x030001F5"
+expect_diagnostic_line = 10
 expect_diagnostic_column = 9
-expect_output_contains = ["'error e' is not supported: the pattern 'error e' is implemented only for a value of type 'T?' or 'T!'"]
+expect_output_contains = ["takes a value of type 'T?' or 'T!' apart", "has type 'int'"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

@@ -2,7 +2,7 @@ module binary_roundtrip
 import { new, from_bytes, to_bytes, sum, zeros } from tensor
 import { from_array, to_array, size } from bytes
 func decode_return(b: Bytes): f32[..] { return from_bytes(b, [4]) }
-func measure(t: f32[..]): float { return sum(t) }
+func measure(t: f32[..]): float { return float(sum(t)) }
 func main(): int sync {
     let source = new([1.0, -2.5, 0.0, -0.0] as f32[])
     let b = to_bytes(source)

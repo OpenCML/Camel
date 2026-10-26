@@ -1,7 +1,7 @@
 module shape_rank_mismatch
 import { zeros, ones, reshape, sum, tanh, load_npy } from tensor
 func f(b: f32[3]): float {
-    return sum(b)
+    return float(sum(b))
 }
 func main(): int sync {
     println(f(ones([3, 1])))

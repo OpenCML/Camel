@@ -6,11 +6,11 @@ import { grad } from autodiff
 // diagnostic is located at the first call (line 10), although the gradient meets the second first.
 with <p: f64[..]>
 func loss(): float {
-    let s = sum(p)
+    let s = float(sum(p))
     let g = if s > 0.0 then (t: f64[..]): f64[..] => tanh(t * s) else (t: f64[..]): f64[..] => t * s
     let a = g(p)
     let b = g(a * 0.5)
-    return sum(b)
+    return float(sum(b))
 }
 
 func main(): int sync {

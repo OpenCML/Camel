@@ -1,0 +1,90 @@
+/**
+ * The full-form tensor reduction accumulates in f64 and rounds into the element type once
+ * (design principles 7.3: "浮点数组的归约在 f64 中累加、舍入一次，返回元素类型"). `sum(t)` and `mean(t)`
+ * used to answer `float` — the f64 accumulator's own width — so an f32 tensor's sum or mean came
+ * back as a float; they now answer the element type, as the by-axis forms already did, and the
+ * single rounding is the only rounding.
+ *
+ * Two vectors and one mean make each way of getting it wrong visible:
+ *
+ *   A: 2^24 followed by 1025 ones. The exact f64 sum is 16778241; a fold with an f32
+ *      accumulator stops at 16777216 (2^24 + 1 rounds back to 2^24 at every step); one rounding
+ *      of the f64 sum gives 16778241 its even neighbour 16778240 (ties to even). The full-form
+ *      sum answers 16778240, and the f64 accumulation — what this call answered before the rule,
+ *      when the result type was `float` — is printed beside it.
+ *   C: three elements, 2^25, 7 and 7. The exact f64 sum is 33554446 and the quotient is
+ *      33554446 / 3 = 11184815.333333334; the f32 grid around 11184815 is the integers, so one
+ *      rounding gives 11184815, while the sum rounded to f32 first is 33554448 and 33554448 / 3
+ *      is 11184816 — exactly one f32 step away. Both are printed, so "round once at the end" and
+ *      "round the sum to the element type and divide again" cannot be confused here.
+ *
+ * The f64 control is a tensor of the same values widened: `float` is the element type, both
+ * results are already f64, and rounding the f64 accumulation once into f32 gives exactly what the
+ * f32 tensor's sum and mean give — the two widths agree under the rule.
+ */
+module whole_reduction_rounding
+
+import { sum as array_sum } from array
+import { new, sum, mean, cast, numel } from tensor
+
+/// The fold written with an f32 accumulator: the accumulator's type is f32, so every addition
+/// rounds — this is what "round after every step" means.
+func foldF32(xs: f32[]): f32 {
+    return xs->reduce<(acc: f32, item: f32): f32 => acc + item, f32(0.0)>
+}
+
+func main(): int sync {
+    let a = 0..1026->map<(i: int) => if i == 0 then f32(16777216.0) else f32(1.0)>
+    let c = 0..3->map<(i: int) => if i == 0 then f32(33554432.0) else f32(7.0)>
+
+    let ta = new(a)
+    let tc = new(c)
+
+    // The element type, from the call: both are f32, and neither is a float.
+    let sumA  = sum(ta)
+    let meanC = mean(tc)
+    // The per-step f32 fold, and the same elements through the array reduction.
+    let foldA   = foldF32(a)
+    let arrayA  = array_sum(a)
+    // The same call with the array spelling of the operand: `sum::<T>(x: T[..]): T` at f32.
+    let arrayArgA = sum(a)
+    // The f64 accumulation of the same elements: the sum this call answered while its result type
+    // was float, and the mean's sum before it was divided.
+    let f64A     = float(sum(cast(ta, 'float')))
+    let f64MeanC = float(mean(cast(tc, 'float')))
+    // The mean with the sum rounded to the element type first, divided in f64 again: the two
+    // roundings the rule rules out.
+    let twiceC = float(sum(tc)) / float(numel(tc))
+
+    let onceA          = sumA == f32(f64A)
+    let differsA       = sumA != foldA
+    let arrayAgrees    = sumA == arrayA && arrayArgA == arrayA
+    let onceC          = meanC == f32(f64MeanC)
+    let twiceDiffersC  = meanC != f32(twiceC)
+    let controlAgrees  = f32(f64A) == sumA && f32(f64MeanC) == meanC
+
+    println("A tensor sum (one rounding)")
+    println(sumA)
+    println("A f64 accumulation (float)")
+    println(f64A)
+    println("A per-step f32 fold")
+    println(foldA)
+    println("A array sum")
+    println(arrayA)
+    println("A array argument, tensor sum")
+    println(arrayArgA)
+    println("C tensor mean (one rounding)")
+    println(meanC)
+    println("C mean with the sum rounded first")
+    println(twiceC)
+    println("C f64 mean (float)")
+    println(f64MeanC)
+    'once: {} {}'->format<onceA, onceC>->println
+    'differs from the per-step fold: {}'->format<differsA>->println
+    'differs from rounding the sum first: {}'->format<twiceDiffersC>->println
+    'array agrees: {}'->format<arrayAgrees>->println
+    'f64 control agrees: {}'->format<controlAgrees>->println
+
+    return if onceA && differsA && arrayAgrees && onceC && twiceDiffersC && controlAgrees then 0
+           else 1
+}

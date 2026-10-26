@@ -12,7 +12,10 @@
  *     reference; no other declaration moves;
  *   - a declaration that does not say whether it carries a machine-applicable edit fails, and so
  *     do one that says something else, one that gives a cause outside the vocabulary, and one
- *     that promises an edit without the help that tells the reader what it does.
+ *     that promises an edit without the help that tells the reader what it does;
+ *   - a message or a help whose braces are not the substitution's fields fails: a literal brace,
+ *     a field with a format specifier and one pattern mixing `{}` with `{1}` are refused, while
+ *     an escaped `{{` is accepted.
  *
  * Usage: node registry_proof.mjs
  */
@@ -196,6 +199,48 @@ expectFailure('fix-edit-without-help', {
     line: 'semantic\tFixNoHelpProbe\t\terror\tOne appended line.\t\tedit',
     mode: '--check',
 }, 'declares \'edit\' and has no help')
+
+// 6b. A message and a help are both put through the brace substitution of format.cpp while a
+//     report is rendered, and a pattern that breaks its rules throws there, when the position a
+//     program needed is already lost: the registry is where it is caught instead.
+expectFailure('brace-literal', {
+    line: 'semantic\tBraceLiteralProbe\t\terror\tWrite it as enum { A }.\tNothing else.\tnone: choice: the writer decides',
+    mode: '--check',
+}, 'message has a malformed field')
+
+expectFailure('brace-unmatched', {
+    line: 'semantic\tBraceUnmatchedProbe\t\terror\tA brace at the very end {\tNothing else.\tnone: choice: the writer decides',
+    mode: '--check',
+}, "message has an unmatched '{'")
+
+expectFailure('brace-specifier', {
+    line: 'semantic\tBraceSpecifierProbe\t\terror\tA field with a specifier {0:d}.\tNothing else.\tnone: choice: the writer decides',
+    mode: '--check',
+}, 'has a format specifier')
+
+expectFailure('brace-mixed', {
+    line: 'semantic\tBraceMixedProbe\t\terror\tOne pattern mixes {} and {1}.\tNothing else.\tnone: choice: the writer decides',
+    mode: '--check',
+}, 'mixes {} and {N} fields')
+
+expectFailure('brace-help', {
+    line: 'semantic\tBraceHelpProbe\t\terror\tOne appended line.\tThe help writes { A }.\tnone: choice: the writer decides',
+    mode: '--check',
+}, 'help has a malformed field')
+
+//     An escaped brace is the way a literal one is written, and the check accepts it: what it
+//     refuses is a pattern that would throw, not every brace.
+{
+    const root = fresh('brace-escaped')
+    append(
+        root,
+        'semantic\tBraceEscapedProbe\t\terror\tWrite it as {{ A }} and read {0}.\tNothing else.\tnone: choice: the writer decides'
+    )
+    const write = run(root, '--write')
+    check('brace-escaped: the escaped brace is accepted', write.status === 0, write.stdout + write.stderr)
+    const recheck = run(root, '--check')
+    check('brace-escaped: the tree passes --check', recheck.status === 0, recheck.stdout + recheck.stderr)
+}
 
 // 7. One line is all a new diagnostic costs, and it takes the next free number.
 {

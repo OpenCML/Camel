@@ -17,7 +17,7 @@ with <m: Mlp>
 func loss(x: f32[..]): float {
     let h = relu(x @ m.w1 + m.b1)
     let y = h @ m.w2 + m.b2
-    let s = mean(y * y)
+    let s = float(mean(y * y))
     let z = if s > 1.0 then s * 2.0 else s
     return z * 3.0
 }

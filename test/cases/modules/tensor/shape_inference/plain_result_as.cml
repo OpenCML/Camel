@@ -4,7 +4,7 @@ func g(x: f32[3]): f32[..] {
     return tanh(x * 0.0) + 2.0
 }
 func h(a: f32[3]): float {
-    return sum(a)
+    return float(sum(a))
 }
 func main(): int sync {
     let t = g(ones([3]))
