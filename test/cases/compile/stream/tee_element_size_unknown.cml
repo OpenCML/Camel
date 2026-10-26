@@ -1,0 +1,28 @@
+/**
+ * What a profile session reports about a `tee` whose elements are not one fixed number of bytes
+ * (design principles 5.4): the elements it pulled and the most it buffered are counted, and the
+ * bytes are left out, because a string's length is part of its value, so a peak in bytes would
+ * state a number the tee never held.
+ */
+module stream_tee_element_size
+
+import stream
+
+func words(n: int): string.. {
+    return step(n)
+}
+
+func step(n: int): () => (string, string..)? {
+    return () => if n > 0 then (string(n), step(n - 1)) else null
+}
+
+func length(s: string..): int {
+    return loop acc = 0 for x in s do acc + len(x)
+}
+
+func main(): int sync {
+    let (front, back) = stream::tee(words(3))
+    println(length(front))
+    println(length(back))
+    return 0
+}

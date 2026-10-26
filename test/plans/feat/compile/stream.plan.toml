@@ -887,6 +887,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
 [[tests]]
+name = "stream.tee_report_element_size_unknown"
+desc = "A `tee` of a stream whose elements are not one fixed number of bytes reports the elements it pulled and the most it buffered, and leaves the bytes out (design principles 5.4): a string's length is part of its value, so a peak in bytes would state a number the tee never held."
+kind = "behavior"
+case = "../../../cases/compile/stream/tee_element_size_unknown.cml"
+args = ["${case}", "std::profile"]
+expect_exit = 0
+expect_stdout_contains = ["PROFILE camel", "streams - one line per tee", "STREAM_TEE {\"tee\":1,\"elem\":\"string\",\"elements\":3,\"peak\":3,\"hint\":8,\"cap\":64}"]
+expect_stdout_not_contains = ["elem_bytes"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
 name = "stream.tee_report_absent"
 desc = "A program with no tee is reported as it was: the same profile session, the same program shape as `stream.tee_report` without a tee, asserts the report and no line about a tee -- so what the change added is printed only where a tee is written."
 kind = "behavior"
