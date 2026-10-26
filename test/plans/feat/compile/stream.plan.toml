@@ -694,3 +694,49 @@ expect_stdout_contains = ["1"]
 expect_output_not_contains = ["UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
+[[tests]]
+name = "stream.unfold"
+desc = "`stream::unfold(state, step)` -- the standard library`s producer, written in Camel -- gives a stream, and `for x in s` consumes it: the program writes no `yield` at all, so this is the whole producer-and-consumer path on one case. The empty stream is the second reading."
+kind = "behavior"
+case = "../../../cases/compile/stream/unfold.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["6", "0"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.unfold_fvm"
+desc = "The same case through `std::opt::inline std::fvm`: a stream from `unfold` is an ordinary closure and a round an ordinary call, so the bytecode back end runs it unchanged."
+kind = "behavior"
+case = "../../../cases/compile/stream/unfold.cml"
+args = ["${case}", "std::opt::inline", "std::fvm"]
+expect_exit = 0
+expect_stdout_contains = ["6", "0"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "stream.unfold_gir"
+desc = "The graph `stream::unfold` and a `for` over its stream become, printed before anything runs: a closure, a call per round, and a LOOP node of the form the graph already has."
+kind = "behavior"
+case = "../../../cases/compile/stream/unfold.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+expect_stdout_contains = ["LOOP", "CALL"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+[[tests]]
+name = "stream.generic_stream"
+desc = "`T..` in a generic signature: passing an `int..` binds `T` to `int` and the instantiation answers `int..`, so `same(count(3))` is consumed by the same `for`. This is the reading every producer written in the library needs, `unfold` included."
+kind = "behavior"
+case = "../../../cases/compile/stream/generic_stream.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["6"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
