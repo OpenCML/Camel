@@ -129,7 +129,7 @@ func save_at::<T>(h: Ckpt, here: string, t: T): Ckpt {
 }
 
 export func load_tree::<T>(dir: string): T! {
-    return ckpt_open(dir, type_spec::<T>()) ?-> (h => load_at::<T>(h, ""))
+    return ckpt_open(dir, type_spec::<T>()) -> (h => load_at::<T>(h, ""))
 }
 func load_at::<T>(h: Ckpt, here: string): T {
     return match type T {
@@ -409,7 +409,7 @@ TypeScript 有实例化深度 50/1000 的限制，Zig 有编译期求值的分�
 
 ### 7.12 工具从第一天就要跟上
 
-TypeScript 的经验是泛型复杂之后，编辑器的速度与悬停信息决定可用性。建议：语言服务器对泛型函数体至少做"不依赖类型变量的那部分"的检查（定义时就能发现的错误不要等实例化）；悬停显示实例化后的类型；调试器在展开的代码里显示静态绑定（`n = "w"`），这依赖交接任务 H3b 的内联来源记录。
+TypeScript 的经验是泛型复杂之后，编辑器的速度与悬停信息决定可用性。建议：语言服务器对泛型函数体至少做"不依赖类型变量的那部分"的检查（定义时就能发现的错误不要等实例化）；悬停显示实例化后的类型；调试器在展开的代码里显示静态绑定（`n = "w"`），这依赖内联来源记录。
 
 ### 7.13 需要语言作者先定的四件事
 

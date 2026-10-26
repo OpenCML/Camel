@@ -2,7 +2,7 @@ id = "docs.ai_reference"
 order = 926
 tier = "fast"
 tags = ["feat", "docs"]
-desc = "The pages for AI readers are what their normative sources produce: the four generated regions (keywords, precedence, diagnostics, standard-library signatures) match what scripts/camel-for-ai.mjs reads from the token table, the parser's productions, the diagnostic registry and the generated standard-library page; the two catalogues are documents of their own and are measured against their own budgets, not the page's; every diagnostic the prose names is declared by the registry; and each document stays within the character budget it states"
+desc = "The pages for AI readers are what their normative sources produce: the four generated regions (keywords, precedence, diagnostics, standard-library signatures) match what scripts/camel-for-ai.mjs reads from the token table, the parser's productions, the diagnostic registry and the generated standard-library page; the two catalogues are documents of their own and carry no budget, so only the page has one; every diagnostic the prose names is declared by the registry; the page stays within the one total it states; and every counter-example in it reports the diagnostic its entry names"
 
 # The pages for AI readers must stay true to the tree without being read by hand every time. Four
 # regions of them are generated, and the check regenerates them: a diagnostic that changes its
@@ -13,8 +13,14 @@ desc = "The pages for AI readers are what their normative sources produce: the f
 # their own: a language that keeps gaining diagnostics and library names would otherwise push the
 # page past the size one read costs. So the layouts differ -- the page holds the keyword table and
 # the precedence levels, beside the rules they state, and the diagnostic catalogue and the signature
-# catalogue have a document each -- and the budget follows the layout: the page's budget counts the
-# page, and each catalogue is measured against its own.
+# catalogue have a document each -- and the budget follows the layout: the page has one total, and
+# the catalogues have none, because a document a reader looks up rather than reads is not the room
+# the page is held to.
+#
+# The page has one number and no budget part by part: how the prose is divided is the writer's, and
+# the total is what a reader pays. The examples are the other half, and they are held by the plan
+# docs.links: `scripts/check-doc-snippets.mjs` compiles every `camel` fence of the reader-facing
+# pages, so a page whose example does not compile is red there.
 #
 # The check also holds the prose to the two rules the pages state for themselves: a diagnostic is
 # named with its section (`SemanticDiag::UnresolvedReference`) and must be one the registry declares,
@@ -24,18 +30,43 @@ desc = "The pages for AI readers are what their normative sources produce: the f
 # The proof cases run the same guard over test/plans/feat/docs_ai_reference/fixture, whose sources
 # are reduced copies of the four real ones and whose layout is the real three-file one, so each red
 # condition is pinned without depending on the language: a region that is not what its source
-# produces, a missing region marker, a diagnostic name the registry does not declare, and a task
-# number in a public document.
+# produces, a missing region marker, a diagnostic name the registry does not declare, a task number
+# in a public document, and -- through `--budget` and a page whose fence does not compile -- the two
+# conditions the page itself is held to.
 
 [[tests]]
 name = "docs.ai_reference.current"
-desc = "Every generated region of the page and its two appendices is what its source produces, every diagnostic the prose names exists, and each document is within its own budget."
+desc = "Every generated region of the page and its two appendices is what its source produces, every diagnostic the prose names exists, and the page is within the one total it states."
 kind = "behavior"
 tool = "node"
 case = "../../../scripts/camel-for-ai.mjs"
 args = ["${case}", "--check"]
 expect_exit = 0
-expect_stdout_contains = ["docs/reference/camel-for-ai.md is what its sources produce", "docs/reference/camel-for-ai-diagnostics.md is what its sources produce", "docs/reference/camel-for-ai-stdlib-signatures.md is what its sources produce", "generated region(s)", "diagnostic name(s) cited by the prose", "characters (budget 59000)", "characters (budget 30500)", "characters (budget 30000)"]
+expect_stdout_contains = ["docs/reference/camel-for-ai.md is what its sources produce", "docs/reference/camel-for-ai-diagnostics.md is what its sources produce", "docs/reference/camel-for-ai-stdlib-signatures.md is what its sources produce", "generated region(s)", "diagnostic name(s) cited by the prose", "characters (budget 20000)"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+[[tests]]
+name = "docs.ai_reference.page_over_budget"
+desc = "The page's one total is enforced: a page longer than the number it states fails, naming its length and the budget. The proof case runs the reduced page against a total small enough to be exceeded, so the red condition is pinned without a 20,000-character page in the fixture."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/camel-for-ai.mjs"
+args = ["${case}", "--check", "--root", "test/plans/feat/docs_ai_reference/fixture", "--budget", "1000"]
+expect_exit = 1
+expect_stdout_contains = ["the document is 3895 characters; its budget is 1000", "1 problem(s) in the AI reference"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+[[tests]]
+name = "docs.ai_reference.example_does_not_compile"
+desc = "An example the language does not accept is red: the checker compiles every `camel` fence of the page, and a fence with an unknown name fails naming the page and the diagnostic. The page's examples are otherwise held by docs.snippets_compile; this entry pins that the compile half of the page's rule can fail."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/check-doc-snippets.mjs"
+args = ["${case}", "test/plans/feat/docs_ai_reference/fixture/docs/reference/cases/stale-snippet.md", "--camel", "${camel}"]
+expect_exit = 1
+expect_stdout_contains = ["does not compile", "missing_name"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
 

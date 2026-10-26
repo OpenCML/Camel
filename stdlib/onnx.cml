@@ -15,20 +15,21 @@
 // `export_model` stays in C++ and is recorded as a computed signature in
 // `stdlib/signatures/onnx.cml`: its first parameter is a function of any parameter list and
 // result (`(...) => R`), its `example` parameter is a tensor, a tuple or a struct whose leaves
-// have to be the function's parameter tree (a predicate on the type variable), and its last two
-// parameters are optional, so its arity is three to five. None of that is expressible in a
-// declaration, and a declaration that wrote one instance of it would accept calls the resolver
-// refuses.
+// have to be the function's parameter tree (a predicate on the type variable), and the file it
+// writes, the axes it leaves dynamic and the target it checks names are `with` arguments, one
+// rule per number of them (one to three). None of that is expressible in a declaration, and a
+// declaration that wrote one instance of it would accept calls the resolver refuses.
 //
-// `supported_operators` is registered with effects until someone has checked that it is not
-// effectful; the declaration keeps that purity (a declaration carries types, not effects).
+// `supported_operators` only reads the lowering table compiled into the module: it is registered
+// pure, and the declaration carries that (a declaration carries types, not effects), so a call
+// may be folded, merged or run concurrently and its result may not be dropped.
 
 module onnx
 
 /// Lists the operator URIs the ONNX backend can lower at its default opset, in the order the
 /// lowering table reports them. A capability report only: it reads the table compiled into the
 /// module and never touches the file system or the ONNX runtime.
-/// @effect reports the lowering table of the backend
+/// @pure
 /// @example let uris = supported_operators()
 export func supported_operators(): string[]
 
@@ -37,8 +38,8 @@ export func supported_operators(): string[]
 // -----------------------------------------------------------------------------
 
 /// Writes the model of the program's `main` (or of the one `export_model` call it makes) as an
-/// ONNX file, translating the function `main` refers to itself. `out` overrides the path
-/// argument of `export_model` (then exactly one call is allowed) and names the file when the
-/// program makes no request.
+/// ONNX file, translating the function `main` refers to itself. `out` overrides the file the
+/// `out` argument of `export_model` names (then exactly one call is allowed) and names the file
+/// when the program makes no request.
 with <out: string = "">
 export func export_model::<F>(f: F): F! when is_function::<F>()

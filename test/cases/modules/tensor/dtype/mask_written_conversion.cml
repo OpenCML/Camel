@@ -1,21 +1,20 @@
 /**
  * The two writings a mask is read with, after the conversion has been written: `where(mask, x, 0.0)`
- * selects the value the mask keeps and answers zero where it does not, and `x * cast(mask, "f32")`
+ * selects the value the mask keeps and answers zero where it does not, and `x * f32(mask)`
  * reads the mask as the number it stands for. Both compute in the tensor's element type - the
  * bytes each answer occupies say so, four an element and not eight - and both are the same numbers
  * the mask idiom always gave (design principles 5.1).
  */
 module mask_written_conversion
 
-import { reshape, cast, where, sum, to_bytes } from tensor
-import { size } from bytes
+import { reshape, where, sum, to_bytes } from tensor
 
 func selected(x: f32[4], mask: bool[4]): float {
     return float(sum(where(mask, x, 0.0)))
 }
 
 func converted(x: f32[4], mask: bool[4]): float {
-    return float(sum(x * cast(mask, "f32")))
+    return float(sum(x * f32(mask)))
 }
 
 func main(): int sync {
@@ -23,7 +22,7 @@ func main(): int sync {
     let mask = x > 0.0
     println(selected(x, mask))
     println(converted(x, mask))
-    println(size(to_bytes(where(mask, x, 0.0))))
-    println(size(to_bytes(x * cast(mask, "f32"))))
+    println(len(to_bytes(where(mask, x, 0.0))))
+    println(len(to_bytes(x * f32(mask))))
     return 0
 }

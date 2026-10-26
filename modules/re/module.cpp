@@ -33,6 +33,8 @@ bool ReModule::load() {
         "re",
         {
             {"test", true},
+            {"find", true},
+            {"validate", true},
         });
     loaded_ = true;
     return true;

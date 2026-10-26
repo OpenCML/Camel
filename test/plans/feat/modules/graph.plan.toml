@@ -49,12 +49,14 @@ timeout_ms = 10000
 
 [[tests]]
 name = "camel_pass_error_stops_the_pipeline"
-desc = "A pass that returns an error value fails with its kind and message, and the program does not run."
+desc = "A pass that returns an error value stops the pipeline at that pass: the error value reaches the exit unhandled, so it is reported on standard error, the exit code is not zero, and the program does not run."
 kind = "negative"
 case = "../../../cases/modules/graph_pass/tiny.cml"
 args = ["${case}", "identity::refuse", "std::nvm"]
 expect_exit = 1
-expect_output_contains = ["GraphPassFailed", "error NotSupported: this program has too few graphs"]
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_diagnostic_code = "0x04000051"
+expect_stderr_contains = ["An error value reached the exit of 'main' without being handled: NotSupported: this program has too few graphs"]
 expect_output_not_contains = ["42"]
 timeout_ms = 10000
 
@@ -70,7 +72,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "unknown_camel_pass"
-desc = "A module that exports no such function names itself and the passes it does provide (H130), instead of leaving the pass unknown."
+desc = "A module that exports no such function names itself and the passes it does provide , instead of leaving the pass unknown."
 kind = "negative"
 case = "../../../cases/modules/graph_pass/tiny.cml"
 args = ["${case}", "identity::nosuch", "std::nvm"]
@@ -116,7 +118,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "camel_pass_module_importing_a_camel_module"
-desc = "A pass module may import a library written in Camel: the imported function is declared and built by the pass program's builder and runs (task H36, item 1)."
+desc = "A pass module may import a library written in Camel: the imported function is declared and built by the pass program's builder and runs ."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/tiny.cml"
 args = ["${case}", "camel_import_values::show", "std::nvm"]
@@ -126,7 +128,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "camel_pass_reads_a_value_imported_from_a_camel_library"
-desc = "A pass reads a value imported from a library written in Camel, and a top-level value built from it and from a call into that library (task H37; H36 allowed the Camel import)."
+desc = "A pass reads a value imported from a library written in Camel, and a top-level value built from it and from a call into that library (the definition-library property)."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/tiny.cml"
 args = ["${case}", "valuereader::show", "std::nvm"]
@@ -178,13 +180,13 @@ expect_output_not_contains = ["126"]
 timeout_ms = 10000
 
 [[tests]]
-name = "txn_conflict"
-desc = "Two transactions edit one graph; the second commit gives the error GraphConflict."
+name = "txn_two_commits_are_two_values"
+desc = "Two transactions edit one graph of the same Program; each commit makes a Program of its own (design principles 9.1), so the second succeeds too."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/edits.cml"
 args = ["${case}", "probes::conflict", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "GraphConflict\n126\ntext\n"
+expect_stdout_exact = "ok\n126\ntext\n"
 timeout_ms = 10000
 
 [[tests]]
@@ -695,7 +697,7 @@ kind = "negative"
 case = "../../../cases/modules/graph_pass/imports_unparsable.cml"
 args = ["--error-format", "text", "${case}", "unparsable_pass_lib::run", "std::nvm"]
 expect_exit = 1
-expect_output_contains = ["[imported by main]", "unparsable_pass.cml:8:5", "camel: 2 errors"]
+expect_output_contains = ["[imported by imports_unparsable]", "unparsable_pass.cml:8:5", "camel: 2 errors"]
 expect_output_not_contains = ["unparsable_pass_lib.cml", "camel: 3 errors"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
 timeout_ms = 10000

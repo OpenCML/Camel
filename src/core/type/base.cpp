@@ -3,9 +3,7 @@
 
 #include "camel/core/type/base.h"
 #include "camel/core/mm.h"
-#include "camel/core/numeric_convert.h"
 #include "camel/core/rtdata/base.h"
-#include "camel/core/rtdata/half.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/type/composite/composite.h"
 #include "camel/core/type/intern.h"
@@ -21,16 +19,6 @@ using namespace camel::core::type;
 using namespace camel::core::rtdata;
 
 namespace camel::core::type {
-
-const signed char primitiveTypeConvMatrix[6][6] = {
-    // Int, Long, Float, Double, Bool, Void
-    {01, 01, 01, 01, 01, 01}, // Int
-    {-1, 01, -1, 01, 01, 01}, // Long
-    {-1, -1, 01, 01, 01, 01}, // Float
-    {-1, -1, -1, 01, 01, 01}, // Double
-    {01, 01, 01, 01, 01, 01}, // Bool
-    {00, 00, 00, 00, 00, 01}, // Void
-};
 
 namespace {
 
@@ -86,6 +74,8 @@ string typeCodeToString(TypeCode code) {
         return "bool";
     case TypeCode::Void:
         return "void";
+    case TypeCode::Never:
+        return "never";
     case TypeCode::String:
         return "string";
     case TypeCode::Complex64:
@@ -281,49 +271,19 @@ CastSafety Type::castSafetyFrom(Type *sourceType) const {
     if (equals(sourceType))
         return CastSafety::Safe;
 
-    // Exclude auxiliary types first.
-    if (camel::core::type::isAuxiliary(code_) ||
-        camel::core::type::isAuxiliary(sourceType->code())) {
-        return CastSafety::Forbidden;
+    // A value of the bottom type `never` never exists (design principles 3.9), and it is
+    // assignable to every type: entering a position of any type is nothing to convert, so the
+    // conversion is safe wherever the value is not (there is no value to lose).
+    if (sourceType->code() == TypeCode::Never) {
+        return CastSafety::Safe;
     }
 
-    // After excluding auxiliary types, only the slot-sized primitive types remain, plus the two
-    // reduced-precision floating types. bf16 and f16 are floating types a program may write and
-    // convert (design principles 7.3): a conversion between them and a wider number is the
-    // precision the program asked for, it rounds once (to nearest, ties to even) into the
-    // narrower type and is exact into a wider one, and it needs no numeric permission. Their
-    // codes do not index the matrix below, so they are decided here, with the same safety as the
-    // f32 conversions of that matrix: a widening and a same-type conversion are Safe, a
-    // narrowing is refused as `as` between primitives always is (`bf16(x)` is the written
-    // conversion, `x as bf16` is a dynamic cast).
-    const auto isHalf = [](TypeCode code) {
-        return code == TypeCode::BFloat16 || code == TypeCode::Float16;
-    };
-    if (isHalf(code_) || isHalf(sourceType->code())) {
-        const TypeCode from = sourceType->code();
-        const TypeCode to   = code_;
-        if (from == to) {
-            return CastSafety::Safe;
-        }
-        if (to == TypeCode::Float32 || to == TypeCode::Float64) {
-            // Widening out of one of them is exact for every stored value.
-            return isHalf(from) ? CastSafety::Safe : CastSafety::Forbidden;
-        }
-        return CastSafety::Forbidden;
-    }
-    // The matrix is [from][to], i.e. [sourceIndex][targetIndex]. Its two axes are the six types
-    // whose codes index it; a bf16 or f16 returned above, so both sides here are one of those.
-    if (camel::core::type::isPrimitive(code_) &&
-        camel::core::type::isPrimitive(sourceType->code())) {
-        const int sourceIndex = static_cast<int>(sourceType->code()) & 0b1111;
-        const int targetIndex = static_cast<int>(code_) & 0b1111;
-        if (sourceIndex >= 6 || targetIndex >= 6) {
-            return CastSafety::Forbidden;
-        }
-        return static_cast<CastSafety>(primitiveTypeConvMatrix[sourceIndex][targetIndex]);
-    }
-
-    // All remaining conversions are disallowed by default.
+    // Every other conversion between these types is refused (design principles 5.1): `as` is the
+    // checked conversion of module types, shapes and the forms `T?` / `T!`, and never a
+    // conversion between numbers, between a number and a bool or a text, or from a text. A number
+    // of another type is made by the conversion function of the target (`float(n)`, `int(x)`,
+    // `f32(x)`), whose loss rule is the function's own. A literal is not converted either: it
+    // takes the type of its position (`let x: float = 5`).
     return CastSafety::Forbidden;
 }
 
@@ -332,178 +292,18 @@ slot_t Type::castSlotFrom(slot_t value, Type *sourceType) const {
     ASSERT(
         castSafetyFrom(sourceType) == CastSafety::Safe,
         "castSlotFrom only allowed when castSafetyFrom returns Safe");
-    ASSERT(
-        !camel::core::type::isComposite(code_),
-        "castSlotFrom not implemented for composite types");
-    ASSERT(!camel::core::type::isOtherType(code_), "castSlotFrom not implemented for other types");
-
-    const TypeCode from = sourceType->code();
-    const TypeCode to   = code_;
-
-    using camel::core::rtdata::Bool;
-    using camel::core::rtdata::Float32;
-    using camel::core::rtdata::Float64;
-    using camel::core::rtdata::Int32;
-    using camel::core::rtdata::Int64;
-
-#define DO_CONV(FromT, ToT, expr) return toSlot(static_cast<ToT>(expr))
-
-    // Same type
-    if (from == to)
-        return value;
-
-    // A bf16 or f16 widens exactly: its slot holds the two-byte pattern in the low half
-    // (camel/core/rtdata/half.h). Widening is the only conversion of one of these types that
-    // castSafetyFrom accepts (`as` refuses the narrowing into them, which is the written
-    // conversion `bf16(x)` / `f16(x)` instead).
-    if (from == TypeCode::BFloat16 || from == TypeCode::Float16) {
-        const bool bf16 = from == TypeCode::BFloat16;
-        const float widened =
-            bf16 ? camel::core::rtdata::halfToFloat<camel::core::rtdata::BFloat16>(value)
-                 : camel::core::rtdata::halfToFloat<camel::core::rtdata::Float16>(value);
-        switch (to) {
-        case TypeCode::Float32:
-            return toSlot(widened);
-        case TypeCode::Float64:
-            return toSlot(static_cast<Float64>(widened));
-        default:
-            ASSERT(false, "castSlotFrom bf16/f16->unsupported target");
-        }
-    }
-
-    switch (from) {
-    case TypeCode::Int32: {
-        Int32 v = fromSlot<Int32>(static_cast<slot_t>(value));
-        switch (to) {
-        case TypeCode::Int64:
-            DO_CONV(Int32, Int64, v);
-        case TypeCode::Float32:
-            DO_CONV(Int32, Float32, v);
-        case TypeCode::Float64:
-            DO_CONV(Int32, Float64, v);
-        case TypeCode::Bool:
-            DO_CONV(Int32, Bool, v != 0);
-        case TypeCode::String: {
-            ::String *s = ::String::from(std::to_string(v), mm::autoSpace());
-            return toSlot(s);
-        }
-        default:
-            ASSERT(false, "castSlotFrom Int32->unsupported target");
-        }
-    }
-    case TypeCode::Int64: {
-        Int64 v = fromSlot<Int64>(static_cast<slot_t>(value));
-        switch (to) {
-        case TypeCode::Int32:
-            return toSlot(checkedNarrow<Int32>(v, "i32"));
-        case TypeCode::Float32:
-            DO_CONV(Int64, Float32, v);
-        case TypeCode::Float64:
-            DO_CONV(Int64, Float64, v);
-        case TypeCode::Bool:
-            DO_CONV(Int64, Bool, v != 0);
-        case TypeCode::String: {
-            ::String *s = ::String::from(std::to_string(v), mm::autoSpace());
-            return toSlot(s);
-        }
-        default:
-            ASSERT(false, "castSlotFrom Int64->unsupported target");
-        }
-    }
-    case TypeCode::Float32: {
-        Float32 v = fromSlot<Float32>(static_cast<slot_t>(value));
-        switch (to) {
-        case TypeCode::Int32:
-            return toSlot(checkedTruncate<Int32>(v, "i32"));
-        case TypeCode::Int64:
-            return toSlot(checkedTruncate<Int64>(v, "int"));
-        case TypeCode::Float64:
-            DO_CONV(Float32, Float64, v);
-        case TypeCode::Bool:
-            DO_CONV(Float32, Bool, v != 0);
-        case TypeCode::String: {
-            ::String *s = ::String::from(camel::utils::floatText(v), mm::autoSpace());
-            return toSlot(s);
-        }
-        default:
-            ASSERT(false, "castSlotFrom Float32->unsupported target");
-        }
-    }
-    case TypeCode::Float64: {
-        Float64 v = fromSlot<Float64>(static_cast<slot_t>(value));
-        switch (to) {
-        case TypeCode::Int32:
-            return toSlot(checkedTruncate<Int32>(v, "i32"));
-        case TypeCode::Int64:
-            return toSlot(checkedTruncate<Int64>(v, "int"));
-        case TypeCode::Float32:
-            DO_CONV(Float64, Float32, v);
-        case TypeCode::Bool:
-            DO_CONV(Float64, Bool, v != 0);
-        case TypeCode::String: {
-            ::String *s = ::String::from(camel::utils::floatText(v), mm::autoSpace());
-            return toSlot(s);
-        }
-        default:
-            ASSERT(false, "castSlotFrom Float64->unsupported target");
-        }
-    }
-    case TypeCode::Bool: {
-        Bool v = fromSlot<Bool>(static_cast<slot_t>(value));
-        switch (to) {
-        case TypeCode::Int32:
-            DO_CONV(Bool, Int32, v ? 1 : 0);
-        case TypeCode::Int64:
-            DO_CONV(Bool, Int64, v ? 1 : 0);
-        case TypeCode::Float32:
-            DO_CONV(Bool, Float32, v ? 1.0f : 0.0f);
-        case TypeCode::Float64:
-            DO_CONV(Bool, Float64, v ? 1.0 : 0.0);
-        case TypeCode::String: {
-            ::String *s = ::String::from(v ? "true" : "false", mm::autoSpace());
-            return toSlot(s);
-        }
-        default:
-            ASSERT(false, "castSlotFrom Bool->unsupported target");
-        }
-    }
-    case TypeCode::Void:
-        if (to == TypeCode::String) {
-            ::String *s = ::String::from("null", mm::autoSpace());
-            return toSlot(s);
-        }
-        ASSERT(false, "castSlotFrom Void->unsupported target");
-    case TypeCode::String: {
-        ::String *s = reinterpret_cast<::String *>(static_cast<uintptr_t>(value));
-        switch (to) {
-        // The whole string must be one number; otherwise the fault of the conversion
-        // functions (design principles 5.1).
-        case TypeCode::Int32:
-            return toSlot(integerFromText<Int32>(s->view(), "i32"));
-        case TypeCode::Int64:
-            return toSlot(integerFromText<Int64>(s->view(), "int"));
-        case TypeCode::Float32:
-            return toSlot(floatFromText<Float32>(s->view(), "f32"));
-        case TypeCode::Float64:
-            return toSlot(floatFromText<Float64>(s->view(), "float"));
-        case TypeCode::String:
-            return value;
-        default:
-            ASSERT(false, "castSlotFrom String->unsupported target");
-        }
-    }
-    default:
-        ASSERT(false, "castSlotFrom unsupported source type");
-    }
-
-#undef DO_CONV
-    return 0; // unreachable
+    // The table (castSafetyFrom) holds one entry for a type that lives in a slot: itself, and
+    // converting a value to its own type does nothing.
+    return value;
 }
 
 bool Type::assignableFrom(Type *from) const {
     const Type *to = this;
 
-    if (!from || to == from)
+    // An unknown source is accepted by no type: the answer does not depend on the target.
+    if (!from)
+        return false;
+    if (to == from)
         return true;
 
     // Built-in types: composite types containing Ref must be resolved before assignment.
@@ -515,11 +315,17 @@ bool Type::assignableFrom(Type *from) const {
     if (to->code_ == TypeCode::TypeVar || from->code_ == TypeCode::TypeVar)
         return to->equals(from);
 
-    // Void can accept assignment from any type, but cannot be assigned to other types.
-    if (to->code_ == TypeCode::Void)
+    // The bottom type `never` (design principles 3.9): the expression it is the type of gives
+    // the function no value, so there is nothing that could be of a type the target does not
+    // take, and it is assignable to every type.
+    if (from->code_ == TypeCode::Never)
         return true;
-    if (from->code_ == TypeCode::Void)
-        return false;
+
+    // `void` is a type of its own: it takes `void` and nothing else, and is taken by nothing but
+    // itself. A function whose result is discarded (`=> void`) is the one place that takes any
+    // result, and it says so itself (FunctionType::assignableFrom).
+    if (to->code_ == TypeCode::Void || from->code_ == TypeCode::Void)
+        return to->code_ == from->code_;
 
     // Third-party types rely on their own overridden assignableFrom. This must be
     // checked before the composite flag: an Other type may also be flagged
@@ -574,6 +380,7 @@ Type *Type::Float() { return Type::Float64(); }
 Type *Type::Bool() { return Type::create(TypeCode::Bool); }
 
 Type *Type::Void() { return Type::create(TypeCode::Void); }
+Type *Type::Never() { return Type::create(TypeCode::Never); }
 
 Type *Type::String() { return Type::create(TypeCode::String); }
 

@@ -143,11 +143,10 @@ bool namesOfList(const std::string &text, std::vector<std::string> &names) {
 }
 
 /// The declared signature as an operator's type: closed, with its parameter names, var marks
-/// and modifiers kept.
+/// kept.
 FunctionType *closedSignature(FunctionType *declared) {
     ASSERT(declared->hasExitType(), "A declared operator has a result type");
     FunctionTypeFactory factory;
-    factory.setModifiers(declared->modifiers());
     for (size_t i = 0; i < declared->withTypesCount(); ++i) {
         factory.addWithArg(
             std::string(declared->argNameAt(i)), declared->withTypeAt(i),
@@ -234,7 +233,7 @@ DeclaredFuncTypeResolver::DeclaredFuncTypeResolver(FunctionType *declared)
 }
 
 std::optional<FunctionType *> DeclaredFuncTypeResolver::resolve(
-    const type_vec_t &with, const type_vec_t &norm, const ModifierSet &modifiers) const {
+    const type_vec_t &with, const type_vec_t &norm) const {
     if (with.size() != funcType_->withTypesCount() || norm.size() != funcType_->normTypesCount()) {
         return std::nullopt; // reject
     }
@@ -297,17 +296,16 @@ std::optional<FunctionType *> DeclaredFuncTypeResolver::resolve(
             return std::nullopt;
         }
     }
-    (void)modifiers;
     return concrete;
 }
 
 std::optional<FunctionType *> DeclaredFuncTypeResolver::resolveForCall(
     const type_vec_t &types, Type *expectedResult, const type_vec_t &with, const type_vec_t &norm,
-    static_args_t normStatics, const ModifierSet &modifiers) const {
+    static_args_t normStatics) const {
     (void)expectedResult;
     (void)normStatics;
     if (types.empty()) {
-        return resolve(with, norm, modifiers);
+        return resolve(with, norm);
     }
     // The call writes the declaration's own variables (`show::<f32>([])`): they are fixed by
     // position, the way a generic function's `::<...>` fixes its head parameters, and the
@@ -328,12 +326,11 @@ std::optional<FunctionType *> DeclaredFuncTypeResolver::resolveForCall(
     // again what it already said.
     return resolve(
         type_vec_t(concrete->withTypesSpan().begin(), concrete->withTypesSpan().end()),
-        type_vec_t(concrete->normTypesSpan().begin(), concrete->normTypesSpan().end()),
-        modifiers);
+        type_vec_t(concrete->normTypesSpan().begin(), concrete->normTypesSpan().end()));
 }
 
 std::optional<FunctionType *> StaticFuncTypeResolver::resolve(
-    const type_vec_t &with, const type_vec_t &norm, const ModifierSet &modifiers) const {
+    const type_vec_t &with, const type_vec_t &norm) const {
     ASSERT(funcType_, "FunctionType is null");
     const size_t withCount = funcType_->withTypesCount();
     const size_t normCount = funcType_->normTypesCount();
@@ -356,15 +353,14 @@ std::optional<FunctionType *> StaticFuncTypeResolver::resolve(
 }
 
 std::optional<FunctionType *> DynamicFuncTypeResolver::resolve(
-    const type_vec_t &withArgs, const type_vec_t &normArgs, const ModifierSet &modifiers) const {
+    const type_vec_t &withArgs, const type_vec_t &normArgs) const {
     // A caller that holds no constants asks the rule the same question without them; a rule whose
     // result follows their values answers what it can without them.
-    return resolveWith(withArgs, normArgs, {}, modifiers);
+    return resolveWith(withArgs, normArgs, {});
 }
 
 std::optional<FunctionType *> DynamicFuncTypeResolver::resolveWith(
-    const type_vec_t &withArgs, const type_vec_t &normArgs, static_args_t normStatics,
-    const ModifierSet &modifiers) const {
+    const type_vec_t &withArgs, const type_vec_t &normArgs, static_args_t normStatics) const {
     if (withVars_.first != -1 && static_cast<int>(withArgs.size()) != withVars_.first) {
         return std::nullopt; // reject
     }
@@ -385,8 +381,8 @@ std::optional<FunctionType *> DynamicFuncTypeResolver::resolveWith(
     // The rule's own callback, and the one that also reads the call's constants when the rule
     // declared it: a rule whose result type follows the values the program wrote answers from the
     // statics path, and a rule that declared none answers exactly as it did.
-    auto optResType = staticsResolver_ ? staticsResolver_(with, norm, normStatics, modifiers)
-                                       : resolver_(with, norm, modifiers);
+    auto optResType = staticsResolver_ ? staticsResolver_(with, norm, normStatics)
+                                       : resolver_(with, norm);
     if (!optResType) {
         return std::nullopt; // reject
     }
@@ -399,5 +395,5 @@ std::optional<FunctionType *> DynamicFuncTypeResolver::resolveWith(
     }
     // The same call shape resolves to the same signature object: a program resolves the same
     // few operator signatures at every call, and the permanent space never frees.
-    return FunctionType::create(withParams, normParams, *optResType, modifiers);
+    return FunctionType::create(withParams, normParams, *optResType);
 }

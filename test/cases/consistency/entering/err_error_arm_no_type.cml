@@ -1,0 +1,6 @@
+func main(): int sync {
+    let c = true
+    let x = if c then error('Bad', 'c was true') else 7
+    println(x)
+    return 0
+}

@@ -1,0 +1,9 @@
+/// std::cpp has no standalone translation of a string operator: the program links the runtime.
+module cpp_runtime_bridge
+
+import str
+
+func main(): int sync {
+    println(str::to_upper('a'))
+    return 0
+}

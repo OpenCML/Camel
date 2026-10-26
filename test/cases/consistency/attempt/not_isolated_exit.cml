@@ -4,6 +4,8 @@
  */
 module not_isolated_exit
 
+import { exit } from process
+
 func leave(x: int): int sync {
     println('leaving')
     if x == 3 then sync { exit(7) }
@@ -12,9 +14,9 @@ func leave(x: int): int sync {
 
 func main(): int sync {
     println('before')
-    let a = attempt(leave, 1) !! -1
+    let a = attempt(leave)(1) !! -1
     println(a)
-    let b = attempt(leave, 3) !! -1
+    let b = attempt(leave)(3) !! -1
     println(b)
     println('not reached')
     return 0

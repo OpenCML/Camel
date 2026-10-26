@@ -72,7 +72,7 @@ camel docs/tutorial/examples/08_modules.cml
 `math`, `str`, `fs`, `json`, `array`, `map`, `tensor` and the rest ship with Camel and are written exactly like a
 module you write yourself. This chapter uses three:
 
-- [`fs`](../stdlib-reference.md#fs): `read_text(path)` reads a text file, `write_text(path, text)` writes one.
+- [`fs`](../stdlib-reference.md#fs): `path->read_text` reads a text file (a failure is an error value), `text->write_text<path>` writes one.
 - [`str`](../stdlib-reference.md#str): `split<' '>` cuts on a separator, `to_lower` and `trim` tidy up words.
 - [`json`](../stdlib-reference.md#json): `encode(value)` writes a value as one line of JSON, `decode(text)` reads
   text back.
@@ -102,7 +102,7 @@ func tally(words: string[]): Map<string, int> {
 }
 
 func main(path: string): int sync {
-    let words = words_of(read_text(path))
+    let words = words_of(path->read_text !! '')
     let counts = tally(words)
     println(len(words))
     println(encode(counts))
@@ -157,7 +157,7 @@ func words_of(text: string): string[] {
 }
 
 func tally(path: string): Map<string, int> {
-    let words = words_of(read_text(path))
+    let words = words_of(path->read_text !! '')
     return words->reduce<(acc: Map<string, int>, w: string): Map<string, int> => acc->put<w, (acc[w] ?? 0) + 1>, [] as Map<string, int>>
 }
 

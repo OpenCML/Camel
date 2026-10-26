@@ -1,0 +1,34 @@
+/**
+ * A lambda cannot capture a stream (design principles 5.4): it may be called any number of times,
+ * so the read it makes is not the one read the path that made it allows. The stream is written
+ * where it is consumed instead -- handed to a call that reads it, or read by a `for` -- and a
+ * stream a closure only hands on, without reading it, is not a capture this rule refuses.
+ */
+module stream_capture_stream
+
+let source: int.. = count(3)
+
+func count(n: int): int.. {
+    return step(n)
+}
+
+func step(n: int): () => (int, int..)? {
+    return () => if n > 0 then (n, step(n - 1)) else null
+}
+
+func firstOf(p: (int, int..)?): int {
+    return match p {
+        case null => 0
+        case v => v.0
+    }
+}
+
+func read(): () => int {
+    return () => firstOf(source())
+}
+
+func main(): int sync {
+    let take = read()
+    println(take())
+    return 0
+}

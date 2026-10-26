@@ -1,0 +1,80 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * Measuring and workloads for benchmarks and for tests of parallelism. This is a tool, not a
+ * library programs depend on: timing is `time::timed`, which runs a call once and gives the
+ * seconds it took, and everything here is built on it. The two workloads are the Monte Carlo
+ * kernels the scheduler tests use as work that is pure, seeded and heavy enough to be worth
+ * spreading over threads: the same seed gives the same result on every run and every thread count.
+ */
+
+import { exp, sqrt } from math
+import { Key, key, fold, split, uniform, normal } from random
+import { mean, stdev } from statistics
+import { sum } from array
+import { timed } from time
+
+// ---- timing ----
+
+/// Runs fn the given number of times, one after the other, and gives the seconds each run took.
+/// @example-fragment times a function that prints, and the printing is the point
+/// @example (() => println('x'))->timeit<repeat: 3>
+with <repeat: int>
+export func timeit(fn: () => void): float[] {
+    return loop times = [] as float[] for i in 0..repeat do times->append<timed((k: int) => fn(), i).1>
+}
+
+/// The mean time of a run, in milliseconds, and the half-width of its 95% confidence interval
+/// (1.96 standard errors), over the given number of runs.
+/// @example-fragment times a function that prints, and the printing is the point
+/// @example (() => println('x'))->perfms<repeat: 30>
+with <repeat: int>
+export func perfms(fn: () => void): (float, float) {
+    let times = fn->timeit<repeat>
+    return (mean(times) * 1000.0, 1.96 * stdev(times) * 1000.0 / sqrt(float(repeat)))
+}
+
+// ---- workloads ----
+
+/// Draws `samples` points uniformly from the square [-1, 1]^2 with the generator of `seed` and
+/// gives how many fall inside the unit circle. The estimate of pi is `4 * hits / samples`.
+/// @fails fault `InvalidArgument` when samples is negative
+/// @example pi_hits(1000, 42) > 700    // true
+export func pi_hits(samples: int, seed: int): int {
+    let k = key(seed)
+    return if samples < 0 then fail<'InvalidArgument'>('the sample count is negative')
+        else (0..samples)->map<(i: int): int => inside(fold(k, i))>->sum
+}
+
+// One point from a key: 1 when it falls inside the unit circle.
+func inside(k: Key): int {
+    let (kx, ky) = split(k)
+    let x = 2.0 * uniform::<float>(kx) - 1.0
+    let y = 2.0 * uniform::<float>(ky) - 1.0
+    return if x * x + y * y <= 1.0 then 1 else 0
+}
+
+/// Prices a one-year Asian call on a geometric random walk with `paths` simulated paths of `steps`
+/// steps each, with S0 = 100, K = 100, r = 0.05 and sigma = 0.2 and the generator of `seed`: the
+/// discounted average payoff.
+/// @fails fault `InvalidArgument` when paths is negative or steps is not positive
+/// @example asian_call_price(2000, 128, 42) > 0.0    // true
+export func asian_call_price(paths: int, steps: int, seed: int): float {
+    let k = key(seed)
+    return if paths < 0 || steps <= 0 then fail<'InvalidArgument'>('the path count is negative or the step count is not positive')
+        else exp(-0.05) * mean((0..paths)->map<(p: int): float => payoff(fold(k, p), steps)>)
+}
+
+// The payoff of one path: the average of the walk above the strike, or nothing.
+func payoff(k: Key, steps: int): float {
+    let dt = 1.0 / float(steps)
+    let drift = (0.05 - 0.5 * 0.2 * 0.2) * dt
+    let vol = 0.2 * sqrt(dt)
+    let walk = loop s = 100.0, total = 0.0 for j in 0..steps do {
+        let next = s * exp(drift + vol * normal::<float>(fold(k, j)))
+        (next, total + next)
+    }
+    let above = walk.1 / float(steps) - 100.0
+    return if above > 0.0 then above else 0.0
+}

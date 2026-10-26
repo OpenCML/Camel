@@ -382,6 +382,13 @@ void declareElementaryFunctions() {
     // One correctly rounded square root in the width of the argument; an integer argument is
     // converted first (a correctly rounded step too, which `compute` names for the narrow case).
     declare(
+        "math:sqrt_d",
+        rounded(
+            TypeCode::Float64,
+            kApprox,
+            "one correctly rounded square root in f64, the kernel of every float type; sqrt(-0) is "
+            "-0, sqrt(x < 0) is a domain error (NaN), sqrt(+inf) is +inf"));
+    declare(
         "math:sqrt",
         rounded(
             TypeCode::Float32,
@@ -505,6 +512,21 @@ void declareIntegerFunctions() {
         exactInteger(
             "x >> count, arithmetic (the sign bit is copied in); a count outside 0..width-1 is a "
             "fault"));
+    // The same two with the count in angle brackets, one operator per width.
+    for (const char *name : {"math:shl_i", "math:shl_l"}) {
+        declare(
+            name,
+            exactInteger(
+                "x << count on the unsigned value (bits shifted out are lost, zeros come in); a "
+                "count outside 0..width-1 is a fault"));
+    }
+    for (const char *name : {"math:shr_i", "math:shr_l"}) {
+        declare(
+            name,
+            exactInteger(
+                "x >> count, arithmetic (the sign bit is copied in); a count outside 0..width-1 is "
+                "a fault"));
+    }
     // The base conversions of integers: no arithmetic, only the digits of the value.
     forIntegerWidths("bin", [] {
         return exactInteger(

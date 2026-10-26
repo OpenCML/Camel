@@ -27,12 +27,14 @@ timeout_ms = 10000
 
 [[tests]]
 name = "rules.two_way_refused"
-desc = "A rule from <=> given to rewrite is an error value, RuleTwoWay, that names the rule: the pass fails and the program does not run."
+desc = "A rule from <=> given to rewrite is an error value, RuleTwoWay, that names the rule: the pass fails with it, and the error value reaches the exit unhandled, so the program does not run."
 kind = "negative"
 case = "../../../cases/modules/rules/target.cml"
 args = ["${case}", "simplify::swapped", "std::nvm"]
 expect_exit = 1
-expect_output_contains = ["GraphPassFailed", "RuleTwoWay", "Rule 'swap' holds both ways"]
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_output_contains = ["RuleTwoWay", "Rule 'swap' holds both ways"]
+expect_stderr_contains = ["without being handled: RuleTwoWay:"]
 expect_output_not_contains = ["56 42"]
 timeout_ms = 10000
 
@@ -79,7 +81,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "rules.check_accepts_rules_that_hold"
-desc = "The check every rule passes before it enters a library (graph store decision 5): 100 random instances of the two sides agree bit for bit (the rules that need no permission), and the engine fires the rule on its own left side and gets a function that agrees too. Integer rules, a rule with const parameters, a rule from <=> and the float rules x + -0.0 and x * 1.0. Each line is a row of the verdict table: the verdict `sampled` (100 samples were compared and no solver established anything), the proposition `equality` (these rules ask for no permission) and the evidence `samples 100` (H247, slice S0). The old wording `ok ...: 100 samples agree` and the old words `FAIL`/`unchecked` are gone from the report."
+desc = "The check every rule passes before it enters a library (graph store decision 5): 100 random instances of the two sides agree bit for bit (the rules that need no permission), and the engine fires the rule on its own left side and gets a function that agrees too. Integer rules, a rule with const parameters, a rule from <=> and the float rules x + -0.0 and x * 1.0. Each line is a row of the verdict table: the verdict `sampled` (100 samples were compared and no solver established anything), the proposition `equality` (these rules ask for no permission) and the evidence `samples 100` . The old wording `ok ...: 100 samples agree` and the old words `FAIL`/`unchecked` are gone from the report."
 kind = "behavior"
 case = "../../../cases/modules/rules/check_rules.cml"
 args = ["${case}", "std::nvm"]
@@ -103,7 +105,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rules.library_verdicts_are_exactly_these"
-desc = "Every rule of the standard library enters the check with the verdict the table gives it, including one row per instance of a generic law: 200 random instances of a rule's two sides agree (or the engine fires the rule on its own left side and agrees), a conditional rule reports the instances its condition selects, and a rule the check cannot make a value for says so in its own reason column. The integer and floating laws are one generic law per fact since the fold (`when is_integer::<T>()`, `when is_float::<T>()`), and `check` walks their instances over the types the operator groups registered, filtered by the condition: `int_add_zero<int>` and `int_add_zero<i32>`, `float_mul_one<float>`/`<f32>`/`<bf16>`/`<f16>`, each under its own name. The old blanket `unchecked <name>: a generic rule, whose instances are not checked here` is gone from the report, and so is the word `unchecked`: a floating instance at `bf16`/`f16` is `sampled` with `evidence samples 200` like an f32 one: the sampler draws the two reduced-precision types as it draws any other floating element type -- the drawn value is rounded once into the element type, a tensor of either is two bytes per element -- and the comparison uses the element epsilon of the type the instance is at, bf16 2^-8 and f16 2^-10 apart from f32's. The reason the check writes for a type it still cannot make a value of is unchanged and is pinned by `rules.check_names_the_type_it_cannot_make`. Every row names its proposition, which follows the permission the rule asks for: the integer laws `equality`, the `reassociate` laws `real equality + IEEE on special values`, the accuracy laws `error bound`. NO rule of the library is `refuted`, and this entry pins the two rows the licence narrowing turned: `float_combine_mixed` and its tensor twin are `sampled` at `f16`, where the points the check draws put an intermediate product above the type's range -- `x = 10000.0` with the coefficients 39 and -55, both products of the left side overflow where the right side is an infinity -- and the two laws ask for `no_infs`, whose meaning is that no value is an infinity, the intermediate results included. A point where a step leaves the element type's range is outside the domain the rule claims and is not a counterexample to it, so the row is a pass; the same point without the licence still refutes the law, and `rules.a_reassociate_rule_is_compared_in_the_higher_precision` reads the two side by side. The `reassociate` half: a rule that asks for it is compared where the real value is, both sides evaluated in the reference's precision, and not one element-type result against another (correcting the method H247 measured: its `1e+30` sample, `c1 = 48`, `c2 = -47`, has two element-type results 27 ulps apart, `1.0000041e+30` and `1e+30`, and one real value; the reassociate contract is what the licence allows the rule's own roundings, not what the cancellation is measured against. No rule is excused from the report either: the coverage case beside this one hands every exported rule over, and a `refuted` line anywhere in its report fails `rules.every_exported_rule_enters_the_check`. Commutation and association are not rules to check any more: they are properties of the operator's declaration, read by the matcher (rewrite design 2 (second version) 6)."
+desc = "Every rule of the standard library enters the check with the verdict the table gives it, including one row per instance of a generic law: 200 random instances of a rule's two sides agree (or the engine fires the rule on its own left side and agrees), a conditional rule reports the instances its condition selects, and a rule the check cannot make a value for says so in its own reason column. The integer and floating laws are one generic law per fact since the fold (`when is_integer::<T>()`, `when is_float::<T>()`), and `check` walks their instances over the types the operator groups registered, filtered by the condition: `int_add_zero<int>` and `int_add_zero<i32>`, `float_mul_one<float>`/`<f32>`/`<bf16>`/`<f16>`, each under its own name. The old blanket `unchecked <name>: a generic rule, whose instances are not checked here` is gone from the report, and so is the word `unchecked`: a floating instance at `bf16`/`f16` is `sampled` with `evidence samples 200` like an f32 one: the sampler draws the two reduced-precision types as it draws any other floating element type -- the drawn value is rounded once into the element type, a tensor of either is two bytes per element -- and the comparison uses the element epsilon of the type the instance is at, bf16 2^-8 and f16 2^-10 apart from f32's. The reason the check writes for a type it still cannot make a value of is unchanged and is pinned by `rules.check_names_the_type_it_cannot_make`. Every row names its proposition, which follows the permission the rule asks for: the integer laws `equality`, the `reassociate` laws `real equality + IEEE on special values`, the accuracy laws `error bound`. NO rule of the library is `refuted`, and this entry pins the two rows the licence narrowing turned: `float_combine_mixed` and its tensor twin are `sampled` at `f16`, where the points the check draws put an intermediate product above the type's range -- `x = 10000.0` with the coefficients 39 and -55, both products of the left side overflow where the right side is an infinity -- and the two laws ask for `no_infs`, whose meaning is that no value is an infinity, the intermediate results included. A point where a step leaves the element type's range is outside the domain the rule claims and is not a counterexample to it, so the row is a pass; the same point without the licence still refutes the law, and `rules.a_reassociate_rule_is_compared_in_the_higher_precision` reads the two side by side. The `reassociate` half: a rule that asks for it is compared where the real value is, both sides evaluated in the reference's precision, and not one element-type result against another (correcting the method first measured: its `1e+30` sample, `c1 = 48`, `c2 = -47`, has two element-type results 27 ulps apart, `1.0000041e+30` and `1e+30`, and one real value; the reassociate contract is what the licence allows the rule's own roundings, not what the cancellation is measured against. No rule is excused from the report either: the coverage case beside this one hands every exported rule over, and a `refuted` line anywhere in its report fails `rules.every_exported_rule_enters_the_check`. Commutation and association are not rules to check any more: they are properties of the operator's declaration, read by the matcher (rewrite design 2 (second version) 6)."
 kind = "behavior"
 case = "../../../cases/modules/rules/check_library.cml"
 args = ["${case}", "std::nvm"]
@@ -569,6 +571,37 @@ expect_stdout_contains = ["sum 3 mixed 2 one 1 two 1\nsum 3 mixed 2 one 0 two 1\
 timeout_ms = 20000
 
 [[tests]]
+name = "rules.fact_reads_a_fact_at_the_type_argument_it_is_given"
+desc = "A fact whose head declares a type parameter is one declaration and one fact per type argument (rewrite design 7.5). A rule's parameter is declared `y: T`, so the node its condition hands the query has the value type `T` and `depth(y)` is read at the type argument the declaration gives, the way any generic call infers one from its arguments (design principles 5.9); the fact body's own `x` is a case node, which states no value type, so the query there writes `depth::<T>(x)`. `drop_deep` rewrites `x + y` to `x` only where `depth(y) > 1`, so `target` (`a + (b + 1)`) loses its outer addition and `keep` (`a + b`) keeps its one: `keep`'s second operand is one addition deep, which is not more than one, while `target`'s second operand is two deep, so the rule drops the whole outer addition of `target` and leaves `a`. The two reports are `target 5 keep 1` (3 + 2 additions deep, then 1) and `target 0 keep 1`, and `target(3, 4)` is 3 where it was 8."
+kind = "behavior"
+case = "../../../cases/modules/rules/fact_at_type_argument_target.cml"
+args = ["${case}", "fact_at_type_argument::report", "fact_at_type_argument::apply", "fact_at_type_argument::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["target 5 keep 1\ntarget 0 keep 1\n3 7\n"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.a_nodes_value_type_is_a_type_a_program_writes"
+desc = "A node's value type is a type a program writes (language reference 9, design principles 5.9): `depthOfWritten(n: Node<int>)` is given a node whose value type is stated, so `depth(n)` infers the fact's type argument from it, the way any generic call infers one from its arguments; a node a pass read out of a graph states no value type, so `depthOfBare(n: Node)` writes `depth::<int>(n)`. Both read the same fact of the two additions of `target` (`a + (b + 1)`, depths 2 and 3), so the report is `written 5 bare 5` and the value is `8`."
+kind = "behavior"
+case = "../../../cases/modules/rules/fact_value_type_target.cml"
+args = ["${case}", "fact_value_type::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["written 5 bare 5\n8\n"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.a_query_given_a_value_names_the_node_type_it_takes"
+desc = "A fact is asked about a node, so a query handed a value is refused with the type its parameter takes and the type the argument has (language reference 9, design principles 5.9): `depth(a)` in a function whose parameter is an `int` names the query's parameter as a node of a value type -- `Node<T>` -- against the `int` value given, which is not the `NoMatchingFunction` of a call no declaration takes."
+kind = "negative"
+case = "../../../cases/modules/rules/fact_query_value.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["GenericArgumentsMismatch", "argument 1 has type 'int', but its parameter 'v: Node<"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
 name = "rules.fact_takes_the_parts_of_a_compound"
 desc = "A declaration with parameters (`fact mul_by_one(a: Node, b: Node): bool`) is a multi-parameter query: a rule's condition hands it the parts of the compound, and the fact is the one of the value whose parts they are (rewrite design 4.1-4.2). `mul_one_by_parts` rewrites `x * 1` to `x` because `mul_by_one(x, node_of(c))` reads `sign(y) == 1` through the `x * y` case; `x * 2` keeps its product because the query answers false. The coefficient is a `const` parameter, so its node is reached with `node_of(c)` (rule-language design v2, section 1: `const c` is the constant's value in a condition, and `node_of(c)` is the node), and the two parts are a factor and a node rather than two values pinned by shape. The first report prints one product in each function, the second only in `two`, and the values are unchanged."
 kind = "behavior"
@@ -577,6 +610,17 @@ args = ["${case}", "fact_parts::report", "fact_parts::apply", "fact_parts::repor
 expect_exit = 0
 expect_stdout_contains = ["one 1 two 1\none 0 two 1\n7 14\n"]
 timeout_ms = 20000
+
+[[tests]]
+name = "rules.fact_refuses_a_query_that_leaves_its_type_arguments_open"
+desc = "A query of a fact whose head declares type parameters without them (`literal_of(n)` where `n` is a `Node`) fixes none of the fact's type arguments: the instance the query asked for cannot be built, and the call is reported where it is written as the same `GenericArgumentsMismatch` any generic call gives when its arguments determine no type, asking for the type arguments to be written out (`literal_of::<...>`) -- a node stands for the value it is the node of and gives no type (design principles 5.9)."
+kind = "negative"
+case = "../../../cases/modules/rules/fact_generic_no_type_arguments.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["GenericArgumentsMismatch", "cannot be determined from the arguments or expected result", "literal_of::<...>"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
 
 [[tests]]
 name = "rules.node_of_reaches_a_const_parameter"
@@ -1057,14 +1101,16 @@ kind = "negative"
 case = "../../../cases/modules/rules/schedule_target.cml"
 args = ["${case}", "schedulers::refuse", "std::nvm"]
 expect_exit = 1
-expect_output_contains = ["GraphPassFailed", "RuleInvalid", "Rule 'bad': the left side has a term that is not an operator, a constant or a parameter"]
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_output_contains = ["RuleInvalid", "Rule 'bad': the left side has a term that is not an operator, a constant or a parameter"]
+expect_stderr_contains = ["without being handled: RuleInvalid:"]
 expect_output_not_contains = ["\n5\n"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
 [[tests]]
 name = "rules.run_cost_is_measurable"
-desc = "`run` keeps what one whole application cost (H226): on a graph of 200 functions holding one `x + 0` each, the first application makes the zero law fire 200 times in 2 rounds (the second round proves the fixpoint) and the second application on its result rewrites nothing in 1 round. The wall time and the visited/erased counts are printed but not pinned (they depend on the machine and the node order); the rewrites and rounds are."
+desc = "`run` keeps what one whole application cost : on a graph of 200 functions holding one `x + 0` each, the first application makes the zero law fire 200 times in 2 rounds (the second round proves the fixpoint) and the second application on its result rewrites nothing in 1 round. The wall time and the visited/erased counts are printed but not pinned (they depend on the machine and the node order); the rewrites and rounds are."
 kind = "behavior"
 case = "../../../cases/modules/rules/bench_target.cml"
 args = ["${case}", "bench::measure", "std::nvm"]
@@ -1171,7 +1217,9 @@ kind = "negative"
 case = "../../../cases/modules/rules/explain_target.cml"
 args = ["${case}", "explain_pass::without_attribution", "std::nvm"]
 expect_exit = 1
-expect_output_contains = ["GraphPassFailed", "NoAttribution", "the run was made without attribution"]
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_output_contains = ["NoAttribution", "the run was made without attribution"]
+expect_stderr_contains = ["without being handled: NoAttribution:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
@@ -1312,7 +1360,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "rules.every_exported_rule_enters_the_check"
-desc = "The check's input is the library's own list of exported rules, and a verify script asserts it name by name (the hand-written list is what drifts, and the library's rule -- no rule enters `stdlib/rules.cml` without passing the check -- has to be catchable by a test). The script reads `stdlib/rules.cml` (43 exported rules), the case's own source with its comments stripped, and this run's report, and fails unless the three name the same set: a rule added to the library and not to the case, a name the case invents, a rule the case hands over that reaches no line of the report, and any `refuted` in it. The gap this closes is measured: `tensor_sigmoid_chain` was exported, used by the fusion pass, and reached no `check` call of any case (the check cases handed over 42 of the library's 43 exported rules, and the folding lane counted the same gap as 68 of 69 rules). NO rule of the library is `refuted`, and no rule is registered as excused either: the script holds no set of names it lets a `refuted` line through for, so H247's finding and every later one fail the run (`refuted` hard-fails, and a law a licence excuses is not registered: it is judged under the licence it asks for). The rules are handed over in the arrangements the two cases beside this one measured, and the seed of a rule now follows its identity rather than its place in the array, so this case's report is the one a check on coverage reads."
+desc = "The check's input is the library's own list of exported rules, and a verify script asserts it name by name (the hand-written list is what drifts, and the library's rule -- no rule enters `stdlib/rules.cml` without passing the check -- has to be catchable by a test). The script reads `stdlib/rules.cml` (43 exported rules), the case's own source with its comments stripped, and this run's report, and fails unless the three name the same set: a rule added to the library and not to the case, a name the case invents, a rule the case hands over that reaches no line of the report, and any `refuted` in it. The gap this closes is measured: `tensor_sigmoid_chain` was exported, used by the fusion pass, and reached no `check` call of any case (the check cases handed over 42 of the library's 43 exported rules, and the folding lane counted the same gap as 68 of 69 rules). NO rule of the library is `refuted`, and no rule is registered as excused either: the script holds no set of names it lets a `refuted` line through for, so that finding and every later one fail the run (`refuted` hard-fails, and a law a licence excuses is not registered: it is judged under the licence it asks for). The rules are handed over in the arrangements the two cases beside this one measured, and the seed of a rule now follows its identity rather than its place in the array, so this case's report is the one a check on coverage reads."
 kind = "behavior"
 case = "../../../cases/modules/rules/check_every_rule.cml"
 args = ["${case}", "std::nvm"]
@@ -1484,7 +1532,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 [[tests]]
 name = "rules.check_program_parameter"
-desc = "`check`'s `program` parameter is a `Program?` whose default is `null`, and `samples` and `seed` have defaults too, so the one-argument call the rule writes compiles as it stands there. The candidate set of a generic law is the types every operator group registered, and then the types of the values a program the call was given has, each once, in the order its graphs write them: what a group registers is the fixed signatures of the declaration modules, and H466 removed `load_npy`'s `(path: string) => Tensor` -- the last one that named a tensor whose element type is open -- so with no program no `sum_swap<Tensor>` instance is made any more (design principles 5.5). The case declares `Vec = f32[3]`, which no group registered, so `sum_swap<Vec>` is an instance only in the report of the call that gives `current()`, and that instance prints under the array's text (`f32[3]`): the printed text of every spelling is the array's (`compile/array_alias.plan.toml`). The first and the third report are the same text: with no program, the candidate set is the registered types alone, which is every reading `check` had before the parameter existed."
+desc = "`check`'s `program` parameter is a `Program?` whose default is `null`, and `samples` and `seed` have defaults too, so the one-argument call the rule writes compiles as it stands there. The candidate set of a generic law is the types every operator group registered, and then the types of the values a program the call was given has, each once, in the order its graphs write them: what a group registers is the fixed signatures of the declaration modules, and The `load_npy` element-type change removed `load_npy`'s `(path: string) => Tensor` -- the last one that named a tensor whose element type is open -- so with no program no `sum_swap<Tensor>` instance is made any more (design principles 5.5). The case declares `Vec = f32[3]`, which no group registered, so `sum_swap<Vec>` is an instance only in the report of the call that gives `current()`, and that instance prints under the array's text (`f32[3]`): the printed text of every spelling is the array's (`compile/array_alias.plan.toml`). The first and the third report are the same text: with no program, the candidate set is the registered types alone, which is every reading `check` had before the parameter existed."
 kind = "behavior"
 case = "../../../cases/modules/rules/check_program_parameter.cml"
 args = ["${case}", "std::nvm"]
@@ -1497,7 +1545,7 @@ assert(blocks.length === 3, 'three reports, got ' + blocks.length + ': ' + block
 const [left, given, allDefaults] = blocks
 assert(left.includes('sampled add_zero: proposition equality, evidence samples 100, fired 8 of 8'), 'the rule of no type parameter is checked: ' + left)
 assert(left.includes('sampled sum_swap<i32>: '), 'the registered types are the candidate set: ' + left)
-assert(!left.includes('sum_swap<Tensor>'), 'no group registers a tensor whose element type is open (H466): ' + left)
+assert(!left.includes('sum_swap<Tensor>'), 'no group registers a tensor whose element type is open: ' + left)
 assert(!left.includes('sampled sum_swap<f32[3]>'), "no program, so the program's own type is no instance: " + left)
 assert(given.includes('sampled sum_swap<f32[3]>: '), "the program's own type joins the candidate set: " + given)
 assert(allDefaults === left, 'the defaults of samples and seed read the registered types alone: ' + allDefaults)
@@ -1689,4 +1737,136 @@ args = ["${case}", "fact_no_value::report", "fact_no_value::apply", "fact_no_val
 expect_exit = 0
 expect_stdout_contains = ["kept 1\nkept 1\nkept 14\n"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.fact_declaration_without_its_type"
+desc = "A fact declaration writes the type of the fact after its parameters (`fact depth(n): int`, rewrite design 7.5), and that is the only type it writes there: `fact depth(n)` with no type is refused where the `:` belongs, by the parser, and nothing of the declaration is compiled. The compiler's own guard for a declaration that reached it without that type is an assertion, not a diagnostic: a file the parser refused is never given an AST."
+kind = "negative"
+case = "../../../cases/modules/rules/fact_no_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::MissingToken"
+expect_diagnostic_code = "0x02000009"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 13
+expect_output_contains = ["Expected ':' before ')'."]
+expect_output_not_contains = ["UnknownInternalError", "ConstructNotSupported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.fact_body_without_a_case"
+desc = "The cases of a fact say what it is, and a body that writes none is refused where the first case belongs, by the parser (`Expected 'case'`), before any fact is built."
+kind = "negative"
+case = "../../../cases/modules/rules/fact_no_cases.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_code = "0x0200000A"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 1
+expect_output_contains = ["Unexpected '}'; expected 'case'."]
+expect_output_not_contains = ["UnknownInternalError", "ConstructNotSupported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.fact_declaration_without_a_join"
+desc = "`join` is the clause that is required: it says how the facts of two writings of one value are merged, and it is the least upper bound of the two (rewrite design 7.5). A fact that writes none is refused with `SemanticDiag::FactJoinRequired` (name=SemanticDiag::FactJoinRequired, code=0x030001F9) on the `fact` line, which names the rule and the clause to write rather than calling the declaration unsupported."
+kind = "negative"
+case = "../../../cases/modules/rules/fact_no_join.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FactJoinRequired"
+expect_diagnostic_code = "0x030001F9"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 1
+expect_output_contains = ["The fact 'sign' writes no 'join'.", "it says how the facts of two writings of one value are merged", "Write it after the cases, naming one binary function or a lambda"]
+expect_output_not_contains = ["UnknownInternalError", "ConstructNotSupported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.fact_const_case_without_a_type"
+desc = "A `const` case matches one constant and the fact function is given the value itself, so the type of that constant is written somewhere: in the case, or in the head of a fact that declares the value it is about with a type (rewrite design 7.5). A fact with no head parameters whose case writes no type is refused with `SemanticDiag::FactConstCaseTypeRequired` (name=SemanticDiag::FactConstCaseTypeRequired, code=0x030001F7), which names the two places the type can stand."
+kind = "negative"
+case = "../../../cases/modules/rules/fact_const_case_without_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FactConstCaseTypeRequired"
+expect_diagnostic_code = "0x030001F7"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 1
+expect_output_contains = ["The 'const' case 'c' of the fact 'one' writes no type.", "case const c: int => c", "fact sign(v: int): int"]
+expect_output_not_contains = ["UnknownInternalError", "ConstructNotSupported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.fact_case_that_binds_no_variable"
+desc = "The cases read how a value was built, and the parts they read are the variables their patterns name: `case x + y` binds the two operands (rewrite design 7.5). A case whose pattern names none is refused with `SemanticDiag::FactCaseBindsNoVariable` (name=SemanticDiag::FactCaseBindsNoVariable, code=0x030001F8), which says what the case has to name, instead of the case being reported as a construct the compiler does not support."
+kind = "negative"
+case = "../../../cases/modules/rules/fact_case_binds_nothing.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FactCaseBindsNoVariable"
+expect_diagnostic_code = "0x030001F8"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 1
+expect_output_contains = ["This case of the fact 'one' names no variable.", "the parts they read are the variables their patterns name", "bind a part with a name, or write `case _`"]
+expect_output_not_contains = ["UnknownInternalError", "ConstructNotSupported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.fact_legal_forms_stay_compilable"
+desc = "The writings the fact rules leave open stay green, and the fact's value is real: a `const` case whose type comes from the head, a `const` case that writes the type of its constant itself, a case whose pattern binds variables (`case x + y`, which recurses into the same fact), the required `join` and `case _` last all compile in one declaration each. The rule `mul_by_sign` reads `sign(y) == 2` in its `when`, so the product `3 * 2` is rewritten to `3 + 100` and `left(3)` prints 103 rather than 106."
+kind = "behavior"
+case = "../../../cases/modules/rules/fact_legal_forms.cml"
+args = ["${case}", "fact_legal_forms::apply", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["103\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+[[tests]]
+name = "saturate_rhs_from_an_enclosing_region"
+desc = "`x + 1 => x` matches `x + 1` in the arm of `&&` with `x` the parameter outside it. The writings of a value share a region, so saturation records no equivalence there instead of failing; saturate and extract from Camel, then the run, give the program's meaning."
+kind = "behavior"
+case = "../../../cases/modules/rules/saturate_outer_operand.cml"
+backends = ["nvm", "fvm"]
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "saturated false true false\n"
+timeout_ms = 20000
+
+[[tests]]
+name = "opt_saturate_rhs_from_an_enclosing_region"
+desc = "The same program through the pipeline's saturation: std::opt::saturate keeps the writings it may, the next pass extracts one per value, and the run gives the program's meaning."
+kind = "behavior"
+case = "../../../cases/modules/rules/saturate_outer_operand.cml"
+args = ["${case}", "std::opt::saturate", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "saturated false true false\n"
+timeout_ms = 20000
+
+[[tests]]
+name = "opt_saturate_loop_with_an_unread_state"
+desc = "A loop whose condition reads one of two states, in a graph with classes of writings: the pipeline's saturation and the extraction the next pass makes keep the condition's port for the unread state, so the run gives the loop's value."
+kind = "behavior"
+case = "../../../cases/modules/rules/saturate_loop_unread_state.cml"
+backends = ["nvm", "fvm"]
+args = ["${case}", "std::opt::saturate", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "3\n"
+timeout_ms = 20000
+
+[[tests]]
+name = "opt_saturate_program_importing_str"
+desc = "A program that imports str (whose cut has a loop of that shape) goes through the pipeline's saturation and runs."
+kind = "behavior"
+case = "../../../cases/modules/rules/saturate_imports_str.cml"
+args = ["${case}", "std::opt::saturate", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "true\n"
 timeout_ms = 20000

@@ -62,12 +62,12 @@ null
 [`examples/07_errors.cml`](examples/07_errors.cml)：
 
 ```cml
-// A function that may fail returns T!; `throw` returns an error value.
+// A function that may fail returns T!: an error value is handed out by `return`.
 // Run: camel docs/tutorial/examples/07_errors.cml
 
 func safe_div(a: int, b: int): int! {
     return if b == 0 then {
-        throw error('DivByZero', 'the divisor is zero')
+        return error('DivByZero', 'the divisor is zero')
     } else {
         return a / b
     }
@@ -85,8 +85,8 @@ func describe(r: int!): string {
 func main(): int sync {
     println(safe_div(9, 3) !! -1)            // 3
     println(safe_div(9, 0) !! -1)            // -1: the substitute
-    println(describe(safe_div(8, 2) ?-> inc))
-    println(describe(safe_div(8, 0) ?-> inc))
+    println(describe(safe_div(8, 2) -> inc))
+    println(describe(safe_div(8, 0) -> inc))
     println(parse_int('12') !! 0, parse_int('twelve') !! 0)
     println(safe_div(1, 0))
     return 0
@@ -106,9 +106,9 @@ DivByZero: the divisor is zero
 error DivByZero: the divisor is zero
 ```
 
-- **`throw e` 是返回一个错误值**，与 `return` 是同一种结构：它不展开调用栈，调用方拿到的是一个 `int!`。
+- **交出一个错误值用 `return e`**：它不展开调用栈，调用方拿到的是一个 `int!`。
   错误值有三个字段：`e.kind`、`e.message`、`e.location`。
-- 拆开的三种写法：`a !! b`（出错取 `b`）、`x ?-> f`（出错就把错误原样传下去，否则调用 `f`，可以连成一串）、
+- 拆开的三种写法：`a !! b`（出错取 `b`）、`x -> f`（出错就把错误原样传下去，否则调用 `f`，可以连成一串）、
   `match` 的 `case error e` 与 `case v`。
 - 最后一行 `println(safe_div(1, 0))` 打印的是错误本身。它同时让编译器给出一条警告——**一个 `int!` 被
   丢掉时，里面的错误就没了**：
@@ -158,7 +158,7 @@ help: Ensure the index is within the valid range of the collection.
 ## 在图上
 
 - 在图上，`int`、`int?`、`int!` **是同一种值**：那个"可能是 `null`、可能带着错误"是一位标记，附着在值上。
-- `??`、`!!`、`?->`、`match` 拆开它时，图上都是一个**分支节点**：条件是那一位，一个臂走"有值"，另一个臂
+- `??`、`!!`、`->`、`match` 拆开它时，图上都是一个**分支节点**：条件是那一位，一个臂走"有值"，另一个臂
   走"没有值/有错误"。所以"处理失败"不是控制流魔法，就是普通的分支。
 - 一个 `int!` 被丢掉（没有任何东西读它）时，图上那条路径就断了——编译器正是从图上看出 `UnusedFallibleValue`。
 
@@ -194,4 +194,4 @@ camel docs/tutorial/examples/07_exercise.cml
 
 - [语言参考 3.4 可能为空 `T?` 与可能出错 `T!`](../language/03_data_model.md#34-可能为空-t-与可能出错-t)
 - [语言参考 6.6 空值与错误的运算符](../language/06_expressions.md#66-空值与错误的运算符)
-- [语言参考 7.3 `return` 与 `throw`](../language/07_statements.md#73-return-与-throw)
+- [语言参考 7.3 `return`](../language/07_statements.md#73-return)

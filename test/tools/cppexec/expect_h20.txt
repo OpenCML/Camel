@@ -1,4 +1,4 @@
-# H20-3: keyed random (key, split, permutation) in std::cpp must print what std::fvm prints.
+# Keyed random (key, split, permutation) in std::cpp must print what std::fvm prints.
 test/cases/modules/random/keyed_random.cml
 test/cases/modules/random/random_independence.cml
 test/cases/modules/random/permutation_negative.cml

@@ -196,7 +196,6 @@ class Node {
         check(NodeKind::EXIT);
         return static_cast<ExitType>(tag_);
     }
-
     /// EXEC: a sync block.
     bool synced() const {
         check(NodeKind::EXEC);

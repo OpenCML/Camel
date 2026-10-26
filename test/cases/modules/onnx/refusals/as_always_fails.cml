@@ -13,8 +13,7 @@ func f(x: f32[..]): f32[..] {
     return y * 2.0
 }
 
-func main(): int sync {
+func main(): void! sync {
     let ex = reshape([1.0, -1.0, 0.5, 2.0, 3.0, -2.0] as f32[], [2, 3])
-    export_model(f, ex, 'tmp/test/onnx/refusal_as_always_fails.onnx')
-    return 0
+    export_model<out: 'tmp/test/onnx/refusal_as_always_fails.onnx'>(f, ex)
 }

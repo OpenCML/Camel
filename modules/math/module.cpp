@@ -82,6 +82,7 @@ bool MathModule::load() {
     // a declaration against.
     declareMathOperatorSemantics();
     camel::core::DerivativeRegistry::instance().setRule("math:sqrt", &sqrtVjp);
+    camel::core::DerivativeRegistry::instance().setRule("math:sqrt_d", &sqrtVjp);
     loaded_ = true;
     return true;
 }

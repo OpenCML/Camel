@@ -437,7 +437,7 @@ unrolling, branch selection, shape facts). These move to general passes:
   dtypes from node types. It reports anything left over (calls, unsupported
   operators) instead of evaluating it.
 
-`onnx.export_model(fn, x, path)` stays as a convenience that runs this pipeline
+`onnx.export_model<out: path>(fn, x)` stays as a convenience that runs this pipeline
 on `fn`.
 
 ### Status
@@ -448,9 +448,9 @@ What exists (`modules/onnx/passes/export.cpp`, `docs/cli.md`):
 
 - `onnx::export` is registered by the `onnx` module and is the last pass of the
   pipeline; it consumes the graph, so the program does not run. The export
-  request is the program's own `onnx.export_model(fn, example, path, ...)`
+  request is the program's own `onnx.export_model<out: path>(fn, example)`
   call, which the pass finds in the entry graph with constant arguments (no new
-  syntax, no new command-line option). the parameter `out` of the pass overrides the path.
+  syntax, no new command-line option). the parameter `out` of the pass overrides the file.
 - It refuses, with the diagnostic `RuntimeDiag::TranslationRefused` at the node
   and the name of the missing pass, a graph that still has a call (not inlined,
   or the entry graph still calling `main`) or an unexpanded macro operator. It
@@ -521,7 +521,7 @@ What differs from the design above:
     argument that is a tuple or struct is carried leaf by leaf, in the order of
     its fields: one `Loop` state input per leaf, the body entry rebuilds the
     tuple or struct from those inputs, and the loop's outputs are rebuilt into
-    the value the recursion returns (H44's outline; `ort_struct_loop`);
+    the value the recursion returns (the outline; `ort_struct_loop`);
   - the body is the function's own graph evaluated once. A branch that
     separates "return" from "call again" becomes an `If` whose outputs are the
     continue flag and the next state: each side is computed only when it is

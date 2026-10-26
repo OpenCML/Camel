@@ -328,6 +328,9 @@ void Builder::initInnerTypes() {
     // The type of binary data (design principles 11.1), a built-in name like `string`.
     typeScope_->insert(Reference("Bytes"), camel::core::type::BytesType::get());
     typeScope_->insert(Reference("void"), Type::Void());
+    // The bottom type (design principles 3.9): a function that never returns, and an
+    // expression that leaves the function, are written `never`.
+    typeScope_->insert(Reference("never"), Type::Never());
     // The built-in collection types, written `Map<K, V>` and `Set<T>` (design principles 11.3).
     typeScope_->insert(Reference("Map"), MapType::prototype());
     typeScope_->insert(Reference("Set"), SetType::prototype());
@@ -1271,7 +1274,10 @@ bool Builder::resolveAmbientResource(
                 if (decl->members.empty()) {
                     // A resource of a module is named with the module, as an operator of one is
                     // (design principles 10.2): `fs::handle` is one thing, wherever it is used.
-                    // A resource of this module keeps the name it was declared with.
+                    // A name shown for a resource of this module leaves the module out, since
+                    // there is nothing to tell it apart from; the module the resource is declared
+                    // in is half of its identity, and that is what the operator's own declaration
+                    // and this clause are compared as (see resourceIdentities).
                     out.push_back(
                         in.get() == module_.get() ? written : in->name() + "::" + written);
                     return true;
@@ -1479,6 +1485,10 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
         signature.params.clear();
         signature.ambient.clear();
     }
+    // The resources the clause wrote are what it promises, and a resource the program does not own
+    // brings its effect on the world with it (design principles 3.3): a clause that names one
+    // covers the body that reaches it, and one that leaves it out does not.
+    sem::ambientCarriesExternal(signature);
     return signature;
 }
 
@@ -2034,8 +2044,7 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
     // Ensure the AST node is of the expected type (Stmt)
     ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for ExitStmt");
 
-    // Create an ExitLoad node to represent the exit statement. `throw` is an exit as well:
-    // it returns the failed form of the function's declared `T!` (the graph builder checks).
+    // Create an ExitLoad node to represent the exit statement.
     const AST::ExitType astExit = ast->loadAs<AST::ExitStmtLoad>()->exitType();
     if (astExit == AST::ExitType::Yield) {
         // The syntax reads `yield` (design principles 5.4: a function whose body writes it
@@ -2048,9 +2057,8 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
         diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("generators");
         throw BuildAbortException();
     }
-    const bool isThrow  = astExit == AST::ExitType::Throw;
-    node_ptr_t exitNode = tree_->makeExit(isThrow ? ExitType::Throw : ExitType::Return);
-    reportExitInUnusedArm(ast, isThrow);
+    node_ptr_t exitNode = tree_->makeExit(ExitType::Return);
+    reportExitInUnusedArm(ast);
 
     // Retrieve the data nodes associated with the exit statement
     const auto &dataNodes = ast->atAs<AST::RepeatedLoad>(0);
@@ -2097,7 +2105,7 @@ void Builder::enterArmOf(const AST::node_ptr_t &ctrl, bool valueUnused) {
     valueUse_.unusedArmOf = valueUnused ? ctrl : nullptr;
 }
 
-void Builder::reportExitInUnusedArm(const AST::node_ptr_t &exit, bool isThrow) {
+void Builder::reportExitInUnusedArm(const AST::node_ptr_t &exit) {
     const AST::node_ptr_t &ctrl = valueUse_.unusedArmOf;
     if (ctrl == nullptr) {
         return;
@@ -2111,7 +2119,7 @@ void Builder::reportExitInUnusedArm(const AST::node_ptr_t &exit, bool isThrow) {
         return;
     }
     const bool isMatch  = ctrl->loadAs<AST::DataLoad>()->dataType() == AST::DataType::MatchExpr;
-    const char *keyword = isThrow ? "throw" : "return";
+    const char *keyword = "return";
     const char *branch  = isMatch ? "match" : "if";
     diags_->of(SemanticDiag::ExitInUnusedBranch)
         .at(range)
@@ -2672,7 +2680,6 @@ enum ReservedDataOp {
     NullThen,
     NullThen,
     ErrorThen,
-    NotNullThen,
     Call, // Data obj, Data* args, NamedData* kwargs
     Bind, // Data obj, Data* args, NamedData* kwargs
     Comp, // Data lhs, Data rhs
@@ -2720,13 +2727,6 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         *caseNode << execNode;
         *res << lhsNode << caseNode;
     } break;
-    case AST::ReservedDataOp::NotNullThen: {
-        // The marked receiver of `x ?-> f` is taken apart where the call is lowered (Call,
-        // below); it does not occur anywhere else.
-        ASSERT(false, "The receiver of '?->' is lowered with its call.");
-        res = visitData(lhsASTNode);
-    } break;
-
     case AST::ReservedDataOp::Call: {
         // Handle the "Call" operator
         const auto &argsNode   = ast->atAs<AST::RepeatedLoad>(1);
@@ -2773,7 +2773,10 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
             const AST::node_ptr_t literal = spreadLiteral(argNode);
             argCount += literal != nullptr ? literal->atAs<AST::RepeatedLoad>(0)->size() : 1;
         }
-        res                   = tree_->makeLink(argCount);
+        res = tree_->makeLink(argCount);
+        if (reservedExpr->pipe()) {
+            tree_->markPipe(res);
+        }
         node_ptr_t calleeNode = visitData(lhsASTNode);
         *res << calleeNode;
         std::vector<camel::source::SemanticPart> parts = {
@@ -2781,11 +2784,6 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         };
         std::vector<camel::source::origin_id_t> mergedInputs = {nodeOrigin(calleeNode)};
         int32_t argSlot                                      = 0;
-        // `x ?-> f`: the receiver is marked (NotNullThen). The call becomes the arm of a
-        // branch on the tag of `x`, taken when `x` has not failed, and receives the value
-        // taken out of `x` under a reserved name (design principles 3.8).
-        node_ptr_t passedNode        = nullptr;
-        AST::node_ptr_t passOperator = nullptr;
         // The name of each argument, aligned with the arguments in the order written: empty for
         // a positional one. The name is not a child of the LINK; the call checks it against the
         // callee when the call is resolved (design principles 4.4).
@@ -2821,23 +2819,7 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
                 }
                 continue;
             }
-            node_ptr_t gctArg   = nullptr;
-            const auto &argData = argNode->loadAs<AST::DataLoad>();
-            if (argData->dataType() == AST::DataType::ReservedExpr &&
-                argNode->loadAs<AST::ReservedExprLoad>()->op() ==
-                    AST::ReservedDataOp::NotNullThen) {
-                passedNode   = visitData(argNode->atAs<AST::DataLoad>(0));
-                passOperator = argNode;
-                gctArg       = tree_->makeDRef(kPassedValueName);
-                setOriginFromOrigin(
-                    context_,
-                    gctArg,
-                    nodeOrigin(passedNode),
-                    camel::source::OriginKind::GctNode,
-                    "gct.tagged.passed");
-            } else {
-                gctArg = visitData(argNode);
-            }
+            node_ptr_t gctArg = visitData(argNode);
             appendArgument(gctArg);
         }
         for (const auto &argNode : *kwargsNode) {
@@ -2858,28 +2840,6 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         tree_->setArgumentNames(res, std::move(argNames));
         setOriginFromAst(context_, res, ast, camel::source::OriginKind::GctNode, "gct.call");
         registerGctSemantic(context_, res, ast, std::move(parts), std::move(mergedInputs));
-        if (passedNode != nullptr) {
-            node_ptr_t execNode = makeExec();
-            setOriginFromAst(
-                context_,
-                execNode,
-                ast,
-                camel::source::OriginKind::GctNode,
-                "gct.tagged.call");
-            *execNode << res;
-            node_ptr_t caseNode = tree_->makeCase(CaseType::Else);
-            *caseNode << execNode;
-            node_ptr_t brchNode = tree_->makeBrch(BranchKind::ErrorPass);
-            // Located at the operator, as the marked receiver is.
-            setOriginFromAst(
-                context_,
-                brchNode,
-                passOperator,
-                camel::source::OriginKind::GctNode,
-                "gct.tagged.branch");
-            *brchNode << passedNode << caseNode;
-            res = brchNode;
-        }
     } break;
 
     case AST::ReservedDataOp::Instantiate: {
@@ -3017,7 +2977,19 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         if (dataNode->type() == NodeKind::DATA && !containsTypeVar(dstType) &&
             asTagged(dstType) == nullptr && !intoCollection) {
             const auto &data = dataNode->data();
-            if (dstType->castSafetyFrom(data->type()) != CastSafety::Safe) {
+            const CastSafety safety = dstType->castSafetyFrom(data->type());
+            if (safety == CastSafety::Forbidden && data->type()->isPrimitive() &&
+                dstType->isPrimitive()) {
+                // The one table of `as` (Type::castSafetyFrom) refuses a literal as it refuses a
+                // variable: `5 as float` and `n as float` are the same answer (design principles
+                // 5.1). A literal takes the type of its position; a number of another type is made
+                // by the conversion function.
+                diags_->of(SemanticDiag::DynamicCastForbidden)
+                    .at(ast->load()->tokenRange())
+                    .commit(data->type()->toString(), dstType->toString());
+                throw BuildAbortException();
+            }
+            if (safety != CastSafety::Safe) {
                 reportLiteralCastFailure(
                     diags_,
                     ast->load()->tokenRange(),
@@ -4344,6 +4316,12 @@ node_ptr_t Builder::visitDataInto(const AST::node_ptr_t &ast, Type *type, bool &
         // a: 1, b: 2.0 }`), so a literal element is converted now, exactly, and an `int`
         // array is never stored where a `float[]` was declared.
         const auto &load = ast->loadAs<AST::DataLoad>();
+        if (load->dataType() == AST::DataType::Array && ast->size() > 1) {
+            // `[f(x) for x in xs]`: a comprehension, whose elements are not written in the first
+            // child, is a computation and takes the type of its position where it is checked, not
+            // an empty literal of it.
+            return visitData(ast);
+        }
         if (load->dataType() == AST::DataType::Array) {
             const auto &items = *ast->atAs<AST::RepeatedLoad>(0);
             if (type->code() == TypeCode::Array) {
@@ -5594,7 +5572,6 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
 
     FunctionTypeFactory factory;
 
-    factory.setModifiers(typeLoad->modifiers());
 
     std::unordered_set<string> paramNames;
 

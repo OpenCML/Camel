@@ -248,9 +248,9 @@
           }
         },
         {
-          "comment": "contextual keywords: 'struct', 'tuple' — in a `match type` case pattern they name a shape, not a type (typeCasePattern, grammar 8.5).",
+          "comment": "contextual keywords: 'struct', 'tuple', 'array' — in a `match type` case pattern they name a shape, not a type (typeCasePattern, grammar 8.5).",
           "name": "keyword.other.contextual-position.camel",
-          "match": "(?<=case\\s)(struct|tuple)\\b"
+          "match": "(?<=case\\s)(struct|tuple|array)\\b"
         },
         {
           "comment": "contextual keywords: 'error' — the pattern of a failed `T!` in a `case` is two words, `error e`.",
@@ -470,7 +470,7 @@
         },
         {
           "name": "keyword.control.flow.camel",
-          "match": "\\b(?:return|throw|yield)\\b"
+          "match": "\\b(?:return|yield)\\b"
         },
         {
           "name": "keyword.control.import.camel",
@@ -532,7 +532,7 @@
       "patterns": [
         {
           "name": "support.type.primitive.camel",
-          "match": "\\b(?:int|i32|i64|float|f32|f64|bf16|f16|c64|c128|bool|string|Bytes|void)\\b"
+          "match": "\\b(?:int|i32|i64|float|f32|f64|bf16|f16|c64|c128|bool|string|Bytes|void|never)\\b"
         },
         {
           "name": "support.type.collection.camel",
@@ -566,8 +566,8 @@
       ]
     },
     "pipe-target": {
-      "comment": "linkExpr: compExpr (('->' | '?->') compExpr)*. A name on the right is the function the left side is passed to.",
-      "match": "(\\?->|->)\\s*((?:[A-Za-z_][A-Za-z_0-9]*::)*)([A-Za-z_][A-Za-z_0-9]*)\\b",
+"comment": "linkExpr: compExpr ('->' compExpr)*. A name on the right is the function the left side is passed to.",
+      "match": "(->)\\s*((?:[A-Za-z_][A-Za-z_0-9]*::)*)([A-Za-z_][A-Za-z_0-9]*)\\b",
       "captures": {
         "1": { "name": "keyword.operator.pipe.camel" },
         "2": { "patterns": [{ "include": "#namespace-path" }] },
@@ -637,7 +637,7 @@
       "comment": "The operators and separators of include/camel/parse/syntax/token_kinds.def, longest first (checked by scripts/check-grammar.mjs).",
       "patterns": [
         { "name": "keyword.operator.compose.camel", "match": "\\.\\." },
-        { "name": "keyword.operator.pipe.camel", "match": "\\?->|->" },
+        { "name": "keyword.operator.pipe.camel", "match": "->" },
         { "name": "keyword.operator.arrow.camel", "match": "<=>|=>" },
         { "name": "keyword.operator.comparison.camel", "match": "===|!==|==|!=|<=|>=" },
         { "name": "keyword.operator.assignment.compound.camel", "match": "\\+=|-=|\\*=|/=|%=|\\^=|@=|&=|\\|=" },

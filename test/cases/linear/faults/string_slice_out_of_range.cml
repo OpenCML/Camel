@@ -1,0 +1,9 @@
+// A string slice that leaves the string is the same fault as an array's, naming the string.
+
+func main(): int sync {
+    let s = 'hello'
+    let n = len(s) + 4
+    println(s[1:n])
+    println('not reached')
+    return 0
+}

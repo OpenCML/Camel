@@ -2,7 +2,7 @@ id = "compile.escapes"
 order = 923
 tier = "fast"
 tags = ["feat", "compile", "literals", "escapes"]
-desc = "The one escape table of the three string forms after H89: `\\0`, `\\xHH`, `\\u{...}` and the named escapes decode; an octal-looking form (`\\101`, `\\01`, `\\012`, `\\033`) and any other unknown pair (`\\q`, `\\8`) are unknown escapes -- kept as written, warned as LexicalDiag::InvalidEscapeSequence, one code and one message shape for all of them."
+desc = "The one escape table of the three string forms: `\\0`, `\\xHH`, `\\u{...}` and the named escapes decode; an octal-looking form (`\\101`, `\\01`, `\\012`, `\\033`) and any other unknown pair (`\\q`, `\\8`) are unknown escapes -- kept as written, warned as LexicalDiag::InvalidEscapeSequence, one code and one message shape for all of them."
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

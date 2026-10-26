@@ -68,3 +68,7 @@ goal/
 
 # Local experiments, never fixtures
 scratch/
+
+# Promo film renders are made locally and not committed (promo/README.md).
+promo/renders/
+promo/**/*.mp4

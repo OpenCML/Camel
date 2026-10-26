@@ -102,6 +102,11 @@ enum class TypeCode : uint32_t {
     // keeps the two suffix readings apart. GC-traced, like an array: a stream value holds the
     // producer of its elements.
     Stream   = makeTypeCode(TypeFlag::Composite | TypeFlag::GC_Traced, 0x016),
+    // The bottom type `never` (design principles 3.9): the type of an expression that gives the
+    // function no value (`fail<...>`, `exit`, a call that never returns) and of no value at all.
+    // Auxiliary, like `Ref`: nothing in a graph is ever of this type, and it is assignable to
+    // every type.
+    Never    = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x017),
     Other    = makeTypeCode(TypeFlag::OtherType, 0x000),
 };
 
@@ -171,8 +176,6 @@ std::string typeCodeToString(TypeCode code);
 /// text, word by word (`(x: i64) => f64` gives `(x: int) => float`). For signatures written
 /// by hand as text (the type rules of built-in operators); a Type prints itself that way.
 std::string sourceTypeSpelling(std::string_view text);
-
-extern const signed char primitiveTypeConvMatrix[6][6];
 
 class Type;
 using type_vec_t = std::vector<Type *>;
@@ -270,6 +273,15 @@ class Type {
     virtual CastSafety castSafetyFrom(Type *sourceType) const;
     virtual slot_t castSlotFrom(slot_t value, Type *sourceType) const;
     bool assignableFrom(Type *sourceType) const;
+    /**
+     * Whether an argument of this type gives a type parameter of a generic function the type it
+     * binds (design principles 5.9). A value of the type does; a handle into a program or a draft
+     * (`graph::Node` and the other handle kinds) does not: it stands for a value of the program
+     * being rewritten and says nothing about which type that value has, so a fact asked for with
+     * one (`range(n)`) has its type arguments written out (`range::<int>(n)`) rather than read off
+     * the handle.
+     */
+    virtual bool determinesTypeParameters() const { return true; }
 
     /**
      * The dimensions this type states, in declaration order, as compile-time extents (design
@@ -319,6 +331,9 @@ class Type {
     static Type *Float();
     static Type *Bool();
     static Type *Void();
+    /// The bottom type `never` (design principles 3.9): no value has it, and it is assignable
+    /// to every type.
+    static Type *Never();
     static Type *String();
     static Type *Complex64();
     static Type *Complex128();

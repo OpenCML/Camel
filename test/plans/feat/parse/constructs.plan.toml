@@ -2,7 +2,7 @@ id = "parse.constructs"
 order = 310
 tier = "fast"
 tags = ["feat", "parse", "constructs"]
-desc = "The parser's construct corpus: one small case for each construct the grammar supports that the older parse cases did not exercise on their own. The AST snapshot (frontend.ast_snapshot) hashes exactly the cases under test/cases/parse, so a construct that no case here writes is a construct the snapshot no longer covers (H188)."
+desc = "The parser's construct corpus: one small case for each construct the grammar supports that the older parse cases did not exercise on their own. The AST snapshot (frontend.ast_snapshot) hashes exactly the cases under test/cases/parse, so a construct that no case here writes is a construct the snapshot no longer covers."
 
 # Every case is also a program that compiles and runs, so the construct it is about is exercised
 # from the parse tree through GCT to the value, not only hashed by the AST snapshot. A `fact`

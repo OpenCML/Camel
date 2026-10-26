@@ -469,7 +469,17 @@ class EncodeSession {
 
             switch (header->kind) {
             case GCNodeKind::Func: {
-                payloadStorage = toPayloadBytes(camel::runtime::GCFuncRef{});
+                // The callee's index is patched in once every runtime graph has its place
+                // (patchPreparedFuncPayloads); the rest of the payload is the node's own and
+                // says which captured variables the call writes, which is what its value
+                // carries the new versions of (GCFuncRef::reserved).
+                camel::runtime::GCFuncRef body{};
+                const auto source = graph->draft().payloadOf(sourceId);
+                if (source.size_bytes() >= sizeof(body)) {
+                    std::memcpy(&body, source.data(), sizeof(body));
+                }
+                body.ref       = camel::runtime::kNoLoopGraph;
+                payloadStorage = toPayloadBytes(body);
             } break;
             case GCNodeKind::Loop: {
                 // The graphs are patched in once every runtime graph has its place

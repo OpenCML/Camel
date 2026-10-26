@@ -255,7 +255,7 @@ expect_stdout_exact = "42\n"
 
 #  ---- -I / --include adds module search roots ----
 # Documented order since (design principles 10.2, docs/cli.md): a module's own directory,
-# then each -I directory in the order given, then CAMEL_PACKAGES, then CAMEL_MODULE_PATH, then
+# then each -I directory in the order given, then CAMEL_PACKAGES, then
 # the standard library; the entry program follows the same rule, so the entry file's directory is
 # its own directory and is not a root for another module. `-I` paths are resolved against the
 # entry file's directory, like CAMEL_PACKAGES, hence the `../roots/...` paths here.
@@ -307,7 +307,7 @@ expect_output_contains = ["missing_root.cml:6:1", "Module 'nowhere_module' not f
 
 [[tests]]
 name = "imports.include_root_library_import"
-desc = "A library that is not the entry resolves its own import through the same -I root (after its own directory, H112)."
+desc = "A library that is not the entry resolves its own import through the same -I root (after its own directory)."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/include_path/prog/library_via_include.cml"
 args = ["-E", "short", "-I", "../roots/one", "${case}"]
@@ -336,7 +336,7 @@ expect_stdout_exact = "200\n"
 
 #  ---- the import order of design principles 10.2 ----
 # A module's import looks in its own directory, then the module roots (-I in the order given,
-# CAMEL_PACKAGES, CAMEL_MODULE_PATH), then the standard library; the entry program follows the
+# CAMEL_PACKAGES), then the standard library; the entry program follows the
 # same rule. The fixtures live under import_order/: before this change the entry file's directory
 # was the first global root, so a library's import fell back to it (`helper+root` where the
 # module root said `root1`) and the import cache was keyed by name (two `lib`s printed `1 1`).
@@ -388,7 +388,7 @@ expect_stdout_exact = "1 2\n"
 
 [[tests]]
 name = "imports.order_local_shadows_stdlib"
-desc = "A library beside a graph.cml imports `graph`: the local file shadows the standard library's graph with no diagnostic (41; stdlib/graph has no `answer`). Pinned as the rule's consequence; whether a warning is wanted is an open author question (H220 report)."
+desc = "A library beside a graph.cml imports `graph`: the local file shadows the standard library's graph with no diagnostic (41; stdlib/graph has no `answer`). Pinned as the rule's consequence; whether a warning is wanted is an open author question."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/import_order/stdlib_shadow/main.cml"
 args = ["-E", "short", "${case}"]

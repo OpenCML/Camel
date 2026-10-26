@@ -333,22 +333,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::ThrowOutsideFallible,
-            {
-                "ThrowOutsideFallible",
-                "'throw' needs a function declared to return 'T!': {0}.",
-                "'throw e' returns an error value, as 'return' returns a value, so the function it stands in must declare a fallible return type, for example 'func f(): int! {{ ... }}'. It does not unwind to a caller.",
-            },
-        },
-        {
-            SemanticDiag::ThrowNotAnError,
-            {
-                "ThrowNotAnError",
-                "'throw' takes an error value, not a value of type '{0}'.",
-                "Make one with 'error(kind, message)', for example 'throw error(\"ParseError\", \"not a number\")', or hand on the one a 'case error e' bound.",
-            },
-        },
-        {
             SemanticDiag::TaggedTypeNesting,
             {
                 "TaggedTypeNesting",
@@ -361,7 +345,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "TaggedValueNotOpened",
                 "A value of type '{0}' cannot be used here: {1}.",
-                "A value that may be null ('T?') or may have failed ('T!') is opened only by '?\?', '!!', '?->' and by 'match' with 'case null' / 'case error e'.",
+                "A value that may be null ('T?') or may have failed ('T!') is opened only by '?\?', '!!', '->' (which passes a null or an error on) and by 'match' with 'case null' / 'case error e'.",
             },
         },
         {
@@ -369,7 +353,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "TaggedOperandMismatch",
                 "'{0}' cannot be applied here: {1}.",
-                "'a ?? b' needs 'a' of type 'T?' and 'b' of type 'T' (the result is a 'T') or 'T?' (the result is a 'T?', so that 'a ?? b ?? c' tries each in turn). 'a !! b' needs 'a' of type 'T!' and 'b' of type 'T' or 'T!'. 'x ?-> f' needs 'x' of type 'T!' and a function 'f' that takes a 'T'.",
+                "'a ?? b' needs 'a' of type 'T?' and 'b' of type 'T' (the result is a 'T') or 'T?' (the result is a 'T?', so that 'a ?? b ?? c' tries each in turn). 'a !! b' needs 'a' of type 'T!' and 'b' of type 'T' or 'T!'.",
             },
         },
         {
@@ -513,7 +497,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "OperatorNotOverloadable",
                 "'{0}' cannot be overloaded: {1}.",
-                "The operators that can be overloaded are the binary '+', '-', '*', '/', '%', '^', '@', '==', '<', '<=', '>', '>=', '&', '|', indexing '[]', and the unary '-', '!', '~'; '!=' follows '=='. '&&', '||', '?\?', '!!', '->', '?->', '..', 'as', assignment and compound assignment are constructs of the language.",
+                "The operators that can be overloaded are the binary '+', '-', '*', '/', '%', '^', '@', '==', '<', '<=', '>', '>=', '&', '|', indexing '[]', and the unary '-', '!', '~'; '!=' follows '=='. '&&', '||', '?\?', '!!', '->', '..', 'as', assignment and compound assignment are constructs of the language.",
             },
         },
         {
@@ -1589,6 +1573,30 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::StreamConsumedInLoop,
+            {
+                "StreamConsumedInLoop",
+                "'{0}' is consumed once per round of this loop.",
+                "A loop's condition and its body run again on every round, so a stream named in one of them is read once per round, and under value semantics every round reads the same stream (design principles 5.4). To read one element per round, carry the stream as the loop's own state: `loop acc = 0, rest = s while ... do ...` takes the rest a round's pull answers and hands it back as the next state. To read the stream to its end, write `for x in s`, which is the loop the compiler builds for exactly that.",
+            },
+        },
+        {
+            SemanticDiag::TeeHintNotPositive,
+            {
+                "TeeHintNotPositive",
+                "The `tee` width '{0}' is below 1.",
+                "`tee(s, n)` reads `s` once and gives two streams over the same elements, each read once (design principles 5.4). A side that runs ahead of the other buffers the elements the other has not read yet, and `n` says how wide that buffer is expected to be: it is a hint, so the executor grows the buffer rather than make a side wait, and a hint wider than the implementation's cap is clamped to it. What no buffer can be is narrower than the one element being handed over, so write `n` as 1 or more, or leave it out for the default of 8.",
+            },
+        },
+        {
+            SemanticDiag::StreamCaptured,
+            {
+                "StreamCaptured",
+                "'{0}' cannot be captured: a stream is read once, and a closure outlives the read.",
+                "A stream is read one element at a time and is done when it ends, so on each execution path its value has one consumer (design principles 5.4). The body of a closure runs after the path that made the closure has finished, so the read a capture would make is not that path's one read: write the stream where it is consumed -- as the argument of a call that reads it, or as the subject of a loop -- and let a closure that needs a stream open one of its own.",
+            },
+        },
+        {
             SemanticDiag::NodeOfNotAParameter,
             {
                 "NodeOfNotAParameter",
@@ -1669,6 +1677,30 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::FactJoinRequired,
+            {
+                "FactJoinRequired",
+                "The fact '{0}' writes no 'join'.",
+                "`join` is the clause that is required: it says how the facts of two writings of one value are merged, and it is the least upper bound of the two (rewrite design 7.5). Write it after the cases, naming one binary function or a lambda: `}} join max`, `}} join (lhs: int, rhs: int) => lhs | rhs`. Without it a value the program wrote two ways has no fact the engine can settle on.",
+            },
+        },
+        {
+            SemanticDiag::FactConstCaseTypeRequired,
+            {
+                "FactConstCaseTypeRequired",
+                "The 'const' case '{0}' of the fact '{1}' writes no type.",
+                "A `const` case matches one constant, and the fact function is given the value itself, so the type of that constant is written somewhere (rewrite design 7.5): in the case (`case const c: int => c`), or in the head of a fact that declares the value it is about with a type (`fact sign(v: int): int`), whose first parameter's type the case then takes.",
+            },
+        },
+        {
+            SemanticDiag::FactCaseBindsNoVariable,
+            {
+                "FactCaseBindsNoVariable",
+                "This case of the fact '{0}' names no variable.",
+                "The cases read how a value was built, and the parts they read are the variables their patterns name: `case x + y` binds the two operands, and the fact function is computed from them (rewrite design 7.5). A pattern that names no variable leaves the case with nothing to read, so the fact says nothing about the values it matches; bind a part with a name, or write `case _`, which is the last case and says what the fact is for a value no other case matched.",
+            },
+        },
+        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",
@@ -1697,7 +1729,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "UnusedFallibleValue",
                 "This value has type '{0}' and nothing uses it: an error it holds is lost{1}.",
-                "A function that returns a 'T!' reports its failure through that value. Take the value apart with '!!', '?->' or 'match', return it from a function that declares a 'T!', or drop it on purpose with 'let _ = ...'.",
+                "A function that returns a 'T!' reports its failure through that value. Take the value apart with '!!', '->' or 'match', return it from a function that declares a 'T!', or drop it on purpose with 'let _ = ...'.",
             },
         },
         {
@@ -1713,7 +1745,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "KnownNotNull",
                 "'{0}' is known not to be null here (it has type '{1}'): the null case of '{2}' is never taken.",
-                "An 'if' around this narrowed the name: in the arm where it is not null it is a 'T'. Use the name directly.",
+                "Only a value of type 'T?' can be null. A plain value cannot be null, and in the arm of 'if x != null' the name 'x' is already a 'T'. Use the value directly, without testing it for null.",
             },
         },
         {

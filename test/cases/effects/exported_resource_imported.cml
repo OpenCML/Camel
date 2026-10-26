@@ -1,0 +1,16 @@
+// A resource another module exports is imported by name like any other exported name (design
+// principles 10.2): `import { rendezvous_point } from test_support` binds it, and a clause then
+// writes it bare. The module prefix is not needed where the name is imported.
+module imports_exported_resource
+
+import { rendezvous_point } from test_support
+
+/// The body touches nothing; a call to it touches the resource the import bound.
+func meet(): int uses rendezvous_point {
+    return 0
+}
+
+func main(): int sync {
+    println(meet())
+    return 0
+}

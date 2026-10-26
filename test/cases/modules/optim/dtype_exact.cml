@@ -13,7 +13,7 @@
 module optim_dtype_exact
 
 import { new, to_bytes } from tensor
-import { size } from bytes
+
 import { adam, constant, init, sgd, update } from optim
 
 // The element type is written, the extent is not (that is the only spelling a tensor expression
@@ -36,7 +36,7 @@ func main(): int sync {
     let opt = sgd(constant(0.5))
     let next = update(opt, model, gradient, init(opt, model))
     let value = next.0.w[0]
-    let width = size(to_bytes(next.0.w))
+    let width = len(to_bytes(next.0.w))
     var failures = 0
 
     // The step is the exact f64 arithmetic, and the leaf is still 16 bytes (two f64 elements).
@@ -57,7 +57,7 @@ func main(): int sync {
     let adam_opt = adam(constant(0.5), 0.5, 0.25, 0.0001)
     let trained = update(adam_opt, model, gradient, init(adam_opt, model))
     let adam_value = trained.0.w[0]
-    let adam_width = size(to_bytes(trained.0.w))
+    let adam_width = len(to_bytes(trained.0.w))
     let delta = adam_value - 16777216.50005
     if adam_width != 16 then failures = failures + 1
     if delta > 0.000001 || delta < -0.000001 then failures = failures + 1

@@ -225,12 +225,12 @@ timeout_ms = 8000
 
 # One number grammar for the command line and the source: an entry argument is one whole
 # number token of the language, read by the same parser a literal is. The integer tokens are
-# decimal, `0x` hexadecimal, `0b` binary and octal with a leading `0`; an integer token in a
+# decimal, `0x` hexadecimal, `0b` binary and `0o` octal; an integer token in a
 # float parameter is converted to that width, as a source literal in a float position is.
 
 [[tests]]
 name = "entry_args.integer_hex"
-desc = "An integer parameter reads a hexadecimal token as the language does (`--arg n=0x10` is 16), and a float parameter reads one too (`--arg rate=0xFF` is 255.0), because a source literal in those positions does (H15h)."
+desc = "An integer parameter reads a hexadecimal token as the language does (`--arg n=0x10` is 16), and a float parameter reads one too (`--arg rate=0xFF` is 255.0), because a source literal in those positions does."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "--arg", "n=0x10", "--arg", "rate=0xFF", "--arg", "name=hi", "--arg", "loud=true"]
@@ -241,14 +241,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
-name = "entry_args.integer_leading_zero_is_decimal"
-desc = "A leading-zero decimal is data text: `--arg n=077` is 77, not the octal 63 a source literal would spell `0o77`, and a float parameter reads the same 77.0 (H15i; reference 2.5.2)."
-kind = "behavior"
+name = "entry_args.integer_leading_zero_refused"
+desc = "A leading zero before another digit is no number token at the entry, as in source: `--arg n=077` is refused (octal is `0o77`), as is `077.5` for a float parameter (reference 2.5.2)."
+kind = "negative"
 case = "../../../cases/compile/entry_args/scalars.cml"
-args = ["${case}", "--arg", "n=077", "--arg", "rate=077", "--arg", "name=hi", "--arg", "loud=true"]
-expect_exit = 78
-expect_stdout_contains = ["hi 77 77.0 true"]
-expect_output_not_contains = ["63"]
+args = ["${case}", "--arg", "n=077", "--arg", "rate=0.5", "--arg", "name=hi", "--arg", "loud=true"]
+expect_exit = 1
+expect_output_contains = ["077"]
+expect_output_not_contains = ["hi 77", "63"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -266,7 +266,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "entry_args.integer_bases_at_width"
-desc = "An integer token is read at the declared width too: `0x7FFFFFFF` is the largest i32, and `0xFF` is a float, each converted once (H15h)."
+desc = "An integer token is read at the declared width too: `0x7FFFFFFF` is the largest i32, and `0xFF` is a float, each converted once."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/widths.cml"
 args = ["${case}", "--arg", "n=0x7FFFFFFF", "--arg", "rate=0xFF"]
@@ -277,20 +277,20 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
-name = "entry_args.leading_zero_decimal_is_data_text"
-desc = "`09` is data text, not a source literal: the entry reader reads it as the decimal 9, while the source lexer refuses `09` as one run (H15i; the two readers differ only in the two supplements of reference 2.5.2)."
-kind = "behavior"
+name = "entry_args.leading_zero_decimal_refused"
+desc = "`09` is no number token at the entry, as in source: it is refused, not read as the decimal 9."
+kind = "negative"
 case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "--arg", "n=09", "--arg", "rate=0.5", "--arg", "name=hi", "--arg", "loud=true"]
-expect_exit = 10
-expect_stdout_contains = ["hi 9 0.5 true"]
-expect_output_not_contains = ["Error"]
-normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
+expect_exit = 1
+expect_output_contains = ["09"]
+expect_output_not_contains = ["hi 9"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
 name = "entry_args.int_exponent_refused"
-desc = "`1e3` is a real token, not an integer one; an integer parameter refuses it, as `let n: int = 1e3` does (H15h: an entry argument is the token a literal is)."
+desc = "`1e3` is a real token, not an integer one; an integer parameter refuses it, as `let n: int = 1e3` does (an entry argument is the token a literal is)."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "--arg", "n=1e3", "--arg", "rate=0.5", "--arg", "name=hi", "--arg", "loud=true"]
@@ -304,7 +304,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "entry_args.integer_too_large_for_float_refused"
-desc = "An integer token whose value does not fit the int64 an integer literal is refused, naming the integer's range, not read as a float that could hold its magnitude: a source literal is refused the same way (H15h)."
+desc = "An integer token whose value does not fit the int64 an integer literal is refused, naming the integer's range, not read as a float that could hold its magnitude: a source literal is refused the same way."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "--arg", "n=3", "--arg", "rate=0xFFFFFFFFFFFFFFFF", "--arg", "name=hi", "--arg", "loud=true"]
@@ -318,7 +318,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "entry_args.float_hex_fraction_refused"
-desc = "A hexadecimal fraction without the `p` exponent (`0x1.8`) is not a number token: the language has no hexadecimal float, and a hexadecimal integer token has no point (H15h)."
+desc = "A hexadecimal fraction without the `p` exponent (`0x1.8`) is not a number token: the language has no hexadecimal float, and a hexadecimal integer token has no point."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "--arg", "n=3", "--arg", "rate=0x1.8", "--arg", "name=hi", "--arg", "loud=true"]
@@ -374,7 +374,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "entry_args.float_underflow_refused"
-desc = "A nonzero real token too small to tell from zero is refused, not read as 0.0: the same rule a source literal and a conversion function apply (H15i, which supersedes H15h's zero for this case)."
+desc = "A nonzero real token too small to tell from zero is refused, not read as 0.0: the same rule a source literal and a conversion function apply ."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "--arg", "n=3", "--arg", "rate=1e-9999", "--arg", "name=hi", "--arg", "loud=true"]
@@ -402,7 +402,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "entry_args.i32_boundaries_fit"
-desc = "An `i32` parameter is read as an int32 and an `f32` as a float all the way (H15g): the boundary values of each fit and are converted once, at the declared width. 2147483647 is the largest i32 and 3.4028235e38 the largest f32 (printed as its shortest round-trip text)."
+desc = "An `i32` parameter is read as an int32 and an `f32` as a float all the way: the boundary values of each fit and are converted once, at the declared width. 2147483647 is the largest i32 and 3.4028235e38 the largest f32 (printed as its shortest round-trip text)."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/widths.cml"
 args = ["${case}", "--arg", "n=2147483647", "--arg", "rate=3.4028235e38"]
@@ -426,7 +426,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "entry_args.i32_overflow_refused"
-desc = "3000000000 is a number an `i32` cannot hold: it is refused as out of range, naming the declared type `i32` and its range, not read as an int64 and narrowed (H15g)."
+desc = "3000000000 is a number an `i32` cannot hold: it is refused as out of range, naming the declared type `i32` and its range, not read as an int64 and narrowed."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/widths.cml"
 args = ["${case}", "--arg", "n=3000000000", "--arg", "rate=0.5"]
@@ -482,7 +482,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "entry_args.f32_underflow_refused"
-desc = "1e-50 is a number too small to tell from zero in an `f32`, and a source literal in an `f32` position is refused (H15i): the entry argument is refused with the same reason, not read as 0.0."
+desc = "1e-50 is a number too small to tell from zero in an `f32`, and a source literal in an `f32` position is refused: the entry argument is refused with the same reason, not read as 0.0."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/widths.cml"
 args = ["${case}", "--arg", "n=3", "--arg", "rate=1e-50"]
@@ -496,7 +496,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "entry_args.f32_once_at_width"
-desc = "A value that fits is converted once, at the declared width (H15g): 1.00000005960464479 sits just above the float midpoint 1 + 2^-24, out of the f32 range's even value but so close that a double rounds it to the midpoint and a second narrowing would give 1.0. Read once as a float it is the next float, 1.0000001."
+desc = "A value that fits is converted once, at the declared width: 1.00000005960464479 sits just above the float midpoint 1 + 2^-24, out of the f32 range's even value but so close that a double rounds it to the midpoint and a second narrowing would give 1.0. Read once as a float it is the next float, 1.0000001."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/widths.cml"
 args = ["${case}", "--arg", "n=1", "--arg", "rate=1.00000005960464479"]
@@ -520,7 +520,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "entry_args.float_inf"
-desc = "`inf` is the text a float is printed as, so an entry argument reads it (reference 2.5.2, H15i); there is no source literal for it."
+desc = "`inf` is the text a float is printed as, so an entry argument reads it (reference 2.5.2); there is no source literal for it."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "--arg", "n=3", "--arg", "rate=inf", "--arg", "name=hi", "--arg", "loud=true"]
@@ -532,7 +532,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "entry_args.float_negative_inf"
-desc = "`-inf` is the printed negative infinity and is read back as one (H15i)."
+desc = "`-inf` is the printed negative infinity and is read back as one."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "--arg", "n=3", "--arg", "rate=-inf", "--arg", "name=hi", "--arg", "loud=true"]
@@ -544,7 +544,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "entry_args.float_nan"
-desc = "`nan` is the printed NaN and is read back as one (H15i); it carries no sign."
+desc = "`nan` is the printed NaN and is read back as one; it carries no sign."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "--arg", "n=3", "--arg", "rate=nan", "--arg", "name=hi", "--arg", "loud=true"]
@@ -730,7 +730,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "entry_args.timeit_failure_iteration"
-desc = "A --timeit run that fails names the iteration that failed: a program dividing by zero on its third execution gives a JSON report with \"iteration\": 3, and the text report prints the same number in its [timeit] 3/5 ... failed line (before H16 item 6 neither said which iteration it was)."
+desc = "A --timeit run that fails names the iteration that failed: a program dividing by zero on its third execution gives a JSON report with \"iteration\": 3, and the text report prints the same number in its [timeit] 3/5 ... failed line (neither used to say which iteration it was)."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/compile/entry_args/timeit_failure.mjs"
@@ -767,7 +767,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "entry_args.cpp_width_open"
-desc = "An `i32` / `f32` parameter left open is read by the generated program at its declared width (H15g): rt::EntryKind::Int32 / Float32, with the refusals rendered for `i32` / `f32` and their ranges. That the program's output and reports agree with camel's byte for byte is checked by feat/trans/cpp.agree_with_fvm (test/tools/cppexec/expect.txt)."
+desc = "An `i32` / `f32` parameter left open is read by the generated program at its declared width: rt::EntryKind::Int32 / Float32, with the refusals rendered for `i32` / `f32` and their ranges. That the program's output and reports agree with camel's byte for byte is checked by feat/trans/cpp.agree_with_fvm (test/tools/cppexec/expect.txt)."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/widths.cml"
 args = ["${case}", "std::cpp"]
@@ -975,7 +975,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "entry_args.complex_imaginary_underflow_refused"
-desc = "Each part of a complex text is a number token of the language: an imaginary part too small to tell from zero is refused with the part named, not read as `0i` (H15i, superseding H15h's zero here)."
+desc = "Each part of a complex text is a number token of the language: an imaginary part too small to tell from zero is refused with the part named, not read as `0i` ."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/complex.cml"
 args = ["${case}", "--arg", "z=1+2i", "--arg", "w=1+1e-9999i"]
@@ -989,7 +989,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "entry_args.complex_integer_bases"
-desc = "Each part of a complex text is one number token, so the integer tokens work in it too: `1+0x10i` is `1+16i`, and `0x10-0o77i` is `16-63i` (octal 63), as the same literals in the language are (H15i writes octal `0o77`)."
+desc = "Each part of a complex text is one number token, so the integer tokens work in it too: `1+0x10i` is `1+16i`, and `0x10-0o77i` is `16-63i` (octal 63), as the same literals in the language are (octal is written `0o77`)."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/complex.cml"
 args = ["${case}", "--arg", "z=1+0x10i", "--arg", "w=0x10-0o77i"]
@@ -1001,7 +1001,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "entry_args.complex_c64_part_boundary_fit"
-desc = "Each part of a c64 is a float (H15g): the largest f32 is a part it holds, converted once at that width, and the value prints as the f32 it was read as."
+desc = "Each part of a c64 is a float: the largest f32 is a part it holds, converted once at that width, and the value prints as the f32 it was read as."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/complex.cml"
 args = ["${case}", "--arg", "z=1+2i", "--arg", "w=3.4028235e38+1i"]

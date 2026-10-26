@@ -23,8 +23,7 @@ func model(x: float[..]): float[..] {
     return f(x)
 }
 
-func main(): int sync {
+func main(): void! sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
-    export_model((x: float[..]): float[..] => model(x), x, 'tmp/test/onnx/refusal_function_branch.onnx')
-    return 0
+    export_model<out: 'tmp/test/onnx/refusal_function_branch.onnx'>((x: float[..]): float[..] => model(x), x)
 }

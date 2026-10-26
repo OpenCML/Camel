@@ -1,18 +1,28 @@
 {
-    "comment": "Rules for `node scripts/test.js --changed`: the plans a change runs. Both kinds are applied to every changed file. A directory rule (`directoryRules`) looks the path up under test/plans/feat and names the deepest plan directory or plan file that mirrors it (modules/tensor/ops.cpp -> feat/modules/tensor, test/cases/compile/enum/x.cml -> feat/compile/enum.plan.toml). A file rule (`rules`) then adds the plans outside that mirrored tree that the same change can also break (modules/tiles -> test/plans/gpu/tiles*, modules/onnx -> the exporter in feat/trans); the first matching file rule applies to a file, so keep them from specific to general. A rule entry is a path under test/plans, { \"plan\": path, \"layer\": true } or { \"plan\": path, \"ownCases\": true }: an ownCases plan is added only when the changed file is one of the `case` paths it names, so a slow plan cannot ride a shared directory into an edit it never reads (H205); a layered plan stays a named target but follows `--tier` like a directory, so the slow cases an ordinary change must not run (the PyTorch comparisons of autodiff and onnx) are filtered while the fast cases still run; `\"layer\": true` on the rule is the default for all its entries. A rule with \"self\": true selects the changed plan file itself (editing a plan runs that plan), except for the paths in \"except\": those fall back to the fast layer instead of running perf, GC stress, progen or PyTorch. A non-plan file under test/plans (a golden, a fixture) selects the nearest directory that holds a plan, so editing a golden runs the plans it belongs to. A change no rule matches (or whose plans cannot be found) falls back to the whole fast layer; `--changed --list` prints the selection without running it. The base branch is origin/develop; CAMEL_TEST_BASE overrides it. A tracked file that matches no rule is a hole, not a silent fallback: when a change also touches a file a rule matches, the unruled file contributes nothing. test/tools/selftest/run.mjs therefore fails on such a file unless it is on its allowlist, which names only the classes the project forbids (perf, GC stress, progen, PyTorch) or that no plan reads (vendored code, packaging, CI configuration). Deliberately not selectable: test/plans/perf/**, the GC-stress plans (feat/mm/gc*, gpu/tiles_regions) and progen (feat/opt/progen.plan.toml) -- the project forbids those on a shared host, so a change there runs the fast layer and the report says so instead of wiring them in. The same self-test now checks the other direction too (H201): every plan file under test/plans must be selected by at least one of the case paths it names, so a plan --changed can never reach cannot hide behind cases that select another plan; plans the policy keeps unselectable (perf, GC stress, progen, the debug layer) and a sweep-only plan are the only exemptions. Update this file when a subsystem grows a plan of its own; see docs/test-plans.md, 'Selecting plans from a change'.",
+    "comment": "Rules for `node scripts/test.js --changed`: the plans a change runs. Both kinds are applied to every changed file. A directory rule (`directoryRules`) looks the path up under test/plans/feat and names the deepest plan directory or plan file that mirrors it (modules/tensor/ops.cpp -> feat/modules/tensor, test/cases/compile/enum/x.cml -> feat/compile/enum.plan.toml). A file rule (`rules`) then adds the plans outside that mirrored tree that the same change can also break (modules/tiles -> test/plans/gpu/tiles*, modules/onnx -> the exporter in feat/trans); the first matching file rule applies to a file, so keep them from specific to general. A rule entry is a path under test/plans, { \"plan\": path, \"layer\": true } or { \"plan\": path, \"ownCases\": true }: an ownCases plan is added only when the changed file is one of the `case` paths it names, so a slow plan cannot ride a shared directory into an edit it never reads ; a layered plan stays a named target but follows `--tier` like a directory, so the slow cases an ordinary change must not run (the PyTorch comparisons of autodiff and onnx) are filtered while the fast cases still run; `\"layer\": true` on the rule is the default for all its entries. A rule with \"self\": true selects the changed plan file itself (editing a plan runs that plan), except for the paths in \"except\": those fall back to the fast layer instead of running perf, GC stress, progen or PyTorch. A non-plan file under test/plans (a golden, a fixture) selects the nearest directory that holds a plan, so editing a golden runs the plans it belongs to. A change no rule matches (or whose plans cannot be found) falls back to the whole fast layer; `--changed --list` prints the selection without running it. The base branch is origin/develop; CAMEL_TEST_BASE overrides it. A tracked file that matches no rule is a hole, not a silent fallback: when a change also touches a file a rule matches, the unruled file contributes nothing. test/tools/selftest/run.mjs therefore fails on such a file unless it is on its allowlist, which names only the classes the project forbids (perf, GC stress, progen, PyTorch) or that no plan reads (vendored code, packaging, CI configuration). Deliberately not selectable: test/plans/perf/**, the GC-stress plans (feat/mm/gc*, gpu/tiles_regions) and progen (feat/opt/progen.plan.toml) -- the project forbids those on a shared host, so a change there runs the fast layer and the report says so instead of wiring them in. The same self-test now checks the other direction too: every plan file under test/plans must be selected by at least one of the case paths it names, so a plan --changed can never reach cannot hide behind cases that select another plan; plans the policy keeps unselectable (perf, GC stress, progen, the debug layer) and a sweep-only plan are the only exemptions. Update this file when a subsystem grows a plan of its own; see docs/test-plans.md, 'Selecting plans from a change'.",
     "directoryRules": [
         {
-            "comment": "The graph-space gradient case is a fast mm case that lives in the GC directory: the generic test/cases rule below resolves that directory to feat/mm/gc.plan.toml, the slow GC-stress plan, which does not run it. This exact path comes first and names no fall-through, so the file rule for the case selects feat/mm/graph_space instead (H205).",
+            "comment": "The graph-space gradient case is a fast mm case that lives in the GC directory: the generic test/cases rule below resolves that directory to feat/mm/gc.plan.toml, the slow GC-stress plan, which does not run it. This exact path comes first and names no fall-through, so the file rule for the case selects feat/mm/graph_space instead.",
             "paths": ["test/cases/feat/mm/gc/graph_space_grad.cml"],
             "plans": "feat/mm/"
         },
         {
-            "comment": "The formatted-print case is a fast consistency program that happens to live under the cpp exec dump directory: the generic test/cases rule below resolves it to feat/trans/cpp.plan.toml, whose agree_with_fvm test compiles and runs C++ for up to ten minutes, and which does not run this case. This exact path comes first and falls through to the file rule that names print_formats (H205).",
+"comment": "The process-state cases are fast mm cases that live in the GC directory: the generic test/cases rule below resolves that directory to feat/mm/gc.plan.toml, the slow GC-stress plan, which runs neither of them. These exact paths come first and name no fall-through, so a change to either selects the feat/mm directory (layered, so the slow plans there still follow --tier).",
+            "paths": ["test/cases/feat/mm/gc/contexts.cml", "test/cases/feat/mm/gc/gc_prl_blocked_worker.cml"],
+            "plans": "feat/mm/"
+        },
+        {
+            "comment": "The context-lifetime case is a fast mm case that lives in the GC directory as well: the generic test/cases rule below resolves that directory to feat/mm/gc.plan.toml, the slow GC-stress plan, which does not run it. This exact path comes first and names no fall-through, so the file rule for the case selects the plan that reads it.",
+            "paths": ["test/cases/feat/mm/gc/context_lifetime.cml"],
+            "plans": "feat/mm/"
+        },
+        {
+            "comment": "The formatted-print case is a fast consistency program that happens to live under the cpp exec dump directory: the generic test/cases rule below resolves it to feat/trans/cpp.plan.toml, whose agree_with_fvm test compiles and runs C++ for up to ten minutes, and which does not run this case. This exact path comes first and falls through to the file rule that names print_formats.",
             "paths": ["test/cases/trans/cpp/exec/print_formats.cml"],
             "plans": "feat/consistency/"
         },
         {
-            "comment": "The seed corpus of the progen finding cases (test/cases/opt/progen/findings): no plan directory mirrors it, and the generic test/cases rule below would resolve it to test/plans/feat/opt/progen.plan.toml -- the slow random-program check an ordinary change must never run in full. This rule comes first and names no fall-through, so the directory rule selects nothing here and the file rule for those cases names progen_simplify instead (H201).",
+            "comment": "The seed corpus of the progen finding cases (test/cases/opt/progen/findings): no plan directory mirrors it, and the generic test/cases rule below would resolve it to test/plans/feat/opt/progen.plan.toml -- the slow random-program check an ordinary change must never run in full. This rule comes first and names no fall-through, so the directory rule selects nothing here and the file rule for those cases names progen_simplify instead.",
             "paths": ["test/cases/opt/progen/"],
             "plans": "feat/opt/"
         },
@@ -49,7 +59,7 @@
             "plans": ["smoke", "feat/consistency/runner.plan.toml"]
         },
         {
-            "comment": "The debugger harness (the DAP race harness of H159): the plan whose slow DAP cases it drives. A harness change is not a plan change, but this is the plan that would catch a regression in it.",
+            "comment": "The debugger harness (the DAP race harness): the plan whose slow DAP cases it drives. A harness change is not a plan change, but this is the plan that would catch a regression in it.",
             "paths": ["test/tools/debugger/"],
             "plans": ["feat/tools/debugger.plan.toml"]
         },
@@ -149,12 +159,12 @@
             "plans": ["smoke", "feat/compile", "feat/trans", "feat/linear"]
         },
         {
-            "comment": "Tiles, the module: the CPU plan, the three GPU plans H154 first ran (all slow, so they are named as plan files and run in full even under --tier fast), the profile plan, and the DDPM plan whose training cases are written against tiles. A module change can invalidate every consumer, and the GPU plans are what no directory rule could reach before H161.",
+            "comment": "Tiles, the module: the CPU plan, the three GPU plans (all slow, so they are named as plan files and run in full even under --tier fast), the profile plan, and the DDPM plan whose training cases are written against tiles. A module change can invalidate every consumer, and the GPU plans are what no directory rule could reach before.",
             "paths": ["modules/tiles/"],
             "plans": ["feat/modules/tiles.plan.toml", "gpu/tiles.plan.toml", "gpu/tiles_rows.plan.toml", "gpu/tiles_transfer.plan.toml", "gpu/profile.plan.toml", "feat/modules/ddpm_primitives.plan.toml"]
         },
         {
-            "comment": "A tiles case: the CPU plan is the directory mirror, and the DDPM and profile plans read some of these cases. The three GPU plans are slow (88 tests) and are added only for the cases they name (`ownCases`): a case edit cannot invalidate a GPU plan that does not run it, which is what kept a one-case edit running a whole GPU plan in full (H205). The GPU plan that shares a case with a fast plan is recorded in `slowCaseOwners`.",
+            "comment": "A tiles case: the CPU plan is the directory mirror, and the DDPM and profile plans read some of these cases. The three GPU plans are slow (88 tests) and are added only for the cases they name (`ownCases`): a case edit cannot invalidate a GPU plan that does not run it, which is what kept a one-case edit running a whole GPU plan in full. The GPU plan that shares a case with a fast plan is recorded in `slowCaseOwners`.",
             "paths": ["test/cases/modules/tiles/", "test/cases/gpu/"],
             "plans": ["feat/modules/tiles.plan.toml", "feat/modules/ddpm_primitives.plan.toml", "gpu/profile.plan.toml", { "plan": "gpu/tiles.plan.toml", "ownCases": true }, { "plan": "gpu/tiles_rows.plan.toml", "ownCases": true }, { "plan": "gpu/tiles_transfer.plan.toml", "ownCases": true }]
         },
@@ -316,7 +326,7 @@
             "plans": ["feat/examples"]
         },
         {
-            "comment": "The CPython binding of the runtime (H253): the extension module links libcamel and is read by the Python binding plan, which drives it from an interpreter (the test skips where the extension was not built).",
+            "comment": "The CPython binding of the runtime: the extension module links libcamel and is read by the Python binding plan, which drives it from an interpreter (the test skips where the extension was not built).",
             "paths": ["bindings/"],
             "plans": ["feat/bindings"]
         },
@@ -371,9 +381,19 @@
             "plans": ["smoke", "feat/linear", "feat/para", "feat/modules"]
         },
         {
-            "comment": "The graph-space gradient case: the directory rule above keeps the slow GC plan off it, and this is the fast plan that runs it (H205).",
+            "comment": "The graph-space gradient case: the directory rule above keeps the slow GC plan off it, and this is the fast plan that runs it.",
             "paths": ["test/cases/feat/mm/gc/graph_space_grad.cml"],
             "plans": ["feat/mm/graph_space.plan.toml"]
+        },
+        {
+"comment": "The process-state cases: the directory rule above keeps the slow GC plan off them, and this is the fast plan that runs them.",
+            "paths": ["test/cases/feat/mm/gc/contexts.cml", "test/cases/feat/mm/gc/gc_prl_blocked_worker.cml"],
+            "plans": ["feat/mm/process_state.plan.toml"]
+        },
+        {
+            "comment": "The context-lifetime case: the directory rule above keeps the slow GC plan off it, and this is the fast plan that runs it.",
+            "paths": ["test/cases/feat/mm/gc/context_lifetime.cml"],
+            "plans": ["feat/mm/context_lifetime.plan.toml"]
         },
         {
             "comment": "The smoke cases: test/plans/smoke is outside the feat/ tree, so no directory rule can mirror test/cases/smoke.",
@@ -386,12 +406,12 @@
             "plans": ["feat/compile/effects_syntax.plan.toml"]
         },
         {
-            "comment": "A case directory with no plan directory of its own: the loop cases are tested by the linear loop plans. loops.plan.toml is not the only one: hof_declared (higher-order declarations), loops_in_arms and loop_collect each name cases in this directory, and a change to those cases has no other rule to select them (H201).",
+            "comment": "A case directory with no plan directory of its own: the loop cases are tested by the linear loop plans. loops.plan.toml is not the only one: hof_declared (higher-order declarations), loops_in_arms and loop_collect each name cases in this directory, and a change to those cases has no other rule to select them.",
             "paths": ["test/cases/loops/"],
             "plans": ["feat/linear/loops.plan.toml", "feat/linear/hof_declared.plan.toml", "feat/linear/loops_in_arms.plan.toml", "feat/linear/loop_collect.plan.toml"]
         },
         {
-            "comment": "The macro cases: the definitions/facts/resources group below also covers them, plus the linear plan whose higher-order declaration cases live here (H201).",
+            "comment": "The macro cases: the definitions/facts/resources group below also covers them, plus the linear plan whose higher-order declaration cases live here.",
             "paths": ["test/cases/macro/"],
             "plans": ["feat/modules", "feat/tools", "feat/trans", "feat/linear/hof_declared.plan.toml"]
         },
@@ -401,32 +421,32 @@
             "plans": ["feat/modules", "feat/tools", "feat/trans"]
         },
         {
-            "comment": "The JSON cases: they live in one directory that no plan directory mirrors (the JSON plans are files under feat/modules). A JSON case change can break any of the three JSON plans and the std facade that wraps them, and none of those cases selects its plan otherwise (H201).",
+            "comment": "The JSON cases: they live in one directory that no plan directory mirrors (the JSON plans are files under feat/modules). A JSON case change can break any of the three JSON plans and the std facade that wraps them, and none of those cases selects its plan otherwise.",
             "paths": ["test/cases/modules/std/json/"],
             "plans": ["feat/modules/json_value.plan.toml", "feat/modules/json_typed.plan.toml", "feat/modules/json_accessor_error.plan.toml", "feat/modules/std.plan.toml"]
         },
         {
-            "comment": "The unicode-path case: its plan lives under feat/modules, and the generic test/cases rule resolves this directory only as far as the feat/tools directory. Name the plan that runs the case (H201).",
+            "comment": "The unicode-path case: its plan lives under feat/modules, and the generic test/cases rule resolves this directory only as far as the feat/tools directory. Name the plan that runs the case.",
             "paths": ["test/cases/tools/unicode/"],
             "plans": ["feat/modules/unicode_paths.plan.toml"]
         },
         {
-            "comment": "The formatted-print case is shared by the consistency plan and the cpp dumps, but its own directory resolves to feat/trans/cpp.plan.toml, which does not run print_formats: name the plan whose test it is (H201).",
+            "comment": "The formatted-print case is shared by the consistency plan and the cpp dumps, but its own directory resolves to feat/trans/cpp.plan.toml, which does not run print_formats: name the plan whose test it is.",
             "paths": ["test/cases/trans/cpp/exec/print_formats.cml"],
             "plans": ["feat/consistency/print_formats.plan.toml"]
         },
         {
-            "comment": "The compiler benchmark's smoke test (benchmarks/compile/bench.py) is feat/tools/compile_bench: a change to its case must select the plan that runs it. The rest of benchmarks/ stays the manual perf layer, as the rule-less allowlist says (H201).",
+            "comment": "The compiler benchmark's smoke test (benchmarks/compile/bench.py) is feat/tools/compile_bench: a change to its case must select the plan that runs it. The rest of benchmarks/ stays the manual perf layer, as the rule-less allowlist says.",
             "paths": ["benchmarks/compile/"],
             "plans": ["feat/tools/compile_bench.plan.toml"]
         },
         {
-            "comment": "The progen finding cases are the seed corpus of progen_simplify (fast) and capacity (fast), not of the progen plan itself: the directory-rule exception above keeps them from naming progen, and these are the plans that read them (H201). capacity runs only `const_graph_capacity.cml` in that corpus, so it is named by ownership (`ownCases`) rather than by the whole directory (H205).",
+            "comment": "The progen finding cases are the seed corpus of progen_simplify (fast) and capacity (fast), not of the progen plan itself: the directory-rule exception above keeps them from naming progen, and these are the plans that read them. capacity runs only `const_graph_capacity.cml` in that corpus, so it is named by ownership (`ownCases`) rather than by the whole directory.",
             "paths": ["test/cases/opt/progen/findings/"],
             "plans": ["feat/opt/progen_simplify.plan.toml", { "plan": "feat/mm/capacity.plan.toml", "ownCases": true }]
         },
         {
-            "comment": "The judgement programs are the corpus of open design questions: the cpp harness reads one of them through test/tools/cppexec/expect.txt, and the translation plan runs that harness (H201). The README and the findings index are documentation of the manual progen tool and are on the self-test's rule-less allowlist.",
+            "comment": "The judgement programs are the corpus of open design questions: the cpp harness reads one of them through test/tools/cppexec/expect.txt, and the translation plan runs that harness. The README and the findings index are documentation of the manual progen tool and are on the self-test's rule-less allowlist.",
             "paths": ["test/cases/opt/progen/judgement/"],
             "plans": ["feat/trans/cpp.plan.toml"]
         },
@@ -438,7 +458,7 @@
         }
     ],
     "slowCaseOwners": {
-        "comment": "Slow plans whose cases live in a directory a fast plan also uses. `ownCases` already keeps such a plan off the cases it does not run; this list records the cases it does run that a fast plan also runs, where the slow plan is therefore not the only owner of the changed path. The reason says why the slow plan must still run. The self-test derives the facts: it requires every entry to be a slow-cost plan (tier slow, a slow test, or a timeout of five minutes or more) that names at least one case a fast plan also names, so an entry that excuses nothing fails (H205).",
+        "comment": "Slow plans whose cases live in a directory a fast plan also uses. `ownCases` already keeps such a plan off the cases it does not run; this list records the cases it does run that a fast plan also runs, where the slow plan is therefore not the only owner of the changed path. The reason says why the slow plan must still run. The self-test derives the facts: it requires every entry to be a slow-cost plan (tier slow, a slow test, or a timeout of five minutes or more) that names at least one case a fast plan also names, so an entry that excuses nothing fails.",
         "entries": [
             {
                 "plan": "gpu/tiles.plan.toml",

@@ -221,6 +221,14 @@ std::string constasKeyOf(const camel::core::data::data_ptr_t &data);
 /// `f<"w">`.
 std::string constasTextOf(const camel::core::data::data_ptr_t &data);
 
+/// Whether a value of this type is read once on each execution path: a stream is (design
+/// principles 5.4), and so is the step function of a stream -- a function taking nothing whose
+/// answer carries one, which is how a stream's value is spelled. A tuple or a struct that holds a
+/// stream is not a value of this kind: reading two of its members reads two members, not the
+/// stream twice. Used where a capture is made (a captured stream is refused) and by the check that
+/// counts the reads of the built graphs, so both read one rule.
+bool streamReadOnce(const camel::core::type::Type *type);
+
 /// The graph builder of a program (design principles 10.1, "模块"; the graph model,
 /// docs/design/graph-model/README.cn.md 3.9). One builder serves every module of the program:
 /// the functions of all modules are graphs of their own, and the values of the top level of
@@ -422,6 +430,11 @@ class Builder {
     // principles 10.4): a direct call of the function is a call of the kernel instead; the
     // graph is kept for what asks to look inside (autodiff, fusion, export, a rule).
     std::unordered_map<DraftGraphBuilder *, ImplKernel> implKernels_;
+    // The name the function of an `#impl` kernel is declared under, by the URI of the kernel
+    // operator (`str:split` -> `split`): a message about a call that resolves in the kernel says
+    // the declaration's name, because the kernel is private to the module that writes it (design
+    // principles 10.4).
+    std::unordered_map<std::string, std::string> implDeclaredNames_;
     // The kernel a generic `#impl` function declares, by its template (rule impl-kernel-site;
     // design principles 10.4, one operator, per-type executors). A generic function's
     // instances have signatures of their own, so which rule of the kernel's declaration is the
@@ -708,6 +721,10 @@ class Builder {
         node_handle_t node;
         GCT::node_ptr_t expr               = nullptr;
         std::optional<std::string> name;
+        /// A position a call leaves out between arguments it names (`<out: p, target: 'cpu'>`
+        /// with a defaulted parameter between them): it has no node, and the declaration the
+        /// call turns out to mean gives it its default (completeWithFor).
+        bool left = false;
     };
 
     using node_modifier_map_t = std::unordered_map<draft_node_ref_t, draft_node_ref_t>;
@@ -735,6 +752,16 @@ class Builder {
     // variable is named by it in diagnostics).
     std::unordered_map<node_handle_t, node_handle_t> captureOriginOf_;
     std::unordered_map<node_handle_t, std::string> originNames_;
+    // The value the port of a machine's region stands for: a round takes the sequence it iterates
+    // and the states it starts from out of its ports, so the port is that value inside the round,
+    // exactly as a capture port is what it captured (design principles 3.7, rule C1). The machine
+    // records it here, where a capture origin is recorded, so one answer says what value a port is
+    // and the linearity check reads one identity for a loop's state slot and the value handed to it.
+    //
+    // It is a table of its own rather than `captureOriginOf_`, which also says what a WRITE to the
+    // port writes (builder_expr.cpp, `recordWrite`): a write to a round's port writes the round's
+    // state, not the value the state started from.
+    std::unordered_map<node_handle_t, node_handle_t> machinePortOrigin_;
     // Graphs whose function value has been made (a DATA node of the function, or a FILL of it
     // with its captures). The value holds the captures the graph had then, so the graph
     // cannot take one more.
@@ -751,6 +778,10 @@ class Builder {
         node_handle_t call;
         compile_graph_ptr_t callee;
         std::vector<node_handle_t> values;
+        // The new version each capture has as of the call, when its last write produced one of
+        // its own valueVersionOf; null otherwise. A variable capture is always in `values` (a
+        // late one is refused), so the version a call hands on is the one recorded here.
+        std::vector<node_handle_t> versions;
         // How many of the callee's captures are linked already.
         size_t linked = 0;
     };
@@ -764,6 +795,11 @@ class Builder {
     /// The name a capture of `origin` is shown with: the qualified name of a top-level value
     /// (with its module when it is not the current module's), `fallback` otherwise.
     std::string captureNameOf(node_handle_t origin, const std::string &fallback) const;
+    /// Records that the port `port`, made by a machine for a region of a loop, stands for the
+    /// value `origin` the machine was handed (the sequence it iterates, the state it starts
+    /// from). Written where a capture origin is written, so one table says what value a port is
+    /// (`machinePortOrigin_`).
+    void noteMachinePortOrigin(node_handle_t port, node_handle_t origin);
     /// Registers the direct call `call` of `callee` in the current graph: its captures, as
     /// the current graph sees them now, to be linked by linkCaptureSites.
     void addCaptureSite(node_handle_t call, const compile_graph_ptr_t &callee);
@@ -877,6 +913,16 @@ class Builder {
     void bindArguments(
         std::vector<Argument> &inputs, node_handle_t callee, const GCT::node_ptr_t &call,
         FunctionType *signature, bool isWith);
+    /// The `with` arguments of a call completed for one declaration of a set of overloads: the
+    /// ones written, and the default the declaration registers for every parameter the call left
+    /// out, at the end or between named ones. False when the declaration takes fewer parameters
+    /// than the call writes, or has no default for a position the call leaves out: the declaration
+    /// is then not one the call can mean (design principles 4.4: a parameter with a default may be
+    /// left out). `types` is rebuilt from the completed arguments. `owner` is the declaration's
+    /// graph or template, `uri` the name of a native one.
+    bool completeWithFor(
+        const void *owner, const std::string &uri, FunctionType *signature,
+        std::vector<Argument> &inputs, camel::core::type::type_vec_t &types);
     /// Binds the named arguments of a call whose callee is several declarations, where no single
     /// signature answers for which parameter a name is (design principles 4.4). The parameter at a
     /// position carries the same name in every declaration of the set, so a name the call writes
@@ -909,6 +955,18 @@ class Builder {
     std::unordered_map<node_handle_t, VariableRead> variableReadSource_;
     std::unordered_set<node_handle_t> knownCellUsers_;
     std::unordered_set<node_handle_t> escapingVariables_;
+    // What each direct call hands on beside its return value (callValueTypeOf): the mask of the
+    // callee's capture table that says which variables it writes, and, per call, the variable
+    // each version is of and the access node of each part made so far. Part 0 is the return
+    // value, which only a call that writes something has; `parts[0]` is null for one that does
+    // not, and such a call's value stays the node itself.
+    std::unordered_map<node_handle_t, uint32_t> callWriteMasks_;
+    struct CallValue {
+        std::vector<node_handle_t> variables;
+        std::vector<node_handle_t> parts;
+        bool hasReturn = true;
+    };
+    std::unordered_map<node_handle_t, CallValue> callValues_;
     void collapseNonEscapingVariableReads();
     // What the compiler knows about a node's value beyond static data, for operators whose
     // result type follows constant arguments (StaticArg). `typeFoldedValues_`: the value of an
@@ -973,6 +1031,12 @@ class Builder {
     struct ArmBuild {
         DraftGraphBuilder *graph = nullptr;
         uint32_t region          = 0;
+        /// What the region is: a branch's arm, or the condition or the body of a loop. A loop's
+        /// round regions are the ones that run again on every round, which is what a stream
+        /// written outside the loop is consumed by.
+        runtime::GCRegionKind kind = runtime::GCRegionKind::Arm;
+        /// Where the region's own construct is written (the `if`, the loop).
+        camel::source::origin_id_t origin = camel::source::kInvalidOriginId;
         /// The first node the draft had room for when the arm began.
         draft_node_ref_t firstNode = 0;
         /// What the JOIN takes from the arm: its value, behind a GATE that waits for the
@@ -1007,26 +1071,34 @@ class Builder {
     using arm_ptr_t = std::shared_ptr<ArmBuild>;
     /// The arms being built, outermost first.
     std::vector<ArmBuild *> armStack_;
-    /// One place a stream value is consumed: which value, the arms the use stands in (outermost
-    /// first), and where it was written. A stream is read once on each execution path (design
-    /// principles 5.4), so two uses of one value are refused unless they stand in different arms
-    /// of one branch.
-    struct StreamConsumption {
-        DraftGraphBuilder *graph         = nullptr;
-        node_handle_t value              = 0;
-        std::vector<uint32_t> arms;
+    /// Refuses the second reader of one stream on one execution path (design principles 5.4: a stream
+    /// is read once on each path). The check measures the built graphs of the whole program -- a
+    /// value handed to a function is read where that call stands -- and records what it finds below;
+    /// the report names them per module, with the module's other diagnostics (program.cpp).
+    struct StreamViolation {
+        /// What is wrong with the read, which is the diagnostic it is reported as.
+        enum class Kind { Captured, ConsumedInLoop, ConsumedTwice };
+        Kind kind                = Kind::ConsumedTwice;
+        DraftGraphBuilder *graph = nullptr;
+        /// The capture port a capture stands for, in the graph that captured it: the way to ask,
+        /// once the body is built, whether the closure reads what it captured.
+        node_handle_t port = nullptr;
+        /// Where the read is written.
         camel::source::origin_id_t origin = camel::source::kInvalidOriginId;
+        /// The other place the message points at: the loop a round read stands in, or the read
+        /// before this one; none for a capture.
+        camel::source::origin_id_t related = camel::source::kInvalidOriginId;
+        std::string relatedText;
+        /// The value's type, as the message names it.
+        std::string what;
     };
-    std::vector<StreamConsumption> streamConsumptions_;
-    /// The arms of one branch, with the graph they belong to: a use in one of them excludes a use
-    /// in another, which is what makes `if c then s() else s()` one consumer rather than two.
-    std::vector<std::pair<DraftGraphBuilder *, std::vector<uint32_t>>> armGroups_;
-    /// Remembers the arms of one branch, so a later use can tell exclusion from a second consumer.
-    void noteArmGroup(const std::vector<arm_ptr_t> &arms);
-    /// Records that `value` is consumed at `at`, and refuses the second consumer of one path.
-    void consumeStream(node_handle_t value, const GCT::node_ptr_t &at);
-    /// Refuses two consumers of one stream on one execution path, once the graph's arms are known.
-    void checkStreamConsumption(DraftGraphBuilder *graph);
+    std::vector<StreamViolation> streamViolations_;
+    /// Measures the built graphs for the stream rule, over the whole program, and records what it
+    /// finds. Runs with the other passes that settle a program, so every body is in hand and every
+    /// read is a data edge of the graph it was written in.
+    void settleStreamLinearity();
+    /// Reports the recorded stream violations of the module being reported.
+    void reportStreamLinearity();
     /// The `match type` arm being built: its cases are not regions (only one is selected),
     /// but a `return` written in the selected body still gives the value of the match, not of
     /// the function around it.
@@ -1163,6 +1235,10 @@ class Builder {
     enum class BodyState { Open, Built };
     std::unordered_map<DraftGraphBuilder *, CaptureSummary> captures_;
     std::unordered_map<DraftGraphBuilder *, BodyState> bodyStates_;
+    /// Registers a built body with the module that owns it, once: a graph built once is one body,
+    /// and a pass that judges every built body (the stream rule) judges it once, counts its readers
+    /// once and asks about its loops once.
+    void registerBuiltBody(const compile_graph_ptr_t &graph);
     // A captured variable as the current graph sees it at a call or branch: the node of the
     // current graph that holds it, and the variable itself (its origin).
     struct CapturedUse {
@@ -1192,13 +1268,18 @@ class Builder {
     //
     // The resources each body was found to touch (design effects plan, step 5). A declaration's
     // own clause is a promise, not a measurement: it is what the declaration asked its callers to
-    // believe, and the body is held to it. This is the measurement, kept here rather than written
-    // onto the signature, because a function type's resources take part in its text form and in
-    // its mangled name (core/type/text.cpp), so completing one after the bodies are built would
-    // change names that were already computed. What reads it is the promise check below and,
-    // through a callee, the next round of the measurement.
+    // believe, and the body is held to it. This is the measurement. Every body of every module unit
+    // has an entry for as long as the measurement runs, starting at the empty set, so that a body
+    // whose walk reads a callee -- its own call included -- has something to read; a body the walk
+    // cannot place ends at the conservative reading rather than at nothing. The settled value is
+    // written onto the signature of the bodies in `inferredSignatures_`, and this map is what the
+    // promise check below reads a body's own reach from.
     std::unordered_map<DraftGraphBuilder *, camel::core::sem::ResourceSignature>
         inferredResources_;
+    // The bodies whose signature carries an inferred set rather than a clause: a declaration that
+    // wrote `uses`/`pure` keeps the clause (its contract with its callers), and one that wrote no
+    // clause carries what its body was measured to reach (design principles 3.3).
+    std::unordered_set<DraftGraphBuilder *> inferredSignatures_;
     node_handle_t lastSyncedNode_{};
     size_t syntheticRefIndex_ = 0;
 
@@ -1282,7 +1363,11 @@ class Builder {
     // its signature never writes (a predicate such as `is_plain::<T>()` matched in its body),
     // and those are bound by an explicit `::<...>` at the call all the same.
     bool isGenericHere(Type *type, const GCT::node_ptr_t &node) const {
-        if (node != nullptr && node->ruleBinding()) {
+        // The mark is one a FUNC carries (Node::ruleBinding asserts the kind, and a DECL of the
+        // same name is what the module makes of it). A declaration is never a rule's binding
+        // function, so the kind is asked first: asking a DECL for a FUNC's mark was an
+        // assertion failure in a debug build.
+        if (node != nullptr && node->type() == GCT::NodeKind::FUNC && node->ruleBinding()) {
             // The function a rule with `with` parameters is written as is not a template, even when
             // the declaration's head writes type parameters: those belong to the rule's sides, and
             // what the name stands for is the `Rule` calling it with values makes (design
@@ -1350,6 +1435,13 @@ class Builder {
     /// `__rule_generic('name', two_way, needs, consts, id)` and resolves as the `Rule` it is. Does
     /// nothing when the call is not that shape, and the maker's own resolution reports it.
     void settleGenericRuleMaker(
+        std::vector<Argument> &normInputs, camel::core::type::type_vec_t &normTypes,
+        const GCT::node_ptr_t &call);
+    /// The maker of a fact whose head declares type parameters (`fact range::<T>(v: T)`): the
+    /// functions the fact is made of are the generic ones the front end named, the type arguments
+    /// are the ones the query's own instance was resolved with, and they name the fact
+    /// (`range<int>`), because two instances at two types are two facts (rewrite design 7.5).
+    void settleGenericFactMaker(
         std::vector<Argument> &normInputs, camel::core::type::type_vec_t &normTypes,
         const GCT::node_ptr_t &call);
     /// The instance of one registered generic rule at `types`: declared public (above), since the
@@ -1618,7 +1710,15 @@ class Builder {
         const camel::core::type::type_vec_t &normTypes,
         camel::core::type::static_args_t normStatics,
         std::vector<std::pair<std::string, std::string>> &unmet,
-        std::vector<std::string> *ambiguous = nullptr);
+        std::vector<std::string> *ambiguous = nullptr,
+        const std::vector<Argument> *withInputs = nullptr);
+    /// The `with` types of a call as one declared rule reads them: the ones written, and the type of
+    /// the default the rule registers for every parameter the call leaves out. Nothing when the rule
+    /// has no default for such a parameter (completeWithFor says the same of the arguments).
+    std::optional<camel::core::type::type_vec_t> withTypesCompletedFor(
+        const std::string &uri, FunctionType *signature,
+        const camel::core::type::type_vec_t &withTypes, const std::vector<Argument> *withInputs)
+        const;
     /// The type variable `ops` leaves without a type for these arguments, or an empty string when
     /// none is: an argument that states no element type (`[]`) cannot fix the variable of the
     /// parameter it stands at, so the call has a type argument nobody can infer (design
@@ -1633,6 +1733,15 @@ class Builder {
     /// The kernel of the one graph `graph`, when it is an `#impl` body an executor was found
     /// for (a generic function's instance, adoptImplKernel).
     std::optional<ImplKernel> implKernelOfGraph(const compile_graph_ptr_t &graph) const;
+    /// The name the function of the `#impl` kernel group `ops` is declared under, or an empty
+    /// string when `ops` is not such a group: what a message about a call that resolves in the
+    /// kernel says, in place of the kernel's own name (design principles 10.4).
+    std::string declaredNameOfKernelGroup(const oper_group_ptr_t &ops) const;
+    /// How a message names the callee behind the operator `uri`: the name its function is
+    /// declared under when the operator is an `#impl` kernel, the operator's own `<uri>`
+    /// otherwise. The one place a message names a callee, so the hint of the call form and the
+    /// list of overloads cannot disagree about it.
+    std::string calleeNameForMessage(const std::string &uri) const;
     /// Whether the graph being built is an `#impl` body or nested in one (a lambda in the
     /// body). A call written there stays a call of the function's semantic graph, so that the
     /// body the expansion reads is the body without the tag; the kernel is for callers.
@@ -1683,8 +1792,36 @@ class Builder {
     /// prefix, then the prelude. `problem` is set when the name exists but cannot be called at
     /// compile time (imported and not a generic function, or two imports that both bring it).
     /// nullopt with `problem` still NotEvaluable when the name is not found by those layers.
-    std::optional<generic_template_ptr_t> whenPredicateNamed(
+    std::optional<generic_ref_t> whenPredicateNamed(
         const std::string &written, const GCT::node_ptr_t &at, WhenResult &problem);
+    // ---- evaluateWhenCondition, in the steps it is made of ----
+    /// What a condition is read against: the declaration's signature, the bindings of its type
+    /// variables and the `with` values the call gave.
+    struct WhenFrame {
+        FunctionType *signature;
+        const camel::core::type::type_bindings_t &bindings;
+        const std::unordered_map<std::string, data_ptr_t> &withValues;
+    };
+    WhenResult whenOf(const WhenFrame &frame, const GCT::node_ptr_t &node);
+    /// `&&`, `||` and a conditional expression.
+    WhenResult whenOfBranch(const WhenFrame &frame, const GCT::node_ptr_t &node);
+    WhenResult whenOfCall(const WhenFrame &frame, const GCT::node_ptr_t &node);
+    /// `p::<T>(...)`: a predicate of the library, resolved where the declaration is written.
+    WhenResult whenOfPredicateCall(const WhenFrame &frame, const GCT::node_ptr_t &node);
+    /// The answer of one chosen predicate: its instance's graph, or its body read over constants.
+    WhenResult whenOfPredicateInstance(
+        const generic_template_ptr_t &tmpl, const camel::core::type::type_bindings_t &callBindings,
+        const std::vector<data_ptr_t> &valueArguments, const GCT::node_ptr_t &callee,
+        const std::string &written);
+    /// `!`, `&&`, `||` and an ordinary function of constants.
+    WhenResult whenOfOperatorCall(const WhenFrame &frame, const GCT::node_ptr_t &node);
+    /// A `with` parameter used as a bool.
+    WhenResult whenOfParameter(const WhenFrame &frame, const GCT::node_ptr_t &node);
+    /// The declaration of an overloaded predicate a call means, by its type arguments and the
+    /// values it passes. `fitting` is how many declarations fit: none or several give nullptr.
+    generic_template_ptr_t pickPredicateOverload(
+        const generic_ref_t &named, const std::vector<camel::core::type::Type *> &typeArguments,
+        const std::vector<data_ptr_t> &valueArguments, size_t &fitting);
     /// Whether two selective imports bring a predicate of the name, in which case `problem`
     /// says so and neither is chosen.
     bool whenPredicateAmbiguous(const std::string &written, WhenResult &problem);
@@ -1740,6 +1877,51 @@ class Builder {
         const std::vector<data_ptr_t> &arguments,
         const std::function<data_ptr_t(const GCT::node_ptr_t &)> &evalArgument,
         const camel::core::type::type_bindings_t &vars, size_t depth, bool buildFirst);
+    // ---- evaluateCallAtBuildTime, in the steps it is made of ----
+    /// The callee of a call, once its `with` applications are taken off.
+    struct FoldRequest {
+        GCT::node_ptr_t callee;
+        bool typeApplied = false;
+        std::string name;
+        const std::vector<data_ptr_t> *arguments = nullptr;
+        std::vector<data_ptr_t> withArguments;
+        const camel::core::type::type_bindings_t *vars = nullptr;
+        size_t depth                                    = 0;
+        bool buildFirst                                 = false;
+    };
+    /// What a call names, ready to be read: the body, the signature with the types bound, and
+    /// where the declaration's own `when` is answered.
+    struct FoldTarget {
+        GCT::node_ptr_t func;
+        FunctionType *signature = nullptr;
+        camel::core::type::type_bindings_t bindings;
+        generic_template_ptr_t declaring;
+        const ModuleUnit *declaringUnit = nullptr;
+    };
+    /// Records why a call was not folded and answers false, for the step that returns it.
+    static bool refuseFold(FoldedCall &result, FoldRefusal refusal, std::string reason);
+    bool foldNameCallee(
+        GCT::node_ptr_t callee,
+        const std::function<data_ptr_t(const GCT::node_ptr_t &)> &evalArgument,
+        FoldRequest &request, FoldedCall &result);
+    bool foldBuiltinOperator(const FoldRequest &request, FoldedCall &result);
+    std::optional<FoldTarget> bindFoldTemplate(
+        const generic_template_ptr_t &tmpl, const FoldRequest &request, bool checkTypes,
+        std::string &why);
+    bool foldTargetOfGeneric(
+        const generic_ref_t &named, const FoldRequest &request, FoldTarget &target,
+        FoldedCall &result);
+    bool buildFoldInstance(
+        const FoldTarget &target, const FoldRequest &request, FoldedCall &result);
+    bool foldTargetOfFunction(const FoldRequest &request, FoldTarget &target, FoldedCall &result);
+    bool foldCheckPurity(const FunctionType &signature, FoldedCall &result);
+    bool foldCheckCondition(
+        const FoldTarget &target, const std::unordered_map<std::string, data_ptr_t> &withValues,
+        FoldedCall &result);
+    bool foldCheckResultType(const FoldTarget &target, FoldedCall &result);
+    void foldRunBody(const FoldTarget &target, const FoldRequest &request, FoldedCall &result);
+    /// The functions whose body reported errors when it was built for a fold: not folded again.
+    std::unordered_set<const DraftGraphBuilder *> brokenBodies_;
     /// evaluateCallAtBuildTime for a call inside a body being evaluated: a refusal becomes an
     /// exception carrying the matching problem.
     data_ptr_t evaluateCallInsideBody(
@@ -1828,6 +2010,10 @@ class Builder {
     // CALL of its value when its value was made before).
     node_handle_t createFuncDataNode(
         const compile_graph_ptr_t &graph, bool callableAsResult, bool allowParameterization);
+    // The FUNC node of a direct call of `callee` in the current graph: its type is the value
+    // the call hands on (callValueTypeOf, from the mask of captured variables the callee
+    // writes), which is also what the run time packs it from (GCFuncRef::reserved).
+    node_handle_t addCallNodeOf(const compile_graph_ptr_t &callee);
     // The value node of a visited expression: a node as is, or a function literal (a graph) as
     // its callable function value.
     node_handle_t valueNodeOf(const std::any &res);
@@ -1879,6 +2065,11 @@ class Builder {
     // such function (it changes an argument in place).
     compile_graph_ptr_t
     operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &origin);
+    /// `attempt(f)` (design principles 3.9): the function value whose parameters are `f`'s and
+    /// whose result is `f`'s result plus `!`. It is a closure -- a graph of its own that captures
+    /// `f` and whose body is one marked call of it -- so no node of the calling graph stands for
+    /// the transform. `f` is the resolved argument: a function value.
+    node_handle_t attemptFunctionValue(const Argument &f, const GCT::node_ptr_t &origin);
     // The one function of the name `node` (a DREF to several overloads or to an operator
     // group) that has exactly the parameters and the result of `expected`, as a value; null
     // when none or several do.
@@ -1997,6 +2188,24 @@ class Builder {
     // The captured variables of `callee` as nodes of the current graph, which becomes a
     // caller of `callee`.
     std::vector<CapturedUse> capturedUsesOf(const compile_graph_ptr_t &callee);
+    // What a direct call of `callee` hands on: the callee's return value, then the new version
+    // of each captured variable the callee writes, in the callee's capture order. `written` is
+    // the mask of that table: bit k of the callee's k-th capture, which is where
+    // linkCaptureSites puts its With input, after the declared `with` arguments. A call that
+    // writes nothing hands on its return value alone, exactly as before; a `void` callee that
+    // writes exactly one variable hands on that variable's version itself, not a tuple of one
+    // element. The mask is recorded in the FUNC node's payload (GCFuncRef::reserved), which is
+    // what the run time packs the tuple from, so the two are decided together.
+    uint32_t captureWriteMaskOf(const compile_graph_ptr_t &callee) const;
+    camel::core::type::Type *callValueTypeOf(
+        const compile_graph_ptr_t &callee, uint32_t written) const;
+    // The access node of part `part` of the value a call hands on: part 0 is the callee's
+    // return value, part k the version of the k-th variable the call writes (CallValue).
+    node_handle_t callValuePartOf(node_handle_t call, uint32_t part);
+    // The node a read of `variable` takes its value from: the value the last write produced, or
+    // the access node of the part of a call that wrote it; nullptr when the write produced no
+    // value of its own, and the read is ordered after the write with a control input instead.
+    node_handle_t valueVersionOf(node_handle_t variable);
     // Reports the writes of captured variables that turned out to be real.
     void reportIgnoredCapturedWrites();
     // Whether running `node` of `graph` is an effect: an operator that is neither pure nor
@@ -2010,27 +2219,77 @@ class Builder {
     // Once every body of the program is built: settles which graphs are effectful (a callee
     // may be written after its caller, in another module).
     void settleEffectfulGraphs();
+    // One body's measurement as it is being walked: what it has been found to reach so far, which
+    // parameter each of its ports is (the numbering a call uses), and whether a use was found that
+    // the numbering cannot name at all. A body with such a use is recorded as reaching anything
+    // rather than as reaching less than it does.
+    struct BodyReach {
+        camel::core::sem::ResourceSignature reach;
+        std::unordered_map<draft_node_ref_t, size_t> ports;
+        // Values the function captured from the one around it: a `with` port its type does not
+        // count, and the closure nodes. Their resources are that function's, not a parameter's.
+        std::unordered_set<draft_node_ref_t> captured;
+        bool unplaceable = false;
+    };
+    // The walk of one body, in the named steps it is made of: the body's ports, the uses one node
+    // adds, and the three node kinds whose resources are not their own type's -- an operator, a
+    // direct call and a call through a value. Each step says whether the node could be placed.
+    void numberBodyPorts(
+        BodyReach &walk, const runtime::GraphDraft &draft, const FunctionType &type) const;
+    void addParamUse(
+        BodyReach &walk, size_t index, camel::core::sem::ResourceClass cls, const std::string &name,
+        camel::core::sem::AccessMode mode) const;
+    void addAmbientUse(
+        BodyReach &walk, const std::string &name, camel::core::sem::AccessMode mode) const;
+    bool readCalleeSignature(
+        BodyReach &walk, const runtime::GraphDraft &draft,
+        const camel::core::sem::ResourceSignature &sig, size_t calleeWithCount, bool isCall,
+        draft_node_ref_t id) const;
+    void readUnknownValue(BodyReach &walk) const;
+    bool reachOfOper(
+        DraftGraphBuilder *graph, const runtime::GraphDraft &draft, BodyReach &walk,
+        draft_node_ref_t id) const;
+    bool reachOfFunc(
+        DraftGraphBuilder *graph, const runtime::GraphDraft &draft, BodyReach &walk,
+        draft_node_ref_t id) const;
+    bool reachOfCall(
+        const runtime::GraphDraft &draft, BodyReach &walk, draft_node_ref_t id) const;
+    void addVarParameters(BodyReach &walk, const FunctionType &type) const;
     // The resources a body touches, from what its nodes already publish: an operator's own
     // signature, a callee's, and the signature of the function value a call goes through. Empty
     // when the body touches nothing. A call through a value that writes no clause promises
     // nothing, so the call is read conservatively (any class, any ambient resource) rather than
     // as touching nothing: a body is never measured as pure because the measurement gave up.
-    // `nullopt` when something in the body cannot be determined at all -- a resource the walk
-    // cannot place.
-    std::optional<camel::core::sem::ResourceSignature> footprintOf(DraftGraphBuilder *graph) const;
+    // `nullopt` when something in the body cannot be placed at all -- a resource the walk cannot
+    // name, which the measurement records as reaching anything rather than as reaching nothing.
+    // With `only`, one node's own reach, which is what tells apart a use the clause names from one
+    // it does not.
+    std::optional<camel::core::sem::ResourceSignature>
+    footprintOf(DraftGraphBuilder *graph, std::optional<draft_node_ref_t> only = std::nullopt) const;
     // Once every body is built: measures each one and settles the measurements against each other
-    // (a callee may be written after its caller, in another module). This reports nothing: it runs
-    // before the module-by-module reporting begins.
+    // (a callee may be written after its caller, in another module, and a body may call itself).
+    // The measurements start empty and grow, so a recursive function settles at the least set its
+    // body satisfies rather than never settling. The settled measurement is also published on the
+    // signature of a function that wrote no clause, so that the signature stays the one place a
+    // function's resources are read from. This reports nothing: it runs before the module-by-module
+    // reporting begins.
     void measureInferredResources();
     // Then holds each declaration of the current module to the clause it wrote: `uses` is an
     // upper bound and `pure` promises the empty set, so a body that reaches past its clause is
     // UsesPromiseViolated at the declaration. Reported with the other per-module diagnostics,
     // while the bodies are still in hand.
     void checkInferredResources();
-    // The report of one declaration whose body reaches past the clause it wrote.
+    // The first node of `graph` whose own reach the clause does not cover: the use where the body
+    // stopped matching it, which is what the report points at. 0 when no such node is found.
+    camel::source::origin_id_t firstUnpromisedEffectOrigin(
+        const compile_graph_ptr_t &graph,
+        const camel::core::sem::ResourceSignature &promised) const;
+    // The report of one declaration whose body reaches past the clause it wrote, at the use
+    // `noteOrigin` names.
     void reportResourceViolation(
         const compile_graph_ptr_t &graph, const camel::core::sem::ResourceSignature &promised,
-        const camel::core::sem::ResourceSignature &measured);
+        const camel::core::sem::ResourceSignature &measured,
+        camel::source::origin_id_t noteOrigin);
     // Then warns for each body of the current module.
     void reportDroppedEffectsOfBodies();
     // Reports EffectInRuleCondition: a rule's condition may not have an effect. The condition is
@@ -2365,6 +2624,14 @@ class Builder {
     void setArmResult(ArmBuild &arm, node_handle_t result);
     /// The arm enters the form `target` at its end (the `CAST` is part of the arm).
     void coerceArmExit(const arm_ptr_t &arm, Type *target, const GCT::node_ptr_t &origin);
+    /// Whether the branch `gct` stands where nothing takes its value: the statement whose value
+    /// its block drops (visitExecNode), or a position written `void` (the value of a `return` in
+    /// a function that returns nothing, the tail of such a body). A `let` without a type has no
+    /// expected type either and does take the value, so a missing type is not this position.
+    bool branchTakesNoValue(const GCT::node_ptr_t &gct) const;
+    /// An arm whose value is a cell gives the value the cell holds instead: a cell is not a
+    /// value, and its type never reaches the join. The read is made in the arm's own region.
+    void readArmCellValue(const arm_ptr_t &arm);
     /// The nodes of each arm that read nothing the arm computes wait for the BRCH.
     void linkArmEntries(const std::vector<arm_ptr_t> &arms, node_handle_t brchNode);
     /// After the JOIN is there: the variables the arms changed are changed by the branch.
@@ -2378,8 +2645,37 @@ class Builder {
     // ---- The tagged forms `T?` and `T!` (design principles 3.8;
     // docs/technical/29_nullable_and_fallible_values.md). Each construct below is a branch on
     // the one-bit tag of a value; nothing here adds a node kind. ----
-    /// `a ?? b`, `a !! b`, `x ?-> f`.
+    /// `a ?? b`, `a !! b`.
     node_handle_t visitTaggedBrchNode(const GCT::node_ptr_t &gct);
+    /// The pipe `x -> f` (design principles 3.9). The call is built with `x` as it is, and the
+    /// overloads of `f` (their `when` conditions included) are asked first; when none takes it and
+    /// `x` is a `T?` or a `T!`, the call takes the value out of `x` (peelPipeReceiver).
+    ///
+    /// Three builds of one call, told apart by `PipeState::mode`. `Detect` builds it as written and
+    /// stops (PipeTagged) the moment its receiver turns out to be tagged, before any other argument
+    /// is built. `Scratch` asks the overloads: the call is built in an arm that is dropped, so
+    /// whatever the other arguments do is not done twice, and a refusal for want of an overload
+    /// (PipeNoMatch) is the answer "no". `Direct` is the call built for real with the receiver as
+    /// it is.
+    class PipeNoMatch {};
+    class PipeTagged {};
+    enum class PipeMode : uint8_t { Detect, Scratch, Direct };
+    struct PipeState {
+        /// The call being built, the node standing for its receiver when the receiver has been
+        /// taken apart (null before), and the receiver's node once it is built.
+        GCT::node_ptr_t call        = nullptr;
+        GCT::node_ptr_t replacement = nullptr;
+        node_handle_t receiver      = nullptr;
+        PipeMode mode               = PipeMode::Detect;
+        PipeState *previous         = nullptr;
+    };
+    PipeState *pipe_ = nullptr;
+    node_handle_t visitPipeLink(const GCT::node_ptr_t &call, const GCT::node_ptr_t &replacement);
+    node_handle_t peelPipeReceiver(const GCT::node_ptr_t &call, node_handle_t receiver);
+    /// Called where a call is refused for want of an overload (or of a `when` condition that
+    /// holds): the pipe's call whose receiver is a tagged value does not report, it takes the
+    /// receiver apart instead.
+    void yieldToPipe(const GCT::node_ptr_t &call);
     /// `match x { case null => ..  case v => .. }` and `case error e` over a tagged `x`.
     node_handle_t visitTaggedMatch(
         const GCT::node_ptr_t &gct, node_handle_t scrutinee, camel::core::type::TupleType *type);
@@ -2445,11 +2741,12 @@ class Builder {
     std::unordered_set<node_handle_t> narrowedValues_;
     /// Whether `expr` is a name narrowed to a `T` by an `if` around it (see narrowedValues_).
     bool isNarrowedName(const GCT::node_ptr_t &expr);
-    /// `subject`, the value of the narrowed name `expr`, put back into `T?` so that a
-    /// construct written for a `T?` (`??`, a `match` with `case null`) applies to it, with a
-    /// warning that the name is known not to be null (KnownNotNull; design principles 3.8).
-    /// `construct` names the construct in the warning.
-    node_handle_t reopenNarrowedName(
+    /// `subject`, the left side `expr` of a construct written for a `T?` that cannot be null
+    /// (a plain value, or the narrowed name of `isNarrowedName`), put back into `T?` so that
+    /// the construct (`??`, a `match` with `case null`) applies to it exactly as it does to a
+    /// `T?`, with a warning that its value is known not to be null (KnownNotNull; design
+    /// principles 3.8). `construct` names the construct in the warning.
+    node_handle_t reopenKnownNotNull(
         const GCT::node_ptr_t &expr, node_handle_t subject, const GCT::node_ptr_t &at,
         const char *construct);
     /// Warns about every `T!` that is evaluated in a body and that nothing takes

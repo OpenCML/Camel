@@ -512,9 +512,8 @@ function declarationModules() {
         const dir = cppModuleDir(name)
         if (!dir) continue
         const source = path.join(STDLIB_DIR, file)
-        const header = read(source).match(/^\s*module\s+([A-Za-z_]\w*)\s*$/m)
-        // `stdlib/perf.cml` says `module util`: it is not the module named after its file.
-        if (!header || header[1] !== name) continue
+        // The file is the module and its name is the file's name: a `.cml` beside the `.cmo`
+        // of the same name is that module's declaration module, and it is read by its name.
         modules.push({ name, cppDir: dir, source })
     }
     return modules
@@ -523,7 +522,7 @@ function declarationModules() {
 // The declarations of a file: each `#op('uri')` binds the next `func`, and a default URI is
 // `<module>:<name>`. `// dynamic func` records a signature C++ computes (math); a body-less
 // `func` is the same declaration without an export.
-function readDeclarations(file, moduleName) {
+function readDeclarations(file, moduleName, allowPass = true) {
     const lines = read(file).split('\n')
     const declarations = []
     const dynamic = []
@@ -545,8 +544,11 @@ function readDeclarations(file, moduleName) {
         if (declaration) {
             // A pass declaration (design principles 9.3): a body-less function whose condition is
             // the pass applicability. It is a function the pipeline applies to the program, not
-            // an operator of the module, so it has no registered operator to agree with.
-            if (/\bwhen\s+is_function::<\w+>\(\)\s*$/.test(trimmed)) {
+            // an operator of the module, so it has no registered operator to agree with. Only a
+            // compiled declaration can declare a pass; a file under stdlib/signatures/ is
+            // reference text, and there the same condition is the type's
+            // (`grad::<F>(f: F): Gradient<F> when is_function::<F>()`).
+            if (allowPass && /\bwhen\s+is_function::<\w+>\(\)\s*$/.test(trimmed)) {
                 pendingUri = null
                 continue
             }
@@ -586,7 +588,7 @@ function computedPlaces(module, entry) {
     if (entry && entry.computed) {
         filePath = path.join(STDLIB_DIR, entry.computed)
         if (fs.existsSync(filePath)) {
-            for (const declaration of readDeclarations(filePath, module.name).declarations) {
+            for (const declaration of readDeclarations(filePath, module.name, false).declarations) {
                 if (!file.has(declaration.name)) {
                     file.set(declaration.name, {
                         file: relative(filePath),

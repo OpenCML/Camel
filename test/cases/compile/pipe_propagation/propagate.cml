@@ -1,0 +1,39 @@
+/**
+ * `x -> f` where `x` is a `T?` or a `T!` that no overload of `f` takes as it is (design principles
+ * 3.9): a null `x` gives null, a failed `x` gives its error as it is, and anything else calls `f`
+ * with the value. The result is a `U?` (`U!`), so a pipeline writes only the normal path and
+ * handles the failure once at its end with `??` or `!!`.
+ */
+module pipe_propagation_propagate
+
+func inc(x: int): int { return x + 1 }
+
+func half(x: int): int? {
+    return if x % 2 == 0 then x / 2 else null
+}
+
+func check(x: int): int! {
+    return if x < 10 then x else {
+        return error('TooBig', 'ten or more')
+    }
+}
+
+func main(): int sync {
+    let a: int? = 1
+    let b: int? = null
+    println(a->inc ?? -1, b->inc ?? -1)
+    println(a->inc->inc ?? -1, b->inc->inc ?? -1)
+
+    let ok: int! = 5
+    let bad: int! = check(99)
+    println(ok->inc !! -1, bad->inc !! -1)
+
+    // `half` already gives an `int?`, which the pipe keeps as it is.
+    let four: int? = 4
+    let three: int? = 3
+    println(four->half ?? -1, three->half ?? -1, b->half ?? -1)
+
+    // The pipeline from a value that may fail, through a function that may fail.
+    println(ok->check->inc !! -1, 50->check->inc !! -1)
+    return 0
+}

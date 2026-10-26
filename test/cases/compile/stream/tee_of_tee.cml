@@ -1,0 +1,29 @@
+/**
+ * A `tee` of a `tee` (design principles 5.4): the streams a `tee` gives are streams like any
+ * other, so each may be split again, and every stream in the tree is read once. All three readers
+ * see the same three elements, and the source is still pulled once per element.
+ */
+module stream_tee_of_tee
+
+import stream
+
+func count(n: int): int.. {
+    return step(n)
+}
+
+func step(n: int): () => (int, int..)? {
+    return () => if n > 0 then (n, step(n - 1)) else null
+}
+
+func total(s: int..): int {
+    return loop acc = 0 for x in s do acc + x
+}
+
+func main(): int sync {
+    let (first, second) = stream::tee(count(3), 2)
+    let (third, fourth) = stream::tee(first, 2)
+    println(total(second))
+    println(total(third))
+    println(total(fourth))
+    return 0
+}

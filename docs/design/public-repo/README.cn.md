@@ -52,8 +52,9 @@ docs/
                              CLI 参考、诊断目录
   internals/                 编译器与运行时：每个模块一篇（见下）
   design.md                  设计取舍：语言的定位与原则（设计原则的公开版，不含裁定记录与内部措辞）
-  reference/camel-for-ai.md  给 AI 的精炼语言参考（必读的一页：规则、惯用法、常见错误；根目录 `llms.txt`
-                             指向它）；生成的诊断目录与标准库签名各成一个查阅文件，与它同目录：
+  reference/camel-for-ai.md  给 AI 的精炼语言参考（必读的一页：为什么是 Camel、心智模型、惯用法、怎么看
+                             编译器的反馈、到哪里查；先讲为什么，其余的去语言参考与标准库参考里查；根目录
+                             `llms.txt` 指向它）；生成的诊断目录与标准库签名各成一个查阅文件，与它同目录：
                              reference/camel-for-ai-diagnostics.md、reference/camel-for-ai-stdlib-signatures.md
   assets/
 ```
@@ -84,7 +85,7 @@ docs/
 ## 5. 公开之后的约定（现在开始执行，公开时已成习惯）
 
 - **提交信息**：Conventional Commits（`feat(parse): …`、`fix(runtime): …`），英文，说明改了什么与为什么；**不写任务编号、不写"交接""评审"等协作措辞**，不提 AI。合并用 squash 或 rebase，保持主线线性。
-- **代码与文档中不出现**：机器路径、个人信息、任务编号（`H123`）、"施工方/协调者"、日期化的过程叙述。
+- **代码与文档中不出现**：机器路径、个人信息、任务编号（`H` 加数字的内部编号）、"施工方/协调者"、日期化的过程叙述。
 - 分支：`main`（发布）与 `develop`；贡献者从 `develop` 拉分支、向 `develop` 提 PR。
 
 ## 6. 实施顺序（施工方先交计划）

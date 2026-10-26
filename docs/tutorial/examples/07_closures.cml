@@ -23,7 +23,7 @@ func main(): int sync {
     println(ops->map<(f: (x: int) => int): int => f(10)>)
 
     var total = 0                            // captured by reference
-    [1, 2, 3]->foreach<sync (x: int) => sync { total = total + x }>
+    [1, 2, 3]->foreach<(x: int) => sync { total = total + x }>
     println(total)
     return 0
 }

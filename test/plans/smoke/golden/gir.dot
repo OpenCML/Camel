@@ -4,24 +4,24 @@ digraph GraphIR {
     edge [minlen=2];
     subgraph cluster_F01 {
         label="main";
-        tooltip="() => int";
+        tooltip="() => int uses clock, stdout";
         subgraph cluster_F02 {
             label="fib";
-            tooltip="(n: int) => int";
+            tooltip="(n: int) => int pure";
             F02 [label="ARGS", type="ARGS", style=dashed, shape=circle];
             O02 [label="EXIT", type="EXIT", style=dashed, shape=circle];
-            N00 [label="n", type="PORT", param_name="n", param_kind="normal", param_index="0", value_type="int", origin=5, span="7:9-7:15", srcfile="/home/zjwei/camel-work/h554-no-module-decl/test/cases/smoke/core/fib10_pipeline.cml", shape=circle, style=solid, tooltip="n\nfib::node#1"];
-            N01 [label="1", type="DATA", shape=circle, style=solid, value_type="int", origin=271, span="8:19-8:20", srcfile="/home/zjwei/camel-work/h554-no-module-decl/test/cases/smoke/core/fib10_pipeline.cml", tooltip="1\nfib::node#-1"];
-            N02 [label=":op/\nle_l", type="OPER", shape=diamond, style=solid, value_type="bool", origin=272, span="8:16-8:18", srcfile="/home/zjwei/camel-work/h554-no-module-decl/test/cases/smoke/core/fib10_pipeline.cml", tooltip=":op/le_l\nfib::node#2"];
-            N03 [label="JOIN", type="JOIN", shape=diamond, style=solid, value_type="int", origin=274, span="8:11-8:56", srcfile="/home/zjwei/camel-work/h554-no-module-decl/test/cases/smoke/core/fib10_pipeline.cml", tooltip="JOIN\nfib::node#9"];
-            N04 [label="BRCH", type="BRCH", shape=diamond, style=solid, value_type="int", origin=273, span="8:11-8:56", srcfile="/home/zjwei/camel-work/h554-no-module-decl/test/cases/smoke/core/fib10_pipeline.cml", tooltip="BRCH\nfib::node#3"];
-            N05 [label="1", type="DATA", shape=circle, style=solid, value_type="int", origin=280, span="8:41-8:42", srcfile="/home/zjwei/camel-work/h554-no-module-decl/test/cases/smoke/core/fib10_pipeline.cml", tooltip="1\nfib::node#-2"];
-            N06 [label=":op/\nsub_l", type="OPER", shape=diamond, style=solid, value_type="int", origin=281, span="8:39-8:40", srcfile="/home/zjwei/camel-work/h554-no-module-decl/test/cases/smoke/core/fib10_pipeline.cml", tooltip=":op/sub_l\nfib::node#4"];
-            N07 [label="fib", type="FUNC", shape=Mdiamond, style=solid, width=1.1, height=1.1, value_type="int", origin=282, span="8:33-8:43", srcfile="/home/zjwei/camel-work/h554-no-module-decl/test/cases/smoke/core/fib10_pipeline.cml", tooltip="fib\nfib::node#5"];
-            N08 [label="2", type="DATA", shape=circle, style=solid, value_type="int", origin=285, span="8:54-8:55", srcfile="/home/zjwei/camel-work/h554-no-module-decl/test/cases/smoke/core/fib10_pipeline.cml", tooltip="2\nfib::node#-3"];
-            N09 [label=":op/\nsub_l", type="OPER", shape=diamond, style=solid, value_type="int", origin=286, span="8:52-8:53", srcfile="/home/zjwei/camel-work/h554-no-module-decl/test/cases/smoke/core/fib10_pipeline.cml", tooltip=":op/sub_l\nfib::node#6"];
-            N0A [label="fib", type="FUNC", shape=Mdiamond, style=solid, width=1.1, height=1.1, value_type="int", origin=287, span="8:46-8:56", srcfile="/home/zjwei/camel-work/h554-no-module-decl/test/cases/smoke/core/fib10_pipeline.cml", tooltip="fib\nfib::node#7"];
-            N0B [label=":op/\nadd_l", type="OPER", shape=diamond, style=solid, value_type="int", origin=288, span="8:44-8:45", srcfile="/home/zjwei/camel-work/h554-no-module-decl/test/cases/smoke/core/fib10_pipeline.cml", tooltip=":op/add_l\nfib::node#8"];
+            N00 [label="n", type="PORT", param_name="n", param_kind="normal", param_index="0", value_type="int", origin=5, span="7:9-7:15", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml", shape=circle, style=solid, tooltip="n\nfib::node#1"];
+            N01 [label="1", type="DATA", shape=circle, style=solid, value_type="int", origin=271, span="8:19-8:20", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml", tooltip="1\nfib::node#-1"];
+            N02 [label=":op/\nle_l", type="OPER", shape=diamond, style=solid, value_type="bool", origin=272, span="8:16-8:18", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml", tooltip=":op/le_l\nfib::node#2"];
+            N03 [label="JOIN", type="JOIN", shape=diamond, style=solid, value_type="int", origin=274, span="8:11-8:56", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml", tooltip="JOIN\nfib::node#9"];
+            N04 [label="BRCH", type="BRCH", shape=diamond, style=solid, value_type="int", origin=273, span="8:11-8:56", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml", tooltip="BRCH\nfib::node#3"];
+            N05 [label="1", type="DATA", shape=circle, style=solid, value_type="int", origin=280, span="8:41-8:42", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml", tooltip="1\nfib::node#-2"];
+            N06 [label=":op/\nsub_l", type="OPER", shape=diamond, style=solid, value_type="int", origin=281, span="8:39-8:40", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml", tooltip=":op/sub_l\nfib::node#4"];
+            N07 [label="fib", type="FUNC", shape=Mdiamond, style=solid, width=1.1, height=1.1, value_type="int", origin=282, span="8:33-8:43", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml", tooltip="fib\nfib::node#5"];
+            N08 [label="2", type="DATA", shape=circle, style=solid, value_type="int", origin=285, span="8:54-8:55", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml", tooltip="2\nfib::node#-3"];
+            N09 [label=":op/\nsub_l", type="OPER", shape=diamond, style=solid, value_type="int", origin=286, span="8:52-8:53", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml", tooltip=":op/sub_l\nfib::node#6"];
+            N0A [label="fib", type="FUNC", shape=Mdiamond, style=solid, width=1.1, height=1.1, value_type="int", origin=287, span="8:46-8:56", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml", tooltip="fib\nfib::node#7"];
+            N0B [label=":op/\nadd_l", type="OPER", shape=diamond, style=solid, value_type="int", origin=288, span="8:44-8:45", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml", tooltip=":op/add_l\nfib::node#8"];
             F02 -> N00 [label="0", type="NORM_PORT", style=solid];
             N03 -> O02 [label="0", type="EXIT", style=solid];
             N00 -> N02 [label="0|0", type="NORM"];
@@ -42,18 +42,18 @@ digraph GraphIR {
             N0A -> N0B [label="0|1", type="NORM"];
         }
         O01 [label="EXIT", type="EXIT", style=dashed, shape=circle];
-        N0C [label="10", type="DATA", shape=circle, style=solid, value_type="int", origin=290, span="12:14-12:16", srcfile="/home/zjwei/camel-work/h554-no-module-decl/test/cases/smoke/core/fib10_pipeline.cml", tooltip="10\nmain::node#-1"];
-        N0D [label="Start c\nompu...", type="DATA", shape=circle, style=solid, value_type="string", origin=293, span="13:4-13:38", srcfile="/home/zjwei/camel-work/h554-no-module-decl/test/cases/smoke/core/fib10_pipeline.cml", tooltip="Start computing fibonacci({})...\nmain::node#-2"];
-        N0E [label=":str/\nformat", type="OPER", shape=diamond, style=solid, value_type="string", origin=294, span="13:46-13:51", srcfile="/home/zjwei/camel-work/h554-no-module-decl/test/cases/smoke/core/fib10_pipeline.cml", tooltip=":str/format\nmain::node#1"];
-        N0F [label=":io/p\nrintln", type="OPER", shape=diamond, style=solid, value_type="string", origin=295, span="13:53-13:60", srcfile="/home/zjwei/camel-work/h554-no-module-decl/test/cases/smoke/core/fib10_pipeline.cml", tooltip=":io/println\nmain::node#2"];
-        N10 [label="time\n:now", type="OPER", shape=diamond, style=solid, value_type="float", origin=297, span="14:16-14:19", srcfile="/home/zjwei/camel-work/h554-no-module-decl/test/cases/smoke/core/fib10_pipeline.cml", tooltip="time:now\nmain::node#3"];
-        N11 [label="fib", type="FUNC", shape=Mdiamond, style=solid, width=1.1, height=1.1, value_type="int", origin=299, span="15:14-15:22", srcfile="/home/zjwei/camel-work/h554-no-module-decl/test/cases/smoke/core/fib10_pipeline.cml", tooltip="fib\nmain::node#4"];
-        N12 [label="time\n:now", type="OPER", shape=diamond, style=solid, value_type="float", origin=302, span="16:19-16:22", srcfile="/home/zjwei/camel-work/h554-no-module-decl/test/cases/smoke/core/fib10_pipeline.cml", tooltip="time:now\nmain::node#5"];
-        N13 [label=":op/\nsub_d", type="OPER", shape=diamond, style=solid, value_type="float", origin=303, span="16:25-16:26", srcfile="/home/zjwei/camel-work/h554-no-module-decl/test/cases/smoke/core/fib10_pipeline.cml", tooltip=":op/sub_d\nmain::node#6"];
-        N14 [label="Fibonac\nci({...", type="DATA", shape=circle, style=solid, value_type="string", origin=306, span="17:4-17:53", srcfile="/home/zjwei/camel-work/h554-no-module-decl/test/cases/smoke/core/fib10_pipeline.cml", tooltip="Fibonacci({}) = {} (computed in {:.4f} seconds)\nmain::node#-3"];
-        N15 [label=":str/\nformat", type="OPER", shape=diamond, style=solid, value_type="string", origin=307, span="17:61-17:81", srcfile="/home/zjwei/camel-work/h554-no-module-decl/test/cases/smoke/core/fib10_pipeline.cml", tooltip=":str/format\nmain::node#7"];
-        N16 [label=":io/p\nrintln", type="OPER", shape=diamond, style=solid, value_type="string", origin=308, span="17:83-17:90", srcfile="/home/zjwei/camel-work/h554-no-module-decl/test/cases/smoke/core/fib10_pipeline.cml", tooltip=":io/println\nmain::node#8"];
-        N17 [label="0", type="DATA", shape=circle, style=solid, value_type="int", origin=309, span="18:11-18:12", srcfile="/home/zjwei/camel-work/h554-no-module-decl/test/cases/smoke/core/fib10_pipeline.cml", tooltip="0\nmain::node#-4"];
+        N0C [label="10", type="DATA", shape=circle, style=solid, value_type="int", origin=290, span="12:14-12:16", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml", tooltip="10\nmain::node#-1"];
+        N0D [label="Start c\nompu...", type="DATA", shape=circle, style=solid, value_type="string", origin=293, span="13:4-13:38", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml", tooltip="Start computing fibonacci({})...\nmain::node#-2"];
+        N0E [label=":str/\nformat", type="OPER", shape=diamond, style=solid, value_type="string", origin=294, span="13:46-13:51", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml", tooltip=":str/format\nmain::node#1"];
+        N0F [label=":io/p\nrintln", type="OPER", shape=diamond, style=solid, value_type="string", origin=295, span="13:53-13:60", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml", tooltip=":io/println\nmain::node#2"];
+        N10 [label="time\n:now", type="OPER", shape=diamond, style=solid, value_type="float", origin=297, span="14:16-14:19", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml", tooltip="time:now\nmain::node#3"];
+        N11 [label="fib", type="FUNC", shape=Mdiamond, style=solid, width=1.1, height=1.1, value_type="int", origin=299, span="15:14-15:22", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml", tooltip="fib\nmain::node#4"];
+        N12 [label="time\n:now", type="OPER", shape=diamond, style=solid, value_type="float", origin=302, span="16:19-16:22", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml", tooltip="time:now\nmain::node#5"];
+        N13 [label=":op/\nsub_d", type="OPER", shape=diamond, style=solid, value_type="float", origin=303, span="16:25-16:26", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml", tooltip=":op/sub_d\nmain::node#6"];
+        N14 [label="Fibonac\nci({...", type="DATA", shape=circle, style=solid, value_type="string", origin=306, span="17:4-17:53", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml", tooltip="Fibonacci({}) = {} (computed in {:.4f} seconds)\nmain::node#-3"];
+        N15 [label=":str/\nformat", type="OPER", shape=diamond, style=solid, value_type="string", origin=307, span="17:61-17:81", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml", tooltip=":str/format\nmain::node#7"];
+        N16 [label=":io/p\nrintln", type="OPER", shape=diamond, style=solid, value_type="string", origin=308, span="17:83-17:90", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml", tooltip=":io/println\nmain::node#8"];
+        N17 [label="0", type="DATA", shape=circle, style=solid, value_type="int", origin=309, span="18:11-18:12", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml", tooltip="0\nmain::node#-4"];
         N18 [label="GATE", type="GATE", shape=diamond, style=dashed, value_type="int", tooltip="GATE\nmain::node#-4"];
         N18 -> O01 [label="0", type="EXIT", style=solid];
         N0C -> N0E [label="0|0", type="WITH", style=dashed];
@@ -74,7 +74,7 @@ digraph GraphIR {
         N16 -> N18 [label="0|0", type="CTRL", style=dashed, arrowhead=empty];
     }
     O00 [label="EXIT", type="EXIT", style=dashed, shape=circle];
-    N19 [label="Functio\nn(gr...", type="DATA", shape=circle, style=solid, value_type="() => int", origin=289, span="11:0-19:1", srcfile="/home/zjwei/camel-work/h554-no-module-decl/test/cases/smoke/core/fib10_pipeline.cml", tooltip="Function(graph=main, tupleSlots=0)\n__root__::node#-1"];
+    N19 [label="Functio\nn(gr...", type="DATA", shape=circle, style=solid, value_type="() => int uses clock, stdout", origin=289, span="11:0-19:1", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml", tooltip="Function(graph=main, tupleSlots=0)\n__root__::node#-1"];
     N1A [label="CALL", type="CALL", shape=diamond, style=solid, value_type="int", tooltip="CALL\n__root__::node#1"];
     N1A -> O00 [label="0", type="EXIT", style=solid];
     N19 -> N1A [label="0|0", type="WITH", style=dashed];

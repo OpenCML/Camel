@@ -1,0 +1,52 @@
+/**
+ * `attempt(f)(x)` isolates a fault of `f` at the call; `f` itself still faults when called
+ * directly afterwards, and its graph is the same (design principles 3.9, 9.1).
+ */
+module attempt_holders
+import { Graph, Node, constant, graph_of, inputs, nodes, op, op_name } from graph
+
+func target(x: int): int {
+    return (x + 1) * 3
+}
+
+func opText(n: Node): string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+func isOne(n: Node): bool {
+    return match constant(n, 0) {
+        case null => false
+        case v => v == 1
+    }
+}
+
+/// The `x + 1` of `target`: an int addition whose second operand is the constant 1.
+func isAddOne(n: Node): bool {
+    let ins = inputs(n)
+    return opText(n) == ':op/add_l' && len(ins) == 2 && isOne(ins[1])
+}
+
+/// How many `+ 1` nodes the graph of a function has.
+func addOnes(g: Graph): int {
+    return len(nodes(g)->filter<isAddOne>)
+}
+
+/// The number of nodes of a function's graph.
+func size(g: Graph): int {
+    return len(nodes(g))
+}
+
+func ratio(x: int): int {
+    return 12 / x
+}
+
+func main(): int sync {
+    let before = size(graph_of(ratio))
+    println(`isolated: ${attempt(ratio)(4) !! -1} ${attempt(ratio)(0) !! -1}`)
+    println(`same: ${ratio(4)} ${size(graph_of(ratio)) == before}`)
+    println(ratio(0))
+    return 0
+}

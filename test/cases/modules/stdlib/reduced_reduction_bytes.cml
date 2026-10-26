@@ -12,19 +12,19 @@
  */
 module stdlib_reduced_reduction_bytes
 
-import { new, cast, reshape, sum, to_bytes } from tensor
-import { to_array, size } from bytes
+import { new, reshape, sum, to_bytes } from tensor
+import { to_array } from bytes
 
 #[change_precision]
 func narrow(x: f32[..]): bf16[..] {
-    return cast(x, 'bf16')
+    return bf16(x)
 }
 
 func main(): int sync {
     let rows: f32[] = [16777216.0, 1.0, -16777216.0, 3.0, 0.0078125, 0.0]
     let matrix = reshape(narrow(new(rows)), [2, 3])
     let reduced = sum(matrix, 1, true)
-    println(size(to_bytes(reduced)))
+    println(len(to_bytes(reduced)))
     println(to_array(to_bytes(reduced)))
     return 0
 }

@@ -71,7 +71,7 @@ SCHEDULING = {"std::nvm", "std::fvm", "std::jit", "std::tf", "std::prl", "std::n
 
 # Environment variables the harness sets itself; a plan value for them is not part of a
 # program's environment.
-HARNESS_ENV: set[str] = set()  # the effect trace is a pass parameter now (H81)
+HARNESS_ENV: set[str] = set()  # the effect trace is a pass parameter now
 
 # Programs whose native value of the exported function is observable in the zero-pass run, so
 # the exported model can be compared with native execution (the artifact gate). The inputs
@@ -82,7 +82,7 @@ ONNX_NATIVE = {
         "kind": "printed",
         "must_contain": ["reshape([1.0, -2.0, 3.0, 0.5], [4])",
                          "'camel gate={} {} {} {}'->format<y[0], y[1], y[2], y[3]>->println",
-                         "export_model((t: f32[..]): f32[..] => gate(t), x,"],
+                         "export_model<out: get_env('ONNX_OUT')>((t: f32[..]): f32[..] => gate(t), x)"],
         "feeds": [{"shape": [4], "values": [1.0, -2.0, 3.0, 0.5]}],
         "pattern": r"^camel gate=(\S+) (\S+) (\S+) (\S+)$",
     },
@@ -90,7 +90,7 @@ ONNX_NATIVE = {
         "kind": "printed",
         "must_contain": ["reshape([1.0, -2.0, 3.0, 0.5], [4])",
                          "'camel gate={} {} {} {}'->format<y[0], y[1], y[2], y[3]>->println",
-                         "export_model((t: f32[..]): f32[..] => gate(t as f32[4]), x,"],
+                         "export_model<out: get_env('ONNX_OUT')>((t: f32[..]): f32[..] => gate(t as f32[4]), x)"],
         "feeds": [{"shape": [4], "values": [1.0, -2.0, 3.0, 0.5]}],
         "pattern": r"^camel gate=(\S+) (\S+) (\S+) (\S+)$",
     },
@@ -240,7 +240,11 @@ def load_exclusions(here: Path) -> dict:
 
 
 def has_export_entry(source: str) -> bool:
-    return bool(re.search(r"\bexport_model\s*\(", source)) and bool(re.search(r"\bonnx\b", source))
+    # `export_model<out: path>(fn, example)`: the model file is a `with` argument, so the call
+    # carries a bracketed list before its parentheses.
+    return bool(re.search(r"\bexport_model\s*(?:<[^<>]*>)?\s*\(", source)) and bool(
+        re.search(r"\bonnx\b", source)
+    )
 
 
 def main() -> int:

@@ -7,7 +7,7 @@ module dropped_foreach_lambda
 
 func main(): int sync {
     var out: int[] = []
-    0..3->foreach<sync (i: int) => sync {
+    0..3->foreach<(i: int) => sync {
         out->append<i>
     }>
     0..3->foreach<(i: int) => out->append<i>>

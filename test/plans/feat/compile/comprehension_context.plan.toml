@@ -1,0 +1,18 @@
+id = "compile.comprehension_context"
+order = 934
+tier = "fast"
+tags = ["feat", "compile", "comprehension", "types"]
+desc = "A comprehension at a position that expects an array type is the comprehension"
+
+[[tests]]
+name = "comprehension_context.annotated"
+desc = "`let xs: f32[] = [f32(i) for i in 0..n]` has its elements, as without the annotation: in a `let`, a `var`, a struct field, an argument and a return. It was an empty array of the annotated type."
+kind = "behavior"
+case = "../../../cases/compile/comprehension_context/annotated.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "[0.0, 1.0, 2.0, 3.0] [0, 2, 4, 6] [0.0, 1.0, 2.0, 3.0] [0.0, 1.0, 2.0, 3.0] 6.0\n[0, 1, 4, 9] [2, 3]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

@@ -1,0 +1,8 @@
+module err_index_of_ordinary
+
+import { index_of } from str
+
+func main(): int sync {
+    println(index_of('hello', 'l'))
+    return 0
+}

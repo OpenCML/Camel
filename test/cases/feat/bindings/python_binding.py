@@ -2,7 +2,7 @@
 # Copyright (c) the OpenCML Organization
 # SPDX-License-Identifier: MIT
 
-"""The Python binding (H253), from the Python side.
+"""The Python binding, from the Python side.
 
 Runs against `out/latest/python/_camel*.so` and the package in `pypi/camel-lang/src`, and needs no
 third-party library: the DLPack capsules here are built with `ctypes`, so the test measures the
@@ -83,6 +83,24 @@ DLManagedTensor._fields_ = [
     ("deleter", ctypes.CFUNCTYPE(None, ctypes.POINTER(DLManagedTensor))),
 ]
 
+class DLPackVersion(ctypes.Structure):
+    _fields_ = [("major", ctypes.c_uint32), ("minor", ctypes.c_uint32)]
+
+
+class DLManagedTensorVersioned(ctypes.Structure):
+    pass
+
+
+DLManagedTensorVersioned._fields_ = [
+    ("version", DLPackVersion),
+    ("manager_ctx", ctypes.c_void_p),
+    ("deleter", ctypes.CFUNCTYPE(None, ctypes.POINTER(DLManagedTensorVersioned))),
+    ("flags", ctypes.c_uint64),
+    ("dl_tensor", DLTensor),
+]
+
+DLPACK_FLAG_BITMASK_READ_ONLY = 1
+
 _PyCapsule_New = ctypes.pythonapi.PyCapsule_New
 _PyCapsule_New.restype = ctypes.py_object
 _PyCapsule_New.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_void_p]
@@ -118,10 +136,15 @@ def is_capsule(value):
     return type(value).__name__ == "PyCapsule"
 
 
+def versioned_of(capsule):
+    """The DLPack 1.0 managed tensor an array the extension returned sits in."""
+    pointer = _PyCapsule_GetPointer(capsule, b"dltensor_versioned")
+    return ctypes.cast(pointer, ctypes.POINTER(DLManagedTensorVersioned)).contents
+
+
 def bytes_of(capsule):
     """The address, the element count and the itemsize the capsule names."""
-    pointer = _PyCapsule_GetPointer(capsule, b"dltensor")
-    tensor = ctypes.cast(pointer, ctypes.POINTER(DLManagedTensor)).contents
+    tensor = versioned_of(capsule)
     elements = 1
     for i in range(tensor.dl_tensor.ndim):
         elements *= tensor.dl_tensor.shape[i]
@@ -134,8 +157,7 @@ def values_of(value, elements):
     own limit: it has no way to say that someone else's buffer may be written)."""
     if not is_capsule(value):
         return [float(value[i]) for i in range(elements)]
-    pointer = _PyCapsule_GetPointer(value, b"dltensor")
-    tensor = ctypes.cast(pointer, ctypes.POINTER(DLManagedTensor)).contents
+    tensor = versioned_of(value)
     data = ctypes.cast(tensor.dl_tensor.data, ctypes.POINTER(ctypes.c_float))
     return [data[i] for i in range(elements)]
 
@@ -244,7 +266,7 @@ def main():
         # And the direction a project takes: a NumPy array goes in as itself, through the
         # `__dlpack__` its producer implements, not through a capsule this test built by hand. NumPy
         # 2 writes the strides explicitly even for a compact array -- the capsule above says null --
-        # and the import path has to read that form as compact rather than as strided (H604: it
+        # and the import path has to read that form as compact rather than as strided (it
         # tested the strides pointer for null, so every NumPy array was refused as "not contiguous"
         # while `examples/python/rules/basket.py` handed one over).
         source = numpy.arange(4, dtype=numpy.float32) * 1.5

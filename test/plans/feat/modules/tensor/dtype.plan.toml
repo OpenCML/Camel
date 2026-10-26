@@ -277,7 +277,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "npy_element_type"
-desc = "`load_npy` reads an f32 `.npy` as `f32[..]` (`load_npy::<f32>`) and the tree's only int64 `.npy` as `i64[..]` (`load_npy::<i64>`), each with the file's extents (3 and 2 elements); a third load writes no type argument at all and takes the element type from the declared type of the position it stands in (`let typed: f32[..] = load_npy(p)`). Before H466 the result had no element type the program could state, and the only spelling was the untyped `load_npy(p)`."
+desc = "`load_npy` reads an f32 `.npy` as `f32[..]` (`load_npy::<f32>`) and the tree's only int64 `.npy` as `i64[..]` (`load_npy::<i64>`), each with the file's extents (3 and 2 elements); a third load writes no type argument at all and takes the element type from the declared type of the position it stands in (`let typed: f32[..] = load_npy(p)`). The result used to have no element type the program could state, and the only spelling was the untyped `load_npy(p)`."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/dtype/npy_element_type.cml"
 args = ["${case}"]
@@ -288,7 +288,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "npy_dtype_mismatch"
-desc = "An int64 `.npy` read as `load_npy::<f32>(p)` is a RuntimeDiag::RuntimeError at the call, at the position of the type argument the call writes (`npy_dtype_mismatch.cml:10:21`), naming the file's element type and the declared one (`the file holds i64 and the program declares f32`). Before H466 no element type was declared, so a file of any element type loaded as-is and the mismatch could not be reported at all (design principles 5.1, 5.5)."
+desc = "An int64 `.npy` read as `load_npy::<f32>(p)` is a RuntimeDiag::RuntimeError at the call, at the position of the type argument the call writes (`npy_dtype_mismatch.cml:10:21`), naming the file's element type and the declared one (`the file holds i64 and the program declares f32`). No element type used to be declared, so a file of any element type loaded as-is and the mismatch could not be reported at all (design principles 5.1, 5.5)."
 kind = "negative"
 case = "../../../../cases/modules/tensor/dtype/npy_dtype_mismatch.cml"
 args = ["${case}"]
@@ -300,7 +300,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "npy_no_element_type"
-desc = "`load_npy(p)` with no type argument, standing where no element type is expected, does not resolve: the element type is the one type variable no parameter mentions, so the call is refused (No matching function found, `SemanticDiag::NoMatchingFunction`) and the candidates print the five element types a `.npy` file can hold, each with the type argument it takes (`<tensor:load_npy_f32>: ::<float32>(path: string) => float32[..]`). Before H466 this call compiled and returned a tensor whose element type was whatever the file held (design principles 5.5)."
+desc = "`load_npy(p)` with no type argument, standing where no element type is expected, does not resolve: the element type is the one type variable no parameter mentions, so the call is refused (No matching function found, `SemanticDiag::NoMatchingFunction`) and the candidates print the five element types a `.npy` file can hold, each with the type argument it takes (`<tensor:load_npy_f32>: ::<float32>(path: string) => float32[..]`). This call used to compile and returned a tensor whose element type was whatever the file held (design principles 5.5)."
 kind = "negative"
 case = "../../../../cases/modules/tensor/dtype/npy_no_element_type.cml"
 args = ["${case}"]
@@ -372,7 +372,7 @@ case = "../../../../cases/modules/tensor/dtype/mixed_width_known_shapes.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
-expect_output_contains = ["Invalid call to '__mul__'", "(float[2], f32[2])", "the two tensor operands have different element types ('float' and 'f32')", "cast(value, \"float\") or cast(value, \"f32\")"]
+expect_output_contains = ["Invalid call to '__mul__'", "(float[2], f32[2])", "the two tensor operands have different element types ('float' and 'f32')", "float(value) or f32(value)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -425,7 +425,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "mask_written_conversion"
-desc = "The two writings a mask is read with once the conversion is written: `where(mask, x, 0.0)` selects what the mask keeps, and `x * cast(mask, \"f32\")` reads the mask as the number it stands for. Both compute in the tensor's element type - four bytes an element in `to_bytes`, the width the tensor states and not the wider one the pair could have been read at - and both answer the numbers the mask idiom always gave."
+desc = "The two writings a mask is read with once the conversion is written: `where(mask, x, 0.0)` selects what the mask keeps, and `x * f32(mask)` reads the mask as the number it stands for. Both compute in the tensor's element type - four bytes an element in `to_bytes`, the width the tensor states and not the wider one the pair could have been read at - and both answer the numbers the mask idiom always gave."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/dtype/mask_written_conversion.cml"
 args = ["${case}", "${run_nvm}"]
@@ -448,7 +448,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "int_written_conversion"
-desc = "The integer operand with its conversion written: `x * cast(k, \"f32\")` computes in the tensor's element type and answers the values the program asked for (design principles 5.1)."
+desc = "The integer operand with its conversion written: `x * f32(k)` computes in the tensor's element type and answers the values the program asked for (design principles 5.1)."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/dtype/int_written_conversion.cml"
 args = ["${case}", "${run_nvm}"]
@@ -483,11 +483,34 @@ timeout_ms = 8000
 
 [[tests]]
 name = "linalg_written_conversion"
-desc = "The product and the linear layer with the conversion written: `cast(x, \"f64\") @ w` computes in f64 because that is what the program wrote, and a bias is passed at the tensor's own element type rather than beside it (design principles 5.1). Both answer the numbers the same call answered when the widths were silently widened."
+desc = "The product and the linear layer with the conversion written: `f64(x) @ w` computes in f64 because that is what the program wrote, and a bias is passed at the tensor's own element type rather than beside it (design principles 5.1). Both answer the numbers the same call answered when the widths were silently widened."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/dtype/linalg_written_conversion.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
 expect_stdout = "10.0\n54.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "array_mask_elementwise"
+desc = "The mask an accuracy counts is an array: `===` compares elementwise, so its result is a `bool` array of the operands' shape (design principles 4.2), and a mask is not a number, so the ones and zeros are read by a conversion the program writes (design principles 5.1). `float(hits)` and the selection `where(hits, 1.0, 0.0)` read the same numbers, and the reduction over the array they produce is ordinary: the mask that agrees nowhere counts 0, the one that agrees at two of four positions counts 2 and agrees 0.5."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/dtype/array_mask_elementwise.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout = "0.0\n0.0\n2.0\n2.0\n0.0\n0.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "whole_value_equality"
+desc = "`==` on two arrays compares them by content and answers one `bool`, the elementwise comparison reduced (design principles 4.2), so its result is not an array: an array type is refused for it while the scalar reading is accepted. The elementwise comparison a mask needs is `===`, whose result is the array this refusal is about."
+kind = "negative"
+case = "../../../../cases/modules/tensor/dtype/whole_value_equality.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+expect_output_contains = ["This value has type 'bool', which is not the declared type 'bool[..]'."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000

@@ -24,7 +24,7 @@
 
 事实（`docs/technical/40_graph_facts.md`）经上下文的事实库读取：`effects(g)`（`external`、`writes_variables`、`may_fault`、`may_not_terminate`）、`shape(n)`、`permissions(n)`。第一次问时计算，之后只要它读过的图没有变就不重算。
 
-句柄也可以指向**正在改写的草稿**（`Handle::createInDraft`，H38）：`when` 条件收到的 `Node` 就是匹配在当前草稿里的节点，不是冻结程序里的版本。读算子对两种来源给同样的答案（`NodeView`：冻结的 `GCNode` 或草稿的 `DraftNodeHeader`），包括 `inputs` / `with_inputs` / `ctrl_inputs`、`users` / `value_users`、`kind`、`op` / `op_name`、`is_pure`、`is_anchor`、`is_written_slot`、`is_constant` / `constant`、`type_of` / `type_name`、`tags`、`origin`、`show`。两处限制：`callee` 在草稿上返回 `null`（草稿不属于任何一个 `Program` 版本，没有函数值可读；今天也没有规则模式匹配 `CALL`）；`is_written_slot` 在草稿上每次现算（冻结的图按版本缓存，草稿按 `mutations()` 缓存是 H39 的事）。草稿句柄不持有 `Program`：草稿属于尚未提交的会话，它的静态值与编译进规则的常量由引擎在条件调用期间注册的根集重定位（`rewrite.engineRoots`）。
+句柄也可以指向**正在改写的草稿**（`Handle::createInDraft`）：`when` 条件收到的 `Node` 就是匹配在当前草稿里的节点，不是冻结程序里的版本。读算子对两种来源给同样的答案（`NodeView`：冻结的 `GCNode` 或草稿的 `DraftNodeHeader`），包括 `inputs` / `with_inputs` / `ctrl_inputs`、`users` / `value_users`、`kind`、`op` / `op_name`、`is_pure`、`is_anchor`、`is_written_slot`、`is_constant` / `constant`、`type_of` / `type_name`、`tags`、`origin`、`show`。两处限制：`callee` 在草稿上返回 `null`（草稿不属于任何一个 `Program` 版本，没有函数值可读；今天也没有规则模式匹配 `CALL`）；`is_written_slot` 在草稿上每次现算（冻结的图按版本缓存，草稿按 `mutations()` 缓存是以后的事）。草稿句柄不持有 `Program`：草稿属于尚未提交的会话，它的静态值与编译进规则的常量由引擎在条件调用期间注册的根集重定位（`rewrite.engineRoots`）。
 
 ## 事务
 
@@ -51,14 +51,14 @@
 
 1. 遍的名字解析不到时，把模块当**程序**编译（`Module::compileAsProgram`，`DefinitionStore::libraryFunction`）：程序以这个函数为入口，模块级的 `let` 在遍运行前算好（设计原则 10.1）；
 2. 它只接受唯一、非泛型、签名为 `(p: Program, ...with 参数) => Program!` 的函数；
-3. 模块可以导入 C++ 模块，也可以导入 Camel 写的库（例如 `array`）：`compileAsProgram` 把传递导入闭包里的 Camel 模块声明进这个程序自己的 builder 并一起构建。导出表是**程序的一份**（`ProgramExports`，`Builder::exports()`），不在模块对象上：同一个模块对象可能同时是两个程序的一部分（被运行的遍读同一个库），第一次构建留下的导出名不会被清掉，也不会挡住第二次声明；两次声明各写各的表，各拿到本程序建出的图，第二次声明也不会改写第一次程序里的图（任务 H42）。
+3. 模块可以导入 C++ 模块，也可以导入 Camel 写的库（例如 `array`）：`compileAsProgram` 把传递导入闭包里的 Camel 模块声明进这个程序自己的 builder 并一起构建。导出表是**程序的一份**（`ProgramExports`，`Builder::exports()`），不在模块对象上：同一个模块对象可能同时是两个程序的一部分（被运行的遍读同一个库），第一次构建留下的导出名不会被清掉，也不会挡住第二次声明；两次声明各写各的表，各拿到本程序建出的图，第二次声明也不会改写第一次程序里的图。
 4. 函数的 `with` 参数就是遍参数（设计原则 4.4、9.3）：流水线写 `mymod::p label='x' n=21 scale=2.5 flag=true`，布尔、整数、浮点与字符串按类型转换后绑定；源码里没有默认值，所以每个都是必填，缺一个就是 `InvalidPassParameter`，消息列出声明；
 5. `NodeVMSchedPass::callGraph` 在 NodeVM 上以被处理的程序为实参、以遍参数为 with 实参运行它；返回的 `Program` 与输入不同就 `installRuntimeProgram`；
-6. 返回错误值是诊断 `GraphPassFailed`；模块编译不过、函数不是遍，是 `InvalidPassParameter`，消息只说哪条遍规格、哪个库编译不过；模块自己的第一条诊断作为**从属位置**附上（文件、行、列与原行），文本格式里就是该位置下的源码片段。诊断没有位置时（例如导入的库编译不过），原因才留在消息里。模块不存在或没有这个函数，遍保持未知。模块自己解析不过（还在编辑的文件）也走这里：`compileAsProgram` 把 `compile()` 抛出的诊断留在模块的诊断表里并返回失败，调用方把它作为遍规格的问题报告，异常不会穿出流水线。诊断表停在错误上限（`--timeit` 的上下文上限是第一条错误）时得到的是上限异常而不是 `Diagnostic`：`DefinitionStore::libraryFunction` 把它同样当作"这个库没编过"，否则它会在遍解析之前穿出去，用户看到的是裸的解析诊断而不是 `InvalidPassParameter`（H210）。
+6. 返回错误值就是遍的失败（设计原则 9.1：遍是 `(f: F) => F!`）：遍驱动在这一条遍上停下流水线，按"没有被处理的错误值到达出口"报出（3.9：标准错误、退出码非零），不再为它另发诊断；模块编译不过、函数不是遍，是 `InvalidPassParameter`，消息只说哪条遍规格、哪个库编译不过；模块自己的第一条诊断作为**从属位置**附上（文件、行、列与原行），文本格式里就是该位置下的源码片段。诊断没有位置时（例如导入的库编译不过），原因才留在消息里。模块不存在或没有这个函数，遍保持未知。模块自己解析不过（还在编辑的文件）也走这里：`compileAsProgram` 把 `compile()` 抛出的诊断留在模块的诊断表里并返回失败，调用方把它作为遍规格的问题报告，异常不会穿出流水线。诊断表停在错误上限（`--timeit` 的上下文上限是第一条错误）时得到的是上限异常而不是 `Diagnostic`：`DefinitionStore::libraryFunction` 把它同样当作"这个库没编过"，否则它会在遍解析之前穿出去，用户看到的是裸的解析诊断而不是 `InvalidPassParameter`。
 
 ## 标准库里的 Camel 遍
 
-`stdlib/opt.cml`（模块 `opt`）是标准库里用 Camel 写的优化遍：`opt::fold`、`opt::cse`、`opt::dce` 分别与 C++ 的 `std::opt::fold`、`std::opt::cse`、`std::opt::dce values_only=true` 做同一件事，流水线里按模块名写作 `opt::fold`（H227 的第一层里的这三个；遍名与遍参数的写法见 `docs/cli.md`）。`opt::fold` 把操作数全是常量的纯算子换成它的算子算出的值（`eval`），逐轮重复到没有可折的为止（`chain` 要把 `let b = a + 4` 的加法先折成常量，才能折 `let c = b * 2` 的乘法）。`opt::cse` 合并同类型同值的常量（`int`、`i32`、`bool`）与算子、类型、输入、区域、权限都相同的纯运算，每一组留下第一个节点；`opt::dce` 删除没人读取的常量、转换、拷贝、访问、填充与纯运算。三个遍都跳过值可能被原地写的节点与读取这种值的节点，并按轮次重复到没有可改的为止：合并两个常量会让它们上面的运算相等，删掉一个值会让读它的值变成没人读，折掉一个算子会让它上面的运算成为常量，所以一轮不够。
+`stdlib/opt.cml`（模块 `opt`）是标准库里用 Camel 写的优化遍：`opt::fold`、`opt::cse`、`opt::dce` 分别与 C++ 的 `std::opt::fold`、`std::opt::cse`、`std::opt::dce values_only=true` 做同一件事，流水线里按模块名写作 `opt::fold`（遍名与遍参数的写法见 `docs/cli.md`）。`opt::fold` 把操作数全是常量的纯算子换成它的算子算出的值（`eval`），逐轮重复到没有可折的为止（`chain` 要把 `let b = a + 4` 的加法先折成常量，才能折 `let c = b * 2` 的乘法）。`opt::cse` 合并同类型同值的常量（`int`、`i32`、`bool`）与算子、类型、输入、区域、权限都相同的纯运算，每一组留下第一个节点；`opt::dce` 删除没人读取的常量、转换、拷贝、访问、填充与纯运算。三个遍都跳过值可能被原地写的节点与读取这种值的节点，并按轮次重复到没有可改的为止：合并两个常量会让它们上面的运算相等，删掉一个值会让读它的值变成没人读，折掉一个算子会让它上面的运算成为常量，所以一轮不够。
 
 每轮一次事务。`cse` 与 `dce` 里同一轮每个待改的节点都被换成"输入完全相同且更早的那个节点"，而这样的两个节点不可能互为祖先——若 `b` 是 `a` 的传递使用者，`b` 的某个输入必在 `a` 的使用者闭包里，于是 `b` 的输入列不可能与 `a` 的相同——所以一轮一次 `commit` 就够，不需要 C++ 的 `reaches` 守卫（`replace` 自带的成环检查是第二道防线）。`fold` 没有这条保证，折出来的值是事务新造的节点而不是更早的节点，所以它只在真有可求值的节点时才 `open`，并且一轮里一个都没折成（必然出故障的常量表达式就是这种）时 `abort` 掉、原样返回：不然事务会造出一个与原来一模一样的图，递归就停不下来。
 
@@ -75,7 +75,7 @@
 
 对照在 `test/plans/feat/opt/camel_passes.plan.toml`：C++ 一侧的图记成 golden，Camel 一侧交给快照测试已有的同构比较（`gir_dot_isomorphic`，`test/tools/gir-dot.mjs`）——节点是种类、类型、形状与出入度，边是两端种类、连接类型与标签，也就是"同样的值、同样的类型、同样的区域结构、同样的接线"。`opt::fold` 另有一条把两侧的转储按文本比的条目：把 origin 号归一化之后两份转储逐字符相同，比同构更强。五个语料（`cse_subject`、`cse_written_variable`、`dce_subject`、`fold_subject`、`fold_fault`）各有一条"遍之前"的条目，断言要合并的重复、要删的死值与要折的运算确实在（没看任何东西的守卫不会通过），一组 `std::jgir` 属性条目（合并的不动点、写过一次的 cell 两侧不合并、程序用到的值还在、没有算子还留在常量上）与四条后端上的结果条目。`fold_fault` 是"必然出故障的常量表达式"那个语料：它在返回位置放一个 `1 / 0`（锚点，不能替换）、在旁边放一个可折的乘法，于是同一轮里既求值又替换，两侧的 jgir 与两侧的警告文本都逐字符相同（`stdout_normalized` 与 `stderr_normalized` 一起比），并且在 `std::nvm` 上跑到那条运行期故障时的结果也与没有这个遍时相同。
 
-**缺口即任务**（H227 第 3 项）。下表记着哪些缺口已关闭、哪些还在：
+**缺口即任务**。下表记着哪些缺口已关闭、哪些还在：
 
 | C++ 遍做什么 | 模块没有提供什么 | 今天的结果 |
 | --- | --- | --- |
@@ -90,13 +90,13 @@
 | 以区域为键的 Map | `id(Region)` 没有导出，只有 `region_of`、`region_kind`、`region_parent` 与 `==` | 区域只能用 `==` 比较 |
 | 遍参数带默认值（`std::opt safe_fp=false`） | Camel 遍的源码没有默认值，每个 `with` 参数都必填（上一节第 4 条） | 每个参数都要写在流水线里 |
 
-H227 第 5 项说的"`opt::cse` 与 `std::opt::cse` 互换"今天只在结果上成立（同构，四个后端一致）：两个名字仍是两条实现。把 `opt::cse` 的 Camel 定义用 `#impl(cse_native)` 接到 C++ 实现（H233 第 7 条，H227 第 5 项末句）落不下来——`#impl` 的内核需要一个既声明算子又持有函数体的模块，而 `tensor:log_softmax`、`nn:adam` 这类算子没有这样的位置；这已记为问题并**已有定论**（设计原则 10.4）：声明模块可以有函数体、泛型函数可以带 `#impl`，这条从此不再是障碍，`#impl(cse_native)` 的实现尚未做。
+计划里说的"`opt::cse` 与 `std::opt::cse` 互换"今天只在结果上成立（同构，四个后端一致）：两个名字仍是两条实现。把 `opt::cse` 的 Camel 定义用 `#impl(cse_native)` 接到 C++ 实现落不下来——`#impl` 的内核需要一个既声明算子又持有函数体的模块，而 `tensor:log_softmax`、`nn:adam` 这类算子没有这样的位置；这已记为问题并**已有定论**（设计原则 10.4）：声明模块可以有函数体、泛型函数可以带 `#impl`，这条从此不再是障碍，`#impl(cse_native)` 的实现尚未做。
 
-**一页结论**（H227 第 4 项）。行数按各自的语言量：`opt::cse` 的定义与它用到的比较（`stdlib/opt.cml` 的 `bitEqualType` 到 `cse`）126 行，对 C++ 的 `cseDraft`（`src/passes/opt/generic/generic.cpp`）130 行；`opt::dce`（同一文件的 `valueOnly` 到 `dce`）26 行，对 `dceDraft` 38 行。这是"同一件工作在同一抽象层上的长度"，不是等价的工作量：草稿、使用者索引与提交在 C++ 侧要自己维护，在 Camel 侧交给了 `graph` 模块。同构率：三个语料（`cse_subject`、`written_variable` 的 cse、`dce_subject` 的 dce）全部同构，四个后端上的结果逐字一致。速度不在本项作门槛，这里也没有计时——计时会把 NodeVM 跑一个 Camel 遍的固定成本与遍本身混在一起，而本项回答的是"写得出来吗"。
+**一页结论**。行数按各自的语言量：`opt::cse` 的定义与它用到的比较（`stdlib/opt.cml` 的 `bitEqualType` 到 `cse`）126 行，对 C++ 的 `cseDraft`（`src/passes/opt/generic/generic.cpp`）130 行；`opt::dce`（同一文件的 `valueOnly` 到 `dce`）26 行，对 `dceDraft` 38 行。这是"同一件工作在同一抽象层上的长度"，不是等价的工作量：草稿、使用者索引与提交在 C++ 侧要自己维护，在 Camel 侧交给了 `graph` 模块。同构率：三个语料（`cse_subject`、`written_variable` 的 cse、`dce_subject` 的 dce）全部同构，四个后端上的结果逐字一致。速度不在本项作门槛，这里也没有计时——计时会把 NodeVM 跑一个 Camel 遍的固定成本与遍本身混在一起，而本项回答的是"写得出来吗"。
 
 ## 一次编译问的是哪些模块
 
-一次编译的"有没有错"只在命令所问的模块上回答，报告也只打印那些模块的诊断：`run`、`check` 与 `--timeit` 的一轮问的是程序的依赖闭包（入口模块加逐层 import），`inspect --ops` 问的是上下文里的全部用户模块，因为清单少任何一个模块的算子都不完整（H172）。pass 列表在编译前装载的 pass 库不在程序里，它的失败由遍解析报成 `InvalidPassParameter`；它不能因为"上下文里恰好有个坏模块"而出现在程序的诊断里，这正是 H198 的范围与 H210 的报告要一致的地方（文本与 JSON 是同一份答案）。`Context::dumpModuleDiagnostics` 接收要打印的模块集合，命令不再自行遍历上下文拼装渲染。语言服务器的按需分析不解析遍列表，因此不会装载 pass 库；依赖模块的错误仍作为程序自己的错误报在 import 处，不需要另一套作用域。
+一次编译的"有没有错"只在命令所问的模块上回答，报告也只打印那些模块的诊断：`run`、`check` 与 `--timeit` 的一轮问的是程序的依赖闭包（入口模块加逐层 import），`inspect --ops` 问的是上下文里的全部用户模块，因为清单少任何一个模块的算子都不完整。pass 列表在编译前装载的 pass 库不在程序里，它的失败由遍解析报成 `InvalidPassParameter`；它不能因为"上下文里恰好有个坏模块"而出现在程序的诊断里，这正是范围划分与报告要一致的地方（文本与 JSON 是同一份答案）。`Context::dumpModuleDiagnostics` 接收要打印的模块集合，命令不再自行遍历上下文拼装渲染。语言服务器的按需分析不解析遍列表，因此不会装载 pass 库；依赖模块的错误仍作为程序自己的错误报在 import 处，不需要另一套作用域。
 
 ## 对照与测试
 
@@ -106,4 +106,4 @@ H227 第 5 项说的"`opt::cse` 与 `std::opt::cse` 互换"今天只在结果上
 
 标准库的 `opt::cse` 与 `opt::dce` 是同一套对照的库里版本，语料、性质断言与缺口清单见上一节"标准库里的 Camel 遍"。
 
-其余覆盖面：`imports::count`（导入 Camel 库的泛型函数 `array::flat_map`）与 `monomorphic::show`（直接调用单态导入函数 `libvals::nine` / `addOne`，返回真值）；`sharedvals::run`（同一个模块既是被运行的遍，又是被处理的程序导入的库，两边各用各的建图器，泛型 `twice` 在两边各有一个实例）与 `chain::show`（导入闭包传递：`chainlib` 再导入 `innerlib`）；`unparsable_pass::run`（遍模块解析不过，报 `InvalidPassParameter`，解析诊断作为从属位置给出文件、行、列与原行，不是异常结束）；同样的 `unparsable_pass_lib::run` 与各条命令路径（H210）：`run` 的解析失败与编译失败报告只打印程序自己的模块、`--timeit` 的文本与 JSON 都报 `InvalidPassParameter`、`camel: N errors` 只数程序自己的模块；`params::report` 的 `with` 参数，缺参、未知参数（带列号并列出声明）与类型不符的 `with` 参数诊断；`fold_constants::fold` 与 `typed_constants::make` 用 `add_constant` 造常量并提交（后者造 int、f64、bool、字符串四种，提交后逐一数回），两者的加强版都在 `CAMEL_GC_STRESS_SAFEPOINT` 下跑 safepoint；`regionprobe` 读出没有区域表的图的体（`region_of` 为区域 0，`region_kind` 为 `Root`）与内联后的 `Inline` 区域及父区域。
+其余覆盖面：`imports::count`（导入 Camel 库的泛型函数 `array::flat_map`）与 `monomorphic::show`（直接调用单态导入函数 `libvals::nine` / `addOne`，返回真值）；`sharedvals::run`（同一个模块既是被运行的遍，又是被处理的程序导入的库，两边各用各的建图器，泛型 `twice` 在两边各有一个实例）与 `chain::show`（导入闭包传递：`chainlib` 再导入 `innerlib`）；`unparsable_pass::run`（遍模块解析不过，报 `InvalidPassParameter`，解析诊断作为从属位置给出文件、行、列与原行，不是异常结束）；同样的 `unparsable_pass_lib::run` 与各条命令路径：`run` 的解析失败与编译失败报告只打印程序自己的模块、`--timeit` 的文本与 JSON 都报 `InvalidPassParameter`、`camel: N errors` 只数程序自己的模块；`params::report` 的 `with` 参数，缺参、未知参数（带列号并列出声明）与类型不符的 `with` 参数诊断；`fold_constants::fold` 与 `typed_constants::make` 用 `add_constant` 造常量并提交（后者造 int、f64、bool、字符串四种，提交后逐一数回），两者的加强版都在 `CAMEL_GC_STRESS_SAFEPOINT` 下跑 safepoint；`regionprobe` 读出没有区域表的图的体（`region_of` 为区域 0，`region_kind` 为 `Root`）与内联后的 `Inline` 区域及父区域。

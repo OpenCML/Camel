@@ -57,14 +57,14 @@ What needed care, all of it kept as ANTLR read it (checked token for token, sect
   to a signed exponent. A decimal digit run that starts with `0` and has another digit (`09`,
   `077`) used to be cut into two tokens; it is now refused as one run, with a located
   `LexicalDiag::InvalidNumberFormat`, and a prefixed form with no digit of its base (`0o8`,
-  `0x`) is refused the same way. Octal is written `0o77` (H15i).
+  `0x`) is refused the same way. Octal is written `0o77`.
 - **Strings** `'…'`, `"…"`, `` `…` `` end at the first unescaped quote; `\\` and an escaped
   quote do not close; a string may span lines. When no quote closes it, it ends at its last
   escaped quote if there is one (`'C:\dir\'`), else it is unclosed and takes the rest of the
   file. `'''…'''` and `"""…"""` run to the first closing triple, without escapes; without one,
   the first two quotes are an empty string.
 - **Identifiers** are ASCII: `[A-Za-z_][A-Za-z_0-9]*`. A lone `_` is the wildcard token.
-- **Operators** are matched longest first (`===`, `!==`, `?->`, `?..`, `...`, then two
+- **Operators** are matched longest first (`===`, `!==`, `->`, `?..`, `...`, then two
   characters, then one). `>=` is always one token; there is no `>>`.
 
 Lexical errors are recorded in the buffer and their text kept as `Error` tokens, which the
@@ -131,7 +131,7 @@ Tokens at the start of a line, in full:
 
 | Continue the expression | Start a statement |
 |---|---|
-| `->` `?->` `.` `..` `?..` `??` `!!` | `-` `+` (sign of a number, negation) |
+| `->` `.` `..` `?..` `??` `!!` | `-` `+` (sign of a number, negation) |
 | `*` `/` `%` `^` | `@` (annotation of a function declaration) |
 | `&&` `\|\|` `==` `!=` `===` `!==` `<` `>` `<=` `>=` | `!` `~` |
 | `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `\|=` | `(` `[` `{` |
@@ -156,7 +156,7 @@ on one line the operator loops behave as they always did, so nothing new can be 
 the first statement ends where its expression cannot go on. `;` separates statements wherever
 the author wants to be explicit.
 
-`return`, `throw`, `let x =`, `import … from` and the like require what follows them, so a line
+`return`, `let x =`, `import … from` and the like require what follows them, so a line
 break after them continues. There is no `return` without a value in the grammar.
 
 ## 4. Grammar and decisions
@@ -454,7 +454,7 @@ without names.
 | Test (`test/plans/feat/parse/frontend.plan.toml`) | What it holds |
 |---|---|
 | `grammar.reference_in_step` | the productions above the parser's functions, the grammar blocks of the language reference, the token table and the node kinds agree (`scripts/check-grammar.mjs`) |
-| `frontend.ast_snapshot` | every case of the parse corpus (`test/cases/parse/**`) and every probe gives the AST recorded at the last comparison with ANTLR (`golden/ast_hashes.txt`, a hash per file of the normalized dump). A rejected file contributes its diagnostics by **code and place**, never by their wording (`camel-parsecheck hashes` hashes `Diagnostics::dumpIdentity`), so editing a message, a help text or a fix title does not move the snapshot (H252). The snapshot is of the parser's tests, not of the repository (H188): other `.cml` files are checked by the plan that owns them |
+| `frontend.ast_snapshot` | every case of the parse corpus (`test/cases/parse/**`) and every probe gives the AST recorded at the last comparison with ANTLR (`golden/ast_hashes.txt`, a hash per file of the normalized dump). A rejected file contributes its diagnostics by **code and place**, never by their wording (`camel-parsecheck hashes` hashes `Diagnostics::dumpIdentity`), so editing a message, a help text or a fix title does not move the snapshot. The snapshot is of the parser's tests, not of the repository: other `.cml` files are checked by the plan that owns them |
 | `frontend.format_keeps_ast` | formatting an accepted file gives a text with the same AST |
 | `frontend.fuzz_lossless_tree` | for mutated programs the parser returns a tree whose leaves are exactly the tokens, and the AST builder accepts every tree without errors |
 

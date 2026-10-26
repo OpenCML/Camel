@@ -25,6 +25,7 @@ module d4_mcts
 // == imports ==
 import { count } from array
 import { log, sqrt } from math
+import { exit } from process
 
 // == game ==
 // A position is the nine places -- empty 0, X 1, O 2 -- and the player to move.  Whose turn it

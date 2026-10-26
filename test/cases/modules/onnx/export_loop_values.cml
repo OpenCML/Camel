@@ -34,7 +34,7 @@ func model(w: f32[..], x: f32[..]): (f32[..], int, float[..], f32[..]) {
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [2, 2])
     let w = reshape([0.5, -0.25, 0.1, 0.3] as f32[], [2, 2])
-    export_model((w: f32[..], x: f32[..]): (f32[..], int, float[..], f32[..]) => model(w, x), (w, x), get_env('ONNX_OUT'))
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((w: f32[..], x: f32[..]): (f32[..], int, float[..], f32[..]) => model(w, x), (w, x))
     println('exported')
     return 0
 }

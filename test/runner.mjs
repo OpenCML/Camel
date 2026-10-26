@@ -91,7 +91,7 @@ function resolveTarget(input) {
     // A plan file's name ends in `.plan.toml`, but saying the whole suffix is noise: the target
     // `test/plans/feat/exemplars` names `exemplars.plan.toml` when no such directory exists.
     // Only a target that is neither a directory nor a file is left alone, so a path that does
-    // not exist still reaches the runner as the ENOENT the caller must see (H201).
+    // not exist still reaches the runner as the ENOENT the caller must see.
     if (!fs.existsSync(absolute) && fs.existsSync(`${absolute}.plan.toml`)) return `${absolute}.plan.toml`
     return absolute
 }
@@ -186,7 +186,7 @@ export function changedFiles() {
  * A plan entry of a file rule: `"feat/opt"`, `{ "plan": "...", "layer": true }`, or
  * `{ "plan": "...", "ownCases": true }`. `ownCases` adds the plan only when the changed file is
  * one of the cases the plan names: a case edit cannot invalidate a plan that does not run it, so
- * a slow plan must not ride a directory into a case it never reads (H205).
+ * a slow plan must not ride a directory into a case it never reads.
  */
 function selectionPlan(entry, ruleLayer) {
     if (entry !== null && typeof entry === 'object') {
@@ -241,7 +241,7 @@ export function loadSelectionRules() {
  * `test/cases/compile/enum/x.cml` selects `test/plans/feat/compile`) without a per-subsystem
  * mapping. The deepest plan directory or plan file that matches wins; the file rules below are
  * the complement for a path no plan directory mirrors (a pass, the standard library, docs) and
- * for the plans outside the mirrored tree that a component needs (H161).
+ * for the plans outside the mirrored tree that a component needs.
  */
 export function loadDirectoryRules() {
     if (directoryRulesCache) return directoryRulesCache
@@ -366,7 +366,7 @@ export function plansForChanges(files) {
             for (const plan of rule.plans) {
                 // An `ownCases` plan is added only for a case it actually names. A slow plan
                 // reached through a directory that also holds fast cases would otherwise run in
-                // full on an edit that never touches it (H205).
+                // full on an edit that never touches it.
                 if (plan.ownCases && !selectionPlanRunsFile(plan.name, file)) continue
                 // A layered plan is still a plan to run: it stays in `names` (so it becomes a
                 // target) and is listed in `layered` so the runner does not treat it as a named
@@ -418,7 +418,7 @@ function resolveSelectionTarget(name) {
 /**
  * The absolute targets a selection resolves to: the named plans (resolved to a file or a
  * directory under test/plans) plus the targets a directory rule or the self rule supplied.
- * `--changed` runs exactly these, and the self-test asks whether a plan is among them (H201).
+ * `--changed` runs exactly these, and the self-test asks whether a plan is among them.
  */
 export function resolvedSelection(plans) {
     const resolved = new Map()

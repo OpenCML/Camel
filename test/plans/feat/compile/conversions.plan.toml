@@ -1,0 +1,31 @@
+id = "compile.conversions"
+order = 930
+tier = "fast"
+tags = ["feat", "compile", "conversions", "tensor"]
+desc = "A type conversion applies to every element of an array, as the arithmetic does"
+
+[[tests]]
+name = "conversions.array_elementwise"
+desc = "`float(ints)`, `f32(ints)`, `int(floats)` and `f64(ones(..))` give arrays of the conversion's element type with the input's shape; the scalar forms are unchanged."
+kind = "behavior"
+case = "../../../cases/compile/conversions/array_elementwise.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[1.5, 2.5, 3.5]\n[1.0, 4.0, 9.0]\n[2, 5, 7]\n[[1.0, 1.0], [1.0, 1.0]]\n3.0 2.0 2\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "conversions.type_variable"
+desc = "`T(x)` in a generic function converts to the type `T` is bound to, as the type's own name does: a scalar `f32(3)` is 3.0 and an array converts elementwise."
+kind = "behavior"
+case = "../../../cases/compile/conversions/type_variable.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "3.0 3.0 3\n[1.0, 2.0, 3.0] [4.0, 5.0]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

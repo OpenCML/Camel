@@ -307,6 +307,13 @@ RunOutcome runScriptOnce(const std::string &targetFile) {
 
         auto result = applyPassesDetailed(program, passes, st.ctx, std::cout);
         program     = result.program;
+        if (result.errored()) {
+            // A pass ended with an error value (design principles 9.1): the pipeline stopped there
+            // and the error is reported the way an error value nobody handled is (3.9). The
+            // debugger's own diagnostics are the text ones.
+            camel::execute::reportPassErrorValue(st.ctx, result.errorValue, false);
+            return failed();
+        }
         if (result.failed())
             return failed();
         if (result.consumed())
@@ -314,6 +321,10 @@ RunOutcome runScriptOnce(const std::string &targetFile) {
         if (!result.consumed()) {
             auto fallbackResult = applyPassesDetailed(program, defaultFallback, st.ctx, std::cout);
             program             = fallbackResult.program;
+            if (fallbackResult.errored()) {
+                camel::execute::reportPassErrorValue(st.ctx, fallbackResult.errorValue, false);
+                return failed();
+            }
             if (fallbackResult.failed())
                 return failed();
             if (fallbackResult.consumed())

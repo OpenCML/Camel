@@ -19,8 +19,6 @@ enum Modifier : uint32_t {
 enum class ExitType {
     Return,
     Yield,
-    Raise,
-    Throw,
 };
 
 inline std::string to_string(Modifier mod) {
@@ -47,10 +45,6 @@ inline std::string to_string(ExitType type) {
         return "return";
     case ExitType::Yield:
         return "yield";
-    case ExitType::Raise:
-        return "raise";
-    case ExitType::Throw:
-        return "throw";
     default:
         ASSERT(false, "Unknown ExitType");
         return "unknown";

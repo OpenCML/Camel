@@ -1,0 +1,41 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * Facilities for tests of the runtime, not for programs: things that make a property of the
+ * scheduler visible.
+ */
+
+import { process } from process
+
+/// The one meeting point of the process: calls on it are ordered with one another and with nothing
+/// else. A module that runs at the meeting point imports it and writes it by name.
+export resource rendezvous_point
+
+/// Blocks until `parties` calls are waiting at the meeting point, or until `timeout` seconds have
+/// passed, and gives how many calls met (after a timeout, how many were waiting). A tool for
+/// showing that calls really run at the same time.
+/// @fails fault `InvalidArgument` when parties is below 1 or timeout is negative
+/// @example-fragment waits for another call, which a page cannot supply
+/// @example rendezvous(2, 1.0)    // 2 when another call arrived in time
+export func rendezvous(parties: int, timeout: float): int uses rendezvous_point
+
+/// The number of threads this process has, the caller included: the count the operating system
+/// reports for the process, not the number of processors. A test reads it to pin how many worker
+/// threads a run creates.
+/// @example thread_count()    // 1 at -t 1
+export func thread_count(): int uses process
+
+/// `base * 10000 + step * 100 + mode`: the three `with` values the call ended with, the defaults of
+/// the parameters it left out among them. A native operator with a generic declaration, for the
+/// tests that pin where the names and the defaults of a call come from.
+/// @example with_probe<1>(0)    // 11000
+with <base: int, step: int = 10, mode: int = 0>
+export func with_probe::<T>(x: T): int
+
+/// The same for an array: the number plus the length of the array, so a test reads which of the two
+/// declarations of the name a call reached.
+/// @example with_probe<1>([5, 6])    // 11002
+#op('test_support:with_probe_array')
+with <base: int, step: int = 10, mode: int = 0>
+export func with_probe(xs: int[]): int

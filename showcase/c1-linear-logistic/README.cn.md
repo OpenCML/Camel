@@ -94,7 +94,7 @@ python showcase/c1-linear-logistic/compare.py --profile standard   # 写 RESULTS
 
 ### 求导的写法
 
-设计原则 9.9（H21 第 3 项已撤回，见 H25）：权重是 `with` 参数，
+设计原则 9.9：权重是 `with` 参数，
 `with_grad(loss)<m>(x, y)` 对第一个 `with` 参数求导，返回与 `m` 同型的梯度；其余
 `with` 参数是常量，普通参数是数据。本示例把 `with_grad(loss)` 绑定在循环外，循环内
 带权重调用。

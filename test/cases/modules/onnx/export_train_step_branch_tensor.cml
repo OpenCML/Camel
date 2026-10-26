@@ -39,7 +39,7 @@ func main(): int sync {
         b2: reshape([0.2], [1])
     }
     let x = reshape([1.0, 2.0, -1.0, 0.5], [2, 2])
-    export_model(step, (m, x), get_env('ONNX_OUT'))
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, x))
     println('exported')
     return 0
 }

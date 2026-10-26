@@ -1,0 +1,23 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * The computed signature of the `array` module: `from_bytes`, whose element type is named only by
+ * the call, and a declaration's parameters cannot mention a type variable that only the result
+ * mentions. Its group is `fromBytesOperatorGroup` in `modules/tensor` (to be registered under
+ * `array`). This file is for reference only (it is not compiled) and feeds
+ * `docs/stdlib-reference.md` and the `--verify-ops` check. Everything else is declared or
+ * written in `stdlib/array.cml`.
+ */
+
+import { is_plain } from types
+
+/// An array of the given shape made of little-endian elements: the payload `to_bytes` wrote. The
+/// element type is the explicit type argument (`from_bytes::<f32>`) or comes from the expected
+/// type of the result: any pure-data type, exactly the type given. The bits are copied: reading
+/// `bf16` or `f16` here passes the stored values through without rounding.
+/// @fails fault `TensorDimensionMismatch` when the number of bytes does not fit the shape and the element type
+/// @example [1.0, 2.0] as f32[2]->to_bytes->from_bytes::<f32><shape: [2]>
+#op('array:from_bytes_*')
+with <shape: int[]>
+export func from_bytes::<T>(bytes: Bytes): T[..] when is_plain::<T>()

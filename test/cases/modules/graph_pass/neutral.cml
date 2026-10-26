@@ -82,7 +82,7 @@ func replaceHits(p: Program, hits: Node[]): Program! sync {
 
 func settle(p: Program): Program! sync {
     let hits = allNodes(p)->filter<isHit>
-    return if len(hits) == 0 then p else replaceHits(p, hits) ?-> settle
+    return if len(hits) == 0 then p else replaceHits(p, hits) -> settle
 }
 
 /// x + 0, 0 + x, x - 0, x * 1 and 1 * x of the integers, replaced by x.

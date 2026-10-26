@@ -5,6 +5,7 @@
 #include "camel/common/scope.h"
 #include "camel/core/array/block_selftest.h"
 #include "camel/core/type/array_type_selftest.h"
+#include "camel/core/type/type_identity_selftest.h"
 #include "camel/core/debug_breakpoint.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/diagnostics/messages/semantic.h"
@@ -22,6 +23,9 @@
 #include "camel/execute/observer.h"
 #include "camel_pass.h"
 #include "camel/passes/test/chunks.h"
+#include "camel/passes/test/context_lifetime.h"
+#include "camel/passes/test/contexts.h"
+#include "camel/passes/test/derivatives.h"
 #include "camel/passes/test/edges.h"
 #include "camel/passes/test/graph_release.h"
 #include "camel/passes/test/keepfn.h"
@@ -266,6 +270,18 @@ class ArrayTypeSelfTestPass final : public GraphIRPass {
     }
 };
 
+class TypeIdentitySelfTestPass final : public GraphIRPass {
+  public:
+    explicit TypeIdentitySelfTestPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
+
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override {
+        os << "TYPE_IDENTITY_SELFTEST ok "
+           << camel::core::type::debugRunTypeIdentitySelfTest() << "\n";
+        return program;
+    }
+};
+
 class GcRememberedSetPass final : public GraphIRPass {
   public:
     explicit GcRememberedSetPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
@@ -481,6 +497,7 @@ PassMaker taskflowPass() {
         options.bytecode  = args.getBool("bytecode");
         options.gcStats   = static_cast<int>(args.getInt("gc_stats"));
         options.gcStress  = args.getBool("gc_stress");
+        options.blockingLeaves = args.getBool("blocking_leaves");
         auto pass         = std::make_unique<TaskflowExecSchedPass>(ctx);
         pass->setOptions(options);
         return pass;
@@ -522,6 +539,7 @@ void registerCoreKernels() {
     registerCoreKernel("topo_node_seq", makePass<TopoNodeSeqDumpPass>());
     registerCoreKernel("tfdump", makePass<TfDumpPass>());
     registerCoreKernel("arraytype", makePass<ArrayTypeSelfTestPass>());
+    registerCoreKernel("identitytype", makePass<TypeIdentitySelfTestPass>());
     registerCoreKernel("gc::snapshot", makePass<GcSnapshotPass>());
     registerCoreKernel("gc::verify", makePass<GcVerifyPass>());
     registerCoreKernel("gc::minor", makePass<GcMinorPass>());
@@ -606,6 +624,7 @@ const std::map<std::string, std::string> passAliases = {
     // written, and the old spelling keeps resolving to it.
     {"std::null", "std::nop"},
     {"std::type::array", "std::arraytype"},
+    {"std::type::identity", "std::identitytype"},
     {"std::cxx", "std::cpp"},
     {"std::cppmod", "std::cpp::module_file"},
     {"std::cppinspect", "std::cpp::inspect"},
@@ -651,11 +670,18 @@ ModuleAliasRegistry &moduleAliases() {
     return registry;
 }
 
+/// Registers `test::declared`, the test-only pass whose parameters are a declaration and not a
+/// list in this file (defined with the pass itself, below).
+void registerDeclaredParamsTestPass();
+
 /// Binds every kernel of the core to its declaration. Called on first resolution, so a run that
 /// never looks a pass up pays nothing; the registry it fills holds implementations only.
 void ensureCorePasses() {
     static std::once_flag once;
-    std::call_once(once, registerCoreKernels);
+    std::call_once(once, [] {
+        registerCoreKernels();
+        registerDeclaredParamsTestPass();
+    });
 }
 
 /// The implementation bound to the function `module::function`, whichever side of the core it
@@ -893,6 +919,9 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kEdgesOkTestPass, EdgesOkTestPass),
         TEST_PASS(kCommitConflictTestPass, CommitConflictTestPass),
         TEST_PASS(kKeepFnTestPass, KeepFnTestPass),
+        TEST_PASS(kContextLifetimeTestPass, ContextLifetimeTestPass),
+        TEST_PASS(kContextsTestPass, ContextsTestPass),
+        TEST_PASS(kDerivativesTestPass, DerivativesTestPass),
         TEST_PASS(kCommitMergeTestPass, CommitMergeTestPass),
         TEST_PASS(kEdgesOrderOkTestPass, EdgesOrderOkTestPass),
         TEST_PASS(kEdgesOrderPureTestPass, EdgesOrderPureTestPass),
@@ -957,6 +986,11 @@ class PassParamsTestPass final : public GraphIRPass {
             case PassParamType::String:
                 os << args_.getString(p.name);
                 break;
+            case PassParamType::IntArray:
+                // Not declared by this pass (its list is the registration's own); the case is here
+                // so the switch covers every type a parameter may have.
+                os << args_.text(p.name);
+                break;
             }
             os << (args_.given(p.name) ? " (given)" : " (default)");
         }
@@ -985,6 +1019,46 @@ const PassDescriptor &passParamsTestDescriptor() {
         return d;
     }();
     return descriptor;
+}
+
+/// A test-only pass whose parameters are a declaration and not a list in C++: it has none of its
+/// own, so the names, types and defaults the pipeline binds are exactly the ones a `.cml` on the
+/// module search path writes for `test::declared` (`test.cml` in a case's own directory, `-I .`).
+/// It prints every parameter the declaration named, the value the declared type read from the
+/// word, and whether that value was written — which is what a case that checks how a type is read
+/// compares against. A declaration the pipeline cannot read (a type it has no value for, a
+/// default that does not fit it) is refused while the pass is resolved, so nothing here ever asks
+/// for a parameter by a type the declaration did not write.
+class DeclaredParamsTestPass final : public GraphIRPass {
+  public:
+    DeclaredParamsTestPass(const context_ptr_t &ctx, const PassArgs &args)
+        : GraphIRPass(ctx), args_(args) {}
+
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override {
+        const std::vector<std::string> names = args_.names();
+        os << "test::declared";
+        for (const auto &name : names) {
+            os << ' ' << name << '=' << args_.text(name)
+               << (args_.given(name) ? " (given)" : " (default)");
+        }
+        os << std::format(" declared={}\n", names.size());
+        return program;
+    }
+
+  private:
+    PassArgs args_;
+};
+
+/// Registers `test::declared`: in no default pipeline, so naming it is the whole switch, and the
+/// declaration it reads is the one its `.cml` writes (there is no parameter list here to fall
+/// back to, which is the point).
+void registerDeclaredParamsTestPass() {
+    PassDescriptor descriptor;
+    descriptor.make = [](const context_ptr_t &ctx, const PassArgs &args) {
+        return std::make_unique<DeclaredParamsTestPass>(ctx, args);
+    };
+    registerModulePass("test::declared", std::move(descriptor));
 }
 
 /// A pass a name resolves to: how to make it and the parameters its declaration gives. The
@@ -1293,8 +1367,9 @@ void listAvailablePasses(const std::string &name, const context_ptr_t &ctx) {
         bool listed = false;
         for (const auto &[path, descriptor] : registry.passes) {
             // The core's kernels are listed from their declarations above; this section is the
-            // passes a module contributed.
-            if (path.rfind("std::", 0) == 0) {
+            // passes a module contributed. A test-only pass is not a module's: the section below
+            // lists it.
+            if (path.rfind("std::", 0) == 0 || path.rfind("test::", 0) == 0) {
                 continue;
             }
             if (!listed) {
@@ -1319,6 +1394,18 @@ void listAvailablePasses(const std::string &name, const context_ptr_t &ctx) {
         (void)factory;
         printPass(help, testName, {}, {});
     }
+    {
+        // `test::declared` is a test pass whose parameters are a declaration, not a list here:
+        // where `test.cml` is on the module search path, the listing shows the types it declares.
+        const auto declaration =
+            camel::execute::detail::findPassDeclaration("test", "declared", ctx);
+        printPass(
+            help,
+            "test::declared",
+            declaration ? declaration->doc
+                        : "a test pass whose parameters are the declaration `test.cml` writes",
+            declaration ? declaration->params : std::vector<PassParam>{});
+    }
     help << std::format("Available aliases are:\n");
     for (const auto &[alias, target] : passAliases) {
         help << std::format("  {} -> {}\n", alias, target);
@@ -1331,8 +1418,9 @@ void listAvailablePasses(const std::string &name, const context_ptr_t &ctx) {
         }
     }
     help << std::endl;
-    help << "A pass is written `name`, followed by its parameters as `key=value` words; the "
-            "values are constants (bool, int, float, string).\n";
+    help << "A pass is written `name`, followed by its parameters as `key=value` words; a value is "
+            "the constant the parameter's declared type reads (a bool, int, float, string or "
+            "`int[]` constant, or `null` where the declaration writes `T?`).\n";
 }
 
 /// The passes of a module, as the sentence of a diagnostic writes them: "no passes", "the pass
@@ -1893,6 +1981,19 @@ PassApplyResult applyPassesDetailed(
                 ctx->rtmDiags()->of(RuntimeDiag::PassInternalError).commit(p, what);
                 CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (internal error)", p);
                 return {nullptr, PassApplyStatus::Failed};
+            }
+            // A pass is `(f: F) => F!` (design principles 9.1): a pass that cannot produce the
+            // program ends with an error value instead of a diagnostic. The pipeline stops at that
+            // pass -- nothing after it runs, the fallback list included -- and the value is handed
+            // to the driver that ran the list, which reports it the way an error value nobody
+            // handled is (3.9): on standard error, with the exit code the run ends with
+            // (reportPassErrorValue). The value is read here, inside the same safepoint window as
+            // `apply`, and the driver reports it before the next one, so nothing collects it in
+            // between.
+            if (pass->hasErrorValue()) {
+                const slot_t error = pass->errorValue();
+                CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (error value)", p);
+                return {nullptr, PassApplyStatus::Errored, error};
             }
             camel::core::mm::autoSpace().safepoint(std::format("after pass {}", p));
             // What the pass had to say about the program, before the next pass runs it.

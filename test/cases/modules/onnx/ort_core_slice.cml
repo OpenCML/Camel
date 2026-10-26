@@ -19,6 +19,17 @@
  *                           bounds go to the ONNX Slice with no guard.
  *   MODE=step    reshape(x, [4])[0:4:2]    a step of its own, still a subscript.
  *
+ * The sign of the step is one node and one encoding, so every backward slice of the family below
+ * is paired with the forward slice that writes the same bounds and the two are read side by side:
+ * `[5:1:-2]` with `[1:5:2]`, `[3::-2]` with `[3::2]`, `[::-2]` with `[::2]`, `[::-1]` with `[:]`,
+ * and `[:, ::-2]` with `[:, ::2]`. A backward slice's end that the source did not write is the
+ * position before the first element, which the kernel reads as -1 (`src/builtin/operators/
+ * struct.cpp`, `sliceRange`); ONNX names that position with an end below every extent and clamps a
+ * negative step's end to -1, where an end of -1 would be added to the extent and read as the axis'
+ * last position instead, leaving the slice empty. MODE=sweep is that same backward slice of an axis
+ * whose extent only the run knows, which is where the encoding has to name the position without the
+ * extent.
+ *
  * Checked by ort_core_slice.py.
  */
 module ort_core_slice
@@ -56,22 +67,101 @@ func stepped(x: f32[..]): f32[..] {
     return reshape(x, [4])[0:4:2]
 }
 
+/// Backward, both bounds written.
+func negBoth(x: f32[..]): f32[..] {
+    return reshape(x, [6])[5:1:-2]
+}
+
+/// Forward, the same two bounds and the same positions read backwards.
+func posBoth(x: f32[..]): f32[..] {
+    return reshape(x, [6])[1:5:2]
+}
+
+/// Backward, the end not written.
+func negEnd(x: f32[..]): f32[..] {
+    return reshape(x, [4])[3::-2]
+}
+
+/// Forward, the end not written.
+func posEnd(x: f32[..]): f32[..] {
+    return reshape(x, [4])[3::2]
+}
+
+/// Backward, neither bound written.
+func negAll(x: f32[..]): f32[..] {
+    return reshape(x, [6])[::-2]
+}
+
+/// Forward, neither bound written.
+func posAll(x: f32[..]): f32[..] {
+    return reshape(x, [6])[::2]
+}
+
+/// Backward along the second axis of a rank-2 value, neither bound written.
+func negRank2(x: f32[..]): f32[..] {
+    return reshape(x, [2, 4])[:, ::-2]
+}
+
+/// Forward along that same axis.
+func posRank2(x: f32[..]): f32[..] {
+    return reshape(x, [2, 4])[:, ::2]
+}
+
+/// Backward along an axis whose extent only the run knows.
+func sweep(x: f32[..]): f32[..] {
+    return rows(x)[::-2]
+}
+
+/// Backward by one: the reverse the library's `reverse` writes.
+func negOne(x: f32[..]): f32[..] {
+    return reshape(x, [6])[::-1]
+}
+
+/// Forward by one, the same two unwritten bounds.
+func posOne(x: f32[..]): f32[..] {
+    return reshape(x, [6])[:]
+}
+
 func main(): int sync {
-    let x = reshape([1.0, 1.0, 1.0, 1.0] as f32[], [4])
-    let out = get_env('ONNX_OUT')
-    let mode = get_env('MODE')
+    let four = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [4])
+    let six = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [6])
+    let eight = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0] as f32[], [8])
+    let out = get_env('ONNX_OUT') ?? ''
+    let mode = get_env('MODE') ?? ''
     if mode == 'open' then {
-        export_model((x: f32[..]): f32[..] => openEnd(x), x, out)
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => openEnd(x), four)
     } else if mode == 'start' then {
-        export_model((x: f32[..]): f32[..] => runtimeStart(x), x, out)
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => runtimeStart(x), four)
     } else if mode == 'rank2' then {
-        export_model((x: f32[..]): f32[..] => rank2(x), x, out)
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => rank2(x), four)
     } else if mode == 'known' then {
-        export_model((x: f32[..]): f32[..] => known(x), x, out)
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => known(x), four)
     } else if mode == 'step' then {
-        export_model((x: f32[..]): f32[..] => stepped(x), x, out)
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => stepped(x), four)
+    } else if mode == 'negBoth' then {
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => negBoth(x), six)
+    } else if mode == 'posBoth' then {
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => posBoth(x), six)
+    } else if mode == 'negEnd' then {
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => negEnd(x), four)
+    } else if mode == 'posEnd' then {
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => posEnd(x), four)
+    } else if mode == 'negAll' then {
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => negAll(x), six)
+    } else if mode == 'posAll' then {
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => posAll(x), six)
+    } else if mode == 'negRank2' then {
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => negRank2(x), eight)
+    } else if mode == 'posRank2' then {
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => posRank2(x), eight)
+    } else if mode == 'sweep' then {
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => sweep(x), four)
+    } else if mode == 'negOne' then {
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => negOne(x), six)
+    } else if mode == 'posOne' then {
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => posOne(x), six)
     } else {
-        export_model((x: f32[..]): f32[..] => both(x), x, out)
+        let _ = export_model<out: out>((x: f32[..]): f32[..] => both(x), four)
     }
     println('exported')
     return 0

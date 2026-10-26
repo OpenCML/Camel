@@ -245,9 +245,10 @@ export func parse_int(text: string): int!
 export func parse_float(text: string): float!
 
 /// An Error value of the given kind with the given message; the compiler adds the source
-/// position of the call. `throw error(...)` returns it from a function declared `T!`.
+/// position of the call. `return error(...)` in a function declared `T!` hands it out as that
+/// type's failed form.
 /// @pure
-/// @example throw error('RangeError', 'too large')
+/// @example return error('RangeError', 'too large')
 #op(':op/error_new')
 export func error(kind: string, message: string): Error
 
@@ -285,19 +286,6 @@ export func eprintln(x: T, ...rest: U...): T
 /// @example input('name: ')    // what the user typed
 #op(':io/input')
 export func input(prompt: string): string
-
-/// Suspends the program for the given number of milliseconds.
-/// @effect waits
-/// @fails fault `InvalidArgument` when the duration is negative
-/// @example sleep(100)
-#op('process:sleep')
-export func sleep(milliseconds: int): void
-
-/// Ends the program with the given exit code, after writing buffered output.
-/// @effect ends the program
-/// @example exit(2)
-#op('process:exit')
-export func exit(code: int): void
 
 // ---- strings ----
 
@@ -393,6 +381,20 @@ export func slice(xs: T[]): T[]
 #op(':op/slice_sub')
 export func slice(t: T[], axis: int, start: int, end: int, step: int = 1, written: int = 3): T[]
 
+/// The same slice of a string, by code point: a string has the one axis 0, and the result is a
+/// string. `'中文字'[1:3]` and `slice('中文字', 0, 1, 3)` are both `'文字'`.
+/// @pure
+/// @example slice('hello', 0, 1, 4)    // 'ell'
+#op(':op/slice_str')
+export func slice(s: string, axis: int, start: int, end: int, step: int = 1, written: int = 3): string
+
+/// The same slice of a `Bytes`, by byte: it has the one axis 0, and the result is a `Bytes`.
+/// `b[1:3]` and `slice(b, 0, 1, 3)` are the same bytes.
+/// @pure
+/// @example slice(encode('hello'), 0, 1, 4)    // the bytes of 'ell'
+#op(':op/slice_bytes')
+export func slice(b: Bytes, axis: int, start: int, end: int, step: int = 1, written: int = 3): Bytes
+
 /// The elements of xs followed by those of ys, as a new array.
 /// @pure
 /// @example concat([1], [2, 3])    // [1, 2, 3]
@@ -487,18 +489,35 @@ export func apply(xs: T[]): T[]
 //
 // A fault (a division by zero, an index out of range, a recursion that is too deep, ...) ends
 // the program with a located diagnostic. `attempt` isolates it at the boundary of one call
-// (design principles 3.9; docs/technical/33_fault_isolation.md). The name is provisional.
+// (design principles 3.9; docs/technical/33_fault_isolation.md). It is a function transform:
+// `attempt(f)` is the function whose parameters are f's and whose calls are calls of f made
+// inside the boundary. The name is provisional.
 
-/// Calls f with the arguments. A fault raised inside the call becomes an error value whose kind
-/// is the name of the fault (`DivisionByZero`, ...), with the fault's message and position;
-/// otherwise the result of f. When f itself returns `U!`, so does attempt. What the call did
-/// before the fault is not undone; exit() and the failures of the compiler itself are not
-/// isolated.
+/// Raises a fault of the kind the program writes, with the message it gives. The call gives no
+/// value at all: its type is the bottom type `never` (design principles 3.9), so it may stand
+/// where any type is expected, and a branch arm that raises the fault leaves the branch's type
+/// to the other arm. The fault is raised where the call is written, and `attempt` isolates it
+/// into an error value whose kind is the name in the angle brackets.
+/// @pure
+/// @fails fault `<Kind>` with the message, which `attempt` isolates
+/// @example fail<'BadLimit'>('the limit must be positive')
+#op(':op/fail')
+with <Kind: string>
+export func fail(message: string): never
+
+/// The function f with the faults of its calls turned into error values: `attempt(f)` takes the
+/// parameters of f and gives the result of f plus `!`. A fault raised inside a call becomes an
+/// error value whose kind is the name of the fault (`DivisionByZero`, ...), with the fault's
+/// message and position; otherwise the call gives the result of f. When f itself returns `U!`,
+/// so does `attempt(f)`. What the call did before the fault is not undone; exit() and the
+/// failures of the compiler itself are not isolated. `attempt(f)` itself calls nothing: the
+/// faults are those of a call of the value.
 /// @effect what f does
-/// @example attempt((x: int) => 10 / x, 0) !! -1    // -1: the division fault becomes an error value
-/// @example attempt((x: int) => 10 / x, 2) !! -1    // 5
-#op(':mark/isolate')
-export func attempt(f: (...args: A) => T, ...args: A): T!
+/// @fails fault `DivisionByZero` and every other fault of a call of f: the call gives an error value whose kind is the fault's name, with the fault's message and position; an error value f itself returns is handed on unchanged
+/// @example attempt((x: int) => 10 / x)(2) !! -1    // 5
+/// @example attempt((x: int) => 10 / x)(0) !! -1    // -1: the division fault becomes an error value
+#op(':mark/attempt')
+export func attempt(f: (...args: A) => T): (...args: A) => T!
 
 // ---- Map<K, V> and Set<T> ---------------------------------------------------------------------
 // Built-in collection types (docs/technical/31_map_and_set.md). Every operator returns a new
@@ -623,3 +642,17 @@ export func difference(s: Set<T>, other: Set<T>): Set<T>
 /// @example is_subset([1, 2] as Set<int>, [1, 2, 3] as Set<int>)    // true
 #op(':coll/set_is_subset')
 export func is_subset(s: Set<T>, other: Set<T>): bool
+
+// ---- streams ----
+
+/// Records one `tee` (design principles 5.4) for the report of a profile session: the hint it
+/// took, the widest hint the implementation honours, the elements it has pulled from its source so
+/// far, and the most elements it has buffered at once -- with the stream it reads, whose value
+/// tells one tee from another and whose type the operator takes, and whose elements it does not.
+/// A program does not write this: `tee` calls it once per element it pulls, and `std::profile`
+/// prints what it recorded (`STREAM_TEE`).
+/// @effect records the numbers of the tee
+/// @example tee_note(8, 64, 2, 2, s)    // the tee written `tee(s, 8)` reports itself this way
+/// @example-fragment the last operand is the stream a tee reads, and no example program has one
+#op(':stream/tee_note')
+export func tee_note(hint: int, cap: int, elements: int, peak: int, s: T..): void

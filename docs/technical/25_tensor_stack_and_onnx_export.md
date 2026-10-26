@@ -47,7 +47,7 @@ one definition.
 
 ```text
             +-----------------------------------------------+
-  modules/  |  onnx module: onnx.export_model(fn, x, path)  |
+  modules/  |  onnx module: export_model<out: path>(fn, x)  |
             |  partial evaluator + lowering table (by URI)  |
             |  + protobuf writer                            |
             +-----------------------+-----------------------+
@@ -313,10 +313,11 @@ Export is a runtime operator, not a tracer:
 
 ```camel
 import { export_model } from onnx
-export_model((x: Tensor): Tensor => forward<model>(x), example_x, 'model.onnx')
+export_model<out: 'model.onnx'>((x: Tensor): Tensor => forward<model>(x), example_x)
 ```
 
-(`export` is a Camel keyword, hence `export_model`.) The first argument is a
+(`export` is a Camel keyword, hence `export_model`.) The file the model is written to is a
+`with` argument — a runtime value, so the call gives it by name. The first argument is a
 function value: a runtime graph (`GCGraph`) plus its closure. The exporter
 partially evaluates that graph, demand-driven from its return value, with the
 parameter bound to a symbolic tensor carrying `example_x`'s dtype and shape.
@@ -366,7 +367,7 @@ Every node evaluates to either a constant or a symbolic tensor:
   becomes an ONNX `If`; each arm is emitted into its own subgraph (values first
   computed inside an arm stay in that arm). Matches on input-dependent values
   are rejected.
-- `export_model(fn, x, path, dynamic_axes)` leaves input axes dynamic (axis 0
+- `export_model<out: path, dynamic_axes: axes>(fn, x)` leaves input axes dynamic (axis 0
   is named `batch`). `shape(x)` then becomes `Shape`, but its statically known
   entries are tracked, so `shape(x)[3]` still folds and only the dynamic
   extent flows through `Gather`/`Concat`; `zeros(shape)` becomes
@@ -581,7 +582,7 @@ rejection reason. That resolver extension is part of step 2.
   | Transformer | 5.87 | 2.2 | 1.97 |
 
   (The "kernels + `tensor::fuse`" column measured the fused kernels of that time.
-  Since H102 the pass records the group as a node attribute and keeps the
+  The pass records the group as a node attribute and keeps the
   program's operators, so the CPU no longer saves the intermediate tensors of a
   fused linear layer; the numbers are the measurements of that experiment.)
 
@@ -614,9 +615,9 @@ inside a batch chunk. `gemm_library_threads()` reports the library's own count f
 the same call: 1 when the library ran, 0 when the canonical kernel did.
 `test/plans/feat/modules/threads.plan.toml` pins `plain == -t` and
 `plain_lib == 1` at 1, 4, 8 and 16 threads, and pins the process's own thread
-count within `-t` (`process.thread_count()`), so a second pool is red.
+count within `-t` (`test_support.thread_count()`), so a second pool is red.
 
-**Why the second pool had to go (H303).** OpenBLAS creates its worker pool in a
+**Why the second pool had to go.** OpenBLAS creates its worker pool in a
 constructor when the library is loaded, at the machine's thread count, before any
 `openblas_set_num_threads` call can reach it. Measured on this host with
 `strace -f -e trace=clone` (exact thread creations, not sampling): before the
@@ -691,16 +692,16 @@ is what the hardware can do):
 | 512x256x512 (d=256) | 1 | 1.8 / 1.6 | 1.6 / 1.6 |
 | | 16 | 1.7 / 0.5 | 1.9 / 0.6 |
 
-This is the H288 window, with the budget at `-t`: the library's best case keeps
+This is the measurement window, with the budget at `-t`: the library's best case keeps
 improving to sixteen threads, the physical core count of this host, and gets
 worse again at 32, the logical count. Its *typical* case is worse than the
 canonical kernel's from four threads up, because the library's pool is a second
 pool that spins between calls and competes with the tensor pool and with the
 neighbours; the gap between the median and the best of the same point is that
-competition, not arithmetic. That reading is what H303 acted on: the second pool
+competition, not arithmetic. That reading is what the decision acted on: the second pool
 is removed, not capped.
 
-**The same cells with one pool and the rows split (H303).** Two copies of the
+**The same cells with one pool and the rows split.** Two copies of the
 base build and two of the row-split build, ten interleaved rounds, order rotated
 each round, `test/cases/perf/gemm_threads_curve.cml`; loads 79-160. Milliseconds,
 median of the ten rounds per build; the two copies of the same build are the null
@@ -762,7 +763,7 @@ does not join the constructor's pool; the GEMM still runs one thread per call, s
 those workers are idle. The one-pool promise is conditional on those variables
 being unset, as the note in `camel::initialize()` says.
 
-**The training step, H288 window.** Same window, the library and the canonical
+**The training step, the same window.** Same window, the library and the canonical
 path interleaved in one loop, median of thirteen timed steps, d=1024,
 `tensor::fuse` versus no pass:
 

@@ -5,7 +5,7 @@ tags = ["feat", "modules", "onnx"]
 
 [[tests]]
 name = "export_model_minimal"
-desc = "The smallest model: one input-dependent product, exported by the runtime operator. The export simplifies a private copy of the bound function; its algebraic stage (`rules::simplify`) must not compare that copy with the program that is still running (H112)."
+desc = "The smallest model: one input-dependent product, exported by the runtime operator. The export simplifies a private copy of the bound function; its algebraic stage (`rules::simplify`) must not compare that copy with the program that is still running."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_minimal.cml"
 args = ["${case}"]
@@ -56,38 +56,46 @@ timeout_ms = 10000
 
 [[tests]]
 name = "export_unsupported_op"
-desc = "An input-dependent operator without an ONNX lowering (a training loss) is reported by URI, at its source position."
+desc = "An input-dependent operator without an ONNX lowering (a training loss) is reported by URI, at its source position: the refusal is the error value of the export_model call (`ExportUnsupported`, located at the unsupported call), which nothing handles, so the exit reports it as an unhandled error."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_unsupported.cml"
 args = ["${case}"]
 envs = ["ONNX_OUT=${test_tmp}/export_unsupported.onnx"]
 expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_diagnostic_code = "0x04000051"
+expect_diagnostic_line = 15
+expect_diagnostic_column = 83
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
 assert(text.includes("operator 'nn:softmax_cross_entropy' has no ONNX lowering at opset 17"), 'missing unsupported-operator detail')
-assert(/at [^ ]*export_unsupported[.]cml:15:51[)]/.test(text), 'missing source position of the unsupported call')
-assert(!text.includes('unreachable'), 'export must fail before the next statement')
+assert(/[^ ]*export_unsupported[.]cml:15:83:/.test(text), 'missing source position of the unsupported call')
+assert(text.includes('ExportUnsupported'), 'the refusal must be the error value of the export_model call')
 }
 """
 timeout_ms = 10000
 
 [[tests]]
 name = "export_impure_op"
-desc = "Impure operators inside the exported function are rejected at their source position."
+desc = "Impure operators inside the exported function are rejected at their source position: the refusal is the error value of the export_model call (`ExportUnsupported`, located at the impure call), which nothing handles, so the exit reports it as an unhandled error."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_impure.cml"
 args = ["${case}"]
 envs = ["ONNX_OUT=${test_tmp}/export_impure.onnx"]
 expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_diagnostic_code = "0x04000051"
+expect_diagnostic_line = 13
+expect_diagnostic_column = 87
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
 assert(text.includes("impure operator 'tensor:randn' cannot be exported"), 'missing impure-operator detail')
-assert(/at [^ ]*export_impure[.]cml:13:56[)]/.test(text), 'missing source position of the impure call')
-assert(!text.includes('unreachable'), 'export must fail before the next statement')
+assert(/[^ ]*export_impure[.]cml:13:87:/.test(text), 'missing source position of the impure call')
+assert(text.includes('ExportUnsupported'), 'the refusal must be the error value of the export_model call')
 }
 """
 timeout_ms = 10000
@@ -546,7 +554,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "export_gated_gru_forward"
-desc = "E13/T5: a data-dependent branch inside a statically unrolled recurrence (GRU cell update gated on mean(|x_t|), T = 3) exports as standard If operators. The gate at step t+1 depends only on the model input, so the export has always had a choice between copying the continuation into both arms of every branch (2^3 - 1 = 7 Ifs) and deciding each gate after the previous branch joined (one If per gate, 4 with the last cell nested in an arm). H44c's cache that does not own its graphs made the second shape the one the exporter emits: with the optimizer's specialization no longer pinned in the program, the export specializes the continuation once more and hoists the next gate out of the arms. The two shapes compute the same function; the loss the model returns was checked with onnxruntime against the interpreter for the case's input (0.0632271543) and for an all-ones input (0.0852279197), and the count of Ifs and the top-level op list are asserted so a change of shape is noticed. The reading after the specialization fixed point  shapes the next gate in the second arm with a `Slice` and a `Reshape` and no `Concat` between them -- an all-constant length folds to one `int64s` initializer -- with the count of Ifs unchanged at 4. (The earlier reading of this same case had a `Concat` there; it came from the parts of a constant literal being concatenated, which the exporter no longer does.)"
+desc = "E13/T5: a data-dependent branch inside a statically unrolled recurrence (GRU cell update gated on mean(|x_t|), T = 3) exports as standard If operators. The gate at step t+1 depends only on the model input, so the export has always had a choice between copying the continuation into both arms of every branch (2^3 - 1 = 7 Ifs) and deciding each gate after the previous branch joined (one If per gate, 4 with the last cell nested in an arm). The cache that does not own its graphs made the second shape the one the exporter emits: with the optimizer's specialization no longer pinned in the program, the export specializes the continuation once more and hoists the next gate out of the arms. The two shapes compute the same function; the loss the model returns was checked with onnxruntime against the interpreter for the case's input (0.0632271543) and for an all-ones input (0.0852279197), and the count of Ifs and the top-level op list are asserted so a change of shape is noticed. The reading after the specialization fixed point  shapes the next gate in the second arm with a `Slice` and a `Reshape` and no `Concat` between them -- an all-constant length folds to one `int64s` initializer -- with the count of Ifs unchanged at 4. (The earlier reading of this same case had a `Concat` there; it came from the parts of a constant literal being concatenated, which the exporter no longer does.)"
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_gated_gru_forward.cml"
 args = ["${case}"]
@@ -611,19 +619,22 @@ timeout_ms = 8000
 
 [[tests]]
 name = "export_capability"
-desc = "Relu on int64 is valid ONNX but ONNX Runtime's CPU provider has no kernel for it at opset 17: the export fails at the relu call (capability data), while target 'none' writes the model."
+desc = "Relu on int64 is valid ONNX but ONNX Runtime's CPU provider has no kernel for it at opset 17: the export fails at the relu call (capability data) — the refusal is the error value of that export_model call (`ExportUnsupported`), which nothing handles, so the exit reports it — while target 'none' writes the model and the program drops that call's result on purpose."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_capability.cml"
 args = ["${case}"]
 envs = ["ONNX_OUT=${test_tmp}/export_capability.onnx", "ONNX_OUT_UNCHECKED=${test_tmp}/export_capability_unchecked.onnx"]
 expect_exit = 1
 expect_stdout_contains = ["written without the check"]
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_diagnostic_code = "0x04000051"
+expect_diagnostic_line = 15
+expect_diagnostic_column = 12
 expect_output_contains = ["(CPUExecutionProvider) has no kernel for Relu on int64 tensors at opset 17", "it has one at opset 18"]
-expect_output_not_contains = ["unreachable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
-assert(/at [^ ]*export_capability[.]cml:15:12[)]/.test(input.normalized.output), 'missing source position of the relu call')
+assert(/[^ ]*export_capability[.]cml:15:12:/.test(input.normalized.output), 'missing source position of the relu call')
 }
 """
 timeout_ms = 6000
@@ -860,12 +871,16 @@ timeout_ms = 120000
 
 [[tests]]
 name = "export_ctrl_effect"
-desc = "An effect that is only on the control path of the exported function (a println statement of a sync callee, its value reaches no output) is refused at the println by export_model, and no model is written (it used to exit 0 and write a model without the effect)."
+desc = "An effect that is only on the control path of the exported function (a println statement of a sync callee, its value reaches no output) is refused at the println by export_model — the refusal is the error value of that call (`ExportUnsupported`), which nothing handles, so the exit reports it — and no model is written (it used to exit 0 and write a model without the effect)."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_ctrl_effect.cml"
 args = ["${case}"]
 envs = ["ONNX_OUT=${test_tmp}/export_ctrl_effect.onnx"]
 expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_diagnostic_code = "0x04000051"
+expect_diagnostic_line = 14
+expect_diagnostic_column = 5
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 async ({ input, assert }) => {
@@ -873,8 +888,8 @@ const fs = await import('fs')
 const path = await import('path')
 const text = input.normalized.output
 assert(text.includes("impure operator ':io/println' cannot be exported"), 'missing impure-operator detail')
-assert(/at [^ ]*export_ctrl_effect[.]cml:14:5[)]/.test(text), 'missing source position of the println')
-assert(!text.includes('unreachable'), 'export must fail before the next statement')
+assert(/[^ ]*export_ctrl_effect[.]cml:14:5:/.test(text), 'missing source position of the println')
+assert(text.includes('ExportUnsupported'), 'the refusal must be the error value of the export_model call')
 assert(!text.includes('EFFECT'), 'the exported function must not be executed')
 assert(!fs.existsSync(path.join(input.test_tmp, 'export_ctrl_effect.onnx')), 'a refused export must not write a model')
 }
@@ -912,6 +927,10 @@ case = "../../../cases/modules/onnx/export_ctrl_effect_callee.cml"
 args = ["${case}"]
 envs = ["ONNX_OUT=${test_tmp}/export_ctrl_effect_callee.onnx"]
 expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_diagnostic_code = "0x04000051"
+expect_diagnostic_line = 14
+expect_diagnostic_column = 5
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 async ({ input, assert }) => {
@@ -919,8 +938,8 @@ const fs = await import('fs')
 const path = await import('path')
 const text = input.normalized.output
 assert(text.includes("impure operator ':io/println' cannot be exported"), 'missing impure-operator detail')
-assert(/at [^ ]*export_ctrl_effect_callee[.]cml:14:5[)]/.test(text), 'missing source position of the println')
-assert(!text.includes('unreachable') && !text.includes('EFFECT'), 'neither the statement after the export nor the exported function may run')
+assert(/[^ ]*export_ctrl_effect_callee[.]cml:14:5:/.test(text), 'missing source position of the println')
+assert(text.includes('ExportUnsupported') && !text.includes('EFFECT'), 'the refusal must be the error value of the export_model call, and the exported function must not run')
 assert(!fs.existsSync(path.join(input.test_tmp, 'export_ctrl_effect_callee.onnx')), 'a refused export must not write a model')
 }
 """
@@ -1043,7 +1062,7 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
 expect_diagnostic_line = 14
-expect_diagnostic_column = 5
+expect_diagnostic_column = 25
 expect_output_contains = ["the parameter out names one model file but the entry graph contains 2 onnx.export_model calls"]
 expect_output_not_contains = ["onnx::export: wrote", ":?:?:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -1060,7 +1079,7 @@ expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
 expect_diagnostic_line = 9
 expect_diagnostic_column = 1
-expect_output_contains = ["the program contains no onnx.export_model(fn, example, path) call, so onnx::export translates 'main' itself, and the model file is not named", "the parameter out"]
+expect_output_contains = ["the program contains no export_model<out: path>(fn, example) call, so onnx::export translates 'main' itself, and the model file is not named", "the parameter out"]
 expect_output_not_contains = ["onnx::export: wrote", ":?:?:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -1092,7 +1111,7 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
 expect_diagnostic_line = 11
-expect_diagnostic_column = 5
+expect_diagnostic_column = 25
 expect_output_contains = ["dynamic axis 5 is out of range for a rank-1 input"]
 expect_output_not_contains = ["onnx::export: wrote", ":?:?:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -1108,7 +1127,7 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
 expect_diagnostic_line = 11
-expect_diagnostic_column = 5
+expect_diagnostic_column = 25
 expect_output_contains = ["unknown export target 'no_such_target'"]
 expect_output_not_contains = ["onnx::export: wrote", ":?:?:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -1124,7 +1143,7 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
 expect_diagnostic_line = 11
-expect_diagnostic_column = 5
+expect_diagnostic_column = 25
 expect_output_contains = ["takes 2 arguments but 1 examples were given"]
 expect_output_not_contains = ["onnx::export: wrote", ":?:?:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -1140,7 +1159,7 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
 expect_diagnostic_line = 11
-expect_diagnostic_column = 5
+expect_diagnostic_column = 25
 expect_output_contains = ["output 'output' must be a tensor or a number, not 'string'"]
 expect_output_not_contains = ["onnx::export: wrote", ":?:?:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -1156,7 +1175,7 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
 expect_diagnostic_line = 11
-expect_diagnostic_column = 5
+expect_diagnostic_column = 25
 expect_output_contains = ["cannot open 'package.json/refusal_path.onnx' for writing"]
 expect_output_not_contains = ["onnx::export: wrote", ":?:?:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -1326,15 +1345,16 @@ timeout_ms = 8000
 
 [[tests]]
 name = "export_canonical_kernel_refused"
-desc = "tensor::fuse safe_fp=true records tensor.kernel=canonical on the product (design principles 7.4); an ONNX MatMul cannot promise the canonical accumulation order, so onnx.export_model refuses at the recorded attribute, names the attribute and the node, gives the source position, and writes no model. A silent drop would make the exported model compute something the program did not promise."
+desc = "tensor::fuse safe_fp=true records tensor.kernel=canonical on the product (design principles 7.4); an ONNX MatMul cannot promise the canonical accumulation order, so onnx.export_model refuses at the recorded attribute, names the attribute and the node, and writes no model. A silent drop would make the exported model compute something the program did not promise. The refusal is the error value of the export_model call (`ExportUnsupported`), which nothing handles, so the exit reports it as an unhandled error at the attribute's node."
 kind = "negative"
 case = "../../../cases/modules/onnx/export_canonical_kernel.cml"
 args = ["${case}", "tensor::fuse safe_fp=true", "std::nvm"]
 envs = ["ONNX_OUT=${test_tmp}/export_canonical_kernel.onnx"]
 expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_diagnostic_code = "0x04000051"
 expect_output_contains = ["tensor.kernel=canonical", "'tensor:matmul'", "cannot be exported", "export_canonical_kernel.cml:"]
-expect_output_not_contains = ["model written"]
+expect_output_not_contains = [":?:?:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 verify_script = """
 async ({ input, assert }) => {
@@ -1347,15 +1367,16 @@ timeout_ms = 8000
 
 [[tests]]
 name = "export_strict_refused"
-desc = "#strict (design principles 7.4) promises the canonical algorithm bit for bit, which an ONNX MatMul cannot carry; onnx.export_model refuses at the strict attribute, names it, and writes no model."
+desc = "#strict (design principles 7.4) promises the canonical algorithm bit for bit, which an ONNX MatMul cannot carry; onnx.export_model refuses at the strict attribute, names it, and writes no model. The refusal is the error value of the export_model call (`ExportUnsupported`), which nothing handles, so the exit reports it as an unhandled error."
 kind = "negative"
 case = "../../../cases/modules/onnx/export_strict.cml"
 args = ["${case}", "std::nvm"]
 envs = ["ONNX_OUT=${test_tmp}/export_strict.onnx"]
 expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_diagnostic_code = "0x04000051"
 expect_output_contains = ["attribute 'strict'", "cannot be exported", "design principles 7.4"]
-expect_output_not_contains = ["model written"]
+expect_output_not_contains = [":?:?:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 verify_script = """
 async ({ input, assert }) => {
@@ -1368,15 +1389,16 @@ timeout_ms = 8000
 
 [[tests]]
 name = "export_unclassified_attribute_refused"
-desc = "The class guard at the exporter: @mark writes test.mark on the nodes of the exported function, and no consumer has a fate for it. onnx.export_model refuses, naming the attribute, the node and the fate table, rather than dropping an attribute it does not understand."
+desc = "The class guard at the exporter: @mark writes test.mark on the nodes of the exported function, and no consumer has a fate for it. onnx.export_model refuses, naming the attribute, the node and the fate table, rather than dropping an attribute it does not understand. The refusal is the error value of the export_model call (`ExportUnsupported`), which nothing handles, so the exit reports it as an unhandled error."
 kind = "negative"
 case = "../../../cases/modules/onnx/export_unclassified.cml"
 args = ["${case}", "std::nvm"]
 envs = ["ONNX_OUT=${test_tmp}/export_unclassified.onnx"]
 expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_diagnostic_code = "0x04000051"
 expect_output_contains = ["attribute 'test.mark'", "not classified", "camel/core/node_attrs.h"]
-expect_output_not_contains = ["model written"]
+expect_output_not_contains = [":?:?:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 verify_script = """
 async ({ input, assert }) => {
@@ -1668,19 +1690,22 @@ timeout_ms = 8000
 
 [[tests]]
 name = "export_nontail_recursion"
-desc = "A recursion whose depth depends on the model input, whose recursive call is not in tail position and which two branches decide (so it is not a linear recursion the exporter unrolls) is refused by export_model with a located diagnostic that says what is accepted."
+desc = "A recursion whose depth depends on the model input, whose recursive call is not in tail position and which two branches decide (so it is not a linear recursion the exporter unrolls) is refused by export_model with a located diagnostic that says what is accepted: the refusal is the error value of that call (`ExportUnsupported`), which nothing handles, so the exit reports it."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_nontail_recursion.cml"
 args = ["${case}"]
 envs = ["ONNX_OUT=${test_tmp}/export_nontail_recursion.onnx"]
 expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_diagnostic_code = "0x04000051"
+expect_diagnostic_line = 12
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
 assert(text.includes('several branches decide whether a function calls itself outside tail position'), 'missing detail: ' + text)
-assert(/at [^ ]*export_nontail_recursion[.]cml:12:[0-9]+[)]/.test(text), 'missing source position: ' + text)
-assert(!text.split(String.fromCharCode(10)).includes('exported'), 'export must fail before the next statement')
+assert(/[^ ]*export_nontail_recursion[.]cml:12:[0-9]+:/.test(text), 'missing source position: ' + text)
+assert(text.includes('ExportUnsupported'), 'the refusal must be the error value of the export_model call')
 }
 """
 timeout_ms = 8000
@@ -1689,20 +1714,23 @@ timeout_ms = 8000
 name = "export_tree_recursion"
 # Slow layer: measured 32.7 s in the full serial run.
 tier = "milestone"
-desc = "A function that calls itself twice on one path with a depth that depends on the model input (tree recursion) is refused by export_model with a diagnostic that names the two calls outside tail position, located at the second one. The refusal is a shape test now rather than a budget running out: export turns recursion into loops only for a linear recursion, so the case fails immediately instead of unrolling until the doubling graph outgrows one runtime graph."
+desc = "A function that calls itself twice on one path with a depth that depends on the model input (tree recursion) is refused by export_model with a diagnostic that names the two calls outside tail position, located at the second one — the refusal is the error value of the export_model call (`ExportUnsupported`), which nothing handles, so the exit reports it. The refusal is a shape test now rather than a budget running out: export turns recursion into loops only for a linear recursion, so the case fails immediately instead of unrolling until the doubling graph outgrows one runtime graph."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_tree_recursion.cml"
 args = ["${case}"]
 envs = ["ONNX_OUT=${test_tmp}/export_tree_recursion.onnx"]
 expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_diagnostic_code = "0x04000051"
+expect_diagnostic_line = 12
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
 assert(text.includes('calls the function again in 2 places outside tail position'), 'missing detail: ' + text)
 assert(text.includes('only with one recursive call (a linear recursion)'), 'missing the shape it can export: ' + text)
-assert(/[(]at [^ ]*export_tree_recursion[.]cml:12:[0-9]+[)]/.test(text), 'missing source position of the call: ' + text)
-assert(!text.split(String.fromCharCode(10)).includes('exported'), 'export must fail before the next statement')
+assert(/[^ ]*export_tree_recursion[.]cml:12:[0-9]+:/.test(text), 'missing source position of the call: ' + text)
+assert(text.includes('ExportUnsupported'), 'the refusal must be the error value of the export_model call')
 }
 """
 timeout_ms = 120000
@@ -1809,7 +1837,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "ort_core_slice"
-desc = "The core's own slice exported to ONNX and run on ONNX Runtime: in-range bounds give the NumPy slice and every bound Camel faults on makes the run fail instead of being clamped. The rows include an axis shorter than a constant bound on a data-dependent extent (the bound is guarded), a start the data makes negative (which a plain ONNX Slice would read from the end of the axis), an end that was not written (the mask says so and the end is the axis' own extent), a slice of a rank-2 value, and a step."
+desc = "The core's own slice exported to ONNX and run on ONNX Runtime: in-range bounds give the NumPy slice and every bound Camel faults on makes the run fail instead of being clamped. The rows include an axis shorter than a constant bound on a data-dependent extent (the bound is guarded), a start the data makes negative (which a plain ONNX Slice would read from the end of the axis), an end that was not written (the mask says so and the end is the axis' own extent), a slice of a rank-2 value, and a step. The step's sign is in the same node and the same encoding, so every backward slice is paired with the forward slice that writes the same bounds -- `[5:1:-2]` with `[1:5:2]`, `[3::-2]` with `[3::2]`, `[::-2]` with `[::2]`, `[::-1]` with `[:]`, `[:, ::-2]` with `[:, ::2]` -- and one of them slices an axis whose extent only the run knows: the end a backward slice does not write is the position before the first element, which ONNX reaches only through an end below every extent, since a -1 would be added to the extent and read as the axis' last position, leaving the slice empty. Each mode's model is printed as the Slice it holds (its bounds and step, the shape the exporter declared and the shape ONNX itself infers), so a backward slice whose end was not written is visible as the empty slice it used to export."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/modules/onnx/ort_core_slice.py"
@@ -1991,7 +2019,7 @@ timeout_ms = 240000
 
 [[tests]]
 name = "ort_struct_loop"
-desc = "Tail recursions that CARRY a struct or tuple argument, exported as one ONNX Loop: the argument is flattened into one Loop state per leaf in the order of its fields, the body entry rebuilds the struct from those leaves, and the Loop's outputs are rebuilt into the struct the recursion returned (H44's outline). Four models: a struct of two tensors and a counter, the same as a tuple, a struct in a struct, and a struct of scalar leaves. Each passes onnx.checker's full check with exactly one Loop; on ONNX Runtime, for inputs on which the recursion stops after 0, 1 and several steps and at its maximum count, every output matches the recursion written in NumPy and Camel's native run (counters int64 and exact). The exporter used to refuse a carried tuple or struct ('pass the elements as separate arguments')."
+desc = "Tail recursions that CARRY a struct or tuple argument, exported as one ONNX Loop: the argument is flattened into one Loop state per leaf in the order of its fields, the body entry rebuilds the struct from those leaves, and the Loop's outputs are rebuilt into the struct the recursion returned. Four models: a struct of two tensors and a counter, the same as a tuple, a struct in a struct, and a struct of scalar leaves. Each passes onnx.checker's full check with exactly one Loop; on ONNX Runtime, for inputs on which the recursion stops after 0, 1 and several steps and at its maximum count, every output matches the recursion written in NumPy and Camel's native run (counters int64 and exact). The exporter used to refuse a carried tuple or struct ('pass the elements as separate arguments')."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/modules/onnx/ort_struct_loop.py"
@@ -2058,7 +2086,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "export_loop_tuple_argument"
-desc = "A tail recursion whose depth depends on the model input and whose state is one tuple argument that every call replaces: the tuple is flattened into one carried value per element at the Loop's entry and rebuilt at both ends (H44's outline), so the model has one Loop, two outputs, and a state input per element. It used to be refused ('pass the elements as separate arguments')."
+desc = "A tail recursion whose depth depends on the model input and whose state is one tuple argument that every call replaces: the tuple is flattened into one carried value per element at the Loop's entry and rebuilt at both ends, so the model has one Loop, two outputs, and a state input per element. It used to be refused ('pass the elements as separate arguments')."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_loop_tuple_argument.cml"
 args = ["${case}"]
@@ -2108,12 +2136,18 @@ timeout_ms = 8000
 
 [[tests]]
 name = "export_loop_carried_array_field"
-desc = "A tail recursion whose depth depends on the model input and whose carried state is a struct with an int[] field the body appends to is refused by export_model at the recursive call: a Loop's state input has one shape for every round, so the criterion is the fact the rule asks for — the body appends to this value, so its length changes from one round to the next (growable-array-vs-tensor-in-the-onnx-exporter). The diagnostic names the array field and the fact, and no model file is written. (The refusal used to be justified by what the type printer spelled, not by the fact.)"
+desc = "A tail recursion whose depth depends on the model input and whose carried state is a struct with an int[] field the body appends to is refused by export_model at the recursive call: a Loop's state input has one shape for every round, so the criterion is the fact the rule asks for — the body appends to this value, so its length changes from one round to the next (growable-array-vs-tensor-in-the-onnx-exporter). The refusal is the error value of the export_model call (`ExportUnsupported`), which nothing handles, so the exit reports it; the diagnostic names the array field and the fact, and no model file is written. (The refusal used to be justified by what the type printer spelled, not by the fact.)"
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_loop_carried_array_field.cml"
 args = ["${case}"]
 envs = ["ONNX_OUT=${test_tmp}/export_loop_carried_array_field.onnx"]
 expect_exit = 1
+# The exporter locates a refusal about the recursion as a whole at the call that entered it
+# (exporter.cpp, `located`): the entry call `walk(x, { xs: [0], k: 0 })` in the closure body.
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_diagnostic_code = "0x04000051"
+expect_diagnostic_line = 23
+expect_diagnostic_column = 79
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 async ({ input, assert }) => {
@@ -2123,7 +2157,7 @@ const text = input.normalized.output
 assert(text.includes("a recursive call changes argument 2 of a recursion whose depth depends on the model input"), 'missing the argument: ' + text)
 assert(text.includes("the leaf 'xs', an int array"), 'the diagnostic must name the array field: ' + text)
 assert(text.includes('whose length changes from one round to the next (the body appends to it or concatenates it), and a Loop carries a state whose shape is the same on every round'), 'the diagnostic must state the fact: ' + text)
-assert(!text.split(String.fromCharCode(10)).includes('exported'), 'export must fail before the next statement')
+assert(text.includes('ExportUnsupported'), 'the refusal must be the error value of the export_model call')
 assert(!fs.existsSync(path.join(input.test_tmp, 'export_loop_carried_array_field.onnx')), 'a refused export must not write a model')
 }
 """
@@ -2581,7 +2615,7 @@ expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
 expect_diagnostic_line = 23
 expect_diagnostic_column = 1
-expect_output_contains = ["the entry graph still contains a call to 'main' that was not inlined", "the inliner ran before onnx::export and left this call because 'main' calls, directly or through other functions, a recursive function (a loop), and such a function is inlined only while it is small: the inlined function has 16 compute nodes (at most 8; a constant, a parameter, a gate and what an inline splice adds are not counted)", "keep the function that makes the export_model call small by moving the rest of its work into a function it calls"]
+expect_output_contains = ["the entry graph still contains a call to 'main' that was not inlined", "the inliner ran before onnx::export and left this call because 'main' calls, directly or through other functions, a recursive function (a loop), and such a function is inlined only while it is small: the inlined function has 28 compute nodes (at most 8; a constant, a parameter, a gate and what an inline splice adds are not counted)", "keep the function that makes the export_model call small by moving the rest of its work into a function it calls"]
 expect_output_not_contains = ["onnx::export: wrote", ":?:?:", "run std::opt before onnx::export", "growth budget"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -2634,7 +2668,7 @@ expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
 expect_diagnostic_line = 19
 expect_diagnostic_column = 12
-expect_output_contains = ["request_in_arm.cml:20:9 is made in an arm of this branch, and the condition of the branch (a value computed by ':op/eq_s') is not known at compile time", "onnx::export does not run the program, so it cannot tell whether the request is made", "write the export_model call outside the branch, or make the condition a constant"]
+expect_output_contains = ["request_in_arm.cml:20:29 is made in an arm of this branch, and the condition of the branch (a value computed by ':op/eq_s') is not known at compile time", "onnx::export does not run the program, so it cannot tell whether the request is made", "write the export_model call outside the branch, or make the condition a constant"]
 expect_output_not_contains = ["onnx::export: wrote", ":?:?:", "the example argument of onnx.export_model", "run std::opt before it so that it folds"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -2746,12 +2780,15 @@ timeout_ms = 20000
 
 [[tests]]
 name = "as_refusal.unproven.operator"
-desc = "A conversion of a model-dependent tensor that asserts an extent the exported inputs leave open (axis 0 is dynamic, the conversion says 2) cannot be checked at export, and an ONNX model checks nothing when it runs: refused at the conversion, naming it. The exporter used to drop the conversion silently. By the operator (default run): the same refusal, as the error of the export_model call, with the position of the construct in its text."
+desc = "A conversion of a model-dependent tensor that asserts an extent the exported inputs leave open (axis 0 is dynamic, the conversion says 2) cannot be checked at export, and an ONNX model checks nothing when it runs: refused at the conversion, naming it. The exporter used to drop the conversion silently. By the operator (default run): the same refusal, as the error value of the export_model call (`ExportUnsupported`), which nothing handles, so the exit reports it as an unhandled error at the position the value carries."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/as_unproven.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_diagnostic_code = "0x04000051"
+expect_diagnostic_line = 13
+expect_diagnostic_column = 13
 expect_output_contains = ["the conversion to 'f32[2, 3]' of a value that depends on the model input cannot be checked when the model is exported: the value is only known to be a 'f32[?, 3]'", "as_unproven.cml:13:13"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
@@ -2774,12 +2811,15 @@ timeout_ms = 20000
 
 [[tests]]
 name = "as_refusal.always_fails.operator"
-desc = "A conversion of a model-dependent tensor to a shape the exported inputs contradict ([2, 3] converted to [3, 2]) always fails: refused at the conversion with both types. The exporter used to drop the conversion silently and write a model. By the operator (default run): the same refusal, as the error of the export_model call, with the position of the construct in its text."
+desc = "A conversion of a model-dependent tensor to a shape the exported inputs contradict ([2, 3] converted to [3, 2]) always fails: refused at the conversion with both types. The exporter used to drop the conversion silently and write a model. By the operator (default run): the same refusal, as the error value of the export_model call (`ExportUnsupported`), which nothing handles, so the exit reports it as an unhandled error at the position the value carries."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/as_always_fails.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_diagnostic_code = "0x04000051"
+expect_diagnostic_line = 12
+expect_diagnostic_column = 13
 expect_output_contains = ["this conversion to 'f32[3, 2]' always fails: for the exported inputs the value is a 'f32[2, 3]'", "as_always_fails.cml:12:13"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
@@ -2802,12 +2842,15 @@ timeout_ms = 20000
 
 [[tests]]
 name = "as_refusal.constant_fails.operator"
-desc = "A conversion of a constant that fails inside the exported function (a [2, 3] tensor from a function declared to return Tensor, converted to [3, 2]): constant folding leaves it, and the export refuses at the conversion with the conversion's own message. By the operator (default run): the same refusal, as the error of the export_model call, with the position of the construct in its text."
+desc = "A conversion of a constant that fails inside the exported function (a [2, 3] tensor from a function declared to return Tensor, converted to [3, 2]): constant folding leaves it, and the export refuses at the conversion with the conversion's own message. By the operator (default run): the same refusal, as the error value of the export_model call (`ExportUnsupported`), which nothing handles, so the exit reports it as an unhandled error at the position the value carries."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/as_constant_fails.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_diagnostic_code = "0x04000051"
+expect_diagnostic_line = 16
+expect_diagnostic_column = 13
 expect_output_contains = ["this conversion of a constant always fails: conversion to 'f32[3, 2]' failed: the array has shape [2, 3]", "as_constant_fails.cml:16:13"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
@@ -2822,21 +2865,22 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
 expect_diagnostic_line = 15
-expect_diagnostic_column = 5
-expect_output_contains = ["the example given for parameter 'x' is a '(f32[2, 3])', but the parameter is declared 'f32[2, 3]'", "pass the value, not a tuple that holds it"]
+expect_diagnostic_column = 17
+expect_output_contains = ["the example given for parameter 'x' is a '(f32[2, 3],)', but the parameter is declared 'f32[2, 3]'", "pass the value, not a tuple that holds it"]
 expect_output_not_contains = ["onnx::export: wrote", ":?:?:", "is used where a tensor is expected"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 
 [[tests]]
 name = "example_refusal.tuple.operator"
-desc = "The example of a one-parameter function is its argument itself; a tuple that holds the tensor is an argument of tuple type that the parameter (declared a tensor) cannot take: refused at the export_model call with the parameter, both types and what to write. It used to bind the tuple to the parameter and fail at the first operator using it, with a message about a tuple that depends on the model input being used where a tensor is expected. By the operator (default run): the same refusal, as the error of the export_model call, with the position of the construct in its text."
+desc = "The example of a one-parameter function is its argument itself; a tuple that holds the tensor is an argument of tuple type that the parameter (declared a tensor) cannot take: refused at the export_model call with the parameter, both types and what to write. It used to bind the tuple to the parameter and fail at the first operator using it, with a message about a tuple that depends on the model input being used where a tensor is expected. By the operator (default run): the same refusal, as the error value of the export_model call (`ExportUnsupported`), which nothing handles, so the exit reports it. The value carries no position — the exporter does not locate this refusal (checkExamples throws without one) — so the report names the operator and falls back to main, not to the call."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/tuple_example.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_output_contains = ["the example given for parameter 'x' is a '(f32[2, 3])', but the parameter is declared 'f32[2, 3]'"]
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_diagnostic_code = "0x04000051"
+expect_output_contains = ["the example given for parameter 'x' is a '(f32[2, 3],)', but the parameter is declared 'f32[2, 3]'"]
 expect_output_not_contains = ["is used where a tensor is expected"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
@@ -2851,7 +2895,7 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
 expect_diagnostic_line = 14
-expect_diagnostic_column = 5
+expect_diagnostic_column = 17
 expect_output_contains = ["the example given for parameter 'x' is a 'f32[2, 3]', but the parameter is declared 'f32[4, 3]'"]
 expect_output_not_contains = ["onnx::export: wrote", ":?:?:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -2859,12 +2903,13 @@ timeout_ms = 20000
 
 [[tests]]
 name = "example_refusal.shape.operator"
-desc = "An example whose shape contradicts the declared type of the parameter it is given for ([2, 3] for a parameter declared [4, 3]) is refused at the export_model call. The function is specialized for the example's type whatever the parameter declares, so the model used to be written for [2, 3] without a word. By the operator (default run): the same refusal, as the error of the export_model call, with the position of the construct in its text."
+desc = "An example whose shape contradicts the declared type of the parameter it is given for ([2, 3] for a parameter declared [4, 3]) is refused at the export_model call. The function is specialized for the example's type whatever the parameter declares, so the model used to be written for [2, 3] without a word. By the operator (default run): the same refusal, as the error value of the export_model call (`ExportUnsupported`), which nothing handles, so the exit reports it. The value carries no position — the exporter does not locate this refusal (checkExamples throws without one) — so the report names the operator and falls back to main, not to the call."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/example_mismatch.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_diagnostic_code = "0x04000051"
 expect_output_contains = ["the example given for parameter 'x' is a 'f32[2, 3]', but the parameter is declared 'f32[4, 3]'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
@@ -2885,7 +2930,7 @@ timeout_ms = 240000
 
 [[tests]]
 name = "typed_constant_ends_unrolling.pass"
-desc = "A constant typed by a declared struct type that says neither element type nor shape, used inside a recursion, is a constant of that type at every level: the simplification ends and the export succeeds. Before H5 an unnamed struct value was typed by its fields where the constant was visible, so every unrolled level was more precisely typed than the loop, the unrolling never ended, and the export was refused (TranslationRefused, or the unlocated 'Runtime draft encoding failed to allocate ... bytes'). Now the literal is built in its declared type (design principles 5.2) -- a struct type's identity is its declaration -- so the loop is the same at every level. H44b made the specialization table program-level and pinned every copy it made; a recursive call whose argument type got more precise then had its copy inlined into its own copy again, one layer per export round, and the export refused again (96 s in the measured run). H44c's inline history stops that: a call that lies in a copy inlined from a function is not inlined into that copy again, so the loop stays one call and the export finishes in milliseconds. By the pass (std::macro std::opt onnx::export)."
+desc = "A constant typed by a declared struct type that says neither element type nor shape, used inside a recursion, is a constant of that type at every level: the simplification ends and the export succeeds. An unnamed struct value used to be typed by its fields where the constant was visible, so every unrolled level was more precisely typed than the loop, the unrolling never ended, and the export was refused (TranslationRefused, or the unlocated 'Runtime draft encoding failed to allocate ... bytes'). Now the literal is built in its declared type (design principles 5.2) -- a struct type's identity is its declaration -- so the loop is the same at every level. The specialization table became program-level and pinned every copy it made; a recursive call whose argument type got more precise then had its copy inlined into its own copy again, one layer per export round, and the export refused again (96 s in the measured run). The inline history stops that: a call that lies in a copy inlined from a function is not inlined into that copy again, so the loop stays one call and the export finishes in milliseconds. By the pass (std::macro std::opt onnx::export)."
 kind = "behavior"
 case = "../../../cases/modules/onnx/refusals/unended_unrolling.cml"
 args = ["${case}", "std::macro", "std::opt", "onnx::export"]
@@ -2897,7 +2942,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "typed_constant_ends_unrolling.operator"
-desc = "The same program by the operator (default run): it compiles and runs to the end, writing nothing and refusing nothing. The unrolling that the declared type used to allow (see the test above) is gone, and the growth H44b's pinned table caused is stopped by the inline history (H44c), so the export_model call reports nothing to refuse."
+desc = "The same program by the operator (default run): it compiles and runs to the end, writing nothing and refusing nothing. The unrolling that the declared type used to allow (see the test above) is gone, and the growth the pinned table caused is stopped by the inline history, so the export_model call reports nothing to refuse."
 kind = "behavior"
 case = "../../../cases/modules/onnx/refusals/unended_unrolling.cml"
 args = ["${case}"]
@@ -2924,12 +2969,15 @@ timeout_ms = 60000
 
 [[tests]]
 name = "function_branch.operator"
-desc = "A branch on a condition that depends on the model input whose arms yield functions, outside the recursion with one recursive call that is exported as loops (the returned function calls the next one twice), is refused at the branch, saying that a function value would be chosen when the model runs. It used to stop with 'the dtype of 'arm_out' is not known statically'. By the operator (default run): the same refusal, as the error of the export_model call, with the position of the construct in its text."
+desc = "A branch on a condition that depends on the model input whose arms yield functions, outside the recursion with one recursive call that is exported as loops (the returned function calls the next one twice), is refused at the branch, saying that a function value would be chosen when the model runs. It used to stop with 'the dtype of 'arm_out' is not known statically'. By the operator (default run): the same refusal, as the error value of the export_model call (`ExportUnsupported`), which nothing handles, so the exit reports it as an unhandled error at the position the value carries."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/function_branch.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_diagnostic_code = "0x04000051"
+expect_diagnostic_line = 14
+expect_diagnostic_column = 12
 expect_output_contains = ["a branch on a condition that depends on the model input chooses between functions (its value is a '(x: float[..]) => float[..] pure')", "function_branch.cml:14:12"]
 expect_output_not_contains = ["arm_out"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -2937,23 +2985,24 @@ timeout_ms = 60000
 
 [[tests]]
 name = "export_var_append"
-desc = "export_model of a function that grows an array variable with `acc = acc->append<v>` (the in-place `:op/assn_owned`, design principles 11.3): refused with a located diagnostic naming the append; the program's own run before the export still prints the tensor."
+desc = "export_model of a function that grows an array variable with `acc = acc->append<v>` (the in-place `:op/assn_owned`, design principles 11.3): refused at the append with a message naming it; the program's own run before the export still prints the tensor. The refusal is the error value of the export_model call (`ExportUnsupported`), which nothing handles, so the exit reports it as an unhandled error at the append."
 kind = "negative"
 case = "../../../cases/modules/onnx/export_var_append.cml"
 args = ["${case}", "std::macro"]
 envs = ["ONNX_OUT=${test_tmp}/export_var_append.onnx"]
 expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 22
-expect_diagnostic_column = 5
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_diagnostic_code = "0x04000051"
+expect_diagnostic_line = 16
+expect_diagnostic_column = 12
 expect_output_contains = ["an array variable is appended to (`acc = acc->append<v>`)", "export_var_append.cml:16:12"]
-expect_output_not_contains = ["exported", "internal error", "Segmentation fault"]
+expect_output_not_contains = ["internal error", "Segmentation fault"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 6000
 
 [[tests]]
 name = "export_take"
-desc = "take with a constant index array exports as one Gather on axis 0 with the indices as an i64 initializer; the capture `forward` is inlined and the tail reshape folds to Identity (H20-2)."
+desc = "take with a constant index array exports as one Gather on axis 0 with the indices as an i64 initializer; the capture `forward` is inlined and the tail reshape folds to Identity."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_take.cml"
 args = ["${case}"]

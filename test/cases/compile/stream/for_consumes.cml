@@ -1,0 +1,23 @@
+/**
+ * The other spelling the diagnostic names (design principles 5.4): to read the stream to its end,
+ * write `for x in s`. The stream stands outside the loop the `for` builds -- that loop is the one
+ * that pulls it, once per round -- so this is one consumer, and the elements come out in order.
+ */
+module stream_for_consumes
+
+func count(n: int): int.. {
+    return step(n)
+}
+
+func step(n: int): () => (int, int..)? {
+    return () => if n > 0 then (n, step(n - 1)) else null
+}
+
+func total(s: int..): int {
+    return loop acc = 0 for x in s do acc + x
+}
+
+func main(): int sync {
+    println(total(count(3)))
+    return 0
+}

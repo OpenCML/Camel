@@ -5,6 +5,11 @@ the two catalogues it points at. The plan runs the check on this root to pin wha
 missing marker, an unknown diagnostic name and a task number are reported as; the sources beside it
 are reduced copies of the four real ones, so the case does not move when the language does.
 
+This page is also where the page's one total is pinned: it states none, so a run over this root is
+green, and the same run with `--budget 1000` makes the total smaller than the page and turns it red.
+The other red condition -- an example that does not compile -- is pinned by
+`docs/reference/cases/stale-snippet.md` beside it.
+
 A `**target**` note names its design under `docs/design/`, and a diagnostic is written in full, as
 `SemanticDiag::UnresolvedReference`.
 
@@ -38,7 +43,7 @@ A `**target**` note names its design under `docs/design/`, and a diagnostic is w
 11  powerExpr           ^                                  right, one
 12  nullableExpr        ?? !!                              right (a whole expression on the right)
 13  unaryExpr           as is                              one
-14  linkExpr            -> ?->                             repeat, left
+14  linkExpr            ->                                 repeat, left
 15  negExpr             - !                                prefix
 16  negPower            - ! ^                              prefix, right
 17  compExpr            ..                                 repeat, left
@@ -62,7 +67,7 @@ multiplicativeExpr : powerExpr (('*' | '/') powerExpr)*
 powerExpr          : nullableExpr ('^' powerExpr)?
 nullableExpr       : unaryExpr (('??' | '!!') dataExpr)?
 unaryExpr          : linkExpr (('as' | 'is') typeExpr)?
-linkExpr           : negExpr (('->' | '?->') compExpr)*
+linkExpr           : negExpr ('->' compExpr)*
 negExpr            : ('-' | '!') negPower | compExpr
 negPower           : ('-' | '!') negPower | compExpr ('^' negPower)?
 compExpr           : annoExpr ('..' annoExpr)*

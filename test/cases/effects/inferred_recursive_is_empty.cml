@@ -1,0 +1,19 @@
+/**
+ * A recursive function that wrote no clause is read by its callers the way any clause-less function
+ * is: its type carries the set its body was measured to reach. The measurement starts every body at
+ * the empty set and grows it round by round, so the call to itself reads the round before and `step`
+ * settles at the empty set -- its type says `pure`, not nothing.
+ */
+module inferred_recursive_is_empty
+
+func step(n: int): int {
+    return if n <= 0 then 0 else step(n - 1)
+}
+
+func show(f: (n: int) => int): int {
+    return f(1)
+}
+
+func main(): int sync {
+    return show(step)
+}

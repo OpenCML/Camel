@@ -67,7 +67,7 @@ scratch directories and the run root, parallel versus serial output, the tier fi
 named-plan rule, the risk-based sweep sample, and the `--changed` mapping (directory rule, file
 rules, `ownCases`, the layered plans, `CAMEL_TEST_BASE`). It also walks every plan file under
 `test/plans/` and fails, by name, when no case path a plan names selects it, and it checks the
-suffix-less plan target (H201). Its mirror (H205) fails, by name, when a fast case path selects a
+suffix-less plan target. Its mirror fails, by name, when a fast case path selects a
 slow-cost plan in full, unless the plan is the only one running that case or
 `test/plan-selection.json` records the shared case in `slowCaseOwners` with a reason.
 
@@ -362,11 +362,11 @@ full whatever `--tier` says.
 An entry may also be `{ "plan": "...", "ownCases": true }`: the plan is added only when the
 changed file is one of the `case` paths that plan names. A plan that does not run the changed case
 cannot be invalidated by it, so a slow plan must not ride a shared directory into an edit it never
-reads (H205). This is how a tiles case edit stops selecting the three GPU plans; the
+reads. This is how a tiles case edit stops selecting the three GPU plans; the
 `modules/tiles/` rule still names them in full, because a change to the module can invalidate all
 of them, while the case-directory rule adds each GPU plan only for the cases it runs.
 
-The rules are checked in the other direction too (H201): `test/tools/selftest/run.mjs` walks every
+The rules are checked in the other direction too: `test/tools/selftest/run.mjs` walks every
 plan file under `test/plans/`, resolves the `case` paths it names the way the runner does, and
 feeds each path and its directory to the same selection function `--changed` uses. A plan that no
 case path selects is a plan whose cases nobody runs on the change that breaks them, and the
@@ -383,7 +383,7 @@ from resolving, through the generic `test/cases/` rule, to `feat/opt/progen.plan
 random-program check an ordinary change must not run: a narrower directory rule for
 `test/cases/opt/progen/` comes first and selects no plan for the finding directory by itself.
 
-The opposite direction is checked as well (H205). A plan file named as a target runs in full
+The opposite direction is checked as well. A plan file named as a target runs in full
 whatever `--tier` says, so a directory rule that resolves a fast case directory to a slow plan
 makes every edit in that directory pay for the whole plan. `test/tools/selftest/over-selection.mjs`
 derives each plan's cost class from the tree (its `tier`, its tests' tiers, a test timeout of five
@@ -428,11 +428,11 @@ the policy excludes are not called holes). And the self-test `test/tools/selftes
 every file in the index plus the untracked, not ignored files, and fails on a class that neither
 a directory rule nor a file rule selects, unless the class is on its allowlist with a reason. The
 plan side is checked the same way, except that its verdict is about the branch: every plan file in
-git's index must be selected by a case path it names, or the self-test fails and names the plan
-(H201). A plan file that is only in the working tree -- an agent's scratch plan, written to try a
+git's index must be selected by a case path it names, or the self-test fails and names the plan.
+A plan file that is only in the working tree -- an agent's scratch plan, written to try a
 case out -- is not one of the branch's plans, and the self-test names it as a note instead of
 failing the run: the live tree is shared with whoever is working in it, and two gates of another
-task went red on exactly such a draft (H368). Committing the file makes the check red for real.
+task went red on exactly such a draft. Committing the file makes the check red for real.
 The
 allowlist names only the deliberately unselectable layers (perf, GC stress, progen, the PyTorch
 comparisons) and files no plan reads (vendored code, packaging, CI configuration, repository
@@ -446,7 +446,7 @@ the documentation and release-gate scripts (`feat/docs_links`), the debugger rac
 (`feat/tools/debugger`), exemplars, root Markdown and assets, the public headers under
 `include/` (mirroring `src/`), the rest of `src/` and the test harnesses. The plan-reachability
 check added the case directories whose plans live elsewhere: the loop, macro, JSON, unicode-path,
-print-format and compiler-benchmark cases (H201). `test/perf-baseline.json`
+print-format and compiler-benchmark cases. `test/perf-baseline.json`
 and `scripts/perf-gate.mjs` are the one class left without a perf plan on purpose: perf is manual
 (the rule that perf is manual), so a change there must not select a perf plan.
 
@@ -518,10 +518,14 @@ Every `[[tests]]` entry may use these common fields:
   timeout **of its own CPU time** (`TIMEOUT_MARGIN` in `test/tools/run-tests.mjs`), and prints the
   measured number and the wall clock beside it. The quantity is the work's, not the host's: on a
   shared host a passing test's wall clock is who else is running, and a rule that read it failed the
-  plan runner's own self-test at random (H368). A host whose kernel reports no CPU time (no
-  `/proc/self/stat`) has no such reading, so there the rule falls back to the wall clock and the run
-  says so once; a host that has the reading and does not get one for a test fails that test, because
-  a margin nobody can read is not a margin. A test that legitimately needs a large bound states the
+  plan runner's own self-test at random. A host whose kernel reports no CPU time (no
+  `/proc/self/stat`) has no such reading, so there the rule is **skipped** with that reason
+  (`skipped: this host reports no CPU time`, said once at the start of the run and counted at the
+  end), never read off the wall clock, which on such a host measures the load as much as the test;
+  a host that has the reading and does not get one for a test fails that test, because
+  a margin nobody can read is not a margin. The timeout itself is unaffected either way: the runner
+  kills a child at its `timeout_ms` on every platform, so a test that really runs too long still
+  fails. A test that legitimately needs a large bound states the
   measurement in a comment next to the value ("20 s: 2.1 s alone, 4.2 s at `-Jobs 8`"); a test that
   sits at its bound on a quiet machine has no margin for a busy one and is fixed, not raised. A fast
   case with no reason for a special bound uses the runner default (`10000`): a 4 s bound is a speed
@@ -1117,7 +1121,7 @@ kept, with its path printed (`[INFO] test scratch kept: ...`), when it fails. No
 instances run at the same time without seeing each other's files. A case run outside the runner
 (a benchmark, or a direct `camel` command) may keep its older fixed path as a fallback when
 `CAMEL_TEST_TMPDIR` is unset; the examples and mnist cases take it through
-`get_env('CAMEL_TEST_TMPDIR')`, and the one ONNX refusal case that writes a model gets an
+`get_env('CAMEL_TEST_TMPDIR') ?? ''`, and the one ONNX refusal case that writes a model gets an
 `onnx::export out="${test_tmp}/..."` path.
 
 ## Field Constraints And Style

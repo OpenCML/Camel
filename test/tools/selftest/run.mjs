@@ -614,11 +614,15 @@ const RULELESS_ALLOWED = [
     },
     {
         match: /^benchmarks\//,
-        why: 'the benchmarks and their PyTorch baselines are the manual perf layer (H167); a change here must not select a perf plan',
+        why: 'the benchmarks and their PyTorch baselines are the manual perf layer; a change here must not select a perf plan',
     },
     {
         match: /^showcase\//,
-        why: 'the showcase programs are the manual perf layer (H167)',
+        why: 'the showcase programs are the manual perf layer',
+    },
+    {
+        match: /^promo\//,
+        why: 'the promo film, the logo and the motion-graphics sources are the manual marketing material; no test plan reads them',
     },
     {
         match: /^pypi\//,
@@ -646,19 +650,19 @@ const RULELESS_ALLOWED = [
     },
     {
         match: /^test\/perf-baseline\.json$/,
-        why: 'the manual perf baseline (H167); a change here must not select a perf plan',
+        why: 'the manual perf baseline; a change here must not select a perf plan',
     },
     {
         match: /^test\/cases\/opt\/progen\/(README\.md|findings\.json)$/,
-        why: 'the progen corpus documentation and its findings index are read by the manual progen tool (H167); the finding and judgement programs next to them are named by rules',
+        why: 'the progen corpus documentation and its findings index are read by the manual progen tool; the finding and judgement programs next to them are named by rules',
     },
     {
         match: /^test\/cases\/perf\//,
-        why: 'the perf cases are run by perf plans only, and perf is manual (H167)',
+        why: 'the perf cases are run by perf plans only, and perf is manual',
     },
     {
         match: /^test\/plans\/perf\//,
-        why: 'the perf plans are deliberately not selectable (H161 section 7)',
+        why: 'the perf plans are deliberately not selectable',
     },
     {
         match: /^test\/plans\/feat\/mm\/gc(\.plan\.toml|_collections\.plan\.toml|_elder_exhaustion\.plan\.toml)$/,
@@ -747,7 +751,7 @@ const trackedPlanFiles = new Set(
 // a guard that cannot fail is not a guard.
 if (trackedPlanFiles.size === 0) {
     problems.push(
-        'plan-selection: git lists no plan file in its index under test/plans, so the reachability check below examined nothing (H368)'
+        'plan-selection: git lists no plan file in its index under test/plans, so the reachability check below examined nothing'
     )
 }
 function planCasePaths(planFile) {
@@ -788,7 +792,7 @@ const selfExcepted = ((selfRuleForHoles && selfRuleForHoles.except) || [])
 function planExemption(planFile, planText) {
     const rel = relFromRepo(planFile)
     if (rel.startsWith('test/plans/perf/')) {
-        return 'the perf layer is manual (H167): a change there must not select a perf plan'
+        return 'the perf layer is manual: a change there must not select a perf plan'
     }
     if (selfExcepted.some((entry) => rel === entry || rel.startsWith(entry))) {
         return 'the test/plans self rule deliberately excludes it (GC stress, progen)'
@@ -826,7 +830,7 @@ for (const planFile of allPlanFiles) {
 if (unreachablePlans.length > 0) {
     problems.push(
         `plan-selection: ${unreachablePlans.length} plan file(s) no case path selects, so --changed can never run them: `
-        + `${unreachablePlans.join('; ')}. Add a rule that names the plan for the directory its cases live in (H201).`
+        + `${unreachablePlans.join('; ')}. Add a rule that names the plan for the directory its cases live in.`
     )
 } else if (scratchPlans.length > 0) {
     // Not a problem: these files are in the working tree and not in git's index, so they are not
@@ -836,7 +840,7 @@ if (unreachablePlans.length > 0) {
     console.log(
         `note: ${scratchPlans.length} untracked plan file(s) under test/plans/ no case path selects, so --changed `
         + `would never run them if they were committed: ${scratchPlans.join('; ')}. They are not in git's index, `
-        + `so they are not the branch's plans and this check does not fail on them (H368).`
+        + `so they are not the branch's plans and this check does not fail on them.`
     )
 }
 

@@ -1,0 +1,94 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * Regular expressions (ECMAScript syntax) over strings. A position is an index in code points,
+ * as everywhere in a string, so `text[m.start, m.end>` is `m.text`.
+ *
+ * - The text a function works on is its ordinary argument; the pattern is a with-argument (it
+ *   decides which function this is), so calls chain: `line->find_all<'[0-9]+'>`.
+ * - A pattern that is not a regular expression is a fault of the call that meets it, as a wrong
+ *   index is. A pattern that comes from the outside world goes through `validate` first.
+ * - The only native pieces are the search itself (`find`), a test for a match
+ *   (`has_match_kernel`) and the check of a pattern; the rest is written here on top of them.
+ */
+
+/// One match of a pattern. The positions are code point indices, end not included. groups holds
+/// the capture groups in order of their opening parenthesis (the whole match is text); a group
+/// that took no part in the match is null.
+export type Match = { start: int, end: int, text: string, groups: (string?)[] }
+
+// ---- native primitives ----
+
+/// The pattern itself when it is a regular expression.
+/// @fails error `RegexInvalid` when pattern is not a regular expression
+/// @example validate('[0-9]+') !! ''    // '[0-9]+'
+export func validate(pattern: string): string!
+
+#op('re:test')
+with <pattern: string>
+func has_match_kernel(text: string): bool
+
+// ---- matching ----
+
+/// The first match of pattern in text that starts at or after start, or null. Native: the kernel
+/// builds the `Match`, compiling each pattern once per run.
+/// @fails fault `RegexInvalid` when pattern is not a regular expression
+/// @example 'room 42'->find<'[0-9]+', 6> != null    // true
+#op('re:find')
+with <pattern: string, start: int = 0>
+export func find(text: string): Match?
+
+/// Whether pattern matches somewhere in text.
+/// @fails fault `RegexInvalid` when pattern is not a regular expression
+/// @example 'room 42'->has_match<'[0-9]+'>    // true
+#impl(has_match_kernel)
+with <pattern: string>
+export func has_match(text: string): bool {
+    return text->find<pattern> != null
+}
+
+/// Every match of pattern in text, left to right, without overlap. After an empty match the
+/// search goes on one code point further.
+/// @fails fault `RegexInvalid` when pattern is not a regular expression
+/// @example 'a1b22'->find_all<'[0-9]+'>->map<(m: Match): string => m.text>    // ['1', '22']
+with <pattern: string>
+export func find_all(text: string): Match[] {
+    let (found, next) = loop found = [] as Match[], next = 0 while next <= len(text) do
+        match text->find<pattern, next> {
+            case null => (found, len(text) + 1)
+            case m => (found->append<m>, if m.end > m.start then m.end else m.end + 1)
+        }
+    return found
+}
+
+// ---- rewriting ----
+
+/// text with every match of pattern replaced by what by makes of it.
+/// @fails fault `RegexInvalid` when pattern is not a regular expression
+/// @example 'a1b22'->replace_with<'[0-9]+', (m: Match): string => '<' + m.text + '>'>    // 'a<1>b<22>'
+with <pattern: string, by: (m: Match) => string>
+export func replace_with(text: string): string {
+    let (out, at) = loop out = '', at = 0 for m in text->find_all<pattern> do
+        (out + text[at:m.start] + by(m), m.end)
+    return out + text[at:]
+}
+
+/// text with every match of pattern replaced by the text new, which is taken literally.
+/// @fails fault `RegexInvalid` when pattern is not a regular expression
+/// @example 'a1b22'->replace<'[0-9]+', '#'>    // 'a#b#'
+with <pattern: string, new: string>
+export func replace(text: string): string {
+    return text->replace_with<pattern, (m: Match): string => new>
+}
+
+/// The pieces of text between the matches of pattern; one piece, the whole text, when there is
+/// no match.
+/// @fails fault `RegexInvalid` when pattern is not a regular expression
+/// @example 'a1b22c'->split<'[0-9]+'>    // ['a', 'b', 'c']
+with <pattern: string>
+export func split(text: string): string[] {
+    let (parts, at) = loop parts = [] as string[], at = 0 for m in text->find_all<pattern> do
+        (concat(parts, [text[at:m.start]]), m.end)
+    return concat(parts, [text[at:]])
+}

@@ -1,0 +1,8 @@
+// `as` does not convert a number to a number (design principles 5.1): a variable of type int is not
+// a float by `as`, the same as a literal is not. The conversion function is `float(n)`.
+func main(): int sync {
+    let n = 5
+    let a = n as float
+    println(a)
+    return 0
+}

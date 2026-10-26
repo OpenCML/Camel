@@ -5,6 +5,7 @@ module tiles_layout_grad
 import { reshape, permute, sum, abs } from tensor
 import { grad } from autodiff
 import { source, run_preferred_resident, download } from tiles
+import { exit } from process
 
 with <x: f32[..]>
 func layout_loss(): float {

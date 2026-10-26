@@ -27,7 +27,7 @@ import { inc } from lib::Tools       // 引入模块里某个命名空间中的�
 - **模块导入自己是允许的，没有效果**（设计原则 10.1）：`module m` 里写 `import m`、`import { f } from m` 不绑定任何名字，它的名字本来就是它自己的（带不带 `m::` 都可以，[5.4](#54-命名空间)）。入口文件按文件名导入自己时也不会再加载一份。
 - **导入时可以改名**：`import { find as str_find } from str` 把模块里的 `find` 以 `str_find` 这个名字引入；改名的与不改名的可以写在同一条里（`import { find as str_find, trim } from str`），单个名字也可以（`import find as str_find from str`）。改名之后原名在本模块不可见。两个模块有同名函数时，给其中一个改名，或只导入一个、另一个用限定名（`import array` 后写 `array::find`）。整个模块的别名写 `import m as n`。
 - 两条按名字的导入带来同名、参数类型也相同的函数，是 `SemanticDiag::ImportNameConflict`，定位在后一条 `import`，并指出前一条；不会悄悄取其中一个。同名而参数类型不同的函数合成一组重载，按实参类型选择（同一层里的同名函数是一个重载集，[5.4](#54-命名空间)）。
-- **查找顺序**：模块的 `import` 先在模块自己的目录里找；找不到再按模块根找——`-I <目录>` 给出的目录按给出的顺序，然后是环境变量 `CAMEL_PACKAGES` 列出的目录，然后是 `CAMEL_MODULE_PATH`；最后是随 Camel 安装的标准库（设计原则 10.2）。入口程序与库模块同一条规则：入口文件自己的 import 先看与它同目录的文件，而这个目录不是别的模块的搜索根，所以标准库自己的 `import graph` 取的是标准库的 `graph`，不会被入口目录里的同名文件顶替，而入口程序自己的 `import graph` 仍然取入口目录里的那个；一个库无论被谁导入，它的 import 都解析到同一处。同一目录里 `xx.cmo` 优先于同名的 `xx.*`。import 写的是模块名，不是文件路径：`import ../lib` 是语法错误，这条规则不提供向上走出模块目录的写法；以点开头的名字按模块名解析，不是从目录向上走——点数是要从导入模块自己的名字里去掉的层数（`a.b` 里的 `..lib` 是 `lib`），点数超过名字的层数时这个名字不成立，导入以 `SemanticDiag::ModuleNotFound` 失败并说明原因，不会去搜索任何目录，也不会被当成路径。
+- **查找顺序**：模块的 `import` 先在模块自己的目录里找；找不到再按模块根找——`-I <目录>` 给出的目录按给出的顺序，然后是环境变量 `CAMEL_PACKAGES` 列出的目录；最后是随 Camel 安装的标准库（设计原则 10.2）。入口程序与库模块同一条规则：入口文件自己的 import 先看与它同目录的文件，而这个目录不是别的模块的搜索根，所以标准库自己的 `import graph` 取的是标准库的 `graph`，不会被入口目录里的同名文件顶替，而入口程序自己的 `import graph` 仍然取入口目录里的那个；一个库无论被谁导入，它的 import 都解析到同一处。同一目录里只有 `.cml` 和 `.cmo` 是模块文件，别的后缀的同名文件不是模块；`xx.cmo` 优先于同名的 `xx.cml`，而它旁边的 `xx.cml` 是它的声明模块。import 写的是模块名，不是文件路径：`import ../lib` 是语法错误，这条规则不提供向上走出模块目录的写法；以点开头的名字按模块名解析，不是从目录向上走——点数是要从导入模块自己的名字里去掉的层数（`a.b` 里的 `..lib` 是 `lib`），点数超过名字的层数时这个名字不成立，导入以 `SemanticDiag::ModuleNotFound` 失败并说明原因，不会去搜索任何目录，也不会被当成路径。
 
 ```cml
 import math
@@ -54,11 +54,11 @@ func main(): int sync {
 | `math` | 常量 `pi`、`e`、`inf`、`nan`（值）；初等函数、取整、`min`/`max`/`clamp`、`gcd`/`lcm`、进制转换、位运算 `bit_and` 等 |
 | `random` | 类型 `Key`；`seed`、`rand`、`randint`、`randn`、`choice`、`sample`、`shuffle`，以及纯的键式随机 `key`、`split`、`permutation` |
 | `time` | `now`、`strftime`、`strptime` |
-| `fs` | `exists`、`is_file`、`is_dir`、`mkdir`、`mkdirs`、`remove`、`remove_dir`、`read_text`、`try_read_text`、`write_text`、`file_size`、`read_chunk`、`read_bytes`、`write_bytes`、`replace` |
+| `fs` | `exists`、`is_file`、`is_dir`、`mkdir`、`mkdirs`、`remove`、`remove_dir`、`list_dir`、`read_text`、`write_text`、`append_text`、`file_size`、`read_chunk`、`read_bytes`、`write_bytes`、`append_bytes` |
 | `json` | 类型 `Json`；`encode`、`decode`、`decode_as`；`kind`、`is_null`、`get`、`as_bool`、`as_int`、`as_float`、`as_string`、`as_array`、`as_object` |
-| `process`、`env` | `whoami`、`cpu_count`、终端输入；`get_cwd`、`get_env` |
+| `process`、`env` | `user_name`、`cpu_count`、终端输入；`get_cwd`、`get_env` |
 | `re` | `test` |
-| `hash` | `sha256`、`sha256_rounds` |
+| `hash` | `sha256` |
 | `this` | `zen` |
 | `statistics` | `mean`、`stdev`、`variance`、`median`、`quantile` |
 | `para` | `unordered_foreach`、`unordered_reduce` |

@@ -45,7 +45,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "numbers.leading_zero_decimal"
-desc = "A decimal run with a leading zero is one lexical error covering the whole run (H15i): `077` is no longer `0` and `77`, and the message names `0o77` as the octal spelling."
+desc = "A decimal run with a leading zero is one lexical error covering the whole run : `077` is no longer `0` and `77`, and the message names `0o77` as the octal spelling."
 kind = "negative"
 case = "../../../cases/parse/numbers/leading_zero.cml"
 args = ["-E", "short", "${case}"]
@@ -59,7 +59,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "numbers.bad_octal_digit"
-desc = "`0o9` is one refused number run: the prefix takes octal digits only, and the run is not cut before the `9` (H15i)."
+desc = "`0o9` is one refused number run: the prefix takes octal digits only, and the run is not cut before the `9`."
 kind = "negative"
 case = "../../../cases/parse/numbers/bad_octal_digit.cml"
 args = ["-E", "short", "${case}"]
@@ -96,3 +96,17 @@ expect_stdout_contains = ["x -1 -0.5 false"]
 expect_output_not_contains = ["Error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+[[tests]]
+name = "numbers.leading_zero_real"
+desc = "A real token with a leading zero before another digit is refused as `077` is: the diagnostic covers the whole run `077.5`."
+kind = "negative"
+case = "../../../cases/parse/numbers/leading_zero_real.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "LexicalDiag::InvalidNumberFormat"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 20
+expect_output_contains = ["Invalid number format: '077.5'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000

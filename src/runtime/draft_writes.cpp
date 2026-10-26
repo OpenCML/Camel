@@ -74,7 +74,7 @@ type::FunctionType *operatorOverloadType(
     if (const auto resolver = camel::core::OperatorTable::instance().resolver(uri)) {
         try {
             const std::vector<type::StaticArg> statics(norm.size());
-            const auto resolved = resolver->resolveWith(with, norm, statics, Modifier::None);
+            const auto resolved = resolver->resolveWith(with, norm, statics);
             answer              = resolved ? *resolved : nullptr;
         } catch (const camel::core::mm::MemoryExhausted &) {
             throw; // not an answer about the overload

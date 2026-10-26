@@ -59,7 +59,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 207
+**Semantic — errors** (`SemanticDiag`) — 211
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -101,8 +101,6 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `TypeFunctionArguments` | The type function '{0}' cannot be used this way: {1}. |
 | `GenericFunctionUnsupported` | The generic function '{0}' cannot be {1}. |
 | `FunctionNameAsValue` | '{0}' is used as a value here, but it names {1}, not one function. |
-| `ThrowOutsideFallible` | 'throw' needs a function declared to return 'T!': {0}. |
-| `ThrowNotAnError` | 'throw' takes an error value, not a value of type '{0}'. |
 | `TaggedTypeNesting` | The type '{0}' marks '{1}' twice. |
 | `TaggedValueNotOpened` | A value of type '{0}' cannot be used here: {1}. |
 | `TaggedOperandMismatch` | '{0}' cannot be applied here: {1}. |
@@ -258,6 +256,9 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ImplKernelNotBodyless` | The '#impl' tag of '{0}' names '{1}', which has a body. |
 | `StreamInContainer` | '{0}' cannot be the element of {1}: a stream is consumed once, while the elements of a container are read more than once. |
 | `StreamConsumedTwice` | '{0}' is consumed twice: a stream is read once on each execution path. |
+| `StreamConsumedInLoop` | '{0}' is consumed once per round of this loop. |
+| `TeeHintNotPositive` | The `tee` width '{0}' is below 1. |
+| `StreamCaptured` | '{0}' cannot be captured: a stream is read once, and a closure outlives the read. |
 | `NodeOfNotAParameter` | '{0}' is not a const parameter of the rule '{1}', so node_of({0}) names no node. |
 | `BranchElementTypeMismatch` | The two arms of the branch have different element types: '{0}' and '{1}'. An array's element type is part of its type, and a number of one element type does not become a number of another by itself. |
 | `RuleConstParamNotMatched` | '{0}' is a `const` parameter of the rule '{1}', and the left side matches no constant for it. |
@@ -268,6 +269,9 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `EnumWrittenWhereATypeIsExpected` | An enum is declared in a type declaration ('type Shape = enum ...') and its type is the name that declaration gives it: the variants are written there and nowhere else. |
 | `StructComprehensionWithoutFields` | A struct comprehension takes its field names from 'fields T', and 'indices' walks positions, which have no names: write a tuple comprehension '( static for ... in indices ... )', or walk 'fields T'. |
 | `IdentifierPatternNeedsNullableOrErrorType` | The pattern '{0}' takes a value of type 'T?' or 'T!' apart, and this value has type '{1}': write '??' or '!!', or a 'match' pattern that is a literal or '_'. |
+| `FactJoinRequired` | The fact '{0}' writes no 'join'. |
+| `FactConstCaseTypeRequired` | The 'const' case '{0}' of the fact '{1}' writes no type. |
+| `FactCaseBindsNoVariable` | This case of the fact '{0}' names no variable. |
 
 **Semantic — warnings** (`SemanticDiag`) — 12
 
@@ -284,11 +288,12 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `DimensionNameUsedOnce` | The dimension name '{0}' is written once in this signature, so it relates nothing. |
 | `TypeVariableUnused` | The type parameter '{0}' is declared at the head but never written in the signature. |
 
-**Run time and passes — errors** (`RuntimeDiag`) — 38
+**Run time and passes — errors** (`RuntimeDiag`) — 36
 
 | `RuntimeError` | An error has occurred: {0}. |
 | `DivisionByZero` | Attempted division by zero. |
 | `IndexOutOfRange` | Index {0} is out of range for {1} of length {2}. |
+| `ProgramFault` | {0} |
 | `MaxRecursionDepthExceeded` | Maximum recursion depth ({1}) exceeded when evaluating graph '{0}'. |
 | `TensorDimensionMismatch` | Array shape mismatch in '{0}': {1}. |
 | `UnrecognizedGraphPass` | Unrecognized graph rewriting/scheduling/translation pass '{0}'. |
@@ -304,7 +309,6 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `OperandTypeUnsupported` | '{0}' does not support a value of type '{1}'; it takes {2}. |
 | `FieldNotFound` | The struct has no field '{0}'. |
 | `InvalidArgument` | Invalid argument of '{0}': {1}. |
-| `FileOpenFailed` | '{0}' cannot open the file '{1}': {2}. |
 | `FileSystemError` | '{0}' failed for '{1}': {2}. |
 | `RegexInvalid` | '{0}': '{1}' is not a valid regular expression: {2}. |
 | `TimeFormatFailed` | '{0}' failed: {1}. |
@@ -314,12 +318,10 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `UnhandledError` | An error value reached the exit of 'main' without being handled: {0}: {1}. |
 | `SliceOutOfRange` | The range {0} to {1} is out of range for {2} of length {3}. |
 | `InvalidPassParameter` | Invalid pass specification '{0}': {1}. |
-| `GraphPassFailed` | Pass '{0}' failed: {1}. |
 | `PassNeedsExtraction` | Pass '{0}' cannot take the program: some values of it have several writings. |
 | `PassNotProvidedByModule` | Module '{0}' provides no pass '{1}'; it provides {2}. |
 | `PassNotExportedByModule` | Module '{0}' declares '{1}' but does not export it, so it cannot be named as a pass; it provides {2}. |
 | `DeviceUnavailable` | CUDA device {0} was named by --devices but is not available: {1}. |
-| `GpuScopeUnsupported` | `#gpu` scope '{0}': {1} cannot run on the device ({2}). |
 | `GpuScopeNoDeviceProgram` | `#gpu` scope '{0}': {1} ({2}). |
 | `GraphNoDeviceProgram` | '{0}' has no device program for '{1}': {2}. |
 | `DeviceNotSelected` | No device to run '{0}' on: {1}. |

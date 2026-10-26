@@ -222,13 +222,17 @@ DraftGraphBuilder::addCallNode(camel::core::type::Type *type, const runtime::GCC
 runtime::DraftNodeRef
 DraftGraphBuilder::addFuncNode(const FuncTarget &target, runtime::gc_slot_idx_t dataIndex) {
     ASSERT(target != nullptr, "DraftGraphBuilder function target cannot be null.");
+    return addFuncNode(target, target->funcType()->exitType(), 0, dataIndex);
+}
+
+runtime::DraftNodeRef DraftGraphBuilder::addFuncNode(
+    const FuncTarget &target, camel::core::type::Type *type, uint32_t writtenCaptures,
+    runtime::gc_slot_idx_t dataIndex) {
+    ASSERT(target != nullptr, "DraftGraphBuilder function target cannot be null.");
     const uint8_t runtimeFlags =
         target->draft().isMacroGraph() ? runtime::kGCNodeFlagMacro : 0;
     const runtime::gc_node_ref_t id = draft_->addFuncNode(
-        runtime::kInvalidGraphId,
-        target->funcType()->exitType(),
-        runtimeFlags,
-        dataIndex);
+        runtime::kInvalidGraphId, type, runtimeFlags, dataIndex, writtenCaptures);
     const auto node = ref(id);
     registerFuncTarget(node, target);
     return node;

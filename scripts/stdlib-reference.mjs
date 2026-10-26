@@ -234,8 +234,7 @@ const MODULES = [
         name: 'hash',
         title: '`hash`',
         kind: 'cpp',
-        // The declarations, not a signature file: they are what the module compiles (
-        // `sha256` is two declarations with two `#op` URIs.
+        // Written in Camel over one private native kernel: no exported declaration is an operator.
         source: 'hash.cml',
         declaration: true,
     },
@@ -254,6 +253,14 @@ const MODULES = [
         // The declarations of `rendezvous` and of the two names that take the element type of
         // their array argument.
         source: 'para.cml',
+        declaration: true,
+    },
+    {
+        name: 'test_support',
+        title: '`test_support`: the facilities of a test',
+        kind: 'cpp',
+        // The declarations, not a signature file: they are what the module compiles.
+        source: 'test_support.cml',
         declaration: true,
     },
     {
@@ -533,11 +540,17 @@ function signatureBodyProblems() {
     return problems
 }
 
-function readDeclarations(file, module) {
+function readDeclarations(file, module, options = {}) {
     const lines = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n').split('\n')
     const relative = path.relative(REPO_ROOT, file).replace(/\\/g, '/')
     const keyword = 'export func'
     const entries = []
+    // The private operators of the module, when the caller asks for them: a body-less `func` a
+    // library module declares without exporting is the kernel an `#impl` function runs (design
+    // principles 10.4). They are not part of the reference page, so they are collected
+    // separately instead of joining `entries`.
+    const kernels = []
+    entries.kernels = kernels
     const sectionNotes = new Map()
     const sections = []
     entries.sectionNotes = sectionNotes
@@ -690,6 +703,9 @@ function readDeclarations(file, module) {
             const tagged = trimmed.match(/^#\[?op\(['"]([^'"]+)['"]\)/)
             if (tagged) {
                 pendingUri = tagged[1]
+            } else if (/^#impl\(/.test(trimmed)) {
+                // `#impl(kernel)`: a Camel definition that carries a native kernel for speed. The
+                // definition is what the page documents; the kernel is private to the module.
             } else if (module.kind === 'cpp') {
                 // A signature file writes `#op(...)` and nothing else: another tag there is a typo,
                 // not a declaration.
@@ -708,16 +724,29 @@ function readDeclarations(file, module) {
         pendingUri = null
         continue
     }
-    if (trimmed.startsWith(keyword + ' ')) {
-            const rest = trimmed.slice(keyword.length + 1)
+    if (trimmed.startsWith(keyword + ' ') ||
+        (options.kernels === true && /^func\s+\S/.test(trimmed))) {
+            const isKernel = !trimmed.startsWith(keyword + ' ')
+            const rest = trimmed.slice(isKernel ? 'func'.length + 1 : keyword.length + 1)
             const name = rest.slice(0, rest.indexOf('(')).replace(/::<.*>$/, '')
             const args = bracketed(rest, rest.indexOf('('))
             const after = rest.slice(args.end + 1)
+            // A private function with a body is not an operator at all: it ends the pending
+            // comment as any other private declaration of a library does.
+            if (isKernel && declarationBody(after, lines, i)) {
+                doc = []
+                withText = ''
+                pendingUri = null
+                continue
+            }
             // A pass declaration (design principles 9.3): a body-less function whose condition
             // is the pass applicability. A pass is a function the pipeline applies to the
             // program, not an operator the module registers; it is documented in docs/cli.md,
-            // and its parameters are the declaration's `with` list.
-            if (!declarationBody(after, lines, i) &&
+            // and its parameters are the declaration's `with` list. Only a compiled declaration
+            // can declare a pass: a file under stdlib/signatures/ is reference text that is never
+            // compiled, and describes operators the C++ resolver gives a computed type, where the
+            // same condition is the type's (`grad::<F>(f: F): Gradient<F> when is_function::<F>()`).
+            if (!relative.startsWith('stdlib/signatures/') && !declarationBody(after, lines, i) &&
                 /\bwhen\s+is_function::<\w+>\(\)\s*$/.test(after)) {
                 doc = []
                 withText = ''
@@ -738,7 +767,8 @@ function readDeclarations(file, module) {
                 // A body-less `export func` in a library module written in Camel declares one of
                 // the module's native operators (`array`'s sorts and primitives): there is no
                 // subgraph, and the kernel is the operator's.
-                native: module.kind === 'camel' && !declarationBody(after, lines, i),
+native: !declarationBody(after, lines, i),
+                private: isKernel,
                 doc: [],
                 purity: null,
                 effect: '',
@@ -758,11 +788,15 @@ function readDeclarations(file, module) {
                 else entry.doc.push(text)
             }
             // A native entry names its operator like a C++ module's declaration does.
-            if (module.kind === 'cpp' || entry.native) {
+            if (entry.native) {
                 // `module:function`, or what the `#op` tag above says.
                 entry.uri = pendingUri || `${module.name}:${name}`
             }
-            entries.push(entry)
+            if (isKernel) {
+                kernels.push(entry)
+            } else {
+                entries.push(entry)
+            }
             doc = []
             withText = ''
             pendingUri = null
@@ -806,6 +840,20 @@ function parseDeclarations(module) {
     entries.sectionNotes = sectionNotes
     entries.sections = sections
     return entries
+}
+
+// The private operators of a module: the kernels its `#impl` functions run. They are body-less
+// declarations the module does not export, so the reference page does not list them (a private name
+// is not the module's interface) and `--verify-ops` checks them against the operators the module
+// registers, marked private in the listing.
+//
+// The module's own file is read whichever language implements the module: `str`, `re` and `hash`
+// are compiled by C++ and still declare their kernels in Camel, with the `#op` tag that names the
+// operator they answer. A signature file declares no private kernel at all (it writes `#op(...)`
+// and exported prototypes only), so reading every module's source collects exactly the kernels
+// that exist. The kind of the module says what compiles it, not what its declaration file is.
+function parseKernels(module) {
+    return readDeclarations(sourceOf(module), module, { kernels: true }).kernels
 }
 
 // The comment at the top of the file, without the two-line header, the blank line after it and the
@@ -865,7 +913,7 @@ function renderDoc() {
     out.push('  principles 3.1). Every operator of these modules declares which it is.')
     out.push('- **Failure**: a *fault* stops the program with a located diagnostic (an index out of range, an')
     out.push('  argument outside what the operator defines). An *error* is a value: the function returns')
-    out.push('  `T!` and the program handles it with `!!`, `?->` or `match`. A result that may not exist is')
+    out.push('  `T!` and the program handles it with `!!`, `->` or `match`. A result that may not exist is')
     out.push('  `T?`, handled with `??`. An entry without a failure line does not fail.')
     out.push("- **Named arguments**: a call may give a parameter by name (`f(x: 1)`, `len(x: xs)`) when")
     out.push('  the name gives that position the same name in every form the callee has, whether the callee is')
@@ -975,9 +1023,13 @@ out.push('Not in this reference: the profiler (`perf`).')
                     out.push('- Written in Camel: a subgraph, pure when the functions passed to it are.')
                 } else if (entry.purity === 'pure') {
                     out.push('- Pure.')
-                } else {
+                } else if (entry.purity === 'effect') {
                     out.push(`- With effects: ${entry.effect || 'not pure'}.`)
                 }
+                // A declaration that writes neither `@pure` nor `@effect` states nothing about
+                // purity, and an operator's purity is registered in C++
+                // (`OperatorTable::declare`), which this page is not generated from: the page
+                // says nothing rather than guessing "not pure".
                 for (const fails of entry.fails) {
                     out.push(`- Failure: ${fails}.`)
                 }
@@ -997,7 +1049,7 @@ out.push('Not in this reference: the profiler (`perf`).')
     return out.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd() + '\n'
 }
 
-const STATEMENT_STARTS = /^(let|var|if|for|while|return|sync|match|throw)\b/
+const STATEMENT_STARTS = /^(let|var|if|for|while|return|sync|match)\b/
 const BUILTIN_TYPES = new Set([
     'int', 'i8', 'i16', 'i32', 'i64', 'u8', 'u16', 'u32', 'u64', 'usize',
     'float', 'f32', 'f64', 'bool', 'string', 'char', 'void', 'null', 'any', 'never',
@@ -1086,7 +1138,7 @@ const NAME = /^[A-Za-z_]\w*$/
 // A keyword is not a name: `set_terminal_raw_mode(true)` must not make `true` a parameter.
 const RESERVED = new Set([
     'true', 'false', 'null', 'func', 'let', 'var', 'if', 'else', 'for', 'while', 'match', 'return',
-    'throw', 'sync', 'with', 'type', 'struct', 'enum', 'rule', 'export', 'module', 'import', 'as', 'is',
+    'sync', 'with', 'type', 'struct', 'enum', 'rule', 'export', 'module', 'import', 'as', 'is',
 ])
 
 function bindArguments(entry, code) {
@@ -1216,7 +1268,9 @@ async function exampleSource(module, entries, entry, code, asStatement = false) 
     }
     for (const [name, owner] of types) lines.push(`import { ${name} } from ${owner}`)
     const params = bindings.map((binding) => `${binding.name}: ${binding.type}`).join(', ')
-    const fallible = /^throw\b/.test(code.trim())
+    // An example that returns an error value leaves a function declared to return a `T!`, so it
+    // compiles in a fallible body.
+    const fallible = /^return\s+error\(/.test(code.trim())
     lines.push(`func __doc_example(${params}): ${fallible ? 'int!' : 'void'} {`)
     // A call of a `void` function has no value to bind, so it is a statement, not an expression.
     if (asStatement || entry.result === 'void' || STATEMENT_STARTS.test(code.trim())) {
@@ -1570,15 +1624,24 @@ function verifyOps() {
         )
         const ops = allOps.filter((op) => !op.name.includes('::'))
         if (allOps.length === 0) {
+            // A module whose only native kernels are private exports no operator to verify.
+            if (!parseDeclarations(module).some((e) => !e.value && e.native)) continue
             problems.push(`${file}: the module '${registeredName}' registers no operator (is it imported by ${path.relative(REPO_ROOT, PROBE)}?)`)
             continue
         }
-        // Values are not operators: inspect --ops does not list them. A module written in Camel
-        // is verified only for its native declarations: its Camel functions are bodies, not
-        // operators.
+        // Values are not operators: inspect --ops does not list them. Only the body-less
+        // declarations are verified, whichever language the module is written in: a function
+        // with a body is a Camel function, not an operator.
         const entries = parseDeclarations(module).filter(
-            (e) => !e.value && (module.kind === 'cpp' || e.native),
+            (e) => !e.value && e.native,
         )
+        // The same module's private operators: a kernel an `#impl` function runs is declared
+        // body-less in the module's own file and registered by the compiler, so `inspect --ops`
+        // lists it marked private and it is checked here like any other declaration. Leaving it
+        // out was the gap: a private kernel's signature and purity went unread.
+        const kernels = parseKernels(module)
+        // A module whose only operators are private kernels is verified too: `allOps` above holds
+        // them, so it is not skipped for registering nothing.
         const declaredNames = new Set(entries.filter((e) => e.file === file).map((e) => e.name))
         // A module may publish an operator under a type namespace too (`Tensor.shape`). That
         // name is C++'s, because a declaration cannot write it, and the compiler points it at
@@ -1625,9 +1688,16 @@ function verifyOps() {
             }
         }
         for (const op of ops) {
-            const sameName = entries.filter((e) => e.name === op.name)
+            // A private operator is answered by the module's private declarations: an exported
+            // declaration that happened to have the same name is a different operator.
+            const pool = op.private === true ? kernels : entries
+            const sameName = pool.filter((e) => e.name === op.name)
             if (sameName.length === 0) {
-                problems.push(`${file}: '${op.name}' (${op.uri}) is registered but not declared`)
+                problems.push(
+                    `${file}: '${op.name}' (${op.uri}) is registered${
+                        op.private === true ? ' as a private kernel' : ''
+                    } but not declared`,
+                )
                 continue
             }
             const matching = sameName.filter(
@@ -1683,13 +1753,26 @@ function verifyOps() {
                     continue
                 }
                 const declaredPure = entry.purity === 'pure'
+                // A declaration that writes neither tag states nothing about purity: an
+                // operator's purity is registered in C++ and a declaration need not repeat it
+                // (design principles 6.4, 10.4), so there is nothing to compare. A tag that *is*
+                // written is a claim about the operator, and it has to agree with it.
                 if (entry.purity === null) {
-                    problems.push(`${entry.file}:${entry.line}: '${entry.name}' says neither @pure nor @effect`)
-                } else if (declaredPure !== (op.purity === 'pure')) {
+                    continue
+                }
+                if (declaredPure !== (op.purity === 'pure')) {
                     problems.push(
                         `${entry.file}:${entry.line}: '${entry.name}' is ${declaredPure ? '@pure' : '@effect'} but ${op.uri} is registered ${op.purity}`,
                     )
                 }
+            }
+        }
+        for (const kernel of kernels) {
+            const hit = allOps.some((op) => op.private === true && op.name === kernel.name && uriMatches(kernel.uri, op.uri))
+            if (!hit) {
+                problems.push(
+                    `${kernel.file}:${kernel.line}: the private kernel '${kernel.name}' (${kernel.uri}) is declared but no such operator is registered`,
+                )
             }
         }
         for (const entry of entries) {

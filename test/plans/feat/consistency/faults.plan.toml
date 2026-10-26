@@ -312,7 +312,7 @@ expect_output_contains = ["Cannot convert 5000000000 to i32: the value is outsid
 
 [[tests]]
 name = "fault.int_text_out_of_range"
-desc = "int('99999999999999999999') is a fault of its own cause: it is a number, and int cannot hold it, so the message says out of range and gives the range instead of 'not a number' (H15f)."
+desc = "int('99999999999999999999') is a fault of its own cause: it is a number, and int cannot hold it, so the message says out of range and gives the range instead of 'not a number'."
 case = "../../../cases/consistency/faults/int_text_out_of_range.cml"
 expect_diagnostic_name = "RuntimeDiag::ConversionOutOfRange"
 expect_diagnostic_line = 7
@@ -322,7 +322,7 @@ expect_output_contains = ["Cannot convert '99999999999999999999' to int: the val
 
 [[tests]]
 name = "fault.float_text_overflow"
-desc = "float('1e999') is a fault of its own cause: it is a number, and float cannot hold it, so the message says out of range and gives the range instead of 'not a number' (H15f)."
+desc = "float('1e999') is a fault of its own cause: it is a number, and float cannot hold it, so the message says out of range and gives the range instead of 'not a number'."
 case = "../../../cases/consistency/faults/float_text_overflow.cml"
 expect_diagnostic_name = "RuntimeDiag::ConversionOutOfRange"
 expect_diagnostic_line = 7
@@ -332,7 +332,7 @@ expect_output_contains = ["Cannot convert '1e999' to float: the value is outside
 
 [[tests]]
 name = "fault.float_text_underflow"
-desc = "float('1e-9999') is the same out-of-range cause: a number too small for float, said as out of range rather than 'not a number' (H15f)."
+desc = "float('1e-9999') is the same out-of-range cause: a number too small for float, said as out of range rather than 'not a number'."
 case = "../../../cases/consistency/faults/float_text_underflow.cml"
 expect_diagnostic_name = "RuntimeDiag::ConversionOutOfRange"
 expect_diagnostic_line = 8
@@ -391,7 +391,7 @@ expect_stdout_starts_with = "done\n"
 
 [[tests]]
 name = "end.exit_code"
-desc = "exit(3) in a function, without importing process: the output before it is there, nothing after it runs, the exit code is 3, and there is no diagnostic."
+desc = "exit(3) from process in a function: the output before it is there, nothing after it runs, the exit code is 3, and there is no diagnostic."
 kind = "behavior"
 case = "../../../cases/consistency/faults/exit_code.cml"
 expect_exit = 3
@@ -402,21 +402,10 @@ assert(input.diagnostics.length === 0, 'no diagnostic expected')
 """
 
 [[tests]]
-name = "end.exit_imported"
-desc = "The same with exit imported from process."
+name = "end.sleep_seconds"
+desc = "sleep takes a number of seconds as a float: a fraction of a second waits and the program goes on."
 kind = "behavior"
-case = "../../../cases/consistency/faults/exit_imported.cml"
-expect_exit = 3
-verify_script = """
-assert(input.normalized.stdout === 'before\nstopping\n', JSON.stringify(input.normalized.stdout))
-assert(input.diagnostics.length === 0, 'no diagnostic expected')
-"""
-
-[[tests]]
-name = "end.sleep_global"
-desc = "The global sleep, implemented in the os module like exit, works without importing it."
-kind = "behavior"
-case = "../../../cases/consistency/faults/sleep_global.cml"
+case = "../../../cases/consistency/faults/sleep_seconds.cml"
 expect_exit = 0
 expect_stdout_starts_with = "before\nafter\n"
 

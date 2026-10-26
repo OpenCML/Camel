@@ -1,12 +1,12 @@
 /**
- * The declaration of `time:strftime` takes two ordinary arguments: a single one is refused at the
- * call, and the overload the message lists is the declaration's (step 10).
+ * The declaration of `time:strftime` takes one ordinary argument: a second one is refused at the
+ * call, and the overload the message lists is the declaration's.
  */
 module time_arity
 
 import { strftime } from time
 
 func main(): int sync {
-    println(strftime(0.0))
+    println(strftime<'%Y'>(0.0, 1.0))
     return 0
 }

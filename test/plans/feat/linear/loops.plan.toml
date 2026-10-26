@@ -65,7 +65,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "loops.struct_state"
-desc = "A struct is the loop's state (H44 item 3): both fields change every round (6 8), only one does (0 7), and a named state's body may write the fields in another order (3 106) or nest a named field in another order (3 16 3), because an unnamed struct value enters the named type by name with a field-by-field copy (design principles 5.2). Also a `sync` body whose last value is the next struct (round 1, round 2, then 2 3), an `if` body whose arms are structs (12 4), an `if` body with one named arm and one unnamed arm in another order (2 4), and a `sync` function returning a struct in another order (2 1). The four back ends agree on the values and on the (empty) diagnostics."
+desc = "A struct is the loop's state : both fields change every round (6 8), only one does (0 7), and a named state's body may write the fields in another order (3 106) or nest a named field in another order (3 16 3), because an unnamed struct value enters the named type by name with a field-by-field copy (design principles 5.2). Also a `sync` body whose last value is the next struct (round 1, round 2, then 2 3), an `if` body whose arms are structs (12 4), an `if` body with one named arm and one unnamed arm in another order (2 4), and a `sync` function returning a struct in another order (2 1). The four back ends agree on the values and on the (empty) diagnostics."
 kind = "behavior"
 case = "../../../cases/loops/struct_state.cml"
 args = ["${case}", "${backend}"]
@@ -89,7 +89,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "loops.zero_leaf_state"
-desc = "A loop's state may be a struct with no leaves, the zero-leaf case of the split that makes a struct's fields the state's components (design principles 3.10, H71). The rule allows it — 「(a) 允许空结构体状态：它是「按叶子拆成分量」的零叶子情形，不加规则、不加诊断。」 — so nothing refuses it and nothing diagnoses it: the state carries nothing, the loop runs one round per element (round 7, round 8, which only the body's effects can show), its value is still that zero-leaf struct ({} {}, and equal to a fresh one), and the four back ends agree."
+desc = "A loop's state may be a struct with no leaves, the zero-leaf case of the split that makes a struct's fields the state's components (design principles 3.10). The rule allows it — 「(a) 允许空结构体状态：它是「按叶子拆成分量」的零叶子情形，不加规则、不加诊断。」 — so nothing refuses it and nothing diagnoses it: the state carries nothing, the loop runs one round per element (round 7, round 8, which only the body's effects can show), its value is still that zero-leaf struct ({} {}, and equal to a fresh one), and the four back ends agree."
 kind = "behavior"
 case = "../../../cases/loops/zero_leaf_state.cml"
 args = ["${case}", "${backend}"]
@@ -145,7 +145,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "loops.captures"
-desc = "The condition and the body read what they use where they are (3.10): `limit` is a constant the condition reads in place, `step` and `scale` are constants the body reads in place (a constant is not a capture, H91); the `var` `bias` is a cell and the outer state is a value, and those are the captures. Nested loops capture the outer state, in a `for` and in a two-state `while` (24 306 42 25 4)."
+desc = "The condition and the body read what they use where they are (3.10): `limit` is a constant the condition reads in place, `step` and `scale` are constants the body reads in place (a constant is not a capture); the `var` `bias` is a cell and the outer state is a value, and those are the captures. Nested loops capture the outer state, in a `for` and in a two-state `while` (24 306 42 25 4)."
 kind = "behavior"
 case = "../../../cases/loops/captures.cml"
 args = ["${case}", "${backend}"]
@@ -158,7 +158,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "loops.constant_is_not_a_capture"
-desc = "A constant is not a capture (H91, design principles 3.10): test::loop_inputs shows with_runtime with one capture (the parameter `n`, which its condition reads) and one constant left out (the body's `k`), and constants_only with no capture and the same one constant. The LOOP node's With inputs stay the results of its regions and the round port, so no constant is bound to the node. The same pipeline runs on std::nvm and prints 21 70: the shape and the values are checked together."
+desc = "A constant is not a capture (design principles 3.10): test::loop_inputs shows with_runtime with one capture (the parameter `n`, which its condition reads) and one constant left out (the body's `k`), and constants_only with no capture and the same one constant. The LOOP node's With inputs stay the results of its regions and the round port, so no constant is bound to the node. The same pipeline runs on std::nvm and prints 21 70: the shape and the values are checked together."
 kind = "behavior"
 case = "../../../cases/loops/captures_constants.cml"
 args = ["${case}", "test::loop_inputs", "std::nvm"]
@@ -511,13 +511,16 @@ timeout_ms = 8000
 
 [[tests]]
 name = "loops.onnx_refused"
-desc = "The program runs onnx.export_model on a function with a loop: the exporter refuses the loop where it is written (line 8), before the export's own simplification rewrites the function's graphs, and no model is written. No pass is needed: the exporter reads the program's own graph when the program calls it, so the default pipeline reaches the refusal. (The entry used to name std::macro, which does nothing here: the program declares no macro.)"
+desc = "The program runs onnx.export_model on a function with a loop: the exporter refuses the loop where it is written (line 8), before the export's own simplification rewrites the function's graphs, and no model is written. No pass is needed: the exporter reads the program's own graph when the program calls it, so the default pipeline reaches the refusal. (The entry used to name std::macro, which does nothing here: the program declares no macro.) The refusal is the error value of the export_model call (`ExportUnsupported`), which nothing handles, so the exit reports it as an unhandled error at the loop."
 kind = "negative"
 case = "../../../cases/loops/onnx_refused.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_output_contains = ["onnx.export_model:", "a 'loop' expression is not exported to ONNX yet", "onnx_refused.cml:8:13"]
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_diagnostic_code = "0x04000051"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 13
+expect_output_contains = ["ExportUnsupported", "a 'loop' expression is not exported to ONNX yet"]
 expect_output_not_contains = ["RewriteInvalid", "rules::simplify"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
@@ -605,13 +608,16 @@ timeout_ms = 20000
 
 [[tests]]
 name = "loops.onnx_refused_prl"
-desc = "The same refusal by export_model run by std::prl: the back end lowers the loop in its own copy, so the export still reads the program's own graph and refuses the loop at line 8."
+desc = "The same refusal by export_model run by std::prl: the back end lowers the loop in its own copy, so the export still reads the program's own graph and refuses the loop at line 8. The refusal is the error value of the export_model call (`ExportUnsupported`), which nothing handles, so the exit reports it as an unhandled error."
 kind = "negative"
 case = "../../../cases/loops/onnx_refused.cml"
 args = ["-E", "short", "${case}", "std::prl"]
 expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_output_contains = ["onnx.export_model:", "a 'loop' expression is not exported to ONNX yet", "onnx_refused.cml:8:13"]
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_diagnostic_code = "0x04000051"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 13
+expect_output_contains = ["ExportUnsupported", "a 'loop' expression is not exported to ONNX yet"]
 expect_output_not_contains = ["RewriteInvalid", "rules::simplify"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
@@ -654,7 +660,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
 [[tests]]
 name = "loops.reduce_element_view"
-desc = "A value reduce keeps across rounds is a value, not a compact-element view (H29): a callback that returns its element gives the same result on every backend for a slot-shaped `(int, int)` array (one reused view cell), a slot-shaped struct, a non-slot-shaped struct (the view ring), a nested aggregate, a loop-written left fold with a tuple state, the same accumulator after filter/map, an identity map whose callback result is the view that was read, and 200 elements whose kept element is older than the 128-cell ring."
+desc = "A value reduce keeps across rounds is a value, not a compact-element view: a callback that returns its element gives the same result on every backend for a slot-shaped `(int, int)` array (one reused view cell), a slot-shaped struct, a non-slot-shaped struct (the view ring), a nested aggregate, a loop-written left fold with a tuple state, the same accumulator after filter/map, an identity map whose callback result is the view that was read, and 200 elements whose kept element is older than the 128-cell ring."
 kind = "behavior"
 case = "../../../cases/loops/reduce_view.cml"
 args = ["${case}", "${backend}"]
@@ -667,12 +673,12 @@ timeout_ms = 60000
 
 [[tests]]
 name = "loops.grad_loop_collect"
-desc = "A loop state that starts as `[]` and is only appended to is a collection output (design principles 3.10): the element type comes from the appended value (5.1, 5.2), the driver builds the array in one pass, and the state stays the program's value and gradient channel. The gradient reads the appended values back through the state, and 1000 rounds cost 2 blocks, not one copy per round (`std::mem::blocks()`, 10.5). One block fewer than the `range(0, n)` this loop head used to hold: the interval `0..n` a `for` iterates is fused by the compiler and no array of its elements is built (design principles 4.2)."
+desc = "A loop state that starts as `[]` and is only appended to is a collection output (design principles 3.10): the element type comes from the appended value (5.1, 5.2), the driver builds the array in one pass, and the state stays the program's value and gradient channel. The gradient reads the appended values back through the state, and 1000 rounds cost 1 block, not one copy per round (`std::mem::blocks()`, 10.5). One block fewer than the `range(0, n)` this loop head used to hold: the interval `0..n` a `for` iterates is fused by the compiler and no array of its elements is built (design principles 4.2). One block fewer again than the count this case recorded before the one in-place rule (`Array::writableInPlace`, docs/design/arrays-memory/README.cn.md 4.3.1): the state's storage is the loop's own, so the append is taken in place instead of the array being handed a copy that the update then had to make; the three values are unchanged."
 kind = "behavior"
 case = "../../../cases/loops/grad_loop_collect.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 0
-expect_stdout_exact = "6.0\n3.0\n1998.0\n2\n"
+expect_stdout_exact = "6.0\n3.0\n1998.0\n1\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -748,7 +754,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "loops.compiled.native"
-desc = "The shapes of a compiled loop whose rounds are native code, not calls of the loop helpers (H55, jit_framed.plan.toml asserts which is which): three state components under a `while` (the condition reads one, the body writes all three), a loop the test stops before its first round (its value is the first state), a condition over one component while the body writes both, the same loop called twice with a frame each, and a division in the body that faults on the third round. The values and the located diagnostic are the interpreters' on every back end."
+desc = "The shapes of a compiled loop whose rounds are native code, not calls of the loop helpers (jit_framed.plan.toml asserts which is which): three state components under a `while` (the condition reads one, the body writes all three), a loop the test stops before its first round (its value is the first state), a condition over one component while the body writes both, the same loop called twice with a frame each, and a division in the body that faults on the third round. The values and the located diagnostic are the interpreters' on every back end."
 kind = "negative"
 case = "../../../cases/loops/compiled_native.cml"
 args = ["${case}", "${backend}"]

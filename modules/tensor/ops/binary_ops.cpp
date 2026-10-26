@@ -70,12 +70,12 @@ class FromBytesResolver final : public FuncTypeResolver {
   public:
     explicit FromBytesResolver(TypeCode dtype) : dtype_(dtype) {}
     std::optional<FunctionType *>
-    resolve(const type_vec_t &, const type_vec_t &, const ModifierSet &) const override {
+    resolve(const type_vec_t &, const type_vec_t &) const override {
         return std::nullopt;
     }
     std::optional<FunctionType *> resolveForCall(
         const type_vec_t &types, Type *expected, const type_vec_t &with, const type_vec_t &norm,
-        static_args_t statics, const ModifierSet &modifiers) const override {
+        static_args_t statics) const override {
         if (!with.empty() || norm.size() != 2 || !BytesType::get()->equals(norm[0]) ||
             norm[1]->code() != TypeCode::Array)
             return std::nullopt;
@@ -92,8 +92,7 @@ class FromBytesResolver final : public FuncTypeResolver {
                 return FunctionType::create(
                     {},
                     {{norm[0], false}, {norm[1], false}},
-                    aggregateResultType(types[0]),
-                    modifiers);
+                    aggregateResultType(types[0]));
             }
         }
         std::optional<TypeCode> requested;
@@ -111,15 +110,13 @@ class FromBytesResolver final : public FuncTypeResolver {
             return FunctionType::create(
                 {},
                 {{norm[0], false}, {norm[1], false}},
-                result,
-                modifiers);
+                result);
         } catch (const std::invalid_argument &) {
             return std::nullopt;
         }
     }
     std::optional<std::string> explainRejection(
-        const type_vec_t &with, const type_vec_t &norm, static_args_t statics,
-        const ModifierSet &) const override {
+        const type_vec_t &with, const type_vec_t &norm, static_args_t statics) const override {
         if (!with.empty() || norm.size() != 2 || !BytesType::get()->equals(norm[0]))
             return std::nullopt;
         try {

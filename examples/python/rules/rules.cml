@@ -1,5 +1,5 @@
 /**
- * The rules of a small basket-pricing engine, as a Camel module (H253).
+ * The rules of a small basket-pricing engine, as a Camel module.
  *
  * A Python project that has one part made of rules -- pricing tiers, eligibility, scoring,
  * anything that is a table of small decisions -- can keep that part here: the rules are checked

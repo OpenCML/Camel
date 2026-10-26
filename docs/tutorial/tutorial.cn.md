@@ -463,7 +463,7 @@ g
 3
 ```
 
-写在 lambda 之前的 `sync`（`sync (x: int) => ...`）是另一种用法：它修饰函数类型，保持不变。
+lambda 的函数体需要按顺序执行时，把 `sync` 写在块前：`(x: int) => sync { ... }`。lambda 头上没有 `sync`。
 
 ### 6.5 `var`、引用与顺序
 
@@ -540,7 +540,7 @@ func main(): int sync {
     println(ops->map<(f: (x: int) => int): int => f(10)>)
 
     var total = 0                            // captured by reference
-    [1, 2, 3]->foreach<sync (x: int) => sync { total = total + x }>
+    [1, 2, 3]->foreach<(x: int) => sync { total = total + x }>
     println(total)
     return 0
 }
@@ -627,7 +627,7 @@ Camel 没有异常，没有 `try`/`catch`。可能失败的函数把返回类型
 
 func safe_div(a: int, b: int): int! {
     return if b == 0 then {
-        throw error('DivByZero', 'the divisor is zero')
+        return error('DivByZero', 'the divisor is zero')
     } else {
         return a / b
     }
@@ -645,8 +645,8 @@ func describe(r: int!): string {
 func main(): int sync {
     println(safe_div(9, 3) !! -1)            // 3
     println(safe_div(9, 0) !! -1)            // -1: the substitute
-    println(describe(safe_div(8, 2) ?-> inc))
-    println(describe(safe_div(8, 0) ?-> inc))
+    println(describe(safe_div(8, 2) -> inc))
+    println(describe(safe_div(8, 0) -> inc))
     println(parse_int('12') !! 0, parse_int('twelve') !! 0)
     println(safe_div(1, 0))
     return 0
@@ -662,10 +662,10 @@ DivByZero: the divisor is zero
 error DivByZero: the divisor is zero
 ```
 
-- **`throw e` 是返回一个错误值**，与 `return` 是同一种结构。它不展开调用栈；调用方拿到的就是一个 `int!` 的值。
+- **交出一个错误值用 `return e`**：它不展开调用栈；调用方拿到的就是一个 `int!` 的值。
 - `int!` 不能当 `int` 用，必须先拆开：
   - `a !! b`：出错取 `b`，否则取里面的值；
-  - `x ?-> f`：出错就把错误原样传下去，否则调用 `f`，可以连成一串；
+  - `x -> f`：出错就把错误原样传下去，否则调用 `f`，可以连成一串；
   - `match` 的 `case error e`（`e.kind`、`e.message`、`e.location`）与 `case v`。
 - 在图上，这三种写法都是一个分支，条件是值上的一位标记，与 `if` 是同一种结构。
 
@@ -809,7 +809,7 @@ func main(): int sync {
 
 ```cml
 
-import { split, trim, to_upper, replace, find } from str
+import { split, trim, to_upper, replace, index_of } from str
 import { sort_by, take, sum, reverse, unique } from array
 import { abs, hypot, bit_and, pi } from math
 import { mean } from statistics
@@ -822,8 +822,8 @@ func main(): int sync {
     println('hello'->to_upper, 'a-b-c'->replace<'-', '+'>, len('héllo'))
 
     // A result that may not exist is a T?.
-    let at_l = 'hello'->find<'l'> ?? -1
-    let at_z = 'hello'->find<'z'> ?? -1
+    let at_l = 'hello'->index_of<'l'> ?? -1
+    let at_z = 'hello'->index_of<'z'> ?? -1
     println(at_l, at_z)
 
     // Arrays and numbers.

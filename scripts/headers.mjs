@@ -49,22 +49,34 @@ const REPO_ROOT = path.resolve(SCRIPT_DIR, '..')
 const COPYRIGHT = 'Copyright (c) the OpenCML Organization'
 const SPDX = 'SPDX-License-Identifier: MIT'
 
-// C/C++, Camel and the JavaScript tools share `//`; Python and CMake use `#`.
+// C/C++, Camel and the JavaScript tools share `//`; Python and CMake use `#`; CSS has only block
+// comments, so its two lines are each a `/* ... */`.
 const CPP_EXT = /\.(?:c|cc|cpp|h|hpp|inl)$/
 // `.ts` is the VS Code extension's source. It is hand-written source of the same kind as the .mjs
 // scripts, so it is named here rather than left undecided; the policy's four script languages did
 // not mention it because the extension was the only place it appears. `.cjs` is named for the same
 // reason: it is a CommonJS script a test fixture loads with `--require`, hand-written source of the
 // same kind as the `.mjs` fixtures beside it, and leaving it undecided fails the guard on a file
-// whose header is canonical.
-const SCRIPT_EXT = /\.(?:js|mjs|cjs|ts|py|cmake)$/
+// whose header is canonical. `.tsx` is TypeScript with JSX, named with `.ts`: the promo film's
+// Motion Canvas scenes (promo/motion/) are written in it. `.css` is named for the same project: its
+// font-face sheet is hand-written source beside those scenes, and it takes the header in CSS's one
+// comment form.
+const SCRIPT_EXT = /\.(?:js|mjs|cjs|ts|tsx|css|py|cmake)$/
 
 function commentPrefix(ext) {
-    return ext === '.py' || ext === '.cmake' ? '#' : '//'
+    if (ext === '.py' || ext === '.cmake') return '#'
+    if (ext === '.css') return '/*'
+    return '//'
+}
+
+// Whether a language has `/* ... */` blocks, so that an old header or a note may be one.
+function hasBlocks(c) {
+    return c === '//' || c === '/*'
 }
 
 function canonicalLines(ext) {
     const c = commentPrefix(ext)
+    if (c === '/*') return [`/* ${COPYRIGHT} */`, `/* ${SPDX} */`]
     return [`${c} ${COPYRIGHT}`, `${c} ${SPDX}`]
 }
 
@@ -167,7 +179,7 @@ const RULES = [
         ext: SCRIPT_EXT,
         member: true,
         kind: 'script',
-        reason: 'a hand-written script (.js/.mjs/.py/.cmake): build, test, editor or package tooling',
+        reason: 'a hand-written script (.js/.mjs/.cjs/.ts/.tsx/.css/.py/.cmake): build, test, editor, package or promo tooling',
     },
 
     // Deny: Camel outside the standard library is a program, not the library.
@@ -202,7 +214,16 @@ const NOT_SOURCE = new Set([
     '.jpeg',
     '.gif',
     '.svg',
+    // A page shell: the promo's renderer page (promo/poc/index.html) is markup that loads the
+    // script, a document format like .svg rather than source in a language this policy names.
+    '.html',
     '.ico',
+    // Brand assets in a moving-image format: a video is not source in any language this policy
+    // names, and it is the one such file the repository carries.
+    '.mp4',
+    // A font is binary data no comment can enter, like the video above: the promo film bundles a
+    // derived font beside its scenes (promo/motion/src/fonts/, with its licence in OFL.txt).
+    '.ttf',
     '.def',
     '.in',
     '.cmo',
@@ -319,7 +340,7 @@ function sweepLeadingStale(lines, ext) {
             i++
             continue
         }
-        if (c === '//' && t.startsWith('/*')) {
+        if (hasBlocks(c) && t.startsWith('/*')) {
             let end = i
             while (end < lines.length && !lines[end].includes('*/')) end++
             if (end >= lines.length) break
@@ -463,7 +484,7 @@ function splitHead(lines, ext) {
     while (s < after.length && after[s].trim() === '') s++
     if (s < after.length) {
         const first = after[s].trim()
-        if (c === '//' && first.startsWith('/*')) {
+        if (hasBlocks(c) && first.startsWith('/*')) {
             let end = s
             while (end < after.length && !after[end].includes('*/')) end++
             if (end < after.length) {
@@ -528,7 +549,7 @@ function staleElements(lines, ext) {
             i++
             continue
         }
-        if (c === '//' && t.startsWith('/*')) {
+        if (hasBlocks(c) && t.startsWith('/*')) {
             let end = i
             while (end < lines.length && !lines[end].includes('*/')) end++
             if (end >= lines.length) break
@@ -655,7 +676,7 @@ const USAGE = `usage: node scripts/headers.mjs --check|--fix [--root DIR] [--dry
   --help      this text
 
 A member file is a hand-written source file: C/C++ under src/, include/, tools/, modules/ and
-stdlib/*/native/; the standard library's .cml; and .js/.mjs/.py/.cmake scripts everywhere except
+stdlib/*/native/; the standard library's .cml; and .js/.mjs/.cjs/.ts/.tsx/.css/.py/.cmake scripts everywhere except
 the denied trees (third_party/, docs/, examples/, showcase/, test/cases/, test/plans/).
 
 The guard is red for a missing header, a header line that is not the canonical text, a year in a

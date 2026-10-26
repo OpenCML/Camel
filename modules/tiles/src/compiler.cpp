@@ -770,7 +770,7 @@ class Compiler {
             statics.emplace_back(arg.staticSlot);
         }
         try {
-            const auto resolved = resolver->resolveWith({}, types, statics, ModifierSet{});
+            const auto resolved = resolver->resolveWith({}, types, statics);
             if (!resolved || !*resolved)
                 return nullptr;
             return (*resolved)->exitType();
@@ -795,7 +795,7 @@ class Compiler {
             statics.emplace_back(arg.staticSlot);
         }
         try {
-            const auto reason = resolver->explainRejection({}, types, statics, ModifierSet{});
+            const auto reason = resolver->explainRejection({}, types, statics);
             return reason ? *reason : std::string();
         } catch (const std::exception &) {
             return {};
@@ -1065,9 +1065,20 @@ class Compiler {
                 return {.type = *inferred, .tensor = n.inputs[0]};
             return {.type = *inferred, .tensor = append(std::move(n))};
         }
-        if (n.op == "cast" || n.op == "cast_like") {
+        // What makes a conversion an alias is the element type, not the spelling: the target
+        // either equals the source's element type -- return the source -- or it does not, and
+        // this backend converts nothing, so the region stays on the CPU. The names below are
+        // only how a conversion reaches here: `modules/tensor/ops/elementwise_ops.cpp`
+        // registers one `convertDef` OpDef per scalar type (`to_i32`, `to_i64`, `to_f32`,
+        // `to_f64`, `to_bf16`, `to_f16`, whose exports are the bare type names) and keeps the
+        // transitional `cast` beside the `cast_like` a conversion's VJP emits. Either spelling
+        // lands in this branch instead of the "no CUDA lowering" fallback.
+        static const std::string conversions =
+            "|cast|cast_like|to_i32|to_i64|to_f32|to_f64|to_bf16|to_f16|";
+        if (conversions.find("|" + n.op + "|") != std::string::npos) {
             // `cast_like` keeps the source's shape but takes `like`'s element type; `cast`
-            // names its target type in the second argument. The check above leaves only f32
+            // names its target type in the second argument, and a type-name conversion names
+            // it in the operator itself. The check above leaves only f32
             // results, and `tensorValue` has already converted an f64 scalar source, so the
             // source is f32 whenever the target is: returning it is then the documented
             // "converting a value to its own type does nothing". A different element type

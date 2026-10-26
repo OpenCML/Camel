@@ -1,0 +1,46 @@
+/**
+ * The mask an accuracy counts is an array, and it is read as the numbers it stands for once the
+ * conversion is written (design principles 4.2 and 5.1).
+ *
+ * `===` compares elementwise, so `hits` is a `bool` array of the same shape as its operands. A mask
+ * is not a number, so the ones and zeros are read by a conversion the program writes: `cast(hits,
+ * "float")` at the element type of the count they are added to, or the selection `where(hits, 1.0,
+ * 0.0)`. Both spellings read the same numbers, and the reduction is an ordinary one over the array
+ * they produce.
+ *
+ * With `x = [1, -2, 3, -4]`, `x > 0.0` is `[true, false, true, false]`. Beside
+ * `y = [0, 1, 0, 1]`, `y > 0.5` is `[false, true, false, true]`: the two agree nowhere, so the
+ * count is 0 and the agreement is 0. Beside `y = [1, 1, 1, 1]`, `y > 0.5` is all true: the two
+ * agree at two of the four positions, so the count is 2 and the agreement is 0.5.
+ */
+module array_mask_elementwise
+
+import { mean, reshape, sum, where } from tensor
+
+func count_hits(x: f32[..], y: f32[..]): float {
+    let hits = (x > 0.0) === (y > 0.5)
+    let hit: float[..] = float(hits)
+    return sum(hit)
+}
+
+func count_hits_selected(x: f32[..], y: f32[..]): float {
+    let hits = (x > 0.0) === (y > 0.5)
+    return sum(where(hits, 1.0, 0.0))
+}
+
+func agreement(x: f32[..], y: f32[..]): float {
+    return float(mean(f32((x > 0.0) === (y > 0.5))))
+}
+
+func main(): int sync {
+    let x = reshape([1.0, -2.0, 3.0, -4.0] as f32[], [4])
+    let none = reshape([0.0, 1.0, 0.0, 1.0] as f32[], [4])
+    let all = reshape([1.0, 1.0, 1.0, 1.0] as f32[], [4])
+    println(count_hits(x, none))
+    println(count_hits_selected(x, none))
+    println(count_hits(x, all))
+    println(count_hits_selected(x, all))
+    println(agreement(x, none))
+    println(agreement(x, all))
+    return 0
+}

@@ -55,6 +55,7 @@
 #include <format>
 #include <memory>
 #include <mutex>
+#include <sstream>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -108,6 +109,11 @@ struct Definition {
     /// The name and the arguments the fact was queried with (`range<5>`): what the description,
     /// the fact kind and the stored value are all keyed by.
     std::string key;
+    /// Which declaration this is: the context and the function the declaration generates for its
+    /// initial value. Two modules may each declare a fact of one name, and one module compiled in
+    /// two contexts declares two; a description or a fact kind is shared only by the same
+    /// declaration.
+    std::string identity;
     type::Type *factType = nullptr;
     /// What the query wrote out, in the order the declaration declares them: every function the
     /// declaration generates is called with them, so a case reads them by name.
@@ -127,7 +133,7 @@ struct Definition {
     std::vector<Clause> clauses;
 };
 
-/// The descriptions by key, and the keys whose fact kind is registered.
+/// The descriptions by key (and declaration), and the keys whose fact kind is registered.
 std::mutex descriptionsMutex;
 std::unordered_map<std::string, std::shared_ptr<Definition>> descriptions;
 std::unordered_set<std::string> registeredKinds;
@@ -254,6 +260,27 @@ bool sameType(type::Type *left, type::Type *right) {
     return left == right || (left != nullptr && right != nullptr && left->equals(right));
 }
 
+/// Whether two constants are the same: the same type and the same bits of the value. The bytes of a
+/// slot beyond the type's width are no part of the value (a Debug and a Release build leave
+/// different ones in an f32 or an i32, or a bool), so they do not decide.
+bool sameConstant(slot_t a, type::Type *ta, slot_t b, type::Type *tb) {
+    if (!sameType(ta, tb)) {
+        return false;
+    }
+    if (ta != nullptr) {
+        switch (ta->code()) {
+        case type::TypeCode::Int32:
+        case type::TypeCode::Float32:
+            return static_cast<uint32_t>(a) == static_cast<uint32_t>(b);
+        case type::TypeCode::Bool:
+            return static_cast<uint8_t>(a) == static_cast<uint8_t>(b);
+        default:
+            break;
+        }
+    }
+    return a == b;
+}
+
 bool sameFamily(core::OperId pattern, core::OperId actual) {
     const auto &table = core::OperatorTable::instance();
     if (pattern == actual) {
@@ -314,8 +341,8 @@ bool matchNode(
     case NodePattern::Kind::Constant: {
         slot_t value = 0;
         type::Type *type = nullptr;
-        return frame.source.constant(ref, value, type) && sameType(type, pattern.type) &&
-               value == pattern.value;
+        return frame.source.constant(ref, value, type) &&
+               sameConstant(value, type, pattern.value, pattern.type);
     }
     case NodePattern::Kind::Op: {
         if (frame.source.kind(ref) != GCNodeKind::Oper) {
@@ -603,12 +630,12 @@ std::shared_ptr<Definition> buildDefinition(
         auto *handle  = new mm::RootHandle(mm::autoSpace(), fn, nullptr, "rewrite.fact");
         return std::shared_ptr<mm::RootHandle>(handle);
     };
-    definition->roots.push_back(root(1)); // initial
-    definition->roots.push_back(root(2)); // join
-    definition->roots.push_back(root(3)); // meet
-    definition->roots.push_back(root(4)); // widen
-    definition->roots.push_back(root(5)); // narrow
-    ::Function *initial = norm.get<::Function *>(1);
+    definition->roots.push_back(root(2)); // initial
+    definition->roots.push_back(root(3)); // join
+    definition->roots.push_back(root(4)); // meet
+    definition->roots.push_back(root(5)); // widen
+    definition->roots.push_back(root(6)); // narrow
+    ::Function *initial = norm.get<::Function *>(2);
     definition->factType = initial->graph()->funcType()->exitType();
     if (definition->factType == nullptr) {
         err::throwRuntimeFault(
@@ -625,12 +652,12 @@ std::shared_ptr<Definition> buildDefinition(
             "fact",
             "the fact type of a fact must be a scalar (int, float or bool)");
     }
-    // What the query wrote out (`range<3>`): the arguments sit between the name and the node
-    // parameters, in the order the declaration declares them, and every function of the
-    // declaration is called with them.
-    const size_t withCount = nodeBegin > 7 ? nodeBegin - 7 : 0;
+    // What the query wrote out (the fact's type arguments and its `with` arguments): they sit
+    // between the functions and the node parameters, and every function of the declaration is
+    // called with them.
+    const size_t withCount = nodeBegin > 8 ? nodeBegin - 8 : 0;
     for (size_t i = 0; i < withCount; ++i) {
-        const size_t index = 7 + i;
+        const size_t index = 8 + i;
         type::Type *argType = norm.type(index);
         WithValue value;
         if (argType != nullptr && type::isGCTraced(argType->code())) {
@@ -672,19 +699,20 @@ std::shared_ptr<Definition> buildDefinition(
     return definition;
 }
 
-camel::runtime::fact::KindId factKindOf(const std::string &key) {
+camel::runtime::fact::KindId factKindOf(const std::string &key, const std::string &identity) {
     std::lock_guard lock(descriptionsMutex);
-    if (const auto found = factKindIds.find(key); found != factKindIds.end()) {
+    const std::string kindKey = key + "@" + identity;
+    if (const auto found = factKindIds.find(kindKey); found != factKindIds.end()) {
         return found->second;
     }
     const camel::runtime::fact::KindId kind =
         camel::runtime::fact::registerKind(camel::runtime::fact::KindSpec<FactValue>{
-            .key        = "user.fact." + key,
+            .key        = "user.fact." + kindKey,
             .owner      = "user",
             .dependency = camel::runtime::fact::Dependency::Node,
             .print      = [](const FactValue &fact) { return factText(fact); },
         });
-    factKindIds.emplace(key, kind);
+    factKindIds.emplace(kindKey, kind);
     return kind;
 }
 
@@ -704,10 +732,23 @@ std::string withArgText(const ArgsView &norm, size_t index) {
         return std::format("{}", static_cast<double>(norm.get<rtdata::Float32>(index)));
     case type::TypeCode::Float64:
         return std::format("{}", norm.get<rtdata::Float64>(index));
-    case type::TypeCode::String:
-        return std::string(norm.get<String *>(index)->view());
-    default:
-        return "<" + argType->toString() + ">";
+    case type::TypeCode::String: {
+        // Quoted with its length: `"a, b"` is one argument and `"a", "b"` are two.
+        const std::string_view text = norm.get<String *>(index)->view();
+        return std::format("\"{}:{}\"", text.size(), text);
+    }
+    default: {
+        // What else is a value of the type: its text, so two values of one type are two facts.
+        std::string text = "<" + argType->toString();
+        if (argType->isGCTraced()) {
+            if (auto *object = norm.get<rtdata::Object *>(index)) {
+                std::ostringstream printed;
+                object->print(printed, argType);
+                text += ":" + printed.str();
+            }
+        }
+        return text + ">";
+    }
     }
 }
 
@@ -715,28 +756,41 @@ std::string withArgText(const ArgsView &norm, size_t index) {
 
 slot_t factKernel(ArgsView &, ArgsView &norm, camel::core::context::Context &ctx) {
     const std::string name(norm.get<String *>(0)->view());
-    // What the query was written with: the number of `with` arguments, then the arguments
-    // themselves. They are part of what the fact is, so they go into the key the description,
-    // the fact kind and the stored value are all keyed by (rewrite design 7.5).
-    const size_t count     = norm.size();
-    const size_t withCount = static_cast<size_t>(norm.get<rtdata::Int64>(6));
-    const size_t nodeBegin = 7 + withCount;
-    std::string key        = name;
-    if (withCount > 0) {
-        key += "<";
-        for (size_t i = 0; i < withCount; ++i) {
-            key += (i == 0 ? "" : ", ");
-            key += withArgText(norm, 7 + i);
-        }
-        key += ">";
+    // The fact's type arguments, as the compiler fixed them for this instance: empty for a fact
+    // whose head declares none. Together with the `with` arguments they are what the query was
+    // written with, and they are part of what the fact is, so they go into the key the
+    // description, the fact kind and the stored value are all keyed by (rewrite design 7.5).
+    const std::string types(norm.get<String *>(1)->view());
+    // The declaration this query is of: its context and the graph of the function it generates
+    // for the initial value, which no other declaration shares.
+    std::string identity = std::format("{:p}", static_cast<const void *>(&ctx));
+    if (auto *initial = norm.get<::Function *>(2); initial != nullptr && initial->graph() != nullptr) {
+        identity += "/" + std::string(initial->graph()->mangledName());
     }
-    // The query's pattern variables: the `Node` handles right after the `with` arguments, one
-    // in the one-value form and one per parameter in a multi-parameter declaration. The case
-    // descriptions follow as triples.
+    const size_t count     = norm.size();
+    const size_t withCount = static_cast<size_t>(norm.get<rtdata::Int64>(7));
+    const size_t nodeBegin = 8 + withCount;
+    std::string key        = name;
+    std::string written;
+    if (!types.empty()) {
+        written = types;
+    }
+    for (size_t i = 0; i < withCount; ++i) {
+        if (!written.empty()) {
+            written += ", ";
+        }
+        written += withArgText(norm, 8 + i);
+    }
+    if (!written.empty()) {
+        key += "<" + written + ">";
+    }
+    // The query's pattern variables: the node handles right after the `with` arguments, one
+    // in the one-value form and one per parameter in a multi-parameter declaration. They are the
+    // arguments that are not functions, as they are for the resolver above. The case descriptions
+    // follow as triples.
     size_t nodeCount = 0;
     while (nodeBegin + nodeCount < count &&
-           camel::graphmod::HandleType::is(
-               norm.type(nodeBegin + nodeCount), camel::graphmod::HandleKind::Node)) {
+           norm.type(nodeBegin + nodeCount)->code() != type::TypeCode::Function) {
         ++nodeCount;
     }
     if (nodeCount == 0 || nodeBegin + nodeCount >= count ||
@@ -766,7 +820,8 @@ slot_t factKernel(ArgsView &, ArgsView &norm, camel::core::context::Context &ctx
     const Program *program = fromDraft ? nullptr : first->program();
     const camel::runtime::GraphId graphId =
         fromDraft ? camel::runtime::GraphId::Invalid : first->graph();
-    if (currentFrame != nullptr && currentFrame->definition->key == key) {
+    if (currentFrame != nullptr && currentFrame->definition->key == key &&
+        currentFrame->definition->identity == identity) {
         const bool sameSource =
             fromDraft ? currentFrame->source.draft == draft
                       : currentFrame->source.program == program &&
@@ -779,17 +834,18 @@ slot_t factKernel(ArgsView &, ArgsView &norm, camel::core::context::Context &ctx
     std::shared_ptr<Definition> definition;
     {
         std::lock_guard lock(descriptionsMutex);
-        const auto found = descriptions.find(key);
+        const auto found = descriptions.find(key + "@" + identity);
         if (found != descriptions.end()) {
             definition = found->second;
         }
     }
     if (!definition) {
-        definition = buildDefinition(ctx, norm, key, nodeBegin, nodeCount);
+        definition           = buildDefinition(ctx, norm, key, nodeBegin, nodeCount);
+        definition->identity = identity;
         std::lock_guard lock(descriptionsMutex);
-        descriptions.emplace(key, definition);
+        descriptions.emplace(key + "@" + identity, definition);
     }
-    const camel::runtime::fact::KindId kind = factKindOf(key);
+    const camel::runtime::fact::KindId kind = factKindOf(key, identity);
 
     Source source;
     if (fromDraft) {

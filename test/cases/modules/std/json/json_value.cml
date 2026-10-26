@@ -28,9 +28,9 @@ func report(j: Json): int sync {
     println(len(tags), tags->map<(t: Json): string => kind(t)>)
     let members = j->as_object ?? ([] as Map<string, Json>)
     println(keys(members))
-    let server = decode_as(j->get<'server'> ?? j, { host: '', port: 0 }) !! { host: '-', port: -1 }
+    let server = decode_as::<{ host: string, port: int }>(j->get<'server'> ?? j) !! { host: '-', port: -1 }
     println(server.host, server.port)
-    let typed = decode_as('{"id": 7, "payload": {"any": [1, {"x": null}]}}', { id: 0, payload: j }) !! { id: -1, payload: j }
+    let typed = decode_as::<{ id: int, payload: Json }>('{"id": 7, "payload": {"any": [1, {"x": null}]}}') !! { id: -1, payload: j }
     println(typed.id, typed.payload, kind(typed.payload))
     println(encode(j->get<'tags'> ?? j), encode([j->get<'on'> ?? j, decode('1.5') !! j]))
     println(decode('18446744073709551615') !! j, decode('-3') !! j, decode('"s"') !! j)
@@ -41,5 +41,5 @@ func report(j: Json): int sync {
 }
 
 func main(): int sync {
-    return decode('{"server": {"host": "example.org", "port": 9000}, "tags": ["a", "b", 3], "ratio": 2, "on": true, "none": null}') ?-> report !! 1
+    return decode('{"server": {"host": "example.org", "port": 9000}, "tags": ["a", "b", 3], "ratio": 2, "on": true, "none": null}') -> report !! 1
 }

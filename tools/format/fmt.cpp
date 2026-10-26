@@ -995,7 +995,7 @@ any Formatter::visitTypeDecl(cst::TypeDecl context) {
 }
 
 /*
-retStmt    : (RETURN | RAISE | THROW) dataList ;
+retStmt    : (RETURN | YIELD) dataList ;
 */
 any Formatter::visitRetStmt(cst::RetStmt context) {
     return context->child(0)->text() + " " +
@@ -1612,7 +1612,7 @@ any Formatter::visitUnaryExpr(syn::Node context) {
 
 /*
 linkExpr
-    : compExpr (('->' | '?->') compExpr)*
+    : compExpr ('->' compExpr)*
     ;
 */
 any Formatter::visitLinkExpr(cst::LinkExpr context) { return formatBiOpsList(context, false); }

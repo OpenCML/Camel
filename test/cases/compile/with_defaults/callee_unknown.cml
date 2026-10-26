@@ -1,0 +1,12 @@
+/**
+ * A `with` argument given by name needs a callee whose parameters are known where the binding is
+ * written: `format` is an operator whose parameter count follows its arguments and records no
+ * names, so `format<x: 1>` names a parameter of nothing and is refused where the argument is
+ * written (design principles 4.4).
+ */
+module with_defaults_callee_unknown
+
+func main(): int sync {
+    'a{}'->format<x: 1>->println
+    return 0
+}

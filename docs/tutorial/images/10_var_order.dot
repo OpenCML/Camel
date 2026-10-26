@@ -1,7 +1,7 @@
 digraph GraphIR {
         subgraph cluster_F02 {
             label="twice";
-            tooltip="() => int";
+            tooltip="() => int pure";
             subgraph cluster_F03 {
                 label="bump";
                 tooltip="(var counter: int) => int uses counter";

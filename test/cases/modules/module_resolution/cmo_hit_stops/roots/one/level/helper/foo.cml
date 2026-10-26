@@ -1,0 +1,3 @@
+/// The module the candidate name `level.helper.foo` resolves to under the `-I` root. It is a
+/// working module, so it is what a lookup that kept going after the refused `.cmo` would use.
+export let value = 7

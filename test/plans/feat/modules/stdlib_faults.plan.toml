@@ -22,54 +22,6 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 20000
 
 [[tests]]
-name = "stdlib.fault.substr_start"
-desc = "substr that starts past the end of the string."
-case = "../../../cases/modules/stdlib/fault_substr_start.cml"
-expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
-expect_diagnostic_line = 7
-
-[[tests]]
-name = "stdlib.fault.substr_start.opt"
-desc = "The same through std::opt."
-case = "../../../cases/modules/stdlib/fault_substr_start.cml"
-backends = false
-args = ["${case}", "std::opt", "std::fvm"]
-expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
-expect_diagnostic_line = 7
-
-[[tests]]
-name = "stdlib.fault.substr_length"
-desc = "substr whose range runs past the end: a fault, not a shorter result (design principles 3.9: a range out of bounds is a fault, as for slice)."
-case = "../../../cases/modules/stdlib/fault_substr_length.cml"
-expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
-expect_diagnostic_line = 8
-
-[[tests]]
-name = "stdlib.fault.substr_length.opt"
-desc = "The same through std::opt."
-case = "../../../cases/modules/stdlib/fault_substr_length.cml"
-backends = false
-args = ["${case}", "std::opt", "std::fvm"]
-expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
-expect_diagnostic_line = 8
-
-[[tests]]
-name = "stdlib.fault.substr_negative"
-desc = "substr with a negative length."
-case = "../../../cases/modules/stdlib/fault_substr_negative.cml"
-expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 7
-
-[[tests]]
-name = "stdlib.fault.substr_negative.opt"
-desc = "The same through std::opt."
-case = "../../../cases/modules/stdlib/fault_substr_negative.cml"
-backends = false
-args = ["${case}", "std::opt", "std::fvm"]
-expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 7
-
-[[tests]]
 name = "stdlib.fault.index"
 desc = "A string indexed at its length."
 case = "../../../cases/modules/stdlib/fault_index.cml"
@@ -116,54 +68,6 @@ backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
 expect_diagnostic_line = 8
-
-[[tests]]
-name = "stdlib.fault.split_empty"
-desc = "split with an empty separator."
-case = "../../../cases/modules/stdlib/fault_split_empty.cml"
-expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 7
-
-[[tests]]
-name = "stdlib.fault.split_empty.opt"
-desc = "The same through std::opt."
-case = "../../../cases/modules/stdlib/fault_split_empty.cml"
-backends = false
-args = ["${case}", "std::opt", "std::fvm"]
-expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 7
-
-[[tests]]
-name = "stdlib.fault.replace_empty"
-desc = "replace of the empty string."
-case = "../../../cases/modules/stdlib/fault_replace_empty.cml"
-expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 7
-
-[[tests]]
-name = "stdlib.fault.replace_empty.opt"
-desc = "The same through std::opt."
-case = "../../../cases/modules/stdlib/fault_replace_empty.cml"
-backends = false
-args = ["${case}", "std::opt", "std::fvm"]
-expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 7
-
-[[tests]]
-name = "stdlib.fault.repeat_negative"
-desc = "repeat a negative number of times."
-case = "../../../cases/modules/stdlib/fault_repeat_negative.cml"
-expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 7
-
-[[tests]]
-name = "stdlib.fault.repeat_negative.opt"
-desc = "The same through std::opt."
-case = "../../../cases/modules/stdlib/fault_repeat_negative.cml"
-backends = false
-args = ["${case}", "std::opt", "std::fvm"]
-expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 7
 
 [[tests]]
 name = "stdlib.fault.repeat_huge"
@@ -321,7 +225,7 @@ name = "stdlib.fault.zip_with"
 desc = "zip_with on arrays of different lengths: the fault of zip, located in the library. The line is \"return zip(xs, ys)->map<...>\" in stdlib/array.cml. It moved once: the reduction kernels took the place of the blank lines above three doc comments without moving it (each `#impl` tag stood for a blank line), and the sorting family's declarations grew from five generic ones to one per element type and algorithm, which stands above it and moved it from 254 to 300."
 case = "../../../cases/modules/stdlib/fault_zip_with.cml"
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 300
+expect_diagnostic_line = 304
 
 [[tests]]
 name = "stdlib.fault.zip_with.opt"
@@ -330,4 +234,4 @@ case = "../../../cases/modules/stdlib/fault_zip_with.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 300
+expect_diagnostic_line = 304

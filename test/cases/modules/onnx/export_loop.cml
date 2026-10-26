@@ -30,7 +30,7 @@ func main(): int sync {
     let r = model(x, w)
     println(r.0)
     println(r.1)
-    export_model((x: float[..], w: float[..]): (float[..], float[..]) => model(x, w), (x, w), get_env('ONNX_OUT'))
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((x: float[..], w: float[..]): (float[..], float[..]) => model(x, w), (x, w))
     println('exported')
     return 0
 }

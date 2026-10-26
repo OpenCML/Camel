@@ -1,0 +1,43 @@
+/**
+ * A node's value type is a type a program writes (language reference 9, design principles 5.9): a
+ * parameter declared `n: Node<int>` is the node of an `int`, and the fact of it is read without
+ * writing a type argument, because the node's own type gives it. A node a pass read out of a graph
+ * states no value type, so the query on it writes `depth::<int>(n)`; the two read the same fact.
+ */
+module fact_value_type
+import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
+import { max } from math
+
+fact depth::<T>(v: T): int match v {
+    case const c => 1
+    case x + y   => max(depth::<T>(x), depth::<T>(y)) + 1
+    case _       => 0
+} join max
+
+func depthOfWritten(n: Node<int>): int {
+    return depth(n)
+}
+
+func depthOfBare(n: Node): int {
+    return depth::<int>(n)
+}
+
+func opText(n: Node): string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+func addsOf(p: Program, function: string): Node[] {
+    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+    return nodes(found[0])->filter<(n: Node): bool => opText(n) == ':op/add_l'>
+}
+
+export func report(p: Program): Program! sync {
+    let adds = addsOf(p, 'target')
+    let written = loop t = 0 for n in adds do t + depthOfWritten(n)
+    let bare = loop t = 0 for n in adds do t + depthOfBare(n)
+    println('written', written, 'bare', bare)
+    return p
+}

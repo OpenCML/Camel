@@ -23,6 +23,7 @@ using namespace camel::core::rtdata;
 #include "../operators/profiler.h"
 #include "../operators/set_value.h"
 #include "../operators/str.h"
+#include "../operators/stream.h"
 #include "../operators/struct.h"
 #include "../operators/tagged.h"
 #include "camel/core/operator_traits.h"
@@ -326,6 +327,12 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/idx_str", __builtin__idx__},
         {"op/idx_take", __idx_take_arr__},
         {"op/slice_sub", __slice_sub__},
+        {"op/slice_str", __slice_str__},
+        {"op/slice_bytes", __slice_bytes__},
+        {"struct/len_bytes", __len_bytes__},
+        {"op/add_bytes", __add_bytes__},
+        {"op/eq_bytes", __eq_bytes__},
+        {"op/ne_bytes", __ne_bytes__},
 
         {"op/not", __builtin__not__},
 
@@ -400,6 +407,9 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"profiler/instant", __profiler_instant__},
         {"profiler/enable", __profiler_enable__},
 
+        // The bookkeeping of `tee` (operators/stream.h).
+        {"stream/tee_note", __stream_tee_note__},
+
         // macro
         {"macro/cmp", __cmp__},
 
@@ -411,6 +421,8 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/tag_error_info", __error_info__},
         {"op/tag_throw", __throw__},
         {"op/error_new", __error_new__},
+        // The program's own premise check: it faults, so it is no pure operator.
+        {"op/fail", __fail__},
         {"op/parse_int", __parse_int__},
         {"op/parse_float", __parse_float__},
 
@@ -460,6 +472,12 @@ void registerBuiltinOperatorTraits() {
         "struct/last_arr",
         "op/idx_take",
         "op/slice_sub",
+        "op/slice_str",
+        "op/slice_bytes",
+        "struct/len_bytes",
+        "op/add_bytes",
+        "op/eq_bytes",
+        "op/ne_bytes",
         "struct/tail_arr",
         "struct/range",
         "struct/slice_arr",
@@ -561,7 +579,12 @@ void registerBuiltinOperatorTraits() {
     registry.set(
         std::string(camel::execute::kFaultIsolationUri),
         {.pure = false, .callsGraphs = true});
-    registry.declare("process", {{"exit", false}, {"sleep", false}});
+    // The transform that gives the function of that node (:mark/attempt) is read by the builder,
+    // which turns `attempt(f)` into the value itself: no graph ever holds this node, and the
+    // declaration is the conservative one, as for the operator the value calls.
+    registry.set(
+        std::string(camel::execute::kAttemptTransformUri),
+        {.pure = false, .callsGraphs = true});
     // The block counters are ambient state: two calls with the same arguments can return
     // different structs, so the call must not be folded, merged or dropped as a pure one.
     registry.set(":op/mem_blocks", {.pure = false});

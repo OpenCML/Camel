@@ -10,7 +10,7 @@ func main(): int sync {
     var total = 1
     // A function with a var parameter cannot be handed to an operator; the closure captures
     // the variable instead (by reference, design principles 3.5).
-    let work = sync (d: int): int => sync {
+    let work = (d: int): int => sync {
         println('work begins')
         total = total + 10
         println(format<total>('total is {}'))
@@ -20,20 +20,20 @@ func main(): int sync {
         return q
     }
     println('before')
-    let a = attempt(work, 4) !! -1
+    let a = attempt(work)(4) !! -1
     println(a)
     println(total)
-    let b = attempt(work, 0) !! -1
+    let b = attempt(work)(0) !! -1
     println(b)
     println(total)
     var seen = 0
     let c = attempt(() => sync {
-        0..6->foreach<sync (x: int) => sync {
+        0..6->foreach<(x: int) => sync {
             seen = seen + 12 / (3 - x)
             println(seen)
         }>
         return seen
-    }) !! -1
+    })() !! -1
     println(c)
     println(seen)
     println('after')

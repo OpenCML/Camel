@@ -1,0 +1,56 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * Computed signatures of the `autodiff` module (C++ operators, modules/autodiff).
+ *
+ * `stop_gradient` and the tag `vjp` are declared in stdlib/autodiff.cml. The four entries here take
+ * a function and give a function whose parameter list and result type come from the argument,
+ * which a declaration cannot write (the arbitrary-function-type gap). `Gradient<F>` and
+ * `ValueAndGradient<F>` below name the result types the resolver computes (`gradientSignature(f)`
+ * in `GradResolver`):
+ *   - the parameters are those of `F`, `with` parameters included;
+ *   - the gradient is a value of the type of the first `with` parameter of `F` (see
+ *     stdlib/autodiff.cml for the leaves: integers and bools give a zero of their own type);
+ *   - `F` must have a scalar float result.
+ * `Pullback<F>` and `Jvp<F>` name the results of the two further transforms below. They are not
+ * types a program can write.
+ *
+ * `vjp` and `jvp` are targets: they land with the autodiff lane, and no declaration of them reaches
+ * the develop branch before the transform works. The function `vjp` and the tag `#vjp(rule)` are
+ * different names in different spaces (a tag is written with `#`); if the compiler cannot keep them
+ * apart, the tag is renamed, not the transform.
+ *
+ * For reference only: these declarations are not compiled. They are checked against the operators
+ * the module registers, and docs/stdlib-reference.md is generated from them.
+ */
+
+/// The gradient function of `f`: it takes the parameters of `f` and gives the gradient of `f`'s
+/// result with respect to its first `with` parameter, in the type of that parameter.
+/// @example-fragment `loss` must have a `with` parameter for its gradient to exist, and that takes a declaration, so the example is a fragment of a program that declares it
+/// @example let loss_grad = grad(loss)
+export func grad::<F>(f: F): Gradient<F> when is_function::<F>()
+
+/// The value and the gradient together: the function it gives returns `(result of f, gradient)`,
+/// the pair a training step needs from one evaluation. The same compile-time refusals as `grad`.
+/// @example-fragment `loss` must have a `with` parameter for its gradient to exist, and that takes a declaration, so the example is a fragment of a program that declares it
+/// @example let step = with_grad(loss)
+export func with_grad::<F>(f: F): ValueAndGradient<F> when is_function::<F>()
+
+/// Reverse mode for any result, not only a scalar: the function it gives takes the parameters of
+/// `f` and returns `(result of f, pullback)`, where the pullback is a function from a cotangent of
+/// the result (a value of the result's type) to the gradient with respect to the first `with`
+/// parameter, in the type of that parameter. `grad` is the pullback applied to 1.0; a Jacobian is
+/// the pullback applied to each basis vector, and a Hessian is `grad` of `grad`.
+/// @example-fragment `layer` must have a `with` parameter for its gradient to exist, and that takes a declaration, so the example is a fragment of a program that declares it
+/// @example let (y, pull) = vjp(layer)<weights>(x)
+export func vjp::<F>(f: F): Pullback<F> when is_function::<F>()
+
+/// Forward mode: the function it gives takes the parameters of `f` and one more `with` parameter,
+/// the direction (a value of the type of the first `with` parameter of `f`, which is what is
+/// differentiated), and returns `(result of f, tangent of the result along the direction)`. Use it
+/// where the output is larger than the input is not (a Jacobian-vector product, a directional
+/// derivative); the cost of one call is that of one evaluation of `f`.
+/// @example-fragment `layer` must have a `with` parameter to differentiate, and that takes a declaration, so the example is a fragment of a program that declares it
+/// @example let (y, dy) = jvp(layer)<weights, direction>(x)
+export func jvp::<F>(f: F): Jvp<F> when is_function::<F>()

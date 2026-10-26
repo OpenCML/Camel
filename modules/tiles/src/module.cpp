@@ -11,6 +11,7 @@
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/struct.h"
+#include "camel/core/rtdata/tagged.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
@@ -69,8 +70,9 @@ template <class F> slot_t checked(Ask ask, F &&body) {
         // the back end has no program for this graph, and whether a shape or the operator itself
         // is missing is what the miss says. `RuntimeError` would tell the user the runtime broke.
         // No `#gpu` scope is claimed here: the graph may be one no tag covers, or one segment of
-        // a scope the pass has cut. The diagnostic a scope's own promise gets at compile time is
-        // `GpuScopeNoDeviceProgram`.
+        // a scope the pass has cut. A scope's own promise refused while it runs is
+        // `GpuScopeNoDeviceProgram`; the pass refuses one while it compiles, with the error value
+        // `GpuScopeUnsupported`.
         core::error::throwRuntimeFault(
             core::error::RuntimeDiag::GraphNoDeviceProgram,
             ask.oper,
@@ -589,7 +591,15 @@ slot_t runPreferredResidentKernel(ArgsView &with, ArgsView &norm, Context &ctx) 
     return runResidentPrepared(with, std::move(program));
 }
 slot_t deviceKernel(ArgsView &, ArgsView &, Context &) {
-    return checked([] { return td::toSlot(::String::from(deviceInfo(), core::mm::autoSpace())); });
+    try {
+        return td::toSlot(::String::from(deviceInfo(), core::mm::autoSpace()));
+    } catch (const BackendUnavailable &e) {
+        // This build or this machine having no device is not a broken run: the call answers an
+        // error value of kind `DeviceUnavailable` and the caller decides how to report it. An
+        // ordinal the run named with `--devices` and that is not there is the other shape of
+        // this: it is refused at start-up, before any graph runs, and stays a fault.
+        return td::makeError("DeviceUnavailable", e.what(), "<tiles::device>");
+    }
 }
 
 bool supportedLeaves(Type *type) {
@@ -661,7 +671,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
               DynamicFuncTypeResolver::create(
                   {{0, {}}, {1, {false}}},
                   "(T: Tensor, float, struct or tuple) => Device<T>",
-                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                  [](const type_vec_t &with, const type_vec_t &norm)
                       -> std::optional<Type *> {
                       if (!with.empty() || norm.size() != 1)
                           return std::nullopt;
@@ -674,7 +684,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
               DynamicFuncTypeResolver::create(
                   {{0, {}}, {1, {false}}},
                   "(Device<T>) => T",
-                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                  [](const type_vec_t &with, const type_vec_t &norm)
                       -> std::optional<Type *> {
                       if (!with.empty() || norm.size() != 1)
                           return std::nullopt;
@@ -687,7 +697,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
               DynamicFuncTypeResolver::create(
                   {{1, {false}}, {1, {false}}},
                   "<fn: (...) => NumericAggregate>(inputs: NumericAggregate) => DeviceAggregate",
-                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                  [](const type_vec_t &with, const type_vec_t &norm)
                       -> std::optional<Type *> {
                       auto result = resolve(with, norm, false);
                       if (!result)
@@ -701,7 +711,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
               DynamicFuncTypeResolver::create(
                   {{1, {false}}, {1, {false}}},
                   "<fn: (...) => NumericAggregate>(inputs: NumericAggregate) => string",
-                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                  [](const type_vec_t &with, const type_vec_t &norm)
                       -> std::optional<Type *> { return resolve(with, norm, true); })}}),
         OperatorGroup::create(
             "inspect",
@@ -709,7 +719,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
               DynamicFuncTypeResolver::create(
                   {{1, {false}}, {1, {false}}},
                   "<fn: (...) => NumericAggregate>(inputs: NumericAggregate) => string",
-                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                  [](const type_vec_t &with, const type_vec_t &norm)
                       -> std::optional<Type *> { return resolve(with, norm, true); })}}),
         OperatorGroup::create(
             "benchmark",
@@ -717,7 +727,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
               DynamicFuncTypeResolver::create(
                   {{1, {false}}, {1, {false}}},
                   "<fn: (...) => NumericAggregate>(inputs: NumericAggregate) => string",
-                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                  [](const type_vec_t &with, const type_vec_t &norm)
                       -> std::optional<Type *> { return resolve(with, norm, true); })}}),
         OperatorGroup::create(
             "regions",
@@ -725,7 +735,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
               DynamicFuncTypeResolver::create(
                   {{1, {false}}, {0, {}}},
                   "<fn: Function>() => string",
-                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                  [](const type_vec_t &with, const type_vec_t &norm)
                       -> std::optional<Type *> {
                       if (with.size() != 1 || !norm.empty() ||
                           with[0]->code() != TypeCode::Function)

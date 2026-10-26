@@ -3,18 +3,18 @@
  */
 module main
 
-import { whoami, sleep, cpu_count } from process
+import { user_name, sleep, cpu_count } from process
 
 func main(): int sync {
     println("=== Process Module Basic Tests ===")
 
-    println("\n[1] whoami()")
-    let user = whoami()
+    println("\n[1] user_name()")
+    let user = user_name() !! ''
     println("  user =", user)
 
-    println("\n[2] sleep(0)")
-    sleep(0)
-    println("  sleep(0) OK")
+    println("\n[2] sleep(0.0)")
+    sleep(0.0)
+    println("  sleep(0.0) OK")
 
     println("\n[3] cpu_count()")
     println("  logical cpu count =", cpu_count())

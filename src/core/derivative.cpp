@@ -8,10 +8,13 @@
 #include "camel/core/derivative.h"
 
 #include "camel/core/type/composite/array.h"
+#include "camel/core/type/intern.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/utils/type.h"
 
+#include <algorithm>
+#include <format>
 #include <mutex>
 #include <stdexcept>
 #include <string>
@@ -39,6 +42,23 @@ DerivativeRegistry &DerivativeRegistry::instance() {
     return registry;
 }
 
+std::vector<std::string> DerivativeRegistry::tangentSpaceDescriptions() const {
+    std::shared_lock lock(mutex_);
+    std::vector<std::string> lines;
+    for (const auto &[code, spaces] : tangents_) {
+        for (const TangentSpace &space : spaces) {
+            lines.push_back(std::format(
+                "code={} owns={} add={}",
+                static_cast<int>(code),
+                space.owns == nullptr ? "all" : "subset",
+                space.addUri));
+        }
+    }
+    // One order, whatever the map did: the readers are diagnostics and tests (C24, AD/H1).
+    std::sort(lines.begin(), lines.end());
+    return lines;
+}
+
 void DerivativeRegistry::setRule(std::string_view uri, VjpRule rule) {
     std::unique_lock lock(mutex_);
     rules_.insert_or_assign(std::string(uri), rule);
@@ -53,13 +73,12 @@ VjpRule DerivativeRegistry::findRule(std::string_view uri) const {
 void DerivativeRegistry::setTangentSpace(type::TypeCode code, TangentSpace space) {
     std::unique_lock lock(mutex_);
     auto &spaces = tangents_[code];
-    if (space.owns == nullptr) {
-        // A space that owns every value of the code replaces the code's space: nothing else has
-        // to answer for it. A subset space is kept, and still answers for the values it owns.
-        spaces.clear();
-        spaces.push_back(std::move(space));
-        return;
-    }
+    // One entry per owner, replaced in place. A registration used to clear the whole code when it
+    // owned every value of it, which took a module's subset entry (a narrower `owns`) with it: the
+    // registry is one per process, a second `Context` registers the core's spaces again, and the
+    // module registers its own once, so the values that module owns fell back to the generic space
+    // for the rest of the process (C24, AD/H1). Replacement keeps the registration order the
+    // lookup reads.
     for (TangentSpace &existing : spaces) {
         if (existing.owns == space.owns) {
             existing = std::move(space);
@@ -244,26 +263,32 @@ Type *computeTangent(Type *primal, Audience audience) {
 
 namespace {
 
-/// The answer of `computeTangent` for one audience, cached. Types are immutable and long-lived, so
-/// the mapping is cached by identity; the two audiences keep separate tables, since one type
-/// answers two different questions.
+/// The answer of `computeTangent` for one audience, cached. A type is its structure (design
+/// principles 5.2): the mapping is cached by canonical id, so `f32[n]` and `f32[m]` are one entry
+/// and one answer, and a comparison of a gradient type with a parameter type never meets two
+/// objects of one type. The two audiences keep separate tables, since one type answers two
+/// different questions. A type the table does not hold is computed each time.
 Type *cachedTangent(Type *primal, Audience audience) {
     if (primal == nullptr) {
         return nullptr;
     }
+    const type::TypeId key = type::TypeTable::instance().canonicalId(primal);
+    if (key == type::kNoTypeId) {
+        return computeTangent(primal, audience);
+    }
     static std::mutex mutex;
-    static std::unordered_map<Type *, Type *> forUser;
-    static std::unordered_map<Type *, Type *> forMachinery;
+    static std::unordered_map<type::TypeId, Type *> forUser;
+    static std::unordered_map<type::TypeId, Type *> forMachinery;
     auto &cache = audience == Audience::User ? forUser : forMachinery;
     {
         std::lock_guard lock(mutex);
-        if (auto it = cache.find(primal); it != cache.end()) {
+        if (auto it = cache.find(key); it != cache.end()) {
             return it->second;
         }
     }
     Type *tangent = computeTangent(primal, audience);
     std::lock_guard lock(mutex);
-    cache.emplace(primal, tangent);
+    cache.emplace(key, tangent);
     return tangent;
 }
 

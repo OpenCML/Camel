@@ -1,0 +1,141 @@
+id = "modules.graph_values"
+order = 377
+tier = "fast"
+tags = ["feat", "modules", "graph"]
+
+# Graphs are values (design principles 9.1): a transform gives a new function, and the function it
+# was given stays the same for every other holder -- a name that calls it, a closure that captured
+# it, a caller that is not transformed, and the Program it was taken from. Each case holds
+# `target` (or `loss`, `ratio`), transforms it, and then looks at it again: what it computes and
+# what its graph contains.
+
+[[tests]]
+name = "function_txn_leaves_the_original"
+desc = "open_function/replace/to_function make a function without the `+ 1`; target still computes 18, its own graph still has the `+ 1` and the same number of nodes, and a closure made before and two callers by name still see the original."
+kind = "behavior"
+case = "../../../cases/modules/graph_values/function_txn.cml"
+backends = ["nvm", "fvm", "jit"]
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "new: 15 0\nold: 18 1 true\nholders: 1018 118 36\n"
+timeout_ms = 20000
+
+[[tests]]
+name = "program_txn_leaves_the_program_and_the_running_code"
+desc = "open/replace/commit over current(): the committed Program has no `+ 1`, the Program the transaction was opened on still has it, and the running target -- called by name, read through graph_of, and through a closure made after the commit -- is the original."
+kind = "behavior"
+case = "../../../cases/modules/graph_values/program_txn.cml"
+backends = ["nvm", "fvm", "jit"]
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_contains = ["committed: 0\n", "opened on: 1\n", "running: 18 1\n", "made after: 1018\n"]
+timeout_ms = 20000
+
+[[tests]]
+name = "program_txn_does_not_republish_current"
+desc = "A commit made by the program itself gives a value and changes nothing another holder sees (design principles 9.1), so current() still names the running program afterwards."
+kind = "behavior"
+case = "../../../cases/modules/graph_values/program_txn.cml"
+backends = ["nvm", "fvm", "jit"]
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_contains = ["current: 1\n"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rewrite_leaves_the_program_and_the_running_code"
+desc = "rewrite(current(), [x + 1 => x]): the result has no `+ 1`, the Program it was given still has it, and the running target -- by name, through graph_of, and through a closure made afterwards -- is the original."
+kind = "behavior"
+case = "../../../cases/modules/graph_values/rewrite_rule.cml"
+backends = ["nvm", "fvm", "jit"]
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_contains = ["rewritten: 0\n", "given: 1\n", "running: 18 1\n", "made after: 1018\n"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rewrite_does_not_republish_current"
+desc = "rewrite(p, rules) gives a Program and changes nothing another holder sees (design principles 9.1), so current() still names the running program afterwards."
+kind = "behavior"
+case = "../../../cases/modules/graph_values/rewrite_rule.cml"
+backends = ["nvm", "fvm", "jit"]
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_contains = ["current: 1\n"]
+timeout_ms = 20000
+
+[[tests]]
+name = "grad_leaves_loss_and_its_callers"
+desc = "grad(loss) and with_grad(loss) built at run time: loss and user, which calls it, compute the same before and after, and user's graph keeps its size."
+kind = "behavior"
+case = "../../../cases/modules/graph_values/grad_holders.cml"
+backends = ["nvm", "fvm", "jit"]
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "before: 20.0 21.0\nderived: 10.0 20.0 10.0\nafter: 20.0 21.0 true\n"
+timeout_ms = 20000
+
+[[tests]]
+name = "grad_expanded_by_macro_leaves_loss_and_its_callers"
+desc = "The same program with std::macro expanding grad and with_grad ahead of time: the output is the one of the run-time route, so the expansion did not change loss or its caller."
+kind = "behavior"
+case = "../../../cases/modules/graph_values/grad_holders.cml"
+args = ["${case}", "std::macro", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "before: 20.0 21.0\nderived: 10.0 20.0 10.0\nafter: 20.0 21.0 true\n"
+timeout_ms = 20000
+
+[[tests]]
+name = "grad_expanded_by_macro_leaves_loss_and_its_callers_fvm"
+desc = "As above, executed by the bytecode VM."
+kind = "behavior"
+case = "../../../cases/modules/graph_values/grad_holders.cml"
+args = ["${case}", "std::macro", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "before: 20.0 21.0\nderived: 10.0 20.0 10.0\nafter: 20.0 21.0 true\n"
+timeout_ms = 20000
+
+[[tests]]
+name = "attempt_leaves_the_function"
+desc = "attempt(ratio)(x) isolates the fault at the call; ratio called directly afterwards still faults with its location, and its graph keeps its size."
+kind = "behavior"
+case = "../../../cases/modules/graph_values/attempt_holders.cml"
+backends = ["nvm", "fvm"]
+args = ["${case}", "${backend}"]
+expect_exit = 1
+expect_stdout_starts_with = "isolated: 3 -1\nsame: 3 true\n"
+expect_output_contains = ["RuntimeDiag::DivisionByZero", "attempt_holders.cml:43:15"]
+timeout_ms = 20000
+
+[[tests]]
+name = "pipeline_rewrites_its_only_holder"
+desc = "The command-line pipeline is the program's only holder and may rewrite in place: after inlining and optimising, the function, its two callers and a closure compute what the source says."
+kind = "behavior"
+case = "../../../cases/modules/graph_values/pipeline_inline.cml"
+backends = ["nvm", "inline_nvm", "inline_fvm", "inline_jit"]
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "20 21 60 19\n"
+timeout_ms = 20000
+
+[[tests]]
+name = "discarded_rewrite_does_not_reach_the_run"
+desc = "A pass written in Camel tries a rewrite and returns the Program it was given: the pipeline goes on with that Program, so target computes 18."
+kind = "behavior"
+case = "../../../cases/modules/graph_values/discard_target.cml"
+backends = ["nvm", "fvm", "jit"]
+args = ["${case}", "discard_pass::discard", "${backend}"]
+expect_exit = 0
+expect_stdout_contains = ["running: 18\n"]
+timeout_ms = 20000
+
+[[tests]]
+name = "discarded_rewrite_does_not_become_current"
+desc = "The same run: the rewrite the pass threw away is no holder's value, so current() inside the run still names the Program the pass returned, with the `+ 1`."
+kind = "behavior"
+case = "../../../cases/modules/graph_values/discard_target.cml"
+backends = ["nvm", "fvm", "jit"]
+args = ["${case}", "discard_pass::discard", "${backend}"]
+expect_exit = 0
+expect_stdout_contains = ["current: 1\n"]
+timeout_ms = 20000

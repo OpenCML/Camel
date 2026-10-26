@@ -1,0 +1,32 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * A moment is a `float`: seconds since 1970-01-01 00:00 UTC, with a fraction. Reading the clock is
+ * an effect (`now`, `timed`); turning a moment into text and back is pure and always in UTC, so the
+ * same moment gives the same text on every machine.
+ */
+
+/// The current time, in seconds since the epoch.
+/// @example now()    // 1791806400.25
+export func now(): float uses clock
+
+/// Runs f(x) once and gives its result together with the seconds it took, measured on a monotonic
+/// clock. Timing is made a call of its own because the reading has to be about this very run of
+/// f: the call is not computed ahead, moved or merged with another, and on a device it waits for
+/// the work to finish. Two `now()` with a pure computation between them can be folded or moved,
+/// and measure nothing. The call uses the clock and whatever f uses.
+/// @example timed((x: int): int => x * 2, 21).0    // 42
+export func timed::<T, R>(f: (x: T) => R, x: T): (R, float) uses clock
+
+/// The moment written with a strftime format, in UTC.
+/// @fails fault `TimeFormatFailed` when the moment is outside the range of calendar time, or the format gives no text
+/// @example 0.0->strftime<'%Y-%m-%d'>    // '1970-01-01'
+with <format: string>
+export func strftime(timestamp: float): string pure
+
+/// The moment a text gives when read with a strptime format; the fields are taken as UTC.
+/// @fails error value `ParseError` when the text does not have the format, or gives a moment outside the range of calendar time; fault `TimeFormatFailed` when the format itself cannot be used
+/// @example '1970-01-02'->strptime<'%Y-%m-%d'> !! 0.0    // 86400.0
+with <format: string>
+export func strptime(text: string): float! pure

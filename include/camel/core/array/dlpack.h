@@ -56,6 +56,24 @@ struct DLManagedTensor {
     void (*deleter)(DLManagedTensor *self);
 };
 
+/// DLPack 1.0: the version of the protocol the structure below belongs to.
+struct DLPackVersion {
+    uint32_t major;
+    uint32_t minor;
+};
+
+/// DLPack 1.0 flag: the consumer must not write through the tensor.
+inline constexpr uint64_t kDLPackFlagBitmaskReadOnly = 1ull << 0;
+
+/// The versioned managed tensor (DLPack 1.0), which carries the flags the legacy one cannot.
+struct DLManagedTensorVersioned {
+    DLPackVersion version;
+    void *manager_ctx;
+    void (*deleter)(DLManagedTensorVersioned *self);
+    uint64_t flags;
+    DLTensor dl_tensor;
+};
+
 /**
  * Exports a tensor as a DLPack managed tensor without copying. The argument must be a compact
  * array (a numeric tensor); an inline one is promoted first, which copies it once. The Block
@@ -63,6 +81,20 @@ struct DLManagedTensor {
  * deleter exactly once.
  */
 DLManagedTensor *toDLPack(Array *tensor);
+
+/**
+ * Exports a tensor as a versioned managed tensor, read-only: the array is a value, and other
+ * Camel values may share its block, so a consumer must not write through it (design principles
+ * 11.3). The block is retained as in `toDLPack`.
+ */
+DLManagedTensorVersioned *toDLPackVersioned(Array *tensor);
+
+/**
+ * A legacy managed tensor over the same memory as `versioned`, for a consumer that predates
+ * DLPack 1.0. The legacy structure has no read-only flag, so the consumer is told by its
+ * caller; the versioned tensor's deleter runs when the legacy one is released.
+ */
+DLManagedTensor *toLegacyDLPack(DLManagedTensorVersioned *versioned);
 
 /**
  * Imports a DLPack tensor without copying: the array reads the producer's memory through an

@@ -1,0 +1,16 @@
+// A recursive function is measured from the bottom: every body starts as touching nothing, and a
+// round adds what its callees have added. `count_down` reaches itself, so the first round that
+// measured it saw `println` and the second saw nothing new; `pure` is a promise the body breaks
+// (design effects plan, step 5), and a recursion is no excuse for not checking it.
+module err_recursive_pure
+
+/// The clause promises the empty set; the body writes `stdout` and calls itself.
+func count_down(n: int): int pure sync {
+    println(n)
+    return if n <= 0 then 0 else count_down(n - 1)
+}
+
+func main(): int sync {
+    println(count_down(3))
+    return 0
+}

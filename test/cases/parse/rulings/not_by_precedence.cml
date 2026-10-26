@@ -1,7 +1,7 @@
-// `!` and `~` are at the level of the unary minus (design principles 4.2): looser than `^`,
-// tighter than `->` and the other binary operators. `!x->f` negates first, then passes on.
-func show(b: bool): string {
-    return if b then 'yes' else 'no'
+// `!` and `~` are at the level of the unary minus (design principles 4.2): looser than `^` and
+// `->`, tighter than the other binary operators. `!x->f` passes on first, then negates.
+func always(b: bool): bool {
+    return true
 }
 
 func inc(x: int): int {
@@ -11,7 +11,7 @@ func inc(x: int): int {
 func main(): int sync {
     let t = true
     let n = 2
-    println(!t->show, (!t)->show, !(t->show == 'yes'))
+    println(!t->always, (!t)->always, !(t->always))
     println(~n->inc, ~(n->inc), ~n * 3, -~n)
     println(!t == false, !false & t, !(!t))
     return 0

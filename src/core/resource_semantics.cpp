@@ -222,6 +222,10 @@ std::optional<std::string> checkResources(const ResourceSpec &spec) {
     return std::nullopt;
 }
 
+AccessMode uniteAccess(AccessMode left, AccessMode right) {
+    return left == right ? left : AccessMode::ReadModifyWrite;
+}
+
 std::string toString(const ResourceAccess &access) {
     std::string out =
         std::format("{} {}", accessModeName(access.mode), resourceClassName(access.resource.cls));
@@ -302,9 +306,6 @@ ResourceSignature signatureOf(const ResourceSpec &spec, size_t withCount) {
     sig.result  = spec.result;
     sig.allocates = spec.allocates;
     sig.external  = spec.externalEffect;
-    const auto uniteMode = [](AccessMode a, AccessMode b) {
-        return writes(a) || writes(b) ? AccessMode::ReadModifyWrite : AccessMode::Read;
-    };
     for (const ResourceAccess &access : spec.accesses) {
         switch (access.binding.kind) {
         case ResourceBinding::Kind::Norm:
@@ -335,7 +336,7 @@ ResourceSignature signatureOf(const ResourceSpec &spec, size_t withCount) {
                 if (found->name.empty()) {
                     found->name = access.resource.name;
                 }
-                found->mode = uniteMode(found->mode, access.mode);
+                found->mode = uniteAccess(found->mode, access.mode);
             }
             break;
         }
@@ -348,7 +349,7 @@ ResourceSignature signatureOf(const ResourceSpec &spec, size_t withCount) {
                     ResourceSignature::AmbientUse{
                         .name = access.resource.name, .mode = access.mode});
             } else {
-                found->mode = uniteMode(found->mode, access.mode);
+                found->mode = uniteAccess(found->mode, access.mode);
             }
             break;
         }
@@ -365,6 +366,7 @@ ResourceSignature signatureOf(const ResourceSpec &spec, size_t withCount) {
     });
     std::sort(sig.captures.begin(), sig.captures.end());
     sig.captures.erase(std::unique(sig.captures.begin(), sig.captures.end()), sig.captures.end());
+    ambientCarriesExternal(sig);
     return sig;
 }
 

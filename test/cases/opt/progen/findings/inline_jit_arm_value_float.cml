@@ -23,7 +23,7 @@ func main(): int sync {
         }
         case 'a' => 1.0
         case _ => sync {
-            2..4->foreach<sync (p63: int) => sync {
+            2..4->foreach<(p63: int) => sync {
                 v61 += r6(0, -1.5, 'ab');
             }>;
             return v61;

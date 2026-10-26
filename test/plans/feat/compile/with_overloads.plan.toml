@@ -1,0 +1,18 @@
+id = "compile.with_overloads"
+order = 929
+tier = "fast"
+tags = ["feat", "compile", "overload"]
+desc = "Functions of one name whose `with` parameter lists differ in count are one overload set"
+
+[[tests]]
+name = "with_overloads.by_count"
+desc = "`total(xs)`, `xs->total<axis: 3>` and `xs->total<1, true>` pick three overloads of one name; `fill()` and `fill<3>()` two."
+kind = "behavior"
+case = "../../../cases/compile/with_overloads/by_count.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "2\n3\n11\n[0] [3]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

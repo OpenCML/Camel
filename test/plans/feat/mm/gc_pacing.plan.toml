@@ -25,7 +25,7 @@ views is counted once (the views case asserts that a 3 MB block shared by an arr
 `reshape` view, both promoted, does not ask for a major against the 4 MB floor), and an array that
 was promoted while still inline registers the block at the takeover when it grows (the adopted
 case asserts that growing that block past the floor asks for a major; without the registration no
-promotion ever sees the block). The training case is the shape of H40 section 8 (integer labels
+promotion ever sees the block). The training case is the shape of the memory-pacing measurement (integer labels
 cast inside the differentiated function, softmax cross entropy, grad, sgd): the batch and the
 model stay alive and the peak stays at the live set plus one window, at twice the steps too.
 

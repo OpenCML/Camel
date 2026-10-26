@@ -277,7 +277,7 @@ Value lowerWhere(const LowerContext &ctx) {
 
 Value lowerCast(const LowerContext &ctx) {
     if (!ctx.result().dtype) {
-        throw ExportError("'tensor:cast': the target dtype must be an export-time constant");
+        throw ExportError("'tensor:to_*': the target dtype must be an export-time constant");
     }
     return ctx.emit(
         "Cast",
@@ -435,9 +435,15 @@ Value lowerConcat(const LowerContext &ctx) {
  * the write site refused a negative or out-of-range one already.
  *
  * A bound is a position from the end only in ONNX's own reading of a negative index, which is
- * nothing Camel has: the end of a backward slice is written as -1, ONNX's own "before the first
- * element", exactly as the core's kernel reads it (`src/builtin/operators/struct.cpp`,
- * `sliceRange`).
+ * nothing Camel has. A backward slice's end that the source did not write is the position before
+ * the first element, which the kernel reads as -1 (`src/builtin/operators/struct.cpp`,
+ * `sliceRange`); in ONNX that same position is named by an end below every extent, because ONNX
+ * adds the extent to a negative end and then clamps a negative step's end to -1. So the unwritten
+ * end of a backward slice is that constant and not -1: ONNX reads a -1 as the last position of the
+ * axis and the slice comes out empty (`x[3::-2]` of a four-element axis was `[]` instead of
+ * `[4, 2]`). The constant names the position without the extent, which is what the ONNX Slice
+ * documentation recommends for slicing backwards to the end of an axis whose size is not known,
+ * so a backward slice of a dynamic extent exports as it stands.
  */
 Value lowerSliceSub(const LowerContext &ctx) {
     Emitter &e = ctx.emitter();
@@ -470,7 +476,10 @@ Value lowerSliceSub(const LowerContext &ctx) {
     const bool wroteStart    = (written & 2) != 0;
     const bool wroteEnd      = (written & 1) != 0;
     const std::optional<int64_t> extent = (*facts.shape)[static_cast<size_t>(at)];
-    const int64_t zero[] = {0}, one[] = {1}, two[] = {2}, minusOne[] = {-1};
+    const int64_t zero[] = {0}, one[] = {1}, two[] = {2};
+    // The position before the first element of an axis of any extent, as ONNX names it: below
+    // every extent, so adding the extent and clamping a negative step's end to -1 leaves -1.
+    const int64_t beforeFirst[] = {std::numeric_limits<int64_t>::min()};
     const auto int64Cast = intAttr("to", static_cast<int64_t>(elemTypeOf(TypeCode::Int64)));
 
     // The extent as a one-element int64 tensor: the number now, or read from the value's shape
@@ -525,7 +534,8 @@ Value lowerSliceSub(const LowerContext &ctx) {
                                : (extent.has_value()
                                       ? e.int64s(std::vector<int64_t>{*extent - 1})
                                       : e.node("Sub", {extentVec, e.int64s(one)})));
-    const std::string end = wroteEnd ? boundOf(3, false) : (step > 0 ? extentVec : e.int64s(minusOne));
+    const std::string end = wroteEnd ? boundOf(3, false)
+                                     : (step > 0 ? extentVec : e.int64s(beforeFirst));
 
     // The length of the slice, when the extent and both bounds are known now.
     std::optional<int64_t> length;
@@ -1216,7 +1226,10 @@ LoweringRegistry::LoweringRegistry() {
     add("tensor:gelu", lowerGelu);
     add("tensor:erf", sameTypeOp("Erf", 1));
     add("tensor:where", lowerWhere);
-    add("tensor:cast", lowerCast);
+    for (const char *uri : {"tensor:to_i32", "tensor:to_i64", "tensor:to_f32", "tensor:to_f64",
+                            "tensor:to_bf16", "tensor:to_f16"}) {
+        add(uri, lowerCast);
+    }
 
     // Linear algebra and layout.
     add("tensor:matmul", sameTypeOp("MatMul", 2));

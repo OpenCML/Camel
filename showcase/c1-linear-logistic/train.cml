@@ -58,8 +58,13 @@ func evaluate(m: Model, x: f32[..], y: f32[..], kind: int): (float, float) {
         let errors = abs(z - y)
         (float(mean(errors * errors)), float(mean(errors)))
     } else {
-        let correct = (z > 0.0) == (y > 0.5)
-        (float(mean(relu(z) - z * y + log(exp(-abs(z)) + 1.0))), float(mean(correct)))
+        // The mask is the elementwise comparison, so `correct` is a bool array of the ones and
+        // zeros the accuracy counts (design principles 4.2). A mask is not a number, so they are
+        // read as the numbers they stand for once the conversion is written, at the f32 this
+        // model computes in (design principles 5.1).
+        let correct = (z > 0.0) === (y > 0.5)
+        let hit: f32[..] = f32(correct)
+        (float(mean(relu(z) - z * y + log(exp(-abs(z)) + 1.0))), float(mean(hit)))
     }
 }
 

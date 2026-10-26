@@ -7,7 +7,7 @@
  */
 module export_train_step_bn
 
-import { cast, relu, mean, reshape, flatten, new } from tensor
+import { relu, mean, reshape, flatten, new } from tensor
 import { with_grad } from autodiff
 import { conv2d, batch_norm_train, sgd } from nn
 import { export_model } from onnx
@@ -31,9 +31,9 @@ func forward(x: float[..], s: BnStats): (float[..], BnStats) {
     // does the value the batch norm answers, while this model works in f64: each is converted
     // where it is stored or meets the model's weights (design principles 7.4: the element type is
     // exact, and a conversion is written).
-    return (cast(flatten(g), 'float64') @ m.fc_w + m.fc_b, {
-        bn1_rm: cast(r1.1, 'float64'), bn1_rv: cast(r1.2, 'float64'),
-        bn2_rm: cast(r2.1, 'float64'), bn2_rv: cast(r2.2, 'float64')
+    return (float(flatten(g)) @ m.fc_w + m.fc_b, {
+        bn1_rm: float(r1.1), bn1_rv: float(r1.2),
+        bn2_rm: float(r2.1), bn2_rv: float(r2.2)
     })
 }
 
@@ -80,7 +80,7 @@ func main(): int sync {
         -0.2, 0.6, 0.5, -0.4, 0.1,
         0.3, -0.5, 0.4, 0.2, -0.7,
         0.1, 0.2, -0.1, 0.6, 0.4]), [1, 1, 5, 5])
-    export_model(step, (m, s, x), get_env('ONNX_OUT'))
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, s, x))
     println('exported')
     return 0
 }

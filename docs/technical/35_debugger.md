@@ -296,7 +296,7 @@ See 4.3: `main [inlined code of g]`, located in `g` (the full name of `g`, 5.5).
 
 ### 5.4 Arms and lambdas: frames of functions, or of subgraphs
 
-`if c then a else b` (and `match`, `??`, `!!`, `?->`, `&&`, `||` and narrowing, which are the
+`if c then a else b` (and `match`, `??`, `!!`, `->`, `&&`, `||` and narrowing, which are the
 same structure) is a branch node and one *arm region* per arm of the graph that holds the
 branch (`GCRegion`, kind `Arm`). The program the debugger shows has its arms lowered like every
 other program, so there is no frame of an arm: an arm is code of the function it is written
@@ -394,7 +394,7 @@ module's answer too, so its condition run and its reasoning are the same as the 
 `explain` on a run made without attribution shows the module's `NoAttribution` error, not an
 empty chain; an argument that has no value, or a call the operator's type rule refuses, is a
 located diagnostic and leaves the session stopped and usable. A nested graph the call may run
-(a `when` condition) is not the program: observation is paused for its duration (H150).
+(a `when` condition) is not the program: observation is paused for its duration.
 
 The record is the authority. The debugger never recomputes a chain or a reason; it formats the
 `Proof` the module made. Where the two could differ — a value the frame no longer holds, a rule

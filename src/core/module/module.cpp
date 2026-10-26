@@ -128,9 +128,20 @@ std::optional<Reference> refFromParts(const std::vector<std::string> &parts) {
 } // namespace
 
 Module::Module(const std::string &name, const std::string &path, context_ptr_t ctx)
-    : loaded_(false), name_(name), path_(path), context_(ctx),
+    : loaded_(false), name_(name), path_(path),
+      // The context owns this module (Context::builtinModules_, loadedModules_), so the context a
+      // module refers back to must not be an owning reference: a module that owned its context
+      // would hold it through the very member the context owns, and a context its own members hold
+      // reaches neither its destructor nor anything its destructor does (Context::handle()). The
+      // conversion belongs in this constructor, which every module goes through, and not at the
+      // places that build one: they hand on a `context_ptr_t` from `Context::create` or from
+      // another module, and a site added later cannot forget a rule this constructor keeps. A
+      // module of another language's `.cmo` gets it from here too, because BuiltinModule, which
+      // such a module derives from, calls this constructor inside libcamel.
+      context_(ctx ? ctx->handle() : context_ptr_t{}),
       exportedTypeNS_(std::make_shared<Namespace<std::string, Type *>>()),
-      nativeEntityNS_(std::make_shared<Namespace<std::string, entity>>()), defaultImportedRefs_(),
+      nativeEntityNS_(std::make_shared<Namespace<std::string, entity>>()),
+      privateEntityNS_(std::make_shared<Namespace<std::string, entity>>()), defaultImportedRefs_(),
       importedRefMap_(), importedNamespaceBindings_() {}
 
 void Module::importDefaultRefsFromMod(const module_ptr_t &mod) {
@@ -348,6 +359,19 @@ bool Module::exportEntity(const Reference &ref, const entity &ent) {
         // signature: a plain name this module writes takes its aliases with it.
         if (ref.plain()) {
             replaceTypeQualifiedAliases(ref.ident(), ent);
+        }
+    }
+    return inserted;
+}
+
+bool Module::declarePrivateEntity(const Reference &ref, const entity &ent) {
+    const bool inserted = privateEntityNS_->insert(ref, ent);
+    // The URI the group answers for is how the compiler names it where it emits the operator
+    // itself (the kernel of an `#impl` function), exactly as for an exported group.
+    if (ent.isOperGroup() && ent.operGroup() != nullptr) {
+        auto &table = camel::core::OperatorTable::instance();
+        for (const auto &[uri, resolver] : ent.operGroup()->resolvers()) {
+            nativeOperatorGroups_[table.intern(uri)] = ent.operGroup();
         }
     }
     return inserted;
@@ -660,6 +684,8 @@ const std::vector<Reference> &Module::defaultImportedRefs() const { return defau
 type_ns_ptr_t Module::exportedTypeNS() const { return exportedTypeNS_; }
 
 entity_ns_ptr_t Module::nativeEntityNS() const { return nativeEntityNS_; }
+
+entity_ns_ptr_t Module::privateEntityNS() const { return privateEntityNS_; }
 
 // ---- Resources (design effects plan 3.2) --------------------------------------------------
 

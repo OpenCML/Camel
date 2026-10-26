@@ -75,7 +75,7 @@ func main(): int sync {
         [1.0, -1.0, 0.25, -0.25, 0.75, 0.5, 0.5, -0.5, -0.25, 0.25, -0.5, 1.0] as f32[],
         [2, 3, 2]
     )
-    export_model(step, (m, x), get_env('ONNX_OUT'))
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, x))
     println('exported')
     return 0
 }
