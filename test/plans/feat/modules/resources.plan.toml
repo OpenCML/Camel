@@ -295,7 +295,6 @@ const expect = {
   'rand:seed': 'write ambient rng; external',
   'rand:rand': 'rmw ambient rng; external',
   'time:now': 'read ambient clock; external',
-  'time:strftime': 'read ambient env; external',
   'env:get_env': 'read ambient env; external',
   'process:sleep': 'read ambient clock; external',
   'process:user_name': 'read ambient env; external',

@@ -28,7 +28,7 @@ assert(stale.length === 0, `operators of the deleted algo module: ${stale.join('
 const undeclared = ops.filter((o) => o.purity === 'undeclared').map((o) => o.uri)
 assert(undeclared.length === 0, `operators without a purity declaration: ${undeclared.join(', ')}`)
 const purity = Object.fromEntries(ops.map((o) => [o.uri, o.purity]))
-const notPure = ['time:now', 'time:strftime', 'time:strptime', 'rand:rand', 'rand:seed', 'rand:shuffle', 'rand:choice', 'env:get_env', 'env:get_cwd',
+const notPure = ['time:now', 'rand:rand', 'rand:seed', 'rand:shuffle', 'rand:choice', 'env:get_env', 'env:get_cwd',
   'fs:read_text', 'fs:try_read_text', 'fs:exists', 'fs:file_size', 'fs:write_text', 'process:user_name', 'process:cpu_count', 'process:sleep', 'process:exit',
   'io:set_terminal_raw_mode', 'io:has_input', 'io:get_char', 'io:get_chars', 'io:clear_input_buffer',
   ':io/print', ':io/println', ':io/eprintln', ':io/input', ':op/assn', ':op/assn_owned', 'para:rendezvous',
@@ -36,7 +36,7 @@ const notPure = ['time:now', 'time:strftime', 'time:strptime', 'rand:rand', 'ran
 for (const uri of notPure) {
   assert(purity[uri] === 'effectful', `${uri} is declared ${purity[uri]}, expected effectful`)
 }
-const pure = ['str:to_upper', 'str:codepoints', 'math:sin_d', 'math:shl', 'statistics:median',
+const pure = ['str:to_upper', 'str:codepoints', 'time:strftime', 'time:strptime', 'math:sin_d', 'math:shl', 'statistics:median',
   're:test', 'json:encode', 'json:decode', 'this:zen', ':op/add_l', ':op/idx_str', ':struct/slice_arr', ':str/format',
   // They return a new array and leave their argument unchanged (design principles 11.3), one
   // operator per element type: the name carries the element type it takes.

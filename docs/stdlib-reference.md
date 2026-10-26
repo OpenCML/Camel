@@ -3653,8 +3653,9 @@ and does not change key; n = 0 gives [] and n = 1 gives [0].
 
 ## `time`
 
-All three are declared with effects: `now` reads the clock, and `strptime` reads the time zone
-of the process. `strftime` formats in UTC and is kept with them.
+A moment is a `float`: seconds since 1970-01-01 00:00 UTC, with a fraction. Reading the clock is
+an effect (`now`); turning a moment into text and back is pure and always in UTC, so the same
+moment gives the same text on every machine.
 
 #### `now`
 
@@ -3662,7 +3663,7 @@ of the process. `strftime` formats in UTC and is kept with them.
 now: () => float
 ```
 
-The current time in seconds since 1970-01-01 00:00 UTC, with a fraction.
+The current time, in seconds since the epoch.
 
 - With effects: reads the clock.
 - Example: `now()` gives `1791806400.25`
@@ -3670,27 +3671,26 @@ The current time in seconds since 1970-01-01 00:00 UTC, with a fraction.
 #### `strftime`
 
 ```camel
-strftime: (timestamp: float, format: string) => string
+strftime: <format: string> (timestamp: float) => string
 ```
 
-The time `timestamp` (seconds since the epoch) written with a strftime format, in UTC.
+The moment written with a strftime format, in UTC.
 
-- With effects: declared with effects together with the rest of the module.
-- Failure: fault `TimeFormatFailed` when the time or the format cannot be used.
-- Example: `strftime(0.0, '%Y-%m-%d')` gives `'1970-01-01'`
+- Pure.
+- Failure: fault `TimeFormatFailed` when the moment is outside the range of calendar time, or the format gives no text.
+- Example: `0.0->strftime<'%Y-%m-%d'>` gives `'1970-01-01'`
 
 #### `strptime`
 
 ```camel
-strptime: (text: string, format: string) => float
+strptime: <format: string> (text: string) => float!
 ```
 
-The time, in seconds since the epoch, that text gives when read with a strptime format; the
-fields are taken as local time.
+The moment a text gives when read with a strptime format; the fields are taken as UTC.
 
-- With effects: reads the time zone.
-- Failure: fault `TimeFormatFailed` when text does not have the format.
-- Example: `strptime('1970-01-02', '%Y-%m-%d')` gives `86400 in UTC`
+- Pure.
+- Failure: error value `ParseError` when the text does not have the format, or gives a moment outside the range of calendar time.
+- Example: `'1970-01-02'->strptime<'%Y-%m-%d'> !! 0.0` gives `86400.0`
 
 <a id="fs"></a>
 

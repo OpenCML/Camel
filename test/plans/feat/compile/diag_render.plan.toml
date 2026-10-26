@@ -460,7 +460,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "render.runtime_time_format"
-desc = "Text that does not match the time format, with both."
+desc = "A timestamp outside the range of calendar time: the fault is rendered with its message, its position and its help line."
 kind = "snapshot"
 case = "../../../cases/compile/diag_render/runtime_time_format.cml"
 args = ["--error-format", "text", "${case}"]

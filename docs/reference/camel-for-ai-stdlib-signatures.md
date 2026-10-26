@@ -509,8 +509,8 @@ permutation: (key: { hi: int, lo: int }, n: int) => int[]
 
 ```text
 now: () => float
-strftime: (timestamp: float, format: string) => string
-strptime: (text: string, format: string) => float
+strftime: <format: string> (timestamp: float) => string
+strptime: <format: string> (text: string) => float!
 ```
 
 **`fs`** — import { ... } from fs — 15 name(s)
