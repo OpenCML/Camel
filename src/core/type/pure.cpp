@@ -4,6 +4,7 @@
 #include "camel/core/type/pure.h"
 
 #include "camel/core/type/composite/struct.h"
+#include "camel/core/type/intern.h"
 #include "camel/utils/assert.h"
 #include "camel/core/type/composite/tuple.h"
 
@@ -35,10 +36,12 @@ size_t alignUp(size_t value, size_t alignment) {
     return (value + alignment - 1) / alignment * alignment;
 }
 
-// The answer is cached per type object. Types are interned and live for the process, so the
-// pointer key stays valid and no entry is ever removed. The cache is a side table rather than
-// fields on Type: a Type is allocated in the permanent space, and growing every type object
-// would shift the point at which that space is exhausted (a diagnostic the tests pin down).
+// The answer is cached per canonical type id (camel/core/type/intern.h): two spellings of one
+// type (the same shape under other dimension names) share an entry, and no entry is ever removed.
+// A result that was computed from something still being defined is not cached (below). The cache
+// is a side table rather than fields on Type: a Type is allocated in the permanent space, and
+// growing every type object would shift the point at which that space is exhausted (a diagnostic
+// the tests pin down).
 struct CacheEntry {
     const DataLayout *layout = nullptr;
     int8_t pure              = 0; // 0 unknown, 1 pure, -1 not pure
@@ -49,10 +52,20 @@ std::mutex &cacheMutex() {
     return *mutex;
 }
 
-std::unordered_map<const Type *, CacheEntry> &cache() {
-    static auto *map = new std::unordered_map<const Type *, CacheEntry>();
+std::unordered_map<TypeId, CacheEntry> &cache() {
+    static auto *map = new std::unordered_map<TypeId, CacheEntry>();
     return *map;
 }
+
+/// The key of a type in the cache, or kNoTypeId for a type the table does not hold (nothing about
+/// such a type is cached).
+TypeId cacheKey(const Type *type) { return TypeTable::instance().canonicalId(type); }
+
+/// Set while the answer being computed leans on something that is not finished: a field whose
+/// type is not known yet (a struct read while its declaration is still being read, a reference
+/// to a type that is not resolved), or a cycle the walk cut. Such an answer is right for now and
+/// may be wrong later, so it is returned and never cached.
+thread_local bool unfinished = false;
 
 // Guards the structural walk against a cycle of pure types (a recursive struct whose fields
 // are references is already rejected by the field codes; this is belt and braces).
@@ -60,6 +73,7 @@ thread_local std::vector<const Type *> visiting;
 
 bool computePure(const Type *type) {
     if (std::find(visiting.begin(), visiting.end(), type) != visiting.end()) {
+        unfinished = true;
         return false;
     }
     switch (type->code()) {
@@ -83,6 +97,9 @@ bool computePure(const Type *type) {
                 return false;
             }
         }
+        if (type->code() == TypeCode::Struct && !static_cast<const StructType *>(type)->resolved()) {
+            unfinished = true;
+        }
         visiting.push_back(type);
         const size_t size = type->code() == TypeCode::Struct
                                 ? static_cast<const StructType *>(type)->size()
@@ -99,6 +116,10 @@ bool computePure(const Type *type) {
         visiting.pop_back();
         return true;
     }
+    case TypeCode::Ref:
+        // A name that is not resolved yet: what it stands for decides.
+        unfinished = true;
+        return false;
     default:
         // Strings, arrays, functions, enums, references and tagged forms hold references.
         return false;
@@ -179,23 +200,29 @@ const DataLayout *scalarDataLayout(TypeCode code) {
 
 bool isPureDataType(const Type *type) {
     if (type == nullptr) {
+        unfinished = true;
         return false;
     }
     // Numeric leaves are the common case and need no cache lookup or lock.
     if (scalarDataLayout(type->code()) != nullptr) {
         return true;
     }
-    {
+    const TypeId key = cacheKey(type);
+    if (key != kNoTypeId) {
         std::lock_guard<std::mutex> lock(cacheMutex());
-        const auto it = cache().find(type);
+        const auto it = cache().find(key);
         if (it != cache().end() && it->second.pure != 0) {
             return it->second.pure == 1;
         }
     }
-    const bool pure = computePure(type);
-    {
+    const bool outer = unfinished;
+    unfinished       = false;
+    const bool pure  = computePure(type);
+    const bool tainted = unfinished;
+    unfinished         = outer || tainted;
+    if (key != kNoTypeId && !tainted) {
         std::lock_guard<std::mutex> lock(cacheMutex());
-        cache()[type].pure = pure ? 1 : -1;
+        cache()[key].pure = pure ? 1 : -1;
     }
     return pure;
 }
@@ -207,20 +234,26 @@ const DataLayout *pureDataLayout(const Type *type) {
     if (const DataLayout *scalar = scalarDataLayout(type->code())) {
         return scalar;
     }
-    {
+    const TypeId key = cacheKey(type);
+    if (key != kNoTypeId) {
         std::lock_guard<std::mutex> lock(cacheMutex());
-        const auto it = cache().find(type);
+        const auto it = cache().find(key);
         if (it != cache().end() && it->second.layout != nullptr) {
             return it->second.layout;
         }
     }
+    const bool outer = unfinished;
+    unfinished       = false;
     if (!isPureDataType(type)) {
+        unfinished = outer || unfinished;
         return nullptr;
     }
     const DataLayout *layout = computeLayout(type);
-    if (layout != nullptr) {
+    const bool tainted       = unfinished;
+    unfinished               = outer || tainted;
+    if (layout != nullptr && key != kNoTypeId && !tainted) {
         std::lock_guard<std::mutex> lock(cacheMutex());
-        CacheEntry &entry = cache()[type];
+        CacheEntry &entry = cache()[key];
         if (entry.layout == nullptr) {
             entry.layout = layout;
         }

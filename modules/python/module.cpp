@@ -65,7 +65,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {-1, {}}},
                         "(fn: string | PyObject, ...args: PyObject[]) => PyObject!",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> std::optional<Type *> {
                             if (norm.size() < 1)
                                 return std::nullopt;
@@ -84,7 +84,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                         {{0, {}}, {-1, {}}},
                         "(fn: string | PyObject, args?: (...PyObject) | PyObject[], kwargs?: "
                         "Struct<...PyObject>) => PyObject!",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> std::optional<Type *> {
                             if (norm.size() < 1 || norm.size() > 3)
                                 return std::nullopt;
@@ -128,7 +128,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {-1, {false}}},
                         "(...objs: PyObject[]) => PyObject?",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> std::optional<Type *> {
                             for (Type *t : norm)
                                 if (!t->isOtherType() || t->code() != PyObjectType::typeCode())
@@ -145,7 +145,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {-1, {false}}},
                         "(...objs: PyObject[]) => PyObject?",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> std::optional<Type *> {
                             for (Type *t : norm)
                                 if (!t->isOtherType() || t->code() != PyObjectType::typeCode())
@@ -162,7 +162,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
                         "(x: T) => PyObject<T>",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> std::optional<Type *> {
                             return getPyObjectType()->cloneWithParams(
                                 std::span<Type *const>(norm.data(), 1));
@@ -177,7 +177,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {1, {false}}},
                         "(obj: PyObject<T>) => T!",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
+                        [](const type_vec_t &with, const type_vec_t &norm)
                             -> std::optional<Type *> {
                             Type *t = norm[0];
                             if (!t->isOtherType() || t->code() != PyObjectType::typeCode())

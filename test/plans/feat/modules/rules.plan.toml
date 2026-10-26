@@ -1823,3 +1823,23 @@ expect_exit = 0
 expect_stdout_contains = ["103\n"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
+[[tests]]
+name = "saturate_rhs_from_an_enclosing_region"
+desc = "`x + 1 => x` matches `x + 1` in the arm of `&&` with `x` the parameter outside it. The writings of a value share a region, so saturation records no equivalence there instead of failing; saturate and extract from Camel, then the run, give the program's meaning."
+kind = "behavior"
+case = "../../../cases/modules/rules/saturate_outer_operand.cml"
+backends = ["nvm", "fvm"]
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "saturated false true false\n"
+timeout_ms = 20000
+
+[[tests]]
+name = "opt_saturate_rhs_from_an_enclosing_region"
+desc = "The same program through the pipeline's saturation: std::opt::saturate keeps the writings it may, the next pass extracts one per value, and the run gives the program's meaning."
+kind = "behavior"
+case = "../../../cases/modules/rules/saturate_outer_operand.cml"
+args = ["${case}", "std::opt::saturate", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "saturated false true false\n"
+timeout_ms = 20000

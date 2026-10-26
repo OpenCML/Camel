@@ -102,7 +102,7 @@ std::optional<type::Type *> operResultType(const GraphDraft &draft, gc_node_ref_
         return overload ? std::optional<type::Type *>(overload->exitType()) : std::nullopt;
     }
     try {
-        const auto resolved = resolver->resolveWith(with, norm, statics, Modifier::None);
+        const auto resolved = resolver->resolveWith(with, norm, statics);
         if (!resolved || !*resolved) {
             return std::nullopt;
         }

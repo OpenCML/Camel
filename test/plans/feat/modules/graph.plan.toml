@@ -178,13 +178,13 @@ expect_output_not_contains = ["126"]
 timeout_ms = 10000
 
 [[tests]]
-name = "txn_conflict"
-desc = "Two transactions edit one graph; the second commit gives the error GraphConflict."
+name = "txn_two_commits_are_two_values"
+desc = "Two transactions edit one graph of the same Program; each commit makes a Program of its own (design principles 9.1), so the second succeeds too."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/edits.cml"
 args = ["${case}", "probes::conflict", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "GraphConflict\n126\ntext\n"
+expect_stdout_exact = "ok\n126\ntext\n"
 timeout_ms = 10000
 
 [[tests]]

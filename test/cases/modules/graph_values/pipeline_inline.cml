@@ -1,0 +1,24 @@
+/**
+ * The command-line pipeline is the program's only holder, so its passes may rewrite in place
+ * (design principles 9.1). `twice` is called by two callers and held by a closure; after
+ * inlining and optimising, every holder computes what the source says.
+ */
+module pipeline_inline
+
+func twice(x: int): int {
+    return x * 2 + x * 2
+}
+
+func a(x: int): int {
+    return twice(x) + 1
+}
+
+func b(x: int): int {
+    return twice(x) * 3
+}
+
+func main(): int sync {
+    let held = (x: int): int => twice(x) - 1
+    println(`${twice(5)} ${a(5)} ${b(5)} ${held(5)}`)
+    return 0
+}

@@ -1714,7 +1714,7 @@ void Builder::settleGenericOperatorArguments(
         for (const Argument &input : normInputs) {
             statics.push_back(isWaiting(input) ? StaticArg{} : staticArgOf(input.node));
         }
-        return ops->resolve(withTypes, normTypes, statics, Modifier::None).has_value();
+        return ops->resolve(withTypes, normTypes, statics).has_value();
     };
     // A name with several functions: the one the operator accepts, when it is exactly one
     // (`xs->map<abs>`, `xs->reduce<max, 0>`). The operator is asked about each candidate's
@@ -1763,11 +1763,11 @@ void Builder::settleGenericOperatorArguments(
                 // A signature computed from the argument types: asked for the candidate
                 // types, one and two parameters.
                 for (Type *first : candidates) {
-                    if (auto one = resolver->resolve({}, {first}, Modifier::None)) {
+                    if (auto one = resolver->resolve({}, {first})) {
                         add(uri, *one);
                     }
                     for (Type *second : candidates) {
-                        if (auto two = resolver->resolve({}, {first, second}, Modifier::None)) {
+                        if (auto two = resolver->resolve({}, {first, second})) {
                             add(uri, *two);
                         }
                     }
@@ -1940,9 +1940,25 @@ void Builder::rejectInvalidCollectionKey(Type *type, const GCT::node_ptr_t &at) 
 }
 
 compile_graph_ptr_t Builder::instantiateGeneric(
-    const generic_template_ptr_t &tmpl, const type_bindings_t &bindings, const ExtentValues &extents,
-    const ConstasValues &constas, const GCT::node_ptr_t &call) {
+    const generic_template_ptr_t &tmpl, const type_bindings_t &callBindings,
+    const ExtentValues &extents, const ConstasValues &constas, const GCT::node_ptr_t &call) {
     ExpectedValueScope instanceScope(expectedValueType_, nullptr);
+    // The key of an instance is the template's own type parameters and what they are bound to,
+    // whatever else the caller passed: a call from the body gives just those, a predicate
+    // evaluated for a `when` gives the template's outer bindings first (they are the template's
+    // own, kept in `tmpl->outerBindings` and put in front of these when the body is built). Two
+    // routes to one instance are one instance, and one diagnostic.
+    const std::vector<std::string> ownNames = typeParameterNames(tmpl);
+    type_bindings_t bindings;
+    for (const auto &binding : callBindings) {
+        const bool own = std::find(ownNames.begin(), ownNames.end(), binding.first) !=
+                             ownNames.end() &&
+                         findTypeBinding(tmpl->outerBindings, binding.first) == nullptr;
+        const bool seen = findTypeBinding(bindings, binding.first) != nullptr;
+        if (own && !seen) {
+            bindings.push_back(binding);
+        }
+    }
     // All routes (inferred calls, function values and::<T>) enforce the same type rules.
     Type *concrete = substituteExtentValues(substituteTypeVars(tmpl->funcType, bindings), extents);
     if (TupleType *repeated = findRepeatedMark(concrete)) {

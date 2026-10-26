@@ -614,19 +614,12 @@ bool sameTypeWith(const Type *a, const Type *b, ResourceMatch resources) {
         case TypeCode::Array: {
             const auto *lhs = static_cast<const ArrayType *>(left);
             const auto *rhs = static_cast<const ArrayType *>(right);
-            // The shape is part of the type: a fixed rank and an open rank are different
-            // types, and so are two different constant extents. An extent that is not a
-            // constant asks for nothing at the call, so two such extents are the same
-            // dimension here; dimension names are signature metadata, as parameter names are
-            // for function types (this is what the tensor type's equality did before).
-            if (lhs->anyRank() != rhs->anyRank() ||
-                lhs->extents().size() != rhs->extents().size()) {
+            // The shape is part of the type: a fixed rank and an open rank are different types, and
+            // so are two different constant extents. An extent that is a linear form over names is
+            // the same extent in any spelling of its names and a different one from `[n + 1]`
+            // or `?`; the shape is compared as a whole (`[n, n]` is not `[n, m]`).
+            if (!lhs->sameShape(*rhs)) {
                 return false;
-            }
-            for (size_t i = 0; i < lhs->extents().size(); ++i) {
-                if (!sameExtentConstraint(lhs->extents()[i], rhs->extents()[i])) {
-                    return false;
-                }
             }
             pending.emplace_back(lhs->elemType(), rhs->elemType());
             break;

@@ -51,7 +51,7 @@ bool TestSupportModule::load() {
             "test_support",
             {
                 {"rendezvous", externalAmbient("rendezvous_point", AccessMode::ReadModifyWrite)},
-                {"thread_count", externalAmbient("process", AccessMode::Read)},
+                {"thread_count", externalAmbient("process::process", AccessMode::Read)},
             });
     }
     loaded_ = true;

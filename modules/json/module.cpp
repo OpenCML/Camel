@@ -47,7 +47,7 @@ class DecodeAsResolver final : public FuncTypeResolver {
 
     std::optional<FunctionType *> resolveForCall(
         const type_vec_t &types, Type *expected, const type_vec_t &with, const type_vec_t &norm,
-        static_args_t, const ModifierSet &) const override {
+        static_args_t, const ModifierSet &modifiers) const override {
         if (!with.empty() || norm.size() != 1 ||
             (norm[0]->code() != TypeCode::String && !isJsonType(norm[0]))) {
             return std::nullopt;
@@ -61,12 +61,7 @@ class DecodeAsResolver final : public FuncTypeResolver {
         if (target == nullptr || !jsonTypeHasForm(target)) {
             return std::nullopt;
         }
-        // A type carries no modifiers (`sync`, `macro`): one identity per type, so the signature
-        // built here has none, and the call's own node keeps what it was written with.
-        return FunctionType::create(
-            {},
-            {{norm[0], false}},
-            TupleType::fallible(target));
+        return FunctionType::create({}, {{norm[0], false}}, TupleType::fallible(target));
     }
 
     std::string signature() const override { return "::<T>(source: string | Json) => T!"; }
