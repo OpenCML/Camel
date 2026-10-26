@@ -208,7 +208,12 @@ with <
     /// one, instead of the gate's pacing (the next collection otherwise starts no sooner than
     /// twice the time the last one took, which holds the collector at a third of a production
     /// run). The stress itself is asked for with the collector's `CAMEL_GC_STRESS_*` settings.
-    gc_stress: bool = false
+    gc_stress: bool = false,
+    /// A blocking operator leaves its GC region for the wait, so that a worker inside a sleep or
+    /// a device synchronise does not stop the world while it waits. Off: the wait holds the
+    /// region, a collection that finds it gives up after 500 ms, and the gate reports the
+    /// refusals once they repeat -- the path a wait that does not announce itself still takes.
+    blocking_leaves: bool = true
 >
 export func taskflow::<F>(f: F): F! when is_function::<F>()
 
