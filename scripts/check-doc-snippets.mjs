@@ -620,7 +620,7 @@ function opensTheDump(pageLines) {
 // A node, a function cluster or an equivalence class is named by a letter and a number: `N03`,
 // `O04`, `F0D`, `C01`, and the `c1` that a saturation dump writes as a class label. The number is
 // an accident of the run -- the counter has drawn every node above it by the time this one is
-// numbered -- so the rule of 2026-10-25 is that an excerpt does not compare numbers:
+// numbered -- so the rule is that an excerpt does not compare numbers:
 // it matches when *some* one-to-one renaming of one side's numbers onto the other's makes it a run
 // of the dump. Everything between the numbers is still compared verbatim, so a different operator
 // or constant is still a difference, and two numbers of one side may not become one number of the

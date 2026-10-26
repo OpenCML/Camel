@@ -3,7 +3,7 @@
  * array is a tensor, `for row in w` takes the row an index names (design principles 5.4),
  * and the reverse pass scatters that round's row gradient back into the array's gradient at that
  * round's index -- the scatter-add the rule
- * of 2026-10-25 asks for beside JAX's `scan`,
+ * asks for beside JAX's `scan`,
  * where a `scan` over an array's leading axis carries the per-round gradients back along it.
  *
  * The scatter is the tensor's own (`tensor:row_add_at`, `TangentSpace::scatterUri`): a row of the

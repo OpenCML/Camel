@@ -122,7 +122,7 @@ iteration code of its own, and `std::cpp` handles the string conversion (`rt::ch
 stay untranslated types there.
 
 A numeric array used to ask the tensor module for its elements (`tensor:iter`, one row a round);
-the rule of 2026-10-24  moved that rule into the core, for every
+that iteration moved into the core, for every
 array, because a `for` over an array is core semantics and the operator in between hid a constant
 array's row count from `core.loopDomain` (`docs/technical/40_graph_facts.md`, the fact is
 `shape[0]`). The module's `iter` goes away with the P4 alias (one thing, one spelling).

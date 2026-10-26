@@ -41,7 +41,7 @@
 
 ## 缺口即任务
 
-写明的元素类型这一条已经修好（the change，2026-10-23）：原生路径按叶子**写下的**元素类型取执行支与输出缓冲（`modules/nn/optim.cpp` 的 `leafElementType` / `leafTensor` / `newLike` / `zerosLeaf`；`floatTensor` 那个「不是 f32 就铸成 f32」的函数没有了），f64 叶子走 `modules/tensor/kernels/update.h` 的 `adaptiveUpdate64`，逐个元素走同一个 `adaptiveUpdateOne`，字节不经过任何 float；`f32[…]` 叶子的字节与轨迹一点没变。守卫是用例 `test/cases/modules/optim/native_dtype_exact.cml`（`optim.native_tensor_leaf_keeps_its_element_type`，四个后端，按字节比较：f64 叶子 16 字节、值是 f32 装不下的 `16777216.5`，f32 叶子 8 字节；两步 `adam` 的 f64 叶子与 `adam_wide` 逐字节相同）。
+写明的元素类型这一条已经修好：原生路径按叶子**写下的**元素类型取执行支与输出缓冲（`modules/nn/optim.cpp` 的 `leafElementType` / `leafTensor` / `newLike` / `zerosLeaf`；`floatTensor` 那个「不是 f32 就铸成 f32」的函数没有了），f64 叶子走 `modules/tensor/kernels/update.h` 的 `adaptiveUpdate64`，逐个元素走同一个 `adaptiveUpdateOne`，字节不经过任何 float；`f32[…]` 叶子的字节与轨迹一点没变。守卫是用例 `test/cases/modules/optim/native_dtype_exact.cml`（`optim.native_tensor_leaf_keeps_its_element_type`，四个后端，按字节比较：f64 叶子 16 字节、值是 f32 装不下的 `16777216.5`，f32 叶子 8 字节；两步 `adam` 的 f64 叶子与 `adam_wide` 逐字节相同）。
 
 元素类型**没写在类型里**那一半也已修好（已改：两侧都按**值的**元素类型走——原生 `leafElementType` 读值的元素类型、`leafTensor` 那个「不是写下的类型就铸过去」的转换没有了，本模块 `sgd_leaf` / `decay_leaf` / `adam_leaf` 的 `case _` 支不再转换参数——所以 `full([3, 2], 0.1)` 这样的叶子在两侧都是 f64，而 f32 值的叶子逐字节与改动前相同（`test/cases/modules/nn/mlp.cml` 与 `embedding_mf.cml` 那类程序没写下的参数现在在 f64 里训练；两个用例的断言是不等式与梯度检查，四个后端上都不用改就仍然通过）。守卫是用例 `test/cases/modules/optim/written_dtype_exact.cml`（`optim.written_dtype_leaves_agree_with_native`，四个后端，按字节比较：写下的元素类型是 f64、extent 敞开的叶子 8 字节一元素，写下 f32 的 4 字节，两侧 `sgd` 与两步 `adam` 的参数字节逐个相同，`adam` 的两棵矩也按参数的元素类型；两个元素类型各看 2 叶 4 元素，`adam` 看 4 叶 8 元素）。下面是还缺的。
 

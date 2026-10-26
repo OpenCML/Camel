@@ -39,7 +39,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "slice_rank2"
-desc = "A subscript slice of the first dimension of a tensor of rank 2 or more is the core's one slice (the rule of 2026-10-25: every `slice(...)` call is the core's): the rows the range names, every element of the other dimensions taken at the coordinate it has. A step of 1 along the first dimension of a compact array is a run of the block, so the slice is a view sharing it (design principles 5.4); it no longer waits for H17."
+desc = "A subscript slice of the first dimension of a tensor of rank 2 or more is the core's one slice (design principles 5.4: every `slice(...)` call is the core's): the rows the range names, every element of the other dimensions taken at the coordinate it has. A step of 1 along the first dimension of a compact array is a run of the block, so the slice is a view sharing it (design principles 5.4); it no longer waits for H17."
 kind = "behavior"
 case = "../../../../cases/modules/tensor/subscript/slice_rank2.cml"
 args = ["${case}"]

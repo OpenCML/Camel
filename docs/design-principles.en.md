@@ -615,7 +615,7 @@ Design motivation: the dynamism of the Python language itself determines its fle
 ### 9.10 Schedulers, back ends and releases
 
 - **The parallel scheduler hands a subgraph with nothing to parallelize to the bytecode interpreter**, and counts the recursion limit by the same rule: when `--max-recursion-depth` is raised, deep non-tail recursion runs to the end on `std::prl` just as on `std::fvm`.
-- The instruction-set baseline of the release package is `x86-64-v3` (AVX2 and FMA; raised from `x86-64-v2` on 2026-10-21, see the rule log).
+- The instruction-set baseline of the release package is `x86-64-v3` (AVX2 and FMA; raised from `x86-64-v2`).
 
 ---
 
