@@ -388,7 +388,7 @@ expect_stdout_exact = "1 2\n"
 
 [[tests]]
 name = "imports.order_local_shadows_stdlib"
-desc = "A library beside a graph.cml imports `graph`: the local file shadows the standard library's graph with no diagnostic (41; stdlib/graph has no `answer`). Pinned as the ruling's consequence; whether a warning is wanted is an open author question (H220 report)."
+desc = "A library beside a graph.cml imports `graph`: the local file shadows the standard library's graph with no diagnostic (41; stdlib/graph has no `answer`). Pinned as the rule's consequence; whether a warning is wanted is an open author question (H220 report)."
 kind = "behavior"
 case = "../../../cases/compile/module_imports/import_order/stdlib_shadow/main.cml"
 args = ["-E", "short", "${case}"]

@@ -111,9 +111,8 @@ expect_stdout_exact = "kernel=42,2,0,1 body=42,2,0,1 diff=0,0,0,0\n"
 # beside the operators, or a test-scoped way to declare another module's operator; both are the
 # language author's call.
 #
-# The rule (`docs/handover/reviews/questions-2026-10-23.md`,
-# 「## impl-kernel-site」) chose the first of the two, and removed both walls on the way
-# (`docs/handover/reviews/H141-H213.md`, Q2): 「选 (a)，而且取宽的那一种：声明模块可以有函数体，
+# The rule  chose the first of the two, and removed both walls on the way
+#: 「选 (a)，而且取宽的那一种：声明模块可以有函数体，
 # `DeclarationModuleHasBody` 删除」 and 「泛型函数可以带 `#impl`」 — the kernel is a body-less
 # declaration with the function's own type parameters, the executor is chosen at instantiation
 # per, an instance whose type has no executor runs the body (the body is the semantics, so
@@ -493,7 +492,7 @@ expect_output_contains = ["The '#impl' tag of 'add' names 'helper', which has a 
 
 [[tests]]
 name = "impl.generic_executor"
-desc = "A generic function carries `#impl` (ruling impl-kernel-site: 「泛型函数可以带 `#impl`」). `at` declares its kernel with the function's own type parameters, so every instance of it takes that executor; `add` declares a kernel with one fixed rule `(int, int) => int`, so `add<int>` is the kernel and `add<i32>` — a type the rule does not accept — runs the body. The body is the semantics, so the two paths of `add` give the same value."
+desc = "A generic function carries `#impl`. `at` declares its kernel with the function's own type parameters, so every instance of it takes that executor; `add` declares a kernel with one fixed rule `(int, int) => int`, so `add<int>` is the kernel and `add<i32>` — a type the rule does not accept — runs the body. The body is the semantics, so the two paths of `add` give the same value."
 kind = "behavior"
 case = "../../../cases/compile/native/impl_generic.cml"
 args = ["${case}", "${backend}"]
@@ -625,7 +624,7 @@ expect_stdout_exact = "direct=42 value=42\n"
 
 [[tests]]
 name = "impl.when_arms_disjoint"
-desc = "Two declarations of one kernel name whose `when` conditions exclude each other are overloads, one family of element types each (design principles 4.4; the language author's ruling of 2026-10-24 on `impl-declaration-arms`, `docs/handover/reviews/questions-2026-10-23.md`): `arms_kernel` is declared twice with the same generic signature, `when is_arm_i32::<T>()` and `when is_arm_int::<T>()`, and `combine` tags it with `#impl`. Each instance takes the rule whose condition holds for its element type -- `i32` runs `:op/sub_i` and prints -4, `int` runs `:op/add_l` and prints 42 -- and `float` satisfies neither, so that instance has no executor and runs the body `a * b`, whose 437 no rule of the declaration can produce. Each number can only come from its own path, so the three lines say which executor each instance chose; a compiler that refused the pair as `SemanticDiag::NativeDeclarationOverlap` compiles nothing, and one that bound a kernel by name alone could not tell the two arms apart."
+desc = "Two declarations of one kernel name whose `when` conditions exclude each other are overloads, one family of element types each (design principles 4.4): `arms_kernel` is declared twice with the same generic signature, `when is_arm_i32::<T>()` and `when is_arm_int::<T>()`, and `combine` tags it with `#impl`. Each instance takes the rule whose condition holds for its element type -- `i32` runs `:op/sub_i` and prints -4, `int` runs `:op/add_l` and prints 42 -- and `float` satisfies neither, so that instance has no executor and runs the body `a * b`, whose 437 no rule of the declaration can produce. Each number can only come from its own path, so the three lines say which executor each instance chose; a compiler that refused the pair as `SemanticDiag::NativeDeclarationOverlap` compiles nothing, and one that bound a kernel by name alone could not tell the two arms apart."
 kind = "behavior"
 case = "../../../cases/compile/native/when_arms_disjoint.cml"
 args = ["${case}", "${backend}"]

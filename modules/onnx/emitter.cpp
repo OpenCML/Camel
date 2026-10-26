@@ -462,8 +462,7 @@ std::string Emitter::constantOperand(const Value &value, std::optional<TypeCode>
     if (value.ty->code() == TypeCode::Array) {
         // Numeric (nested) arrays become tensors of their inferred dtype and shape. The tensor
         // states the dtype and the shape it holds: the array it was may be nested, so its own
-        // type is not the tensor's, and a rank-0 tensor is the element type itself (the rank-zero
-        // ruling).
+        // type is not the tensor's, and a rank-0 tensor is the element type itself.
         Array *t =
             tensor::tensorFromArray(value.slot, value.ty, tensor::ops::resultAllocator());
         const auto dims    = t->shapeSpan();

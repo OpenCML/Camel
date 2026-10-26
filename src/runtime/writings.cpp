@@ -1079,17 +1079,20 @@ DraftWritings::extract(const CostModel &model, camel::core::context::Context *co
         select(regionResults.back());
     }
     for (size_t at = 0; at < work.size(); ++at) {
-        // The other writings of this value that waited for something (control inputs): the
-        // writing that stays waits for it too.
+        // The other writings of this value that waited for something: the writing that stays waits
+        // for it too, in whichever kind the chain of its block is written (a control input, or the
+        // sync edge of a `sync` block's chain; docs/design/effects/edges.cn.md 1.5 and 5.3).
         if (multi[work[at]]) {
             for (gc_node_ref_t member : store_.members(contextOf(work[at]), work[at])) {
-                for (gc_node_ref_t wait : draft_.ctrlInputsOf(member)) {
-                    const gc_node_ref_t pick = chosen[classOf[wait]];
-                    if (pick == kInvalidNodeRef) {
-                        throw std::logic_error(
-                            "A control input has no writing that does not read itself.");
+                for (auto waits : {draft_.ctrlInputsOf(member), draft_.syncInputsOf(member)}) {
+                    for (gc_node_ref_t wait : waits) {
+                        const gc_node_ref_t pick = chosen[classOf[wait]];
+                        if (pick == kInvalidNodeRef) {
+                            throw std::logic_error(
+                                "A control input has no writing that does not read itself.");
+                        }
+                        select(pick);
                     }
-                    select(pick);
                 }
             }
         }
@@ -2055,8 +2058,10 @@ RewriteStats DraftWritings::rewrite(
                 std::vector<gc_node_ref_t> matchedWaits(
                     draft_.ctrlInputsOf(node).begin(), draft_.ctrlInputsOf(node).end());
                 // A statement of a `sync` block is ordered by the statement written before it, and
-                // that edge is a sync edge (docs/design/effects/edges.cn.md 1.5). Both
-                // are "everything the match read that ordered it" (below): a law over data inputs
+                // that edge is a sync edge (docs/design/effects/edges.cn.md 1.5); a control input
+                // is the other kind of wait such a statement carries, and one taken from the node
+                // already sits in `matchedWaits`. Both are "everything the match read that ordered
+                // it" (below): a law over data inputs
                 // is sound whatever the node is ordered after, and the writing that replaces it
                 // must not be moved across an effect, whichever kind of wait named that effect.
                 for (gc_node_ref_t wait : draft_.syncInputsOf(node)) {

@@ -59,7 +59,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 208
+**Semantic — errors** (`SemanticDiag`) — 209
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -142,6 +142,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `EnumMatchNotExhaustive` | The match over '{0}' has no case for {1}, and no 'case _'. |
 | `EnumFieldAccess` | '{0}' is a value of enum '{1}': its fields are not read by name or index. |
 | `EnumTypeArgumentNotInferred` | Cannot infer the type argument '{0}' of enum '{1}' from the fields of '{2}'. |
+| `FunctionTypeArgumentNotInferred` | Cannot infer the type argument '{0}' of '{1}': the empty literal '[]' states no element type. |
 | `EnumFieldTypeMismatch` | Field {0} of variant '{1}' has type '{2}', but the value given has type '{3}'. |
 | `EnumConstructionMismatch` | Variant '{0}' of enum '{1}' cannot be built from this value: {2}. |
 | `ConstasNotAllowed` | The dimension name '{0}' is bound here, but only a parameter type can bind one. |

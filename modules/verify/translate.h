@@ -8,8 +8,7 @@
  *
  * Rewrite design 8.1 splits the field in two: what a translation covers, and what it does not. A
  * rule the layer cannot translate is refused **with a reason** -- the layer never guesses and never
- * approximates, because a verdict read off a guessed translation would be a lie (the ruling of
- * 2026-10-24 on `verification-verdict-surface`, 3: a rule outside the coverage is `sampled` and the
+ * approximates, because a verdict read off a guessed translation would be a lie (the rule on `verification-verdict-surface`, 3: a rule outside the coverage is `sampled` and the
  * reason is written on its row).
  *
  * Slice S1 translates the **integer scalar** fragment: the widths `int` and `i32`, the operators

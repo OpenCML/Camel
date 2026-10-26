@@ -720,8 +720,7 @@ slot_t zeroTangent(Context &ctx, Type *primalType, Type *tangentType, slot_t pri
         // marker, not a type whose tangent exists, so there is no element to take the zero of. The
         // zero of such a value is its kind's own zero, made from the value
         // (`tensor:zeros_like`), and the element type follows the value
-        // (docs/handover/reviews/questions-2026-10-23.md, rank-zero-tensor and
-        // unstated-element-type-scalar-and-print): zeroing the elements one by one is not the
+        // elements element by element is not the
         // answer, and doing it refused with "a zero tangent is not defined for tangent type
         // 'void'" although the value it is the zero of is a tensor.
         const bool elementsUnstated = tangentArray->elemType() != nullptr &&

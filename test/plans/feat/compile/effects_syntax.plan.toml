@@ -78,7 +78,7 @@ expect_output_contains = ["native_clause_wrong.cml:", "exists", "fs:exists", "pu
 #
 # A function that writes no clause has no promise to read, so what it promises is what its body
 # was measured to reach, and that measurement is written onto its own signature -- the open one,
-# which no other function shares (the language author's ruling: only a function-typed *parameter*
+# which no other function shares (only a function-typed *parameter*
 # that writes no resources stays Generic, because it is determined per instantiation). A value of
 # the function is therefore judged by the same set the declaration is, and the two cases below
 # pin both halves: a resource-generic parameter takes whatever instantiates it, and a clause-less

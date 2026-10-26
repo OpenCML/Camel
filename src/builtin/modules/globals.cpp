@@ -232,9 +232,8 @@ std::optional<std::string> staticIndexRejection(const type_vec_t &norm, static_a
 /// tensor operator returns). What stays the core's is the program's own array of values: rank 1
 /// with no extent stated (`T[]`) -- the form an array literal has and the form the core's array
 /// operators build and take -- because the programs that subscript one without importing the
-/// tensor module must keep working (docs/handover/reviews/questions-2026-10-24-evening.md, section
-/// subscript-operator-choice-and-the-rank-two-refusal: the same narrowing `t[idx]` already has on
-/// this line, where a rank-2 array is refused by the core).
+/// tensor module must keep working (design principles 5.4: the same narrowing `t[idx]` already
+/// has on this line, where a rank-2 array is refused by the core).
 
 /// The extent the type states for `axis` of `type`, when it states one: a negative axis counts
 /// from the end and `-1` is the last axis. `std::nullopt` when the type does not state the extent
@@ -412,7 +411,7 @@ std::optional<int64_t> staticSliceLength(const type_vec_t &norm, static_args_t s
 /// whose axis the compiler does not know may cut any axis, so no axis keeps a length of the
 /// value's own. An `f32[6, 3]` sliced along axis 1 from 0 to 2 is therefore an `f32[6, 2]`, and
 /// the rank-1 `T[]` sliced is another `T[]`. Every element type goes through the same rule, which
-/// is what the author's ruling asks of the core's one slice operator (any rank, any element type;
+/// is what the core's one slice operator does (any rank, any element type;
 /// the module's inference, which the core took over, wrote the same lengths when the bounds were
 /// constants).
 std::optional<Type *> sliceResultType(const type_vec_t &norm, static_args_t statics) {
@@ -461,9 +460,9 @@ std::optional<Type *> sliceResultType(const type_vec_t &norm, static_args_t stat
 
 /// The result of the slice node a subscript lowers to: the kinds its six words must have, then the
 /// same type rule as the function form, with the one difference the subscript has. One rule for
-/// both `[]` forms, for every rank and every element type (the author's ruling of 2026-10-25,
-/// section discrete-gradient-and-rank-one-slice-ownership, point 2: the two subscripts are
-/// answered by the core alone, and the module copy and the dispatch by "whose array is this" are
+/// both `[]` forms, for every rank and every element type (design principles 5.4: the two
+/// subscripts are answered by the core alone, and the module copy and the dispatch by "whose
+/// array is this" are
 /// the transition types' residue, deleted together with the module's own subscript kernel and type
 /// rule). An array whose element type nobody stated -- the bare `Tensor` spelling, whose element is
 /// `Void` -- has no element type to hand back and keeps the array type it has: a step-1 slice of a
@@ -512,8 +511,7 @@ FunctionType *sliceParameterTable() {
 }
 
 /// `slice(t, axis, start, end, step, written)` -- the function form of the same slice node the
-/// subscript lowers to, for every call (design principles 5.4; the author's ruling of 2026-10-25,
-/// section `slice-function-form-and-what-the-core-answers`, points 2-5). The two spellings are one
+/// subscript lowers to, for every call (design principles 5.4). The two spellings are one
 /// node with one parameter table, one adjoint rule and one wording for what is out of range; the
 /// function form writes the axis it names and both of its bounds, so it fills the mask "both
 /// written" (3), and a call that leaves the step or the mask out is read as step 1 and mask 3 --

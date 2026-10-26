@@ -1076,7 +1076,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "generic_decorated"
-desc = "Decorating a generic function is not supported and says so."
+desc = "Decorating a generic function is refused by name: a decorator takes the function as its value, and a function that declares type parameters is instantiated where a call fixes them (design principles 6.1, 5.5)."
 kind = "negative"
 case = "../../../cases/compile/generics/err_decorated.cml"
 args = ["${case}"]

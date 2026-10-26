@@ -130,9 +130,8 @@ bool TensorModule::load() {
                 const auto dims = t->shapeSpan();
                 camel::core::type::Type *elem = camel::core::type::Type::create(t->dtype());
                 if (dims.empty()) {
-                    // No dimension at all: the element type itself. The rank-zero ruling
-                    // (docs/handover/reviews/questions-2026-10-23.md, section rank-zero-tensor)
-                    // says a value with no dimension is the scalar it holds, not a rank-0 array.
+                    // No dimension at all: the element type itself: a value with no dimension is
+                    // the scalar it holds, not a rank-0 array.
                     return elem;
                 }
                 return camel::core::type::ArrayType::create(elem, dims);
@@ -156,9 +155,9 @@ bool TensorModule::load() {
                camel::core::type::Type *&valueType) -> slot_t {
                 namespace tensor = camel::tensor;
                 if (!tensor::isTensorType(declared)) {
-                    // The .npy format holds a numeric array. Another array — an array of arrays,
-                    // `string[]` — is not one, and this loader does not take it: the caller
-                    // reports it the way it reports any type no loader takes.
+                    //The .npy format holds a numeric array. Another array — an array of arrays,
+                    //`string[]` — is not one, and this loader does not take it: the caller
+                    //reports it the way it reports any type no loader takes.
                     return NullSlot;
                 }
                 std::filesystem::path path = camel::utils::pathFromUtf8(text);
@@ -197,8 +196,8 @@ bool TensorModule::load() {
                camel::core::type::Type *type,
                const std::string &text) -> std::string {
                 if (!camel::tensor::isTensorType(type)) {
-                    // As above: a .npy file holds a numeric array, and this saver does not write
-                    // the other arrays (`string[]`, an array of arrays).
+                    //As above: a .npy file holds a numeric array, and this saver does not write
+                    //the other arrays (`string[]`, an array of arrays).
                     return std::string();
                 }
                 std::filesystem::path path = camel::utils::pathFromUtf8(text);

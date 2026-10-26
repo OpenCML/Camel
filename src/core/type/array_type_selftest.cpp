@@ -135,17 +135,14 @@ std::string debugRunArrayTypeSelfTest() {
     require(open3->assignableFrom(fromInts), "f32[3, ..] does not accept f32[3, 4]");
     require(!open3->assignableFrom(ArrayType::create(f32, shapeOf({4, 5}))), "f32[3, ..] accepts f32[4, 5]");
     require(!open3->assignableFrom(anyF32), "f32[3, ..] accepts an argument of unknown extents");
-    // An open rank whose element type nobody stated: a type variable bound to `Void` leaves one
-    // behind (`func f::<T>(x: T[..])` at a call whose argument is the empty literal), and no value
-    // has it, so nothing is assignable to it.
+    // A type nobody wrote an element type in: `Void` is the "no value" marker and `Void[..]` is
+    // an open rank whose element type nobody stated, so no type variable takes either (design
+    // principles 5.1, 5.2: `T := Void` is not a type a call can be made at).
     ArrayType *openVoid = ArrayType::openRank(ArrayType::create(nullptr)->elemType());
     require(
-        isElementTypeUnstatedOpenArray(openVoid) && !isElementTypeUnstatedOpenArray(anyF32) &&
-            !isElementTypeUnstatedOpenArray(openF32),
-        "the open array whose element type nobody stated is not told from the others");
-    require(
-        !openVoid->assignableFrom(fromInts),
-        "the open array whose element type nobody stated accepts f32[3, 4]");
+        isElementTypeUnstated(openVoid) && isElementTypeUnstated(Type::Void()) &&
+            !isElementTypeUnstated(anyF32) && !isElementTypeUnstated(openF32),
+        "the types nobody wrote an element type in are not told from the others");
 
     // ---- The conversion: Safe, Unsafe (checked at run time), Forbidden --------------------
     require(anyF32->castSafetyFrom(fixed4) == CastSafety::Safe, "f32[] from f32[4] is not Safe");

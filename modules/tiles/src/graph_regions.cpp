@@ -197,7 +197,7 @@ gpuRefusal(const rt::GCGraph &graph, const SegmentAnalysis &analysis, rt::gc_nod
     const auto oper   = graph.nodeBodyAs<rt::GCOperBody>(id)->oper;
     const auto &table = core::OperatorTable::instance();
     // A host effect is the boundary of a device scope, not an operator the device must run
-    // (review of the GPU plan, Q3): the pass leaves it to the host and this refusal ignores it.
+    // The pass leaves it to the host and this refusal ignores it.
     if (!table.isPure(oper) || table.hasExternalEffect(oper))
         return "";
     if (reason == "unsupported_operator") {

@@ -1,5 +1,5 @@
 /**
- * A `constas` parameter may be combined with a rest parameter (rule, 2026-10-22): the
+ * A `constas` parameter may be combined with a rest parameter: the
  * value is bound before the expansion, and the rest parameter takes the arguments left over.
  */
 module constas_with_rest

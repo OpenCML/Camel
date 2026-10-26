@@ -15,7 +15,7 @@ tags = ["feat", "linear", "runtime", "effects"]
 # The other half of F3 (`var x = println(1); x = println(2); return x` prints nothing for the
 # initializer) is not asserted here yet: the `var` representation still makes the initializer's
 # value a data input of the cell. The rule takes that input away, which is what makes the half
-# assertable -- docs/handover/reviews/questions-2026-10-23.md, " -var-initializer-write".
+# assertable -- the rule.
 
 [[tests]]
 name = "order_edges.nvm"

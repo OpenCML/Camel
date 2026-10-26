@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-286 diagnostics: 269 errors, 17 warnings. 15 carry a machine-applicable edit, 271 say why they carry none.
+287 diagnostics: 270 errors, 17 warnings. 15 carry a machine-applicable edit, 272 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -252,6 +252,7 @@ prints one entry.
 | `0x030001F3` | [SemanticDiag::EnumWrittenWhereATypeIsExpected](#enumwrittenwhereatypeisexpected) | Error | no |
 | `0x030001F4` | [SemanticDiag::StructComprehensionWithoutFields](#structcomprehensionwithoutfields) | Error | no |
 | `0x030001F5` | [SemanticDiag::IdentifierPatternNeedsNullableOrErrorType](#identifierpatternneedsnullableorerrortype) | Error | no |
+| `0x030001F6` | [SemanticDiag::FunctionTypeArgumentNotInferred](#functiontypeargumentnotinferred) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -1032,7 +1033,7 @@ A lambda's parameters need their parentheses: write '(x) => e', not 'x => e'.
 **Help**
 
 ```text
-A lambda's parameters are written in parentheses, and a parameter list destructured as a tuple is written '((a, b)) => e' (design principles 5.9). An unparenthesised 'x => e' is not a lambda: inside a rule body the '=>' is the rule's own arrow (rule r(x: int) { x => x }), so the two readings would collide and no unparenthesised spelling is added (the author's ruling of 2026-10-24). What is written here is an expression followed by an arrow that fits nothing; if a rewrite was meant, it is declared with 'rule'.
+A lambda's parameters are written in parentheses, and a parameter list destructured as a tuple is written '((a, b)) => e' (design principles 5.9). An unparenthesised 'x => e' is not a lambda: inside a rule body the '=>' is the rule's own arrow (rule r(x: int) { x => x }), so the two readings would collide and no unparenthesised spelling is added. What is written here is an expression followed by an arrow that fits nothing; if a rewrite was meant, it is declared with 'rule'.
 ```
 
 **Example** (`test/cases/parse/rulings/lambda_without_parentheses.cml`, run as `camel test/cases/parse/rulings/lambda_without_parentheses.cml`)
@@ -2511,7 +2512,7 @@ The generic function '{0}' cannot be {1}.
 **Help**
 
 ```text
-This use of a generic function is not supported.
+A decorator is applied where the declaration is: '@d func f' is 'let f = d(f0)', and d takes the function as its value (design principles 6.1). A function that declares type parameters is instantiated where a call fixes them (design principles 5.5); a decorated declaration fixes none, so the decorator has no instance to take.
 ```
 
 **Example** (`test/cases/compile/generics/err_decorated.cml`, run as `camel test/cases/compile/generics/err_decorated.cml`)
@@ -7804,8 +7805,8 @@ The name of a generic function stands for no one function until a position fixes
 // principles 5.5), and nothing here does: the composition stands in a `let` with no declared
 // type, so neither the operand nor the whole expression has a function type to take the instance
 // from. The refusal is the composition's own, and it says what the operand is and both ways to
-// settle it (the rule is docs/handover/reviews/questions-2026-10-23.md, section
-// generic-operands-of-composition).
+// settle it (design principles 5.5: a name of a generic function is an instance only
+// where a position fixes its type arguments).
 module h428_comp_operand_generic
 
 func ident::<T>(x: T): T {
@@ -7886,7 +7887,7 @@ The range 'range({0}, {1}, 0)' has a step of 0, so it is no sequence of integers
 **Help**
 
 ```text
-The integers of `range(a, b, step)` are `a`, `a + step`, ... below `b`, so the step decides which integers the range holds: a step that does not move names no one sequence, whatever the bounds are (design principles 4.2; the author's ruling of 2026-10-24 on `h426-interval-step-form`). The step is a constant here, so the call can never be right and the refusal is at the call, where the step is written. Give a non-zero step, or write the interval `a..b` when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).
+The integers of `range(a, b, step)` are `a`, `a + step`, ... below `b`, so the step decides which integers the range holds: a step that does not move names no one sequence, whatever the bounds are (design principles 4.2). The step is a constant here, so the call can never be right and the refusal is at the call, where the step is written. Give a non-zero step, or write the interval `a..b` when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).
 ```
 
 **Example** (`test/cases/compile/static_expansion/static_loop_sequence_range_step_zero.cml`, run as `camel test/cases/compile/static_expansion/static_loop_sequence_range_step_zero.cml`)
@@ -8492,6 +8493,39 @@ func f(n: int): int {
 func main(): int sync {
     println('never printed')
     println(f(1))
+    return 0
+}
+```
+
+### FunctionTypeArgumentNotInferred
+
+`0x030001F6` · Error · `SemanticDiag::FunctionTypeArgumentNotInferred`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+Cannot infer the type argument '{0}' of '{1}': the empty literal '[]' states no element type.
+```
+
+**Help**
+
+```text
+A variable takes its type from where it stands, and an empty literal states no element type, so the position '[]' is written in is the only thing that can fix the variable - and a generic parameter states none (design principles 5.1, 5.2). Write the type argument ('show::<f32>([])'), or give the literal a position whose type it can take ('let e: f32[] = []').
+```
+
+**Example** (`test/cases/compile/native/tensor_show_empty_array.cml`, run as `camel test/cases/compile/native/tensor_show_empty_array.cml`)
+
+```camel
+module tensor_show_empty_array
+
+import { show } from tensor
+
+func main(): int sync {
+    show([])
     return 0
 }
 ```
@@ -9152,13 +9186,13 @@ Check the shapes of all operands involved in the operation and ensure they are c
 **Example** (`test/cases/loops/fault_tensor_rank0.cml`, run as `camel -E short test/cases/loops/fault_tensor_rank0.cml ${backend}`)
 
 ```camel
-// Reshaping a tensor to no dimension makes it the one element it holds — the rank-zero ruling,
-// docs/handover/reviews/questions-2026-10-23.md section rank-zero-tensor — so another element count
+// Reshaping a tensor to no dimension makes it the one element it holds,
+// so another element count
+// has no value to become, and the count is checked when the shape runs (the shape arrives through a
 // has no value to become, and the count is checked when the shape runs (the shape arrives through a
 // parameter). The loop below is never reached: `for` over a value with no dimension is refused
 // where it is written (loops.err_tensor_rank0), and rank 0 is decided at the instantiation, so the
-// parameter is written the final way, `T[..]` (the author's ruling of 2026-10-25 on
-// no-dimension-value-in-an-array-typed-slot).
+// parameter is written the final way, `T[..]`.
 module tensor_rank0_runtime
 
 import { zeros, reshape } from tensor

@@ -256,8 +256,7 @@ void printValueImpl(std::ostream &os, slot_t data, Type *type, size_t arrayLimit
                 continue;
             }
             if (array->rank() == 0) {
-                // A value with no dimension is the element it holds (the rank-zero ruling,
-                // docs/handover/reviews/questions-2026-10-23.md section rank-zero-tensor): it
+                // A value with no dimension is the element it holds: it
                 // prints as that value, not as a bracketed list of none, which is the text
                 // `Array::print` writes for `show`. `pushArray` cannot take this value: it reads
                 // dimension 0, which a rank-0 array has not, and its descent `dim + 1 == rank`

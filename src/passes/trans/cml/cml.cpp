@@ -1443,7 +1443,7 @@ class CmlPrinter {
     }
 
     /// The cell a read of `ref` reads. A write's product is the version of the variable it wrote
-    /// (`:op/assn*` returns this version's cell, questions-2026-10-24-evening.md var-version-node):
+    /// (`:op/assn*` returns this version's cell; design principles 2.1):
     /// the cell a write stores into is that same variable, so a read whose data port is a write
     /// reads the variable itself and is written with the variable's own name. Every other data port
     /// is the cell it names, and one that has no name yet is named by `cellName` as before.
@@ -2018,8 +2018,8 @@ class CmlPrinter {
                         kIntervalPrecedence};
                 }
                 // The stepped range `range(a, b, step)`: written back as the call it is, so the
-                // program the printer writes reads the way the program it prints did (the
-                // rule on ` -interval-step-form`).
+                // program the printer writes reads the way the program it prints did (design
+                // principles 4.2).
                 return {
                     std::format(
                         "range({}, {}, {})",

@@ -9,8 +9,8 @@
  * test, and one that would be wrong for every other constant.
  *
  * The fact is read on `y`, a pattern variable, and so a node of the draft: a `const` parameter of
- * a rule is the constant's *value* in a condition (rewrite design 2 (second version) 1;
- * reviews/stdlib-rules.md item 5), and reaching the node of one needs a `node_of` the language
+ * a rule is the constant's *value* in a condition (rewrite design 2 (second version) 1),
+ * and reaching the node of one needs a `node_of` the language
  * does not have yet.
  *
  * `report` reads `depth` of the frozen graphs of the target functions (`sum`, `mixed`), which is

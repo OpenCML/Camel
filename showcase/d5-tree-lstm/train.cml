@@ -12,7 +12,7 @@
 module d5_tree_lstm
 
 // == imports ==
-import { argmax, load_npy, numel, reshape, set_num_threads, shape, sigmoid, sum, tanh, zeros } from tensor
+import { argmax, cast, load_npy, numel, reshape, set_num_threads, shape, sigmoid, sum, tanh, zeros } from tensor
 import { with_grad } from autodiff
 import { adam, adam_state, softmax_cross_entropy } from nn
 import { now } from time
@@ -118,8 +118,13 @@ func accuracy(words: f32[..], labels: f32[..]): float {
             let sample = slice(words, 0, index, index + 1)
             let target = slice(labels, 0, index, index + 1)
             let (hidden, state) = forward<p>(tree_at(sample))
-            let hits = argmax(hidden @ p.wout + p.bout, 1) == argmax(target, 1)
-            (count + sum(hits), index + 1)
+            // The mask is the elementwise comparison, so `hits` is a bool array of the ones this
+            // count adds up (design principles 4.2). A mask is not a number, so they are read as the
+            // numbers they stand for once the conversion is written, at the element type of the
+            // count they are added to (design principles 5.1).
+            let hits = argmax(hidden @ p.wout + p.bout, 1) === argmax(target, 1)
+            let hit: float[..] = cast(hits, "float")
+            (count + sum(hit), index + 1)
         }
     return correct / float(n)
 }

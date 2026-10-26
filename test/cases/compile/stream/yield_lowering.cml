@@ -3,7 +3,7 @@
  * (docs/design/io-concurrency-streams/plan.cn.md slice E, lines 282-307): `yield` now parses, and
  * running it as a `return` would give a wrong value, so the graph builder reports
  * `SemanticDiag::FeatureNotSupported` with `'generators'` in the message. The `yield` is on line
- * 10; what it means is already ruled (docs/handover/reviews/questions-2026-10-23.md:394).
+ * 10; what it means is already ruled.
  */
 func count(n: int): int.. {
     loop i = 0 while i < n do {

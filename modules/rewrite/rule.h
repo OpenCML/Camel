@@ -11,8 +11,7 @@
  *
  * A rule whose head declares type parameters or `with` parameters is the exception: it has no
  * function values to hold, and keeps the id of the templates it was registered under instead
- * (camel/compile/gir/rule_templates.h; the ruling of 2026-10-23 on generic-rule-instantiation, and
- * the ruling of 2026-10-25 on the one instantiation channel). Its sides and its condition are made
+ *. Its sides and its condition are made
  * where it matches, one instance per type tuple and set of `with` values, and the `with` values it
  * was bound to are what it carries beside the id.
  */

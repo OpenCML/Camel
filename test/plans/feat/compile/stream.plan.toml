@@ -74,7 +74,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.type_signature"
-desc = "A stream type stands where any type stands (the author's ruling of 2026-10-24: `T..` is a core type, not a spelling of `T`): a parameter, a result, a function type and a generic signature all take one, and the suffix is read left to right with no special case - `int?..` is the stream of a nullable int, `int..?` the possibly absent stream, `int[3]..` the stream of three-element arrays and `int[..]..` the stream of open-rank arrays, while `int[..]` keeps its own reading. None of these parsed before: `func count(s: int..)` was MissingComma at the `..`."
+desc = "A stream type stands where any type stands: a parameter, a result, a function type and a generic signature all take one, and the suffix is read left to right with no special case - `int?..` is the stream of a nullable int, `int..?` the possibly absent stream, `int[3]..` the stream of three-element arrays and `int[..]..` the stream of open-rank arrays, while `int[..]` keeps its own reading. None of these parsed before: `func count(s: int..)` was MissingComma at the `..`."
 kind = "behavior"
 case = "../../../cases/compile/stream/type_signature.cml"
 args = ["${case}"]
@@ -176,7 +176,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.type_in_collection"
-desc = "The same linearity rule where the container is a map or a set: the value of a map and the element of a set are read more than once, so a stream cannot be one of them, and the refusal is StreamInContainer - not the key rule's 'no order', which would name a reason that is not the one (the ruling of 2026-10-24 rests on linearity). Both are reported in one run: the map first, the set after it."
+desc = "The same linearity rule where the container is a map or a set: the value of a map and the element of a set are read more than once, so a stream cannot be one of them, and the refusal is StreamInContainer - not the key rule's 'no order', which would name a reason that is not the one. Both are reported in one run: the map first, the set after it."
 kind = "negative"
 case = "../../../cases/compile/stream/type_in_collection.cml"
 args = ["${case}"]
@@ -192,7 +192,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.type_as"
-desc = "The right side of `as` is always a type (the author's ruling of 2026-10-24, option (c)): `xs as int..` reads the stream type where a type stands, and the program is not a syntax error. The conversion itself has no reading yet - nothing turns an array into a stream, and producing a stream value is another slice - so it is refused with the two types printed. It used to be `Unexpected '..'; expected '}'.` at the `..`."
+desc = "The right side of `as` is always a type (the right side of `as` is always a type): `xs as int..` reads the stream type where a type stands, and the program is not a syntax error. The conversion itself has no reading yet - nothing turns an array into a stream, and producing a stream value is another slice - so it is refused with the two types printed. It used to be `Unexpected '..'; expected '}'.` at the `..`."
 kind = "negative"
 case = "../../../cases/compile/stream/type_as.cml"
 args = ["${case}"]
@@ -208,7 +208,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.type_impl_signature"
-desc = "`#impl` matches the kernel's signature to the function's by type identity (design principles 10.4), and a stream type is one of the types that identity compares: `(a: int, b: int) => int` and `(a: int, b: int..) => int` are different functions, and the refusal prints the stream in the signature it names. Before the ruling the spelling did not parse at all, so the kernel could not be compared to it."
+desc = "`#impl` matches the kernel's signature to the function's by type identity (design principles 10.4), and a stream type is one of the types that identity compares: `(a: int, b: int) => int` and `(a: int, b: int..) => int` are different functions, and the refusal prints the stream in the signature it names. Before the rule the spelling did not parse at all, so the kernel could not be compared to it."
 kind = "negative"
 case = "../../../cases/compile/stream/type_impl_signature.cml"
 args = ["${case}"]
@@ -224,7 +224,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.comp_operand_generic"
-desc = "An operand of `..` whose type is not settled: `ident` is generic, and nothing at this position says which instance it is - the composition stands in a `let` with no declared type - so it is refused by that name. The refusal is the composition's own diagnostic, and it says what the old one did not: which operand is the generic function, that the type arguments name the instance, and that an expected function type for the whole expression settles it (the ruling is docs/handover/reviews/questions-2026-10-23.md, section generic-operands-of-composition). With such a type the same program passes - stream.comp_expected_type - and the refusal no longer prints `void` as if it were the operand's type or reaches CompOperandMismatch, which stays for operands `..` cannot take at all."
+desc = "An operand of `..` whose type is not settled: `ident` is generic, and nothing at this position says which instance it is - the composition stands in a `let` with no declared type - so it is refused by that name. The refusal is the composition's own diagnostic, and it says what the old one did not: which operand is the generic function, that the type arguments name the instance, and that an expected function type for the whole expression settles it. With such a type the same program passes - stream.comp_expected_type - and the refusal no longer prints `void` as if it were the operand's type or reaches CompOperandMismatch, which stays for operands `..` cannot take at all."
 kind = "negative"
 case = "../../../cases/compile/stream/comp_operand_generic.cml"
 args = ["${case}"]
@@ -256,7 +256,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.comp_expected_type"
-desc = "`f..g` is the lambda `(x) => g(f(x))` (design principles 4.2), so the function type the position expects is the type that lambda would have: it gives the composition its input - the parameter of `f` - and its output - the result of `g` - and it instantiates a generic operand where it stands, exactly as the lambda's calls are instantiated under that type. `let h: (x: int) => int = (x) => ident(ident(x))` passed before this, so the composition must too (the ruling is docs/handover/reviews/questions-2026-10-23.md, section generic-operands-of-composition). It used to be CompOperandMismatch at the `..`, with the operand printed as `void`."
+desc = "`f..g` is the lambda `(x) => g(f(x))` (design principles 4.2), so the function type the position expects is the type that lambda would have: it gives the composition its input - the parameter of `f` - and its output - the result of `g` - and it instantiates a generic operand where it stands, exactly as the lambda's calls are instantiated under that type. `let h: (x: int) => int = (x) => ident(ident(x))` passed before this, so the composition must too. It used to be CompOperandMismatch at the `..`, with the operand printed as `void`."
 kind = "behavior"
 case = "../../../cases/compile/stream/comp_expected_type.cml"
 args = ["${case}"]
@@ -316,7 +316,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.interval_loop"
-desc = "`for i in 0..n` is fused by the compiler (the ruling of 2026-10-24 on `h248-generator-and-composition`): the loop walks the two bounds, so the rounds are `a .. b - 1`, an interval that ends where it starts and one whose end is below its start run no round, the bounds are read once, and the end takes no round."
+desc = "`for i in 0..n` is fused by the compiler: the loop walks the two bounds, so the rounds are `a .. b - 1`, an interval that ends where it starts and one whose end is below its start run no round, the bounds are read once, and the end takes no round."
 kind = "behavior"
 case = "../../../cases/compile/stream/interval_loop.cml"
 args = ["${case}", "std::nvm"]
@@ -410,7 +410,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.range_step"
-desc = "`range(a, b, step)` is the integers `a`, `a + step`, ... below `b`, and above `b` when the step is negative: the array form of the interval with a step, empty when the step carries the start to the side it does not go, and `range(a, b, 1)` the same integers as `a..b` (the author's ruling of 2026-10-24 on `h426-interval-step-form`). The step may be an expression."
+desc = "`range(a, b, step)` is the integers `a`, `a + step`, ... below `b`, and above `b` when the step is negative: the array form of the interval with a step, empty when the step carries the start to the side it does not go, and `range(a, b, 1)` the same integers as `a..b`. The step may be an expression."
 kind = "behavior"
 case = "../../../cases/compile/stream/range_step.cml"
 args = ["${case}"]
@@ -423,7 +423,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.range_step_zero"
-desc = "A constant step of 0 is refused where it is written: `range(0, 10, 0)` names no sequence, so the call is refused under the step, with the interval to write for the unit step (SemanticDiag::RangeStepZero; the author's ruling of 2026-10-24 on `h426-interval-step-form`)."
+desc = "A constant step of 0 is refused where it is written: `range(0, 10, 0)` names no sequence, so the call is refused under the step, with the interval to write for the unit step ."
 kind = "negative"
 case = "../../../cases/compile/stream/range_step_zero.cml"
 args = ["${case}"]
@@ -440,7 +440,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.range_step_runtime"
-desc = "A step the compiler does not know is the run's: `range(0, 10, k)` with `k` 3 and -3 is the sequence it names, and with `k` 0 the fault the array form raises, RuntimeDiag::InvalidArgument, at the call (the author's ruling of 2026-10-24 on `h426-interval-step-form`)."
+desc = "A step the compiler does not know is the run's: `range(0, 10, k)` with `k` 3 and -3 is the sequence it names, and with `k` 0 the fault the array form raises, RuntimeDiag::InvalidArgument, at the call ."
 kind = "negative"
 case = "../../../cases/compile/stream/range_step_runtime.cml"
 args = ["${case}"]
@@ -454,7 +454,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.range_import_wins"
-desc = "A name imported by name is the name the program means: with `import { range } from tensor` the call is tensor's `range`, at its one-argument and three-argument arities, and the built-in of the same spelling (the prelude, the lowest layer) does not answer for the name (design principles 6.x; the author's ruling of 2026-10-24 on the name lookup order). The graph names the entity that answered."
+desc = "A name imported by name is the name the program means: with `import { range } from tensor` the call is tensor's `range`, at its one-argument and three-argument arities, and the built-in of the same spelling (the prelude, the lowest layer) does not answer for the name (design principles 6.x). The graph names the entity that answered."
 kind = "behavior"
 case = "../../../cases/compile/stream/range_import_wins.cml"
 args = ["${case}", "std::jgir", "canonical=true"]
@@ -467,7 +467,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.range_using_wins"
-desc = "`using namespace` is layer 4, above the built-in: after `using namespace tensor` the one-argument `range(5)` is tensor's, which the merged layer the built-in takes part in cannot answer (design principles 6.x; the author's ruling of 2026-10-24 on the name lookup order)."
+desc = "`using namespace` is layer 4, above the built-in: after `using namespace tensor` the one-argument `range(5)` is tensor's, which the merged layer the built-in takes part in cannot answer (design principles 6.x)."
 kind = "behavior"
 case = "../../../cases/compile/stream/range_using_wins.cml"
 args = ["${case}", "std::nvm"]

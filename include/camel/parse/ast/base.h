@@ -74,7 +74,6 @@ class Load {
     const std::string typeStr() const { return to_string(type_); }
 
     virtual const std::string toString() const { return typeStr(); }
-    virtual void visit() { throw std::runtime_error("Load::visit() not implemented"); };
     virtual const std::string geneCode() const;
 
   protected:

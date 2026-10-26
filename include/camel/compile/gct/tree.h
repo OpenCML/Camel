@@ -236,7 +236,7 @@ class Tree {
     /// The applicability condition a declaration was written with: the expression after its
     /// `when`, and the source text as written, for the report at a call site. Null when the
     /// declaration has no condition. The condition is not a child of the FUNC: it is evaluated
-    /// when the declaration is instantiated (design principles 5.13), not when its body is
+    /// when the declaration is instantiated (design principles 4.4), not when its body is
     /// built.
     struct WhenClause {
         node_ptr_t condition               = nullptr;
@@ -249,7 +249,7 @@ class Tree {
     /// The guard of a `match` case (`case p when c => ...`), for the case that has one. The
     /// guard is not a child of the CASE: the graph builder evaluates it in the arm the case
     /// becomes, after the names the pattern binds are taken out, and it decides whether that arm
-    /// is taken at all (review 「when-placement-and-match-guards」). Null when the case has none.
+    /// is taken at all. Null when the case has none.
     void setCaseGuard(const Node *caseNode, node_ptr_t guard);
     node_ptr_t caseGuardOf(const Node *caseNode) const;
 

@@ -2,7 +2,7 @@ id = "compile.with_defaults"
 order = 329
 tier = "fast"
 tags = ["feat", "compile", "with", "defaults"]
-desc = "Defaults of `with` parameters and `with` arguments given by name (design principles 4.4, handover H235): a default is a compile-time constant evaluated where the declaration is and filled into each call that leaves the parameter out; a call gives the parameters by position, or by name after the positional ones. A callee that is several declarations names the parameter at each position the same way in all of them, and a name then means one position there (handover H376); a call of such a callee fills no default, since a default is written by one declaration."
+desc = "Defaults of `with` parameters and `with` arguments given by name (design principles 4.4): a default is a compile-time constant evaluated where the declaration is and filled into each call that leaves the parameter out; a call gives the parameters by position, or by name after the positional ones. A callee that is several declarations names the parameter at each position the same way in all of them, and a name then means one position there; a call of such a callee fills no default, since a default is written by one declaration."
 
 # A default belongs to the declaration, not to the call site: it is evaluated once, where the
 # declaration is (so `2 + 3` is 5, and a value it cannot compute is a declaration error), and a

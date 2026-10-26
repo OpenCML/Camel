@@ -113,7 +113,7 @@ for (const pass of [null, 'std::fvm', 'std::nvm', 'std::jit', 'std::tf']) {
         { env, encoding: 'utf8' },
     )
     const out = proc.stdout
-    // Printing has one form (the 2026-10-24 ruling): the value's own shape in brackets, each
+    // Printing has one form: the value's own shape in brackets, each
     // element in the shortest text of its own type. The tuple holds two rank-2 arrays, so the
     // tuple's `(` is followed by two `[[` and the text ends with the tuple's `)`.
     const arrays = out.split('[[').length - 1

@@ -1,6 +1,6 @@
 /**
  * A `when` condition that is false: the declaration is inapplicable, and a call that only it
- * could take is reported with the unmet condition at the call site (design principles 5.13).
+ * could take is reported with the unmet condition at the call site (design principles 4.4).
  */
 module when_not_applicable
 

@@ -1,7 +1,7 @@
 # Entry Parameters and the Export of a Pure Program
 
 This note describes how a `main` with parameters is compiled, run and exported. The normative
-text is `docs/design-principles.cn.md` section 9.8 (the rulings on `main` with parameters,
+text is `docs/design-principles.cn.md` section 9.8 (the rule with parameters,
 `with` parameters, automatic module loading, entry and export). User-facing behaviour is in
 `docs/cli.md`.
 

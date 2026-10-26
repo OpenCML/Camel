@@ -3,7 +3,7 @@ order = 428
 tier = "slow"
 tags = ["perf", "training", "reduction", "layout", "counts"]
 
-# The guard half of `perf.reduce_layout`, split out by the 2026-10-25 rule on the eight perf plans
+# The guard half of `perf.reduce_layout`, split out by the rule on the eight perf plans
 # that no layer reached: a plan that only asserts counts and properties stays gate-able, and the half
 # that measures runs before a release. Nothing here is asserted on a duration; `perf.reduce_layout`
 # keeps the measurement (`reduce_layout.ops`) and is in the release gate's FORBIDDEN list.
@@ -34,8 +34,7 @@ expect_stdout_contains = ["reduce layout counts: PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # The cost bound is this test's own CPU time (user + system), and the timeout below is its liveness
-# bound, by the rule (docs/handover/reviews/questions-2026-10-23.md,
-# "declaration-cost-gate" (a)):
+# bound, by the rule:
 #
 #   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移 ... 进程的 CPU 时间（用户态 + 内核态）基本
 #    不随负载变"

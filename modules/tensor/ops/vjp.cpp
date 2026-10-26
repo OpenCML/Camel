@@ -287,9 +287,16 @@ void accumulateMatmulGradients(
 }
 
 vjp_node_t reluGradient(VjpBuilder &builder, vjp_node_t output, vjp_node_t dy) {
+    // relu'(x) is 1 where the output is positive and 0 elsewhere, and the mask that says so is a
+    // bool array: a bool array beside a float one is a pair no operator computes in (design
+    // principles 5.1), so the conversion the multiplication needs is written. The element type is
+    // not a name this rule can state - it serves f32 and f64 models alike - so the gradient names
+    // it and `cast_like` puts the mask at that type: 0 and 1, read as the gradient's numbers.
     const vjp_node_t mask =
         addTensorOper(builder, "tensor:gt", {output, builder.addStaticFloat(0.0)});
-    return addTensorOper(builder, "tensor:multiply", {dy, mask});
+    const vjp_node_t selected =
+        addTensorOperFor(builder, dy, "tensor:cast_like", {mask, dy});
+    return addTensorOper(builder, "tensor:multiply", {selected, dy});
 }
 
 void setVjp(std::vector<OpDef> &defs, std::string_view name, VjpFn rule) {

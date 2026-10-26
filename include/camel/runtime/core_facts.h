@@ -99,8 +99,8 @@ struct LoopDomain {
     std::optional<gc_node_ref_t> iterable;
     /// For, ForWhile: how many elements the loop takes from that array along its first dimension
     /// when the array is a constant of the graph — `shape[0]`, the element count of a rank-1
-    /// array and the row count of a higher-rank one (design principles 5.4; the ruling of
-    /// 2026-10-24 on the loop domain: the extent is `shape[0]`, one fact for every reader). The
+    /// array and the row count of a higher-rank one (design principles 5.4: the extent is
+    /// `shape[0]`, one fact for every reader). The
     /// iterable of a loop over an array is the array itself (the core takes an array's elements,
     /// no module's `__iter__`), so a constant array gives its own length.
     std::optional<int64_t> extent;

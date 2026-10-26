@@ -200,7 +200,7 @@ class Compiler {
             // A rank-0 f32 resident value is the f32 scalar of design principles 7.3 — the bytes
             // the tensor path already carries — so the host type is the scalar one. The flip
             // line's `tensor::ops::tensorOf` already answers the element type itself for an empty
-            // shape (the rank-zero ruling), and `TensorType` is gone, so this side is taken.
+            // shape (the rule), and `TensorType` is gone, so this side is taken.
             ty::Type *exact = node.dtype == DType::F64
                                   ? ty::Type::Float64()
                                   : tensor::ops::tensorOf(

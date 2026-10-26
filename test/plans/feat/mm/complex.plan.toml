@@ -3,7 +3,7 @@ order = 372
 tier = "fast"
 debug_tier = true # also selected by --tier debug (Debug build)
 tags = ["feat", "mm", "complex", "literal", "layout", "view"]
-desc = "Complex numbers c64 and c128: imaginary literals take their type from the context (c128 when there is none), arithmetic and printing, the pure-data layout inside arrays and tuples, and the compact-element view boundary (design principles 5.1, 10.5; H15b, H28 review items 1-3)."
+desc = "Complex numbers c64 and c128: imaginary literals take their type from the context (c128 when there is none), arithmetic and printing, the pure-data layout inside arrays and tuples, and the compact-element view boundary (design principles 5.1, 10.5)."
 
 [defaults]
 kind = "behavior"

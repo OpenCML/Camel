@@ -5,7 +5,7 @@
 """Interleaved A/B comparison of two builds of camel (docs/performance/graph-store-baseline.md).
 
 A time measured in one build says little about another build: the layout of the code alone moves
-an execution by several percent (docs/handover/reviews/H17-H22.md, H17c). So the two builds are
+an execution by several percent. So the two builds are
 run alternately on the same program, and every pair is bracketed by a second run of A:
 
     A1  B  A2  A1  B  A2 ...

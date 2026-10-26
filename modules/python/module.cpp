@@ -33,8 +33,7 @@ namespace py = pybind11;
 namespace {
 
 // The venv check the module has always made before creating the interpreter. It is made at the
-// module's first use now, not at `import` (design principles 3.1; the language author's ruling of
-// 2026-10-22), so a program that imports `python` and never calls one of its
+// module's first use now, not at `import` (design principles 3.1), so a program that imports `python` and never calls one of its
 // operators does not read the environment at all.
 void checkActiveVenvVersion() {
     if (camel::pyembed::activeVenvMatchesBuild())
@@ -243,8 +242,7 @@ static void logInterpreterMetadata() {
 bool PythonModule::load() {
     if (loaded_)
         return true;
-    // `import` executes no code (design principles 3.1; the language author's ruling of
-    // 2026-10-22): loading registers the executor and the purity of the operators,
+    // `import` executes no code (design principles 3.1): loading registers the executor and the purity of the operators,
     // which the declaration loader needs, and nothing that touches CPython. The interpreter is
     // created by the first operator call (`ensurePythonInterpreter`), or attached to when
     // `pyplot` created it first.

@@ -12,7 +12,7 @@ desc = "Maps and sets under collection stress: a table keeps its keys and values
 
 # Thirty-six of the entries below declare their own cost bound (cpu_budget_ms) and their timeouts
 # are liveness bounds, by
-# (docs/handover/reviews/questions-2026-10-23.md, "declaration-cost-gate" (a)):
+# (the rule (a)):
 #
 #   "改量 CPU 时间，不量墙钟。共享主机上的墙钟随负载漂移 ... 进程的 CPU 时间（用户态 + 内核态）基本
 #    不随负载变"

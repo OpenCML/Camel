@@ -321,7 +321,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "GenericFunctionUnsupported",
                 "The generic function '{0}' cannot be {1}.",
-                "This use of a generic function is not supported.",
+                "A decorator is applied where the declaration is: '@d func f' is 'let f = d(f0)', and d takes the function as its value (design principles 6.1). A function that declares type parameters is instantiated where a call fixes them (design principles 5.5); a decorated declaration fixes none, so the decorator has no instance to take.",
             },
         },
         {
@@ -658,6 +658,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "EnumTypeArgumentNotInferred",
                 "Cannot infer the type argument '{0}' of enum '{1}' from the fields of '{2}'.",
                 "The fields of the variant do not say what the argument is; where the value is used the expected type does: 'let x: Option<int> = Option::None'.",
+            },
+        },
+        {
+            SemanticDiag::FunctionTypeArgumentNotInferred,
+            {
+                "FunctionTypeArgumentNotInferred",
+                "Cannot infer the type argument '{0}' of '{1}': the empty literal '[]' states no element type.",
+                "A variable takes its type from where it stands, and an empty literal states no element type, so the position '[]' is written in is the only thing that can fix the variable - and a generic parameter states none (design principles 5.1, 5.2). Write the type argument ('show::<f32>([])'), or give the literal a position whose type it can take ('let e: f32[] = []').",
             },
         },
         {
@@ -1505,7 +1513,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "RangeStepZero",
                 "The range 'range({0}, {1}, 0)' has a step of 0, so it is no sequence of integers.",
-                "The integers of `range(a, b, step)` are `a`, `a + step`, ... below `b`, so the step decides which integers the range holds: a step that does not move names no one sequence, whatever the bounds are (design principles 4.2; the author's ruling of 2026-10-24 on `h426-interval-step-form`). The step is a constant here, so the call can never be right and the refusal is at the call, where the step is written. Give a non-zero step, or write the interval `a..b` when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).",
+                "The integers of `range(a, b, step)` are `a`, `a + step`, ... below `b`, so the step decides which integers the range holds: a step that does not move names no one sequence, whatever the bounds are (design principles 4.2). The step is a constant here, so the call can never be right and the refusal is at the call, where the step is written. Give a non-zero step, or write the interval `a..b` when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).",
             },
         },
         {
