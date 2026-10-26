@@ -58,7 +58,7 @@ the right 58 %, unless a shot says otherwise.
 
 ## Act I · The graph you never had
 
-### Shot 0 · 0:00–0:06 · Recovered
+### Shot 0 · 0:00–0:06 · Recovered (rendered: `shot00/out/`)
 
 **Idea:** compilers need the graph. When it is recovered from running code, it breaks.
 
@@ -222,7 +222,7 @@ camel train.cml std::macro std::opt std::jit
 
 **Out:** a rose region begins to draw around both graphs.
 
-### Shot 5 · 0:39–0:47 · Say where; ship anywhere
+### Shot 5 · 0:39–0:47 · Say where; ship anywhere (rendered: `shot05/out/`)
 
 **Idea:** placement is declared and transfers are derived. The same graph goes to other runtimes with
 the same meaning.
@@ -261,7 +261,7 @@ camel model.cml std::macro std::opt std::cpp
 
 **Out:** the cards fold back into one graph. Its input stretches left into a pipe.
 
-### Shot 6 · 0:47–0:52 · Data is a stream
+### Shot 6 · 0:47–0:52 · Data is a stream (rendered: `shot06/out/`)
 
 **Idea:** a stream `T..` is a value, an element is computed only when pulled, and a generator
 `yield`s it.
@@ -270,7 +270,7 @@ camel model.cml std::macro std::opt std::cpp
 
 - The training `loop` (a frame with a return arc) **pulls a short thread** from the pipe's mouth.
   One bead comes out, then another.
-- `batch(64)` gathers 64 beads into one array badge. Between pulls, nothing in the pipe moves.
+- `chunks<64>` gathers 64 beads into one array badge. Between pulls, nothing in the pipe moves.
 - A ghost second consumer reaches for the pipe. Its thread snaps in coral, because a stream is
   consumed once.
 
@@ -287,7 +287,7 @@ func rows(xs: f32[?, 784]): f32[784].. {
     for x in xs do yield x
 }
 
-let data = xs->rows->batch(64)
+let data = xs->rows->chunks<64>
 let trained = loop p = p0 for b in data do p->sgd(b)
 ```
 
@@ -295,7 +295,7 @@ let trained = loop p = p0 for b in data do p->sgd(b)
 
 ## Act III · When things go wrong
 
-### Shot 7 · 0:52–0:59 · The railway
+### Shot 7 · 0:52–0:59 · The railway (rendered: `shot07/out/`)
 
 **Idea:** failure is a value. `->` carries null and errors past the steps that need a value, and the
 failure is handled once.
@@ -327,7 +327,7 @@ let cfg = path
 
 **Out:** the rail curves into a `map` that fans out over rows.
 
-### Shot 8 · 0:59–1:04 · A fault, and a fence
+### Shot 8 · 0:59–1:04 · A fault, and a fence (rendered: `shot08/out/`)
 
 **Idea:** a bug is a fault, not an error. It stops the program with a location, unless `attempt(f)`
 draws a function boundary around it.
@@ -335,7 +335,7 @@ draws a function boundary around it.
 **Picture:**
 
 - 0–2 s: `map` fans out to six `parse_row` calls. Call 4 **blots** coral. Every stroke freezes and
-  dims, and a location is stamped beside the blot: `rows.cml:3:31 index out of range`.
+  dims, and a location is stamped beside the blot: `rows.cml:3:31  IndexOutOfRange`.
 - 2–2.4 s: a short reverse scrub. `attempt(` is typed in, and a thin coral **fence** is drawn
   around each call.
 - 2.4–5 s: replay. Call 4 blots inside its fence. At the fence the blot becomes a coral bead on a
@@ -356,7 +356,7 @@ let rows = lines->map<attempt(parse_row)>
 
 **Out:** one fence widens into the frame of shot 9.
 
-### Shot 9 · 1:04–1:09 · The seal
+### Shot 9 · 1:04–1:09 · The seal (rendered: `shot09/out/`)
 
 **Idea:** resources are part of the function type. `pure` and `uses` are promises the compiler
 checks.
@@ -385,17 +385,18 @@ func normalize(x: f32[n]): f32[n] pure {
 
 ## Coda
 
-### Shot 10 · 1:09–1:15 · The camel
+### Shot 10 · 1:09–1:15 · The camel (rendered: `shot10/out/`)
 
 **Idea:** it was one graph all along.
 
 **Picture:**
 
-- 0–2.5 s: the camera pulls far back. Every graph drawn since shot 1 is still on the canvas, joined
-  by the match cuts. From this distance, their outer strokes **lie on the outline of the Camel
-  logo**: the frames of shots 3–5 form the body, the rail of shot 7 the neck, and the circle closes
-  through the stream pipe.
-- 2.5–3.7 s: the inner graphs fade, and the logo outline is re-traced in chalk.
+- 0–2.5 s: the camera pulls far back from one node. The logo's own strokes are drawn as the
+  film's graph pieces: edges with arrowheads in the colours of the film (cyan passes, violet
+  derivatives, sand values, rose device, coral failures, mint results), its node circles as
+  nodes, a few labels from the film (`x`, `mlp`, `!!`), and the ring as the dashed `sync` thread.
+  From this distance, they **are the Camel logo** (`assets/brand/camel-mark.svg`).
+- 2.5–3.7 s: the colours fade, and the logo is re-traced in chalk.
 - 3.7 s: `Let the graph speak.` appears and its sand underline is drawn.
 - 4.5 s: `pip install camel-lang`.
 
@@ -671,7 +672,7 @@ same section numbers.
 | 4 | Passes are graph-to-graph functions, composed explicitly on the command line | DP 9.1, 9.2; ZEN 5 |
 | 5 | `#gpu` declares placement; the compiler derives transfers; the device is chosen at run time | DP 13.1, 13.3, 13.4; `docs/cli.md` `--devices` |
 | 5 | The same program exports to ONNX and standalone C++ with the same meaning | README; DP 9.8, 10.6 |
-| 6 | A stream is a value; an element is computed only when pulled; a stream is consumed once; generators `yield`; `batch` gives `T[k]..` | DP 5.4 |
+| 6 | A stream is a value; an element is computed only when pulled; a stream is consumed once; generators `yield`; `chunks<k>` gives `T[]..` in arrays of k | DP 5.4; docs/handover/stdlib/stream.cml |
 | 7 | `->` propagates null and errors; handle once with `!!` | DP 3.9; stdlib conventions §4 |
 | 8 | A fault terminates with a location; `attempt(f)` turns a fault into an error value at the function boundary; `map<attempt(parse_row)>` | DP 3.9 |
 | 9 | `pure` and `uses` are checked promises; violation is `UsesPromiseViolated` | DP 3.3; DP 1, red line 8 |
@@ -689,10 +690,10 @@ same section numbers.
 
 ## Production notes
 
-- **Real output:** the node count (shot 4), the `check` lines (L5) and the fault location (shot 8)
+- **Real output:** the `check` lines (L5) and the fault location (shot 8)
   are in the form the tools print. Replace them with real output at render time.
 - **Timing:** narration is budgeted at 2.3 words per second. If the voice runs slow, shot 4 and L3
   are the first to stretch. Take the time back from the hold in shot 10, never from shot 1.
-- **The logo coda needs layout planning:** the graphs of the main film are placed on the canvas so
-  that their outer frames trace the logo's outline (`assets/logo.svg`, viewBox 121×121). Lay out the
-  whole canvas once, from the logo backwards, before animating any shot after shot 1.
+- **The logo coda:** the rendered shots are not laid out on one canvas, so shot 10 draws the logo's
+  own strokes (`assets/brand/camel-mark.svg`, copied to `shot01/src/assets/`) as the film's graph
+  pieces instead of pulling back over the earlier shots.

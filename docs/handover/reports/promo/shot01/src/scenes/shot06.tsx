@@ -5,13 +5,13 @@
  * What the picture claims, and why it holds (design principles 5.4):
  * - `rows(xs)` is a generator: a stream `f32[784]..`, one element per pull; nothing in the pipe
  *   moves between pulls (an element is computed if and only if a consumer pulls it).
- * - `batch(s, 64)` pulls 64 elements for each batch it hands on, and the loop pulls one batch per
- *   round (`for b in data`).
+ * - `chunks<64>` (stdlib stream; the size is a `with` parameter) pulls 64 elements for each array it
+ *   hands on, and the loop pulls one array per round (`for b in data`).
  * - A stream is consumed once: a second consumer is a compile-time error (StreamConsumedTwice).
  *
  * Timeline (seconds)
- *   0.0 - 0.7   the code; the pipe with its step function and state; batch; the loop
- *   0.7 - 1.1   the loop pulls a batch; batch pulls from the pipe
+ *   0.0 - 0.7   the code; the pipe with its step function and state; chunks; the loop
+ *   0.7 - 1.1   the loop pulls a batch; chunks pulls from the pipe
  *   1.1 - 3.0   64 elements leave the pipe, one per pull, faster and faster; the count climbs
  *   3.0 - 3.7   one batch goes into the loop; its state goes round once
  *   3.8 - 4.8   a second consumer reaches for the pipe; its thread snaps: StreamConsumedTwice
@@ -54,7 +54,7 @@ export default makeScene2D(function* (view) {
     [ch('    '), kw('for'), ch(' x '), kw('in'), ch(' xs '), kw('do'), ch(' '), kw('yield'), ch(' x')],
     [ch('}')],
     [ch('')],
-    [kw('let'), ch(' data = xs'), dm('->'), ch('rows'), dm('->'), ch('batch(64)')],
+    [kw('let'), ch(' data = xs'), dm('->'), ch('rows'), dm('->'), ch('chunks<64>')],
     [kw('let'), ch(' trained = '), kw('loop'), ch(' p = p0 '), kw('for'), ch(' b '), kw('in'), ch(' data '), kw('do'), ch(' p'), dm('->'), ch('sgd(b)')],
   ], 34);
 
@@ -70,7 +70,7 @@ export default makeScene2D(function* (view) {
   const pipeName = createRef<Txt>();
   w.add(<Txt ref={pipeName} text="f32[784].." x={-480} y={Y + 76} fontFamily={MONO} fontSize={24} fill={CHALK_DIM} opacity={0} />);
 
-  const batch = addNode(w, at(110, Y), 'batch(64)');
+  const batch = addNode(w, at(110, Y), 'chunks<64>');
   const count = createRef<Txt>();
   const n = createSignal(0);
   w.add(<Txt ref={count} text={() => `${n()} / 64`} x={110} y={Y + 70} fontFamily={MONO} fontSize={26} fill={SAND} opacity={0} />);
@@ -123,7 +123,7 @@ export default makeScene2D(function* (view) {
     stroke(toLoop, 0.4),
   );
 
-  // ---- 0.7 - 1.1: the loop pulls a batch; batch pulls from the pipe --------------------------------
+  // ---- 0.7 - 1.1: the loop pulls a batch; chunks pulls from the pipe --------------------------------
   yield* loopPull().end(1, 0.25, easeOutCubic);
   yield* batchPull().end(1, 0.25, easeOutCubic);
 
