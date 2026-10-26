@@ -3922,3 +3922,23 @@ backends = ["nvm", "fvm", "jit", "prl"]
 expect_exit = 0
 expect_stdout_exact = "[a, b, c] [x, b, c]\n[a, b, c] [changed, b, c]\n"
 timeout_ms = 10000
+
+[[tests]]
+name = "inplace_write_then_read"
+desc = "The positive control of the in-place plan: the value in the cell is one this graph made, nothing that can keep it reads the cell before the write, and the graph's own edges order the read after the write, so the plan says the update reuses the input's storage -- `std::profile` reports 1 reuse of the input and 0 by the array's own count. A plan that handed the decision to the array's count here would lose the in-place guarantee of design principles 10.5 on every ordinary program."
+kind = "behavior"
+case = "../../../cases/linear/byref/inplace_write_then_read.cml"
+args = ["${case}", 'std::profile top=0 json="${test_tmp}/profile.json"', "std::nvm"]
+expect_exit = 0
+expect_stdout_starts_with = "v[0] = 9\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 60000
+verify_script = """
+async ({ input, assert }) => {
+    const fs = await import('node:fs')
+    const report = JSON.parse(fs.readFileSync(input.test_tmp + '/profile.json', 'utf8'))
+    const u = report.inplace_updates
+    assert(u.plan_reuse_input === 1, `the plan did not reuse the input's storage: ${JSON.stringify(u)}`)
+    assert(u.plan_by_array_count === 0, `the array's own count answered where the graph ordered the read: ${JSON.stringify(u)}`)
+}
+"""
