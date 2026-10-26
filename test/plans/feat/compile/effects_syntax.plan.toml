@@ -86,12 +86,31 @@ expect_output_contains = ["native_clause_wrong.cml:", "exists", "fs:exists", "pu
 
 [[tests]]
 name = "inferred.parameter_is_resource_generic"
-desc = "A function-typed parameter that writes no clause is determined per instantiation: `apply` says nothing about what `f` touches, so `noisy`, whose body prints, is a value it takes, and the program runs as it always did."
+desc = "A function-typed parameter that writes no clause is determined per instantiation: `apply` says nothing about what `f` touches, so the resources of the value it is instantiated with are what the call through it reaches, and `noisy`, whose body prints, is a value it takes. The program runs as it always did, and the effect is carried by the resource set the value infers, not by a flag on its type."
 kind = "behavior"
 case = "../../../cases/effects/generic_parameter_takes_instantiation.cml"
 args = ["${case}"]
 expect_exit = 0
 expect_stdout_exact = "4\n8\n"
+
+[[tests]]
+name = "effect.through_parameter"
+desc = "The effect of a call through a function-typed parameter is the resource set of the value it is instantiated with: `add<t>` writes the cell it bound, so a call through the parameter is an effectful call. Outside a sync block a result nothing depends on does not run it and is reported (EffectNotExecuted, the same warning the direct call of the value gets); inside one it runs and the write lands. The reads after the calls show both."
+kind = "behavior"
+case = "../../../cases/effects/effect_through_parameter.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_output_contains = ["SemanticDiag::EffectNotExecuted", "effect_through_parameter.cml:21:", "0 0 1 2"]
+
+[[tests]]
+name = "effect.parameter_promises_pure"
+desc = "The other side of the same rule: a parameter written `pure` promises the empty set, so a call through it is not an effect and a result nothing depends on is dropped without a warning. A function whose type says `pure` stands at the parameter."
+kind = "behavior"
+case = "../../../cases/effects/pure_parameter_takes_pure.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "0\n"
+expect_output_not_contains = ["SemanticDiag::EffectNotExecuted"]
 
 # ---- Refusals ----
 
@@ -105,6 +124,27 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
 expect_diagnostic_code = "0x0300000F"
 expect_output_contains = ["err_inferred_not_pure.cml:19:", "uses stdout", "(x: int) => int pure"]
+
+[[tests]]
+name = "err.pure_parameter_write"
+desc = "A parameter written `pure` takes only a value that promises the empty set: `add<t>` writes the cell it bound and its type says so, so the call is refused where the two meet. The bare type the value was known by is `(x: int) => int`, and the signature the parameter asked for is the one the error names."
+kind = "negative"
+case = "../../../cases/effects/err_pure_parameter_write.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+expect_diagnostic_code = "0x0300000F"
+expect_output_contains = ["err_pure_parameter_write.cml:21:", "usePure: (f: (x: int) => int pure) => int pure"]
+
+[[tests]]
+name = "err.promise_through_parameter"
+desc = "A body that declares `pure` and calls through a parameter that writes no clause has not proved the empty set: what the call reaches is the instantiation's, which nobody wrote, so the declaration is refused at its own clause (UsesPromiseViolated), and the help says to write `pure` on the parameter."
+kind = "negative"
+case = "../../../cases/effects/err_promise_through_parameter.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_output_contains = ["err_promise_through_parameter.cml:9:", "write 'pure' on the parameter", "an effect outside the program"]
 
 [[tests]]
 name = "err.unknown_resource"

@@ -234,8 +234,10 @@ Builder::footprintOf(DraftGraphBuilder *graph) const {
         }
         case runtime::GCNodeKind::Call: {
             // A call through a function value: what it runs is the value's signature, which is
-            // the first `with` input of the call (isEffectNode reads it the same way). When that
-            // signature promises nothing, the body is not measured.
+            // the first `with` input of the call (isEffectNode reads it the same way). A value
+            // that writes no clause promises nothing -- what it reaches is the instantiation's,
+            // and any instantiation may write a cell or print -- so nothing in this body proves
+            // the call pure and it is read conservatively (resource_semantics.h, `Generic`).
             const auto callee = draft.withInputsOf(id);
             if (callee.empty()) {
                 return std::nullopt;
@@ -245,6 +247,18 @@ Builder::footprintOf(DraftGraphBuilder *graph) const {
                 return std::nullopt;
             }
             const auto *calleeFunc = tt::as_ptr<FunctionType>(calleeType);
+            if (calleeFunc->resources().mode != sem::ResourceSignature::Mode::Concrete) {
+                for (sem::ResourceClass cls :
+                     {sem::ResourceClass::Variable,
+                      sem::ResourceClass::Object,
+                      sem::ResourceClass::Foreign,
+                      sem::ResourceClass::Ambient,
+                      sem::ResourceClass::Handle}) {
+                    out.anyOf.push_back(cls);
+                }
+                out.external = true;
+                break;
+            }
             if (!readSignature(calleeFunc->resources(), calleeFunc->withTypesCount(), true, id)) {
                 return std::nullopt;
             }

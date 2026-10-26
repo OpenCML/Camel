@@ -172,11 +172,16 @@ void Builder::reportIgnoredCapturedWrites() {
 }
 
 bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
-    const auto declaresEffects = [](Type *type) {
-        if (type == nullptr || type->code() != TypeCode::Function) {
-            return false;
-        }
-        const auto *func = tt::as_ptr<FunctionType>(type);
+    // What a call touches is in the resources of the value's type, not in a flag on it: `sync` is
+    // a property of a body block, not of a type (design principles 3.3, effects plan 5). A clause
+    // that names a resource means the call touches it, `pure` means it touches nothing, and a
+    // `var` parameter is a resource by itself, so a signature that leaves it out is still read as
+    // one.
+    const auto clauseSaysEffect = [](const FunctionType *func) {
+        return func->resources().mode == sem::ResourceSignature::Mode::Concrete &&
+               !func->resources().pure();
+    };
+    const auto shapeSaysEffect = [](const FunctionType *func) {
         if (func->modifiers().sync()) {
             return true;
         }
@@ -199,15 +204,35 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
         return op != nullptr && camel::core::OperatorTable::instance().hasExternalEffect(op->uri());
     }
     case runtime::GCNodeKind::Func: {
+        // A call of a function this compiler has a body for is judged by that body first
+        // (effectfulGraphs_); its signature is the summary of the same body, so a clause that
+        // names a resource says the same thing. A signature with no clause is one the measuring
+        // walk could not write down, which is not evidence of an effect.
         const auto callee = calleeOf(node);
         if (callee == nullptr) {
             return false;
         }
-        return declaresEffects(callee->funcType()) || effectfulGraphs_.contains(callee.get());
+        if (effectfulGraphs_.contains(callee.get())) {
+            return true;
+        }
+        const FunctionType *type = callee->funcType();
+        return type != nullptr && (shapeSaysEffect(type) || clauseSaysEffect(type));
     }
     case runtime::GCNodeKind::Call: {
+        // A call through a function value: the value's type is all there is to read at this call,
+        // and one that writes no clause promises nothing -- what it reaches is fixed by the
+        // instantiation, which may write a cell or print -- so it is read conservatively. Only a
+        // type that promises the empty set says the call is not an effect.
         const auto callee = withInputsOf(node);
-        return !callee.empty() && declaresEffects(nodeTypeOf(nodeDraftOf(node)->ref(callee[0])));
+        if (callee.empty()) {
+            return false;
+        }
+        Type *type = nodeTypeOf(nodeDraftOf(node)->ref(callee[0]));
+        if (type == nullptr || type->code() != TypeCode::Function) {
+            return false;
+        }
+        const auto *func = tt::as_ptr<FunctionType>(type);
+        return !func->resources().pure() || shapeSaysEffect(func);
     }
     case runtime::GCNodeKind::Loop: {
         // Each round runs the condition and the body, regions of the graph.

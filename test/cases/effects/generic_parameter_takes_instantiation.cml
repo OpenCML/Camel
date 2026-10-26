@@ -2,8 +2,11 @@
  * A function-typed parameter that writes no resource clause is resource-generic: it is
  * determined per instantiation, so it takes the resources of the function the argument
  * instantiates it with (design principles 3.3, effects plan 5). `apply` says nothing about what
- * `f` touches, so `noisy`, whose body prints, is a value it takes; what the call through `f`
- * reaches is what `apply` itself leaves undetermined. The program prints what it always did.
+ * `f` touches, so `noisy`, whose body prints, is a value it takes, and the call through `f` is a
+ * call of a value whose resources are that argument's: an effect, carried by the resource set of
+ * the value and not by a flag on its type. Here the call's result is what `apply` returns, so
+ * nothing is dropped; a result nothing depended on would be reported as `EffectNotExecuted`, the
+ * same warning the direct call of `noisy` gets.
  */
 module generic_parameter_takes_instantiation
 
