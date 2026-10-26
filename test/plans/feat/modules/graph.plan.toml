@@ -70,7 +70,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "unknown_camel_pass"
-desc = "A module that exports no such function names itself and the passes it does provide (H130), instead of leaving the pass unknown."
+desc = "A module that exports no such function names itself and the passes it does provide , instead of leaving the pass unknown."
 kind = "negative"
 case = "../../../cases/modules/graph_pass/tiny.cml"
 args = ["${case}", "identity::nosuch", "std::nvm"]
@@ -116,7 +116,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "camel_pass_module_importing_a_camel_module"
-desc = "A pass module may import a library written in Camel: the imported function is declared and built by the pass program's builder and runs (task H36, item 1)."
+desc = "A pass module may import a library written in Camel: the imported function is declared and built by the pass program's builder and runs ."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/tiny.cml"
 args = ["${case}", "camel_import_values::show", "std::nvm"]
@@ -126,7 +126,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "camel_pass_reads_a_value_imported_from_a_camel_library"
-desc = "A pass reads a value imported from a library written in Camel, and a top-level value built from it and from a call into that library (task H37; H36 allowed the Camel import)."
+desc = "A pass reads a value imported from a library written in Camel, and a top-level value built from it and from a call into that library (the definition-library property)."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/tiny.cml"
 args = ["${case}", "valuereader::show", "std::nvm"]

@@ -1,0 +1,28 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * The computed signatures of the `json` module: `encode` and `decode_as`, whose types come from a
+ * type rule rather than from a written signature. The C++ resolvers in `modules/json` are the one
+ * source of these types; this file is for reference only (it is not compiled), and feeds
+ * `docs/stdlib-reference.md` and the `--verify-ops` check for these two entries. The other names
+ * of the module are declared in `stdlib/json.cml`.
+ */
+
+/// The JSON text of a value, on one line, or indented by the given number of spaces per level.
+/// The type of the value must have a JSON form: numbers, bool, string, null, a Json, and arrays,
+/// tuples, structs, sets and maps with string keys of those; a function or a tensor is refused
+/// when the call is compiled. A map is written with its keys in order, a struct with its fields
+/// in the order of its type, so the same value gives the same text.
+/// @example [1, 2]->encode    // '[1,2]'
+/// @example [1, 2]->encode<indent: 2>    // '[\n  1,\n  2\n]'
+with <indent: int? = null>
+export func encode::<T>(value: T): string pure
+
+/// The value a JSON text (or a Json decoded before) describes, decoded to the type T. A part of
+/// T typed `Json` takes whatever is there. T is given where the call is written or taken from
+/// where the result goes (`let cfg: Config! = text->decode_as`).
+/// @fails error value `JsonTypeError` when the text is JSON of another type (the message gives the path of the mismatch); error value `JsonParseError` when the text is not JSON; error value `JsonTooDeep` when the document nests deeper than the limit
+/// @example decode_as::<Map<string, int>>('{"a": 1}')    // {a: 1}
+export func decode_as::<T>(source: string): T! pure
+export func decode_as::<T>(source: Json): T! pure

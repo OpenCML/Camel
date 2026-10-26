@@ -253,7 +253,7 @@ for (const [uri, text] of Object.entries(expect)) {
 
 [[tests]]
 name = "resource_names"
-desc = "The resource set of the standard library is pinned (H134): `camel inspect --ops` on a program that imports every module declaring a resource prints exactly these ambient and foreign names, so a later task cannot quietly rename one back. The names are the ones design principles 3.3 gives (`stdout`, `stderr`, `stdin`, `clock`, `env`, `fs`, plus the module's own `rng`, `tensor:generator`, `tensor:threads`, `tiles:driver`, `tiles:device`, `para:rendezvous`, `process`); raw mode writes `stdin`, the one resource the terminal mode was merged into ."
+desc = "The resource set of the standard library is pinned: `camel inspect --ops` on a program that imports every module declaring a resource prints exactly these ambient and foreign names, so a later task cannot quietly rename one back. The names are the ones design principles 3.3 gives (`stdout`, `stderr`, `stdin`, `clock`, `env`, `fs`, plus the module's own `rng`, `tensor:generator`, `tensor:threads`, `tiles:driver`, `tiles:device`, `para:rendezvous`, `process`); raw mode writes `stdin`, the one resource the terminal mode was merged into ."
 kind = "behavior"
 case = "../../../cases/resources/names.cml"
 args = ["inspect", "--ops", "${case}"]

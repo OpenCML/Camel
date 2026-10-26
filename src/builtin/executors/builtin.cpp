@@ -23,6 +23,7 @@ using namespace camel::core::rtdata;
 #include "../operators/profiler.h"
 #include "../operators/set_value.h"
 #include "../operators/str.h"
+#include "../operators/stream.h"
 #include "../operators/struct.h"
 #include "../operators/tagged.h"
 #include "camel/core/operator_traits.h"
@@ -399,6 +400,9 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"profiler/end", __profiler_end__},
         {"profiler/instant", __profiler_instant__},
         {"profiler/enable", __profiler_enable__},
+
+        // The bookkeeping of `tee` (operators/stream.h).
+        {"stream/tee_note", __stream_tee_note__},
 
         // macro
         {"macro/cmp", __cmp__},

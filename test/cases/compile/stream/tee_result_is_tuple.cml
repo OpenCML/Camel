@@ -1,0 +1,34 @@
+/**
+ * The result of `tee` is a tuple (design principles 5.4), and a tuple is a value: it crosses a
+ * function's signature as one value, and taking it apart is what consumes the two streams it
+ * holds. So the streams a `tee` gives travel where a stream cannot -- a tuple, an item of one --
+ * and each is still read once: both sides of this `tee` see all three elements.
+ */
+module stream_tee_result_is_tuple
+
+import stream
+
+func count(n: int): int.. {
+    return step(n)
+}
+
+func step(n: int): () => (int, int..)? {
+    return () => if n > 0 then (n, step(n - 1)) else null
+}
+
+/// The tuple itself: the two streams are the items of one value, which this signature takes and
+/// gives as one value.
+func sides(s: int.., n: int): (int.., int..) {
+    return stream::tee(s, n)
+}
+
+func total(s: int..): int {
+    return loop acc = 0 for x in s do acc + x
+}
+
+func main(): int sync {
+    let (left, right) = sides(count(3), 2)
+    println(total(left))
+    println(total(right))
+    return 0
+}

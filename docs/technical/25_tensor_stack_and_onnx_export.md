@@ -581,7 +581,7 @@ rejection reason. That resolver extension is part of step 2.
   | Transformer | 5.87 | 2.2 | 1.97 |
 
   (The "kernels + `tensor::fuse`" column measured the fused kernels of that time.
-  Since H102 the pass records the group as a node attribute and keeps the
+  The pass records the group as a node attribute and keeps the
   program's operators, so the CPU no longer saves the intermediate tensors of a
   fused linear layer; the numbers are the measurements of that experiment.)
 
@@ -616,7 +616,7 @@ the same call: 1 when the library ran, 0 when the canonical kernel did.
 `plain_lib == 1` at 1, 4, 8 and 16 threads, and pins the process's own thread
 count within `-t` (`process.thread_count()`), so a second pool is red.
 
-**Why the second pool had to go (H303).** OpenBLAS creates its worker pool in a
+**Why the second pool had to go.** OpenBLAS creates its worker pool in a
 constructor when the library is loaded, at the machine's thread count, before any
 `openblas_set_num_threads` call can reach it. Measured on this host with
 `strace -f -e trace=clone` (exact thread creations, not sampling): before the
@@ -691,16 +691,16 @@ is what the hardware can do):
 | 512x256x512 (d=256) | 1 | 1.8 / 1.6 | 1.6 / 1.6 |
 | | 16 | 1.7 / 0.5 | 1.9 / 0.6 |
 
-This is the H288 window, with the budget at `-t`: the library's best case keeps
+This is the measurement window, with the budget at `-t`: the library's best case keeps
 improving to sixteen threads, the physical core count of this host, and gets
 worse again at 32, the logical count. Its *typical* case is worse than the
 canonical kernel's from four threads up, because the library's pool is a second
 pool that spins between calls and competes with the tensor pool and with the
 neighbours; the gap between the median and the best of the same point is that
-competition, not arithmetic. That reading is what H303 acted on: the second pool
+competition, not arithmetic. That reading is what the decision acted on: the second pool
 is removed, not capped.
 
-**The same cells with one pool and the rows split (H303).** Two copies of the
+**The same cells with one pool and the rows split.** Two copies of the
 base build and two of the row-split build, ten interleaved rounds, order rotated
 each round, `test/cases/perf/gemm_threads_curve.cml`; loads 79-160. Milliseconds,
 median of the ten rounds per build; the two copies of the same build are the null
@@ -762,7 +762,7 @@ does not join the constructor's pool; the GEMM still runs one thread per call, s
 those workers are idle. The one-pool promise is conditional on those variables
 being unset, as the note in `camel::initialize()` says.
 
-**The training step, H288 window.** Same window, the library and the canonical
+**The training step, the same window.** Same window, the library and the canonical
 path interleaved in one loop, median of thirteen timed steps, d=1024,
 `tensor::fuse` versus no pass:
 

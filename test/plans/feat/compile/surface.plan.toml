@@ -182,7 +182,7 @@ assert(input.normalized.stdout.trim() === 'printed by the program', JSON.stringi
 
 [[tests]]
 name = "semantic.type_contains_itself"
-desc = "A struct that contains itself directly is a cycle no value could fill: ModuleTypeCycle names the chain (`A -> A`). It was UnresolvedTypeReference before H23, which said nothing about the cycle."
+desc = "A struct that contains itself directly is a cycle no value could fill: ModuleTypeCycle names the chain (`A -> A`). It used to be UnresolvedTypeReference, which said nothing about the cycle."
 kind = "negative"
 case = "../../../cases/compile/semantic/type_contains_itself.cml"
 args = ["-E", "short", "${case}"]

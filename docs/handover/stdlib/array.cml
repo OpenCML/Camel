@@ -1,0 +1,427 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * Functions on arrays, written in Camel on the built-in operators (`map`, `filter`, `reduce`,
+ * `zip`, `len`, the subscript) and on two native atoms: `argsort`, and the flat view of an array
+ * of any rank. Every function returns a new value; none changes its argument. The functions of
+ * one dimension take `T[]`; the reductions take `T[..]` and reduce every element, in row-major
+ * order.
+ *
+ * - The array is the ordinary argument; what configures the function (a count, a value, a
+ *   function) is in angle brackets, so calls chain: `xs->filter<keep>->sort_by<key>->take<3>`.
+ * - A result that may not exist (`find`, `find_index`, `index_of`) is `T?`; nothing here returns
+ *   an error value. A reduction over no element (`sum`, `mean`, `min`, `max`, `argmax`,
+ *   `argmin`) is a fault, as design principles 7.7 say.
+ * - A function passed to these runs element by element in order and stops as soon as the answer
+ *   is known (`find`, `any`, `all`), or is mapped, with no order among the calls (`sort_by`,
+ *   `flat_map`, `zip_with`). None of them asks for a `pure` function.
+ * - Elements are not converted: the numbers added, compared or searched for are of the
+ *   element type of the array.
+ */
+
+import math
+import { is_float, is_integer, is_numeric, is_ordered, is_plain, is_same } from types
+
+// ---- rearranging ----
+
+/// The elements in reverse order.
+/// @example [1, 2, 3]->reverse    // [3, 2, 1]
+export func reverse::<T>(xs: T[]): T[] {
+    return xs[::-1]
+}
+
+/// The first n elements; all of them when there are fewer, none when n is not positive.
+/// @example [1, 2, 3, 4]->take<2>    // [1, 2]
+with <n: int>
+export func take::<T>(xs: T[]): T[] {
+    return xs[:math::clamp(n, 0, len(xs))]
+}
+
+/// The elements after the first n; none when there are fewer, all when n is not positive.
+/// @example [1, 2, 3, 4]->drop<1>    // [2, 3, 4]
+with <n: int>
+export func drop::<T>(xs: T[]): T[] {
+    return xs[math::clamp(n, 0, len(xs)):]
+}
+
+/// Consecutive pieces of n elements; the last is shorter when n does not divide the length.
+/// @fails fault `InvalidArgument` when n is not positive
+/// @example [1, 2, 3, 4, 5]->chunks<2>    // [[1, 2], [3, 4], [5]]
+with <n: int>
+export func chunks::<T>(xs: T[]): T[][] {
+    return if n < 1 then fail<'InvalidArgument'>('a chunk holds at least one element')
+        else [xs->drop<i>->take<n> for i in range(0, len(xs), n)]
+}
+
+/// Each element with its index.
+/// @example ['a', 'b']->enumerate    // [(0, 'a'), (1, 'b')]
+export func enumerate::<T>(xs: T[]): (int, T)[] {
+    return zip(0..len(xs), xs)
+}
+
+/// The elements of the inner arrays, in order.
+/// @example [[1, 2], [3]]->flatten    // [1, 2, 3]
+export func flatten::<T>(xss: T[][]): T[] {
+    return loop flat = [] as T[] for xs in xss do flat->extend<xs>
+}
+
+/// The elements of an array of any rank, in row-major order, as an array of one dimension.
+/// @example [[1, 2], [3, 4]] as int[2, 2]->flatten    // [1, 2, 3, 4]
+export func flatten::<T>(xs: T[..]): T[] {
+    return elements(xs)
+}
+
+/// The first occurrence of every value, in order. Values are compared as `==` compares them, so
+/// a NaN equals nothing and every NaN is kept. The time is quadratic in the number of distinct
+/// values; to drop repeats of numbers or strings in a long array, `sort` it and compare
+/// neighbours.
+/// @example [3, 1, 3, 2, 1]->unique    // [3, 1, 2]
+export func unique::<T>(xs: T[]): T[] {
+    return loop kept = [] as T[] for x in xs do if kept->contains<x> then kept else kept->append<x>
+}
+
+// ---- searching ----
+
+/// The index of the first element for which pred is true, or null. pred is not called on the
+/// elements after it.
+/// @example [3, 9, 2]->find_index<(x) => x > 4> ?? -1    // 1
+with <pred: (x: T) => bool>
+export func find_index::<T>(xs: T[]): int? {
+    let i = loop i = 0 while i < len(xs) && !pred(xs[i]) do i + 1
+    return if i < len(xs) then i else null
+}
+
+/// The first element for which pred is true, or null.
+/// @example [3, 9, 2]->find<(x) => x > 4> ?? -1    // 9
+with <pred: (x: T) => bool>
+export func find::<T>(xs: T[]): T? {
+    let i = xs->find_index<pred>
+    return if i != null then xs[i] else null
+}
+
+/// The index of the first element equal to x, or null. Equality is `==`, so a NaN is never found.
+/// @example [3, 9, 2]->index_of<9> ?? -1    // 1
+with <x: T>
+export func index_of::<T>(xs: T[]): int? {
+    return xs->find_index<(y) => y == x>
+}
+
+/// True when pred is true for at least one element; false for an empty array.
+/// @example [3, 9, 2]->any<(x) => x > 4>    // true
+with <pred: (x: T) => bool>
+export func any::<T>(xs: T[]): bool {
+    return xs->find_index<pred> != null
+}
+
+/// True when pred is true for every element; true for an empty array.
+/// @example [3, 9, 2]->all<(x) => x > 4>    // false
+with <pred: (x: T) => bool>
+export func all::<T>(xs: T[]): bool {
+    return xs->find_index<(x) => !pred(x)> == null
+}
+
+/// The number of elements for which pred is true.
+/// @example [3, 9, 2]->count<(x) => x > 2>    // 2
+with <pred: (x: T) => bool>
+export func count::<T>(xs: T[]): int {
+    return loop n = 0 for x in xs do if pred(x) then n + 1 else n
+}
+
+// ---- reducing ----
+
+// The elements a reduction reduces; a reduction over no element is a fault.
+func some_elements::<T>(xs: T[..]): T[] {
+    let es = flatten(xs)
+    return if len(es) == 0 then fail<'InvalidArgument'>('a reduction over no elements') else es
+}
+
+// The sum of the elements in f64, from +0 in order, never rounded into the element type.
+func sum64::<T>(es: T[]): float {
+    return es->reduce<(acc: float, x: T) => acc + float(x), 0.0>
+}
+
+/// The sum of the elements.
+///
+/// A float element type is added in f64 and rounded once into the element type: the rule of
+/// every float reduction, not a rounding after each addition. An integer or complex element
+/// type is added in itself and wraps around on overflow, as `+` does.
+/// @fails fault `InvalidArgument` when the array has no element
+/// @example [1, 2, 3]->sum    // 6
+/// @example [0.5, 0.25]->sum    // 0.75
+#impl(sum_kernel)
+export func sum::<T>(xs: T[..]): T when is_numeric::<T>() {
+    let es = some_elements(xs)
+    return match type T {
+        case _ when is_float::<T>() => T(sum64(es))
+        case _ => es->reduce<(acc, x) => acc + x, T(0)>
+    }
+}
+
+/// The arithmetic mean: the sum and the division both in f64, rounded once into the element
+/// type, `T(sum(float(x)) / float(numel(x)))`.
+/// @fails fault `InvalidArgument` when the array has no element
+/// @example [1.0, 2.0, 3.0, 4.0]->mean    // 2.5
+export func mean::<T>(xs: T[..]): T when is_float::<T>() {
+    let es = some_elements(xs)
+    return T(sum64(es) / float(len(es)))
+}
+
+/// The smallest element. Numbers are compared as `math::min` compares them: a NaN anywhere gives
+/// NaN, and -0 is below +0. Strings compare by their bytes, and false is below true.
+/// @fails fault `InvalidArgument` when the array has no element
+/// @example [3, 9, 2]->min    // 2
+#impl(min_kernel)
+export func min::<T>(xs: T[..]): T when is_ordered::<T>() {
+    let es = some_elements(xs)
+    return es->reduce<math::min, es[0]>
+}
+
+/// The largest element. Numbers are compared as `math::max` compares them: a NaN anywhere gives
+/// NaN, and +0 is above -0.
+/// @fails fault `InvalidArgument` when the array has no element
+/// @example [3, 9, 2]->max    // 9
+#impl(max_kernel)
+export func max::<T>(xs: T[..]): T when is_ordered::<T>() {
+    let es = some_elements(xs)
+    return es->reduce<math::max, es[0]>
+}
+
+/// The row-major position of the largest element: the first NaN if there is one, +0 above -0,
+/// the earlier position on a tie.
+/// @fails fault `InvalidArgument` when the array has no element
+/// @example [3, 9, 2, 9]->argmax    // 1
+export func argmax::<T>(xs: T[..]): int when is_ordered::<T>() {
+    let es = some_elements(xs)
+    return loop best = 0 for i in 1..len(es) do if precedes(es[best], es[i]) then i else best
+}
+
+/// The row-major position of the smallest element: the first NaN if there is one, -0 below +0,
+/// the earlier position on a tie.
+/// @fails fault `InvalidArgument` when the array has no element
+/// @example [3, 1, 2, 1]->argmin    // 1
+export func argmin::<T>(xs: T[..]): int when is_ordered::<T>() {
+    let es = some_elements(xs)
+    let nan_at = es->find_index<(x) => x != x>
+    return if nan_at != null then nan_at
+        else loop best = 0 for i in 1..len(es) do if precedes(es[i], es[best]) then i else best
+}
+
+// a is strictly before b in the order of `argsort`.
+func precedes::<T>(a: T, b: T): bool {
+    return argsort([b, a])[0] == 1
+}
+
+// ---- reducing along an axis ----
+
+// The same names with an axis in angle brackets (`x->sum<0>`): the reduction of one axis, an
+// array of the rank below (the same rank with keepdims, the axis kept with extent 1). A negative
+// axis counts from the last. Which of the two forms a call means is decided by its angle
+// brackets. Each is a Camel function over a native kernel, for the result shape follows the
+// axis and the kernels sweep one axis of a contiguous block.
+
+/// The sum along an axis, with the rule of the whole sum: a float element type is added in f64
+/// from +0 in ascending order and rounded once, an integer one wraps around.
+/// @fails fault `InvalidArgument` when the axis is outside the rank or its extent is 0
+/// @example [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]->sum<0>    // [4.0, 6.0]
+with <axis: int, keepdims: bool = false>
+export func sum::<T>(xs: T[..]): T[..] when is_integer::<T>() || is_float::<T>() {
+    return sum_axis(xs, axis, keepdims)
+}
+
+/// The mean along an axis: the sum and the division both in f64, rounded once into the element
+/// type.
+/// @fails fault `InvalidArgument` when the axis is outside the rank or its extent is 0
+/// @example [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]->mean<1>    // [1.5, 3.5]
+with <axis: int, keepdims: bool = false>
+export func mean::<T>(xs: T[..]): T[..] when is_float::<T>() {
+    return mean_axis(xs, axis, keepdims)
+}
+
+/// The smallest element along an axis, compared as `min` of the whole array compares.
+/// @fails fault `InvalidArgument` when the axis is outside the rank or its extent is 0
+/// @example [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]->min<1>    // [1.0, 3.0]
+with <axis: int, keepdims: bool = false>
+export func min::<T>(xs: T[..]): T[..] when is_integer::<T>() || is_float::<T>() {
+    return min_axis(xs, axis, keepdims)
+}
+
+/// The largest element along an axis, compared as `max` of the whole array compares.
+/// @fails fault `InvalidArgument` when the axis is outside the rank or its extent is 0
+/// @example [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]->max<0>    // [3.0, 4.0]
+with <axis: int, keepdims: bool = false>
+export func max::<T>(xs: T[..]): T[..] when is_integer::<T>() || is_float::<T>() {
+    return max_axis(xs, axis, keepdims)
+}
+
+/// The position along an axis of the first largest element, ordered as `argmax` of the whole
+/// array orders.
+/// @fails fault `InvalidArgument` when the axis is outside the rank or its extent is 0
+/// @example [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]->argmax<1>    // [1, 1]
+with <axis: int, keepdims: bool = false>
+export func argmax::<T>(xs: T[..]): int[..] when is_integer::<T>() || is_float::<T>() {
+    return argmax_axis(xs, axis, keepdims)
+}
+
+/// The position along an axis of the first smallest element, ordered as `argmin` of the whole
+/// array orders.
+/// @fails fault `InvalidArgument` when the axis is outside the rank or its extent is 0
+/// @example [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]->argmin<0>    // [0, 0]
+with <axis: int, keepdims: bool = false>
+export func argmin::<T>(xs: T[..]): int[..] when is_integer::<T>() || is_float::<T>() {
+    return argmin_axis(xs, axis, keepdims)
+}
+
+// ---- shape ----
+
+/// The extents of an array, in order.
+/// @example shape([[1.0, 2.0], [3.0, 4.0]] as f32[2, 2])    // [2, 2]
+export func shape::<T>(xs: T[..]): int[]
+
+/// The number of elements of an array: the product of its extents.
+/// @example numel([[1.0, 2.0], [3.0, 4.0]] as f32[2, 2])    // 4
+export func numel::<T>(xs: T[..]): int
+
+/// The extent of one axis; a negative axis counts from the last one.
+/// @fails fault `InvalidArgument` when the axis is outside the rank
+/// @example [[1.0, 2.0, 3.0]] as f32[1, 3]->dim<1>    // 3
+with <axis: int>
+export func dim::<T>(xs: T[..]): int
+
+// ---- binary form ----
+
+/// The elements of an array as little-endian bytes, in row-major order: the payload `from_bytes`
+/// reads back. The elements are the array's own bytes, so every pure-data element type has them:
+/// one byte an element for a `bool` array, four for an `f32` one and eight for an `f64` or `c64`
+/// one.
+/// @example [1.0, 2.0] as f32[2]->to_bytes    // [0, 0, 128, 63, 0, 0, 0, 64]
+export func to_bytes::<T>(xs: T[..]): Bytes when is_plain::<T>()
+
+// ---- sorting ----
+
+/// The positions of the keys in ascending order of key; equal keys keep their order. Numbers
+/// are ordered as `min` and `max` order them, with -0 below +0 and every NaN after the numbers;
+/// strings are ordered by their bytes and false is below true. This is the atom the sorts are
+/// written on.
+/// @example [30, 10, 20]->argsort    // [1, 2, 0]
+#op('array:argsort_i')
+export func argsort(keys: i32[]): int[]
+#op('array:argsort_l')
+export func argsort(keys: int[]): int[]
+#op('array:argsort_f')
+export func argsort(keys: f32[]): int[]
+#op('array:argsort_d')
+export func argsort(keys: float[]): int[]
+#op('array:argsort_bf')
+export func argsort(keys: bf16[]): int[]
+#op('array:argsort_f6')
+export func argsort(keys: f16[]): int[]
+#op('array:argsort_b')
+export func argsort(keys: bool[]): int[]
+#op('array:argsort_s')
+export func argsort(keys: string[]): int[]
+
+/// The elements in ascending order, in the order `argsort` gives.
+/// @example [3, 1, 2]->sort    // [1, 2, 3]
+/// @example ['pear', 'fig']->sort    // ['fig', 'pear']
+#impl(sort_kernel)
+export func sort::<T>(xs: T[]): T[] when is_ordered::<T>() {
+    return xs[argsort(xs)]
+}
+
+/// The elements in ascending order of key(x); elements with equal keys keep their order, so
+/// sorting by one key and then by another works. key is called once for every element. Keys
+/// are ordered as `argsort` orders them; for a descending order of numbers use the negated key.
+/// @example ['pear', 'fig', 'apple']->sort_by<(w) => len(w)>    // ['fig', 'pear', 'apple']
+with <key: (x: T) => K>
+export func sort_by::<T, K>(xs: T[]): T[] when is_ordered::<K>() {
+    return xs[argsort(xs->map<key>)]
+}
+
+// ---- transforming ----
+
+/// f applied to every element, the resulting arrays joined in order.
+/// @example [1, 2]->flat_map<(x) => [x, x * 10]>    // [1, 10, 2, 20]
+with <f: (x: T) => U[]>
+export func flat_map::<T, U>(xs: T[]): U[] {
+    return flatten(xs->map<f>)
+}
+
+/// f(xs[i], ys[i]) for every i.
+/// @fails fault `InvalidArgument` (of zip) when the two arrays differ in length
+/// @example zip_with<(a, b) => a + b>([1, 2], [10, 20])    // [11, 22]
+with <f: (a: T, b: U) => V>
+export func zip_with::<T, U, V>(xs: T[], ys: U[]): V[] {
+    return zip(xs, ys)->map<((a, b)) => f(a, b)>
+}
+
+// ---- native atoms and kernels ----
+
+// The flat view: the elements of an array of any rank in row-major order, as an array of one
+// dimension (a layout kernel; for a contiguous array it shares the data block).
+#op('array:elements')
+func elements::<T>(xs: T[..]): T[]
+
+// The kernels of the reductions along an axis: one operator each, sweeping one axis of a
+// contiguous block; the result shape follows the axis and keepdims.
+#op('array:sum_axis')
+func sum_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..]
+#op('array:mean_axis')
+func mean_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..]
+#op('array:min_axis')
+func min_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..]
+#op('array:max_axis')
+func max_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..]
+#op('array:argmax_axis')
+func argmax_axis::<T>(xs: T[..], axis: int, keepdims: bool): int[..]
+#op('array:argmin_axis')
+func argmin_axis::<T>(xs: T[..], axis: int, keepdims: bool): int[..]
+
+// The Camel function above is the meaning of its name; a kernel is the same function run by a
+// native executor, adopted for the element types that have one (design principles 10.4) and
+// checked against the body element type by element type
+// (test/cases/modules/stdlib/array_reduction_kernels.cml). An element type with no kernel runs
+// the body. A kernel sweeps every element and faults on an empty array as the body does. There is
+// one executor per element type, so one declaration per element type; its `when` names the type,
+// and a call is written `sum(xs)`, never with a kernel's name.
+//
+// How to add and how to compare is written once, in modules/math/minmax.h, which these kernels
+// and the tensor kernels both call.
+
+// sum: an f64 accumulator rounded once for f32 and float, the element type itself for i32 and int.
+#op('array:sum_i')
+func sum_kernel::<T>(xs: T[..]): T when is_same::<T, i32>()
+#op('array:sum_l')
+func sum_kernel::<T>(xs: T[..]): T when is_same::<T, int>()
+#op('array:sum_f')
+func sum_kernel::<T>(xs: T[..]): T when is_same::<T, f32>()
+#op('array:sum_d')
+func sum_kernel::<T>(xs: T[..]): T when is_same::<T, float>()
+
+#op('array:min_i')
+func min_kernel::<T>(xs: T[..]): T when is_same::<T, i32>()
+#op('array:min_l')
+func min_kernel::<T>(xs: T[..]): T when is_same::<T, int>()
+#op('array:min_f')
+func min_kernel::<T>(xs: T[..]): T when is_same::<T, f32>()
+#op('array:min_d')
+func min_kernel::<T>(xs: T[..]): T when is_same::<T, float>()
+
+#op('array:max_i')
+func max_kernel::<T>(xs: T[..]): T when is_same::<T, i32>()
+#op('array:max_l')
+func max_kernel::<T>(xs: T[..]): T when is_same::<T, int>()
+#op('array:max_f')
+func max_kernel::<T>(xs: T[..]): T when is_same::<T, f32>()
+#op('array:max_d')
+func max_kernel::<T>(xs: T[..]): T when is_same::<T, float>()
+
+// sort: `xs = xs->sort` runs the in-place form of the kernel when nothing else refers to xs.
+#op('array:sort_i')
+func sort_kernel::<T>(xs: T[]): T[] when is_same::<T, i32>()
+#op('array:sort_l')
+func sort_kernel::<T>(xs: T[]): T[] when is_same::<T, int>()
+#op('array:sort_f')
+func sort_kernel::<T>(xs: T[]): T[] when is_same::<T, f32>()
+#op('array:sort_d')
+func sort_kernel::<T>(xs: T[]): T[] when is_same::<T, float>()

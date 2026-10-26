@@ -1,4 +1,4 @@
-"""The NumPy side of Camel's DLPack contract for complex numbers (H15c item 5).
+"""The NumPy side of Camel's DLPack contract for complex numbers.
 
 Camel exports a complex tensor as DLPack dtype code 5 (complex), 64 bits for c64 and 128 for
 c128, lanes 1, with the two parts (real, imaginary) in memory order: src/core/array/dlpack.cpp,
@@ -8,7 +8,7 @@ This script checks NumPy's side of that contract: a NumPy complex128 array annou
 DLPack dtype in the capsule its __dlpack__ gives, and its bytes are the same (real, imaginary)
 float64 pairs, for the parts the C++ round trip writes. It exists so the two sides cannot drift
 apart silently; there is no bridge that hands a Camel array to Python yet (the capsule wrapper
-is H17's interop step), so the round trip is the C++ one and this is its NumPy half.
+is part of the native array interop work), so the round trip is the C++ one and this is its NumPy half.
 
 Runs only when NumPy is importable: the test plan gates it with
 `skip_unless = ["${python}", "-c", "import numpy"]`.

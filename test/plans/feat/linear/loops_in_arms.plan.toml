@@ -3,11 +3,11 @@ order = 357
 tier = "fast"
 debug_tier = true # also selected by --tier debug (Debug build)
 tags = ["feat", "linear", "loops"]
-desc = "A loop written as the value of a branch arm (H45): the first round starts where the region of the arm starts, so a loop in an arm gives the value of the same loop in the function body. The matrix of shapes on every back end (nvm, fvm, jit, prl, prl without bytecode) and in every mode (interpreted, compiled, compiled without inlining, the macro evaluator), and the commit-time check that the condition and body regions of a loop are regions of where the loop is."
+desc = "A loop written as the value of a branch arm: the first round starts where the region of the arm starts, so a loop in an arm gives the value of the same loop in the function body. The matrix of shapes on every back end (nvm, fvm, jit, prl, prl without bytecode) and in every mode (interpreted, compiled, compiled without inlining, the macro evaluator), and the commit-time check that the condition and body regions of a loop are regions of where the loop is."
 
 [[tests]]
 name = "loops_in_arms"
-desc = "The matrix of H45, every value computed by hand: the whole `then` arm (6) and the whole `else` arm (6), a `while` in an arm (3), a loop of two states ((5, 10)), a loop followed by more statements in the same arm (61), an `if` inside the loop's body (2 + 4 = 6), a loop in a `match` arm (6, -1), a loop in each arm (6, 100 + 6 = 106), a collecting loop ([0, 7, 7, 7], [9]), the same function called twice (6 6), and a loop in an arm of the root graph (4 + 5 = 9). The other arm (-1) does not disturb the loop, and the four back ends agree."
+desc = "The matrix of that case, every value computed by hand: the whole `then` arm (6) and the whole `else` arm (6), a `while` in an arm (3), a loop of two states ((5, 10)), a loop followed by more statements in the same arm (61), an `if` inside the loop's body (2 + 4 = 6), a loop in a `match` arm (6, -1), a loop in each arm (6, 100 + 6 = 106), a collecting loop ([0, 7, 7, 7], [9]), the same function called twice (6 6), and a loop in an arm of the root graph (4 + 5 = 9). The other arm (-1) does not disturb the loop, and the four back ends agree."
 kind = "behavior"
 case = "../../../cases/loops/arm_loops.cml"
 args = ["${case}", "${backend}"]
@@ -89,7 +89,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "loops_in_arms.regions"
-desc = "The commit-time check of a loop's regions (requirement 3 of H45): a test-only pass gives the body of the loop of `then_for` a second body region in the body of the graph instead of in the arm the loop runs in, and the commit refuses the graph with a message that names both regions (`LOOP ... is in arm 0 of BRCH ... (region ...) but its body region ... is a region of the body (region 0)`). No Camel program builds that graph: the pass edits it through the draft API, the way a rewrite could. The refused commit leaves the program as it was, so it still prints the matrix."
+desc = "The commit-time check of a loop's regions: a test-only pass gives the body of the loop of `then_for` a second body region in the body of the graph instead of in the arm the loop runs in, and the commit refuses the graph with a message that names both regions (`LOOP ... is in arm 0 of BRCH ... (region ...) but its body region ... is a region of the body (region 0)`). No Camel program builds that graph: the pass edits it through the draft API, the way a rewrite could. The refused commit leaves the program as it was, so it still prints the matrix."
 kind = "behavior"
 case = "../../../cases/loops/arm_loops.cml"
 args = ["${case}", "test::arm_loop_regions", "std::nvm"]

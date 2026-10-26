@@ -1,0 +1,30 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * Computed signatures of the `onnx` module (C++ operators, modules/onnx).
+ *
+ * `supported_operators` and the pass form of `export_model` are declared in stdlib/onnx.cml. The
+ * entry here is the call form, whose signature a declaration cannot write:
+ *   - its first parameter is a function of any parameter list and result, which no declaration can
+ *     name (the arbitrary-function-type gap);
+ *   - its `example` parameter is a tuple with one value for each parameter of the function (a
+ *     single value for a one-parameter function), and each leaf of it must be of the type of the
+ *     parameter tree of the function -- a predicate on a type variable, which a declaration cannot
+ *     state either.
+ * The `DynamicFuncTypeResolver` of modules/onnx is the one source of this signature. `ExampleOf<F>`
+ * below names the type the resolver computes; it is not a type a program can write.
+ *
+ * For reference only: these declarations are not compiled. They are checked against the operators
+ * the module registers, and docs/stdlib-reference.md is generated from them.
+ */
+
+/// Writes the ONNX model of `f` applied to arguments like `example` to the file `out`, at the
+/// backend's default opset. The function's graph is translated after the generic passes, at the
+/// shapes of `example`; `dynamic_axes` leaves those axes of the tensor inputs unknown, and
+/// `target` names the runtime whose capability data the model is checked against.
+/// @fails error value `ExportUnsupported` when the graph cannot be translated (a call that remains, an operator without an ONNX lowering, a dtype or shape the exporter cannot name) or the target runtime rejects a node; error value `IOError` when the file cannot be written
+/// @example-fragment the function and its example come from the surrounding program
+/// @example export_model<out: '/tmp/model.onnx'>(net, x)
+with <out: string, dynamic_axes: int[]? = null, target: string? = null>
+export func export_model::<F>(f: F, example: ExampleOf<F>): void! uses fs when is_function::<F>()

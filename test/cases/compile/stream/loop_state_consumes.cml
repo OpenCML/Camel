@@ -1,0 +1,30 @@
+/**
+ * Consuming one element per round (design principles 5.4): the stream is the loop's own state, so
+ * each round pulls the value its port carries and hands back the rest a pull answers as the next
+ * state. The rounds are counted by a second state here, and what the two rounds leave behind is
+ * read afterwards: one element of `count(3)`, which is what threading the rest means.
+ */
+module stream_loop_state_consumes
+
+func count(n: int): int.. {
+    return step(n)
+}
+
+func step(n: int): () => (int, int..)? {
+    return () => if n > 0 then (n, step(n - 1)) else null
+}
+
+func twoRounds(first: int..): (int, int..) {
+    return loop round = 0, rest = first while round < 2 do
+        match rest() {
+            case null => (round, rest)
+            case p => (round + 1, p.1)
+        }
+}
+
+func main(): int sync {
+    let (rounds, rest) = twoRounds(count(3))
+    println(rounds)
+    println(loop acc = 0 for x in rest do acc + x)
+    return 0
+}

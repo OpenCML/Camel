@@ -1,4 +1,4 @@
-# H17 实施计划：原生多维数组与数据块
+# 原生多维数组与数据块 —— 实施计划
 
 状态：**计划，待协调者批复**。本分支只改文档：不提交任何代码，因而不改变任何被观察到的行为。基线提交 `6a1c40c0`（2026-10-21，`develop`），构建与 `smoke` 已通过。
 
@@ -6,7 +6,7 @@
 
 - [原生多维数组、内存管理与互操作](README.cn.md) 第 9 节第 1–3 步；
 - [设计原则](../../design-principles.cn.md) 5.4（原生多维数组与维度）、10.5（库的边界与内存）；
-- 批复 [H17 计划批复]、[H17–H22 检查意见]、[H17c] 的测量口径；
+- 批复 [计划批复]、[检查意见]、[测量复核] 的口径；
 - 旧计划（已被本文件取代，保留作历史）；
 - 已落地的相关工作：本计划的摘要报告 （现状、关键判断、已读文件与验证）、、、、。
 
@@ -20,7 +20,7 @@
 
 | 任务 | 状态 | 还差什么 |
 |---|---|---|
-| 1. 缓冲区对象与引用计数 | **已落地**（H17 第一批 + H28） | 三个证明缺口：外部释放回调恰好一次、外部缓冲区永不原地写、大数组循环的 GC 峰值有界（P1） |
+| 1. 缓冲区对象与引用计数 | **已落地**（第一批 + 紧凑存储） | 三个证明缺口：外部释放回调恰好一次、外部缓冲区永不原地写、大数组循环的 GC 峰值有界（P1） |
 | 2. 原生类型 `T[维度...]` | **未开始** | 核心 `ArrayType` 带维度；语法与绑定；形状检查进核心；`Tensor` 别名；第一维语义（P2–P5） |
 | 3. 计数为 1 时原地写 | **部分落地** | 今天只有 `sort` 家族、`append`、`set_index`、循环状态；其余返回数组的算子尚未分类与覆盖（P6） |
 | 4. 性能基线 | **未做** | 交错 A/B、先测噪声底、加张量程序、写进基线文档（P7） |
@@ -41,7 +41,7 @@
 
 **不改变行为**：`T[]` 仍是 `int[?]`，今天的程序（除 `Tensor` 拼写改写外）语义不变；`size()` 仍是第一维；`numel()` 仍是元素总数；小数组内联与 256 字节阈值不变；DLPack 仍只接受数值标量元素、CPU、连续布局。
 
-不在本项：下标与切片语法（H21）、非连续视图（`transpose` 作视图）、秩 0、编译期规划/后端/Python/稀疏（设计第 9 节第 4–7 步）、临时值原地写（H18）、`constas` 在形状位置以外的退休（H26）。
+不在本项：下标与切片语法、非连续视图（`transpose` 作视图）、秩 0、编译期规划/后端/Python/稀疏（设计第 9 节第 4–7 步）、临时值原地写、`constas` 在形状位置以外的退休。
 
 ---
 
@@ -74,7 +74,7 @@ Array（GC 对象，可移动）                    mm::Block（非 GC 对象，
 - `Block` **不是** GC 对象：没有类型头、不进堆、不被扫描、不被移动。它只有计数与所有者。
 - 一个 `Array` 恰好持有一个块的引用；每个视图是独立对象、独立持有一份，所以块比源值活得久（`x = xs->view(...); xs = ...` 之后视图仍可读）。
 - 块字节计入压力：`src/core/mm/gen.cpp` 的 `oldBytesHeldUnlocked()`、`blockBytesGrowthUnlocked()`、`checkBlockBytes()`、`blockBytesAtCollection_` 把活着的块字节算进年轻代/全量触发、大对象预算与堆上限请求。这是"循环里反复产生大张量不会先耗尽内存"的机制。
-- 纯数据判据是 `type::isPureDataType()`，不是"只放数字"：结构体/元组/字符串数组也能紧凑存储（H28）。**任务里"缓冲区只放数字"的红线按 H28 的纯数据判据落地**；"只放数字"只保留在 DLPack：`toDLPack` 断言元素是数值标量，`fromDLPack` 拒绝非数值。
+- 纯数据判据是 `type::isPureDataType()`，不是"只放数字"：结构体/元组/字符串数组也能紧凑存储（纯数据判据）。**任务里"缓冲区只放数字"的红线按纯数据判据落地**；"只放数字"只保留在 DLPack：`toDLPack` 断言元素是数值标量，`fromDLPack` 拒绝非数值。
 
 ### 1.2 数组类型（第 2 项的起点）
 
@@ -129,7 +129,7 @@ Array（GC 对象，可移动）                    mm::Block（非 GC 对象，
 
 1. **外部释放回调恰好一次**：用一块静态缓冲区 + 一个计数回调构造 `Block::adoptExternal`，`Array::wrap` 两次（两个视图），依次丢弃全部值，断言回调计数 = 1、`blockLiveCount()` 回到基线。这一条锁住 `releaseFromFinalizer` 的推迟路径与计数到 0 的时序。
 2. **外部块永不原地写**：`canWriteInPlace()` 在外部块上为 false（即使计数为 1）；对一个外部数组调用一个原地形式的算子（例如 `sort`），断言返回的是新块、外部缓冲区字节不变。设计原则 11.3：另一个框架不能看到我们的修改。
-3. **大数组循环的峰值有界**：在用例里循环 `reps` 次创建 `f32[1 << 20]`（4 MB，必然走块），每次丢弃；断言 `blocks().live - 基线` 有上界（例如 ≤ 2）且 `frees > 0`，即 GC 确实被块字节触发过。这是批复第 2 条的验收，也覆盖 H28 的元素视图不泄漏。
+3. **大数组循环的峰值有界**：在用例里循环 `reps` 次创建 `f32[1 << 20]`（4 MB，必然走块），每次丢弃；断言 `blocks().live - 基线` 有上界（例如 ≤ 2）且 `frees > 0`，即 GC 确实被块字节触发过。这是批复第 2 条的验收，也覆盖紧凑存储的元素视图不泄漏。
 
 新增用例放 `test/cases/feat/mm/external_block.cml`（或直接扩 `blocks.cml`）与 `test/cases/feat/mm/block_pressure.cml`；计划 `test/plans/feat/mm/blocks.plan.toml` 加一行 `BLOCK_SELFTEST ok` 与两组计数断言。`gc_poison_sweep` 用例加入一个 rank-2 视图与一个外部块视图，确保毒化清除后没有悬挂读。
 
@@ -292,7 +292,7 @@ Tensor<f32>               // f32[..]
 7. `..s` ⇒ 绑定包名 `s`（参数里可再次引用 `..s`）；`..` 匿名；包名与维度名分属两个命名空间，重名是错误；
 8. 线性形式只从名字与整数常数构造：`n`、`n + 1`、`2 * n`、`n - 2` 保留；名字乘名字、除法、函数调用 ⇒ `ExtentForm::unknown()`（现有 `visitExtent` 4173–4252 的规则，保留）。
 
-删除 `collectDimensionNames`（3697–3720 的 `constas` 预扫描）：绑定按源顺序发生，不再需要预示。删掉之后，`constas` 在形状位置不再被识别 ⇒ 普通语法错误（批复 Q2：不加 `ConstasRetired`）。`ConstAsLoad` 节点与 `constas` 关键字本身留给 H26。
+删除 `collectDimensionNames`（3697–3720 的 `constas` 预扫描）：绑定按源顺序发生，不再需要预示。删掉之后，`constas` 在形状位置不再被识别 ⇒ 普通语法错误（批复 Q2：不加 `ConstasRetired`）。`ConstAsLoad` 节点与 `constas` 关键字本身留给后续工作。
 
 **名字与值作用域**：维度名只在类型里，函数体里的同名变量不冲突；反过来，一个已绑定的维度名不能在同一签名里再当作常量求值。这是设计 5.4 "维度名只活在类型里"的直接结果。
 
@@ -307,12 +307,12 @@ Tensor<f32>               // f32[..]
 | `InvalidExtentExpression` | 非整数、名字乘名字等 | 有（未知维度不报错，沿用） |
 | `InvalidTypeArgument` | `const` 形状、`Tensor<string>` | 有 |
 
-`DimensionNameAlreadyBound`、`ConstasNotAllowed` 保留定义但不再从形状路径发出（H26 统一处理）。`docs/diagnostics.md` 由脚本重新生成。
+`DimensionNameAlreadyBound`、`ConstasNotAllowed` 保留定义但不再从形状路径发出（统一处理）。`docs/diagnostics.md` 由脚本重新生成。
 
 ### 4.5 标准库与文档
 
 - `stdlib/signatures/globals.cml`：`map`/`filter`/`foreach`/`reduce` 的声明从 `T[]` 改为 `T[..]` 并在注释里写第一维规则（实际类型规则在 `globals.cpp`，见 P5）；`append`/`extend`/`slice`/`concat` 仍是 `T[]`（只对 rank 1 有意义）；`len` 从 `T[]` 改 `T[..]`。
-- `stdlib/array.cml`：`sort` 家族与 `argsort` 改 `T[..]`；`sort_by` 等 `stdlib/array.cml` 的 Camel 实现保持 rank 1（H21 再泛化）。
+- `stdlib/array.cml`：`sort` 家族与 `argsort` 改 `T[..]`；`sort_by` 等 `stdlib/array.cml` 的 Camel 实现保持 rank 1（下标切片落地后再泛化）。
 - `docs/language/08_top_level_and_grammar.md` 与 `en/`（76–77、201–202 行）的 `arrayType` 产生式、`constas` 说明；`docs/language/03_data_model.md` 的类型表加 `T[dims]`、`?`、`..s`、`Tensor` 别名。
 - `docs/stdlib-reference.md` 由 `scripts/stdlib-reference.mjs` 重新生成。
 
@@ -389,7 +389,7 @@ P4 的终点：
 | `modules/onnx/emitter.cpp` 的 `Value::constant(..., numericUnknown())` | 数组常量当张量时的声明类型 | 改为值自己的数组类型 |
 | `src/core/rtdata/equality.cpp` 的 `registerContentComparableType` / `isRegisteredContentComparableType`，以及 `isContentComparableImpl` 里的 `isNumericUnknown()` 分支 | 让模块的 `Tensor` 类型与元素类型未定的数组参加整体比较 `==` | 随过渡类型删除：张量就是数组，走数组自己的比较；注册表整个删掉 |
 | `modules/tensor/ops/layout_ops.cpp` 的 `OpDef idx_take`（`.exports = {"__idx__"}`）与 `setVjp(defs, "idx_take", &takeVjp)` | 模块的 `Tensor` 值经它参加 `t[idx]`；核心 `:op/idx_take` 已对任意秩按第 0 维取行、带反向 | 删掉这份副本，`t[idx]` 只有核心一条规则；函数形式 `tensor::take` 保留；`export_matrix` 去掉 `tensor:idx_take` 一行；`take_rows`、`gather_grad_f64`、`discrete_zero`、`gather_discrete_index_zero` 四个用例的 `t[idx]` 落到核心 |
-| `stdlib/rules.cml` 的 `tensor_f32_*`、`tensor_i64_*` 一族规则（约 13 条） | 张量是单独的类型，标量的代数律管不到它，于是每条律再抄一份 `Tensor<f32>` 版本 | 删掉这一族；标量那条律推广到数值数组（逐元素成立，元素与数组共用同一条律，写法由 H232 的车道定），同一条代数律只写一次 |
+| `stdlib/rules.cml` 的 `tensor_f32_*`、`tensor_i64_*` 一族规则（约 13 条） | 张量是单独的类型，标量的代数律管不到它，于是每条律再抄一份 `Tensor<f32>` 版本 | 删掉这一族；标量那条律推广到数值数组（逐元素成立，元素与数组共用同一条律，写法由规则语言那一版定），同一条代数律只写一次 |
 | 切片：张量模块的 `tensor:slice`（含 `__slice__` 导出）与 `globals.cpp` 里按"是不是程序自己的数组"分派下标的 `isTensorSubscript` | 模块的 `Tensor` 值经它参加 `t[a:b]`，核心只答 `T[]` | 切片只有核心一个算子、一条伴随规则（`t[a:b]` 与 `slice(t, 0, a, b)` 同一个节点，对任何秩、任何元素类型），模块副本与按类型分派的那段一起删掉；伴随交回的值带写明的元素类型与形状 |
 | `src/compile/gir/builder_operators.cpp` 的 `var` 实参接管（普通实参与 `with` 实参各一处） | 形参的裸 `Tensor` 与实参值的数组拼法不是同一个类型，cell 的"内容类型必须相等"（`src/core/type/composite/tuple.cpp`）会拒 | 随标记删除：两侧是同一个类型，接管分支删掉（详见下一节） |
 
@@ -432,7 +432,7 @@ P4 的终点：
 
 ### 5.4 打印统一
 
-- `modules/tensor` 的 `tensor(...)` 打印删除（`printTensor`），全部走 `Array::print`：rank 1 是 `[1, 2, 3]`，rank 2 是嵌套括号 `[[1, 2], [3, 4]]`（H28 已有的紧凑聚合打印），元素用运行时的 `elemType_` 而不是声明类型的 `Void`（`Array::print` 现在从 `arrayType->elemType()` 取元素类型，`Tensor` 家族要改为 `elemType_` 优先）。
+- `modules/tensor` 的 `tensor(...)` 打印删除（`printTensor`），全部走 `Array::print`：rank 1 是 `[1, 2, 3]`，rank 2 是嵌套括号 `[[1, 2], [3, 4]]`（已有的紧凑聚合打印），元素用运行时的 `elemType_` 而不是声明类型的 `Void`（`Array::print` 现在从 `arrayType->elemType()` 取元素类型，`Tensor` 家族要改为 `elemType_` 优先）。
 - 影响面：`test/plans` 里 10 个计划、72 行含 `tensor(` 的期望输出；11 个用例文件。逐行改为嵌套括号。这是 P4 里最机械也最容易漏的部分，按 `grep -l 'tensor('` 清单逐个更新，并由 `feat/modules/tensor` 全绿背书。
 - 类型文本：`f32[]`、`f32[3, 4]`、`f32[..]`、`Tensor`、`Tensor<[3]>`。`docs/stdlib-reference.md` 与诊断文本随之更新。
 
@@ -476,10 +476,10 @@ P4 的终点：
 | `foreach` | 每个元素 | 每行 | `void` |
 | `reduce` | 逐个折叠 | 折叠行 | `f` 的返回类型 |
 | `sort` | 按元素 | 按行**字典序**（先比第 0 列，相等再比第 1 列……） | `T[d0, ..., dn]` |
-| `sort_by`（`stdlib/array.cml`） | 保持 | 不泛化（H21） | — |
+| `sort_by`（`stdlib/array.cml`） | 保持 | 不泛化 | — |
 | `argsort` | `int[n]` | 行的字典序排名，`int[d0]` | `int[d0]` |
 | `len` | `n` | `d0` | `int` |
-| `slice`/下标 | H21 | H21 | — |
+| `slice`/下标 | 下标切片 | 下标切片 | — |
 | `append`/`extend`/`concat` | 不变 | 类型错误（会改变秩） | — |
 
 `map` 也按第一维：rank 1 的"行"就是元素，所以 `map(xs, f)` 对 `T[]` 与今天完全相同；rank ≥ 2 时 `f` 收到一行，结果是 `d0` 个返回值组成的 rank-1 数组（`U[d0]`；`f` 返回数组时元素类型是数组，即"数组的数组"）。这与任务与设计第 8 节的"按第一维"一致。曾考虑逐元素保形，但那与任务文字不符；而且今天的 `map_arr` 在 rank ≥ 2 上本来就按 `size()` 循环（对紧凑数组会读错元素），没有兼容包袱。`filter`/`foreach`/`reduce`/`sort` 同理走行。
@@ -495,7 +495,7 @@ Array *rowView(mm::IAllocator &allocator, uint64_t row) const;   // 新 Array，
 Array *rowCopy(mm::IAllocator &allocator, uint64_t row) const;
 ```
 
-- 行视图是**一等数组值**：可以逃逸、可以存进容器，块计数保证源被释放后仍可读。它与 H29 的"元素视图不得流进累加器"不是一回事：元素视图是指向聚合体槽内的指针，行视图是独立的 `Array` + 块引用。
+- 行视图是**一等数组值**：可以逃逸、可以存进容器，块计数保证源被释放后仍可读。它与"元素视图不得流进累加器"不是一回事：元素视图是指向聚合体槽内的指针，行视图是独立的 `Array` + 块引用。
 - 每次调用 `rowView` 产生一个小 GC 对象；`foreach`/`filter` 在回调是安全点的前提下，用 `mm::RootHandle` 把这一行护住，回调返回后再释放。这是行语义的代价，P7 会记录一行 `tensor.hof` 的耗时，不作为红线。
 - 槽数组（`string[m, n]` 等非纯数据）不能取视图：`rowCopy` 复制槽并用写屏障。这类数组上的 `filter`/`foreach` 仍可用，只是每次一行复制；`sort` 只支持数值数组（今天已如此）。
 
@@ -573,7 +573,7 @@ Array *rowCopy(mm::IAllocator &allocator, uint64_t row) const;
 | `zip` | 否 | — | 元素类型改变 |
 | `copy`/`clone` | 否 | — | 定义就是复制 |
 | `range` | 否 | — | 没有操作数可复用 |
-| 切向量算子（`tangent_add_arr` 等） | 否 | — | H22 的梯度累加语义，别名由 autodiff 持有 |
+| 切向量算子（`tangent_add_arr` 等） | 否 | — | 梯度累加语义，别名由 autodiff 持有 |
 | `reshape`/`view` | 不分配 | 视图 | — |
 | 张量归约（`sum`/`mean`/`max` 带轴） | 否 | — | 结果形状不同 |
 | `matmul` | 否 | — | 结果形状不同，操作数不可覆盖 |
@@ -583,7 +583,7 @@ Array *rowCopy(mm::IAllocator &allocator, uint64_t row) const;
 
 ### 7.4 实现
 
-- 重绑改写的机制已存在（`OperatorTable::setInPlaceForm`、`declareReusesOperand`、`Builder::inPlaceRebindingOf`），P6 只是**注册更多对**，不新造机制。批复第 5 条要求的"临时值原地写"（`relu(exp(x))` 按使用者计数）不在 P6：接口留在 `reusesOperand`，由 H18 的图存储提供使用者计数。
+- 重绑改写的机制已存在（`OperatorTable::setInPlaceForm`、`declareReusesOperand`、`Builder::inPlaceRebindingOf`），P6 只是**注册更多对**，不新造机制。批复第 5 条要求的"临时值原地写"（`relu(exp(x))` 按使用者计数）不在 P6：接口留在 `reusesOperand`，由图存储提供使用者计数。
 - 集合算子（`extend`/`concat`/`merge`/`filter`/`unique`）：在 `src/builtin/operators/struct.cpp` 的现有实现里加 `bool inPlace` 分支，复用 `reusableBlock(newBytes)`（它已经在计数为 1 且容量够时返回原块）；结果对象用 `adoptBlock` 接管；`filter`/`unique` 结束时把 `extents_[0]` 设为保留数并 `shrinkToFit`（容量可大于长度，紧凑数组允许容量 > 长度，见 `reserve` 注释）。
 - 张量逐元素：在 `modules/tensor` 的算子注册处，对满足"结果类型 == 操作数 0 类型"的逐元素算子生成 `_in_place` URI（一个循环注册，不逐算子手写）；内核拿到输出数组时先 `canWriteInPlace()`，可以就把输出指向操作数 0 的存储（`Array::reusableBlock`），否则新建。四个后端都走同一段内核，所以只改一处。
 - 反向排除的注释写进 `OperatorTable` 的注册旁（"为什么不原地"），作为 7.6 结构测试的清单来源。
@@ -619,8 +619,8 @@ println(after - before);             // 期望 0
 
 ### 8.1 两条红线
 
-- **小型逻辑程序不变慢**：批复 H17–H22 第 1 条——`fib.deep`、`alloc_small`、`map_chain` 在 H17 前后各测一次（多轮中位数、空载机器），时间与峰值内存不得上升超过 ±3%。H17c 收紧为**交错 A/B**、**先测噪声底**：同一提交加一处不执行的无关改动再构建一次，两者之差是布局噪声；只有超过噪声底才算数。
-- **张量程序的时间与峰值内存不升**：同一组张量程序在 A（H17 之前）与 B（H17 之后）上跑，时间在噪声底以内，峰值内存不超过 A 的 +3%。
+- **小型逻辑程序不变慢**：批复第 1 条——`fib.deep`、`alloc_small`、`map_chain` 在改造前后各测一次（多轮中位数、空载机器），时间与峰值内存不得上升超过 ±3%。复核收紧为**交错 A/B**、**先测噪声底**：同一提交加一处不执行的无关改动再构建一次，两者之差是布局噪声；只有超过噪声底才算数。
+- **张量程序的时间与峰值内存不升**：同一组张量程序在 A（改造前）与 B（改造后）上跑，时间在噪声底以内，峰值内存不超过 A 的 +3%。
 
 ### 8.2 程序
 
@@ -651,9 +651,9 @@ println(after - before);             // 期望 0
 
    张量行同理，`--only` 换成 `tensor.elementwise,tensor.matmul,tensor.reduce,tensor.alloc`。红线行按批复只判时间与峰值；`compile` 也一并测，作为"编译期没有变慢"的证据。
 4. **中间红线（P4 之后、P5 之前）**：批复要求"超了先修再继续第 5 步"。用同一份 A 与 P4 后的构建 B′，只跑三个红线程序的 `nvm,fvm,jit`（`--pairs 3`），阈值同 8.4；超了就在开 P5 之前修 P2–P4。P7 的最终测量仍用 P6 后的完整 B，写进文档。
-5. **空载**：同一时段、无其它构建与测试并行；先跑 `fib.deep` 一次确认噪声底 < 3%，否则换时段重跑。作废受干扰的整轮（H17c 的做法），不挑单个数字。
-6. **不跨构建单次比较**：任何执行时间只在同一次 `ab.py` 调用内比较；`docs/performance/graph-store-baseline.md` 已有的"执行时间不跨构建单次比较"一节继续有效（H17c 第 3 条已写）。
-7. **认真记录**：结果表（程序、模式、A、B、B/A、噪声底、峰值 A/B）写进 `docs/performance/graph-store-baseline.md` 新增一节"H17 前后"。A 的提交、B 的提交、机器、时间、`--pairs/--rounds` 全部写明。
+5. **空载**：同一时段、无其它构建与测试并行；先跑 `fib.deep` 一次确认噪声底 < 3%，否则换时段重跑。作废受干扰的整轮（复核的做法），不挑单个数字。
+6. **不跨构建单次比较**：任何执行时间只在同一次 `ab.py` 调用内比较；`docs/performance/graph-store-baseline.md` 已有的"执行时间不跨构建单次比较"一节继续有效（复核第 3 条已写）。
+7. **认真记录**：结果表（程序、模式、A、B、B/A、噪声底、峰值 A/B）写进 `docs/performance/graph-store-baseline.md` 新增一节"改造前后"。A 的提交、B 的提交、机器、时间、`--pairs/--rounds` 全部写明。
 
 ### 8.4 通过标准
 
@@ -679,7 +679,7 @@ println(after - before);             // 期望 0
 | P4 | `refactor(tensor): Tensor is an ArrayType alias` | P3 | `TensorType`（570 行）、`normalizeTensorDType`、`printTensor`、第二套类型码 | 单独 revert；P1–P3 留下 |
 | P5 | `feat(lang): first-dimension array operators` | P4 | 四个后端的旧 `map_arr` 元素循环 | 单独 revert；P4 留下 |
 | P6 | `feat(mm): in-place forms for array-returning operators` | P2（实际排在 P5 后） | 无（只加注册） | 单独 revert |
-| P7 | `docs(perf): H17 before/after baseline` | 全部 | 无 | 单独 revert |
+| P7 | `docs(perf): before/after baseline` | 全部 | 无 | 单独 revert |
 
 每一步都能构建、相关测试通过；P2、P3 是"行为不变"的，可以先进 `develop`；P4 是原子提交，不能拆；P5/P6 相互独立，顺序可换；P7 只写文档与基准程序。
 
@@ -728,7 +728,7 @@ println(after - before);             // 期望 0
 
 ### 10.4 明确不破坏
 
-- `T[]` 的含义与打印；`int[][]` 的嵌套含义；`size()`/`numel()`/`strides_`；小数组内联 256 字节；`std::mem::blocks()` 的字段与语义；DLPack 的 CPU/连续/数值标量限制；`std::cpp` 的多维拒绝；`constas` 在非形状位置（H26 处理）。
+- `T[]` 的含义与打印；`int[][]` 的嵌套含义；`size()`/`numel()`/`strides_`；小数组内联 256 字节；`std::mem::blocks()` 的字段与语义；DLPack 的 CPU/连续/数值标量限制；`std::cpp` 的多维拒绝；`constas` 在非形状位置（统一处理）。
 
 ---
 
@@ -763,14 +763,14 @@ P4 是一个提交。如果评审或实施中发现它无法在合理时间内�
 | `var` 加宽 | 同秩会改写 `static_types.cml` | Q5；选同秩，改写一个用例 |
 | `Tensor<float>` 变 f64 | 用户可见 | 批复 Q1 已同意；无测试使用；文档写明 |
 | conv/bn 的 f64 | 静默读错 | 推断处拒绝；内核入口断言 |
-| 行视图的分配 | `foreach`/`filter` 每行一个小对象 | 记录在 P7 `tensor.hof`；不设阈值；H21 的编译期规划可消掉 |
+| 行视图的分配 | `foreach`/`filter` 每行一个小对象 | 记录在 P7 `tensor.hof`；不设阈值；下标切片的编译期规划可消掉 |
 | 性能红线 | 数组类型多几个词、`getSlot` 分支 | P7 交错 A/B；超噪声底先修 |
 
 ### 11.4 不留半转换的检查清单
 
 - 源码里不再有 `TensorType`（`grep -rn 'TensorType' src include modules` 为空）。
 - 不再有 `asTensorType`、`normalizeTensorDType`、`printTensor`、`kUnknownDim`。
-- 不再有形状位置的 `constas`（用例与标准库的 18 处已改写；其余用法由 H26 处理）。
+- 不再有形状位置的 `constas`（用例与标准库的 18 处已改写；其余用法统一处理）。
 - `T[]` 的打印与今天一致；`int[]` 与 `int[?]` 是同一驻留对象（自检）。
 - 每个返回数组的算子有原地形式或列在例外清单（结构测试）。
 - `baseline.py` 的新程序在 A、B 上都能编译（P7 的第一件事）。
@@ -793,11 +793,11 @@ P4 是一个提交。如果评审或实施中发现它无法在合理时间内�
 
 **Q7（`Tensor<float>` = f64）**：批复 Q1 已同意；确认在文档里写明，并把 conv/bn 等 f32-only 算子的拒绝方式定为运行时故障。
 
-**Q8（秩 0）**：`Tensor<f32, []>` 今天表示标量张量（形状列表为空）。建议：**H17 不支持秩 0**，`Tensor<*, []>` 报错并建议写 `[1]`；`f32[]` 仍是 rank 1 未知。没有测试使用 `const []`。若必须保留标量张量，请指示，P2 的 `ArrayType` 与 `Array` 要支持零维（`numel=1`、无第一维）。
+**Q8（秩 0）**：`Tensor<f32, []>` 今天表示标量张量（形状列表为空）。建议：**本计划不支持秩 0**，`Tensor<*, []>` 报错并建议写 `[1]`；`f32[]` 仍是 rank 1 未知。没有测试使用 `const []`。若必须保留标量张量，请指示，P2 的 `ArrayType` 与 `Array` 要支持零维（`numel=1`、无第一维）。
 
-**Q9（标准库 `sort_by`/`array.cml`）**：H17 只泛化 `sort`/`argsort`/`filter`/`foreach`/`reduce`/`len`；`sort_by`、`flat_map`、`zip`、`flatten` 保持 rank 1，H21 再泛化。请确认。
+**Q9（标准库 `sort_by`/`array.cml`）**：本计划只泛化 `sort`/`argsort`/`filter`/`foreach`/`reduce`/`len`；`sort_by`、`flat_map`、`zip`、`flatten` 保持 rank 1，下标切片落地后再泛化。请确认。
 
-**Q10（问题记录的流程）**：按批复最后一条，以上选择写在本计划与 H17 报告的"待决问题"里，由协调者批复后进裁定记录；施工方不直接改裁定记录。
+**Q10（问题记录的流程）**：按批复最后一条，以上选择写在本计划与报告的"待决问题"里，由协调者批复后进裁定记录；施工方不直接改裁定记录。
 
 ---
 

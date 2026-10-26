@@ -1307,7 +1307,7 @@ timeout_ms = 90000
 
 [[tests]]
 name = "softmax_cross_entropy_labels"
-desc = "softmax_cross_entropy and softmax_cross_entropy_grad overloaded on the target's type: integer class labels (int[] or a rank-1 int64/int32 tensor) give exactly the value and gradient of the one-hot form, which is selected when the target has a floating element type (H20-2)."
+desc = "softmax_cross_entropy and softmax_cross_entropy_grad overloaded on the target's type: integer class labels (int[] or a rank-1 int64/int32 tensor) give exactly the value and gradient of the one-hot form, which is selected when the target has a floating element type."
 kind = "behavior"
 case = "../../../cases/modules/nn/softmax_labels.cml"
 args = ["${case}", "${backend}"]
@@ -1333,7 +1333,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "adam_update_bits"
-desc = "One Adam update on fixed inputs keeps the exact values of the fused update: the double intermediates and the order of the arithmetic are the ones the element-by-element loop produced (H64). The leaves print by the shortest text that reads back as the same number of their own type (design principles 7.7): the two tensors are f32, so w0, w3 and w5 print in 7 to 8 digits, while b1 and the f64 `scale` keep the digits their type needs. The plan used to hold the f64 digits of the f32 leaves -- the intermediates, not the stored values -- so it failed once the text became the element's own."
+desc = "One Adam update on fixed inputs keeps the exact values of the fused update: the double intermediates and the order of the arithmetic are the ones the element-by-element loop produced. The leaves print by the shortest text that reads back as the same number of their own type (design principles 7.7): the two tensors are f32, so w0, w3 and w5 print in 7 to 8 digits, while b1 and the f64 `scale` keep the digits their type needs. The plan used to hold the f64 digits of the f32 leaves -- the intermediates, not the stored values -- so it failed once the text became the element's own."
 kind = "behavior"
 case = "../../../cases/modules/nn/adam_update_bits.cml"
 args = ["${case}", "--arg", "steps=3", "--arg", "lr=0.01", "${backend}"]

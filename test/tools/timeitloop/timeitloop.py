@@ -2,7 +2,7 @@
 # Copyright (c) the OpenCML Organization
 # SPDX-License-Identifier: MIT
 
-"""Repeat the `--timeit` command of the H9/2 crash report until it fails, and count how often.
+"""Repeat the `--timeit` command of the crash report until it fails, and count how often.
 
 The command
 
@@ -10,7 +10,7 @@ The command
           --output-format json
 
 was seen to end in an access violation (`0xC0000005`, exit code 3221225477) twice in about thirty
-`--timeit` calls of the H8 performance baseline (, section 6). The same
+`--timeit` calls of the performance baseline (section 6). The same
 command passed when it was repeated, so the script runs it in fresh processes and records every
 exit code: a run that ends in the violation, and a run that ends with any other nonzero code, are
 both failures here, and the stdout and stderr of each are kept.

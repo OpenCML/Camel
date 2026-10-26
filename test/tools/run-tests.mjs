@@ -1662,7 +1662,7 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
             failures.push(
                 `no CPU reading to judge the margin of its ${timeoutMs.toFixed(0)} ms timeout by: ` +
                     `${cpuReading.reason || 'the wrapper reported nothing'}. A bound whose margin nobody ` +
-                    `can read is not a bound, and it is not a pass either (H368)`
+                    `can read is not a bound, and it is not a pass either`
             )
         } else if (cpuReading.cpuMs === null && result.wallMs * TIMEOUT_MARGIN > timeoutMs) {
             // No /proc/self/stat on this host: the wall clock is the only reading there is.

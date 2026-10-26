@@ -931,6 +931,25 @@ Whether every element of s is an element of other.
 - Pure.
 - Example: `is_subset([1, 2] as Set<int>, [1, 2, 3] as Set<int>)` gives `true`
 
+### Streams
+
+#### `tee_note`
+
+```camel
+tee_note: (hint: int, cap: int, elements: int, peak: int, s: T..) => void
+```
+
+Records one `tee` (design principles 5.4) for the report of a profile session: the hint it
+took, the widest hint the implementation honours, the elements it has pulled from its source so
+far, and the most elements it has buffered at once -- with the stream it reads, whose value
+tells one tee from another and whose type the operator takes, and whose elements it does not.
+A program does not write this: `tee` calls it once per element it pulls, and `std::profile`
+prints what it recorded (`STREAM_TEE`).
+
+- With effects: records the numbers of the tee.
+- Example (a fragment, not compiled): `tee_note(8, 64, 2, 2, s)` gives `the tee written `tee(s, 8)` reports itself this way`
+- Why it is not compiled: the last operand is the stream a tee reads, and no example program has one
+
 <a id="str"></a>
 
 ## `str`: strings
@@ -2704,6 +2723,8 @@ what runs, one element at a time.
 - `unfold(state, step)` is the smallest producer: a state and a step that answers the next
   element with the state after it, or `null` when the stream is over. A `yield` generator
   compiles to the same kind of value, and one written `#op` source can hand one out too.
+- `tee(s, n)` is the one way to read one stream from two places: it reads `s` once and gives two
+  streams, each of which is read once, and both see the same elements.
 - A stream is a value and is pure, so pulling the same stream value twice answers the same
   element; the rest a pull hands out is what threads the stream, and the consumer passes it on.
   One stream value has one consumer per execution path (design principles 5.4).
@@ -2722,6 +2743,25 @@ and every later round is a pull of the rest, so the states are threaded rather t
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `loop acc = 0 for x in unfold(3, (n: int) => if n > 0 then (n, n - 1) else null) do acc + x` gives `6`
+
+### Splitting
+
+#### `tee`
+
+```camel
+tee: (s: T.., n: int = 8) => (T.., T..)
+```
+
+Two streams over the elements of `s` (design principles 5.4), each read once, both seeing the
+same elements in the same order. `s` is read once: the first side to need an element the buffer
+does not hold pulls it, and the other side finds it there. `n` is a hint -- the width the
+buffer is expected to have -- and is clamped to the implementation's cap.
+The result is a tuple, and taking it apart is what consumes the two streams; the streams
+themselves are values like any other, so a `tee` of one of them is another `tee`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example (a fragment, not compiled): `let (left, right) = tee(unfold(3, (n: int) => if n > 0 then (n, n - 1) else null), 2)`
+- Why it is not compiled: the two streams are live values a page shows; a program reads them where it consumes them
 
 <a id="math"></a>
 

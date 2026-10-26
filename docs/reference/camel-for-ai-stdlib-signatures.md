@@ -19,7 +19,7 @@ Source: `docs/stdlib-reference.md`, generated from the declarations in `stdlib/*
 `node scripts/stdlib-reference.mjs --write`.
 
 <!-- camel-for-ai region: stdlib-signatures (generated from docs/stdlib-reference.md; node scripts/camel-for-ai.mjs --write) -->
-**`Built-in functions`** — no import — 59 name(s)
+**`Built-in functions`** — no import — 60 name(s)
 
 ```text
 std::mem::blocks: () => { allocs: int, frees: int, live: int, bytes: int }
@@ -141,6 +141,7 @@ union: (s: Set<T>, other: Set<T>) => Set<T>
 intersect: (s: Set<T>, other: Set<T>) => Set<T>
 difference: (s: Set<T>, other: Set<T>) => Set<T>
 is_subset: (s: Set<T>, other: Set<T>) => bool
+tee_note: (hint: int, cap: int, elements: int, peak: int, s: T..) => void
 ```
 
 **`str`** — import { ... } from str — 14 name(s)
@@ -329,10 +330,11 @@ sort_by: <key: (x: T) => K> (xs: T[]) => T[]
 zip_with: <f: (a: T, b: U) => V> (xs: T[], ys: U[]) => V[]
 ```
 
-**`stream`** — import { ... } from stream — 1 name(s)
+**`stream`** — import { ... } from stream — 2 name(s)
 
 ```text
 unfold: (state: S, step: (state: S) => (T, S)?) => T..
+tee: (s: T.., n: int = 8) => (T.., T..)
 ```
 
 **`math`** — import { ... } from math — 48 name(s)

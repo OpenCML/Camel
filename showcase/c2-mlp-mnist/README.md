@@ -1,6 +1,6 @@
 # C2: training an MLP on MNIST
 
-The first example of the showcase batch (H13). The same task is written twice: once in Camel
+The first example of the showcase batch. The same task is written twice: once in Camel
 (`train.cml`) and once in the idiomatic PyTorch a practitioner would write
 (`baseline/train_torch.py`). Both read the same data and the same starting weights, train the
 same 784 → 128 → 10 MLP (ReLU, Adam, softmax cross-entropy), evaluate on the same validation
@@ -176,15 +176,15 @@ stand-in) differs at the `2.4e-4` level.
 ## Problems
 
 The genuinely awkward parts of writing this example, with the question each raises in the
-"Open questions" section of `handover note ⟨9981995⟩ (H13)`.
+"Open questions" section of `handover note ⟨9981995⟩`.
 
-1. **Subscript and slice syntax is not implemented.** Design principles 5.4 and H21 describe
+1. **Subscript and slice syntax is not implemented.** Design principles 5.4 and the subscript and slice work describe
    `t[i]`, `t[a:b]` and `t[idx]`; the language reference (`docs/language/06_expressions.md`) still says the
    slice spelling is reserved and reports `NoMatchingFunction`. The natural showcase line
    `train_x[order[offset : offset + batch]]` therefore has to be written as
    `take(train_x, slice(order, 0, offset, offset + batch))`. It works, but a reader has to
    decode the function-call form of an operation the design presents as indexing.
-   **Question**: H21's indexing is in the queue; is the function-call form acceptable for the
+   **Question**: subscript indexing is in the queue; is the function-call form acceptable for the
    showcase until it lands, and should the example switch to `t[...]` when it does?
 2. **A tensor read from a file has no static element type, so label-taking operators cannot be
    selected.** `nn.softmax_cross_entropy` is overloaded on the target's type: a floating
@@ -212,25 +212,25 @@ The genuinely awkward parts of writing this example, with the question each rais
    question; recorded because it is the kind of ceremony the showcase is meant to expose.
 5. **`take` copies rows.** The shuffled-order sampler needs a gather; a contiguous batch could
    be a `slice` view. The copy is a per-step cost, not the source of the peak: **correction
-   (H40b)** this example used to say the standard run's memory was higher than with contiguous
-   slices; H40 found that the 262 MiB peak came from collection pacing (the order in which the
+   (corrected)** this example used to say the standard run's memory was higher than with contiguous
+   slices; the review found that the 262 MiB peak came from collection pacing (the order in which the
    block-bytes base was taken after deferred releases) and not from `take`, and that `take` and
-   `slice` peak the same (H40 section 3). The standard run now peaks at 74.7 MiB
+   `slice` peak the same (the review's section 3). The standard run now peaks at 74.7 MiB
    (`RESULTS.md`). This is the documented semantics of `take` (5.4), not a defect; it is
    reported with the other numbers.
 
 ## Tests
 
-The first review's questions were answered in H20/H21 and the example now uses the answers:
+The first review's questions were answered in a later review and the example now uses the answers:
 `save_tree` replaces a directory as a whole (no Python-side cleanup), `take` selects rows,
-`softmax_cross_entropy` takes integer labels, and `one_hot` is no longer needed. H21 item 3
-was withdrawn (see H25): `with <m: Mlp>` and `with_grad(loss)<m>(x, y)` are the final
+`softmax_cross_entropy` takes integer labels, and `one_hot` is no longer needed. Item 3 of the subscript and slice work
+was withdrawn: `with <m: Mlp>` and `with_grad(loss)<m>(x, y)` are the final
 spelling. The example binds `with_grad(loss)` outside the loop and uses
 `let (value, gradient) = loss_with_grad<m>(x, y)` inside.
 
 The small configuration is registered in `test/plans/perf/showcase_c2.plan.toml`
 (`tier = "milestone"`): it runs 200 steps on the synthetic stand-in, runs both sides, checks the
-tolerances above, and takes a few seconds (3.3 s in the recorded run). H10's fast/slow split
+tolerances above, and takes a few seconds (3.3 s in the recorded run). The fast/slow split
 has landed: the default `npm run test` skips the slow tier and `npm run test:all` (or
 `--tier all`) runs it.
 

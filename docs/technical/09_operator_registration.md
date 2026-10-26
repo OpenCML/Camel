@@ -135,7 +135,7 @@ using operator_t = slot_t (*)(ArgsView &with, ArgsView &norm, context::Context &
 
 以 `str` 为例（`modules/str/`）：
 
-- `module.cpp`：构造 `BuiltinModule("str")`；`load()` 调用 `context_->registerExecutorFactory("str", factory)`，并用 `OperatorTable::declare("str", ...)` 声明每个算子的纯性。签名不在这里：它们在声明模块 `stdlib/str.cml`（H19），模块不再导出 `OperatorGroup`。
+- `module.cpp`：构造 `BuiltinModule("str")`；`load()` 调用 `context_->registerExecutorFactory("str", factory)`，并用 `OperatorTable::declare("str", ...)` 声明每个算子的纯性。签名不在这里：它们在声明模块 `stdlib/str.cml`，模块不再导出 `OperatorGroup`。
 - `operators.cpp`：`getStrOpsMap()` 返回 suffix → `operator_t` 的映射，key 为 `split`、`trim` 等。
 - `executor.cpp`：`createStrExecutor()` 用上述映射构造 `Executor`。
 
@@ -232,7 +232,7 @@ URI 仍是调度器向执行器管理器查实现时的键，也是诊断里显�
 5. 在 `load()` 中调用 `registerExecutorFactory("<name>", factory)`，factory 创建持有 suffix → `operator_t` 映射的 Executor；并在此登记纯算子的 `OperatorTraits`。
 6. 确保 opsMap 的 key 与算子组中 URI 的 suffix 一一对应。
 
-导入模块时，`Context` 在导入方是文件模块时先在它自己的目录里查找 `<name>.cmo` 或同名源文件（H112），再按模块搜索路径查找，找不到再查 libcamel 内部的模块工厂表。
+导入模块时，`Context` 在导入方是文件模块时先在它自己的目录里查找 `<name>.cmo` 或同名源文件，再按模块搜索路径查找，找不到再查 libcamel 内部的模块工厂表。
 
 ## 6. 注意事项汇总
 
@@ -279,7 +279,7 @@ URI 仍是调度器向执行器管理器查实现时的键，也是诊断里显�
 
 ## 8. 声明与标准库参考
 
-- 原生实现的签名写成**没有函数体的 `export func`**（设计原则 6.4；H19 第 1 步）：`stdlib/<模块>.cml`
+- 原生实现的签名写成**没有函数体的 `export func`**（设计原则 6.4）：`stdlib/<模块>.cml`
   与同目录的 `<模块>.cmo` 是同一个模块，这份 `.cml` 就是它的声明模块，参与编译，签名与参数名以它为准。
   `///` 注释写说明，`@pure` 或 `@effect <原因>`、`@fails <失败时的行为>`、`@example <代码>    // <结果>`；
   URI 默认是 `<模块>:<名字>`，算子名不是 Camel 标识符或是本模块算子的另一个前缀时，用
