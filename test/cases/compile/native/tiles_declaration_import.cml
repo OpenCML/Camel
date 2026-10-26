@@ -1,20 +1,22 @@
 /**
  * The declarations of `tiles:available` and `tiles:device` are what an importer sees, read from
- * `stdlib/tiles.cml`: no parameters, a `bool` and a `string` result, and the call reaches the C++
- * operator (step 10). `available` runs here; `device` is only type-checked,
- * because asking for a device without one is a fault and this case has to run without a GPU.
+ * `stdlib/tiles.cml`: no parameters, a `bool` and a `string!` result, and the call reaches the C++
+ * operator (step 10). Both run here: `available` answers `false` in a run without a device, and
+ * `device` reaches the C++ operator and answers the error value of kind `DeviceUnavailable`, which
+ * the `!!` below stands for, so this case needs no GPU.
  */
 module tiles_declaration_import
 
 import { available, device } from tiles
 
 func description(): string {
-    let text: string = device()
+    let text: string = device() !! 'no device'
     return text
 }
 
 func main(): int sync {
     let possible: bool = available()
     println(possible)
+    println(description())
     return 0
 }

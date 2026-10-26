@@ -561,14 +561,11 @@ node_handle_t Builder::convertStructValue(
         return nullptr;
     }
     auto *source = tt::as_ptr<StructType>(sourceType);
-    if (source == nullptr || source->size() != target->size()) {
+    // The fields must be the same ones, by name, before anything is copied: the relation of the
+    // type layer (relateStructs) says so, as it does for every other conversion of a struct.
+    if (source == nullptr ||
+        relateStructs(target, source) == StructRelation::None) {
         return nullptr;
-    }
-    // The fields must be the same ones, by name, before anything is copied.
-    for (size_t i = 0; i < target->size(); ++i) {
-        if (!source->findField(target->fieldName(i)).has_value()) {
-            return nullptr;
-        }
     }
     // A struct of `target`'s shape, its slots filled from the source's fields in the target's
     // order: the copy is what makes `{ y: 1, x: 2 }` a `Point` (fields by name, declaration

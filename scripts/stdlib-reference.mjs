@@ -256,6 +256,14 @@ const MODULES = [
         declaration: true,
     },
     {
+        name: 'test_support',
+        title: '`test_support`: the facilities of a test',
+        kind: 'cpp',
+        // The declarations, not a signature file: they are what the module compiles.
+        source: 'test_support.cml',
+        declaration: true,
+    },
+    {
         name: 'this',
         title: '`this`',
         kind: 'cpp',
@@ -977,9 +985,13 @@ out.push('Not in this reference: the profiler (`perf`).')
                     out.push('- Written in Camel: a subgraph, pure when the functions passed to it are.')
                 } else if (entry.purity === 'pure') {
                     out.push('- Pure.')
-                } else {
+                } else if (entry.purity === 'effect') {
                     out.push(`- With effects: ${entry.effect || 'not pure'}.`)
                 }
+                // A declaration that writes neither `@pure` nor `@effect` states nothing about
+                // purity, and an operator's purity is registered in C++
+                // (`OperatorTable::declare`), which this page is not generated from: the page
+                // says nothing rather than guessing "not pure".
                 for (const fails of entry.fails) {
                     out.push(`- Failure: ${fails}.`)
                 }
@@ -1687,9 +1699,14 @@ function verifyOps() {
                     continue
                 }
                 const declaredPure = entry.purity === 'pure'
+                // A declaration that writes neither tag states nothing about purity: an
+                // operator's purity is registered in C++ and a declaration need not repeat it
+                // (design principles 6.4, 10.4), so there is nothing to compare. A tag that *is*
+                // written is a claim about the operator, and it has to agree with it.
                 if (entry.purity === null) {
-                    problems.push(`${entry.file}:${entry.line}: '${entry.name}' says neither @pure nor @effect`)
-                } else if (declaredPure !== (op.purity === 'pure')) {
+                    continue
+                }
+                if (declaredPure !== (op.purity === 'pure')) {
                     problems.push(
                         `${entry.file}:${entry.line}: '${entry.name}' is ${declaredPure ? '@pure' : '@effect'} but ${op.uri} is registered ${op.purity}`,
                     )

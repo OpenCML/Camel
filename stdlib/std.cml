@@ -99,6 +99,9 @@ export func tfdump::<F>(f: F): F! when is_function::<F>()
 /// Prints the array type implementation's self-test and hands the graph on.
 export func arraytype::<F>(f: F): F! when is_function::<F>()
 
+/// Prints the type identity self-test (one identity per type, one table for `as`) and hands the graph on.
+export func identitytype::<F>(f: F): F! when is_function::<F>()
+
 namespace cpp {
 /// Builds a C++ module from the graph and consumes it.
 export func module_file::<F>(f: F): F! when is_function::<F>()

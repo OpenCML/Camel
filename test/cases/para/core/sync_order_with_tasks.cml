@@ -8,7 +8,7 @@
 module sync_order_with_tasks
 
 import { sleep } from process
-import { rendezvous } from para
+import { rendezvous } from test_support
 
 func step(tag: int, delay_ms: int): int sync {
     sleep(float(delay_ms) / 1000.0)
@@ -23,8 +23,8 @@ func ordered(): int sync {
     return a + b + c
 }
 
-func meet(timeout_ms: int): int sync {
-    return rendezvous(2, timeout_ms)
+func meet(timeout: float): int sync {
+    return rendezvous(2, timeout)
 }
 
 func bump(var total: int, delay_ms: int, by: int): int sync {
@@ -34,15 +34,15 @@ func bump(var total: int, delay_ms: int, by: int): int sync {
 }
 
 // Not a sync block: nothing orders the two calls.
-func independent(timeout_ms: int): int {
-    let l = meet(timeout_ms)
-    let r = meet(timeout_ms)
+func independent(timeout: float): int {
+    let l = meet(timeout)
+    let r = meet(timeout)
     return l + r
 }
 
 func main(): int sync {
     println(ordered())
-    println('independent calls that met: {}'->format<independent(3000) - 2>)
+    println('independent calls that met: {}'->format<independent(3.0) - 2>)
     println(ordered())
     var total = 0
     let x = bump(total, 40, 1)

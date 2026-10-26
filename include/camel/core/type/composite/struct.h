@@ -166,11 +166,27 @@ class StructDecl {
 };
 
 // Immutable StructType: type information is embedded directly in the object.
+/// How a struct value of the type `source` relates to the type `target` (design principles
+/// 5.2). This is the one place that says it; the implicit entrance (`assignableFrom`), the
+/// explicit `as` (`castSafetyFrom`), the entrance of an unnamed value into a named type
+/// (`structFieldsMatchByName`) and the copy the builder makes (`convertStructValue`) all ask it.
+///
+///  - `SameLayout`: the same field names in the same order, each readable as the target field's
+///    type; nothing moves, so the conversion changes the type and nothing else.
+///  - `ByName`: the same field names in another order, or a field that is itself a struct related
+///    by name; the conversion is a copy that puts the fields in the target's order (the
+///    declaration's order for a named type).
+///  - `None`: the fields are not the same ones, or one of them cannot be read as the target's.
+///
+/// The relation says what a conversion can do, not what is written without one: two named types are
+/// never assignable to each other (`as` is written where the program means it).
+enum class StructRelation { None, SameLayout, ByName };
+StructRelation relateStructs(const StructType *target, const StructType *source);
+
 /// Whether `source` is an unnamed struct value whose fields are `target`'s fields, by name,
-/// and whose field types can each be read as the target field's (in any written order). This
-/// is the relation that lets an unnamed struct value enter a named struct type (design
-/// principles 5.2): `target` must be named and `source` unnamed, and when the two orders
-/// differ the conversion needs a copy (camel/compile/gir convertStructValue).
+/// and whose field types can each be read as the target field's (in any written order): the
+/// relation that lets an unnamed struct value enter a named struct type. `target` must be named
+/// and `source` unnamed.
 bool structFieldsMatchByName(const StructType *target, const StructType *source);
 
 class StructType : public CompositeType {
@@ -251,6 +267,7 @@ class StructType : public CompositeType {
     virtual CastSafety castSafetyFrom(Type *sourceType) const override;
     virtual slot_t castSlotFrom(slot_t value, Type *sourceType) const override;
     virtual bool assignableFrom(Type *sourceType) const override;
+    virtual Type *unify(Type *other) const override;
     /// Widens every element type, so `var` bindings never hold refined aggregates (mutation
     /// through `var` parameters would otherwise break covariant assignability).
     virtual Type *widened() const override;

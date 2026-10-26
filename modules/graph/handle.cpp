@@ -5,6 +5,7 @@
 
 #include "camel/core/mm.h"
 #include "camel/core/type/intern.h"
+#include "camel/core/type/text.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/program.h"
 #include "camel/utils/assert.h"
@@ -225,8 +226,12 @@ bool Handle::equals(const rtdata::Object *other, const Type *type, bool deep) co
         return false;
     }
     const auto *that = static_cast<const Handle *>(other);
+    // A type is its structure and nothing else (design principles 5.2): two handles of the same
+    // structure name the same type, whatever names (dimensions, parameters) they were written with.
+    const bool sameType = typeRef_ == that->typeRef_ ||
+                          (kind_ == HandleKind::TypeRef && type::sameCanonicalType(typeRef_, that->typeRef_));
     return kind_ == that->kind_ && program_ == that->program_ && draft_ == that->draft_ &&
-           graph_ == that->graph_ && index_ == that->index_ && typeRef_ == that->typeRef_;
+           graph_ == that->graph_ && index_ == that->index_ && sameType;
 }
 
 rtdata::Object *Handle::clone(mm::IAllocator &allocator, const Type *type, bool deep) const {

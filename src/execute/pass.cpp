@@ -5,6 +5,7 @@
 #include "camel/common/scope.h"
 #include "camel/core/array/block_selftest.h"
 #include "camel/core/type/array_type_selftest.h"
+#include "camel/core/type/type_identity_selftest.h"
 #include "camel/core/debug_breakpoint.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/diagnostics/messages/semantic.h"
@@ -266,6 +267,18 @@ class ArrayTypeSelfTestPass final : public GraphIRPass {
     }
 };
 
+class TypeIdentitySelfTestPass final : public GraphIRPass {
+  public:
+    explicit TypeIdentitySelfTestPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
+
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override {
+        os << "TYPE_IDENTITY_SELFTEST ok "
+           << camel::core::type::debugRunTypeIdentitySelfTest() << "\n";
+        return program;
+    }
+};
+
 class GcRememberedSetPass final : public GraphIRPass {
   public:
     explicit GcRememberedSetPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
@@ -522,6 +535,7 @@ void registerCoreKernels() {
     registerCoreKernel("topo_node_seq", makePass<TopoNodeSeqDumpPass>());
     registerCoreKernel("tfdump", makePass<TfDumpPass>());
     registerCoreKernel("arraytype", makePass<ArrayTypeSelfTestPass>());
+    registerCoreKernel("identitytype", makePass<TypeIdentitySelfTestPass>());
     registerCoreKernel("gc::snapshot", makePass<GcSnapshotPass>());
     registerCoreKernel("gc::verify", makePass<GcVerifyPass>());
     registerCoreKernel("gc::minor", makePass<GcMinorPass>());
@@ -606,6 +620,7 @@ const std::map<std::string, std::string> passAliases = {
     // written, and the old spelling keeps resolving to it.
     {"std::null", "std::nop"},
     {"std::type::array", "std::arraytype"},
+    {"std::type::identity", "std::identitytype"},
     {"std::cxx", "std::cpp"},
     {"std::cppmod", "std::cpp::module_file"},
     {"std::cppinspect", "std::cpp::inspect"},

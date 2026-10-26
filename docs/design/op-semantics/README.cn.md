@@ -598,7 +598,7 @@ func caller(x: Tensor<f32, const [8, 3]>, w: Tensor<f32, const [3, 4]>): float {
 
 ### 6.6 `unordered_reduce`
 
-`para` 模块的 `unordered_reduce<f, initial>(xs)` 今天的实现：把数组切成块，每块从块的第一个元素起按顺序折叠，块的部分结果再从 `initial` 起按块序折叠【读码：`src/passes/sched/taskflow/taskflow.cpp#unordered_reduce`】。签名的文档说"合并顺序不固定，所以 f 应当可结合可交换"【读码：`stdlib/signatures/para.cml#para`】。
+`para` 模块的 `unordered_reduce<f, initial>(xs)` 今天的实现：把数组切成块，每块从块的第一个元素起按顺序折叠，块的部分结果再从 `initial` 起按块序折叠【读码：`src/passes/sched/taskflow/taskflow.cpp#unordered_reduce`】。签名的文档说"合并顺序不固定，所以 f 应当可结合可交换"【读码：`stdlib/para.cml#unordered_reduce`】。
 
 在本协议里：`:mark/unordered_reduce_arr` 的声明是一条 `ReductionLaw`，`combine` 是传入的函数值（`Custom`），`order = Unordered`。它对这次归约的作用**等同于节点上的许可 (a)**，但它来自算子本身（程序选择了这个算子），不来自许可列，也不是"模块替调用者扩大许可"——调用它就是程序写下的授予。它**不**授予 `f` 内部的任何东西：`f` 是被调函数，其中的加乘仍按规范算法，`f` 自己的标注才算数。初值 `initial` 只参与一次，所以律不要求它是单位元。
 

@@ -295,22 +295,41 @@ class Array : public rtdata::Object {
     /// True when this value reads another array's block rather than owning the storage.
     bool isView() const { return view_; }
 
-    /// Whether this array may be changed in place: an inline compact array is its own storage,
-    /// a block-backed one needs the only reference to a Camel-owned block at offset 0 and
-    /// must not be a view. An imported (external) block is never writable (design principles
-    /// 11.3: another framework must not see the change).
-    bool canWriteInPlace() const;
+    /// The one answer to "may this value's storage be written in place", for every in-place
+    /// update operator (`:op/set_index_in_place`, the in-place forms of `append` and `sort`):
+    /// true when nothing but this value can observe a write through it. Nothing here asks who
+    /// else is in the graph, and no operator asks anything else -- a second opinion at a call
+    /// site is how the two answers drifted apart.
+    ///
+    /// The answer is the actual reference count of the storage, and every path that hands the
+    /// value to a second name runs `shareForSecondName`, so the count is the number of names
+    /// that can see a write:
+    ///
+    ///   * a compact array with a block: the only reference to a Camel-owned block at offset 0,
+    ///     and not a view. An imported (external) block is never writable (design principles
+    ///     11.3: another framework must not see the change).
+    ///   * a compact array whose data is inline: the array object is the storage and the second
+    ///     name gets a copy of the data, so the count is one by construction.
+    ///   * a slot array (elements that are references): the same, its `FixedArray` is its own
+    ///     and the second name gets its own copy (design principles 10.5: with a count of one
+    ///     the "returns a new value" operation happens in place, and that is a guarantee, not
+    ///     an optimisation).
+    ///
+    /// The answers are also what `std::profile` reports as "the array's own count answered".
+    bool writableInPlace() const;
 
     /// A second name for this array's storage, so that the references to it count the names that
-    /// can still observe it and "the only reference" (canWriteInPlace) means "no other name".
+    /// can still observe it and "the only reference" (writableInPlace) means "no other name".
     /// Handed out where a value gains such a name: a read that lets the value out of a variable,
     /// a store into a variable's cell (the operators of the variable family call this).
     ///
     /// A compact array with a block of its own hands out a value over the same block, which
     /// takes one more reference to it and copies nothing. One whose data is inline hands out a
     /// copy of that data: two names for one inline storage would be two names for one array, and
-    /// the data fits the inline limit. An array no write could be seen through -- a slot array,
-    /// a view, an imported block, a shifted one -- is handed out as it is, and so is a block
+    /// the data fits the inline limit. A slot array hands out a copy of its own for the same
+    /// reason: it has no block to count, so two names for one `FixedArray` would be two names
+    /// for one storage that no count keeps apart. An array no write could be seen through -- a
+    /// view, an imported block, a shifted one -- is handed out as it is, and so is a block
     /// several values already hold: nothing has to be counted to keep a write out of the other
     /// names' sight.
     Array *shareForSecondName(camel::core::mm::IAllocator &allocator);

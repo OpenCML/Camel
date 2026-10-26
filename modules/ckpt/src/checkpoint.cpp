@@ -349,7 +349,7 @@ class SaveResolver final : public FuncTypeResolver {
         param_vec_t args;
         for (auto t : norm)
             args.emplace_back(t, false);
-        return FunctionType::create({}, args, Type::Void(), mods);
+        return FunctionType::create({}, args, Type::Void());
     }
     std::optional<std::string> explainRejection(
         const type_vec_t &with, const type_vec_t &norm, static_args_t,
@@ -382,7 +382,7 @@ class LoadResolver final : public FuncTypeResolver {
         param_vec_t args;
         for (auto t : norm)
             args.emplace_back(t, false);
-        return FunctionType::create({}, args, TupleType::fallible(target), mods);
+        return FunctionType::create({}, args, TupleType::fallible(target));
     }
     std::optional<std::string> explainCallRejection(
         const type_vec_t &types, Type *expected, const type_vec_t &with, const type_vec_t &norm,

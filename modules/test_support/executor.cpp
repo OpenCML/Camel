@@ -7,15 +7,15 @@
 
 namespace {
 
-class ParaExecutor : public Executor {
+class TestSupportExecutor : public Executor {
   public:
-    ParaExecutor(
+    TestSupportExecutor(
         camel::core::context::context_ptr_t ctx, std::unordered_map<std::string, operator_t> ops)
         : Executor(std::move(ctx), std::move(ops)) {}
 };
 
 } // namespace
 
-executor_ptr_t createParaExecutor(camel::core::context::context_ptr_t ctx) {
-    return std::make_shared<ParaExecutor>(std::move(ctx), getParaOpsMap());
+executor_ptr_t createTestSupportExecutor(camel::core::context::context_ptr_t ctx) {
+    return std::make_shared<TestSupportExecutor>(std::move(ctx), getTestSupportOpsMap());
 }

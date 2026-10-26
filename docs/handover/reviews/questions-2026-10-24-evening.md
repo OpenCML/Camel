@@ -1741,3 +1741,29 @@ Python 边界（C25、C27）已合入（`937cbc71e`、`b0413e05f`）。索引里
 - **`match v` 保持不变**（负责人定）。9.5 讲清楚这里的 `match` 拆的是 `v` 在图上的构造方式，`case const c`、`case x * x` 里的 `c`、`x` 是模式变量，和普通 `match` 里按变体拆值是同一种写法。
 
 C12 的补充已合入（`91594ca60` 经 `829ccf0ff`）：施工方的度量之外，嵌套函数写捕获变量时不再被当成 `pure`（捕获端口与闭包节点按捕获处理）；五条用例保留。索引里的 **C9（编译期求值不猜：未绑定的类型变量、重载取第一个、在调用方作用域求值、宽 `catch`）也由决策者这边做**，施工方不做这一组。
+
+C4、C22 已合入（`8fa694785`）：`as` 在基本类型之间只把一个类型转成它自己，数值转换写 `float(n)` 这类函数（语言参考 6.7.4 已写）；转换只有 `Type::castSafetyFrom` 一张表；函数类型就是它的结构，`sync` 是块的性质，已从 `FunctionType` 里删掉；`unify` 补齐；结构体关系只有 `relateStructs` 一处。随之定两件：类型位置上的 `sync (x: int) => int` 不再有含义，文法拒绝它（写了就是语法错误）；`resolve()` 里不再使用的 `ModifierSet` 参数删掉。这两件和 T3（`f32[n]` 与 `f32[n+1]` 的相等）、T10（以指针为键的缓存，即 C19）由决策者这边接着做。
+
+## 六页问题（2026-10-26 晚）
+
+**c12-is-already-done-and-merged**：认可，C12 标成完成。我们这边补的那一处（嵌套函数写捕获变量）已在 `829ccf0ff` 合入，和你们的结构是一套；两边各自修过的不重复做。
+
+**closure-type-says-pure-but-footprint-says-rmw**：`ResourceSignature::captures` **要放类别、模式和被捕获变量的身份**，经由闭包值的调用照样精确指名到那个格子，打印时写被捕获的变量名（按"推断出的资源按名字打印"那条）。这一条取代我们在 `829ccf0ff` 里"捕获按未知记"的保守读法，资源计划里"`c` 与 `d` 的格子是不同的资源"那条断言保持绿。由你们做。
+
+**gpu-report-schema-number-code-one-doc-two**：保持 **1**，把设计稿那一行改成 1。约定：只有已有字段改了含义或被删掉时才升号，加字段不升号。现在还没有外部使用者，这一版就定为 1。这条约定写进报告格式的说明和检查。
+
+**grad-loop-collect-block-count-two-to-one**：认可，2 变 1 是一条规则带来的正确结果，值没变。保持 1，`desc` 里写明原因。
+
+**onnx-with-parameters-cannot-carry-a-runtime-path**：前提不对。**`with` 实参不要求是编译期常量**：`x->linear<w, b>` 的权重、`f<w>` 绑定的 `var` 上下文参数都是运行期的值。只有声明本身要求静态值的地方才必须是常量：规则与事实的 `with`、命令行上的遍参数、出现在类型里的维度。所以 `export_model<out: get_env('ONNX_OUT')>(f, x)` 是合法的，照草稿接入。如果实现里把函数的 `with` 实参当成只收常量，那是缺陷，一起修。172 个文件的迁移照做，`refusals` 那 7 个用例按草稿从故障改成错误值。`process.cml` 加 `export resource process`、`tiles.cml` 的 `driver` 照"库的资源"那条做，你们可以直接动这两个文件；设计稿 `effects/plan.cn.md:48` 那句过时的话直接改。
+
+**pass-failures-have-no-error-value-path**：选 1。原则 9.1 写的遍类型就是 `(f: F) => F!`，遍可以失败，失败就是错误值，**遍 API 要长出这条路**：遍返回错误值时，流水线在那里停下，把错误按"没被处理的错误值到达出口"的规则报出（打印到标准错误，退出码非零）；在 Camel 里调用遍时就是普通的 `T!`。`tiles::compile` 照草稿改成错误值 `GpuScopeUnsupported`，用例措辞随之改。诊断只留给编译期就能确定的错误。
+
+## 2026-10-26-entry-module-name-and-candidate-table
+
+1. **一律取文件名**（选 1）：原则 10.2，一个文件就是一个模块，模块名只来自文件名。`module` 声明照 5a 删除，删完就不存在"两个名字"。在那之前文件里的 `module` 行不影响任何命名。
+2. **候选名表删掉**（选 1）：只认写出来的那个名字，找不到就是"找不到模块"，并给出搜索过的路径。一件事一种写法，不替用户猜。两条用例改成反例。
+
+## 2026-10-26-recognizing-an-array-in-match-type
+
+**甲：加形状词 `case array`**，与 `struct`、`tuple`、`func`、`#leaf` 并列，匹配任何数组类型（任意元素类型、任意形状）。于是 `is_array::<T>()` 用 Camel 写得出来，`is_sliceable::<T>()` 由 `is_array`、`is_string`、`is_same::<T, Bytes>` 合成，用户也能自己写。设计原则 5.5 的形状词列表补上 `func` 与 `array`（现在只写了三个）。
+- **缺陷单独先修**：不认识的形状词在 Release 里静默当成 `case _`，在 Debug 里中止。改成一条带位置的具名诊断（"未知的形状词，可用的是 `struct`、`tuple`、`func`、`array`、`#leaf`"），`builder_static.cpp` 里那份名字表与解析器共用一处。这正是 `agents/refactor.md` 里"拒绝必须说出来"那一条。
