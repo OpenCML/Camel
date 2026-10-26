@@ -491,3 +491,26 @@ expect_exit = 0
 expect_stdout = "10.0\n54.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+[[tests]]
+name = "array_mask_elementwise"
+desc = "The mask an accuracy counts is an array: `===` compares elementwise, so its result is a `bool` array of the operands' shape (design principles 4.2), and a mask is not a number, so the ones and zeros are read by a conversion the program writes (design principles 5.1). `cast(hits, \"float\")` and the selection `where(hits, 1.0, 0.0)` read the same numbers, and the reduction over the array they produce is ordinary: the mask that agrees nowhere counts 0, the one that agrees at two of four positions counts 2 and agrees 0.5."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/dtype/array_mask_elementwise.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout = "0.0\n0.0\n2.0\n2.0\n0.0\n0.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "whole_value_equality"
+desc = "`==` on two arrays compares them by content and answers one `bool`, the elementwise comparison reduced (design principles 4.2), so its result is not an array: an array type is refused for it while the scalar reading is accepted. The elementwise comparison a mask needs is `===`, whose result is the array this refusal is about."
+kind = "negative"
+case = "../../../../cases/modules/tensor/dtype/whole_value_equality.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+expect_output_contains = ["This value has type 'bool', which is not the declared type 'bool[..]'."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
