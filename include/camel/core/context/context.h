@@ -58,6 +58,11 @@ using module_ptr_t  = std::shared_ptr<module::Module>;
 /// 1. Reading it creates nothing.
 size_t hardwareThreadCount();
 
+/// How many `Context` objects are alive in this process right now. Read-only: it counts what the
+/// constructor and the destructor do and changes nothing else, so a reading that builds a context
+/// in a scope can tell whether that context was destroyed when the scope ended.
+size_t liveContextCount() noexcept;
+
 struct EntryConfig {
     std::string entryDir;                 // root path of the context, used for loading modules
     std::string entryFile;                // entry module path

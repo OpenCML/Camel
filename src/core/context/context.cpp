@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
 #include <filesystem>
 #include <format>
@@ -40,6 +41,18 @@ using namespace camel::core::module;
 using namespace camel::core::type;
 
 namespace camel::core::context {
+
+namespace {
+
+/// The `Context` objects alive right now, for liveContextCount(): a reading that builds a context
+/// in a scope reads it on both sides of that scope to see whether the context was destroyed.
+std::atomic<size_t> gLiveContexts{0};
+
+} // namespace
+
+size_t liveContextCount() noexcept {
+    return gLiveContexts.load(std::memory_order_acquire);
+}
 
 namespace {
 
@@ -267,13 +280,16 @@ size_t hardwareThreadCount() {
 
 Context::Context(const EntryConfig &entryConf, const DiagsConfig &diagConf)
     : entryConfig_(entryConf), diagConfig_(diagConf),
-      resolver_(entryConf.entryDir, entryConf.searchPaths) {}
+      resolver_(entryConf.entryDir, entryConf.searchPaths) {
+    gLiveContexts.fetch_add(1, std::memory_order_acq_rel);
+}
 
 size_t Context::threadLimit() const {
     return entryConfig_.maxThreads != 0 ? entryConfig_.maxThreads : hardwareThreadCount();
 }
 
 Context::~Context() {
+    gLiveContexts.fetch_sub(1, std::memory_order_acq_rel);
     // Runtime function objects stored inside modules may consult GCGraph-backed
     // closure metadata during teardown. Release module-owned runtime data before
     // dropping the graph closure so those metadata pointers stay valid for the

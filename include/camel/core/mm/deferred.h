@@ -30,4 +30,10 @@ void deferRelease(DeferredRelease release, void *context) noexcept;
 /// a collection can start, after the allocator has been unlocked.
 size_t runDeferredReleases() noexcept;
 
+/// Whether a release is queued right now. Read-only: it neither runs the queue nor changes what a
+/// later drain does. A caller that has just queued something, and queued it where no collection
+/// will start before the point it is asking about, reads this to tell whether that drain has
+/// happened yet.
+bool deferredReleasePending() noexcept;
+
 } // namespace camel::core::mm

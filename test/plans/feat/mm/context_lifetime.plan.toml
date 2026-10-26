@@ -1,0 +1,73 @@
+id = "mm.context_lifetime"
+order = 374
+tier = "fast"
+tags = ["feat", "mm", "gc", "context-lifetime"]
+desc = """
+The lifetime of a `Context` that is not the only one of the process.
+
+A process may hold more than one context: a tool, a language server or `--timeit` builds a second
+`Context::create` beside a running one. Each context owns the modules, the executor manager and
+the builders it made, and those objects refer back to the context they belong to. When that
+back-reference was an owning one, the context was kept alive by its own members: `held` read 5
+(the pass's own reference, `Context::exeMgr_`, the built-in module, and the two executor factories
+that module registers in `src/builtin/modules/globals.cpp`), the context never reached its
+destructor, and a context that was not the last one of the process was never destroyed. Everything
+its destructor does then happened only for the last context: giving back the object root set and
+the graph sweeper it installed, and draining the deferred-release queue its teardown queued.
+
+`test::context_lifetime` reads all of it. It builds a second context in a scope of its own, reads
+how many owners it has while the scope holds one of them, ends the scope, and reads what the
+teardown left. One line per pass, read once per back end:
+
+  CONTEXTS-PROBE held=<n> live_before=<n> live_second=<n> live_after=<n> rootset_before=<0|1|2>
+                 rootset_second=<0|1|2> rootset_after=<0|1|2> root_given_back=<0|1>
+                 deferred_before=<0|1> deferred_after=<0|1> ran=<0|1> alive=<0|1>
+
+  held              the second context's owner count while the scope holds one of them
+  live_before       the contexts alive when the pass starts (liveContextCount)
+  live_second       the contexts alive while the second one is being used
+  live_after        the contexts alive after its scope ended
+  rootset_before    the object root set the allocator holds before the second context is built
+  rootset_second    the one it holds while both are alive
+  rootset_after     the one it holds after the scope (0 none, 1 the running context's, 2 another's)
+  root_given_back   the second context's registration is no longer the one installed
+  deferred_before   a release the pass queued inside the scope is queued
+  deferred_after    it is still queued after the scope
+  ran               and the queue was drained
+  alive             the running program survived a major collection taken afterwards
+
+The numbers this reads: `held=5`, `live_after` one above `live_before`, `rootset_after=2` with
+`root_given_back=0`, and `deferred_after=1` with `ran=0` -- the cycle, a second context never
+destroyed. With the back-references non-owning (a module and the executor manager hold
+`Context::handle()`, which is a handle that does not own): `held=1`, `live_after` back to
+`live_before`, `rootset_after=0` with `root_given_back=1`, and `deferred_after=0` with `ran=1`.
+
+The allocator holds one object root set and one graph sweeper for the process, so registering the
+second context displaces the running one's whatever happens to the second context later; the pass
+reads the registration it found and puts that same one back before its major collection, because
+the `alive` control is about the running context's own registration, not about the second one's.
+"""
+
+[[tests]]
+name = "context_lifetime.second_context_is_destroyed"
+desc = "The second context's only owner is the scope that built it, so it is destroyed when that scope ends: it gives the object root set it installed back and drains the deferred-release queue its teardown queued, and the running program survives a major collection taken afterwards. The pinned reading: it read held=5, live_after=2, root_given_back=0 and ran=0 before the back-references were made non-owning."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/context_lifetime.cml"
+args = ["--gc", "generational", "${case}", "test::context_lifetime", "${run_nvm}"]
+
+expect_exit = 0
+expect_stdout_contains = ["CONTEXTS-PROBE held=1 live_before=1 live_second=2 live_after=1 rootset_before=1 rootset_second=2 rootset_after=0 root_given_back=1 deferred_before=1 deferred_after=0 ran=1 alive=1", "contexts-1-2-3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "context_lifetime.second_context_is_destroyed_fvm"
+desc = "The same reading on the bytecode back end, where the contexts of a run are not the ones the node VM made."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/context_lifetime.cml"
+args = ["--gc", "generational", "${case}", "test::context_lifetime", "${run_fvm}"]
+
+expect_exit = 0
+expect_stdout_contains = ["CONTEXTS-PROBE held=1 live_before=1 live_second=2 live_after=1 rootset_before=1 rootset_second=2 rootset_after=0 root_given_back=1 deferred_before=1 deferred_after=0 ran=1 alive=1", "contexts-1-2-3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000

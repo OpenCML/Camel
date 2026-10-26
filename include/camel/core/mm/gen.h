@@ -329,6 +329,12 @@ class GenerationalAllocatorWithGC : public IAllocator {
     /// Called by a major collection once it has marked what it reaches, before the spaces are
     /// swept: the graph space holds Programs and graphs, which it frees when unmarked.
     void setGraphSweeper(std::function<void()> sweeper);
+    /// The object root set and the graph sweeper installed right now. Read-only: they neither
+    /// install nor clear anything. The allocator holds one of each for the process, so the place
+    /// that installs one is the place that gives it back; a caller that has to disturb the
+    /// registration (a diagnostic, a test) reads them before and after, to put back what it found.
+    std::vector<rtdata::Object *> *objectRootSet() const { return rootObjectSet_; }
+    const std::function<void()> &graphSweeper() const { return graphSweeper_; }
     /// Asks for a major collection at the next safepoint, for a space the collector does not
     /// budget itself (the graph space: Programs and graph versions).
     void requestMajorCollection(std::string_view reason);

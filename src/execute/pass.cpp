@@ -22,6 +22,7 @@
 #include "camel/execute/observer.h"
 #include "camel_pass.h"
 #include "camel/passes/test/chunks.h"
+#include "camel/passes/test/context_lifetime.h"
 #include "camel/passes/test/edges.h"
 #include "camel/passes/test/graph_release.h"
 #include "camel/passes/test/keepfn.h"
@@ -893,6 +894,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kEdgesOkTestPass, EdgesOkTestPass),
         TEST_PASS(kCommitConflictTestPass, CommitConflictTestPass),
         TEST_PASS(kKeepFnTestPass, KeepFnTestPass),
+        TEST_PASS(kContextLifetimeTestPass, ContextLifetimeTestPass),
         TEST_PASS(kCommitMergeTestPass, CommitMergeTestPass),
         TEST_PASS(kEdgesOrderOkTestPass, EdgesOrderOkTestPass),
         TEST_PASS(kEdgesOrderPureTestPass, EdgesOrderPureTestPass),

@@ -45,6 +45,10 @@ void deferRelease(DeferredRelease release, void *context) noexcept {
     }
 }
 
+bool deferredReleasePending() noexcept {
+    return queue().pending.load(std::memory_order_acquire);
+}
+
 size_t runDeferredReleases() noexcept {
     Queue &q = queue();
     if (!q.pending.load(std::memory_order_acquire)) {
