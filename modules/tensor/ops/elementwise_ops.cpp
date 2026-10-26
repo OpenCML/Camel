@@ -310,6 +310,34 @@ std::optional<Type *> castInfer(const InferContext &ctx) {
     return tensorOf(dtype, ctx.facts(0).shape);
 }
 
+/// A type conversion applied to every element of an array: `f32(xs)`, `float(xs)`, `int(xs)`.
+/// One rule with the arithmetic around it (an operator of a scalar applies elementwise to an
+/// array), so the target element type is the conversion's own name and no dtype string is written.
+/// The shape is the input's; the values are converted as `cast` converts them.
+template <TypeCode Target> slot_t convertKernel(ArgsView &, ArgsView &norm, context::Context &) {
+    return runKernel("convert", [&] {
+        Array *input = tensorArg(norm, 0, true);
+        return wrap(norm.resultType(), k::cast(input, Target, resultAllocator()));
+    });
+}
+
+template <TypeCode Target> std::optional<Type *> convertInfer(const InferContext &ctx) {
+    return tensorOf(Target, ctx.facts(0).shape);
+}
+
+template <TypeCode Target>
+OpDef convertDef(std::string_view name, std::vector<std::string_view> exports) {
+    return OpDef{
+        .name      = name,
+        .exports   = std::move(exports),
+        .params    = {{"t", ParamKind::TensorLike}},
+        .resultDoc = "the converted array",
+        .infer     = &convertInfer<Target>,
+        .kernel    = &convertKernel<Target>,
+        .traits    = elementwiseTraits(),
+    };
+}
+
 // ---------------------------------------------------------------- VJP rules
 
 // Rules of broadcasting binary operators reduce each operand's gradient to its shape; an operand
@@ -534,6 +562,17 @@ void castVjp(VjpBuilder &b, const VjpCall &call) {
     }
 }
 
+// A conversion's input gradient is the output's, taken back to the input's own element type.
+void convertVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 1, 1);
+    if (auto dy = b.gradientOf(call.output); dy) {
+        if (!hasTensorAdjoint(b, call, call.inputs[0], "its input")) {
+            return;
+        }
+        b.accumulateGradient(call.inputs[0], tensorCastTo(b, call.inputs[0], *dy));
+    }
+}
+
 } // namespace
 
 std::vector<OpDef> elementwiseOps() {
@@ -594,6 +633,13 @@ std::vector<OpDef> elementwiseOps() {
         .kernel    = &castKernel,
         .traits    = elementwiseTraits(),
     });
+    // The conversions of the scalar types, applied to every element of an array.
+    defs.push_back(convertDef<TypeCode::Int32>("to_i32", {"i32"}));
+    defs.push_back(convertDef<TypeCode::Int64>("to_i64", {"i64", "int"}));
+    defs.push_back(convertDef<TypeCode::Float32>("to_f32", {"f32"}));
+    defs.push_back(convertDef<TypeCode::Float64>("to_f64", {"f64", "float"}));
+    defs.push_back(convertDef<TypeCode::BFloat16>("to_bf16", {"bf16"}));
+    defs.push_back(convertDef<TypeCode::Float16>("to_f16", {"f16"}));
     setVjp(defs, "add", &addVjp);
     setVjp(defs, "subtract", &subtractVjp);
     setVjp(defs, "multiply", &multiplyVjp);
@@ -614,6 +660,9 @@ std::vector<OpDef> elementwiseOps() {
     setVjp(defs, "erf", &erfVjp);
     setVjp(defs, "where", &whereVjp);
     setVjp(defs, "cast", &castVjp);
+    for (std::string_view name : {"to_i32", "to_i64", "to_f32", "to_f64", "to_bf16", "to_f16"}) {
+        setVjp(defs, name, &convertVjp);
+    }
     // Comparisons are locally constant.
     for (std::string_view name : {"lt", "le", "gt", "ge", "strict_eq", "strict_neq"}) {
         setVjp(defs, name, &camel::core::noGradient);

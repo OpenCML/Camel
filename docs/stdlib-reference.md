@@ -2075,6 +2075,94 @@ computation the compiler moves to lower precision (design principles 7.2-7.3). R
 - Failure: fault `RuntimeError` when the name is not one of those.
 - Example: `cast(new([1.0, 2.0]), 'int64')` gives `[1, 2]`
 
+#### `i32`
+
+```camel
+i32: (t: float[..] | number[]) => i32[..]
+```
+
+The conversion `i32` applied to every element of an array: the result has the input's extents and element type `i32`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
+
+- Pure.
+- Example: `i32(new([1.0, 2.0]))`
+
+#### `i64`
+
+```camel
+i64: (t: float[..] | number[]) => int64[..]
+```
+
+The conversion `i64` applied to every element of an array: the result has the input's extents and element type `int64`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
+
+- Pure.
+- Example: `i64(new([1.0, 2.0]))`
+
+#### `int`
+
+```camel
+int: (t: float[..] | number[]) => int64[..]
+```
+
+The conversion `int` applied to every element of an array: the result has the input's extents and element type `int64`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
+
+- Pure.
+- Example: `int(new([1.0, 2.0]))`
+
+#### `f32`
+
+```camel
+f32: (t: float[..] | number[]) => f32[..]
+```
+
+The conversion `f32` applied to every element of an array: the result has the input's extents and element type `f32`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
+
+- Pure.
+- Example: `f32(new([1.0, 2.0]))`
+
+#### `f64`
+
+```camel
+f64: (t: float[..] | number[]) => f64[..]
+```
+
+The conversion `f64` applied to every element of an array: the result has the input's extents and element type `f64`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
+
+- Pure.
+- Example: `f64(new([1.0, 2.0]))`
+
+#### `float`
+
+```camel
+float: (t: float[..] | number[]) => f64[..]
+```
+
+The conversion `float` applied to every element of an array: the result has the input's extents and element type `f64`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
+
+- Pure.
+- Example: `float(new([1.0, 2.0]))`
+
+#### `bf16`
+
+```camel
+bf16: (t: float[..] | number[]) => bf16[..]
+```
+
+The conversion `bf16` applied to every element of an array: the result has the input's extents and element type `bf16`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
+
+- Pure.
+- Example: `bf16(new([1.0, 2.0]))`
+
+#### `f16`
+
+```camel
+f16: (t: float[..] | number[]) => f16[..]
+```
+
+The conversion `f16` applied to every element of an array: the result has the input's extents and element type `f16`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
+
+- Pure.
+- Example: `f16(new([1.0, 2.0]))`
+
 #### `load_npy`
 
 ```camel

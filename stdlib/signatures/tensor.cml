@@ -373,6 +373,54 @@ export func ones_like(t: float[..]): float[..]
 /// @example cast(new([1.0, 2.0]), 'int64')    // [1, 2]
 export func cast(t: float[..] | number[], dtype: string): int64[..]
 
+/// The conversion `i32` applied to every element of an array: the result has the input's extents and element type `i32`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
+/// @pure
+/// @example i32(new([1.0, 2.0]))
+#op('tensor:to_i32')
+export func i32(t: float[..] | number[]): i32[..]
+
+/// The conversion `i64` applied to every element of an array: the result has the input's extents and element type `int64`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
+/// @pure
+/// @example i64(new([1.0, 2.0]))
+#op('tensor:to_i64')
+export func i64(t: float[..] | number[]): int64[..]
+
+/// The conversion `int` applied to every element of an array: the result has the input's extents and element type `int64`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
+/// @pure
+/// @example int(new([1.0, 2.0]))
+#op('tensor:to_i64')
+export func int(t: float[..] | number[]): int64[..]
+
+/// The conversion `f32` applied to every element of an array: the result has the input's extents and element type `f32`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
+/// @pure
+/// @example f32(new([1.0, 2.0]))
+#op('tensor:to_f32')
+export func f32(t: float[..] | number[]): f32[..]
+
+/// The conversion `f64` applied to every element of an array: the result has the input's extents and element type `f64`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
+/// @pure
+/// @example f64(new([1.0, 2.0]))
+#op('tensor:to_f64')
+export func f64(t: float[..] | number[]): f64[..]
+
+/// The conversion `float` applied to every element of an array: the result has the input's extents and element type `f64`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
+/// @pure
+/// @example float(new([1.0, 2.0]))
+#op('tensor:to_f64')
+export func float(t: float[..] | number[]): f64[..]
+
+/// The conversion `bf16` applied to every element of an array: the result has the input's extents and element type `bf16`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
+/// @pure
+/// @example bf16(new([1.0, 2.0]))
+#op('tensor:to_bf16')
+export func bf16(t: float[..] | number[]): bf16[..]
+
+/// The conversion `f16` applied to every element of an array: the result has the input's extents and element type `f16`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
+/// @pure
+/// @example f16(new([1.0, 2.0]))
+#op('tensor:to_f16')
+export func f16(t: float[..] | number[]): f16[..]
+
 // `show` is declared: its result is fixed `void` and its umbrella parameter is two declarations
 // (a tensor, and any array). See `stdlib/tensor.cml`.
 

@@ -191,7 +191,7 @@ tree_reduce: <f: (acc: R, leaf: A) => R> (t: T, init: R) => R
 tree_unzip: (r: R, s: S) => ?
 ```
 
-**`tensor`** — import { ... } from tensor — 69 name(s)
+**`tensor`** — import { ... } from tensor — 77 name(s)
 
 ```text
 new: (values: float[..] | number[]) => float[..]
@@ -252,6 +252,14 @@ linear: (x: f32[..], weight: f32[..], bias?: f32[..]) => f32[..]
 zeros_like: (t: float[..]) => float[..]
 ones_like: (t: float[..]) => float[..]
 cast: (t: float[..] | number[], dtype: string) => int64[..]
+i32: (t: float[..] | number[]) => i32[..]
+i64: (t: float[..] | number[]) => int64[..]
+int: (t: float[..] | number[]) => int64[..]
+f32: (t: float[..] | number[]) => f32[..]
+f64: (t: float[..] | number[]) => f64[..]
+float: (t: float[..] | number[]) => f64[..]
+bf16: (t: float[..] | number[]) => bf16[..]
+f16: (t: float[..] | number[]) => f16[..]
 load_npy: (path: string) => T[..]
 show: (t: A[..]) => void
 from_bytes: (bytes: Bytes, shape: int[]) => T[..] when is_plain::<T>()
