@@ -6,7 +6,7 @@
  */
 module ort_train_dynamic
 
-import { Tensor, relu, sum, reshape, shape, load_npy } from tensor
+import { relu, sum, reshape, shape, load_npy } from tensor
 import { with_grad } from autodiff
 import { sgd, save_params } from nn
 import { export_model } from onnx
@@ -18,7 +18,7 @@ with <m: Mlp>
 func loss(x: f32[..]): float {
     let h = relu(x @ m.w1 + m.b1)
     let y = h @ m.w2 + m.b2
-    return sum(y * y) / float(shape(y)[0] * shape(y)[1])
+    return float(sum(y * y)) / float(shape(y)[0] * shape(y)[1])
 }
 
 func step(m: Mlp, x: f32[..]): (float, Mlp) {

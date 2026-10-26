@@ -80,12 +80,12 @@ STEP_CPU_MS = 64.896
 PROBES = [
     {
         "name": "sum_to_leading",
-        "with": "b: Tensor<f32, [256]>",
-        "args": "x: Tensor<f32, [512, 256]>",
+        "with": "b: f32[256]",
+        "args": "x: f32[512, 256]",
         "body": "sum(x * b)",
-        "lets": ["let x: Tensor<f32, [512, 256]> = randn([512, 256], 0.0, 1.0) "
-                 "as Tensor<f32, [512, 256]>",
-                 "let w0: Tensor<f32, [256]> = randn([256], 0.0, 1.0) as Tensor<f32, [256]>"],
+        "lets": ["let x: f32[512, 256] = randn([512, 256], 0.0, 1.0) "
+                 "as f32[512, 256]",
+                 "let w0: f32[256] = randn([256], 0.0, 1.0) as f32[256]"],
         "calls": {"tensor:sum_to": 1},
         "note": "512x256 summed to [256]",
         "reference": "tensor:broadcast_like",
@@ -93,13 +93,13 @@ PROBES = [
     },
     {
         "name": "sum_to_trailing",
-        "with": "s: Tensor<f32, [512, 1]>",
-        "args": "x: Tensor<f32, [512, 256]>",
+        "with": "s: f32[512, 1]",
+        "args": "x: f32[512, 256]",
         "body": "sum(x / s)",
-        "lets": ["let x: Tensor<f32, [512, 256]> = randn([512, 256], 0.0, 1.0) "
-                 "as Tensor<f32, [512, 256]>",
-                 "let w0: Tensor<f32, [512, 1]> = randn([512, 1], 0.0, 1.0) "
-                 "as Tensor<f32, [512, 1]>"],
+        "lets": ["let x: f32[512, 256] = randn([512, 256], 0.0, 1.0) "
+                 "as f32[512, 256]",
+                 "let w0: f32[512, 1] = randn([512, 1], 0.0, 1.0) "
+                 "as f32[512, 1]"],
         "calls": {"tensor:sum_to": 1},
         "note": "512x256 summed to [512,1] along the trailing axis",
         "reference": "tensor:broadcast_like",
@@ -107,13 +107,13 @@ PROBES = [
     },
     {
         "name": "sum_to_identity",
-        "with": "b: Tensor<f32, [512, 256]>",
-        "args": "x: Tensor<f32, [512, 256]>",
+        "with": "b: f32[512, 256]",
+        "args": "x: f32[512, 256]",
         "body": "sum(x * b)",
-        "lets": ["let x: Tensor<f32, [512, 256]> = randn([512, 256], 0.0, 1.0) "
-                 "as Tensor<f32, [512, 256]>",
-                 "let w0: Tensor<f32, [512, 256]> = randn([512, 256], 0.0, 1.0) "
-                 "as Tensor<f32, [512, 256]>"],
+        "lets": ["let x: f32[512, 256] = randn([512, 256], 0.0, 1.0) "
+                 "as f32[512, 256]",
+                 "let w0: f32[512, 256] = randn([512, 256], 0.0, 1.0) "
+                 "as f32[512, 256]"],
         "calls": {"tensor:sum_to": 1},
         "alloc_per_call": 0.0,
         "note": "the floor: the call is the identity path",
@@ -122,11 +122,11 @@ PROBES = [
     },
     {
         "name": "expand_axis",
-        "with": "w: Tensor<f32, [512, 256]>",
+        "with": "w: f32[512, 256]",
         "args": "",
         "body": "sum(mean(w, -1, true))",
-        "lets": ["let w0: Tensor<f32, [512, 256]> = randn([512, 256], 0.0, 1.0) "
-                 "as Tensor<f32, [512, 256]>"],
+        "lets": ["let w0: f32[512, 256] = randn([512, 256], 0.0, 1.0) "
+                 "as f32[512, 256]"],
         "calls": {"tensor:expand_axis": 1, "tensor:mean_axis": 1},
         "note": "the mean's VJP spreads [512,1] back over [512,256]",
         "reference": "tensor:mean_axis",
@@ -134,11 +134,11 @@ PROBES = [
     },
     {
         "name": "permute",
-        "with": "w: Tensor<f32, [16, 32, 16, 16]>",
+        "with": "w: f32[16, 32, 16, 16]",
         "args": "",
         "body": "sum(permute(permute(w, [0, 2, 1, 3]), [0, 2, 1, 3]))",
-        "lets": ["let w0: Tensor<f32, [16, 32, 16, 16]> = randn([16, 32, 16, 16], 0.0, 1.0) "
-                 "as Tensor<f32, [16, 32, 16, 16]>"],
+        "lets": ["let w0: f32[16, 32, 16, 16] = randn([16, 32, 16, 16], 0.0, 1.0) "
+                 "as f32[16, 32, 16, 16]"],
         "calls": {"tensor:permute": 2, "tensor:permute_inverse": 2},
         "note": "split_heads and merge_heads, forward and back",
         "reference": "tensor:broadcast_like",
@@ -146,11 +146,11 @@ PROBES = [
     },
     {
         "name": "transpose",
-        "with": "w: Tensor<f32, [16, 16, 32, 32]>",
+        "with": "w: f32[16, 16, 32, 32]",
         "args": "",
         "body": "sum(transpose(w))",
-        "lets": ["let w0: Tensor<f32, [16, 16, 32, 32]> = randn([16, 16, 32, 32], 0.0, 1.0) "
-                 "as Tensor<f32, [16, 16, 32, 32]>"],
+        "lets": ["let w0: f32[16, 16, 32, 32] = randn([16, 16, 32, 32], 0.0, 1.0) "
+                 "as f32[16, 16, 32, 32]"],
         "calls": {"tensor:transpose": 2},
         "note": "the attention product's right operand, forward and back",
         "reference": "tensor:broadcast_like",
@@ -158,11 +158,11 @@ PROBES = [
     },
     {
         "name": "sum_axis",
-        "with": "w: Tensor<f32, [16, 16, 32, 32]>",
+        "with": "w: f32[16, 16, 32, 32]",
         "args": "",
         "body": "sum(sum(w, -1, true))",
-        "lets": ["let w0: Tensor<f32, [16, 16, 32, 32]> = randn([16, 16, 32, 32], 0.0, 1.0) "
-                 "as Tensor<f32, [16, 16, 32, 32]>"],
+        "lets": ["let w0: f32[16, 16, 32, 32] = randn([16, 16, 32, 32], 0.0, 1.0) "
+                 "as f32[16, 16, 32, 32]"],
         "calls": {"tensor:sum_axis": 1},
         "note": "the softmax denominator",
         "reference": "tensor:broadcast_like",
@@ -170,7 +170,7 @@ PROBES = [
     },
 ]
 
-IMPORTS = "import { Tensor, mean, permute, randn, seed, sum, transpose } from tensor"
+IMPORTS = "import { mean, permute, randn, seed, sum, transpose } from tensor"
 
 
 def program(probe: dict, reps: int) -> str:

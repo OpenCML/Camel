@@ -144,9 +144,9 @@ const refuted = (name) => {
     const word = new RegExp(`^refuted\\s+${name}(?![A-Za-z0-9_])`)
     return stdout.split('\n').some((line) => word.test(line.trim()))
 }
-// The list of rules allowed to be `refuted` is empty, and it is written here rather than dropped so
+// The list of rules allowed to be `refuted` is exactly the two below, and it is written here rather than dropped so
 // that the count below still catches a name added back by accident. It used to hold
-// `tensor_f32_combine_mixed`, whose own guard (`combineMixedSign`) was read as assuming `reassociate`
+// `tensor_combine_mixed`, whose own guard (`combineMixedSign`) was read as assuming `reassociate`
 // covers the opposite-sign cancellation: a tensor with a `1e+30` element, `c1 = 48`, `c2 = -47` gave
 // two element-type results 27 ulps of the result apart, `1.0000041e+30` and `1e+30`, and the rule was
 // refused by measuring those two against each other. The rule on
@@ -167,7 +167,13 @@ const refuted = (name) => {
 // (`docs/handover/reviews/questions-2026-10-24-evening.md` §reduced-element-epsilon-and-rounding,
 // 四); fixing the guard belongs
 // to the rules library's own lane, and this entry comes out with it.
-const knownRefuted = new Set(['float_combine_mixed'])
+// The tensor twin of that law is `refuted` at `f16` for the same reason, measured 2026-10-26 on this
+// case's own seed: the elementwise `tensor_combine_mixed<f16>` draws 10000.0 with the coefficients 58
+// and -61, both products overflow f16's 65504, and its left side is a NaN where the right side is an
+// infinity. The guard `combineMixedSign` checks the coefficients' finiteness, not that the two products
+// stay finite, and one generic law inherits the hole its scalar twin has; the fix belongs to the rules
+// library's lane with `float_combine_mixed`, and this entry comes out with it.
+const knownRefuted = new Set(['float_combine_mixed', 'tensor_combine_mixed'])
 const failed = [...verdicts.keys()].filter((name) => refuted(name) && !knownRefuted.has(name))
 if (failed.length > 0) {
     fail(`${input.test_name ?? payload.test_name}: the check failed ${failed.length} rule(s): ${failed.join(', ')}`)

@@ -16,7 +16,7 @@
  */
 module thread_pools
 
-import { Tensor, num_threads, sum, zeros } from tensor
+import { num_threads, sum, zeros } from tensor
 import { thread_count } from process
 
 func main(): int sync {

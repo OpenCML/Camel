@@ -5,7 +5,7 @@
  */
 module lenet_big
 
-import { Tensor, relu, flatten, mean } from tensor
+import { relu, flatten, mean } from tensor
 import { grad, with_grad } from autodiff
 import { conv2d, max_pool2d, sgd, save_params } from nn
 import { get_env } from env
@@ -34,7 +34,7 @@ func forward(x: f32[..]): f32[..] {
 with <m: LeNet>
 func loss(x: f32[..]): float {
     let y = forward<m>(x)
-    return mean(y * y)
+    return float(mean(y * y))
 }
 
 func train_step(m: LeNet, x: f32[..]): float sync {

@@ -1,0 +1,15 @@
+/**
+ * The postfix `!` is not in the language: the `!` of a `T!` belongs to the type, and the value of
+ * a `T?` is taken out with `??`, so a `!` after a value is an ordinary syntax error (line 11,
+ * column 15): `(a!)` asks the list for the `,` or the `)` it stands in the place of, and says so
+ * (`Expected ',' or ')' before '!'`). It was a `ConstructNotSupported`.
+ */
+module no_postfix_bang
+
+func main(): int sync {
+    let a = 1
+    let b = (a!) + 1
+    println('never printed')
+    println(b)
+    return 0
+}

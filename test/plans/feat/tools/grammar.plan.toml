@@ -6,7 +6,7 @@ desc = "The TextMate grammar of the VS Code extension (editors/vscode): its tabl
 
 [[tests]]
 name = "grammar.tables"
-desc = "Every keyword of the lexer's token table (include/camel/parse/syntax/token_kinds.def) is matched by exactly one keyword pattern of the grammar and the grammar lists no other keyword; every operator and separator of the table is matched by an operator or punctuation pattern; the built-in type names are those of the compiler's root type scope. No dependencies."
+desc = "Every keyword of the lexer's token table (include/camel/parse/syntax/token_kinds.def) is matched by exactly one keyword pattern of the grammar and the grammar lists no other keyword; every operator and separator of the table is matched by an operator or punctuation pattern; the built-in type names are those of the compiler's root type scope; the contextual keywords of scripts/context-keywords.mjs (the table of the language reference, 02, 2.4.1) are the words of the grammar's contextual-keywords rule, each with a scope. No dependencies."
 kind = "behavior"
 tool = "node"
 case = "../../../../editors/vscode/scripts/check-grammar.mjs"
@@ -75,7 +75,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "grammar.scopes.operators"
-desc = "Scopes of every operator and punctuation token of the parser grammar, including ->, ?->, .., ..., ??, !!, the compound assignments and the type operators."
+desc = "Scopes of every operator and punctuation token of the parser grammar, including ->, ?->, .., ??, !!, the compound assignments, the expression's `&`, and the type marks `?` and `!`."
 kind = "snapshot"
 tool = "node"
 case = "../../../cases/tools/grammar/operators.cml"
@@ -131,6 +131,21 @@ normalizers = ["normalize_newlines"]
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "./golden/grammar/types.scopes"
+timeout_ms = 30000
+
+[[tests]]
+name = "grammar.scopes.context_keywords"
+desc = "Scopes of every contextual keyword of the language reference (02, 2.4.1) in a position the parser reads it in, and of the same words as ordinary names, which stay names."
+kind = "snapshot"
+tool = "node"
+case = "../../../cases/tools/grammar/context_keywords.cml"
+args = ["editors/vscode/scripts/tokenize.mjs", "${case}"]
+skip_unless = ["node", "editors/vscode/scripts/have-deps.mjs"]
+expect_exit = 0
+normalizers = ["normalize_newlines"]
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/grammar/context_keywords.scopes"
 timeout_ms = 30000
 
 [[tests]]

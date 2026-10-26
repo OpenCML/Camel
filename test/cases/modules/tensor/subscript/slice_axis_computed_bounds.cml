@@ -1,0 +1,26 @@
+/**
+ * The same slice with a computed bound: the length of the axis it cuts is the run's, so the type
+ * states `?` there, and every axis the slice does not cut keeps the length the value's type states
+ * (design principles 5.4). `x` is an `f32[3, 4]` and `slice(x, 1, 0, i)` cuts axis 1 at a bound the
+ * run reads, so the value is an `f32[3, ?]` -- `row`'s parameter states exactly that. The old rule
+ * stated nothing at all (`f32[?, ?]`), which this call would be refused for as less exact; the
+ * computed axis stays `?` either way, which is what `si_computed_slice` pins with its diagnostic.
+ *
+ * `slice` is called unqualified here, so the module's own `slice` is not in scope and the core's
+ * function form answers (only `reshape` and `sum` come from the module).
+ */
+module slice_axis_computed_bounds
+import { reshape, sum } from tensor
+
+func row(a: f32[3, ?]): float {
+    return float(sum(a))
+}
+
+func f(x: f32[3, 4], i: int): float {
+    return row(slice(x, 1, 0, i))
+}
+
+func main(): int sync {
+    println(f(reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0] as f32[], [3, 4]), 3))
+    return 0
+}

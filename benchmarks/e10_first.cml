@@ -6,7 +6,7 @@
 module e10_first
 
 import { grad } from autodiff
-import { Tensor, relu, mean, reshape } from tensor
+import { relu, mean, reshape } from tensor
 
 func fwd(w1: float[..], b1: float[..], w2: float[..], b2: float[..], x: float[..]): float[..] {
     let h = relu(x @ w1 + b1)
@@ -21,7 +21,7 @@ func loss_s(): float {
     let b2 = reshape([0.2], [1])
     let x = reshape([1.0, 2.0], [1, 2])
     let y = fwd(w1, b1, w2, b2, x * t)
-    return mean(y * y)
+    return float(mean(y * y))
 }
 
 func main(): int sync {

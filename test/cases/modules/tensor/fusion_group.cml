@@ -14,7 +14,7 @@
  */
 module fusion_group
 
-import { Tensor, reshape, sum, to_bytes } from tensor
+import { reshape, sum, to_bytes } from tensor
 import { with_grad } from autodiff
 import { to_array } from bytes
 
@@ -22,13 +22,13 @@ type W = { w: f32[..] }
 
 with <m: W>
 func private_chain(x: f32[..]): float {
-    return sum(x / m.w)
+    return float(sum(x / m.w))
 }
 
 with <m: W>
 func strict_chain(x: f32[..]): float {
     #strict {
-        return sum(x / m.w)
+        return float(sum(x / m.w))
     }
 }
 
@@ -36,7 +36,7 @@ type AB = { a: f32[..], w: f32[..] }
 
 with <m: AB>
 func shared_chain(): float {
-    return sum(m.a / m.w)
+    return float(sum(m.a / m.w))
 }
 
 func main(): int sync {

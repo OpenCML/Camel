@@ -1,10 +1,10 @@
 module tiles_device_tree
-import { Tensor, reshape, sum, abs, zeros } from tensor
+import { reshape, sum, abs, zeros } from tensor
 import { with_grad } from autodiff
 import { Device, upload, download, run_preferred_resident } from tiles
 
-type Model = { weight: Tensor<f32>, block: (Tensor<f32>, float) }
-type ExplicitDeviceModel = { weight: Device<Tensor<f32>>, block: (Device<Tensor<f32>>, Device<float>) }
+type Model = { weight: f32[..], block: (f32[..], float) }
+type ExplicitDeviceModel = { weight: Device<f32[..]>, block: (Device<f32[..]>, Device<float>) }
 func identity(p: Device<Model>): ExplicitDeviceModel { return p }
 func typed_upload::<P>(p: P): Device<P> sync { return upload(p) }
 with <p: Model>

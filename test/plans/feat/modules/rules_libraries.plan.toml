@@ -22,7 +22,7 @@ kind = "behavior"
 case = "../../../cases/modules/rules/accuracy_logsoftmax_target.cml"
 args = ["${case}", "rules::accuracy", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["log of softmax clean -14.18400290608406 -14.18400290608406", "log of softmax gap   -300.0 -300.0"]
+expect_stdout_contains = ["log of softmax clean -14.184003 -14.184003", "log of softmax gap   -300.0 -300.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -33,7 +33,7 @@ kind = "behavior"
 case = "../../../cases/modules/rules/accuracy_guard_target.cml"
 args = ["${case}", "accuracy_schedule::all", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["all rewrites 0 rounds 1", "multiplied sum 4.372588634490967", "mismatched sum -3.806684565381147"]
+expect_stdout_contains = ["all rewrites 0 rounds 1", "multiplied sum 4.3725886", "mismatched sum -3.8066845"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -44,7 +44,9 @@ kind = "behavior"
 case = "../../../cases/modules/rules/accuracy_guard_target.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "multiplied sum 4.372588634490967\nmismatched sum -3.806684565381147\n"
+expect_stdout_exact = """multiplied sum 4.3725886
+mismatched sum -3.8066845
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -66,7 +68,11 @@ kind = "behavior"
 case = "../../../cases/modules/rules/fusion_target.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "chain minus sigmoid 0.0\ndoubled sum         7.31624373793602\npositive sum        2.341878153383732\nafter matmul minus sigmoid 0.0\n"
+expect_stdout_exact = """chain minus sigmoid 0.0
+doubled sum         7.3162436
+positive sum        2.3418782
+after matmul minus sigmoid 0.0
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -79,7 +85,11 @@ args = ["${case}", "rules::fusion", "${backend}"]
 backends = ["nvm", "fvm", "jit"]
 backends_agree = ["stdout_normalized"]
 expect_exit = 0
-expect_stdout_exact = "chain minus sigmoid 0.0\ndoubled sum         7.31624373793602\npositive sum        2.341878153383732\nafter matmul minus sigmoid 0.0\n"
+expect_stdout_exact = """chain minus sigmoid 0.0
+doubled sum         7.3162436
+positive sum        2.3418782
+after matmul minus sigmoid 0.0
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 [[tests]]

@@ -19,7 +19,7 @@
 module c2_mlp_mnist
 
 // == imports ==
-import { Tensor, abs, argmax, cast, load_npy, numel, relu, set_num_threads, shape, slice, sum, take } from tensor
+import { abs, argmax, cast, load_npy, numel, relu, set_num_threads, shape, slice, sum, take } from tensor
 import { with_grad } from autodiff
 import { adam, adam_state, softmax_cross_entropy } from nn
 import { load_tree, save_tree } from ckpt
@@ -71,7 +71,7 @@ func load_model(data: string): Mlp {
 func evaluate(m: Mlp, x: f32[..], labels: f32[..]): (float, float) {
     let value = logits<m>(x)
     let class_ids = cast(labels, 'int64')
-    let correct = sum(argmax(value, 1) === class_ids)
+    let correct = float(sum(argmax(value, 1) === class_ids))
     return (softmax_cross_entropy(value, class_ids), float(correct) / float(shape(x)[0]))
 }
 

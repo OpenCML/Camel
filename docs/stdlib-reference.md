@@ -1398,7 +1398,7 @@ The `f32` n by n identity matrix.
 #### `range`
 
 ```camel
-range: (start: int, stop?: int, step?: int) => Tensor<int64>
+range: (start: int, stop?: int, step?: int) => int64[..]
 ```
 
 The integer sequence start, start + step, ... below stop, as a rank-1 `int64` tensor: one
@@ -1817,11 +1817,18 @@ The extent of one axis; a negative axis counts from the last one (`-1` is the la
 #### `sum`
 
 ```camel
-sum: (t: float[..]) => float
+sum: (t: T[..]) => T
 ```
 
-Every element converted to `f64` and summed in row-major order from +0; `int64` and `bool`
-elements are summed exactly in `int64` and converted once.
+The sum of every element, in the operand's element type: the canonical form of the element
+type `T` is `sum::<T>(x: T[..]): T = T(sum(float(x)))`, so the elements are widened into an
+`f64` accumulator (`float(x)`), the additions happen in `f64` in row-major order from +0, and
+their sum is rounded into `T` once, at the end — the same element type and the same one
+rounding as the axis form below, so the full form and the axis form agree bit for bit
+(design principles 7.3). An `int64`, `int32` or `bool` tensor has no float accumulator: it is
+summed exactly in `int64`, wrapping on overflow as integer arithmetic does (design principles
+5.1, 7.7), and that exact value is the answer — `int64` as it stands, `int32` truncated into
+its element type, `bool` as `int64`.
 
 - Pure.
 - Example: `sum(new([[1.0, 2.0], [3.0, 4.0]]))` gives `10.0`
@@ -1841,10 +1848,15 @@ The same sum over one axis, in an `f64` accumulator; keepdims keeps the axis wit
 #### `mean`
 
 ```camel
-mean: (t: float[..]) => float
+mean: (t: T[..]) => T
 ```
 
-The sum of `sum` divided by the element count in `f64`; an empty tensor is a fault.
+The mean of every element, in the operand's element type, with one rounding: the canonical
+form of the element type `T` is `mean::<T>(x: T[..]): T = T(sum(float(x)) / float(numel(x)))`.
+The sum and the division by the element count both happen in `f64`, and their result is
+rounded into `T` once — never a sum rounded to the element type and divided again, which
+would round twice. A mean of an integer or bool tensor is `f32`, as by axis; an empty tensor
+is a fault.
 
 - Pure.
 - Failure: fault `DivisionByZero` when the tensor has no element.
@@ -2050,7 +2062,7 @@ be `T` -- a file of another element type is a fault, never a conversion (design 
 5.5). `T` is `f32`, `f64`, `i32`, `i64` or `bool`, the element types the format's storage types
 (`'<f4'`, `'<f8'`, `'<i4'`, `'<i8'`, `'|b1'`) map to, exactly the type given. It is written at
 the call (`load_npy::<f32>(p)`) or taken from the type of the position the call stands in
-(`Tensor<f32, [3]>`, `f32[..]`); `T` is the one type variable no parameter mentions, so a call
+(`f32[3]`, `f32[..]`); `T` is the one type variable no parameter mentions, so a call
 that says neither is not a use of this operator.
 
 - With effects: reads a file.
@@ -5103,7 +5115,7 @@ The device holds a foreign resource (`tiles:device`) and the driver is ambient s
 #### `upload`
 
 ```camel
-upload: (value: Tensor<f32>) => Device<Tensor<f32>>
+upload: (value: f32[..]) => Device<f32[..]>
 ```
 
 Uploads every leaf of the value — a tensor, or a scalar of the element type it is written with,
@@ -5111,12 +5123,12 @@ alone or inside a tuple or a struct — and returns the same tree with each leaf
 `Device<...>`. A leaf of any other type is refused when the call is compiled.
 
 - With effects: transfers to the device.
-- Example: `upload(host)` gives `a Device<Tensor<f32>>`
+- Example: `upload(host)` gives `a Device<f32[..]>`
 
 #### `download`
 
 ```camel
-download: (value: Device<Tensor<f32>>) => Tensor<f32>
+download: (value: Device<f32[..]>) => f32[..]
 ```
 
 Downloads every device leaf of the value and returns the host value it came from. A tree with a
@@ -5425,7 +5437,7 @@ Drops this program's reference to the Python object `obj`.
 Neural-network primitives: 2-D convolution and its gradients, max and average pooling with
 their gradients, batch normalization, embedding, the fused softmax cross-entropy loss, the
 optimizers, and the checkpoint writer for a parameter tree. The operators work on the core
-`Tensor` type; nothing here needs PyTorch or a GPU.
+array type; nothing here needs PyTorch or a GPU.
 
 ### Convolution
 
@@ -5930,7 +5942,7 @@ needs neither the ONNX runtime nor a GPU; only a run of `export_model` writes a 
 #### `export_model`
 
 ```camel
-export_model: (fn: (x: Tensor<f32>) => void, example: Tensor<f32>, path: string) => void
+export_model: (fn: (x: f32[..]) => void, example: f32[..], path: string) => void
 ```
 
 Writes the ONNX model of `fn` applied to arguments like `example` to the file `path`, at the

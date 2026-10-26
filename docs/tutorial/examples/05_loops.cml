@@ -1,6 +1,5 @@
 // `loop` carries its state from one round to the next; the body's value is the next state.
 // Run: camel docs/tutorial/examples/05_loops.cml
-module loops
 
 func main(): int sync {
     // One round per element of the sequence.

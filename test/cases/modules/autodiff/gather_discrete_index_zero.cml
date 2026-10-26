@@ -13,7 +13,7 @@
  */
 module gather_discrete_index_zero
 
-import { Tensor, cast, reshape, sum } from tensor
+import { cast, reshape, sum } from tensor
 import { with_grad } from autodiff
 
 type Model = {
@@ -23,7 +23,7 @@ type Model = {
 
 with <m: Model>
 func gather_loss(): float {
-    return sum(m.weights[m.labels])
+    return float(sum(m.weights[m.labels]))
 }
 
 func main(): int sync {

@@ -6,7 +6,7 @@
 module embedding_mf
 
 import { grad, with_grad } from autodiff
-import { Tensor, full, reshape, sum } from tensor
+import { full, reshape, sum } from tensor
 import { embedding, sgd } from nn
 
 type EmbeddingMf = {
@@ -18,7 +18,7 @@ with <model: EmbeddingMf>
 func score(user_ids: i64[..], item_ids: i64[..]): float {
     let users = embedding(model.user_table, user_ids)
     let items = embedding(model.item_table, item_ids)
-    return sum(users * items)
+    return float(sum(users * items))
 }
 
 func mse_loss(pred: float, rating: float): float {

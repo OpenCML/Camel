@@ -8,7 +8,7 @@
  */
 module export_train_step_dynamic
 
-import { Tensor, relu, sum, reshape, shape } from tensor
+import { relu, sum, reshape, shape } from tensor
 import { with_grad } from autodiff
 import { sgd } from nn
 import { export_model } from onnx
@@ -20,7 +20,7 @@ with <m: Mlp>
 func loss(x: f32[..]): float {
     let h = relu(x @ m.w1 + m.b1)
     let y = h @ m.w2 + m.b2
-    return sum(y * y) / float(shape(y)[0] * shape(y)[1])
+    return float(sum(y * y)) / float(shape(y)[0] * shape(y)[1])
 }
 
 func step(m: Mlp, x: f32[..]): (float, Mlp) {

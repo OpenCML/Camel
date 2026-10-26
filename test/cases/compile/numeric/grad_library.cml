@@ -13,21 +13,21 @@
 module grad_library
 
 import { grad } from autodiff
-import { Tensor, abs, linear, max, randn, seed, sum } from tensor
+import { abs, linear, max, randn, seed, sum } from tensor
 
 #strict
 with <w: f32[..]>
 func exact_loss(x: f32[..], b: f32[..]): float {
-    return sum(linear(x, w, b))
+    return float(sum(linear(x, w, b)))
 }
 
 with <w: f32[..]>
 func fast_loss(x: f32[..], b: f32[..]): float {
-    return sum(linear(x, w, b))
+    return float(sum(linear(x, w, b)))
 }
 
 func max_abs(t: f32[..]): float {
-    return sum(max(max(abs(t), 0), 0))
+    return float(sum(max(max(abs(t), 0), 0)))
 }
 
 func main(): int sync {

@@ -9,19 +9,19 @@
  */
 module broadcast_scalar_operand
 
-import { Tensor, new, sum, zeros } from tensor
+import { new, sum, zeros } from tensor
 
 /// A value whose type is its own, beside a tensor: `a * w` is the product of f32 values, and the
 /// sum of `a * w + 0.5` is read as the f32 element type the tensor declares.
-func scale(w: Tensor<f32>, a: f32): float {
-    return sum(a * w + 0.5)
+func scale(w: f32[..], a: f32): float {
+    return float(sum(a * w + 0.5))
 }
 
 /// The round of a loop over a tensor is the scalar side of `v * w`. `x`'s shape is not fixed where
 /// the body is compiled, so the operator has to read the round as the element type the enclosing
 /// tensor declares - a value, not a tensor of its own.
-func loss(w: Tensor<f32>, x: Tensor<f32>): float {
-    return loop s = 0.0 for v in x do s + sum(v * w + 0.5)
+func loss(w: f32[..], x: f32[..]): float {
+    return loop s = 0.0 for v in x do s + float(sum(v * w + 0.5))
 }
 
 func main(): int sync {
@@ -33,9 +33,9 @@ func main(): int sync {
     'scalar local={}'->format<sum(a * w + 0.5)>->println
     'round loss={}'->format<loss(w, x)>->println
     'round total={}'->format<total>->println
-    'round left={}'->format<loop s = 0.0 for v in x do s + sum(v * w)>->println
-    'round right={}'->format<loop s = 0.0 for v in x do s + sum(w * v)>->println
-    'round zeros={}'->format<loop s = 0.0 for v in x do s + sum(v * zeros([4]) + 1.0)>->println
+    'round left={}'->format<loop s = 0.0 for v in x do s + float(sum(v * w))>->println
+    'round right={}'->format<loop s = 0.0 for v in x do s + float(sum(w * v))>->println
+    'round zeros={}'->format<loop s = 0.0 for v in x do s + float(sum(v * zeros([4]) + 1.0))>->println
     'tensor tensor={}'->format<sum(x * w)>->println
     'tensor literal={}'->format<sum(x * 0.5)>->println
     'literal tensor={}'->format<sum(0.5 * x)>->println

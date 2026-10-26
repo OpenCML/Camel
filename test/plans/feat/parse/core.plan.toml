@@ -154,3 +154,227 @@ expect_diagnostic_column = 29
 expect_output_contains = ["Unexpected '='; expected a name."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
+
+[[tests]]
+name = "syntax.no_spread_in_array_literal"
+desc = "`...xs` in an array literal is not in the language: a spread is refused at the marker as an ordinary syntax error. It was a `ConstructNotSupported` while the form was still in the grammar, and before that the marker was dropped and the program printed an address."
+kind = "negative"
+case = "../../../cases/parse/syntax/no_spread_in_array_literal.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_code = "0x0200000A"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 15
+expect_output_contains = ["Unexpected '...'"]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "syntax.no_spread_in_struct_literal"
+desc = "`...s` in a struct literal is not in the language: it is refused at the marker as an ordinary syntax error. It used to crash the compiler (null dereference), and afterwards it was a `ConstructNotSupported` while the form was still in the grammar."
+kind = "negative"
+case = "../../../cases/parse/syntax/no_spread_in_struct_literal.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_code = "0x0200000A"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 15
+expect_output_contains = ["Unexpected '...'"]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "syntax.no_struct_destructuring"
+desc = "Destructuring a struct is not in the language: `let {x, y} = p` is refused at the `{` as an ordinary syntax error, and the name that has to stand there is asked for. It was a `ConstructNotSupported`, and before that a warning that dropped only the function using it."
+kind = "negative"
+case = "../../../cases/parse/syntax/no_struct_destructuring.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_code = "0x0200000A"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 9
+expect_output_contains = ["Unexpected '{'"]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "syntax.no_tuple_pattern"
+desc = "A tuple pattern is not in the language: `case (1, 2)` is refused at the `(` as an ordinary syntax error, and a pattern is asked for. It was a `ConstructNotSupported` while the parser read the nesting so that the compiler could say so."
+kind = "negative"
+case = "../../../cases/parse/syntax/no_tuple_pattern.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_code = "0x0200000A"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 14
+expect_output_contains = ["Unexpected '('; expected a pattern."]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "syntax.no_struct_pattern"
+desc = "A struct pattern is not in the language: `case { x: 1 }` is refused at the `{` as an ordinary syntax error, and a pattern is asked for. It was a `ConstructNotSupported` while the parser read the nesting so that the compiler could say so."
+kind = "negative"
+case = "../../../cases/parse/syntax/no_struct_pattern.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_code = "0x0200000A"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 14
+expect_output_contains = ["Unexpected '{'; expected a pattern."]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "syntax.no_two_word_pattern"
+desc = "A pattern is one word (a name, a literal, `_`, a variant path, or `error e`): the second word of `case a b` is refused where the `=>` belongs, and the error names the token that is missing there. It was a `ConstructNotSupported` naming the one two-word pattern."
+kind = "negative"
+case = "../../../cases/parse/syntax/no_two_word_pattern.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::MissingToken"
+expect_diagnostic_code = "0x02000009"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 16
+expect_output_contains = ["Expected '=>' before 'b'."]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "syntax.no_nested_pattern"
+desc = "A field position of an enum pattern takes a name or `_`: the literal of `case Shape::Circle(0.0)` is refused there as an ordinary syntax error, and a pattern is asked for. It was a `ConstructNotSupported` while the parser read the nesting so that the compiler could say so."
+kind = "negative"
+case = "../../../cases/parse/syntax/no_nested_pattern.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_code = "0x0200000A"
+expect_diagnostic_line = 14
+expect_diagnostic_column = 28
+expect_output_contains = ["Unexpected '0.0'; expected a pattern."]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "syntax.no_formatted_string_pattern"
+desc = "A pattern is a constant, and an interpolation is not one: the formatted string of `case `x`` is refused where a pattern is read, as an ordinary syntax error. It was a `ConstructNotSupported` while the grammar's `literal` took a formatted string in a pattern."
+kind = "negative"
+case = "../../../cases/parse/syntax/no_formatted_string_pattern.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_code = "0x0200000A"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 14
+expect_output_contains = ["expected a pattern."]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "syntax.no_postfix_bang"
+desc = "The postfix `!` is not in the language (the `!` of `T!` belongs to the type): inside `(a!)` the marker is where the list expects its `,` or its `)` and is refused there. It was a `ConstructNotSupported` while the grammar read the mark and dropped it."
+kind = "negative"
+case = "../../../cases/parse/syntax/no_postfix_bang.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::MissingComma"
+expect_diagnostic_code = "0x02000007"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 15
+expect_output_contains = ["Expected ',' or ')' before '!'."]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "syntax.no_array_destructuring"
+desc = "Destructuring an array is not in the language: `let [a, b] = xs` is refused at the `[` as an ordinary syntax error, and the name being declared is asked for. The array carrier the parser read was dropped with the struct and array carriers."
+kind = "negative"
+case = "../../../cases/parse/syntax/no_array_destructuring.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_code = "0x0200000A"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 9
+expect_output_contains = ["Unexpected '['"]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "syntax.no_type_inter"
+desc = "A type expression has no operators: `A & B` is not a type, so the `&` is refused where the declaration asks for its `=`. `&` is the expression's operator. The type operators the grammar reserved left the language in the item-5 clearance, where the `TypeOp::Inter` refusal stood."
+kind = "negative"
+case = "../../../cases/parse/syntax/no_type_inter.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_code = "0x0200000A"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 14
+expect_output_contains = ["Unexpected '&'; expected '='."]
+expect_output_not_contains = ["never printed", "UnknownInternalError", "FeatureNotSupported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "syntax.no_type_diff"
+desc = "The backslash is not a token of the language any more: `A \\ B` was the only place it was read, so a `\\` is an unknown character now and the lexer reports it before the parser reads a type. The type operators left the language in the item-5 clearance, where the `TypeOp::Diff` refusal stood, and the token went with them because nothing produced it."
+kind = "negative"
+case = "../../../cases/parse/syntax/no_type_diff.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "LexicalDiag::IllegalCharacter"
+expect_diagnostic_code = "0x01000000"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 14
+expect_output_contains = ["Illegal character"]
+expect_output_not_contains = ["never printed", "UnknownInternalError", "FeatureNotSupported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "syntax.no_type_key_ops"
+desc = "The key-union and key-difference family and the key intersection (`A + B`, `A - B`, `A ^ B`) are not types: the operators are the expression's, so the type ends before them and the declaration asks for its `=`. The type operators the grammar reserved left the language in the item-5 clearance, where the `TypeOp::KeyUnion`, `TypeOp::KeyDiff` and `TypeOp::KeyInter` refusals stood."
+kind = "negative"
+case = "../../../cases/parse/syntax/no_type_key_ops.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_code = "0x0200000A"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 14
+expect_output_contains = ["Unexpected '+'; expected '='."]
+expect_output_not_contains = ["never printed", "UnknownInternalError", "FeatureNotSupported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
+name = "syntax.no_name_of_type"
+desc = "`<name> of T` is not a type: `of` is not a keyword, so the name after the type is where the declaration asks for its `=`, and the form is an ordinary syntax error. The unit that carried it is gone with the type operators in the item-5 clearance."
+kind = "negative"
+case = "../../../cases/parse/syntax/no_name_of_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_code = "0x0200000A"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 14
+expect_output_contains = ["Unexpected 'of'; expected '='."]
+expect_output_not_contains = ["never printed", "UnknownInternalError", "FeatureNotSupported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000

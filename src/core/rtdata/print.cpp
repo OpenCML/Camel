@@ -70,7 +70,7 @@ void pushText(std::vector<PrintItem> &stack, std::string_view text) {
 /// back: the dimension pushes its closing bracket first and its opening bracket last, so the
 /// opening one is written first. Every dimension has its own pair -- the outermost level included
 /// -- because a value of rank r is r nested bracket levels, whatever the spelling that produced it
-/// (`f32[2, 2]`, `Tensor<f32, [2, 2]>`); a rank-2 value is `[[1.0, 2.0], [3.0, 4.0]]`.
+/// (`f32[2, 2]`); a rank-2 value is `[[1.0, 2.0], [3.0, 4.0]]`.
 void pushArray(
     const Array *array, const Type *elemType, size_t dim, uint64_t base,
     std::vector<PrintItem> &stack) {

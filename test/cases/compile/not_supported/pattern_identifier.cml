@@ -1,6 +1,7 @@
 /**
- * An identifier pattern binds the value taken out of a `T?` / `T!`; over any other type it is
- * not decided: a compile-time error at the case (line 9), not an internal error.
+ * An identifier pattern binds the value taken out of a `T?` / `T!`, and over any other type
+ * there is no mark to take apart (design principles 3.8): a compile-time error at the case
+ * itself, not an internal error. The value is read with a literal pattern or `_`.
  */
 module pattern_identifier
 

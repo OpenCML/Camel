@@ -2,7 +2,7 @@
 // extents forgotten, so it still fills a rank-2 parameter after a second assignment.
 module array_alias_var_widening
 
-import { Tensor, ones } from tensor
+import { ones } from tensor
 
 func rows2(t: f32[?, ?]): int {
     return len(t)

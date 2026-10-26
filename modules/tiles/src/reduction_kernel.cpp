@@ -92,8 +92,12 @@ Domain domain(const Program &p, const Node &n) {
     const auto f32 = core::type::TypeCode::Float32, f64 = core::type::TypeCode::Float64;
     const bool maximum = n.op == "max_axis", mean = n.op == "mean_axis" || n.op == "mean_all";
     const bool all = n.op == "sum_all" || n.op == "mean_all";
+    // A whole-tensor reduction's result is the elements' own type (design principles 7.3), which
+    // is the node's annotation; an axis reduction keeps the f32 result it always had.
+    const auto wholeResult = n.dtype == DType::F32 ? f32 : f64;
     require(
-        law.input == f32 && law.result == (all ? f64 : f32) && law.init == sem::LawInit::Constant &&
+        law.input == f32 && law.result == (all ? wholeResult : f32) &&
+            law.init == sem::LawInit::Constant &&
             law.order == sem::LawOrder::Ascending &&
             law.kind == (maximum ? sem::LawKind::Max : sem::LawKind::Add) &&
             law.accumulator == (maximum || n.op == "sum_to" ? f32 : f64) &&

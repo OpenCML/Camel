@@ -32,27 +32,27 @@
  */
 module gpu_grad_expand
 
-import { Tensor, abs, reshape, sum } from tensor
+import { abs, reshape, sum } from tensor
 import { with_grad } from autodiff
 
 type M = {
-    p0: Tensor<f32, [3]>,
-    x: Tensor<f32, [2, 3]>,
+    p0: f32[3],
+    x: f32[2, 3],
 }
 
 #gpu
 with <m: M>
-func loss(): float sync {
+func loss(): f32 sync {
     return sum(m.x * m.p0)
 }
 
 #gpu
-func step(m: M): Tensor<f32, [3]> sync {
+func step(m: M): f32[3] sync {
     let vg = with_grad(loss)<m>()
     return vg.1.p0
 }
 
-func step_host(m: M): Tensor<f32, [3]> sync {
+func step_host(m: M): f32[3] sync {
     let vg = with_grad(loss)<m>()
     return vg.1.p0
 }

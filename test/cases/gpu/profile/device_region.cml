@@ -6,10 +6,10 @@
 
 module profile_device_region
 
-import { Tensor, new, sum } from tensor
+import { new, sum } from tensor
 import { upload, download, run_preferred_resident } from tiles
 
-func step(x: Tensor<f32>): Tensor<f32> { return x * 2.0 + 1.0 }
+func step(x: f32[..]): f32[..] { return x * 2.0 + 1.0 }
 
 func main(): int sync {
     let x = new([1.0, 2.0, 3.0, 4.0] as f32[])

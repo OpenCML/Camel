@@ -34,8 +34,7 @@ enum class SemanticDiag : uint32_t {
     ReturnTypeMismatch          = 0x000011,
     ElementTypeMismatch         = 0x000012,
     CallingIncompleteFunction   = 0x000013,
-    // 0x000014 was ClosureCaptureAfterSelfCall, replaced by CaptureAfterRecursiveCall: with
-    // function bodies built when first needed it is only met in recursion.
+    // 0x000014: empty. The number is not reused.
     ImportNameNotExported = 0x000015,
     // A literal the type it is given cannot hold: out of range, truncated (a decimal literal
     // in an integer type), or not a value of that type at all (a text that is not a number).
@@ -53,10 +52,9 @@ enum class SemanticDiag : uint32_t {
     InvalidTypeArgument         = 0x000020,
     ArgumentNeedsConversion     = 0x000021,
     ReturnNeedsConversion       = 0x000022,
-    // 0x000023 was LiteralOutOfRange, merged into LiteralNotRepresentable (0x000016).
-    // 0x000025 was ImportCycle: modules may import each other (design principles 10.1).
-    // 0x000026 was ImportedFunctionUsesModuleValue: a function of another module may use the
-    // top level of its own module since every module builds into one root graph.
+    // 0x000023: empty. The number is not reused.
+    // 0x000025: empty. The number is not reused.
+    // 0x000026: empty. The number is not reused.
     ImportNameConflict = 0x000027,
     // An error: the construct it reports is not compiled, so a program that uses it must not
     // run. It used to be a warning (0x100000), and the declaration that used the feature was
@@ -74,9 +72,7 @@ enum class SemanticDiag : uint32_t {
     FunctionNameAsValue = 0x000060,
     // Nullable and fallible values (design principles 3.8;
     // docs/technical/29_nullable_and_fallible_values.md).
-    // 0x000074 was TryCatchNotInLanguage: it named the `try`/`catch`/`finally` construct. Those
-    // words are not keywords any more (handover 5.00 "语法层收口" item 5), so writing one of them is
-    // an ordinary name or a syntax error and the diagnostic has no producer. The code is not reused.
+    // 0x000074: empty. The number is not reused.
     ThrowOutsideFallible  = 0x000070,
     ThrowNotAnError       = 0x000071,
     TaggedTypeNesting     = 0x000072,
@@ -251,7 +247,7 @@ enum class SemanticDiag : uint32_t {
     /// A constant is larger than the printer's max_literal_bytes.
     CmlBigConstant = 0x0001A6,
 
-    // Tensor element types (design/arrays-memory, P4 "element type exact"). 0x1A7 is retired: a
+    // Array element types (design/arrays-memory, P4 "element type exact"). 0x1A7 is retired: a
     // tensor keeps the element type it is written with, so nothing rewrites it and there is no
     // such diagnostic. The code is not reused.
 
@@ -411,17 +407,34 @@ enum class SemanticDiag : uint32_t {
     // may take and give a stream.
     StreamInContainer   = 0x0001E3,
     NodeOfNotAParameter = 0x0001DE,
-    // The element type of a value is in its type (design principles 5.1), so a tensor type writes one:
-    // the name `Tensor` on its own, and a shape written without it (`Tensor<[3]>`), ask a question the
-    // type of a value answers. A signature that takes any element type declares a type variable in its
-    // head and writes it as the element type.
-    TensorElementTypeRequired = 0x0001ED,
+    // The element type of a value is in its type (design principles 5.1), so an array type writes one:
+    // a shape with no element type in front of it asks a question the type of a value answers. A
+    // signature that takes any element type declares a type variable in its head and writes it in the
+    // element type's place.
     BranchElementTypeMismatch = 0x0001EE,
     RuleConstParamNotMatched  = 0x0001E8,
     RuleWithParameterUnbound  = 0x0001DD,
     /// The value bound to a rule's `with` parameter is part of what selects the instance its sides and
     // its condition are made at, so it is a value the compiler knows.
     RuleWithArgumentNotConstant = 0x0001F0,
+
+    // The resource clause's promise (design effects plan 4.3, step 5): the resources a body infers
+    // have to be within what its signature promises. The resource group above is 0x1A0-0x1A4, and
+    // 0x1A5-0x1A6 are `std::cml` and 0x1A7 is retired, so this one is appended at the end of the
+    // semantic space instead of being placed next to a group that has no room left.
+    /// The resources a body uses are not within what its `pure`/`uses` signature promises.
+    UsesPromiseViolated = 0x0001F1,
+    // What the item-5 clearance named, where the rule itself can be said: 0x1F2 and up. The
+    // constructs with no ruling left the grammar and are ordinary syntax errors instead; these four
+    // are language rules, so each one names the rule rather than saying "not supported".
+    /// A type that mentions itself through a collection.
+    TypeAliasRecursionUnrepresented = 0x0001F2,
+    /// An `enum` written where a type is expected.
+    EnumWrittenWhereATypeIsExpected = 0x0001F3,
+    /// A struct comprehension that walks `indices`.
+    StructComprehensionWithoutFields = 0x0001F4,
+    /// An identifier pattern, or `error e`, over a type that is neither 'T?' nor 'T!'.
+    IdentifierPatternNeedsNullableOrErrorType = 0x0001F5,
 
     // Warnings
     IgnoredSideEffect = 0x100002,

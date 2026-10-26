@@ -5,7 +5,7 @@
  * ort_slice_bounds.py, for the slice alone and inside a branch on the data: MODE=branch).
  */
 module ort_slice_bounds
-import { Tensor, reshape, slice, sum } from tensor
+import { reshape, slice, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env
 

@@ -1,8 +1,7 @@
 // A pinned reading of the language, measured while choosing how a yielded element is delivered:
-// the postfix non-null assertion is a named refusal ("'!' is not supported: the postfix non-null
-// assertion is not implemented"), so a value of a nullable type is not unwrapped with `x!`;
-// `??` is the form the language has.
-module non_null_assertion_not_implemented
+// the postfix `!` is not a spelling of the language -- it left the grammar, so `x!` is an ordinary
+// syntax error ("Expected ',' or ')' before '!'") -- so a value of a nullable type is not unwrapped
+// with `x!`; `??` is the form the language has.
 
 func main(): int sync {
     let x: int? = 5

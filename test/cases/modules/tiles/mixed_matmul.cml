@@ -1,12 +1,12 @@
 module mixed_checks
-import { Tensor, ones, reshape, sum, abs, randn, seed, set_num_threads } from tensor
+import { ones, reshape, sum, abs, randn, seed, set_num_threads } from tensor
 import { inspect, run_preferred_resident, download } from tiles
 
 #[reassociate, change_precision, finite_math]
-func mixed(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return a @ b }
-func strict(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return a @ b }
+func mixed(a: f32[..], b: f32[..]): f32[..] { return a @ b }
+func strict(a: f32[..], b: f32[..]): f32[..] { return a @ b }
 #[change_precision]
-func incomplete(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return a @ b }
+func incomplete(a: f32[..], b: f32[..]): f32[..] { return a @ b }
 
 func main(run_gpu: bool): int sync {
     set_num_threads(1)

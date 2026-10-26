@@ -1,7 +1,6 @@
 // The answer to the exercise of chapter 9: one call now needs the other's result, so the graph
 // has an edge between them and they no longer stand side by side.
 // Run: camel docs/tutorial/examples/09_exercise.cml
-module exercise
 
 func price(n: int): int {
     return n * 3

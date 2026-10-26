@@ -10,7 +10,7 @@
  */
 module compute_nodes_two_shapes
 
-import { Tensor, reshape } from tensor
+import { reshape } from tensor
 import { export_model } from onnx
 import { get_env } from env
 

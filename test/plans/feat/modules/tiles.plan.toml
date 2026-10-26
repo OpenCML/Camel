@@ -60,7 +60,7 @@ assert(lines.length === 4, 'expected the value, the error and two plans');
 // here was reading a vehicle that no longer exists, not a changed element type. Line 0 is the
 // gradient of `sum(cast(x, "float32"))`, the case's first program. The value itself is pinned
 // exactly, and the element type stays pinned twice: statically by the case's own two lambdas
-// (`(v: Tensor<f32>): Tensor<f32>`, so a gradient of another element type does not compile), and at
+// (`(v: f32[..]): f32[..]`, so a gradient of another element type does not compile), and at
 // run time by the plan numbers below -- cast_like/cast to a different element type cannot keep
 // materialized_values, allocations, logical_bytes, allocated_bytes and borrowed_bytes equal to the
 // cast-free derivative (an f64 buffer is twice as wide).
@@ -977,7 +977,9 @@ assert(observed >= 0, input.stdout)
 assert(result > observed, input.stdout)
 assert(report.device_work.kernels >= 1, JSON.stringify(report.device_work))
 assert(report.device_work.syncs === 3, JSON.stringify(report.device_work))
-assert(report.device_work.to_host_bytes === 20, JSON.stringify(report.device_work))
+// sum(y) answers y's element type f32, so the value the host reads where the `println` sits is 4
+// bytes and not the 8 an f64 sum took: the two readings are 16 bytes, not 20.
+assert(report.device_work.to_host_bytes === 16, JSON.stringify(report.device_work))
 }
 """
 timeout_ms = 60000

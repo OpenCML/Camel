@@ -9,7 +9,7 @@
  */
 module export_gated_gru_step
 
-import { Tensor, sigmoid, tanh, slice, reshape, shape, zeros, mean, abs } from tensor
+import { sigmoid, tanh, slice, reshape, shape, zeros, mean, abs } from tensor
 import { with_grad } from autodiff
 import { sgd } from nn
 import { export_model } from onnx
@@ -46,7 +46,7 @@ with <m: Gru>
 func loss(x: f32[..]): float {
     let h = run<m, x>(0, shape(x)[1], zeros([shape(x)[0], shape(m.w_hr)[0]]))
     let y = h @ m.fc_w + m.fc_b
-    return mean(y * y)
+    return float(mean(y * y))
 }
 
 func step(m: Gru, x: f32[..]): (float, Gru) {

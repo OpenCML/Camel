@@ -20,7 +20,7 @@
  */
 module lora_mlp
 
-import { Tensor, relu, mean, sum, neg, log_softmax, load_npy } from tensor
+import { relu, mean, sum, neg, log_softmax, load_npy } from tensor
 import { with_grad, stop_gradient } from autodiff
 import { OptimizerState, sgd, adam, adam_state, save_params } from nn
 import { get_env } from env
@@ -54,13 +54,13 @@ func forward_full(x: f32[..]): f32[..] {
 with <m: LoraMlp>
 func loss(x: f32[..]): float {
     let y = forward<m>(x)
-    return mean(y * y)
+    return float(mean(y * y))
 }
 
 with <m: LoraMlp>
 func loss_full(x: f32[..]): float {
     let y = forward_full<m>(x)
-    return mean(y * y)
+    return float(mean(y * y))
 }
 
 func step(m: LoraMlp, x: f32[..]): (float, LoraMlp) {
@@ -79,7 +79,7 @@ func step_full(m: LoraMlp, x: f32[..]): (float, LoraMlp) {
 with <m: LoraMlp>
 func loss_ce(x: f32[..], target: f32[..]): float {
     let y = forward<m>(x)
-    return mean(sum(target * neg(log_softmax(y, 1)), 1))
+    return float(mean(sum(target * neg(log_softmax(y, 1)), 1)))
 }
 
 func step_ce(m: LoraMlp, x: f32[..], target: f32[..]): (float, LoraMlp) {

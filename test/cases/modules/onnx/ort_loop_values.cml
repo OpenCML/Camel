@@ -8,7 +8,7 @@
  * every model are saved there, and the model named by MODEL is exported when ONNX_OUT is set.
  */
 module ort_loop_values
-import { Tensor, load_npy, reshape, save_npy, sum, tanh } from tensor
+import { load_npy, reshape, save_npy, sum, tanh } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
@@ -61,7 +61,7 @@ func done(h: f32[..], k: int, e: float): ((f32[..], int), (float, bool)) {
 }
 
 func shrink5(h: f32[..], k: int, e: float): ((f32[..], int), (float, bool)) {
-    return if k >= 6 || sum(h * h) < 1.0 then done(h, k, e) else shrink5(tanh(h) * 0.3 + h * 0.6, k + 1, e * 0.5 + sum(h * h))
+    return if k >= 6 || float(sum(h * h)) < 1.0 then done(h, k, e) else shrink5(tanh(h) * 0.3 + h * 0.6, k + 1, e * 0.5 + float(sum(h * h)))
 }
 
 func nested(x: f32[..]): ((f32[..], int), (float, bool)) {

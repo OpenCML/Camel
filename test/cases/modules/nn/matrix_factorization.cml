@@ -6,7 +6,7 @@
 module matrix_factorization
 
 import { grad, with_grad } from autodiff
-import { Tensor, full, reshape, sum } from tensor
+import { full, reshape, sum } from tensor
 import { sgd } from nn
 
 type MatrixFactorization = {
@@ -18,7 +18,7 @@ with <model: MatrixFactorization>
 func rating_loss(user_one_hot: f32[..], item_one_hot: f32[..], rating: float): float {
     let user_vec = user_one_hot @ model.user_table
     let item_vec = item_one_hot @ model.item_table
-    let pred = sum(user_vec * item_vec)
+    let pred = float(sum(user_vec * item_vec))
     let error = pred - rating
     return error * error
 }

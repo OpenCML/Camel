@@ -1,6 +1,5 @@
 // A function that may fail returns T!; `throw` returns an error value.
 // Run: camel docs/tutorial/examples/09_errors.cml
-module errors
 
 func safe_div(a: int, b: int): int! {
     return if b == 0 then {

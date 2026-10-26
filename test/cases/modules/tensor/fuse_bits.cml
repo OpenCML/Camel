@@ -7,7 +7,7 @@
  */
 module fuse_bits
 
-import { Tensor, reshape, relu, to_bytes, sum } from tensor
+import { reshape, relu, to_bytes, sum } from tensor
 import { to_array } from bytes
 
 func main(): int sync {

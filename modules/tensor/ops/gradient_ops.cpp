@@ -188,20 +188,40 @@ std::optional<Type *> sameAsFirst(const InferContext &ctx) { return tensorOf(ctx
 
 std::optional<Type *> intScalar(const InferContext &) { return Type::Int64(); }
 
-/// A float gradient shaped like argument `index`. The kernels behind these operators compute in
-/// f32 only (they refuse another element type rather than narrowing it), so they declare f32.
-InferFn gradientLike(size_t index) {
-    return [index](const InferContext &ctx) -> std::optional<Type *> {
-        return tensorOf(TypeCode::Float32, ctx.facts(index).shape);
-    };
-}
-
-/// A gradient of the value it is made like: that value's shape and element type. The operator it is
-/// used for builds the adjoint of `index`, and a gradient is read at the width of the value it is
-/// the gradient of (design principles 9.9): an f32 fill read as f64 is 0.0078125, not the derivative.
+/// The signature of `sum_to`, `broadcast_like`, `expand_axis`, `gelu_grad`, `erf_grad`,
+/// `slice_grad` and the two matmul gradients: `::<T>(g: T[..], like: T[..])`. The result is
+/// argument `index`'s shape and element type, and the other argument is that same element type. A
+/// gradient is read at the width of the value it is the gradient of (design principles 9.9): an
+/// f32 fill read as f64 is 0.0078125, not the derivative.
+///
+/// These operators used to declare f32 whatever the value's own width was, from the time their
+/// kernels were written for f32. An f64 training step then built `sum_to(<f32 gradient>, <f64
+/// like>)` -- the mixed pair below -- the call was refused, and the node that fed it reached the
+/// exporter with no rank facts (feat/modules/onnx, the train-step cases). The declaration follows
+/// the value's own width instead, and a kernel that takes no other width says so at the call,
+/// naming the operator, the argument type and the set it takes (feat.modules.tensor.dtype).
+///
+/// Two *tensors* whose element types disagree match no arm -- there is no conversion between
+/// numeric types to reach one (design principles 5.1) -- so the call is refused by the signature,
+/// not narrowed into an arm.
+///
+/// A *number* on the other side is not such a pair: a number has no element type of its own and is
+/// read at the width of the tensor it meets, the same rule every elementwise operator follows
+/// (`x * 0.5` with an f32 `x` computes at f32), and `index_eval.cpp` reads it that way. The
+/// gradient of a broadcast is the case that needs it: `broadcast_like(0.5, y)` with an f32 `y`
+/// carries an f64 number, and the gradient that comes back must be read at y's width.
 InferFn gradientLikeTyped(size_t index) {
     return [index](const InferContext &ctx) -> std::optional<Type *> {
-        return tensorOf(ctx.facts(index).dtype, ctx.facts(index).shape);
+        const auto &like  = ctx.facts(index);
+        const auto &other = ctx.facts(index == 0 ? 1 : 0);
+        // A number is an operand with no shape to spread: a rank-0 value, or one whose shape the
+        // facts do not pin down. Only a pair of tensors with known shapes of different element
+        // types is provably mixed.
+        const bool otherIsNumber = !other.shape || other.shape->empty();
+        if (like.dtype && other.dtype && *like.dtype != *other.dtype && !otherIsNumber) {
+            return std::nullopt;
+        }
+        return tensorOf(like.dtype, like.shape);
     };
 }
 
@@ -242,7 +262,7 @@ OpDef internal(
         .name      = name,
         .exports   = {},
         .params    = std::move(params),
-        .resultDoc = "Tensor",
+        .resultDoc = "float[..]",
         .infer     = std::move(infer),
         .kernel    = kernel,
         .traits    = {}};
@@ -348,7 +368,7 @@ std::vector<OpDef> gradientOps() {
         .name      = "zeros_like",
         .exports   = {"zeros_like"},
         .params    = {{"t", ParamKind::Tensor}},
-        .resultDoc = "Tensor",
+        .resultDoc = "float[..]",
         .infer     = sameAsFirst,
         .kernel    = &zerosLikeKernel,
         .traits    = {}});
@@ -356,7 +376,7 @@ std::vector<OpDef> gradientOps() {
         .name      = "ones_like",
         .exports   = {"ones_like"},
         .params    = {{"t", ParamKind::Tensor}},
-        .resultDoc = "Tensor",
+        .resultDoc = "float[..]",
         .infer     = sameAsFirst,
         .kernel    = &onesLikeKernel,
         .traits    = {}});
@@ -405,10 +425,14 @@ std::vector<OpDef> gradientOps() {
                 static_cast<camel::core::rtdata::Int64>(*(*shape)[static_cast<size_t>(axis)]));
         }});
 
+    // sum_to(g, like) is `::<T>(g: T[..], like: T[..])`: two tensors of one element type, and its
+    // arms are the widths its kernel carries -- f32 and f64 (indexing.cpp says which, and design
+    // principles 5.1: no conversion to reach an arm). A number on the `g` side is read at `like`'s
+    // width (gradientLikeTyped above), which is what a broadcast's gradient passes.
     defs.push_back(internal(
         "sum_to",
         {{"g", ParamKind::Tensor}, {"like", ParamKind::Tensor}},
-        gradientLike(1),
+        gradientLikeTyped(1),
         &sumToKernel));
     defs.push_back(internal(
         "broadcast_like",
@@ -421,17 +445,17 @@ std::vector<OpDef> gradientOps() {
          {"like", ParamKind::Tensor},
          {"axis", ParamKind::Int},
          {"keepdims", ParamKind::Bool, true}},
-        gradientLike(1),
+        gradientLikeTyped(1),
         &expandAxisKernel));
     defs.push_back(internal(
         "gelu_grad",
         {{"x", ParamKind::Tensor}, {"dy", ParamKind::Tensor}},
-        gradientLike(0),
+        gradientLikeTyped(0),
         &geluGradKernel));
     defs.push_back(internal(
         "erf_grad",
         {{"x", ParamKind::Tensor}, {"dy", ParamKind::Tensor}},
-        gradientLike(0),
+        gradientLikeTyped(0),
         &erfGradKernel));
     defs.push_back(internal(
         "layer_norm_grad",
@@ -450,17 +474,17 @@ std::vector<OpDef> gradientOps() {
          {"start", ParamKind::Int},
          {"end", ParamKind::Int},
          {"step", ParamKind::Int, true}},
-        gradientLike(1),
+        gradientLikeTyped(1),
         &sliceGradKernel));
     defs.push_back(internal(
         "matmul_grad_lhs",
         {{"dy", ParamKind::Tensor}, {"lhs", ParamKind::Tensor}, {"rhs", ParamKind::Tensor}},
-        gradientLike(1),
+        gradientLikeTyped(1),
         &matmulGradKernel<true>));
     defs.push_back(internal(
         "matmul_grad_rhs",
         {{"dy", ParamKind::Tensor}, {"lhs", ParamKind::Tensor}, {"rhs", ParamKind::Tensor}},
-        gradientLike(2),
+        gradientLikeTyped(2),
         &matmulGradKernel<false>));
     defs.push_back(internal(
         "cast_like",

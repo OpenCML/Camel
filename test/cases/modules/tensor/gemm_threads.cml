@@ -20,7 +20,7 @@
  */
 module gemm_threads
 
-import { Tensor, gemm_library, gemm_library_threads, gemm_threads, num_threads, sum, zeros } from tensor
+import { gemm_library, gemm_library_threads, gemm_threads, num_threads, sum, zeros } from tensor
 import { cpu_count } from process
 
 func main(expected: int): int sync {

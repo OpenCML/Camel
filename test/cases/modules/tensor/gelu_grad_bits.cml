@@ -26,13 +26,13 @@
  */
 module gelu_grad_bits
 
-import { Tensor, gelu, random, seed, sum, to_bytes } from tensor
+import { gelu, random, seed, sum, to_bytes } from tensor
 import { grad } from autodiff
 import { sha256 } from hash
 
 with <x: f32[..]>
 func loss(): float {
-    return sum(gelu(x))
+    return float(sum(gelu(x)))
 }
 
 func main(): int sync {

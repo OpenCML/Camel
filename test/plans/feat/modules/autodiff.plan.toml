@@ -917,7 +917,7 @@ case = "../../../cases/modules/autodiff/pb_statics_gc.cml"
 args = ["${case}", "${run_nvm}"]
 envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
 expect_exit = 0
-expect_stdout_contains = ["loss=0.3579342999437358 gqw=0.19846567139029503 gkw=0.0764192040078342", "loss2=0.3579342999437358 gqw2=0.19846567139029503 gkw2=0.0764192040078342"]
+expect_stdout_contains = ["loss=0.35793429613113403 gqw=0.19846568 gkw=0.076419204", "loss2=0.35793429613113403 gqw2=0.19846568 gkw2=0.076419204"]
 timeout_ms = 20000
 
 [[tests]]
@@ -928,7 +928,7 @@ case = "../../../cases/modules/autodiff/pb_statics_gc.cml"
 args = ["${case}", "${run_fvm}"]
 envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
 expect_exit = 0
-expect_stdout_contains = ["loss=0.3579342999437358 gqw=0.19846567139029503 gkw=0.0764192040078342", "loss2=0.3579342999437358 gqw2=0.19846567139029503 gkw2=0.0764192040078342"]
+expect_stdout_contains = ["loss=0.35793429613113403 gqw=0.19846568 gkw=0.076419204", "loss2=0.35793429613113403 gqw2=0.19846568 gkw2=0.076419204"]
 timeout_ms = 20000
 
 [[tests]]
@@ -1577,7 +1577,8 @@ kind = "behavior"
 case = "../../../cases/modules/autodiff/loop_grad_record_tensor_fd.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
-expect_stdout_exact = "loop_grad_record_tensor_fd d=94.840000 fd=94.828963 gap=0.011036873\n"
+expect_stdout_exact = """loop_grad_record_tensor_fd d=94.840000 fd=94.833374 gap=0.006626129
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -1588,7 +1589,8 @@ kind = "behavior"
 case = "../../../cases/modules/autodiff/loop_grad_record_tensor_fd.cml"
 args = ["${case}", "${run_fvm}"]
 expect_exit = 0
-expect_stdout_exact = "loop_grad_record_tensor_fd d=94.840000 fd=94.828963 gap=0.011036873\n"
+expect_stdout_exact = """loop_grad_record_tensor_fd d=94.840000 fd=94.833374 gap=0.006626129
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -1793,7 +1795,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'loss | helper | helper: done | loss: helper returned | 0.557950884103775 | loss | helper | helper: done | loss: helper returned | [1.7692266, 1.7808359, 1.7770708] | loss | helper | helper: done | loss: helper returned | (0.557950884103775, [1.7692266, 1.7808359, 1.7770708])', `unexpected output: ${out}`)
+assert(out === 'loss | helper | helper: done | loss: helper returned | 0.5579508543014526 | loss | helper | helper: done | loss: helper returned | [1.7692266, 1.7808359, 1.7770708] | loss | helper | helper: done | loss: helper returned | (0.5579508543014526, [1.7692266, 1.7808359, 1.7770708])', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1809,7 +1811,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'loss | helper | helper: done | loss: helper returned | 0.557950884103775 | loss | helper | helper: done | loss: helper returned | [1.7692266, 1.7808359, 1.7770708] | loss | helper | helper: done | loss: helper returned | (0.557950884103775, [1.7692266, 1.7808359, 1.7770708])', `unexpected output: ${out}`)
+assert(out === 'loss | helper | helper: done | loss: helper returned | 0.5579508543014526 | loss | helper | helper: done | loss: helper returned | [1.7692266, 1.7808359, 1.7770708] | loss | helper | helper: done | loss: helper returned | (0.5579508543014526, [1.7692266, 1.7808359, 1.7770708])', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1825,7 +1827,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'loss | helper | helper: done | loss: helper returned | 0.557950884103775 | loss | helper | helper: done | loss: helper returned | [1.7692266, 1.7808359, 1.7770708] | loss | helper | helper: done | loss: helper returned | (0.557950884103775, [1.7692266, 1.7808359, 1.7770708])', `unexpected output: ${out}`)
+assert(out === 'loss | helper | helper: done | loss: helper returned | 0.5579508543014526 | loss | helper | helper: done | loss: helper returned | [1.7692266, 1.7808359, 1.7770708] | loss | helper | helper: done | loss: helper returned | (0.5579508543014526, [1.7692266, 1.7808359, 1.7770708])', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -1841,7 +1843,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split(String.fromCharCode(10)).join(' | ')
-assert(out === 'loss | helper | helper: done | loss: helper returned | 0.557950884103775 | loss | helper | helper: done | loss: helper returned | [1.7692266, 1.7808359, 1.7770708] | loss | helper | helper: done | loss: helper returned | (0.557950884103775, [1.7692266, 1.7808359, 1.7770708])', `unexpected output: ${out}`)
+assert(out === 'loss | helper | helper: done | loss: helper returned | 0.5579508543014526 | loss | helper | helper: done | loss: helper returned | [1.7692266, 1.7808359, 1.7770708] | loss | helper | helper: done | loss: helper returned | (0.5579508543014526, [1.7692266, 1.7808359, 1.7770708])', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 12000
@@ -2041,8 +2043,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_static_branch.cml:11:16: [Error]'), 'the diagnostic is not located at the call (11:16): ' + text)
-assert(/[(]at [^ ]*grad_function_value_static_branch[.]cml:11:16[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.includes('grad_function_value_static_branch.cml:11:22: [Error]'), 'the diagnostic is not located at the call (11:22): ' + text)
+assert(/[(]at [^ ]*grad_function_value_static_branch[.]cml:11:22[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('which function it calls is not evident where it is called'), 'missing: which function it calls is not evident where it is called in: ' + text)
 assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
@@ -2061,8 +2063,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_static_branch.cml:11:16: [Error]'), 'the diagnostic is not located at the call (11:16): ' + text)
-assert(/[(]at [^ ]*grad_function_value_static_branch[.]cml:11:16[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.includes('grad_function_value_static_branch.cml:11:22: [Error]'), 'the diagnostic is not located at the call (11:22): ' + text)
+assert(/[(]at [^ ]*grad_function_value_static_branch[.]cml:11:22[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('which function it calls is not evident where it is called'), 'missing: which function it calls is not evident where it is called in: ' + text)
 assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
@@ -2123,8 +2125,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_container.cml:11:16: [Error]'), 'the diagnostic is not located at the call (11:16): ' + text)
-assert(/[(]at [^ ]*grad_function_value_container[.]cml:11:16[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.includes('grad_function_value_container.cml:11:22: [Error]'), 'the diagnostic is not located at the call (11:22): ' + text)
+assert(/[(]at [^ ]*grad_function_value_container[.]cml:11:22[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('the function is read from a tuple, a struct or an array'), 'missing: the function is read from a tuple, a struct or an array in: ' + text)
 }
@@ -2142,8 +2144,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
-assert(text.includes('grad_function_value_container.cml:11:16: [Error]'), 'the diagnostic is not located at the call (11:16): ' + text)
-assert(/[(]at [^ ]*grad_function_value_container[.]cml:11:16[)]/.test(text), 'the message does not name the call: ' + text)
+assert(text.includes('grad_function_value_container.cml:11:22: [Error]'), 'the diagnostic is not located at the call (11:22): ' + text)
+assert(/[(]at [^ ]*grad_function_value_container[.]cml:11:22[)]/.test(text), 'the message does not name the call: ' + text)
 assert(text.split('[Error]').length === 2, 'expected one error: ' + text)
 assert(text.includes('the function is read from a tuple, a struct or an array'), 'missing: the function is read from a tuple, a struct or an array in: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
@@ -2731,7 +2733,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "grad_data_input_is_data"
-desc = "An ordinary argument is data even when its type has a tangent: a float `scale` converted to int and a `Tensor` of integer labels cast to int64 and back to float are inputs of the differentiated computation with nothing differentiable upstream, so they are not refused; the gradient is taken through the first `with` parameter and is 3.0 and [0, 1, 0] (sum 1.0) respectively (design principles 9.9). This is the C2 `with_grad(loss)` shape."
+desc = "An ordinary argument is data even when its type has a tangent: a float `scale` converted to int and an integer array of labels cast to int64 and back to float are inputs of the differentiated computation with nothing differentiable upstream, so they are not refused; the gradient is taken through the first `with` parameter and is 3.0 and [0, 1, 0] (sum 1.0) respectively (design principles 9.9). This is the C2 `with_grad(loss)` shape."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_data_input.cml"
 args = ["${case}", "std::macro"]
@@ -3034,7 +3036,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "refuse_container_new"
-desc = "`new(xs)` with `xs: float[][]` converts the container to a tensor by flattening it, and the container has no adjoint: the gradient would have to return as an array of arrays, which no operator of this module builds from a tensor's gradient. The call is refused by name, with the container's type, at the new call (line 21); `refuse_container_reshape` is the same refusal for `reshape`. A numeric array is a tensor and is not refused (`adjoint_new_array` asserts its adjoint), and a constant container is converted by the forward rule and never visited here. Without the refusal this program faulted in the kernels, which read the container as a tensor: \"Expected Tensor argument\", with no place in the source to point at. (grad built at run time)"
+desc = "`new(xs)` with `xs: float[][]` converts the container to a tensor by flattening it, and the container has no adjoint: the gradient would have to return as an array of arrays, which no operator of this module builds from a tensor's gradient. The call is refused by name, with the container's type, at the new call (line 21); `refuse_container_reshape` is the same refusal for `reshape`. A numeric array is a tensor and is not refused (`adjoint_new_array` asserts its adjoint), and a constant container is converted by the forward rule and never visited here. Without the refusal this program faulted in the kernels, which read the container as a tensor: \"Expected an array argument\", with no place in the source to point at. (grad built at run time)"
 kind = "negative"
 case = "../../../cases/modules/autodiff/refuse_container_new.cml"
 args = ["${case}", "${run_nvm}"]
@@ -3194,7 +3196,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "f64_broadcast_grad"
-desc = "An f64 gradient through a broadcast: sum(x * p0) with x a Tensor<f64, [2, 3]> and p0 a Tensor<f64, [3]> multiplies by broadcasting p0 over the rows, and tensor:sum_to is the reduction of that broadcast, so this is where an f64 gradient was refused with \"'the gradient kernels' does not support a value of type 'Tensor<f64>'\". Both gradients are printed in the array form and both distances are 0.0 against the values written out by hand from the forward expression (d/dx is the row broadcast of p0, d/dp0 the column sum [5, 7, 9]). The wide pair sums 2^24 + 1 in the third column: 16777217.0 in f64 and 16777216.0 if the value is accumulated in f32, so its printed third coordinate and its distance (0.0 against 1.0) say which accumulator the arm uses."
+desc = "An f64 gradient through a broadcast: sum(x * p0) with x a f64[2, 3] and p0 a f64[3] multiplies by broadcasting p0 over the rows, and tensor:sum_to is the reduction of that broadcast, so this is where an f64 gradient was refused with \"'the gradient kernels' does not support a value of type 'f64[..]'\". Both gradients are printed in the array form and both distances are 0.0 against the values written out by hand from the forward expression (d/dx is the row broadcast of p0, d/dp0 the column sum [5, 7, 9]). The wide pair sums 2^24 + 1 in the third column: 16777217.0 in f64 and 16777216.0 if the value is accumulated in f32, so its printed third coordinate and its distance (0.0 against 1.0) say which accumulator the arm uses."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/f64_broadcast_grad.cml"
 args = ["${case}", "${run_nvm}"]
@@ -3207,6 +3209,24 @@ assert(text.includes('f64_broadcast_grad value=22.25 a_x=0.0 a_p0=0.0 wa=0.0'), 
 assert(text.includes('gx [[0.5, 0.25, 2.0], [0.5, 0.25, 2.0]]'), `the x gradient is not the row broadcast of p0: ${text}`)
 assert(text.includes('gp [5.0, 7.0, 9.0]'), `the p0 gradient is not the column sum of x: ${text}`)
 assert(text.includes('wp [16777217.0, 2.0, 16777217.0]'), `the wide sum did not accumulate in f64: ${text}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "f64_matmul_grad_width"
+desc = "The width the matmul gradient accumulates in: loss = sum(x @ w) with x an f64[2, 3] and w an f64[3, 1] gives d/dw = x^T @ dy (tensor:matmul_grad_rhs) and d/dx = dy @ w^T (tensor:matmul_grad_lhs), the only two gradient operators that add several products together. The narrow pair prints the hand-written column sums [5, 7, 9] and the row of w. The wide pair's x is [[2^24, 1, 0], [1, 0, 0]], so d/dw is [2^24 + 1, 1, 0] = [16777217.0, 1.0, 0.0]: 1 is below half an ulp of 2^24, so an f32 accumulation of the two rows answers 16777216.0 and its distance is 1.0 where the f64 one is 0.0. The operators used to declare f32 whatever the width of the value they are the gradient of, which is what made a sum_to of an f64 step a pair the signature refuses; the declaration follows the value's width now, and this pair is what pins that the declaration is not a claim the arithmetic cannot keep: the printed wide gradient is [[16777217.0], [1.0], [0.0]] and its distance 0.0, so tensor:matmul_grad_rhs adds the two rows of an f64 d/dw at f64's width and the f64 declaration is the one the kernel actually keeps."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/f64_matmul_grad_width.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.stdout
+assert(text.includes('f64_matmul_grad_width value=21.0 a_w=0.0 a_x=0.0 wa=0.0'), `unexpected distances: ${text}`)
+assert(text.includes('gw [[5.0], [7.0], [9.0]]'), `the w gradient is not the column sums of x: ${text}`)
+assert(text.includes('wg [[16777217.0], [1.0], [0.0]]'), `the two rows were not added at f64's width: ${text}`)
 }
 """
 timeout_ms = 10000

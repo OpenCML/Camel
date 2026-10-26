@@ -199,7 +199,7 @@ zeros: (shape: int[]) => f32[..]
 ones: (shape: int[]) => f32[..]
 full: (shape: int[], value: number) => float[..]
 eye: (n: int) => f32[..]
-range: (start: int, stop?: int, step?: int) => Tensor<int64>
+range: (start: int, stop?: int, step?: int) => int64[..]
 random: (shape: int[], low: number, high: number) => f32[..]
 randn: (shape: int[], mean?: number, std?: number) => f32[..]
 add: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
@@ -235,9 +235,9 @@ shape: (t: T[..]) => int[] when is_numeric::<T>()
 numel: (t: T[..]) => int when is_numeric::<T>()
 dim: (t: T[..], axis: int) => int when is_numeric::<T>()
 dim: (t: T[..], axis: i32) => int when is_numeric::<T>()
-sum: (t: float[..]) => float
+sum: (t: T[..]) => T
 sum: (t: float[..], axis: int, keepdims?: bool) => float[..]
-mean: (t: float[..]) => float
+mean: (t: T[..]) => T
 mean: (t: float[..], axis: int, keepdims?: bool) => float[..]
 max: (t: float[..], axis: int, keepdims?: bool) => float[..]
 min: (t: float[..], axis: int, keepdims?: bool) => float[..]
@@ -714,8 +714,8 @@ rule_consts: (r: Rule) => int
 **`tiles`** — import { ... } from tiles — 9 name(s)
 
 ```text
-upload: (value: Tensor<f32>) => Device<Tensor<f32>>
-download: (value: Device<Tensor<f32>>) => Tensor<f32>
+upload: (value: f32[..]) => Device<f32[..]>
+download: (value: Device<f32[..]>) => f32[..]
 run_preferred_resident: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => Device<f32>
 source: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string
 inspect: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string
@@ -814,7 +814,7 @@ asian_call_price: (paths: int, steps: int, seed: int) => float
 **`onnx`** — import { ... } from onnx — 2 name(s)
 
 ```text
-export_model: (fn: (x: Tensor<f32>) => void, example: Tensor<f32>, path: string) => void
+export_model: (fn: (x: f32[..]) => void, example: f32[..], path: string) => void
 supported_operators: () => string[]
 ```
 <!-- camel-for-ai end: stdlib-signatures -->

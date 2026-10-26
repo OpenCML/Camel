@@ -23,7 +23,6 @@ let xs = 1..11        // [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 ```cml
 // Arrays and the higher-order operators map, filter, reduce and foreach.
 // Run: camel docs/tutorial/examples/05_arrays.cml
-module arrays
 
 func main(): int sync {
     let xs = 1..11    // [1, ..., 10]
@@ -74,7 +73,6 @@ item c
 ```cml
 // `loop` carries its state from one round to the next; the body's value is the next state.
 // Run: camel docs/tutorial/examples/05_loops.cml
-module loops
 
 func main(): int sync {
     // One round per element of the sequence.
@@ -126,7 +124,6 @@ camel docs/tutorial/examples/05_loops.cml
 // The elements of `map` have no agreed order of execution: do not put stateful calls in them.
 // Run: camel docs/tutorial/examples/05_map_order.cml
 //      camel docs/tutorial/examples/05_map_order.cml std::prl
-module map_order
 
 import { seed, randint } from random
 
@@ -161,7 +158,6 @@ camel docs/tutorial/examples/05_map_order.cml
 // The elements of `map` have no agreed order of execution: do not put stateful calls in them.
 // Run: camel docs/tutorial/examples/05_map_order.cml
 //      camel docs/tutorial/examples/05_map_order.cml std::prl
-module map_order
 
 import { seed, randint } from random
 
@@ -196,7 +192,6 @@ camel docs/tutorial/examples/05_map_order.cml std::prl
 ```cml
 // Step 5 of the word counter: the words of the text with their counts, carried by a `loop`.
 // Run: camel examples/wordcount/step5.cml
-module wordcount
 
 import { split, trim, to_lower, replace } from str
 import { any, flat_map, sort_by, take } from array
@@ -281,7 +276,6 @@ and 1
 ```cml
 // The answer to the exercise of chapter 5: a `loop` that adds the squares of the even numbers.
 // Run: camel docs/tutorial/examples/05_exercise.cml
-module exercise
 
 func main(): int sync {
     let total = loop acc = 0 for x in 1..11 do if x % 2 == 0 then acc + x * x else acc

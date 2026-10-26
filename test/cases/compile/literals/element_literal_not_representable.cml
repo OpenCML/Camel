@@ -4,9 +4,9 @@
 /// not out of the integer's range, it is not an integer: "the value would be truncated".
 module element_literal_not_representable
 
-import { Tensor, reshape, cast, sum } from tensor
+import { reshape, cast, sum } from tensor
 
-func half(x: Tensor<int>): Tensor<f32> {
+func half(x: int[..]): f32[..] {
     return x * 0.5
 }
 

@@ -23,7 +23,7 @@
  *   negExpr         prefix -         tighter than `->`, looser than `^`:
  *                                    `-x->f` is `(-x)->f`, `-x ^ 2` is `-(x ^ 2)`
  *   compExpr        ..                                          left
- *   annoExpr        [index]  (arguments)  <arguments>  !  .member   postfix, touching
+ *   annoExpr        [index]  (arguments)  <arguments>  .member   postfix, touching
  *   accessExpr      .member
  *   primaryData     name, literal, [array], {struct}, (tuple), lambda
  *
@@ -381,13 +381,16 @@ void ParserImpl::parseComp() {
     }
 }
 
-/// annoExpr : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | '!'
+/// annoExpr : accessExpr (indices | parentArgues | structData | angledValues | typeArguments
 /// | memberAccess)*
 /// memberAccess : '.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']')
 /// Rule 1: an index, a call, an
-/// angle-bracket argument list and the postfix `!` touch the expression before them. For `<` the
+/// angle-bracket argument list and a member access touch the expression before them. For `<` the
 /// lexer has decided already (LAngle). `Shape::Rect { w: 2 }` is a struct variant construction:
 /// a struct literal follows a variant path, never a name that could be a value.
+/// The postfix `!` is not in the language: the mark `!` of a `T!` belongs to the type, and a
+/// value of that type is taken hold of with `!!`, `?->` or `case error e`. A `!` after a value
+/// therefore fits nothing and is an ordinary syntax error.
 void ParserImpl::parseAnno() {
     const size_t m = mark();
     bool any       = false;
@@ -420,11 +423,6 @@ void ParserImpl::parseAnno() {
             }
             if (cur_ == TK::LAngle) {
                 parseAngledValues();
-                any = true;
-                continue;
-            }
-            if (cur_ == TK::Bang) {
-                bump();
                 any = true;
                 continue;
             }
@@ -706,30 +704,26 @@ void ParserImpl::parseLiteral() {
     close(m, NK::Literal);
 }
 
-/// indexValue : ('...' | '..')? dataExpr
-/// `...e` is a spread that is not implemented; `..e` is a rest argument (design principles 5.5).
+/// indexValue : '..'? dataExpr
+/// `..e` is a rest argument: the arguments left over, as a compile-time tuple (design
+/// principles 5.5). A spread `...e` is not in the language, so the `...` token is refused here
+/// like any other token that fits nothing.
 void ParserImpl::parseIndexValue() {
-    if (cur_ == TK::Ellipsis || cur_ == TK::DotDot) {
+    if (cur_ == TK::DotDot) {
         const size_t m = mark();
-        const bool rest = cur_ == TK::DotDot;
         bump();
         parseExpr();
-        return close(m, rest ? NK::RestValue : NK::SpreadValue);
+        return close(m, NK::RestValue);
     }
     parseExpr();
 }
 
-/// keyValuePair : identDef ':' dataExpr | '...' dataExpr
+/// keyValuePair : identDef ':' dataExpr
 void ParserImpl::parseKeyValuePair() {
     const size_t m = mark();
-    if (cur_ == TK::Ellipsis) {
-        bump();
+    parseIdentDef();
+    if (!panic_ && expect(TK::Colon)) {
         parseExpr();
-    } else {
-        parseIdentDef();
-        if (!panic_ && expect(TK::Colon)) {
-            parseExpr();
-        }
     }
     close(m, NK::KeyValuePair);
 }
@@ -1339,7 +1333,7 @@ void ParserImpl::parseStaticLoopHeader() {
 
 /// typeCasePattern : 'struct' | 'tuple' | 'func' | '#' 'leaf' | '_' | typeExpr
 /// The words are contextual: only here do they name a shape, not a type. Anything else that
-/// starts a type is an identity pattern (`case int`, `case Tensor<f32, [..]>`, `case T`): the
+/// starts a type is an identity pattern (`case int`, `case f32[..]`, `case T`): the
 /// same clause with a type written in it (design principles 5.5).
 void ParserImpl::parseTypeCasePattern() {
     const size_t m = mark();
@@ -1417,70 +1411,56 @@ void ParserImpl::parseMatchCase() {
     close(m, NK::MatchCase);
 }
 
-/// pattern : identRef (identDef | enumTuplePattern | enumStructPattern)? | literal
-///         | '(' (dataList | identList)? ','? ')' | '{' (pairedValues | identList)? ','? '}' | '_'
-/// A parenthesized pattern is read as a dataList (the first alternative, which every identList
-/// also is); a braced one as pairedValues when it starts with `name:` or `...`. A path with a
-/// `::` followed by `(` or `{` is an enum pattern: the variant and the fields it binds.
-void ParserImpl::parsePattern() {
+/// pattern : 'error' identDef
+///         | identRef (enumTuplePattern | enumStructPattern)?
+///         | literal
+///         | '_'
+/// fieldPattern : identRef | '_'
+/// The fields of a variant are destructured by the enum pattern after its path (`::` followed by
+/// `(` or `{`): the variant and the fields it binds. A pattern of its own is a name, a constant
+/// literal or `_`; a `(` or a `{` here is refused like any other token that fits nothing.
+/// A field of an enum pattern is a `fieldPattern` and nothing else, so nesting
+/// (`case Shape::Circle(Shape::Square(x))`) is refused where it is written: what a nested pattern
+/// would bind has no meaning in the language, and the reading is not kept for a message.
+/// The only pattern of two words is `error e`, the second word of which is the name the error is
+/// bound to (design principles 3.8). `when` is not a keyword of the lexer but the guard of a
+/// `match` case (and the condition of a declaration), and it is written after the pattern:
+/// reading it as the second word here would swallow the guard, so `case error e when c` keeps its
+/// condition.
+/// A formatted string is not among the literals a pattern takes: an interpolation is not a
+/// constant, so `` case `...` `` is refused here, by the same rule that keeps a pattern a constant.
+void ParserImpl::parsePattern(bool fieldPosition) {
     const size_t m = mark();
+    if (fieldPosition) {
+        if (cur_ == TK::Underscore) {
+            bump();
+        } else if (cur_ == TK::Identifier) {
+            parseIdentRef(NK::IdentRef);
+        } else {
+            unexpected({SyntaxError::PatternItem});
+        }
+        close(m, NK::Pattern);
+        return;
+    }
     switch (cur_) {
-    case TK::Identifier:
+    case TK::Identifier: {
+        const bool isError = atWord(0, "error");
         parseIdentRef(NK::IdentRef);
         if (cur_ == TK::LParen) {
             parseEnumTuplePattern();
         } else if (cur_ == TK::LBrace) {
             parseEnumStructPattern();
-        } else if (cur_ == TK::Identifier && !atWord(0, "when")) {
-            // The only two-word pattern is `error e`. `when` is not a keyword of the lexer but
-            // the guard of a `match` case (and the condition of a declaration), and it is
-            // written after the pattern: reading it as the second word here would swallow the
-            // guard, so `case error e when c` keeps its condition.
+        } else if (isError && cur_ == TK::Identifier && !atWord(0, "when")) {
             parseIdentDef();
         }
         break;
+    }
     case TK::Underscore:
         bump();
         break;
-    case TK::LParen: {
-        bump();
-        {
-            Scope scope(*this, false);
-            if (cur_ != TK::RParen && cur_ != TK::Comma) {
-                parseDataList(TK::RParen);
-            }
-            eat(TK::Comma);
-        }
-        if (!panic_) {
-            expectListEnd(TK::RParen);
-        }
-        break;
-    }
-    case TK::LBrace: {
-        bump();
-        {
-            Scope scope(*this, false);
-            if (cur_ == TK::Ellipsis || pairStartsAt(0)) {
-                parsePairedValues(TK::RBrace);
-            } else if (cur_ == TK::Identifier) {
-                const size_t lm = mark();
-                parseIdentDef();
-                while (cur_ == TK::Comma && peek(1) != TK::RBrace && !panic_) {
-                    bump();
-                    parseIdentDef();
-                }
-                close(lm, NK::IdentList);
-            }
-            eat(TK::Comma);
-        }
-        if (!panic_) {
-            expectListEnd(TK::RBrace);
-        }
-        break;
-    }
     default:
         if (cur_ == TK::Integer || cur_ == TK::Real || cur_ == TK::String || cur_ == TK::MultiStr ||
-            cur_ == TK::FString || cur_ == TK::KwTrue || cur_ == TK::KwFalse ||
+            cur_ == TK::KwTrue || cur_ == TK::KwFalse ||
             cur_ == TK::KwNull || literalSignAhead()) {
             parseLiteral();
         } else {
@@ -1491,19 +1471,18 @@ void ParserImpl::parsePattern() {
     close(m, NK::Pattern);
 }
 
-/// enumTuplePattern : '(' (pattern (',' pattern)*)? ','? ')'
-/// A field the branch does not need is `_`. Nesting is read, so that the compiler can say it is
-/// not supported yet instead of the parser refusing the program.
+/// enumTuplePattern : '(' (fieldPattern (',' fieldPattern)*)? ','? ')'
+/// A field the branch does not need is `_`.
 void ParserImpl::parseEnumTuplePattern() {
     const size_t m = mark();
     bump();
     {
         Scope scope(*this, false);
         if (cur_ != TK::RParen && cur_ != TK::Comma) {
-            parsePattern();
+            parsePattern(/*fieldPosition=*/true);
             while (cur_ == TK::Comma && peek(1) != TK::RParen && !panic_) {
                 bump();
-                parsePattern();
+                parsePattern(/*fieldPosition=*/true);
             }
         }
         eat(TK::Comma);
@@ -1514,7 +1493,7 @@ void ParserImpl::parseEnumTuplePattern() {
     close(m, NK::EnumTuplePattern);
 }
 
-/// enumStructPattern : '{' (IDENTIFIER (':' pattern)? ','?)* '}'
+/// enumStructPattern : '{' (IDENTIFIER (':' fieldPattern)? ','?)* '}'
 /// `{ w, h }` binds the fields of those names, `{ w: width }` binds the field `w` to `width`,
 /// and `{ w: _ }` binds nothing.
 void ParserImpl::parseEnumStructPattern() {
@@ -1525,7 +1504,7 @@ void ParserImpl::parseEnumStructPattern() {
         while (cur_ == TK::Identifier && !panic_) {
             bump();
             if (eat(TK::Colon)) {
-                parsePattern();
+                parsePattern(/*fieldPosition=*/true);
             }
             if (cur_ != TK::Comma) {
                 break;

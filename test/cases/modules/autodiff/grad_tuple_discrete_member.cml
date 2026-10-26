@@ -15,13 +15,13 @@
  */
 module grad_tuple_discrete_member
 
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { with_grad } from autodiff
 
 with <m: (f32[..], int)>
 func loss(): float {
     let (p, k) = m
-    return sum(p) * float(k)
+    return float(sum(p)) * float(k)
 }
 
 func main(): int sync {

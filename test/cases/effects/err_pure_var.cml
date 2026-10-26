@@ -1,0 +1,15 @@
+// `pure` promises that a call touches no resource at all. A `var` parameter is a resource by
+// itself: the cell is shared with the caller, so a call through the parameter reads and writes it
+// wherever the body is written, and no body can bring the set back to empty. So the signature is
+// refused at its own clause, and the note points at the parameter that breaks the promise
+// (UsesPromiseViolated).
+func bump(var c: int): int pure sync {
+    c = c + 1
+    return c
+}
+
+func main(): int sync {
+    var n = 1
+    println(bump(n))
+    return 0
+}

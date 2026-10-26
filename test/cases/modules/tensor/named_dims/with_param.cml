@@ -1,9 +1,9 @@
 module named_dims_with_param
-import { Tensor, ones, sum } from tensor
+import { ones, sum } from tensor
 // A `with` parameter binds a name like a normal one, and the normal parameters write it.
-with <w: Tensor<f32, [n]>>
-func scale(x: Tensor<f32, [n]>): float {
-    return sum(x) + sum(w)
+with <w: f32[n]>
+func scale(x: f32[n]): float {
+    return float(sum(x)) + float(sum(w))
 }
 func main(): int sync {
     println(scale<ones([3])>(ones([3])))

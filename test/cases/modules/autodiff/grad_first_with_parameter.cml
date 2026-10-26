@@ -10,7 +10,7 @@
 module grad_first_with_parameter
 
 import { grad, with_grad } from autodiff
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 
 // d/dx (x*y + x) = y + 1.
 with <x: float>
@@ -29,7 +29,7 @@ func point_loss(y: float): float {
 // The gradient is a tensor of the weight's shape: x.
 with <w: f64[..]>
 func dot(x: f64[..]): float {
-    return sum(w * x)
+    return float(sum(w * x))
 }
 
 // `k` is the first `with` parameter and is differentiated; `x` is a second `with` parameter

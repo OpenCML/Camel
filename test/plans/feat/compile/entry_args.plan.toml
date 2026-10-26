@@ -652,7 +652,7 @@ case = "../../../cases/compile/entry_args/tensors.cml"
 args = ["${case}", "--arg", "x=test/cases/compile/entry_args/absent.npy", "--arg", "w=test/cases/compile/entry_args/w.npy"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_output_contains = ["a Tensor parameter takes a .npy file", "does not exist"]
+expect_output_contains = ["an array parameter takes a .npy file", "does not exist"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

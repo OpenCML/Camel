@@ -5,13 +5,13 @@
  */
 module accuracy_guard_target
 
-import { Tensor, reshape, exp, log, sum } from tensor
+import { reshape, exp, log, sum } from tensor
 
-func multiplied(x: Tensor<f32>): Tensor<f32> {
+func multiplied(x: f32[..]): f32[..] {
     return log(exp(x) * 2.0)
 }
 
-func mismatched(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
+func mismatched(a: f32[..], b: f32[..]): f32[..] {
     return log(exp(a) / sum(exp(b), -1, true))
 }
 

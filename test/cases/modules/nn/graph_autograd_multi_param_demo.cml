@@ -6,7 +6,7 @@
 module graph_autograd_multi_param_demo
 
 import { with_grad } from autodiff
-import { Tensor, ones, shape, sum, zeros } from tensor
+import { ones, shape, sum, zeros } from tensor
 import { sgd } from nn
 
 type LinearBias = {
@@ -19,7 +19,7 @@ func mse_loss(x: f32[..], y: f32[..]): float {
     let pred = (x @ model.weight) + model.bias
     let errors = pred - y
     let squared = errors * errors
-    return sum(squared) / float(shape(x)[0])
+    return float(sum(squared)) / float(shape(x)[0])
 }
 
 func init(): LinearBias {

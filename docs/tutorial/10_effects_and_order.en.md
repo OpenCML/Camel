@@ -14,7 +14,6 @@ order are not defaults, they are **written in the program**, and the graph has e
 // An effect whose result nothing needs: `greet`'s body is not a sync block, so its `println`
 // never runs.
 // Run: camel docs/tutorial/examples/10_unused_effect.cml
-module unused_effect
 
 func greet(): int {
     println('hello from greet')
@@ -33,9 +32,9 @@ camel docs/tutorial/examples/10_unused_effect.cml
 
 ```text
 warning[SemanticDiag::EffectNotExecuted]: The call of 'println' has side effects but is never executed: nothing depends on it and it is not in a sync block.
-  --> docs/tutorial/examples/10_unused_effect.cml:7:5
+  --> docs/tutorial/examples/10_unused_effect.cml:6:5
    |
- 7 |     println('hello from greet')
+ 6 |     println('hello from greet')
    |     ^^^^^^^
 help: Evaluation is driven by dependencies: outside a sync block an expression whose result (or the variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or use its result.
 
@@ -59,7 +58,6 @@ with `greet`'s body made a sync block ([`examples/10_sync_body.cml`](examples/10
 ```cml
 // The same two statements as 10_unused_effect.cml, in a sync body: now both run.
 // Run: camel docs/tutorial/examples/10_sync_body.cml
-module sync_body
 
 func greet(): int sync {
     println('hello from greet')
@@ -96,7 +94,6 @@ inside it behaves as it is written: write `sync` there too if you want order the
 // A sync function body orders its own statements. What is written inside it -- an arm, a loop
 // body -- is ordered only if it says `sync` itself.
 // Run: camel docs/tutorial/examples/10_sync_block.cml
-module sync_block
 
 func report(second: bool): int sync {
     println('the body is a sync block')
@@ -117,9 +114,9 @@ camel docs/tutorial/examples/10_sync_block.cml
 
 ```text
 warning[SemanticDiag::EffectNotExecuted]: The call of 'println' has side effects but is never executed: nothing depends on it and it is not in a sync block.
-  --> docs/tutorial/examples/10_sync_block.cml:8:22
+  --> docs/tutorial/examples/10_sync_block.cml:7:22
    |
- 8 |     if second then { println('three'); println('four') }
+ 7 |     if second then { println('three'); println('four') }
    |                      ^^^^^^^
 help: Evaluation is driven by dependencies: outside a sync block an expression whose result (or the variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or use its result.
 
@@ -149,7 +146,6 @@ in. [`examples/10_var_order.cml`](examples/10_var_order.cml):
 // A `var` and the order of its writes: in a sync body the statements run in the order written, a
 // read takes the value of the most recent write before it, and a write nobody reads does not run.
 // Run: camel docs/tutorial/examples/10_var_order.cml
-module var_order
 
 func bump(var counter: int): int sync {
     counter += 1
@@ -203,7 +199,6 @@ bodies, the same output, different warnings
 // earlier uses of the variable. Both programs below print the same `1`: what the sync block adds is
 // the guarantee, not the value.
 // Run: camel docs/tutorial/examples/10_write_nobody_reads.cml
-module write_nobody_reads
 
 func unordered(): int {
     var c = 1
@@ -232,16 +227,16 @@ camel docs/tutorial/examples/10_write_nobody_reads.cml
 
 ```text
 warning[SemanticDiag::IgnoredSideEffect]: The call of '<__assn__>: (var int, int) => int' is not in a sync block, and it takes a var argument.
-   --> docs/tutorial/examples/10_write_nobody_reads.cml:10:5
+   --> docs/tutorial/examples/10_write_nobody_reads.cml:9:5
     |
- 10 |     c = 5
+ 9 |     c = 5
     |     ^^^^^
 help: Put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'): only then is the write ordered after the earlier uses of the variable. Without one, the write runs only if the variable is read afterwards.
 
 warning[SemanticDiag::EffectNotExecuted]: The assignment has side effects but is never executed: nothing depends on it and it is not in a sync block.
-   --> docs/tutorial/examples/10_write_nobody_reads.cml:10:7
+   --> docs/tutorial/examples/10_write_nobody_reads.cml:9:7
     |
- 10 |     c = 5
+ 9 |     c = 5
     |       ^
 help: Evaluation is driven by dependencies: outside a sync block an expression whose result (or the variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or use its result.
 
@@ -269,7 +264,6 @@ used (`println` returns its argument), so they happen in the order written with 
 ```cml
 // Two effects on the same resource (stdout) keep the written order without a sync block.
 // Run: camel docs/tutorial/examples/10_same_resource.cml
-module same_resource
 
 func report(): int {
     return 5->println->println
@@ -309,7 +303,6 @@ records it in the function type it displays. This program puts the forms side by
 // What a call touches: a resource of the module, a group of them, a handle type and `uses` on a
 // parameter. The bodies touch nothing -- a clause is a promise the compiler checks where it can.
 // Run: camel docs/tutorial/examples/10_resources.cml
-module resources
 
 resource db
 resource console = [db, stdout]
@@ -370,8 +363,8 @@ Draw the graph of this program and the `tooltip` of a function node is the resou
 
 All three lines say what a call touches: `read_id` touches the handle it is given, `tick` touches the `console` group
 (expanded to `db` and `stdout`), `bump` touches the cell the caller hands it. **That is resource inference**: you need
-not write it, and it is visible on the graph; what you write is a promise, and the compiler checks the part of it it
-can (the errors below).
+not write it, and it is visible on the graph; what you write is a promise, and a body that goes beyond it is a compile
+error (the errors below).
 
 What a wrong clause looks like (all compile errors):
 
@@ -380,18 +373,27 @@ What a wrong clause looks like (all compile errors):
   `uses` says "these", and only one of the two may be written.
 - a body-less declaration (a native operator) whose clause is not the operator's: `SemanticDiag::NativeResourceMismatch`
   -- such a declaration *is* the whole signature of the operator, resources included.
+- a body that goes beyond its own `pure`/`uses` promise: `SemanticDiag::UsesPromiseViolated`. `uses` is an upper bound
+  and `pure` is the empty set; the error is at the declaration and the note points at the first use the signature does
+  not promise (a `pure` signature with a `var` parameter is reported here too: a `var` parameter is a resource by
+  itself).
 
 ## `pure`: touching no resource at all
 
-`pure` is the promise that a call touches no resource. Written in a **function type** it is a requirement: whoever
-passes a function in has to pass one that satisfies it, and satisfying it means **its own signature says `pure`**. `apply` in
+`pure` is the promise that a call touches no resource at all. Written in a **function type** it is a
+requirement: whoever passes a function in must pass one whose **inferred** resource set does not go
+beyond it -- a function that uses fewer resources fits where more are asked for, and not the other way
+round ([design principles 3.3](../design-principles.en.md#33-resources-uses-and-pure)).
+**What is written is the promise, and a body that goes beyond it is a compile error**: a named function
+is held to the clause it writes (`pure` must come out empty), and an anonymous function has no clause --
+its resources are inferred, so a lambda that touches nothing, or a named function whose body touches
+nothing, fits a `pure` parameter. `apply` in
 [`examples/10_pure_callback.cml`](examples/10_pure_callback.cml) accepts only a pure function:
 
 ```cml
-// `pure` in a function type is part of the requirement: `apply` accepts only a function whose own
-// signature says `pure`, and `twice` says it.
+// `pure` in a function type is part of the requirement: what is compared is the resources the
+// argument's body infers against the empty set the parameter asks for, and `twice` touches nothing.
 // Run: camel docs/tutorial/examples/10_pure_callback.cml
-module pure_callback
 
 func apply(f: (x: int) => int pure, x: int): int {
     return f(x)
@@ -415,16 +417,17 @@ camel docs/tutorial/examples/10_pure_callback.cml
 8
 ```
 
-Pass a function whose signature does not say `pure` and the trouble is not a wrong value but a **signature that does
-not match** -- refused at the call ([`examples/10_pure_callback_wrong.cml`](examples/10_pure_callback_wrong.cml)):
+Pass a function that touches a resource and the trouble is not a wrong value but a **signature that does
+not match**: what is compared is the **resources the argument infers against the resources the parameter
+asks for**, and the error is raised at the call
+([`examples/10_pure_callback_wrong.cml`](examples/10_pure_callback_wrong.cml)):
 
 <!-- camel-snippet: counter-example: this program deliberately does not compile: the call is a mismatch, so the text block below is the diagnostic, not output -->
 
 ```cml
-// A counter-example: `noisy` prints and its own signature does not say `pure`, so its type is not
-// what the requirement asks for. The error names the signature that would have matched.
+// A counter-example: `noisy` prints, so the resources its body infers do not fit the empty set the
+// parameter asks for. The error names the signature that would have matched.
 // Run: camel docs/tutorial/examples/10_pure_callback_wrong.cml
-module pure_callback_wrong
 
 func apply(f: (x: int) => int pure, x: int): int {
     return f(x)
@@ -447,9 +450,9 @@ camel docs/tutorial/examples/10_pure_callback_wrong.cml
 
 ```text
 error[SemanticDiag::NoMatchingFunction]: No matching function found for argument types: <> ((x: int) => int, int).
-   --> docs/tutorial/examples/10_pure_callback_wrong.cml:16:18
+   --> docs/tutorial/examples/10_pure_callback_wrong.cml:15:18
     |
- 16 |     println(apply(noisy, 4))
+ 15 |     println(apply(noisy, 4))
     |                  ^^^^^^^^^^
 help: Check the number and types of arguments to ensure they match one of the available overloaded function signatures. Available overloads:
           apply: (f: (x: int) => int pure, x: int) => int
@@ -502,7 +505,6 @@ The answer is [`examples/10_exercise.cml`](examples/10_exercise.cml):
 // The answer to the exercise of chapter 10: a `var` written inside a sync block, and a callback
 // that has to be pure.
 // Run: camel docs/tutorial/examples/10_exercise.cml
-module exercise_effects
 
 func sum_upto(n: int): int sync {
     var total = 0

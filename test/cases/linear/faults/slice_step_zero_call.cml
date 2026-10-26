@@ -1,0 +1,14 @@
+/**
+ * The function form of the slice node with a constant step of 0 is the same fault as the
+ * subscript's: the two spellings are one node (the core's `:op/slice_sub`), so one fault has one
+ * answer -- the catalog's `SemanticDiag::SliceStepZero`, with the caret under the step the program
+ * wrote, and the program after it does not run (design principles 5.4, 3.9).
+ */
+module slice_step_zero_call
+
+func main(): int sync {
+    let xs = [1, 2, 3, 4, 5, 6]
+    println(slice(xs, 0, 0, 6, 0))
+    println('not reached')
+    return 0
+}

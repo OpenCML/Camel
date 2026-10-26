@@ -6,7 +6,7 @@
  * records for a stepped slice, and the view with strides waits for H17.
  */
 module subscript_slice_step
-import { Tensor, reshape, shape, sum } from tensor
+import { reshape, shape, sum } from tensor
 
 func main(): int sync {
     println('ran')

@@ -681,7 +681,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "ConstasNotAllowed",
                 "The dimension name '{0}' is bound here, but only a parameter type can bind one.",
-                "A dimension name binds where it first appears in a parameter type, 'x: Tensor<f32, [n, 3]>'. Every later occurrence, including one in the return type, writes 'n'.",
+                "A dimension name binds where it first appears in a parameter type, 'x: f32[n, 3]'. Every later occurrence, including one in the return type, writes 'n'.",
             },
         },
         {
@@ -1589,14 +1589,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::TensorElementTypeRequired,
-            {
-                "TensorElementTypeRequired",
-                "The type '{0}' states no element type: a tensor's element type is part of its type, so this spelling is not a type of a value.",
-                "Every tensor type writes its element type: 'Tensor<f32>' (a rank nobody fixes yet), 'Tensor<f32, [2, 3]>', or the array type itself, 'f32[..]' and 'f32[2, 3]'. A signature that takes a tensor of any element type declares a type variable in its head and writes it as the element type -- 'func f::<T>(x: Tensor<T>)', which is the same type as 'func f::<T>(x: T[..])' -- and the call's argument fixes that type variable, so the body sees the element type the call bound. A shape written without an element type ('Tensor<[3]>') leaves the same question open.",
-            },
-        },
-        {
             SemanticDiag::BranchElementTypeMismatch,
             {
                 "BranchElementTypeMismatch",
@@ -1629,6 +1621,46 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::UsesPromiseViolated,
+            {
+                "UsesPromiseViolated",
+                "'{0}' does not keep its resource promise: {1}.",
+                "A signature is a promise the compiler checks against the resources the function uses. 'uses' is an upper bound, so every resource the body uses must be named there, and 'pure' promises the empty set; a 'var' parameter is a resource by itself, and so is a capture. Change the body so that it no longer reaches for it, or change the signature to name it.",
+            },
+        },
+        {
+            SemanticDiag::TypeAliasRecursionUnrepresented,
+            {
+                "TypeAliasRecursionUnrepresented",
+                "The type '{0}' mentions itself through a collection: recursion through an array, a map, a set or an enum is admitted by the language, and this compiler does not have that representation.",
+                "A type may reach itself indirectly, through an array, a map, a set or an enum (design principles 5.2), and the shape that needs is not built here: write the type without mentioning itself. Containing itself directly, as a struct field of its own type, is a different error: `ModuleTypeCycle`.",
+            },
+        },
+        {
+            SemanticDiag::EnumWrittenWhereATypeIsExpected,
+            {
+                "EnumWrittenWhereATypeIsExpected",
+                "An enum is declared in a type declaration ('type Shape = enum ...') and its type is the name that declaration gives it: the variants are written there and nowhere else.",
+                "An enum is a named type (design principles 5.3): `type Shape = enum {{ Circle(float), Dot }}` declares it, and `Shape` is what is written where a value of it is expected. The variants are written in the `type` declaration and nowhere else.",
+            },
+        },
+        {
+            SemanticDiag::StructComprehensionWithoutFields,
+            {
+                "StructComprehensionWithoutFields",
+                "A struct comprehension takes its field names from 'fields T', and 'indices' walks positions, which have no names: write a tuple comprehension '( static for ... in indices ... )', or walk 'fields T'.",
+                "A struct value is written as one value per field name, and `indices` walks the positions of a tuple, so a struct comprehension over it would have nothing to name its fields with (design principles 5.2). A tuple comprehension has one element per position, which is what `indices` gives.",
+            },
+        },
+        {
+            SemanticDiag::IdentifierPatternNeedsNullableOrErrorType,
+            {
+                "IdentifierPatternNeedsNullableOrErrorType",
+                "The pattern '{0}' takes a value of type 'T?' or 'T!' apart, and this value has type '{1}': write '?\?' or '!!', or a 'match' pattern that is a literal or '_'.",
+                "The patterns that bind are the fixed forms of the two marks (design principles 3.8): `error e` reads the error out of a `T!`, and a plain name reads the value out of a `T?` or a `T!`. Over any other type there is no mark to take apart, so the value is read with a literal pattern or '_'.",
+            },
+        },
+        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",
@@ -1640,8 +1672,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::EffectNotExecuted,
             {
                 "EffectNotExecuted",
-                "{0} has side effects but is never executed: nothing depends on it and it is not in a sync block.",
-                "Evaluation is driven by dependencies: outside a sync block an expression whose result (or the variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync block ('sync {{ ... }}', or a function body 'func f(): T sync {{ ... }}'), or use its result.",
+                "{0} has side effects but is never executed: {1}.",
+                "Evaluation is driven by dependencies: an expression whose result (or the variable it writes) nothing needs does not run, and a sync block nothing needs does not run either, so the effects written directly in it do not run with it. This is legal. To run it, put it on a sync chain ('sync {{ ... }}' in a function body, or use the block's value), or use its result.",
             },
         },
         {

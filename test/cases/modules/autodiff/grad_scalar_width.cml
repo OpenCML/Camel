@@ -18,7 +18,7 @@
  */
 module grad_scalar_width
 
-import { Tensor, new, sum, where } from tensor
+import { new, sum, where } from tensor
 import { with_grad } from autodiff
 
 with <x: f32>

@@ -1,7 +1,6 @@
 // The answer to the exercise of chapter 10: a `var` written inside a sync block, and a callback
 // that has to be pure.
 // Run: camel docs/tutorial/examples/10_exercise.cml
-module exercise_effects
 
 func sum_upto(n: int): int sync {
     var total = 0

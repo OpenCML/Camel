@@ -1,10 +1,10 @@
 module tiles_fusion
-import { Tensor, reshape, random, seed, exp, relu, sum, abs } from tensor
+import { reshape, random, seed, exp, relu, sum, abs } from tensor
 import { inspect, run_preferred_resident, download } from tiles
-func pipeline(x: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
+func pipeline(x: f32[..], b: f32[..]): f32[..] {
     return exp(relu((x + b) * 0.5 - 0.25))
 }
-func fork(x: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
+func fork(x: f32[..], b: f32[..]): f32[..] {
     let y = x + b
     return exp(y) + y * 2.0
 }

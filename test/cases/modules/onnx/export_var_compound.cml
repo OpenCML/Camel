@@ -8,7 +8,7 @@
  * conversion is written, not assumed).
  */
 module export_var_compound
-import { Tensor, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
@@ -16,7 +16,7 @@ func forward(x: f32[..]): f32[..] sync {
     var k = 1
     k += 2
     var s = 0.5
-    s += sum(x)
+    s += float(sum(x))
     s *= 2.0
     k = k * 2
     s -= 1.0

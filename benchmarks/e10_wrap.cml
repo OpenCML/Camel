@@ -5,7 +5,7 @@
 module e10_wrap
 
 import { grad } from autodiff
-import { Tensor, relu, mean, reshape } from tensor
+import { relu, mean, reshape } from tensor
 
 func branchy(x: float): float {
     return if x > 0.0 then x * x * x else x * x
@@ -28,7 +28,7 @@ func loss_s(): float {
     let b2 = reshape([0.2], [1])
     let x = reshape([1.0, 2.0], [1, 2])
     let y = fwd(w1, b1, w2, b2, x * t)
-    return mean(y * y)
+    return float(mean(y * y))
 }
 
 with <t: float>

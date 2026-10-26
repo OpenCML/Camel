@@ -229,6 +229,16 @@ struct ResourceSignature {
 /// `withCount` with parameters (with parameters first, ordinary ones after them).
 ResourceSignature signatureOf(const ResourceSpec &spec, size_t withCount);
 
+/// Whether a call that touches `source` may stand where `target` is promised: one signature
+/// covers another when it allows no less, so the caller is told at least what it gets.
+///
+/// This is the whole of the resource half of function assignability (design effects plan 2.2,
+/// design principles 3.3), and it is what "the resources the argument infers are within the
+/// resources the parameter asks for" means at a call. A `Generic` target promises nothing and
+/// covers anything; a `Generic` source cannot be proved to fit a `Concrete` target, so it does
+/// not cover it; a `pure` target covers only a source that touches nothing.
+bool covers(const ResourceSignature &target, const ResourceSignature &source);
+
 /// The ambient resources the language gives every program (design principles 3.3): `stdout`,
 /// `stderr`, `stdin`, `clock`, `env` and `fs`. They need no declaration and every module sees
 /// them; a module may still write `resource fs` to say it uses it, and a group may name them.
