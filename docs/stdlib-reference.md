@@ -155,15 +155,21 @@ fold, merge or drop it.
 
 Numeric types are never converted implicitly; these functions do it. There is one conversion
 per target type, named by the type: `int`, `i32`, `float`, `f32`, `bf16`, `f16`, `c64`, `c128`
-(and `i64`, `f64`, the spellings of `int` and `float`). Each is one generic declaration over the
-source type. Applied to an array, a conversion converts every element (one rule with arithmetic:
+(and `i64`, `f64`, the spellings of `int` and `float`). Each is one declaration per source type,
+the overloads of one name written under one comment. Applied to an array, a conversion converts every element (one rule with arithmetic:
 `f32(xs)` is one node, and `T(xs)` does it for the type a generic function is given); that entry
 is declared below, with the core's conversions: it needs no import. Converting a float to an integer drops the fraction.
 
 #### `int`
 
 ```camel
-int: (x: S) => int when is_real::<S>() || is_string::<S>()
+int: (x: i32) => int
+int: (x: int) => int
+int: (x: f32) => int
+int: (x: float) => int
+int: (x: string) => int
+int: (x: bf16) => int
+int: (x: f16) => int
 ```
 
 x as a 64-bit integer.
@@ -174,7 +180,13 @@ x as a 64-bit integer.
 #### `i64`
 
 ```camel
-i64: (x: S) => int when is_real::<S>() || is_string::<S>()
+i64: (x: i32) => int
+i64: (x: int) => int
+i64: (x: f32) => int
+i64: (x: float) => int
+i64: (x: string) => int
+i64: (x: bf16) => int
+i64: (x: f16) => int
 ```
 
 The same as int.
@@ -185,7 +197,13 @@ The same as int.
 #### `i32`
 
 ```camel
-i32: (x: S) => i32 when is_real::<S>() || is_string::<S>()
+i32: (x: i32) => i32
+i32: (x: int) => i32
+i32: (x: f32) => i32
+i32: (x: float) => i32
+i32: (x: string) => i32
+i32: (x: bf16) => i32
+i32: (x: f16) => i32
 ```
 
 x as a 32-bit integer.
@@ -196,7 +214,13 @@ x as a 32-bit integer.
 #### `float`
 
 ```camel
-float: (x: S) => float when is_real::<S>() || is_string::<S>()
+float: (x: i32) => float
+float: (x: int) => float
+float: (x: f32) => float
+float: (x: float) => float
+float: (x: string) => float
+float: (x: bf16) => float
+float: (x: f16) => float
 ```
 
 x as a 64-bit float.
@@ -207,7 +231,13 @@ x as a 64-bit float.
 #### `f64`
 
 ```camel
-f64: (x: S) => float when is_real::<S>() || is_string::<S>()
+f64: (x: i32) => float
+f64: (x: int) => float
+f64: (x: f32) => float
+f64: (x: float) => float
+f64: (x: string) => float
+f64: (x: bf16) => float
+f64: (x: f16) => float
 ```
 
 The same as float.
@@ -218,7 +248,13 @@ The same as float.
 #### `f32`
 
 ```camel
-f32: (x: S) => f32 when is_real::<S>() || is_string::<S>()
+f32: (x: i32) => f32
+f32: (x: int) => f32
+f32: (x: f32) => f32
+f32: (x: float) => f32
+f32: (x: string) => f32
+f32: (x: bf16) => f32
+f32: (x: f16) => f32
 ```
 
 x as a 32-bit float.
@@ -229,7 +265,12 @@ x as a 32-bit float.
 #### `bf16`
 
 ```camel
-bf16: (x: S) => bf16 when is_real::<S>() || is_string::<S>()
+bf16: (x: i32) => bf16
+bf16: (x: int) => bf16
+bf16: (x: f32) => bf16
+bf16: (x: float) => bf16
+bf16: (x: bf16) => bf16
+bf16: (x: string) => bf16
 ```
 
 x as a bf16: the nearest bf16 of x, rounding to nearest with ties to even, once. A bf16 is a
@@ -242,7 +283,12 @@ and writing the conversion asks for that precision, so no numeric permission is 
 #### `f16`
 
 ```camel
-f16: (x: S) => f16 when is_real::<S>() || is_string::<S>()
+f16: (x: i32) => f16
+f16: (x: int) => f16
+f16: (x: f32) => f16
+f16: (x: float) => f16
+f16: (x: f16) => f16
+f16: (x: string) => f16
 ```
 
 x as an f16: the nearest f16 of x, rounding to nearest with ties to even, once. The same
@@ -342,7 +388,12 @@ The conversion `f16` applied to every element of a numeric array: the result has
 #### `c64`
 
 ```camel
-c64: (x: S) => c64 when is_real::<S>() || is_complex::<S>()
+c64: (x: i32) => c64
+c64: (x: int) => c64
+c64: (x: f32) => c64
+c64: (x: float) => c64
+c64: (x: c64) => c64
+c64: (x: c128) => c64
 ```
 
 x as a 64-bit complex number: the real part is x and the imaginary part is zero. A c128
@@ -353,7 +404,12 @@ keeps both parts as they are.
 #### `c128`
 
 ```camel
-c128: (x: S) => c128 when is_real::<S>() || is_complex::<S>()
+c128: (x: i32) => c128
+c128: (x: int) => c128
+c128: (x: f32) => c128
+c128: (x: float) => c128
+c128: (x: c64) => c128
+c128: (x: c128) => c128
 ```
 
 x as a 128-bit complex number: the real part is x and the imaginary part is zero.
