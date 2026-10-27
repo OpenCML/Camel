@@ -937,5 +937,12 @@ bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byS
 /// recompute such a node.
 bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node, bool byShape = false);
 
+/// Whether a node is a pure computation that no statement waits for and that waits for none: an
+/// operator that may be recomputed, or a conversion, with no control, order or sync edge on either
+/// side. Nothing anchors it, so when nothing reads its value it is not run and not kept, even if it
+/// may fault (design principles 3.1: a node runs iff the run uses it); a node on a chain is a
+/// statement and stays.
+bool isUnanchoredPure(const GraphDraft &draft, gc_node_ref_t node);
+
 } // namespace camel::runtime
 

@@ -80,17 +80,7 @@ bool isDeadWhenUnread(const GraphDraft &draft, gc_node_ref_t id) {
     if (isValueOnly(draft, id)) {
         return true;
     }
-    const auto *h = draft.header(id);
-    if (!h || (h->kind != GCNodeKind::Oper && h->kind != GCNodeKind::Cast)) {
-        return false;
-    }
-    if (h->kind == GCNodeKind::Oper && !isPureOper(draft, id)) {
-        return false;
-    }
-    const auto anyOf = [&](auto... groups) { return (!groups.empty() || ...); };
-    return !anyOf(
-        draft.ctrlInputsOf(id), draft.orderInputsOf(id), draft.syncInputsOf(id),
-        draft.ctrlUsersOf(id), draft.orderUsersOf(id), draft.syncUsersOf(id));
+    return camel::runtime::isUnanchoredPure(draft, id);
 }
 
 bool isReplaceable(const GraphDraft &draft, gc_node_ref_t id) {

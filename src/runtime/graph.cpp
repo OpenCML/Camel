@@ -1175,6 +1175,27 @@ bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byS
     }
 }
 
+bool isUnanchoredPure(const GraphDraft &draft, gc_node_ref_t node) {
+    const DraftNodeHeader *header = draft.header(node);
+    if (header == nullptr || !draft.alive(node)) {
+        return false;
+    }
+    if (header->kind == GCNodeKind::Oper) {
+        const std::span<const std::byte> payload = draft.payloadOf(node);
+        if (payload.size() < sizeof(GCOperBody) ||
+            !camel::core::OperatorTable::instance().mayBeRecomputed(
+                reinterpret_cast<const GCOperBody *>(payload.data())->oper)) {
+            return false;
+        }
+    } else if (header->kind != GCNodeKind::Cast) {
+        return false;
+    }
+    const auto anyOf = [&](auto... groups) { return (!groups.empty() || ...); };
+    return !anyOf(
+        draft.ctrlInputsOf(node), draft.orderInputsOf(node), draft.syncInputsOf(node),
+        draft.ctrlUsersOf(node), draft.orderUsersOf(node), draft.syncUsersOf(node));
+}
+
 bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node, bool byShape) {
     const DraftNodeHeader *header = draft.header(node);
     if (header == nullptr) {
