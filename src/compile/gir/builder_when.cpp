@@ -1680,8 +1680,19 @@ Builder::FoldedCall Builder::evaluateCallAtBuildTime(
     }
 
     FoldTarget target;
-    const auto templateFound = templateScope_->get(request.name);
-    const bool generic       = templateFound.has_value() && static_cast<bool>(templateFound.value());
+    auto templateFound = templateScope_->get(request.name);
+    // A generic predicate a body calls with its type arguments (`is_integer::<T>()`) is found the
+    // way a condition finds one: among the module's own names, then what its imports bring by name
+    // or through a prefix or an alias, then the prelude. The scope above holds only the first.
+    if (!(templateFound.has_value() && static_cast<bool>(templateFound.value())) &&
+        request.typeApplied && request.callee != nullptr && request.callee->size() > 0) {
+        WhenResult unresolved;
+        if (const auto named = whenPredicateNamed(request.name, request.callee->at(0), unresolved);
+            named.has_value() && static_cast<bool>(*named)) {
+            templateFound = *named;
+        }
+    }
+    const bool generic = templateFound.has_value() && static_cast<bool>(templateFound.value());
     if (generic ? !foldTargetOfGeneric(templateFound.value(), request, target, result)
                 : !foldTargetOfFunction(request, target, result)) {
         return result;

@@ -407,3 +407,14 @@ expect_diagnostic_name = "SemanticDiag::WhenTypeQueryNotConcrete"
 expect_output_contains = ["still has a type variable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "when.predicate_calls_library_predicates"
+desc = "A predicate written in Camel that asks the library's predicates by name (`is_real` over `is_integer` and `is_float`) conditions a generic function: it is applicable at `int` and `float`."
+kind = "behavior"
+case = "../../../cases/compile/when/predicate_calls_library_predicates.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "42 2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

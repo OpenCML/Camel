@@ -23,7 +23,7 @@
  * answers a `Run`.
  *
  * One law is written once. The head declares the type parameter and the condition names the
- * family (`rule mul_one::<T>(x: T) when is_integer::<T>() || is_float::<T>()`), so there is one instance per element
+ * family (`rule mul_one::<T>(x: T) when is_real::<T>()`), so there is one instance per element
  * type and the engine fires the instance whose type the matched node has. A law that is the same
  * for the integers and the floats (`x * 1`, `x / 1`, `x - 0`, `-(-x)`, `x + x`) is one rule for
  * both; a law that differs (`x + 0` for integers, `x + -0.0` for floats), or needs a permission
@@ -46,6 +46,11 @@ import { is_float, is_integer, is_function } from types
 
 // ---- the families ----
 
+// A type whose arithmetic the laws below are about: an integer (wrapping) or a float.
+func is_real::<T>(): bool {
+    return is_integer::<T>() || is_float::<T>()
+}
+
 // The largest integer c for which doubling a rounded product commutes with rounding and 2c is
 // exactly representable: 2^(p - 1) for a significand of p bits.
 func exact_limit::<T>(): float {
@@ -61,37 +66,37 @@ func exact_limit::<T>(): float {
 // ---- Real numbers: the laws that are exact for the integers and for the floats ----
 
 /// `x * 1` is `x`.
-export rule mul_one::<T>(x: T) when is_integer::<T>() || is_float::<T>() { x * 1 => x }
+export rule mul_one::<T>(x: T) when is_real::<T>() { x * 1 => x }
 
 /// `x / 1` is `x`.
-export rule div_one::<T>(x: T) when is_integer::<T>() || is_float::<T>() { x / 1 => x }
+export rule div_one::<T>(x: T) when is_real::<T>() { x / 1 => x }
 
 /// `x - 0` is `x`.
-export rule sub_zero::<T>(x: T) when is_integer::<T>() || is_float::<T>() { x - 0 => x }
+export rule sub_zero::<T>(x: T) when is_real::<T>() { x - 0 => x }
 
 /// `-(-x)` is `x`.
-export rule neg_neg::<T>(x: T) when is_integer::<T>() || is_float::<T>() { -(-x) => x }
+export rule neg_neg::<T>(x: T) when is_real::<T>() { -(-x) => x }
 
 /// `x + x` is `x * 2`: doubling is exact in IEEE arithmetic for every value, including the
 /// infinities, the NaNs and the subnormals (the exponent grows by one, the significand is
 /// unchanged), and an integer wraps either way.
-export rule add_self::<T>(x: T) when is_integer::<T>() || is_float::<T>() { x + x => x * 2 }
+export rule add_self::<T>(x: T) when is_real::<T>() { x + x => x * 2 }
 
 /// `x * 1` is `x`, elementwise.
-export rule array_mul_one::<T>(x: T[..]) when is_integer::<T>() || is_float::<T>() { x * 1 => x }
+export rule array_mul_one::<T>(x: T[..]) when is_real::<T>() { x * 1 => x }
 
 /// `x / 1` is `x`, elementwise, for floats: the quotient of two integer arrays is a float array,
 /// so for an integer array the right side would be of another type.
 export rule array_div_one::<T>(x: T[..]) when is_float::<T>() { x / 1 => x }
 
 /// `x - 0` is `x`, elementwise.
-export rule array_sub_zero::<T>(x: T[..]) when is_integer::<T>() || is_float::<T>() { x - 0 => x }
+export rule array_sub_zero::<T>(x: T[..]) when is_real::<T>() { x - 0 => x }
 
 /// `-(-x)` is `x`, elementwise.
-export rule array_neg_neg::<T>(x: T[..]) when is_integer::<T>() || is_float::<T>() { -(-x) => x }
+export rule array_neg_neg::<T>(x: T[..]) when is_real::<T>() { -(-x) => x }
 
 /// `x + x` is `x * 2`, elementwise.
-export rule array_add_self::<T>(x: T[..]) when is_integer::<T>() || is_float::<T>() { x + x => x * 2 }
+export rule array_add_self::<T>(x: T[..]) when is_real::<T>() { x + x => x * 2 }
 
 // ---- Integers: wrapping arithmetic, every law is exact ----
 //
