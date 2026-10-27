@@ -12,7 +12,7 @@
  * while it is still in use: 'release a' and 'release b' both appear, after the 'use' lines.
  */
 
-import { py_call, py_exec, py_eval, py_wrap, py_attr, PyObject } from python
+import { exec, import_module, attr, call, py_wrap, PyObject } from python
 import { get_env } from env
 import { exit } from process
 
@@ -21,29 +21,50 @@ func must(r: PyObject!): PyObject {
     return r !! py_wrap('python failed')
 }
 
+// A name of the program's `__main__`, or of `builtins`.
+func main_name(name: string): PyObject sync {
+    return must(import_module('__main__')->attr<name>)
+}
+
+func builtin(name: string): PyObject sync {
+    return must(import_module('builtins')->attr<name>)
+}
+
+func say(text: string): void sync {
+    let print = builtin('print')
+    let _ = [py_wrap(text)]->call<print>
+}
+
+func touch(resource: PyObject): void sync {
+    let method = must(resource->attr<'touch'>)
+    let none: PyObject[] = []
+    let _ = none->call<method>
+}
+
 func open_resource(name: string): PyObject sync {
-    return must(py_call('Resource', py_wrap(name)))
+    let resource = main_name('Resource')
+    return must([py_wrap(name)]->call<resource>)
 }
 
 func hold_and_fault(d: int): int sync {
     let b = open_resource('b')
-    let _ = py_call('print', py_wrap('use b'))
+    say('use b')
     let q = 100 / d
-    let _ = py_call(must(py_attr(b, 'touch')))
+    touch(b)
     return q
 }
 
 func main(): int sync {
-    let _ = py_exec('class Resource:\n    def __init__(self, name):\n        self.name = name\n        print("acquire", name, flush=True)\n    def touch(self):\n        print("touch", self.name, flush=True)\n    def __del__(self):\n        print("release", self.name, flush=True)\n')
+    let _ = exec('class Resource:\n    def __init__(self, name):\n        self.name = name\n        print("acquire", name, flush=True)\n    def touch(self):\n        print("touch", self.name, flush=True)\n    def __del__(self):\n        print("release", self.name, flush=True)\n')
     let end = get_env('END') ?? ''
     let a = open_resource('a')
-    let _ = py_call('print', py_wrap('use a'))
+    say('use a')
     if end == 'isolated' then sync {
         println(attempt(hold_and_fault)(0) !! -1)
     } else sync {
         println(attempt(hold_and_fault)(4) !! -1)
     }
-    let _ = py_call(must(py_attr(a, 'touch')))
+    touch(a)
     let z = if end == 'fault' then 0 else 1
     println(1 / z)
     if end == 'exit' then sync { exit(5) }

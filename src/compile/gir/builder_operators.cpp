@@ -3861,7 +3861,7 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
     // A function value has no name of its own; its type stands for it in diagnostics.
     const std::string calleeLabel = targetName.empty() ? targetFuncType->toString() : targetName;
 
-    // `tee(s, n)` reads one stream from two places: the two streams it gives share one buffer,
+    // `s->tee<n>` reads one stream from two places: the two streams it gives share one buffer,
     // which holds the elements one side has read and the other has not (design principles 5.4).
     // `n` says how wide that buffer is expected to be -- a hint the executor may exceed by growing
     // the buffer -- but no buffer holds fewer than one element, the one being handed over, so a
@@ -3876,7 +3876,7 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
         return generic == std::string::npos ? name : name.substr(0, generic);
     };
     if (targetGraph != nullptr && baseGraphName(targetGraph->name()) == "stream::tee" &&
-        normInputs.size() == 2 && targetFuncType->normTypesCount() == 2 &&
+        normInputs.size() == 1 && withInputs.size() == 1 && targetFuncType->normTypesCount() == 1 &&
         targetFuncType->normTypeAt(0) != nullptr &&
         targetFuncType->normTypeAt(0)->code() == TypeCode::Stream) {
         const auto widthBelowOne = [](const data_ptr_t &data) {
@@ -3886,15 +3886,15 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
             const auto integer = std::dynamic_pointer_cast<IntData>(data);
             return integer != nullptr && integer->data() < 1;
         };
-        if (widthBelowOne(constantOfNode(normInputs[1].node))) {
+        if (widthBelowOne(constantOfNode(withInputs[0].node))) {
             // The caret is under the width, the argument that says why the call can never be right.
-            const GCT::node_ptr_t &widthExpr = normInputs[1].expr;
+            const GCT::node_ptr_t &widthExpr = withInputs[0].expr;
             const auto where                 = widthExpr != nullptr && widthExpr->origin() != 0
                                                    ? widthExpr->origin()
                                                    : gct->origin();
             diags_->of(SemanticDiag::TeeHintNotPositive)
                 .atOrigin(where)
-                .commit(sourceTextOf(normInputs[1].expr));
+                .commit(sourceTextOf(withInputs[0].expr));
             throw BuildAbortException();
         }
     }

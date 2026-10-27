@@ -19,7 +19,7 @@ func total(s: int..): int {
 }
 
 func main(): int sync {
-    let (left, right) = stream::tee(count(3), 2)
+    let (left, right) = stream::tee<2>(count(3))
     println(total(left))
     println(total(left))
     println(total(right))

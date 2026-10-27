@@ -2,12 +2,22 @@
  * Output printed by Python before exit(6).
  */
 
-import { py_call, py_wrap } from python
+import { import_module, attr, call, eval, py_wrap, PyObject } from python
 import { exit } from process
+
+// A Python call is an error value; these programs expect every call to succeed.
+func must(r: PyObject!): PyObject {
+    return r !! py_wrap('python failed')
+}
+
+func say(text: string): void sync {
+    let print = must(import_module('builtins')->attr<'print'>)
+    let _ = [py_wrap(text)]->call<print>
+}
 
 func main(): int sync {
     println('camel 1')
-    let _ = py_call('print', py_wrap('python 1'))
+    say('python 1')
     exit(6)
     println('not reached')
     return 0

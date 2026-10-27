@@ -450,7 +450,7 @@ export func is_subset(s: Set<T>, other: Set<T>): bool
 /// tells one tee from another and whose type the operator takes, and whose elements it does not.
 /// A program does not write this: `tee` calls it once per element it pulls, and `std::profile`
 /// prints what it recorded (`STREAM_TEE`).
-/// @example tee_note(8, 64, 2, 2, s)    // the tee written `tee(s, 8)` reports itself this way
+/// @example tee_note(8, 64, 2, 2, s)    // the tee written `s->tee<8>` reports itself this way
 /// @example-fragment the last operand is the stream a tee reads, and no example program has one
 #op(':stream/tee_note')
 export func tee_note(hint: int, cap: int, elements: int, peak: int, s: T..): void

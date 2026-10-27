@@ -1577,7 +1577,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "StreamConsumedTwice",
                 "'{0}' is consumed twice: a stream is read once on each execution path.",
-                "A stream is read one element at a time and is done when it ends, so on each execution path its value has one consumer (design principles 5.4). The second consumer is here and the first is here. To read one stream from two places, write `tee(s, n)`: it gives two streams, each read once, and both see the same elements.",
+                "A stream is read one element at a time and is done when it ends, so on each execution path its value has one consumer (design principles 5.4). The second consumer is here and the first is here. To read one stream from two places, write `s->tee<n>`: it gives two streams, each read once, and both see the same elements.",
             },
         },
         {
@@ -1593,7 +1593,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "TeeHintNotPositive",
                 "The `tee` width '{0}' is below 1.",
-                "`tee(s, n)` reads `s` once and gives two streams over the same elements, each read once (design principles 5.4). A side that runs ahead of the other buffers the elements the other has not read yet, and `n` says how wide that buffer is expected to be: it is a hint, so the executor grows the buffer rather than make a side wait, and a hint wider than the implementation's cap is clamped to it. What no buffer can be is narrower than the one element being handed over, so write `n` as 1 or more, or leave it out for the default of 8.",
+                "`s->tee<n>` reads `s` once and gives two streams over the same elements, each read once (design principles 5.4). A side that runs ahead of the other buffers the elements the other has not read yet, and `n` says how wide that buffer is expected to be: it is a hint, so the executor grows the buffer rather than make a side wait, and a hint wider than the implementation's cap is clamped to it. What no buffer can be is narrower than the one element being handed over, so write `n` as 1 or more, or leave it out for the default of 8.",
             },
         },
         {
