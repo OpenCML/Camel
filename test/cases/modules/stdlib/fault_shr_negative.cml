@@ -4,7 +4,7 @@ import { shr } from math
 
 func main(): int sync {
     println('before')
-    println(shr(1, -1))
+    println(1->shr<-1>)
     println('not reached')
     return 0
 }

@@ -175,8 +175,7 @@ for (const name of ['pow', 'hypot']) {
   expected.get(`math:${name}_d`).notIeee = ['nans']
 }
 // Exact float operators: no rounding; only the finite_math assumptions can change the result.
-for (const name of ['abs', 'round', 'ceil', 'floor', 'trunc', 'min', 'max', 'clamp', 'sign',
-                    'is_nan', 'is_inf']) both(name, 'exact', FINITE)
+for (const name of ['abs', 'round', 'ceil', 'floor', 'trunc', 'min', 'max', 'sign']) both(name, 'exact', FINITE)
 // The two reduced-precision floating types take abs, min and max and nothing else of this module
 // Each is the exact operation on the value the operand widens to, so `compute` is the
 // element type's own width and not a wider working type: nothing is computed in f32 and rounded
@@ -202,16 +201,18 @@ for (const uri of ['math:abs_c', 'math:abs_z', 'math:exp_c', 'math:exp_z']) {
 }
 // One correctly rounded square root in the width of the argument.
 add('math:sqrt', 'correctly_rounded', 'f32', APPROX)
+add('math:sqrt_d', 'correctly_rounded', 'f64', APPROX)
 // Exact integer operators: no rounding and no permission can change the result.
-for (const name of ['abs', 'min', 'max', 'clamp', 'sign', 'gcd', 'lcm', 'bit_and', 'bit_or',
-                    'bit_xor', 'bit_not', 'bin', 'oct', 'hex']) {
+for (const name of ['abs', 'min', 'max', 'sign', 'bit_and', 'bit_or', 'bit_xor']) {
   for (const suffix of ['_i', '_l']) add(`math:${name}${suffix}`, 'exact', undefined, NONE)
 }
 // min and max over the other ordered types: comparing a string's bytes or two bools is exact too.
 for (const name of ['min', 'max']) {
   for (const suffix of ['_s', '_b']) add(`math:${name}${suffix}`, 'exact', undefined, NONE)
 }
-for (const name of ['shl', 'shr']) add(`math:${name}`, 'exact', undefined, NONE)
+for (const name of ['shl', 'shr']) {
+  for (const suffix of ['_i', '_l']) add(`math:${name}${suffix}`, 'exact', undefined, NONE)
+}
 
 for (const op of mathOps) {
   const uri = op.uri

@@ -9,17 +9,17 @@
 module check_accuracy
 
 import { check } from rewrite
-import { log, log1p } from math
+import { log as scalar_log, log1p } from math
 import { log, log_softmax, softmax } from tensor
 
 #requires(refine_accuracy)
 rule accurate_log1p(x: float) {
-    log(1.0 + x) => log1p(x)
+    scalar_log(1.0 + x) => log1p(x)
 }
 
 #requires(refine_accuracy)
 rule worse_log1p(x: float) {
-    log1p(x) => log(1.0 + x)
+    log1p(x) => scalar_log(1.0 + x)
 }
 
 #requires(refine_accuracy)

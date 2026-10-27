@@ -9,7 +9,7 @@ import { sqrt, abs, round, ceil, floor, exp } from math
 func main(): int sync {
     println("=== Math Module Basic Tests ===")
 
-    println("\n[1] sqrt(4) =", sqrt(4))
+    println("\n[1] sqrt(4.0) =", sqrt(4.0))
     println("[2] abs(-3) =", abs(-3))
     println("[3] round(3.7) =", round(3.7))
     println("[4] ceil(3.2) =", ceil(3.2))
