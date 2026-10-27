@@ -388,3 +388,12 @@ H233（`graph`、`rewrite`、`rules`、`opt` 改成以函数为中心，`Program
   - 声明用 `#impl` 标出原生内核，函数体写语义最自然的写法 `sort(concat(xs, ys))`（负责人定：`#impl` 就是原生加速的显式标记，函数体只要求语义相同，不要求同一算法；见原则里 `#impl` 那一条）。文档注释写明执行走内核、复杂度 O(n+m)。差分测试照常保证两者结果一致，包括 NaN 与 ±0 的次序。
 - 并行用例（`merge_sort`、`merge_sort_small`、`concurrent_alloc`）和 `benchmarks/parallel/cases/merge_sort.cml` 改回调用它，删掉各自手写的 Camel 归并；`perf/para` 的基线不再需要因此重录。
 - 由决策者这边做，下次开工的第一批里。
+
+## 决策者这边恢复开工（2026-10-27）
+
+以下几项由决策者这边做，你们不用排：
+- 恢复原生 `merge_sorted`；
+- 快速层剩下的 `declaration_evaluator`（`tensor:divide` 的声明）、`registry.*`、`docs/cli.md:234`、`reduce_layout.count`；
+- `ckpt` 接入；
+- 前奏改由声明决定匹配（六族）；
+- 之后是张量翻转与 `tensor`/`nn`/`optim`。
