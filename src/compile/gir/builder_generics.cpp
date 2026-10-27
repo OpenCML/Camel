@@ -1228,13 +1228,18 @@ generic_template_ptr_t Builder::chooseGenericOverload(
         const auto conditionOf = [](const generic_template_ptr_t &tmpl) {
             return GCT::Tree::of(tmpl->func)->whenOf(tmpl->func);
         };
-        if (std::all_of(fits.begin(), fits.end(), [&](const auto &t) {
+        // An overload that writes no condition applies wherever it fits.
+        if (std::any_of(fits.begin(), fits.end(), [&](const auto &t) {
                 return conditionOf(t) != nullptr;
             })) {
             std::vector<generic_template_ptr_t> holding;
             std::vector<std::string> unmet;
             for (const auto &candidate : fits) {
                 const auto *when = conditionOf(candidate);
+                if (when == nullptr) {
+                    holding.push_back(candidate);
+                    continue;
+                }
                 std::unordered_map<std::string, data_ptr_t> withValues;
                 const size_t withCount = candidate->funcType->withTypesCount();
                 for (size_t i = 0; i < withCount && i < withInputs.size(); ++i) {
@@ -1268,9 +1273,10 @@ generic_template_ptr_t Builder::chooseGenericOverload(
             if (holding.size() > 1) {
                 std::vector<std::string> also;
                 for (const auto &candidate : holding) {
+                    const auto *when = conditionOf(candidate);
                     also.push_back(
-                        candidate->name + ": " + candidate->funcType->toString() + " — when " +
-                        conditionOf(candidate)->text);
+                        candidate->name + ": " + candidate->funcType->toString() +
+                        (when != nullptr ? " — when " + when->text : std::string()));
                 }
                 rejectAmbiguousCall(holding.front()->name, argTypes, also, call);
             }

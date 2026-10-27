@@ -55,14 +55,14 @@ timeout_ms = 10000
 
 [[tests]]
 name = "any_typing.array_literal"
-desc = "A computed element whose type is not the one the literal elements fixed is an element type mismatch, reported at the element (defect D2: `[wrap_s('ab'), 5]` was an `int[]` whose first element was the string's address; the same held for a `string` element). An element that is a parameter is read through the parameter's port, and the port carries the position the parameter is written at, so that position is what the diagnostic names."
+desc = "A computed element whose type is not the one the literal elements fixed is an element type mismatch, reported at the element (defect D2: `[wrap_s('ab'), 5]` was an `int[]` whose first element was the string's address; the same held for a `string` element). The literal is built in the declaration position by the place it stands in, so the diagnostic names the element the literal computed, not the port the parameter it is read from carries."
 kind = "negative"
 case = "../../../cases/compile/any_typing/array_literal.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ElementTypeMismatch"
-expect_diagnostic_line = 9
-expect_diagnostic_column = 12
+expect_diagnostic_line = 10
+expect_diagnostic_column = 15
 expect_output_contains = ["Cannot insert data of type 'Json' into a(n) array with element type 'int'."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000

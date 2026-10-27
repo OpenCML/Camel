@@ -24,7 +24,7 @@ import { inc } from lib::Tools       // 引入模块里某个命名空间中的�
 
 - `import 模块` 不把模块里的名字直接注入当前模块；通过 `模块::名字` 访问，或再写 `using namespace 模块`（[5.4](#54-命名空间)）。
 - **模块可以互相导入**（`a` 导入 `b`、`b` 又导入 `a`，或更长的环）：两边的函数可以互相调用，值与类型可以互相使用，只要顶层的值之间不成环（[5.6](#56-模块的加载)）。找不到模块是 `SemanticDiag::ModuleNotFound`，定位在那条 `import`；被导入的模块有错误时，导入它的地方是 `SemanticDiag::ImportedModuleHasErrors`。
-- **导入从不解析到导入它的模块自己**（设计原则 10.2）：搜索顺序里遇到导入者自己的文件就跳过它，找下一个位置。所以一个叫 `math.cml` 的程序里 `import math` 得到的是标准库的 `math`；没有下一个位置时是 `SemanticDiag::ModuleNotFound`。模块自己的名字本来就是它自己的（带不带 `m::` 都可以，[5.4](#54-命名空间)），不需要导入。
+- **模块导入自己是允许的，没有效果**（设计原则 10.1）：`module m` 里写 `import m`、`import { f } from m` 不绑定任何名字，它的名字本来就是它自己的（带不带 `m::` 都可以，[5.4](#54-命名空间)）。入口文件按文件名导入自己时也不会再加载一份。
 - **导入时可以改名**：`import { find as str_find } from str` 把模块里的 `find` 以 `str_find` 这个名字引入；改名的与不改名的可以写在同一条里（`import { find as str_find, trim } from str`），单个名字也可以（`import find as str_find from str`）。改名之后原名在本模块不可见。两个模块有同名函数时，给其中一个改名，或只导入一个、另一个用限定名（`import array` 后写 `array::find`）。整个模块的别名写 `import m as n`。
 - 两条按名字的导入带来同名、参数类型也相同的函数，是 `SemanticDiag::ImportNameConflict`，定位在后一条 `import`，并指出前一条；不会悄悄取其中一个。同名而参数类型不同的函数合成一组重载，按实参类型选择（同一层里的同名函数是一个重载集，[5.4](#54-命名空间)）。
 - **查找顺序**：模块的 `import` 先在模块自己的目录里找；找不到再按模块根找——`-I <目录>` 给出的目录按给出的顺序，然后是环境变量 `CAMEL_PACKAGES` 列出的目录；最后是随 Camel 安装的标准库（设计原则 10.2）。入口程序与库模块同一条规则：入口文件自己的 import 先看与它同目录的文件，而这个目录不是别的模块的搜索根，所以标准库自己的 `import graph` 取的是标准库的 `graph`，不会被入口目录里的同名文件顶替，而入口程序自己的 `import graph` 仍然取入口目录里的那个；一个库无论被谁导入，它的 import 都解析到同一处。同一目录里只有 `.cml` 和 `.cmo` 是模块文件，别的后缀的同名文件不是模块；`xx.cmo` 优先于同名的 `xx.cml`，而它旁边的 `xx.cml` 是它的声明模块。import 写的是模块名，不是文件路径：`import ../lib` 是语法错误，这条规则不提供向上走出模块目录的写法；以点开头的名字按模块名解析，不是从目录向上走——点数是要从导入模块自己的名字里去掉的层数（`a.b` 里的 `..lib` 是 `lib`），点数超过名字的层数时这个名字不成立，导入以 `SemanticDiag::ModuleNotFound` 失败并说明原因，不会去搜索任何目录，也不会被当成路径。
@@ -50,7 +50,7 @@ func main(): int sync {
 | 模块 | 内容 |
 |---|---|
 | `str` | 字符串：按字节的切分、修剪、大小写、替换、查找、截取；按码点的计数、读取、编解码 |
-| `array` | 数组：`sort`、`merge_sort`、`quick_sort`、`insert_sort`、`merge_sorted_arrays`、`argsort`、`reverse`、`take`、`drop`、`unique`、`find`、`sum`、`min`、`max`、`sort_by`、`flat_map` 等（大部分是用 Camel 写的泛型函数，排序的内核是原生算子） |
+| `array` | 数组：`sort`、`argsort`、`reverse`、`take`、`drop`、`chunks`、`unique`、`find`、`find_index`、`sum`、`mean`、`min`、`max`、`argmax`、`argmin`、`sort_by`、`flat_map` 等（大部分是用 Camel 写的泛型函数，原生的只有 `argsort`、形状与布局的原子和排序、求和、最值的内核） |
 | `math` | 常量 `pi`、`e`、`inf`、`nan`（值）；初等函数、取整、`min`/`max`/`clamp`、`gcd`/`lcm`、进制转换、位运算 `bit_and` 等 |
 | `random` | 类型 `Key`；`seed`、`rand`、`randint`、`randn`、`choice`、`sample`、`shuffle`，以及纯的键式随机 `key`、`split`、`permutation` |
 | `time` | `now`、`strftime`、`strptime` |
@@ -163,7 +163,11 @@ func main(): int sync {
 
 导出的值就是公共 `__root__` 上的那个节点：导入方在顶层直接用它，在函数里经捕获端口取得它，不复制、不重新求值。没有被任何东西用到的导出值不求值（它的初始化表达式里有效应也不执行，被导入的模块里这也不给警告）。
 
-- **不能导出 `var`**：`export var count = 0` 是 `SemanticDiag::ExportedVariable`，定位在这个变量。导出读写它的函数（上面的 `counter`）。
+- **模块顶层的 `var` 是本模块的一个资源**（设计原则 3.5）：资源的名字就是这个变量，身份是模块加名字，与 `resource` 声明的资源相同。`export var count = 0` 导出这个资源，导入方读它、给它赋值，用的是同一个变量。
+  - 函数读它记为对这个资源的读，写它（包括 `v[i] = x`）记为写；由编译器推出，也可以写进 `uses`（`func bump(): int uses count sync`）。读写它的函数不是纯函数：`pure` 的函数读它是 `SemanticDiag::UsesPromiseViolated`，它的类型带着 `uses 模块::count`，`pure` 的参数不接受它。
+  - 读写是效应：在同步块里按书写顺序发生；在非同步的函数体里，作为语句写下、值又没人用的写不执行。
+  - 初值与顶层的 `let` 一样按依赖求值，在第一次读之前算好。
+  - 被求导的函数里，梯度需要经过它时被拒绝，与任何 `var` 相同。
 - 两条按名字的导入带来同名的值（或一个是值、一个是函数）是 `SemanticDiag::ImportNameConflict`；值不组成重载。
 
 ## 5.4 命名空间
@@ -193,7 +197,7 @@ func main(): int sync {
 
 - 命名空间不是一种对象：它是名字里的路径。声明在 `namespace A { namespace B { ... } }` 里的 `f` 叫 `A::B::f`；同一个命名空间可以写成几块。
 - **块内不带前缀的名字**：在命名空间里写的名字依次在所在的命名空间、外层的命名空间、模块顶层里找，取第一个找到的；类型也一样（`namespace Models { type Box = ...; func mk(): Box }`）。
-- **命名空间里可以有值**：`namespace Config { export let limit = 10 }`，用 `Config::limit`。它与模块顶层的 `let` 只差名字里的路径。`var` 可以写，不能导出。
+- **命名空间里可以有值**：`namespace Config { export let limit = 10 }`，用 `Config::limit`。它与模块顶层的 `let` 只差名字里的路径。`var` 可以写，也可以导出，是这个模块的资源。
 - **模块可以用自己的名字限定自己的东西**：`module shapes` 里写 `shapes::area` 与写 `area` 相同（文件名作为模块名时也一样）。
 - 命名空间可以与类型同名，于是 `类型::名字` 成为这个类型的构造函数与工具函数的惯用写法（`enum` 的变体就是这样：`Shape::Circle`、`Shape::Empty`）。
 - 在命名空间里导出的名字保留限定名：`namespace Tools { export func inc(...) }` 在别的模块里是 `模块::Tools::inc`，也可以 `import { inc } from 模块::Tools`。

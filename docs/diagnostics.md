@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-293 diagnostics: 273 errors, 20 warnings. 15 carry a machine-applicable edit, 278 say why they carry none.
+292 diagnostics: 272 errors, 20 warnings. 15 carry a machine-applicable edit, 277 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -98,7 +98,6 @@ prints one entry.
 | `0x030000B3` | [SemanticDiag::PartialApplicationRefused](#partialapplicationrefused) | Error | no |
 | `0x030000B4` | [SemanticDiag::ComprehensionSourceRefused](#comprehensionsourcerefused) | Error | no |
 | `0x030000C0` | [SemanticDiag::LogicalOperandNotBool](#logicaloperandnotbool) | Error | no |
-| `0x030000D0` | [SemanticDiag::ExportedVariable](#exportedvariable) | Error | no |
 | `0x030000D1` | [SemanticDiag::ModuleValueCycle](#modulevaluecycle) | Error | no |
 | `0x030000D2` | [SemanticDiag::CaptureAfterRecursiveCall](#captureafterrecursivecall) | Error | no |
 | `0x030000D3` | [SemanticDiag::AmbiguousName](#ambiguousname) | Error | no |
@@ -1651,24 +1650,16 @@ Return type '{0}' does not match the function's declared return type '{1}'.
 Ensure that the value returned from the function matches the type specified in the function signature: {2}. No implicit conversion is applied: convert explicitly, for example float(x) for a number or 'x as T' for a module type.
 ```
 
-**Example** (`test/cases/compile/literals/context_composite_holes_mismatch.cml`, run as `camel -E short test/cases/compile/literals/context_composite_holes_mismatch.cml`)
+**Example** (`test/cases/compile/return_type/string_as_int.cml`, run as `camel test/cases/compile/return_type/string_as_int.cml`)
 
 ```camel
-module literal_context_composite_holes_mismatch
-
-type MA = { n: int, t: (f32, f32) }
-type MB = { n: int, v: f32[2] }
-
-// `n` is a float and the field is an int: the literal does not take MA, and the tuple of
-// literals beside it stays a `(float, float)` rather than becoming an `(f32, f32)`.
-func wrongSibling(n: float): MA { return { n: n, t: (1.0, 2.0) } }
-
-// `v` is a computed `f64[]` where the field is an `f32[2]`: no element is narrowed into it.
-func computedArray(v: f64[]): MB { return { n: 1, v: v } }
-
-func main(): int {
-    println(wrongSibling(1.0).n)
-    println(computedArray([1.0]).n)
+module return_string_as_int
+func f(): int {
+    return 'abc'
+}
+func main(): int sync {
+    println('ran')
+    println(f())
     return 0
 }
 ```
@@ -1693,22 +1684,19 @@ Cannot insert data of type '{1}' into a(n) {0} with element type '{2}'.
 Ensure the data type matches the {0}'s element type, or convert the data to the appropriate type before inserting.
 ```
 
-**Example** (`test/cases/compile/literals/context_composite_holes_positions_mismatch.cml`, run as `camel -E short test/cases/compile/literals/context_composite_holes_positions_mismatch.cml`)
+**Example** (`test/cases/compile/literals/context_struct_field_variable.cml`, run as `camel -E short test/cases/compile/literals/context_struct_field_variable.cml`)
 
 ```camel
-module literal_context_composite_holes_positions_mismatch
+module literal_context_struct_field_variable
 
-func first(xs: f32[]): f32 { return xs[0] }
+type Point = { x: float, y: float }
 
-// the argument position
-func argumentPosition(n: float): f32 { return first([1.0, float(n)]) }
-// the declaration position
-func declarationPosition(n: float): f32 {
-    let xs: f32[] = [1.0, float(n)]
-    return xs[0]
+func main(): int sync {
+    let n: int = 1
+    let p: Point = { x: n, y: 2.0 }
+    println(p)
+    return 0
 }
-// the receiver of `->`
-func receiverPosition(n: float): f32 { return [1.0, float(n)]->first }
 ```
 
 ### CallingIncompleteFunction
@@ -2091,17 +2079,13 @@ None: context: the construct is not built here, so the program has to be restruc
 The grammar accepts this construct, but the compiler does not implement it. Remove it; nothing in the language replaces it yet.
 ```
 
-**Example** (`test/cases/modules/tensor/subscript/index_other_dimension.cml`, run as `camel test/cases/modules/tensor/subscript/index_other_dimension.cml`)
+**Example** (`test/cases/compile/module_imports/d2_value.cml`, run as `camel -E short test/cases/compile/module_imports/d2_value.cml`)
 
 ```camel
-module subscript_index_other_dimension
-import { reshape, shape } from tensor
+import { pi } from mi_values
 
 func main(): int sync {
-    println('reached')
-    let m = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3])
-    let column = m[:, 0]
-    println(shape(column))
+    println(pi)
     return 0
 }
 ```
@@ -3024,37 +3008,6 @@ func main(): int sync {
     let o: bool? = true
     let p = o || false
     println(p)
-    return 0
-}
-```
-
-### ExportedVariable
-
-`0x030000D0` · Error · `SemanticDiag::ExportedVariable`
-
-**Fix**
-
-None: choice: the repair is a decision only the writer can make
-
-**Message**
-
-```text
-The variable '{0}' cannot be exported.
-```
-
-**Help**
-
-```text
-A 'var' of the top level of a module is read and written only by the module's own functions: export the functions that read and write it ('export func bump(): int sync { cnt += 1; return cnt }'). A 'let' can be exported.
-```
-
-**Example** (`test/cases/compile/module_root/export_var.cml`, run as `camel -E short test/cases/compile/module_root/export_var.cml`)
-
-```camel
-// A `var` cannot be exported (design principles 10.1).
-import export_var_lib
-
-func main(): int sync {
     return 0
 }
 ```

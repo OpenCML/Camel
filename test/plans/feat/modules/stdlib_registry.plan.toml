@@ -40,18 +40,14 @@ const notPure = ['time:now', 'rand:rand', 'rand:seed', 'rand:shuffle', 'rand:cho
 for (const uri of notPure) {
   assert(purity[uri] === 'effectful', `${uri} is declared ${purity[uri]}, expected effectful`)
 }
-const pure = ['str:to_upper', 'str:codepoints', 'time:strftime', 'time:strptime', 'math:sin_d', 'math:shl', 'statistics:median',
+const pure = ['str:to_upper', 'str:codepoints', 'time:strftime', 'time:strptime', 'math:sin_d', 'math:shl_l', 'statistics:median',
   're:find', 'json:encode', 'json:decode', 'this:zen', ':op/add_l', ':op/idx_str', ':str/format',
   // They return a new array and leave their argument unchanged (design principles 11.3), one
   // operator per element type: the name carries the element type it takes.
   ':struct/append_arr', 'array:sort_i', 'array:sort_l', 'array:sort_f', 'array:sort_d',
-  'array:quick_sort_i', 'array:quick_sort_l', 'array:quick_sort_f', 'array:quick_sort_d',
-  'array:insert_sort_i', 'array:insert_sort_l', 'array:insert_sort_f', 'array:insert_sort_d',
-  'array:merge_sort_i', 'array:merge_sort_l', 'array:merge_sort_f', 'array:merge_sort_d',
   // The native primitives of `array`: pure too, and every one of them returns a new array.
-  'array:merge_sorted_arrays_i', 'array:merge_sorted_arrays_l', 'array:merge_sorted_arrays_f',
-  'array:merge_sorted_arrays_d', 'array:argsort_i', 'array:argsort_l', 'array:argsort_f',
-  'array:argsort_d', 'array:argsort_b', 'array:argsort_s', 'array:flatten', 'array:unique']
+  'array:argsort_i', 'array:argsort_l', 'array:argsort_f', 'array:argsort_d', 'array:argsort_bf',
+  'array:argsort_f6', 'array:argsort_b', 'array:argsort_s', 'array:elements']
 for (const uri of pure) {
   assert(purity[uri] === 'pure', `${uri} is declared ${purity[uri]}, expected pure`)
 }

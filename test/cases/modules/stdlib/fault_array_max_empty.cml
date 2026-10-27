@@ -1,0 +1,11 @@
+module fault_array_max_empty
+
+import { max } from array
+
+func main(): int sync {
+    let xs: int[] = []
+    println('before')
+    println(max(xs))
+    println('not reached')
+    return 0
+}

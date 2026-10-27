@@ -733,6 +733,11 @@ class Builder {
         /// with a defaulted parameter between them): it has no node, and the declaration the
         /// call turns out to mean gives it its default (completeWithFor).
         bool left = false;
+        /// The value of a variable argument, read where the argument is written: an argument
+        /// after it may write the variable (`f(c, g(c))`), and the read is a use of the variable
+        /// that comes before that write (design principles 3.3). Unused when the parameter takes
+        /// the variable itself, and the read nobody uses is dropped with the graph's other dead reads.
+        node_handle_t early = nullptr;
     };
 
     using node_modifier_map_t = std::unordered_map<draft_node_ref_t, draft_node_ref_t>;
@@ -760,6 +765,15 @@ class Builder {
     // variable is named by it in diagnostics).
     std::unordered_map<node_handle_t, node_handle_t> captureOriginOf_;
     std::unordered_map<node_handle_t, std::string> originNames_;
+    // The cell of each `var` at the top level of a module, and the resource it is (the module and
+    // the name, `counter::cnt`): a body that reads or writes the cell through a capture touches
+    // that resource (builder_resources.cpp).
+    std::unordered_map<node_handle_t, std::string> moduleVariableResources_;
+    // The last call through a function value written in a sync block: it may write any variable the
+    // value captured, so a read written after it is ordered after it (readVariableThrough).
+    node_handle_t lastIndirectCall_ = nullptr;
+    std::optional<std::string>
+    moduleVariableOf(const runtime::GraphDraft &draft, draft_node_ref_t port) const;
     // The value the port of a machine's region stands for: a round takes the sequence it iterates
     // and the states it starts from out of its ports, so the port is that value inside the round,
     // exactly as a capture port is what it captured (design principles 3.7, rule C1). The machine
@@ -2474,7 +2488,11 @@ class Builder {
         node_handle_t lhs, node_handle_t rhs, const GCT::node_ptr_t &gct);
     node_handle_t visitWithNode(const GCT::node_ptr_t &gct);
     node_handle_t visitTypeApplication(const GCT::node_ptr_t &gct);
-    FunctionType *signatureForArgumentContext(node_handle_t target) const;
+    /// The signature the arguments of a call take their expected types from. `withWritten` is the
+    /// number of `with` arguments the call writes: an overload with fewer `with` parameters
+    /// cannot be the one meant, so it does not keep the others from agreeing.
+    FunctionType *
+    signatureForArgumentContext(node_handle_t target, size_t withWritten = 0) const;
     node_handle_t visitAccsNode(const GCT::node_ptr_t &gct);
     node_handle_t visitBrchNode(const GCT::node_ptr_t &gct);
     /// `match type`: selects a case from the shape of the subject type and builds only that
@@ -3068,17 +3086,17 @@ class Builder {
     /// types of the nodes they stand for, in the literal's reference order), and the elements it
     /// did write take the types `position` states for them — a tuple, array or struct field the
     /// position does not reach otherwise (design principles 5.1). A computed element takes no
-    /// type from the position: it is checked against the type the position gives it, and, where
-    /// the literal wrote an element of its own (one whose elements are all computed has no
-    /// element type of its own and does not fit the position at all), an array element or a
-    /// tuple element that is not of that type is reported at the element
-    /// (`ElementTypeMismatch`) — the argument position, the declaration position and the
-    /// receiver of `->` then name the element the literal computed instead of ending in a call
-    /// without a matching function. nullptr when the position does not fit the literal in any
-    /// other way: another kind or shape, or a struct field the literal computed that is not of
-    /// the type the position gives that field — the literal then keeps the type its own elements
-    /// give it, and the place it was written in reports the mismatch. The converted literal is a
-    /// value of `position` itself, a named struct type included (design principles 5.2).
+    /// type from the position: it is checked against the type the position gives it, and, at an
+    /// array element, a tuple element or a struct field alike, one that is not of that type is
+    /// reported at the element itself (`ElementTypeMismatch`) — the argument position, the
+    /// declaration position and the receiver of `->` then name the element the literal computed
+    /// instead of ending in a call without a matching function. A field the literal computed
+    /// takes the same path as an element, and a field of a struct whose fields are all computed
+    /// is judged like any other. nullptr when the position does not fit the literal in any other
+    /// way: another kind or shape, a struct field the position does not name, or a field whose
+    /// type it does not state — the literal then keeps the type its own elements give it, and the
+    /// place it was written in reports the mismatch. The converted literal is a value of
+    /// `position` itself, a named struct type included (design principles 5.2).
     /// `refHoles` is where the computed elements sit in the literal's own type, parallel to
     /// `refNames`; on success `holeSlots` holds where they sit in `position`, which is what the
     /// fill of the value reads. An array and a tuple are positional, so the indexes are the same;

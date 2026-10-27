@@ -1403,9 +1403,25 @@ const std::unordered_map<std::string, std::vector<GCGraph *>> &Engine::implBodie
     }
     implBodiesBuilt_ = true;
     const rt::Program *program = &inlining_.work();
+    // A body that is built on its own kernel (the scalar `exp` at `float` is `T(exp_kernel(x))`,
+    // and the kernel of that instance is the very `math:exp_d` the body calls) has no meaning
+    // beyond the atom: the kernel is the primitive operator there, and keeps its rule. Expanding
+    // such a call would expand the body's own call again.
+    const auto callsItsKernel = [](GCGraph *body, const std::string &uri) {
+        for (rt::gc_cnt_t id = 0; id < body->nodeCount(); ++id) {
+            const rt::GCNode *node = body->node(id);
+            if (node == nullptr || node->kind != rt::GCNodeKind::Oper) {
+                continue;
+            }
+            if (body->nodeBodyAs<rt::GCOperBody>(id)->uri() == uri) {
+                return true;
+            }
+        }
+        return false;
+    };
     for (GCGraph *body : program->implBodies()) {
         const std::string &uri = body->implKernelUri();
-        if (!uri.empty()) {
+        if (!uri.empty() && !callsItsKernel(body, uri)) {
             implBodies_[uri].push_back(body);
         }
     }

@@ -315,7 +315,7 @@ std::string resourceClause(const FunctionType *fn, bool mangle) {
         }
     }
     for (const auto &use : sig.ambient) {
-        add(use.name);
+        add(sem::resourceDisplayName(use.name));
     }
     for (sem::ResourceClass cls : sig.anyOf) {
         add(std::format("any {}", sem::resourceClassName(cls)));

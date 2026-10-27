@@ -5,7 +5,7 @@ tags = ["feat", "linear", "sync", "var"]
 
 [[tests]]
 name = "var_between_statements.default"
-desc = "A var declared and read in a sync body is not a statement of the chain: the println statements around it all run, in written order (one before, after and between reads and writes, three in a row, a nested sync block). Pipeline: default."
+desc = "A var declared and read in a sync body is not a statement of the chain: the println statements around it all run, in written order (one before, after and between reads and writes, three in a row, a nested sync block, a read nothing uses). Pipeline: default."
 kind = "behavior"
 case = "../../../cases/linear/runtime/var_between_statements.cml"
 args = ["${case}"]
@@ -14,14 +14,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 2 | 1 | 2 | 1 | 1 | 2 | 6 | 1 | 2 | 3 | 1 | 2 | 3', `unexpected output: ${out}`)
+assert(out === '1 | 2 | 1 | 2 | 1 | 1 | 2 | 6 | 1 | 2 | 3 | 1 | 2 | 3 | 2', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_between_statements.nvm"
-desc = "A var declared and read in a sync body is not a statement of the chain: the println statements around it all run, in written order (one before, after and between reads and writes, three in a row, a nested sync block). Pipeline: nvm."
+desc = "A var declared and read in a sync body is not a statement of the chain: the println statements around it all run, in written order (one before, after and between reads and writes, three in a row, a nested sync block, a read nothing uses). Pipeline: nvm."
 kind = "behavior"
 case = "../../../cases/linear/runtime/var_between_statements.cml"
 args = ["${case}", "std::nvm"]
@@ -30,14 +30,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 2 | 1 | 2 | 1 | 1 | 2 | 6 | 1 | 2 | 3 | 1 | 2 | 3', `unexpected output: ${out}`)
+assert(out === '1 | 2 | 1 | 2 | 1 | 1 | 2 | 6 | 1 | 2 | 3 | 1 | 2 | 3 | 2', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_between_statements.fvm"
-desc = "A var declared and read in a sync body is not a statement of the chain: the println statements around it all run, in written order (one before, after and between reads and writes, three in a row, a nested sync block). Pipeline: fvm."
+desc = "A var declared and read in a sync body is not a statement of the chain: the println statements around it all run, in written order (one before, after and between reads and writes, three in a row, a nested sync block, a read nothing uses). Pipeline: fvm."
 kind = "behavior"
 case = "../../../cases/linear/runtime/var_between_statements.cml"
 args = ["${case}", "std::fvm"]
@@ -46,14 +46,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 2 | 1 | 2 | 1 | 1 | 2 | 6 | 1 | 2 | 3 | 1 | 2 | 3', `unexpected output: ${out}`)
+assert(out === '1 | 2 | 1 | 2 | 1 | 1 | 2 | 6 | 1 | 2 | 3 | 1 | 2 | 3 | 2', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_between_statements.jit"
-desc = "A var declared and read in a sync body is not a statement of the chain: the println statements around it all run, in written order (one before, after and between reads and writes, three in a row, a nested sync block). Pipeline: jit."
+desc = "A var declared and read in a sync body is not a statement of the chain: the println statements around it all run, in written order (one before, after and between reads and writes, three in a row, a nested sync block, a read nothing uses). Pipeline: jit."
 kind = "behavior"
 case = "../../../cases/linear/runtime/var_between_statements.cml"
 args = ["${case}", "std::jit"]
@@ -62,14 +62,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 2 | 1 | 2 | 1 | 1 | 2 | 6 | 1 | 2 | 3 | 1 | 2 | 3', `unexpected output: ${out}`)
+assert(out === '1 | 2 | 1 | 2 | 1 | 1 | 2 | 6 | 1 | 2 | 3 | 1 | 2 | 3 | 2', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_between_statements.opt"
-desc = "A var declared and read in a sync body is not a statement of the chain: the println statements around it all run, in written order (one before, after and between reads and writes, three in a row, a nested sync block). Pipeline: opt."
+desc = "A var declared and read in a sync body is not a statement of the chain: the println statements around it all run, in written order (one before, after and between reads and writes, three in a row, a nested sync block, a read nothing uses). Pipeline: opt."
 kind = "behavior"
 case = "../../../cases/linear/runtime/var_between_statements.cml"
 args = ["${case}", "std::opt"]
@@ -78,14 +78,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 2 | 1 | 2 | 1 | 1 | 2 | 6 | 1 | 2 | 3 | 1 | 2 | 3', `unexpected output: ${out}`)
+assert(out === '1 | 2 | 1 | 2 | 1 | 1 | 2 | 6 | 1 | 2 | 3 | 1 | 2 | 3 | 2', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_between_statements.opt_jit"
-desc = "A var declared and read in a sync body is not a statement of the chain: the println statements around it all run, in written order (one before, after and between reads and writes, three in a row, a nested sync block). Pipeline: opt_jit."
+desc = "A var declared and read in a sync body is not a statement of the chain: the println statements around it all run, in written order (one before, after and between reads and writes, three in a row, a nested sync block, a read nothing uses). Pipeline: opt_jit."
 kind = "behavior"
 case = "../../../cases/linear/runtime/var_between_statements.cml"
 args = ["${case}", "std::opt", "std::jit"]
@@ -94,7 +94,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 2 | 1 | 2 | 1 | 1 | 2 | 6 | 1 | 2 | 3 | 1 | 2 | 3', `unexpected output: ${out}`)
+assert(out === '1 | 2 | 1 | 2 | 1 | 1 | 2 | 6 | 1 | 2 | 3 | 1 | 2 | 3 | 2', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000

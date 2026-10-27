@@ -1203,8 +1203,40 @@ node_handle_t Builder::inPlaceRebindingOf(const GCT::node_ptr_t &gct) {
     }
     // `op` is an operator of a module (nothing of the program is named so), and one of its
     // overloads declares an in-place form: anything else is an ordinary call.
-    const oper_group_ptr_t group = importedOperatorGroupNamed(opName->name());
-    auto &table                  = camel::core::OperatorTable::instance();
+    oper_group_ptr_t group = importedOperatorGroupNamed(opName->name());
+    if (group == nullptr) {
+        // A generic function whose `#impl` kernel has an in-place form (`sort`): the rule of the
+        // kernel that is the executor for this array is the operator the rewrite is about
+        // (adoptImplKernel asks the same question of an instance).
+        std::vector<generic_template_ptr_t> templates;
+        if (const auto scoped = templateScope_->get(opName->name()); scoped.has_value()) {
+            if (GenericGroup *templated = genericGroupOf(scoped.value()); templated != nullptr) {
+                templates.assign(templated->begin(), templated->end());
+            }
+        } else if (const auto imported = importedEntity(opName->name()); imported.has_value()) {
+            templates = genericTemplatesOfEntity(imported.value());
+        }
+        for (const generic_template_ptr_t &tmpl : templates) {
+            const auto declared = implTemplateKernels_.find(tmpl.get());
+            if (declared == implTemplateKernels_.end()) {
+                continue;
+            }
+            for (const auto &[ruleUri, resolver] : declared->second.group->resolvers()) {
+                if (resolver->resolve({}, {arrayType}).has_value() &&
+                    declaredRuleApplies(resolver, declared->second.name, {}, {arrayType})) {
+                    group = OperatorGroup::create(
+                        declared->second.group->name(),
+                        std::vector<std::pair<std::string, camel::core::type::resolver_ptr_t>>{
+                            {ruleUri, resolver}});
+                    break;
+                }
+            }
+            if (group != nullptr) {
+                break;
+            }
+        }
+    }
+    auto &table = camel::core::OperatorTable::instance();
     if (group == nullptr || std::ranges::none_of(group->resolvers(), [&](const auto &overload) {
             return table.inPlaceForm(overload.first).has_value();
         })) {
@@ -1944,7 +1976,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         return nodeTypeOf(inputNode);
     };
 
-    FunctionType *argumentSignature = signatureForArgumentContext(targetNode);
+    FunctionType *argumentSignature = signatureForArgumentContext(
+        targetNode, gct->at(0)->type() == GCT::NodeKind::WITH ? gct->at(0)->size() - 1 : 0);
     // The type of the position the call stands in, aligned with the callee's result type, solves
     // the type variables that result mentions (design principles 5.1, 5.5; the rule of
     // 2026-10-23 on `expected-type-through-literals-and-calls`). Every variable the result
@@ -2084,6 +2117,21 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             argumentNames != nullptr && i - 1 < argumentNames->size() ? (*argumentNames)[i - 1]
                                                                       : std::nullopt;
         normInputs.push_back({inputNode, argumentExpr, name});
+        const bool takesVariable = isAssignment ||
+                                   (argumentSignature != nullptr &&
+                                    slot < argumentSignature->normTypesCount() &&
+                                    argumentSignature->normIsVarAt(slot));
+        if (synced_ && !takesVariable && inputNode != nullptr && isVariable(inputNode)) {
+            // An argument written after this one that does more than name a value may write the
+            // variable: this one is read first.
+            for (size_t later = i + 1; later < gct->size(); ++later) {
+                const auto kind = gct->at(later)->type();
+                if (kind != GCT::NodeKind::DATA && kind != GCT::NodeKind::DREF) {
+                    normInputs.back().early = readVariable(inputNode);
+                    break;
+                }
+            }
+        }
         if (isAssignment && i == 1) {
             Type *place = valueTypeOf(nodeTypeOf(inputNode));
             if (place != nullptr && place->code() == TypeCode::Function) {
@@ -2789,6 +2837,15 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     kernelStatics);
                 resolved.has_value()) {
                 targetOperator = *resolved;
+                if (inPlaceCalls_.contains(gct)) {
+                    // Written by inPlaceRebindingOf, which checked that this kernel has an
+                    // in-place form: the call works on the array var/take hands it.
+                    const auto form =
+                        camel::core::OperatorTable::instance().inPlaceForm(targetOperator->uri());
+                    ASSERT(form.has_value(), "An in-place rebinding lost its in-place form.");
+                    targetOperator = std::make_shared<OperatorIndex>(
+                        targetOperator->name(), targetOperator->funcType(), *form);
+                }
                 targetNode     = currGraph_->addOperNode(targetOperator, 0);
                 stampPermissions(targetNode);
                 registerNodeOrigin(context_, targetNode, gct->at(0), "gir.link.oper");
@@ -3849,7 +3906,8 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
     // The node to link and, at a `var` position, the variable the callee writes (if any).
     const auto passArgument = [&](const Argument &arg, bool isVar) {
         if (!isVar) {
-            return Passed{valueOf(arg.node), node_handle_t{}, LinkType::Norm};
+            return Passed{
+                arg.early != nullptr ? arg.early : valueOf(arg.node), node_handle_t{}, LinkType::Norm};
         }
         requireMutableArgument(arg, calleeLabel);
         const bool named = isVariable(arg.node);
@@ -3883,7 +3941,10 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
             }
             return Passed{variable, variable, LinkType::Norm};
         }
-        return Passed{valueOf(arg.node), named ? arg.node : node_handle_t{}, LinkType::Norm};
+        return Passed{
+            arg.early != nullptr ? arg.early : valueOf(arg.node),
+            named ? arg.node : node_handle_t{},
+            LinkType::Norm};
     };
 
     // All arguments are read before the call is recorded as a writer: a variable passed both
@@ -3976,6 +4037,22 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
     for (const Passed &arg : passed) {
         if (arg.written != nullptr) {
             recordWrite(arg.written, targetNode);
+        }
+    }
+    if (synced_ && !targetGraph && targetOperator == nullptr) {
+        lastIndirectCall_ = targetNode;
+        // A call through a function value may write any variable the value captured, and which
+        // ones is not known here: every read written before it is ordered before it, as a read is
+        // before the write it precedes (the reads of a variable nothing else touches are folded
+        // away, with these edges).
+        for (const auto &[variable, uses] : pendingUses_) {
+            for (const VariableUse &use : uses) {
+                if (use.isRead && sameGraph(use.node, currGraph_) && linkCheek(use.node, targetNode) &&
+                    nodeTakesAnOrder(use.node) && nodeTakesAnOrder(targetNode) &&
+                    !hasDirectDataDependency(use.node, targetNode)) {
+                    linkNodes(LinkType::Order, use.node, targetNode);
+                }
+            }
         }
     }
     for (const CapturedUse &use : captured) {

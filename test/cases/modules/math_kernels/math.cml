@@ -1,11 +1,11 @@
 /**
  * The kernels of `math` the module of the draft declares (docs/handover/stdlib/math.cml): `sqrt` in
- * f64 and the shifts with their count in angle brackets. This file is named `math`, so it may
- * declare operators of the `math` protocol; it declares each as the module does and runs them.
- * `import math` here is the standard library's, never this file.
+ * f64 and the shifts with their count in angle brackets. This file is named `math`, so it is the
+ * module `math` and may declare its operators and values; it declares each as the module does and
+ * runs them.
  */
+import { timeit } from perf // loads the C++ module `math` (perf imports it); this file is its own `math`
 import { is_same } from types
-import { pi } from math
 
 /// Values the C++ module registers, declared without a right side (design principles 6.4).
 export let inf: float

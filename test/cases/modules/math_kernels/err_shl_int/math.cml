@@ -1,5 +1,5 @@
+import { timeit } from perf
 import { is_same } from types
-import { inf } from math
 
 #op('math:shl_l')
 with <count: int>

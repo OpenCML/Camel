@@ -1,0 +1,11 @@
+module fault_array_mean_empty
+
+import { mean } from array
+
+func main(): int sync {
+    let xs: float[] = []
+    println('before')
+    println(mean(xs))
+    println('not reached')
+    return 0
+}

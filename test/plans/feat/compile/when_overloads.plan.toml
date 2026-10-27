@@ -81,3 +81,25 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::Redeclaration"
 expect_diagnostic_line = 9
+
+[[tests]]
+name = "when_overloads.mixed"
+desc = "Of two overloads that fit `int[][]`, the one with no `when` applies and the other's condition (`T` is not an array) is false; for `int[]` only the conditioned one fits."
+kind = "behavior"
+case = "../../../cases/compile/when_overloads/mixed.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "true false\n[1, 2]\n[1]\n"
+
+[[tests]]
+name = "when_overloads.unselected_conversion"
+desc = "`T(x)` in a case of `match type` that the instance does not select resolves like the one it selects: the instances for `f32`, `float` and `int` all compile and run."
+kind = "behavior"
+case = "../../../cases/compile/when_overloads/unselected_conversion.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "1.5 2.5 0\n"

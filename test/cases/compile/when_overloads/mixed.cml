@@ -1,0 +1,26 @@
+/**
+ * An overload that writes no `when` applies wherever its parameters fit, beside one that does: for
+ * `int[][]` both `fl::<T>(T[][])` and `fl::<T>(T[..])` fit, and the second's condition (`T` is not
+ * an array) is false there, so the first is the call. For `int[]` only the second fits.
+ */
+func is_arr::<T>(): bool {
+    return match type T {
+        case array => true
+        case _ => false
+    }
+}
+
+func fl::<T>(xss: T[][]): T[] {
+    return xss[0]
+}
+
+func fl::<T>(xs: T[..]): T[] when !is_arr::<T>() {
+    return xs[0:1] as T[]
+}
+
+func main(): int sync {
+    println(is_arr::<int[]>(), is_arr::<int>())
+    println(fl([[1, 2], [3]]))
+    println(fl([1, 2, 3]))
+    return 0
+}

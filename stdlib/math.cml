@@ -2,33 +2,42 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Numeric types are not converted implicitly. A function over floats takes `f32` or `float`
- * and returns the type it was given; a function of several numbers takes numbers of one type.
- * Outside its domain a float function gives the IEEE result (NaN or an infinity), not a fault.
- * A constant is a value, written without parentheses: `pi`.
+ * Scalar mathematics. One definition covers every type that has the operation: a function of
+ * floats is written once for `f32`, `float`, `bf16` and `f16` and answers the type it was given;
+ * a function of several numbers takes numbers of one type. Numeric types are not converted
+ * implicitly: `sqrt(4)` is refused, write `sqrt(4.0)` or `sqrt(float(n))`.
+ *
+ * - Outside its domain a float function gives the IEEE result (NaN or an infinity), not a fault.
+ *   Special values (zeros, infinities, NaN) are exact.
+ * - The transcendental functions are computed in f64 and rounded once into the type asked for.
+ *   They promise an error of at most 2 ulp (of the type's own precision, for `float`), not the
+ *   same bits on every device (design principles 7.1). `sqrt`, the rounding functions, `min` and
+ *   `max` are exact: the result is the correctly rounded or the selected operand.
+ * - `min` and `max` are the IEEE 754-2019 `minimum` and `maximum`: a NaN on either side gives
+ *   NaN, and -0 is below +0 (design principles 7.7).
+ * - Over an array the elementwise functions are the `tensor` module's for now (`exp(xs)`); the
+ *   scalar ones here apply to a number, and `xs->map<exp>` is the same function on every element.
+ *   The conversions `f32(xs)`, `float(xs)` are elementwise (core). `sum`, `mean`, `min`, `max` of a
+ *   whole array belong to `array`.
+ * - Only what a program cannot compute from the language is native: the f64 kernels of the
+ *   elementary functions, the sign-exact selection of `min` and `max`, the parts of a complex
+ *   number, and the bit operations of an integer width.
  */
 
-// The declarations of the operators of the C++ module `math` (`modules/math`). This file is the
-// one source of their signatures (design principles 6.4): the C++ side
-// keeps the kernels, the executor, the operator traits, the numeric semantics and the constants.
-// Every operator is declared here and no computed signature is left: `sqrt` and
-// the two shifts, whose result type C++ computes from the argument, are written out per spelling
-// (`i32`/`int` for `sqrt`, both integer types for a shift count), which is the whole accept set
-// of the old resolvers. A constant the C++ module registers is declared with no right side
-// (`export let inf: float`), as a function with no body stands for its operator.
-
-module math
+import { is_complex, is_float, is_integer, is_ordered, is_real, is_same } from types
 
 // ---- constants ----
-// Values the module exports (design principles 10.1), written without parentheses.
 
 /// The ratio of a circle's circumference to its diameter.
 /// @example pi    // 3.14159...
-export let pi: float
+export let pi: float = 3.141592653589793
 
 /// The base of the natural logarithm.
 /// @example log(e)    // 1
-export let e: float
+export let e: float = 2.718281828459045
+
+// Values the C++ module provides: declared without a right side, as a function without a body
+// and a type without a right side are (design principles 6.4; a float division by zero is a fault).
 
 /// Positive infinity; negative infinity is -inf.
 /// @example is_inf(-inf)    // true
@@ -38,436 +47,571 @@ export let inf: float
 /// @example is_nan(nan)    // true
 export let nan: float
 
+// ---- the kernels ----
+// The elementary functions have a native kernel per float width (`f32` and `float`), as the
+// reductions of `array` have one per hot element type (design principles 10.4): a call of the
+// function at one of those types is the kernel's operator, and an instance at another type (`bf16`,
+// `f16`) runs the body, which computes in f64 and rounds once into the type asked for. The body
+// calls the f64 kernel, so it is also the definition the kernels are checked against.
+
+#op('math:sqrt')
+func sqrt_kernel::<T>(x: T): T when is_same::<T, f32>()
+#op('math:sqrt_d')
+func sqrt_kernel::<T>(x: T): T when is_same::<T, float>()
+
+#op('math:exp_f')
+func exp_kernel::<T>(x: T): T when is_same::<T, f32>()
+#op('math:exp_d')
+func exp_kernel::<T>(x: T): T when is_same::<T, float>()
+
+#op('math:expm1_f')
+func expm1_kernel::<T>(x: T): T when is_same::<T, f32>()
+#op('math:expm1_d')
+func expm1_kernel::<T>(x: T): T when is_same::<T, float>()
+
+#op('math:log_f')
+func log_kernel::<T>(x: T): T when is_same::<T, f32>()
+#op('math:log_d')
+func log_kernel::<T>(x: T): T when is_same::<T, float>()
+
+#op('math:log2_f')
+func log2_kernel::<T>(x: T): T when is_same::<T, f32>()
+#op('math:log2_d')
+func log2_kernel::<T>(x: T): T when is_same::<T, float>()
+
+#op('math:log10_f')
+func log10_kernel::<T>(x: T): T when is_same::<T, f32>()
+#op('math:log10_d')
+func log10_kernel::<T>(x: T): T when is_same::<T, float>()
+
+#op('math:log1p_f')
+func log1p_kernel::<T>(x: T): T when is_same::<T, f32>()
+#op('math:log1p_d')
+func log1p_kernel::<T>(x: T): T when is_same::<T, float>()
+
+#op('math:sin_f')
+func sin_kernel::<T>(x: T): T when is_same::<T, f32>()
+#op('math:sin_d')
+func sin_kernel::<T>(x: T): T when is_same::<T, float>()
+
+#op('math:cos_f')
+func cos_kernel::<T>(x: T): T when is_same::<T, f32>()
+#op('math:cos_d')
+func cos_kernel::<T>(x: T): T when is_same::<T, float>()
+
+#op('math:tan_f')
+func tan_kernel::<T>(x: T): T when is_same::<T, f32>()
+#op('math:tan_d')
+func tan_kernel::<T>(x: T): T when is_same::<T, float>()
+
+#op('math:asin_f')
+func asin_kernel::<T>(x: T): T when is_same::<T, f32>()
+#op('math:asin_d')
+func asin_kernel::<T>(x: T): T when is_same::<T, float>()
+
+#op('math:acos_f')
+func acos_kernel::<T>(x: T): T when is_same::<T, f32>()
+#op('math:acos_d')
+func acos_kernel::<T>(x: T): T when is_same::<T, float>()
+
+#op('math:atan_f')
+func atan_kernel::<T>(x: T): T when is_same::<T, f32>()
+#op('math:atan_d')
+func atan_kernel::<T>(x: T): T when is_same::<T, float>()
+
+#op('math:sinh_f')
+func sinh_kernel::<T>(x: T): T when is_same::<T, f32>()
+#op('math:sinh_d')
+func sinh_kernel::<T>(x: T): T when is_same::<T, float>()
+
+#op('math:cosh_f')
+func cosh_kernel::<T>(x: T): T when is_same::<T, f32>()
+#op('math:cosh_d')
+func cosh_kernel::<T>(x: T): T when is_same::<T, float>()
+
+#op('math:tanh_f')
+func tanh_kernel::<T>(x: T): T when is_same::<T, f32>()
+#op('math:tanh_d')
+func tanh_kernel::<T>(x: T): T when is_same::<T, float>()
+
+#op('math:floor_f')
+func floor_kernel::<T>(x: T): T when is_same::<T, f32>()
+#op('math:floor_d')
+func floor_kernel::<T>(x: T): T when is_same::<T, float>()
+
+#op('math:ceil_f')
+func ceil_kernel::<T>(x: T): T when is_same::<T, f32>()
+#op('math:ceil_d')
+func ceil_kernel::<T>(x: T): T when is_same::<T, float>()
+
+#op('math:round_f')
+func round_kernel::<T>(x: T): T when is_same::<T, f32>()
+#op('math:round_d')
+func round_kernel::<T>(x: T): T when is_same::<T, float>()
+
+#op('math:trunc_f')
+func trunc_kernel::<T>(x: T): T when is_same::<T, f32>()
+#op('math:trunc_d')
+func trunc_kernel::<T>(x: T): T when is_same::<T, float>()
+
+#op('math:pow_f')
+func pow_kernel::<T>(x: T, y: T): T when is_same::<T, f32>()
+#op('math:pow_d')
+func pow_kernel::<T>(x: T, y: T): T when is_same::<T, float>()
+
+#op('math:hypot_f')
+func hypot_kernel::<T>(x: T, y: T): T when is_same::<T, f32>()
+#op('math:hypot_d')
+func hypot_kernel::<T>(x: T, y: T): T when is_same::<T, float>()
+
+#op('math:atan2_f')
+func atan2_kernel::<T>(y: T, x: T): T when is_same::<T, f32>()
+#op('math:atan2_d')
+func atan2_kernel::<T>(y: T, x: T): T when is_same::<T, float>()
+
+// The IEEE 754-2019 minimum and maximum: a NaN gives NaN, -0 is below +0.
+
+#op('math:min_i')
+func min_kernel::<T>(a: T, b: T): T when is_same::<T, i32>()
+
+#op('math:min_l')
+func min_kernel::<T>(a: T, b: T): T when is_same::<T, int>()
+
+#op('math:min_f')
+func min_kernel::<T>(a: T, b: T): T when is_same::<T, f32>()
+
+#op('math:min_d')
+func min_kernel::<T>(a: T, b: T): T when is_same::<T, float>()
+
+#op('math:min_s')
+func min_kernel::<T>(a: T, b: T): T when is_same::<T, string>()
+
+#op('math:min_b')
+func min_kernel::<T>(a: T, b: T): T when is_same::<T, bool>()
+
+#op('math:min_bf')
+func min_kernel::<T>(a: T, b: T): T when is_same::<T, bf16>()
+
+#op('math:min_f6')
+func min_kernel::<T>(a: T, b: T): T when is_same::<T, f16>()
+
+#op('math:max_i')
+func max_kernel::<T>(a: T, b: T): T when is_same::<T, i32>()
+
+#op('math:max_l')
+func max_kernel::<T>(a: T, b: T): T when is_same::<T, int>()
+
+#op('math:max_f')
+func max_kernel::<T>(a: T, b: T): T when is_same::<T, f32>()
+
+#op('math:max_d')
+func max_kernel::<T>(a: T, b: T): T when is_same::<T, float>()
+
+#op('math:max_s')
+func max_kernel::<T>(a: T, b: T): T when is_same::<T, string>()
+
+#op('math:max_b')
+func max_kernel::<T>(a: T, b: T): T when is_same::<T, bool>()
+
+#op('math:max_bf')
+func max_kernel::<T>(a: T, b: T): T when is_same::<T, bf16>()
+
+#op('math:max_f6')
+func max_kernel::<T>(a: T, b: T): T when is_same::<T, f16>()
+
+#op('math:abs_i')
+func abs_kernel::<T>(x: T): T when is_same::<T, i32>()
+
+#op('math:abs_l')
+func abs_kernel::<T>(x: T): T when is_same::<T, int>()
+
+#op('math:abs_f')
+func abs_kernel::<T>(x: T): T when is_same::<T, f32>()
+
+#op('math:abs_d')
+func abs_kernel::<T>(x: T): T when is_same::<T, float>()
+
+#op('math:abs_bf')
+func abs_kernel::<T>(x: T): T when is_same::<T, bf16>()
+
+#op('math:abs_f6')
+func abs_kernel::<T>(x: T): T when is_same::<T, f16>()
+
+#op('math:abs_c')
+func abs_c_kernel::<T>(z: T): f32 when is_same::<T, c64>()
+#op('math:abs_z')
+func abs_z_kernel::<T>(z: T): float when is_same::<T, c128>()
+
+#op('math:sign_i')
+func sign_kernel::<T>(x: T): T when is_same::<T, i32>()
+
+#op('math:sign_l')
+func sign_kernel::<T>(x: T): T when is_same::<T, int>()
+
+#op('math:sign_f')
+func sign_kernel::<T>(x: T): T when is_same::<T, f32>()
+
+#op('math:sign_d')
+func sign_kernel::<T>(x: T): T when is_same::<T, float>()
+
+#op('math:exp_c')
+func exp_c_kernel::<T>(z: T): T when is_same::<T, c64>()
+#op('math:exp_z')
+func exp_c_kernel::<T>(z: T): T when is_same::<T, c128>()
+
 // ---- elementary functions ----
 
-/// The square root. An integer argument is converted: i32 gives f32, int gives float.
-/// @pure
+/// The square root; NaN for a negative x, and the square root of -0 is -0.
 /// @example sqrt(9.0)    // 3
-export func sqrt(x: i32): f32
-export func sqrt(x: int): float
-export func sqrt(x: f32): f32
-export func sqrt(x: float): float
-
-/// The absolute value. The smallest integer has no positive counterpart: its absolute value is
-/// not defined. A bf16 or f16 value is the sign cleared, computed on the f32 it widens to
-/// exactly, so -0 becomes +0 and no value of either type rounds (design principles 7.3).
-/// @pure
-/// @example abs(-3)    // 3
-#op('math:abs_i')
-export func abs(x: i32): i32
-#op('math:abs_l')
-export func abs(x: int): int
-#op('math:abs_f')
-export func abs(x: f32): f32
-#op('math:abs_d')
-export func abs(x: float): float
-#op('math:abs_c')
-export func abs(x: c64): f32
-#op('math:abs_z')
-export func abs(x: c128): float
-#op('math:abs_bf')
-export func abs(x: bf16): bf16
-#op('math:abs_f6')
-export func abs(x: f16): f16
-
-/// The real part of a complex number.
-/// @pure
-/// @example re(3+4i)    // 3.0
-#op('math:re_c')
-export func re(x: c64): f32
-#op('math:re_z')
-export func re(x: c128): float
-
-/// The imaginary part of a complex number.
-/// @pure
-/// @example im(3+4i)    // 4.0
-#op('math:im_c')
-export func im(x: c64): f32
-#op('math:im_z')
-export func im(x: c128): float
-
-/// The conjugate of a complex number: the imaginary part is negated.
-/// @pure
-/// @example conj(3+4i)    // 3-4i
-#op('math:conj_c')
-export func conj(x: c64): c64
-#op('math:conj_z')
-export func conj(x: c128): c128
+#impl(sqrt_kernel)
+export func sqrt::<T>(x: T): T when is_float::<T>() {
+    return T(sqrt_kernel(float(x)))
+}
 
 /// e raised to the power x.
-/// @pure
 /// @example exp(0.0)    // 1
-#op('math:exp_f')
-export func exp(x: f32): f32
-#op('math:exp_d')
-export func exp(x: float): float
-#op('math:exp_c')
-export func exp(x: c64): c64
-#op('math:exp_z')
-export func exp(x: c128): c128
+#impl(exp_kernel)
+export func exp::<T>(x: T): T when is_float::<T>() {
+    return T(exp_kernel(float(x)))
+}
+
+/// e raised to the power of a complex number.
+/// @example exp(0.0+0.0i)    // 1+0i
+#impl(exp_c_kernel)
+export func exp::<T>(z: T): T when is_complex::<T>() {
+    let r = exp(re(z))
+    let t = im(z)
+    return T(r * cos(t)) + T(r * sin(t)) * 1i
+}
 
 /// exp(x) - 1, accurate for x near 0.
-/// @pure
 /// @example expm1(0.0)    // 0
-#op('math:expm1_f')
-export func expm1(x: f32): f32
-#op('math:expm1_d')
-export func expm1(x: float): float
+#impl(expm1_kernel)
+export func expm1::<T>(x: T): T when is_float::<T>() {
+    return T(expm1_kernel(float(x)))
+}
 
 /// The natural logarithm. log(0.0) is -inf, the logarithm of a negative number is NaN.
-/// @pure
 /// @example log(1.0)    // 0
-#op('math:log_f')
-export func log(x: f32): f32
-#op('math:log_d')
-export func log(x: float): float
+#impl(log_kernel)
+export func log::<T>(x: T): T when is_float::<T>() {
+    return T(log_kernel(float(x)))
+}
 
 /// The logarithm to base 2.
-/// @pure
 /// @example log2(8.0)    // 3
-#op('math:log2_f')
-export func log2(x: f32): f32
-#op('math:log2_d')
-export func log2(x: float): float
+#impl(log2_kernel)
+export func log2::<T>(x: T): T when is_float::<T>() {
+    return T(log2_kernel(float(x)))
+}
 
 /// The logarithm to base 10.
-/// @pure
 /// @example log10(1000.0)    // 3
-#op('math:log10_f')
-export func log10(x: f32): f32
-#op('math:log10_d')
-export func log10(x: float): float
+#impl(log10_kernel)
+export func log10::<T>(x: T): T when is_float::<T>() {
+    return T(log10_kernel(float(x)))
+}
 
 /// log(1 + x), accurate for x near 0.
-/// @pure
 /// @example log1p(0.0)    // 0
-#op('math:log1p_f')
-export func log1p(x: f32): f32
-#op('math:log1p_d')
-export func log1p(x: float): float
+#impl(log1p_kernel)
+export func log1p::<T>(x: T): T when is_float::<T>() {
+    return T(log1p_kernel(float(x)))
+}
 
 /// x raised to the power y. pow(0.0, 0.0) is 1; a negative x with a fractional y gives NaN.
-/// @pure
 /// @example pow(2.0, 10.0)    // 1024
-#op('math:pow_f')
-export func pow(x: f32, y: f32): f32
-#op('math:pow_d')
-export func pow(x: float, y: float): float
+#impl(pow_kernel)
+export func pow::<T>(x: T, y: T): T when is_float::<T>() {
+    return T(pow_kernel(float(x), float(y)))
+}
 
 /// The square root of x*x + y*y, without overflow in the squares.
-/// @pure
 /// @example hypot(3.0, 4.0)    // 5
-#op('math:hypot_f')
-export func hypot(x: f32, y: f32): f32
-#op('math:hypot_d')
-export func hypot(x: float, y: float): float
+#impl(hypot_kernel)
+export func hypot::<T>(x: T, y: T): T when is_float::<T>() {
+    return T(hypot_kernel(float(x), float(y)))
+}
 
 /// The sine of x, x in radians.
-/// @pure
 /// @example sin(0.0)    // 0
-#op('math:sin_f')
-export func sin(x: f32): f32
-#op('math:sin_d')
-export func sin(x: float): float
+#impl(sin_kernel)
+export func sin::<T>(x: T): T when is_float::<T>() {
+    return T(sin_kernel(float(x)))
+}
 
 /// The cosine of x, x in radians.
-/// @pure
 /// @example cos(0.0)    // 1
-#op('math:cos_f')
-export func cos(x: f32): f32
-#op('math:cos_d')
-export func cos(x: float): float
+#impl(cos_kernel)
+export func cos::<T>(x: T): T when is_float::<T>() {
+    return T(cos_kernel(float(x)))
+}
 
 /// The tangent of x, x in radians.
-/// @pure
 /// @example tan(0.0)    // 0
-#op('math:tan_f')
-export func tan(x: f32): f32
-#op('math:tan_d')
-export func tan(x: float): float
+#impl(tan_kernel)
+export func tan::<T>(x: T): T when is_float::<T>() {
+    return T(tan_kernel(float(x)))
+}
 
 /// The arc sine, in radians; NaN outside -1 to 1.
-/// @pure
 /// @example asin(1.0)    // 1.5708
-#op('math:asin_f')
-export func asin(x: f32): f32
-#op('math:asin_d')
-export func asin(x: float): float
+#impl(asin_kernel)
+export func asin::<T>(x: T): T when is_float::<T>() {
+    return T(asin_kernel(float(x)))
+}
 
 /// The arc cosine, in radians; NaN outside -1 to 1.
-/// @pure
 /// @example acos(1.0)    // 0
-#op('math:acos_f')
-export func acos(x: f32): f32
-#op('math:acos_d')
-export func acos(x: float): float
+#impl(acos_kernel)
+export func acos::<T>(x: T): T when is_float::<T>() {
+    return T(acos_kernel(float(x)))
+}
 
 /// The arc tangent, in radians.
-/// @pure
 /// @example atan(1.0)    // 0.785398
-#op('math:atan_f')
-export func atan(x: f32): f32
-#op('math:atan_d')
-export func atan(x: float): float
+#impl(atan_kernel)
+export func atan::<T>(x: T): T when is_float::<T>() {
+    return T(atan_kernel(float(x)))
+}
 
 /// The angle of the point (x, y) in radians, between -pi and pi. Note the order: y first.
-/// @pure
 /// @example atan2(1.0, 1.0)    // 0.785398
-#op('math:atan2_f')
-export func atan2(y: f32, x: f32): f32
-#op('math:atan2_d')
-export func atan2(y: float, x: float): float
+#impl(atan2_kernel)
+export func atan2::<T>(y: T, x: T): T when is_float::<T>() {
+    return T(atan2_kernel(float(y), float(x)))
+}
 
 /// The hyperbolic sine.
-/// @pure
 /// @example sinh(0.0)    // 0
-#op('math:sinh_f')
-export func sinh(x: f32): f32
-#op('math:sinh_d')
-export func sinh(x: float): float
+#impl(sinh_kernel)
+export func sinh::<T>(x: T): T when is_float::<T>() {
+    return T(sinh_kernel(float(x)))
+}
 
 /// The hyperbolic cosine.
-/// @pure
 /// @example cosh(0.0)    // 1
-#op('math:cosh_f')
-export func cosh(x: f32): f32
-#op('math:cosh_d')
-export func cosh(x: float): float
+#impl(cosh_kernel)
+export func cosh::<T>(x: T): T when is_float::<T>() {
+    return T(cosh_kernel(float(x)))
+}
 
 /// The hyperbolic tangent.
-/// @pure
 /// @example tanh(0.0)    // 0
-#op('math:tanh_f')
-export func tanh(x: f32): f32
-#op('math:tanh_d')
-export func tanh(x: float): float
+#impl(tanh_kernel)
+export func tanh::<T>(x: T): T when is_float::<T>() {
+    return T(tanh_kernel(float(x)))
+}
 
 // ---- rounding ----
 
 /// The largest whole number not above x, as a float.
-/// @pure
 /// @example floor(-2.5)    // -3
-#op('math:floor_f')
-export func floor(x: f32): f32
-#op('math:floor_d')
-export func floor(x: float): float
+#impl(floor_kernel)
+export func floor::<T>(x: T): T when is_float::<T>() {
+    return T(floor_kernel(float(x)))
+}
 
 /// The smallest whole number not below x, as a float.
-/// @pure
 /// @example ceil(2.1)    // 3
-#op('math:ceil_f')
-export func ceil(x: f32): f32
-#op('math:ceil_d')
-export func ceil(x: float): float
+#impl(ceil_kernel)
+export func ceil::<T>(x: T): T when is_float::<T>() {
+    return T(ceil_kernel(float(x)))
+}
 
 /// The nearest whole number, halves away from zero, as a float.
-/// @pure
 /// @example round(2.5)    // 3
-#op('math:round_f')
-export func round(x: f32): f32
-#op('math:round_d')
-export func round(x: float): float
+#impl(round_kernel)
+export func round::<T>(x: T): T when is_float::<T>() {
+    return T(round_kernel(float(x)))
+}
 
 /// x without its fraction (rounded toward zero), as a float.
-/// @pure
 /// @example trunc(-2.7)    // -2
-#op('math:trunc_f')
-export func trunc(x: f32): f32
-#op('math:trunc_d')
-export func trunc(x: float): float
+#impl(trunc_kernel)
+export func trunc::<T>(x: T): T when is_float::<T>() {
+    return T(trunc_kernel(float(x)))
+}
 
 // ---- comparing ----
 
 /// The smaller of two values of one ordered type. For numbers this is the IEEE 754 minimum: a
-/// NaN on either side gives NaN, and -0 is below +0. Strings compare by their bytes (a proper
-/// prefix first), and false is below true. A bf16 or f16 comparison is made on the f32 each
-/// operand widens to exactly, and the result is that operand itself: neither type rounds here
-/// (design principles 7.3).
-/// @pure
+/// NaN on either side gives NaN, and -0 is below +0. Strings compare by code point (a proper
+/// prefix first), and false is below true.
 /// @example min(3, 5)    // 3
 /// @example min('b', 'a')    // 'a'
-#op('math:min_i')
-export func min(a: i32, b: i32): i32
-#op('math:min_l')
-export func min(a: int, b: int): int
-#op('math:min_f')
-export func min(a: f32, b: f32): f32
-#op('math:min_d')
-export func min(a: float, b: float): float
-#op('math:min_s')
-export func min(a: string, b: string): string
-#op('math:min_b')
-export func min(a: bool, b: bool): bool
-#op('math:min_bf')
-export func min(a: bf16, b: bf16): bf16
-#op('math:min_f6')
-export func min(a: f16, b: f16): f16
+#impl(min_kernel)
+export func min::<T>(a: T, b: T): T when is_ordered::<T>() {
+    return match type T {
+        case float | f32 | bf16 | f16 => T(min_kernel(float(a), float(b)))
+        case bool => a & b
+        case _ => if b < a then b else a
+    }
+}
 
 /// The larger of two values of one ordered type. For numbers this is the IEEE 754 maximum: a
-/// NaN on either side gives NaN, and -0 is below +0. Strings compare by their bytes (a proper
-/// prefix first), and false is below true. A bf16 or f16 comparison is made on the f32 each
-/// operand widens to exactly, and the result is that operand itself: neither type rounds here
-/// (design principles 7.3).
-/// @pure
+/// NaN on either side gives NaN, and -0 is below +0. Strings compare by code point (a proper
+/// prefix first), and false is below true.
 /// @example max(3, 5)    // 5
 /// @example max('a', 'b')    // 'b'
-#op('math:max_i')
-export func max(a: i32, b: i32): i32
-#op('math:max_l')
-export func max(a: int, b: int): int
-#op('math:max_f')
-export func max(a: f32, b: f32): f32
-#op('math:max_d')
-export func max(a: float, b: float): float
-#op('math:max_s')
-export func max(a: string, b: string): string
-#op('math:max_b')
-export func max(a: bool, b: bool): bool
-#op('math:max_bf')
-export func max(a: bf16, b: bf16): bf16
-#op('math:max_f6')
-export func max(a: f16, b: f16): f16
+#impl(max_kernel)
+export func max::<T>(a: T, b: T): T when is_ordered::<T>() {
+    return match type T {
+        case float | f32 | bf16 | f16 => T(max_kernel(float(a), float(b)))
+        case bool => a | b
+        case _ => if a < b then b else a
+    }
+}
 
 /// x held between lo and hi: lo when x is below, hi when above. A NaN x stays NaN.
-/// @pure
 /// @fails fault `InvalidArgument` when lo is above hi, or a bound is NaN
 /// @example clamp(15, 0, 10)    // 10
-#op('math:clamp_i')
-export func clamp(x: i32, lo: i32, hi: i32): i32
-#op('math:clamp_l')
-export func clamp(x: int, lo: int, hi: int): int
-#op('math:clamp_f')
-export func clamp(x: f32, lo: f32, hi: f32): f32
-#op('math:clamp_d')
-export func clamp(x: float, lo: float, hi: float): float
+export func clamp::<T>(x: T, lo: T, hi: T): T when is_real::<T>() {
+    return if !(lo <= hi) then fail<'InvalidArgument'>('clamp needs lo <= hi') else min(max(x, lo), hi)
+}
 
-/// -1, 0 or 1 by the sign of x, in the type of x. The sign of a NaN is NaN.
-/// @pure
+/// The absolute value of an integer or a float. The sign of a zero is cleared, a NaN stays a NaN,
+/// and the smallest integer is its own absolute value (negation wraps, as it does in `-x`).
+/// @example abs(-3)    // 3
+#impl(abs_kernel)
+export func abs::<T>(x: T): T when is_real::<T>() {
+    return max(x, -x)
+}
+
+/// The modulus of a single-precision complex number.
+/// @example abs(c64(3.0)+4.0i)    // 5
+#impl(abs_c_kernel)
+export func abs::<T>(z: T): f32 when is_same::<T, c64>() {
+    return hypot(re(z), im(z))
+}
+
+/// The modulus of a double-precision complex number.
+/// @example abs(3.0+4.0i)    // 5
+#impl(abs_z_kernel)
+export func abs::<T>(z: T): float when is_same::<T, c128>() {
+    return hypot(re(z), im(z))
+}
+
+/// -1, 0 or 1 by the sign of x, in the type of x. A zero and a NaN are returned as they are.
 /// @example sign(-2.5)    // -1
-#op('math:sign_i')
-export func sign(x: i32): i32
-#op('math:sign_l')
-export func sign(x: int): int
-#op('math:sign_f')
-export func sign(x: f32): f32
-#op('math:sign_d')
-export func sign(x: float): float
+#impl(sign_kernel)
+export func sign::<T>(x: T): T when is_real::<T>() {
+    return if x > 0 then 1 else if x < 0 then -1 else x
+}
 
 /// Whether x is a NaN.
-/// @pure
 /// @example is_nan(inf - inf)    // true
-#op('math:is_nan_f')
-export func is_nan(x: f32): bool
-#op('math:is_nan_d')
-export func is_nan(x: float): bool
+export func is_nan::<T>(x: T): bool when is_float::<T>() {
+    return x != x
+}
 
 /// Whether x is positive or negative infinity.
-/// @pure
 /// @example is_inf(1.0)    // false
-#op('math:is_inf_f')
-export func is_inf(x: f32): bool
-#op('math:is_inf_d')
-export func is_inf(x: float): bool
+export func is_inf::<T>(x: T): bool when is_float::<T>() {
+    return abs(float(x)) == inf
+}
+
+/// Whether x is neither a NaN nor an infinity.
+/// @example is_finite(1.0)    // true
+export func is_finite::<T>(x: T): bool when is_float::<T>() {
+    return abs(float(x)) < inf
+}
+
+// ---- complex numbers ----
+// The parts of a complex number are native: the result type is not the argument's.
+
+/// The real part of a complex number.
+/// @example re(3.0+4.0i)    // 3.0
+#op('math:re_c')
+export func re(z: c64): f32
+#op('math:re_z')
+export func re(z: c128): float
+
+/// The imaginary part of a complex number.
+/// @example im(3.0+4.0i)    // 4.0
+#op('math:im_c')
+export func im(z: c64): f32
+#op('math:im_z')
+export func im(z: c128): float
+
+/// The conjugate of a complex number: the imaginary part is negated, a zero's sign included.
+/// @example conj(3.0+4.0i)    // 3-4i
+#op('math:conj_c')
+export func conj::<T>(z: T): T when is_same::<T, c64>()
+#op('math:conj_z')
+export func conj::<T>(z: T): T when is_same::<T, c128>()
 
 // ---- integers ----
 
-/// The greatest common divisor, never negative; gcd(0, 0) is 0.
-/// @pure
-/// @fails fault `InvalidArgument` when the result does not fit the type (the smallest integer with itself or with 0)
+/// The greatest common divisor, never negative; gcd(0, 0) is 0. The smallest integer, which has
+/// no positive counterpart, is not accepted.
+/// @fails fault `InvalidArgument` when an argument is the smallest integer of its type
 /// @example gcd(12, 18)    // 6
-#op('math:gcd_i')
-export func gcd(a: i32, b: i32): i32
-#op('math:gcd_l')
-export func gcd(a: int, b: int): int
+export func gcd::<T>(a: T, b: T): T when is_integer::<T>() {
+    return if abs(a) < 0 || abs(b) < 0
+        then fail<'InvalidArgument'>('gcd does not accept the smallest integer')
+        else gcd_of(abs(a), abs(b))
+}
+
+// Euclid's algorithm on non-negative numbers; a tail call.
+func gcd_of::<T>(a: T, b: T): T {
+    return if b == 0 then a else gcd_of(b, a % b)
+}
 
 /// The least common multiple, never negative; 0 when either argument is 0.
-/// @pure
-/// @fails fault `InvalidArgument` when the result does not fit the type
+/// @fails fault `InvalidArgument` when an argument is the smallest integer, or the result does not fit the type
 /// @example lcm(4, 6)    // 12
-#op('math:lcm_i')
-export func lcm(a: i32, b: i32): i32
-#op('math:lcm_l')
-export func lcm(a: int, b: int): int
-
-/// The digits of x in base 2 with the prefix 0b; a negative number is shown as its 64-bit
-/// two's complement.
-/// @pure
-/// @example bin(5)    // '0b101'
-#op('math:bin_i')
-export func bin(x: i32): string
-#op('math:bin_l')
-export func bin(x: int): string
-
-/// The digits of x in base 8 with the prefix 0o.
-/// @pure
-/// @example oct(8)    // '0o10'
-#op('math:oct_i')
-export func oct(x: i32): string
-#op('math:oct_l')
-export func oct(x: int): string
-
-/// The digits of x in base 16, in upper case, with the prefix 0x.
-/// @pure
-/// @example hex(255)    // '0xFF'
-#op('math:hex_i')
-export func hex(x: i32): string
-#op('math:hex_l')
-export func hex(x: int): string
+export func lcm::<T>(a: T, b: T): T when is_integer::<T>() {
+    let g = gcd(a, b)
+    let q = if g == 0 then T(0) else abs(a) / g
+    let r = q * abs(b)
+    return if q != 0 && (r < 0 || r / q != abs(b)) then fail<'InvalidArgument'>('lcm does not fit the type') else r
+}
 
 // ---- bits ----
 //
-// Bit operations are functions, not operators. Integers are two's complement: `int` has 64
-// bits, `i32` has 32.
-
-/// x shifted left by count bits: bits shifted out are lost and zeros come in, so the sign may
-/// change. The count may be of either integer type.
-/// @pure
-/// @fails fault `InvalidArgument` when count is negative or not below the width of x (64 for int, 32 for i32)
-/// @example shl(1, 4)    // 16
-export func shl(x: i32, count: i32): i32
-export func shl(x: i32, count: int): i32
-export func shl(x: int, count: i32): int
-export func shl(x: int, count: int): int
-
-/// x shifted right by count bits, keeping the sign (an arithmetic shift): shr(-8, 1) is -4.
-/// @pure
-/// @fails fault `InvalidArgument` when count is negative or not below the width of x
-/// @example shr(256, 4)    // 16
-export func shr(x: i32, count: i32): i32
-export func shr(x: i32, count: int): i32
-export func shr(x: int, count: i32): int
-export func shr(x: int, count: int): int
+// Bit operations are functions, not operators (`&` and `|` are logical). Integers are two's
+// complement: `int` has 64 bits, `i32` has 32. One declaration per width, because the operator
+// that runs differs; the name and the signature are one generic.
 
 /// The bits set in both a and b.
-/// @pure
 /// @example bit_and(12, 10)    // 8
 #op('math:bit_and_i')
-export func bit_and(a: i32, b: i32): i32
+export func bit_and::<T>(a: T, b: T): T when is_same::<T, i32>()
 #op('math:bit_and_l')
-export func bit_and(a: int, b: int): int
+export func bit_and::<T>(a: T, b: T): T when is_same::<T, int>()
 
 /// The bits set in a or in b.
-/// @pure
 /// @example bit_or(12, 10)    // 14
 #op('math:bit_or_i')
-export func bit_or(a: i32, b: i32): i32
+export func bit_or::<T>(a: T, b: T): T when is_same::<T, i32>()
 #op('math:bit_or_l')
-export func bit_or(a: int, b: int): int
+export func bit_or::<T>(a: T, b: T): T when is_same::<T, int>()
 
 /// The bits set in exactly one of a and b.
-/// @pure
 /// @example bit_xor(12, 10)    // 6
 #op('math:bit_xor_i')
-export func bit_xor(a: i32, b: i32): i32
+export func bit_xor::<T>(a: T, b: T): T when is_same::<T, i32>()
 #op('math:bit_xor_l')
-export func bit_xor(a: int, b: int): int
+export func bit_xor::<T>(a: T, b: T): T when is_same::<T, int>()
 
-/// Every bit of x inverted; the same as the operator ~.
-/// @pure
-/// @example bit_not(0)    // -1
-#op('math:bit_not_i')
-export func bit_not(x: i32): i32
-#op('math:bit_not_l')
-export func bit_not(x: int): int
+/// x shifted left by count bits: bits shifted out are lost and zeros come in, so the sign may
+/// change.
+/// @fails fault `InvalidArgument` when count is negative or not below the width of x (64 for int, 32 for i32)
+/// @example 1->shl<4>    // 16
+#op('math:shl_i')
+with <count: int>
+export func shl::<T>(x: T): T when is_same::<T, i32>()
+#op('math:shl_l')
+with <count: int>
+export func shl::<T>(x: T): T when is_same::<T, int>()
 
-
+/// x shifted right by count bits, keeping the sign (an arithmetic shift): `-8->shr<1>` is -4.
+/// @fails fault `InvalidArgument` when count is negative or not below the width of x
+/// @example 256->shr<4>    // 16
+#op('math:shr_i')
+with <count: int>
+export func shr::<T>(x: T): T when is_same::<T, i32>()
+#op('math:shr_l')
+with <count: int>
+export func shr::<T>(x: T): T when is_same::<T, int>()

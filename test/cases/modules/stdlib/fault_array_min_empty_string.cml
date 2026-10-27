@@ -1,0 +1,11 @@
+module fault_array_min_empty_string
+
+import { min } from array
+
+func main(): int sync {
+    let xs: string[] = []
+    println('before')
+    println(min(xs))
+    println('not reached')
+    return 0
+}

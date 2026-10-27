@@ -15,12 +15,17 @@ namespace camel::compile::gir {
 using namespace core::type;
 using namespace core::error;
 
-FunctionType *Builder::signatureForArgumentContext(node_handle_t target) const {
+FunctionType *Builder::signatureForArgumentContext(node_handle_t target, size_t withWritten) const {
     if (const auto generic = genericDrefs_.find(target); generic != genericDrefs_.end()) {
         // A name with several generic functions gives the arguments a type only when every
         // overload declares the same parameters; a set whose entries differ says nothing about
         // which one a call means, exactly as an operator set whose entries differ does.
-        const std::vector<generic_template_ptr_t> candidates = genericOverloadsOf(target);
+        std::vector<generic_template_ptr_t> candidates = genericOverloadsOf(target);
+        if (withWritten > 0) {
+            std::erase_if(candidates, [&](const generic_template_ptr_t &candidate) {
+                return candidate->funcType->withTypesCount() < withWritten;
+            });
+        }
         if (candidates.size() > 1) {
             const FunctionType *first = candidates.front()->funcType;
             for (const auto &candidate : candidates) {
@@ -90,7 +95,7 @@ FunctionType *Builder::signatureForArgumentContext(node_handle_t target) const {
             if (fixed == nullptr && resolver) {
                 fixed = resolver->declaredSignature();
             }
-            if (fixed == nullptr) {
+            if (fixed == nullptr || fixed->withTypesCount() < withWritten) {
                 continue;
             }
             if (same == nullptr) {

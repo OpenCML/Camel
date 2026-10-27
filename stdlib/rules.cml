@@ -327,17 +327,27 @@ export rule array_log_softmax_of_softmax(x: f32[..], const axis: int) {
     log_array(softmax(x, axis)) => log_softmax(x, axis)
 }
 
+/// The floating widths whose scalar `log`, `exp`, `log1p` and `expm1` are operators of the graph
+/// (`f32` and `float`): a rule is written over operators, and the other widths (`bf16`, `f16`) run
+/// the Camel body of the function, which is no operator, so those instances do not exist.
+func hasScalarKernel::<T>(): bool {
+    return match type T {
+        case float | f32 => true
+        case _ => false
+    }
+}
+
 /// `log(1 + x)` is `log1p(x)`: `1 + x` rounds before the log, and for |x| below the spacing of 1
 /// the naive log is 0 and its relative error is 100%.
 #requires(refine_accuracy)
-export rule float_log1p::<T>(x: T) when is_float::<T>() {
+export rule float_log1p::<T>(x: T) when hasScalarKernel::<T>() {
     log(1.0 + x) => log1p(x)
 }
 
 /// `exp(x) - 1` is `expm1(x)`: for |x| below the spacing of 1 the naive `exp(x)` rounds to
 /// exactly 1 and the subtraction gives 0.
 #requires(refine_accuracy)
-export rule float_expm1::<T>(x: T) when is_float::<T>() {
+export rule float_expm1::<T>(x: T) when hasScalarKernel::<T>() {
     exp(x) - 1.0 => expm1(x)
 }
 

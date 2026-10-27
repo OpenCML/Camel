@@ -1,4 +1,3 @@
-// A file that imports its own name finds no module of it (design principles 10.2).
 import self_import
 
 func main(): int sync {

@@ -18,7 +18,7 @@ camel test/modules/time/basic.cml
 # random 模块
 camel test/modules/random/basic.cml
 
-# array 模块的排序（sort, merge_sorted_arrays）
+# array 模块的排序（sort）
 camel test/cases/modules/std/array/sort_basic.cml
 
 # statistics 模块（mean, stdev）

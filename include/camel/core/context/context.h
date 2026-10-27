@@ -178,9 +178,7 @@ class Context : public std::enable_shared_from_this<Context> {
     /// `CAMEL_PACKAGES`), then the standard library. An empty `importerDir` means the entry
     /// program, whose own directory is `entryDir`.
     std::pair<std::string, bool>
-    resolveModulePath(
-        const std::string &moduleName, const std::string &importerDir,
-        const std::string &exceptFile = {});
+    resolveModulePath(const std::string &moduleName, const std::string &importerDir);
     /// The directory of the importing module: the directory of the file it was loaded from, or
     /// the entry file's directory for the entry program and for a program-level import (a pass
     /// library, a definition).
@@ -457,11 +455,6 @@ class Context : public std::enable_shared_from_this<Context> {
     /** Called by loadCmoModule to retain a loaded .cmo handle and prevent unloading. */
     void addLoadedDll(const std::string &path, void *handle) { loadedDllHandles_[path] = handle; }
 
-    /// Import a module as `importer` does (design principles 10.2: its own directory, then the
-    /// module roots, then the standard library). `importer` is the module whose `import` this is;
-    /// null means the entry program, whose own directory is the entry file's directory, or a
-    /// program-level import (a pass library named on the command line, a definition) that stands
-    /// where the program does.
     module_ptr_t importModule(
         const std::string &rawModuleName, const module::Module *importer = nullptr);
     /// Whether a file for the module is found on the search paths, whether or not it can be

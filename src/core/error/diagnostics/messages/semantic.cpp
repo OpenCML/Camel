@@ -445,14 +445,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::ExportedVariable,
-            {
-                "ExportedVariable",
-                "The variable '{0}' cannot be exported.",
-                "A 'var' of the top level of a module is read and written only by the module's own functions: export the functions that read and write it ('export func bump(): int sync {{ cnt += 1; return cnt }}'). A 'let' can be exported.",
-            },
-        },
-        {
             SemanticDiag::ModuleValueCycle,
             {
                 "ModuleValueCycle",

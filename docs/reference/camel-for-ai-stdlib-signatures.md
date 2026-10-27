@@ -230,54 +230,29 @@ is_bool: () => bool
 is_plain: () => bool
 ```
 
-**`array`** — import { ... } from array — 33 name(s)
+**`array`** — import { ... } from array — 35 name(s)
 
 ```text
-argsort: (keys: i32[]) => int[]
-argsort: (keys: int[]) => int[]
-argsort: (keys: f32[]) => int[]
-argsort: (keys: float[]) => int[]
-argsort: (keys: bf16[]) => int[]
-argsort: (keys: f16[]) => int[]
-argsort: (keys: bool[]) => int[]
-argsort: (keys: string[]) => int[]
-sort: (xs: i32[]) => i32[]
-sort: (xs: int[]) => int[]
-sort: (xs: f32[]) => f32[]
-sort: (xs: float[]) => float[]
-insert_sort: (xs: i32[]) => i32[]
-insert_sort: (xs: int[]) => int[]
-insert_sort: (xs: f32[]) => f32[]
-insert_sort: (xs: float[]) => float[]
-quick_sort: (xs: i32[]) => i32[]
-quick_sort: (xs: int[]) => int[]
-quick_sort: (xs: f32[]) => f32[]
-quick_sort: (xs: float[]) => float[]
-merge_sort: (xs: i32[]) => i32[]
-merge_sort: (xs: int[]) => int[]
-merge_sort: (xs: f32[]) => f32[]
-merge_sort: (xs: float[]) => float[]
-merge_sorted_arrays: (left: i32[], right: i32[]) => i32[]
-merge_sorted_arrays: (left: int[], right: int[]) => int[]
-merge_sorted_arrays: (left: f32[], right: f32[]) => f32[]
-merge_sorted_arrays: (left: float[], right: float[]) => float[]
 reverse: (xs: T[]) => T[]
 take: <n: int> (xs: T[]) => T[]
 drop: <n: int> (xs: T[]) => T[]
+chunks: <n: int> (xs: T[]) => T[][]
 enumerate: (xs: T[]) => (int, T)[]
 flatten: (xss: T[][]) => T[]
+flatten: (xs: T[..]) => T[] when !is_array_type::<T>()
 unique: (xs: T[]) => T[]
-index_of: <x: T> (xs: T[]) => int?
+find_index: <pred: (x: T) => bool> (xs: T[]) => int?
 find: <pred: (x: T) => bool> (xs: T[]) => T?
+index_of: <x: T> (xs: T[]) => int?
 any: <pred: (x: T) => bool> (xs: T[]) => bool
 all: <pred: (x: T) => bool> (xs: T[]) => bool
 count: <pred: (x: T) => bool> (xs: T[]) => int
-sum: (xs: T[]) => T when is_numeric::<T>()
-min: (xs: T[]) => T? when is_ordered::<T>()
-max: (xs: T[]) => T? when is_ordered::<T>()
-flat_map: <f: (x: T) => U[]> (xs: T[]) => U[]
-sort_by: <key: (x: T) => K> (xs: T[]) => T[]
-zip_with: <f: (a: T, b: U) => V> (xs: T[], ys: U[]) => V[]
+sum: (xs: T[..]) => T when is_numeric::<T>()
+mean: (xs: T[..]) => T when is_float::<T>()
+min: (xs: T[..]) => T when is_ordered::<T>()
+max: (xs: T[..]) => T when is_ordered::<T>()
+argmax: (xs: T[..]) => int when is_ordered::<T>()
+argmin: (xs: T[..]) => int when is_ordered::<T>()
 sum: <axis: int, keepdims: bool = false> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
 mean: <axis: int, keepdims: bool = false> (xs: T[..]) => T[..] when is_float::<T>()
 min: <axis: int, keepdims: bool = false> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
@@ -288,6 +263,18 @@ shape: (xs: T[..]) => int[]
 numel: (xs: T[..]) => int
 dim: <axis: int> (xs: T[..]) => int
 to_bytes: (xs: T[..]) => Bytes when is_plain::<T>()
+argsort: (keys: i32[]) => int[]
+argsort: (keys: int[]) => int[]
+argsort: (keys: f32[]) => int[]
+argsort: (keys: float[]) => int[]
+argsort: (keys: bf16[]) => int[]
+argsort: (keys: f16[]) => int[]
+argsort: (keys: bool[]) => int[]
+argsort: (keys: string[]) => int[]
+sort: (xs: T[]) => T[] when is_ordered::<T>()
+sort_by: <key: (x: T) => K> (xs: T[]) => T[] when is_ordered::<K>()
+flat_map: <f: (x: T) => U[]> (xs: T[]) => U[]
+zip_with: <f: (a: T, b: U) => V> (xs: T[], ys: U[]) => V[]
 ```
 
 **`stream`** — import { ... } from stream — 2 name(s)
@@ -304,124 +291,58 @@ pi: float
 e: float
 inf: float
 nan: float
-sqrt: (x: i32) => f32
-sqrt: (x: int) => float
-sqrt: (x: f32) => f32
-sqrt: (x: float) => float
-abs: (x: i32) => i32
-abs: (x: int) => int
-abs: (x: f32) => f32
-abs: (x: float) => float
-abs: (x: c64) => f32
-abs: (x: c128) => float
-abs: (x: bf16) => bf16
-abs: (x: f16) => f16
-re: (x: c64) => f32
-re: (x: c128) => float
-im: (x: c64) => f32
-im: (x: c128) => float
-conj: (x: c64) => c64
-conj: (x: c128) => c128
-exp: (x: f32) => f32
-exp: (x: float) => float
-exp: (x: c64) => c64
-exp: (x: c128) => c128
-expm1: (x: f32) => f32
-expm1: (x: float) => float
-log: (x: f32) => f32
-log: (x: float) => float
-log2: (x: f32) => f32
-log2: (x: float) => float
-log10: (x: f32) => f32
-log10: (x: float) => float
-log1p: (x: f32) => f32
-log1p: (x: float) => float
-pow: (x: f32, y: f32) => f32
-pow: (x: float, y: float) => float
-hypot: (x: f32, y: f32) => f32
-hypot: (x: float, y: float) => float
-sin: (x: f32) => f32
-sin: (x: float) => float
-cos: (x: f32) => f32
-cos: (x: float) => float
-tan: (x: f32) => f32
-tan: (x: float) => float
-asin: (x: f32) => f32
-asin: (x: float) => float
-acos: (x: f32) => f32
-acos: (x: float) => float
-atan: (x: f32) => f32
-atan: (x: float) => float
-atan2: (y: f32, x: f32) => f32
-atan2: (y: float, x: float) => float
-sinh: (x: f32) => f32
-sinh: (x: float) => float
-cosh: (x: f32) => f32
-cosh: (x: float) => float
-tanh: (x: f32) => f32
-tanh: (x: float) => float
-floor: (x: f32) => f32
-floor: (x: float) => float
-ceil: (x: f32) => f32
-ceil: (x: float) => float
-round: (x: f32) => f32
-round: (x: float) => float
-trunc: (x: f32) => f32
-trunc: (x: float) => float
-min: (a: i32, b: i32) => i32
-min: (a: int, b: int) => int
-min: (a: f32, b: f32) => f32
-min: (a: float, b: float) => float
-min: (a: string, b: string) => string
-min: (a: bool, b: bool) => bool
-min: (a: bf16, b: bf16) => bf16
-min: (a: f16, b: f16) => f16
-max: (a: i32, b: i32) => i32
-max: (a: int, b: int) => int
-max: (a: f32, b: f32) => f32
-max: (a: float, b: float) => float
-max: (a: string, b: string) => string
-max: (a: bool, b: bool) => bool
-max: (a: bf16, b: bf16) => bf16
-max: (a: f16, b: f16) => f16
-clamp: (x: i32, lo: i32, hi: i32) => i32
-clamp: (x: int, lo: int, hi: int) => int
-clamp: (x: f32, lo: f32, hi: f32) => f32
-clamp: (x: float, lo: float, hi: float) => float
-sign: (x: i32) => i32
-sign: (x: int) => int
-sign: (x: f32) => f32
-sign: (x: float) => float
-is_nan: (x: f32) => bool
-is_nan: (x: float) => bool
-is_inf: (x: f32) => bool
-is_inf: (x: float) => bool
-gcd: (a: i32, b: i32) => i32
-gcd: (a: int, b: int) => int
-lcm: (a: i32, b: i32) => i32
-lcm: (a: int, b: int) => int
-bin: (x: i32) => string
-bin: (x: int) => string
-oct: (x: i32) => string
-oct: (x: int) => string
-hex: (x: i32) => string
-hex: (x: int) => string
-shl: (x: i32, count: i32) => i32
-shl: (x: i32, count: int) => i32
-shl: (x: int, count: i32) => int
-shl: (x: int, count: int) => int
-shr: (x: i32, count: i32) => i32
-shr: (x: i32, count: int) => i32
-shr: (x: int, count: i32) => int
-shr: (x: int, count: int) => int
-bit_and: (a: i32, b: i32) => i32
-bit_and: (a: int, b: int) => int
-bit_or: (a: i32, b: i32) => i32
-bit_or: (a: int, b: int) => int
-bit_xor: (a: i32, b: i32) => i32
-bit_xor: (a: int, b: int) => int
-bit_not: (x: i32) => i32
-bit_not: (x: int) => int
+sqrt: (x: T) => T when is_float::<T>()
+exp: (x: T) => T when is_float::<T>()
+exp: (z: T) => T when is_complex::<T>()
+expm1: (x: T) => T when is_float::<T>()
+log: (x: T) => T when is_float::<T>()
+log2: (x: T) => T when is_float::<T>()
+log10: (x: T) => T when is_float::<T>()
+log1p: (x: T) => T when is_float::<T>()
+pow: (x: T, y: T) => T when is_float::<T>()
+hypot: (x: T, y: T) => T when is_float::<T>()
+sin: (x: T) => T when is_float::<T>()
+cos: (x: T) => T when is_float::<T>()
+tan: (x: T) => T when is_float::<T>()
+asin: (x: T) => T when is_float::<T>()
+acos: (x: T) => T when is_float::<T>()
+atan: (x: T) => T when is_float::<T>()
+atan2: (y: T, x: T) => T when is_float::<T>()
+sinh: (x: T) => T when is_float::<T>()
+cosh: (x: T) => T when is_float::<T>()
+tanh: (x: T) => T when is_float::<T>()
+floor: (x: T) => T when is_float::<T>()
+ceil: (x: T) => T when is_float::<T>()
+round: (x: T) => T when is_float::<T>()
+trunc: (x: T) => T when is_float::<T>()
+min: (a: T, b: T) => T when is_ordered::<T>()
+max: (a: T, b: T) => T when is_ordered::<T>()
+clamp: (x: T, lo: T, hi: T) => T when is_real::<T>()
+abs: (x: T) => T when is_real::<T>()
+abs: (z: T) => f32 when is_same::<T, c64>()
+abs: (z: T) => float when is_same::<T, c128>()
+sign: (x: T) => T when is_real::<T>()
+is_nan: (x: T) => bool when is_float::<T>()
+is_inf: (x: T) => bool when is_float::<T>()
+is_finite: (x: T) => bool when is_float::<T>()
+re: (z: c64) => f32
+re: (z: c128) => float
+im: (z: c64) => f32
+im: (z: c128) => float
+conj: (z: T) => T when is_same::<T, c64>()
+conj: (z: T) => T when is_same::<T, c128>()
+gcd: (a: T, b: T) => T when is_integer::<T>()
+lcm: (a: T, b: T) => T when is_integer::<T>()
+bit_and: (a: T, b: T) => T when is_same::<T, i32>()
+bit_and: (a: T, b: T) => T when is_same::<T, int>()
+bit_or: (a: T, b: T) => T when is_same::<T, i32>()
+bit_or: (a: T, b: T) => T when is_same::<T, int>()
+bit_xor: (a: T, b: T) => T when is_same::<T, i32>()
+bit_xor: (a: T, b: T) => T when is_same::<T, int>()
+shl: <count: int> (x: T) => T when is_same::<T, i32>()
+shl: <count: int> (x: T) => T when is_same::<T, int>()
+shr: <count: int> (x: T) => T when is_same::<T, i32>()
+shr: <count: int> (x: T) => T when is_same::<T, int>()
 ```
 
 **`statistics`** — import { ... } from statistics — 5 name(s)
@@ -766,6 +687,6 @@ asian_call_price: (paths: int, steps: int, seed: int) => float
 
 ```text
 supported_operators: () => string[]
-export_model: <out: string, dynamic_axes: void[] = [], target: string = 'onnxruntime-cpu'> (fn: F, example: E) => void!
+export_model: <out: string, dynamic_axes: int[] = [], target: string = 'onnxruntime-cpu'> (fn: F, example: E) => void!
 ```
 <!-- camel-for-ai end: stdlib-signatures -->

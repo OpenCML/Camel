@@ -2333,116 +2333,22 @@ so, and a struct or tuple is asked field by field.
 
 ## `array`: arrays, sorting and higher-order functions
 
-Array functions and higher-order functions, written in Camel on top of the built-in
-operators (map, filter, reduce, range, zip, slice, len) and a few native primitives of this
-module (the sorts, argsort, flatten, unique). Every function returns a new value; none changes
-its argument.
+Functions on arrays, written in Camel on the built-in operators (`map`, `filter`, `reduce`,
+`zip`, `len`, the subscript) and on two native atoms: `argsort`, and the flat view of an array
+of any rank. Every function returns a new value; none changes its argument. The functions of
+one dimension take `T[]`; the reductions take `T[..]` and reduce every element, in row-major
+order.
 
-- The array a function works on is its ordinary argument; a function or a value that
-  configures it is a with-argument, as for the built-in `map<f>(xs)` and `filter<f>(xs)`,
-  so calls chain: `xs->filter<p>->sort_by<key>->take<3>`.
-- A result that may not exist is `T?` (`find`, `index_of`, `min`, `max`). Nothing here
-  returns an error value, and a wrong argument is a fault of the operator that meets it.
-- A function passed to any of these must be pure. The implementation may stop early
-  (`find`, `index_of`, `any`, `all`) or, when a fast path is added under `#impl`, apply it to
-  several elements at once; the result is the same either way, and no call observes another.
-  A function with side effects belongs in `foreach` or `reduce`, which run in order.
-- The functions written here are generic: there is one instance per set of element types in
-  the whole program, whichever module calls it (one root graph, design principles 10.1).
-  `group_by` is not here: it needs the map type.
-
-### Sorting
-
-#### `argsort`
-
-```camel
-argsort: (keys: i32[]) => int[]
-argsort: (keys: int[]) => int[]
-argsort: (keys: f32[]) => int[]
-argsort: (keys: float[]) => int[]
-argsort: (keys: bf16[]) => int[]
-argsort: (keys: f16[]) => int[]
-argsort: (keys: bool[]) => int[]
-argsort: (keys: string[]) => int[]
-```
-
-The positions of the keys in ascending order of key; equal keys keep their order (a stable
-sort). Keys are numbers, strings (ordered by byte) or bools; NaN keys come last. The
-primitive behind `sort_by`.
-
-- A native operator of this module: an opaque node, pure.
-- Example: `argsort([30, 10, 20])` gives `[1, 2, 0]`
-
-#### `sort`
-
-```camel
-sort: (xs: i32[]) => i32[]
-sort: (xs: int[]) => int[]
-sort: (xs: f32[]) => f32[]
-sort: (xs: float[]) => float[]
-```
-
-A sorted copy of xs (quicksort).
-
-- A native operator of this module: an opaque node, pure.
-- Example: `sort([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `insert_sort`
-
-```camel
-insert_sort: (xs: i32[]) => i32[]
-insert_sort: (xs: int[]) => int[]
-insert_sort: (xs: f32[]) => f32[]
-insert_sort: (xs: float[]) => float[]
-```
-
-A sorted copy of xs, by insertion sort.
-
-- A native operator of this module: an opaque node, pure.
-- Example: `insert_sort([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `quick_sort`
-
-```camel
-quick_sort: (xs: i32[]) => i32[]
-quick_sort: (xs: int[]) => int[]
-quick_sort: (xs: f32[]) => f32[]
-quick_sort: (xs: float[]) => float[]
-```
-
-A sorted copy of xs, by quicksort.
-
-- A native operator of this module: an opaque node, pure.
-- Example: `quick_sort([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `merge_sort`
-
-```camel
-merge_sort: (xs: i32[]) => i32[]
-merge_sort: (xs: int[]) => int[]
-merge_sort: (xs: f32[]) => f32[]
-merge_sort: (xs: float[]) => float[]
-```
-
-A sorted copy of xs, by merge sort.
-
-- A native operator of this module: an opaque node, pure.
-- Example: `merge_sort([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `merge_sorted_arrays`
-
-```camel
-merge_sorted_arrays: (left: i32[], right: i32[]) => i32[]
-merge_sorted_arrays: (left: int[], right: int[]) => int[]
-merge_sorted_arrays: (left: f32[], right: f32[]) => f32[]
-merge_sorted_arrays: (left: float[], right: float[]) => float[]
-```
-
-The sorted array made of the elements of two sorted arrays of numbers. The two must hold the
-same element type: `T` is one of the four the sorts order, not one per argument.
-
-- A native operator of this module: an opaque node, pure.
-- Example: `merge_sorted_arrays([1, 4], [2, 3])` gives `[1, 2, 3, 4]`
+- The array is the ordinary argument; what configures the function (a count, a value, a
+  function) is in angle brackets, so calls chain: `xs->filter<keep>->sort_by<key>->take<3>`.
+- A result that may not exist (`find`, `find_index`, `index_of`) is `T?`; nothing here returns
+  an error value. The `sum` of no element is 0; `mean`, `min`, `max`, `argmax` and `argmin`
+  of no element are faults, as design principles 7.7 say.
+- A function passed to these runs element by element in order and stops as soon as the answer
+  is known (`find`, `any`, `all`), or is mapped, with no order among the calls (`sort_by`,
+  `flat_map`, `zip_with`). None of them asks for a `pure` function.
+- Elements are not converted: the numbers added, compared or searched for are of the
+  element type of the array.
 
 ### Rearranging
 
@@ -2455,7 +2361,7 @@ reverse: (xs: T[]) => T[]
 The elements in reverse order.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `reverse([1, 2, 3])` gives `[3, 2, 1]`
+- Example: `[1, 2, 3]->reverse` gives `[3, 2, 1]`
 
 #### `take`
 
@@ -2479,6 +2385,18 @@ The elements after the first n; none when there are fewer, all when n is not pos
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `[1, 2, 3, 4]->drop<1>` gives `[2, 3, 4]`
 
+#### `chunks`
+
+```camel
+chunks: <n: int> (xs: T[]) => T[][]
+```
+
+Consecutive pieces of n elements; the last is shorter when n does not divide the length.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Failure: fault `InvalidArgument` when n is not positive.
+- Example: `[1, 2, 3, 4, 5]->chunks<2>` gives `[[1, 2], [3, 4], [5]]`
+
 #### `enumerate`
 
 ```camel
@@ -2488,7 +2406,7 @@ enumerate: (xs: T[]) => (int, T)[]
 Each element with its index.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `enumerate(['a', 'b'])` gives `[(0, 'a'), (1, 'b')]`
+- Example: `['a', 'b']->enumerate` gives `[(0, 'a'), (1, 'b')]`
 
 #### `flatten`
 
@@ -2496,10 +2414,21 @@ Each element with its index.
 flatten: (xss: T[][]) => T[]
 ```
 
-The elements of the inner arrays, in order. The primitive behind `flat_map`.
+The elements of the inner arrays, in order.
 
-- A native operator of this module: an opaque node, pure.
-- Example: `flatten([[1, 2], [3]])` gives `[1, 2, 3]`
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `[[1, 2], [3]]->flatten` gives `[1, 2, 3]`
+
+#### `flatten`
+
+```camel
+flatten: (xs: T[..]) => T[] when !is_array_type::<T>()
+```
+
+The elements of an array of any rank, in row-major order, as an array of one dimension.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `([[1, 2], [3, 4]] as int[2, 2])->flatten` gives `[1, 2, 3, 4]`
 
 #### `unique`
 
@@ -2507,24 +2436,27 @@ The elements of the inner arrays, in order. The primitive behind `flat_map`.
 unique: (xs: T[]) => T[]
 ```
 
-The first occurrence of every value, in order; values are compared as `==` compares them
-(a NaN equals nothing, so every NaN is kept).
+The first occurrence of every value, in order. Values are compared as `==` compares them, so
+a NaN equals nothing and every NaN is kept. The time is quadratic in the number of distinct
+values; to drop repeats of numbers or strings in a long array, `sort` it and compare
+neighbours.
 
-- A native operator of this module: an opaque node, pure.
-- Example: `unique([3, 1, 3, 2, 1])` gives `[3, 1, 2]`
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `[3, 1, 3, 2, 1]->unique` gives `[3, 1, 2]`
 
 ### Searching
 
-#### `index_of`
+#### `find_index`
 
 ```camel
-index_of: <x: T> (xs: T[]) => int?
+find_index: <pred: (x: T) => bool> (xs: T[]) => int?
 ```
 
-The index of the first element equal to x, or null.
+The index of the first element for which pred is true, or null. pred is not called on the
+elements after it.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `[3, 9, 2]->index_of<9> ?? -1` gives `1`
+- Example: `[3, 9, 2]->find_index<(x) => x > 4> ?? -1` gives `1`
 
 #### `find`
 
@@ -2535,7 +2467,18 @@ find: <pred: (x: T) => bool> (xs: T[]) => T?
 The first element for which pred is true, or null.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `[3, 9, 2]->find<(x: int) => x > 4> ?? -1` gives `9`
+- Example: `[3, 9, 2]->find<(x) => x > 4> ?? -1` gives `9`
+
+#### `index_of`
+
+```camel
+index_of: <x: T> (xs: T[]) => int?
+```
+
+The index of the first element equal to x, or null. Equality is `==`, so a NaN is never found.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `[3, 9, 2]->index_of<9> ?? -1` gives `1`
 
 #### `any`
 
@@ -2546,7 +2489,7 @@ any: <pred: (x: T) => bool> (xs: T[]) => bool
 True when pred is true for at least one element; false for an empty array.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `[3, 9, 2]->any<(x: int) => x > 4>` gives `true`
+- Example: `[3, 9, 2]->any<(x) => x > 4>` gives `true`
 
 #### `all`
 
@@ -2557,7 +2500,7 @@ all: <pred: (x: T) => bool> (xs: T[]) => bool
 True when pred is true for every element; true for an empty array.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `[3, 9, 2]->all<(x: int) => x > 4>` gives `false`
+- Example: `[3, 9, 2]->all<(x) => x > 4>` gives `false`
 
 #### `count`
 
@@ -2568,100 +2511,91 @@ count: <pred: (x: T) => bool> (xs: T[]) => int
 The number of elements for which pred is true.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `[3, 9, 2]->count<(x: int) => x > 2>` gives `2`
+- Example: `[3, 9, 2]->count<(x) => x > 2>` gives `2`
 
-### Aggregating
+### Reducing
 
 #### `sum`
 
 ```camel
-sum: (xs: T[]) => T when is_numeric::<T>()
+sum: (xs: T[..]) => T when is_numeric::<T>()
 ```
 
-The sum of the elements, 0 for an empty array.
+The sum of the elements.
 
-A floating-point element type accumulates in f64 and rounds once into the element type at the
-end: the additions are f64 additions and the result is one conversion of their sum, not a
-rounding after every addition (an f32 accumulator rounds at every step and answers
-differently). This is the same rule the tensor axis `sum` follows (modules/tensor/kernels/
-reduce.cpp: a double accumulator, one rounding when the element is stored), so the two paths
-agree bit for bit on the same elements. An integer element type accumulates in itself and
-wraps around on overflow, as `+` does on it; a complex element type accumulates in itself as
-well, the f64 rule being stated for the floating-point element types.
+A float element type is added in f64 and rounded once into the element type: the rule of
+every float reduction, not a rounding after each addition. An integer or complex element
+type is added in itself and wraps around on overflow, as `+` does.
+The sum of no element is 0, the identity of addition.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `sum([1, 2, 3])` gives `6`
+- Example: `[1, 2, 3]->sum` gives `6`
+- Example: `[0.5, 0.25]->sum` gives `0.75`
+
+#### `mean`
+
+```camel
+mean: (xs: T[..]) => T when is_float::<T>()
+```
+
+The arithmetic mean: the sum and the division both in f64, rounded once into the element
+type, `T(sum(float(x)) / float(numel(x)))`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Failure: fault `InvalidArgument` when the array has no element.
+- Example: `[1.0, 2.0, 3.0, 4.0]->mean` gives `2.5`
 
 #### `min`
 
 ```camel
-min: (xs: T[]) => T? when is_ordered::<T>()
+min: (xs: T[..]) => T when is_ordered::<T>()
 ```
 
-The smallest number (IEEE 754 minimum: a NaN anywhere makes the result NaN, and -0 is below
-+0), or null for an empty array.
-
-No accumulator and no accumulation width take part in this fold: it carries an element of T
-and combines it with `math::min`, which is IEEE 754 minimum — exactly associative and
-commutative (design principles 7.7) — so the order does not change the bits and there is
-nothing to round.
+The smallest element. Numbers are compared as `math::min` compares them: a NaN anywhere gives
+NaN, and -0 is below +0. Strings compare by their bytes, and false is below true.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `min([3, 9, 2]) ?? 0` gives `2`
+- Failure: fault `InvalidArgument` when the array has no element.
+- Example: `[3, 9, 2]->min` gives `2`
 
 #### `max`
 
 ```camel
-max: (xs: T[]) => T? when is_ordered::<T>()
+max: (xs: T[..]) => T when is_ordered::<T>()
 ```
 
-The largest number (IEEE 754 maximum: a NaN anywhere makes the result NaN, and +0 is above
--0), or null for an empty array.
-
-As `min`: the fold carries an element of T, and `math::max` is IEEE 754 maximum, exactly
-associative and commutative (design principles 7.7), so no accumulator type enters.
+The largest element. Numbers are compared as `math::max` compares them: a NaN anywhere gives
+NaN, and +0 is above -0.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `max([3, 9, 2]) ?? 0` gives `9`
+- Failure: fault `InvalidArgument` when the array has no element.
+- Example: `[3, 9, 2]->max` gives `9`
 
-### Transforming
-
-#### `flat_map`
+#### `argmax`
 
 ```camel
-flat_map: <f: (x: T) => U[]> (xs: T[]) => U[]
+argmax: (xs: T[..]) => int when is_ordered::<T>()
 ```
 
-f applied to every element, the resulting arrays joined in order.
+The row-major position of the largest element: the first NaN if there is one, +0 above -0,
+the earlier position on a tie.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `[1, 2]->flat_map<(x: int) => [x, x * 10]>` gives `[1, 10, 2, 20]`
+- Failure: fault `InvalidArgument` when the array has no element.
+- Example: `[3, 9, 2, 9]->argmax` gives `1`
 
-#### `sort_by`
+#### `argmin`
 
 ```camel
-sort_by: <key: (x: T) => K> (xs: T[]) => T[]
+argmin: (xs: T[..]) => int when is_ordered::<T>()
 ```
 
-The elements in ascending order of key(x); elements with equal keys keep their order (the
-sort is stable, so sorting by one key and then by another works). A key is a number, a string
-(ordered by byte) or a bool; NaN keys come last. For a descending order of numbers use the
-negated key.
+The row-major position of the smallest element: the first NaN if there is one, -0 below +0,
+the earlier position on a tie.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `['pear', 'fig', 'apple']->sort_by<(w: string) => len(w)>` gives `['fig', 'pear', 'apple']`
-
-#### `zip_with`
-
-```camel
-zip_with: <f: (a: T, b: U) => V> (xs: T[], ys: U[]) => V[]
-```
-
-f(xs[i], ys[i]) for every i.
-
-- Written in Camel: a subgraph, pure when the functions passed to it are.
-- Failure: fault `InvalidArgument` (of zip) when the two arrays differ in length.
-- Example: `zip_with<(a: int, b: int) => a + b>([1, 2], [10, 20])` gives `[11, 22]`
+- Failure: fault `InvalidArgument` when the array has no element.
+- Example: `[3, 1, 2, 1]->argmin` gives `1`
 
 ### Reducing along an axis
 
@@ -2677,7 +2611,6 @@ from +0 in ascending order and rounded once, an integer one wraps around.
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Failure: fault `InvalidArgument` when the axis is outside the rank.
 - Example: `([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->sum<0>` gives `[4.0, 6.0]`
-- Example: `([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->sum<1, true>` gives `[[3.0], [7.0]]`
 
 #### `mean`
 
@@ -2788,11 +2721,84 @@ to_bytes: (xs: T[..]) => Bytes when is_plain::<T>()
 
 The elements of an array as little-endian bytes, in row-major order: the payload `from_bytes`
 reads back. The elements are the array's own bytes, so every pure-data element type has them:
-one byte an element for a `bool` array, four for an `i32` or `f32` one and eight for an `f64` or `c64`
+one byte an element for a `bool` array, four for an `f32` one and eight for an `f64` or `c64`
 one.
 
 - A native operator of this module: an opaque node, pure.
-- Example: `([[1, 2]] as int[1, 2])->to_bytes` gives `[1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0]`
+- Example: `([1.0, 2.0] as f32[])->to_bytes` gives `[0, 0, 128, 63, 0, 0, 0, 64]`
+
+### Sorting
+
+#### `argsort`
+
+```camel
+argsort: (keys: i32[]) => int[]
+argsort: (keys: int[]) => int[]
+argsort: (keys: f32[]) => int[]
+argsort: (keys: float[]) => int[]
+argsort: (keys: bf16[]) => int[]
+argsort: (keys: f16[]) => int[]
+argsort: (keys: bool[]) => int[]
+argsort: (keys: string[]) => int[]
+```
+
+The positions of the keys in ascending order of key; equal keys keep their order. Numbers
+are ordered as `min` and `max` order them, with -0 below +0 and every NaN after the numbers;
+strings are ordered by their bytes and false is below true. This is the atom the sorts are
+written on.
+
+- A native operator of this module: an opaque node, pure.
+- Example: `[30, 10, 20]->argsort` gives `[1, 2, 0]`
+
+#### `sort`
+
+```camel
+sort: (xs: T[]) => T[] when is_ordered::<T>()
+```
+
+The elements in ascending order, in the order `argsort` gives.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `[3, 1, 2]->sort` gives `[1, 2, 3]`
+- Example: `['pear', 'fig']->sort` gives `['fig', 'pear']`
+
+#### `sort_by`
+
+```camel
+sort_by: <key: (x: T) => K> (xs: T[]) => T[] when is_ordered::<K>()
+```
+
+The elements in ascending order of key(x); elements with equal keys keep their order, so
+sorting by one key and then by another works. key is called once for every element. Keys
+are ordered as `argsort` orders them; for a descending order of numbers use the negated key.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `['pear', 'fig', 'apple']->sort_by<(w) => len(w)>` gives `['fig', 'pear', 'apple']`
+
+### Transforming
+
+#### `flat_map`
+
+```camel
+flat_map: <f: (x: T) => U[]> (xs: T[]) => U[]
+```
+
+f applied to every element, the resulting arrays joined in order.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `[1, 2]->flat_map<(x) => [x, x * 10]>` gives `[1, 10, 2, 20]`
+
+#### `zip_with`
+
+```camel
+zip_with: <f: (a: T, b: U) => V> (xs: T[], ys: U[]) => V[]
+```
+
+f(xs[i], ys[i]) for every i.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Failure: fault `InvalidArgument` (of zip) when the two arrays differ in length.
+- Example: `zip_with<(a, b) => a + b>([1, 2], [10, 20])` gives `[11, 22]`
 
 <a id="stream"></a>
 
@@ -2854,14 +2860,28 @@ themselves are values like any other, so a `tee` of one of them is another `tee`
 
 ## `math`: numbers and bits
 
-Numeric types are not converted implicitly. A function over floats takes `f32` or `float`
-and returns the type it was given; a function of several numbers takes numbers of one type.
-Outside its domain a float function gives the IEEE result (NaN or an infinity), not a fault.
-A constant is a value, written without parentheses: `pi`.
+Scalar mathematics. One definition covers every type that has the operation: a function of
+floats is written once for `f32`, `float`, `bf16` and `f16` and answers the type it was given;
+a function of several numbers takes numbers of one type. Numeric types are not converted
+implicitly: `sqrt(4)` is refused, write `sqrt(4.0)` or `sqrt(float(n))`.
+
+- Outside its domain a float function gives the IEEE result (NaN or an infinity), not a fault.
+  Special values (zeros, infinities, NaN) are exact.
+- The transcendental functions are computed in f64 and rounded once into the type asked for.
+  They promise an error of at most 2 ulp (of the type's own precision, for `float`), not the
+  same bits on every device (design principles 7.1). `sqrt`, the rounding functions, `min` and
+  `max` are exact: the result is the correctly rounded or the selected operand.
+- `min` and `max` are the IEEE 754-2019 `minimum` and `maximum`: a NaN on either side gives
+  NaN, and -0 is below +0 (design principles 7.7).
+- Over an array the elementwise functions are the `tensor` module's for now (`exp(xs)`); the
+  scalar ones here apply to a number, and `xs->map<exp>` is the same function on every element.
+  The conversions `f32(xs)`, `float(xs)` are elementwise (core). `sum`, `mean`, `min`, `max` of a
+  whole array belong to `array`.
+- Only what a program cannot compute from the language is native: the f64 kernels of the
+  elementary functions, the sign-exact selection of `min` and `max`, the parts of a complex
+  number, and the bit operations of an integer width.
 
 ### Constants
-
-Values the module exports (design principles 10.1), written without parentheses.
 
 #### `pi`
 
@@ -2912,289 +2932,201 @@ A NaN. It equals nothing, itself included: test with is_nan.
 #### `sqrt`
 
 ```camel
-sqrt: (x: i32) => f32
-sqrt: (x: int) => float
-sqrt: (x: f32) => f32
-sqrt: (x: float) => float
+sqrt: (x: T) => T when is_float::<T>()
 ```
 
-The square root. An integer argument is converted: i32 gives f32, int gives float.
+The square root; NaN for a negative x, and the square root of -0 is -0.
 
-- Pure.
 - Example: `sqrt(9.0)` gives `3`
-
-#### `abs`
-
-```camel
-abs: (x: i32) => i32
-abs: (x: int) => int
-abs: (x: f32) => f32
-abs: (x: float) => float
-abs: (x: c64) => f32
-abs: (x: c128) => float
-abs: (x: bf16) => bf16
-abs: (x: f16) => f16
-```
-
-The absolute value. The smallest integer has no positive counterpart: its absolute value is
-not defined. A bf16 or f16 value is the sign cleared, computed on the f32 it widens to
-exactly, so -0 becomes +0 and no value of either type rounds (design principles 7.3).
-
-- Pure.
-- Example: `abs(-3)` gives `3`
-
-#### `re`
-
-```camel
-re: (x: c64) => f32
-re: (x: c128) => float
-```
-
-The real part of a complex number.
-
-- Pure.
-- Example: `re(3+4i)` gives `3.0`
-
-#### `im`
-
-```camel
-im: (x: c64) => f32
-im: (x: c128) => float
-```
-
-The imaginary part of a complex number.
-
-- Pure.
-- Example: `im(3+4i)` gives `4.0`
-
-#### `conj`
-
-```camel
-conj: (x: c64) => c64
-conj: (x: c128) => c128
-```
-
-The conjugate of a complex number: the imaginary part is negated.
-
-- Pure.
-- Example: `conj(3+4i)` gives `3-4i`
 
 #### `exp`
 
 ```camel
-exp: (x: f32) => f32
-exp: (x: float) => float
-exp: (x: c64) => c64
-exp: (x: c128) => c128
+exp: (x: T) => T when is_float::<T>()
 ```
 
 e raised to the power x.
 
-- Pure.
 - Example: `exp(0.0)` gives `1`
+
+#### `exp`
+
+```camel
+exp: (z: T) => T when is_complex::<T>()
+```
+
+e raised to the power of a complex number.
+
+- Example: `exp(0.0+0.0i)` gives `1+0i`
 
 #### `expm1`
 
 ```camel
-expm1: (x: f32) => f32
-expm1: (x: float) => float
+expm1: (x: T) => T when is_float::<T>()
 ```
 
 exp(x) - 1, accurate for x near 0.
 
-- Pure.
 - Example: `expm1(0.0)` gives `0`
 
 #### `log`
 
 ```camel
-log: (x: f32) => f32
-log: (x: float) => float
+log: (x: T) => T when is_float::<T>()
 ```
 
 The natural logarithm. log(0.0) is -inf, the logarithm of a negative number is NaN.
 
-- Pure.
 - Example: `log(1.0)` gives `0`
 
 #### `log2`
 
 ```camel
-log2: (x: f32) => f32
-log2: (x: float) => float
+log2: (x: T) => T when is_float::<T>()
 ```
 
 The logarithm to base 2.
 
-- Pure.
 - Example: `log2(8.0)` gives `3`
 
 #### `log10`
 
 ```camel
-log10: (x: f32) => f32
-log10: (x: float) => float
+log10: (x: T) => T when is_float::<T>()
 ```
 
 The logarithm to base 10.
 
-- Pure.
 - Example: `log10(1000.0)` gives `3`
 
 #### `log1p`
 
 ```camel
-log1p: (x: f32) => f32
-log1p: (x: float) => float
+log1p: (x: T) => T when is_float::<T>()
 ```
 
 log(1 + x), accurate for x near 0.
 
-- Pure.
 - Example: `log1p(0.0)` gives `0`
 
 #### `pow`
 
 ```camel
-pow: (x: f32, y: f32) => f32
-pow: (x: float, y: float) => float
+pow: (x: T, y: T) => T when is_float::<T>()
 ```
 
 x raised to the power y. pow(0.0, 0.0) is 1; a negative x with a fractional y gives NaN.
 
-- Pure.
 - Example: `pow(2.0, 10.0)` gives `1024`
 
 #### `hypot`
 
 ```camel
-hypot: (x: f32, y: f32) => f32
-hypot: (x: float, y: float) => float
+hypot: (x: T, y: T) => T when is_float::<T>()
 ```
 
 The square root of x*x + y*y, without overflow in the squares.
 
-- Pure.
 - Example: `hypot(3.0, 4.0)` gives `5`
 
 #### `sin`
 
 ```camel
-sin: (x: f32) => f32
-sin: (x: float) => float
+sin: (x: T) => T when is_float::<T>()
 ```
 
 The sine of x, x in radians.
 
-- Pure.
 - Example: `sin(0.0)` gives `0`
 
 #### `cos`
 
 ```camel
-cos: (x: f32) => f32
-cos: (x: float) => float
+cos: (x: T) => T when is_float::<T>()
 ```
 
 The cosine of x, x in radians.
 
-- Pure.
 - Example: `cos(0.0)` gives `1`
 
 #### `tan`
 
 ```camel
-tan: (x: f32) => f32
-tan: (x: float) => float
+tan: (x: T) => T when is_float::<T>()
 ```
 
 The tangent of x, x in radians.
 
-- Pure.
 - Example: `tan(0.0)` gives `0`
 
 #### `asin`
 
 ```camel
-asin: (x: f32) => f32
-asin: (x: float) => float
+asin: (x: T) => T when is_float::<T>()
 ```
 
 The arc sine, in radians; NaN outside -1 to 1.
 
-- Pure.
 - Example: `asin(1.0)` gives `1.5708`
 
 #### `acos`
 
 ```camel
-acos: (x: f32) => f32
-acos: (x: float) => float
+acos: (x: T) => T when is_float::<T>()
 ```
 
 The arc cosine, in radians; NaN outside -1 to 1.
 
-- Pure.
 - Example: `acos(1.0)` gives `0`
 
 #### `atan`
 
 ```camel
-atan: (x: f32) => f32
-atan: (x: float) => float
+atan: (x: T) => T when is_float::<T>()
 ```
 
 The arc tangent, in radians.
 
-- Pure.
 - Example: `atan(1.0)` gives `0.785398`
 
 #### `atan2`
 
 ```camel
-atan2: (y: f32, x: f32) => f32
-atan2: (y: float, x: float) => float
+atan2: (y: T, x: T) => T when is_float::<T>()
 ```
 
 The angle of the point (x, y) in radians, between -pi and pi. Note the order: y first.
 
-- Pure.
 - Example: `atan2(1.0, 1.0)` gives `0.785398`
 
 #### `sinh`
 
 ```camel
-sinh: (x: f32) => f32
-sinh: (x: float) => float
+sinh: (x: T) => T when is_float::<T>()
 ```
 
 The hyperbolic sine.
 
-- Pure.
 - Example: `sinh(0.0)` gives `0`
 
 #### `cosh`
 
 ```camel
-cosh: (x: f32) => f32
-cosh: (x: float) => float
+cosh: (x: T) => T when is_float::<T>()
 ```
 
 The hyperbolic cosine.
 
-- Pure.
 - Example: `cosh(0.0)` gives `1`
 
 #### `tanh`
 
 ```camel
-tanh: (x: f32) => f32
-tanh: (x: float) => float
+tanh: (x: T) => T when is_float::<T>()
 ```
 
 The hyperbolic tangent.
 
-- Pure.
 - Example: `tanh(0.0)` gives `0`
 
 ### Rounding
@@ -3202,49 +3134,41 @@ The hyperbolic tangent.
 #### `floor`
 
 ```camel
-floor: (x: f32) => f32
-floor: (x: float) => float
+floor: (x: T) => T when is_float::<T>()
 ```
 
 The largest whole number not above x, as a float.
 
-- Pure.
 - Example: `floor(-2.5)` gives `-3`
 
 #### `ceil`
 
 ```camel
-ceil: (x: f32) => f32
-ceil: (x: float) => float
+ceil: (x: T) => T when is_float::<T>()
 ```
 
 The smallest whole number not below x, as a float.
 
-- Pure.
 - Example: `ceil(2.1)` gives `3`
 
 #### `round`
 
 ```camel
-round: (x: f32) => f32
-round: (x: float) => float
+round: (x: T) => T when is_float::<T>()
 ```
 
 The nearest whole number, halves away from zero, as a float.
 
-- Pure.
 - Example: `round(2.5)` gives `3`
 
 #### `trunc`
 
 ```camel
-trunc: (x: f32) => f32
-trunc: (x: float) => float
+trunc: (x: T) => T when is_float::<T>()
 ```
 
 x without its fraction (rounded toward zero), as a float.
 
-- Pure.
 - Example: `trunc(-2.7)` gives `-2`
 
 ### Comparing
@@ -3252,250 +3176,236 @@ x without its fraction (rounded toward zero), as a float.
 #### `min`
 
 ```camel
-min: (a: i32, b: i32) => i32
-min: (a: int, b: int) => int
-min: (a: f32, b: f32) => f32
-min: (a: float, b: float) => float
-min: (a: string, b: string) => string
-min: (a: bool, b: bool) => bool
-min: (a: bf16, b: bf16) => bf16
-min: (a: f16, b: f16) => f16
+min: (a: T, b: T) => T when is_ordered::<T>()
 ```
 
 The smaller of two values of one ordered type. For numbers this is the IEEE 754 minimum: a
-NaN on either side gives NaN, and -0 is below +0. Strings compare by their bytes (a proper
-prefix first), and false is below true. A bf16 or f16 comparison is made on the f32 each
-operand widens to exactly, and the result is that operand itself: neither type rounds here
-(design principles 7.3).
+NaN on either side gives NaN, and -0 is below +0. Strings compare by code point (a proper
+prefix first), and false is below true.
 
-- Pure.
 - Example: `min(3, 5)` gives `3`
 - Example: `min('b', 'a')` gives `'a'`
 
 #### `max`
 
 ```camel
-max: (a: i32, b: i32) => i32
-max: (a: int, b: int) => int
-max: (a: f32, b: f32) => f32
-max: (a: float, b: float) => float
-max: (a: string, b: string) => string
-max: (a: bool, b: bool) => bool
-max: (a: bf16, b: bf16) => bf16
-max: (a: f16, b: f16) => f16
+max: (a: T, b: T) => T when is_ordered::<T>()
 ```
 
 The larger of two values of one ordered type. For numbers this is the IEEE 754 maximum: a
-NaN on either side gives NaN, and -0 is below +0. Strings compare by their bytes (a proper
-prefix first), and false is below true. A bf16 or f16 comparison is made on the f32 each
-operand widens to exactly, and the result is that operand itself: neither type rounds here
-(design principles 7.3).
+NaN on either side gives NaN, and -0 is below +0. Strings compare by code point (a proper
+prefix first), and false is below true.
 
-- Pure.
 - Example: `max(3, 5)` gives `5`
 - Example: `max('a', 'b')` gives `'b'`
 
 #### `clamp`
 
 ```camel
-clamp: (x: i32, lo: i32, hi: i32) => i32
-clamp: (x: int, lo: int, hi: int) => int
-clamp: (x: f32, lo: f32, hi: f32) => f32
-clamp: (x: float, lo: float, hi: float) => float
+clamp: (x: T, lo: T, hi: T) => T when is_real::<T>()
 ```
 
 x held between lo and hi: lo when x is below, hi when above. A NaN x stays NaN.
 
-- Pure.
 - Failure: fault `InvalidArgument` when lo is above hi, or a bound is NaN.
 - Example: `clamp(15, 0, 10)` gives `10`
+
+#### `abs`
+
+```camel
+abs: (x: T) => T when is_real::<T>()
+```
+
+The absolute value of an integer or a float. The sign of a zero is cleared, a NaN stays a NaN,
+and the smallest integer is its own absolute value (negation wraps, as it does in `-x`).
+
+- Example: `abs(-3)` gives `3`
+
+#### `abs`
+
+```camel
+abs: (z: T) => f32 when is_same::<T, c64>()
+```
+
+The modulus of a single-precision complex number.
+
+- Example: `abs(c64(3.0)+4.0i)` gives `5`
+
+#### `abs`
+
+```camel
+abs: (z: T) => float when is_same::<T, c128>()
+```
+
+The modulus of a double-precision complex number.
+
+- Example: `abs(3.0+4.0i)` gives `5`
 
 #### `sign`
 
 ```camel
-sign: (x: i32) => i32
-sign: (x: int) => int
-sign: (x: f32) => f32
-sign: (x: float) => float
+sign: (x: T) => T when is_real::<T>()
 ```
 
--1, 0 or 1 by the sign of x, in the type of x. The sign of a NaN is NaN.
+-1, 0 or 1 by the sign of x, in the type of x. A zero and a NaN are returned as they are.
 
-- Pure.
 - Example: `sign(-2.5)` gives `-1`
 
 #### `is_nan`
 
 ```camel
-is_nan: (x: f32) => bool
-is_nan: (x: float) => bool
+is_nan: (x: T) => bool when is_float::<T>()
 ```
 
 Whether x is a NaN.
 
-- Pure.
 - Example: `is_nan(inf - inf)` gives `true`
 
 #### `is_inf`
 
 ```camel
-is_inf: (x: f32) => bool
-is_inf: (x: float) => bool
+is_inf: (x: T) => bool when is_float::<T>()
 ```
 
 Whether x is positive or negative infinity.
 
-- Pure.
 - Example: `is_inf(1.0)` gives `false`
+
+#### `is_finite`
+
+```camel
+is_finite: (x: T) => bool when is_float::<T>()
+```
+
+Whether x is neither a NaN nor an infinity.
+
+- Example: `is_finite(1.0)` gives `true`
+
+### Complex numbers
+
+The parts of a complex number are native: the result type is not the argument's.
+
+#### `re`
+
+```camel
+re: (z: c64) => f32
+re: (z: c128) => float
+```
+
+The real part of a complex number.
+
+- Example: `re(3.0+4.0i)` gives `3.0`
+
+#### `im`
+
+```camel
+im: (z: c64) => f32
+im: (z: c128) => float
+```
+
+The imaginary part of a complex number.
+
+- Example: `im(3.0+4.0i)` gives `4.0`
+
+#### `conj`
+
+```camel
+conj: (z: T) => T when is_same::<T, c64>()
+conj: (z: T) => T when is_same::<T, c128>()
+```
+
+The conjugate of a complex number: the imaginary part is negated, a zero's sign included.
+
+- Example: `conj(3.0+4.0i)` gives `3-4i`
 
 ### Integers
 
 #### `gcd`
 
 ```camel
-gcd: (a: i32, b: i32) => i32
-gcd: (a: int, b: int) => int
+gcd: (a: T, b: T) => T when is_integer::<T>()
 ```
 
-The greatest common divisor, never negative; gcd(0, 0) is 0.
+The greatest common divisor, never negative; gcd(0, 0) is 0. The smallest integer, which has
+no positive counterpart, is not accepted.
 
-- Pure.
-- Failure: fault `InvalidArgument` when the result does not fit the type (the smallest integer with itself or with 0).
+- Failure: fault `InvalidArgument` when an argument is the smallest integer of its type.
 - Example: `gcd(12, 18)` gives `6`
 
 #### `lcm`
 
 ```camel
-lcm: (a: i32, b: i32) => i32
-lcm: (a: int, b: int) => int
+lcm: (a: T, b: T) => T when is_integer::<T>()
 ```
 
 The least common multiple, never negative; 0 when either argument is 0.
 
-- Pure.
-- Failure: fault `InvalidArgument` when the result does not fit the type.
+- Failure: fault `InvalidArgument` when an argument is the smallest integer, or the result does not fit the type.
 - Example: `lcm(4, 6)` gives `12`
-
-#### `bin`
-
-```camel
-bin: (x: i32) => string
-bin: (x: int) => string
-```
-
-The digits of x in base 2 with the prefix 0b; a negative number is shown as its 64-bit
-two's complement.
-
-- Pure.
-- Example: `bin(5)` gives `'0b101'`
-
-#### `oct`
-
-```camel
-oct: (x: i32) => string
-oct: (x: int) => string
-```
-
-The digits of x in base 8 with the prefix 0o.
-
-- Pure.
-- Example: `oct(8)` gives `'0o10'`
-
-#### `hex`
-
-```camel
-hex: (x: i32) => string
-hex: (x: int) => string
-```
-
-The digits of x in base 16, in upper case, with the prefix 0x.
-
-- Pure.
-- Example: `hex(255)` gives `'0xFF'`
 
 ### Bits
 
-Bit operations are functions, not operators. Integers are two's complement: `int` has 64
-bits, `i32` has 32.
-
-#### `shl`
-
-```camel
-shl: (x: i32, count: i32) => i32
-shl: (x: i32, count: int) => i32
-shl: (x: int, count: i32) => int
-shl: (x: int, count: int) => int
-```
-
-x shifted left by count bits: bits shifted out are lost and zeros come in, so the sign may
-change. The count may be of either integer type.
-
-- Pure.
-- Failure: fault `InvalidArgument` when count is negative or not below the width of x (64 for int, 32 for i32).
-- Example: `shl(1, 4)` gives `16`
-
-#### `shr`
-
-```camel
-shr: (x: i32, count: i32) => i32
-shr: (x: i32, count: int) => i32
-shr: (x: int, count: i32) => int
-shr: (x: int, count: int) => int
-```
-
-x shifted right by count bits, keeping the sign (an arithmetic shift): shr(-8, 1) is -4.
-
-- Pure.
-- Failure: fault `InvalidArgument` when count is negative or not below the width of x.
-- Example: `shr(256, 4)` gives `16`
+Bit operations are functions, not operators (`&` and `|` are logical). Integers are two's
+complement: `int` has 64 bits, `i32` has 32. One declaration per width, because the operator
+that runs differs; the name and the signature are one generic.
 
 #### `bit_and`
 
 ```camel
-bit_and: (a: i32, b: i32) => i32
-bit_and: (a: int, b: int) => int
+bit_and: (a: T, b: T) => T when is_same::<T, i32>()
+bit_and: (a: T, b: T) => T when is_same::<T, int>()
 ```
 
 The bits set in both a and b.
 
-- Pure.
 - Example: `bit_and(12, 10)` gives `8`
 
 #### `bit_or`
 
 ```camel
-bit_or: (a: i32, b: i32) => i32
-bit_or: (a: int, b: int) => int
+bit_or: (a: T, b: T) => T when is_same::<T, i32>()
+bit_or: (a: T, b: T) => T when is_same::<T, int>()
 ```
 
 The bits set in a or in b.
 
-- Pure.
 - Example: `bit_or(12, 10)` gives `14`
 
 #### `bit_xor`
 
 ```camel
-bit_xor: (a: i32, b: i32) => i32
-bit_xor: (a: int, b: int) => int
+bit_xor: (a: T, b: T) => T when is_same::<T, i32>()
+bit_xor: (a: T, b: T) => T when is_same::<T, int>()
 ```
 
 The bits set in exactly one of a and b.
 
-- Pure.
 - Example: `bit_xor(12, 10)` gives `6`
 
-#### `bit_not`
+#### `shl`
 
 ```camel
-bit_not: (x: i32) => i32
-bit_not: (x: int) => int
+shl: <count: int> (x: T) => T when is_same::<T, i32>()
+shl: <count: int> (x: T) => T when is_same::<T, int>()
 ```
 
-Every bit of x inverted; the same as the operator ~.
+x shifted left by count bits: bits shifted out are lost and zeros come in, so the sign may
+change.
 
-- Pure.
-- Example: `bit_not(0)` gives `-1`
+- Failure: fault `InvalidArgument` when count is negative or not below the width of x (64 for int, 32 for i32).
+- Example: `1->shl<4>` gives `16`
+
+#### `shr`
+
+```camel
+shr: <count: int> (x: T) => T when is_same::<T, i32>()
+shr: <count: int> (x: T) => T when is_same::<T, int>()
+```
+
+x shifted right by count bits, keeping the sign (an arithmetic shift): `-8->shr<1>` is -4.
+
+- Failure: fault `InvalidArgument` when count is negative or not below the width of x.
+- Example: `256->shr<4>` gives `16`
 
 <a id="statistics"></a>
 
@@ -6062,7 +5972,7 @@ module and never touches the file system or the ONNX runtime.
 #### `export_model`
 
 ```camel
-export_model: <out: string, dynamic_axes: void[] = [], target: string = 'onnxruntime-cpu'> (fn: F, example: E) => void!
+export_model: <out: string, dynamic_axes: int[] = [], target: string = 'onnxruntime-cpu'> (fn: F, example: E) => void!
 ```
 
 Writes the ONNX model of `fn` applied to arguments like `example` to the file `out`, at the

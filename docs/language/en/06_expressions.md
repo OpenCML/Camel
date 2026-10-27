@@ -175,7 +175,7 @@ The operators of the following sections (except `&&`, `||` and `as`) are calls o
 | Unary `-` | The four real numeric types, `c64`, `c128` | |
 | `~` | `int`, `i32` | Bitwise not: `~5` is `-6` |
 
-The two operands must have the same type. There are no bitwise and, or, xor or shift operators; use `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl` and `shr` of the `math` module.
+The two operands must have the same type. There are no bitwise and, or, xor or shift operators; use `bit_and`, `bit_or` and `bit_xor` of the `math` module and `x->shl<n>`, `x->shr<n>` (the count in angle brackets); the complement is `~x`.
 
 **Two places where mistakes are easy:**
 
