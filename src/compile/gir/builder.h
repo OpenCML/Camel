@@ -2465,7 +2465,11 @@ class Builder {
         node_handle_t lhs, node_handle_t rhs, const GCT::node_ptr_t &gct);
     node_handle_t visitWithNode(const GCT::node_ptr_t &gct);
     node_handle_t visitTypeApplication(const GCT::node_ptr_t &gct);
-    FunctionType *signatureForArgumentContext(node_handle_t target) const;
+    /// The signature the arguments of a call take their expected types from. `withWritten` is the
+    /// number of `with` arguments the call writes: an overload with fewer `with` parameters
+    /// cannot be the one meant, so it does not keep the others from agreeing.
+    FunctionType *
+    signatureForArgumentContext(node_handle_t target, size_t withWritten = 0) const;
     node_handle_t visitAccsNode(const GCT::node_ptr_t &gct);
     node_handle_t visitBrchNode(const GCT::node_ptr_t &gct);
     /// `match type`: selects a case from the shape of the subject type and builds only that

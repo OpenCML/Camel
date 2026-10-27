@@ -1944,7 +1944,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         return nodeTypeOf(inputNode);
     };
 
-    FunctionType *argumentSignature = signatureForArgumentContext(targetNode);
+    FunctionType *argumentSignature = signatureForArgumentContext(
+        targetNode, gct->at(0)->type() == GCT::NodeKind::WITH ? gct->at(0)->size() - 1 : 0);
     // The type of the position the call stands in, aligned with the callee's result type, solves
     // the type variables that result mentions (design principles 5.1, 5.5; the rule of
     // 2026-10-23 on `expected-type-through-literals-and-calls`). Every variable the result

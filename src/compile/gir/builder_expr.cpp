@@ -1612,7 +1612,7 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     // lambda and the literal take their types there. A name is not deferred: a generic function
     // or a set of overloads bound as a with-argument stays a name until the callee resolves it.
     vector<Argument> inputs;
-    FunctionType *argumentSignature = signatureForArgumentContext(targetNode);
+    FunctionType *argumentSignature = signatureForArgumentContext(targetNode, gct->size() - 1);
     const bool parameterTypesFollowCall = inCall && argumentSignature != nullptr;
     // A call of a rest function is expanded at the call (inlineRestCall), so a with-argument
     // that names a generic function or a set of overloads stays a compile-time callable: every
@@ -1709,7 +1709,21 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
                 inputs.push_back({nullptr, gct->at(i), name});
                 continue;
             }
-            inputs.push_back({visitOperand(gct->at(i), gct), gct->at(i), name});
+            // A `with` argument stands where an ordinary argument stands (design principles 5.1):
+            // a literal takes its type from the parameter, `[]` its element type, and a `T`
+            // enters a `T?`. A value that does not fit is left as it is, for the call to report.
+            const bool concrete = wanted != nullptr && !containsTypeVar(wanted) &&
+                                  wanted->code() != TypeCode::Function;
+            node_handle_t built = concrete && kind == GCT::NodeKind::DATA
+                                      ? visitInPosition(gct->at(i), wanted)
+                                      : visitOperand(gct->at(i), gct);
+            if (concrete && kind != GCT::NodeKind::DATA && built != nullptr &&
+                !valueTypeOf(nodeTypeOf(built))->equals(wanted)) {
+                if (node_handle_t entered = coerceTo(built, wanted, gct->at(i))) {
+                    built = entered;
+                }
+            }
+            inputs.push_back({built, gct->at(i), name});
             refuseNonConstant(slot, inputs.back());
             continue;
         }
