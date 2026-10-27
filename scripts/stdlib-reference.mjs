@@ -85,7 +85,7 @@ const PROBE = path.join(REPO_ROOT, 'test', 'cases', 'modules', 'stdlib', 'regist
 // The modules of the reference, in the order of the document. `source` is the file read:
 // a signature file for a C++ module, the library itself for a module written in Camel.
 const MODULES = [
-    { name: 'globals', title: 'Built-in functions', registered: '<builtin>', kind: 'cpp' },
+    { name: 'globals', title: 'Built-in functions', registered: '<builtin>', kind: 'cpp', source: 'prelude.cml' },
     {
         name: 'str',
         title: '`str`: strings',
@@ -215,14 +215,9 @@ const MODULES = [
         name: 'json',
         title: '`json`',
         kind: 'cpp',
-        // The declarations, in stdlib/json.cml. `encode` and `decode_as` are computed
-        // signatures — the value's type must have a JSON form, and the result type is the type
-        // of the shape argument — so a declaration cannot express them; their entries, and the
-        // check against the registered operators, come from the signature file that names them
-        // 
+        // The declarations, in stdlib/json.cml: every signature of the module is declared there.
         source: 'json.cml',
         declaration: true,
-        computed: 'signatures/json.cml',
     },
     {
         name: 'hash',
@@ -310,12 +305,9 @@ const MODULES = [
         name: 'python',
         title: '`python`: the embedded interpreter',
         kind: 'cpp',
-        // Seven fixed signatures are declared in stdlib/python.cml; `py_wrap`/`py_unwrap` move a
-        // type through the module type `PyObject<T>`, so their reference entries live in the
-        // signature file named by `computed:`.
+        // Every signature of the module is declared in stdlib/python.cml.
         source: 'python.cml',
         declaration: true,
-        computed: 'signatures/python.cml',
     },
     {
         name: 'nn',
