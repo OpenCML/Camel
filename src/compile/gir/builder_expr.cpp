@@ -470,6 +470,16 @@ void Builder::recordWrite(node_handle_t variable, node_handle_t exit, bool throu
     // users; they stay pending for the next write.
     auto &uses = pendingUsesOf(variable);
     if (synced_) {
+        // The chain orders the calls that used the variable before this write. A read is not on
+        // the chain, so the write is ordered after it by an order edge: the read has to see the
+        // value as it was before the write changes it (docs/design/effects/edges.cn.md 5.5).
+        for (const VariableUse &use : uses) {
+            if (use.isRead && sameGraph(use.node, currGraph_) && linkCheek(use.node, exit) &&
+                nodeTakesAnOrder(use.node) && nodeTakesAnOrder(exit) &&
+                !hasDirectDataDependency(use.node, exit)) {
+                linkNodes(LinkType::Order, use.node, exit);
+            }
+        }
         uses.clear();
     }
     // A store is one of the cell's known users (collapseNonEscapingVariableReads): a user the builder
@@ -1333,6 +1343,15 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     node_handle_t castNode = currGraph_->addCastNode(targetType);
     linkNodes(LinkType::Norm, valueNode, castNode);
     registerNodeOrigin(context_, castNode, gct, "gir.cast");
+    // A conversion that can fail is a statement of a `sync` block like a call: it runs where it
+    // is written, in the chain, with or without a reader of its value (design principles 3.4).
+    if (synced_ && camel::runtime::castMayFault(targetType, sourceType)) {
+        if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, castNode)) {
+            linkNodes(LinkType::Ctrl, lastSyncedNode_, castNode);
+        }
+        lastSyncedNode_ = castNode;
+        chainedNodes_.insert(castNode);
+    }
     LEAVE("CAST");
     return castNode;
 }
@@ -1420,14 +1439,21 @@ node_handle_t Builder::readVariableThrough(
         variableReadSource_[value] = VariableRead{version, variable};
         knownCellUsers_.insert(value);
     }
-    // In a sync block a read happens where it is written, like a call.
+    // A read is not a statement of a sync block: it does not join the chain. What orders it is the
+    // version it takes as its data port and the writes recorded after it (design principles 3.5,
+    // docs/design/effects/edges.cn.md 5.5), so the statement written before it keeps its own place
+    // on the chain when the read is folded into its version. The exception is a `var` parameter:
+    // it may be the caller's variable passed twice, a name the callee cannot tell from another, so
+    // only the place the read is written in orders it against the writes of the other name.
     if (synced_) {
-        if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, value)) {
-            linkNodes(LinkType::Ctrl, lastSyncedNode_, value);
-        }
-        lastSyncedNode_ = value;
         syncedReads_.push_back(value);
-        chainedNodes_.insert(value);
+        if (nodeKindOf(variable) == camel::runtime::GCNodeKind::Port) {
+            if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, value)) {
+                linkNodes(LinkType::Ctrl, lastSyncedNode_, value);
+            }
+            lastSyncedNode_ = value;
+            chainedNodes_.insert(value);
+        }
     }
     return value;
 }

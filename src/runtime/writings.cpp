@@ -458,43 +458,6 @@ bool readsVariable(
     return false;
 }
 
-/// Whether a node carries the program's order instead of being a value a pass may compute for
-/// itself: a call runs a graph, a branch, join, sync or loop runs (or orders) what it holds, a
-/// gate waits -- for its control inputs, or for the sync edge the chain of a `sync` block is
-/// written as (docs/design/effects/edges.cn.md 5.3) -- and an operator that has an effect, or
-/// that must run where the program writes it, is not one a pass may recompute (design principles
-/// 3.3).
-/// This is the rule the generic rewrite pass uses to decide what it may not reorder
-/// (`carriesOrdering` in src/passes/opt/generic/rewrite.cpp).
-bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node) {
-    const auto *h = draft.header(node);
-    if (h == nullptr) {
-        return false;
-    }
-    switch (h->kind) {
-    case GCNodeKind::Func:
-    case GCNodeKind::Call:
-    case GCNodeKind::Join:
-    case GCNodeKind::Brch:
-    case GCNodeKind::Sync:
-    case GCNodeKind::Loop:
-        return true;
-    case GCNodeKind::Gate:
-        // Either kind of wait is what makes a gate more than plain forwarding: the sync edge is
-        // what the chain of a `sync` block writes (docs/design/effects/edges.cn.md 5.3), and the
-        // control input is the other kind of wait such a gate was written with.
-        return !draft.ctrlInputsOf(node).empty() || !draft.syncInputsOf(node).empty();
-    case GCNodeKind::Oper: {
-        const std::span<const std::byte> payload = draft.payloadOf(node);
-        return payload.size() < sizeof(GCOperBody) ||
-               !camel::core::OperatorTable::instance().mayBeRecomputed(
-                   reinterpret_cast<const GCOperBody *>(payload.data())->oper);
-    }
-    default:
-        return false;
-    }
-}
-
 /// Whether a node of this shape computes its value from its data inputs alone, apart from the
 /// nodes it reads. A control input is not part of this question: it orders the node, it does not
 /// make the value different (design principles 3.3, 3.4), so a pure computation with a
@@ -1061,7 +1024,7 @@ DraftWritings::extract(const CostModel &model, camel::core::context::Context *co
         }
     };
     for (gc_node_ref_t node = 0; node < slots; ++node) {
-        if (draft_.alive(node) && (writtenInPlace(node) || carriesOrdering(draft_, node))) {
+        if (draft_.alive(node) && (writtenInPlace(node) || carriesOrdering(draft_, node, true))) {
             select(node);
         }
     }
@@ -1905,7 +1868,7 @@ bool DraftWritings::pureComputation(gc_node_ref_t node) {
         if (h == nullptr || !draft_.alive(at)) {
             continue;
         }
-        if (carriesOrdering(draft_, at) || !draft_.ctrlInputsOf(at).empty() ||
+        if (carriesOrdering(draft_, at, true) || !draft_.ctrlInputsOf(at).empty() ||
             writtenInPlace(at)) {
             return false;
         }
