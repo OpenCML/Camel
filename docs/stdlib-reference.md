@@ -120,6 +120,21 @@ Not in this reference: the profiler (`perf`).
 The operators behind the language's own operators (`+`, `==`, `[]`, `??`, assignment, ...) are
 registered under reserved names (`__add__`, ...) and are not listed here.
 
+These declarations are compiled with every program: a name they write that does not exist fails
+every program, with its location here. They give a call's arguments their expected types (so a
+lambda passed to `filter` needs no parameter types), --verify-ops checks them against the
+operators the core registers, and docs/stdlib-reference.md is generated from them
+(scripts/stdlib-reference.mjs).
+
+The parameter names written here are the names a call binds to by name (`len(x: xs)`), and they
+are the ones the reference page prints: `--verify-ops` compares them with the names of the
+registered rules, position by position, in both the `with` list and the ordinary one. Until
+these declarations also decide which function a call matches (design principles, "the single
+source of a signature"), the C++ rules still do, so the two have to stay equal, and a difference
+is a test failure rather than a silent drift. The names here are the ones to keep:
+the reference page is generated from them, and a position a call names is the position this file
+names (stdlib-conventions.cn.md, section 4).
+
 ### Memory
 
 Data blocks (design principles 10.5): the process-wide counters, read between two operations.
@@ -2832,6 +2847,23 @@ The elements in ascending order, in the order `argsort` gives.
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `[3, 1, 2]->sort` gives `[1, 2, 3]`
 - Example: `['pear', 'fig']->sort` gives `['fig', 'pear']`
+
+#### `merge_sorted`
+
+```camel
+merge_sorted: (xs: T[], ys: T[]) => T[] when is_ordered::<T>()
+```
+
+The elements of both arrays in ascending order, in the order `sort` gives: the meaning is
+`sort(concat(xs, ys))`. Execution takes a kernel that merges the two in one pass when each is
+already in order, which is what the function is for: the cost is O(n + m), against the
+O((n + m) log (n + m)) of the sort it stands for. An input that is not in order is sorted with
+the other, so the result is the same array for every input; equal elements keep their order,
+those of `xs` first.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `merge_sorted([1, 4, 6], [2, 3, 7])` gives `[1, 2, 3, 4, 6, 7]`
+- Example: `merge_sorted([2.0, 1.0], [0.5])` gives `[0.5, 1.0, 2.0]`
 
 #### `sort_by`
 

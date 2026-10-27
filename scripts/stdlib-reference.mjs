@@ -222,7 +222,6 @@ const MODULES = [
         // 
         source: 'json.cml',
         declaration: true,
-        computed: 'signatures/json.cml',
     },
     {
         name: 'hash',
@@ -315,7 +314,6 @@ const MODULES = [
         // signature file named by `computed:`.
         source: 'python.cml',
         declaration: true,
-        computed: 'signatures/python.cml',
     },
     {
         name: 'nn',

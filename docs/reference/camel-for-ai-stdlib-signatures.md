@@ -235,7 +235,7 @@ is_bool: () => bool
 is_plain: () => bool
 ```
 
-**`array`** — import { ... } from array — 35 name(s)
+**`array`** — import { ... } from array — 36 name(s)
 
 ```text
 reverse: (xs: T[]) => T[]
@@ -277,6 +277,7 @@ argsort: (keys: f16[]) => int[]
 argsort: (keys: bool[]) => int[]
 argsort: (keys: string[]) => int[]
 sort: (xs: T[]) => T[] when is_ordered::<T>()
+merge_sorted: (xs: T[], ys: T[]) => T[] when is_ordered::<T>()
 sort_by: <key: (x: T) => K> (xs: T[]) => T[] when is_ordered::<K>()
 flat_map: <f: (x: T) => U[]> (xs: T[]) => U[]
 zip_with: <f: (a: T, b: U) => V> (xs: T[], ys: U[]) => V[]
