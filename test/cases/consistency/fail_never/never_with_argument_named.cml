@@ -1,0 +1,20 @@
+/**
+ * A `with` argument of type `never` given by name (design principles 3.9; the author's ruling of
+ * 2026-10-26 on `never-argument-scope`): the call never runs and the warning names the argument
+ * by the name the program gave it, the same warning an ordinary argument of type `never` gets.
+ * The `with` argument and the ordinary one are one reading, not two.
+ */
+module never_with_argument_named
+
+func stop(m: string): never {
+    return fail<'Stopped'>(m)
+}
+
+with <rounds: int>
+func repeat(x: int): int {
+    return x + rounds
+}
+
+func main(): int[] sync {
+    return repeat<rounds: stop('no rounds by name')>(3)
+}
