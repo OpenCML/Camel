@@ -326,7 +326,7 @@ void Builder::reportResourceViolation(
                 return cls == sem::ResourceClass::Unknown;
             });
         if (!promisedUse && !anyPromised) {
-            unnamed.push_back(use.name);
+            unnamed.push_back(sem::resourceDisplayName(use.name));
         }
     }
     for (const auto &use : measured.params) {

@@ -411,7 +411,7 @@ std::string describeResources(
         }
     }
     for (const auto &use : signature.ambient) {
-        add(use.name);
+        add(camel::core::sem::resourceDisplayName(use.name));
     }
     for (camel::core::sem::ResourceClass cls : signature.anyOf) {
         add(std::format("any {}", camel::core::sem::resourceClassName(cls)));
