@@ -1,0 +1,7 @@
+module open_not_function
+
+import { open, abort } from graph
+func main(): int sync {
+    let t = open(5)
+    return 0
+}

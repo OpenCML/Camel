@@ -62,6 +62,10 @@ class HandleType final : public type::OtherType {
     /// A node's argument is the type of the value it stands for, so the algebra reads it (design
     /// principles 5.9): `Node<T>` against `Node<int>` binds `T` to `int`. The other handle kinds
     /// take no argument.
+    /// A transaction is a state that edits change: one resource per transaction.
+    bool isResourceHandle() const override { return kind_ == HandleKind::Txn; }
+    std::string resourceHandleName() const override { return "graph::Txn"; }
+
     bool typeArguments() const override {
         return kind_ == HandleKind::Node || kind_ == HandleKind::Txn;
     }

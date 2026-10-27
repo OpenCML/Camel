@@ -270,15 +270,12 @@ const MODULES = [
     },
     {
         name: 'graph',
-        title: '`graph`: a program as a value',
+        title: '`graph`: the graph of a function as a value',
         kind: 'cpp',
-        // The declarations, and, in the signature file, the reference entries of the four
-        // operators whose type C++ computes (a function value's type). `constant` and
-        // `add_constant` take the type of their sample and are written out per sample type
-        // 
+        // The declarations only: every signature is stated, a function-valued argument is `F`
+        // with `when is_function::<F>()`.
         source: 'graph.cml',
         declaration: true,
-        computed: 'signatures/graph.cml',
     },
     {
         name: 'rewrite',
