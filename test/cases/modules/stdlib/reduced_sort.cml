@@ -1,18 +1,16 @@
 /**
- * The sorts are declared once per element type and none of those declarations takes bf16 or f16
- * (src/builtin/operators/array.cpp has one executor per element type, and `stdlib/array.cml` names
- * them: `array:sort_i`, `array:sort_l`, `array:sort_f`, `array:sort_d`). bf16 and f16 are numbers
- * (`is_numeric` asks `is_float`), so the call is refused by name, where it is written, with what to
- * write instead rather than with a list of overloads that could never match: nothing is sorted as
- * raw two-byte slots, and the refusal is no longer the kernel's (the rule's
- * 「不在运行期拒绝」).
+ * `sort` orders every ordered element type, with or without a kernel: the reduced-precision
+ * floats, `string` and `bool` have no kernel and run the body `xs[argsort(xs)]`, so the
+ * reduced-precision floats are ordered as the f32 they widen to, exactly, with -0 below +0.
  */
-module stdlib_reduced_sort_refused
+module stdlib_reduced_sort
 
 import { sort } from array
 
 func main(): int sync {
-    let xs: f16[] = []
-    println(sort(xs))
+    let xs: f16[] = [3.0, -1.0, 2.0, 0.0, -0.0]
+    let ys: bf16[] = [3.0, -1.0, 2.0]
+    println(sort(xs), sort(ys))
+    println(sort(['pear', 'fig', 'apple']), sort([true, false, true]))
     return 0
 }

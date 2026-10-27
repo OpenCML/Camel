@@ -69,16 +69,13 @@ timeout_ms = 8000
 # refuse a reduced one where the call is written.
 
 [[tests]]
-name = "reduced_sort_refused"
-desc = "`sort` over an `f16[]` is refused where the call is written, not at run time : the sorts have one declaration per element type and none takes a reduced-precision element type, so the call has nothing to compile through. SemanticDiag::ReducedPrecisionUnsupported names `sort` and `f16`, and the help says to read the value as f32 first; bf16 and f16 are numbers, and the old wording claimed to take what it refuses. The old spelling declared one generic `sort::<T>(xs: T[]): T[]` and refused the element type inside the C++ kernel (RuntimeDiag::OperandTypeUnsupported, 'an array of i32, i64, f32 or f64 values')."
-kind = "negative"
-case = "../../../cases/modules/stdlib/reduced_sort_refused.cml"
+name = "reduced_sort"
+desc = "`sort` over an `f16[]`, a `bf16[]`, a `string[]` and a `bool[]`: none has a kernel, so the call runs the body `xs[argsort(xs)]` and orders them as `argsort` does -- the reduced-precision floats as the f32 they widen to, exactly, with -0 below +0."
+kind = "behavior"
+case = "../../../cases/modules/stdlib/reduced_sort.cml"
 args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ReducedPrecisionUnsupported"
-expect_diagnostic_code = "0x030001D7"
-expect_diagnostic_line = 16
-expect_output_contains = ["cannot take a value of the reduced-precision element type 'f16'"]
+expect_exit = 0
+expect_stdout_exact = "[-1.0, -0.0, 0.0, 2.0, 3.0] [-1.0, 2.0, 3.0]\n[apple, fig, pear] [false, true, true]\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
@@ -123,6 +120,6 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout = "1.0 2.0 1.0 2.0\n128 63 0 64\n0 60 0 64\ntrue true true\n0 128 0 0\ntrue true\n0 128 0 0\n0 0 0 0\n3.5 3.5 2.0 2.0\n1.0 2.0\n0 128\n0 0\ntrue true true\n-1.0 65500.0\n255 123\n0.1 205\ntrue true 0\n1.0 true 128 63\n1.01 true 129 63\n1.0\n"
+expect_stdout = "1.0 2.0 1.0 2.0\n128 63 0 64\n0 60 0 64\ntrue true true\n0 128 0 0\ntrue true\n0 128 0 0\n0 0 0 0\n3.5 3.5 2.0 2.0\n1.0 2.0\n0 128\n0 0\ntrue true true\n-1.0 65500.0\n255 123\n0.1 205\n1.0 true 128 63\n1.01 true 129 63\n1.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000

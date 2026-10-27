@@ -50,7 +50,7 @@ Names that can be used without an import (global built-ins): `print`, `println`,
 | Module | Contents |
 |---|---|
 | `str` | Strings: by byte, splitting, trimming, case conversion, replacing, searching, taking substrings; by code point, counting, reading, encoding and decoding |
-| `array` | Arrays: `sort`, `merge_sort`, `quick_sort`, `insert_sort`, `merge_sorted_arrays`, `argsort`, `reverse`, `take`, `drop`, `unique`, `find`, `sum`, `min`, `max`, `sort_by`, `flat_map` and others (mostly generic functions written in Camel; the sorting kernels are native operators) |
+| `array` | Arrays: `sort`, `argsort`, `reverse`, `take`, `drop`, `chunks`, `unique`, `find`, `find_index`, `sum`, `mean`, `min`, `max`, `argmax`, `argmin`, `sort_by`, `flat_map` and others (mostly generic functions written in Camel; the native parts are `argsort`, the shape and layout atoms, and the kernels of the sort, the sum and the extremes) |
 | `math` | The constants `pi`, `e`, `inf`, `nan` (values); elementary functions, rounding, `min`/`max`/`clamp`, `gcd`/`lcm`, base conversion, bit operations such as `bit_and` |
 | `random` | The type `Key`; `seed`, `rand`, `randint`, `randn`, `choice`, `sample`, `shuffle`, and the pure keyed `key`, `split`, `permutation` |
 | `time` | `now`, `strftime`, `strptime` |

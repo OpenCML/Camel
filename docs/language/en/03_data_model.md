@@ -120,7 +120,7 @@ func main(): int sync {
   | `map`, `filter`, `reduce`, `foreach` | See [6.10](06_expressions.md#610-higher-order-operators) |
   | `xs->append<v>` | A **new array** with `v` at the end; `xs` is unchanged. To append to a variable write `xs = xs->append<v>` (see 3.7); to join two arrays use `concat(xs, ys)` |
 
-- More array functions are in the `array` module, which has to be imported (`import { reverse, sum } from array`): `reverse`, `take`, `drop`, `enumerate`, `flatten`, `unique`, `index_of`, `find`, `any`, `all`, `count`, `sum`, `min`, `max`, `flat_map`, `sort_by`, `zip_with`; see the [standard library reference](../../stdlib-reference.md).
+- More array functions are in the `array` module, which has to be imported (`import { reverse, sum } from array`): `reverse`, `take`, `drop`, `enumerate`, `flatten`, `unique`, `index_of`, `find`, `find_index`, `any`, `all`, `count`, `chunks`, `sum`, `mean`, `min`, `max`, `argmax`, `argmin`, `flat_map`, `sort_by`, `zip_with`; see the [standard library reference](../../stdlib-reference.md).
 
 ### 3.3.2 Tuples
 

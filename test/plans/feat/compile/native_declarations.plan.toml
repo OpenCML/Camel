@@ -295,7 +295,7 @@ kind = "behavior"
 case = "../../../cases/compile/native/array_declaration_import.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_exact = "[1, 2, 0]\n[1, 0, 2]\n[2, 1, 0]\n[1, 2, 3]\n[1, 2, 3]\n[1, 2, 3]\n[1, 2, 3]\n[1, 2, 3, 4]\n[1, 2, 3]\n[3, 1, 2]\n"
+expect_stdout_exact = "[1, 2, 0]\n[1, 0, 2]\n[2, 1, 0]\n[1, 2, 3]\n[1, 2, 3]\n[3, 1, 2]\n"
 
 [[tests]]
 name = "native.array_wrong_arity"
@@ -317,21 +317,21 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F",
 
 [[tests]]
 name = "native.array_sort_wrong_arity"
-desc = "`array:sort` is declared with one array argument: a second one is refused at the call, and the overloads the message lists are the declarations', parameter name included — one per element type, each naming its own operator (`array:sort_i` for `i32`)."
+desc = "`sort` is a generic function of one array argument: a second one is refused at the call, by name, with the number of arguments it takes (`SemanticDiag::GenericArgumentsMismatch`)."
 kind = "negative"
 case = "../../../cases/compile/native/array_sort_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "array_sort_arity.cml:10:17", "argument types: <> (int[], int)", "<array:sort_i>: (xs: i32[]) => i32[]"]
+expect_output_contains = ["SemanticDiag::GenericArgumentsMismatch", "array_sort_arity.cml:9:17", "(int[], int)", "takes 1 argument(s) and 2 were given"]
 
 [[tests]]
 name = "native.array_sort_wrong_type"
-desc = "A number where the declarations of `array:sort` take an array: refused at the declarations' type, and the signatures in the message have their own parameter name (`xs`) and the element type of their own declaration — `stdlib/array.cml`, not the C++, is the source."
+desc = "A number where `sort` takes an array: refused at the parameter's form, and the message names the parameter (`xs: T[]`) of the declaration in `stdlib/array.cml`."
 kind = "negative"
 case = "../../../cases/compile/native/array_sort_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "array_sort_type.cml:11:17", "argument types: <> (int)", "<array:sort_i>: (xs: i32[]) => i32[]"]
+expect_output_contains = ["SemanticDiag::GenericArgumentsMismatch", "array_sort_type.cml:10:17", "(int)", "xs: T[]"]
 
 #  ---- The declarations of `statistics`: four element types per name ----
 
