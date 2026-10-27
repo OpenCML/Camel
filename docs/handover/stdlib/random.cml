@@ -26,6 +26,9 @@ import { reshape } from tensor
 import { cos, log, sqrt } from math
 import { is_float } from types
 
+/// The global stream of keys, `seed` and `next_key` use it.
+export resource rng
+
 /// A 128-bit key. The two fields are its halves, as signed int64.
 export type Key = { hi: int, lo: int }
 
