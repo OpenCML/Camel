@@ -33,14 +33,8 @@ std::unordered_map<std::string, operator_t> getRandomOpsMap() {
         {"seed", __rand_seed__},
         {"next_key", __rand_next_key__},
         {"philox", __rand_philox__},
-        {"uniform_array_d", __rand_uniform_array__},
-        {"uniform_array_f", __rand_uniform_array__},
-        {"uniform_array_h", __rand_uniform_array__},
-        {"uniform_array_b", __rand_uniform_array__},
-        {"normal_array_d", __rand_normal_array__},
-        {"normal_array_f", __rand_normal_array__},
-        {"normal_array_h", __rand_normal_array__},
-        {"normal_array_b", __rand_normal_array__},
+        {"uniform_array", __rand_uniform_array__},
+        {"normal_array", __rand_normal_array__},
     };
 }
 

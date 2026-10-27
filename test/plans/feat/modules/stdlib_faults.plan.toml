@@ -225,7 +225,7 @@ name = "stdlib.fault.variance_short"
 desc = "The variance of one element: a fault, located in the library."
 case = "../../../cases/modules/stdlib/fault_variance_short.cml"
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 60
+expect_diagnostic_line = 55
 
 [[tests]]
 name = "stdlib.fault.variance_short.opt"
@@ -234,14 +234,14 @@ case = "../../../cases/modules/stdlib/fault_variance_short.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 60
+expect_diagnostic_line = 55
 
 [[tests]]
 name = "stdlib.fault.stdev_short"
 desc = "The standard deviation of one element: the variance underneath faults."
 case = "../../../cases/modules/stdlib/fault_stdev_short.cml"
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 60
+expect_diagnostic_line = 55
 
 [[tests]]
 name = "stdlib.fault.stdev_short.opt"
@@ -250,7 +250,7 @@ case = "../../../cases/modules/stdlib/fault_stdev_short.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 60
+expect_diagnostic_line = 55
 
 [[tests]]
 name = "stdlib.fault.median_empty"

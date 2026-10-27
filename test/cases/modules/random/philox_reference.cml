@@ -11,7 +11,7 @@
  *   array     key(42)'s whole-array draw of shape [2, 3], then the scalar draws of the keys it folds
  */
 import {
-    key, fold, uniform, normal, randint, permutation, seed, next_key, rand, uniform_array, normal_array
+    key, fold, uniform, normal, randint, permutation, seed, next_key, rand
 } from random
 
 func main(): int sync {
@@ -23,9 +23,9 @@ func main(): int sync {
     let first = next_key()
     let second = next_key()
     println('stream', first, second, rand())
-    println('normal', normal::<float>(k), normal::<f32>(k), k->normal_array::<float><shape: [3]>)
+    println('normal', normal::<float>(k), normal::<f32>(k), k->normal::<float><shape: [3]>)
     println('permutation', permutation(k, 8), permutation(k, 0), permutation(k, -3))
-    println('array', k->uniform_array::<f32><shape: [2, 3]>)
+    println('array', k->uniform::<f32><shape: [2, 3]>)
     println('scalars', uniform::<f32>(fold(k, 0)), uniform::<f32>(fold(k, 1)), uniform::<f32>(fold(k, 5)))
     return 0
 }

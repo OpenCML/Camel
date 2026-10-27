@@ -1,0 +1,18 @@
+id = "modules.array_conversion"
+order = 368
+tier = "fast"
+tags = ["feat", "modules", "tensor", "prelude"]
+desc = "A type name applied to an array converts it elementwise with no import (the prelude's conversion): float(xs), f32(xs), int(xs), f16(xs), T(xs) in a generic function"
+
+[[tests]]
+name = "array_conversion.no_import"
+desc = "The conversions of an int array, a float array, an f32 array and a generic T[], printed on the four back ends, with no `import tensor` anywhere."
+kind = "behavior"
+case = "../../../cases/modules/tensor/array_conversion.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[1.0, 2.0, 3.0] [1.0, 2.0, 3.0] [1.0, 2.0, 3.0]\n[1, -2] [1.5] [0.5, 2.0]\n[0.5, 1.0, 1.5]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
