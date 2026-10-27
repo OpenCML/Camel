@@ -22,7 +22,7 @@
  * names (stdlib-conventions.cn.md, section 4).
  */
 
-import { is_complex, is_real, is_string } from types
+import { is_complex, is_numeric, is_real, is_string } from types
 
 /// The value an error carries: its kind, its message and the position it was made at. `error(...)`
 /// makes one, and a `T!` that failed holds one. The module provides the type.
@@ -103,49 +103,49 @@ export func f16::<S>(x: S): f16 when is_real::<S>() || is_string::<S>()
 /// @pure
 /// @example i32([1.0, 2.0])
 #op(':op/atoi')
-export func i32(x: number[]): i32[..]
+export func i32::<T>(x: T[]): i32[..] when is_numeric::<T>()
 
 /// The conversion `i64` applied to every element of a numeric array: the result has the input's extents and element type `int64`. A scalar converts by the declaration above.
 /// @pure
 /// @example i64([1.0, 2.0])
 #op(':op/atol')
-export func i64(x: number[]): int64[..]
+export func i64::<T>(x: T[]): int[..] when is_numeric::<T>()
 
 /// The conversion `int` applied to every element of a numeric array: the result has the input's extents and element type `int64`. A scalar converts by the declaration above.
 /// @pure
 /// @example int([1.0, 2.0])
 #op(':op/atol')
-export func int(x: number[]): int64[..]
+export func int::<T>(x: T[]): int[..] when is_numeric::<T>()
 
 /// The conversion `f32` applied to every element of a numeric array: the result has the input's extents and element type `f32`. A scalar converts by the declaration above.
 /// @pure
 /// @example f32([1.0, 2.0])
 #op(':op/atof')
-export func f32(x: number[]): f32[..]
+export func f32::<T>(x: T[]): f32[..] when is_numeric::<T>()
 
 /// The conversion `f64` applied to every element of a numeric array: the result has the input's extents and element type `f64`. A scalar converts by the declaration above.
 /// @pure
 /// @example f64([1.0, 2.0])
 #op(':op/atod')
-export func f64(x: number[]): f64[..]
+export func f64::<T>(x: T[]): float[..] when is_numeric::<T>()
 
 /// The conversion `float` applied to every element of a numeric array: the result has the input's extents and element type `f64`. A scalar converts by the declaration above.
 /// @pure
 /// @example float([1.0, 2.0])
 #op(':op/atod')
-export func float(x: number[]): f64[..]
+export func float::<T>(x: T[]): float[..] when is_numeric::<T>()
 
 /// The conversion `bf16` applied to every element of a numeric array: the result has the input's extents and element type `bf16`. A scalar converts by the declaration above. A conversion into `bf16` or `f16` rounds (to nearest, ties to even); writing it asks for that precision, so it needs no numeric permission (`change_precision` governs a computation the compiler moves to lower precision, design principles 7.2-7.3).
 /// @pure
 /// @example bf16([1.0, 2.0])
 #op(':op/atobf')
-export func bf16(x: number[]): bf16[..]
+export func bf16::<T>(x: T[]): bf16[..] when is_numeric::<T>()
 
 /// The conversion `f16` applied to every element of a numeric array: the result has the input's extents and element type `f16`. A scalar converts by the declaration above. A conversion into `bf16` or `f16` rounds (to nearest, ties to even); writing it asks for that precision, so it needs no numeric permission (`change_precision` governs a computation the compiler moves to lower precision, design principles 7.2-7.3).
 /// @pure
 /// @example f16([1.0, 2.0])
 #op(':op/atof6')
-export func f16(x: number[]): f16[..]
+export func f16::<T>(x: T[]): f16[..] when is_numeric::<T>()
 
 /// x as a 64-bit complex number: the real part is x and the imaginary part is zero. A c128
 /// keeps both parts as they are.
