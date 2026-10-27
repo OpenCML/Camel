@@ -501,7 +501,10 @@ std::vector<Type *> programValueTypes(const camel::runtime::Program &program) {
             // instance takes the value (measured 2026-10-24: `float_combine__when<var float>`
             // passes a `var float` to `combineSameSign<float>`).
             Type *type = camel::core::type::valueTypeOf(graph->node(it.ref())->dataType());
-            if (type == nullptr || type->code() == TypeCode::Void) {
+            // A value of `never` never exists (design principles 3.9): the node that has the type
+            // ends the run, and no law is written for the value it does not give.
+            if (type == nullptr || type->code() == TypeCode::Void ||
+                type->code() == TypeCode::Never) {
                 continue;
             }
             const bool known = std::any_of(

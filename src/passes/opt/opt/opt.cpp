@@ -10,7 +10,7 @@
 
 const camel::runtime::Program *
 OptimizeRewritePass::apply(const camel::runtime::Program *program, std::ostream &os) {
-    return simplifyGraph(context_, program, config_, os);
+    return simplifyGraph(context_, program, config_, os, 16, this);
 }
 
 const camel::runtime::Program *
@@ -23,6 +23,7 @@ OptimizeSaturatePass::apply(const camel::runtime::Program *program, std::ostream
         std::format(
             "rules::saturate_only rounds={} strict={}", rounds_, strict_ ? "true" : "false"),
         context_,
-        os);
+        os,
+        this);
     return result.program;
 }
