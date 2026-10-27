@@ -168,6 +168,64 @@ ARRAY_SORT_EXECUTOR(d, Float64)
 
 #undef ARRAY_SORT_EXECUTOR
 
+// ---- the merge ----
+
+// `merge_sorted(xs, ys)` is `sort(concat(xs, ys))`; the kernel gives the same array. When both
+// inputs are in order (the case the function exists for) one pass merges them: the element of
+// `ys` goes out only when it is strictly below the element of `xs`, so equal elements keep their
+// order, `xs` before `ys`, as the stable sort of the concatenation keeps them. An input that is
+// not in order is sorted with the concatenation, so the result is the body's for every input. The
+// order is `numberLess` throughout: every NaN after the numbers, -0 below +0.
+template <typename T> bool inOrder(const T *values, size_t count) {
+    for (size_t i = 1; i < count; ++i) {
+        if (numberLess(values[i], values[i - 1])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+template <typename T> slot_t mergeSortedOf(ArgsView &norm) {
+    Array *xs           = norm.get<Array *>(0);
+    Array *ys           = norm.get<Array *>(1);
+    const auto *arrType = tt::as_ptr<ArrayType>(norm.type(0));
+    const size_t n      = xs->size();
+    const size_t m      = ys->size();
+    Array *result       = Array::create(mm::autoSpace(), arrType, n + m);
+    const T *x          = n > 0 ? xs->dataAs<T>() : nullptr;
+    const T *y          = m > 0 ? ys->dataAs<T>() : nullptr;
+    T *out              = n + m > 0 ? result->dataAs<T>() : nullptr;
+    if (inOrder(x, n) && inOrder(y, m)) {
+        size_t i = 0, j = 0, k = 0;
+        while (i < n && j < m) {
+            out[k++] = numberLess(y[j], x[i]) ? y[j++] : x[i++];
+        }
+        while (i < n) {
+            out[k++] = x[i++];
+        }
+        while (j < m) {
+            out[k++] = y[j++];
+        }
+    } else {
+        std::copy(x, x + n, out);
+        std::copy(y, y + m, out + n);
+        std::stable_sort(out, out + n + m, [](T a, T b) { return numberLess(a, b); });
+    }
+    return toSlot(result);
+}
+
+#define ARRAY_MERGE_EXECUTOR(suffix, T)                                         \
+    slot_t __array_merge_##suffix##__(ArgsView &, ArgsView &norm, Context &) {    \
+        return mergeSortedOf<T>(norm);                                          \
+    }
+
+ARRAY_MERGE_EXECUTOR(i, Int32)
+ARRAY_MERGE_EXECUTOR(l, Int64)
+ARRAY_MERGE_EXECUTOR(f, Float32)
+ARRAY_MERGE_EXECUTOR(d, Float64)
+
+#undef ARRAY_MERGE_EXECUTOR
+
 // ---- the sort's element types, one entry each ----
 
 /// One element type of the sort: the suffix its operator names carry (the reductions'
@@ -243,6 +301,11 @@ std::unordered_map<std::string, operator_t> getArrayOpsMap() {
     for (const auto &[suffix, exec] : kArgsortTypes) {
         ops[std::string("argsort_") + suffix] = exec;
     }
+    // `merge_sorted`'s kernels, one per element type like the sort's.
+    ops["merge_sorted_i"] = __array_merge_i__;
+    ops["merge_sorted_l"] = __array_merge_l__;
+    ops["merge_sorted_f"] = __array_merge_f__;
+    ops["merge_sorted_d"] = __array_merge_d__;
     // The reductions' kernels (builtin/operators/array_reduce.cpp): one executor per element
     // type, named after the element type it takes. Each body-less declaration in stdlib/array.cml
     // names one of them with its `#op` tag and admits exactly that element type with its own
@@ -309,6 +372,12 @@ void declareArrayOperatorFacts() {
         (void)exec;
         table.declare("array", {{std::string("argsort_") + suffix, true}});
     }
+    table.declare(
+        "array",
+        {{"merge_sorted_i", true},
+         {"merge_sorted_l", true},
+         {"merge_sorted_f", true},
+         {"merge_sorted_d", true}});
     // The sorts: the returning form of every element type, and the in-place form the compiler
     // introduces for `xs = xs->sort` (design principles 11.3; Builder::inPlaceRebindingOf). The
     // in-place form changes the array it is given, so it is not pure; what it changes is the

@@ -2848,6 +2848,23 @@ The elements in ascending order, in the order `argsort` gives.
 - Example: `[3, 1, 2]->sort` gives `[1, 2, 3]`
 - Example: `['pear', 'fig']->sort` gives `['fig', 'pear']`
 
+#### `merge_sorted`
+
+```camel
+merge_sorted: (xs: T[], ys: T[]) => T[] when is_ordered::<T>()
+```
+
+The elements of both arrays in ascending order, in the order `sort` gives: the meaning is
+`sort(concat(xs, ys))`. Execution takes a kernel that merges the two in one pass when each is
+already in order, which is what the function is for: the cost is O(n + m), against the
+O((n + m) log (n + m)) of the sort it stands for. An input that is not in order is sorted with
+the other, so the result is the same array for every input; equal elements keep their order,
+those of `xs` first.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `merge_sorted([1, 4, 6], [2, 3, 7])` gives `[1, 2, 3, 4, 6, 7]`
+- Example: `merge_sorted([2.0, 1.0], [0.5])` gives `[0.5, 1.0, 2.0]`
+
 #### `sort_by`
 
 ```camel

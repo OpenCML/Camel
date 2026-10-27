@@ -1,0 +1,71 @@
+/**
+ * `merge_sorted(xs, ys)` is `sort(concat(xs, ys))`, and a kernel per element type merges two
+ * inputs that are in order in one pass: `array:merge_sorted_i` for `i32`, `_l` for `int`, `_f` for
+ * `f32`, `_d` for `float`. The kernel gives the same bits as the body for every input, so this
+ * program prints each call beside the body spelled out on `argsort` (`all[argsort(all)]`, which
+ * runs no merge): for inputs in order, for inputs out of order (the kernel sorts them with the
+ * rest), with empty sides, and for floats with NaNs and the two zeros, where -0 is below +0 and
+ * every NaN comes last, in the kernel and in the body alike.
+ */
+
+import { merge_sorted, argsort } from array
+import { nan } from math
+
+func by_body_i(xs: i32[], ys: i32[]): i32[] {
+    let all = concat(xs, ys)
+    return all[argsort(all)]
+}
+
+func by_body_l(xs: int[], ys: int[]): int[] {
+    let all = concat(xs, ys)
+    return all[argsort(all)]
+}
+
+func by_body_f(xs: f32[], ys: f32[]): f32[] {
+    let all = concat(xs, ys)
+    return all[argsort(all)]
+}
+
+func by_body_d(xs: float[], ys: float[]): float[] {
+    let all = concat(xs, ys)
+    return all[argsort(all)]
+}
+
+func main(): int sync {
+    let a_i: i32[] = [1, 4, 6]
+    let b_i: i32[] = [2, 3, 7]
+    let a_l: int[] = [10, 40, 60]
+    let b_l: int[] = [20, 30, 70, 80]
+    let a_f: f32[] = [1.5, 4.5]
+    let b_f: f32[] = [0.5, 2.5, 9.5]
+    let a_d: float[] = [-2.5, 0.5]
+    let b_d: float[] = [-3.5, -1.5, 8.5]
+    println('merge', merge_sorted(a_i, b_i), merge_sorted(a_l, b_l), merge_sorted(a_f, b_f), merge_sorted(a_d, b_d))
+    println('body', by_body_i(a_i, b_i), by_body_l(a_l, b_l), by_body_f(a_f, b_f), by_body_d(a_d, b_d))
+
+    // inputs out of order: the result is the body's
+    let u_i: i32[] = [5, 1, 3]
+    let v_i: i32[] = [4, 2]
+    let u_d: float[] = [3.5, -1.5, 2.5]
+    let v_d: float[] = [0.5, 9.5, -4.5]
+    println('unsorted', merge_sorted(u_i, v_i), merge_sorted(u_d, v_d))
+    println('unsorted body', by_body_i(u_i, v_i), by_body_d(u_d, v_d))
+    println('one side', merge_sorted(a_i, v_i), by_body_i(a_i, v_i), merge_sorted(u_d, b_d), by_body_d(u_d, b_d))
+
+    // empty sides
+    let e_i: i32[] = []
+    let e_d: float[] = []
+    println('empty', merge_sorted(e_i, b_i), merge_sorted(a_i, e_i), merge_sorted(e_i, e_i), merge_sorted(e_d, b_d))
+
+    // equal elements and the order of floats
+    let p: float[] = [-0.0, 0.0, 1.0, nan]
+    let q: float[] = [-1.0, -0.0, 0.0, nan, nan]
+    println('floats', merge_sorted(p, q), by_body_d(p, q))
+    let r: f32[] = [f32(-0.0), f32(1.0)]
+    let t: f32[] = [f32(0.0), f32(-0.0)]
+    println('f32', merge_sorted(r, t), by_body_f(r, t))
+
+    // the inputs are unchanged
+    println('input', a_i, b_i, u_i, v_i)
+    return 0
+}

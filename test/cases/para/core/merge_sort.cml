@@ -4,19 +4,7 @@
 
 import { now } from time
 import { seed, rand, shuffle, next_key } from random
-import { sort } from array
-
-/// Merges two sorted arrays in one pass: the smaller front element goes out first, then what is
-/// left of either side.
-func merge(lhs: int[], rhs: int[]): int[] sync {
-    let none: int[] = []
-    let (i, j, out) = loop i = 0, j = 0, out = none while i < len(lhs) && j < len(rhs) do {
-        let l = lhs[i]
-        let r = rhs[j]
-        return if l <= r then (i + 1, j, out->append<l>) else (i, j + 1, out->append<r>)
-    }
-    return concat(concat(out, lhs[i:]), rhs[j:])
-}
+import { sort, merge_sorted } from array
 
 func mergesort(arr: int[]): int[] sync {
     let start = now()
@@ -24,7 +12,7 @@ func mergesort(arr: int[]): int[] sync {
         let mid = len(arr) / 2
         let lhs = arr[0:mid]->mergesort
         let rhs = arr[mid:len(arr)]->mergesort
-        return merge(lhs, rhs)
+        return merge_sorted(lhs, rhs)
     }
     let duration = now() - start
     println('MergeSorted {} elements in {:.2f} seconds.'->format<len(arr), duration>)
