@@ -1,6 +1,9 @@
 // The in-place append of a loop state does not depend on how the body is written (design
 // principles 10.5): a body that is a block, binds names with `let` and hands the next state back
 // with `return` appends to the state's own array exactly as the body that is one expression does.
+// A body that ends in an `if` or a `match` is the same: each arm holds the state once, only one
+// arm runs, and the join forwards the array the arm appended to, so the arms that append, the arm
+// that leaves the state as it was, an `else if` chain and the arms of a `match` take one block too.
 // `std::mem::blocks()` between the operations shows one block for the 200 rounds of each.
 func grown(n: int): int[] {
     return loop xs = [0] while len(xs) < n do xs->append<7>
@@ -21,6 +24,32 @@ func grownWithCounter(n: int): (int[], int) {
     }
 }
 
+func grownByIf(n: int): (int[], int) {
+    return loop xs = [0], rounds = 0 while len(xs) < n do
+        if rounds % 2 == 0 then (xs->append<rounds>, rounds + 1) else (xs->append<-rounds>, rounds + 1)
+}
+
+func grownOrKept(n: int): (int[], int) {
+    return loop xs = [0], rounds = 0 while rounds < n do
+        if rounds % 4 == 0 then (xs, rounds + 1) else (xs->append<rounds>, rounds + 1)
+}
+
+func grownByChain(n: int): (int[], int) {
+    return loop xs = [0], rounds = 0 while rounds < n do
+        if rounds % 3 == 0 then (xs->append<1>, rounds + 1)
+        else if rounds % 3 == 1 then (xs->append<2>, rounds + 1)
+        else (xs->append<3>, rounds + 1)
+}
+
+func grownByMatch(n: int): (int[], int) {
+    return loop xs = [0], rounds = 0 while len(xs) < n do
+        match rounds % 3 {
+            case 0 => (xs->append<10>, rounds + 1)
+            case 1 => (xs->append<20>, rounds + 1)
+            case _ => (xs->append<30>, rounds + 1)
+        }
+}
+
 func main(): int sync {
     let before = std::mem::blocks()
     let a      = grown(200)
@@ -29,7 +58,20 @@ func main(): int sync {
     let after  = std::mem::blocks()
     let (c, r) = grownWithCounter(200)
     let last   = std::mem::blocks()
+    let beforeIf = std::mem::blocks()
+    let (d, dr)  = grownByIf(200)
+    let afterIf  = std::mem::blocks()
+    let (e, er)  = grownOrKept(200)
+    let afterKept = std::mem::blocks()
+    let (f, fr)  = grownByChain(199)
+    let afterChain = std::mem::blocks()
+    let (g, gr)  = grownByMatch(200)
+    let afterMatch = std::mem::blocks()
     println(len(a), len(b), len(c), r)
     println(mid.allocs - before.allocs, after.allocs - mid.allocs, last.allocs - after.allocs)
+    println(len(d), dr, d[1], d[2], d[199], afterIf.allocs - beforeIf.allocs)
+    println(len(e), er, e[1], e[2], e[4], afterKept.allocs - afterIf.allocs)
+    println(len(f), fr, f[1], f[2], f[3], f[199], afterChain.allocs - afterKept.allocs)
+    println(len(g), gr, g[1], g[2], g[3], g[199], afterMatch.allocs - afterChain.allocs)
     return 0
 }

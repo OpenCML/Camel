@@ -17,7 +17,7 @@ func merge(lhs: int[], rhs: int[]): int[] {
     let (i, j, out) = loop i = 0, j = 0, out = none while i < len(lhs) && j < len(rhs) do {
         let l = lhs[i]
         let r = rhs[j]
-        return (if l <= r then i + 1 else i, if l <= r then j else j + 1, out->append<if l <= r then l else r>)
+        return if l <= r then (i + 1, j, out->append<l>) else (i, j + 1, out->append<r>)
     }
     return concat(concat(out, lhs[i:]), rhs[j:])
 }
