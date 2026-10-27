@@ -471,15 +471,23 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
                 }
             }
         }
-        if (!claimed) {
+        // A declaration of an operator no rule of the group has yet is the rule itself: its
+        // resolver is the declaration (design principles 6.4), and it joins the built-in group at
+        // export. The operator's kernel and facts must be there, as for any declaration.
+        const bool ownRule = !claimed && uri.find('*') == std::string::npos &&
+                             context_->execMgr().findWithoutImport(uri).has_value() &&
+                             camel::core::OperatorTable::instance().find(uri).has_value();
+        if (!claimed && !ownRule) {
             diags_->of(SemanticDiag::NativeDeclarationNotLoaded)
                 .atOrigin(gct->origin())
                 .commit(name, uri);
             throw BuildAbortException();
         }
-        // Nothing is exported: the name is the built-in operator's own.
-        unit_->passDeclarations.insert(name);
-        return;
+        if (claimed) {
+            // Nothing is exported: the name is the built-in operator's own.
+            unit_->passDeclarations.insert(name);
+            return;
+        }
     }
     // The declaration is the signature of an operator of a loaded module: an operator no executor
     // answers cannot be called, and a mistake of the declaration (a wrong module, a typo) must be
@@ -725,6 +733,23 @@ void Builder::exportNativeOperators(const GCT::node_ptr_t &exportList) {
         // it marked private and the reference checker verifies its signature and its purity
         // against this registration, which is what a kernel nobody exported used to escape.
         const bool isExported = exported.contains(group.name);
+        if (context_->preludeModule() != nullptr && unit_->module == context_->preludeModule()) {
+            // The rules of the prelude join the built-in group of their name, which every module
+            // already holds.
+            const auto builtins = context_->importModule("");
+            const auto entity   = builtins ? builtins->getNativeEntity(ref) : std::nullopt;
+            if (!entity.has_value() || !entity->isOperGroup()) {
+                diags_->of(SemanticDiag::NativeDeclarationNotLoaded)
+                    .atOrigin(group.origin)
+                    .commit(group.name, group.rules.front().first);
+                throw BuildAbortException();
+            }
+            for (auto &[ruleUri, rule] : group.rules) {
+                entity->operGroup()->addRule(ruleUri, std::move(rule));
+            }
+            group.rules.clear();
+            continue;
+        }
         std::optional<camel::core::module::entity> existing;
         if (isExported) {
             existing = unit_->module->getNativeEntity(ref);
