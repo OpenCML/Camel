@@ -8,10 +8,19 @@
  *   1 2        a local variable a closure writes
  *   10 11      a local variable passed to a var parameter
  *   1 2        a value read before a call through a function value, and a read after it
+ *   [1, 2, 2]  the elements of an array literal, left to right
+ *   (2, 3, 3)  a tuple literal
+ *   3 4 4      the fields of a struct literal
  */
 module argument_order
 
 var cnt: int = 100
+var lit: int = 1
+
+func lit_step(): int sync {
+    lit += 1
+    return lit
+}
 
 func bump(): int sync {
     cnt += 10
@@ -43,5 +52,9 @@ func main(): int sync {
     let before = e
     write_e()
     println(before, e)
+    println([lit, lit_step(), lit])
+    println((lit, lit_step(), lit))
+    let fields = { a: lit, b: lit_step(), c: lit }
+    println(fields.a, fields.b, fields.c)
     return 0
 }

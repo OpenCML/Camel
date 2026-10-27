@@ -282,8 +282,38 @@ pair<data_ptr_t, bool> Builder::extractData(const node_ptr_t &node, node_ptr_t &
     // expression: `((h, k), 1)` is `let a = (h, k)` then `(a, 1)`. Embedded as a constant it
     // kept its unresolved element types ("(ref, ref)") and its names were never filled.
     if (data && !isUnresolvedLiteral(data)) {
+        if (node->type() == NodeKind::DREF) {
+            // A name: read where the literal is built, unless an element computed after it is
+            // hoisted first.
+            auto entry = std::find_if(
+                pendingNames_.begin(), pendingNames_.end(), [&](const auto &candidate) {
+                    return candidate.first == execNode;
+                });
+            if (entry == pendingNames_.end()) {
+                pendingNames_.emplace_back(execNode, std::vector<PendingName>{});
+                entry = std::prev(pendingNames_.end());
+            }
+            entry->second.push_back(
+                PendingName{std::dynamic_pointer_cast<camel::core::data::RefData>(data), node});
+        }
         return make_pair(data, false);
     } else {
+        // The names written before this element are used before it: they are hoisted ahead of it.
+        const auto entry = std::find_if(
+            pendingNames_.begin(), pendingNames_.end(), [&](const auto &candidate) {
+                return candidate.first == execNode;
+            });
+        if (entry != pendingNames_.end()) {
+            for (const PendingName &name : entry->second) {
+                auto [nameNode, nameData] = makeRefData(name.expr);
+                *execNode << nameNode;
+                if (name.data != nullptr) {
+                    name.data->rename(
+                        std::dynamic_pointer_cast<camel::core::data::RefData>(nameData)->ref());
+                }
+            }
+            entry->second.clear();
+        }
         auto [refNode, refData] = makeRefData(node);
         *execNode << refNode;
         return make_pair(refData, true);

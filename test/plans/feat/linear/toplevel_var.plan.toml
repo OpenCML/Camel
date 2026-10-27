@@ -270,7 +270,7 @@ expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '100 110 | 120 120 | 250 | 1 2 | 10 11 | 1 2', `unexpected output: ${out}`)
+assert(out === '100 110 | 120 120 | 250 | 1 2 | 10 11 | 1 2 | [1, 2, 2] | (2, 3, 3) | 3 4 4', `unexpected output: ${out}`)
 }
 """
 
@@ -284,7 +284,7 @@ expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '100 110 | 120 120 | 250 | 1 2 | 10 11 | 1 2', `unexpected output: ${out}`)
+assert(out === '100 110 | 120 120 | 250 | 1 2 | 10 11 | 1 2 | [1, 2, 2] | (2, 3, 3) | 3 4 4', `unexpected output: ${out}`)
 }
 """
 
@@ -298,7 +298,7 @@ expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '100 110 | 120 120 | 250 | 1 2 | 10 11 | 1 2', `unexpected output: ${out}`)
+assert(out === '100 110 | 120 120 | 250 | 1 2 | 10 11 | 1 2 | [1, 2, 2] | (2, 3, 3) | 3 4 4', `unexpected output: ${out}`)
 }
 """
 
@@ -312,7 +312,7 @@ expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '100 110 | 120 120 | 250 | 1 2 | 10 11 | 1 2', `unexpected output: ${out}`)
+assert(out === '100 110 | 120 120 | 250 | 1 2 | 10 11 | 1 2 | [1, 2, 2] | (2, 3, 3) | 3 4 4', `unexpected output: ${out}`)
 }
 """
 
@@ -326,7 +326,7 @@ expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '100 110 | 120 120 | 250 | 1 2 | 10 11 | 1 2', `unexpected output: ${out}`)
+assert(out === '100 110 | 120 120 | 250 | 1 2 | 10 11 | 1 2 | [1, 2, 2] | (2, 3, 3) | 3 4 4', `unexpected output: ${out}`)
 }
 """
 
@@ -340,7 +340,7 @@ expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '100 110 | 120 120 | 250 | 1 2 | 10 11 | 1 2', `unexpected output: ${out}`)
+assert(out === '100 110 | 120 120 | 250 | 1 2 | 10 11 | 1 2 | [1, 2, 2] | (2, 3, 3) | 3 4 4', `unexpected output: ${out}`)
 }
 """
 
