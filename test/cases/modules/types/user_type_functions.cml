@@ -1,0 +1,48 @@
+/// A type function written by the program: `type F<T> = ...` has a type expression for its body,
+/// a `match type` among them, and is called `F<T>` where a type is written. It is evaluated when
+/// the instance that binds `T` is made.
+import { is_integer, is_float, is_string, is_same, ElementOf } from types
+
+// The element of an array, and any other type as it is.
+type ElemOrSelf<T> = match type T {
+    case array => ElementOf<T>
+    case _ => T
+}
+
+// What a number is shown as: integers and floats by their text.
+type Shown<T> = match type T {
+    case int | i32 => string
+    case float | f32 => string
+    case bool => bool
+    case #leaf => T
+}
+
+// A type function in a type function.
+type Twice<T> = ElemOrSelf<ElemOrSelf<T>>
+
+type Pair<T> = (T, T)
+
+func element_is_integer::<T>(): bool {
+    return is_integer::<ElemOrSelf<T>>()
+}
+
+func shown_is_string::<T>(): bool {
+    return is_string::<Shown<T>>()
+}
+
+func twice_is_float::<T>(): bool {
+    return is_float::<Twice<T>>()
+}
+
+func pair_of::<T>(x: ElemOrSelf<T>): Pair<ElemOrSelf<T>> {
+    return (x, x)
+}
+
+func main(): int sync {
+    println(element_is_integer::<int[]>(), element_is_integer::<int>(), element_is_integer::<f32[]>())
+    println(shown_is_string::<int>(), shown_is_string::<f32>(), shown_is_string::<string>(), shown_is_string::<bool>())
+    println(twice_is_float::<float[][]>(), twice_is_float::<float[]>(), twice_is_float::<int[][]>())
+    println(pair_of::<int[]>(7), pair_of::<string>('s'))
+    println(is_same::<Twice<int[][]>, int>(), is_same::<Pair<ElemOrSelf<f32[]>>, (f32, f32)>())
+    return 0
+}

@@ -16,7 +16,7 @@
  * unchanged, so one `!!` or `??` at the end of a chain settles it.
  */
 
-import { is_string } from types
+import { is_string, ElementOf, PayloadOf, KeyOf, ValueOf } from types
 
 /// A JSON value whose shape is known only when the program runs; the module provides the type.
 export type Json
@@ -29,9 +29,9 @@ export type Json
 func has_json_form::<T>(): bool {
     return match type T {
         case Json | bool | int | i32 | float | f32 | string => true
-        case nullable => has_json_form::<payload_of::<T>()>()
-        case array | set => has_json_form::<element_of::<T>()>()
-        case map => is_string::<key_of::<T>()>() && has_json_form::<value_of::<T>()>()
+        case nullable => has_json_form::<PayloadOf<T>>()
+        case array | set => has_json_form::<ElementOf<T>>()
+        case map => is_string::<KeyOf<T>>() && has_json_form::<ValueOf<T>>()
         case struct | tuple => every_member_json::<T>()
         case _ => false
     }

@@ -8339,23 +8339,23 @@ None: choice: the repair is a decision only the writer can make
 **Message**
 
 ```text
-The type function call '{0}' is not applicable: {1}.
+The type function '{0}' is not applicable: {1}.
 ```
 
 **Help**
 
 ```text
-A type function computes a type from types at compile time (design principles 21): `element_of::<T>()` is the element of an array or a set, `payload_of::<T>()` the `U` of `U?` or `U!`, and `key_of::<T>()` and `value_of::<T>()` the key and value types of a map. It is written where a type is, with its arguments between `::<` and `>` and an empty argument list, and it accepts only the types it is defined for.
+A type function computes a type from types at compile time (design principles 21): `ElementOf<T>` is the element of an array or a set, `PayloadOf<T>` the `U` of `U?` or `U!`, and `KeyOf<T>` and `ValueOf<T>` the key and value types of a map; a program writes its own with `type F<T> = ...`, whose body may be a `match type`. It is called with `F<...>` where a type is written, and it accepts only the types it is defined for.
 ```
 
 **Example** (`test/cases/modules/types/type_function_not_applicable.cml`, run as `camel test/cases/modules/types/type_function_not_applicable.cml`)
 
 ```camel
 /// A type function that does not accept the type it is given is refused where the instance is made.
-import { is_integer } from types
+import { is_integer, ElementOf } from types
 
 func element_is_integer::<T>(): bool {
-    return is_integer::<element_of::<T>()>()
+    return is_integer::<ElementOf<T>>()
 }
 
 func main(): int sync {

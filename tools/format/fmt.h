@@ -753,6 +753,8 @@ class Formatter {
     std::string formatTypeInTypePosition(syn::Node type);
 
     std::any visitTypeCase(cst::TypeCase context);
+    std::any visitMatchTypeType(cst::MatchTypeType context);
+    std::any visitTypeArm(cst::TypeArm context);
 
     std::any visitStaticForExpr(cst::StaticForExpr context);
 

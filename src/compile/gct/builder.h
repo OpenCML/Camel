@@ -391,6 +391,7 @@ class Builder {
         const AST::node_ptr_t &ast, Tree::ParameterDefaults *defaultsOut = nullptr);
     Type *visitRefType(const AST::node_ptr_t &ast);
     Type *visitSpecType(const AST::node_ptr_t &ast);
+    Type *visitMatchTypeType(const AST::node_ptr_t &ast);
     /// The extents of one `[...]` as linear forms (design principles 5.4). An unknown extent
     /// (`?`, or the empty `[]`) is `ExtentForm::unknown()`; nullptr with a diagnostic reported.
     std::shared_ptr<const std::vector<camel::core::type::ExtentForm>>

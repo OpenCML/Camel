@@ -183,6 +183,7 @@ class Builder {
     Value visitStaticForExpr(syntax::cst::StaticForExpr context);
     Value visitStaticLoopExpr(syntax::cst::StaticLoopExpr context);
     TypeCaseKind typeCaseKindOf(syntax::cst::TypeCasePattern pattern);
+    std::vector<TypeCasePattern> typeCasePatternsOf(const std::vector<syntax::cst::TypeCasePattern> &patterns);
     /// IfExpr, MatchExpr, MatchTypeExpr, StaticForExpr.
     Value visitCtrlExpr(syntax::Node context);
     Value visitLoopExpr(syntax::cst::LoopExpr context);
@@ -228,7 +229,8 @@ class Builder {
     Value visitSpecType(syntax::cst::SpecType context);
     Value visitRefType(syntax::cst::RefType context);
     Value visitTypeOfType(syntax::cst::TypeOfType context);
-    Value visitTypeCallType(syntax::cst::TypeCallType context);
+    Value visitMatchTypeType(syntax::cst::MatchTypeType context);
+    Value visitTypeArm(syntax::cst::TypeArm context);
     Value visitStructType(syntax::cst::StructType context);
     Value visitEnumType(syntax::cst::EnumType context);
     Value visitEnumPattern(syntax::cst::Pattern context, syntax::cst::IdentRef ref);
