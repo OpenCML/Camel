@@ -372,8 +372,8 @@ const CPP_PARAMETERS = new Map([
     ['modules/tensor/passes/fuse.cpp', 4], // tensor::test_echo, test-only
     ['src/execute/pass.cpp', 5], // test::params, test-only
     // Not a second declaration: built from the Camel function's `with` list, which is the
-    // pass's declaration (once for a pass over a program, once for a generic pass over a function).
-    ['src/execute/camel_pass.cpp', 2],
+    // pass's declaration.
+    ['src/execute/camel_pass.cpp', 1],
 ])
 for (const root of ['src', 'modules']) {
     for (const file of files(path.join(REPO_ROOT, root))) {
