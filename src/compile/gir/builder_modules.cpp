@@ -440,6 +440,47 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
         diags_->of(SemanticDiag::InvalidOperatorURI).atOrigin(gct->origin()).commit(uri);
         throw BuildAbortException();
     }
+    // The prelude's declaration file declares the built-in operators, whose rules the core
+    // computes: the declaration gives each rule it names the parameter types every call is held
+    // to, and declares nothing of its own. A `*` in the URI stands for the family of operators one
+    // declaration covers (`:op/*tol`: one per source type).
+    if (context_->preludeModule() != nullptr && unit_->module == context_->preludeModule()) {
+        const auto matches = [](const std::string &pattern, const std::string &candidate) {
+            const size_t star = pattern.find('*');
+            if (star == std::string::npos) {
+                return pattern == candidate;
+            }
+            return candidate.size() >= pattern.size() - 1 &&
+                   candidate.compare(0, star, pattern, 0, star) == 0 &&
+                   candidate.compare(
+                       candidate.size() - (pattern.size() - star - 1),
+                       std::string::npos,
+                       pattern,
+                       star + 1,
+                       std::string::npos) == 0;
+        };
+        bool claimed = false;
+        if (const auto builtins = context_->importModule("")) {
+            if (const auto entity = builtins->getNativeEntity(Reference(name));
+                entity.has_value() && entity->isOperGroup()) {
+                for (const auto &[ruleUri, rule] : entity->operGroup()->resolvers()) {
+                    if (rule != nullptr && matches(uri, ruleUri)) {
+                        context_->claimBuiltinSignature(rule, funcType);
+                        claimed = true;
+                    }
+                }
+            }
+        }
+        if (!claimed) {
+            diags_->of(SemanticDiag::NativeDeclarationNotLoaded)
+                .atOrigin(gct->origin())
+                .commit(name, uri);
+            throw BuildAbortException();
+        }
+        // Nothing is exported: the name is the built-in operator's own.
+        unit_->passDeclarations.insert(name);
+        return;
+    }
     // The declaration is the signature of an operator of a loaded module: an operator no executor
     // answers cannot be called, and a mistake of the declaration (a wrong module, a typo) must be
     // reported where it is written rather than when the call runs (step 1).

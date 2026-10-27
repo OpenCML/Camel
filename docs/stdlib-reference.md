@@ -348,7 +348,7 @@ arguments put in and one line end.
 #### `format`
 
 ```camel
-format: <args: T[]> (fmt: string) => string
+format: <..args> (fmt: string) => string
 ```
 
 The text fmt with each `{}` placeholder replaced by the next argument; placeholders take
@@ -532,7 +532,7 @@ map: <f: (item: T) => U> (xs: T[]) => U[]
 
 f applied to every element; the calls have no order among them.
 
-- Example: `[1, 2, 3]->map<(x: int) => x * 2>` gives `[2, 4, 6]`
+- Example: `[1, 2, 3]->map<(x) => x * 2>` gives `[2, 4, 6]`
 
 #### `filter`
 
@@ -542,7 +542,7 @@ filter: <f: (item: T) => bool> (xs: T[]) => T[]
 
 The elements for which f is true, in order; the calls of f have no order among them.
 
-- Example: `[1, 2, 3, 4]->filter<(x: int) => x % 2 == 0>` gives `[2, 4]`
+- Example: `[1, 2, 3, 4]->filter<(x) => x % 2 == 0>` gives `[2, 4]`
 
 #### `reduce`
 
@@ -562,7 +562,7 @@ foreach: <f: (item: T) => void> (xs: T[]) => void
 
 Calls f for every element, in order.
 
-- Example: `[1, 2, 3]->foreach<(x: int) => println(x)>`
+- Example: `[1, 2, 3]->foreach<(x) => println(x)>`
 
 ### Fault isolation
 

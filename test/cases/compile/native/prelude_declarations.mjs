@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * The prelude's declaration file (`signatures/globals.cml` of the standard library) is the one
+ * The prelude's declaration file (`prelude.cml` of the standard library) is the one
  * source of the built-in signatures, so every program is compiled with it read: an invalid file
  * fails `camel check` of a plain program, and the diagnostics are located in that file. A copy of
  * the standard library in the test's own scratch directory gets a broken prelude and is named by
@@ -24,7 +24,7 @@ const SCRATCH = process.env.CAMEL_TEST_TMPDIR || fs.mkdtempSync(path.join(os.tmp
 fs.mkdirSync(SCRATCH, { recursive: true })
 const stdlib = path.join(SCRATCH, 'stdlib')
 fs.cpSync(path.join(HOME, 'stdlib'), stdlib, { recursive: true })
-const prelude = path.join(stdlib, 'signatures', 'globals.cml')
+const prelude = path.join(stdlib, 'prelude.cml')
 fs.appendFileSync(prelude, '\nexport func broken(: int\n')
 const program = path.join(SCRATCH, 'plain.cml')
 fs.writeFileSync(program, 'func main(): int sync {\n    return 0\n}\n')
@@ -51,7 +51,7 @@ const text = `${bad.stdout}${bad.stderr}`
 verdict('a broken prelude fails the check of a plain program', bad.status !== 0, `${bad.status}\n${text}`)
 verdict(
     'the diagnostic is located in the prelude file',
-    text.includes('globals.cml') && /globals\.cml:\d+:\d+/.test(text),
+    text.includes('prelude.cml') && /prelude\.cml:\d+:\d+/.test(text),
     text,
 )
 

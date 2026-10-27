@@ -235,7 +235,7 @@ For the functions each module exports (signature, whether it is pure, behaviour 
   import { trim, split, to_upper } from str
   import { sort_by, take } from array
 
-  let words = '  pear, fig ,apple '->trim->split<','>->map<(w: string) => trim(w)>
+  let words = '  pear, fig ,apple '->trim->split<','>->map<(w) => trim(w)>
   let shortest = words->sort_by<(w: string) => len(w)>->take<2>     // ['fig', 'pear']
   ```
 

@@ -363,7 +363,7 @@ timeout_ms = 120000
 
 [[tests]]
 name = "native.prelude_declaration_file_is_checked"
-desc = "The prelude's declaration file is the one source of the built-in signatures, so it is read with every program: a broken `signatures/globals.cml` in a scratch standard library (named by CAMEL_STD_LIB) fails `camel check` of a plain program with a diagnostic located in that file, and the real one checks clean."
+desc = "The prelude's declaration file is the one source of the built-in signatures, so it is read with every program: a broken `prelude.cml` in a scratch standard library (named by CAMEL_STD_LIB) fails `camel check` of a plain program with a diagnostic located in that file, and the real one checks clean."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/compile/native/prelude_declarations.mjs"

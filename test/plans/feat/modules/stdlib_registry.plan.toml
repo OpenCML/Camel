@@ -92,7 +92,7 @@ timeout_ms = 30000
 
 # A position that means the same thing carries the same name in every rule of a name: that is what
 # a named argument binds to (`len(x: xs)`), and it is why `stdlib/json.cml` and
-# `stdlib/signatures/globals.cml` rename a position. The declaration files and the rules C++
+# `stdlib/prelude.cml` rename a position. The declaration files and the rules C++
 # registers are two places a rule's names are written; `registry.signatures_match` compares their
 # parameters and names position by position, and this compares the names within one name's rules,
 # so the two cannot drift apart again. Two sets are the counter-examples the reference page states:

@@ -266,8 +266,8 @@ There is no "early return" in Camel. Make the branch the last expression of the 
 
 func main(): int sync {
     let xs = 1..11    // [1, ..., 10]
-    let squares = xs->map<(x: int): int => x * x>
-    let evens = squares->filter<(x: int): bool => x % 2 == 0>
+    let squares = xs->map<(x) => x * x>
+    let evens = squares->filter<(x) => x % 2 == 0>
     let total = evens->reduce<(acc: int, x: int): int => acc + x, 0>
 
     println(xs)
@@ -280,7 +280,7 @@ func main(): int sync {
     println(ys, len(ys), ys[0])
 
     // foreach runs its function for each element, in order.
-    ['a', 'b', 'c']->foreach<(s: string) => sync { println('item', s) }>
+    ['a', 'b', 'c']->foreach<(s) => sync { println('item', s) }>
     return 0
 }
 ```
@@ -311,7 +311,7 @@ import { seed, randint, next_key } from random
 func main(): int sync {
     seed(42)
     // Wrong tool: next_key advances a hidden state, so each element depends on which ran first.
-    let drawn = 0..8->map<(i: int): int => next_key()->randint<0, 100>>
+    let drawn = 0..8->map<(i) => next_key()->randint<0, 100>>
     println(drawn)
 
     seed(42)
@@ -540,7 +540,7 @@ func main(): int sync {
     println(ops->map<(f: (x: int) => int): int => f(10)>)
 
     var total = 0                            // captured by reference
-    [1, 2, 3]->foreach<(x: int) => sync { total = total + x }>
+    [1, 2, 3]->foreach<(x) => sync { total = total + x }>
     println(total)
     return 0
 }
@@ -816,7 +816,7 @@ import { mean } from array
 
 func main(): int sync {
     // Strings: the value goes in on the left, what configures the call goes in angle brackets.
-    let words = '  pear, fig ,apple, fig '->trim->split<','>->map<(w: string): string => trim(w)>
+    let words = '  pear, fig ,apple, fig '->trim->split<','>->map<(w) => trim(w)>
     println(words)
     println(words->unique->sort_by<(w: string): int => len(w)>->take<2>)
     println('hello'->to_upper, 'a-b-c'->replace<'-', '+'>, len('héllo'))
@@ -828,7 +828,7 @@ func main(): int sync {
 
     // Arrays and numbers.
     let xs = [3, -1, 4, -1, 5]
-    println(sum(xs), reverse(xs), xs->map<(x: int): int => abs(x)>)
+    println(sum(xs), reverse(xs), xs->map<(x) => abs(x)>)
     println(mean([1.0, 2.0, 4.0]), hypot(3.0, 4.0), bit_and(6, 3))
     println('{:.4f}'->format<pi>)
     return 0

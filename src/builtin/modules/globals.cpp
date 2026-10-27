@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "camel/core/type/bytes.h"
+#include "camel/core/type/native.h"
 #include "globals.h"
 #include "builtin/executors/builtin.h"
 #include "builtin/operators/array.h"
@@ -484,6 +485,10 @@ class StaticCheckedResolver final : public FuncTypeResolver {
 
     std::string signature() const override { return inner_->signature(); }
     FunctionType *fixedSignature() const override { return inner_->fixedSignature(); }
+    FunctionType *graftedSignature() const override { return inner_->graftedSignature(); }
+    void graftDeclaredSignature(FunctionType *signature) override {
+        inner_->graftDeclaredSignature(signature);
+    }
     bool parameterNames(std::vector<std::string> &with, std::vector<std::string> &norm)
         const override {
         return inner_->parameterNames(with, norm);
@@ -626,7 +631,7 @@ std::optional<Type *> coreSliceSubscriptResultType(const type_vec_t &norm, stati
 /// both bounds (`src/compile/gct/builder.cpp`:
 /// `intConstant((written[1] ? 1 : 0) | (written[0] ? 2 : 0))` over the start and the end).
 ///
-/// The declaration of the function form (`stdlib/signatures/globals.cml`) carries the two words a
+/// The declaration of the function form (`stdlib/prelude.cml`) carries the two words a
 /// short call leaves out as its parameters' defaults -- the step 1, the mask 3 -- and a rule that
 /// fixes its signature is what the compiler looks for when it fills a native operator's defaults
 /// (`src/compile/gir/builder_calls.cpp`, `defaultsOfCallee`; the function form is generic
@@ -3130,6 +3135,8 @@ bool GlobalsBuiltinModule::load() {
         return std::make_shared<Executor>(ctx, getArrayOpsMap());
     });
     declareArrayOperatorFacts();
+    // The type `Error` of the prelude's declaration file (`export type Error`).
+    camel::core::type::registerNativeType("prelude", "Error", camel::core::type::errorType());
     loaded_ = true;
     return true;
 }
