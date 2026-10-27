@@ -31,13 +31,15 @@ transformer 同型（`:89`，`g1/g2/wq/wk/wv/wo/w1/b1/w2/b2`）。落到调用�
    ⇒ `f32[?, ?] != f32[..]`。于是两侧一方开秩、一方具体时，`equals` **恒假**。
 
 诊断里两侧的**真实形态**是：`params`（`mlp_step.cml:55` 的 `m`）带 loop 状态里**具体秩**的字段，
-而 `grads`（`grad<m>` 的结果）是**开秩** `f32[..]` 字段 —— 也就是 `grep` 里 10-27 记录写的那一对，
+而 `grads`（`grad<m>` 的结果）是**开秩** `f32[..]` 字段 —— 也就是 `grep` 里 10-27 记录
+（[batch-slow-2026-10-27.md](../batch-slow-2026-10-27.md) 的 `:53`／`:58`）写的那一对，
 只是"声明写 `f32[..]`、实参给具体形状"这句话把两边的**方向**说反了。
 
 ## (c) 裁定检索：没有
 
-`git grep -n 'f32\[\.\.\]' origin/develop -- docs/handover` 的 **41 个文件**逐条看过（reviews/
-questions/reports/stdlib），**没有**"开秩形参能否收具体秩实参"或"梯度该按哪一侧定形状"的裁定。
+`git grep -n 'f32\[\.\.\]' origin/develop -- docs/handover` 的 **20 个文件**（61 行；口径就是这条命令的路径，
+限定 `docs/handover`，放宽到 `-- docs` 是 **35 个文件**／158 行）逐条看过（reviews/questions/reports/stdlib，
+另有 handover 根下 2 个），**没有**"开秩形参能否收具体秩实参"或"梯度该按哪一侧定形状"的裁定。
 唯一相关且**方向相反**的是设计原则 5.4（`docs/design-principles.cn.md:378`）：
 
 > **形状未知的数组进入声明了形状的位置**：不隐式放行，用 `as` 显式转换，转换处做检查。
