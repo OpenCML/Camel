@@ -1132,6 +1132,12 @@ bool Builder::valueNameExists(const std::string &written, const GCT::node_ptr_t 
         // does; for a case that is not selected the name is at least qualified.
         return true;
     }
+    if (const ModuleUnit *unit = currentModuleUnit();
+        unit != nullptr && unit->nativeOperatorGroups.contains(name)) {
+        // A body-less declaration of this module that it does not export (a private kernel): a
+        // case that is not selected must see it as the selected case does.
+        return true;
+    }
     if (module_ != nullptr) {
         // A body-less declaration of this module: a name the module itself declared for a
         // native operator (step 1). `visitDRefNode` looks it up here, before what
@@ -1718,6 +1724,7 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
                                       ? visitInPosition(gct->at(i), wanted)
                                       : visitOperand(gct->at(i), gct);
             if (concrete && kind != GCT::NodeKind::DATA && built != nullptr &&
+                asTagged(wanted) != nullptr && asTagged(valueTypeOf(nodeTypeOf(built))) == nullptr &&
                 !valueTypeOf(nodeTypeOf(built))->equals(wanted)) {
                 if (node_handle_t entered = coerceTo(built, wanted, gct->at(i))) {
                     built = entered;
