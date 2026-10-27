@@ -101,52 +101,8 @@ int deriveProcessExitCode(camel::runtime::GCGraph *graph, slot_t result, bool de
 // ---- the module lookup (camel/core/context/module_resolver.h) -------------------------------
 //
 // One walk, used by the lookup and by the reason a `ModuleNotFound` carries: the same roots in the
-// same order, the same idea of what a module file is, and the same file passed over as the
-// importing module's own. Nothing here reads the environment or the command line; the roots arrive
-// as text (design principles 10.2).
-
-namespace {
-
-/// True when two spellings name one file: what the file system says, or, for a path it will not
-/// compare (a file that went away between the listing and here), the same path written twice.
-bool isSameFile(const std::string &a, const std::string &b) {
-    if (a.empty() || b.empty()) {
-        return false;
-    }
-    std::error_code ec;
-    if (fs::equivalent(camel::utils::pathFromUtf8(a), camel::utils::pathFromUtf8(b), ec) && !ec) {
-        return true;
-    }
-    const auto normalized = [](const std::string &path) {
-        return camel::utils::pathToUtf8(
-            fs::absolute(camel::utils::pathFromUtf8(path)).lexically_normal());
-    };
-    return normalized(a) == normalized(b);
-}
-
-/// True when a candidate is a file of the module the import stands in, which the lookup passes over
-/// (design principles 10.1: one module's import never resolves to itself). A `xx.cml` beside a
-/// `xx.cmo` is that module's declaration (design principles 10.2), so the two files are one module
-/// and an import written in either of them resolves to neither: `math.cml` reaches the standard
-/// library's `math` even where a `math.cmo` stands beside it. A name that no other module of the
-/// search order has is not found at all.
-bool isOwnModuleFile(const std::string &candidate, const std::string &ownFile) {
-    if (isSameFile(candidate, ownFile)) {
-        return true;
-    }
-    fs::path other           = camel::utils::pathFromUtf8(candidate);
-    const fs::path extension = other.extension();
-    if (extension == ".cml") {
-        other.replace_extension(".cmo");
-    } else if (extension == ".cmo") {
-        other.replace_extension(".cml");
-    } else {
-        return false;
-    }
-    return isSameFile(camel::utils::pathToUtf8(other), ownFile);
-}
-
-} // namespace
+// same order, the same idea of what a module file is. Nothing here reads the environment or the
+// command line; the roots arrive as text (design principles 10.2).
 
 bool isModuleName(const std::string &name) {
     if (name.empty())
@@ -243,8 +199,7 @@ ModuleResolver::listingFor(const std::string &directory) {
     return listings_.emplace(directory, std::move(files)).first->second;
 }
 
-ModuleFile ModuleResolver::findUnder(
-    const std::string &baseDir, const std::string &moduleName, const std::string &ownFile) {
+ModuleFile ModuleResolver::findUnder(const std::string &baseDir, const std::string &moduleName) {
     // A lookup key is a resolved module name, never an import spelling or a path: the relative
     // prefix is resolved against the importing module's name before this, and a leading dot here
     // would turn into a leading '/' below and search the filesystem root.
@@ -258,25 +213,14 @@ ModuleFile ModuleResolver::findUnder(
     const fs::path dir  = dirPart.empty() ? base : base / camel::utils::pathFromUtf8(dirPart);
 
     // Within one directory: `D/xx.cmo`, then `D/xx.cml`; and, when `D/xx` is a directory itself,
-    // the same two forms inside it (`D/xx/xx.cmo`, `D/xx/xx.cml`). A file that is the importing
-    // module's own is passed over here and not returned: the search goes on with what the names
-    // below stand for -- which may be the same *name* in a later directory.
+    // the same two forms inside it (`D/xx/xx.cmo`, `D/xx/xx.cml`).
     const auto findIn = [&](const fs::path &directory) -> ModuleFile {
         const DirectoryListing &files =
             listingFor(camel::utils::pathToUtf8(directory.lexically_normal()));
-        const auto take = [&](const std::string &path, bool isCmo) -> ModuleFile {
-            if (isOwnModuleFile(path, ownFile))
-                return {};
-            return {path, isCmo};
-        };
-        if (files.cmo.contains(stem)) {
-            ModuleFile found =
-                take(camel::utils::pathToUtf8(directory / (stem + ".cmo")), true);
-            if (found.found())
-                return found;
-        }
-        if (auto source = files.source.find(stem); source != files.source.end())
-            return take(source->second, false);
+        if (files.cmo.contains(stem))
+            return {camel::utils::pathToUtf8(directory / (stem + ".cmo")), true};
+        if (auto found = files.source.find(stem); found != files.source.end())
+            return {found->second, false};
         return {};
     };
     ModuleFile found = findIn(dir);
@@ -285,19 +229,19 @@ ModuleFile ModuleResolver::findUnder(
     return findIn(dir / camel::utils::pathFromUtf8(stem));
 }
 
-ModuleFile ModuleResolver::resolve(
-    const std::string &moduleName, const std::string &importerDir, const std::string &ownFile) {
+ModuleFile
+ModuleResolver::resolve(const std::string &moduleName, const std::string &importerDir) {
     camel::utils::phase::Scope phaseScope("resolve", moduleName);
     for (const std::string &root : searchRoots(importerDir)) {
-        ModuleFile found = findUnder(root, moduleName, ownFile);
+        ModuleFile found = findUnder(root, moduleName);
         if (found.found())
             return found;
     }
     return {};
 }
 
-std::string ModuleResolver::directoryReason(
-    const std::string &directory, const std::string &stem, const std::string &ownFile) {
+std::string
+ModuleResolver::directoryReason(const std::string &directory, const std::string &stem) {
     const fs::path dir = camel::utils::pathFromUtf8(directory);
     std::error_code ec;
     if (!fs::exists(dir, ec))
@@ -305,24 +249,13 @@ std::string ModuleResolver::directoryReason(
     if (!fs::is_directory(dir, ec))
         return "not a directory";
     const DirectoryListing &files = listingFor(camel::utils::pathToUtf8(dir.lexically_normal()));
-    if (files.cmo.contains(stem)) {
-        const std::string path = camel::utils::pathToUtf8(dir / (stem + ".cmo"));
-        if (isOwnModuleFile(path, ownFile))
-            return "only the module's own file '" + stem + ".cmo' is here, and an import never "
-                   "resolves to itself";
+    if (files.cmo.contains(stem) || files.source.contains(stem))
         return ""; // found: what happened to the file is the caller's to say
-    }
-    if (auto source = files.source.find(stem); source != files.source.end()) {
-        if (isOwnModuleFile(source->second, ownFile))
-            return "only the module's own file '" + stem + ".cml' is here, and an import never "
-                   "resolves to itself";
-        return "";
-    }
     return "no file '" + stem + ".cml' or '" + stem + ".cmo' in directory";
 }
 
 std::vector<std::string> ModuleResolver::searchReport(
-    const std::string &moduleName, const std::string &importerDir, const std::string &ownFile) {
+    const std::string &moduleName, const std::string &importerDir) {
     // Only a resolved module name can name the files to report on; a relative spelling names
     // nothing and is never turned into a path.
     if (!isModuleName(moduleName))
@@ -341,7 +274,7 @@ std::vector<std::string> ModuleResolver::searchReport(
             const std::string key = camel::utils::pathToUtf8(fs::absolute(directory));
             if (!seen.insert(key).second)
                 continue;
-            const std::string reason = directoryReason(key, stem, ownFile);
+            const std::string reason = directoryReason(key, stem);
             if (!reason.empty())
                 out.push_back(key + ": " + reason);
         }
@@ -714,14 +647,9 @@ Context::importModule(const std::string &rawModuleName, const module::Module *im
     // library's own `import graph` in stdlib/rules.cml could find a same-named program of the
     // entry directory instead of stdlib/graph.cmo.
     const std::string importerDir = importerDirectory(importer);
-    // The file of the module this import stands in, passed over by the lookup: an import never
-    // resolves to the module that writes it, so the search goes on with the rest of its order
-    // (design principles 10.1). An `import` always has the module it stands in; the callers that
-    // name a module rather than importing it (a pass library, an operator's module) pass none.
-    const std::string ownFile = importerOwnFile(importer);
 
     for (const auto &name : candidates) {
-        auto [path, isCmo] = resolveModulePath(name, importerDir, ownFile);
+        auto [path, isCmo] = resolveModulePath(name, importerDir);
         if (!path.empty()) {
             if (auto cached = moduleAtPath(path)) {
                 EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
@@ -766,7 +694,7 @@ Context::importModule(const std::string &rawModuleName, const module::Module *im
                 reason << "\n  " << p;
         }
     } else {
-        std::vector<std::string> diagLines = resolver_.searchReport(firstCandidate, importerDir, ownFile);
+        std::vector<std::string> diagLines = resolver_.searchReport(firstCandidate, importerDir);
         if (!diagLines.empty()) {
             reason << "Search attempts:";
             for (const auto &line : diagLines)
@@ -789,6 +717,37 @@ Context::importModule(const std::string &rawModuleName, const module::Module *im
     throw DiagnosticBuilder::of(SemanticDiag::ModuleNotFound).commit(rawModuleName, reasonStr);
 }
 
+std::string Context::checkPreludeDeclarations() {
+    if (preludeChecked_) {
+        return preludeProblem_;
+    }
+    preludeChecked_ = true;
+    for (const std::string &root : resolver_.searchRoots(std::string())) {
+        const fs::path file = camel::utils::pathFromUtf8(root) / "signatures" / "globals.cml";
+        std::error_code ec;
+        if (!fs::is_regular_file(file, ec) || ec) {
+            continue;
+        }
+        const std::string path = camel::utils::pathToUtf8(file);
+        auto prelude = std::static_pointer_cast<UserDefinedModule>(
+            UserDefinedModule::fromFile("prelude", path, shared_from_this()));
+        preludeModule_ = prelude;
+        try {
+            prelude->compile(CompileStage::AST);
+        } catch (...) {
+            // A file that does not parse is reported by its own diagnostics, below.
+            if (!prelude->diagnostics() || !prelude->diagnostics()->hasErrors()) {
+                throw;
+            }
+        }
+        if (prelude->diagnostics() && prelude->diagnostics()->hasErrors()) {
+            preludeProblem_ = path;
+        }
+        return preludeProblem_;
+    }
+    return preludeProblem_;
+}
+
 std::string Context::importerDirectory(const module::Module *importer) const {
     if (importer != nullptr && !importer->path().empty()) {
         return camel::utils::pathToUtf8(
@@ -801,19 +760,6 @@ std::string Context::importerDirectory(const module::Module *importer) const {
             camel::utils::pathFromUtf8(mainModule_->path()).parent_path());
     }
     return entryConfig_.entryDir;
-}
-
-std::string Context::importerOwnFile(const module::Module *importer) const {
-    // The file of the importing module, which the lookup passes over, because an import never
-    // resolves to the module that writes it (design principles 10.1). Only an `import` comes with
-    // the module it stands in: a load that names a module rather than importing it -- the library
-    // of a pass (`counts::simplify`), the module that implements an operator URI, the built-in
-    // module -- has none to skip, and a program that declares its own pass is loaded as the module
-    // its own file names.
-    if (importer != nullptr) {
-        return importer->path();
-    }
-    return {};
 }
 
 module_ptr_t Context::moduleAtPath(const std::string &path) const {
@@ -948,12 +894,11 @@ void Context::setModuleSearchPaths(std::vector<std::string> roots) {
 }
 
 std::pair<std::string, bool> Context::resolveModulePath(
-    const std::string &moduleName, const std::string &importerDir, const std::string &ownFile) {
+    const std::string &moduleName, const std::string &importerDir) {
     // The one lookup: the importing module's own directory, then the module roots, in the order
     // `ModuleResolver::searchRoots` gives (design principles 10.2). A hit is what the name stands
-    // for, and only `.cml` and `.cmo` name a module file. `ownFile` is passed over: an import never
-    // resolves to the module that writes it (design principles 10.1).
-    ModuleFile found = resolver_.resolve(moduleName, importerDir, ownFile);
+    // for, and only `.cml` and `.cmo` name a module file.
+    ModuleFile found = resolver_.resolve(moduleName, importerDir);
     return {found.path, found.isCmo};
 }
 
@@ -1007,9 +952,8 @@ Context::loadModuleFrom(const std::string &moduleName, const std::string &path, 
         return mod;
     }
     // The file of the entry module (which is registered under no module name): the entry
-    // itself, not a second copy of it. The entry's own `import <its file name>` never gets here
-    // -- the lookup passes over the module's own file (design principles 10.1) -- but another
-    // module may import the entry back, and then the entry is what the name stands for.
+    // itself, not a second copy of it. A module may import itself, to no effect (design
+    // principles 10.1), and another module may import the entry back.
     if (mainModule_ && !mainModule_->path().empty()) {
         std::error_code ec;
         if (fs::equivalent(

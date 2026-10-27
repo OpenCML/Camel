@@ -241,7 +241,7 @@ export func eval::<F>(t: Txn<F>, n: Node): Node? uses t
 /// traced.
 /// @example-fragment t is an open transaction and g a graph of it
 /// @example add_constant(t, g, 7)
-export func add_constant::<F, T>(t: Txn<F>, g: Graph, value: T): Node when is_ordered::<T>() uses t
+export func add_constant::<F, T>(t: Txn<F>, g: Graph, value: T): Node uses t when is_ordered::<T>()
 
 /// Checks the edits and makes the changed function: the same type as the one that was opened, with
 /// the values it captured, sharing every graph nothing changed. The transaction is over.

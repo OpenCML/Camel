@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-289 diagnostics: 269 errors, 20 warnings. 15 carry a machine-applicable edit, 274 say why they carry none.
+291 diagnostics: 271 errors, 20 warnings. 15 carry a machine-applicable edit, 276 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -97,7 +97,6 @@ prints one entry.
 | `0x030000B3` | [SemanticDiag::PartialApplicationRefused](#partialapplicationrefused) | Error | no |
 | `0x030000B4` | [SemanticDiag::ComprehensionSourceRefused](#comprehensionsourcerefused) | Error | no |
 | `0x030000C0` | [SemanticDiag::LogicalOperandNotBool](#logicaloperandnotbool) | Error | no |
-| `0x030000D0` | [SemanticDiag::ExportedVariable](#exportedvariable) | Error | no |
 | `0x030000D1` | [SemanticDiag::ModuleValueCycle](#modulevaluecycle) | Error | no |
 | `0x030000D2` | [SemanticDiag::CaptureAfterRecursiveCall](#captureafterrecursivecall) | Error | no |
 | `0x030000D3` | [SemanticDiag::AmbiguousName](#ambiguousname) | Error | no |
@@ -254,6 +253,9 @@ prints one entry.
 | `0x030001F8` | [SemanticDiag::FactCaseBindsNoVariable](#factcasebindsnovariable) | Error | no |
 | `0x030001F9` | [SemanticDiag::FactJoinRequired](#factjoinrequired) | Error | no |
 | `0x030001FA` | [SemanticDiag::StreamCaptured](#streamcaptured) | Error | no |
+| `0x030001FB` | [SemanticDiag::NativeValueNotLoaded](#nativevaluenotloaded) | Error | no |
+| `0x030001FC` | [SemanticDiag::NativeValueMismatch](#nativevaluemismatch) | Error | no |
+| `0x030001FD` | [SemanticDiag::NativeTypeNotProvided](#nativetypenotprovided) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -2884,37 +2886,6 @@ func main(): int sync {
 }
 ```
 
-### ExportedVariable
-
-`0x030000D0` · Error · `SemanticDiag::ExportedVariable`
-
-**Fix**
-
-None: choice: the repair is a decision only the writer can make
-
-**Message**
-
-```text
-The variable '{0}' cannot be exported.
-```
-
-**Help**
-
-```text
-A 'var' of the top level of a module is read and written only by the module's own functions: export the functions that read and write it ('export func bump(): int sync { cnt += 1; return cnt }'). A 'let' can be exported.
-```
-
-**Example** (`test/cases/compile/module_root/export_var.cml`, run as `camel -E short test/cases/compile/module_root/export_var.cml`)
-
-```camel
-// A `var` cannot be exported (design principles 10.1).
-import export_var_lib
-
-func main(): int sync {
-    return 0
-}
-```
-
 ### ModuleValueCycle
 
 `0x030000D1` · Error · `SemanticDiag::ModuleValueCycle`
@@ -4294,14 +4265,13 @@ A requirement names a permission of design principles 7.2: reassociate, contract
 
 ```camel
 /// A requirement that names no permission: reported at the argument, where it is written.
-import { Program } from graph
 import { rewrite } from rewrite
 
 #requires(reassociate2)
 rule r(x: int) { x + 0 => x }
 
-export func apply(p: Program): Program! {
-    return rewrite(p, [r])
+export func apply::<F>(p: F): F! {
+    return p->rewrite<[r]>
 }
 ```
 
@@ -5842,15 +5812,14 @@ A rule's condition decides whether the rule applies to a redex, and the engine e
 **Example** (`test/cases/modules/rules/condition_rewrite.cml`, run as `camel test/cases/modules/rules/condition_rewrite.cml`)
 
 ```camel
-import { Program, current } from graph
 import { rewrite } from rewrite
 
 rule add_zero(x: int) when publish_now() { x + 0 => x }
 rule drop_one(x: int) when true { x * 1 => x }
 
 func publish_now(): bool {
-    let p = current()
-    return match rewrite(p, [drop_one]) {
+    let p = redex
+    return match p->rewrite<[drop_one]> {
         case error e => sync { println('inner error value: ', e.kind); return false }
         case q => sync { return true }
     }
@@ -5861,8 +5830,8 @@ func redex(x: int): int {
 }
 
 func main(): int sync {
-    let p = current()
-    return match rewrite(p, [add_zero]) {
+    let p = redex
+    return match p->rewrite<[add_zero]> {
         case error e => sync { println('outer error value: ', e.kind); return 1 }
         case q => sync { println('rewritten'); return 0 }
     }
@@ -6424,7 +6393,7 @@ A fact is computed once for the arguments it is queried with, and two different 
 **Example** (`test/cases/modules/rules/fact_arg_not_constant.cml`, run as `camel test/cases/modules/rules/fact_arg_not_constant.cml`)
 
 ```camel
-import { Program, Node } from graph
+import { Node } from graph
 import { max } from math
 import { rewrite } from rewrite
 
@@ -6764,10 +6733,8 @@ Name one function, or give the arguments positionally.
 **Example** (`test/cases/compile/param_defaults/stdlib_no_place_for_name.cml`, run as `camel test/cases/compile/param_defaults/stdlib_no_place_for_name.cml`)
 
 ```camel
-import python
-
 func main(): int sync {
-    println(python::py_call(fn: 'printf'))
+    println(fn: 'printf')
     return 0
 }
 ```
@@ -6949,14 +6916,12 @@ The call of '{0}' cannot take a value of the reduced-precision element type '{1}
 bf16 and f16 are floating types of the language: a literal has one, bf16(x) and f16(x) are written conversions, and the scalar arithmetic and comparison compute in f32 and round once into the element type (design principles 7.3). This call asks for an operation one of them has no overload for - an operation the same type refuses on f32, such as %, or a function that takes a fixed set of types. Write the operation on a type that has it, or read the value as f32 (or f64) first, which is exact: f32(x).
 ```
 
-**Example** (`test/cases/modules/stdlib/reduced_sort_refused.cml`, run as `camel test/cases/modules/stdlib/reduced_sort_refused.cml`)
+**Example** (`test/cases/modules/stdlib/reduced_arithmetic_refused.cml`, run as `camel test/cases/modules/stdlib/reduced_arithmetic_refused.cml`)
 
 ```camel
-import { sort } from array
-
 func main(): int sync {
-    let xs: f16[] = []
-    println(sort(xs))
+    let xs: bf16[] = []
+    println(xs[0] % xs[0])
     return 0
 }
 ```
@@ -7157,15 +7122,18 @@ A rule whose declaration writes `with` parameters is a function of them, and onl
 **Example** (`test/cases/modules/rules/err_rule_with_unbound.cml`, run as `camel test/cases/modules/rules/err_rule_with_unbound.cml std::nvm`)
 
 ```camel
-import { Program } from graph
 import { rewrite } from rewrite
 
 with <shift: int>
 rule add_shift(x: int) { x + 0 => x }
 
-export func apply(p: Program): Program! {
+export func apply(p: () => int): (() => int)! {
     let rules = [add_shift]
-    return rewrite(p, rules)
+    return p->rewrite<rules>
+}
+
+func main(): int sync {
+    return 0
 }
 ```
 
@@ -7192,13 +7160,13 @@ node_of reaches the node of a const parameter, so that a condition can read a fa
 **Example** (`test/cases/modules/rules/node_of_misuse.cml`, run as `camel test/cases/modules/rules/node_of_misuse.cml std::nvm`)
 
 ```camel
-import { Program, Node } from graph
+import { Node } from graph
 import { rewrite } from rewrite
 
 rule drop_by_node(x: int, const c: int) when node_of(x) == node_of(c) { x * c => x }
 
-export func apply(p: Program): Program! {
-    return rewrite(p, [drop_by_node])
+export func apply::<F>(p: F): F! {
+    return p->rewrite<[drop_by_node]>
 }
 
 func scaled(x: int): int { return x * 2 }
@@ -7451,7 +7419,7 @@ None: choice: a stream has one consumer on each path, so which place reads it an
 **Help**
 
 ```text
-A stream is read one element at a time and is done when it ends, so on each execution path its value has one consumer (design principles 5.4). The second consumer is here and the first is here. To read one stream from two places, write `tee(s, n)`: it gives two streams, each read once, and both see the same elements.
+A stream is read one element at a time and is done when it ends, so on each execution path its value has one consumer (design principles 5.4). The second consumer is here and the first is here. To read one stream from two places, write `s->tee<n>`: it gives two streams, each read once, and both see the same elements.
 ```
 
 **Example** (`test/cases/compile/stream/consumed_twice.cml`, run as `camel test/cases/compile/stream/consumed_twice.cml`)
@@ -7565,7 +7533,7 @@ A `const` parameter means the left side matches a constant there: in the rule r(
 **Example** (`test/cases/modules/rules/const_param_unbound.cml`, run as `camel test/cases/modules/rules/const_param_unbound.cml const_param_unbound::apply std::nvm`)
 
 ```camel
-import { Program, Node, type_of, type_name } from graph
+import { Node, type_of, type_name } from graph
 import { rewrite } from rewrite
 
 func typeText(n: Node): string {
@@ -7577,8 +7545,8 @@ func typeText(n: Node): string {
 
 rule drop_by_shape(x: int, const c: int) when typeText(node_of(c)) == 'int' { x + 1 => x }
 
-export func apply(p: Program): Program! {
-    return rewrite(p, [drop_by_shape])
+export func apply::<F>(p: F): F! {
+    return p->rewrite<[drop_by_shape]>
 }
 
 func shifted(a: int): int { return a + 1 }
@@ -7841,7 +7809,7 @@ The `tee` width '{0}' is below 1.
 **Help**
 
 ```text
-`tee(s, n)` reads `s` once and gives two streams over the same elements, each read once (design principles 5.4). A side that runs ahead of the other buffers the elements the other has not read yet, and `n` says how wide that buffer is expected to be: it is a hint, so the executor grows the buffer rather than make a side wait, and a hint wider than the implementation's cap is clamped to it. What no buffer can be is narrower than the one element being handed over, so write `n` as 1 or more, or leave it out for the default of 8.
+`s->tee<n>` reads `s` once and gives two streams over the same elements, each read once (design principles 5.4). A side that runs ahead of the other buffers the elements the other has not read yet, and `n` says how wide that buffer is expected to be: it is a hint, so the executor grows the buffer rather than make a side wait, and a hint wider than the implementation's cap is clamped to it. What no buffer can be is narrower than the one element being handed over, so write `n` as 1 or more, or leave it out for the default of 8.
 ```
 
 **Example** (`test/cases/compile/stream/tee_hint_not_positive.cml`, run as `camel test/cases/compile/stream/tee_hint_not_positive.cml`)
@@ -7862,7 +7830,7 @@ func total(s: int..): int {
 }
 
 func main(): int sync {
-    let (left, right) = stream::tee(count(3), 0)
+    let (left, right) = stream::tee<0>(count(3))
     return total(left) + total(right)
 }
 ```
@@ -7890,15 +7858,14 @@ A rule's `with` value is part of what selects the instance the rule's sides and 
 **Example** (`test/cases/modules/rules/err_rule_with_not_constant.cml`, run as `camel test/cases/modules/rules/err_rule_with_not_constant.cml std::nvm`)
 
 ```camel
-import { Program, graphs } from graph
 import { rewrite } from rewrite
 
 with <tile: int>
 rule add_tile(x: int) when tile > 0 { x + tile => x }
 
 /// The factor is a parameter of the function, so it is not known while the program is compiled.
-func apply(p: Program, tile: int): Program! {
-    return rewrite(p, [add_tile<tile>])
+func apply(p: () => int, tile: int): (() => int)! {
+    return p->rewrite<[add_tile<tile>]>
 }
 
 func main(): int sync {
@@ -8260,6 +8227,102 @@ func read(): () => int {
 func main(): int sync {
     let take = read()
     println(take())
+    return 0
+}
+```
+
+### NativeValueNotLoaded
+
+`0x030001FB` · Error · `SemanticDiag::NativeValueNotLoaded`
+
+**Fix**
+
+None: context: the native module that supplies it was not loaded, or the name is not the one it registers; the repair is not in this text
+
+**Message**
+
+```text
+The declaration '{0}' has no right side, and no loaded module registers a value of that name.
+```
+
+**Help**
+
+```text
+A value declared without a right side (`export let inf: float`) is supplied by the C++ module of the declaration, registered under the same name; import the module and check the name. A value written in Camel has its right side.
+```
+
+**Example** (`test/cases/modules/math_kernels/err_value_missing/math.cml`, run as `camel test/cases/modules/math_kernels/err_value_missing/math.cml`)
+
+```camel
+
+import { timeit } from perf
+export let tau: float
+
+func main(): int sync {
+    return 0
+}
+```
+
+### NativeValueMismatch
+
+`0x030001FC` · Error · `SemanticDiag::NativeValueMismatch`
+
+**Fix**
+
+None: choice: the type is the writer's to settle against the module
+
+**Message**
+
+```text
+The declaration '{0}' says '{1}', but the module registers a value of type '{2}'.
+```
+
+**Help**
+
+```text
+A value declared without a right side is the one the C++ module registers: write the type it registers, as a body-less function writes the signature of its operator.
+```
+
+**Example** (`test/cases/modules/math_kernels/err_value_type/math.cml`, run as `camel test/cases/modules/math_kernels/err_value_type/math.cml`)
+
+```camel
+
+import { timeit } from perf
+export let inf: int
+
+func main(): int sync {
+    return 0
+}
+```
+
+### NativeTypeNotProvided
+
+`0x030001FD` · Error · `SemanticDiag::NativeTypeNotProvided`
+
+**Fix**
+
+None: choice: whether the type is written out or provided by the module is a decision only the writer can make
+
+**Message**
+
+```text
+The type '{0}' is declared without a right side, so a C++ module has to provide it, and the module '{1}' registered no type of that name.
+```
+
+**Help**
+
+```text
+A type written without '=' (`export type Graph`, `export type Txn<F>`) is the one a C++ module provides, as a function without a body is: its identity is the module and the name. Give the type its definition after '=', or check that the module registers it under this name.
+```
+
+**Example** (`test/cases/compile/native_types/not_provided.cml`, run as `camel test/cases/compile/native_types/not_provided.cml`)
+
+```camel
+
+
+export type Nope
+
+func main(): int sync {
     return 0
 }
 ```
@@ -9666,7 +9729,7 @@ A bound of 'slice' is a position from 0 to the length; the end is one past the l
 **Example** (`test/cases/consistency/faults/slice_out_of_range.cml`, run as `camel test/cases/consistency/faults/slice_out_of_range.cml ${backend}`)
 
 ```camel
-func head(xs: int[], n: int): int[] { return xs->slice<0, n> }
+func head(xs: int[], n: int): int[] { return xs[0:n] }
 
 func main(): int sync {
     let xs = [10, 20, 30]

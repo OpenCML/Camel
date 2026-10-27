@@ -1,4 +1,4 @@
-// The imported module's import names its own file: that import is not found, so this one has errors.
+// The imported module imports itself: no effect there either.
 import { three } from self_lib
 
 func main(): int sync {

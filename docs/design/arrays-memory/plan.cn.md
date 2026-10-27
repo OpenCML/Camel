@@ -559,10 +559,9 @@ Array *rowCopy(mm::IAllocator &allocator, uint64_t row) const;
 | `append`（`xs = xs + [v]`） | **是**（已落地） | `:struct/append_arr_in_place`（`setInPlaceForm` 声明），就地追加 | — |
 | `extend` | **是** | 复用操作数 0 的块，追加 | — |
 | `concat`（`xs = xs + ys`） | **是** | 结果以操作数 0 为底 | — |
-| `merge_sorted_arrays` | **是** | 从尾部合并进操作数 0 | — |
 | `filter` | **是** | 原地压缩，末尾收缩 | — |
 | `unique` | **是** | 原地压缩 | — |
-| `sort`/`insert_sort`/`quick_sort`/`merge_sort` | **是**（已落地） | `array` 的原地形式（`src/builtin/operators/array.cpp`） | — |
+| `sort` | **是**（已落地） | `array` 的原地形式（`src/builtin/operators/array.cpp`） | — |
 | `set_index`（`xs[i] = v`） | **是**（已落地） | `:op/set_index_in_place` | — |
 | `tail` | 不分配（视图） | 返回 `rowView`/偏移视图 | 不是"原地写"，而是不分配 |
 | `head` | 不分配 | 返回元素 | — |
@@ -599,7 +598,7 @@ let after = std::mem::blocks().allocs;
 println(after - before);             // 期望 0
 ```
 
-覆盖：`append`、`extend`、`concat`、`merge_sorted_arrays`、`filter`、`unique`、`sort` 家族（各一次）、`set_index`、张量逐元素一元与二元各一次（f32 与 f64 各一组）、`tail`（视图，0 次）。对照用例（**必须分配**）：`let ys = xs; xs = xs->sort()`（1 次——`take` 复制，再原地排序）、`map(xs, f)`（1 次输出）、`argsort`（1 次）。
+覆盖：`append`、`extend`、`concat`、`filter`、`unique`、`sort`（各一次）、`set_index`、张量逐元素一元与二元各一次（f32 与 f64 各一组）、`tail`（视图，0 次）。对照用例（**必须分配**）：`let ys = xs; xs = xs->sort()`（1 次——`take` 复制，再原地排序）、`map(xs, f)`（1 次输出）、`argsort`（1 次）。
 
 文件：`test/cases/feat/mm/dyn_in_place/*.cml`、`test/plans/feat/mm/dyn_in_place.plan.toml`。断言用打印的计数差，不用时间。
 

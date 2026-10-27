@@ -2,12 +2,11 @@
  * `nondeterministic` is a permission like the others (design principles 7.2): a rule may
  * require it, and a function may grant it; the rule is applied only where it is granted.
  */
-import { Program } from graph
 import { rewrite } from rewrite
 
 #requires(nondeterministic)
 rule mul_one(x: float) { x * 1.0 => x }
 
-export func apply(p: Program): Program! {
-    return rewrite(p, [mul_one])
+export func apply::<F>(p: F): F! {
+    return p->rewrite<[mul_one]>
 }

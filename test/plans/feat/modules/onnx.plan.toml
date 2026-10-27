@@ -1744,7 +1744,7 @@ verify_script = """
 const text = input.normalized.output
 assert(text.includes('calls the function again in 2 places outside tail position'), 'missing detail: ' + text)
 assert(text.includes('only with one recursive call (a linear recursion)'), 'missing the shape it can export: ' + text)
-assert(/[^ ]*export_tree_recursion[.]cml:12:[0-9]+:/.test(text), 'missing source position of the call: ' + text)
+assert(/[^ ]*export_tree_recursion[.]cml:11:[0-9]+:/.test(text), 'missing source position of the call: ' + text)
 assert(text.includes('ExportUnsupported'), 'the refusal must be the error value of the export_model call')
 }
 """

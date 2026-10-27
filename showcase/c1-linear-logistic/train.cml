@@ -36,9 +36,9 @@ func loss(x: f32[..], y: f32[..], kind: int): float {
     let z = predict<m>(x)
     return if kind == 0 then {
         let errors = z - y
-        mean(errors * errors)
+        float(mean(errors * errors))
     } else {
-        mean(relu(z) - z * y + log(exp(-abs(z)) + 1.0))
+        float(mean(relu(z) - z * y + log(exp(-abs(z)) + 1.0)))
     }
 }
 

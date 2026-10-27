@@ -18,12 +18,10 @@ using namespace camel::core::context;
 using namespace camel::core::type;
 using namespace camel::core::rtdata;
 
-#include <bitset>
 
 using namespace camel::core::error;
 #include <cmath>
 #include <complex>
-#include <sstream>
 
 // ---- min, max and abs over bf16 and f16 ------------------------------------------------------
 //
@@ -219,62 +217,6 @@ slot_t __math_floor__(ArgsView &with, ArgsView &norm, Context &ctx) {
     }
 }
 
-slot_t __math_bin__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    int64_t number = 0;
-    switch (norm.code(0)) {
-    case TypeCode::Int32:
-        number = static_cast<int64_t>(norm.get<Int32>(0));
-        break;
-    case TypeCode::Int64:
-        number = static_cast<int64_t>(norm.get<Int64>(0));
-        break;
-    default:
-        throwRuntimeFault(
-            RuntimeDiag::OperandTypeUnsupported,
-            "math.bin",
-            typeCodeToString(norm.code(0)),
-            "an integer");
-    }
-    std::string bits = std::bitset<64>(number).to_string();
-    auto first_one   = bits.find('1');
-    std::string body = (first_one == std::string::npos) ? "0" : bits.substr(first_one);
-    return toSlot(String::from("0b" + body, mm::autoSpace()));
-}
-
-slot_t __math_oct__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    if (norm.code(0) != TypeCode::Int32 && norm.code(0) != TypeCode::Int64) {
-        throwRuntimeFault(
-            RuntimeDiag::OperandTypeUnsupported,
-            "math.oct",
-            typeCodeToString(norm.code(0)),
-            "an integer");
-    }
-    std::ostringstream oss;
-    oss << "0o" << std::oct;
-    if (norm.code(0) == TypeCode::Int32)
-        oss << norm.get<Int32>(0);
-    else
-        oss << norm.get<Int64>(0);
-    return toSlot(String::from(oss.str(), mm::autoSpace()));
-}
-
-slot_t __math_hex__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    if (norm.code(0) != TypeCode::Int32 && norm.code(0) != TypeCode::Int64) {
-        throwRuntimeFault(
-            RuntimeDiag::OperandTypeUnsupported,
-            "math.hex",
-            typeCodeToString(norm.code(0)),
-            "an integer");
-    }
-    std::ostringstream oss;
-    oss << "0x" << std::hex << std::uppercase;
-    if (norm.code(0) == TypeCode::Int32)
-        oss << norm.get<Int32>(0);
-    else
-        oss << norm.get<Int64>(0);
-    return toSlot(String::from(oss.str(), mm::autoSpace()));
-}
-
 slot_t __math_sqrt__(ArgsView &with, ArgsView &norm, Context &ctx) {
     switch (norm.code(0)) {
     case TypeCode::Int32:
@@ -306,8 +248,6 @@ std::unordered_map<std::string, operator_t> getMathOpsMap() {
         {"exp_z", __math_exp__},
         {"round_f", __math_round__}, {"round_d", __math_round__}, {"ceil_f", __math_ceil__},
         {"ceil_d", __math_ceil__},   {"floor_f", __math_floor__}, {"floor_d", __math_floor__},
-        {"bin_i", __math_bin__},     {"bin_l", __math_bin__},     {"oct_i", __math_oct__},
-        {"oct_l", __math_oct__},     {"hex_i", __math_hex__},     {"hex_l", __math_hex__},
         {"sqrt", __math_sqrt__},
         {"re_c", __math_re__},   {"re_z", __math_re__},
         {"im_c", __math_im__},   {"im_z", __math_im__},

@@ -40,7 +40,7 @@ let warmup = 3
 let lr = 0.003
 
 // 1 / sqrt(d_head), computed once from the width the model actually uses.
-let attention_scale = f32(scalar_sqrt(d_head))
+let attention_scale = f32(scalar_sqrt(float(d_head)))
 
 // The shapes the program works in.  A named alias keeps a signature short; the alias itself
 // shows every extent, so a reader never has to guess what the array spelling means here.

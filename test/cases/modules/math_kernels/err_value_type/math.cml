@@ -1,0 +1,7 @@
+
+import { timeit } from perf
+export let inf: int
+
+func main(): int sync {
+    return 0
+}

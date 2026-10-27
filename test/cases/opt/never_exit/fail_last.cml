@@ -1,0 +1,10 @@
+/**
+ * A sync main whose last statement is `fail`, of type `never`: no pass drops the output before
+ * it, and the run ends with the failure unhandled (exit code 1).
+ */
+
+
+func main(): int sync {
+    println('before')
+    fail<'Stop'>('stopped')
+}

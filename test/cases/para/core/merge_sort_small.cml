@@ -2,31 +2,43 @@
  * merge_sort.cml at a small size, with the evidence that the two recursive calls of a split
  * run concurrently: each of the 8 leaf sorts waits at a rendezvous for one peer (see
  * concurrent_calls) and reports whether it met one. The sort carries that count next to the
- * sorted array, so no shared state orders the calls. (The leaves use `merge_sort`; `sort`,
- * which merge_sort.cml uses, does not sort at the time of writing.)
+ * sorted array, so no shared state orders the calls. (The leaves use `sort`, the merges are the
+ * one-pass `merge` below, as merge_sort.cml does.)
  */
 
-import { seed, shuffle } from random
-import { merge_sort, merge_sorted_arrays } from array
+import { seed, shuffle, next_key } from random
+import { sort } from array
 import { rendezvous } from test_support
+
+/// Merges two sorted arrays in one pass: the smaller front element goes out first, then what is
+/// left of either side.
+func merge(lhs: int[], rhs: int[]): int[] {
+    let none: int[] = []
+    let (i, j, out) = loop i = 0, j = 0, out = none while i < len(lhs) && j < len(rhs) do {
+        let l = lhs[i]
+        let r = rhs[j]
+        return if l <= r then (i + 1, j, out->append<l>) else (i, j + 1, out->append<r>)
+    }
+    return concat(concat(out, lhs[i:]), rhs[j:])
+}
 
 func sort_leaf(arr: int[]): (int[], int) sync {
     let met = rendezvous(2, 5.0) - 1
-    return (merge_sort(arr), met)
+    return (sort(arr), met)
 }
 
 func mergesort(arr: int[]): (int[], int) {
     return if len(arr) <= 8 then sort_leaf(arr) else {
         let mid = len(arr) / 2
-        let (lhs, lmet) = arr->slice<0, mid>->mergesort
-        let (rhs, rmet) = arr->slice<mid, len(arr)>->mergesort
-        return (merge_sorted_arrays(lhs, rhs), lmet + rmet)
+        let (lhs, lmet) = arr[0:mid]->mergesort
+        let (rhs, rmet) = arr[mid:len(arr)]->mergesort
+        return (merge(lhs, rhs), lmet + rmet)
     }
 }
 
 func main(): int sync {
     seed(1)
-    let arr = 0..64->shuffle
+    let arr = 0..64->shuffle<next_key()>
     let (res, met) = mergesort(arr)
     res->println
     println('leaf sorts that met a peer: {} of 8'->format<met>)

@@ -1,4 +1,3 @@
-import { Program } from graph
 
 func twice(x: int): int {
     return x * 2
@@ -7,7 +6,7 @@ func twice(x: int): int {
 /// The `with` parameters of the function are the pass's parameters: `params::report label='ok' n=21 ...`.
 /// `n` is read at a call site (`twice(n)`), captured by a lambda and printed with the others.
 with <label: string, n: int, scale: f64, small: f32, flag: bool>
-export func report(p: Program): Program! sync {
+export func report::<F>(p: F): F! sync {
     println(label)
     println(n)
     println(twice(n))

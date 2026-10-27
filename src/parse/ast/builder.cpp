@@ -2357,7 +2357,14 @@ Value Builder::visitDataDecl(cst::DataDecl context, bool topLevel) {
         *dataDeclNode << typeListNode;
     }
 
-    *dataDeclNode << any2node(visitDataList(context->get<cst::DataList>()));
+    if (context->get<cst::DataList>()) {
+        *dataDeclNode << any2node(visitDataList(context->get<cst::DataList>()));
+    } else {
+        // `export let inf: float`: no right side, the value the C++ module supplies.
+        node_ptr_t none = createNodeAs<RepeatedLoad>("Data");
+        setNodeTokenRangeByContext(none, context);
+        *dataDeclNode << none;
+    }
     std::vector<camel::source::SemanticPart> parts;
     if (context->tok(TK::KwLet)) {
         parts.push_back(semanticPart(
@@ -2393,8 +2400,7 @@ Value Builder::visitDataDecl(cst::DataDecl context, bool topLevel) {
 
 /*
 typeDecl
-    : TYPE identRef ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
-      (typeExpr | STRING)
+    : TYPE identRef ('<' identDef (',' identDef)* ','? ('>' | '>='))? ('=' typeExpr)?
     ;
 */
 /*
@@ -2455,15 +2461,9 @@ Value Builder::visitResourceClause(cst::ResourceClause context) {
 
 Value Builder::visitTypeDecl(cst::TypeDecl context) {
     ENTER("TypeDecl");
-    string uri;
     Reference ref = qualifyRef(value_cast<Reference>(visitIdentRef(context->get<cst::IdentRef>())));
-    if (context->tok(TK::String)) {
-        uri = context->tok(TK::String)->text();
-        // Remove quotes from the string
-        uri = uri.substr(1, uri.size() - 2);
-    }
 
-    node_ptr_t typeDeclNode = createNodeAs<TypeDeclLoad>(ref, uri);
+    node_ptr_t typeDeclNode = createNodeAs<TypeDeclLoad>(ref);
     setNodeTokenRangeByContext(typeDeclNode, context);
     unwrapNodeAs<TypeDeclLoad>(typeDeclNode)->setDoc(docOf(context));
     if (!context->all<cst::IdentDef>().empty()) {
@@ -2617,8 +2617,10 @@ Value Builder::visitTupleParam(cst::TupleParam context) {
     for (const auto &identDef : context->all<cst::IdentDef>()) {
         names.push_back(identDef->text());
     }
-    // The name is internal: no program writes it, and the position makes it unique.
-    Reference ref("_tuple_" + std::to_string(context->begin()));
+    // The name is internal: no program writes it, and the count of such parameters before it in
+    // the file makes it unique. It does not depend on where the parameter is written, so a file
+    // formatted differently has the same tree.
+    Reference ref("_tuple_" + std::to_string(tupleParams_++));
     node_ptr_t namedPairNode = createNodeAs<NamedPairLoad>(ref);
     namedPairNode->loadAs<NamedPairLoad>()->setTupleNames(std::move(names));
     setNodeTokenRangeByContext(namedPairNode, context);

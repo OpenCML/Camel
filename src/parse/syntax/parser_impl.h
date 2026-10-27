@@ -239,7 +239,7 @@ class ParserImpl {
     uint32_t tokenIndexAt(uint32_t n) const;
     /// The offset just after the `<...>` whose `<` is at the offset `angle`, or kNone.
     uint32_t afterAngledParams(uint32_t angle) const;
-    void parseDataDecl();
+    void parseDataDecl(bool exported = false);
     void parseTypeDecl();
     /// typeDecl after the tags and decorators that may precede it; `m` marks where it began.
     void parseTypeDeclRest(size_t m);

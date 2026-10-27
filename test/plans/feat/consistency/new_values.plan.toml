@@ -338,7 +338,7 @@ kind = "behavior"
 case = "../../../cases/consistency/new_values/sort_rebinding.cml"
 args = ["${case}", "std::rgir"]
 expect_exit = 0
-expect_stdout_contains = [":var/take", "array:sort_l_in_place", "array:merge_sort_l_in_place", "array:insert_sort_d_in_place", ":op/assn_owned"]
+expect_stdout_contains = [":var/take", "array:sort_l_in_place", "array:sort_d_in_place", ":op/assn_owned"]
 
 [[tests]]
 name = "new_values.sort_rebinding.passes"

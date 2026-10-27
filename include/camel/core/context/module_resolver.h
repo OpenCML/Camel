@@ -70,25 +70,13 @@ class ModuleResolver {
     /// The file `moduleName` resolves to: the first directory of `searchRoots(importerDir)` that
     /// holds one. A hit is what the name stands for: the caller decides what a file it cannot load
     /// means, but not by looking somewhere else for the name.
-    ///
-    /// `ownFile` is the file of the module the import is written in, and the lookup passes over it
-    /// (design principles 10.1): an import never resolves to the module that writes it, so the
-    /// `import math` of `math.cml` goes on and takes the next `math` of the search order -- the
-    /// standard library's, when that file is the only one of the name. An empty `ownFile` means the
-    /// caller has none to skip, which is what a question about a name in general asks.
-    ModuleFile resolve(
-        const std::string &moduleName,
-        const std::string &importerDir,
-        const std::string &ownFile = {});
+    ModuleFile resolve(const std::string &moduleName, const std::string &importerDir);
 
     /// Every directory the lookup tried and why it holds no such module, in the order they were
     /// tried: the reason a `ModuleNotFound` gives. A directory that holds the file contributes
-    /// nothing (the caller's own message says what went wrong with it); a directory whose only file
-    /// of that name is `ownFile` says that, since the search went past it.
-    std::vector<std::string> searchReport(
-        const std::string &moduleName,
-        const std::string &importerDir,
-        const std::string &ownFile = {});
+    /// nothing (the caller's own message says what went wrong with it).
+    std::vector<std::string>
+    searchReport(const std::string &moduleName, const std::string &importerDir);
 
   private:
     /// The module files of one directory, read once. A stem has at most one `.cml`; several `.cml`
@@ -99,10 +87,8 @@ class ModuleResolver {
     };
 
     const DirectoryListing &listingFor(const std::string &directory);
-    ModuleFile
-    findUnder(const std::string &baseDir, const std::string &moduleName, const std::string &ownFile);
-    std::string
-    directoryReason(const std::string &directory, const std::string &stem, const std::string &ownFile);
+    ModuleFile findUnder(const std::string &baseDir, const std::string &moduleName);
+    std::string directoryReason(const std::string &directory, const std::string &stem);
     /// `a.b.c` -> `a/b` and `c`; a name with no component left over is its own stem.
     static void splitLookup(const std::string &moduleName, std::string &dirPart, std::string &stem);
 

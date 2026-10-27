@@ -1,25 +1,30 @@
 /**
- * `rewrite`'s declarations are what an importer sees: the engines take a `Program` and an array
- * of `Rule` values, the two arities of `rewrite` and `saturate` both resolve, `extract` answers
- * `Program!`, and `check` answers the verdict table `CheckReport` from `stdlib/rewrite.cml`
- * (slice S0, is what moved `check` from `string` to the table).
+ * `rewrite`'s declarations are what an importer sees: the engines take a function and an array of
+ * `Rule` values in angle brackets, with and without `strict` and `rounds`, `extract` takes a cost
+ * function, every engine answers the function it was given, `F!`, and `check` answers the verdict
+ * table `CheckReport` from `stdlib/rewrite.cml`.
  * Checked, not run: the engines need a compiled program, and the rules plans run them.
  */
 
 import { rewrite, saturate, extract, check, check_text } from rewrite
-import { Program, current } from graph
+import { nodes as sizeCost } from rules
 
 export rule int_add_zero(x: int) { x + 0 => x }
 
+/// The function the engines are applied to: the program itself would be a recursive reference.
+func target(): int {
+    return 0
+}
+
 func main(): int sync {
-    let p: Program = current()
+    let p = target
     let rules = [int_add_zero]
-    let a: Program! = rewrite(p, rules)
-    let b: Program! = rewrite(p, rules, true)
-    let c: Program! = saturate(p, rules, 20)
-    let d: Program! = saturate(p, rules, 20, true)
-    let e: Program! = extract(p, 'size')
-    let report = check(rules, 10, 7)
+    let a = p->rewrite<rules>
+    let b = p->rewrite<rules, strict: true>
+    let c = p->saturate<rules, rounds: 20>
+    let d = p->saturate<rules, rounds: 20, strict: true>
+    let e = p->extract<sizeCost>
+    let report = rules->check<10, 7>
     let written: string = check_text(report)
     return 0
 }

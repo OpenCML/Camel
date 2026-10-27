@@ -267,7 +267,7 @@ def ex(n: N, ind: int, top: bool = False) -> str:
     if k == "reduce":
         return wrap(f"{post(n.c[0])}->reduce<{arg(n.c[1])}, {arg(n.c[2])}>")
     if k == "slice":
-        return wrap(f"{post(n.c[0])}->slice<{arg(n.c[1])}, {arg(n.c[2])}>")
+        return wrap(f"({post(n.c[0])})[{arg(n.c[1])}:{arg(n.c[2])}]")
     if k == "contains":
         return wrap(f"{post(n.c[0])}->contains<{arg(n.c[1])}>")
     if k == "append":

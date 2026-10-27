@@ -50,12 +50,15 @@ digraph GraphIR {
             N07 -> N0A [label="0|0", type="NORM"];
             N0D -> N0C [label="0|0", type="NORM"];
             N0B -> N0C [label="0|1", type="NORM"];
+            N09 -> N0C [label="0|0", type="CTRL"];
             N07 -> N0D [label="1|0", type="NORM"];
-            N09 -> N0D [label="0|0", type="CTRL"];
             N07 -> N0E [label="2|0", type="NORM"];
             N0C -> N0E [label="0|1", type="NORM"];
+            N0A -> N0E [label="ORDER", type="ORDER"];
+            N0D -> N0E [label="ORDER", type="ORDER"];
             N10 -> N0F [label="0|0", type="NORM"];
             N08 -> N0F [label="1|1", type="NORM"];
+            N0E -> N0F [label="0|0", type="CTRL"];
             N0E -> N10 [label="0|0", type="NORM"];
             N09 -> N11 [label="0|0", type="NORM"];
             N0F -> N11 [label="0|1", type="NORM"];

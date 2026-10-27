@@ -28,7 +28,7 @@ func main(): int sync {
         { name: 'backpack', qty: 1, price: 34.99 }
     ]
 
-    let longest = max(items->map<(it: Item): int => len(it.name)>) ?? 0
+    let longest = max(items->map<(it: Item): int => len(it.name)>)
     let width = longest + 2
     let rule = '-'->repeat<width + 24>
     let heads = ['item', 'qty', 'price', 'amount']->map<(h: string): string => to_upper(h)>

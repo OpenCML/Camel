@@ -1,10 +1,9 @@
 // One of two passes run in one pipeline, each built as its own program over the module
 // `sharedvals` (which the program being transformed imports too). Its exports are this
 // program's; another program declaring the same module keeps its own (task).
-import { Program } from graph
 import { bump, twice } from sharedvals
 
-export func run(p: Program): Program! sync {
+export func run::<F>(p: F): F! sync {
     println(bump(9))
     println(twice(3))
     return p

@@ -161,6 +161,9 @@ class Builder {
     Value visitKeyValuePair(syntax::cst::KeyValuePair context);
     Value visitKeyParamPair(syntax::cst::KeyParamPair context);
     Value visitTupleParam(syntax::cst::TupleParam context);
+
+    /// How many destructured lambda parameters this file has had: the internal name of the next one.
+    size_t tupleParams_ = 0;
     Value visitDataList(syntax::cst::DataList context);
     Value visitIdentList(syntax::cst::IdentList context);
     Value visitIndexValues(syntax::cst::IndexValues context);

@@ -1,14 +1,13 @@
 // A pass whose module imports a library written in Camel: the imported function's graph is
 // declared and built by the pass program's builder, and its generic `flat_map` works there
 // (item 1).
-import { Program } from graph
 import { flat_map } from array
 
 func expanded(x: int): int[] {
     return [x, x + 1]
 }
 
-export func show(p: Program): Program! sync {
+export func show::<F>(p: F): F! sync {
     println([1, 2, 3]->flat_map<expanded>)
     return p
 }

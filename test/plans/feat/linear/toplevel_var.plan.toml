@@ -1,0 +1,468 @@
+id = "linear.toplevel_var"
+order = 347
+tier = "fast"
+tags = ["feat", "linear", "var", "resources", "modules"]
+desc = "A var at the top level of a module is a resource of the module (design principles 3.5): read and written by functions, exported, named in uses, inferred, ordered like any effect"
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "exported.default"
+desc = "An exported top-level var is one resource: the importing module reads it and assigns it, and the module's own function sees the same variable. Pipeline: default."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/exported.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '1 2 2 | 11 11', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "exported.nvm"
+desc = "An exported top-level var is one resource: the importing module reads it and assigns it, and the module's own function sees the same variable. Pipeline: nvm."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/exported.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '1 2 2 | 11 11', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "exported.fvm"
+desc = "An exported top-level var is one resource: the importing module reads it and assigns it, and the module's own function sees the same variable. Pipeline: fvm."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/exported.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '1 2 2 | 11 11', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "exported.jit"
+desc = "An exported top-level var is one resource: the importing module reads it and assigns it, and the module's own function sees the same variable. Pipeline: jit."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/exported.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '1 2 2 | 11 11', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "exported.opt"
+desc = "An exported top-level var is one resource: the importing module reads it and assigns it, and the module's own function sees the same variable. Pipeline: opt."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/exported.cml"
+args = ["${case}", "std::opt"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '1 2 2 | 11 11', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "exported.opt_jit"
+desc = "An exported top-level var is one resource: the importing module reads it and assigns it, and the module's own function sees the same variable. Pipeline: opt_jit."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/exported.cml"
+args = ["${case}", "std::opt", "std::jit"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '1 2 2 | 11 11', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "counter.default"
+desc = "A top-level var as a counter, with uses cnt on the function that writes it: three calls in written order, then the variable. Pipeline: default."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/counter.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '1 2 3 | 3', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "counter.nvm"
+desc = "A top-level var as a counter, with uses cnt on the function that writes it: three calls in written order, then the variable. Pipeline: nvm."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/counter.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '1 2 3 | 3', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "counter.fvm"
+desc = "A top-level var as a counter, with uses cnt on the function that writes it: three calls in written order, then the variable. Pipeline: fvm."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/counter.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '1 2 3 | 3', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "counter.jit"
+desc = "A top-level var as a counter, with uses cnt on the function that writes it: three calls in written order, then the variable. Pipeline: jit."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/counter.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '1 2 3 | 3', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "counter.opt"
+desc = "A top-level var as a counter, with uses cnt on the function that writes it: three calls in written order, then the variable. Pipeline: opt."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/counter.cml"
+args = ["${case}", "std::opt"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '1 2 3 | 3', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "counter.opt_jit"
+desc = "A top-level var as a counter, with uses cnt on the function that writes it: three calls in written order, then the variable. Pipeline: opt_jit."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/counter.cml"
+args = ["${case}", "std::opt", "std::jit"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '1 2 3 | 3', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "initial_value.default"
+desc = "The initial value of a top-level var is evaluated by dependency, before the first read, even when it names a let written after it. Pipeline: default."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/initial_value.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '105 | 106', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "initial_value.nvm"
+desc = "The initial value of a top-level var is evaluated by dependency, before the first read, even when it names a let written after it. Pipeline: nvm."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/initial_value.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '105 | 106', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "initial_value.fvm"
+desc = "The initial value of a top-level var is evaluated by dependency, before the first read, even when it names a let written after it. Pipeline: fvm."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/initial_value.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '105 | 106', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "initial_value.jit"
+desc = "The initial value of a top-level var is evaluated by dependency, before the first read, even when it names a let written after it. Pipeline: jit."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/initial_value.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '105 | 106', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "initial_value.opt"
+desc = "The initial value of a top-level var is evaluated by dependency, before the first read, even when it names a let written after it. Pipeline: opt."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/initial_value.cml"
+args = ["${case}", "std::opt"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '105 | 106', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "initial_value.opt_jit"
+desc = "The initial value of a top-level var is evaluated by dependency, before the first read, even when it names a let written after it. Pipeline: opt_jit."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/initial_value.cml"
+args = ["${case}", "std::opt", "std::jit"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '105 | 106', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "argument_order.default"
+desc = "Two uses of one resource in one expression are ordered as written: a read argument before a call that writes the variable sees the value from before it, for a top-level var, a closure-written local and a var parameter. Pipeline: default."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/argument_order.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '100 110 | 120 120 | 250 | 1 2 | 10 11 | 1 2 | [1, 2, 2] | (2, 3, 3) | 3 4 4', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "argument_order.nvm"
+desc = "Two uses of one resource in one expression are ordered as written: a read argument before a call that writes the variable sees the value from before it, for a top-level var, a closure-written local and a var parameter. Pipeline: nvm."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/argument_order.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '100 110 | 120 120 | 250 | 1 2 | 10 11 | 1 2 | [1, 2, 2] | (2, 3, 3) | 3 4 4', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "argument_order.fvm"
+desc = "Two uses of one resource in one expression are ordered as written: a read argument before a call that writes the variable sees the value from before it, for a top-level var, a closure-written local and a var parameter. Pipeline: fvm."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/argument_order.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '100 110 | 120 120 | 250 | 1 2 | 10 11 | 1 2 | [1, 2, 2] | (2, 3, 3) | 3 4 4', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "argument_order.jit"
+desc = "Two uses of one resource in one expression are ordered as written: a read argument before a call that writes the variable sees the value from before it, for a top-level var, a closure-written local and a var parameter. Pipeline: jit."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/argument_order.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '100 110 | 120 120 | 250 | 1 2 | 10 11 | 1 2 | [1, 2, 2] | (2, 3, 3) | 3 4 4', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "argument_order.opt"
+desc = "Two uses of one resource in one expression are ordered as written: a read argument before a call that writes the variable sees the value from before it, for a top-level var, a closure-written local and a var parameter. Pipeline: opt."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/argument_order.cml"
+args = ["${case}", "std::opt"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '100 110 | 120 120 | 250 | 1 2 | 10 11 | 1 2 | [1, 2, 2] | (2, 3, 3) | 3 4 4', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "argument_order.opt_jit"
+desc = "Two uses of one resource in one expression are ordered as written: a read argument before a call that writes the variable sees the value from before it, for a top-level var, a closure-written local and a var parameter. Pipeline: opt_jit."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/argument_order.cml"
+args = ["${case}", "std::opt", "std::jit"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '100 110 | 120 120 | 250 | 1 2 | 10 11 | 1 2 | [1, 2, 2] | (2, 3, 3) | 3 4 4', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "unread_write.default"
+desc = "A write in a function that is not a sync block, with nothing reading it, does not run. Pipeline: default."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/unread_write.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 | 0', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "unread_write.nvm"
+desc = "A write in a function that is not a sync block, with nothing reading it, does not run. Pipeline: nvm."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/unread_write.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 | 0', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "unread_write.fvm"
+desc = "A write in a function that is not a sync block, with nothing reading it, does not run. Pipeline: fvm."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/unread_write.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 | 0', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "unread_write.jit"
+desc = "A write in a function that is not a sync block, with nothing reading it, does not run. Pipeline: jit."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/unread_write.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 | 0', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "unread_write.opt"
+desc = "A write in a function that is not a sync block, with nothing reading it, does not run. Pipeline: opt."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/unread_write.cml"
+args = ["${case}", "std::opt"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 | 0', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "unread_write.opt_jit"
+desc = "A write in a function that is not a sync block, with nothing reading it, does not run. Pipeline: opt_jit."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/unread_write.cml"
+args = ["${case}", "std::opt", "std::jit"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '5 | 0', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "err_uses_other"
+desc = "Reading a top-level var is a use of it: a clause that names another resource does not keep its promise, and the report names the variable."
+kind = "negative"
+case = "../../../cases/linear/toplevel_var/err_uses_other.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_output_contains = ["err_uses_other::cnt"]
+
+[[tests]]
+name = "err_pure_read"
+desc = "A function that reads a top-level var is not pure: pure promises the empty set."
+kind = "negative"
+case = "../../../cases/linear/toplevel_var/err_pure_read.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_output_contains = ["err_pure_read::cnt"]
+
+[[tests]]
+name = "err_pure_parameter"
+desc = "A function that writes a top-level var says so in its type, and a pure parameter refuses it."
+kind = "negative"
+case = "../../../cases/linear/toplevel_var/err_pure_parameter.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+expect_output_contains = ["uses err_pure_parameter::cnt"]
+
+[[tests]]
+name = "grad_refused"
+desc = "Gradients do not flow through a top-level var either: the pass refuses, as it does for any var."
+kind = "negative"
+case = "../../../cases/linear/toplevel_var/grad_refused.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 1
+expect_output_contains = ["Gradients do not flow through variables"]

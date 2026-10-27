@@ -31,7 +31,7 @@ func bench(round: int, label: string, m: int, n: int, k: int, a: f32[..], b: f32
     let started = now()
     let measured = loop i = 0, s = 0.0 while i < reps do {
         let product = exact(a, b)
-        return (i + 1, s + sum(product))
+        return (i + 1, s + float(sum(product)))
     }
     let ms = (now() - started) * 1000.0 / float(reps)
     let gflops = 2.0 * float(m) * float(n) * float(k) / (ms / 1000.0) / 1000000000.0
@@ -46,7 +46,7 @@ func bench_reference(round: int, m: int, n: int, k: int, a: f32[..], b: f32[..],
     let started = now()
     let measured = loop i = 0, s = 0.0 while i < reps do {
         let product = sum(unsqueeze(a, 2) * unsqueeze(b, 0), 1)
-        return (i + 1, s + sum(product))
+        return (i + 1, s + float(sum(product)))
     }
     let ms = (now() - started) * 1000.0 / float(reps)
     let gflops = 2.0 * float(m) * float(n) * float(k) / (ms / 1000.0) / 1000000000.0

@@ -100,14 +100,14 @@ timeout_ms = 8000
 
 [[tests]]
 name = "when.not_constant"
-desc = "A `when` that reads a run-time value is not a compile-time predicate: the condition calls a `sync` function, so it is a declaration-site error (WhenConditionNotConstant) and is never taken for true."
+desc = "A `when` that reads a run-time value is not a compile-time predicate: the condition calls a function that reads and writes a module-level `var`, a resource, so it is a declaration-site error (WhenConditionNotConstant) and is never taken for true."
 kind = "negative"
 case = "../../../cases/compile/when/not_constant.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::WhenConditionNotConstant"
 expect_diagnostic_line = 14
-expect_output_contains = ["The 'when' condition of 'bad' cannot be evaluated", "it reads 'counter', which is not a compile-time constant"]
+expect_output_contains = ["The 'when' condition of 'bad' cannot be evaluated", "it declares effects: uses not_constant::counter"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -406,4 +406,15 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::WhenTypeQueryNotConcrete"
 expect_output_contains = ["still has a type variable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.predicate_calls_library_predicates"
+desc = "A predicate written in Camel that asks the library's predicates by name (`is_real` over `is_integer` and `is_float`) conditions a generic function: it is applicable at `int` and `float`."
+kind = "behavior"
+case = "../../../cases/compile/when/predicate_calls_library_predicates.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "42 2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000

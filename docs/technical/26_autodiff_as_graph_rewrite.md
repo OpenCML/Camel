@@ -395,7 +395,7 @@ float array is continuous, design principles 9.9, and is refused). `t[a:b]`
 (`:op/slice_sub`) is a selection of indices, so its adjoint is the upstream
 gradient scattered back into the parent's shape at those indices, padded with
 zeros — `:tangent/scatter_slice_arr` is that scatter. An array says the same thing in
-its own tangent space: `xs->slice<a, b>` (`:struct/slice_arr`) and `xs[a:b:s]`
+its own tangent space: `xs[a:b]` (`:struct/slice_arr`) and `xs[a:b:s]`
 (`:op/slice_sub`) place the gradient back in the range they took with
 `tangent/scatter_slice_arr`, whose bounds go through the same normalization as
 the forward slice, so a negative step walks the positions backwards in the

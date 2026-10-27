@@ -352,6 +352,12 @@ GrowthBudget growthBudgetOf(const PassArgs &args, std::string passName) {
     return budget;
 }
 
+// A file a pass writes to is a `string?` parameter: null (left out) writes none, which the passes
+// read as the empty path.
+std::string pathArgument(const PassArgs &args, const std::string &name) {
+    return args.isNull(name) ? std::string() : args.getString(name);
+}
+
 PassMaker makeGraphVizPass(GraphVizDumpConfig config) {
     return [config](const context_ptr_t &ctx, const PassArgs &) {
         return std::make_unique<GraphVizDumpPass>(ctx, config);
@@ -412,7 +418,7 @@ PassMaker extractPass() {
 }
 
 /// The saturation of the rules library, under the core's name. Like `std::opt::algebra`,
-/// the laws are the library's (`rules::saturate_only`); unlike it, the extraction is not made, so
+/// the laws are the library's (`opt::saturate`); unlike it, the extraction is not made, so
 /// the program stops in the state where a value has several writings.
 PassMaker saturatePass() {
     return [](const context_ptr_t &ctx, const PassArgs &args) {
@@ -428,12 +434,12 @@ PassMaker dcePass() {
 }
 
 /// The algebraic simplification under the core's name: the rules library's pass
-/// (`rules::simplify`, or `rules::simplify_strict` for `safe_fp=true`), so the laws live once,
+/// (`rules::simplify`, or `rules::simplify strict=true` for `safe_fp=true`), so the laws live once,
 /// in stdlib/rules.cml. `neutral_only` has no library equivalent; it keeps the C++ reference
 /// mode (the integer neutral elements only) that graph.plan.toml compares a Camel pass against.
 const camel::runtime::Program *runRulesAlgebra(
     const camel::core::context::context_ptr_t &ctx, const camel::runtime::Program *program,
-    bool safeFp, std::ostream &os);
+    bool safeFp, std::ostream &os, GraphIRPass *caller);
 
 class RulesAlgebraPass final : public GraphIRPass {
   public:
@@ -441,7 +447,7 @@ class RulesAlgebraPass final : public GraphIRPass {
         : GraphIRPass(ctx), safeFp_(safeFp) {}
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override {
-        return runRulesAlgebra(context_, program, safeFp_, os);
+        return runRulesAlgebra(context_, program, safeFp_, os, this);
     }
 
   private:
@@ -469,17 +475,17 @@ PassMaker profilePass() {
         return std::make_unique<ProfilePass>(
             ctx,
             options,
-            args.getString("json"),
+            pathArgument(args, "json"),
             gcStats < 0 ? 0 : static_cast<int>(gcStats),
             args.getBool("type_stats"),
-            args.getString("effect_trace"));
+            pathArgument(args, "effect_trace"));
     };
 }
 
 PassMaker fastVmPass(bool jit) {
     return [jit](const context_ptr_t &ctx, const PassArgs &args) {
         FastVMConfig config = jit ? makeDefaultFastVmJitConfig() : FastVMConfig{};
-        config.statsPath    = args.getString("stats");
+        config.statsPath    = pathArgument(args, "stats");
         if (jit) {
             const int64_t threshold = args.getInt("hot_threshold");
             config.jitHotThreshold  = threshold < 0 ? 0 : static_cast<size_t>(threshold);
@@ -1540,7 +1546,7 @@ namespace {
 /// The graph id -> revision of every graph a program holds: what `programContentChanged`
 /// compares. Read out before a pass runs rather than looked at afterwards, because a pass of the
 /// core is another registered pass's caller (`std::opt::algebra` runs the rules library's
-/// `rules::simplify`, `std::opt::saturate` its `rules::saturate_only`), and that inner pass
+/// `rules::simplify`, `std::opt::saturate` its `opt::saturate`), and that inner pass
 /// commits its result and releases the program the outer one was given
 /// (`Context::settleRuntimeGraphs`). The old program is not read after `pass->apply` returns.
 std::unordered_map<uint32_t, uint64_t>
@@ -1590,7 +1596,7 @@ bool programContentChanged(
 
 PassRunResult applyRegisteredPass(
     const camel::runtime::Program *program, const std::string &spec, const context_ptr_t &ctx,
-    std::ostream &os) {
+    std::ostream &os, GraphIRPass *caller) {
     ResolvedPass resolved = resolvePassWithModule(spec, ctx);
     if (!resolved.factory) {
         // No pipeline source here (a pass run by name from a tool): the first line is the call.
@@ -1601,6 +1607,9 @@ PassRunResult applyRegisteredPass(
     const std::unordered_map<uint32_t, uint64_t> beforeRevisions = graphRevisionsOf(program);
     auto pass            = resolved.factory(ctx);
     const camel::runtime::Program *produced = pass->apply(program, os);
+    if (pass->hasErrorValue() && caller != nullptr) {
+        caller->failWithErrorValue(pass->errorValue());
+    }
     if (produced == nullptr) {
         return {nullptr, true};
     }
@@ -1624,12 +1633,13 @@ namespace {
 
 const camel::runtime::Program *runRulesAlgebra(
     const camel::core::context::context_ptr_t &ctx, const camel::runtime::Program *program,
-    bool safeFp, std::ostream &os) {
+    bool safeFp, std::ostream &os, GraphIRPass *caller) {
     const PassRunResult result = applyRegisteredPass(
         program,
-        safeFp ? "rules::simplify_strict" : "rules::simplify",
+        safeFp ? "rules::simplify strict=true" : "rules::simplify",
         ctx,
-        os);
+        os,
+        caller);
     return result.program;
 }
 

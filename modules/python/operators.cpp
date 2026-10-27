@@ -8,6 +8,7 @@
 #include "camel/core/mm/block.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/bytes.h"
+#include "camel/core/rtdata/collection.h"
 #include "camel/core/rtdata/foreign.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/struct.h"
@@ -15,6 +16,7 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/base.h"
 #include "camel/core/type/bytes.h"
+#include "camel/core/type/collection.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
@@ -215,139 +217,72 @@ slot_t pythonOk(ArgsView &norm, py::object value) {
     return makeOk(wrapPyObject(std::move(value)), resultType);
 }
 
-// 解析 norm[0] 为可调用对象（PyObject 或字符串路径）。Python 一侧的异常（找不到模块或属性）原样
-// 抛出，由调用的算子变成错误值。
-py::object resolveCallable(ArgsView &norm, camel::core::context::Context &ctx) {
-    if (norm.size() < 1) {
-        throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "python: at least one argument (callable or path string) required");
-    }
-    if (norm.type(0)->code() == PyObjectType::typeCode()) {
-        PythonObjectHolder *h = unwrapPyObject(norm.slot(0), ctx);
-        return h ? py::reinterpret_borrow<py::object>(h->obj) : py::none();
-    }
-    if (norm.type(0)->code() == TypeCode::String) {
-        String *pathObj  = norm.get<String *>(0);
-        std::string path = pathObj ? pathObj->toString() : "";
-        if (path.empty()) {
-            throwRuntimeFault(RuntimeDiag::RuntimeError, "python: empty path");
-        }
-        std::vector<std::string> parts;
-        for (size_t i = 0; i < path.size();) {
-            size_t j = path.find('.', i);
-            if (j == std::string::npos) {
-                parts.push_back(path.substr(i));
-                break;
-            }
-            parts.push_back(path.substr(i, j - i));
-            i = j + 1;
-        }
-        if (parts.size() == 1) {
-            py::object main = py::module_::import("__main__");
-            if (py::hasattr(main, parts[0].c_str()))
-                return main.attr(parts[0].c_str());
-            return py::module_::import("builtins").attr(parts[0].c_str());
-        }
-        py::object obj = py::module_::import(parts[0].c_str());
-        for (size_t k = 1; k < parts.size(); ++k)
-            obj = obj.attr(parts[k].c_str());
-        return obj;
-    }
-    throwRuntimeFault(
-        RuntimeDiag::RuntimeError,
-        "python: first argument must be PyObject or string");
-}
-
 } // namespace
 
 std::unordered_map<std::string, operator_t> getPythonOpsMap() {
     return {
-        {"py_call", __python_py_call__},
-        {"py_call_kw", __python_py_call_kw__},
-        {"py_exec", __python_py_exec__},
-        {"py_eval", __python_py_eval__},
-        {"py_run", __python_py_run__},
-        {"py_attr", __python_py_attr__},
-        {"py_import", __python_py_import__},
-        {"py_print", __python_py_print__},
-        {"py_println", __python_py_println__},
-        {"py_wrap", __python_wrap__},
-        {"py_unwrap", __python_upwrap__},
-        {"py_dispose", __python_py_dispose__},
+        {"exec", __python_exec__},
+        {"eval", __python_eval__},
+        {"run_file", __python_run_file__},
+        {"import_module", __python_import_module__},
+        {"attr", __python_attr__},
+        {"call", __python_call__},
+        {"to_string", __python_to_string__},
+        {"to_py", __python_to_py__},
+        {"from_py", __python_from_py__},
     };
 }
 
-// py_call: 调用 Python 函数 (fn, ...args)，首参为字符串时按 "module.attr" 解析
-slot_t __python_py_call__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
-    // The interpreter is created at the operator's first use, not by `import python`.
-    ensurePythonInterpreter(ctx);
-    py::gil_scoped_acquire gil;
-    try {
-        py::object callable = resolveCallable(norm, ctx);
-        if (callable.is_none()) {
-            return makeError("PythonError", "the callable is None", "<python::py_call>");
-        }
-        py::tuple argTuple(norm.size() > 1 ? static_cast<size_t>(norm.size() - 1) : 0);
-        for (size_t i = 1; i < norm.size(); ++i)
-            argTuple[i - 1] = camelToPy(norm, i, ctx);
-
-        return pythonOk(norm, callable(*argTuple));
-    } catch (const py::error_already_set &e) {
-        return pythonFailure("py_call", e);
-    }
+// The PyObject a slot holds, read as a borrowed Python object.
+static py::object pythonObjectOf(slot_t slot, camel::core::context::Context &ctx) {
+    PythonObjectHolder *holder = unwrapPyObject(slot, ctx);
+    return holder ? py::reinterpret_borrow<py::object>(holder->obj) : py::none();
 }
 
-// py_call_kw: 调用 Python 函数 (fn, args?: Tuple|Array<PyObject>, kwargs?: Struct<PyObject>)，1–3
-// 参
-slot_t __python_py_call_kw__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
+// `args->call<fn, kwargs>`: calls the Python callable `fn` with the PyObjects the array holds as
+// positional arguments, in order, and the entries of `kwargs` (a `Map<string, PyObject>?`, null
+// for none) as keyword arguments.
+slot_t __python_call__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
     // The interpreter is created at the operator's first use, not by `import python`.
     ensurePythonInterpreter(ctx);
     py::gil_scoped_acquire gil;
     try {
-        py::object callable = resolveCallable(norm, ctx);
+        py::object callable = pythonObjectOf(with.slot(0), ctx);
         if (callable.is_none()) {
-            return makeError("PythonError", "the callable is None", "<python::py_call_kw>");
+            return makeError("PythonError", "the callable is None", "<python::call>");
         }
-
-        py::tuple args;
-        if (norm.size() >= 2 && norm.type(1)->code() == TypeCode::Array) {
-            Array *arr = norm.get<Array *>(1);
-            if (arr) {
-                args = py::tuple(arr->size());
-                for (size_t i = 0; i < arr->size(); ++i) {
-                    PythonObjectHolder *h = unwrapPyObject(arr->getSlot(i), ctx);
-                    args[i]               = py::reinterpret_borrow<py::object>(h->obj);
-                }
-            }
-        } else if (norm.size() >= 2 && norm.type(1)->code() == TypeCode::Tuple) {
-            Tuple *tuple = norm.get<Tuple *>(1);
-            if (tuple) {
-                const TupleType *tupleType = static_cast<const TupleType *>(norm.type(1));
-                args                       = py::tuple(tupleType->size());
-                for (size_t i = 0; i < tupleType->size(); ++i) {
-                    PythonObjectHolder *h = unwrapPyObject(tuple->data()[i], ctx);
-                    args[i]               = py::reinterpret_borrow<py::object>(h->obj);
-                }
-            }
+        Array *arr = norm.get<Array *>(0);
+        py::tuple args(arr ? arr->size() : 0);
+        for (size_t i = 0; arr && i < arr->size(); ++i) {
+            args[i] = pythonObjectOf(arr->getSlot(i), ctx);
         }
-
         py::dict kwargs;
-        if (norm.size() == 3 && norm.type(2)->code() == TypeCode::Struct) {
-            Struct *st                   = norm.get<Struct *>(2);
-            const StructType *structType = static_cast<const StructType *>(norm.type(2));
-            if (st && structType) {
-                for (size_t i = 0; i < structType->size(); ++i) {
-                    PythonObjectHolder *h = unwrapPyObject(st->data()[i], ctx);
-                    kwargs[py::str(std::string(structType->fieldName(i)))] =
-                        py::reinterpret_borrow<py::object>(h->obj);
-                }
+        if (with.size() >= 2) {
+            slot_t slot = with.slot(1);
+            bool given  = true;
+            auto *nullable = asNullable(with.type(1));
+            Type *mapType  = with.type(1);
+            if (nullable != nullptr) {
+                given   = !isNullValue(slot);
+                slot    = nullablePayload(slot);
+                mapType = nullable->payloadType();
+            } else if (!dynamic_cast<camel::core::type::MapType *>(mapType)) {
+                given = false; // the type of `null`
+            }
+            if (given && mapType != nullptr) {
+                const auto *type = static_cast<const camel::core::type::MapType *>(mapType);
+                camel::core::rtdata::table::forEachEntry(
+                    fromSlot<camel::core::rtdata::Table *>(slot),
+                    type,
+                    [&](slot_t key, slot_t value) {
+                        kwargs[py::str(fromSlot<String *>(key)->toString())] =
+                            pythonObjectOf(value, ctx);
+                    });
             }
         }
-
         return pythonOk(norm, kwargs.empty() ? callable(*args) : callable(*args, **kwargs));
     } catch (const py::error_already_set &e) {
-        return pythonFailure("py_call_kw", e);
+        return pythonFailure("call", e);
     }
 }
 
@@ -367,76 +302,61 @@ static std::string textArgument(ArgsView &norm, const char *who, const char *wha
     return strObj ? strObj->toString() : "";
 }
 
-// py_exec: 执行任意 Python 代码（语句），返回 None
-slot_t __python_py_exec__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
+// exec: 执行任意 Python 代码（语句）
+slot_t __python_exec__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
     // The interpreter is created at the operator's first use, not by `import python`.
     ensurePythonInterpreter(ctx);
     py::gil_scoped_acquire gil;
-    const std::string code = textArgument(norm, "py_exec", "code string");
+    const std::string code = textArgument(norm, "exec", "code string");
     try {
         py::exec(code);
-        return pythonOk(norm, py::none());
+        return makeOk(NullSlot, static_cast<const TupleType *>(norm.resultType()));
     } catch (const py::error_already_set &e) {
-        return pythonFailure("py_exec", e);
+        return pythonFailure("exec", e);
     }
 }
 
-// py_eval: 计算表达式并返回结果
-slot_t __python_py_eval__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
+// eval: 计算表达式并返回结果
+slot_t __python_eval__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
     // The interpreter is created at the operator's first use, not by `import python`.
     ensurePythonInterpreter(ctx);
     py::gil_scoped_acquire gil;
-    const std::string expr = textArgument(norm, "py_eval", "expression string");
+    const std::string expr = textArgument(norm, "eval", "expression string");
     try {
         return pythonOk(norm, py::eval(expr));
     } catch (const py::error_already_set &e) {
-        return pythonFailure("py_eval", e);
+        return pythonFailure("eval", e);
     }
 }
 
-// py_run: 执行指定路径的 Python 脚本文件
-slot_t __python_py_run__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
+// run_file: 执行指定路径的 Python 脚本文件
+slot_t __python_run_file__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
     // The interpreter is created at the operator's first use, not by `import python`.
     ensurePythonInterpreter(ctx);
     py::gil_scoped_acquire gil;
-    const std::string path = textArgument(norm, "py_run", "file path string");
+    const std::string path = textArgument(norm, "run_file", "file path string");
     if (path.empty()) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "python.py_run: empty file path");
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "python.run_file: empty file path");
     }
     try {
         py::object scope = py::module_::import("__main__").attr("__dict__");
         py::eval_file(path, scope);
-        return pythonOk(norm, py::none());
+        return makeOk(NullSlot, static_cast<const TupleType *>(norm.resultType()));
     } catch (const py::error_already_set &e) {
-        return pythonFailure("py_run", e);
+        return pythonFailure("run_file", e);
     }
 }
 
-// py_attr: 获取 PyObject 属性，attr 可含 . 表示链式访问（如 "a.b.c"）
-slot_t __python_py_attr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
+// obj->attr<name>: 获取 PyObject 属性，name 可含 . 表示链式访问（如 "a.b.c"）
+slot_t __python_attr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
     // The interpreter is created at the operator's first use, not by `import python`.
     ensurePythonInterpreter(ctx);
     py::gil_scoped_acquire gil;
-    if (norm.size() < 2) {
-        throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "python.py_attr: two arguments (obj, attr_name) required");
-    }
-    if (norm.type(0)->code() != PyObjectType::typeCode()) {
-        throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "python.py_attr: first argument must be PyObject");
-    }
-    if (norm.type(1)->code() != TypeCode::String) {
-        throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "python.py_attr: second argument must be string (attribute name)");
-    }
     PythonObjectHolder *h = unwrapPyObject(norm.slot(0), ctx);
-    String *attrObj       = norm.get<String *>(1);
+    String *attrObj       = with.get<String *>(0);
     std::string attr      = attrObj ? attrObj->toString() : "";
     if (attr.empty()) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "python.py_attr: empty attribute name");
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "python.attr: empty attribute name");
     }
     try {
         py::object obj = py::reinterpret_borrow<py::object>(h->obj);
@@ -451,79 +371,49 @@ slot_t __python_py_attr__(ArgsView &with, ArgsView &norm, camel::core::context::
         }
         return pythonOk(norm, obj);
     } catch (const py::error_already_set &e) {
-        return pythonFailure("py_attr", e);
+        return pythonFailure("attr", e);
     }
 }
 
-// py_import: 导入 Python 模块，返回 PyObject（模块对象）
-slot_t __python_py_import__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
+// import_module: 导入 Python 模块，返回 PyObject（模块对象）
+slot_t __python_import_module__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
     // The interpreter is created at the operator's first use, not by `import python`.
     ensurePythonInterpreter(ctx);
     py::gil_scoped_acquire gil;
-    const std::string name = textArgument(norm, "py_import", "module name string");
+    const std::string name = textArgument(norm, "import_module", "module name string");
     if (name.empty()) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "python.py_import: empty module name");
+        throwRuntimeFault(RuntimeDiag::RuntimeError, "python.import_module: empty module name");
     }
     try {
         return pythonOk(norm, py::module_::import(name.c_str()));
     } catch (const py::error_already_set &e) {
-        return pythonFailure("py_import", e);
+        return pythonFailure("import_module", e);
     }
 }
 
-// py_print / py_println: 打印任意数量 PyObject 以便调试
-slot_t __python_py_print__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
+// to_string: the `str()` of a Python object, as text.
+slot_t __python_to_string__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
     // The interpreter is created at the operator's first use, not by `import python`.
     ensurePythonInterpreter(ctx);
     py::gil_scoped_acquire gil;
-    py::module_ builtins = py::module_::import("builtins");
-    py::object print_fn  = builtins.attr("print");
+    PythonObjectHolder *h = unwrapPyObject(norm.slot(0), ctx);
     try {
-        py::tuple args(norm.size());
-        for (size_t i = 0; i < norm.size(); ++i) {
-            PythonObjectHolder *h = unwrapPyObject(norm.slot(i), ctx);
-            if (!h)
-                return NullSlot;
-            args[i] = h->obj;
-        }
-        print_fn(*args, py::arg("end") = "", py::arg("flush") = true); // 不换行，立即刷新
-        return norm.size() == 0 ? NullSlot : norm.slot(0);
+        const std::string text = py::str(h->obj).cast<std::string>();
+        return makeOk(
+            toSlot(String::from(text, mm::autoSpace())),
+            static_cast<const TupleType *>(norm.resultType()));
     } catch (const py::error_already_set &e) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "python.py_print: " + pythonErrorMessage(e));
-    }
-}
-slot_t __python_py_println__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
-    // The interpreter is created at the operator's first use, not by `import python`.
-    ensurePythonInterpreter(ctx);
-    py::gil_scoped_acquire gil;
-    py::module_ builtins = py::module_::import("builtins");
-    py::object print_fn  = builtins.attr("print");
-    try {
-        py::tuple args(norm.size());
-        for (size_t i = 0; i < norm.size(); ++i) {
-            PythonObjectHolder *h = unwrapPyObject(norm.slot(i), ctx);
-            if (!h)
-                return NullSlot;
-            args[i] = h->obj;
-        }
-        print_fn(*args, py::arg("flush") = true); // 默认换行，立即刷新
-        return norm.size() == 0 ? NullSlot : norm.slot(0);
-    } catch (const py::error_already_set &e) {
-        throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "python.py_println: " + pythonErrorMessage(e));
+        return pythonFailure("to_string", e);
     }
 }
 
-slot_t __python_wrap__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
+// to_py::<T>(x): the Python object that stands for a Camel value, in the Python form of its type.
+slot_t __python_to_py__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
     // The interpreter is created at the operator's first use, not by `import python`.
     ensurePythonInterpreter(ctx);
     py::gil_scoped_acquire gil;
-    if (norm.size() < 1) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "python.wrap: one argument required");
-    }
     py::object o = camelToPy(norm, 0, ctx);
-    return wrapPyObject(o);
+    return pythonOk(norm, o);
 }
 
 // The Python type of an object, for a message.
@@ -721,40 +611,19 @@ static bool pyToCamel(
     }
 }
 
-slot_t __python_upwrap__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
+// from_py::<T>(obj): the value of type T that a Python object holds; T is the payload of the
+// result type, and an object that is not of that kind is a `PythonTypeError` with the path.
+slot_t __python_from_py__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
     // The interpreter is created at the operator's first use, not by `import python`.
     ensurePythonInterpreter(ctx);
     py::gil_scoped_acquire gil;
     PythonObjectHolder *h = unwrapPyObject(norm.slot(0), ctx);
-    Type *argType         = norm.type(0);
-    if (!argType->isOtherType() || argType->code() != getPyObjectType()->code()) {
-        throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "python.unwrap: argument must be PyObject<T> with type param");
-    }
-    auto *o = static_cast<OtherType *>(argType);
-    if (o->paramCount() == 0 || !o->params()[0]) {
-        throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "python.unwrap: PyObject must have one type parameter");
-    }
-    Type *targetType = o->params()[0];
-    slot_t converted = NullSlot;
+    const auto *resultType = static_cast<const TupleType *>(norm.resultType());
+    Type *targetType       = resultType->payloadType();
+    slot_t converted       = NullSlot;
     std::string problem;
     if (!pyToCamel(h->obj, targetType, ctx, "value", converted, problem)) {
-        return makeError("PythonTypeError", problem, "<python::py_unwrap>");
+        return makeError("PythonTypeError", problem, "<python::from_py>");
     }
-    return makeOk(converted, static_cast<const TupleType *>(norm.resultType()));
-}
-
-slot_t __python_py_dispose__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
-    // The interpreter is created at the operator's first use, not by `import python`.
-    ensurePythonInterpreter(ctx);
-    py::gil_scoped_acquire gil;
-    if (norm.size() < 1) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "python.dispose: one PyObject required");
-    }
-    ForeignResourceObject *wrapper = unwrapPyObjectWrapper(norm.slot(0), ctx, true);
-    wrapper->dispose();
-    return NullSlot;
+    return makeOk(converted, resultType);
 }

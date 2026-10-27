@@ -1,0 +1,31 @@
+id = "compile.with_arguments"
+order = 939
+tier = "fast"
+tags = ["feat", "compile", "with", "expected-type"]
+desc = "A `with` argument stands where an ordinary argument stands: a literal takes its type from the parameter, `[]` its element type, and a `T` enters a `T?` (design principles 5.1)"
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "with_arguments.positions"
+desc = "`[0]` against `int[]?`, `[]` against `int[]`, `null` against `int[]?`, a float literal against an `f32` parameter, and the same by name."
+kind = "behavior"
+case = "../../../cases/compile/with_arguments/positions.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "101.0\n201.0\n3.0\n102.5\n100.5\n"
+
+[[tests]]
+name = "with_arguments.overloads_by_count"
+desc = "Two generic overloads that differ in the number of `with` parameters: a call writing three `with` arguments takes the expected types from the longer one, so its `[]` is an `int[]` and a `string[]`."
+kind = "behavior"
+case = "../../../cases/compile/with_arguments/overloads_by_count.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "1\n1\n121\n"

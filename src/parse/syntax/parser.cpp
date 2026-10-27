@@ -655,7 +655,7 @@ void ParserImpl::parseExportDecl() {
     if (cur_ == TK::LBrace) {
         parseBracketedIdents(TK::RBrace, NK::BracedIdents);
     } else if (cur_ == TK::KwLet || cur_ == TK::KwVar) {
-        parseDataDecl();
+        parseDataDecl(true);
     } else {
         parseTypeDecl();
     }
@@ -1059,10 +1059,12 @@ void ParserImpl::parseOperatorName() {
 /// dataDecl : ('let' | 'var') carrier (':' typeList)? '=' dataList
 ///          | 'let' '_' (':' typeList)? '=' dataList
 /// carrier  : identList | parentIdents
+/// After `export`, `let name: type` with no `=` is also a declaration: the value a C++ module
+/// registers under the name (design principles 6.4). Anywhere else the `=` is required.
 /// A destructuring declaration binds the fields of a struct or the elements of an array, and
 /// neither is in the language: `let {x, y} = p` and `let [x, y] = xs` are syntax errors. A
 /// parenthesized carrier (`let (a, b) = t`) destructures a tuple, which the language has.
-void ParserImpl::parseDataDecl() {
+void ParserImpl::parseDataDecl(bool exported) {
     const size_t m   = mark();
     const bool isLet = cur_ == TK::KwLet;
     bump();
@@ -1101,6 +1103,11 @@ void ParserImpl::parseDataDecl() {
         parseTypeList(TK::Eof);
     }
     if (!eat(TK::Assign)) {
+        if (exported && isLet && typed && !panic_) {
+            // `export let inf: float`: a value the C++ module of the declaration supplies, as a
+            // function without a body stands for its operator (design principles 6.4).
+            return close(m, NK::DataDecl);
+        }
         if (!typed && !panic_) {
             error(SyntaxError::Kind::MissingInitializer, {e(TK::Colon), e(TK::Assign)}, prev_);
         } else {
@@ -1113,8 +1120,11 @@ void ParserImpl::parseDataDecl() {
 }
 
 /// typeDecl : frontMatter? 'type' identRef
-///            ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
-///            (typeExpr | STRING)
+///            ('<' identDef (',' identDef)* ','? ('>' | '>='))?
+///            ('=' typeExpr)?
+///
+/// A declaration without the right side names a type a C++ module provides (design principles
+/// 10.4): `export type Graph`, `export type Txn<F>`. `>=` closes the parameters and is the `=`.
 void ParserImpl::parseTypeDecl() {
     const size_t m = mark();
     parseFrontMatter();
@@ -1127,6 +1137,7 @@ void ParserImpl::parseTypeDeclRest(size_t m) {
         return close(m, NK::TypeDecl);
     }
     parseIdentRef(NK::IdentRef);
+    bool rightSide = false;
     if (cur_ == TK::LAngle || cur_ == TK::Lt) {
         bump();
         Scope scope(*this, false);
@@ -1136,23 +1147,21 @@ void ParserImpl::parseTypeDeclRest(size_t m) {
             parseIdentDef();
         }
         eat(TK::Comma);
-        if (!eat(TK::GtEq)) {
-            if (cur_ == TK::Gt) {
-                bump();
-                expect(TK::Assign);
-            } else {
-                unexpected({e(TK::Comma), e(TK::Gt)});
-            }
+        if (eat(TK::GtEq)) {
+            rightSide = true;
+        } else if (cur_ == TK::Gt) {
+            bump();
+            rightSide = eat(TK::Assign);
+        } else {
+            unexpected({e(TK::Comma), e(TK::Gt)});
         }
-    } else if (!eat(TK::Assign)) {
-        unexpected({e(TK::Assign), e(TK::Lt)});
+    } else {
+        rightSide = eat(TK::Assign);
     }
     if (panic_) {
         return close(m, NK::TypeDecl);
     }
-    if (cur_ == TK::String) {
-        bump();
-    } else {
+    if (rightSide) {
         parseType();
     }
     close(m, NK::TypeDecl);

@@ -143,6 +143,9 @@ class Module : public std::enable_shared_from_this<Module> {
     struct ResourceDecl {
         bool unordered = false;
         bool exported  = false;
+        /// A `var` of the top level of the module is a resource of it, named by the variable
+        /// (design principles 3.5): it is always shown with its module.
+        bool variable = false;
         /// The members of a group, as written; empty for a single resource.
         std::vector<Reference> members;
         bool group() const { return !members.empty(); }

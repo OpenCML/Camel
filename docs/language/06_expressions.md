@@ -175,7 +175,7 @@ func main(): int sync {
 | 一元 `-` | 四种实数值类型、`c64`、`c128` | |
 | `~` | `int`、`i32` | 按位取反：`~5` 是 `-6` |
 
-两个操作数的类型必须相同。没有按位与、或、异或、移位运算符；用 `math` 模块的 `bit_and`、`bit_or`、`bit_xor`、`bit_not`、`shl`、`shr`。
+两个操作数的类型必须相同。没有按位与、或、异或、移位运算符；用 `math` 模块的 `bit_and`、`bit_or`、`bit_xor` 和 `x->shl<n>`、`x->shr<n>`（移位量写在尖括号里）；按位取反是 `~x`。
 
 **两个容易出错的地方：**
 
@@ -630,6 +630,16 @@ lambda 的写法是 `(形参): 返回类型 => 体`，返回类型可以省略�
   ```cml
   func adder(n: int): (x: int) => int {
       return (x) => x + n              // x: int，返回类型也是 int
+  }
+  ```
+
+- `->` 后面的 lambda：形参就是接收者，所以它的类型是接收者的类型，或者从 `T?`、`T!` 里取出的值的类型（3.9 的流水线）：
+
+  ```cml
+  func main(): int sync {
+      let a = 5 -> (y) => y + 1                  // y: int
+      println(a)
+      return 0
   }
   ```
 

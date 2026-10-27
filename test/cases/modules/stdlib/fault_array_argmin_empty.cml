@@ -1,0 +1,11 @@
+
+
+import { argmin } from array
+
+func main(): int sync {
+    let xs: int[] = []
+    println('before')
+    println(argmin(xs))
+    println('not reached')
+    return 0
+}

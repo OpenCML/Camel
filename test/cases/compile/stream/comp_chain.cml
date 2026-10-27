@@ -15,7 +15,7 @@ func head::<T>(xs: T[]): T {
 
 func main(): int sync {
     let chain: (x: int) => int[] = wrap..head..wrap
-    let written: (x: int) => int[] = (x) => wrap(head(wrap(x)))
+    let written: (x: int) => int[] = (x) => wrap(wrap(x)[0])
     println(chain(4))
     println(written(4))
     return 0

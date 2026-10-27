@@ -23,7 +23,7 @@ const modules = new Set(ops.map((o) => o.module))
 // `para` is listed through the two operators its declaration carries: they are built-in element
 // calls (`:mark/...`), and `inspect --ops` names the module that declares them, not the one whose
 // executor runs them.
-for (const m of ['<builtin>', 'array', 'fs', 'io', 'json', 'math', 'process', 'para', 'test_support', 'random', 're', 'sim', 'statistics', 'str', 'env', 'this', 'time']) {
+for (const m of ['<builtin>', 'array', 'fs', 'io', 'json', 'math', 'process', 'para', 'test_support', 'random', 're', 'sim', 'str', 'env', 'this', 'time']) {
   assert(modules.has(m), `module ${m} is not listed`)
 }
 const stale = ops.filter((o) => o.uri.startsWith('algo:')).map((o) => o.uri)
@@ -31,27 +31,23 @@ assert(stale.length === 0, `operators of the deleted algo module: ${stale.join('
 const undeclared = ops.filter((o) => o.purity === 'undeclared').map((o) => o.uri)
 assert(undeclared.length === 0, `operators without a purity declaration: ${undeclared.join(', ')}`)
 const purity = Object.fromEntries(ops.map((o) => [o.uri, o.purity]))
-const notPure = ['time:now', 'rand:rand', 'rand:seed', 'rand:shuffle', 'rand:choice', 'env:get_env', 'env:get_cwd',
+const notPure = ['time:now', 'rand:seed', 'rand:next_key', 'env:get_env', 'env:get_cwd',
   'fs:read_bytes', 'fs:list_dir', 'fs:exists', 'fs:file_size', 'fs:write_bytes', 'fs:append_bytes', 'process:user_name', 'process:cpu_count', 'process:sleep', 'process:exit',
-  'io:set_terminal_raw_mode', 'io:has_input', 'io:get_chars', 'io:clear_input_buffer',
-  ':io/print', ':io/println', ':io/eprintln', ':io/input', ':op/assn', ':op/assn_owned',
+  'io:set_terminal_raw_mode', 'io:input', 'io:has_input', 'io:get_chars', 'io:clear_input_buffer',
+  ':io/print', ':io/println', ':io/eprintln', ':op/assn', ':op/assn_owned',
   'test_support:rendezvous', 'test_support:thread_count',
   ':mark/map_arr', ':mark/foreach_arr']
 for (const uri of notPure) {
   assert(purity[uri] === 'effectful', `${uri} is declared ${purity[uri]}, expected effectful`)
 }
-const pure = ['str:to_upper', 'str:codepoints', 'time:strftime', 'time:strptime', 'math:sin_d', 'math:shl', 'statistics:median',
-  're:find', 'json:encode', 'json:decode', 'this:zen', ':op/add_l', ':op/idx_str', ':struct/slice_arr', ':str/format',
+const pure = ['str:to_upper', 'str:codepoints', 'time:strftime', 'time:strptime', 'math:sin_d', 'math:shl_l',
+  're:find', 'json:encode', 'json:decode', 'this:zen', ':op/add_l', ':op/idx_str', ':str/format',
   // They return a new array and leave their argument unchanged (design principles 11.3), one
   // operator per element type: the name carries the element type it takes.
-  ':struct/append_arr', ':struct/extend_arr', 'array:sort_i', 'array:sort_l', 'array:sort_f', 'array:sort_d',
-  'array:quick_sort_i', 'array:quick_sort_l', 'array:quick_sort_f', 'array:quick_sort_d',
-  'array:insert_sort_i', 'array:insert_sort_l', 'array:insert_sort_f', 'array:insert_sort_d',
-  'array:merge_sort_i', 'array:merge_sort_l', 'array:merge_sort_f', 'array:merge_sort_d',
+  ':struct/append_arr', 'array:sort_i', 'array:sort_l', 'array:sort_f', 'array:sort_d',
   // The native primitives of `array`: pure too, and every one of them returns a new array.
-  'array:merge_sorted_arrays_i', 'array:merge_sorted_arrays_l', 'array:merge_sorted_arrays_f',
-  'array:merge_sorted_arrays_d', 'array:argsort_i', 'array:argsort_l', 'array:argsort_f',
-  'array:argsort_d', 'array:argsort_b', 'array:argsort_s', 'array:flatten', 'array:unique']
+  'array:argsort_i', 'array:argsort_l', 'array:argsort_f', 'array:argsort_d', 'array:argsort_bf',
+  'array:argsort_f6', 'array:argsort_b', 'array:argsort_s', 'array:elements']
 for (const uri of pure) {
   assert(purity[uri] === 'pure', `${uri} is declared ${purity[uri]}, expected pure`)
 }
@@ -101,7 +97,7 @@ timeout_ms = 30000
 # parameters and names position by position, and this compares the names within one name's rules,
 # so the two cannot drift apart again. Two sets are the counter-examples the reference page states:
 # `contains`, whose first position means an element in one form and a substring in another, and
-# `py_call`, whose parameter count follows the arguments.
+# `println`, whose parameter count follows the arguments.
 [[tests]]
 name = "registry.overload_position_names_agree"
 desc = "One position, one name: `json.get`'s with-parameter is `key` in every one of its eight declarations and in `:coll/map_get` (a string argument is a member key, an integer one an element index), `len`'s one parameter is `x` in the string, array, map and set rules, `items`' is `m` in the map and set rules, and `json.as_int`'s ordinary parameter is `j` in all four. These are the names the reference page declares for them, and every rule of each such set names the position -- a rule that gives no name would take no named argument silently. `contains` and `py_call` are not such sets: `contains` names its first position `value` in the collection forms and `sub` in the string form, and `py_call`'s parameter count follows its arguments (two forms that differ in arity), so neither takes a named argument, as the reference page states."
@@ -148,15 +144,13 @@ assert(contains.every((n) => n !== undefined),
 assert(contains.includes('value') && contains.includes('sub'),
   `contains names its first position 'value' in the collection forms and 'sub' in the string form: ${contains.join(', ')}`)
 assert(new Set(contains).size > 1, `contains would take a named argument if its rules agreed: ${contains.join(', ')}`)
-// `py_call` is the other set the page says takes no named argument, for the other reason: its
+// `println` is the other set the page says takes no named argument, for the other reason: its
 // parameter count follows the arguments (a rest list), so no position is a parameter a name could
-// mark, and the two forms of the name differ in arity.
-const pyCall = ops.filter((o) => o.name === 'py_call')
-assert(pyCall.length === 2, `py_call: ${pyCall.length} rule(s) listed`)
-assert(pyCall.every((o) => o.norm === -1),
-  `py_call's parameters follow its arguments: ${pyCall.map((o) => o.norm).join(', ')}`)
-assert(pyCall[0].signature !== pyCall[1].signature,
-  `the two forms of py_call differ in arity: ${pyCall.map((o) => o.signature).join(' | ')}`)
+// mark.
+const printing = ops.filter((o) => o.name === 'println')
+assert(printing.length >= 1, `println: ${printing.length} rule(s) listed`)
+assert(printing.every((o) => o.norm === -1),
+  `println's parameters follow its arguments: ${printing.map((o) => o.norm).join(', ')}`)
 }
 """
 timeout_ms = 20000

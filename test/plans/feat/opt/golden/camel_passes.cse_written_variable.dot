@@ -34,7 +34,7 @@ digraph GraphIR {
             N08 -> N09 [label="0|0", type="NORM"];
             N09 -> N0A [label="0|0", type="NORM"];
             N0A -> N0B [label="0|0", type="NORM"];
-            N09 -> N0B [label="0|0", type="CTRL"];
+            N08 -> N0B [label="0|0", type="CTRL"];
             N0C -> N0D [label="0|0", type="NORM"];
             N0B -> N0D [label="0|0", type="CTRL"];
         }
@@ -70,7 +70,6 @@ digraph GraphIR {
             N11 -> N12 [label="0|0", type="NORM"];
             N12 -> N13 [label="0|0", type="NORM"];
             N13 -> N14 [label="0|0", type="NORM"];
-            N12 -> N14 [label="0|0", type="CTRL"];
             N0E -> N16 [label="0|0", type="NORM"];
             N15 -> N16 [label="0|1", type="NORM"];
             N14 -> N16 [label="0|0", type="CTRL"];
@@ -79,15 +78,15 @@ digraph GraphIR {
             N11 -> N19 [label="1|0", type="NORM"];
             N18 -> N19 [label="0|1", type="NORM"];
             N16 -> N19 [label="0|0", type="CTRL"];
+            N12 -> N19 [label="ORDER", type="ORDER"];
             N19 -> N1A [label="0|0", type="NORM"];
             N1A -> N1B [label="0|0", type="NORM"];
             N1B -> N1C [label="0|0", type="NORM"];
-            N1A -> N1C [label="0|0", type="CTRL"];
+            N19 -> N1C [label="0|0", type="CTRL"];
             N19 -> N1D [label="1|0", type="NORM"];
-            N1C -> N1D [label="0|0", type="CTRL"];
             N1D -> N1E [label="0|0", type="NORM"];
             N1E -> N1F [label="0|0", type="NORM"];
-            N1D -> N1F [label="0|0", type="CTRL"];
+            N1C -> N1F [label="0|0", type="CTRL"];
             N20 -> N21 [label="0|0", type="NORM"];
             N1F -> N21 [label="0|0", type="CTRL"];
         }
@@ -118,13 +117,16 @@ digraph GraphIR {
             N23 -> N26 [label="0|0", type="NORM"];
             N25 -> N27 [label="0|0", type="NORM"];
             N23 -> N29 [label="1|0", type="NORM"];
-            N27 -> N29 [label="0|0", type="CTRL"];
             N29 -> N2A [label="0|0", type="NORM"];
             N28 -> N2A [label="0|1", type="NORM"];
+            N27 -> N2A [label="0|0", type="CTRL"];
             N23 -> N2B [label="2|0", type="NORM"];
             N2A -> N2B [label="0|1", type="NORM"];
+            N26 -> N2B [label="ORDER", type="ORDER"];
+            N29 -> N2B [label="ORDER", type="ORDER"];
             N2D -> N2C [label="0|0", type="NORM"];
             N24 -> N2C [label="1|1", type="NORM"];
+            N2B -> N2C [label="0|0", type="CTRL"];
             N2B -> N2D [label="0|0", type="NORM"];
             N2C -> N2E [label="0|0", type="NORM"];
             N2F -> N30 [label="0|0", type="NORM"];

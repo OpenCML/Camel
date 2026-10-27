@@ -3,13 +3,10 @@
 // each value in the committed program. The draft's static slots are the roots that keep these
 // values alive while the transaction is open (item 3).
 import { flat_map } from array
-import {
-    Program, Graph, Node, Txn, graphs, nodes, constant,
-    add_constant, open, commit
-} from graph
+import { Graph, Node, Txn, nodes, constant, add_constant, open, commit, graphs_of } from graph
 
-func allNodes(p: Program): Node[] {
-    return graphs(p)->flat_map<(g: Graph): Node[] => nodes(g)>
+func allNodes::<F>(p: F): Node[] {
+    return graphs_of(p)->flat_map<(g: Graph): Node[] => nodes(g)>
 }
 
 func churn(rounds: int): string {
@@ -18,24 +15,24 @@ func churn(rounds: int): string {
 }
 
 func countInt(ns: Node[], v: int): int {
-    return ns->filter<(n: Node): bool => (constant(n, 0) ?? -1) == v>->len()
+    return ns->filter<(n: Node): bool => (constant::<int>(n) ?? -1) == v>->len()
 }
 
 func countFloat(ns: Node[], v: f64): int {
-    return ns->filter<(n: Node): bool => (constant(n, 0.0) ?? -1.0) == v>->len()
+    return ns->filter<(n: Node): bool => (constant::<float>(n) ?? -1.0) == v>->len()
 }
 
 func countBool(ns: Node[], v: bool): int {
-    return ns->filter<(n: Node): bool => (constant(n, false) ?? false) == v>->len()
+    return ns->filter<(n: Node): bool => (constant::<bool>(n) ?? false) == v>->len()
 }
 
 func countString(ns: Node[], v: string): int {
-    return ns->filter<(n: Node): bool => (constant(n, '') ?? '') == v>->len()
+    return ns->filter<(n: Node): bool => (constant::<string>(n) ?? '') == v>->len()
 }
 
-export func make(p: Program): Program! sync {
+export func make::<F>(p: F): F! sync {
     let t = open(p)
-    let g = graphs(p)[0]
+    let g = graphs_of(p)[0]
     let i = add_constant(t, g, 12345)
     let f = add_constant(t, g, 2.5)
     let b = add_constant(t, g, true)

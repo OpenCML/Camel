@@ -3,7 +3,7 @@
 // line. The rule below it fits, so it stays
 // on one line however the source spaced it.
 #requires(reassociate)
-export rule tensor_combine(x: f32[..], const c1: f32, const c2: f32)   when   combineSameSign::<f32>(c1, c2) {
+export rule array_combine(x: f32[..], const c1: f32, const c2: f32)   when   combineSameSign::<f32>(c1, c2) {
     x * c1 + x * c2 => x * (c1 + c2)
 }
 

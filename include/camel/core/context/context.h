@@ -176,22 +176,13 @@ class Context : public std::enable_shared_from_this<Context> {
     /// Resolve a module name in the order of design principles 10.2, through the one lookup: the
     /// importing module's own directory, then the module roots (`-I` in the order given,
     /// `CAMEL_PACKAGES`), then the standard library. An empty `importerDir` means the entry
-    /// program, whose own directory is `entryDir`. `ownFile` is the importing module's own file,
-    /// which the lookup passes over: an import never resolves to the module that writes it (design
-    /// principles 10.1).
-    std::pair<std::string, bool> resolveModulePath(
-        const std::string &moduleName,
-        const std::string &importerDir,
-        const std::string &ownFile = {});
+    /// program, whose own directory is `entryDir`.
+    std::pair<std::string, bool>
+    resolveModulePath(const std::string &moduleName, const std::string &importerDir);
     /// The directory of the importing module: the directory of the file it was loaded from, or
     /// the entry file's directory for the entry program and for a program-level import (a pass
     /// library, a definition).
     std::string importerDirectory(const module::Module *importer) const;
-    /// The file of the importing module, which the lookup passes over, so that an import never
-    /// resolves to the module that writes it (design principles 10.1). Empty when the caller names
-    /// a module instead of importing it (the library of a pass, the module of an operator URI, the
-    /// built-in module) and there is therefore nothing to pass over.
-    std::string importerOwnFile(const module::Module *importer) const;
     /// The module already loaded from the file `path`, if any: the import cache is keyed by the
     /// file a name resolved to, so two modules that resolved to different files are two modules
     /// even when they have the same name.
@@ -206,6 +197,23 @@ class Context : public std::enable_shared_from_this<Context> {
     /// other file as source). Kept apart from the lookup so a caller can name the directory the
     /// path was found in.
     module_ptr_t loadModuleFrom(const std::string &moduleName, const std::string &path, bool isCmo);
+
+  public:
+    /// The prelude's declaration file (`signatures/globals.cml` of a module root) is the one source
+    /// of the built-in signatures, so it is read with every program: a file that does not parse
+    /// fails the compile with its own diagnostics, located in that file. Read once. A tree without
+    /// the file (a tool run without a standard library) has nothing to read.
+    /// Answers the path of the file when it has errors (they are in the context's module list),
+    /// and the empty string otherwise.
+    std::string checkPreludeDeclarations();
+    /// The module of the prelude's declaration file once it was read, else null: a dependency of
+    /// every program.
+    module_ptr_t preludeModule() const { return preludeModule_; }
+
+  private:
+    bool preludeChecked_ = false;
+    std::string preludeProblem_;
+    module_ptr_t preludeModule_;
 
     Context(const EntryConfig &entryConf, const error::DiagsConfig &diagConf);
 
@@ -464,11 +472,6 @@ class Context : public std::enable_shared_from_this<Context> {
     /** Called by loadCmoModule to retain a loaded .cmo handle and prevent unloading. */
     void addLoadedDll(const std::string &path, void *handle) { loadedDllHandles_[path] = handle; }
 
-    /// Import a module as `importer` does (design principles 10.2: its own directory, then the
-    /// module roots, then the standard library). `importer` is the module whose `import` this is;
-    /// null means the entry program, whose own directory is the entry file's directory, or a
-    /// program-level import (a pass library named on the command line, a definition) that stands
-    /// where the program does.
     module_ptr_t importModule(
         const std::string &rawModuleName, const module::Module *importer = nullptr);
     /// Whether a file for the module is found on the search paths, whether or not it can be

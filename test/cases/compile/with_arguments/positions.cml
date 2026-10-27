@@ -1,0 +1,18 @@
+/**
+ * A `with` argument stands where an ordinary argument stands (design principles 5.1): a literal takes
+ * its type from the parameter, `[]` takes its element type from it, and a `T` enters `T?`.
+ */
+with <axes: int[]?, extra: int[] = [], scale: f32 = 1.0>
+func probe(): float {
+    let n = len(axes ?? [])
+    return float(n * 100 + len(extra)) + float(scale)
+}
+
+func main(): int sync {
+    println(probe<[0]>())
+    println(probe<[0, 1], []>())
+    println(probe<null, [4, 5]>())
+    println(probe<[0], [], 2.5>())
+    println(probe<axes: [3], scale: 0.5>())
+    return 0
+}

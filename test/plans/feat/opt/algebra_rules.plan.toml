@@ -67,11 +67,11 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 #
 #   * both rewrite: the ten integer neutral forms, the integer coefficient fold and doubling
 #     (`fold`, `double`), the float doubling (`double_d`) and the element-wise doubling
-#     (`tensor_double`) — the same graph on the two sides every time.
+#     (`array_double`) — the same graph on the two sides every time.
 #   * the library alone: the integer `x*0`, `0*x`, `x-x`, `x/1`, `-(-x)` on both integer types, the
-#     five float neutrals, and the two like-term combines (`combine`, `combine_d`, `tensor_combine`)
+#     five float neutrals, and the two like-term combines (`combine`, `combine_d`, `array_combine`)
 #     that the reference mode leaves as written because it carries no rule for them.
-#   * neither: the float coefficient folds `(x*3.0)*2.0` (`fold_d`, `tensor_fold`), which need the
+#   * neither: the float coefficient folds `(x*3.0)*2.0` (`fold_d`, `array_fold`), which need the
 #     `no_infs` grant no node carries on either side, and the element-wise `t*0.0`, which would have
 #     to write a zero tensor of the matched shape.
 #   * different graphs: the two anchored forms -- the C++ pass keeps the operation as the graph's
@@ -105,7 +105,7 @@ verify_script_path = "../../../cases/opt/algebra_rules/algebra_graph_equal.mjs"
 
 [[tests]]
 name = "algebra_rules.agreement.cpp_table"
-desc = "The reference table (measure::report after the C++ mode and dce): eleven graphs — the ten forms and main — each 4 nodes and 3 edges with no operation left, one print, and main 32 nodes and 31 edges with 10 prints."
+desc = "The reference table (measure::report after the C++ mode and dce): eleven graphs — the ten forms and main — each 4 nodes and 2 edges with no operation left, one print, and main 32 nodes and 21 edges with 10 prints."
 kind = "snapshot"
 case = "../../../cases/opt/algebra_rules/agreement.cml"
 args = ["${case}", "std::opt::algebra neutral_only=true", "std::opt::dce values_only=true", "measure::report", "std::nvm"]
@@ -241,7 +241,7 @@ compare_fields = ["exit_code", "stdout_normalized"]
 
 [[tests]]
 name = "algebra_rules.tensor.by_cpp"
-desc = "The reference from this tree: the C++ mode performs the element-wise doubling here (`tensor_double`), and leaves the other three forms as written. It is the column `table` compares against, read from this golden by `tables.mjs`."
+desc = "The reference from this tree: the C++ mode performs the element-wise doubling here (`array_double`), and leaves the other three forms as written. It is the column `table` compares against, read from this golden by `tables.mjs`."
 kind = "snapshot"
 case = "../../../cases/opt/algebra_rules/tensor_forms.cml"
 args = ["${case}", "std::opt::algebra neutral_only=true", "std::opt::dce values_only=true", "measure::report", "std::nvm"]
@@ -250,7 +250,7 @@ golden = "./golden/algebra_rules.tensor.cpp.txt"
 
 [[tests]]
 name = "algebra_rules.tensor.table"
-desc = "The library's table against the reference mode's, out of 5 graphs: `tensor_double` is the one form both rewrite (`t + t` becomes `t * 2.0`), `tensor_combine` is the like-term combine the library carries and the reference mode does not, and two forms are left by both — `tensor_fold`, which needs the `no_infs` grant no node carries, and `tensor_zero`, whose replacement is a zero tensor of the matched shape: the rule language does write it, as a right side that calls a Camel function (rule language v2 section 4, `t * 0.0 => zeros_like(t)`), which is not in the rule language yet, so what is missing here is a law and not a language feature. Against the reference mode the library rewrites 2 of the 5 forms here and grows none of them. The values the program prints are the values the C++ side printed, line for line."
+desc = "The library's table against the reference mode's, out of 5 graphs: `array_double` is the one form both rewrite (`t + t` becomes `t * 2.0`), `array_combine` is the like-term combine the library carries and the reference mode does not, and two forms are left by both — `array_fold`, which needs the `no_infs` grant no node carries, and `tensor_zero`, whose replacement is a zero tensor of the matched shape: the rule language does write it, as a right side that calls a Camel function (rule language v2 section 4, `t * 0.0 => zeros_like(t)`), which is not in the rule language yet, so what is missing here is a law and not a language feature. Against the reference mode the library rewrites 2 of the 5 forms here and grows none of them. The values the program prints are the values the C++ side printed, line for line."
 case = "../../../cases/opt/algebra_rules/tensor_forms.cml"
 args = ["${case}", "rules::simplify", "std::opt::dce values_only=true", "measure::report", "std::nvm"]
 verify_script_path = "../../../cases/opt/algebra_rules/tables.mjs"

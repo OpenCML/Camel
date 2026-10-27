@@ -28,6 +28,9 @@
 // and returns nothing. A declaration can say that with a type variable over the value.
 
 
+/// The state an optimiser carries between steps; the module provides the type.
+export type OptimizerState
+
 // ---- optimizers ----
 
 /// Saves every tensor leaf of `params` under `dir`, as `<dir>/<path>.npy`, the path joining struct

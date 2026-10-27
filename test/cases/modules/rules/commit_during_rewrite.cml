@@ -4,15 +4,15 @@
  * plain `true`, so the interleaving is written in the right side rather than in a condition.
  */
 
-import { Program, Graph, Node, current, root, open, commit, add_constant, id } from graph
+import { Graph, Node, open, commit, add_constant, id, graph_of } from graph
 import { rewrite } from rewrite
 
 rule add_zero(x: int) when true { x + 0 => publishes(x) }
 
 func publishes(x: int): int sync {
-    let p = current()
+    let p = redex
     let t = open(p)
-    let n = add_constant(t, root(p), 1)
+    let n = add_constant(t, graph_of(p), 1)
     sync { println('added node ', id(n)) }
     let published = commit(t)
     return match published {
@@ -26,8 +26,8 @@ func redex(x: int): int {
 }
 
 func main(): int sync {
-    let p = current()
-    return match rewrite(p, [add_zero]) {
+    let p = redex
+    return match p->rewrite<[add_zero]> {
         case error e => sync { println('outer error value: ', e.kind, ' | ', e.message); return 1 }
         case q => sync { println('rewritten'); return 0 }
     }

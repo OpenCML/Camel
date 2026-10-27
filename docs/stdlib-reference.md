@@ -34,8 +34,8 @@ How to read an entry:
   form runs (`len`'s one parameter is `x` for a string, an array, a map and a set, so one name
   reaches all four). The name is written in the list that holds the parameter: an ordinary one
   in the parentheses (`len(x: xs)`), a `with` one in the angle brackets (`j->get<key: 'port'>`).
-  A form that gives a position no name, or leaves its count to the arguments (a rest list --
-  `py_call`'s two forms differ in arity as well), is one no named argument reaches: the call
+  A form that gives a position no name, or leaves its count to the arguments (a rest list,
+  as `println` takes), is one no named argument reaches: the call
   reports that the signature is not known where the call is written. `contains` refuses a named
   argument for a reason of its own: its position 0 means an element in two forms and the
   substring in the third, so the name would mean another thing in one of them.
@@ -56,7 +56,7 @@ Not in this reference: the profiler (`perf`).
 | [array](#array) | `import { ... } from array` | Camel |
 | [stream](#stream) | `import { ... } from stream` | Camel |
 | [math](#math) | `import { ... } from math` | C++ |
-| [statistics](#statistics) | `import { ... } from statistics` | C++ |
+| [statistics](#statistics) | `import { ... } from statistics` | Camel |
 | [random](#random) | `import { ... } from random` | C++ |
 | [time](#time) | `import { ... } from time` | C++ |
 | [fs](#fs) | `import { ... } from fs` | C++ |
@@ -134,190 +134,128 @@ The data-block counters: blocks allocated so far, freed so far, live now, and th
 live blocks hold. The call is not pure: it reports process state, so the optimizer must not
 fold, merge or drop it.
 
-- With effects: reads the process-wide data-block counters.
 - Example: `std::mem::blocks().live` gives `0 when no block is alive`
 
 ### Conversions
 
-Numeric types are never converted implicitly; these functions do it. Converting a float to
-an integer drops the fraction.
+Numeric types are never converted implicitly; these functions do it. There is one conversion
+per target type, named by the type: `int`, `i32`, `float`, `f32`, `bf16`, `f16`, `c64`, `c128`
+(and `i64`, `f64`, the spellings of `int` and `float`). Each is one generic declaration over the
+source type. Applied to an array, a conversion converts every element (one rule with arithmetic:
+`f32(xs)` is one node, and `T(xs)` does it for the type a generic function is given); that entry
+comes with the module `tensor` (stdlib/signatures/tensor.cml), read together with these once it
+is imported. Converting a float to an integer drops the fraction.
 
 #### `int`
 
 ```camel
-int: (x: i32) => int
-int: (x: int) => int
-int: (x: f32) => int
-int: (x: float) => int
-int: (x: string) => int
-int: (x: bf16) => int
-int: (x: f16) => int
+int: (x: S) => int when is_real::<S>() || is_string::<S>()
 ```
 
 x as a 64-bit integer.
 
-- Pure.
 - Failure: fault `InvalidNumberText` when x is a string that is not, as a whole, one integer (blanks and a trailing part included); fault `ConversionOutOfRange` when x is a string that is an integer beyond the range, or a float that is NaN, infinite or beyond the range; use parse_int to handle text in the program.
 - Example: `int(2.9)` gives `2`
 
 #### `i64`
 
 ```camel
-i64: (x: i32) => int
-i64: (x: int) => int
-i64: (x: f32) => int
-i64: (x: float) => int
-i64: (x: string) => int
-i64: (x: bf16) => int
-i64: (x: f16) => int
+i64: (x: S) => int when is_real::<S>() || is_string::<S>()
 ```
 
 The same as int.
 
-- Pure.
 - Failure: fault `InvalidNumberText` when x is a string that is not, as a whole, one integer; fault `ConversionOutOfRange` when x is a string that is an integer beyond the range, or an int or a float beyond the range of i32, or NaN.
 - Example: `i64('42')` gives `42`
 
 #### `i32`
 
 ```camel
-i32: (x: i32) => i32
-i32: (x: int) => i32
-i32: (x: f32) => i32
-i32: (x: float) => i32
-i32: (x: string) => i32
-i32: (x: bf16) => i32
-i32: (x: f16) => i32
+i32: (x: S) => i32 when is_real::<S>() || is_string::<S>()
 ```
 
 x as a 32-bit integer.
 
-- Pure.
 - Failure: fault `InvalidNumberText` when x is a string that is not, as a whole, one integer; fault `ConversionOutOfRange` when x is a string that is an integer beyond the range, or an int or a float beyond the range of i32, or NaN.
 - Example: `i32(7)` gives `7`
 
 #### `float`
 
 ```camel
-float: (x: i32) => float
-float: (x: int) => float
-float: (x: f32) => float
-float: (x: float) => float
-float: (x: string) => float
-float: (x: bf16) => float
-float: (x: f16) => float
+float: (x: S) => float when is_real::<S>() || is_string::<S>()
 ```
 
 x as a 64-bit float.
 
-- Pure.
 - Failure: fault `InvalidNumberText` when x is a string that is not, as a whole, one number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of float (overflow or underflow); use parse_float to handle that in the program.
 - Example: `float(3)` gives `3`
 
 #### `f64`
 
 ```camel
-f64: (x: i32) => float
-f64: (x: int) => float
-f64: (x: f32) => float
-f64: (x: float) => float
-f64: (x: string) => float
-f64: (x: bf16) => float
-f64: (x: f16) => float
+f64: (x: S) => float when is_real::<S>() || is_string::<S>()
 ```
 
 The same as float.
 
-- Pure.
 - Failure: fault `InvalidNumberText` when x is a string that is not a number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of float (overflow or underflow).
 - Example: `f64('2.5')` gives `2.5`
 
 #### `f32`
 
 ```camel
-f32: (x: i32) => f32
-f32: (x: int) => f32
-f32: (x: f32) => f32
-f32: (x: float) => f32
-f32: (x: string) => f32
-f32: (x: bf16) => f32
-f32: (x: f16) => f32
+f32: (x: S) => f32 when is_real::<S>() || is_string::<S>()
 ```
 
 x as a 32-bit float.
 
-- Pure.
 - Failure: fault `InvalidNumberText` when x is a string that is not a number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of f32 (overflow or underflow).
 - Example: `f32(0.5)` gives `0.5`
 
 #### `bf16`
 
 ```camel
-bf16: (x: i32) => bf16
-bf16: (x: int) => bf16
-bf16: (x: f32) => bf16
-bf16: (x: float) => bf16
-bf16: (x: bf16) => bf16
-bf16: (x: string) => bf16
+bf16: (x: S) => bf16 when is_real::<S>() || is_string::<S>()
 ```
 
 x as a bf16: the nearest bf16 of x, rounding to nearest with ties to even, once. A bf16 is a
 floating-point type of the language (design principles 7.3), not only a tensor element type,
 and writing the conversion asks for that precision, so no numeric permission is involved.
 
-- Pure.
 - Failure: fault `InvalidNumberText` when x is a string that is not a number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of bf16 (overflow or underflow).
 - Example: `bf16(0.5)` gives `0.5`
 
 #### `f16`
 
 ```camel
-f16: (x: i32) => f16
-f16: (x: int) => f16
-f16: (x: f32) => f16
-f16: (x: float) => f16
-f16: (x: f16) => f16
-f16: (x: string) => f16
+f16: (x: S) => f16 when is_real::<S>() || is_string::<S>()
 ```
 
 x as an f16: the nearest f16 of x, rounding to nearest with ties to even, once. The same
 conversion as bf16, at the other reduced precision (design principles 7.3).
 
-- Pure.
 - Failure: fault `InvalidNumberText` when x is a string that is not a number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of f16 (overflow or underflow).
 - Example: `f16(0.5)` gives `0.5`
 
 #### `c64`
 
 ```camel
-c64: (x: i32) => c64
-c64: (x: int) => c64
-c64: (x: f32) => c64
-c64: (x: float) => c64
-c64: (x: c64) => c64
-c64: (x: c128) => c64
+c64: (x: S) => c64 when is_real::<S>() || is_complex::<S>()
 ```
 
 x as a 64-bit complex number: the real part is x and the imaginary part is zero. A c128
 keeps both parts as they are.
 
-- Pure.
 - Example: `c64(2)` gives `2+0i`
 
 #### `c128`
 
 ```camel
-c128: (x: i32) => c128
-c128: (x: int) => c128
-c128: (x: f32) => c128
-c128: (x: float) => c128
-c128: (x: c64) => c128
-c128: (x: c128) => c128
+c128: (x: S) => c128 when is_real::<S>() || is_complex::<S>()
 ```
 
 x as a 128-bit complex number: the real part is x and the imaginary part is zero.
 
-- Pure.
 - Example: `c128(2)` gives `2+0i`
 
 #### `string`
@@ -329,7 +267,6 @@ string: (x: T) => string
 x as text, as println writes it. A float is written as the shortest text that reads back as
 the same number: string(2.5) is '2.5', string(2.0) is '2.0'.
 
-- Pure.
 - Example: `string(42)` gives `'42'`
 
 #### `parse_int`
@@ -340,7 +277,6 @@ parse_int: (text: string) => int!
 
 The integer a text spells, or an error value.
 
-- Pure.
 - Failure: error `ParseError` when the text is not, as a whole, one integer (blanks are not skipped).
 - Example: `parse_int('42') !! 0` gives `42`
 
@@ -352,7 +288,6 @@ parse_float: (text: string) => float!
 
 The number a text spells, or an error value.
 
-- Pure.
 - Failure: error `ParseError` when the text is not a number.
 - Example: `parse_float('2.5') !! 0.0` gives `2.5`
 
@@ -363,10 +298,8 @@ error: (kind: string, message: string) => Error
 ```
 
 An Error value of the given kind with the given message; the compiler adds the source
-position of the call. `return error(...)` in a function declared `T!` hands it out as that
-type's failed form.
+position of the call. `return error(...)` hands it out of a function declared `T!`.
 
-- Pure.
 - Example: `return error('RangeError', 'too large')`
 
 ### Input and output
@@ -374,7 +307,7 @@ type's failed form.
 #### `print`
 
 ```camel
-print: (x: T, ...rest: U...) => T
+print: (x: T, ..rest) => T
 ```
 
 Writes the arguments, separated by spaces, without a line end, and gives back the first one
@@ -382,13 +315,12 @@ Writes the arguments, separated by spaces, without a line end, and gives back th
 of their own. With a format, print<fmt>(...), writes the format with the arguments put in,
 also without a line end.
 
-- With effects: writes to standard output.
 - Example: `print('a', 1)` gives `a 1`
 
 #### `println`
 
 ```camel
-println: (x: T, ...rest: U...) => T
+println: (x: T, ..rest) => T
 ```
 
 Writes the arguments, separated by spaces, and a line end, and gives back the first one (so
@@ -396,13 +328,12 @@ that the write can be part of the data flow). The other arguments may each have 
 their own. With a format, println<fmt>(...), writes the format with the arguments put in and
 one line end.
 
-- With effects: writes to standard output.
 - Example: `println('a', 1)` gives `a 1`
 
 #### `eprintln`
 
 ```camel
-eprintln: (x: T, ...rest: U...) => T
+eprintln: (x: T, ..rest) => T
 ```
 
 Writes the arguments, separated by spaces, and a line end, to standard error, and gives back
@@ -410,26 +341,14 @@ the first one (so that the write can be part of the data flow). The other argume
 have a type of their own. With a format, eprintln<fmt>(...), writes the format with the
 arguments put in and one line end.
 
-- With effects: writes to standard error.
 - Example: `eprintln('a', 1)` gives `a 1`
-
-#### `input`
-
-```camel
-input: (prompt: string) => string
-```
-
-Writes prompt and reads one line from standard input.
-
-- With effects: reads standard input.
-- Example: `input('name: ')` gives `what the user typed`
 
 ### Strings
 
 #### `format`
 
 ```camel
-format: <...args: T...> (fmt: string) => string
+format: <args: T[]> (fmt: string) => string
 ```
 
 The text fmt with each `{}` placeholder replaced by the next argument; placeholders take
@@ -444,7 +363,6 @@ element and an `f64` element each at two places. An array without a specificatio
 it does everywhere else: every element in the shortest text that reads back as the same
 number, which is `'{}'->format<xs>` giving `[0.7692267, 0.780836, 0.77707076]`.
 
-- Pure.
 - Failure: fault `FormatFailed` when the placeholders and the arguments do not fit.
 - Example: `'{} is {:.2f}'->format<'x', 2.5>` gives `'x is 2.50'`
 
@@ -456,7 +374,6 @@ join: <sep: string> (xs: string[]) => string
 
 The strings of xs joined with sep between them.
 
-- Pure.
 - Example: `['a', 'b']->join<', '>` gives `'a, b'`
 
 #### `len`
@@ -464,19 +381,20 @@ The strings of xs joined with sep between them.
 ```camel
 len: (x: string) => int
 len: (x: T[..]) => int
+len: (x: Bytes) => int
 ```
 
-The number of bytes of a string, or of the first dimension of an array of any rank.
+The number of code points of a string, of bytes of a `Bytes`, or the length of the first
+dimension of an array of any rank.
 
-- Pure.
-- Example: `len('h€')` gives `4`
+- Example: `len('h€')` gives `2`
 
 ### Arrays
 
 #### `range`
 
 ```camel
-range: (start: int, end: int, step?: int) => int[]
+range: (start: int, end: int, step: int = 1) => int[]
 ```
 
 The integers of a step: `start`, `start + step`, ... up to, not including, `end`; with no step
@@ -486,23 +404,10 @@ with a step of 0 is refused where it is written. The result is empty when the st
 carry `start` towards `end`. A `for` over an interval is fused by the compiler and builds no
 array; this call builds one.
 
-- Pure.
 - Failure: fault `InvalidArgument` when the step is 0.
 - Example (a fragment, not compiled): `range(0, 10, 3)` gives `[0, 3, 6, 9]`
 - Example (a fragment, not compiled): `range(10, 0, -3)` gives `[10, 7, 4, 1]`
 - Why it is not compiled: the interval is written `a..b`; the stepped form is `range(a, b, step)`
-
-#### `head`
-
-```camel
-head: (xs: T[]) => T
-```
-
-The first element. An empty array has none: check len first.
-
-- Pure.
-- Failure: fault `IndexOutOfRange` when the array is empty.
-- Example: `head([1, 2, 3])` gives `1`
 
 #### `last`
 
@@ -514,74 +419,46 @@ The last element. An empty array has none: check len first. Negative indices are
 counted from the end (a negative index is a fault), so this is how the last element is
 written.
 
-- Pure.
 - Failure: fault `IndexOutOfRange` when the array is empty.
 - Example: `last([1, 2, 3])` gives `3`
 
-#### `tail`
+#### `slice`
 
 ```camel
-tail: (xs: T[]) => T[]
+slice: <axis: int, start: int, end: int, step: int = 1> (x: T[]) => T[]
 ```
 
-The elements after the first; empty for an array of fewer than two elements.
+The part of x from start up to, not including, end along one axis, taking every step-th
+position (a step of 1 by default, any non-zero value allowed). x is an array of any rank, a
+string (by code point) or a `Bytes`; this is the same node the subscript `x[a:b:s]` builds, so
+a pipeline can write it: `xs->slice<0, 1, 3>`. A bound outside the value (a negative one
+included) is a fault, as an index out of range is; a start after the end gives the empty
+value. The last element is `last(x)` and the length of an axis `dim(x, axis)`.
 
-- Pure.
-- Example: `tail([1, 2, 3])` gives `[2, 3]`
+- Failure: fault `IndexOutOfRange` when a bound lies outside the axis; fault `InvalidArgument` when the step is 0.
+- Example: `[1, 2, 3, 4]->slice<0, 1, 3>` gives `[2, 3]`
 
 #### `slice`
 
 ```camel
-slice: <start: int, end: int> (xs: T[]) => T[]
-```
-
-The elements from index start up to, not including, end. Both are positions from 0 to the
-length; a bound outside the array (a negative one included) is a fault, as an index out of
-range is. `take` and `drop` of the module `array` cut to the array instead.
-
-- Pure.
-- Example: `[1, 2, 3, 4]->slice<1, 3>` gives `[2, 3]`
-
-#### `slice`
-
-```camel
-slice: (t: T[], axis: int, start: int, end: int, step: int = 1, written: int = 3) => T[]
-```
-
-A slice of one axis of an array of values, written as a call: `slice(t, axis, a, b, s)` is the
-same node the subscript `t[a:b:s]` builds -- the value, the axis, the two bounds, the step and
-the mask saying which bounds were written. The function form writes both, so its mask is 3; any
-axis and any rank are the core's; a negative or out-of-range bound is a fault, with the
-subscript's one wording, and a step may be any non-zero value (the constant 0 is refused).
-The last element is `last(t)` and an axis' length is `dim(t, axis)`, which is how a bound is
-written where it used to count from the end.
-
-- Pure.
-- Example: `[1, 2, 3, 4]->slice(0, 1, 3)` gives `[2, 3]`
-
-#### `slice`
-
-```camel
-slice: (s: string, axis: int, start: int, end: int, step: int = 1, written: int = 3) => string
+slice: <axis: int, start: int, end: int, step: int = 1> (x: string) => string
 ```
 
 The same slice of a string, by code point: a string has the one axis 0, and the result is a
-string. `'中文字'[1:3]` and `slice('中文字', 0, 1, 3)` are both `'文字'`.
+string. `'中文字'[1:3]` and `'中文字'->slice<0, 1, 3>` are both `'文字'`.
 
-- Pure.
-- Example: `slice('hello', 0, 1, 4)` gives `'ell'`
+- Example: `'hello'->slice<0, 1, 4>` gives `'ell'`
 
 #### `slice`
 
 ```camel
-slice: (b: Bytes, axis: int, start: int, end: int, step: int = 1, written: int = 3) => Bytes
+slice: <axis: int, start: int, end: int, step: int = 1> (x: Bytes) => Bytes
 ```
 
 The same slice of a `Bytes`, by byte: it has the one axis 0, and the result is a `Bytes`.
-`b[1:3]` and `slice(b, 0, 1, 3)` are the same bytes.
+`b[1:3]` and `b->slice<0, 1, 3>` are the same bytes.
 
-- Pure.
-- Example: `slice(encode('hello'), 0, 1, 4)` gives `the bytes of 'ell'`
+- Example: `encode('hello')->slice<0, 1, 4>` gives `the bytes of 'ell'`
 
 #### `concat`
 
@@ -591,7 +468,6 @@ concat: (xs: T[], ys: T[]) => T[]
 
 The elements of xs followed by those of ys, as a new array.
 
-- Pure.
 - Example: `concat([1], [2, 3])` gives `[1, 2, 3]`
 
 #### `contains`
@@ -603,7 +479,6 @@ contains: <value: T> (xs: T[]) => bool
 Whether an element of xs equals value, by the `==` of the element type (by content for
 arrays, tuples and structs).
 
-- Pure.
 - Example: `[1, 2, 3]->contains<2>` gives `true`
 
 #### `contains`
@@ -615,7 +490,6 @@ contains: <sub: string> (s: string) => bool
 Whether sub occurs in the string s (bytes are compared). The empty string occurs in every
 string.
 
-- Pure.
 - Example: `'hello'->contains<'ell'>` gives `true`
 
 #### `zip`
@@ -627,7 +501,6 @@ zip: (xs: T[], ys: U[]) => (T, U)[]
 Two arrays combined element by element into pairs. They must have the same length.
 Three or more arrays (`zip(xs, ys, zs)`) give tuples of that many elements.
 
-- Pure.
 - Failure: fault `InvalidArgument` when the lengths differ.
 - Example: `zip([1, 2], ['a', 'b'])` gives `[(1, 'a'), (2, 'b')]`
 
@@ -641,19 +514,7 @@ A new array: the elements of xs, then value. xs is unchanged; to add to a variab
 to the result: `acc = acc->append<4>` (as a statement, that form grows the array in place
 when nothing else refers to it, which cannot be observed).
 
-- Pure.
 - Example: `[1, 2, 3]->append<4>` gives `[1, 2, 3, 4]`
-
-#### `extend`
-
-```camel
-extend: <other: T[]> (xs: T[]) => T[]
-```
-
-A new array: the elements of xs, then those of other. xs is unchanged.
-
-- Pure.
-- Example: `[1, 2, 3]->extend<[4, 5]>` gives `[1, 2, 3, 4, 5]`
 
 ### Higher-order functions
 
@@ -671,7 +532,6 @@ map: <f: (item: T) => U> (xs: T[]) => U[]
 
 f applied to every element; the calls have no order among them.
 
-- With effects: what f does.
 - Example: `[1, 2, 3]->map<(x: int) => x * 2>` gives `[2, 4, 6]`
 
 #### `filter`
@@ -682,7 +542,6 @@ filter: <f: (item: T) => bool> (xs: T[]) => T[]
 
 The elements for which f is true, in order; the calls of f have no order among them.
 
-- With effects: what f does.
 - Example: `[1, 2, 3, 4]->filter<(x: int) => x % 2 == 0>` gives `[2, 4]`
 
 #### `reduce`
@@ -693,7 +552,6 @@ reduce: <f: (acc: U, item: T) => U, initial: U> (xs: T[]) => U
 
 The elements combined from left to right: f(...f(f(initial, xs[0]), xs[1])..., xs[n-1]).
 
-- With effects: what f does.
 - Example: `[1, 2, 3]->reduce<(acc: int, x: int) => acc + x, 0>` gives `6`
 
 #### `foreach`
@@ -704,20 +562,7 @@ foreach: <f: (item: T) => void> (xs: T[]) => void
 
 Calls f for every element, in order.
 
-- With effects: what f does.
 - Example: `[1, 2, 3]->foreach<(x: int) => println(x)>`
-
-#### `apply`
-
-```camel
-apply: <f: (item: T) => T> (xs: T[]) => T[]
-```
-
-A new array: f of every element of xs, which is unchanged; `map` where f keeps the element
-type. The calls have no order among them, as for `map`.
-
-- With effects: what f does.
-- Example: `[1, 2, 3]->apply<(x: int) => x * 2>` gives `[2, 4, 6]`
 
 ### Fault isolation
 
@@ -739,14 +584,13 @@ where any type is expected, and a branch arm that raises the fault leaves the br
 to the other arm. The fault is raised where the call is written, and `attempt` isolates it
 into an error value whose kind is the name in the angle brackets.
 
-- Pure.
 - Failure: fault `<Kind>` with the message, which `attempt` isolates.
 - Example: `fail<'BadLimit'>('the limit must be positive')`
 
 #### `attempt`
 
 ```camel
-attempt: (f: (...args: A) => T) => (...args: A) => T!
+attempt: (f: F) => F!
 ```
 
 The function f with the faults of its calls turned into error values: `attempt(f)` takes the
@@ -757,7 +601,6 @@ so does `attempt(f)`. What the call did before the fault is not undone; exit() a
 failures of the compiler itself are not isolated. `attempt(f)` itself calls nothing: the
 faults are those of a call of the value.
 
-- With effects: what f does.
 - Failure: fault `DivisionByZero` and every other fault of a call of f: the call gives an error value whose kind is the fault's name, with the fault's message and position; an error value f itself returns is handed on unchanged.
 - Example: `attempt((x: int) => 10 / x)(2) !! -1` gives `5`
 - Example: `attempt((x: int) => 10 / x)(0) !! -1` gives `-1: the division fault becomes an error value`
@@ -773,7 +616,6 @@ The number of entries of a map or of elements of a set. The collection is `x`, t
 string and array declarations above give their one parameter: the position means the value
 whose length is asked for, whatever its type.
 
-- Pure.
 - Example: `len([('a', 1), ('b', 2)] as Map<string, int>)` gives `2`
 
 #### `get`
@@ -784,7 +626,6 @@ get: <key: K> (m: Map<K, V>) => V?
 
 The value stored under key, or null when the map has no such key. `m[key]` is the same lookup.
 
-- Pure.
 - Example: `([('a', 1)] as Map<string, int>)->get<'z'> ?? 0` gives `0 when the map has no 'z'`
 
 #### `get_or`
@@ -795,7 +636,6 @@ get_or: <key: K, fallback: V> (m: Map<K, V>) => V
 
 The value stored under key, or fallback when the map has no such key.
 
-- Pure.
 - Example: `([('a', 1)] as Map<string, int>)->get_or<'z', -1>` gives `-1 when the map has no 'z'`
 
 #### `put`
@@ -806,7 +646,6 @@ put: <key: K, value: V> (m: Map<K, V>) => Map<K, V>
 
 A map with value stored under key; an existing entry of that key is replaced. m is unchanged.
 
-- Pure.
 - Example: `([('a', 1), ('b', 2)] as Map<string, int>)->put<'c', 3>` gives `{a: 1, b: 2, c: 3}`
 
 #### `remove`
@@ -818,19 +657,16 @@ remove: (c: Set<K>) => Set<K>
 
 A map without the entry of key, or a set without the element; a key or element that is not there changes nothing. The argument is unchanged.
 
-- Pure.
 - Example: `([('a', 1), ('b', 2)] as Map<string, int>)->remove<'a'>` gives `{b: 2}`
 
 #### `has`
 
 ```camel
 has: <key: K> (c: Map<K, V>) => bool
-has: (c: Set<K>) => bool
 ```
 
-Whether a map has an entry of key, or a set has the element.
+Whether a map has an entry of key. (A set is asked with `contains`.)
 
-- Pure.
 - Example: `([('a', 1)] as Map<string, int>)->has<'a'>` gives `true`
 
 #### `keys`
@@ -841,7 +677,6 @@ keys: (m: Map<K, V>) => K[]
 
 The keys of a map, in ascending order.
 
-- Pure.
 - Example: `keys([('b', 2), ('a', 1)] as Map<string, int>)` gives `[a, b]`
 
 #### `values`
@@ -852,7 +687,6 @@ values: (m: Map<K, V>) => V[]
 
 The values of a map, in the ascending order of their keys.
 
-- Pure.
 - Example: `values([('b', 2), ('a', 1)] as Map<string, int>)` gives `[1, 2]`
 
 #### `items`
@@ -863,7 +697,6 @@ items: (m: Map<K, V>) => (K, V)[]
 
 The entries of a map as (key, value) tuples, in ascending order of the keys.
 
-- Pure.
 - Example: `items([('b', 2), ('a', 1)] as Map<string, int>)` gives `[(a, 1), (b, 2)]`
 
 #### `items`
@@ -876,7 +709,6 @@ The elements of a set as an array, in ascending order. The collection is `m`, th
 map declaration above gives its one parameter: the position means the collection whose items
 are listed.
 
-- Pure.
 - Example: `items([3, 1, 2] as Set<int>)` gives `[1, 2, 3]`
 
 #### `merge`
@@ -887,7 +719,6 @@ merge: (m: Map<K, V>, other: Map<K, V>) => Map<K, V>
 
 A map with the entries of both maps; for a key in both, the entry of other is taken. Neither argument is changed.
 
-- Pure.
 - Example: `merge([('a', 1), ('b', 2)] as Map<string, int>, [('b', 20), ('c', 30)] as Map<string, int>)` gives `{a: 1, b: 20, c: 30}`
 
 #### `contains`
@@ -898,7 +729,6 @@ contains: <value: T> (s: Set<T>) => bool
 
 Whether value is an element of the set.
 
-- Pure.
 - Example: `([1, 2, 3] as Set<int>)->contains<9>` gives `false`
 
 #### `add`
@@ -909,7 +739,6 @@ add: <value: T> (s: Set<T>) => Set<T>
 
 A set with value added; s is unchanged.
 
-- Pure.
 - Example: `([1, 2, 3] as Set<int>)->add<9>` gives `{1, 2, 3, 9}`
 
 #### `union`
@@ -920,7 +749,6 @@ union: (s: Set<T>, other: Set<T>) => Set<T>
 
 The set of the elements that are in either set.
 
-- Pure.
 - Example: `union([1, 2, 3] as Set<int>, [3, 4] as Set<int>)` gives `{1, 2, 3, 4}`
 
 #### `intersect`
@@ -931,7 +759,6 @@ intersect: (s: Set<T>, other: Set<T>) => Set<T>
 
 The set of the elements that are in both sets.
 
-- Pure.
 - Example: `intersect([1, 2, 3] as Set<int>, [3, 4] as Set<int>)` gives `{3}`
 
 #### `difference`
@@ -942,7 +769,6 @@ difference: (s: Set<T>, other: Set<T>) => Set<T>
 
 The set of the elements of s that are not in other.
 
-- Pure.
 - Example: `difference([1, 2, 3] as Set<int>, [3, 4] as Set<int>)` gives `{1, 2}`
 
 #### `is_subset`
@@ -953,7 +779,6 @@ is_subset: (s: Set<T>, other: Set<T>) => bool
 
 Whether every element of s is an element of other.
 
-- Pure.
 - Example: `is_subset([1, 2] as Set<int>, [1, 2, 3] as Set<int>)` gives `true`
 
 ### Streams
@@ -971,8 +796,7 @@ tells one tee from another and whose type the operator takes, and whose elements
 A program does not write this: `tee` calls it once per element it pulls, and `std::profile`
 prints what it recorded (`STREAM_TEE`).
 
-- With effects: records the numbers of the tee.
-- Example (a fragment, not compiled): `tee_note(8, 64, 2, 2, s)` gives `the tee written `tee(s, 8)` reports itself this way`
+- Example (a fragment, not compiled): `tee_note(8, 64, 2, 2, s)` gives `the tee written `s->tee<8>` reports itself this way`
 - Why it is not compiled: the last operand is the stream a tee reads, and no example program has one
 
 <a id="str"></a>
@@ -2509,116 +2333,22 @@ so, and a struct or tuple is asked field by field.
 
 ## `array`: arrays, sorting and higher-order functions
 
-Array functions and higher-order functions, written in Camel on top of the built-in
-operators (map, filter, reduce, range, zip, slice, len) and a few native primitives of this
-module (the sorts, argsort, flatten, unique). Every function returns a new value; none changes
-its argument.
+Functions on arrays, written in Camel on the built-in operators (`map`, `filter`, `reduce`,
+`zip`, `len`, the subscript) and on two native atoms: `argsort`, and the flat view of an array
+of any rank. Every function returns a new value; none changes its argument. The functions of
+one dimension take `T[]`; the reductions take `T[..]` and reduce every element, in row-major
+order.
 
-- The array a function works on is its ordinary argument; a function or a value that
-  configures it is a with-argument, as for the built-in `map<f>(xs)` and `slice<a, b>(xs)`,
-  so calls chain: `xs->filter<p>->sort_by<key>->take<3>`.
-- A result that may not exist is `T?` (`find`, `index_of`, `min`, `max`). Nothing here
-  returns an error value, and a wrong argument is a fault of the operator that meets it.
-- A function passed to any of these must be pure. The implementation may stop early
-  (`find`, `index_of`, `any`, `all`) or, when a fast path is added under `#impl`, apply it to
-  several elements at once; the result is the same either way, and no call observes another.
-  A function with side effects belongs in `foreach` or `reduce`, which run in order.
-- The functions written here are generic: there is one instance per set of element types in
-  the whole program, whichever module calls it (one root graph, design principles 10.1).
-  `group_by` is not here: it needs the map type.
-
-### Sorting
-
-#### `argsort`
-
-```camel
-argsort: (keys: i32[]) => int[]
-argsort: (keys: int[]) => int[]
-argsort: (keys: f32[]) => int[]
-argsort: (keys: float[]) => int[]
-argsort: (keys: bf16[]) => int[]
-argsort: (keys: f16[]) => int[]
-argsort: (keys: bool[]) => int[]
-argsort: (keys: string[]) => int[]
-```
-
-The positions of the keys in ascending order of key; equal keys keep their order (a stable
-sort). Keys are numbers, strings (ordered by byte) or bools; NaN keys come last. The
-primitive behind `sort_by`.
-
-- A native operator of this module: an opaque node, pure.
-- Example: `argsort([30, 10, 20])` gives `[1, 2, 0]`
-
-#### `sort`
-
-```camel
-sort: (xs: i32[]) => i32[]
-sort: (xs: int[]) => int[]
-sort: (xs: f32[]) => f32[]
-sort: (xs: float[]) => float[]
-```
-
-A sorted copy of xs (quicksort).
-
-- A native operator of this module: an opaque node, pure.
-- Example: `sort([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `insert_sort`
-
-```camel
-insert_sort: (xs: i32[]) => i32[]
-insert_sort: (xs: int[]) => int[]
-insert_sort: (xs: f32[]) => f32[]
-insert_sort: (xs: float[]) => float[]
-```
-
-A sorted copy of xs, by insertion sort.
-
-- A native operator of this module: an opaque node, pure.
-- Example: `insert_sort([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `quick_sort`
-
-```camel
-quick_sort: (xs: i32[]) => i32[]
-quick_sort: (xs: int[]) => int[]
-quick_sort: (xs: f32[]) => f32[]
-quick_sort: (xs: float[]) => float[]
-```
-
-A sorted copy of xs, by quicksort.
-
-- A native operator of this module: an opaque node, pure.
-- Example: `quick_sort([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `merge_sort`
-
-```camel
-merge_sort: (xs: i32[]) => i32[]
-merge_sort: (xs: int[]) => int[]
-merge_sort: (xs: f32[]) => f32[]
-merge_sort: (xs: float[]) => float[]
-```
-
-A sorted copy of xs, by merge sort.
-
-- A native operator of this module: an opaque node, pure.
-- Example: `merge_sort([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `merge_sorted_arrays`
-
-```camel
-merge_sorted_arrays: (left: i32[], right: i32[]) => i32[]
-merge_sorted_arrays: (left: int[], right: int[]) => int[]
-merge_sorted_arrays: (left: f32[], right: f32[]) => f32[]
-merge_sorted_arrays: (left: float[], right: float[]) => float[]
-```
-
-The sorted array made of the elements of two sorted arrays of numbers. The two must hold the
-same element type: `T` is one of the four the sorts order, not one per argument.
-
-- A native operator of this module: an opaque node, pure.
-- Example: `merge_sorted_arrays([1, 4], [2, 3])` gives `[1, 2, 3, 4]`
+- The array is the ordinary argument; what configures the function (a count, a value, a
+  function) is in angle brackets, so calls chain: `xs->filter<keep>->sort_by<key>->take<3>`.
+- A result that may not exist (`find`, `find_index`, `index_of`) is `T?`; nothing here returns
+  an error value. The `sum` of no element is 0; `mean`, `min`, `max`, `argmax` and `argmin`
+  of no element are faults, as design principles 7.7 say.
+- A function passed to these runs element by element in order and stops as soon as the answer
+  is known (`find`, `any`, `all`), or is mapped, with no order among the calls (`sort_by`,
+  `flat_map`, `zip_with`). None of them asks for a `pure` function.
+- Elements are not converted: the numbers added, compared or searched for are of the
+  element type of the array.
 
 ### Rearranging
 
@@ -2631,7 +2361,7 @@ reverse: (xs: T[]) => T[]
 The elements in reverse order.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `reverse([1, 2, 3])` gives `[3, 2, 1]`
+- Example: `[1, 2, 3]->reverse` gives `[3, 2, 1]`
 
 #### `take`
 
@@ -2655,6 +2385,18 @@ The elements after the first n; none when there are fewer, all when n is not pos
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `[1, 2, 3, 4]->drop<1>` gives `[2, 3, 4]`
 
+#### `chunks`
+
+```camel
+chunks: <n: int> (xs: T[]) => T[][]
+```
+
+Consecutive pieces of n elements; the last is shorter when n does not divide the length.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Failure: fault `InvalidArgument` when n is not positive.
+- Example: `[1, 2, 3, 4, 5]->chunks<2>` gives `[[1, 2], [3, 4], [5]]`
+
 #### `enumerate`
 
 ```camel
@@ -2664,7 +2406,7 @@ enumerate: (xs: T[]) => (int, T)[]
 Each element with its index.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `enumerate(['a', 'b'])` gives `[(0, 'a'), (1, 'b')]`
+- Example: `['a', 'b']->enumerate` gives `[(0, 'a'), (1, 'b')]`
 
 #### `flatten`
 
@@ -2672,10 +2414,21 @@ Each element with its index.
 flatten: (xss: T[][]) => T[]
 ```
 
-The elements of the inner arrays, in order. The primitive behind `flat_map`.
+The elements of the inner arrays, in order.
 
-- A native operator of this module: an opaque node, pure.
-- Example: `flatten([[1, 2], [3]])` gives `[1, 2, 3]`
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `[[1, 2], [3]]->flatten` gives `[1, 2, 3]`
+
+#### `flatten`
+
+```camel
+flatten: (xs: T[..]) => T[] when !is_array_type::<T>()
+```
+
+The elements of an array of any rank, in row-major order, as an array of one dimension.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `([[1, 2], [3, 4]] as int[2, 2])->flatten` gives `[1, 2, 3, 4]`
 
 #### `unique`
 
@@ -2683,24 +2436,27 @@ The elements of the inner arrays, in order. The primitive behind `flat_map`.
 unique: (xs: T[]) => T[]
 ```
 
-The first occurrence of every value, in order; values are compared as `==` compares them
-(a NaN equals nothing, so every NaN is kept).
+The first occurrence of every value, in order. Values are compared as `==` compares them, so
+a NaN equals nothing and every NaN is kept. The time is quadratic in the number of distinct
+values; to drop repeats of numbers or strings in a long array, `sort` it and compare
+neighbours.
 
-- A native operator of this module: an opaque node, pure.
-- Example: `unique([3, 1, 3, 2, 1])` gives `[3, 1, 2]`
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `[3, 1, 3, 2, 1]->unique` gives `[3, 1, 2]`
 
 ### Searching
 
-#### `index_of`
+#### `find_index`
 
 ```camel
-index_of: <x: T> (xs: T[]) => int?
+find_index: <pred: (x: T) => bool> (xs: T[]) => int?
 ```
 
-The index of the first element equal to x, or null.
+The index of the first element for which pred is true, or null. pred is not called on the
+elements after it.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `[3, 9, 2]->index_of<9> ?? -1` gives `1`
+- Example: `[3, 9, 2]->find_index<(x) => x > 4> ?? -1` gives `1`
 
 #### `find`
 
@@ -2711,7 +2467,18 @@ find: <pred: (x: T) => bool> (xs: T[]) => T?
 The first element for which pred is true, or null.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `[3, 9, 2]->find<(x: int) => x > 4> ?? -1` gives `9`
+- Example: `[3, 9, 2]->find<(x) => x > 4> ?? -1` gives `9`
+
+#### `index_of`
+
+```camel
+index_of: <x: T> (xs: T[]) => int?
+```
+
+The index of the first element equal to x, or null. Equality is `==`, so a NaN is never found.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `[3, 9, 2]->index_of<9> ?? -1` gives `1`
 
 #### `any`
 
@@ -2722,7 +2489,7 @@ any: <pred: (x: T) => bool> (xs: T[]) => bool
 True when pred is true for at least one element; false for an empty array.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `[3, 9, 2]->any<(x: int) => x > 4>` gives `true`
+- Example: `[3, 9, 2]->any<(x) => x > 4>` gives `true`
 
 #### `all`
 
@@ -2733,7 +2500,7 @@ all: <pred: (x: T) => bool> (xs: T[]) => bool
 True when pred is true for every element; true for an empty array.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `[3, 9, 2]->all<(x: int) => x > 4>` gives `false`
+- Example: `[3, 9, 2]->all<(x) => x > 4>` gives `false`
 
 #### `count`
 
@@ -2744,100 +2511,91 @@ count: <pred: (x: T) => bool> (xs: T[]) => int
 The number of elements for which pred is true.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `[3, 9, 2]->count<(x: int) => x > 2>` gives `2`
+- Example: `[3, 9, 2]->count<(x) => x > 2>` gives `2`
 
-### Aggregating
+### Reducing
 
 #### `sum`
 
 ```camel
-sum: (xs: T[]) => T when is_numeric::<T>()
+sum: (xs: T[..]) => T when is_numeric::<T>()
 ```
 
-The sum of the elements, 0 for an empty array.
+The sum of the elements.
 
-A floating-point element type accumulates in f64 and rounds once into the element type at the
-end: the additions are f64 additions and the result is one conversion of their sum, not a
-rounding after every addition (an f32 accumulator rounds at every step and answers
-differently). This is the same rule the tensor axis `sum` follows (modules/tensor/kernels/
-reduce.cpp: a double accumulator, one rounding when the element is stored), so the two paths
-agree bit for bit on the same elements. An integer element type accumulates in itself and
-wraps around on overflow, as `+` does on it; a complex element type accumulates in itself as
-well, the f64 rule being stated for the floating-point element types.
+A float element type is added in f64 and rounded once into the element type: the rule of
+every float reduction, not a rounding after each addition. An integer or complex element
+type is added in itself and wraps around on overflow, as `+` does.
+The sum of no element is 0, the identity of addition.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `sum([1, 2, 3])` gives `6`
+- Example: `[1, 2, 3]->sum` gives `6`
+- Example: `[0.5, 0.25]->sum` gives `0.75`
+
+#### `mean`
+
+```camel
+mean: (xs: T[..]) => T when is_float::<T>()
+```
+
+The arithmetic mean: the sum and the division both in f64, rounded once into the element
+type, `T(sum(float(x)) / float(numel(x)))`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Failure: fault `InvalidArgument` when the array has no element.
+- Example: `[1.0, 2.0, 3.0, 4.0]->mean` gives `2.5`
 
 #### `min`
 
 ```camel
-min: (xs: T[]) => T? when is_ordered::<T>()
+min: (xs: T[..]) => T when is_ordered::<T>()
 ```
 
-The smallest number (IEEE 754 minimum: a NaN anywhere makes the result NaN, and -0 is below
-+0), or null for an empty array.
-
-No accumulator and no accumulation width take part in this fold: it carries an element of T
-and combines it with `math::min`, which is IEEE 754 minimum — exactly associative and
-commutative (design principles 7.7) — so the order does not change the bits and there is
-nothing to round.
+The smallest element. Numbers are compared as `math::min` compares them: a NaN anywhere gives
+NaN, and -0 is below +0. Strings compare by their bytes, and false is below true.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `min([3, 9, 2]) ?? 0` gives `2`
+- Failure: fault `InvalidArgument` when the array has no element.
+- Example: `[3, 9, 2]->min` gives `2`
 
 #### `max`
 
 ```camel
-max: (xs: T[]) => T? when is_ordered::<T>()
+max: (xs: T[..]) => T when is_ordered::<T>()
 ```
 
-The largest number (IEEE 754 maximum: a NaN anywhere makes the result NaN, and +0 is above
--0), or null for an empty array.
-
-As `min`: the fold carries an element of T, and `math::max` is IEEE 754 maximum, exactly
-associative and commutative (design principles 7.7), so no accumulator type enters.
+The largest element. Numbers are compared as `math::max` compares them: a NaN anywhere gives
+NaN, and +0 is above -0.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `max([3, 9, 2]) ?? 0` gives `9`
+- Failure: fault `InvalidArgument` when the array has no element.
+- Example: `[3, 9, 2]->max` gives `9`
 
-### Transforming
-
-#### `flat_map`
+#### `argmax`
 
 ```camel
-flat_map: <f: (x: T) => U[]> (xs: T[]) => U[]
+argmax: (xs: T[..]) => int when is_ordered::<T>()
 ```
 
-f applied to every element, the resulting arrays joined in order.
+The row-major position of the largest element: the first NaN if there is one, +0 above -0,
+the earlier position on a tie.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `[1, 2]->flat_map<(x: int) => [x, x * 10]>` gives `[1, 10, 2, 20]`
+- Failure: fault `InvalidArgument` when the array has no element.
+- Example: `[3, 9, 2, 9]->argmax` gives `1`
 
-#### `sort_by`
+#### `argmin`
 
 ```camel
-sort_by: <key: (x: T) => K> (xs: T[]) => T[]
+argmin: (xs: T[..]) => int when is_ordered::<T>()
 ```
 
-The elements in ascending order of key(x); elements with equal keys keep their order (the
-sort is stable, so sorting by one key and then by another works). A key is a number, a string
-(ordered by byte) or a bool; NaN keys come last. For a descending order of numbers use the
-negated key.
+The row-major position of the smallest element: the first NaN if there is one, -0 below +0,
+the earlier position on a tie.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `['pear', 'fig', 'apple']->sort_by<(w: string) => len(w)>` gives `['fig', 'pear', 'apple']`
-
-#### `zip_with`
-
-```camel
-zip_with: <f: (a: T, b: U) => V> (xs: T[], ys: U[]) => V[]
-```
-
-f(xs[i], ys[i]) for every i.
-
-- Written in Camel: a subgraph, pure when the functions passed to it are.
-- Failure: fault `InvalidArgument` (of zip) when the two arrays differ in length.
-- Example: `zip_with<(a: int, b: int) => a + b>([1, 2], [10, 20])` gives `[11, 22]`
+- Failure: fault `InvalidArgument` when the array has no element.
+- Example: `[3, 1, 2, 1]->argmin` gives `1`
 
 ### Reducing along an axis
 
@@ -2853,7 +2611,6 @@ from +0 in ascending order and rounded once, an integer one wraps around.
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Failure: fault `InvalidArgument` when the axis is outside the rank.
 - Example: `([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->sum<0>` gives `[4.0, 6.0]`
-- Example: `([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->sum<1, true>` gives `[[3.0], [7.0]]`
 
 #### `mean`
 
@@ -2964,33 +2721,106 @@ to_bytes: (xs: T[..]) => Bytes when is_plain::<T>()
 
 The elements of an array as little-endian bytes, in row-major order: the payload `from_bytes`
 reads back. The elements are the array's own bytes, so every pure-data element type has them:
-one byte an element for a `bool` array, four for an `i32` or `f32` one and eight for an `f64` or `c64`
+one byte an element for a `bool` array, four for an `f32` one and eight for an `f64` or `c64`
 one.
 
 - A native operator of this module: an opaque node, pure.
-- Example: `([[1, 2]] as int[1, 2])->to_bytes` gives `[1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0]`
+- Example: `([1.0, 2.0] as f32[])->to_bytes` gives `[0, 0, 128, 63, 0, 0, 0, 64]`
+
+### Sorting
+
+#### `argsort`
+
+```camel
+argsort: (keys: i32[]) => int[]
+argsort: (keys: int[]) => int[]
+argsort: (keys: f32[]) => int[]
+argsort: (keys: float[]) => int[]
+argsort: (keys: bf16[]) => int[]
+argsort: (keys: f16[]) => int[]
+argsort: (keys: bool[]) => int[]
+argsort: (keys: string[]) => int[]
+```
+
+The positions of the keys in ascending order of key; equal keys keep their order. Numbers
+are ordered as `min` and `max` order them, with -0 below +0 and every NaN after the numbers;
+strings are ordered by their bytes and false is below true. This is the atom the sorts are
+written on.
+
+- A native operator of this module: an opaque node, pure.
+- Example: `[30, 10, 20]->argsort` gives `[1, 2, 0]`
+
+#### `sort`
+
+```camel
+sort: (xs: T[]) => T[] when is_ordered::<T>()
+```
+
+The elements in ascending order, in the order `argsort` gives.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `[3, 1, 2]->sort` gives `[1, 2, 3]`
+- Example: `['pear', 'fig']->sort` gives `['fig', 'pear']`
+
+#### `sort_by`
+
+```camel
+sort_by: <key: (x: T) => K> (xs: T[]) => T[] when is_ordered::<K>()
+```
+
+The elements in ascending order of key(x); elements with equal keys keep their order, so
+sorting by one key and then by another works. key is called once for every element. Keys
+are ordered as `argsort` orders them; for a descending order of numbers use the negated key.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `['pear', 'fig', 'apple']->sort_by<(w) => len(w)>` gives `['fig', 'pear', 'apple']`
+
+### Transforming
+
+#### `flat_map`
+
+```camel
+flat_map: <f: (x: T) => U[]> (xs: T[]) => U[]
+```
+
+f applied to every element, the resulting arrays joined in order.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `[1, 2]->flat_map<(x) => [x, x * 10]>` gives `[1, 10, 2, 20]`
+
+#### `zip_with`
+
+```camel
+zip_with: <f: (a: T, b: U) => V> (xs: T[], ys: U[]) => V[]
+```
+
+f(xs[i], ys[i]) for every i.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Failure: fault `InvalidArgument` (of zip) when the two arrays differ in length.
+- Example: `zip_with<(a, b) => a + b>([1, 2], [10, 20])` gives `[11, 22]`
 
 <a id="stream"></a>
 
 ## `stream`: producing and consuming streams
 
-Streams, written in Camel. A stream's value is its step function together with its state (design
-principles 5.4, and the reading of 2026-10-26): `T..` is an ordinary function value of the
-signature `() => (T, T..)?`, one call is one pull, and a pull answers the next element together
-with the rest of the stream -- `null` when the stream is over. So the producers here are
-ordinary functions that return such a closure, and the consumer is `for x in s`, which the
-compiler expands on the graph into the `while` it already has (language reference 7.3.2). No
-part of this module needs a new node kind, and none of it runs anything by itself: pulling is
-what runs, one element at a time.
+Streams, written in Camel. A stream is a value: `T..` is a step function together with its
+state, an ordinary function value of the signature `() => (T, T..)?`. One call is one pull; a
+pull answers the next element together with the rest of the stream, or `null` when the stream
+is over. The consumer is `for x in s`, which the compiler expands on the graph into the `while`
+it already has (language reference 7.3.2), so nothing here needs a node kind of its own and
+nothing runs until something pulls.
 
-- `unfold(state, step)` is the smallest producer: a state and a step that answers the next
-  element with the state after it, or `null` when the stream is over. A `yield` generator
-  compiles to the same kind of value, and one written `#op` source can hand one out too.
-- `tee(s, n)` is the one way to read one stream from two places: it reads `s` once and gives two
-  streams, each of which is read once, and both see the same elements.
-- A stream is a value and is pure, so pulling the same stream value twice answers the same
-  element; the rest a pull hands out is what threads the stream, and the consumer passes it on.
-  One stream value has one consumer per execution path (design principles 5.4).
+- A stream is consumed once: on every execution path a stream value has one consumer, and a
+  second use is a compile-time error (design principles 5.4). A function that takes a stream
+  takes it as an argument; a lambda cannot capture one. So every transformation below keeps the
+  upstream stream as the state of `unfold` (an argument of its step), never in a closure.
+- The transformations are pure and lazy: an element is computed when something pulls it, and
+  not before. Sharing is written, with `tee`.
+- A generator (`yield`) produces the same kind of value; `unfold` is the producer for a state
+  and a step that need no generator.
+- What depends on the order of arrival or on time (merging streams, windows by time) is not
+  here: those declare their non-determinism and belong to the libraries that own a clock.
 
 ### Producing
 
@@ -3001,18 +2831,134 @@ unfold: (state: S, step: (state: S) => (T, S)?) => T..
 ```
 
 The stream of what `step` answers from `state` on: one element with the state after it, or
-`null` when there is nothing more. The first round of `for x in s` over it is `step(state)`,
-and every later round is a pull of the rest, so the states are threaded rather than repeated.
+`null` when there is nothing more. The states are threaded, not repeated.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `loop acc = 0 for x in unfold(3, (n: int) => if n > 0 then (n, n - 1) else null) do acc + x` gives `6`
 
-### Splitting
+#### `empty`
+
+```camel
+empty: () => T..
+```
+
+The stream with no element.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `loop n = 0 for x in empty::<int>() do n + 1` gives `0`
+
+#### `from_array`
+
+```camel
+from_array: (xs: T[]) => T..
+```
+
+The elements of xs, in order.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `loop acc = 0 for x in from_array([1, 2, 3]) do acc + x` gives `6`
+
+#### `iterate`
+
+```camel
+iterate: <f: (x: T) => T> (x: T) => T..
+```
+
+x, f(x), f(f(x)), ... without end.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `1->iterate<(x: int) => x * 2>->take<4>->collect` gives `[1, 2, 4, 8]`
+
+### Transforming
+
+#### `map`
+
+```camel
+map: <f: (x: T) => U> (s: T..) => U..
+```
+
+f of every element.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `from_array([1, 2, 3])->map<(x: int) => x * 2>->collect` gives `[2, 4, 6]`
+
+#### `filter`
+
+```camel
+filter: <pred: (x: T) => bool> (s: T..) => T..
+```
+
+The elements for which pred is true, in order.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `from_array([1, 2, 3, 4])->filter<(x: int) => x % 2 == 0>->collect` gives `[2, 4]`
+
+#### `take`
+
+```camel
+take: <n: int> (s: T..) => T..
+```
+
+The first n elements; fewer when the stream ends first, none when n is not positive. The
+element after the n-th is never pulled.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `1->iterate<(x: int) => x + 1>->take<3>->collect` gives `[1, 2, 3]`
+
+#### `scan`
+
+```camel
+scan: <f: (acc: A, x: T) => A, init: A> (s: T..) => A..
+```
+
+The running results of folding the elements with f from init: one per element, the first
+being f(init, first element).
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `from_array([1, 2, 3])->scan<(acc: int, x: int) => acc + x, 0>->collect` gives `[1, 3, 6]`
+
+#### `chunks`
+
+```camel
+chunks: <k: int> (s: T..) => T[]..
+```
+
+The elements in arrays of k, in order; the last array is shorter when the stream does not end
+on a multiple of k.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `from_array([1, 2, 3])->chunks<2>->collect` gives `[[1, 2], [3]]`
+
+#### `zip`
+
+```camel
+zip: (a: T.., b: U..) => (T, U)..
+```
+
+The elements of two streams in pairs, until the shorter ends.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `zip(from_array([1, 2]), from_array(['a', 'b', 'c']))->collect` gives `[(1, 'a'), (2, 'b')]`
+
+### Consuming
+
+#### `collect`
+
+```camel
+collect: (s: T..) => T[]
+```
+
+All the elements, as an array. The stream must end: a stream without end never returns.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `from_array([1, 2, 3])->collect` gives `[1, 2, 3]`
+
+### Sharing
 
 #### `tee`
 
 ```camel
-tee: (s: T.., n: int = 8) => (T.., T..)
+tee: <n: int = 8> (s: T..) => (T.., T..)
 ```
 
 Two streams over the elements of `s` (design principles 5.4), each read once, both seeing the
@@ -3023,21 +2969,35 @@ The result is a tuple, and taking it apart is what consumes the two streams; the
 themselves are values like any other, so a `tee` of one of them is another `tee`.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example (a fragment, not compiled): `let (left, right) = tee(unfold(3, (n: int) => if n > 0 then (n, n - 1) else null), 2)`
-- Why it is not compiled: the two streams are live values a page shows; a program reads them where it consumes them
+- Example (a fragment, not compiled): `let (left, right) = unfold(3, (n: int) => if n > 0 then (n, n - 1) else null)->tee<2>`
+- Why it is not compiled: a pair of streams is bound by a destructuring `let`, a statement
 
 <a id="math"></a>
 
 ## `math`: numbers and bits
 
-Numeric types are not converted implicitly. A function over floats takes `f32` or `float`
-and returns the type it was given; a function of several numbers takes numbers of one type.
-Outside its domain a float function gives the IEEE result (NaN or an infinity), not a fault.
-A constant is a value, written without parentheses: `pi`.
+Scalar mathematics. One definition covers every type that has the operation: a function of
+floats is written once for `f32`, `float`, `bf16` and `f16` and answers the type it was given;
+a function of several numbers takes numbers of one type. Numeric types are not converted
+implicitly: `sqrt(4)` is refused, write `sqrt(4.0)` or `sqrt(float(n))`.
+
+- Outside its domain a float function gives the IEEE result (NaN or an infinity), not a fault.
+  Special values (zeros, infinities, NaN) are exact.
+- The transcendental functions are computed in f64 and rounded once into the type asked for.
+  They promise an error of at most 2 ulp (of the type's own precision, for `float`), not the
+  same bits on every device (design principles 7.1). `sqrt`, the rounding functions, `min` and
+  `max` are exact: the result is the correctly rounded or the selected operand.
+- `min` and `max` are the IEEE 754-2019 `minimum` and `maximum`: a NaN on either side gives
+  NaN, and -0 is below +0 (design principles 7.7).
+- Over an array the elementwise functions are the `tensor` module's for now (`exp(xs)`); the
+  scalar ones here apply to a number, and `xs->map<exp>` is the same function on every element.
+  The conversions `f32(xs)`, `float(xs)` are elementwise (core). `sum`, `mean`, `min`, `max` of a
+  whole array belong to `array`.
+- Only what a program cannot compute from the language is native: the f64 kernels of the
+  elementary functions, the sign-exact selection of `min` and `max`, the parts of a complex
+  number, and the bit operations of an integer width.
 
 ### Constants
-
-Values the module exports (design principles 10.1), written without parentheses.
 
 #### `pi`
 
@@ -3088,289 +3048,201 @@ A NaN. It equals nothing, itself included: test with is_nan.
 #### `sqrt`
 
 ```camel
-sqrt: (x: i32) => f32
-sqrt: (x: int) => float
-sqrt: (x: f32) => f32
-sqrt: (x: float) => float
+sqrt: (x: T) => T when is_float::<T>()
 ```
 
-The square root. An integer argument is converted: i32 gives f32, int gives float.
+The square root; NaN for a negative x, and the square root of -0 is -0.
 
-- Pure.
 - Example: `sqrt(9.0)` gives `3`
-
-#### `abs`
-
-```camel
-abs: (x: i32) => i32
-abs: (x: int) => int
-abs: (x: f32) => f32
-abs: (x: float) => float
-abs: (x: c64) => f32
-abs: (x: c128) => float
-abs: (x: bf16) => bf16
-abs: (x: f16) => f16
-```
-
-The absolute value. The smallest integer has no positive counterpart: its absolute value is
-not defined. A bf16 or f16 value is the sign cleared, computed on the f32 it widens to
-exactly, so -0 becomes +0 and no value of either type rounds (design principles 7.3).
-
-- Pure.
-- Example: `abs(-3)` gives `3`
-
-#### `re`
-
-```camel
-re: (x: c64) => f32
-re: (x: c128) => float
-```
-
-The real part of a complex number.
-
-- Pure.
-- Example: `re(3+4i)` gives `3.0`
-
-#### `im`
-
-```camel
-im: (x: c64) => f32
-im: (x: c128) => float
-```
-
-The imaginary part of a complex number.
-
-- Pure.
-- Example: `im(3+4i)` gives `4.0`
-
-#### `conj`
-
-```camel
-conj: (x: c64) => c64
-conj: (x: c128) => c128
-```
-
-The conjugate of a complex number: the imaginary part is negated.
-
-- Pure.
-- Example: `conj(3+4i)` gives `3-4i`
 
 #### `exp`
 
 ```camel
-exp: (x: f32) => f32
-exp: (x: float) => float
-exp: (x: c64) => c64
-exp: (x: c128) => c128
+exp: (x: T) => T when is_float::<T>()
 ```
 
 e raised to the power x.
 
-- Pure.
 - Example: `exp(0.0)` gives `1`
+
+#### `exp`
+
+```camel
+exp: (z: T) => T when is_complex::<T>()
+```
+
+e raised to the power of a complex number.
+
+- Example: `exp(0.0+0.0i)` gives `1+0i`
 
 #### `expm1`
 
 ```camel
-expm1: (x: f32) => f32
-expm1: (x: float) => float
+expm1: (x: T) => T when is_float::<T>()
 ```
 
 exp(x) - 1, accurate for x near 0.
 
-- Pure.
 - Example: `expm1(0.0)` gives `0`
 
 #### `log`
 
 ```camel
-log: (x: f32) => f32
-log: (x: float) => float
+log: (x: T) => T when is_float::<T>()
 ```
 
 The natural logarithm. log(0.0) is -inf, the logarithm of a negative number is NaN.
 
-- Pure.
 - Example: `log(1.0)` gives `0`
 
 #### `log2`
 
 ```camel
-log2: (x: f32) => f32
-log2: (x: float) => float
+log2: (x: T) => T when is_float::<T>()
 ```
 
 The logarithm to base 2.
 
-- Pure.
 - Example: `log2(8.0)` gives `3`
 
 #### `log10`
 
 ```camel
-log10: (x: f32) => f32
-log10: (x: float) => float
+log10: (x: T) => T when is_float::<T>()
 ```
 
 The logarithm to base 10.
 
-- Pure.
 - Example: `log10(1000.0)` gives `3`
 
 #### `log1p`
 
 ```camel
-log1p: (x: f32) => f32
-log1p: (x: float) => float
+log1p: (x: T) => T when is_float::<T>()
 ```
 
 log(1 + x), accurate for x near 0.
 
-- Pure.
 - Example: `log1p(0.0)` gives `0`
 
 #### `pow`
 
 ```camel
-pow: (x: f32, y: f32) => f32
-pow: (x: float, y: float) => float
+pow: (x: T, y: T) => T when is_float::<T>()
 ```
 
 x raised to the power y. pow(0.0, 0.0) is 1; a negative x with a fractional y gives NaN.
 
-- Pure.
 - Example: `pow(2.0, 10.0)` gives `1024`
 
 #### `hypot`
 
 ```camel
-hypot: (x: f32, y: f32) => f32
-hypot: (x: float, y: float) => float
+hypot: (x: T, y: T) => T when is_float::<T>()
 ```
 
 The square root of x*x + y*y, without overflow in the squares.
 
-- Pure.
 - Example: `hypot(3.0, 4.0)` gives `5`
 
 #### `sin`
 
 ```camel
-sin: (x: f32) => f32
-sin: (x: float) => float
+sin: (x: T) => T when is_float::<T>()
 ```
 
 The sine of x, x in radians.
 
-- Pure.
 - Example: `sin(0.0)` gives `0`
 
 #### `cos`
 
 ```camel
-cos: (x: f32) => f32
-cos: (x: float) => float
+cos: (x: T) => T when is_float::<T>()
 ```
 
 The cosine of x, x in radians.
 
-- Pure.
 - Example: `cos(0.0)` gives `1`
 
 #### `tan`
 
 ```camel
-tan: (x: f32) => f32
-tan: (x: float) => float
+tan: (x: T) => T when is_float::<T>()
 ```
 
 The tangent of x, x in radians.
 
-- Pure.
 - Example: `tan(0.0)` gives `0`
 
 #### `asin`
 
 ```camel
-asin: (x: f32) => f32
-asin: (x: float) => float
+asin: (x: T) => T when is_float::<T>()
 ```
 
 The arc sine, in radians; NaN outside -1 to 1.
 
-- Pure.
 - Example: `asin(1.0)` gives `1.5708`
 
 #### `acos`
 
 ```camel
-acos: (x: f32) => f32
-acos: (x: float) => float
+acos: (x: T) => T when is_float::<T>()
 ```
 
 The arc cosine, in radians; NaN outside -1 to 1.
 
-- Pure.
 - Example: `acos(1.0)` gives `0`
 
 #### `atan`
 
 ```camel
-atan: (x: f32) => f32
-atan: (x: float) => float
+atan: (x: T) => T when is_float::<T>()
 ```
 
 The arc tangent, in radians.
 
-- Pure.
 - Example: `atan(1.0)` gives `0.785398`
 
 #### `atan2`
 
 ```camel
-atan2: (y: f32, x: f32) => f32
-atan2: (y: float, x: float) => float
+atan2: (y: T, x: T) => T when is_float::<T>()
 ```
 
 The angle of the point (x, y) in radians, between -pi and pi. Note the order: y first.
 
-- Pure.
 - Example: `atan2(1.0, 1.0)` gives `0.785398`
 
 #### `sinh`
 
 ```camel
-sinh: (x: f32) => f32
-sinh: (x: float) => float
+sinh: (x: T) => T when is_float::<T>()
 ```
 
 The hyperbolic sine.
 
-- Pure.
 - Example: `sinh(0.0)` gives `0`
 
 #### `cosh`
 
 ```camel
-cosh: (x: f32) => f32
-cosh: (x: float) => float
+cosh: (x: T) => T when is_float::<T>()
 ```
 
 The hyperbolic cosine.
 
-- Pure.
 - Example: `cosh(0.0)` gives `1`
 
 #### `tanh`
 
 ```camel
-tanh: (x: f32) => f32
-tanh: (x: float) => float
+tanh: (x: T) => T when is_float::<T>()
 ```
 
 The hyperbolic tangent.
 
-- Pure.
 - Example: `tanh(0.0)` gives `0`
 
 ### Rounding
@@ -3378,49 +3250,41 @@ The hyperbolic tangent.
 #### `floor`
 
 ```camel
-floor: (x: f32) => f32
-floor: (x: float) => float
+floor: (x: T) => T when is_float::<T>()
 ```
 
 The largest whole number not above x, as a float.
 
-- Pure.
 - Example: `floor(-2.5)` gives `-3`
 
 #### `ceil`
 
 ```camel
-ceil: (x: f32) => f32
-ceil: (x: float) => float
+ceil: (x: T) => T when is_float::<T>()
 ```
 
 The smallest whole number not below x, as a float.
 
-- Pure.
 - Example: `ceil(2.1)` gives `3`
 
 #### `round`
 
 ```camel
-round: (x: f32) => f32
-round: (x: float) => float
+round: (x: T) => T when is_float::<T>()
 ```
 
 The nearest whole number, halves away from zero, as a float.
 
-- Pure.
 - Example: `round(2.5)` gives `3`
 
 #### `trunc`
 
 ```camel
-trunc: (x: f32) => f32
-trunc: (x: float) => float
+trunc: (x: T) => T when is_float::<T>()
 ```
 
 x without its fraction (rounded toward zero), as a float.
 
-- Pure.
 - Example: `trunc(-2.7)` gives `-2`
 
 ### Comparing
@@ -3428,358 +3292,474 @@ x without its fraction (rounded toward zero), as a float.
 #### `min`
 
 ```camel
-min: (a: i32, b: i32) => i32
-min: (a: int, b: int) => int
-min: (a: f32, b: f32) => f32
-min: (a: float, b: float) => float
-min: (a: string, b: string) => string
-min: (a: bool, b: bool) => bool
-min: (a: bf16, b: bf16) => bf16
-min: (a: f16, b: f16) => f16
+min: (a: T, b: T) => T when is_ordered::<T>()
 ```
 
 The smaller of two values of one ordered type. For numbers this is the IEEE 754 minimum: a
-NaN on either side gives NaN, and -0 is below +0. Strings compare by their bytes (a proper
-prefix first), and false is below true. A bf16 or f16 comparison is made on the f32 each
-operand widens to exactly, and the result is that operand itself: neither type rounds here
-(design principles 7.3).
+NaN on either side gives NaN, and -0 is below +0. Strings compare by code point (a proper
+prefix first), and false is below true.
 
-- Pure.
 - Example: `min(3, 5)` gives `3`
 - Example: `min('b', 'a')` gives `'a'`
 
 #### `max`
 
 ```camel
-max: (a: i32, b: i32) => i32
-max: (a: int, b: int) => int
-max: (a: f32, b: f32) => f32
-max: (a: float, b: float) => float
-max: (a: string, b: string) => string
-max: (a: bool, b: bool) => bool
-max: (a: bf16, b: bf16) => bf16
-max: (a: f16, b: f16) => f16
+max: (a: T, b: T) => T when is_ordered::<T>()
 ```
 
 The larger of two values of one ordered type. For numbers this is the IEEE 754 maximum: a
-NaN on either side gives NaN, and -0 is below +0. Strings compare by their bytes (a proper
-prefix first), and false is below true. A bf16 or f16 comparison is made on the f32 each
-operand widens to exactly, and the result is that operand itself: neither type rounds here
-(design principles 7.3).
+NaN on either side gives NaN, and -0 is below +0. Strings compare by code point (a proper
+prefix first), and false is below true.
 
-- Pure.
 - Example: `max(3, 5)` gives `5`
 - Example: `max('a', 'b')` gives `'b'`
 
 #### `clamp`
 
 ```camel
-clamp: (x: i32, lo: i32, hi: i32) => i32
-clamp: (x: int, lo: int, hi: int) => int
-clamp: (x: f32, lo: f32, hi: f32) => f32
-clamp: (x: float, lo: float, hi: float) => float
+clamp: (x: T, lo: T, hi: T) => T when is_real::<T>()
 ```
 
 x held between lo and hi: lo when x is below, hi when above. A NaN x stays NaN.
 
-- Pure.
 - Failure: fault `InvalidArgument` when lo is above hi, or a bound is NaN.
 - Example: `clamp(15, 0, 10)` gives `10`
+
+#### `abs`
+
+```camel
+abs: (x: T) => T when is_real::<T>()
+```
+
+The absolute value of an integer or a float. The sign of a zero is cleared, a NaN stays a NaN,
+and the smallest integer is its own absolute value (negation wraps, as it does in `-x`).
+
+- Example: `abs(-3)` gives `3`
+
+#### `abs`
+
+```camel
+abs: (z: T) => f32 when is_same::<T, c64>()
+```
+
+The modulus of a single-precision complex number.
+
+- Example: `abs(c64(3.0)+4.0i)` gives `5`
+
+#### `abs`
+
+```camel
+abs: (z: T) => float when is_same::<T, c128>()
+```
+
+The modulus of a double-precision complex number.
+
+- Example: `abs(3.0+4.0i)` gives `5`
 
 #### `sign`
 
 ```camel
-sign: (x: i32) => i32
-sign: (x: int) => int
-sign: (x: f32) => f32
-sign: (x: float) => float
+sign: (x: T) => T when is_real::<T>()
 ```
 
--1, 0 or 1 by the sign of x, in the type of x. The sign of a NaN is NaN.
+-1, 0 or 1 by the sign of x, in the type of x. A zero and a NaN are returned as they are.
 
-- Pure.
 - Example: `sign(-2.5)` gives `-1`
 
 #### `is_nan`
 
 ```camel
-is_nan: (x: f32) => bool
-is_nan: (x: float) => bool
+is_nan: (x: T) => bool when is_float::<T>()
 ```
 
 Whether x is a NaN.
 
-- Pure.
 - Example: `is_nan(inf - inf)` gives `true`
 
 #### `is_inf`
 
 ```camel
-is_inf: (x: f32) => bool
-is_inf: (x: float) => bool
+is_inf: (x: T) => bool when is_float::<T>()
 ```
 
 Whether x is positive or negative infinity.
 
-- Pure.
 - Example: `is_inf(1.0)` gives `false`
+
+#### `is_finite`
+
+```camel
+is_finite: (x: T) => bool when is_float::<T>()
+```
+
+Whether x is neither a NaN nor an infinity.
+
+- Example: `is_finite(1.0)` gives `true`
+
+### Complex numbers
+
+The parts of a complex number are native: the result type is not the argument's.
+
+#### `re`
+
+```camel
+re: (z: c64) => f32
+re: (z: c128) => float
+```
+
+The real part of a complex number.
+
+- Example: `re(3.0+4.0i)` gives `3.0`
+
+#### `im`
+
+```camel
+im: (z: c64) => f32
+im: (z: c128) => float
+```
+
+The imaginary part of a complex number.
+
+- Example: `im(3.0+4.0i)` gives `4.0`
+
+#### `conj`
+
+```camel
+conj: (z: T) => T when is_same::<T, c64>()
+conj: (z: T) => T when is_same::<T, c128>()
+```
+
+The conjugate of a complex number: the imaginary part is negated, a zero's sign included.
+
+- Example: `conj(3.0+4.0i)` gives `3-4i`
 
 ### Integers
 
 #### `gcd`
 
 ```camel
-gcd: (a: i32, b: i32) => i32
-gcd: (a: int, b: int) => int
+gcd: (a: T, b: T) => T when is_integer::<T>()
 ```
 
-The greatest common divisor, never negative; gcd(0, 0) is 0.
+The greatest common divisor, never negative; gcd(0, 0) is 0. The smallest integer, which has
+no positive counterpart, is not accepted.
 
-- Pure.
-- Failure: fault `InvalidArgument` when the result does not fit the type (the smallest integer with itself or with 0).
+- Failure: fault `InvalidArgument` when an argument is the smallest integer of its type.
 - Example: `gcd(12, 18)` gives `6`
 
 #### `lcm`
 
 ```camel
-lcm: (a: i32, b: i32) => i32
-lcm: (a: int, b: int) => int
+lcm: (a: T, b: T) => T when is_integer::<T>()
 ```
 
 The least common multiple, never negative; 0 when either argument is 0.
 
-- Pure.
-- Failure: fault `InvalidArgument` when the result does not fit the type.
+- Failure: fault `InvalidArgument` when an argument is the smallest integer, or the result does not fit the type.
 - Example: `lcm(4, 6)` gives `12`
-
-#### `bin`
-
-```camel
-bin: (x: i32) => string
-bin: (x: int) => string
-```
-
-The digits of x in base 2 with the prefix 0b; a negative number is shown as its 64-bit
-two's complement.
-
-- Pure.
-- Example: `bin(5)` gives `'0b101'`
-
-#### `oct`
-
-```camel
-oct: (x: i32) => string
-oct: (x: int) => string
-```
-
-The digits of x in base 8 with the prefix 0o.
-
-- Pure.
-- Example: `oct(8)` gives `'0o10'`
-
-#### `hex`
-
-```camel
-hex: (x: i32) => string
-hex: (x: int) => string
-```
-
-The digits of x in base 16, in upper case, with the prefix 0x.
-
-- Pure.
-- Example: `hex(255)` gives `'0xFF'`
 
 ### Bits
 
-Bit operations are functions, not operators. Integers are two's complement: `int` has 64
-bits, `i32` has 32.
-
-#### `shl`
-
-```camel
-shl: (x: i32, count: i32) => i32
-shl: (x: i32, count: int) => i32
-shl: (x: int, count: i32) => int
-shl: (x: int, count: int) => int
-```
-
-x shifted left by count bits: bits shifted out are lost and zeros come in, so the sign may
-change. The count may be of either integer type.
-
-- Pure.
-- Failure: fault `InvalidArgument` when count is negative or not below the width of x (64 for int, 32 for i32).
-- Example: `shl(1, 4)` gives `16`
-
-#### `shr`
-
-```camel
-shr: (x: i32, count: i32) => i32
-shr: (x: i32, count: int) => i32
-shr: (x: int, count: i32) => int
-shr: (x: int, count: int) => int
-```
-
-x shifted right by count bits, keeping the sign (an arithmetic shift): shr(-8, 1) is -4.
-
-- Pure.
-- Failure: fault `InvalidArgument` when count is negative or not below the width of x.
-- Example: `shr(256, 4)` gives `16`
+Bit operations are functions, not operators (`&` and `|` are logical). Integers are two's
+complement: `int` has 64 bits, `i32` has 32. One declaration per width, because the operator
+that runs differs; the name and the signature are one generic.
 
 #### `bit_and`
 
 ```camel
-bit_and: (a: i32, b: i32) => i32
-bit_and: (a: int, b: int) => int
+bit_and: (a: T, b: T) => T when is_same::<T, i32>()
+bit_and: (a: T, b: T) => T when is_same::<T, int>()
 ```
 
 The bits set in both a and b.
 
-- Pure.
 - Example: `bit_and(12, 10)` gives `8`
 
 #### `bit_or`
 
 ```camel
-bit_or: (a: i32, b: i32) => i32
-bit_or: (a: int, b: int) => int
+bit_or: (a: T, b: T) => T when is_same::<T, i32>()
+bit_or: (a: T, b: T) => T when is_same::<T, int>()
 ```
 
 The bits set in a or in b.
 
-- Pure.
 - Example: `bit_or(12, 10)` gives `14`
 
 #### `bit_xor`
 
 ```camel
-bit_xor: (a: i32, b: i32) => i32
-bit_xor: (a: int, b: int) => int
+bit_xor: (a: T, b: T) => T when is_same::<T, i32>()
+bit_xor: (a: T, b: T) => T when is_same::<T, int>()
 ```
 
 The bits set in exactly one of a and b.
 
-- Pure.
 - Example: `bit_xor(12, 10)` gives `6`
 
-#### `bit_not`
+#### `shl`
 
 ```camel
-bit_not: (x: i32) => i32
-bit_not: (x: int) => int
+shl: <count: int> (x: T) => T when is_same::<T, i32>()
+shl: <count: int> (x: T) => T when is_same::<T, int>()
 ```
 
-Every bit of x inverted; the same as the operator ~.
+x shifted left by count bits: bits shifted out are lost and zeros come in, so the sign may
+change.
 
-- Pure.
-- Example: `bit_not(0)` gives `-1`
+- Failure: fault `InvalidArgument` when count is negative or not below the width of x (64 for int, 32 for i32).
+- Example: `1->shl<4>` gives `16`
+
+#### `shr`
+
+```camel
+shr: <count: int> (x: T) => T when is_same::<T, i32>()
+shr: <count: int> (x: T) => T when is_same::<T, int>()
+```
+
+x shifted right by count bits, keeping the sign (an arithmetic shift): `-8->shr<1>` is -4.
+
+- Failure: fault `InvalidArgument` when count is negative or not below the width of x.
+- Example: `256->shr<4>` gives `16`
 
 <a id="statistics"></a>
 
-## `statistics`
+## `statistics`: variance, standard deviation, median and quantile
 
-Every function takes an array of numbers of one type (i32, int, f32 or float) and computes
-in float.
+Descriptive statistics of an array of floats, written in Camel on `array` (whose `mean` is the
+first of them).
 
-#### `mean`
-
-```camel
-mean: (xs: i32[]) => float
-mean: (xs: int[]) => float
-mean: (xs: f32[]) => float
-mean: (xs: float[]) => float
-```
-
-The arithmetic mean; 0 for an empty array.
-
-- Pure.
-- Example: `mean([1, 2, 3, 4])` gives `2.5`
-
-#### `stdev`
-
-```camel
-stdev: (xs: i32[]) => float
-stdev: (xs: int[]) => float
-stdev: (xs: f32[]) => float
-stdev: (xs: float[]) => float
-```
-
-The sample standard deviation (divisor n - 1); 0 for fewer than two elements.
-
-- Pure.
-- Example: `stdev([2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0])` gives `2.13809`
+Every function takes a float element type (`float`, `f32`, `bf16` or `f16`) and answers it.
+The elements are widened to f64, the statistic is computed there, and the result is rounded
+once into the element type: the rule of every float reduction. An array of integers is
+converted first (`xs->map<(x) => float(x)>`). A statistic that does not exist for the array
+(the standard deviation of one value) is a fault, as every reduction over too few elements is
+(design principles 7.7).
 
 #### `variance`
 
 ```camel
-variance: (xs: i32[]) => float
-variance: (xs: int[]) => float
-variance: (xs: f32[]) => float
-variance: (xs: float[]) => float
+variance: (xs: T[]) => T when is_float::<T>()
 ```
 
-The sample variance (divisor n - 1), the square of stdev; 0 for fewer than two elements.
+The sample variance (divisor n - 1).
 
-- Pure.
-- Example: `variance([1, 2, 3, 4])` gives `1.66667`
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Failure: fault `InvalidArgument` when the array has fewer than two elements.
+- Example: `[1.0, 2.0, 3.0, 4.0]->variance` gives `1.66667`
+
+#### `stdev`
+
+```camel
+stdev: (xs: T[]) => T when is_float::<T>()
+```
+
+The sample standard deviation (divisor n - 1).
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Failure: fault `InvalidArgument` when the array has fewer than two elements.
+- Example: `[2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]->stdev` gives `2.13809`
 
 #### `median`
 
 ```camel
-median: (xs: i32[]) => float?
-median: (xs: int[]) => float?
-median: (xs: f32[]) => float?
-median: (xs: float[]) => float?
+median: (xs: T[]) => T when is_float::<T>()
 ```
 
-The middle value of the sorted elements, the mean of the two middle ones for an even
-count; null for an empty array, NaN when an element is NaN.
+The middle value of the sorted elements, the mean of the two middle ones for an even count;
+NaN when an element is NaN.
 
-- Pure.
-- Example: `median([3, 1, 2]) ?? 0.0` gives `2`
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Failure: fault `InvalidArgument` when the array has no element.
+- Example: `[3.0, 1.0, 2.0]->median` gives `2`
 
 #### `quantile`
 
 ```camel
-quantile: <q: float> (xs: i32[]) => float?
-quantile: <q: float> (xs: int[]) => float?
-quantile: <q: float> (xs: f32[]) => float?
-quantile: <q: float> (xs: float[]) => float?
+quantile: <q: float> (xs: T[]) => T when is_float::<T>()
 ```
 
 The q-quantile, q from 0 to 1, by linear interpolation between the two nearest ranks
-(position q * (n - 1) of the sorted elements); null for an empty array, NaN when an
-element is NaN.
+(position q * (n - 1) of the sorted elements); NaN when an element is NaN.
 
-- Pure.
-- Failure: fault `InvalidArgument` when q is not between 0 and 1.
-- Example: `[1.0, 2.0, 3.0, 4.0, 5.0]->quantile<0.25> ?? 0.0` gives `2`
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Failure: fault `InvalidArgument` when q is not between 0 and 1, or the array has no element.
+- Example: `[1.0, 2.0, 3.0, 4.0, 5.0]->quantile<0.25>` gives `2`
 
 <a id="random"></a>
 
 ## `random`
 
-One generator for the whole process, and keyed functions that read none. The functions that
-draw from the generator are declared with effects and are never folded or merged by a pass;
-the keyed ones are pure, and the same key gives the same bits everywhere.
+Random numbers by key. A `Key` is a value; a function that draws takes a key and answers a
+number, and the same key gives the same bits on every device and every scheduler. Nothing is
+read or changed, so these functions are pure and an optimizer may share, move or batch them.
+To get several independent streams from one key, derive keys: `split(k)` gives two,
+`fold(k, i)` gives the i-th. A key is used for one draw, or to derive other keys, not both.
 
-After a seed the numbers are the same on every platform. The generator is the 64-bit Mersenne
-Twister (std::mt19937_64, seeded with the value as an unsigned 64-bit integer), and the draws
-are made by the project's own code (include/camel/utils/random.h), not by the C++ library's
-distributions, which differ between libraries: a float in [0, 1) is the generator's 64 bits
-times 2^-64; an integer in a range uses Lemire's method; a normal value uses Marsaglia's polar
-method (the second value of each pair is dropped); `shuffle` and `sample` take the generator's
-output modulo the number of places left.
+The generator is Philox4x32-10 (design principles 13.5). The integer functions are
+identical on every device. The normal distribution uses `log`, `sqrt`, `cos` and so holds
+to the error bound of `math`, not to the bit.
+
+Calls chain on what flows: the key is the data of a draw (`k->uniform::<f32>`), and what shapes
+the draw is configuration (`k->randint<1, 7>`, `xs->shuffle<k>`).
+
+For a program that wants a random number without passing keys there is one global stream, the
+resource `rng`: `seed(v)` starts it, `next_key()` takes the next key from it, and everything
+else is the keyed function applied to that key: `next_key()->randint<1, 7>`. Without `seed`
+the stream starts from seed 0, so a run is the same every time.
+
+### Keys
+
+#### `key`
+
+```camel
+key: (seed: int) => Key
+```
+
+The key of a seed.
+
+- Example: `key(42)` gives `{ hi: 0, lo: 42 }`
+
+#### `fold`
+
+```camel
+fold: (k: Key, i: int) => Key
+```
+
+The i-th key derived from k, i from 0. The same k and i always give the same key, and k is
+not changed.
+
+- Failure: fault `InvalidArgument` when i is negative.
+- Example: `key(42)->fold(3)`
+
+#### `split`
+
+```camel
+split: (k: Key) => (Key, Key)
+```
+
+Two independent keys derived from k: the same pair every time, and k is not changed.
+
+- Example: `let (a, b) = split(key(42))`
+
+### Draws
+
+#### `uniform`
+
+```camel
+uniform: (k: Key) => T when is_float::<T>()
+```
+
+A number drawn uniformly from 0 (included) to 1 (excluded).
+
+- Example: `key(42)->uniform::<f32>`
+
+#### `uniform_array`
+
+```camel
+uniform_array: <shape: int[]> (k: Key) => T[..] when is_float::<T>()
+```
+
+An array of the given shape; element i (row-major) is the scalar `uniform` of `fold(k, i)`.
+
+- Example: `key(42)->uniform_array::<f32><shape: [3, 4]>`
+
+#### `normal`
+
+```camel
+normal: (k: Key) => T when is_float::<T>()
+```
+
+A number drawn from the normal distribution with mean 0 and deviation 1 (Box-Muller).
+
+- Example: `key(42)->normal::<f32>`
+
+#### `normal_array`
+
+```camel
+normal_array: <shape: int[]> (k: Key) => T[..] when is_float::<T>()
+```
+
+An array of the given shape; element i (row-major) is the scalar `normal` of `fold(k, i)`.
+
+- Example: `key(42)->normal_array::<f32><shape: [3, 4]>`
+
+#### `randint`
+
+```camel
+randint: <low: int, high: int> (k: Key) => int
+```
+
+An integer drawn uniformly from low (included) to high (excluded).
+
+- Failure: fault `InvalidArgument` when high is not above low, or the range is wider than 2^62.
+- Example: `key(42)->randint<1, 7>`
+
+#### `permutation`
+
+```camel
+permutation: (k: Key, n: int) => int[]
+```
+
+A uniformly random permutation of 0 up to, not including, n: the positions ordered by one
+uniform draw each (the key folded with the position), ties keeping position order. Empty when n is not positive.
+
+- Example: `key(42)->permutation(4)`
+
+#### `shuffle`
+
+```camel
+shuffle: <k: Key> (xs: T[]) => T[]
+```
+
+The elements of xs in a random order, as a new array; xs is not changed.
+
+- Example: `[1, 2, 3]->shuffle<key(42)>`
+
+#### `choice`
+
+```camel
+choice: <k: Key> (xs: T[]) => T
+```
+
+One element of xs, drawn uniformly.
+
+- Failure: fault `InvalidArgument` when xs is empty.
+- Example: `['a', 'b', 'c']->choice<key(42)>`
+
+#### `sample`
+
+```camel
+sample: <k: Key, n: int> (xs: T[]) => T[]
+```
+
+n elements of xs drawn without replacement, as a new array.
+
+- Failure: fault `IndexOutOfRange` when n is negative or above the number of elements.
+- Example: `[1, 2, 3, 4]->sample<key(42), 2>`
+
+### The global stream
 
 #### `seed`
 
 ```camel
-seed: (value: int) => void
+seed: (value: int) => void uses rng
 ```
 
-Sets the state of the generator: the same seed gives the same sequence.
+Starts the global stream: the same seed gives the same sequence of keys.
 
-- With effects: sets the generator.
 - Example: `seed(42)`
+
+#### `next_key`
+
+```camel
+next_key: () => Key uses rng
+```
+
+The next key of the global stream, and the stream moves on: two calls give two keys.
+
+- Example: `next_key()`
 
 #### `rand`
 
@@ -3787,10 +3767,9 @@ Sets the state of the generator: the same seed gives the same sequence.
 rand: () => float
 ```
 
-A float drawn uniformly from 0 (included) to 1 (excluded).
+A number drawn uniformly from 0 (included) to 1 (excluded) from the global stream.
 
-- With effects: advances the generator.
-- Example: `rand()` gives `0.374540`
+- Example: `rand()`
 
 #### `randn`
 
@@ -3798,96 +3777,9 @@ A float drawn uniformly from 0 (included) to 1 (excluded).
 randn: () => float
 ```
 
-A float drawn from the normal distribution with mean 0 and deviation 1.
+A number drawn from the normal distribution with mean 0 and deviation 1, from the global stream.
 
-- With effects: advances the generator.
-- Example: `randn()` gives `-0.138264`
-
-#### `randint`
-
-```camel
-randint: (low: int, high: int) => int
-```
-
-An integer drawn uniformly from low to high, both included; the two are swapped when low is
-above high.
-
-- With effects: advances the generator.
-- Example: `randint(1, 6)` gives `4`
-
-#### `choice`
-
-```camel
-choice: (xs: T[]) => T
-```
-
-One element of xs, drawn uniformly.
-
-- With effects: advances the generator.
-- Failure: fault `InvalidArgument` when xs is empty.
-- Example: `choice(['a', 'b', 'c'])` gives `'b'`
-
-#### `sample`
-
-```camel
-sample: (xs: T[], n: int) => T[]
-```
-
-n elements of xs drawn without replacement, as a new array.
-
-- With effects: advances the generator.
-- Failure: fault `InvalidArgument` when n is negative or above the number of elements.
-- Example: `sample([1, 2, 3, 4], 2)` gives `[3, 1]`
-
-#### `shuffle`
-
-```camel
-shuffle: (xs: T[]) => T[]
-```
-
-The elements of xs in a random order, as a new array; xs is not changed.
-
-- With effects: advances the generator.
-- Example: `shuffle([1, 2, 3])` gives `[2, 3, 1]`
-
-#### `key`
-
-```camel
-key: (seed: int) => { hi: int, lo: int }
-```
-
-A 128-bit key derived from a seed, as the struct `{ hi: int, lo: int }` (the high and the low
-half, as signed int64 bits). Pure: it reads no generator and the same seed gives the same key
-on every scheduler, in translated C++, and on every platform.
-
-- Pure.
-- Example: `key(42)` gives `{ hi: 1350887118657991639, lo: -7139630017956984517 }`
-
-#### `split`
-
-```camel
-split: (key: { hi: int, lo: int }) => ({ hi: int, lo: int }, { hi: int, lo: int })
-```
-
-Two independent keys derived from key: split(key) gives the same pair every time, and does
-not change key.
-
-- Pure.
-- Example: `let (a, b) = split(key(42))`
-
-#### `permutation`
-
-```camel
-permutation: (key: { hi: int, lo: int }, n: int) => int[]
-```
-
-A uniformly random permutation of [0, n) by a Fisher-Yates shuffle driven by key's Philox
-stream. Pure: the same key and n give the same permutation everywhere, it reads no generator
-and does not change key; n = 0 gives [] and n = 1 gives [0].
-
-- Pure.
-- Failure: fault `InvalidArgument` when n is negative.
-- Example: `permutation(key(42), 4)` gives `[1, 0, 2, 3]`
+- Example: `randn()`
 
 <a id="time"></a>
 
@@ -4170,8 +4062,8 @@ delete; a file or a symbolic link is an error too.
 
 The terminal as a keyboard: what has been typed and not yet read, the keys themselves, and raw
 mode. Reading is a use of the resource `stdin`, so reads and the changes of mode keep their
-written order. Writing to the terminal and reading a whole line are the prelude's
-(`print`, `println`, `eprintln`, `input`).
+written order. `input` reads a whole line after writing its prompt; writing to the terminal is
+the prelude's (`print`, `println`, `eprintln`).
 
 #### `set_terminal_raw_mode`
 
@@ -4186,6 +4078,18 @@ off always succeeds. Raw mode is left again when the program ends.
 - Failure: error value `NotATerminal` when raw mode is asked for and standard input is not a terminal (a pipe, a file); error value `IOError` when the terminal refuses.
 - Example (a fragment, not compiled): `set_terminal_raw_mode(true)`
 - Why it is not compiled: changes the terminal when it runs, and the example only has the `void!` result to show
+
+#### `input`
+
+```camel
+input: (prompt: string) => string
+```
+
+Writes prompt to standard output and reads one line from standard input, without its line end.
+
+- With effects: writes standard output, reads standard input.
+- Example (a fragment, not compiled): `input('name: ')`
+- Why it is not compiled: waits for a line the example program is not given
 
 #### `has_input`
 
@@ -4736,6 +4640,19 @@ declarations of the name a call reached.
 
 - Example: `with_probe<1>([5, 6])` gives `11002`
 
+#### `arity_probe`
+
+```camel
+arity_probe: <tag: int, extra: int[] = []> (f: F, example: E) => int when is_function::<F>()
+```
+
+An operator that wants a function and an example and writes `when is_function::<F>()`, the
+condition a pass writes: the count of ordinary parameters (a pass takes one) tells the two
+apart, so this is an operator, exported and callable with its `with` arguments by name, as
+`onnx::export_model` is. It gives `tag * 10 + len(extra)`.
+
+- Example: `arity_probe<7, [1]>((x: int): int => x, 0)` gives `71`
+
 <a id="this"></a>
 
 ## `this`
@@ -4755,42 +4672,46 @@ The Zen of Camel, the text of the file ZEN.
 
 <a id="graph"></a>
 
-## `graph`: a program as a value
+## `graph`: the graph of a function as a value
 
-### The program
+The graph of a function, as a value. A function is a graph; this module reads it and, in a
+transaction, edits it. The handles `Graph`, `Node`, `Op`, `TypeRef`, `Region` and `Tag` name
+things inside the graphs of one function and compare with `==` and `!=`. Reads are pure.
 
-#### `current`
+A pass is a function from a function to a function of the same type, `(f: F) => F!`, so it
+applies to one function, `loss->opt::fold`, or to the program's entry on the pipeline,
+`camel prog.cml opt::fold std::nvm`. A pass written in Camel opens a transaction on `f`
+(`open`), replaces and erases nodes, and commits (`commit`), which gives the changed function:
+the same type, the captured values it had, and every graph nothing changed shared. What a pass
+reads of the program around the function (declarations, tags, facts) is read through the
+function; no snapshot of the program is in this interface.
 
-```camel
-current: () => Program
-```
+A module that holds passes is compiled as a program of its own, whose entry is the pass: its
+module-level values are computed before the pass runs. It may import modules written in C++ and
+libraries written in Camel (for example `array`); the imports are declared and built with it.
 
-The Program the running program was compiled to: an immutable snapshot, whose graphs a pass reads.
+### The graphs of a function
 
-- Pure.
-- Example: `graphs(current())`
-
-#### `graphs`
-
-```camel
-graphs: (p: Program) => Graph[]
-```
-
-Every graph of the program, in the order of their ids.
-
-- Pure.
-- Example: `len(graphs(current()))`
-
-#### `root`
+#### `graph_of`
 
 ```camel
-root: (p: Program) => Graph
+graph_of: (f: F) => Graph when is_function::<F>()
 ```
 
-The entry graph of the program.
+The graph of a function value: its body.
 
-- Pure.
-- Example: `name(root(current()))`
+- Example: `graph_of((x: int): int => x + 1)`
+
+#### `graphs_of`
+
+```camel
+graphs_of: (f: F) => Graph[] when is_function::<F>()
+```
+
+The graph of a function value and every graph it calls, directly or not, in the order of
+their ids; each graph once.
+
+- Example: `len(graphs_of((x: int): int => x + 1))`
 
 #### `name`
 
@@ -4800,8 +4721,7 @@ name: (g: Graph) => string
 
 The name of the graph.
 
-- Pure.
-- Example: `name(root(current()))` gives `'__root__'`
+- Example: `name(graph_of((x: int): int => x + 1))`
 
 #### `nodes`
 
@@ -4811,8 +4731,7 @@ nodes: (g: Graph) => Node[]
 
 The nodes of the graph in NodeId order; the places of removed nodes are skipped.
 
-- Pure.
-- Example: `nodes(root(current()))`
+- Example: `nodes(graph_of((x: int): int => x + 1))`
 
 ### Reading nodes
 
@@ -4824,8 +4743,8 @@ inputs: (n: Node) => Node[]
 
 The nodes whose values `n` takes as ordinary inputs, in order.
 
-- Pure.
-- Example: `inputs(n)`
+- Example (a fragment, not compiled): `inputs(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `with_inputs`
 
@@ -4835,19 +4754,32 @@ with_inputs: (n: Node) => Node[]
 
 The nodes whose values `n` takes as with inputs.
 
-- Pure.
-- Example: `with_inputs(n)`
+- Example (a fragment, not compiled): `with_inputs(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
-#### `ctrl_inputs`
+#### `sync_inputs`
 
 ```camel
-ctrl_inputs: (n: Node) => Node[]
+sync_inputs: (n: Node) => Node[]
 ```
 
-The nodes `n` waits for (control inputs).
+The nodes that must run before `n` when both run, because a sync block puts them in one chain
+(the sync edges of design principles 3.1).
 
-- Pure.
-- Example: `ctrl_inputs(n)`
+- Example (a fragment, not compiled): `sync_inputs(n)`
+- Why it is not compiled: n is a node of the surrounding pass
+
+#### `order_inputs`
+
+```camel
+order_inputs: (n: Node) => Node[]
+```
+
+The nodes that must run before `n` when both run, because they use the same resource (the
+order edges of design principles 3.1); an order edge never makes a node run.
+
+- Example (a fragment, not compiled): `order_inputs(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `users`
 
@@ -4857,8 +4789,8 @@ users: (n: Node) => Node[]
 
 The nodes that read `n` as an input of any kind, once each, in NodeId order.
 
-- Pure.
-- Example: `users(n)`
+- Example (a fragment, not compiled): `users(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `value_users`
 
@@ -4868,8 +4800,8 @@ value_users: (n: Node) => Node[]
 
 The nodes that read the value of `n` (ordinary or with input), once each.
 
-- Pure.
-- Example: `len(value_users(n)) == 0`
+- Example (a fragment, not compiled): `len(value_users(n)) == 0`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `kind`
 
@@ -4879,8 +4811,8 @@ kind: (n: Node) => NodeKind
 
 The kind of the node.
 
-- Pure.
-- Example: `kind(n) == NodeKind::Oper`
+- Example (a fragment, not compiled): `kind(n) == NodeKind::Oper`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `op`
 
@@ -4890,8 +4822,8 @@ op: (n: Node) => Op?
 
 The operator of an operation node, null for any other node.
 
-- Pure.
-- Example: `op(n)`
+- Example (a fragment, not compiled): `op(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `op_name`
 
@@ -4901,8 +4833,8 @@ op_name: (o: Op) => string
 
 The URI of the operator, such as `:op/add_l`.
 
-- Pure.
-- Example: `op_name(o)`
+- Example (a fragment, not compiled): `op_name(o)`
+- Why it is not compiled: o is the operator of a node of the surrounding pass
 
 #### `is_pure`
 
@@ -4912,8 +4844,8 @@ is_pure: (n: Node) => bool
 
 Whether the node is an operation whose operator is declared pure.
 
-- Pure.
-- Example: `is_pure(n)`
+- Example (a fragment, not compiled): `is_pure(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `is_anchor`
 
@@ -4921,10 +4853,11 @@ Whether the node is an operation whose operator is declared pure.
 is_anchor: (n: Node) => bool
 ```
 
-Whether the node anchors its graph (its exit, output or return, or the end of a branch arm); a transaction does not replace or erase it.
+Whether the node anchors its graph (its exit, output or return, or the end of a branch arm); a
+transaction does not replace or erase it.
 
-- Pure.
-- Example: `is_anchor(n)`
+- Example (a fragment, not compiled): `is_anchor(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `is_written_slot`
 
@@ -4932,10 +4865,12 @@ Whether the node anchors its graph (its exit, output or return, or the end of a 
 is_written_slot: (n: Node) => bool
 ```
 
-Whether the value of the node may be written in place: it is passed to a `var` parameter or to an operator that changes its operand, directly or through gates. A rewrite must not treat such a node as one value.
+Whether the value of the node may be written in place: it is passed to a `var` parameter or to
+an operator that changes its operand, directly or through gates. A rewrite must not treat such
+a node as one value.
 
-- Pure.
-- Example: `is_written_slot(n)`
+- Example (a fragment, not compiled): `is_written_slot(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `is_constant`
 
@@ -4945,8 +4880,8 @@ is_constant: (n: Node) => bool
 
 Whether the node is a constant of the graph.
 
-- Pure.
-- Example: `is_constant(n)`
+- Example (a fragment, not compiled): `is_constant(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `type_of`
 
@@ -4956,8 +4891,8 @@ type_of: (n: Node) => TypeRef?
 
 The type of the node's value, null when it has none.
 
-- Pure.
-- Example: `type_of(n)`
+- Example (a fragment, not compiled): `type_of(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `type_name`
 
@@ -4967,8 +4902,8 @@ type_name: (t: TypeRef) => string
 
 The type as a program writes it.
 
-- Pure.
-- Example: `type_name(t)` gives `'int'`
+- Example (a fragment, not compiled): `type_name(t)` gives `'int'`
+- Why it is not compiled: t is the type of a node of the surrounding pass
 
 #### `callee`
 
@@ -4978,8 +4913,8 @@ callee: (n: Node) => Graph?
 
 The graph a call or function node names, null for any other node.
 
-- Pure.
-- Example: `callee(n)`
+- Example (a fragment, not compiled): `callee(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `tags`
 
@@ -4989,8 +4924,8 @@ tags: (n: Node) => string
 
 The attributes of the node as text (empty when there are none).
 
-- Pure.
-- Example: `tags(n)`
+- Example (a fragment, not compiled): `tags(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `origin`
 
@@ -5000,25 +4935,20 @@ origin: (n: Node) => int
 
 The source origin id of the node, 0 when unknown.
 
-- Pure.
-- Example: `origin(n)`
+- Example (a fragment, not compiled): `origin(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `constant`
 
 ```camel
-constant: (n: Node, sample: i32) => i32?
-constant: (n: Node, sample: int) => int?
-constant: (n: Node, sample: f32) => f32?
-constant: (n: Node, sample: float) => float?
-constant: (n: Node, sample: bool) => bool?
-constant: (n: Node, sample: string) => string?
+constant: (n: Node) => T? when is_ordered::<T>()
 ```
 
-The value of a constant node of the type of the sample (a number, a bool or a string; the value
-of the sample is not read), null for any other node.
+The value of a constant node as the type T (a number, a bool or a string), null for a node
+that is no constant of that type. T is written (`constant::<int>(n)`).
 
-- Pure.
-- Example: `constant(n, 0)` gives `int?`
+- Example (a fragment, not compiled): `constant::<int>(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
 ### Regions
 
@@ -5031,8 +4961,8 @@ region_of: (n: Node) => Region
 The innermost region the node is in. Every node is in one: region 0 is the body, also in a
 graph whose region table is empty.
 
-- Pure.
-- Example: `region_of(n)`
+- Example (a fragment, not compiled): `region_of(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `region_kind`
 
@@ -5043,8 +4973,8 @@ region_kind: (r: Region) => RegionKind
 The kind of the region: `Root` (the function body, region 0), `Arm`, `LoopCond`, `LoopBody`,
 `Inline`, `Block` or `Dead`.
 
-- Pure.
-- Example: `region_kind(r) == RegionKind::Inline`
+- Example (a fragment, not compiled): `region_kind(r) == RegionKind::Inline`
+- Why it is not compiled: r is a region of the surrounding pass
 
 #### `region_parent`
 
@@ -5054,8 +4984,8 @@ region_parent: (r: Region) => Region?
 
 The region the region is in; null for the body (region 0).
 
-- Pure.
-- Example: `region_parent(r)`
+- Example (a fragment, not compiled): `region_parent(r)`
+- Why it is not compiled: r is a region of the surrounding pass
 
 #### `show`
 
@@ -5065,8 +4995,8 @@ show: (n: Node) => string
 
 The node on one line: its id, kind, operator and type.
 
-- Pure.
-- Example: `show(n)` gives `'%2 Oper :op/mul_l : int'`
+- Example (a fragment, not compiled): `show(n)` gives `'%2 Oper :op/mul_l : int'`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `id`
 
@@ -5076,10 +5006,11 @@ id: (h: Node) => int
 id: (h: Op) => int
 ```
 
-The number a graph, a node or an operator is known by inside its Program: the GraphId, the NodeId or the OperId. Stable for the Program, so a pass can key a map by it.
+The number a graph, a node or an operator is known by inside its function: the GraphId, the
+NodeId or the OperId. Stable for the function, so a pass can key a map by it.
 
-- Pure.
-- Example: `id(n)`
+- Example (a fragment, not compiled): `id(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
 ### Facts
 
@@ -5089,21 +5020,21 @@ The number a graph, a node or an operator is known by inside its Program: the Gr
 effects: (g: Graph) => Effects
 ```
 
-What running the graph once does besides computing its value: `external`, `writes_variables`, `may_fault`, `may_not_terminate`.
+What running the graph once does besides computing its value: `external`, `writes_variables`,
+`may_fault`, `may_not_terminate`.
 
-- Pure.
-- Example: `effects(g).external`
+- Example: `effects(graph_of((x: int): int => x + 1)).external`
 
-#### `shape`
+#### `shape_text`
 
 ```camel
-shape: (n: Node) => string?
+shape_text: (n: Node) => string?
 ```
 
-The tensor shape of the node's value as text, null when its value is no tensor.
+The shape of the node's value as text, null when its value is no array of known element type.
 
-- Pure.
-- Example: `shape(n)` gives `'f32 [2, 3]'`
+- Example (a fragment, not compiled): `shape_text(n)` gives `'f32 [2, 3]'`
+- Why it is not compiled: n is a node of the surrounding pass
 
 #### `permissions`
 
@@ -5113,94 +5044,52 @@ permissions: (n: Node) => int
 
 The numeric permissions the program granted the node, as a bit set (0 for none).
 
-- Pure.
-- Example: `permissions(n)`
-
-### Function values
-
-#### `program_of`
-
-```camel
-program_of: (f: F) => Program
-```
-
-The Program a function value lives in.
-
-- Pure.
-- Example: `program_of((x: float): float => x + 1.0)`
-
-#### `graph_of`
-
-```camel
-graph_of: (f: F) => Graph
-```
-
-The graph of a function value.
-
-- Pure.
-- Example: `graph_of((x: float): float => x + 1.0)`
+- Example (a fragment, not compiled): `permissions(n)`
+- Why it is not compiled: n is a node of the surrounding pass
 
 ### Transactions
-
-#### `open_function`
-
-```camel
-open_function: (f: F) => Txn
-```
-
-Opens a transaction on a function value's graph and the graphs it reaches.
-
-- With effects: opens a transaction.
-- Example: `open_function((x: float): float => x + 1.0)`
-
-#### `to_function`
-
-```camel
-to_function: (t: Txn, sample: F) => F!
-```
-
-Commits a transaction of `open_function` to a Program of its own (the running program is left as it is) and gives the function value, of the type of the sample. The error value has the kinds of `commit`, `SignatureMismatch` (the graph has another signature than the sample) or `ClosureNotEmpty` (the function captures values).
-
-- With effects: changes the transaction.
-- Example: `to_function(t, (x: float): float => x + 1.0)`
 
 #### `open`
 
 ```camel
-open: (p: Program) => Txn
+open: (f: F) => Txn<F> when is_function::<F>()
 ```
 
-Opens a transaction on the Program: a private workspace in which graphs are edited. Nothing changes until `commit`.
+Opens a transaction on a function: a private workspace in which its graphs are edited.
+Nothing changes until `commit`.
 
-- With effects: opens a transaction.
-- Example: `let t = open(p)`
+- Example (a fragment, not compiled): `let t = open((x: int): int => x + 1)`
+- Why it is not compiled: the transaction is closed by commit or abort
 
 #### `replace`
 
 ```camel
-replace: (t: Txn, old: Node, new: Node) => void
+replace: (t: Txn<F>, old: Node, new: Node) => void uses t
 ```
 
-Puts the node `new` of the same graph in the place of `old`, which is removed; what `old` ordered stays ordered. A fault when a node anchors its graph, when `new` is computed from `old`, or when the transaction is over.
+Puts the node `new` of the same graph in the place of `old`, which is removed; what `old`
+ordered stays ordered.
 
-- With effects: changes the transaction.
-- Example: `replace(t, n, inputs(n)[0])`
+- Failure: fault `InvalidArgument` when a node anchors its graph, when `new` is computed from `old`, or when the transaction is over.
+- Example (a fragment, not compiled): `replace(t, n, inputs(n)[0])`
+- Why it is not compiled: t is an open transaction and n a node of its graph
 
 #### `erase`
 
 ```camel
-erase: (t: Txn, n: Node) => void
+erase: (t: Txn<F>, n: Node) => void uses t
 ```
 
-Removes a node whose value nobody reads. A fault when the value is read or the node anchors its graph.
+Removes a node whose value nobody reads.
 
-- With effects: changes the transaction.
-- Example: `erase(t, n)`
+- Failure: fault `InvalidArgument` when the value is read, when the node anchors its graph, or when the transaction is over.
+- Example (a fragment, not compiled): `erase(t, n)`
+- Why it is not compiled: t is an open transaction and n a node of its graph
 
 #### `eval`
 
 ```camel
-eval: (t: Txn, n: Node) => Node?
+eval: (t: Txn<F>, n: Node) => Node? uses t
 ```
 
 Evaluates the pure operator of the node over its constant operands and gives the node holding
@@ -5209,135 +5098,149 @@ node is no pure operation, or evaluating it faults). The node the answer names i
 transaction's to put in place of `n` with `replace`. A constant expression that can only fault
 is left as written and warned about, as the C++ fold does.
 
-- With effects: changes the transaction.
-- Example: `eval(t, n)`
-
-#### `commit`
-
-```camel
-commit: (t: Txn) => Program!
-```
-
-Checks the edits and makes the new Program, which shares every graph nothing changed; the transaction is over. The new Program is a value: the one the transaction was opened on, and the running program, stay as they were (design principles 9.1), so two transactions over one Program commit to two Programs. The error value has the kind `GraphInvalid` (an edit broke an invariant; the message names the graph, the node and the edge) or `TxnUsed` (the transaction was over already).
-
-- With effects: changes the transaction.
-- Failure: error value `GraphInvalid` when an edit broke an invariant; error value `TxnUsed` when the transaction was over already.
-- Example: `commit(t)`
-
-#### `abort`
-
-```camel
-abort: (t: Txn) => void
-```
-
-Drops the transaction.
-
-- With effects: changes the transaction.
-- Example: `abort(t)`
+- Example (a fragment, not compiled): `eval(t, n)`
+- Why it is not compiled: t is an open transaction and n a node of its graph
 
 #### `add_constant`
 
 ```camel
-add_constant: (t: Txn, g: Graph, value: i32) => Node
-add_constant: (t: Txn, g: Graph, value: int) => Node
-add_constant: (t: Txn, g: Graph, value: f32) => Node
-add_constant: (t: Txn, g: Graph, value: float) => Node
-add_constant: (t: Txn, g: Graph, value: bool) => Node
-add_constant: (t: Txn, g: Graph, value: string) => Node
+add_constant: (t: Txn<F>, g: Graph, value: T) => Node uses t when is_ordered::<T>()
 ```
 
 Adds a value the transaction creates to the graph's static values and gives the node that
-holds it. The value may be a number, a bool or a string; a string is copied into the permanent
+holds it. The value is a number, a bool or a string; a string is copied into the permanent
 space because a value a transaction creates may be live at a safepoint where its draft is not
 traced.
 
-- With effects: changes the transaction.
-- Example: `add_constant(t, g, 7)`
+- Example (a fragment, not compiled): `add_constant(t, g, 7)`
+- Why it is not compiled: t is an open transaction and g a graph of it
+
+#### `commit`
+
+```camel
+commit: (t: Txn<F>) => F! uses t
+```
+
+Checks the edits and makes the changed function: the same type as the one that was opened, with
+the values it captured, sharing every graph nothing changed. The transaction is over.
+
+- Failure: error value `GraphConflict` when a graph the transaction touched changed since it was opened; error value `GraphInvalid` when an edit broke an invariant (the message names the graph, the node and the edge); error value `TxnUsed` when the transaction was over already.
+- Example (a fragment, not compiled): `commit(t)`
+- Why it is not compiled: t is an open transaction
+
+#### `abort`
+
+```camel
+abort: (t: Txn<F>) => void uses t
+```
+
+Drops the transaction.
+
+- Example (a fragment, not compiled): `abort(t)`
+- Why it is not compiled: t is an open transaction
 
 <a id="rewrite"></a>
 
 ## `rewrite`: rules applied to a program
 
-Rewrite engines and rule readers: `rewrite`, `saturate` and `extract` apply an array of `Rule`
-values to a `Program`, `check` tests rules on random programs, and the four readers report a
-`Rule`'s name, direction, required rewrites and added constants. `run` is `rewrite` with the
-round budget explicit and the cost kept: it answers a `Run`, the program and what the
-application cost. Its `explain` with parameter opens the attribution record; `explain`
-prints the shortest chain between two values and `explain_all` every rewrite that was made,
-each with the rule, round, graph and nodes (rewrite design 8.7); `why_not` says why a rule did
-not fire at a value. A rule that stops a rewrite without changing the program is a fault,
-and `strict` restricts the float rules to the ones that hold bit for bit.
+Rewrite engines and their records. `rewrite`, `saturate` and `extract` are passes, functions
+from a function to a function of the same type, `(f: F) => F!`, with the rule set and the
+choices in angle brackets: `f->rewrite<rules>`, `f->saturate<rules, rounds: 8>`,
+`f->extract<rules::nodes>`. A rule set is an ordinary `Rule[]`. `run` is `rewrite` with the
+cost kept: it answers a `Run`, the function and what the application cost. `check` tests rules
+on random instances. `explain` prints the shortest chain between two values of a run,
+`explain_all` every rewrite that was made, and `why_not` says why a rule did not fire at a
+value (rewrite design 8.7). A rule that stops a rewrite without changing the function is a
+fault, and `strict` restricts the float rules to the ones that hold bit for bit.
 
 The module also exports the reserved groups the language's own `rule`, `rule` with `when`, and
-`fact` declarations compile to (`rewrite:rule`, `rewrite:rule_when`,
-`rewrite:fact`). They have no callable Camel name, so they are not declared here and
-`inspect --ops` hides them from the name comparison.
+`fact` declarations compile to (`rewrite:rule`, `rewrite:rule_when`, `rewrite:fact`). They have
+no callable Camel name, so they are not declared here.
+
+### The passes
 
 #### `rewrite`
 
 ```camel
-rewrite: (p: Program, rules: Rule[]) => Program!
-rewrite: (p: Program, rules: Rule[], strict: bool) => Program!
+rewrite: <rules: Rule[], strict: bool = false> (f: F) => F! when is_function::<F>()
 ```
 
-Applies `rules` to `p` until no rule changes the program, and gives the rewritten program.
+Applies `rules` until no rule changes the function, and gives the rewritten function.
 
-- With effects: runs the rules' functions.
 - Failure: error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow.
-- Example: `rewrite(p, rules)` gives `the rewritten program`
+- Example (a fragment, not compiled): `f->rewrite<rules>`
+- Why it is not compiled: a rule set comes from the caller
 
 #### `saturate`
 
 ```camel
-saturate: (p: Program, rules: Rule[], rounds: int) => Program!
-saturate: (p: Program, rules: Rule[], rounds: int, strict: bool) => Program!
+saturate: <rules: Rule[], rounds: int = 6, strict: bool = false> (f: F) => F! when is_function::<F>()
 ```
 
-Applies the rearranging rules too, for at most `rounds` rounds, and gives the smallest
-writing of the value it finds.
+Applies the rearranging rules too, for at most `rounds` rounds, and leaves the function with
+every writing the saturation found; `extract` chooses among them.
 
-- With effects: runs the rules' functions.
 - Failure: error value `RuleInvalid` when a rule does not compile.
-- Example: `saturate(p, rules, 20)` gives `the smallest writing found`
+- Example (a fragment, not compiled): `f->saturate<rules, rounds: 20>`
+- Why it is not compiled: a rule set comes from the caller
 
 #### `extract`
 
 ```camel
-extract: (p: Program, cost: string) => Program!
+extract: <cost: (o: Op, inputs: float[]) => float> (f: F) => F! when is_function::<F>()
 ```
 
-Extracts the program `p` in the cost model named `cost` (for example `"size"`).
+Chooses one writing of every value that has several, the one of least total cost. The cost of
+a writing is `cost(o, inputs)`: the operator and the costs of the writings of its inputs.
 
-- With effects: rewrites the program and runs the cost model.
-- Failure: error value `NoCostModel` when there is no cost model named `cost`.
-- Example: `extract(p, 'size')` gives `the extracted program`
+- Example (a fragment, not compiled): `f->extract<rules::nodes>`
+- Why it is not compiled: the cost function comes from `rules`
+
+#### `run`
+
+```camel
+run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false> (f: F) => Run<F>! when is_function::<F>()
+```
+
+Applies `rules` one way, for at most `rounds` rounds, and gives the function it produced and
+what the application cost. This is `rewrite` with the round budget explicit and the cost kept.
+`explain: true` opens the attribution record (rewrite design 8.7): `explain` then reads back
+the shortest chain between two values, and `explain_all` every rewrite that was made.
+Recording is off unless it is asked for, so a plain application pays nothing for it.
+
+- Failure: error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow.
+- Example (a fragment, not compiled): `f->run<rules, rounds: 8, explain: true>`
+- Why it is not compiled: a rule set comes from the caller
+
+### Checking rules
 
 #### `check`
 
 ```camel
-check: (rules: Rule[], samples: int = 100, seed: int = 0, program: Program? = null) => CheckReport
+check: <samples: int = 100, seed: int = 0> (rules: Rule[]) => CheckReport
 ```
 
-Checks `rules` on `samples` random instances drawn with `seed`, and answers the verdict table
-(slice S0). Each row of the table carries, the instance (a generic law's type
-tuple), the verdict, what the verdict is about and the evidence or the reason for it; the
-verdicts are `proved`, `refuted` and `sampled`, and every line of the report wears one of them
-as its first word (the rule on `verification-verdict-surface`, 2). The sample
-stream of a rule follows the rule's identity -- its name and its instance's type tuple -- and
-not its place in `rules`, so a rule draws the same samples in any call (
-on `accuracy-check-sampling`, 1). A build without a solver can answer `sampled` and `refuted`
-and never `proved`: `proved` is a licence's proposition being established, which is not what
-comparing samples does.
+Checks `rules` on random instances drawn with `seed`: each row of the report carries the
+instance (a generic law's type tuple), the verdict, what the verdict is about and the evidence
+or the reason for it. The sample stream of a rule follows the rule's identity (its name and its
+instance's type tuple), not its place in `rules`, so a rule draws the same samples in any call.
+A build without a solver answers `Sampled` and `Refuted` and never `Proved`. A generic law is
+checked at the types every operator group registered.
 
-`samples` and `seed` have defaults, and `program` names the program whose own types a generic
-law is also checked at: the candidate set is the types every operator group registered, and
-then the types of the values the program has, each once, in the order its graphs write them
-(the rule on `generic-rule-check-surface-and-multi-parameter-instances`, 1).
-Left out, the candidate set is the registered types alone, so a call that gives no program
-reads exactly what it read before the parameter existed.
+- Example (a fragment, not compiled): `rules->check<samples: 1000, seed: 7>`
+- Why it is not compiled: a rule set comes from the caller
 
-- With effects: runs the rules' functions and draws random values.
-- Example: `check(rules, 1000, 7)` gives `the report`
+#### `check`
+
+```camel
+check: <over: F, samples: int = 100, seed: int = 0> (rules: Rule[]) => CheckReport when is_function::<F>()
+```
+
+The same, with the law also checked at the types of the values `over` has, each once, in the
+order its graphs write them.
+
+- Example (a fragment, not compiled): `rules->check<over: f>`
+- Why it is not compiled: a rule set and a function come from the caller
 
 #### `check_text`
 
@@ -5345,204 +5248,74 @@ reads exactly what it read before the parameter existed.
 check_text: (r: CheckReport) => string
 ```
 
-The report's fixed rendering, as a string: the same text `print` writes, for a caller that
-wants it as a value.
+The report's fixed rendering, one line per row, for a caller that wants it as a value.
 
-- Pure.
-- Example: `check_text(r)` gives `'sampled add_zero: proposition equality, evidence samples 100, ...'`
+- Example (a fragment, not compiled): `check_text(report)` gives `'sampled add_zero: proposition equality, evidence samples 100, ...'`
+- Why it is not compiled: a report comes from a check
 
-#### `check_row_count`
-
-```camel
-check_row_count: (r: CheckReport) => int
-```
-
-How many rows the table has: one per rule, or one per instance of a generic law.
-
-- Pure.
-- Example: `check_row_count(r)` gives `2`
-
-#### `check_rule`
+#### `coverage_table`
 
 ```camel
-check_rule: (r: CheckReport, row: int) => string!
-```
-
-The rule of one row: the law's name, without the type tuple an instance adds.
-
-- Pure.
-- Failure: error value `IndexError` when the report has no such row.
-- Example: `check_rule(r, 0)` gives `'add_zero'`
-
-#### `check_instance`
-
-```camel
-check_instance: (r: CheckReport, row: int) => string!
-```
-
-The type tuple of one row's instance, as written (`int`, `int, int`). Empty for a rule that is
-not a generic law.
-
-- Pure.
-- Failure: error value `IndexError` when the report has no such row.
-- Example: `check_instance(r, 0)` gives `'i32'`
-
-#### `check_verdict`
-
-```camel
-check_verdict: (r: CheckReport, row: int) => string!
-```
-
-One row's verdict: `proved`, `refuted` or `sampled`. The words are closed: a rule nothing could
-be examined on is `sampled` with its reason, never a fourth word.
-
-- Pure.
-- Failure: error value `IndexError` when the report has no such row.
-- Example: `check_verdict(r, 0)` gives `'sampled'`
-
-#### `check_proposition`
-
-```camel
-check_proposition: (r: CheckReport, row: int) => string!
-```
-
-What one row's verdict is about (the rule on
-`verification-licence-to-precondition`): `equality` for a rule that needs no permission,
-`real equality + IEEE on special values` for the rules that ask for `reassociate` or `contract`,
-and `error bound` for the ones that ask for `refine_accuracy` or `change_precision`.
-
-- Pure.
-- Failure: error value `IndexError` when the report has no such row.
-- Example: `check_proposition(r, 0)` gives `'equality'`
-
-#### `check_evidence`
-
-```camel
-check_evidence: (r: CheckReport, row: int) => string!
-```
-
-What one row's verdict rests on: `solver` when a solver established it, `samples <n>` when `n`
-samples were drawn, `counterexample` when a value is the witness, and `none` when nothing could
-be examined.
-
-- Pure.
-- Failure: error value `IndexError` when the report has no such row.
-- Example: `check_evidence(r, 0)` gives `'samples 100'`
-
-#### `check_reason`
-
-```camel
-check_reason: (r: CheckReport, row: int) => string!
-```
-
-Why a row says what it says when the answer is not a counterexample: the reason nothing was
-examined (`no numeric bound`), or the reason a rule the engine never fired on its own left side
-is `refuted`. Written in its own column and never left implicit, so a `sampled` that sampled is
-never read as one that did not.
-
-- Pure.
-- Failure: error value `IndexError` when the report has no such row.
-- Example: `check_reason(r, 0)` gives `''`
-
-#### `check_coverage`
-
-```camel
-check_coverage: (r: CheckReport, row: int) => string!
-```
-
-What the translation layer made of one row's rule: the proposition it read out
-of the rule's two sides -- `integer scalar int: (x + 0) = x`, with `, no premise yet` when the
-declaration carries a condition -- or `beyond translation coverage` followed by the reason it
-refused. The layer never guesses: a rule it cannot translate says which width, operator or node
-kind stopped it, and that rule is `sampled`, never `proved`. A later slice adds the floating
-widths and the conditions as premises; `check_coverage_table` is the boundary as a value.
-
-- Pure.
-- Failure: error value `IndexError` when the report has no such row.
-- Example: `check_coverage(r, 0)` gives `'integer scalar int: (x + 0) = x'`
-
-#### `check_coverage_table`
-
-```camel
-check_coverage_table: () => string
+coverage_table: string
 ```
 
 The declared coverage of the translation layer: the widths it translates (`int`, `i32`), the
 widths the design lists beside them and it does not translate yet (`float`, `f32`, `bf16`,
 `f16`), the operators it translates, what happens to integer division and remainder, what is
 beyond translation coverage, and that a rule's condition is not a premise yet (rewrite design
-8.1). The boundary is a value a reader can read and a test can pin, not a paragraph in a design
-document that drifts from the code.
+8.1). The boundary is a value a reader can read and a test can pin.
 
-- Pure.
-- Example: `check_coverage_table()` gives `'the coverage of the integer scalar translation\n...'`
+- A value: written without parentheses, a constant where it is used.
+- Example: `coverage_table` gives `'the coverage of the integer scalar translation\n...'`
 
-#### `run`
-
-```camel
-run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false> (p: Program) => Run<Program>!
-```
-
-Applies `rules` to `p` one way, for at most `rounds` rounds, and gives the program it produced
-and what the application cost. This is `rewrite` with the round budget explicit and the cost
-kept. The rule set, the budget and the choices are configuration, so they are `with`
-parameters, written at the call (design principles 4.4): `p->run<rules>`,
-`p->run<rules, explain: true>`, `p->run<rules, rounds: 8, strict: true>`. The first one has no
-default and must be written; `rounds` defaults to 16 and `strict` and `explain` to false.
-`explain: true` opens the attribution record (rewrite design 8.7): `explain` then reads back
-the shortest chain between two values, and `explain_all` every rewrite that was made. Recording
-is off unless it is asked for, so a plain application pays nothing for it.
-
-- With effects: runs the rules' functions, and nothing else.
-- Failure: error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow.
-- Example: `let rs: Rule[] = []; p->run<rs>` gives `the run`
+### Reading a run
 
 #### `explain`
 
 ```camel
-explain: (r: Run<Program>, a: Node, b: Node) => Proof!
+explain: <a: Node, b: Node> (r: Run<F>) => Proof!
 ```
 
 The shortest chain of rewrites of the run `r` that connects the values `a` and `b`, as the
-derivation `a = ... = b`: only that chain, not every step the run made (rewrite design 8.7).
-Each line names the rule and whether the step is read backwards; a chain through a value that
-was later rewritten away names it too. When two chains are equally short both are printed, in
-the order the rewrites were made. A run that recorded nothing, or that holds no chain between
-the two values, is refused as an error value, never answered with an empty chain.
+derivation `a = ... = b`: only that chain, not every step the run made. Each line names the
+rule and whether the step is read backwards; a chain through a value that was later rewritten
+away names it too. When two chains are equally short both are printed, in the order the
+rewrites were made.
 
-- Pure.
-- Failure: error value `NoAttribution` when the run was made without `explain: true`, and `InvalidArgument` for a value of another program; error value `NoChain` when no rewrite connects the two values.
-- Example: `explain(r, a, b)` gives `the chain between a and b`
+- Failure: error value `NoAttribution` when the run was made without `explain: true`; error value `InvalidArgument` for a value of another function; error value `NoChain` when no rewrite connects the two values.
+- Example (a fragment, not compiled): `r->explain<a, b>`
+- Why it is not compiled: a run and two of its values come from the caller
 
 #### `explain_all`
 
 ```camel
-explain_all: (r: Run<Program>) => Proof!
+explain_all: (r: Run<F>) => Proof!
 ```
 
 Every rewrite of the run `r`, in the order it made them, each naming the rule, the round, the
-graph and the nodes that matched, were produced and were erased (rewrite design 8.7). This is
-the full record `explain` narrows to one chain. A run that applied nothing is explained as
-such, not as an empty table.
+graph and the nodes that matched, were produced and were erased. This is the full record
+`explain` narrows to one chain.
 
-- Pure.
-- Failure: error value `NoAttribution` when the run was made without `explain: true`, and `InvalidArgument` for a value of another program.
-- Example: `explain_all(r)` gives `every rewrite the run made`
+- Failure: error value `NoAttribution` when the run was made without `explain: true`; error value `InvalidArgument` for a value of another function.
+- Example (a fragment, not compiled): `explain_all(r)`
+- Why it is not compiled: a run comes from the caller
 
 #### `why_not`
 
 ```camel
-why_not: (r: Run<Program>, rule: Rule, v: Node) => string!
+why_not: <rule: Rule, v: Node> (r: Run<F>) => string!
 ```
 
-Why the rule `rule` did not fire at the value `v` of the run `r` (rewrite design 8.7): the
-first place the left side fails to match, the value the pattern wanted there and the value the
-program has, a missing permission, or the rule's condition being false with the values it read.
-A rule that did fire at `v` is reported as such.
+Why the rule `rule` did not fire at the value `v` of the run `r`: the first place the left side
+fails to match, the value the pattern wanted there and the value the program has, a missing
+permission, or the rule's condition being false with the values it read. A rule that did fire
+at `v` is reported as such.
 
-- With effects: runs the rule's condition.
-- Failure: error value `NoAttribution` when the run was made without `explain: true`, and `InvalidArgument` for a value of another program.
-- Example: `why_not(r, target, v)` gives `the reason`
+- Failure: error value `NoAttribution` when the run was made without `explain: true`; error value `InvalidArgument` for a value of another function.
+- Example (a fragment, not compiled): `r->why_not<target, v>`
+- Why it is not compiled: a run, a rule and a value come from the caller
+
+### Reading a rule
 
 #### `rule_name`
 
@@ -5552,8 +5325,8 @@ rule_name: (r: Rule) => string
 
 The name of the rule `r`.
 
-- Pure.
-- Example: `rule_name(r)` gives `'int_add_zero'`
+- Example (a fragment, not compiled): `rule_name(r)` gives `'int_add_zero'`
+- Why it is not compiled: a rule comes from the library
 
 #### `rule_two_way`
 
@@ -5563,8 +5336,8 @@ rule_two_way: (r: Rule) => bool
 
 Whether the rule `r` may also be applied from right to left.
 
-- Pure.
-- Example: `rule_two_way(r)` gives `false`
+- Example (a fragment, not compiled): `rule_two_way(r)` gives `false`
+- Why it is not compiled: a rule comes from the library
 
 #### `rule_needs`
 
@@ -5574,8 +5347,8 @@ rule_needs: (r: Rule) => int
 
 How many rewrites the rule `r` needs before it may fire.
 
-- Pure.
-- Example: `rule_needs(r)` gives `0`
+- Example (a fragment, not compiled): `rule_needs(r)` gives `0`
+- Why it is not compiled: a rule comes from the library
 
 #### `rule_consts`
 
@@ -5583,10 +5356,10 @@ How many rewrites the rule `r` needs before it may fire.
 rule_consts: (r: Rule) => int
 ```
 
-How many constants the rule `r` adds to the program.
+How many constants the rule `r` adds to the function.
 
-- Pure.
-- Example: `rule_consts(r)` gives `0`
+- Example (a fragment, not compiled): `rule_consts(r)` gives `0`
+- Why it is not compiled: a rule comes from the library
 
 <a id="tiles"></a>
 
@@ -5759,173 +5532,140 @@ plot. matplotlib is used when it is importable, and an SVG file is written other
 
 ## `python`: the embedded interpreter
 
-The Python bridge: run code in the embedded interpreter, import modules, read attributes and
-dispose of the handles the calls return. Every operator observes or advances the interpreter,
-which no argument names, so every one has effects and is never folded, merged or dropped by a
-pass. A result of type `PyObject` is a handle into the interpreter, not a value of the program.
+Camel calling Python: run code in an embedded interpreter, import modules, read attributes and
+call what they hold. A `PyObject` is a handle into the interpreter, not a value of the program;
+it is released when nothing refers to it any more, so there is nothing to dispose of by hand.
+Values cross the boundary by copy: `to_py` makes the Python object of a Camel value, in the
+Python form of its type, and `from_py` reads a Python object as a value of the type the call
+names.
 
-The declarations of the operators of the C++ module `modules/python` (design principles 6.4).
-This file is the one source of the six fixed signatures; the C++
-side keeps the kernels, the executor, the operator traits and the purity.
+The Python form of a type:
+  - `bool`, the integer types, the float types and `string` are the Python scalars of the same
+    name, by value; `Bytes` is `bytes`;
+  - a tuple is a `tuple`, a struct a `dict` of its fields by name, an array a `list`, and a map
+    with string keys a `dict`, each of them by its parts;
+  - `PyObject` itself passes through as it is.
+What converts is a table, never whatever Python would accept: `bool` takes a bool only (not `5`),
+the integers take an int that fits and not a bool or a float, the floats take a float or an int
+and refuse a number the type cannot hold, `string` takes a str and not bytes.
 
-Five operators stay in C++ and are recorded as computed signatures in
-`stdlib/signatures/python.cml`:
-  - `py_call` (two URIs, `python:py_call` and `python:py_call_kw`) and `py_print`/`py_println`
-    are variadic: a declaration cannot say "any number of `PyObject` arguments";
-  - `py_wrap` and `py_unwrap` move a type through the module type `PyObject<T>`, and a type
-    variable cannot be an argument of a module type in a declaration
-    (`SemanticDiag::InvalidTypeArgument`).
+Python code can do anything, including write files and print, and the interpreter holds state
+between calls. So no function here names a resource of its own: each is a use of everything, in
+the written order, never folded, merged or dropped, and it runs when its result is needed or it
+is in a `sync` block. Whatever Python itself refuses -- an exception, a missing module, a missing
+attribute -- is an error value of kind `PythonError` whose message is the exception, its text and
+its traceback, never a fault of Camel's.
 
-#### `py_call`
+The interpreter is started the first time a function here runs.
+The other direction, Python calling Camel, is the package `camel` (`pip install camel-lang`).
 
-```camel
-py_call: (fn: string | PyObject, ...args: PyObject[]) => PyObject!
-```
-
-Calls the Python callable `fn` -- a `PyObject`, or a dotted name such as `"math.sqrt"` -- with
-the `PyObject` arguments `args`, and returns its result. Any number of arguments is accepted.
-
-- With effects: runs arbitrary Python code.
-- Failure: error `PythonError` when the call raises; the message starts with the exception class.
-- Example: `py_call("math.sqrt", py_wrap(2.0))`
-
-#### `py_call`
+#### `exec`
 
 ```camel
-py_call: (fn: string | PyObject, args?: (...PyObject) | PyObject[], kwargs?: Struct<...PyObject>) => PyObject!
+exec: (code: string) => void!
 ```
 
-Calls `fn` with a tuple (or an array) of positional arguments and a struct of keyword
-arguments. Both collections are optional; every element is a `PyObject`.
+Runs Python statements in the interpreter. Definitions and assignments stay visible to later
+calls, as in a Python session.
 
-- Failure: error `PythonError` when the call raises; the message starts with the exception class.
-- Example: `py_call(fn, (py_wrap(2.0),), {x: py_wrap(1)})`
+- Failure: error value `PythonError` when the code raises.
+- Example (a fragment, not compiled): `exec('x = 1')`
+- Why it is not compiled: runs Python code when it runs, and the example only has the `void!` result to show
 
-#### `py_print`
+#### `eval`
 
 ```camel
-py_print: (...objs: PyObject[]) => PyObject?
+eval: (expression: string) => PyObject!
 ```
 
-Writes the printed form of every `PyObject` argument to Python's standard output, with no
-separator and no newline, and returns the last argument (or `void` when there is none).
+Evaluates a Python expression and gives its value.
 
-- With effects: writes the interpreter's standard output.
-- Example: `py_print(py_wrap(1), py_wrap(2))`
+- Failure: error value `PythonError` when the expression raises.
+- Example: `eval('1 + 2 * 3')->to_string !! ''` gives `'7'`
 
-#### `py_println`
+#### `run_file`
 
 ```camel
-py_println: (...objs: PyObject[]) => PyObject?
+run_file: (path: string) => void!
 ```
 
-Writes the printed form of every `PyObject` argument and a newline, as `py_print` does, and
-returns the last argument (or `void` when there is none).
+Runs the Python script at the path.
 
-- With effects: writes the interpreter's standard output.
-- Example: `py_eval("1 + 1") -> (o: PyObject): PyObject? => py_println(o)`
+- Failure: error value `PythonError` when the file cannot be read or the script raises.
+- Example (a fragment, not compiled): `'scripts/hello.py'->run_file`
+- Why it is not compiled: runs Python code when it runs, and the example only has the `void!` result to show
 
-#### `py_wrap`
+#### `import_module`
 
 ```camel
-py_wrap: (x: T) => PyObject<T>
+import_module: (name: string) => PyObject!
 ```
 
-Wraps the value `x` in a new Python object, keeping its Camel type as the type argument of
-`PyObject<T>`.
+Imports a Python module (`'math'`, `'numpy'`, `'matplotlib.pyplot'`) and gives it. Importing runs
+the body of the module and records it in `sys.modules`.
 
-- With effects: creates an interpreter object.
-- Example: `py_wrap(2.0)` gives `a PyObject<float>`
+- Failure: error value `PythonError` when the import raises.
+- Example: `import_module('math')->attr<'pi'>->to_string !! ''` gives `'3.141592653589793'`
 
-#### `py_unwrap`
+#### `attr`
 
 ```camel
-py_unwrap: (obj: PyObject<T>) => T!
+attr: <name: string> (obj: PyObject) => PyObject!
 ```
 
-Unwraps a Python object into a value of type `T`. An object that did not come from `py_wrap`
-has no type argument and is refused when the call is compiled. The object must be of the kind
-`T` names: a `bool` takes a bool only (not `5`), an `int` an int that fits (not a bool or a
-float), a `float` a float or an int, a `string` a str (not bytes), `Bytes` bytes, an array a
-list, a tuple a tuple or list of its length, a struct a dict with its fields.
+The attribute of a Python object; a dotted name walks the chain. Asking may run a property or
+a descriptor, so it can raise.
 
-- With effects: reads an interpreter object.
-- Failure: error `PythonTypeError` when the object is not of the kind `T` names; the message gives the path and what was found.
-- Example: `py_unwrap(py_wrap(2.0)) !! 0.0` gives `2.0`
+- Failure: error value `PythonError` when the attribute does not exist or its getter raises.
+- Example: `import_module('math')->attr<'pi'>`
 
-#### `py_exec`
+#### `call`
 
 ```camel
-py_exec: (code: string) => PyObject!
+call: <fn: PyObject, kwargs: Map<string, PyObject>? = null> (args: PyObject[]) => PyObject!
 ```
 
-Runs Python statements `code` in the interpreter and returns its `None`. Definitions and
-assignments stay visible to later calls, as in a Python session.
+Calls a Python callable with the arguments the array holds, in order, and the keyword arguments
+the callable was bound with. `call<fn>` is a function from an array of arguments to a result, so
+it can be bound once and applied again.
 
-- With effects: runs arbitrary Python code.
-- Failure: error `PythonError` when the code raises; the message starts with the exception class.
-- Example: `py_exec("x = 1")`
+- Failure: error value `PythonError` when the call raises.
+- Example (a fragment, not compiled): `[2.0->to_py !! eval('0')]->call<sqrt>`
+- Why it is not compiled: the callable is a Python object from `attr`, which the page does not show
 
-#### `py_eval`
+#### `to_string`
 
 ```camel
-py_eval: (expr: string) => PyObject!
+to_string: (obj: PyObject) => string!
 ```
 
-Evaluates the Python expression `expr` and returns its value as a `PyObject`.
+The `str()` of a Python object, as text.
 
-- With effects: runs arbitrary Python code.
-- Failure: error `PythonError` when the expression raises; the message starts with the exception class.
-- Example: `py_eval("1 + 2 * 3")` gives `7`
+- Failure: error value `PythonError` when `__str__` raises.
+- Example: `eval('[1, 2]')->to_string !! ''` gives `'[1, 2]'`
 
-#### `py_run`
+#### `to_py`
 
 ```camel
-py_run: (file_path: string) => PyObject!
+to_py: (x: T) => PyObject!
 ```
 
-Runs the Python script at `file_path` and returns its `None`.
+The Python object that stands for a Camel value, in the Python form of its type.
 
-- With effects: runs arbitrary Python code.
-- Failure: error `PythonError` when the file cannot be read or the script raises; the message starts with the exception class.
-- Example: `py_run("scripts/hello.py")`
+- Failure: error value `PythonError` when the interpreter cannot make the object.
+- Example: `2.0->to_py->to_string !! ''` gives `'2.0'`
 
-#### `py_attr`
+#### `from_py`
 
 ```camel
-py_attr: (obj: PyObject, attr: string) => PyObject!
+from_py: (obj: PyObject) => T!
 ```
 
-The attribute `attr` of the Python object `obj`; a dotted `attr` walks the chain. Asking may
-run a property or a descriptor, so the read is an effect.
+The Camel value of type T that a Python object holds. T is written at the call
+(`from_py::<int>(obj)`) or taken from the type of the position the call stands in.
 
-- With effects: reads interpreter state and may run Python code.
-- Failure: error `PythonError` when the attribute does not exist; the message starts with the exception class.
-- Example: `py_import("math") -> (m: PyObject): PyObject! => py_attr(m, "sqrt")`
-
-#### `py_import`
-
-```camel
-py_import: (module_name: string) => PyObject!
-```
-
-Imports the Python module `module_name` and returns it. Importing runs the module body and
-records the module in `sys.modules`.
-
-- With effects: imports a module and runs its body.
-- Failure: error `PythonError` when the import raises; the message starts with the exception class.
-- Example: `py_import("math")`
-
-#### `py_dispose`
-
-```camel
-py_dispose: (obj: PyObject) => void
-```
-
-Drops this program's reference to the Python object `obj`.
-
-- With effects: advances the interpreter's reference counts.
-- Example: `py_import("math") -> py_dispose`
+- Failure: error value `PythonTypeError` when the object does not have the type T (the message gives the path of the mismatch and what was found there); error value `PythonError` when reading it raises.
+- Example: `eval('1 + 2')->from_py::<int> !! 0` gives `3`
 
 <a id="nn"></a>
 
@@ -6470,7 +6210,7 @@ module and never touches the file system or the ONNX runtime.
 #### `export_model`
 
 ```camel
-export_model: <out: string, dynamic_axes: void[] = [], target: string = 'onnxruntime-cpu'> (fn: F, example: E) => void!
+export_model: <out: string, dynamic_axes: int[] = [], target: string = 'onnxruntime-cpu'> (fn: F, example: E) => void! when is_function::<F>()
 ```
 
 Writes the ONNX model of `fn` applied to arguments like `example` to the file `out`, at the

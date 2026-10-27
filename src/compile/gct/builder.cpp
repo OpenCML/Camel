@@ -13,6 +13,7 @@
 #include "camel/core/tags.h"
 #include "camel/core/type/bytes.h"
 #include "camel/core/type/collection.h"
+#include "camel/core/type/native.h"
 #include "camel/core/type/composite/stream.h"
 #include "camel/core/type/enum.h"
 #include "camel/core/type/other.h"
@@ -281,8 +282,38 @@ pair<data_ptr_t, bool> Builder::extractData(const node_ptr_t &node, node_ptr_t &
     // expression: `((h, k), 1)` is `let a = (h, k)` then `(a, 1)`. Embedded as a constant it
     // kept its unresolved element types ("(ref, ref)") and its names were never filled.
     if (data && !isUnresolvedLiteral(data)) {
+        if (node->type() == NodeKind::DREF) {
+            // A name: read where the literal is built, unless an element computed after it is
+            // hoisted first.
+            auto entry = std::find_if(
+                pendingNames_.begin(), pendingNames_.end(), [&](const auto &candidate) {
+                    return candidate.first == execNode;
+                });
+            if (entry == pendingNames_.end()) {
+                pendingNames_.emplace_back(execNode, std::vector<PendingName>{});
+                entry = std::prev(pendingNames_.end());
+            }
+            entry->second.push_back(
+                PendingName{std::dynamic_pointer_cast<camel::core::data::RefData>(data), node});
+        }
         return make_pair(data, false);
     } else {
+        // The names written before this element are used before it: they are hoisted ahead of it.
+        const auto entry = std::find_if(
+            pendingNames_.begin(), pendingNames_.end(), [&](const auto &candidate) {
+                return candidate.first == execNode;
+            });
+        if (entry != pendingNames_.end()) {
+            for (const PendingName &name : entry->second) {
+                auto [nameNode, nameData] = makeRefData(name.expr);
+                *execNode << nameNode;
+                if (name.data != nullptr) {
+                    name.data->rename(
+                        std::dynamic_pointer_cast<camel::core::data::RefData>(nameData)->ref());
+                }
+            }
+            entry->second.clear();
+        }
         auto [refNode, refData] = makeRefData(node);
         *execNode << refNode;
         return make_pair(refData, true);
@@ -563,6 +594,30 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
         } catch (const BuildAbortException &) {
         }
     }
+    // A `var` at the top level is a resource of the module, named by the variable (design
+    // principles 3.5): `uses cnt` names it like any other, and a function that reads or writes it
+    // is measured as touching it. It is declared with the resources, before any clause is read.
+    for (const auto &stmt : *stmtNodes) {
+        if (stmt->type() != AST::LoadType::Stmt ||
+            stmt->loadAs<AST::StmtLoad>()->stmtType() != AST::StmtType::Data) {
+            continue;
+        }
+        const auto &declared = stmt->loadAs<AST::DataDeclLoad>();
+        if (!declared->isVar()) {
+            continue;
+        }
+        for (const Reference &ref : declared->refs()) {
+            if (module_->resource(ref) != nullptr) {
+                continue; // a second declaration of the name is reported where it is built
+            }
+            camel::core::module::Module::ResourceDecl resource;
+            resource.variable = true;
+            module_->declareResource(ref, std::move(resource));
+            if (exportedRefs_.contains(ref.toString())) {
+                module_->setResourceExported(ref);
+            }
+        }
+    }
     try {
         checkResourceGroups();
     } catch (const BuildAbortException &) {
@@ -768,12 +823,9 @@ void_ptr_t Builder::visitImport(const AST::node_ptr_t &ast) {
         throw BuildAbortException();
     }
 
-    // An import never resolves to the module that writes it (design principles 10.1): the lookup
-    // passes over the module's own file, so `math.cml`'s `import math` is the standard library's
-    // module and a name no other module of the search order has is not found at all. This branch
-    // therefore does not stand for a rule but for a lookup that handed back this module anyway: the
-    // import binds nothing rather than binding the names this module already has, and records no
-    // import a cycle could be made of.
+    // A module importing itself: allowed, and it has no effect (design principles 10.1). Its
+    // names are its own already (with or without its own name in front, 10.2); the import
+    // binds nothing, and records no import a cycle could be made of.
     if (mod == module_) {
         LEAVE("ImportDecl");
         return nullptr;
@@ -978,6 +1030,33 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
     // The names of the declaration get a scope of their own, which is not a block of the
     // program: in a sync block the initializer keeps its place in the block's order.
     node_ptr_t res = makeExec(false, true);
+
+    if (dataNodes->size() == 0) {
+        // `export let inf: float`: no right side. The value is the one the C++ module of the
+        // declaration registers under the name (design principles 6.4); the declaration is its
+        // type, and the graph builder reads the module.
+        if (refs.size() != 1 || typeNodes->size() != 1 || isVar) {
+            diags_->of(SemanticDiag::TupleUnpackingCountMismatch)
+                .at(ast->load()->tokenRange())
+                .commit();
+            throw BuildAbortException();
+        }
+        if (!validateIdent(refs[0].ident())) {
+            diags_->of(SemanticDiag::ReservedIdentifier).at(dataDeclLoad->tokenRange()).commit();
+            throw BuildAbortException();
+        }
+        Type *declaredType  = visitType(typeNodes->atAs<AST::TypeLoad>(0));
+        node_ptr_t nRefNode = tree_->makeNRef(refs[0].toString());
+        tree_->markNativeValue(nRefNode, declaredType);
+        setOriginFromOrigin(
+            context_,
+            nRefNode,
+            findBindingOrigin(context_, ast, 0),
+            camel::source::OriginKind::GctNode,
+            "gct.nref");
+        LEAVE("DataDecl");
+        return nRefNode;
+    }
 
     // The declaration binds one name, several names, or the elements of a tuple (the
     // parenthesized carrier). A struct or an array carrier is not in the language: the
@@ -1280,7 +1359,9 @@ bool Builder::resolveAmbientResource(
                     // in is half of its identity, and that is what the operator's own declaration
                     // and this clause are compared as (see resourceIdentities).
                     out.push_back(
-                        in.get() == module_.get() ? written : in->name() + "::" + written);
+                        in.get() == module_.get() && !decl->variable
+                            ? written
+                            : in->name() + (decl->variable ? ":" : "::") + written);
                     return true;
                 }
                 for (const Reference &member : decl->members) {
@@ -1637,7 +1718,6 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
     ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for TypeDecl");
     const auto &typeNode = ast->optAtAs<AST::TypeLoad>(0);
     Type *type;
-    ASSERT(typeNode, "TypeDecl must have a type");
     const auto &typeLoad = ast->loadAs<AST::TypeDeclLoad>();
     // A declaration in error declares nothing; uses of the name follow from that error.
     struct PoisonOnFailure {
@@ -1672,7 +1752,18 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
             : self(b), outer(std::exchange(b.fieldTagOwner_, owner)) {}
         ~FieldTagOwner() { self.fieldTagOwner_ = outer; }
     } fieldTagOwner(*this, declNode);
-    if (typeNode->loadAs<AST::TypeLoad>()->typeType() == AST::TypeType::Enum) {
+    if (!typeNode) {
+        // `export type Graph`, `export type Txn<F>`: the type is provided by the C++ module of
+        // the same name, under this name (design principles 10.4), like a function without a
+        // body. Its identity is the module and the name.
+        type = camel::core::type::findNativeType(module_->name(), typeLoad->ref().toString());
+        if (type == nullptr) {
+            diags_->of(SemanticDiag::NativeTypeNotProvided)
+                .at(ast->load()->tokenRange())
+                .commit(typeLoad->ref().toString(), module_->name());
+            throw BuildAbortException();
+        }
+    } else if (typeNode->loadAs<AST::TypeLoad>()->typeType() == AST::TypeType::Enum) {
         // The name is in scope before the variants are read, so that a variant field can hold
         // the enum itself (`type Tree = enum { Node(Tree, Tree) }`).
         type = declareEnumType(typeNode, typeLoad.get());
@@ -6007,21 +6098,6 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
             }
             diag.commit(keyType->toString(), coll->toString(), problem);
             throw BuildAbortException();
-        }
-    }
-    if (base->isOtherType() && !static_cast<OtherType *>(base)->typeArguments()) {
-        // What the arguments of a module type mean is defined by the type, which sees
-        // concrete types only. A type whose arguments are plain types (Map, Set) takes
-        // variables like an array or a tuple does.
-        for (const TypeArgument &argument : arguments) {
-            if (argument.type != nullptr && containsTypeVar(argument.type)) {
-                diags_->of(SemanticDiag::InvalidTypeArgument)
-                    .at(ast->load()->tokenRange())
-                    .commit(
-                        base->toString(),
-                        "a type variable cannot be an argument of a module type");
-                throw BuildAbortException();
-            }
         }
     }
     std::string error;

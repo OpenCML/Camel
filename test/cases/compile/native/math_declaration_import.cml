@@ -1,9 +1,7 @@
 /**
- * The declarations of `math` are what an importer sees: the per-type overloads (`abs`, `min`,
- * `clamp`), `sqrt` with its four spellings and the two shifts with both integer types for the
- * count are read from `stdlib/math.cml`, and the calls reach the operators the C++ module runs.
- * The constant `pi` is still the C++ module's value, visible through the same declaration module
- * ().
+ * The functions of `math` are what an importer sees: `abs`, `min`, `clamp`, `sqrt` and the two
+ * shifts (the count in angle brackets) are read from `stdlib/math.cml`, and a call at a type with a
+ * kernel reaches the operator the C++ module runs. The constant `pi` is a value of the module.
  */
 
 import { abs, clamp, min, sqrt, shl, shr, pi } from math
@@ -14,8 +12,8 @@ func main(): int sync {
     println(min(3, 5))
     println(clamp(15, 0, 10))
     println(sqrt(9.0))
-    println(shl(1, i32(4)))
-    println(shr(256, 4))
+    println(1->shl<4>)
+    println(256->shr<4>)
     println(pi)
     return 0
 }

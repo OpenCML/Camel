@@ -11,7 +11,7 @@ func root32(): f32 { return sqrt(x) }
 with <x: float>
 func repeated(): float { return sqrt(x) * sqrt(x) }
 with <x: float>
-func integer_root(n: int): float { return sqrt(n) * x }
+func integer_root(n: int): float { return sqrt(float(n)) * x }
 with <w: f32[..]>
 func weighted(x: f32[..], variance: float): float { return float(sum(w * x * f32(sqrt(variance)))) }
 

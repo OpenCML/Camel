@@ -1,0 +1,16 @@
+/**
+ * An exported top-level `var` is one resource of the module that declares it: the importing module
+ * reads and writes the same variable the module's own function does.
+ *   1 2 2     two bumps and a read of the variable
+ *   11 11     an assignment from the importing module, then a bump and a read
+ */
+
+
+import { count, bump } from counter_lib
+
+func main(): int sync {
+    println(bump(), bump(), count)
+    count = 10
+    println(bump(), count)
+    return 0
+}

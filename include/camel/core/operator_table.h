@@ -325,8 +325,10 @@ class OperatorTable {
     /// True when a call of the operator may be computed by the compiler or a pass itself and its
     /// result treated as a value: it has no effect, and it is foldable (isPure and the foldable
     /// fact). False for every operator that has an effect, and for a pure one that must run where
-    /// the program writes it (declareUnfoldable). A pass that folds, moves, merges or drops a
-    /// call asks this, not isPure.
+    /// the program writes it (declareUnfoldable). A pass that folds a call or merges it with an
+    /// identical one asks this, not isPure. Whether a pass may also drop, move or reorder the call
+    /// depends on whether it can fault as well: that is `nodeIsFreelySchedulable`
+    /// (camel/runtime/graph.h), the one question every pass asks.
     bool mayBeRecomputed(OperId id) const;
     bool mayBeRecomputed(std::string_view uri) const;
 

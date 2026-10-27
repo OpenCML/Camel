@@ -53,7 +53,7 @@ var count = 0
 
   Struct destructuring `let { x, y } = p` and array destructuring `let [a, b] = xs` are not in the language: a `{` or a `[` where a name stands is an ordinary syntax error. Use `p.x`, `xs[0]`.
 - **`let _ = e` drops the value of `e` on purpose.** `_` is not a name: nothing is bound, so it can be written any number of times in one block, and it cannot be read. The expression is evaluated like the initial value of any `let` (in a sync block, in order). It is the way to say that a `T!` is ignored deliberately ([7.1](#71-expression-statements)). Only this form exists: `var _`, and `_` among several names, are syntax errors.
-- A `let` at the module top level is a global constant; a top-level `var` can be read and written by functions, also by an imported function of the module that declares it ([5.3](05_modules.md#53-exports)). **The top-level declarations do not depend on the order they are written in, only on what they use**: `let area = pi * r * r` may come before `let pi`; top-level values that depend on each other are `SemanticDiag::ModuleValueCycle` ([5.6](05_modules.md#56-loading-modules)). A local `let` in a function body is still declared before it is used.
+- A `let` at the module top level is a global constant; a top-level `var` is a resource of its module: functions read and write it, it can be exported, and `uses` can name it ([5.3](05_modules.md#53-exports)). **The top-level declarations do not depend on the order they are written in, only on what they use**: `let area = pi * r * r` may come before `let pi`; top-level values that depend on each other are `SemanticDiag::ModuleValueCycle` ([5.6](05_modules.md#56-loading-modules)). A local `let` in a function body is still declared before it is used.
 
 ## 7.3 `return`
 
@@ -97,7 +97,7 @@ error InvalidAge: age is negative
 - The other reading holds too: **exactly that** signature makes a function value a `T..` (`let s: int.. = step(3)`), any other signature does not, and a `T..` is not converted from anything else. `T..` and its step signature are two writings of one runtime value, and the conversion moves nothing.
 - Consuming is a pull through that signature: `s()` pulls one element. A stream is a value and is pure, so pulling the same stream value twice answers the same element, and **the consumer holds the rest it was handed and passes it on** -- an empty stream is one that answers `null` at once (see [7.3.1](#731-yield)).
 - `s()` takes no arguments: the step signature has none, and `s(1)` is an ordinary mismatch report.
-- On each execution path a stream value has **one consumer at most**: a `s()` and a `for x in s` are both consumption, reading one value twice is a compile error, and the diagnostic names **both places** and writes out the primitive `tee(s, n)` (which is not in the standard library yet); two arms of one branch that each consume once **count as one**, because one path takes one of them (design principles 5.4).
+- On each execution path a stream value has **one consumer at most**: a `s()` and a `for x in s` are both consumption, reading one value twice is a compile error, and the diagnostic names **both places** and writes out the primitive `s->tee<n>` (which is not in the standard library yet); two arms of one branch that each consume once **count as one**, because one path takes one of them (design principles 5.4).
 - A stream writes directly in a `for`: every round of `for x in s` is one pull, expanded on the graph into the `while` that already exists (no new node kind, no new driver, no new loop form; a back end sees the LOOP node it always saw). The state of the head is the state of the loop, and `x` is the element of this round's pull. Every round **judges its condition first and takes its element afterwards**, the order an array takes: `for x in s while c` asks `c` first and calls the step function only where `c` holds, and a pull that answers `null` ends the loop -- so `for line in read_lines(f) while n < 10` does not read line 11. An impure call in the condition without `sync` is not executed and is warned about, exactly as in a statement. An empty stream asks `c` once, pulls nothing and runs no round, and its value is the initial state (see [7.3.1](#731-yield)).
 
 ## 7.4 Functions
@@ -217,7 +217,7 @@ int 1 string a
 |---|---|
 | `sync` | The function's body is a sync block ([4.3.3](04_execution_model.md#433-sync-on-a-function-body-function-modifier)) |
 
-There are no other modifiers. A function implemented in C++ is a body-less `export func` declaration (design principles 6.4); a helper used only inside its module is a plain `func` without `export`, since `func` is module-private already.
+There are no other modifiers. A function implemented in C++ is a body-less `export func` declaration (design principles 6.4); a value C++ supplies is the same rule, written without a right side: `export let inf: float` is the value the C++ module registers under the name `inf`, and a type that differs from the registered one is `SemanticDiag::NativeValueMismatch` (no value of the name at all is `SemanticDiag::NativeValueNotLoaded`); a helper used only inside its module is a plain `func` without `export`, since `func` is module-private already.
 
 `#macro` is not a modifier but a standard tag written before a function declaration ([4.5](04_execution_model.md#45-macro-functions)).
 
@@ -677,6 +677,15 @@ id
 - The right-hand side can only refer to types already declared, so a type function cannot refer to itself.
 - It can be `export`ed, and is used in another module as `module::Pair<int>`.
 - The angle brackets of a module type are interpreted by the type itself, and the arguments can be types or `const data`; the angle brackets of `f32[2, 3]`, another spelling of a numeric array, are interpreted by the array type itself (a shape argument is written without `const`: `f32[2, 3]` is `SemanticDiag::InvalidTypeArgument`).
+
+**A type a C++ module provides is declared without a right side**, as a function it provides is declared without a body (design principles 6.4, 10.4):
+
+```text
+export type Graph
+export type Txn<F>
+```
+
+The type is the one the module registered under that name; its identity is the module and the name, so a type of the same name in another module is another type, and a name the module did not register is `SemanticDiag::NativeTypeNotProvided`. The parameters list the arguments the type takes, and an argument is any type expression, a type variable of a generic declaration included: `func same::<F>(t: Txn<F>): Txn<F>`. A type is never named by a string: `type X = 'text'` is a syntax error.
 
 A type expression has no type operations: `A & B`, `A \ B`, `A + B` and `A ^ B` are ordinary syntax errors (`&`, `\`, `+`, `-`, `^` mean nothing in a type position; they are the operators of an expression, so `x as T + U` is `(x as T) + U`). `keyof` and `of` are not keywords: the ones in `keyof T` and `name of T` are ordinary names, and writing them is a syntax error. `typeof e` is a whole type, the type of the value of `e`, expanded by the compiler where the type is used. It cannot be nested inside a larger type (`typeof(1)[]` is `SemanticDiag::TypeOfNotWholeType`), and an operand with no value (`void`) is `SemanticDiag::TypeOfNotAValue`.
 

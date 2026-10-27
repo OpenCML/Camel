@@ -4,7 +4,7 @@
 
 func pick(xs: int[]): int {
     let n = len(xs)
-    let first = head(xs)
+    let first = xs[0]
     return if n > 3 then first + n else first - n
 }
 

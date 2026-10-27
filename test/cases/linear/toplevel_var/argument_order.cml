@@ -1,0 +1,60 @@
+/**
+ * Two uses of one resource in one expression happen in written order, arguments and operands from
+ * left to right (design principles 3.3): a read of the variable written before a call that writes
+ * it sees the value from before the call, whatever the variable is.
+ *   100 110    a read, then the call that writes the top-level variable
+ *   120 120    the call, then a read
+ *   250        operands of +: the read, then the call
+ *   1 2        a local variable a closure writes
+ *   10 11      a local variable passed to a var parameter
+ *   1 2        a value read before a call through a function value, and a read after it
+ *   [1, 2, 2]  the elements of an array literal, left to right
+ *   (2, 3, 3)  a tuple literal
+ *   3 4 4      the fields of a struct literal
+ */
+
+
+var cnt: int = 100
+var lit: int = 1
+
+func lit_step(): int sync {
+    lit += 1
+    return lit
+}
+
+func bump(): int sync {
+    cnt += 10
+    return cnt
+}
+
+func inc(var x: int): int sync {
+    x += 1
+    return x
+}
+
+func main(): int sync {
+    println(cnt, bump())
+    println(bump(), cnt)
+    println(cnt + bump())
+    var c = 1
+    let step = (): int => sync {
+        c += 1
+        c
+    }
+    println(c, step())
+    var d = 10
+    println(d, inc(d))
+    var e = 1
+    let write_e = (): int => sync {
+        e += 1
+        e
+    }
+    let before = e
+    write_e()
+    println(before, e)
+    println([lit, lit_step(), lit])
+    println((lit, lit_step(), lit))
+    let fields = { a: lit, b: lit_step(), c: lit }
+    println(fields.a, fields.b, fields.c)
+    return 0
+}

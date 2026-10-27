@@ -16,5 +16,6 @@ slot_t __io_set_terminal_raw_mode__(ArgsView &with, ArgsView &norm, ctx::Context
 slot_t __io_has_input__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __io_get_chars__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __io_clear_input_buffer__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __io_input__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 
 std::unordered_map<std::string, operator_t> getIOOpsMap();

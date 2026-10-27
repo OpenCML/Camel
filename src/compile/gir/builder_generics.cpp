@@ -313,6 +313,14 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
         tmpl->outerBindings  = typeBindings_;
         tmpl->ownerGraph     = currGraph_;
         tmpl->module         = module_;
+        // The tags written before the declaration belong to it, as they do for a function that is
+        // not generic (a generic pass names the tags it reads).
+        if (!isOperator) {
+            const TagFacts tags = tagFactsOf(child, camel::core::tag::Func);
+            if (tags.declaration != camel::core::attr::kNoAttrs) {
+                camel::core::tag::attachToDeclaration(*module_, Reference(name), tags.declaration);
+            }
+        }
         tmpl->nodeScope      = nodeScope_;
         tmpl->graphScope     = graphScope_;
         tmpl->decoratedScope = decoratedScope_;
@@ -2419,6 +2427,20 @@ Type *Builder::visitTypeNode(const GCT::node_ptr_t &gct) {
     Type *type = resolveTypeNode(gct->dataType(), gct);
     LEAVE("TYPE");
     return type;
+}
+
+} // namespace camel::compile::gir
+
+namespace camel::compile::gir {
+
+std::vector<std::string> genericSignaturesOf(const camel::core::module::Entity &entity) {
+    std::vector<std::string> signatures;
+    for (const generic_template_ptr_t &tmpl : genericTemplatesOfEntity(entity)) {
+        if (tmpl != nullptr && tmpl->funcType != nullptr) {
+            signatures.push_back(tmpl->funcType->toString());
+        }
+    }
+    return signatures;
 }
 
 } // namespace camel::compile::gir

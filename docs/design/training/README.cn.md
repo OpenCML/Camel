@@ -170,23 +170,23 @@ export func sq_norm::<P>(p: P): float {
 
 ### 4.1 无状态随机数
 
-新增计数器式随机数（与 JAX 同一思路），现有带全局状态的 `randn`、`randint`、`seed` 保持不变。
+计数器式随机数（与 JAX 同一思路）是 `random` 模块的主模型：带键的函数是纯函数；全局流只是它上面的一层薄壳，`seed(v)` 与 `next_key()` 是唯一的两个有状态原子，`rand()`、`randn()` 是 `next_key()` 加一个带键函数。
 
 ```cml
-import { key, fold, split, normal, uniform, randint } from random
+import { key, fold, split, normal_array, uniform, randint } from random
 
 let k     = key(20261018)                 // 由种子得到的键
 let ks    = fold(k, step)                 // 由键与整数派生新键
 let (a, b) = split(k)                     // 一个键拆成两个互不相关的键
-let noise = normal(ks, [batch, 784])      // 只由键与形状决定
-let t     = randint(fold(ks, 1), 0, 999)
+let noise = ks->normal_array::<f32><shape: [batch, 784]>   // 只由键与形状决定
+let t     = fold(ks, 1)->randint<0, 1000>                  // 左闭右开
 ```
 
 - **键**是不透明的值类型 `Key`（128 位），可打印、可比较、可存储，参与树操作（作为叶子）。
 - 这些函数是**纯函数**：同一个键给出同样的数，不读写任何状态，不是外部效应。因此能与其余计算一起编进 GPU 内核，能出现在被重计算的区域里（第 7 节），能在多卡上各自生成。
 - 用户负责不重复使用同一个键。重复使用不是错误（结果就是相同的数），以后可加提示（待定 T2）。
 
-**算法（规范）**：Philox4x32-10。张量按行优先线性下标，第 i 个元素取计数器 i 的输出，与设备和并行划分无关。`uniform` 由 32 位输出按规定的位操作构造 `[0,1)` 的 f32（`(bits >> 8) * 2^-24`）；`randint` 用规定的无偏拒绝算法；`fold` 与 `split` 用规定的 Philox 派生。
+**算法（规范）**：Philox4x32-10。张量按行优先线性下标，第 i 个元素取 `fold(k, i)` 的标量抽样，与设备和并行划分无关。`uniform` 由 32 位输出按规定的位操作构造 `[0,1)` 的 f32（`(bits >> 8) * 2^-24`）；`randint` 用规定的无偏拒绝算法；`fold` 与 `split` 用规定的 Philox 派生。
 
 **数值契约**：键派生、`uniform`、`randint` 只用整数运算与正确舍入运算，**跨设备逐位相同**。`normal` 用 Box–Muller，涉及 `log`、`sqrt`、`sin`、`cos`，按 7.1 只保证声明的 ulp 上界；实现应共用核心的同一套超越函数算法（核心的向量数学可原样编成 CUDA），使 CPU 与 Tiles 在实践中逐位一致，测试按 ulp 上界写。
 
@@ -205,10 +205,10 @@ type State = { params: Params, m: Params, v: Params, ema: Params, key: Key, step
 #gpu
 func train_step(s: Device<State>, data: Device<Tensor<f32>>, cfg: Config): (Device<State>, Device<float>) {
     let k     = fold(s.key, s.step)
-    let idx   = randint(fold(k, 0), 0, cfg.count, [cfg.batch])
+    let idx   = randints(fold(k, 0), 0, cfg.count, [cfg.batch])   // a batch of indices (a whole-array integer draw is not in the module yet)
     let clean = gather(data, idx)
-    let t     = randint(fold(k, 1), 0, cfg.timesteps - 1)
-    let noise = normal(fold(k, 2), [cfg.batch, 784])
+    let t     = fold(k, 1)->randint<0, cfg.timesteps - 1>
+    let noise = fold(k, 2)->normal_array::<f32><shape: [cfg.batch, 784]>
     let noisy = q_sample(clean, noise, cfg.abar[t])
     let (l, g) = with_grad(loss)<s.params>(noisy, noise, embedding(t))
     let (p, m, v) = adam(s.params, g, s.m, s.v, hyper(cfg, s.step))

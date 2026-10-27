@@ -16,6 +16,7 @@
  * `__fact`) have no callable Camel name, so they stay exported from here.
  */
 
+#include "camel/core/type/native.h"
 #include "checkreport.h"
 #include "proof.h"
 #include "rule.h"
@@ -33,17 +34,21 @@
 #include "camel/core/operator_table.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/rtdata/array.h"
+#include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/half.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/struct.h"
+#include "camel/core/rtdata/variant.h"
 #include "camel/core/rtdata/tagged.h"
 #include "camel/core/type/composite/array.h"
+#include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/resolver.h"
 #include "camel/execute/executor.h"
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/program.h"
+#include "camel/runtime/reachable.h"
 #include "camel/runtime/rules.h"
 #include "camel/runtime/writings.h"
 #include "camel/utils/assert.h"
@@ -54,6 +59,7 @@
 #include <bit>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <cstdint>
 #include <cstring>
 #include <deque>
@@ -82,7 +88,7 @@ using camel::compile::gir::RuleConditionAt;
 using camel::graphmod::Handle;
 using camel::graphmod::HandleKind;
 using camel::graphmod::HandleType;
-using camel::rewritemod::CheckReportObject;
+using camel::rewritemod::renderRows;
 using camel::rewritemod::CheckRow;
 using camel::rewritemod::kPropositionEquality;
 using camel::rewritemod::kPropositionErrorBound;
@@ -500,7 +506,10 @@ std::vector<Type *> programValueTypes(const camel::runtime::Program &program) {
             // instance takes the value (measured 2026-10-24: `float_combine__when<var float>`
             // passes a `var float` to `combineSameSign<float>`).
             Type *type = camel::core::type::valueTypeOf(graph->node(it.ref())->dataType());
-            if (type == nullptr || type->code() == TypeCode::Void) {
+            // A value of `never` never exists (design principles 3.9): the node that has the type
+            // ends the run, and no law is written for the value it does not give.
+            if (type == nullptr || type->code() == TypeCode::Void ||
+                type->code() == TypeCode::Never) {
                 continue;
             }
             const bool known = std::any_of(
@@ -780,60 +789,6 @@ bool ProofType::assignableFrom(Type *source) const { return is(source); }
 
 OtherType *ProofType::cloneWithParams(std::span<Type *const>) const { return get(); }
 
-/// `CheckReport`, the type of what `check` answers (docs/design/rewrite/plan-verification.cn.md,
-/// S0). A report is a table of rows (checkreport.h), not a string: the fixed rendering of the
-/// table is its `print`, so a reader keeps the fields and gets the text, and no caller has to
-/// parse the text back into fields. The type holds text and no reference into any GC space, so
-/// it is an ordinary other type.
-class CheckReportType final : public OtherType {
-  public:
-    static CheckReportType *get();
-    static bool is(const Type *type);
-
-    std::string toString() const override { return "CheckReport"; }
-    std::string mangle() const override { return "rewrite.CheckReport"; }
-    Type *clone(bool deep = false) const override;
-    bool equals(Type *other) const override;
-    CastSafety castSafetyFrom(Type *source) const override;
-    bool assignableFrom(Type *source) const override;
-    OtherType *cloneWithParams(std::span<Type *const> params) const override;
-
-  private:
-    explicit CheckReportType(TypeCode code) : OtherType(code) {}
-};
-
-CheckReportType *CheckReportType::get() {
-    // One object for the one `CheckReport` code, from the type table (see intern.h).
-    static CheckReportType *instance = nullptr;
-    static std::once_flag once;
-    std::call_once(once, [] {
-        const TypeCode code = registerOtherType("rewrite::CheckReport", TypeFlag::GC_Traced);
-        instance            = static_cast<CheckReportType *>(TypeTable::instance().internOther(
-            code, std::span<const uintptr_t>(), [&]() -> Type * {
-                void *mem = mm::permSpace().alloc(sizeof(CheckReportType), alignof(CheckReportType));
-                ASSERT(mem != nullptr, "Failed to allocate CheckReportType from permSpace");
-                return new (mem) CheckReportType(code);
-            }));
-    });
-    return instance;
-}
-
-bool CheckReportType::is(const Type *type) {
-    return type != nullptr && type->code() == get()->code();
-}
-
-Type *CheckReportType::clone(bool) const { return get(); }
-
-bool CheckReportType::equals(Type *other) const { return is(other); }
-
-CastSafety CheckReportType::castSafetyFrom(Type *source) const {
-    return is(source) ? CastSafety::Safe : CastSafety::Forbidden;
-}
-
-bool CheckReportType::assignableFrom(Type *source) const { return is(source); }
-
-OtherType *CheckReportType::cloneWithParams(std::span<Type *const>) const { return get(); }
-
 /// What a verdict is about, read off the permissions the rule asks for:
 ///
 ///   * `reassociate` and `contract` let the rewriting change the rounding, so the proposition is
@@ -878,6 +833,24 @@ uint64_t sampleStreamOf(uint64_t seed, std::string_view identity) {
 }
 
 
+/// The function an engine is applied to (`f` of `f->rewrite<rules>`), read again from the
+/// arguments each time it is used: a rule's condition is Camel code, and a safepoint, so the
+/// collector may have moved it.
+::Function *subjectOf(ArgsView &norm, size_t index = 0) { return norm.get<::Function *>(index); }
+
+/// The function `norm[index]` is, over the graphs of `committed` (design principles 9.1: a
+/// transform gives a function of the type it was given). The closure it had is kept, so the
+/// values it captured are captured still, and the graph it names is the same graph.
+::Function *functionOver(ArgsView &norm, size_t index, const camel::runtime::Program *committed) {
+    ::Function *subject = subjectOf(norm, index);
+    const auto id       = subject->graphId();
+    mm::NoCollectionScope noCollection;
+    auto *function = static_cast<::Function *>(
+        subject->clone(mm::autoSpace(), norm.type(index), false));
+    function->rebind(committed, committed->graph(id) != nullptr ? id : committed->root()->id());
+    return function;
+}
+
 /// One application of rules: the program it produced and what the engine counted while applying
 /// them (the rewrites and the nodes are summed over the graphs; the rounds are the rounds the
 /// whole application made, each graph advancing in the same round).
@@ -897,15 +870,16 @@ struct Application {
 /// `run` and is null for every other caller, so a plain `rewrite` records nothing and allocates
 /// nothing for the record.
 Application applyRewrite(
-    Context &ctx, const camel::runtime::Program *base,
+    Context &ctx, const camel::runtime::Program *base, camel::runtime::GCGraph *subject,
     std::span<const camel::runtime::Rule> compiled, camel::core::sem::NumericPolicy policy,
     size_t maxRounds, RewriteRecord *record = nullptr) {
-    camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), base);
+    camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), base, subject);
     camel::runtime::RuntimeGraphDraftSession::RootScope draftRoots(session);
     camel::runtime::RewriteStats total;
     total.fixpoint = true;
     camel::runtime::RewriteLog *log = record != nullptr ? &record->steps : nullptr;
-    for (camel::runtime::GCGraph *graph : base->graphs()) {
+    for (camel::runtime::GCGraph *graph :
+         camel::runtime::collectReachableGraphs(*base, subject)) {
         if (isRuleSide(*graph)) {
             continue;
         }
@@ -941,19 +915,18 @@ Application applyRewrite(
 /// Only this module's own rule errors become error values. Anything else leaves by the exception
 /// it already is: a limit, a fault or a defect of another part of the compiler reported as a
 /// rule that is badly written would name the wrong cause and drop whatever the exception carried.
-slot_t rewriteKernel(ArgsView &, ArgsView &norm, Context &ctx) {
+slot_t rewriteKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     const TupleType *resultType = TupleType::fallible(norm.type(0));
-    const auto *base            = norm.get<const camel::runtime::Program *>(0);
-    const bool strict           = norm.size() > 2 && norm.get<Bool>(2);
+    const auto *base            = subjectOf(norm)->program();
+    const bool strict           = with.size() > 1 && with.get<Bool>(1);
     try {
-        const auto compiled = engineRules(ctx, norm, 1, base);
+        const auto compiled = engineRules(ctx, with, 0, base);
         const Application application = applyRewrite(
-            ctx, base, compiled,
+            ctx, base, subjectOf(norm)->graph(), compiled,
             strict ? camel::core::sem::NumericPolicy::strict()
                    : camel::core::sem::NumericPolicy::relaxed(),
             16);
-        return makeOk(
-            toSlot(const_cast<camel::runtime::Program *>(application.program)), resultType);
+        return makeOk(toSlot(functionOver(norm, 0, application.program)), resultType);
     } catch (const camel::runtime::RuleCompileError &e) {
         return makeError("RuleInvalid", e.what(), "<rewrite::rewrite>");
     } catch (const std::invalid_argument &e) {
@@ -977,7 +950,7 @@ slot_t rewriteKernel(ArgsView &, ArgsView &norm, Context &ctx) {
 /// plain run pays nothing for a reader that never comes.
 /// Only this module's own rule errors become error values (see `rewriteKernel`).
 slot_t runKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
-    const auto *base     = norm.get<const camel::runtime::Program *>(0);
+    const auto *base     = subjectOf(norm)->program();
     const int64_t rounds = with.size() > 1 ? with.get<Int64>(1) : 16;
     const bool strict    = with.size() > 2 && with.get<Bool>(2);
     const bool explain   = with.size() > 3 && with.get<Bool>(3);
@@ -1000,15 +973,19 @@ slot_t runKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         record.strict = strict;
         record.input  = base;
         const Application application = applyRewrite(
-            ctx, base, compiled,
+            ctx, base, subjectOf(norm)->graph(), compiled,
             strict ? camel::core::sem::NumericPolicy::strict()
                    : camel::core::sem::NumericPolicy::relaxed(),
             rounds < 0 ? 0 : static_cast<size_t>(rounds), explain ? &record : nullptr);
         const double seconds =
             std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+        // The function the run produced is rooted while the struct is made: that allocation can
+        // collect.
+        ::Function *produced = functionOver(norm, 0, application.program);
+        mm::RootHandle producedRoot(mm::autoSpace(), produced, norm.type(0), "rewrite.run.result");
         // The struct is rooted while the fallible box is made: that allocation can collect.
         Struct *run = Struct::create(8, mm::autoSpace());
-        run->set(0, toSlot(const_cast<camel::runtime::Program *>(application.program)));
+        run->set(0, toSlot(producedRoot.getAs<::Function>()));
         run->set(1, toSlot<Int64>(static_cast<int64_t>(application.stats.applied)));
         run->set(2, toSlot<Int64>(static_cast<int64_t>(application.stats.rounds)));
         run->set(3, toSlot<Int64>(static_cast<int64_t>(application.stats.visited)));
@@ -1223,7 +1200,7 @@ slot_t explainAllKernel(ArgsView &, ArgsView &norm, Context &) {
 /// `explain(r, a, b)`: the shortest chain of rewrites of the run `r` that connects the values `a`
 /// and `b` (rewrite design 8.7). Only that chain is printed — the full record stays available as
 /// `explain_all` — and a pair no chain connects is an error value, never an empty chain.
-slot_t explainKernel(ArgsView &, ArgsView &norm, Context &) {
+slot_t explainKernel(ArgsView &with, ArgsView &norm, Context &) {
     const auto *run    = norm.get<Struct *>(0);
     const slot_t field = run->slotAt(7);
     if (isNullValue(field)) {
@@ -1232,17 +1209,16 @@ slot_t explainKernel(ArgsView &, ArgsView &norm, Context &) {
             "the run was made without attribution: call run(..., explain: true) to record it",
             "<rewrite::explain>");
     }
-    const auto *a = norm.get<const camel::graphmod::Handle *>(1);
-    const auto *b = norm.get<const camel::graphmod::Handle *>(2);
+    const auto *a = with.get<const camel::graphmod::Handle *>(0);
+    const auto *b = with.get<const camel::graphmod::Handle *>(1);
     if (a == nullptr || b == nullptr || a->kind() != camel::graphmod::HandleKind::Node ||
         b->kind() != camel::graphmod::HandleKind::Node) {
         return makeError(
-            "InvalidArgument", "explain reads two nodes of the program the run produced",
+            "InvalidArgument", "explain reads two nodes of the function the run produced",
             "<rewrite::explain>");
     }
     auto *full = fromSlot<ProofObject *>(nullablePayload(field));
-    const camel::runtime::Program *program =
-        fromSlot<const camel::runtime::Program *>(run->slotAt(0));
+    const camel::runtime::Program *program = fromSlot<::Function *>(run->slotAt(0))->program();
     const camel::runtime::Program *input = full->input();
     const auto known                      = [&](const camel::graphmod::Handle *h) {
         return h->program() == program || (input != nullptr && h->program() == input);
@@ -1269,7 +1245,7 @@ slot_t explainKernel(ArgsView &, ArgsView &norm, Context &) {
 /// has there, or the permission the value lacks, or the condition that is false with the values it
 /// matched, or the rule that did fire and made `v`. It matches the way the run did: with the
 /// same numeric policy and against the same program.
-slot_t whyNotKernel(ArgsView &, ArgsView &norm, Context &ctx) {
+slot_t whyNotKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     const auto *run    = norm.get<Struct *>(0);
     const slot_t field = run->slotAt(7);
     if (isNullValue(field)) {
@@ -1278,14 +1254,14 @@ slot_t whyNotKernel(ArgsView &, ArgsView &norm, Context &ctx) {
             "the run was made without attribution: call run(..., explain: true) to record it",
             "<rewrite::why_not>");
     }
-    const auto *rule  = norm.get<RuleObject *>(1);
-    const auto *value = norm.get<const camel::graphmod::Handle *>(2);
+    const auto *rule  = with.get<RuleObject *>(0);
+    const auto *value = with.get<const camel::graphmod::Handle *>(1);
     if (value == nullptr || value->kind() != camel::graphmod::HandleKind::Node) {
         return makeError(
-            "InvalidArgument", "why_not reads a node of the program the run produced",
+            "InvalidArgument", "why_not reads a node of the function the run produced",
             "<rewrite::why_not>");
     }
-    if (value->program() != fromSlot<const camel::runtime::Program *>(run->slotAt(0))) {
+    if (value->program() != fromSlot<::Function *>(run->slotAt(0))->program()) {
         return makeError(
             "InvalidArgument",
             "why_not reads a node of the program the run produced; a value the run started from is "
@@ -1313,7 +1289,7 @@ slot_t whyNotKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     const auto ruleNow = [&ruleRoot]() { return ruleRoot.getAs<RuleObject>(); };
     const auto runNow  = [&norm]() { return norm.get<Struct *>(0); };
     const auto programNow = [&runNow]() {
-        return fromSlot<const camel::runtime::Program *>(runNow()->slotAt(0));
+        return fromSlot<::Function *>(runNow()->slotAt(0))->program();
     };
     const camel::runtime::GraphId graphId = value->graph();
     const uint32_t valueIndex             = value->index();
@@ -1490,14 +1466,15 @@ const uint64_t ruleId = ruleNow()->ruleId();
 /// found or `rounds` rounds were made (rewrite design 3, graph store 3.5). The last parameter is
 /// the pass's numeric policy, as for `rewrite`. The result has values with several writings:
 /// `extract` (or the pipeline, before a pass that runs or translates it) chooses one.
-slot_t saturateKernel(ArgsView &, ArgsView &norm, Context &ctx) {
+slot_t saturateKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     const TupleType *resultType = TupleType::fallible(norm.type(0));
-    const auto *base            = norm.get<const camel::runtime::Program *>(0);
-    const int64_t rounds        = norm.get<Int64>(2);
-    const bool strict           = norm.size() > 3 && norm.get<Bool>(3);
+    const auto *base            = subjectOf(norm)->program();
+    const int64_t rounds        = with.get<Int64>(1);
+    const bool strict           = with.size() > 2 && with.get<Bool>(2);
     try {
-        const auto compiled = engineRules(ctx, norm, 1, base);
-        camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), base);
+        const auto compiled = engineRules(ctx, with, 0, base);
+        camel::runtime::RuntimeGraphDraftSession session(
+            ctx.shared_from_this(), base, subjectOf(norm)->graph());
         session.setGraphState(camel::runtime::GraphState::Tabled);
         // A condition is Camel code, and so is a safepoint: every draft this session has opened
         // must keep its static values relocatable until the commit reads them again, not only the
@@ -1505,7 +1482,8 @@ slot_t saturateKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         camel::runtime::RuntimeGraphDraftSession::RootScope draftRoots(session);
         camel::runtime::Budget budget;
         budget.rounds = rounds < 0 ? 0 : static_cast<size_t>(rounds);
-        for (camel::runtime::GCGraph *graph : base->graphs()) {
+        for (camel::runtime::GCGraph *graph :
+             camel::runtime::collectReachableGraphs(*base, subjectOf(norm)->graph())) {
             if (isRuleSide(*graph)) {
                 continue;
             }
@@ -1520,7 +1498,7 @@ slot_t saturateKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         }
         // Detached, as `rewrite`: the result is a value, the context's program is left alone.
         const camel::runtime::Program *committed = session.commit(true);
-        return makeOk(toSlot(const_cast<camel::runtime::Program *>(committed)), resultType);
+        return makeOk(toSlot(functionOver(norm, 0, committed)), resultType);
     } catch (const camel::runtime::RuleCompileError &e) {
         return makeError("RuleInvalid", e.what(), "<rewrite::saturate>");
     } catch (const mm::MemoryExhausted &) {
@@ -1528,21 +1506,78 @@ slot_t saturateKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     }
 }
 
-/// `extract(p, cost)`: one writing for every value, chosen by the cost model of that name.
-slot_t extractKernel(ArgsView &, ArgsView &norm, Context &ctx) {
-    const TupleType *resultType = TupleType::fallible(norm.type(0));
-    const auto *base            = norm.get<const camel::runtime::Program *>(0);
-    const std::string cost(norm.get<String *>(1)->view());
-    const auto model = camel::runtime::findCostModel(cost);
-    if (!model) {
-        return makeError(
-            "NoCostModel",
-            "There is no cost model '" + cost + "'.",
-            "<rewrite::extract>");
+/// A cost written in Camel, `(o: Op, inputs: float[]) => float`: what a writing costs, from its
+/// operator and the costs of the cheapest writings of the values it reads (egg's
+/// `CostFunction`). A node that is no operator (a constant, a port, a branch) costs one more than
+/// its inputs do. The function is Camel code, so it runs at a safepoint: it is rooted, and read
+/// again from the root at every call.
+class CamelCostModel final : public camel::runtime::CostModel {
+  public:
+    CamelCostModel(Context &ctx, ::Function *cost, Type *costType)
+        : vm_(std::make_shared<NodeVMSchedPass>(ctx.shared_from_this())),
+          cost_(mm::autoSpace(), cost, costType, "rewrite.cost") {}
+
+    double nodeCost(const camel::runtime::CostContext &, camel::runtime::gc_node_ref_t) const override {
+        return 1.0;
     }
-    const camel::runtime::Program *extracted =
-        camel::runtime::extractWritings(ctx.shared_from_this(), base, *model, /*detached=*/true);
-    return makeOk(toSlot(const_cast<camel::runtime::Program *>(extracted)), resultType);
+
+    double totalCost(
+        const camel::runtime::CostContext &context, camel::runtime::gc_node_ref_t node, double own,
+        std::span<const double> inputs) const override {
+        const auto *header = context.draft.header(node);
+        double inputsTotal = 0.0;
+        for (double cost : inputs) {
+            inputsTotal += cost;
+        }
+        if (header == nullptr || header->kind != camel::runtime::GCNodeKind::Oper) {
+            return own + inputsTotal;
+        }
+        const auto bytes = context.draft.payloadOf(node);
+        if (bytes.size() < sizeof(camel::runtime::GCOperBody)) {
+            return own + inputsTotal;
+        }
+        const auto oper =
+            reinterpret_cast<const camel::runtime::GCOperBody *>(bytes.data())->oper;
+        // The operator handle is rooted while the array of the input costs is made: that
+        // allocation can collect.
+        auto *op = camel::graphmod::Handle::create(
+            camel::graphmod::HandleKind::Op, nullptr, camel::runtime::GraphId::Invalid, oper,
+            nullptr, mm::autoSpace());
+        mm::RootHandle opRoot(
+            mm::autoSpace(),
+            op,
+            camel::graphmod::HandleType::get(camel::graphmod::HandleKind::Op),
+            "rewrite.cost.op");
+        Array *costs = Array::create(mm::autoSpace(), inputs.size());
+        for (size_t i = 0; i < inputs.size(); ++i) {
+            costs->set<Float64>(i, inputs[i]);
+        }
+        const slot_t args[2] = {toSlot(opRoot.getAs<camel::graphmod::Handle>()), toSlot(costs)};
+        const slot_t answer  = vm_->callFunction(cost_.getAs<::Function>(), args);
+        const double total   = fromSlot<Float64>(answer);
+        if (!(total > 0.0)) {
+            throw std::logic_error("A cost function gives every writing a positive cost.");
+        }
+        return total;
+    }
+
+  private:
+    std::shared_ptr<NodeVMSchedPass> vm_;
+    mutable mm::RootHandle cost_;
+};
+
+/// `f->extract<cost>`: one writing for every value, chosen by the cost function `cost`.
+slot_t extractKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
+    const TupleType *resultType = TupleType::fallible(norm.type(0));
+    const auto *base            = subjectOf(norm)->program();
+    try {
+        CamelCostModel model(ctx, with.get<::Function *>(0), with.type(0));
+        const camel::runtime::Program *extracted = camel::runtime::extractWritings(
+            ctx.shared_from_this(), base, model, /*detached=*/true, subjectOf(norm)->graph());
+        return makeOk(toSlot(functionOver(norm, 0, extracted)), resultType);
+    } catch (const std::logic_error &e) {
+        return makeError("NoCostModel", e.what(), "<rewrite::extract>");
+    }
 }
 
 // ---- the check of a rule (graph store decision 5) ----
@@ -3795,6 +3830,81 @@ void checkGenericRule(
     }
 }
 
+/// The text of the verdict words of a row, in the order of the enum `Verdict` the module declares,
+/// and the propositions in the order of `Proposition`.
+constexpr const char *kVerdictWords[] = {
+    camel::rewritemod::kVerdictProved,
+    camel::rewritemod::kVerdictRefuted,
+    camel::rewritemod::kVerdictSampled};
+constexpr const char *kPropositionWords[] = {
+    camel::rewritemod::kPropositionEquality,
+    camel::rewritemod::kPropositionRealEquality,
+    camel::rewritemod::kPropositionErrorBound};
+
+/// The report `check` answers: the struct `CheckReport { rows: CheckRow[] }` the module declares
+/// (stdlib/rewrite.cml), built against the type of the call's result, whose field types and field
+/// order are the declaration's. The values of the enums are their variants in declaration order.
+slot_t reportValue(Type *reportType, const std::vector<CheckRow> &rows) {
+    // Nothing is allocated between the first object and the last that could move another.
+    mm::NoCollectionScope noCollection;
+    const auto *report   = static_cast<const StructType *>(reportType);
+    const auto *rowsType = static_cast<const ArrayType *>(report->typeAt(0));
+    Array *array         = Array::create(mm::autoSpace(), rows.size());
+    const auto index     = [](const char *const *words, size_t count, const std::string &word) {
+        for (size_t k = 0; k < count; ++k) {
+            if (word == words[k]) {
+                return static_cast<uint32_t>(k);
+            }
+        }
+        return static_cast<uint32_t>(count - 1);
+    };
+    for (size_t i = 0; i < rows.size(); ++i) {
+        const CheckRow &row = rows[i];
+        Struct *out         = Struct::create(8, mm::autoSpace());
+        out->set(0, toSlot(String::from(row.rule, mm::autoSpace())));
+        out->set(1, toSlot(String::from(row.instance, mm::autoSpace())));
+        out->set(
+            2, toSlot(Variant::create(index(kVerdictWords, 3, row.verdict), 0, mm::autoSpace())));
+        out->set(
+            3,
+            toSlot(Variant::create(
+                index(kPropositionWords, 3, row.proposition), 0, mm::autoSpace())));
+        out->set(4, toSlot(String::from(row.evidence, mm::autoSpace())));
+        out->set(5, toSlot(String::from(row.reason, mm::autoSpace())));
+        out->set(6, toSlot(String::from(row.coverage, mm::autoSpace())));
+        out->set(7, toSlot(String::from(row.detail, mm::autoSpace())));
+        array->set<Object *>(i, out, rowsType);
+    }
+    Struct *out = Struct::create(1, mm::autoSpace());
+    out->set(0, toSlot(array));
+    return toSlot(out);
+}
+
+/// The rows of a report value, as text: what `reportValue` put into it.
+std::vector<CheckRow> rowsOfReport(const Struct *report) {
+    std::vector<CheckRow> rows;
+    const auto *array = fromSlot<const Array *>(report->slotAt(0));
+    for (size_t i = 0; i < array->size(); ++i) {
+        const auto *out = array->get<const Struct *>(i);
+        const auto text = [&](size_t field) {
+            return fromSlot<const String *>(out->slotAt(field))->toString();
+        };
+        CheckRow row;
+        row.rule               = text(0);
+        row.instance           = text(1);
+        const auto verdict     = fromSlot<const Variant *>(out->slotAt(2))->tag();
+        const auto proposition = fromSlot<const Variant *>(out->slotAt(3))->tag();
+        row.verdict            = kVerdictWords[verdict < 3 ? verdict : 2];
+        row.proposition        = kPropositionWords[proposition < 3 ? proposition : 0];
+        row.evidence           = text(4);
+        row.reason             = text(5);
+        row.coverage           = text(6);
+        row.detail             = text(7);
+        rows.push_back(std::move(row));
+    }
+    return rows;
+}
+
 /// `check(rules, samples, seed)`: for every rule, `samples` random instances (random constants
 /// for the const parameters, random values for the others) of its two sides, which must agree.
 /// A rule that asks for `refine_accuracy` is compared by its error against a higher-precision
@@ -3807,24 +3917,19 @@ void checkGenericRule(
 /// instance, the verdict, what the verdict is about and the evidence or the reason (the rule on `verification-verdict-surface`, 2: the verdict is published by `check` and
 /// the text output is the fixed rendering of that table, which is what a reader -- and the
 /// acceptance -- reads).
-slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
-    const int64_t samples = std::max<int64_t>(1, norm.get<Int64>(1));
-    const uint64_t seed   = static_cast<uint64_t>(norm.get<Int64>(2));
+slot_t checkRules(ArgsView &with, ArgsView &norm, Context &ctx, bool over) {
+    const int64_t samples = std::max<int64_t>(1, with.get<Int64>(with.size() - 2));
+    const uint64_t seed   = static_cast<uint64_t>(with.get<Int64>(with.size() - 1));
     // The program the call was given, or none: the parameter is a `Program?` whose default is
     // `null` (design principles 4.4), so a
     // call that leaves it out reads the null constant of the type and has no types of its own to
     // add. Its types join the candidate set of every generic rule below.
     std::vector<Type *> programTypes;
-    if (norm.size() > 3) {
-        // A `Program?` is the null slot or a tuple holding the program (rtdata/tagged.h), so the
-        // payload is what names the program: reading the slot as a pointer would read the tuple.
-        const slot_t given = norm.slot(3);
-        if (given != NullSlot) {
-            if (const camel::runtime::Program *program =
-                    fromSlot<const camel::runtime::Program *>(nullablePayload(given));
-                program != nullptr) {
-                programTypes = programValueTypes(*program);
-            }
+    if (over) {
+        // `over: f`: the values of the function `f` have types of their own to add.
+        if (const ::Function *over = with.get<::Function *>(0);
+            over != nullptr && over->program() != nullptr) {
+            programTypes = programValueTypes(*over->program());
         }
     }
     std::vector<CheckRow> rows;
@@ -3860,86 +3965,24 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         checkOneRule(
             ctx, source, samples, sampleStreamOf(seed, std::string_view(source.name)), "", rows);
     }
-    return toSlot(CheckReportObject::create(std::move(rows), mm::autoSpace()));
+    return reportValue(norm.resultType(), rows);
 }
 
-/// The report's fixed rendering, as a string. `print(report)` writes the same text through the
-/// value's `print`: this is for a caller that wants the text as a value (to compare it, to store
-/// it, or to hand it to something that reads strings).
+/// `rules->check<samples, seed>`.
+slot_t checkKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return checkRules(with, norm, ctx, false);
+}
+
+/// `rules->check<over, samples, seed>`: the rules are also checked at the types of `over`.
+slot_t checkOverKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return checkRules(with, norm, ctx, true);
+}
+
+/// The report's fixed rendering, as a string: for a caller that wants the text as a value (to
+/// compare it, to store it, or to hand it to something that reads strings).
 slot_t checkTextKernel(ArgsView &, ArgsView &norm, Context &) {
-    const auto *report = norm.get<const CheckReportObject *>(0);
-    return toSlot(String::from(report->text(), mm::autoSpace()));
-}
-
-/// How many rows the table has.
-slot_t checkRowCountKernel(ArgsView &, ArgsView &norm, Context &) {
-    const auto *report = norm.get<const CheckReportObject *>(0);
-    return toSlot<Int64>(static_cast<int64_t>(report->rows().size()));
-}
-
-/// One column of one row of the table. The row index is checked: a reader that asks for a row the
-/// report does not have is answered with an error value naming the count, rather than with an empty
-/// string that would read like a row whose reason is empty.
-const CheckRow *rowAt(const CheckReportObject *report, int64_t at, const char *who) {
-    if (at < 0 || static_cast<size_t>(at) >= report->rows().size()) {
-        return nullptr;
-    }
-    return &report->rows()[static_cast<size_t>(at)];
-}
-
-slot_t rowColumnKernel(ArgsView &norm, const char *who, std::string CheckRow::*field) {
-    const auto *report  = norm.get<const CheckReportObject *>(0);
-    const int64_t at    = norm.get<Int64>(1);
-    const CheckRow *row = rowAt(report, at, who);
-    if (row == nullptr) {
-        return makeError(
-            "IndexError",
-            std::format(
-                "the report has {} row(s), and row {} was asked for", report->rows().size(), at),
-            who);
-    }
-    return makeOk(
-        toSlot(String::from(row->*field, mm::autoSpace())),
-        TupleType::fallible(Type::String()));
-}
-
-slot_t checkRuleKernel(ArgsView &, ArgsView &norm, Context &) {
-    return rowColumnKernel(norm, "<rewrite::check_rule>", &CheckRow::rule);
-}
-
-slot_t checkInstanceKernel(ArgsView &, ArgsView &norm, Context &) {
-    return rowColumnKernel(norm, "<rewrite::check_instance>", &CheckRow::instance);
-}
-
-slot_t checkVerdictKernel(ArgsView &, ArgsView &norm, Context &) {
-    return rowColumnKernel(norm, "<rewrite::check_verdict>", &CheckRow::verdict);
-}
-
-slot_t checkPropositionKernel(ArgsView &, ArgsView &norm, Context &) {
-    return rowColumnKernel(norm, "<rewrite::check_proposition>", &CheckRow::proposition);
-}
-
-slot_t checkEvidenceKernel(ArgsView &, ArgsView &norm, Context &) {
-    return rowColumnKernel(norm, "<rewrite::check_evidence>", &CheckRow::evidence);
-}
-
-slot_t checkReasonKernel(ArgsView &, ArgsView &norm, Context &) {
-    return rowColumnKernel(norm, "<rewrite::check_reason>", &CheckRow::reason);
-}
-
-/// What the translation layer made of one row's rule
-/// (docs/design/rewrite/plan-verification.cn.md, S1): the proposition read out of the two sides,
-/// or `beyond translation coverage` with the reason it refused. A rule outside
-/// the coverage is `sampled` and this is where the reason is written.
-slot_t checkCoverageKernel(ArgsView &, ArgsView &norm, Context &) {
-    return rowColumnKernel(norm, "<rewrite::check_coverage>", &CheckRow::coverage);
-}
-
-/// The declared coverage of the translation layer: which widths and operators it translates, what
-/// it refuses, and that a rule's condition is not a premise yet. The boundary is a value and not a
-/// paragraph, so a reader reads it and a test pins it.
-slot_t coverageTableKernel(ArgsView &, ArgsView &, Context &) {
-    return toSlot(String::from(camel::verify::coverageTable(), mm::autoSpace()));
+    const auto text = renderRows(rowsOfReport(norm.get<const Struct *>(0)));
+    return toSlot(String::from(text, mm::autoSpace()));
 }
 
 class RewriteExecutor final : public Executor {
@@ -3964,16 +4007,8 @@ class RewriteExecutor final : public Executor {
             {"saturate", saturateKernel},
             {"extract", extractKernel},
             {"check", checkKernel},
+            {"check_over", checkOverKernel},
             {"check_text", checkTextKernel},
-            {"check_row_count", checkRowCountKernel},
-            {"check_rule", checkRuleKernel},
-            {"check_instance", checkInstanceKernel},
-            {"check_verdict", checkVerdictKernel},
-            {"check_proposition", checkPropositionKernel},
-            {"check_evidence", checkEvidenceKernel},
-            {"check_reason", checkReasonKernel},
-            {"check_coverage", checkCoverageKernel},
-            {"check_coverage_table", coverageTableKernel},
             {"fact", camel::rewritemod::factKernel},
         };
     }
@@ -3982,9 +4017,13 @@ class RewriteExecutor final : public Executor {
 class RewriteModule final : public BuiltinModule {
   public:
     explicit RewriteModule(context_ptr_t ctx) : BuiltinModule("rewrite", std::move(ctx)) {
-        exportType(Reference("Rule"), RuleType::get());
-        exportType(Reference("Proof"), ProofType::get());
-        exportType(Reference("CheckReport"), CheckReportType::get());
+        camel::core::type::registerNativeType("rewrite", "Rule", RuleType::get());
+        camel::core::type::registerNativeType("rewrite", "Proof", ProofType::get());
+        // The declared coverage of the translation layer is a value of the module, read as a
+        // name (`coverage_table`), not called.
+        exportValue(
+            Reference("coverage_table"),
+            std::make_shared<camel::core::data::StringData>(camel::verify::coverageTable()));
         exportEntity(
             "__rule",
             OperatorGroup::create(
@@ -4151,16 +4190,8 @@ class RewriteModule final : public BuiltinModule {
              {"saturate", false},
              {"extract", false},
              {"check", false},
+             {"check_over", false},
              {"check_text", true},
-             {"check_row_count", true},
-             {"check_rule", true},
-             {"check_instance", true},
-             {"check_verdict", true},
-             {"check_proposition", true},
-             {"check_evidence", true},
-             {"check_reason", true},
-             {"check_coverage", true},
-{"check_coverage_table", true},
              {"fact", true}});
         // What builds a rule and what compiles a fact declaration has no effect on anything
         // outside the program: the rule value it makes is the program's own, and the facts a

@@ -22,14 +22,14 @@ func appended(): float {
 with <w: float[]>
 func extended(): float {
     let xs = [10.0, 20.0]
-    let ys = xs->extend<w>
+    let ys = concat(xs, w)
     return ys[2] * 2.0 + ys[3] * 5.0
 }
 
 with <w: float>
 func sliced(): float {
     let xs = [10.0, 20.0, 30.0]
-    let s = xs->slice<0, int(w)>
+    let s = xs[0:int(w)]
     return s[0] * 5.0
 }
 

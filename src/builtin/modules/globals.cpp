@@ -46,6 +46,21 @@ bool sameOrEnteringStruct(Type *a, Type *b) {
            (a->assignableFrom(b) || b->assignableFrom(a));
 }
 
+// An element stands at a callback's parameter: the same type, or an unnamed struct and a named one
+// with its fields, which is the relation the other joins use (design principles 5.2). The
+// callback's parameter takes the element's resources when its own clause is unwritten.
+bool elementEntersParameter(Type *parameter, Type *element) {
+    if (sameTypeWithUnwrittenResources(parameter, element)) {
+        return true;
+    }
+    if (parameter->code() != TypeCode::Struct || element->code() != TypeCode::Struct ||
+        static_cast<const StructType *>(parameter)->named() ==
+            static_cast<const StructType *>(element)->named()) {
+        return false;
+    }
+    return parameter->assignableFrom(element);
+}
+
 /// Whether a value of type `type` exists at run time, so that an operator taking a value of
 /// every type (`string(x)`) may take it: not `void`, not a type the compiler uses on its own
 /// (a type variable, a union, a reference). This is what a parameter typed `any` used to accept.
@@ -2407,22 +2422,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             }),
         // ======= IO (built-in input/print/println/eprintln) ======
         OperatorGroup::create(
-            "input",
-            {
-                {
-                    ":io/input",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "(prompt: string) => string",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            if (!norm[0]->equals(Type::String()))
-                                return nullopt;
-                            return Type::String();
-                        }),
-                },
-            }),
-        OperatorGroup::create(
             "print",
             {
                 {
@@ -2601,23 +2600,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 },
             }),
         OperatorGroup::create(
-            "head",
-            {
-                {
-                    ":struct/head_arr",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "<> (xs: T[]) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
-                            return arrType->elemType();
-                        }),
-                },
-            }),
-        OperatorGroup::create(
             "last",
             {
                 {
@@ -2631,23 +2613,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                 return nullopt;
                             const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
                             return arrType->elemType();
-                        }),
-                },
-            }),
-        OperatorGroup::create(
-            "tail",
-            {
-                {
-                    ":struct/tail_arr",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "<> (xs: T[]) => T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
-                            return ArrayType::create(arrType->elemType());
                         }),
                 },
             }),
@@ -2681,23 +2646,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
         OperatorGroup::create(
             "slice",
             {
-                {
-                    ":struct/slice_arr",
-                    DynamicFuncTypeResolver::create(
-                        {{2, {false, false}}, {1, {false}}},
-                        "<start: int, end: int> (xs: T[]) => T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            if (with[0]->code() != TypeCode::Int64)
-                                return nullopt;
-                            if (with[1]->code() != TypeCode::Int64)
-                                return nullopt;
-                            const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
-                            return arrType;
-                        }),
-                },
                 {
                     // The function form of the same slice node the subscript lowers to; see
                     // coreSliceFunctionResolver for the calls each of the two answers.
@@ -2856,28 +2804,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 },
             }),
         OperatorGroup::create(
-            "extend",
-            {
-                {
-                    ":struct/extend_arr",
-                    DynamicFuncTypeResolver::create(
-                        {{1, {false}}, {1, {false}}},
-                        "<other: T[]> (xs: T[]) => T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            if (with[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            const auto &arrType      = tt::as_ptr<ArrayType>(norm[0]);
-                            const auto &otherArrType = tt::as_ptr<ArrayType>(with[0]);
-                            if (!arrType->equals(otherArrType))
-                                return nullopt;
-                            return arrType;
-                        }),
-                },
-            }),
-        OperatorGroup::create(
             "contains",
             {
                 {
@@ -2943,43 +2869,13 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                 // An element stands at the callback's result, and the callback's
                                 // parameter stands at the element type: each takes the other
                                 // side's resources when its own clause is unwritten.
-                                if (!sameTypeWithUnwrittenResources(
+                                if (!elementEntersParameter(
                                         funcType->normTypeAt(0), elemType))
                                     return nullopt;
                                 ASSERT(funcType->hasExitType(), "Function must have exit type");
                                 return ArrayType::create(funcType->exitType());
                             }),
                         mapRuleSignature()),
-                },
-            }),
-        OperatorGroup::create(
-            "apply",
-            {
-                {
-                    ":mark/apply_arr",
-                    DynamicFuncTypeResolver::create(
-                        {{1, {false}}, {1, {false}}},
-                        "<f: (item: T) => T> (xs: T[]) => T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            const auto &arrType  = tt::as_ptr<ArrayType>(norm[0]);
-                            const auto &elemType = arrType->elemType();
-                            if (with[0]->code() != TypeCode::Function)
-                                return nullopt;
-                            const auto &funcType = tt::as_ptr<FunctionType>(with[0]);
-                            if (funcType->normTypesCount() != 1)
-                                return nullopt;
-                            // An element stands at the callback's result and the callback's
-                            // parameter: each takes the other side's resources when its own
-                            // clause is unwritten.
-                            if (!sameTypeWithUnwrittenResources(funcType->normTypeAt(0), elemType))
-                                return nullopt;
-                            if (!sameTypeWithUnwrittenResources(elemType, funcType->exitType()))
-                                return nullopt;
-                            return arrType;
-                        }),
                 },
             }),
         OperatorGroup::create(
@@ -3004,7 +2900,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                 return nullopt;
                             // An element stands at the predicate's parameter, which takes the
                             // element's resources when its own clause is unwritten.
-                            if (!sameTypeWithUnwrittenResources(
+                            if (!elementEntersParameter(
                                     funcType->normTypeAt(0), arrType->elemType()))
                                 return nullopt;
                             if (!funcType->hasExitType() ||
@@ -3071,7 +2967,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                 return nullopt;
                             // An element stands at the callback's parameter, which takes the
                             // element's resources when its own clause is unwritten.
-                            if (!sameTypeWithUnwrittenResources(
+                            if (!elementEntersParameter(
                                     funcType->normTypeAt(0), arrType->elemType()))
                                 return nullopt;
                             return Type::Void();

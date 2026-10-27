@@ -2,72 +2,75 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Signatures of the `statistics` module (C++ operators, modules/statistics).
+ * Descriptive statistics of an array of floats, written in Camel on `array` (whose `mean` is the
+ * first of them).
  *
- * Every function takes an array of numbers of one type (i32, int, f32 or float) and computes
- * in float.
+ * Every function takes a float element type (`float`, `f32`, `bf16` or `f16`) and answers it.
+ * The elements are widened to f64, the statistic is computed there, and the result is rounded
+ * once into the element type: the rule of every float reduction. An array of integers is
+ * converted first (`xs->map<(x) => float(x)>`). A statistic that does not exist for the array
+ * (the standard deviation of one value) is a fault, as every reduction over too few elements is
+ * (design principles 7.7).
  */
 
-// The declarations of the operators of the C++ module `statistics` (`modules/statistics`). This
-// file is the one source of their signatures (design principles 6.4): the
-// C++ side keeps the kernels, the executor and the operator traits.
-//
-// None of them has a computed result type: the answer is `float` (or `float?`) whatever the
-// element type is. The C++ resolver was one umbrella rule that accepted a numeric array and gave
-// `float`; the four numeric element types are enumerated here, as they already were in the
-// reference signature file, and each name's four declarations share its one operator URI
-// (`statistics:mean`, ...). A call picks the rule of its element type, exactly as the resolver
-// did.
-//
-// `quantile`'s with-parameter is part of every one of its four signatures: a with-parameter
-// written above a declaration belongs to that declaration only, so each overload repeats it and
-// `[...]->quantile<q>` is checked the same way for an i32, an int, an f32 and a float array.
+import { sort, sum } from array
+import { ceil, floor, is_nan, nan, sqrt } from math
+import { is_float } from types
 
+/// The sample variance (divisor n - 1).
+/// @fails fault `InvalidArgument` when the array has fewer than two elements
+/// @example [1.0, 2.0, 3.0, 4.0]->variance    // 1.66667
+export func variance::<T>(xs: T[]): T when is_float::<T>() {
+    return T(variance_of(wide(xs)))
+}
 
-/// The arithmetic mean; 0 for an empty array.
-/// @pure
-/// @example mean([1, 2, 3, 4])    // 2.5
-export func mean(xs: i32[]): float
-export func mean(xs: int[]): float
-export func mean(xs: f32[]): float
-export func mean(xs: float[]): float
+/// The sample standard deviation (divisor n - 1).
+/// @fails fault `InvalidArgument` when the array has fewer than two elements
+/// @example [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]->stdev    // 2.13809
+export func stdev::<T>(xs: T[]): T when is_float::<T>() {
+    return T(sqrt(variance_of(wide(xs))))
+}
 
-/// The sample standard deviation (divisor n - 1); 0 for fewer than two elements.
-/// @pure
-/// @example stdev([2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0])    // 2.13809
-export func stdev(xs: i32[]): float
-export func stdev(xs: int[]): float
-export func stdev(xs: f32[]): float
-export func stdev(xs: float[]): float
-
-/// The sample variance (divisor n - 1), the square of stdev; 0 for fewer than two elements.
-/// @pure
-/// @example variance([1, 2, 3, 4])    // 1.66667
-export func variance(xs: i32[]): float
-export func variance(xs: int[]): float
-export func variance(xs: f32[]): float
-export func variance(xs: float[]): float
-
-/// The middle value of the sorted elements, the mean of the two middle ones for an even
-/// count; null for an empty array, NaN when an element is NaN.
-/// @pure
-/// @example median([3, 1, 2]) ?? 0.0    // 2
-export func median(xs: i32[]): float?
-export func median(xs: int[]): float?
-export func median(xs: f32[]): float?
-export func median(xs: float[]): float?
+/// The middle value of the sorted elements, the mean of the two middle ones for an even count;
+/// NaN when an element is NaN.
+/// @fails fault `InvalidArgument` when the array has no element
+/// @example [3.0, 1.0, 2.0]->median    // 2
+export func median::<T>(xs: T[]): T when is_float::<T>() {
+    return xs->quantile<0.5>
+}
 
 /// The q-quantile, q from 0 to 1, by linear interpolation between the two nearest ranks
-/// (position q * (n - 1) of the sorted elements); null for an empty array, NaN when an
-/// element is NaN.
-/// @pure
-/// @fails fault `InvalidArgument` when q is not between 0 and 1
-/// @example [1.0, 2.0, 3.0, 4.0, 5.0]->quantile<0.25> ?? 0.0    // 2
+/// (position q * (n - 1) of the sorted elements); NaN when an element is NaN.
+/// @fails fault `InvalidArgument` when q is not between 0 and 1, or the array has no element
+/// @example [1.0, 2.0, 3.0, 4.0, 5.0]->quantile<0.25>    // 2
 with <q: float>
-export func quantile(xs: i32[]): float?
-with <q: float>
-export func quantile(xs: int[]): float?
-with <q: float>
-export func quantile(xs: f32[]): float?
-with <q: float>
-export func quantile(xs: float[]): float?
+export func quantile::<T>(xs: T[]): T when is_float::<T>() {
+    return if !(q >= 0.0 && q <= 1.0) then fail<'InvalidArgument'>('a quantile is between 0 and 1')
+        else if len(xs) == 0 then fail<'InvalidArgument'>('the quantile of no elements')
+        else T(quantile_of(sort(wide(xs)), q))
+}
+
+// The elements as f64, each converted on its own (the type name does not yet act on an array).
+func wide::<T>(xs: T[]): float[] {
+    return xs->map<(x: T): float => float(x)>
+}
+
+// The sample variance: the squares of the distances to the mean, added in f64 and divided by n - 1.
+func variance_of(w: float[]): float {
+    return if len(w) < 2 then fail<'InvalidArgument'>('a variance needs at least two elements')
+        else {
+            let m = sum(w) / float(len(w))
+            sum(w->map<(x) => (x - m) * (x - m)>) / float(len(w) - 1)
+        }
+}
+
+// The q-quantile of values in ascending order, a NaN being last, so one anywhere is NaN.
+func quantile_of(sorted: float[], q: float): float {
+    let at = q * float(len(sorted) - 1)
+    let lo = int(floor(at))
+    let hi = int(ceil(at))
+    let frac = at - float(lo)
+    return if is_nan(last(sorted)) then nan
+        else if lo == hi then sorted[lo]
+        else sorted[lo] * (1.0 - frac) + sorted[hi] * frac
+}

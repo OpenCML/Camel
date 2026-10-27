@@ -111,18 +111,17 @@ func main(): int sync {
   | 写法 | 结果 |
   |---|---|
   | `len(xs)` | 长度 |
-  | `head(xs)`、`tail(xs)` | 第一个元素（空数组是故障 `RuntimeDiag::IndexOutOfRange`，与 `xs[0]` 相同）；去掉第一个元素的数组 |
   | `last(xs)` | 最后一个元素（空数组是故障 `RuntimeDiag::IndexOutOfRange`）。负数下标不是从尾部数，所以取末尾元素用它，不写 `xs[-1]` |
   | `a..b` | 区间 `[a, a+1, ..., b-1]`；`a >= b` 时为空。带步长写 `range(a, b, step)` |
-  | `xs->slice<a, b>` | 下标 `a` 到 `b-1` 的新数组。`a`、`b` 是 0 到长度之间的位置；越出数组（包括负数）是故障 `RuntimeDiag::SliceOutOfRange`，与下标越界一致。两端都在数组内而 `b < a` 时结果为空。要“至多取 n 个”用 `array` 模块的 `take`、`drop`，它们按定义截断 |
+  | `xs[a:b]` | 下标 `a` 到 `b-1` 的新数组。`a`、`b` 是 0 到长度之间的位置；越出数组（包括负数）是故障 `RuntimeDiag::SliceOutOfRange`，与下标越界一致。两端都在数组内而 `b < a` 时结果为空。要“至多取 n 个”用 `array` 模块的 `take`、`drop`，它们按定义截断 |
   | `concat(xs, ys)` | 连接成新数组 |
   | `xs->contains<v>` | 是否含有等于 `v` 的元素；“等于”就是元素类型的 `==`（数组、元组、结构体按内容比较，见 [6.7.3](06_expressions.md)） |
   | `zip(xs, ys)` | `(x, y)` 元组的数组；三个或更多数组得到相应元数的元组（`zip(xs, ys, zs)`）；长度必须相同 |
   | `strs->join<sep>` | 把 `string[]` 连成一个字符串 |
   | `map`、`filter`、`reduce`、`foreach` | 见 [6.10](06_expressions.md#610-高阶算子) |
-  | `xs->append<v>`、`xs->extend<ys>` | 在末尾加上 `v`（或 `ys` 的各个元素）的**新数组**，`xs` 不变；要追加到变量上写 `xs = xs->append<v>`（见 3.7） |
+  | `xs->append<v>` | 在末尾加上 `v` 的**新数组**，`xs` 不变；要追加到变量上写 `xs = xs->append<v>`（见 3.7）；连接两个数组用 `concat(xs, ys)` |
 
-- 更多的数组函数在 `array` 模块里，使用前要导入（`import { reverse, sum } from array`）：`reverse`、`take`、`drop`、`enumerate`、`flatten`、`unique`、`index_of`、`find`、`any`、`all`、`count`、`sum`、`min`、`max`、`flat_map`、`sort_by`、`zip_with`，见 [标准库参考](../stdlib-reference.md)。
+- 更多的数组函数在 `array` 模块里，使用前要导入（`import { reverse, sum } from array`）：`reverse`、`take`、`drop`、`enumerate`、`flatten`、`unique`、`index_of`、`find`、`find_index`、`any`、`all`、`count`、`chunks`、`sum`、`mean`、`min`、`max`、`argmax`、`argmin`、`flat_map`、`sort_by`、`zip_with`，见 [标准库参考](../stdlib-reference.md)。
 
 ### 3.3.2 元组
 
@@ -354,7 +353,7 @@ func main(): int sync {
 | `get_or<k, d>(m)` | `V` | 查不到时为 `d` |
 | `put<k, v>(m)` | `Map<K, V>` | 键已存在则替换 |
 | `remove<k>(m)`、`remove<x>(s)` | 同类型 | 不存在时内容不变 |
-| `has<k>(m)`、`has<x>(s)`、`contains<x>(s)` | `bool` | |
+| `has<k>(m)`、`contains<x>(s)` | `bool` | |
 | `len(m)`、`len(s)` | `int` | |
 | `keys(m)`、`values(m)`、`items(m)` | `K[]`、`V[]`、`(K, V)[]` | 按键的顺序 |
 | `merge(m1, m2)` | `Map<K, V>` | 键相同时取 `m2` 的 |

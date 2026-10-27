@@ -1,0 +1,31 @@
+id = "compile.when_arity"
+order = 943
+tier = "fast"
+tags = ["feat", "compile", "overload", "when"]
+desc = "Overloads of one name that differ in their number of arguments resolve independently: the count picks the candidates and `when` filters among them (design principles 4.4); a pass-shaped declaration (one function in, `when is_function::<F>()`) does not take the operator of its name with it"
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "when_arity.camel"
+desc = "Two generic Camel functions of one name, one and two ordinary arguments, the same `when`: each call takes its own, and a named `with` argument finds the parameter of the declaration chosen by the count."
+kind = "behavior"
+case = "../../../cases/compile/when_arity/camel_overloads.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "2 2\n32 31 30\n"
+
+[[tests]]
+name = "when_arity.native"
+desc = "A native operator that writes the condition of a pass (`arity_probe` of test_support, as `export_model` of onnx) beside a pass of the same name in onnx: the operator has two ordinary parameters, a pass one, so it is exported and its named `with` arguments are found. It was taken for a pass because of its `when`, and left unexported."
+kind = "behavior"
+case = "../../../cases/compile/when_arity/native_overloads.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "70 70\n72 71\n"

@@ -6,7 +6,6 @@
  */
 
 import { reshape } from tensor
-import { Program } from graph
 import { rewrite } from rewrite
 
 type Vec = f32[3]
@@ -47,6 +46,6 @@ func main(): int sync {
 }
 
 /// The unguarded laws, applied to the same program: the boundary lines collapse.
-export func apply(p: Program): Program! {
-    return rewrite(p, [combine_unguarded, fold_unguarded, mixed_unguarded])
+export func apply::<F>(p: F): F! {
+    return p->rewrite<[combine_unguarded, fold_unguarded, mixed_unguarded]>
 }

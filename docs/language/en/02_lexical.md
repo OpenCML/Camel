@@ -177,7 +177,7 @@ The other way round, `func` and `type` among the position names are reserved wor
 
 - **An octal digit is not an escape**: only a bare `\0` is the null byte. A `0` followed by another octal digit is an unknown escape, not a byte: `\01` is `\01`, `\012` is `\012`, and `\101` and `\8` are the same; each is kept as written and warns with `LexicalDiag::InvalidEscapeSequence` (one code and one message shape, with no diagnostic of its own for octal). `\x` with no hexadecimal digit and a `\u{...}` that is not a scalar value are still kept as written by the table above; they are not unknown escapes here.
 - `\$` is a `$` in a formatted string too. The one addition is `\${` (a dollar sign immediately followed by a left brace): in a formatted string it is the **structural escape** that writes a literal `${` and starts no interpolation, see [2.5.4.1](#2541-formatted-strings); an ordinary or a triple-quoted string has no `${` meaning, so `\${` there is the character escape `\$` followed by `{`, which is also `${`.
-- A string is a sequence of bytes. `len` gives the number of bytes: `len('héllo')` is 6, `len('中文')` is 6.
+- A string is valid UTF-8 text, and its length and subscripts count code points: `len('héllo')` is 5, `len('中文')` is 2; a sequence of bytes is `Bytes`.
 
 #### 2.5.4.1 Formatted strings
 

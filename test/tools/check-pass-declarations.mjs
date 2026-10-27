@@ -184,6 +184,35 @@ if (process.argv.includes('--names')) {
 
 // (4) A module's pass is a declaration in the module's `.cml` file, and every registration has
 // one. A declaration is pass-shaped when its condition is the pipeline's (`is_function::<T>()`).
+// The number of ordinary parameters a declaration line writes: the commas at the top level of its
+// first parenthesised list, plus one. A pass takes one (the function it is applied to); a
+// declaration with the same condition and more is an operator that wants a function.
+function ordinaryParameterCount(line) {
+    const open = line.indexOf('(')
+    if (open < 0) {
+        return -1
+    }
+    let depth = 0
+    let count = 0
+    let seen = false
+    for (let i = open + 1; i < line.length; i++) {
+        const c = line[i]
+        if ('([<{'.includes(c)) {
+            depth++
+        } else if (')]>}'.includes(c)) {
+            if (depth === 0) {
+                break
+            }
+            depth--
+        } else if (c === ',' && depth === 0) {
+            count++
+        } else if (!/\s/.test(c)) {
+            seen = true
+        }
+    }
+    return seen ? count + 1 : 0
+}
+
 const moduleDeclarations = new Set()
 for (const entry of fs.readdirSync(path.join(REPO_ROOT, 'stdlib'))) {
     if (!entry.endsWith('.cml') || entry === 'std.cml') {
@@ -196,7 +225,15 @@ for (const entry of fs.readdirSync(path.join(REPO_ROOT, 'stdlib'))) {
     )) {
         const lineEnd = text.indexOf('\n', match.index)
         const line = text.slice(match.index, lineEnd < 0 ? undefined : lineEnd)
-        if (!line.replace(/\s+/g, '').includes('whenis_function::<')) {
+        const compact = line.replace(/\s+/g, '')
+        if (!compact.includes('whenis_function::<')) {
+            continue
+        }
+        // A pass is a function transform, `(f: F): F!` (design principles 9.1); a declaration of
+        // another shape declares an operator of a function value, and one with a body is a pass
+        // written in Camel: neither has a registration in C++.
+        const shaped = compact.match(/\(([A-Za-z_][A-Za-z0-9_]*):([A-Za-z_][A-Za-z0-9_]*)\):([A-Za-z_][A-Za-z0-9_]*)!/)
+        if (!shaped || shaped[2] !== shaped[3] || compact.endsWith('{')) {
             continue
         }
         moduleDeclarations.add(`${module}::${match[1]}`)
@@ -304,6 +341,37 @@ if (declaringModules.size === 0 || registeredModules.size === 0) {
 for (const module of registeredModules) {
     if (!declaringModules.has(module)) {
         problems.push(`the module '${module}' contributes a pass and no declaration of it was read`)
+    }
+}
+// A pass is told by its type, whatever implements it. A function transform a module implements
+// as an operator of its own (an engine of `rewrite`, called as `f->rewrite<rules>`) has a kernel
+// table entry of the same name in the module's C++ instead of a pass registration: that entry is
+// its implementation.
+const operatorNames = (module) => {
+    const names = new Set()
+    for (const file of files(path.join(REPO_ROOT, 'modules', module))) {
+        if (!file.endsWith('.cpp')) {
+            continue
+        }
+        for (const match of fs.readFileSync(file, 'utf8').matchAll(/\{\s*"([a-z_0-9]+)"\s*,/g)) {
+            names.add(match[1])
+        }
+    }
+    return names
+}
+for (const declared of [...moduleDeclarations]) {
+    const module = declared.slice(0, declared.indexOf('::'))
+    const name = declared.slice(declared.indexOf('::') + 2)
+    if (!registrations.has(declared) && operatorNames(module).has(name)) {
+        moduleDeclarations.delete(declared)
+    }
+}
+const declaringModulesNow = new Set(
+    [...moduleDeclarations].map((path) => path.slice(0, path.indexOf('::')))
+)
+for (const module of [...declaringModules]) {
+    if (!declaringModulesNow.has(module)) {
+        declaringModules.delete(module)
     }
 }
 for (const module of declaringModules) {

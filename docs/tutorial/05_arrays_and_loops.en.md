@@ -14,7 +14,7 @@ An array is `T[]`; `a..b` is the range from `a` to `b - 1`, which is shorter to 
 let xs = 1..11        // [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 ```
 
-An array is a **value**, not a container someone else can change: `concat(xs, [11])` and `xs->slice<0, 3>` both
+An array is a **value**, not a container someone else can change: `concat(xs, [11])` and `xs[0:3]` both
 return a new array and leave `xs` alone (chapter 2). An out-of-range index is a fault, and the program stops with
 a location (chapter 7).
 
@@ -38,8 +38,8 @@ func main(): int sync {
     println(total)
 
     // Arrays are values: slice and concat return new arrays.
-    let ys = concat(xs->slice<0, 3>, [99])
-    println(ys, len(ys), head(ys))
+    let ys = concat(xs[0:3], [99])
+    println(ys, len(ys), ys[0])
 
     // foreach runs its function for each element, in order.
     ['a', 'b', 'c']->foreach<(s: string) => sync { println('item', s) }>
@@ -134,17 +134,17 @@ in the element function of a `map` (wrong) and in the accumulating function of a
 // Run: camel docs/tutorial/examples/05_map_order.cml
 //      camel docs/tutorial/examples/05_map_order.cml std::prl
 
-import { seed, randint } from random
+import { seed, randint, next_key } from random
 
 func main(): int sync {
     seed(42)
-    // Wrong tool: randint advances a hidden state, so each element depends on which ran first.
-    let drawn = 0..8->map<(i: int): int => randint(0, 99)>
+    // Wrong tool: next_key advances a hidden state, so each element depends on which ran first.
+    let drawn = 0..8->map<(i: int): int => next_key()->randint<0, 100>>
     println(drawn)
 
     seed(42)
     // reduce runs in element order on every back end.
-    let ordered = 0..8->reduce<(acc: int[], i: int): int[] => concat(acc, [randint(0, 99)]), [0]->slice<0, 0>>
+    let ordered = 0..8->reduce<(acc: int[], i: int): int[] => concat(acc, [next_key()->randint<0, 100>]), [0][0:0]>
     println(ordered)
     return 0
 }
@@ -155,8 +155,8 @@ camel docs/tutorial/examples/05_map_order.cml
 ```
 
 ```text
-[75, 63, 75, 13, 90, 9, 57, 37]
-[75, 63, 75, 13, 90, 9, 57, 37]
+[22, 72, 89, 99, 60, 96, 66, 2]
+[22, 72, 89, 99, 60, 96, 66, 2]
 ```
 
 On the sequential back ends (the default `std::nvm`, and `std::fvm` and `std::jit`) the two lines are the same,
@@ -169,17 +169,17 @@ and the same on every run.
 // Run: camel docs/tutorial/examples/05_map_order.cml
 //      camel docs/tutorial/examples/05_map_order.cml std::prl
 
-import { seed, randint } from random
+import { seed, randint, next_key } from random
 
 func main(): int sync {
     seed(42)
-    // Wrong tool: randint advances a hidden state, so each element depends on which ran first.
-    let drawn = 0..8->map<(i: int): int => randint(0, 99)>
+    // Wrong tool: next_key advances a hidden state, so each element depends on which ran first.
+    let drawn = 0..8->map<(i: int): int => next_key()->randint<0, 100>>
     println(drawn)
 
     seed(42)
     // reduce runs in element order on every back end.
-    let ordered = 0..8->reduce<(acc: int[], i: int): int[] => concat(acc, [randint(0, 99)]), [0]->slice<0, 0>>
+    let ordered = 0..8->reduce<(acc: int[], i: int): int[] => concat(acc, [next_key()->randint<0, 100>]), [0][0:0]>
     println(ordered)
     return 0
 }
@@ -190,8 +190,8 @@ camel docs/tutorial/examples/05_map_order.cml std::prl
 ```
 
 Change the last word to the parallel scheduler `std::prl` and the order of the first line is no longer promised;
-it may differ from run to run. One such run printed `[37, 75, 57, 63, 75, 13, 90, 9]` on the first line, and
-still `[75, 63, 75, 13, 90, 9, 57, 37]` on the second. That is the language behaving as specified (design
+it may differ from run to run. One such run printed `[66, 22, 96, 72, 89, 2, 99, 60]` on the first line, and
+still `[22, 72, 89, 99, 60, 96, 66, 2]` on the second. That is the language behaving as specified (design
 principles 3.6), not a defect: the elements have no order, which is exactly what lets `map` run in parallel. The
 rule is short: **keep the functions you hand to `map` and `filter` pure; anything that has to happen in order
 goes in `foreach`, `reduce` or `loop`.**

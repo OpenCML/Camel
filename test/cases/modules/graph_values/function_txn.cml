@@ -1,9 +1,9 @@
 /**
- * A transaction over one function (`open_function`, `to_function`): the new function drops the
+ * A transaction over one function (`open`, `commit`): the new function drops the
  * `+ 1`, and `target` stays as it was for every other holder -- its own graph, a closure that
  * captured it before, and two callers that call it by name.
  */
-import { Graph, Node, constant, graph_of, inputs, nodes, op, op_name, open_function, replace, to_function } from graph
+import { Graph, Node, constant, graph_of, inputs, nodes, op, op_name, open, replace, commit } from graph
 
 func target(x: int): int {
     return (x + 1) * 3
@@ -17,7 +17,7 @@ func opText(n: Node): string {
 }
 
 func isOne(n: Node): bool {
-    return match constant(n, 0) {
+    return match constant::<int>(n) {
         case null => false
         case v => v == 1
     }
@@ -50,9 +50,9 @@ func viaB(x: int): int {
 func main(): int sync {
     let before = size(graph_of(target))
     let held = (x: int): int => target(x) + 1000
-    let t = open_function(target)
+    let t = open(target)
     nodes(graph_of(target))->filter<isAddOne>->foreach<(n: Node) => replace(t, n, inputs(n)[0])>
-    let g = to_function(t, target) !! target
+    let g = commit(t) !! target
     println(`new: ${g(5)} ${addOnes(graph_of(g))}`)
     println(`old: ${target(5)} ${addOnes(graph_of(target))} ${size(graph_of(target)) == before}`)
     println(`holders: ${held(5)} ${viaA(5)} ${viaB(5)}`)

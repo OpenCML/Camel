@@ -1,0 +1,105 @@
+id = "compile.when_overloads"
+order = 937
+tier = "fast"
+tags = ["feat", "compile", "overload", "when"]
+desc = "Declarations of one name with the same parameters and different `when` conditions are overloads (design principles 4.4)"
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "when_overloads.generic"
+desc = "`kind::<T>` is declared for floats, for complex numbers and for integers, each with its own `when`: the call takes the overload whose condition holds for the type of its argument."
+kind = "behavior"
+case = "../../../cases/compile/when_overloads/generic.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "float float complex integer integer\n"
+
+[[tests]]
+name = "when_overloads.values"
+desc = "Overloads whose conditions read a `with` value are both declared, and a call where one condition holds takes that overload."
+kind = "behavior"
+case = "../../../cases/compile/when_overloads/values.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "fast wide\n"
+
+[[tests]]
+name = "when_overloads.none_applies"
+desc = "No condition holds for the argument: WhenConditionUnmet at the call, listing each candidate and its condition."
+kind = "negative"
+case = "../../../cases/compile/when_overloads/err_none_applies.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenConditionUnmet"
+expect_diagnostic_line = 14
+expect_output_contains = ["when is_float::<T>()", "when is_complex::<T>()"]
+
+[[tests]]
+name = "when_overloads.ambiguous_call"
+desc = "Two overloads apply to one call: AmbiguousCall at the call, listing the condition of each."
+kind = "negative"
+case = "../../../cases/compile/when_overloads/err_ambiguous.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::AmbiguousCall"
+expect_diagnostic_line = 14
+expect_output_contains = ["when fast", "when wide"]
+
+[[tests]]
+name = "when_overloads.overlap"
+desc = "Conditions a registered type satisfies together (`is_float` inside `is_numeric`) are WhenDeclarationOverlap at the second declaration."
+kind = "negative"
+case = "../../../cases/compile/when_overloads/err_overlap.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenDeclarationOverlap"
+expect_diagnostic_line = 9
+
+[[tests]]
+name = "when_overloads.same_condition"
+desc = "The same condition written twice overlaps itself: WhenDeclarationOverlap."
+kind = "negative"
+case = "../../../cases/compile/when_overloads/err_same_condition.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenDeclarationOverlap"
+expect_diagnostic_line = 9
+
+[[tests]]
+name = "when_overloads.no_condition_is_redeclaration"
+desc = "A declaration without a `when` beside one with a `when` takes every type the other takes: it is a Redeclaration, not an overload."
+kind = "negative"
+case = "../../../cases/compile/when_overloads/err_no_when.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::Redeclaration"
+expect_diagnostic_line = 9
+
+[[tests]]
+name = "when_overloads.mixed"
+desc = "Of two overloads that fit `int[][]`, the one with no `when` applies and the other's condition (`T` is not an array) is false; for `int[]` only the conditioned one fits."
+kind = "behavior"
+case = "../../../cases/compile/when_overloads/mixed.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "true false\n[1, 2]\n[1]\n"
+
+[[tests]]
+name = "when_overloads.unselected_conversion"
+desc = "`T(x)` in a case of `match type` that the instance does not select resolves like the one it selects: the instances for `f32`, `float` and `int` all compile and run."
+kind = "behavior"
+case = "../../../cases/compile/when_overloads/unselected_conversion.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "1.5 2.5 0\n"

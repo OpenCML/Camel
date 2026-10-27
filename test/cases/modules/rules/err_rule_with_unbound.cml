@@ -5,13 +5,16 @@
  * declaration is a compile error where the value is written, whether it stands in a rule set or
  * anywhere else a `Rule` is wanted.
  */
-import { Program } from graph
 import { rewrite } from rewrite
 
 with <shift: int>
 rule add_shift(x: int) { x + 0 => x }
 
-export func apply(p: Program): Program! {
+export func apply(p: () => int): (() => int)! {
     let rules = [add_shift]
-    return rewrite(p, rules)
+    return p->rewrite<rules>
+}
+
+func main(): int sync {
+    return 0
 }

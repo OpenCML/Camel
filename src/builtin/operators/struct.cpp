@@ -102,33 +102,6 @@ slot_t __zip__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return rtdata::toSlot(result);
 }
 
-slot_t __head_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *arr = norm.get<Array *>(0);
-    if (!arr || arr->size() == 0) {
-        // An empty array has no first element: the same fault as `xs[0]`. It used to return
-        // a zero slot (0, 0.0, or a null object the caller then read as a value).
-        throwRuntimeFault(RuntimeDiag::IndexOutOfRange, Int64{0}, "an array", size_t{0});
-    }
-    return arr->get<slot_t>(0);
-}
-
-slot_t __tail_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *arr    = norm.get<Array *>(0);
-    auto *arrType = tt::as_ptr<ArrayType>(norm.type(0));
-
-    size_t n = arr->size();
-    if (n <= 1) {
-        Array *empty = Array::create(mm::autoSpace(), arrType, 0);
-        return rtdata::toSlot(empty);
-    }
-
-    Array *res = Array::create(mm::autoSpace(), arrType, n - 1);
-    for (size_t i = 1; i < n; ++i) {
-        res->set<slot_t>(i - 1, arr->get<slot_t>(i), arrType);
-    }
-    return toSlot(res);
-}
-
 slot_t __range__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Int64 start = norm.get<Int64>(0);
     Int64 stop  = norm.get<Int64>(1);
@@ -159,34 +132,6 @@ slot_t __range__(ArgsView &with, ArgsView &norm, Context &ctx) {
         result->set(i, value);
 
     return rtdata::toSlot(result);
-}
-
-slot_t __slice_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *arr    = norm.get<Array *>(0);
-    auto *arrType = tt::as_ptr<ArrayType>(norm.type(0));
-    Int64 start   = with.get<Int64>(0);
-    Int64 end     = with.get<Int64>(1);
-
-    // A bound outside the array is a fault, as an index out of range is (design principles
-    // 3.9): a bound is a position from 0 to the length, the end one past the last element
-    // taken. It used to be cut to the array, and a negative bound counted from the end.
-    // `take` and `drop` of the `array` module are the operations that cut by definition.
-    const Int64 size = static_cast<Int64>(arr->size());
-    if (start < 0 || start > size || end < 0 || end > size) {
-        throwRuntimeFault(RuntimeDiag::SliceOutOfRange, start, end, "an array", arr->size());
-    }
-    // Both bounds inside the array and the end before the start is the empty range, not a
-    // fault (design principles 3.9): `xs->slice<2, 1>` is `[]`.
-    if (end < start)
-        end = start;
-
-    size_t newSize = static_cast<size_t>(end - start);
-    Array *res     = Array::create(mm::autoSpace(), arrType, newSize);
-
-    for (size_t i = 0; i < newSize; ++i)
-        res->set<slot_t>(i, arr->get<slot_t>(start + i), arrType);
-
-    return rtdata::toSlot(res);
 }
 
 namespace {
@@ -766,19 +711,6 @@ slot_t __append_owned_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 // someone else holds) it copies exactly like `append`; the result is the same either way.
 slot_t __append_in_place_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return __append_owned_arr__(with, norm, ctx);
-}
-
-// `xs->extend<ys>`: a new array, the elements of xs and then those of ys. xs is unchanged.
-slot_t __extend_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    const Array *arr  = norm.get<Array *>(0);
-    const Array *more = with.get<Array *>(0);
-    auto *arrType     = tt::as_ptr<ArrayType>(norm.type(0));
-    const size_t n2   = more->size();
-    Array *res        = copyWithRoom(arr, n2, arrType);
-    for (size_t i = 0; i < n2; ++i) {
-        res->append(more->get<slot_t>(i), arrType);
-    }
-    return rtdata::toSlot(res);
 }
 
 slot_t __contains_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {

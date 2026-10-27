@@ -133,7 +133,7 @@ for (const fn of ['tight', 'tightBlock']) {
   if (as.length === 0) {
     assert(ms.length === 2, `${fn} without a sum must be the product and its exact double, got ${shape(fn)}`)
     const doubled = ms.filter((m) => constants(m).includes('2.0'))
-    assert(doubled.length === 1, `${fn} must double the merged product by 2.0 (float_add_self), got ${JSON.stringify(ms.map(constants))}`)
+    assert(doubled.length === 1, `${fn} must double the merged product by 2.0 (add_self), got ${JSON.stringify(ms.map(constants))}`)
     assert(ms.some((m) => constants(m).includes('0.1')), `${fn} must still carry the rounded product x*0.1, got ${JSON.stringify(ms.map(constants))}`)
   } else {
     assert(as.length === 1, `${fn} keeps at most its one sum, got ${shape(fn)}`)

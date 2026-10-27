@@ -949,7 +949,7 @@ std::optional<oper_idx_ptr_t> Builder::resolveGroupedCall(
         // unmet, only when no rule at all takes it.
         std::string condition;
         const RuleVerdict verdict =
-            ruleVerdictForCall(resolver, ops->name(), ruleWith, normTypes, &condition);
+            ruleVerdictForCall(resolver, ops->name(), ruleWith, normTypes, &condition, explicitTypes);
         if (verdict == RuleVerdict::ConditionUnmet) {
             unmet.emplace_back(resolver->signature(), std::move(condition));
             continue;
@@ -1203,8 +1203,40 @@ node_handle_t Builder::inPlaceRebindingOf(const GCT::node_ptr_t &gct) {
     }
     // `op` is an operator of a module (nothing of the program is named so), and one of its
     // overloads declares an in-place form: anything else is an ordinary call.
-    const oper_group_ptr_t group = importedOperatorGroupNamed(opName->name());
-    auto &table                  = camel::core::OperatorTable::instance();
+    oper_group_ptr_t group = importedOperatorGroupNamed(opName->name());
+    if (group == nullptr) {
+        // A generic function whose `#impl` kernel has an in-place form (`sort`): the rule of the
+        // kernel that is the executor for this array is the operator the rewrite is about
+        // (adoptImplKernel asks the same question of an instance).
+        std::vector<generic_template_ptr_t> templates;
+        if (const auto scoped = templateScope_->get(opName->name()); scoped.has_value()) {
+            if (GenericGroup *templated = genericGroupOf(scoped.value()); templated != nullptr) {
+                templates.assign(templated->begin(), templated->end());
+            }
+        } else if (const auto imported = importedEntity(opName->name()); imported.has_value()) {
+            templates = genericTemplatesOfEntity(imported.value());
+        }
+        for (const generic_template_ptr_t &tmpl : templates) {
+            const auto declared = implTemplateKernels_.find(tmpl.get());
+            if (declared == implTemplateKernels_.end()) {
+                continue;
+            }
+            for (const auto &[ruleUri, resolver] : declared->second.group->resolvers()) {
+                if (resolver->resolve({}, {arrayType}).has_value() &&
+                    declaredRuleApplies(resolver, declared->second.name, {}, {arrayType})) {
+                    group = OperatorGroup::create(
+                        declared->second.group->name(),
+                        std::vector<std::pair<std::string, camel::core::type::resolver_ptr_t>>{
+                            {ruleUri, resolver}});
+                    break;
+                }
+            }
+            if (group != nullptr) {
+                break;
+            }
+        }
+    }
+    auto &table = camel::core::OperatorTable::instance();
     if (group == nullptr || std::ranges::none_of(group->resolvers(), [&](const auto &overload) {
             return table.inPlaceForm(overload.first).has_value();
         })) {
@@ -1897,15 +1929,29 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     withArgsOfCall_                = gct->at(0)->type() == GCT::NodeKind::WITH;
     // The callee of a call is a name: a rule's binding function called here is called, not made
     // the `Rule` its name gives (visitDRefNode).
+    // A lambda written after `->` that leaves a parameter's type out (`v -> (x) => x + 1`) takes the
+    // type from the receiver: the position of its parameter is that value (design principles 5.1,
+    // 5.9). A lambda called with parentheses, `((x) => x + 1)(2)`, is not in such a position. It is built after the arguments, which are typed without it.
+    const bool lambdaCalleeAfterArguments =
+        gct->at(0)->type() == GCT::NodeKind::FUNC && !gct->at(0)->decoratedBlock() &&
+        gct->at(0)->name().empty() && GCT::Tree::of(gct)->isPipe(gct) &&
+        [&] {
+            const auto *unwritten = GCT::Tree::of(gct->at(0))->unwrittenParamsOf(gct->at(0));
+            return unwritten != nullptr && !unwritten->empty();
+        }();
     const bool outerRuleBindingCallee = std::exchange(ruleBindingCallee_, true);
-    any targetNodeRes                 = visit(gct->at(0));
+    any targetNodeRes;
+    if (!lambdaCalleeAfterArguments) {
+        targetNodeRes = visit(gct->at(0));
+    }
     ruleBindingCallee_                = outerRuleBindingCallee;
     withArgsOfCall_                = outerWithArgsOfCall;
     genericCalleeAllowed_          = false;
     // The callee may be a lambda written in place (`((x: int): int => x + 1)(3)`,
     // `v -> (x: int): int => x * 2`): visiting it gives its graph, and what is called is the
     // function value of that graph. (The graph was cast to a node: `bad any_cast`, bare.)
-    node_handle_t targetNode = valueNodeOf(targetNodeRes);
+    node_handle_t targetNode =
+        lambdaCalleeAfterArguments ? nullptr : valueNodeOf(targetNodeRes);
 
     compile_graph_ptr_t targetGraph = nullptr;
     oper_idx_ptr_t targetOperator   = nullptr;
@@ -1944,7 +1990,12 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         return nodeTypeOf(inputNode);
     };
 
-    FunctionType *argumentSignature = signatureForArgumentContext(targetNode);
+    FunctionType *argumentSignature =
+        lambdaCalleeAfterArguments
+            ? nullptr
+            : signatureForArgumentContext(
+                  targetNode,
+                  gct->at(0)->type() == GCT::NodeKind::WITH ? gct->at(0)->size() - 1 : 0);
     // The type of the position the call stands in, aligned with the callee's result type, solves
     // the type variables that result mentions (design principles 5.1, 5.5; the rule of
     // 2026-10-23 on `expected-type-through-literals-and-calls`). Every variable the result
@@ -2084,12 +2135,39 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             argumentNames != nullptr && i - 1 < argumentNames->size() ? (*argumentNames)[i - 1]
                                                                       : std::nullopt;
         normInputs.push_back({inputNode, argumentExpr, name});
+        const bool takesVariable = isAssignment ||
+                                   (argumentSignature != nullptr &&
+                                    slot < argumentSignature->normTypesCount() &&
+                                    argumentSignature->normIsVarAt(slot));
+        if (synced_ && !takesVariable && inputNode != nullptr && isVariable(inputNode)) {
+            // An argument written after this one that does more than name a value may write the
+            // variable: this one is read first.
+            for (size_t later = i + 1; later < gct->size(); ++later) {
+                const auto kind = gct->at(later)->type();
+                if (kind != GCT::NodeKind::DATA && kind != GCT::NodeKind::DREF) {
+                    normInputs.back().early = readVariable(inputNode);
+                    break;
+                }
+            }
+        }
         if (isAssignment && i == 1) {
             Type *place = valueTypeOf(nodeTypeOf(inputNode));
             if (place != nullptr && place->code() == TypeCode::Function) {
                 assignedType = place;
             }
         }
+    }
+    if (lambdaCalleeAfterArguments) {
+        // A lambda that writes no parameter type takes the value of a tagged receiver out: it is
+        // never the overload that takes the tagged value as it is.
+        yieldToPipe(gct);
+        FunctionTypeFactory parameters;
+        for (const Argument &input : normInputs) {
+            parameters.addNormArg("", valueTypeOf(nodeTypeOf(input.node)), false);
+        }
+        ExpectedValueScope calleeScope(expectedValueType_, parameters.buildOpen());
+        any lambdaRes = visit(gct->at(0));
+        targetNode    = valueNodeOf(lambdaRes);
     }
     // An ordinary argument may be written by name, and an ordinary parameter may have a
     // default (design principles 4.4): the same binding as the `with` arguments,
@@ -2139,6 +2217,32 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 tt::as_shared<Data>(std::make_shared<StringData>(sourceLocationOf(where))));
             registerNodeOrigin(context_, location, gct, "gir.data");
             normInputs.push_back({location, gct, std::nullopt});
+        }
+    }
+    // The with-form of the core slice (design principles 5.4): `xs->slice<axis, start, end>` and
+    // `<axis, start, end, step>` are the slice node the subscript and the function form build,
+    // whose words after the value are the axis, the two bounds, the step and the mask saying both
+    // bounds were written. The with-arguments become those ordinary words, so there is one node
+    // and one rule for every consumer of it (its derivative, its checks, its lowering).
+    if (nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
+        const auto &sliceTarget = nodeGraphOf(targetNode)->drefTarget(targetNode);
+        if (std::holds_alternative<oper_group_ptr_t>(sliceTarget) &&
+            std::get<oper_group_ptr_t>(sliceTarget)->name() == "slice" && normInputs.size() == 1 &&
+            (withInputs.size() == 3 || withInputs.size() == 4)) {
+            const auto staticWord = [&](int64_t value) {
+                node_handle_t word = currGraph_->addStaticDataNode(tt::as_shared<Data>(
+                    std::make_shared<PrimaryData<int64_t>>(value)));
+                registerNodeOrigin(context_, word, gct, "gir.data");
+                return Argument{word, gct, std::nullopt};
+            };
+            for (const Argument &word : withInputs) {
+                normInputs.push_back({word.node, word.expr, std::nullopt});
+            }
+            if (withInputs.size() == 3) {
+                normInputs.push_back(staticWord(1));
+            }
+            normInputs.push_back(staticWord(3));
+            withInputs.clear();
         }
     }
     // The one place the ordinary argument types are built: from the bound nodes, in the
@@ -2763,6 +2867,15 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     kernelStatics);
                 resolved.has_value()) {
                 targetOperator = *resolved;
+                if (inPlaceCalls_.contains(gct)) {
+                    // Written by inPlaceRebindingOf, which checked that this kernel has an
+                    // in-place form: the call works on the array var/take hands it.
+                    const auto form =
+                        camel::core::OperatorTable::instance().inPlaceForm(targetOperator->uri());
+                    ASSERT(form.has_value(), "An in-place rebinding lost its in-place form.");
+                    targetOperator = std::make_shared<OperatorIndex>(
+                        targetOperator->name(), targetOperator->funcType(), *form);
+                }
                 targetNode     = currGraph_->addOperNode(targetOperator, 0);
                 stampPermissions(targetNode);
                 registerNodeOrigin(context_, targetNode, gct->at(0), "gir.link.oper");
@@ -2882,6 +2995,22 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     // Both (or more) take the arguments in this pass: no declaration order
                     // chooses between them. The signatures shown are the ones the call would
                     // be made with, decorated forms included.
+                    // Overloads told apart by their conditions are listed each with the condition
+                    // it wrote (design principles 4.4).
+                    const bool allConditioned =
+                        std::all_of(fitted.begin(), fitted.end(), [&](const auto &g) {
+                            return whenClauses_.contains(g.get());
+                        });
+                    if (allConditioned) {
+                        std::vector<std::string> listed;
+                        for (const auto &g : fitted) {
+                            listed.push_back(
+                                signatureOf(g)->toString() + " — when " +
+                                whenClauses_.at(g.get()).text);
+                        }
+                        std::ranges::sort(listed);
+                        rejectAmbiguousCall(graphs->front()->name(), argumentTypes, listed, gct);
+                    }
                     std::vector<FunctionType *> candidates;
                     candidates.reserve(fitted.size());
                     for (const auto &g : fitted) {
@@ -3732,7 +3861,7 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
     // A function value has no name of its own; its type stands for it in diagnostics.
     const std::string calleeLabel = targetName.empty() ? targetFuncType->toString() : targetName;
 
-    // `tee(s, n)` reads one stream from two places: the two streams it gives share one buffer,
+    // `s->tee<n>` reads one stream from two places: the two streams it gives share one buffer,
     // which holds the elements one side has read and the other has not (design principles 5.4).
     // `n` says how wide that buffer is expected to be -- a hint the executor may exceed by growing
     // the buffer -- but no buffer holds fewer than one element, the one being handed over, so a
@@ -3747,7 +3876,7 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
         return generic == std::string::npos ? name : name.substr(0, generic);
     };
     if (targetGraph != nullptr && baseGraphName(targetGraph->name()) == "stream::tee" &&
-        normInputs.size() == 2 && targetFuncType->normTypesCount() == 2 &&
+        normInputs.size() == 1 && withInputs.size() == 1 && targetFuncType->normTypesCount() == 1 &&
         targetFuncType->normTypeAt(0) != nullptr &&
         targetFuncType->normTypeAt(0)->code() == TypeCode::Stream) {
         const auto widthBelowOne = [](const data_ptr_t &data) {
@@ -3757,15 +3886,15 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
             const auto integer = std::dynamic_pointer_cast<IntData>(data);
             return integer != nullptr && integer->data() < 1;
         };
-        if (widthBelowOne(constantOfNode(normInputs[1].node))) {
+        if (widthBelowOne(constantOfNode(withInputs[0].node))) {
             // The caret is under the width, the argument that says why the call can never be right.
-            const GCT::node_ptr_t &widthExpr = normInputs[1].expr;
+            const GCT::node_ptr_t &widthExpr = withInputs[0].expr;
             const auto where                 = widthExpr != nullptr && widthExpr->origin() != 0
                                                    ? widthExpr->origin()
                                                    : gct->origin();
             diags_->of(SemanticDiag::TeeHintNotPositive)
                 .atOrigin(where)
-                .commit(sourceTextOf(normInputs[1].expr));
+                .commit(sourceTextOf(withInputs[0].expr));
             throw BuildAbortException();
         }
     }
@@ -3807,7 +3936,8 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
     // The node to link and, at a `var` position, the variable the callee writes (if any).
     const auto passArgument = [&](const Argument &arg, bool isVar) {
         if (!isVar) {
-            return Passed{valueOf(arg.node), node_handle_t{}, LinkType::Norm};
+            return Passed{
+                arg.early != nullptr ? arg.early : valueOf(arg.node), node_handle_t{}, LinkType::Norm};
         }
         requireMutableArgument(arg, calleeLabel);
         const bool named = isVariable(arg.node);
@@ -3841,7 +3971,10 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
             }
             return Passed{variable, variable, LinkType::Norm};
         }
-        return Passed{valueOf(arg.node), named ? arg.node : node_handle_t{}, LinkType::Norm};
+        return Passed{
+            arg.early != nullptr ? arg.early : valueOf(arg.node),
+            named ? arg.node : node_handle_t{},
+            LinkType::Norm};
     };
 
     // All arguments are read before the call is recorded as a writer: a variable passed both
@@ -3872,7 +4005,14 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
             continue;
         }
         if (auto modifierNode = modifierOf(arg.node); modifierNode.has_value()) {
-            if (sameGraph(*modifierNode, currGraph_) &&
+            // In a sync block the statement before this call is linked to it below, and when it
+            // already comes after the modifier the modifier's edge says nothing more: the edge
+            // would be a transitive one, which the contract of the control edges leaves out.
+            const bool chainedAfterModifier =
+                synced_ && lastSyncedNode_ != nullptr && sameGraph(lastSyncedNode_, currGraph_) &&
+                runtime::hasControlDependency(
+                    *nodeDraftOf(lastSyncedNode_), nodeIdOf(*modifierNode), nodeIdOf(lastSyncedNode_));
+            if (sameGraph(*modifierNode, currGraph_) && !chainedAfterModifier &&
                 shouldAddSyncCtrlLink(*modifierNode, targetNode)) {
                 linkNodes(LinkType::Ctrl, *modifierNode, targetNode);
             }
@@ -3934,6 +4074,22 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
     for (const Passed &arg : passed) {
         if (arg.written != nullptr) {
             recordWrite(arg.written, targetNode);
+        }
+    }
+    if (synced_ && !targetGraph && targetOperator == nullptr) {
+        lastIndirectCall_ = targetNode;
+        // A call through a function value may write any variable the value captured, and which
+        // ones is not known here: every read written before it is ordered before it, as a read is
+        // before the write it precedes (the reads of a variable nothing else touches are folded
+        // away, with these edges).
+        for (const auto &[variable, uses] : pendingUses_) {
+            for (const VariableUse &use : uses) {
+                if (use.isRead && sameGraph(use.node, currGraph_) && linkCheek(use.node, targetNode) &&
+                    nodeTakesAnOrder(use.node) && nodeTakesAnOrder(targetNode) &&
+                    !hasDirectDataDependency(use.node, targetNode)) {
+                    linkNodes(LinkType::Order, use.node, targetNode);
+                }
+            }
         }
     }
     for (const CapturedUse &use : captured) {

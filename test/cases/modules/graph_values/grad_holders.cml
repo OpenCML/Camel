@@ -18,7 +18,7 @@ func opText(n: Node): string {
 }
 
 func isOne(n: Node): bool {
-    return match constant(n, 0) {
+    return match constant::<int>(n) {
         case null => false
         case v => v == 1
     }

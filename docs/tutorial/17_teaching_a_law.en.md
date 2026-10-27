@@ -16,7 +16,7 @@ program.
 // The law of this program's arithmetic, written the way the compiler reads laws.
 // Run: camel docs/tutorial/examples/17_rule.cml
 
-import { check } from rewrite
+import { check, check_text } from rewrite
 
 // Multiplying by -1 is negating. A `rule` names a pattern and the writing it may be replaced by.
 // This one holds for every `int`, so it carries no condition; chapter 18 shows a law that needs one.
@@ -39,7 +39,7 @@ func doubled(x: int): int {
 
 func main(): int sync {
     // `check` draws random instances and compares the two sides of every rule it is given.
-    println(check([negate], 100, 1))
+    println(check_text([negate]->check<100, 1>))
     println(negated(7), combined(7), doubled(7))
     return 0
 }
@@ -93,7 +93,7 @@ The graph still has one `:op/mul_l` and one constant `-1`, and the result does n
 
 **Hand it over and it is used.** `std::opt` has no `rules` parameter yet (writing it gives
 `SemanticDiag::ParamArgumentUnknown`), so today there are two roads to make your own law take effect: write a pass
-of your own and hand that to the command line, or let `check([negate], …)` draw random instances for it — the
+of your own and hand that to the command line, or let `[negate]->check<…>` draw random instances for it — the
 `fired 8 of 8` above is the reading of "handed over explicitly". Once the `rules` parameter lands, the same file's
 `x * -1` will be replaced by `0 - x` and that `:op/mul_l` will become an `:op/sub_l`: **a law is a value, and it
 is used once it is handed over** — that is the one door through which knowledge reaches this pipeline.
@@ -135,7 +135,7 @@ holds.
 // The knowledge of your field that is not an equation, handed to the compiler.
 // Run: camel docs/tutorial/examples/17_fact.cml
 
-import { check } from rewrite
+import { check, check_text } from rewrite
 import { abs } from math
 
 // A `fact` says what the compiler may rely on for a value: a square is never negative. The match
@@ -155,7 +155,7 @@ func squared(x: int): int {
 
 func main(): int sync {
     // `check` samples the law together with its premise, so the fact decides where it may fire.
-    println(check([abs_of_nonnegative], 100, 1))
+    println(check_text([abs_of_nonnegative]->check<100, 1>))
     println(squared(-3))
     return 0
 }
@@ -208,12 +208,12 @@ Answer [`examples/17_exercise.cml`](examples/17_exercise.cml):
 // gives it.
 // Run: camel docs/tutorial/examples/17_exercise.cml
 
-import { check } from rewrite
+import { check, check_text } from rewrite
 
 rule fold_scales(x: int, const c1: int, const c2: int) { x * c1 + x * c2 => x * (c1 + c2) }
 
 func main(): int sync {
-    println(check([fold_scales], 100, 1))
+    println(check_text([fold_scales]->check<100, 1>))
     return 0
 }
 ```

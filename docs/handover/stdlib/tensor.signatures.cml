@@ -120,4 +120,4 @@ export func matmul::<T>(a: T[..], b: T[..]): T[..] when is_float::<T>()
 /// @example-fragment reads the file system when it runs
 /// @example 'x.npy'->load_npy::<f32>
 #op('tensor:load_npy_*')
-export func load_npy::<T>(path: string): T[..]! when is_numeric::<T>() uses fs
+export func load_npy::<T>(path: string): T[..]! uses fs when is_numeric::<T>()

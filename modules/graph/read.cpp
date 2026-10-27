@@ -17,6 +17,7 @@
 #include "camel/core/operator_table.h"
 #include "camel/core/tags.h"
 #include "camel/core/rtdata/array.h"
+#include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/tagged.h"
 #include "camel/core/rtdata/variant.h"
@@ -27,7 +28,10 @@
 #include "camel/runtime/draft_writes.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/program.h"
+#include "camel/runtime/reachable.h"
+#include "camel/utils/assert.h"
 
+#include <algorithm>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -74,8 +78,6 @@ namespace mm  = camel::core::mm;
 namespace err = camel::core::error;
 
 // ---- the arguments ----
-
-const Program *programArg(ArgsView &norm, size_t index) { return norm.get<const Program *>(index); }
 
 /// The graph a Graph or Node handle names; a fault when the Program holds no such graph.
 const GCGraph &graphOf(const Handle *handle, const char *site) {
@@ -187,27 +189,29 @@ slot_t stringSlot(std::string_view text) {
 /// The result type `T?` for a handle type or a scalar.
 TupleType *nullableOf(Type *payload) { return TupleType::nullable(payload); }
 
-// ---- the program ----
+// ---- a function ----
 
-slot_t graphsKernel(ArgsView &, ArgsView &norm, Context &) {
-    const Program *program = programArg(norm, 0);
+/// The graphs of a function: its own and every graph it calls, directly or not, once each in the
+/// order of their ids. The program they live in is the function's, and does not appear.
+slot_t graphsOfKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto *function   = norm.get<::Function *>(0);
+    const Program *program = function->program();
+    GCGraph *root          = function->graph();
+    if (program == nullptr || root == nullptr) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            "graph.graphs_of",
+            "the function has no graph");
+    }
+    std::vector<GCGraph *> graphs = camel::runtime::collectReachableGraphs(*program, root);
+    std::sort(graphs.begin(), graphs.end(), [](const GCGraph *a, const GCGraph *b) {
+        return toValue(a->id()) < toValue(b->id());
+    });
     std::vector<Handle *> items;
-    for (const GCGraph *graph : program->graphs()) {
+    for (const GCGraph *graph : graphs) {
         items.push_back(graphHandle(program, graph->id()));
     }
     return handleArray(HandleKind::Graph, items);
-}
-
-slot_t rootKernel(ArgsView &, ArgsView &norm, Context &) {
-    const Program *program = programArg(norm, 0);
-    const GCGraph *root    = program->root();
-    if (root == nullptr) {
-        err::throwRuntimeFault(
-            err::RuntimeDiag::InvalidArgument,
-            "graph.root",
-            "the program has no root");
-    }
-    return toSlot(graphHandle(program, root->id()));
 }
 
 // ---- a graph ----
@@ -234,16 +238,45 @@ slot_t nodesKernel(ArgsView &, ArgsView &norm, Context &) {
 slot_t inputsOf(ArgsView &norm, const char *site, int group) {
     const auto *handle  = norm.get<Handle *>(0);
     const NodeView view = viewOf(handle, site);
-    std::span<const gc_node_ref_t> refs;
+    std::vector<gc_node_ref_t> refs;
+    const auto take = [&](std::span<const gc_node_ref_t> run) {
+        refs.insert(refs.end(), run.begin(), run.end());
+    };
     if (view.isDraft()) {
-        refs = group == 0   ? view.draft->normInputsOf(view.ref)
-               : group == 1 ? view.draft->withInputsOf(view.ref)
-                            : view.draft->ctrlInputsOf(view.ref);
+        switch (group) {
+        case 0:
+            take(view.draft->normInputsOf(view.ref));
+            break;
+        case 1:
+            take(view.draft->withInputsOf(view.ref));
+            break;
+        case 2:
+            take(view.draft->syncInputsOf(view.ref));
+            break;
+        default:
+            take(view.draft->orderInputsOf(view.ref));
+            break;
+        }
     } else {
         const GCGraph &graph = graphOf(handle, site);
-        refs                 = group == 0   ? graph.normInputsOf(handle->index())
-                               : group == 1 ? graph.withInputsOf(handle->index())
-                                            : graph.ctrlInputsOf(handle->index());
+        switch (group) {
+        case 0:
+            take(graph.normInputsOf(handle->index()));
+            break;
+        case 1:
+            take(graph.withInputsOf(handle->index()));
+            break;
+        case 2:
+            for (const auto &edge : graph.syncPredsOf(handle->index())) {
+                refs.push_back(edge.pred);
+            }
+            break;
+        default:
+            for (const auto &edge : graph.orderPredsOf(handle->index())) {
+                refs.push_back(edge.pred);
+            }
+            break;
+        }
     }
     std::vector<Handle *> items;
     for (auto ref : refs) {
@@ -258,8 +291,13 @@ slot_t inputsKernel(ArgsView &, ArgsView &norm, Context &) {
 slot_t withInputsKernel(ArgsView &, ArgsView &norm, Context &) {
     return inputsOf(norm, "graph.with_inputs", 1);
 }
-slot_t ctrlInputsKernel(ArgsView &, ArgsView &norm, Context &) {
-    return inputsOf(norm, "graph.ctrl_inputs", 2);
+/// The statements written before the node in the same `sync` block, whose "used" reaches it.
+slot_t syncInputsKernel(ArgsView &, ArgsView &norm, Context &) {
+    return inputsOf(norm, "graph.sync_inputs", 2);
+}
+/// The nodes that must run before it when both run, along an edge that carries no "used".
+slot_t orderInputsKernel(ArgsView &, ArgsView &norm, Context &) {
+    return inputsOf(norm, "graph.order_inputs", 3);
 }
 
 /// The nodes that read node `n` as an input of any of the three groups, once each, in NodeId
@@ -492,12 +530,14 @@ slot_t originKernel(ArgsView &, ArgsView &norm, Context &) {
     return toSlot<Int64>(static_cast<int64_t>(origin));
 }
 
-/// The value of a node that holds a constant of the type of the second argument (a sample of the
-/// type; its value is not read), null for any other node.
+/// The value of a node that holds a constant of the type `T` the call names (`constant::<int>(n)`),
+/// null for any other node. `T` is the payload of the result type `T?` the call was built with.
 slot_t constantKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *handle  = norm.get<Handle *>(0);
     const NodeView node = viewOf(handle, "graph.constant");
-    Type *wanted        = norm.type(1);
+    const TupleType *answer = asNullable(norm.resultType());
+    ASSERT(answer != nullptr, "constant answers a T?");
+    Type *wanted        = answer->payloadType();
     const Type *type    = node.dataType();
     const auto index    = static_cast<int64_t>(-node.dataIndex());
     if (node.kind() != GCNodeKind::Data || type == nullptr || type->code() != wanted->code() ||
@@ -636,13 +676,13 @@ struct ReadOp {
 
 const std::vector<ReadOp> &readOps() {
     static const std::vector<ReadOp> ops = {
-        {"graphs", graphsKernel},
-        {"root", rootKernel},
+        {"graphs_of", graphsOfKernel},
         {"name", nameKernel},
         {"nodes", nodesKernel},
         {"inputs", inputsKernel},
         {"with_inputs", withInputsKernel},
-        {"ctrl_inputs", ctrlInputsKernel},
+        {"sync_inputs", syncInputsKernel},
+        {"order_inputs", orderInputsKernel},
         {"users", usersKernel},
         {"value_users", valueUsersKernel},
         {"is_constant", isConstantKernel},

@@ -160,7 +160,7 @@
 
 ### 遍的参数
 
-遍是标准库里的函数（设计原则 9.3）：它的名字、说明和参数是模块 `.cml` 文件里的一条声明——核心的遍在 `stdlib/std.cml`，模块的遍在 `stdlib/<module>.cml`——流水线从那里读取。参数写作遍名之后的 `key=value` **词，不带括号**：`camel m.cml std::opt safe_fp=true growth_budget=8192 std::fvm`。值是一个词，按声明给这个参数的类型读（设计原则 9.3）：`bool`、`int`、`float` 参数取该类型的 Camel 常量表达式——布尔、整数、浮点字面量，以及作用在它们上的运算符（`n=2*8`、`growth_budget=2*8+1`）——值必须是一个词，带空格的表达式省掉空格写；`int[]` 参数取数组常量，元素全是整数（`axes=[0,1]`，空数组写 `[]`）；`string` 参数取那个词的原文，不需要引号（`onnx::export out=model.onnx` 写出的文件就叫 `model.onnx`），值里有空格时用 shell 的引号，与任何命令行工具一样；引号必须作为那个词的一部分到达命令行，所以整条遍写法要一起引起来（`'onnx::export out="a b.onnx"'`）；声明写成 `T?` 的参数另外接受 `null`，默认值是 `null` 时可以整个省略，省略即 `null`（不是"没有值"）。声明就是函数自己的 `with` 列表，所以遵守函数的规则（设计原则 4.4）：名字、`:`、类型（`bool`、`int`、`float`、`string`、`int[]`，以及可空的 `T?`）、默认值写 `= 值`；没有默认值的参数是必需参数，必需参数不能跟在有默认值的参数后面。用 Camel 写的遍，其声明就是函数自己的 `with` 列表、写不出默认值，因此只取 `bool`、`int`、`float`、`string` 四种标量；`int[]` 与 `T?` 需要一条带默认值的声明。**默认值是在声明处求值一次的常量表达式**，不在每次调用时重算：帮助列表显示值本身（`top: int = 24`，不是 `top=8*3`）。`when` 子句是遍的适用条件：流水线认的是 `is_function::<F>()`，别的条件会被拒绝而不是假定成立。括号形式（`std::opt(safe_fp=true)`）、命令行上的冒号写法（`safe_fp: true`）和位置参数都已删除，均报告 `RuntimeDiag::InvalidPassParameter`（`0x04000060`），消息说明应该怎么写。声明在流水线解析时按模块搜索路径读取；找不到模块的 `.cml` 文件，或文件里没有声明这个遍，流水线拒绝这个遍，而不是拿声明从未给过的默认值去跑内核：消息写明模块和读到的文件（或找过的那些路径），所以缺少标准库的安装会直接说出来，而不是把遍报成不存在。
+遍是标准库里的函数（设计原则 9.3）：它的名字、说明和参数是模块 `.cml` 文件里的一条声明——核心的遍在 `stdlib/std.cml`，模块的遍在 `stdlib/<module>.cml`——流水线从那里读取。参数写作遍名之后的 `key=value` **词，不带括号**：`camel m.cml std::opt safe_fp=true growth_budget=8192 std::fvm`。值是一个词，按声明给这个参数的类型读（设计原则 9.3）：`bool`、`int`、`float` 参数取该类型的 Camel 常量表达式——布尔、整数、浮点字面量，以及作用在它们上的运算符（`n=2*8`、`growth_budget=2*8+1`）——值必须是一个词，带空格的表达式省掉空格写；`int[]` 参数取数组常量，元素全是整数（`axes=[0,1]`，空数组写 `[]`）；`string` 参数取那个词的原文，不需要引号（`onnx::export out=model.onnx` 写出的文件就叫 `model.onnx`），值里有空格时用 shell 的引号，与任何命令行工具一样；引号必须作为那个词的一部分到达命令行，所以整条遍写法要一起引起来（`'onnx::export out="a b.onnx"'`）；声明写成 `T?` 的参数另外接受 `null`，默认值是 `null` 时可以整个省略，省略即 `null`（不是"没有值"）。声明就是函数自己的 `with` 列表，所以遵守函数的规则（设计原则 4.4）：名字、`:`、类型（`bool`、`int`、`float`、`string`、`int[]`，以及可空的 `T?`）、默认值写 `= 值`；没有默认值的参数是必需参数，必需参数不能跟在有默认值的参数后面。用 Camel 写的遍，其声明就是函数自己的 `with` 列表、写不出默认值，因此只取 `bool`、`int`、`float`、`string` 四种标量；`int[]` 与 `T?` 需要一条带默认值的声明。**默认值是在声明处求值一次的常量表达式**，不在每次调用时重算：帮助列表显示值本身（`top: int = 24`，不是 `top=8*3`）。`when` 子句是遍的适用条件：流水线认的是 `is_function::<F>()`，别的条件会被拒绝而不是假定成立。遍只收它所作用的那个函数，一个普通形参；带同样条件、普通形参更多的无函数体声明是要一个函数的算子（`onnx::export_model(f, example)`），不是遍。括号形式（`std::opt(safe_fp=true)`）、命令行上的冒号写法（`safe_fp: true`）和位置参数都已删除，均报告 `RuntimeDiag::InvalidPassParameter`（`0x04000060`），消息说明应该怎么写。声明在流水线解析时按模块搜索路径读取；找不到模块的 `.cml` 文件，或文件里没有声明这个遍，流水线拒绝这个遍，而不是拿声明从未给过的默认值去跑内核：消息写明模块和读到的文件（或找过的那些路径），所以缺少标准库的安装会直接说出来，而不是把遍报成不存在。
 
 遍的设置是参数：
 
@@ -168,7 +168,7 @@
 | --- | --- |
 | `std::opt`、`std::opt::algebra` | `safe_fp: bool = false`（严格等价的浮点算式；设计原则 7.4） |
 | `std::opt::dce` | `values_only: bool = false`（只删除无人读取的常量与纯运算，不动 GATE 与 SYNC；用作同类遍（例如用 Camel 写的遍）的对照基准） |
-| `std::opt::algebra` | 规则库的遍（`rules::simplify`，`safe_fp` 下为 `rules::simplify_strict`）；`neutral_only: bool = false` 只做整数的单位元化简 `x + 0`、`0 + x`、`x - 0`、`x * 1`、`1 * x`，不做同类项与常数因子合并（这是没有库对应物的 C++ 对照模式，供同类遍（例如用 Camel 写的遍）对照） |
+| `std::opt::algebra` | 规则库的遍（`rules::simplify`，`safe_fp` 下为 `rules::simplify strict=true`）；`neutral_only: bool = false` 只做整数的单位元化简 `x + 0`、`0 + x`、`x - 0`、`x * 1`、`1 * x`，不做同类项与常数因子合并（这是没有库对应物的 C++ 对照模式，供同类遍（例如用 Camel 写的遍）对照） |
 | `std::opt`、`std::opt::inline`（及 `::small` / `::arm` / `::hybrid`）、`std::opt::specialize`、`std::opt::devirtualize` | `growth_budget: int = 4096`（特化和内联可复制的节点数；用完后剩下的调用仍是调用；0 表示不再复制；`std::opt` 的所有轮次共用一个预算） |
 | `std::fvm`、`std::jit` | `stats: string = ""`（把本次运行每张图的字节码数与执行计数追加写入该文件） |
 | `std::jit` | `hot_threshold: int = 1`（同一调用点调用多少次后编译一张图；0 表示第一次调用就编译）。**含循环区域的图在 0 与 1（默认）这两个"尽早编译"的阈值下第一次调用就编译**：使图变贵的是轮次，调用次数看不见轮次；显式把阈值设到 1 以上仍按调用次数走（`hot_threshold=1000000000` 因此仍表示"什么都不编译"） |
@@ -189,7 +189,7 @@
 - `std::opt::small` / `std::opt::arm` / `std::opt::hybrid`：显式的内联目标策略
 - `std::opt::specialize`：运行时原生的特化遍
 - `std::opt`：集成优化总入口；循环执行去虚化、特化、内联、fold、cse、algebra 和 dce，直到稳定或达到共享的增长及轮数预算
-- `std::opt::algebra`：就是规则库的化简遍 `rules::simplify`，定律即 `stdlib/rules.cml` 里的规则，一条定律只写一次；`safe_fp=true` 时运行 `rules::simplify_strict`（设计原则 7.4：严格等价的浮点算式）。默认 `safe_fp=false`，不自动允许降精度、近似函数或任意特殊值假设。它不要求前面先有 `std::opt::fold`；`std::opt` 会先跑 fold，以得到语料对照所用的系数形式。`neutral_only=true` 保留 C++ 对照模式（只做整数单位元）。PowerShell 中带参数的遍须加引号（这是普通的遍参数）；所有参数在运行第一个遍之前校验。
+- `std::opt::algebra`：就是规则库的化简遍 `rules::simplify`，定律即 `stdlib/rules.cml` 里的规则，一条定律只写一次；`safe_fp=true` 时运行 `rules::simplify strict=true`（设计原则 7.4：严格等价的浮点算式）。默认 `safe_fp=false`，不自动允许降精度、近似函数或任意特殊值假设。它不要求前面先有 `std::opt::fold`；`std::opt` 会先跑 fold，以得到语料对照所用的系数形式。`neutral_only=true` 保留 C++ 对照模式（只做整数单位元）。PowerShell 中带参数的遍须加引号（这是普通的遍参数）；所有参数在运行第一个遍之前校验。
 - `std::opt::fold` / `std::opt::cse` / `std::opt::dce`：分别运行常量折叠、公共子表达式消除、死代码消除
 - `std::opt::order`：顺序边的传递约简——A→B→C 已在时删去 A→C（设计稿 `docs/design/effects/edges.cn.md` 第 5 节第 4 条）；同步边是一条链，没有冗余，不动。CTRL 边还没有从图里删掉，所以在它消失之前这一遍同时继续做控制边的传递约简：删掉被必需的数据/控制路径覆盖的 CTRL 边，保留分支及循环边界、臂锚点，不把未选中的分支当作必需依赖。`std::opt` 的其他阶段结束后默认执行一次
 - `std::inline`（含 `small` / `arm` / `hybrid`）：`std::opt::inline` 及其策略的别名
@@ -294,7 +294,7 @@
 
 ### 效应追踪（`std::profile effect_trace="..."`）
 
-在流水线里给出 `std::profile effect_trace="<file>"` 后，进程为每个被执行的有效应算子追加一行 JSON，按调用顺序排列（有效应算子指任何没有在算子特性注册表里登记为纯的或仅状态的算子：`println`、文件 I/O、`py_*`、赋值 `:op/assn*`，包括写成语句的 `acc = acc->append<v>` 所用的 `:op/assn_append`……）。`report=false` 使 `std::profile` 的文本报告不进入程序的输出：
+在流水线里给出 `std::profile effect_trace="<file>"` 后，进程为每个被执行的有效应算子追加一行 JSON，按调用顺序排列（有效应算子指任何没有在算子特性注册表里登记为纯的或仅状态的算子：`println`、文件 I/O、`python` 的算子、赋值 `:op/assn*`，包括写成语句的 `acc = acc->append<v>` 所用的 `:op/assn_append`……）。`report=false` 使 `std::profile` 的文本报告不进入程序的输出：
 
     camel m.cml 'std::profile effect_trace="trace.jsonl" report=false' std::nvm
 

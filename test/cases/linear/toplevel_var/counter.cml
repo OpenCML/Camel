@@ -1,0 +1,24 @@
+/**
+ * A top-level `var` as a counter: the functions that touch it are not pure, `uses cnt` names it,
+ * and in a sync body the calls run in written order.
+ *   1 2 3     three calls
+ *   3         the variable after them
+ */
+
+
+var cnt: int = 0
+
+func bump(): int uses cnt sync {
+    cnt += 1
+    return cnt
+}
+
+func peek(): int sync {
+    return cnt
+}
+
+func main(): int sync {
+    println(bump(), bump(), bump())
+    println(peek())
+    return 0
+}

@@ -1,0 +1,16 @@
+/**
+ * The functions of `math` are Camel definitions with a native kernel per hot type (`#impl`, design
+ * principles 10.4): a call at `f32` or `float` is one operator of that width, and a call at
+ * `bf16` or `f16` runs the body, which computes in f64 and rounds once. The complex `exp` and
+ * `abs` have kernels of their own.
+ */
+
+
+import { abs, exp, log, max, min, sign, sqrt } from math
+
+func main(): int sync {
+    println(sqrt(f32(16.0)), sqrt(16.0), exp(0.0), exp(f32(0.0)), exp(bf16(0.0)), exp(f16(0.0)))
+    println(abs(-3), abs(i32(-3)), abs(-2.5), abs(f16(-2.5)), min(3, 5), max(f32(1.5), f32(2.5)), sign(-2.5))
+    println(exp(0.0 + 0.0i), exp(c64(0.0)), abs(3.0 + 4.0i), abs(c64(3.0) + c64(4.0i)), log(1.0))
+    return 0
+}

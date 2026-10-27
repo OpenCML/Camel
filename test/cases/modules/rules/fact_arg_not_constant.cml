@@ -3,7 +3,7 @@
  * where the query is written: `y` is a parameter of the rule, a value of the run, and there is no
  * fact to key by it.
  */
-import { Program, Node } from graph
+import { Node } from graph
 import { max } from math
 import { rewrite } from rewrite
 

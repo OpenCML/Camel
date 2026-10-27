@@ -205,7 +205,7 @@ func main(reps: int): int sync {{
         return (i + 1, {probe["call"]})
     }}
     let elapsed = now() - start
-    `probe name={probe["name"]} reps=${{reps}} check=${{sum(last):.9f}}`->println
+    `probe name={probe["name"]} reps=${{reps}} check=${{sum(f64(last)):.9f}}`->println
     `probe elapsed name={probe["name"]} reps=${{reps}} ms=${{elapsed * 1000.0:.6f}}`->println
     return 0
 }}

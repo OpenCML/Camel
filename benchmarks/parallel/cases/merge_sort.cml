@@ -2,23 +2,35 @@
 // 1e6 sorted by array::sort, the two halves of every split independent of each other. The
 // shuffle and the merges are sequential; they bound what the parallel scheduler can gain.
 
-import { seed, shuffle } from random
-import { sort, merge_sorted_arrays } from array
+import { seed, shuffle, next_key } from random
+import { sort } from array
+
+/// Merges two sorted arrays in one pass: the smaller front element goes out first, then what is
+/// left of either side.
+func merge(lhs: int[], rhs: int[]): int[] {
+    let none: int[] = []
+    let (i, j, out) = loop i = 0, j = 0, out = none while i < len(lhs) && j < len(rhs) do {
+        let l = lhs[i]
+        let r = rhs[j]
+        return if l <= r then (i + 1, j, out->append<l>) else (i, j + 1, out->append<r>)
+    }
+    return concat(concat(out, lhs[i:]), rhs[j:])
+}
 
 func mergesort(arr: int[]): int[] {
     return if len(arr) <= 1000000 then sort(arr) else {
         let mid = len(arr) / 2
-        let lhs = arr->slice<0, mid>->mergesort
-        let rhs = arr->slice<mid, len(arr)>->mergesort
-        return merge_sorted_arrays(lhs, rhs)
+        let lhs = arr[0:mid]->mergesort
+        let rhs = arr[mid:len(arr)]->mergesort
+        return merge(lhs, rhs)
     }
 }
 
 func main(): int sync {
     seed(1)
-    let arr = 0..8000000->shuffle
+    let arr = 0..8000000->shuffle<next_key()>
     let res = mergesort(arr)
-    res->slice<0, 16>->println
-    res->slice<len(res) - 4, len(res)>->println
+    res[0:16]->println
+    res[len(res) - 4:len(res)]->println
     return 0
 }

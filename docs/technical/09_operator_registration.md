@@ -101,7 +101,7 @@ OperatorGroup::create(
 
 - `:op/add_i` → protocol 为空，suffix=`op/add_i`
 - `array:sort` → protocol=`array`，suffix=`sort`
-- `python:py_call` → protocol=`python`，suffix=`py_call`
+- `python:call` → protocol=`python`，suffix=`call`
 
 ### 3.2 Executor 与 opsMap
 
@@ -141,7 +141,7 @@ using operator_t = slot_t (*)(ArgsView &with, ArgsView &norm, context::Context &
 
 `.cmo` 模块的类继承 `camel::core::module::BuiltinModule`，以模块名作为名字。
 
-`array` 的算子由内置模块以协议 `array` 注册（第 1 节），形状相同：`src/builtin/operators/array.cpp` 的 `getArrayOpsMap()` 给出 suffix → `operator_t`，`GlobalsBuiltinModule::load()` 注册工厂并调用 `declareArrayOperatorFacts()`；`sort`、`insert_sort`、`quick_sort`、`merge_sort` 的 `*_in_place` 形式同样用 `OperatorTable::setInPlaceForm` 登记（`xs = xs->sort` 用）。
+`array` 的算子由内置模块以协议 `array` 注册（第 1 节），形状相同：`src/builtin/operators/array.cpp` 的 `getArrayOpsMap()` 给出 suffix → `operator_t`，`GlobalsBuiltinModule::load()` 注册工厂并调用 `declareArrayOperatorFacts()`；`sort` 的各元素类型内核的 `*_in_place` 形式同样用 `OperatorTable::setInPlaceForm` 登记（`xs = xs->sort` 用）。
 
 ### 3.5 模块导出的值
 

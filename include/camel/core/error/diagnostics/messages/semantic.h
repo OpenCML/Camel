@@ -51,6 +51,7 @@ enum class SemanticDiag : uint32_t {
     AssignmentTargetNotVariable = 0x00001E,
     // 0x00001F: empty. The number is not reused.
     InvalidTypeArgument     = 0x000020,
+    NativeTypeNotProvided   = 0x0001FD,
     ArgumentNeedsConversion = 0x000021,
     ReturnNeedsConversion   = 0x000022,
     // 0x000023: empty. The number is not reused.
@@ -95,7 +96,6 @@ enum class SemanticDiag : uint32_t {
     // Design principles log 2.11: 0xC0 and up.
     LogicalOperandNotBool = 0x0000C0,
     // Modules and namespaces (design principles 10.1, 10.2): 0xD0 and up.
-    ExportedVariable          = 0x0000D0,
     ModuleValueCycle          = 0x0000D1,
     CaptureAfterRecursiveCall = 0x0000D2,
     AmbiguousName             = 0x0000D3,
@@ -296,6 +296,8 @@ enum class SemanticDiag : uint32_t {
     //  6.4, step 1). 0x17B and up.
     NativeDeclarationIncomplete = 0x00017B,
     NativeDeclarationNotLoaded  = 0x00017C,
+    NativeValueNotLoaded        = 0x0001FB,
+    NativeValueMismatch         = 0x0001FC,
     // Body-less declarations: 0x17E and up.
     /// Two generic declarations of one name can take the same call (rule 2).
     NativeDeclarationOverlap = 0x000180,
@@ -409,7 +411,7 @@ enum class SemanticDiag : uint32_t {
     // sees the same stream. A value a round may consume is the loop's own state, which the round takes
     // from its port and hands back as the next state (design principles 5.4 and 3.10).
     StreamConsumedInLoop = 0x0001ED,
-    // `tee(s, n)` reads one stream from two places (design principles 5.4): the two streams it gives
+    // `s->tee<n>` reads one stream from two places (design principles 5.4): the two streams it gives
     // share one buffer, and `n` is a hint at the width of that buffer -- the executor grows the buffer
     // rather than block the side that runs ahead -- but no buffer holds fewer than the one element
     // being handed over, so a constant width below 1 is refused where it is written.

@@ -120,7 +120,7 @@ verify_script = '''
 ({ input, assert }) => {
  const doc = JSON.parse(input.normalized.stdout)
  const g = doc.graphs.find(g => g.name === 'main')
- for(const label of ['rand:rand', 'rand:seed']) assert(g.nodes.filter(n => n.label === label).length === 1, label + ' executed early or duplicated')
+ for(const label of ['random::rand', 'rand:seed']) assert(g.nodes.filter(n => n.label === label).length === 1, label + ' executed early or duplicated')
  assert(doc.graphs.some(g => g.name === 'grad(h)'), 'gradient graph missing')
 }
 '''
@@ -137,7 +137,7 @@ verify_script = '''
  const x = Number(m[1]), dy = Number(m[2])
  assert(x >= 0 && x < 1, 'random input outside range')
  assert(approx(dy, (x + x) + (3 * (x + 1) + 3 * (x + 1)), 1e-13), 'wrong derivative')
- assert(x === 0.755155532954539, 'seed/draw order changed')
+ assert(x === 0.4138508284758604, 'seed/draw order changed')
 }
 '''
 
@@ -149,7 +149,7 @@ verify_script = '''
 ({ input, assert }) => {
  const doc = JSON.parse(input.normalized.stdout)
  const g = doc.graphs.find(g => g.name === 'main')
- for(const label of ['rand:rand', 'rand:seed']) assert(g.nodes.filter(n => n.label === label).length === 1, label + ' executed early or duplicated')
+ for(const label of ['rand:next_key', 'rand:seed']) assert(g.nodes.filter(n => n.label === label).length === 1, label + ' executed early or duplicated')
  assert(g.nodes.some(n => n.label === ':op/mul_d') && g.nodes.some(n => n.label === ':str/format'), 'random gradient folded')
  assert(!g.nodes.some(n => ['CALL', 'FUNC', 'FILL', 'ACCS'].includes(n.kind)), 'calls remained')
 }
@@ -167,6 +167,6 @@ verify_script = '''
  const x = Number(m[1]), dy = Number(m[2])
  assert(x >= 0 && x < 1, 'random input outside range')
  assert(approx(dy, (x + x) + (3 * (x + 1) + 3 * (x + 1)), 1e-13), 'wrong derivative')
- assert(x === 0.755155532954539, 'seed/draw order changed')
+ assert(x === 0.4138508284758604, 'seed/draw order changed')
 }
 '''

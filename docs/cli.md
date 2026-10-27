@@ -151,7 +151,7 @@ Both streams carry the same bytes on every platform: a line ends with a line fee
 
 ### Modules that start a runtime: `python` and `pyplot`
 
-`import` executes no code (design principles 3.1), so importing these two modules creates nothing. They share one embedded CPython per process, and it is created by the **first operator call** that needs it — `plot`, or any `py_exec`/`py_eval`/`py_run`/`py_call`/`py_import`/... — or, if the other module already created it, that call attaches to the same interpreter. A program that imports `pyplot` and never plots never starts Python.
+`import` executes no code (design principles 3.1), so importing these two modules creates nothing. They share one embedded CPython per process, and it is created by the **first operator call** that needs it — `plot`, or any `exec`/`eval`/`run_file`/`call`/`import_module`/... — or, if the other module already created it, that call attaches to the same interpreter. A program that imports `pyplot` and never plots never starts Python.
 
 - **A CPython that cannot start is reported at that call, not at the import.** `import python` / `import pyplot` then succeed; the first operator call fails with `RuntimeDiag::RuntimeError`, located at the call, and the run exits 1. CPython's own diagnostic (for example the path configuration it prints when `PYTHONHOME` names no Python) is on standard error, as it was. The same failure used to happen during the import, so a script that checked the exit code of an import-only run saw 1; it now sees 0. The active venv's version is checked at the same moment, for the same reason.
 - **`camel inspect --ops` does not prove an interpreter is available.** It lists `pyplot:plot` and `python`'s operators without creating one; an operator that cannot start Python fails when it runs.
@@ -229,7 +229,9 @@ expression evaluated once, where the declaration is**, not at each call: the hel
 value (`top: int = 24`, not `top=8*3`), and every call that leaves the parameter out copies that
 one value. The `when` clause is the pass's applicability: `is_function::<F>()` is what the pipeline
 checks, and a declaration whose condition is something else is refused rather than applied on an
-assumption.
+assumption. A pass takes the function it is applied to and nothing else: one ordinary parameter. A
+body-less declaration with the same condition and more ordinary parameters is an operator that wants
+a function (`onnx::export_model(f, example)`), and is not a pass.
 
 The call is checked when the pipeline is resolved, before any pass runs, and the refusal is the
 language's own for a call, located at the call and in the semantic stage (`typecheck`):
@@ -258,7 +260,7 @@ Settings of a pass are parameters:
 | --- | --- |
 | `std::opt`, `std::opt::algebra` | `safe_fp: bool = false` (strictly equivalent float algebra; design principles 7.4) |
 | `std::opt::dce` | `values_only: bool = false` (remove only the constants and pure operations that no node reads, not gates and syncs; the reference for passes that do the same, such as one written in Camel) |
-| `std::opt::algebra` | the rules library's pass (`rules::simplify`, or `rules::simplify_strict` under `safe_fp`); `neutral_only: bool = false` applies only the integer neutral elements `x + 0`, `0 + x`, `x - 0`, `x * 1`, `1 * x`, not the merging of like terms and constant factors (a C++ reference mode with no library equivalent, for passes that do the same, such as one written in Camel) |
+| `std::opt::algebra` | the rules library's pass (`rules::simplify`, or `rules::simplify strict=true` under `safe_fp`); `neutral_only: bool = false` applies only the integer neutral elements `x + 0`, `0 + x`, `x - 0`, `x * 1`, `1 * x`, not the merging of like terms and constant factors (a C++ reference mode with no library equivalent, for passes that do the same, such as one written in Camel) |
 | `std::opt`, `std::opt::inline` (and `::small` / `::arm` / `::hybrid`), `std::opt::specialize`, `std::opt::devirtualize` | `growth_budget: int = 4096` (nodes specialization and inlining may copy before the remaining calls are left as calls; 0 stops them; one budget for all rounds of `std::opt`) |
 | `std::fvm`, `std::jit` | `stats: string = ""` (append per-graph bytecode and execution counts of the run to this file) |
 | `std::jit` | `hot_threshold: int = 1` (calls from one call site before a graph is compiled; 0 compiles at the first call). A graph that runs a loop of regions is compiled at its first call under the eager thresholds (0 and 1, the default): what makes it expensive is the rounds, which a call count cannot see; an explicit threshold above 1 keeps the call-count rule (so `hot_threshold=1000000000` still compiles nothing) |
@@ -276,7 +278,7 @@ The `std::` prefix belongs to the passes of the core. A pass of a module is name
 
 A module's passes run only where the pipeline writes them: the pipeline is composed explicitly, so importing a module never adds a pass. A library whose pass is needed (autodiff needs `std::macro` before it) diagnoses the missing pass and says which one to add, and a tag whose reading pass is absent draws a warning. The parameters of a module's pass are its declaration's `with` list, checked like the core's.
 
-A pass written in Camel (`<module>::<function>`, `src/execute/camel_pass.cpp`) declares its parameters as the `with` parameters of that function: `with <label: string, n: int> export func report(p: Program): Program!` is run as `mymod::report label="x" n=21`. The names, order and types of the `with` parameters are the pass's parameters (design principles 4.4 and 9.3). A `with` parameter has no default in source, so each one is required: leaving one out is `SemanticDiag::ParamArgumentMissing` at the call in the pipeline, and the message names the parameter. A parameter of such a pass is a `bool`, an `int`, a `float` or a `string`: an `int[]` or a nullable `T?` parameter needs a default (`null` for the omittable case), and a default belongs to the declaration in the module's `.cml`, which is where the pass's parameters are read from.
+A pass written in Camel (`<module>::<function>`, `src/execute/camel_pass.cpp`) declares its parameters as the `with` parameters of that function: `with <label: string, n: int> export func report::<F>(p: F): F!` is run as `mymod::report label="x" n=21`. The names, order and types of the `with` parameters are the pass's parameters (design principles 4.4 and 9.3). A `with` parameter has no default in source, so each one is required: leaving one out is `SemanticDiag::ParamArgumentMissing` at the call in the pipeline, and the message names the parameter. A parameter of such a pass is a `bool`, an `int`, a `float` or a `string`: an `int[]` or a nullable `T?` parameter needs a default (`null` for the omittable case), and a default belongs to the declaration in the module's `.cml`, which is where the pass's parameters are read from.
 
 ### Common Passes
 
@@ -285,7 +287,7 @@ A pass written in Camel (`<module>::<function>`, `src/execute/camel_pass.cpp`) d
 - `std::opt::devirtualize`: runtime-native devirtualization pass
 - `std::opt::specialize`: runtime-native specialization pass
 - `std::opt`: integrated optimization entry point; repeats call rewriting (`devirtualize`, `specialize`, `inline`), `fold`, `cse`, `algebra`, and `dce` until stable, within shared growth and round limits
-- `std::opt::algebra`: the rules library's simplification, `rules::simplify`, so its laws are the rules in `stdlib/rules.cml` and a law is written once. Under `safe_fp=true` it runs `rules::simplify_strict` (design principles 7.4: strictly equivalent float algebra); `safe_fp=false` is the default, not permission for lower precision, approximate functions or arbitrary special-value assumptions. It is valid without `std::opt::fold` before it; `std::opt` runs fold first, which exposes the coefficient forms the corpus measurements use. `neutral_only=true` keeps the C++ reference mode (the integer neutral elements alone). Quote parameterized passes in PowerShell; parameters are validated before any pass runs.
+- `std::opt::algebra`: the rules library's simplification, `rules::simplify`, so its laws are the rules in `stdlib/rules.cml` and a law is written once. Under `safe_fp=true` it runs `rules::simplify strict=true` (design principles 7.4: strictly equivalent float algebra); `safe_fp=false` is the default, not permission for lower precision, approximate functions or arbitrary special-value assumptions. It is valid without `std::opt::fold` before it; `std::opt` runs fold first, which exposes the coefficient forms the corpus measurements use. `neutral_only=true` keeps the C++ reference mode (the integer neutral elements alone). Quote parameterized passes in PowerShell; parameters are validated before any pass runs.
 - `std::opt::fold` / `std::opt::cse` / `std::opt::dce`: standalone constant folding, common-subexpression elimination, and dead-code elimination
 - `std::opt::order`: the transitive reduction over ordering edges -- an order edge A -> C goes away when a path of order edges already orders the two ends (docs/design/effects/edges.cn.md 5.4); the statements of a `sync` block are one chain and carry no redundancy, so they are left alone. The control-edge kind is still in the graph, so until it is removed this pass keeps reducing control edges too: the CTRL edges covered by mandatory data/control paths, with branch/loop boundaries and arm anchors retained and unselected arms never treated as mandatory dependencies. `std::opt` runs it once after its other stages finish
 - `std::inline` (including `small` / `arm` / `hybrid`): alias of `std::opt::inline` and its strategies
@@ -481,7 +483,7 @@ Errors are printed on stdout, after any program output, as a JSON array of objec
 
 ### Effect trace (`std::profile effect_trace="..."`)
 
-Giving `std::profile effect_trace="<file>"` in the pipeline makes the process append one JSON line per executed effectful operator (any operator not registered as pure or as state-only in the operator-traits registry: `println`, file I/O, `py_*`, assignment `:op/assn*`, including `:op/assn_append`, the statement `acc = acc->append<v>`, ...), in call order. `report=false` keeps the text report of `std::profile` out of the program's output:
+Giving `std::profile effect_trace="<file>"` in the pipeline makes the process append one JSON line per executed effectful operator (any operator not registered as pure or as state-only in the operator-traits registry: `println`, file I/O, the operators of `python`, assignment `:op/assn*`, including `:op/assn_append`, the statement `acc = acc->append<v>`, ...), in call order. `report=false` keeps the text report of `std::profile` out of the program's output:
 
     camel m.cml 'std::profile effect_trace="trace.jsonl" report=false' std::nvm
 

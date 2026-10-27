@@ -2,59 +2,89 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * The Python bridge: run code in the embedded interpreter, import modules, read attributes and
- * dispose of the handles the calls return. Every operator observes or advances the interpreter,
- * which no argument names, so every one has effects and is never folded, merged or dropped by a
- * pass. A result of type `PyObject` is a handle into the interpreter, not a value of the program.
+ * Camel calling Python: run code in an embedded interpreter, import modules, read attributes and
+ * call what they hold. A `PyObject` is a handle into the interpreter, not a value of the program;
+ * it is released when nothing refers to it any more, so there is nothing to dispose of by hand.
+ * Values cross the boundary by copy: `to_py` makes the Python object of a Camel value, in the
+ * Python form of its type, and `from_py` reads a Python object as a value of the type the call
+ * names.
  *
- * The declarations of the operators of the C++ module `modules/python` (design principles 6.4).
- * This file is the one source of the six fixed signatures; the C++
- * side keeps the kernels, the executor, the operator traits and the purity.
+ * The Python form of a type:
+ *   - `bool`, the integer types, the float types and `string` are the Python scalars of the same
+ *     name, by value; `Bytes` is `bytes`;
+ *   - a tuple is a `tuple`, a struct a `dict` of its fields by name, an array a `list`, and a map
+ *     with string keys a `dict`, each of them by its parts;
+ *   - `PyObject` itself passes through as it is.
+ * What converts is a table, never whatever Python would accept: `bool` takes a bool only (not `5`),
+ * the integers take an int that fits and not a bool or a float, the floats take a float or an int
+ * and refuse a number the type cannot hold, `string` takes a str and not bytes.
  *
- * Five operators stay in C++ and are recorded as computed signatures in
- * `stdlib/signatures/python.cml`:
- *   - `py_call` (two URIs, `python:py_call` and `python:py_call_kw`) and `py_print`/`py_println`
- *     are variadic: a declaration cannot say "any number of `PyObject` arguments";
- *   - `py_wrap` and `py_unwrap` move a type through the module type `PyObject<T>`, and a type
- *     variable cannot be an argument of a module type in a declaration
- *     (`SemanticDiag::InvalidTypeArgument`).
+ * Python code can do anything, including write files and print, and the interpreter holds state
+ * between calls. So no function here names a resource of its own: each is a use of everything, in
+ * the written order, never folded, merged or dropped, and it runs when its result is needed or it
+ * is in a `sync` block. Whatever Python itself refuses -- an exception, a missing module, a missing
+ * attribute -- is an error value of kind `PythonError` whose message is the exception, its text and
+ * its traceback, never a fault of Camel's.
+ *
+ * The interpreter is started the first time a function here runs.
+ * The other direction, Python calling Camel, is the package `camel` (`pip install camel-lang`).
  */
 
+/// A Python object seen from Camel; the module provides the type.
+export type PyObject
 
-/// Runs Python statements `code` in the interpreter and returns its `None`. Definitions and
-/// assignments stay visible to later calls, as in a Python session.
-/// @effect runs arbitrary Python code
-/// @fails error `PythonError` when the code raises; the message starts with the exception class
-/// @example py_exec("x = 1")
-export func py_exec(code: string): PyObject!
+/// Runs Python statements in the interpreter. Definitions and assignments stay visible to later
+/// calls, as in a Python session.
+/// @fails error value `PythonError` when the code raises
+/// @example-fragment runs Python code when it runs, and the example only has the `void!` result to show
+/// @example exec('x = 1')
+export func exec(code: string): void!
 
-/// Evaluates the Python expression `expr` and returns its value as a `PyObject`.
-/// @effect runs arbitrary Python code
-/// @fails error `PythonError` when the expression raises; the message starts with the exception class
-/// @example py_eval("1 + 2 * 3")    // 7
-export func py_eval(expr: string): PyObject!
+/// Evaluates a Python expression and gives its value.
+/// @fails error value `PythonError` when the expression raises
+/// @example eval('1 + 2 * 3')->to_string !! ''    // '7'
+export func eval(expression: string): PyObject!
 
-/// Runs the Python script at `file_path` and returns its `None`.
-/// @effect runs arbitrary Python code
-/// @fails error `PythonError` when the file cannot be read or the script raises; the message starts with the exception class
-/// @example py_run("scripts/hello.py")
-export func py_run(file_path: string): PyObject!
+/// Runs the Python script at the path.
+/// @fails error value `PythonError` when the file cannot be read or the script raises
+/// @example-fragment runs Python code when it runs, and the example only has the `void!` result to show
+/// @example 'scripts/hello.py'->run_file
+export func run_file(path: string): void!
 
-/// The attribute `attr` of the Python object `obj`; a dotted `attr` walks the chain. Asking may
-/// run a property or a descriptor, so the read is an effect.
-/// @effect reads interpreter state and may run Python code
-/// @fails error `PythonError` when the attribute does not exist; the message starts with the exception class
-/// @example py_import("math") -> (m: PyObject): PyObject! => py_attr(m, "sqrt")
-export func py_attr(obj: PyObject, attr: string): PyObject!
+/// Imports a Python module (`'math'`, `'numpy'`, `'matplotlib.pyplot'`) and gives it. Importing runs
+/// the body of the module and records it in `sys.modules`.
+/// @fails error value `PythonError` when the import raises
+/// @example import_module('math')->attr<'pi'>->to_string !! ''    // '3.141592653589793'
+export func import_module(name: string): PyObject!
 
-/// Imports the Python module `module_name` and returns it. Importing runs the module body and
-/// records the module in `sys.modules`.
-/// @effect imports a module and runs its body
-/// @fails error `PythonError` when the import raises; the message starts with the exception class
-/// @example py_import("math")
-export func py_import(module_name: string): PyObject!
+/// The attribute of a Python object; a dotted name walks the chain. Asking may run a property or
+/// a descriptor, so it can raise.
+/// @fails error value `PythonError` when the attribute does not exist or its getter raises
+/// @example import_module('math')->attr<'pi'>
+with <name: string>
+export func attr(obj: PyObject): PyObject!
 
-/// Drops this program's reference to the Python object `obj`.
-/// @effect advances the interpreter's reference counts
-/// @example py_import("math") -> py_dispose
-export func py_dispose(obj: PyObject): void
+/// Calls a Python callable with the arguments the array holds, in order, and the keyword arguments
+/// the callable was bound with. `call<fn>` is a function from an array of arguments to a result, so
+/// it can be bound once and applied again.
+/// @fails error value `PythonError` when the call raises
+/// @example-fragment the callable is a Python object from `attr`, which the page does not show
+/// @example [2.0->to_py !! eval('0')]->call<sqrt>
+with <fn: PyObject, kwargs: Map<string, PyObject>? = null>
+export func call(args: PyObject[]): PyObject!
+
+/// The `str()` of a Python object, as text.
+/// @fails error value `PythonError` when `__str__` raises
+/// @example eval('[1, 2]')->to_string !! ''    // '[1, 2]'
+export func to_string(obj: PyObject): string!
+
+/// The Python object that stands for a Camel value, in the Python form of its type.
+/// @fails error value `PythonError` when the interpreter cannot make the object
+/// @example 2.0->to_py->to_string !! ''    // '2.0'
+export func to_py::<T>(x: T): PyObject!
+
+/// The Camel value of type T that a Python object holds. T is written at the call
+/// (`from_py::<int>(obj)`) or taken from the type of the position the call stands in.
+/// @fails error value `PythonTypeError` when the object does not have the type T (the message gives the path of the mismatch and what was found there); error value `PythonError` when reading it raises
+/// @example eval('1 + 2')->from_py::<int> !! 0    // 3
+export func from_py::<T>(obj: PyObject): T!

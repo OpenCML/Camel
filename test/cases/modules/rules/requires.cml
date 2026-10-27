@@ -5,7 +5,6 @@
  * `apply` needs `approx_math`, which must be granted; `apply_default` needs `reassociate`, which
  * the defaults already allow (7.3).
  */
-import { Program } from graph
 import { rewrite } from rewrite
 
 #requires(approx_math)
@@ -14,10 +13,10 @@ rule mul_one(x: float) { x * 1.0 => x }
 #requires(reassociate)
 rule fold_reassociate(x: float) { x * 1.0 => x }
 
-export func apply(p: Program): Program! {
-    return rewrite(p, [mul_one])
+export func apply::<F>(p: F): F! {
+    return p->rewrite<[mul_one]>
 }
 
-export func apply_default(p: Program): Program! {
-    return rewrite(p, [fold_reassociate])
+export func apply_default::<F>(p: F): F! {
+    return p->rewrite<[fold_reassociate]>
 }

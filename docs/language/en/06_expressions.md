@@ -175,7 +175,7 @@ The operators of the following sections (except `&&`, `||` and `as`) are calls o
 | Unary `-` | The four real numeric types, `c64`, `c128` | |
 | `~` | `int`, `i32` | Bitwise not: `~5` is `-6` |
 
-The two operands must have the same type. There are no bitwise and, or, xor or shift operators; use `bit_and`, `bit_or`, `bit_xor`, `bit_not`, `shl` and `shr` of the `math` module.
+The two operands must have the same type. There are no bitwise and, or, xor or shift operators; use `bit_and`, `bit_or` and `bit_xor` of the `math` module and `x->shl<n>`, `x->shr<n>` (the count in angle brackets); the complement is `~x`.
 
 **Two places where mistakes are easy:**
 
@@ -630,6 +630,16 @@ A function type is written `(x: T) => R`, and the parameters must be named: `(x:
   ```cml
   func adder(n: int): (x: int) => int {
       return (x) => x + n              // x: int, and the result is int
+  }
+  ```
+
+- The lambda after `->`: the parameter is the receiver, so its type is the receiver's, or the value taken out of a `T?` or a `T!` (the pipeline of 3.9):
+
+  ```cml
+  func main(): int sync {
+      let a = 5 -> (y) => y + 1                  // y: int
+      println(a)
+      return 0
   }
   ```
 

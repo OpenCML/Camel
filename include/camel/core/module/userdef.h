@@ -150,7 +150,8 @@ class UserDefinedModule : public Module {
      */
     ProgramStatus compileAsProgram(
         const std::string &entryFunction, std::string &problem,
-        std::shared_ptr<camel::compile::gir::DraftGraphBuilder> &root);
+        std::shared_ptr<camel::compile::gir::DraftGraphBuilder> &root,
+        camel::core::type::FunctionType *expected = nullptr);
     /// Called by the program's graph builder once the program is built: `root` is its root
     /// graph, and the module is done.
     void setProgramGraph(const std::shared_ptr<camel::compile::gir::DraftGraphBuilder> &root);

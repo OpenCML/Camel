@@ -140,7 +140,6 @@ const valueWith = ops.filter((o) => o.with !== 0).map((o) => ({
 const handled = {
   ':struct/append_arr': 'rule',
   ':struct/append_arr_owned': 'rule',
-  ':struct/extend_arr': 'rule',
   ':struct/contains_arr': 'no-channel',
   ':mark/reduce_arr': 'refused',
   ':mark/unordered_reduce_arr': 'refused',
@@ -148,7 +147,6 @@ const handled = {
   ':coll/map_put': 'refused-at-construction',
   ':coll/set_add': 'refused-at-construction',
   ':coll/set_contains': 'no-channel',
-  'statistics:quantile': 'refused',
 }
 const known = new Set(Object.keys(handled))
 const missing = valueWith.filter((o) => !known.has(o.uri)).map((o) => o.uri + ' <' + o.params.map((p) => p.name + ': ' + p.type).join(', ') + '>')
