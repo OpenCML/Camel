@@ -283,3 +283,13 @@
 4. **H49 GPU G1–G3**，以及文档清理第 1 步。
 
 H233（`graph`、`rewrite`、`rules`、`opt` 改成以函数为中心，`Program` 从接口删除）由决策者这边做完了，在第一条车道上，正在合入 fsh-dev，你们不用再排。
+
+## 决策者这边暂停时的状态：五个签名文件能否改成声明（下次接着做）
+
+有了类型函数（`type F<T> = match type …`，加 `ElementOf`/`PayloadOf`/`KeyOf`/`ValueOf`）之后，逐个模块看还缺什么：
+- **ckpt**：`save_tree`、`load_tree` 现在就能写，草稿已是声明模块（`docs/handover/stdlib/ckpt.cml`）。`tree_leaves` 属于树库，要等类型体能拼接元组。
+- **nn**：优化器（`sgd`、`adam`、`adam_state`，加一个"叶子可微"的谓词）和按元素类型的两个 `softmax_cross_entropy` 现在能写。卷积、池化、批归一化、嵌入的输出形状要等类型体支持维度算术。
+- **tensor**：多数能按元素类型写成泛型，用 `when` 重载代替 `float[..] | number` 并集。形状精确的结果（矩阵乘、改形）在维度算术落地前写成开秩，与草稿里的归约一致，决策者同意这样写。按创建、逐元素、归约分组做，每组一个提交。这一项与施工方的张量翻转（P4）相邻，开工前先和协调者对齐归属。
+- **autodiff**：要拆开、再组装函数类型的原语（`ParamsOf<F>`、`WithOf<F>`、`ResultOf<F>`，以及在类型体里构造函数类型）。
+- **tiles**：要按字段映射的类型体（类型层的 `static for … in fields T`），以及 `ParamsOf`。
+下一步的顺序：ckpt 的两个算子、nn 的优化器，然后 tensor 分组；接着是维度算术、函数类型原语、字段映射类型体这三项语言能力。
