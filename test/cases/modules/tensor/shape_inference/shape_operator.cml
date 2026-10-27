@@ -8,8 +8,8 @@ func three(a: f32[3]): float {
 }
 func f(x: f32[2, 3], y: f32[6]): float {
     let a = reshape(y, shape(x))
-    let b = zeros(shape(x)) + x
-    let c = ones([dim(x, 1)])
+    let b = zeros::<f32>(shape(x)) + x
+    let c = ones::<f32>([dim(x, 1)])
     return six(a) + six(b) + three(c)
 }
 func main(): int sync {

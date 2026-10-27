@@ -329,6 +329,19 @@ export func sort::<T>(xs: T[]): T[] when is_ordered::<T>() {
     return xs[argsort(xs)]
 }
 
+/// The elements of both arrays in ascending order, in the order `sort` gives: the meaning is
+/// `sort(concat(xs, ys))`. Execution takes a kernel that merges the two in one pass when each is
+/// already in order, which is what the function is for: the cost is O(n + m), against the
+/// O((n + m) log (n + m)) of the sort it stands for. An input that is not in order is sorted with
+/// the other, so the result is the same array for every input; equal elements keep their order,
+/// those of `xs` first.
+/// @example merge_sorted([1, 4, 6], [2, 3, 7])    // [1, 2, 3, 4, 6, 7]
+/// @example merge_sorted([2.0, 1.0], [0.5])    // [0.5, 1.0, 2.0]
+#impl(merge_kernel)
+export func merge_sorted::<T>(xs: T[], ys: T[]): T[] when is_ordered::<T>() {
+    return sort(concat(xs, ys))
+}
+
 /// The elements in ascending order of key(x); elements with equal keys keep their order, so
 /// sorting by one key and then by another works. key is called once for every element. Keys
 /// are ordered as `argsort` orders them; for a descending order of numbers use the negated key.
@@ -415,6 +428,16 @@ func max_kernel::<T>(xs: T[..]): T when is_same::<T, int>()
 func max_kernel::<T>(xs: T[..]): T when is_same::<T, f32>()
 #op('array:max_d')
 func max_kernel::<T>(xs: T[..]): T when is_same::<T, float>()
+
+// merge_sorted: one pass over two inputs in order; an input out of order is sorted with the rest.
+#op('array:merge_sorted_i')
+func merge_kernel::<T>(xs: T[], ys: T[]): T[] when is_same::<T, i32>()
+#op('array:merge_sorted_l')
+func merge_kernel::<T>(xs: T[], ys: T[]): T[] when is_same::<T, int>()
+#op('array:merge_sorted_f')
+func merge_kernel::<T>(xs: T[], ys: T[]): T[] when is_same::<T, f32>()
+#op('array:merge_sorted_d')
+func merge_kernel::<T>(xs: T[], ys: T[]): T[] when is_same::<T, float>()
 
 // sort: `xs = xs->sort` runs the in-place form of the kernel when nothing else refers to xs.
 #op('array:sort_i')

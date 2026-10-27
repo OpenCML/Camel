@@ -22,6 +22,6 @@ func main(): int sync {
     println(sum(abs(download(run_preferred_resident<crop>(x)) - crop(x))))
     println(sum(abs(download(run_preferred_resident<chain>(x)) - chain(x))))
     println(sum(download(run_preferred_resident<empty>(x))))
-    println(sum(download(run_preferred_resident<trans>(zeros([2, 0, 7])))))
+    println(sum(download(run_preferred_resident<trans>(zeros::<f32>([2, 0, 7])))))
     return 0
 }

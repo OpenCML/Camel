@@ -85,7 +85,7 @@ const PROBE = path.join(REPO_ROOT, 'test', 'cases', 'modules', 'stdlib', 'regist
 // The modules of the reference, in the order of the document. `source` is the file read:
 // a signature file for a C++ module, the library itself for a module written in Camel.
 const MODULES = [
-    { name: 'globals', title: 'Built-in functions', registered: '<builtin>', kind: 'cpp', source: 'prelude.cml' },
+    { name: 'globals', title: 'Built-in functions', registered: '<builtin>', kind: 'cpp', source: 'prelude.cml', declaration: true },
     {
         name: 'str',
         title: '`str`: strings',
@@ -102,7 +102,7 @@ const MODULES = [
         source: 'bytes.cml',
         declaration: true,
     },
-    { name: 'ckpt', title: '`ckpt`: parameter trees and checkpoints', kind: 'cpp' },
+    { name: 'ckpt', title: '`ckpt`: parameter trees and checkpoints', kind: 'cpp', source: 'ckpt.cml', declaration: true, computed: 'signatures/ckpt.cml' },
     {
         name: 'tree',
         title: '`tree`: parameter trees written in Camel',
@@ -215,7 +215,11 @@ const MODULES = [
         name: 'json',
         title: '`json`',
         kind: 'cpp',
-        // The declarations, in stdlib/json.cml: every signature of the module is declared there.
+        // The declarations, in stdlib/json.cml. `encode` and `decode_as` are computed
+        // signatures — the value's type must have a JSON form, and the result type is the type
+        // of the shape argument — so a declaration cannot express them; their entries, and the
+        // check against the registered operators, come from the signature file that names them
+        // 
         source: 'json.cml',
         declaration: true,
     },
@@ -305,7 +309,9 @@ const MODULES = [
         name: 'python',
         title: '`python`: the embedded interpreter',
         kind: 'cpp',
-        // Every signature of the module is declared in stdlib/python.cml.
+        // Seven fixed signatures are declared in stdlib/python.cml; `py_wrap`/`py_unwrap` move a
+        // type through the module type `PyObject<T>`, so their reference entries live in the
+        // signature file named by `computed:`.
         source: 'python.cml',
         declaration: true,
     },
@@ -1636,7 +1642,7 @@ function verifyOps() {
         // The module that declares its signatures one by one and publishes them under a type
         // namespace publishes every declared name there: `Tensor.shape` is not a second
         // signature, so it costs nothing to require it.
-        if (module.declaration && aliases.length > 0) {
+        if (module.declaration && module.registered !== '<builtin>' && aliases.length > 0) {
             for (const name of declaredNames) {
                 if (!aliases.some((alias) => alias.name.split('::').pop() === name)) {
                     problems.push(

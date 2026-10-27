@@ -35,13 +35,13 @@ func loss(x: f32[..], labels: f32[..]): float {
 func main(steps: int, batch: int, lr: float): int sync {
     // Deterministic inputs: a constant field, so every step sees the same data and two runs are
     // comparable. The point is the cost of a step, not what it learns.
-    let x = zeros([batch, 784]) + 0.001
-    let labels = zeros([batch])
+    let x = zeros::<f32>([batch, 784]) + 0.001
+    let labels = zeros::<f32>([batch])
     let model = {
-        w1: zeros([784, 128]) + 0.01,
-        b1: zeros([128]) + 0.001,
-        w2: zeros([128, 10]) + 0.01,
-        b2: zeros([10]) + 0.001
+        w1: zeros::<f32>([784, 128]) + 0.01,
+        b1: zeros::<f32>([128]) + 0.001,
+        w2: zeros::<f32>([128, 10]) + 0.01,
+        b2: zeros::<f32>([10]) + 0.001
     }
     let params = numel(model.w1) + numel(model.b1) + numel(model.w2) + numel(model.b2)
     'perf mlp params={} steps={} batch={}'->format<params, steps, batch>->println

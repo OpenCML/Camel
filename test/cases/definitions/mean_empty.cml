@@ -5,7 +5,7 @@
 import { zeros, mean } from tensor
 
 func main(): int sync {
-    println(mean(zeros([2, 2])))
-    println(mean(zeros([0, 4])))
+    println(mean(zeros::<f32>([2, 2])))
+    println(mean(zeros::<f32>([0, 4])))
     return 0
 }

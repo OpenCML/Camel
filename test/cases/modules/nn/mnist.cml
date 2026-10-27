@@ -21,12 +21,12 @@ func softmax(logits: f32[?, ?]): f32[?, ?] {
     let k = shape(logits)[1]
     let row_max = max(logits, 1)
     let row_max_2d = reshape(row_max, [n, 1])
-    let row_max_broadcast = row_max_2d @ ones([1, k])
+    let row_max_broadcast = row_max_2d @ ones::<f32>([1, k])
     let stable = logits - row_max_broadcast
     let exp_logits = exp(stable)
     let row_sums = sum(exp_logits, 1)
     let row_sums_2d = reshape(row_sums, [n, 1])
-    let row_sums_broadcast = row_sums_2d @ ones([1, k])
+    let row_sums_broadcast = row_sums_2d @ ones::<f32>([1, k])
     return exp_logits / row_sums_broadcast
 }
 
@@ -72,7 +72,7 @@ func main(): int sync {
 
     let X = random([n_samples, n_features], 0.0, 1.0)
 
-    let ones_col = ones([n_samples, 1])
+    let ones_col = ones::<f32>([n_samples, 1])
     let X_bias = concat(X, ones_col, 1)
     let n = shape(X_bias)[0]
     let d = shape(X_bias)[1]
@@ -87,8 +87,8 @@ func main(): int sync {
         }
     }
 
-    let y_onehot = build_one_hot(0, zeros([1, num_classes]))
-    var W = zeros([d, num_classes])
+    let y_onehot = build_one_hot(0, zeros::<f32>([1, num_classes]))
+    var W = zeros::<f32>([d, num_classes])
 
     println('Training softmax classifier (synthetic data)...')
     println('Samples:', n_samples, 'Features:', n_features, 'Classes:', num_classes)

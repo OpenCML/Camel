@@ -1,7 +1,7 @@
 import { load_tree } from ckpt
 
 func main(): int sync {
-    let s = load_tree::<{ block: { f: (x: int) => int } }>('out/never')
+    let s = 'out/never'->load_tree::<{ block: { f: (x: int) => int } }>
     println(s)
     return 0
 }

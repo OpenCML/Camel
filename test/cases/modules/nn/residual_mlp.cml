@@ -38,9 +38,9 @@ func loss(x: f32[..], target: f32[..]): float {
 
 func init(): ResidualMlp {
     return {
-        l0: { weight: full([2, 2], f32(0.05)), bias: zeros([2]) },
-        l1: { weight: full([2, 2], f32(0.05)), bias: zeros([2]) },
-        skip: { weight: full([2, 2], f32(0.05)), bias: zeros([2]) },
+        l0: { weight: full([2, 2], f32(0.05)), bias: zeros::<f32>([2]) },
+        l1: { weight: full([2, 2], f32(0.05)), bias: zeros::<f32>([2]) },
+        skip: { weight: full([2, 2], f32(0.05)), bias: zeros::<f32>([2]) },
         depth: 2
     }
 }

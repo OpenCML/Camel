@@ -3,6 +3,6 @@ func g(x: f32[3], c: bool): f32[?] {
     return if c then x else concat(x, x, 0)
 }
 func main(): int sync {
-    println(sum(g(ones([3]), true) as f32[3]))
+    println(sum(g(ones::<f32>([3]), true) as f32[3]))
     return 0
 }

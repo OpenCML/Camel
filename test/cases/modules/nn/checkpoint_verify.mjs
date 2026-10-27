@@ -186,7 +186,7 @@ try {
     manifest.tree.sha256 = sha256(malformedNpy)
     fs.writeFileSync(manifestFile, JSON.stringify(manifest))
     assert.match(invoke('checkpoint_tensor.cml', 'std::jit', 3, malformed).stdout, /CheckpointError.*exact f32\/int64\/bool storage dtype/)
-    assert.match(invoke('checkpoint_tensor.cml', 'std::nvm', 3, path.join(root, 'missing')).stdout, /CheckpointError.*manifest.json/)
+    assert.match(invoke('checkpoint_tensor.cml', 'std::nvm', 3, path.join(root, 'missing')).stdout, /NotFound.*no checkpoint at this path/)
     // A tensor checkpoint is replaced too: mode 4 writes one element over the four of the
     // original, and the old leaf is gone rather than left beside the new manifest.
     const overwritten = invoke('checkpoint_tensor.cml', 'std::jit', 4, tensor, {}, 0)

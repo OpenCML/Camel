@@ -3,6 +3,6 @@ import { source } from tiles
 
 func outside(x: f32[..]): f32[..] { return slice(x, 0, 0, 9) }
 func main(): int sync {
-    println(source<outside>(zeros([3])))
+    println(source<outside>(zeros::<f32>([3])))
     return 0
 }

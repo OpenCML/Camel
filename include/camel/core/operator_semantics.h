@@ -453,6 +453,11 @@ struct OperatorSemantics {
     /// of it ahead of time when its arguments are constants. `grad` and `with_grad` are the
     /// macro operators of this repository; a declaration tag is not an operator trait.
     bool macro = false;
+    /// The operator's kernel takes the with-arguments of a call after the ordinary ones, as one
+    /// list (`kernelArgumentsOf`): a fact about the kernel's argument order, not about the
+    /// language, where the graph keeps a with-argument on its own edge. `reshape<shape>(x)` is
+    /// the kernel's `(x, shape)`.
+    bool withAfterNorm = false;
     /// The index semantics (camel/core/index_semantics.h): the instance of one call. Empty when
     /// not declared: the operator reads its operands whole and writes its result whole, and
     /// nothing is known about which elements depend on which.

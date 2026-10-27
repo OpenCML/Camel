@@ -3,7 +3,7 @@ func f(x: f32[?, 3], w: f32[3, 2]): f32[?, 2] {
     return tanh(x @ w)
 }
 func main(): int sync {
-    println(f(ones([5, 3]), ones([3, 2])))
-    println(f(ones([1, 3]), ones([3, 2])))
+    println(f(ones::<f32>([5, 3]), ones::<f32>([3, 2])))
+    println(f(ones::<f32>([1, 3]), ones::<f32>([3, 2])))
     return 0
 }

@@ -15,7 +15,7 @@ func main(): int sync {
     let narrow: f32[] = f32(ints)
     println(narrow * narrow)
     println(int(floats * 2.5))
-    let wide: f64[2, 2] = f64(ones([2, 2]))
+    let wide: f64[2, 2] = f64(ones::<f32>([2, 2]))
     println(wide)
     println(float(3), f32(2), int(2.9))
     return 0

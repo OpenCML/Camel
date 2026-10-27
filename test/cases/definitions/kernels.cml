@@ -29,7 +29,7 @@ func main(): int sync {
     seed(7)
     let r = random([4, 5], -10.0, 10.0)
     let cube = reshape(r, [2, 2, 5])
-    let empty = zeros([0, 4])
+    let empty = zeros::<f32>([0, 4])
 
     show("relu specials", relu(specials))
     show("relu random", relu(r))

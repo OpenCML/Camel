@@ -358,21 +358,6 @@ normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 6000
 
 [[tests]]
-name = "unknown_pass_of_known_module"
-desc = "A C++ module that exists but contributes no pass of that name: still an unknown pass (the module is loaded, the name stays unknown), and the program does not run. (`onnx` and `hash` are declaration modules now, so their missing pass gets the module-specific diagnostic, tested in feat/modules/pass_not_found. `ckpt` is the C++ module with no declaration file, so it is the subject here.)"
-kind = "behavior"
-case = "../../../cases/linear/byref/order_direct_user.cml"
-args = ["--output-format", "json", "${case}", "std::nvm", "ckpt::nosuchpass"]
-expect_exit = 1
-verify_script = """
-const diags = JSON.parse(input.stdout)
-assert(diags.length === 1 && diags[0].data.name === 'RuntimeDiag::UnrecognizedGraphPass', 'diagnostic: ' + input.stdout)
-assert(diags[0].data.stage === 'pass:ckpt::nosuchpass', 'stage ' + diags[0].data.stage)
-"""
-normalizers = ["strip_ansi", "normalize_newlines"]
-timeout_ms = 6000
-
-[[tests]]
 name = "module_pass_autoload"
 desc = "Naming a module's pass on the command line loads the module: tensor::fuse on a program that imports nothing is a known pass (it finds nothing to fuse) and the program runs under the scheduler after it."
 kind = "behavior"

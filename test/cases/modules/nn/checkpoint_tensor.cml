@@ -6,26 +6,26 @@ func original(): f32[..] {
 }
 func main(mode: int, dir: string): int sync {
     return if mode == 0 then sync {
-        save_tree(dir, original())
-        println(to_array(to_bytes(load_tree::<f32[..]>(dir) !! original())))
+        let _ = original()->save_tree<dir>
+        println(to_array(to_bytes(dir->load_tree::<f32[..]> !! original())))
         return 0
     } else if mode == 1 then sync {
-        let _ = println(load_tree::<int[..]>(dir))
+        let _ = println(dir->load_tree::<int[..]>)
         return 0
     } else if mode == 2 then sync {
-        let _ = println(load_tree::<f32[3]>(dir))
+        let _ = println(dir->load_tree::<f32[3]>)
         return 0
     } else if mode == 3 then sync {
-        let loaded: f32[..]! = load_tree(dir)
+        let loaded: f32[..]! = dir->load_tree
         let _ = println(loaded)
         return 0
     } else if mode == 4 then sync {
         // f32 is written, not assumed: an array of float literals is f64, and a typed restore
         // refuses a stored tensor of another element type instead of narrowing it.
-        save_tree(dir, new([9.0] as f32[]))
+        let _ = (new([9.0] as f32[]))->save_tree<dir>
         return 0
     } else if mode == 5 then sync {
-        let loaded = load_tree::<f32[..]>(dir) !! original()
+        let loaded = dir->load_tree::<f32[..]> !! original()
         println(to_array(to_bytes(loaded)))
         return 0
     } else 2

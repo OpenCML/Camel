@@ -7,7 +7,7 @@ func f(x: f32[3]): (f32[3], float, f32[3]) {
     return (a as f32[3], float(sum(x)), b as f32[3])
 }
 func main(): int sync {
-    let r = f(ones([3]))
+    let r = f(ones::<f32>([3]))
     println(r.1)
     println(sum(r.0))
     return 0

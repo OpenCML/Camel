@@ -24,6 +24,6 @@ func main(): int sync {
     println(sum(abs(download(r.rest.1) - x * 2.0)))
     println(sum(abs(download(run_preferred_resident<identity>(r.first)) - x * 2.0)))
     println(sum(abs(download(run_preferred_resident<identity>(x)) - x)))
-    println(sum(download(run_preferred_resident<step>(upload(zeros([0, 3]))))))
+    println(sum(download(run_preferred_resident<step>(upload(zeros::<f32>([0, 3]))))))
     return 0
 }

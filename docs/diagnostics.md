@@ -1378,7 +1378,7 @@ func count(t: Tensor): int {
 
 func main(): int sync {
     let ints: int[3] = [1, 2, 3]
-    let floats: f32[2, 3] = ones([2, 3])
+    let floats: f32[2, 3] = ones::<f32>([2, 3])
     println(count(ints))
     println(count(floats))
     return 0
@@ -2278,7 +2278,7 @@ func total(constas n: int, x: f32[n]): float {
 
 func main(): int sync {
     // The instance for n = 3 takes a f32[3]; this argument has extent 4.
-    println(total(3, ones([4])))
+    println(total(3, ones::<f32>([4])))
     return 0
 }
 ```
@@ -5215,7 +5215,7 @@ func total(constas n: int, x: f32[n]): float {
 }
 
 func use(m: int): float {
-    return total(m, ones([3]))
+    return total(m, ones::<f32>([3]))
 }
 
 func main(): int sync {
@@ -5259,7 +5259,7 @@ func apply(f: (x: f32[..]) => float, x: f32[..]): float {
 
 func main(): int sync {
     // The value must be known where the call is written, so `total` has no function value.
-    println(apply(total, ones([3])))
+    println(apply(total, ones::<f32>([3])))
     return 0
 }
 ```
@@ -9141,7 +9141,7 @@ func toShape::<T>(t: T[..], s: int[]): T[..] {
 
 func main(): int sync {
     let no: int[] = []
-    let s  = toShape(zeros([2]), no)
+    let s  = toShape(zeros::<f32>([2]), no)
     let n  = loop c = 0 for x in s do c + 1
     println(n)
     return 0
@@ -9507,8 +9507,8 @@ import { conv2d } from nn
 func main(): int sync {
     let values: f64[] = [1.0, 2.0, 3.0, 4.0]
     let x = reshape(new(values), [1, 1, 2, 2])
-    let kernel = ones([1, 1, 1, 1])
-    let bias = ones([1])
+    let kernel = ones::<f32>([1, 1, 1, 1])
+    let bias = ones::<f32>([1])
     let y = conv2d(x, kernel, bias, 1, 0)
     println(sum(y))
     return 0
@@ -9575,17 +9575,20 @@ Invalid argument of '{0}': {1}.
 The operator was given an argument it cannot take; the message names the argument and why. The value comes from the program, so what to change is where it was made.
 ```
 
-**Example** (`test/cases/compile/collections/fault_untyped_array.cml`, run as `camel test/cases/compile/collections/fault_untyped_array.cml ${backend}`)
+**Example** (`test/cases/compile/stream/range_step_runtime.cml`, run as `camel test/cases/compile/stream/range_step_runtime.cml`)
 
 ```camel
-// An array without an element type (`[]`) converts only while it is empty: this one was
-// appended to, so the conversion is a fault with its position, on every back end.
+// The step of a stepped range is not always a constant: when it is not, the step is the run's and
+// a step of 0 is the fault the array form raises there (RuntimeDiag::InvalidArgument), because the
+// refusal of a constant step cannot see it (design principles 4.2). A step that is not 0 is the
+// sequence it names.
+
+func counted(k: int): int[] { return range(0, 10, k) }
 
 func main(): int sync {
-    println("before")
-    let s = ([]->append<1>) as Set<int>
-    println(s)
-    println("never printed")
+    println(counted(3))
+    println(counted(-3))
+    println(counted(0))
     return 0
 }
 ```

@@ -12,7 +12,7 @@ type Record = {
 }
 
 func main(dir: string): int sync {
-    let loaded = load_tree::<Record>(dir)
+    let loaded = dir->load_tree::<Record>
     return match loaded {
         case error e => sync {
             println(e)

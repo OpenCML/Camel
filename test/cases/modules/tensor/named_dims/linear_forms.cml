@@ -12,8 +12,8 @@ func affine(
 }
 func main(): int sync {
     // n = 2, m = 3: n + 1 = 3, 2 * n = 4, n + m = 5.
-    println(affine(ones([2]), ones([3]), ones([4]), ones([5]), ones([3])))
+    println(affine(ones::<f32>([2]), ones::<f32>([3]), ones::<f32>([4]), ones::<f32>([5]), ones::<f32>([3])))
     // Another call, other extents: one function, no new instance.
-    println(affine(ones([4]), ones([5]), ones([8]), ones([7]), ones([3])))
+    println(affine(ones::<f32>([4]), ones::<f32>([5]), ones::<f32>([8]), ones::<f32>([7]), ones::<f32>([3])))
     return 0
 }

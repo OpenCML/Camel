@@ -10,8 +10,8 @@ import {
 } from tensor
 
 func main(): int sync {
-    let a = ones([2, 2])
-    let b = eye(2)
+    let a = ones::<f32>([2, 2])
+    let b = eye::<f32>(2)
     let c = matmul(a, b)
     let d = add(c, 2.0)
     let e = concat([[1.0, 2.0]], [[3.0, 4.0]], 0)

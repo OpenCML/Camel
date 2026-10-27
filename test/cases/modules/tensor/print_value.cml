@@ -13,7 +13,7 @@ import { is_numeric } from types
 
 func forward(x: f32[..]): f32[..] {
     let s = shape(x)
-    return zeros([s[0]]) + 1.0
+    return zeros::<f32>([s[0]]) + 1.0
 }
 
 // The three helpers return the same string the value itself prints as, so the assertion side can
@@ -38,7 +38,7 @@ func main(): int sync {
     println(probe("A", argmin(rows, 0, true)))
     println(probe("B", tanh(a @ b)))
     println(probe("C", reshape([3.0, 3.0], [2, 1])))
-    println(`D sum=${sum(forward(ones([2, 3])))}`)
+    println(`D sum=${sum(forward(ones::<f32>([2, 3])))}`)
 
     // Controls: a declaration that names the element type, and the rank-1 and rank-0 forms.
     let flat: float[] = [1.0, 2.0]

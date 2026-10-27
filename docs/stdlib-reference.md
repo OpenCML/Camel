@@ -155,15 +155,21 @@ fold, merge or drop it.
 
 Numeric types are never converted implicitly; these functions do it. There is one conversion
 per target type, named by the type: `int`, `i32`, `float`, `f32`, `bf16`, `f16`, `c64`, `c128`
-(and `i64`, `f64`, the spellings of `int` and `float`). Each is one generic declaration over the
-source type. Applied to an array, a conversion converts every element (one rule with arithmetic:
+(and `i64`, `f64`, the spellings of `int` and `float`). Each is one declaration per source type,
+the overloads of one name written under one comment. Applied to an array, a conversion converts every element (one rule with arithmetic:
 `f32(xs)` is one node, and `T(xs)` does it for the type a generic function is given); that entry
 is declared below, with the core's conversions: it needs no import. Converting a float to an integer drops the fraction.
 
 #### `int`
 
 ```camel
-int: (x: S) => int when is_real::<S>() || is_string::<S>()
+int: (x: i32) => int
+int: (x: int) => int
+int: (x: f32) => int
+int: (x: float) => int
+int: (x: string) => int
+int: (x: bf16) => int
+int: (x: f16) => int
 ```
 
 x as a 64-bit integer.
@@ -174,7 +180,13 @@ x as a 64-bit integer.
 #### `i64`
 
 ```camel
-i64: (x: S) => int when is_real::<S>() || is_string::<S>()
+i64: (x: i32) => int
+i64: (x: int) => int
+i64: (x: f32) => int
+i64: (x: float) => int
+i64: (x: string) => int
+i64: (x: bf16) => int
+i64: (x: f16) => int
 ```
 
 The same as int.
@@ -185,7 +197,13 @@ The same as int.
 #### `i32`
 
 ```camel
-i32: (x: S) => i32 when is_real::<S>() || is_string::<S>()
+i32: (x: i32) => i32
+i32: (x: int) => i32
+i32: (x: f32) => i32
+i32: (x: float) => i32
+i32: (x: string) => i32
+i32: (x: bf16) => i32
+i32: (x: f16) => i32
 ```
 
 x as a 32-bit integer.
@@ -196,7 +214,13 @@ x as a 32-bit integer.
 #### `float`
 
 ```camel
-float: (x: S) => float when is_real::<S>() || is_string::<S>()
+float: (x: i32) => float
+float: (x: int) => float
+float: (x: f32) => float
+float: (x: float) => float
+float: (x: string) => float
+float: (x: bf16) => float
+float: (x: f16) => float
 ```
 
 x as a 64-bit float.
@@ -207,7 +231,13 @@ x as a 64-bit float.
 #### `f64`
 
 ```camel
-f64: (x: S) => float when is_real::<S>() || is_string::<S>()
+f64: (x: i32) => float
+f64: (x: int) => float
+f64: (x: f32) => float
+f64: (x: float) => float
+f64: (x: string) => float
+f64: (x: bf16) => float
+f64: (x: f16) => float
 ```
 
 The same as float.
@@ -218,7 +248,13 @@ The same as float.
 #### `f32`
 
 ```camel
-f32: (x: S) => f32 when is_real::<S>() || is_string::<S>()
+f32: (x: i32) => f32
+f32: (x: int) => f32
+f32: (x: f32) => f32
+f32: (x: float) => f32
+f32: (x: string) => f32
+f32: (x: bf16) => f32
+f32: (x: f16) => f32
 ```
 
 x as a 32-bit float.
@@ -229,7 +265,12 @@ x as a 32-bit float.
 #### `bf16`
 
 ```camel
-bf16: (x: S) => bf16 when is_real::<S>() || is_string::<S>()
+bf16: (x: i32) => bf16
+bf16: (x: int) => bf16
+bf16: (x: f32) => bf16
+bf16: (x: float) => bf16
+bf16: (x: bf16) => bf16
+bf16: (x: string) => bf16
 ```
 
 x as a bf16: the nearest bf16 of x, rounding to nearest with ties to even, once. A bf16 is a
@@ -242,7 +283,12 @@ and writing the conversion asks for that precision, so no numeric permission is 
 #### `f16`
 
 ```camel
-f16: (x: S) => f16 when is_real::<S>() || is_string::<S>()
+f16: (x: i32) => f16
+f16: (x: int) => f16
+f16: (x: f32) => f16
+f16: (x: float) => f16
+f16: (x: f16) => f16
+f16: (x: string) => f16
 ```
 
 x as an f16: the nearest f16 of x, rounding to nearest with ties to even, once. The same
@@ -254,7 +300,7 @@ conversion as bf16, at the other reduced precision (design principles 7.3).
 #### `i32`
 
 ```camel
-i32: (x: T[]) => i32[..] when is_numeric::<T>()
+i32: (x: A) => WithElement<A, i32> when is_compact_array::<A>()
 ```
 
 The conversion `i32` applied to every element of a numeric array: the result has the input's extents and element type `i32`. A scalar converts by the declaration above.
@@ -265,7 +311,7 @@ The conversion `i32` applied to every element of a numeric array: the result has
 #### `i64`
 
 ```camel
-i64: (x: T[]) => int[..] when is_numeric::<T>()
+i64: (x: A) => WithElement<A, int> when is_compact_array::<A>()
 ```
 
 The conversion `i64` applied to every element of a numeric array: the result has the input's extents and element type `int64`. A scalar converts by the declaration above.
@@ -276,7 +322,7 @@ The conversion `i64` applied to every element of a numeric array: the result has
 #### `int`
 
 ```camel
-int: (x: T[]) => int[..] when is_numeric::<T>()
+int: (x: A) => WithElement<A, int> when is_compact_array::<A>()
 ```
 
 The conversion `int` applied to every element of a numeric array: the result has the input's extents and element type `int64`. A scalar converts by the declaration above.
@@ -287,7 +333,7 @@ The conversion `int` applied to every element of a numeric array: the result has
 #### `f32`
 
 ```camel
-f32: (x: T[]) => f32[..] when is_numeric::<T>()
+f32: (x: A) => WithElement<A, f32> when is_compact_array::<A>()
 ```
 
 The conversion `f32` applied to every element of a numeric array: the result has the input's extents and element type `f32`. A scalar converts by the declaration above.
@@ -298,7 +344,7 @@ The conversion `f32` applied to every element of a numeric array: the result has
 #### `f64`
 
 ```camel
-f64: (x: T[]) => float[..] when is_numeric::<T>()
+f64: (x: A) => WithElement<A, float> when is_compact_array::<A>()
 ```
 
 The conversion `f64` applied to every element of a numeric array: the result has the input's extents and element type `f64`. A scalar converts by the declaration above.
@@ -309,7 +355,7 @@ The conversion `f64` applied to every element of a numeric array: the result has
 #### `float`
 
 ```camel
-float: (x: T[]) => float[..] when is_numeric::<T>()
+float: (x: A) => WithElement<A, float> when is_compact_array::<A>()
 ```
 
 The conversion `float` applied to every element of a numeric array: the result has the input's extents and element type `f64`. A scalar converts by the declaration above.
@@ -320,7 +366,7 @@ The conversion `float` applied to every element of a numeric array: the result h
 #### `bf16`
 
 ```camel
-bf16: (x: T[]) => bf16[..] when is_numeric::<T>()
+bf16: (x: A) => WithElement<A, bf16> when is_compact_array::<A>()
 ```
 
 The conversion `bf16` applied to every element of a numeric array: the result has the input's extents and element type `bf16`. A scalar converts by the declaration above. A conversion into `bf16` or `f16` rounds (to nearest, ties to even); writing it asks for that precision, so it needs no numeric permission (`change_precision` governs a computation the compiler moves to lower precision, design principles 7.2-7.3).
@@ -331,7 +377,7 @@ The conversion `bf16` applied to every element of a numeric array: the result ha
 #### `f16`
 
 ```camel
-f16: (x: T[]) => f16[..] when is_numeric::<T>()
+f16: (x: A) => WithElement<A, f16> when is_compact_array::<A>()
 ```
 
 The conversion `f16` applied to every element of a numeric array: the result has the input's extents and element type `f16`. A scalar converts by the declaration above. A conversion into `bf16` or `f16` rounds (to nearest, ties to even); writing it asks for that precision, so it needs no numeric permission (`change_precision` governs a computation the compiler moves to lower precision, design principles 7.2-7.3).
@@ -342,7 +388,12 @@ The conversion `f16` applied to every element of a numeric array: the result has
 #### `c64`
 
 ```camel
-c64: (x: S) => c64 when is_real::<S>() || is_complex::<S>()
+c64: (x: i32) => c64
+c64: (x: int) => c64
+c64: (x: f32) => c64
+c64: (x: float) => c64
+c64: (x: c64) => c64
+c64: (x: c128) => c64
 ```
 
 x as a 64-bit complex number: the real part is x and the imaginary part is zero. A c128
@@ -353,7 +404,12 @@ keeps both parts as they are.
 #### `c128`
 
 ```camel
-c128: (x: S) => c128 when is_real::<S>() || is_complex::<S>()
+c128: (x: i32) => c128
+c128: (x: int) => c128
+c128: (x: f32) => c128
+c128: (x: float) => c128
+c128: (x: c64) => c128
+c128: (x: c128) => c128
 ```
 
 x as a 128-bit complex number: the real part is x and the imaginary part is zero.
@@ -482,21 +538,42 @@ The strings of xs joined with sep between them.
 
 ```camel
 len: (x: string) => int
-len: (x: T[..]) => int
+```
+
+The number of code points of a string.
+
+- Pure.
+- Example: `len('h€')` gives `2`
+
+#### `len`
+
+```camel
+len: (x: A) => int when is_array::<A>()
+```
+
+The length of the first dimension of an array of any rank.
+
+- Pure.
+- Example: `len([1, 2, 3])` gives `3`
+
+#### `len`
+
+```camel
 len: (x: Bytes) => int
 ```
 
-The number of code points of a string, of bytes of a `Bytes`, or the length of the first
-dimension of an array of any rank.
+The number of bytes of a `Bytes`.
 
-- Example: `len('h€')` gives `2`
+- Pure.
+- Example (a fragment, not compiled): `len(encode('h€'))` gives `4`
+- Why it is not compiled: the example builds its `Bytes` with `encode` from the `bytes` module, which this page does not import
 
 ### Arrays
 
 #### `range`
 
 ```camel
-range: (start: int, end: int, step: int = 1) => int[]
+range: (start: int, end: int, step: int) => int[]
 ```
 
 The integers of a step: `start`, `start + step`, ... up to, not including, `end`; with no step
@@ -1164,6 +1241,16 @@ The values of the bytes, each in 0..255.
 
 ## `ckpt`: parameter trees and checkpoints
 
+Checkpoints of a parameter tree. A tree is a struct or a tuple whose members are trees or
+leaves; a checkpoint holds the leaves an array of numbers, `Bytes`, `string`, `bool`, `i32`,
+`int`, `f32` and `float` can be written as (`has_ckpt_form`), and a tree with any other leaf is
+refused where the call is written.
+
+The tree is the data, the directory is where it goes: `tree->save_tree<dir: 'out/ckpt'>` and
+`'out/ckpt'->load_tree::<T>`. A failure of the file system is an error value; a directory that
+holds something other than a tree of the type asked for is an error value too. Walking a tree is
+the tree library's (`stdlib/tree.cml`), not this module's.
+
 #### `tree_leaves`
 
 ```camel
@@ -1178,49 +1265,39 @@ The leaves of a tree, as a tuple.
 #### `save_tree`
 
 ```camel
-save_tree: (dir: string, tree: T, dataset_manifest_sha256?: string) => void
+save_tree: <dir: string, dataset_manifest_sha256: string? = null> (tree: T) => void! uses fs when has_ckpt_form::<T>()
 ```
 
-Saves a tree to a directory, one file per leaf named by its path (`blocks.0.w.npy` for a
-tensor), with a manifest that records the types, sizes and SHA-256 sums and, when
-`dataset_manifest_sha256` is given, that hash of the data manifest. The directory is
-replaced as a whole or not at all: the new checkpoint is written and flushed into a
-temporary sibling and renamed into place, and the old directory is kept beside it as the
-hidden sibling `.<name>.ckpt-previous` (the destination's own directory name between a
-leading dot and `.ckpt-previous`) until that rename succeeds, so a failure puts the old
-directory back. A destination that does not exist is created; one that does is replaced; a
-symbolic link or a reparse point there is refused. If the process dies between the two
-renames, `load_tree` reads `.<name>.ckpt-previous` and the next `save_tree` restores it
-before replacing it. (A directory rename cannot replace a non-empty directory on Windows or
-POSIX, hence the two renames.) A leaf type a checkpoint cannot hold (anything but a tensor,
-`Bytes`, `string`, `bool`, `i32`, `int`, `f32`, `f64`) is a compile-time error that names
-the path. Only one writer may save to a directory at a time: concurrent `save_tree` calls
-for the same directory are not serialized (there is no lock file), so the contract is a
-single writer; one of two racing saves fails explicitly, and a reader still sees a complete
-checkpoint.
+Saves a tree to a directory, one file per leaf named by its path (`blocks.0.w.npy` for an
+array), with a manifest that records the types, sizes and SHA-256 sums and, when
+`dataset_manifest_sha256` is given, that hash of the data manifest. The directory is replaced as
+a whole or not at all: the new checkpoint is written and flushed into a temporary sibling and
+renamed into place, and the old directory is kept beside it as the hidden sibling
+`.<name>.ckpt-previous` until that rename succeeds, so a failure puts the old directory back. A
+destination that does not exist is created; one that does is replaced; a symbolic link there is
+refused. If the process dies between the two renames, `load_tree` reads the sibling and the
+next `save_tree` restores it before replacing it. Only one writer may save to a directory at a
+time; one of two racing saves fails, and a reader still sees a complete checkpoint.
 
-- With effects: writes and replaces the directory.
-- Failure: fault `FileSystemError` when the directory cannot be written or published.
-- Example: `save_tree('out/ckpt', { w: 1.0, step: 10 })`
+- Failure: error value `PermissionDenied` when the file system refuses a write; error value `IOError` when the directory cannot be written or published, or a symbolic link is in the way.
+- Example (a fragment, not compiled): `{ w: 1.0, step: 10 }->save_tree<dir: 'out/ckpt'>`
+- Why it is not compiled: the tree comes from the surrounding program
 
 #### `load_tree`
 
 ```camel
-load_tree: (dir: string, dataset_manifest_sha256?: string) => T!
+load_tree: <dataset_manifest_sha256: string? = null> (dir: string) => T! uses fs, stderr when has_ckpt_form::<T>()
 ```
 
-Reads a tree of the type T back from a directory `save_tree` wrote, checking the structure,
-the types, the sizes and the SHA-256 sums first: a directory that does not fit T is a
-`CheckpointError` value, nothing is partly loaded. A `dataset_manifest_sha256` that differs
-from the one the checkpoint records is a warning on standard error, not an error. T is the
-explicit type argument or the
-expected type of the result. When a save was interrupted after moving the old directory
-aside, the complete `.<name>.ckpt-previous` sibling is read instead, with a warning on
-standard error; the next save restores it before replacing it.
+Reads a tree of the type T back from a directory `save_tree` wrote, checking the structure, the
+types, the sizes and the SHA-256 sums first: nothing is partly loaded. A
+`dataset_manifest_sha256` that differs from the one the checkpoint records is a warning on
+standard error, not an error. T is the explicit type argument or the expected type of the
+result. When a save was interrupted after moving the old directory aside, the complete
+`.<name>.ckpt-previous` sibling is read instead, with a warning on standard error.
 
-- With effects: reads the directory.
-- Failure: error value `CheckpointError` when the directory does not hold a tree of the type T, or a file is missing or does not match its recorded sum.
-- Example: `load_tree::<{ w: float, step: int }>('out/ckpt') !! { w: 0.0, step: 0 }`
+- Failure: error value `NotFound` when there is no checkpoint at the path; error value `CheckpointError` when the directory does not hold a tree of the type T, or a file is missing or does not match its recorded sum.
+- Example: `'out/ckpt'->load_tree::<{ w: float, step: int }> !! { w: 0.0, step: 0 }`
 
 <a id="tree"></a>
 
@@ -1323,39 +1400,30 @@ boolean.
 - Pure.
 - Example: `new([[1.0, 2.0], [3.0, 4.0]])`
 
-#### `empty`
-
-```camel
-empty: (shape: int[]) => f32[..]
-```
-
-A tensor of the given extents; the allocation is zeroed, so it reads as `zeros` of the same
-shape.
-
-- Pure.
-- Example: `empty([2, 3])`
-
 #### `zeros`
 
 ```camel
-zeros: (shape: int[]) => f32[..]
+zeros: (shape: int[]) => T[..] when is_numeric::<T>()
 ```
 
-A tensor of `f32` zeros with the given extents.
+An array of the given extents whose elements are all 0. The element type is written
+(`zeros::<f32>([2, 3])`) or comes from the position of the call (`let x: f32[2, 3] =
+zeros([2, 3])`); there is no default.
 
 - Pure.
-- Example: `zeros([2, 3])`
+- Example: `zeros::<f32>([2, 3])`
 
 #### `ones`
 
 ```camel
-ones: (shape: int[]) => f32[..]
+ones: (shape: int[]) => T[..] when is_numeric::<T>()
 ```
 
-A tensor of `f32` ones with the given extents.
+An array of the given extents whose elements are all 1; the element type is the call's, as for
+`zeros`.
 
 - Pure.
-- Example: `ones([2, 3])`
+- Example: `ones::<f32>([2, 3])`
 
 #### `full`
 
@@ -1371,13 +1439,13 @@ A tensor of the given extents whose elements are all value; the element type is 
 #### `eye`
 
 ```camel
-eye: (n: int) => f32[..]
+eye: (n: int) => T[..] when is_numeric::<T>()
 ```
 
-The `f32` n by n identity matrix.
+The n by n identity matrix; the element type is the call's, as for `zeros`.
 
 - Pure.
-- Example: `eye(2)`
+- Example: `eye::<f32>(2)`
 
 #### `range`
 
@@ -1770,7 +1838,7 @@ numel: (t: T[..]) => int when is_numeric::<T>()
 The number of elements in a tensor: the product of its extents.
 
 - Pure.
-- Example: `numel(zeros([2, 3]))` gives `6`
+- Example: `numel(zeros::<f32>([2, 3]))` gives `6`
 
 #### `dim`
 
@@ -2080,7 +2148,7 @@ Writes a tensor to a NumPy `.npy` file, replacing it.
 
 - With effects: writes a file.
 - Failure: fault `RuntimeError` when the file cannot be written.
-- Example: `save_npy(zeros([2, 2]), 'x.npy')`
+- Example: `save_npy(zeros::<f32>([2, 2]), 'x.npy')`
 
 ### Module state
 
@@ -2847,6 +2915,23 @@ The elements in ascending order, in the order `argsort` gives.
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `[3, 1, 2]->sort` gives `[1, 2, 3]`
 - Example: `['pear', 'fig']->sort` gives `['fig', 'pear']`
+
+#### `merge_sorted`
+
+```camel
+merge_sorted: (xs: T[], ys: T[]) => T[] when is_ordered::<T>()
+```
+
+The elements of both arrays in ascending order, in the order `sort` gives: the meaning is
+`sort(concat(xs, ys))`. Execution takes a kernel that merges the two in one pass when each is
+already in order, which is what the function is for: the cost is O(n + m), against the
+O((n + m) log (n + m)) of the sort it stands for. An input that is not in order is sorted with
+the other, so the result is the same array for every input; equal elements keep their order,
+those of `xs` first.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `merge_sorted([1, 4, 6], [2, 3, 7])` gives `[1, 2, 3, 4, 6, 7]`
+- Example: `merge_sorted([2.0, 1.0], [0.5])` gives `[0.5, 1.0, 2.0]`
 
 #### `sort_by`
 
@@ -3799,7 +3884,10 @@ uniform draw each (the key folded with the position), ties keeping position orde
 shuffle: <k: Key> (xs: T[]) => T[]
 ```
 
-The elements of xs in a random order, as a new array; xs is not changed.
+The elements of xs in a random order, as a new array; xs is not changed. The meaning is
+`xs[permutation(k, len(xs))]`; numbers are shuffled by a kernel that makes the same
+permutation in O(n log n) time (the cost of ordering n draws) and 16 bytes of working memory
+for each element.
 
 - Example: `[1, 2, 3]->shuffle<key(42)>`
 

@@ -80,6 +80,15 @@ class InferContext {
         std::span<const std::optional<PartialInts>> partials = {}, bool sourceLevel = false)
         : types_(types), constants_(constants), partials_(partials), sourceLevel_(sourceLevel) {}
 
+    /// The element type the call states (`zeros::<f32>(shape)`) or takes from the position it
+    /// stands in (`let x: f32[2, 3] = zeros([2, 3])`), for an operator whose element type is not
+    /// in its arguments (`OpDef::elementFromCall`).
+    std::optional<type::TypeCode> callElement() const { return callElement_; }
+    InferContext &withCallElement(std::optional<type::TypeCode> element) {
+        callElement_ = element;
+        return *this;
+    }
+
     size_t size() const { return types_.size(); }
     type::Type *type(size_t index) const { return types_[index]; }
     bool has(size_t index) const { return index < types_.size(); }
@@ -105,6 +114,7 @@ class InferContext {
     std::span<const std::optional<ConstArg>> constants_;
     std::span<const std::optional<PartialInts>> partials_;
     bool sourceLevel_ = false;
+    std::optional<type::TypeCode> callElement_;
 };
 
 using InferFn = std::function<std::optional<type::Type *>(const InferContext &)>;
@@ -135,6 +145,16 @@ struct OpDef {
     InferFn infer;
     operator_t kernel;
     OpTraits traits;
+    /// The kernel takes the with-arguments of a call after the ordinary ones, as one list
+    /// (`reshape<shape>(x)` is the kernel's `(x, shape)`): the operator is registered with that
+    /// fact (OperatorTraits::withAfterNorm), the resolver and the index semantics read the joined
+    /// list, and the kernel is wrapped by `positionally` (support.h). The graph keeps the
+    /// with-argument on its own edge.
+    bool withAfterNorm = false;
+    /// The element type of the result is not in the arguments: the call writes it
+    /// (`zeros::<f32>(shape)`) or the position gives it (`let x: f32[2, 3] = zeros(...)`), and a
+    /// call that does neither is refused (design principles 5.1: no default element type).
+    bool elementFromCall = false;
     VjpFn vjp = nullptr; // reverse-mode rule; nullptr when the operator is not differentiable
     FoldFn foldFromTypes = nullptr; // constant result from argument types, when they fix it
     /// What the operator computes (camel/core/operator_semantics.h), declared to the core

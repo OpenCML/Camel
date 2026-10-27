@@ -1,0 +1,11 @@
+/**
+ * A creation operator whose call states no element type and stands where none is expected is
+ * refused: there is no default element type.
+ */
+import { zeros } from tensor
+
+func main(): int sync {
+    let x = zeros([2])
+    println(x)
+    return 0
+}

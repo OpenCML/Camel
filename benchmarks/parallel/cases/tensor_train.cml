@@ -30,10 +30,10 @@ func train(m: Mlp, x: f32[..], steps: int, last: float): float {
 
 func main(): int sync {
     let m = {
-        fc1_w: ones([784, 256]) * 0.001, fc1_b: ones([256]) * 0.01,
-        fc2_w: ones([256, 128]) * 0.002, fc2_b: ones([128]) * 0.01,
-        fc3_w: ones([128, 10]) * 0.003, fc3_b: ones([10]) * 0.01
+        fc1_w: ones::<f32>([784, 256]) * 0.001, fc1_b: ones::<f32>([256]) * 0.01,
+        fc2_w: ones::<f32>([256, 128]) * 0.002, fc2_b: ones::<f32>([128]) * 0.01,
+        fc3_w: ones::<f32>([128, 10]) * 0.003, fc3_b: ones::<f32>([10]) * 0.01
     }
-    println(format<train(m, ones([64, 784]), 60, 0.0)>('final loss: {:.6f}'))
+    println(format<train(m, ones::<f32>([64, 784]), 60, 0.0)>('final loss: {:.6f}'))
     return 0
 }

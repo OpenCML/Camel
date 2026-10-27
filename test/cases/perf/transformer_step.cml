@@ -64,19 +64,19 @@ func loss(x: f32[..], labels: f32[..]): float {
 
 func main(steps: int, lr: float): int sync {
     // Deterministic inputs and starting weights.
-    let x = zeros([4, 8]) + 0.01
-    let labels = zeros([4])
+    let x = zeros::<f32>([4, 8]) + 0.01
+    let labels = zeros::<f32>([4])
     let block = {
-        g1: zeros([8]) + 1.0,
-        g2: zeros([8]) + 1.0,
-        wq: zeros([8, 8]) + 0.01,
-        wk: zeros([8, 8]) + 0.01,
-        wv: zeros([8, 8]) + 0.01,
-        wo: zeros([8, 8]) + 0.01,
-        w1: zeros([8, 16]) + 0.01,
-        b1: zeros([16]) + 0.001,
-        w2: zeros([16, 8]) + 0.01,
-        b2: zeros([8]) + 0.001
+        g1: zeros::<f32>([8]) + 1.0,
+        g2: zeros::<f32>([8]) + 1.0,
+        wq: zeros::<f32>([8, 8]) + 0.01,
+        wk: zeros::<f32>([8, 8]) + 0.01,
+        wv: zeros::<f32>([8, 8]) + 0.01,
+        wo: zeros::<f32>([8, 8]) + 0.01,
+        w1: zeros::<f32>([8, 16]) + 0.01,
+        b1: zeros::<f32>([16]) + 0.001,
+        w2: zeros::<f32>([16, 8]) + 0.01,
+        b2: zeros::<f32>([8]) + 0.001
     }
     'perf transformer steps={} lr={}'->format<steps, lr>->println
 

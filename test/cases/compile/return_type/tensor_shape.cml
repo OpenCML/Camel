@@ -4,6 +4,6 @@ func f(x: f32[2, 3]): f32[3, 2] {
 }
 func main(): int sync {
     println('ran')
-    println(f(ones([2, 3])))
+    println(f(ones::<f32>([2, 3])))
     return 0
 }

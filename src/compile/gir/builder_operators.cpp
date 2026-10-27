@@ -953,8 +953,20 @@ std::optional<oper_idx_ptr_t> Builder::resolveGroupedCall(
         // them. The condition is recorded, and the call reported as one whose conditions are
         // unmet, only when no rule at all takes it.
         std::string condition;
+        // A variable only the result mentions was fixed by the type the call is expected to
+        // give: the condition is asked with it.
+        type_vec_t verdictTypes = explicitTypes;
+        if (explicitTypes.empty()) {
+            if (const auto *declared =
+                    dynamic_cast<const DeclaredFuncTypeResolver *>(resolver.get());
+                declared != nullptr && !declared->resolve(ruleWith, normTypes).has_value()) {
+                if (auto fromExpected = declared->typesFromExpected(expectedResult)) {
+                    verdictTypes = std::move(*fromExpected);
+                }
+            }
+        }
         const RuleVerdict verdict =
-            ruleVerdictForCall(resolver, ops->name(), ruleWith, normTypes, &condition, explicitTypes);
+            ruleVerdictForCall(resolver, ops->name(), ruleWith, normTypes, &condition, verdictTypes);
         if (verdict == RuleVerdict::ConditionUnmet) {
             unmet.emplace_back(resolver->signature(), std::move(condition));
             continue;
@@ -3190,6 +3202,11 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             std::vector<StaticArg> normStatics;
             normStatics.reserve(normInputs.size());
             for (const Argument &input : normInputs) {
+                normStatics.push_back(staticArgOf(input.node));
+            }
+            // The constants among the with-arguments follow them: an operator whose kernel takes
+            // its with-arguments after the ordinary ones reads one list (kernelArgumentsOf).
+            for (const Argument &input : withInputs) {
                 normStatics.push_back(staticArgOf(input.node));
             }
             type_vec_t explicitTypes;

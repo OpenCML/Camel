@@ -107,32 +107,77 @@ class OpDefResolver final : public FuncTypeResolver {
 
     std::optional<FunctionType *> resolveWith(
         const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics) const override {
-        if (!argumentsFit(*def_, with, norm)) {
+        // An operator whose element type only the call can give has no answer without one.
+        if (def_->elementFromCall) {
+            return std::nullopt;
+        }
+        return resolveFor(with, norm, normStatics, std::nullopt);
+    }
+
+    /// The element type of a creation operator is written (`zeros::<f32>(shape)`) or comes from
+    /// the position of the call; neither is a default.
+    std::optional<FunctionType *> resolveForCall(
+        const type_vec_t &types, Type *expectedResult, const type_vec_t &with,
+        const type_vec_t &norm, static_args_t normStatics) const override {
+        if (!def_->elementFromCall) {
+            return types.empty() ? resolveFor(with, norm, normStatics, std::nullopt) : std::nullopt;
+        }
+        std::optional<TypeCode> element;
+        if (types.size() == 1 && types[0] != nullptr) {
+            element = types[0]->code();
+        } else if (types.empty() && expectedResult != nullptr) {
+            if (const ArrayType *array = asArrayType(valueTypeOf(expectedResult))) {
+                element = array->elemTypeCode();
+            }
+        }
+        if (!element || !isNumericScalar(*element)) {
+            return std::nullopt;
+        }
+        return resolveFor(with, norm, normStatics, element);
+    }
+
+    std::optional<FunctionType *> resolveFor(
+        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics,
+        std::optional<TypeCode> element) const {
+        // An operator whose kernel takes the with-arguments after the ordinary ones is asked about
+        // the joined list, its statics aligned with it (norm, then with).
+        if (!with.empty() && !def_->withAfterNorm) {
+            return std::nullopt;
+        }
+        const type_vec_t all = kernelArguments(with, norm);
+        if (!argumentsFit(*def_, {}, all)) {
             return std::nullopt;
         }
         std::optional<Type *> result;
         try {
-            result = infer(norm, normStatics);
+            result = infer(all, normStatics, element);
         } catch (const std::invalid_argument &) {
             return std::nullopt; // statically known shapes or dtypes conflict (see explain)
         }
         if (!result) {
             return std::nullopt;
         }
-        param_vec_t normParams;
+        param_vec_t withParams, normParams;
+        for (Type *t : with) {
+            withParams.emplace_back(t, false);
+        }
         for (Type *t : norm) {
             normParams.emplace_back(t, false);
         }
-        return FunctionType::create(param_vec_t{}, normParams, *result);
+        return FunctionType::create(withParams, normParams, *result);
     }
 
     std::optional<std::string> explainRejection(
         const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics) const override {
-        if (!argumentsFit(*def_, with, norm)) {
+        if (!with.empty() && !def_->withAfterNorm) {
+            return std::nullopt;
+        }
+        const type_vec_t all = kernelArguments(with, norm);
+        if (!argumentsFit(*def_, {}, all)) {
             return std::nullopt;
         }
         try {
-            (void)infer(norm, normStatics);
+            (void)infer(all, normStatics);
         } catch (const std::invalid_argument &e) {
             return std::string(e.what());
         }
@@ -142,11 +187,24 @@ class OpDefResolver final : public FuncTypeResolver {
     std::string signature() const override { return signature_; }
 
   private:
-    std::optional<Type *> infer(const type_vec_t &norm, static_args_t normStatics) const {
+    /// The arguments in kernel order: the ordinary ones, then the with-arguments when the kernel
+    /// takes them so.
+    type_vec_t kernelArguments(const type_vec_t &with, const type_vec_t &norm) const {
+        type_vec_t all = norm;
+        if (def_->withAfterNorm) {
+            all.insert(all.end(), with.begin(), with.end());
+        }
+        return all;
+    }
+
+    std::optional<Type *> infer(
+        const type_vec_t &norm, static_args_t normStatics,
+        std::optional<TypeCode> element = std::nullopt) const {
         const StaticFacts facts(norm, normStatics);
         // A call the program wrote: design principles 5.1's literal rule has run, so a scalar of
         // another type than the element type is a value to report.
-        return def_->infer(InferContext(norm, facts.constants, facts.partials, true));
+        return def_->infer(
+            InferContext(norm, facts.constants, facts.partials, true).withCallElement(element));
     }
 
     std::shared_ptr<const OpDef> def_;
@@ -172,7 +230,9 @@ void OpRegistry::add(std::string_view protocol, std::vector<OpDef> defs) {
         // registries.
         camel::core::OperatorTable::instance().set(
             uri,
-            {.pure = def.traits.pure, .elementwise = def.traits.elementwise});
+            {.pure = def.traits.pure,
+             .elementwise   = def.traits.elementwise,
+             .withAfterNorm = def.withAfterNorm});
         if (def.semantics) {
             // After the traits, which the declaration is checked against. A rejected
             // declaration is a defect of this module: say so with the module's name.
@@ -182,7 +242,7 @@ void OpRegistry::add(std::string_view protocol, std::vector<OpDef> defs) {
                     core::sem::OperatorKey::of(uri, semantics.key.major, semantics.key.minor);
             }
             if (def.index) {
-                semantics.indexing = indexingFrom(def.index);
+                semantics.indexing = indexingFrom(def.index, def.withAfterNorm);
             }
             try {
                 camel::core::OperatorTable::instance().declareSemantics(uri, std::move(semantics));

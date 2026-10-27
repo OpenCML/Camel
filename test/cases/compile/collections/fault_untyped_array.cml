@@ -1,10 +1,11 @@
-// An array without an element type (`[]`) converts only while it is empty: this one was
-// appended to, so the conversion is a fault with its position, on every back end.
+// An empty literal (`[]`) takes its element type from where it stands: appended to, it is an
+// array of the appended value's type, so it converts to a set like any other array of that type.
+// (It used to stay an array without an element type and fault on the conversion.)
 
 func main(): int sync {
     println("before")
     let s = ([]->append<1>) as Set<int>
     println(s)
-    println("never printed")
+    println("after")
     return 0
 }

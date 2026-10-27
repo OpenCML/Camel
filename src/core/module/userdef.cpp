@@ -109,8 +109,10 @@ bool UserDefinedModule::compile(CompileStage till) {
         CAMEL_LOG_INFO_S("Module", "Start compiling module '{}' from file '{}'.", name_, path_);
     }
 
-    if (stage_ == CompileStage::None && context_->mainModule().get() == this) {
-        // The built-in signatures are read with every program (the prelude's declaration file).
+    if (stage_ == CompileStage::None) {
+        // The built-in signatures are read with every program (the prelude's declaration file): by
+        // the first module of the context that is compiled, whichever it is -- a session of the
+        // Python binding has no entry module.
         if (const std::string broken = context_->checkPreludeDeclarations(); !broken.empty()) {
             diagnostics_->of(SemanticDiag::ImportedModuleHasErrors).commit("prelude", broken);
             return false;
