@@ -16,7 +16,7 @@
  * no answer is an outcome of a condition (the rule does not apply), not a death of the pass.
  */
 
-import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
+import { Node, Graph, nodes, op, op_name, name, graphs_of } from graph
 import { max } from math
 import { rewrite } from rewrite
 
@@ -39,16 +39,16 @@ func opText(n: Node): string {
     }
 }
 
-func countOf(p: Program, function: string, operator: string): int {
-    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+func countOf::<F>(p: F, function: string, operator: string): int {
+    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
     return len(nodes(found[0])->filter<(n: Node): bool => opText(n) == operator>)
 }
 
-export func apply(p: Program): Program! sync {
-    return rewrite(p, [drop_by_one])
+export func apply::<F>(p: F): F! sync {
+    return p->rewrite<[drop_by_one]>
 }
 
-export func report(p: Program): Program! sync {
+export func report::<F>(p: F): F! sync {
     println('kept', countOf(p, 'kept', ':op/mul_l'))
     return p
 }

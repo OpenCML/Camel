@@ -1,4 +1,4 @@
-import { Program, Graph, Node, Region, RegionKind, graphs, nodes, region_of, region_kind, region_parent } from graph
+import { Graph, Node, Region, RegionKind, nodes, region_of, region_kind, region_parent, graphs_of } from graph
 
 // Every node is in a region; the body of a graph is region 0 and its kind is Root, whether or
 // not the graph has a region table.
@@ -27,7 +27,7 @@ func reportGraph(g: Graph) sync {
     println(len(ns->filter<parentOk>))
 }
 
-export func report(p: Program): Program! sync {
-    graphs(p)->foreach<(g: Graph) => reportGraph(g)>
+export func report::<F>(p: F): F! sync {
+    graphs_of(p)->foreach<(g: Graph) => reportGraph(g)>
     return p
 }

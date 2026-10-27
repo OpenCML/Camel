@@ -418,7 +418,7 @@ PassMaker extractPass() {
 }
 
 /// The saturation of the rules library, under the core's name. Like `std::opt::algebra`,
-/// the laws are the library's (`rules::saturate_only`); unlike it, the extraction is not made, so
+/// the laws are the library's (`opt::saturate`); unlike it, the extraction is not made, so
 /// the program stops in the state where a value has several writings.
 PassMaker saturatePass() {
     return [](const context_ptr_t &ctx, const PassArgs &args) {
@@ -434,7 +434,7 @@ PassMaker dcePass() {
 }
 
 /// The algebraic simplification under the core's name: the rules library's pass
-/// (`rules::simplify`, or `rules::simplify_strict` for `safe_fp=true`), so the laws live once,
+/// (`rules::simplify`, or `rules::simplify strict=true` for `safe_fp=true`), so the laws live once,
 /// in stdlib/rules.cml. `neutral_only` has no library equivalent; it keeps the C++ reference
 /// mode (the integer neutral elements only) that graph.plan.toml compares a Camel pass against.
 const camel::runtime::Program *runRulesAlgebra(
@@ -1546,7 +1546,7 @@ namespace {
 /// The graph id -> revision of every graph a program holds: what `programContentChanged`
 /// compares. Read out before a pass runs rather than looked at afterwards, because a pass of the
 /// core is another registered pass's caller (`std::opt::algebra` runs the rules library's
-/// `rules::simplify`, `std::opt::saturate` its `rules::saturate_only`), and that inner pass
+/// `rules::simplify`, `std::opt::saturate` its `opt::saturate`), and that inner pass
 /// commits its result and releases the program the outer one was given
 /// (`Context::settleRuntimeGraphs`). The old program is not read after `pass->apply` returns.
 std::unordered_map<uint32_t, uint64_t>
@@ -1636,7 +1636,7 @@ const camel::runtime::Program *runRulesAlgebra(
     bool safeFp, std::ostream &os, GraphIRPass *caller) {
     const PassRunResult result = applyRegisteredPass(
         program,
-        safeFp ? "rules::simplify_strict" : "rules::simplify",
+        safeFp ? "rules::simplify strict=true" : "rules::simplify",
         ctx,
         os,
         caller);

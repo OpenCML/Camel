@@ -1,18 +1,14 @@
 /**
- * The declarations of `graph` are what an importer sees: `Program`, `Graph` and `Node` and the
- * result types of `current`, `root`, `nodes`, `id` and `type_of` come from `stdlib/graph.cml`,
- * the two comparison declarations are the operators of the handle types, and every call reaches
- * the operator the C++ module runs (step 10).
+ * The declarations of `graph` are what an importer sees: `Graph` and `Node` and the result types
+ * of `graph_of`, `nodes`, `id` and `type_of` come from `stdlib/graph.cml`, and every call reaches
+ * the operator the C++ module runs.
  */
 
-import { current, root, name, nodes, id, type_of, type_name } from graph
-import { Program, Graph, Node } from graph
+import { name, nodes, id, type_of, type_name, graph_of } from graph
+import { Graph, Node } from graph
 
 func main(): int sync {
-    let p: Program = current()
-    println(p == current())
-    println(p != current())
-    let g: Graph = root(p)
+    let g: Graph = graph_of(main)
     println(name(g))
     let ns = nodes(g)
     println(len(ns) > 0)

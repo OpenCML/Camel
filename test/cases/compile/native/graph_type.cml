@@ -1,12 +1,12 @@
 /**
- * An integer where the declaration says `Program`: the call is refused at the declaration's
- * type, and the message prints the declaration's own parameter name (`p`) — the one source is
- * `stdlib/graph.cml`, not the C++ module (step 10).
+ * An integer where the declaration says a function: the call is refused, because the declaration's
+ * `when` condition (`is_function::<F>()`) is false for it, and the message prints the declaration's
+ * own parameter name (`f`): the one source is `stdlib/graph.cml`, not the C++ module.
  */
 
-import { root } from graph
+import { graph_of } from graph
 
 func main(): int sync {
-    println(root(42))
+    println(graph_of(42))
     return 0
 }

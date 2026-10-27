@@ -37,15 +37,15 @@ string: (x: T) => string
 parse_int: (text: string) => int!
 parse_float: (text: string) => float!
 error: (kind: string, message: string) => Error
-print: (x: T, ...rest: U...) => T
-println: (x: T, ...rest: U...) => T
-eprintln: (x: T, ...rest: U...) => T
-format: <...args: T...> (fmt: string) => string
+print: (x: T, ..rest) => T
+println: (x: T, ..rest) => T
+eprintln: (x: T, ..rest) => T
+format: <args: T[]> (fmt: string) => string
 join: <sep: string> (xs: string[]) => string
 len: (x: string) => int
 len: (x: T[..]) => int
 len: (x: Bytes) => int
-range: (start: int, end: int, step?: int) => int[]
+range: (start: int, end: int, step: int = 1) => int[]
 last: (xs: T[]) => T
 slice: <axis: int, start: int, end: int, step: int = 1> (x: T[]) => T[]
 slice: <axis: int, start: int, end: int, step: int = 1> (x: string) => string
@@ -60,7 +60,7 @@ filter: <f: (item: T) => bool> (xs: T[]) => T[]
 reduce: <f: (acc: U, item: T) => U, initial: U> (xs: T[]) => U
 foreach: <f: (item: T) => void> (xs: T[]) => void
 fail: <Kind: string> (message: string) => never
-attempt: (f: (...args: A) => T) => (...args: A) => T!
+attempt: (f: F) => F!
 len: (x: Map<K, V>) => int
 len: (x: Set<T>) => int
 get: <key: K> (m: Map<K, V>) => V?
@@ -517,17 +517,17 @@ arity_probe: <tag: int, extra: int[] = []> (f: F, example: E) => int when is_fun
 zen: () => string
 ```
 
-**`graph`** — import { ... } from graph — 42 name(s)
+**`graph`** — import { ... } from graph — 38 name(s)
 
 ```text
-current: () => Program
-graphs: (p: Program) => Graph[]
-root: (p: Program) => Graph
+graph_of: (f: F) => Graph when is_function::<F>()
+graphs_of: (f: F) => Graph[] when is_function::<F>()
 name: (g: Graph) => string
 nodes: (g: Graph) => Node[]
 inputs: (n: Node) => Node[]
 with_inputs: (n: Node) => Node[]
-ctrl_inputs: (n: Node) => Node[]
+sync_inputs: (n: Node) => Node[]
+order_inputs: (n: Node) => Node[]
 users: (n: Node) => Node[]
 value_users: (n: Node) => Node[]
 kind: (n: Node) => NodeKind
@@ -542,12 +542,7 @@ type_name: (t: TypeRef) => string
 callee: (n: Node) => Graph?
 tags: (n: Node) => string
 origin: (n: Node) => int
-constant: (n: Node, sample: i32) => i32?
-constant: (n: Node, sample: int) => int?
-constant: (n: Node, sample: f32) => f32?
-constant: (n: Node, sample: float) => float?
-constant: (n: Node, sample: bool) => bool?
-constant: (n: Node, sample: string) => string?
+constant: (n: Node) => T? when is_ordered::<T>()
 region_of: (n: Node) => Region
 region_kind: (r: Region) => RegionKind
 region_parent: (r: Region) => Region?
@@ -556,56 +551,38 @@ id: (h: Graph) => int
 id: (h: Node) => int
 id: (h: Op) => int
 effects: (g: Graph) => Effects
-shape: (n: Node) => string?
+shape_text: (n: Node) => string?
 permissions: (n: Node) => int
-program_of: (f: F) => Program
-graph_of: (f: F) => Graph
-open_function: (f: F) => Txn
-to_function: (t: Txn, sample: F) => F!
-open: (p: Program) => Txn
-replace: (t: Txn, old: Node, new: Node) => void
-erase: (t: Txn, n: Node) => void
-eval: (t: Txn, n: Node) => Node?
-commit: (t: Txn) => Program!
-abort: (t: Txn) => void
-add_constant: (t: Txn, g: Graph, value: i32) => Node
-add_constant: (t: Txn, g: Graph, value: int) => Node
-add_constant: (t: Txn, g: Graph, value: f32) => Node
-add_constant: (t: Txn, g: Graph, value: float) => Node
-add_constant: (t: Txn, g: Graph, value: bool) => Node
-add_constant: (t: Txn, g: Graph, value: string) => Node
+open: (f: F) => Txn<F> when is_function::<F>()
+replace: (t: Txn<F>, old: Node, new: Node) => void uses t
+erase: (t: Txn<F>, n: Node) => void uses t
+eval: (t: Txn<F>, n: Node) => Node? uses t
+add_constant: (t: Txn<F>, g: Graph, value: T) => Node uses t when is_ordered::<T>()
+commit: (t: Txn<F>) => F! uses t
+abort: (t: Txn<F>) => void uses t
 ```
 
-**`rewrite`** — import { ... } from rewrite — 22 name(s)
+**`rewrite`** — import { ... } from rewrite — 15 name(s)
 
 ```text
-rewrite: (p: Program, rules: Rule[]) => Program!
-rewrite: (p: Program, rules: Rule[], strict: bool) => Program!
-saturate: (p: Program, rules: Rule[], rounds: int) => Program!
-saturate: (p: Program, rules: Rule[], rounds: int, strict: bool) => Program!
-extract: (p: Program, cost: string) => Program!
-check: (rules: Rule[], samples: int = 100, seed: int = 0, program: Program? = null) => CheckReport
+rewrite: <rules: Rule[], strict: bool = false> (f: F) => F! when is_function::<F>()
+saturate: <rules: Rule[], rounds: int = 6, strict: bool = false> (f: F) => F! when is_function::<F>()
+extract: <cost: (o: Op, inputs: float[]) => float> (f: F) => F! when is_function::<F>()
+run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false> (f: F) => Run<F>! when is_function::<F>()
+check: <samples: int = 100, seed: int = 0> (rules: Rule[]) => CheckReport
+check: <over: F, samples: int = 100, seed: int = 0> (rules: Rule[]) => CheckReport when is_function::<F>()
 check_text: (r: CheckReport) => string
-check_row_count: (r: CheckReport) => int
-check_rule: (r: CheckReport, row: int) => string!
-check_instance: (r: CheckReport, row: int) => string!
-check_verdict: (r: CheckReport, row: int) => string!
-check_proposition: (r: CheckReport, row: int) => string!
-check_evidence: (r: CheckReport, row: int) => string!
-check_reason: (r: CheckReport, row: int) => string!
-check_coverage: (r: CheckReport, row: int) => string!
-check_coverage_table: () => string
-run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false> (p: Program) => Run<Program>!
-explain: (r: Run<Program>, a: Node, b: Node) => Proof!
-explain_all: (r: Run<Program>) => Proof!
-why_not: (r: Run<Program>, rule: Rule, v: Node) => string!
+coverage_table: string
+explain: <a: Node, b: Node> (r: Run<F>) => Proof!
+explain_all: (r: Run<F>) => Proof!
+why_not: <rule: Rule, v: Node> (r: Run<F>) => string!
 rule_name: (r: Rule) => string
 rule_two_way: (r: Rule) => bool
 rule_needs: (r: Rule) => int
 rule_consts: (r: Rule) => int
 ```
 
-**`tiles`** — import { ... } from tiles — 9 name(s)
+**`tiles`** — import { ... } from tiles — 10 name(s)
 
 ```text
 upload: (value: f32[..]) => Device<f32[..]> uses driver
@@ -617,6 +594,7 @@ benchmark: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses dri
 regions: <fn: (a: f32, b: f32) => f32> () => string uses driver
 available: () => bool uses driver
 device: () => string! uses driver
+compile: (f: F) => F! uses driver when is_function::<F>()
 ```
 
 **`pyplot`** — import { ... } from pyplot — 1 name(s)

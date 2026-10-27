@@ -1,0 +1,19 @@
+
+import { graph_of, graphs_of, name, nodes, inputs, kind } from graph
+
+func helper(x: int): int {
+    return x * 2
+}
+
+func f(x: int): int {
+    return helper(x) + 1
+}
+
+func main(): int sync {
+    let gs = graphs_of(f)
+    println(len(gs))
+    println(gs->map<name>)
+    println(name(graph_of(f)))
+    println(len(nodes(graph_of(helper))) > 0)
+    return 0
+}

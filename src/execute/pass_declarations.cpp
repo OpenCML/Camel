@@ -4,6 +4,7 @@
 #include "pass_declarations.h"
 
 #include "camel/core/error/diagnostics.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/source/manager.h"
 #include "camel/parse/ast.h"
 #include "camel/parse/parse.h"
@@ -67,9 +68,62 @@ ast::node_ptr_t funcDataOf(const ast::node_ptr_t &declare) {
     return nullptr;
 }
 
+/// Whether the type of a body-less declaration is the shape of a pass, `(f: F): F!` (design
+/// principles 9.1): one ordinary parameter written as a name and the failable form of that name as
+/// the result. A declaration of another shape that is conditioned on `is_function` declares an
+/// operator of a function value, not a pass.
+bool hasPassShape(const ast::node_ptr_t &funcType) {
+    if (funcType == nullptr || funcType->size() < 3) {
+        return false;
+    }
+    const ast::node_ptr_t &norm = funcType->at(1);
+    if (norm->size() != 1 || norm->at(0)->size() == 0 ||
+        norm->at(0)->type() != ast::LoadType::NamedPair) {
+        return false;
+    }
+    const ast::node_ptr_t &parameterType = norm->at(0)->at(0);
+    const auto parameter = std::dynamic_pointer_cast<ast::RefTypeLoad>(parameterType->load());
+    if (parameter == nullptr || funcType->at(2)->size() == 0) {
+        return false;
+    }
+    const ast::node_ptr_t &result = funcType->at(2)->at(0);
+    const auto mark = std::dynamic_pointer_cast<ast::NullableTypeLoad>(result->load());
+    if (mark == nullptr || !mark->fallible() || result->size() != 1) {
+        return false;
+    }
+    const auto payload = std::dynamic_pointer_cast<ast::RefTypeLoad>(result->at(0)->load());
+    return payload != nullptr && payload->ref().toString() == parameter->ref().toString();
+}
+
+/// How many function declarations of each name the module writes (a namespace's prefix and the
+/// module's own are left off the name, as a pass's name is read).
+void countDeclarations(
+    const ast::node_ptr_t &node, const std::string &module, std::map<std::string, size_t> &counts) {
+    if (node->type() == ast::LoadType::Stmt) {
+        const auto stmt = node->loadAs<ast::StmtLoad>();
+        if (stmt->stmtType() == ast::StmtType::Func) {
+            if (const auto func = funcDataOf(node)) {
+                const auto data = std::dynamic_pointer_cast<ast::FuncDataLoad>(func->load());
+                std::string name = data->ref().toString();
+                if (const std::string prefix = module + "::"; name.rfind(prefix, 0) == 0) {
+                    name = name.substr(prefix.size());
+                }
+                ++counts[name];
+            }
+            return;
+        }
+        if (stmt->stmtType() == ast::StmtType::Data) {
+            return;
+        }
+    }
+    for (size_t i = 0; i < node->size(); ++i) {
+        countDeclarations(node->at(i), module, counts);
+    }
+}
+
 void collectDeclarations(
     const ast::node_ptr_t &node, const std::string &module,
-    std::vector<PassDeclaration> &out) {
+    const std::map<std::string, size_t> &counts, std::vector<PassDeclaration> &out) {
     if (node->type() == ast::LoadType::Stmt) {
         const auto stmt = node->loadAs<ast::StmtLoad>();
         if (stmt->stmtType() == ast::StmtType::Func) {
@@ -91,7 +145,16 @@ void collectDeclarations(
             // A pass declares when it applies (`when is_function::<F>()`). An ordinary body-less
             // declaration of the module (`func argsort(...)`) has no such condition and is not a
             // pass: the pipeline resolves it through the module's own exports.
-            if (declaration.when.empty()) {
+            // A function transform the module implements as an operator of the same name is no
+            // pass (`rewrite`, called as `f->rewrite<rules>`); a name that is declared more than
+            // once is the exception, because the operator is then the other declaration's (the
+            // two-argument `export_model`) and this one, the pass-shaped one, is the pass.
+            const bool namedOperator =
+                camel::core::OperatorTable::instance()
+                    .find(module + ":" + declaration.name)
+                    .has_value() &&
+                counts.at(declaration.name) == 1;
+            if (declaration.when.empty() || !hasPassShape(funcType) || namedOperator) {
                 return;
             }
             // A pass takes the function it is applied to and nothing else: one ordinary
@@ -105,6 +168,14 @@ void collectDeclarations(
                     declaration.params =
                         readPassParams(funcType->at(0), module + "::" + declaration.name);
                 } catch (const std::exception &e) {
+                    // A body-less transform whose parameters no pass can take (a rule set, a
+                    // cost function) is an engine the module implements as an operator, called
+                    // as `f->rewrite<rules>`: it is not a pass, and the pipeline does not read
+                    // it as one. A declaration with a body is a pass, and its parameters are
+                    // refused.
+                    if (func->size() == 1) {
+                        return;
+                    }
                     throw std::runtime_error(
                         std::format("{}: {}", module + ".cml", e.what()));
                 }
@@ -118,7 +189,7 @@ void collectDeclarations(
         }
     }
     for (size_t i = 0; i < node->size(); ++i) {
-        collectDeclarations(node->at(i), module, out);
+        collectDeclarations(node->at(i), module, counts, out);
     }
 }
 
@@ -142,7 +213,9 @@ std::vector<PassDeclaration> readDeclarations(
     }
     std::vector<PassDeclaration> declarations;
     // Module -> Stmts.
-    collectDeclarations(parser.ast()->at(2), module, declarations);
+    std::map<std::string, size_t> counts;
+    countDeclarations(parser.ast()->at(2), module, counts);
+    collectDeclarations(parser.ast()->at(2), module, counts, declarations);
     return declarations;
 }
 

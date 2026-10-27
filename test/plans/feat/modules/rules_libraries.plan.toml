@@ -6,7 +6,7 @@ desc = "The first two standard rule libraries (rewrite design 2 (second version)
 
 [[tests]]
 name = "rules.accuracy_log_of_softmax_rule"
-desc = "`tensor_log_softmax_of_softmax` fires once on `log(softmax(x, -1))`: two operators become one `log_softmax`."
+desc = "`array_log_softmax_of_softmax` fires once on `log(softmax(x, -1))`: two operators become one `log_softmax`."
 kind = "behavior"
 case = "../../../cases/modules/rules/accuracy_logsoftmax_target.cml"
 args = ["${case}", "library_counts::report", "accuracy_schedule::only_log_of_softmax", "library_counts::report", "std::nvm"]
@@ -52,7 +52,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rules.fusion_sigmoid_rule"
-desc = "`tensor_sigmoid_chain` fires once: the cost of `chain` goes from four operators (neg, exp, add, divide) to one `sigmoid`; `doubled` and `positive` are left alone, and `after_matmul` fuses only the elementwise part -- the matmul stays a node."
+desc = "`array_sigmoid_chain` fires once: the cost of `chain` goes from four operators (neg, exp, add, divide) to one `sigmoid`; `doubled` and `positive` are left alone, and `after_matmul` fuses only the elementwise part -- the matmul stays a node."
 kind = "behavior"
 case = "../../../cases/modules/rules/fusion_target.cml"
 args = ["${case}", "library_counts::report", "fusion_schedule::only_sigmoid", "library_counts::report", "std::nvm"]

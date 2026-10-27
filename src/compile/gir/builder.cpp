@@ -61,6 +61,22 @@ void Builder::buildEntryCall() {
         entryGraph = *decoratedMain;
     } else if (auto gv = graphsAt(entryName); gv.has_value() && !gv.value()->empty()) {
         entryGraph = gv.value()->front();
+    } else if (libraryEntryExpected_ != nullptr) {
+        // A pass is a generic function of the function it transforms (`(f: F) => F!`, design
+        // principles 9.1): the entry is its instance that is a function of the expected type.
+        if (auto group = templateScope_->get(entryName); group.has_value()) {
+            if (GenericGroup *templates = genericGroupOf(group.value()); templates != nullptr) {
+                for (const generic_template_ptr_t &tmpl : *templates) {
+                    std::string why;
+                    if (compile_graph_ptr_t instance = instantiateGenericAs(
+                            tmpl, libraryEntryExpected_, tmpl->func, why)) {
+                        entryGraph = instance;
+                        break;
+                    }
+                    libraryEntryProblem_ = why;
+                }
+            }
+        }
     }
     if (entryGraph) {
         // The entry graph stands for the entry function where a diagnostic is about the
@@ -634,6 +650,50 @@ bool Builder::isPassDeclaration(const GCT::node_ptr_t &gct) {
     const auto *when = GCT::Tree::of(gct)->whenOf(gct);
     if (when == nullptr) {
         return false;
+    }
+    // A pass is a function transform `(f: F) => F!` (design principles 9.1): one ordinary
+    // parameter and the same type, failable, as the result. A body-less declaration of another
+    // shape that is conditioned on `is_function` declares an operator of a function value
+    // (`graph_of::<F>(f: F): Graph when is_function::<F>()`).
+    const auto *signature = tt::as_ptr<FunctionType>(gct->at(0)->dataType());
+    if (signature == nullptr || signature->normTypesCount() != 1 || !signature->hasExitType()) {
+        return false;
+    }
+    const auto *answer = asFallible(signature->exitType());
+    if (answer == nullptr || !answer->payloadType()->equals(signature->normTypeAt(0))) {
+        return false;
+    }
+    // A function transform the module implements as an operator of its own (an engine of
+    // `rewrite`, which is called as `f->rewrite<rules>`) is no pass of the pipeline: a pass has a
+    // kernel of the core and no operator.
+    {
+        const std::string &declared = unit_->module->declaredName();
+        std::string uri = (declared.empty() ? unit_->module->name() : declared) + ":" + gct->name();
+        if (auto tagged = nativeOperatorUri(gct); tagged.has_value()) {
+            uri = std::move(*tagged);
+        }
+        if (camel::core::OperatorTable::instance().find(uri).has_value()) {
+            // The operator is the declaration's only when the module declares the name once: a
+            // name declared again is an operator beside a pass of the same name (`export_model`),
+            // and the pass-shaped declaration is the pass.
+            size_t declared = 0;
+            const std::function<void(const GCT::node_ptr_t &)> count =
+                [&](const GCT::node_ptr_t &node) {
+                    if (node->type() == GCT::NodeKind::DECL && node->nativeDeclaration() &&
+                        node->name() == gct->name()) {
+                        ++declared;
+                    }
+                    for (size_t i = 0; i < node->size(); ++i) {
+                        count(node->at(i));
+                    }
+                };
+            if (unit_->tree != nullptr && unit_->tree->root() != nullptr) {
+                count(unit_->tree->root());
+            }
+            if (declared <= 1) {
+                return false;
+            }
+        }
     }
     // The text the pipeline reads, normalized the same way: `is_function::<T>()` with any
     // identifier for the type parameter (pass_declarations.cpp, passDeclarationApplies). A

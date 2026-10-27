@@ -1,4 +1,4 @@
-import { current, graphs, name, nodes, kind } from graph
+import { name, nodes, kind, graphs_of } from graph
 import { Graph, Node, NodeKind } from graph
 
 func pick(a: int, b: int): int {
@@ -15,7 +15,7 @@ func kinds(g: Graph): NodeKind[] {
 
 func main(): int sync {
     println(total([1, 5, 9]))
-    let all = graphs(current())
+    let all = graphs_of(main)
     println(all->map<name>)
     println(all->map<kinds>)
     return 0

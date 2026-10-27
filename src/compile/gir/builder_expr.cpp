@@ -1729,6 +1729,14 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
                 argumentSignature->withTypeAt(slot)->toString());
         throw BuildAbortException();
     };
+    // The angled values are not the callee: a rule bound inside them (`f->rewrite<[r<7>]>`) is a
+    // use of the rule as a value, whatever the binding itself stands beside.
+    struct CalleeContext {
+        bool &flag;
+        bool outer;
+        ~CalleeContext() { flag = outer; }
+    } calleeContext{ruleBindingCallee_, ruleBindingCallee_};
+    ruleBindingCallee_ = false;
     for (size_t i = 1; i < gct->size(); i++) {
         const size_t slot = slotOf(i - 1);
         Type *wanted      = argumentSignature && slot < argumentSignature->withTypesCount()
@@ -1799,7 +1807,7 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     // statement it is written in (1.6). Its span is derived where the binding is used as a
     // value (partialApplicationOf), so an ordinary `f<w>(x)` allocates nothing extra.
     boundWithOrigin_.try_emplace(targetNode, gct);
-    if (!ruleBindingCallee_ && isRuleBindingTarget(targetNode)) {
+    if (!calleeContext.outer && isRuleBindingTarget(targetNode)) {
         // `name<value>` where the name is the function a rule with `with` parameters is written
         // as: the values bind the rule's parameters and the value is the `Rule` (design
         // principles 5.5). What `f<w>` makes of a function -- a function value that has the

@@ -1023,7 +1023,7 @@ const camel::runtime::Program *simplifyGraph(
             mayMerge,
             config.checkScreens);
         // The algebraic stage is the pass itself: std::opt::algebra is the rules library's
-        // `rules::simplify` (`rules::simplify_strict` for safe_fp), so the laws are written once,
+        // `rules::simplify` (`rules::simplify strict=true` for safe_fp), so the laws are written once,
         // in stdlib/rules.cml. std::opt orders it after fold, as the library's corpus
         // measurements assume.
         const std::string algebraPass =

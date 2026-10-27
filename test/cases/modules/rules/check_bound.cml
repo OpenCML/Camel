@@ -12,7 +12,7 @@
  * untouched by that rule, so `wrong_precision` is `sampled`: a looser bound would hide the first
  * rule, and the tight one is what catches it.
  */
-import { check } from rewrite
+import { check, check_text } from rewrite
 
 #requires(reassociate)
 rule wrong_reassociate(x: float) { x * 2.0 => x * 2.000000001 }
@@ -21,6 +21,6 @@ rule wrong_reassociate(x: float) { x * 2.0 => x * 2.000000001 }
 rule wrong_precision(x: float) { x * 2.0 => x * 2.000000001 }
 
 func main(): int sync {
-    println(check([wrong_reassociate, wrong_precision], 40, 5))
+    println(check_text([wrong_reassociate, wrong_precision]->check<40, 5>))
     return 0
 }

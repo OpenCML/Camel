@@ -5,15 +5,14 @@
  * the binding is written (design principles 5.4, 5.5; rewrite design 2 (second version) 1).
  */
 
-import { Program, graphs } from graph
 import { rewrite } from rewrite
 
 with <tile: int>
 rule add_tile(x: int) when tile > 0 { x + tile => x }
 
 /// The factor is a parameter of the function, so it is not known while the program is compiled.
-func apply(p: Program, tile: int): Program! {
-    return rewrite(p, [add_tile<tile>])
+func apply(p: () => int, tile: int): (() => int)! {
+    return p->rewrite<[add_tile<tile>]>
 }
 
 func main(): int sync {

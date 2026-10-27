@@ -34,7 +34,7 @@ function run(source) {
 }
 
 const PRINT = `
-import { current, graphs, name, nodes, type_of, type_name } from graph
+import { graphs_of, name, nodes, type_of, type_name } from graph
 import { Graph, Node, TypeRef } from graph
 
 func firstType(g: Graph): TypeRef? {
@@ -42,7 +42,7 @@ func firstType(g: Graph): TypeRef? {
 }
 
 func graphNamed(label: string): Graph {
-    let found = graphs(current())->filter<(g: Graph): bool => name(g) == label>
+    let found = graphs_of(reach)->filter<(g: Graph): bool => name(g) == label>
     return found[0]
 }
 `
@@ -56,6 +56,11 @@ func probe(x: ${spelling}, y: ${spelling}): int {
 ${again === undefined ? '' : `func again(x: (${again}), y: (${again})): int {
     return 0
 }`}
+/// The graphs the probe reads are the ones this function reaches: it names them without calling them.
+func reach(): int {
+    let a = probe${again === undefined ? '' : '\n    let b = again'}
+    return 0
+}
 func main(): int sync {
     let first = firstType(graphNamed('probe'))
     println(match first {

@@ -132,25 +132,25 @@ calls a user function. A `<=>` rule gives two `Rule`s.
 
 | operator | |
 |---|---|
-| `rewrite(p, rules)` | the rules one way, in place, to a fixpoint (`DraftWritings::rewrite`); a `<=>` rule is the error value `RuleTwoWay` |
-| `saturate(p, rules, rounds)` | both ways on the writings of every value; the result has values with several writings |
-| `extract(p, cost)` | one writing per value by the named cost model |
-| `check(rules, samples, seed)` | the check of section 4 |
+| `f->rewrite<rules>` | the rules one way, in place, to a fixpoint (`DraftWritings::rewrite`); a `<=>` rule is the error value `RuleTwoWay` |
+| `f->saturate<rules, rounds>` | both ways on the writings of every value; the result has values with several writings |
+| `f->extract<cost>` | one writing per value by the cost function `cost`, a Camel function `(o: Op, inputs: float[]) => float` |
+| `rules->check<samples, seed>` | the check of section 4 |
 | `p->run<rules>` | `rewrite` with the round budget explicit, as a `Run` with its cost (section 3.1); `rounds` (16), `strict` (false) and `explain` (false) have defaults |
-| `p->run<rules, explain: true>` | the same, with the attribution record open; `explain(r, a, b)` reads the chain between two values and `explain_all(r)` the whole log (section 3.2) |
-| `explain(r, a, b)` | the shortest chain of rewrites connecting the value `a` to the value `b`, as a `Proof` |
+| `p->run<rules, explain: true>` | the same, with the attribution record open; `r->explain<a, b>` reads the chain between two values and `explain_all(r)` the whole log (section 3.2) |
+| `r->explain<a, b>` | the shortest chain of rewrites connecting the value `a` to the value `b`, as a `Proof` |
 | `explain_all(r)` | every rewrite the run made, as a `Proof`; the debugging view |
-| `why_not(r, rule, v)` | why `rule` did not fire at the value `v` |
+| `r->why_not<rule, v>` | why `rule` did not fire at the value `v` |
 
 `rewrite` and `saturate` leave the functions that are the sides of rules (`__lhs`, `__rhs`, and
-`__when`) alone. The result is `Program!`; the errors are `RuleInvalid`, `RuleTwoWay` and
+`__when`) alone. The result is the function it was given, `F!`; the errors are `RuleInvalid`, `RuleTwoWay` and
 `NoCostModel`. A rule's condition may not have an effect: a condition is evaluated while the engine
 holds a session on the program it is rewriting, so a rewrite or a commit there replaces the program
 the rewrite started from while it runs, and the rule is refused where it is written. A pass is
-a function `(p: Program) => Program!` (`camel prog.cml mod::pass std::nvm`):
+a function `(f: F) => F!` (`camel prog.cml mod::pass std::nvm`):
 
 ```camel
-export func apply(p: Program): Program! { return rewrite(p, [add_zero, mul_one, combine]) }
+export func apply::<F>(p: F): F! { return p->rewrite<[add_zero, mul_one, combine]> }
 ```
 
 The engines read `Rule` values from the array; no function is called to make a rule. Compiling a
@@ -172,7 +172,7 @@ parameters, so they are written in the angle brackets of the call:
 | `until<rules, done, rounds, strict>(p)` | one round at a time while `done(p)` is false, until a fixpoint or `rounds` rounds |
 | `alternate<left, right, rounds, strict>(p)` | one round of `left`, then one of `right`, until a full pair applies nothing or `rounds` pairs |
 
-Each answers a `Run<Program>`: `result` is the program, and `rewrites`, `rounds`, `visited`,
+Each answers a `Run<F>`: `result` is the function, and `rewrites`, `rounds`, `visited`,
 `erased`, `fixpoint` and `seconds` are what the schedule cost, summed over the stages (`fixpoint`
 is the last application's; `proof` is described in section 3.2). The functions are written with
 `loop ... for ... while` and `->`; no
@@ -236,7 +236,7 @@ A run that applied nothing prints one sentence (`no rewrite matched in 1 round: 
 unchanged`), not an empty table. `explain_all` is the debugging view; the user-facing question is
 the next one.
 
-`explain(r, a, b)` answers "why are these two values equal". It reads the record as a graph rather
+`r->explain<a, b>` answers "why are these two values equal". It reads the record as a graph rather
 than a log: a step is an edge from the value its left side matched to the value its right side
 produced, so the chain is a path over those pairs, read in either direction, within one graph (a
 value of one function is never rewritten into a value of another). Only the chain is printed:
@@ -272,7 +272,7 @@ chain %2 :op/add_l : int = %6 :op/add_l : int: 2 rewrites
   is one node, so no rewrite is needed to connect it to itself`); a handle of another program is
   `InvalidArgument`.
 
-`why_not(r, rule, v)` answers the other question 8.7 names: why the rule did not fire at a value
+`r->why_not<rule, v>` answers the other question 8.7 names: why the rule did not fire at a value
 of the program the run produced. It answers with the first place the left side fails to match (a
 different operator, a different constant, a value of the wrong type, a different permission class,
 a missing permission, a node a rewrite may not read) and the values it compared; when the left
@@ -283,7 +283,7 @@ round, the graph and the value it made, rather than as "no chain". The result is
 answer.
 ## 4. The check
 
-`check(rules, samples, seed)` is the check every rule passes before it enters a library (graph
+`rules->check<samples, seed>` is the check every rule passes before it enters a library (graph
 store decision 5). For each rule: `samples` random instances of the two sides (random constants
 for the `const` parameters, random values for the others, with the special values of floats that
 the rule's permissions do not rule out: NaN, infinities, signed zero) must agree: bit for bit

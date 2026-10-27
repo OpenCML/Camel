@@ -14,7 +14,7 @@
 // The law of this program's arithmetic, written the way the compiler reads laws.
 // Run: camel docs/tutorial/examples/17_rule.cml
 
-import { check } from rewrite
+import { check, check_text } from rewrite
 
 // Multiplying by -1 is negating. A `rule` names a pattern and the writing it may be replaced by.
 // This one holds for every `int`, so it carries no condition; chapter 18 shows a law that needs one.
@@ -37,7 +37,7 @@ func doubled(x: int): int {
 
 func main(): int sync {
     // `check` draws random instances and compares the two sides of every rule it is given.
-    println(check([negate], 100, 1))
+    println(check_text([negate]->check<100, 1>))
     println(negated(7), combined(7), doubled(7))
     return 0
 }
@@ -83,7 +83,7 @@ dot -Tsvg negated.dot -o negated.svg
 进去"的读数。
 
 **交出去，它才会用**。今天 `std::opt` 还没有 `rules` 参数（写它会得到 `SemanticDiag::ParamArgumentUnknown`），
-所以今天要让自己的定律生效有两条路：写一条自己的遍再交给命令行，或者像上面那样用 `check([negate], …)`
+所以今天要让自己的定律生效有两条路：写一条自己的遍再交给命令行，或者像上面那样用 `[negate]->check<…>`
 让它拿随机实例去抽查——`fired 8 of 8` 就是"显式交出去"的读数。等 `rules` 参数落地，同一个文件里那句
 `x * -1` 会被换成 `0 - x`，图上那个 `:op/mul_l` 也就变成 `:op/sub_l`：**定律是值，交出去才用**，
 这是这条流水线唯一的知识入口。
@@ -122,7 +122,7 @@ dot -Tsvg negated.dot -o negated.svg
 // The knowledge of your field that is not an equation, handed to the compiler.
 // Run: camel docs/tutorial/examples/17_fact.cml
 
-import { check } from rewrite
+import { check, check_text } from rewrite
 import { abs } from math
 
 // A `fact` says what the compiler may rely on for a value: a square is never negative. The match
@@ -142,7 +142,7 @@ func squared(x: int): int {
 
 func main(): int sync {
     // `check` samples the law together with its premise, so the fact decides where it may fire.
-    println(check([abs_of_nonnegative], 100, 1))
+    println(check_text([abs_of_nonnegative]->check<100, 1>))
     println(squared(-3))
     return 0
 }
@@ -187,12 +187,12 @@ sampled abs_of_nonnegative: proposition equality, evidence samples 100, fired 8 
 // gives it.
 // Run: camel docs/tutorial/examples/17_exercise.cml
 
-import { check } from rewrite
+import { check, check_text } from rewrite
 
 rule fold_scales(x: int, const c1: int, const c2: int) { x * c1 + x * c2 => x * (c1 + c2) }
 
 func main(): int sync {
-    println(check([fold_scales], 100, 1))
+    println(check_text([fold_scales]->check<100, 1>))
     return 0
 }
 ```

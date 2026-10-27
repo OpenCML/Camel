@@ -2617,8 +2617,10 @@ Value Builder::visitTupleParam(cst::TupleParam context) {
     for (const auto &identDef : context->all<cst::IdentDef>()) {
         names.push_back(identDef->text());
     }
-    // The name is internal: no program writes it, and the position makes it unique.
-    Reference ref("_tuple_" + std::to_string(context->begin()));
+    // The name is internal: no program writes it, and the count of such parameters before it in
+    // the file makes it unique. It does not depend on where the parameter is written, so a file
+    // formatted differently has the same tree.
+    Reference ref("_tuple_" + std::to_string(tupleParams_++));
     node_ptr_t namedPairNode = createNodeAs<NamedPairLoad>(ref);
     namedPairNode->loadAs<NamedPairLoad>()->setTupleNames(std::move(names));
     setNodeTokenRangeByContext(namedPairNode, context);

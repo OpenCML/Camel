@@ -16,7 +16,7 @@
  * pass's other work, which a pass that quietly stopped rewriting anything would fail to show.
  */
 
-import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
+import { Node, Graph, nodes, op, op_name, name, graphs_of } from graph
 import { max } from math
 import { rewrite } from rewrite
 
@@ -41,8 +41,8 @@ rule drop_by_one(x: int, const c: int) when sub(x, node_of(c)) == 1 { x * c => x
 /// A guard on the value, which the value channel answers without any node.
 rule drop_positive(x: float, const c: float) when positive(c) { x * c => x }
 
-export func apply(p: Program): Program! {
-    return rewrite(p, [drop_by_one, drop_positive])
+export func apply::<F>(p: F): F! {
+    return p->rewrite<[drop_by_one, drop_positive]>
 }
 
 func opText(n: Node): string {
@@ -52,12 +52,12 @@ func opText(n: Node): string {
     }
 }
 
-func countOf(p: Program, function: string, operator: string): int {
-    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+func countOf::<F>(p: F, function: string, operator: string): int {
+    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
     return len(nodes(found[0])->filter<(n: Node): bool => opText(n) == operator>)
 }
 
-export func report(p: Program): Program! sync {
+export func report::<F>(p: F): F! sync {
     println('kept', countOf(p, 'kept', ':op/mul_l'))
     println('plain', countOf(p, 'plain', ':op/mul_d'))
     return p

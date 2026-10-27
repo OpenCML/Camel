@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "camel/runtime/writings.h"
+#include "camel/runtime/reachable.h"
 
 #include "camel/core/operator_table.h"
 #include "camel/core/tags.h"
@@ -954,16 +955,18 @@ DraftWritings::choiceByCost(const CostModel &model, camel::core::context::Contex
             if (!draft_.alive(node)) {
                 continue;
             }
-            double total = own[node];
-            bool known   = true;
+            std::vector<double> inputCosts;
+            bool known = true;
             for (gc_node_ref_t input : inputsOf(node)) {
                 const double cost = best[choice.classOf[input]];
                 if (cost == kInfinite) {
                     known = false;
                     break;
                 }
-                total += cost;
+                inputCosts.push_back(cost);
             }
+            const double total =
+                known ? model.totalCost(costContext, node, own[node], inputCosts) : kInfinite;
             if (known && total < best[choice.classOf[node]]) {
                 best[choice.classOf[node]]   = total;
                 chosen[choice.classOf[node]] = node;
@@ -1191,20 +1194,33 @@ bool hasWritings(const Program &program) {
 
 const Program *extractWritings(
     const std::shared_ptr<camel::core::context::Context> &context, const Program *program,
-    const CostModel &model, bool detached) {
+    const CostModel &model, bool detached, GCGraph *root) {
     if (program == nullptr || !hasWritings(*program)) {
         return program;
     }
-    RuntimeGraphDraftSession session(context, program);
-    for (GCGraph *graph : program->graphs()) {
+    auto session = root != nullptr
+                       ? std::make_unique<RuntimeGraphDraftSession>(context, program, root)
+                       : std::make_unique<RuntimeGraphDraftSession>(context, program);
+    // A cost written in Camel runs at a safepoint: every draft keeps its static values relocatable
+    // until the commit reads them again.
+    RuntimeGraphDraftSession::RootScope draftRoots(*session);
+    std::vector<GCGraph *> graphs;
+    if (root != nullptr) {
+        graphs = collectReachableGraphs(*program, root);
+    } else {
+        for (GCGraph *graph : program->graphs()) {
+            graphs.push_back(graph);
+        }
+    }
+    for (GCGraph *graph : graphs) {
         if (graph->executable()) {
             continue;
         }
-        GraphDraft &draft = session.edit(graph);
+        GraphDraft &draft = session->edit(graph);
         DraftWritings writings(draft);
         writings.extract(model, context.get());
     }
-    return session.commit(detached);
+    return session->commit(detached);
 }
 
 gc_node_ref_t DraftWritings::find(gc_node_ref_t node) { return store_.find(contextOf(node), node); }

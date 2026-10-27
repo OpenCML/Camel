@@ -7,7 +7,7 @@
  * 2 and -1.
  */
 
-import { check } from rewrite
+import { check, check_text } from rewrite
 import { log as scalar_log, log1p } from math
 import { log, log_softmax, softmax } from tensor
 
@@ -37,12 +37,12 @@ rule softmax_axis2(x: f32[2, 2, 2], const axis: int) {
 }
 
 func main(): int sync {
-    println(check([
+    println(check_text([
         accurate_log1p,
         worse_log1p,
         softmax_vector,
         softmax_matrix,
-        softmax_axis2,
-    ], 100, 7))
+        softmax_axis2
+    ]->check<100, 7>))
     return 0
 }

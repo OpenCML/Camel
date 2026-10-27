@@ -294,9 +294,10 @@ class DebugCore final : public camel::execute::ExecutionObserver {
         ShadowFrame &f, const std::string &expression, ResolvedValue &out, std::string &why);
     /// Calls a native operator at the stopped frame, through the run-time dispatch the scheduler
     /// uses, with the arguments read from the frame. Never lets a fault leave: it comes back as a
-    /// located diagnostic.
-    CallAnswer
-    callAtFrame(ShadowFrame &f, const std::string &uri, const std::vector<std::string> &arguments);
+    /// located diagnostic. `withArguments` are the angled values of the call (`r->explain<a, b>`).
+    CallAnswer callAtFrame(
+        ShadowFrame &f, const std::string &uri, const std::vector<std::string> &arguments,
+        const std::vector<std::string> &withArguments = {});
     /// `{"ok": false, "error": ..., "diagnostic": {...}}` for a value a command could not read.
     json evaluationFailure(const ShadowFrame &f, const std::string &why);
     /// `message` prefixed with the source position of `f`, when it has one.

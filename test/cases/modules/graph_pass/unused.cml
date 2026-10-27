@@ -1,5 +1,5 @@
 import { flatten } from array
-import { Program, Node, Graph, NodeKind, graphs, nodes, kind, is_pure, is_constant, is_anchor, value_users, open, erase, commit } from graph
+import { Node, Graph, NodeKind, nodes, kind, is_pure, is_constant, is_anchor, value_users, open, erase, commit, graphs_of } from graph
 
 /// Whether the node is no more than its value: a constant, a conversion, a copy, an access, a
 /// fill or a pure operation.
@@ -12,22 +12,25 @@ func isUnused(n: Node): bool {
     return valueOnly(n) && len(value_users(n)) == 0 && !is_anchor(n)
 }
 
-func allNodes(p: Program): Node[] {
-    return flatten(graphs(p)->map<(g: Graph): Node[] => nodes(g)>)
+func allNodes::<F>(p: F): Node[] {
+    return flatten(graphs_of(p)->map<(g: Graph): Node[] => nodes(g)>)
 }
 
-func eraseAll(p: Program, hits: Node[]): Program! sync {
+func eraseAll::<F>(p: F, hits: Node[]): F! sync {
     let t = open(p)
     hits->foreach<(n: Node) => erase(t, n)>
     return commit(t)
 }
 
-func settle(p: Program): Program! sync {
+func settle::<F>(p: F): F! sync {
     let hits = allNodes(p)->filter<isUnused>
-    return if len(hits) == 0 then p else eraseAll(p, hits) -> settle
+    return if len(hits) == 0 then p else match eraseAll(p, hits) {
+        case error e => error(e.kind, e.message)
+        case q => settle(q)
+    }
 }
 
 /// The constants and pure operations that no node reads, removed until none is left.
-export func values(p: Program): Program! {
+export func values::<F>(p: F): F! {
     return settle(p)
 }

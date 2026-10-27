@@ -1,9 +1,8 @@
 // The second pass of the same pipeline: it imports `sharedvals` under names of its own, and the
 // two programs (and the program being transformed) each use their own exported entities.
-import { Program } from graph
 import { bump as plusOne, twice as doubled } from sharedvals
 
-export func run(p: Program): Program! sync {
+export func run::<F>(p: F): F! sync {
     println(plusOne(19))
     println(doubled(4))
     return p

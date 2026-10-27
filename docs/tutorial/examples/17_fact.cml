@@ -1,7 +1,7 @@
 // The knowledge of your field that is not an equation, handed to the compiler.
 // Run: camel docs/tutorial/examples/17_fact.cml
 
-import { check } from rewrite
+import { check, check_text } from rewrite
 import { abs } from math
 
 // A `fact` says what the compiler may rely on for a value: a square is never negative. The match
@@ -21,7 +21,7 @@ func squared(x: int): int {
 
 func main(): int sync {
     // `check` samples the law together with its premise, so the fact decides where it may fire.
-    println(check([abs_of_nonnegative], 100, 1))
+    println(check_text([abs_of_nonnegative]->check<100, 1>))
     println(squared(-3))
     return 0
 }

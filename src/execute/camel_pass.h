@@ -4,7 +4,7 @@
 /*
  * Passes written in Camel (the graph module).
  *
- * A pass is a function `(p: Program) => Program!` exported by a module written in Camel. It is
+ * A pass is a function `(f: F) => F!` exported by a module written in Camel. It is
  * named on the pipeline as `<module>::<function>`, like the passes of the C++ modules. The
  * module is compiled as a program of its own whose entry is that function, the tool program,
  * which the context keeps: its root graph holds the module's top-level values — computed before

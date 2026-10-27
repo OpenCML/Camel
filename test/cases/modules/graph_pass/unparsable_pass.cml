@@ -1,8 +1,8 @@
 // A pass module that does not parse. The pass is a bad pass specification, reported with the
 // parse diagnostic — not an exception out of the pipeline (item 1).
-import { Program } from graph
 
-export func run(p: Program): Program! sync {
+
+export func run::<F>(p: F): F! sync {
     println(
     return p
 }

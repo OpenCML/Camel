@@ -293,9 +293,12 @@ class Builder {
     /// (UserDefinedModule::compileAsProgram). False when the function has no graph or a module
     /// is in error.
     bool buildLibraryEntry(
-        const camel::core::module::module_ptr_t &module, const std::string &entryFunction);
+        const camel::core::module::module_ptr_t &module, const std::string &entryFunction,
+        FunctionType *expected = nullptr);
 
     compile_graph_ptr_t rootGraph() const { return rootGraph_; }
+    /// Why a generic entry function has no instance for the type it was asked for.
+    const std::string &libraryEntryProblem() const { return libraryEntryProblem_; }
 
     /// The instance of one registered generic rule at `types`: its two sides and its condition,
     /// built here, in the builder the rule's templates belong to (where it was declared). Answers
@@ -559,7 +562,7 @@ class Builder {
     // condition is `is_function::<T>()`, the same condition the pipeline reads from the module's
     // `.cml` file. A pass is a function the pipeline applies to the program, not an operator of
     // the module; nothing of it is compiled or exported.
-    static bool isPassDeclaration(const GCT::node_ptr_t &gct);
+    bool isPassDeclaration(const GCT::node_ptr_t &gct);
     // Exports the operator groups of the body-less declarations of the current module, one group
     // per declared name, after its declarations were read. A name the module's export list
     // `exportList` does not have stays private to the module.
@@ -597,6 +600,11 @@ class Builder {
     // The function the root graph calls, when the build is a library used as a program of its
     // own (buildLibraryEntry); empty for a program, whose entry is `main`.
     std::string libraryEntryFunction_;
+    // The type of the entry function when it is generic (a pass `(f: F) => F!`): the instance
+    // that is a function of this type is the one the root graph calls (instantiateGenericAs).
+    FunctionType *libraryEntryExpected_ = nullptr;
+    // Why the generic entry has no instance of the expected type, when it has none.
+    std::string libraryEntryProblem_;
 
     node_scope_ptr_t nodeScope_;
     graph_scope_ptr_t graphScope_;
@@ -1697,7 +1705,8 @@ class Builder {
     RuleVerdict ruleVerdictForCall(
         const camel::core::type::resolver_ptr_t &rule, const std::string &name,
         const camel::core::type::type_vec_t &withTypes,
-        const camel::core::type::type_vec_t &normTypes, std::string *conditionText = nullptr);
+        const camel::core::type::type_vec_t &normTypes, std::string *conditionText = nullptr,
+        const camel::core::type::type_vec_t &explicitTypes = {});
     /// The rule of the operator group `ops` a call means: a rule whose signature takes the
     /// arguments and whose own `when` holds for them (design principles 4.4). A rule that takes
     /// the arguments while its condition is false is not a candidate; it is recorded in `unmet`

@@ -1,9 +1,9 @@
 /**
- * A rule applied to the running Program through the rewrite engine (`rewrite(p, rules)`): the
- * result drops the `+ 1`; the Program it was given and the running `target` stay as they were
- * (design principles 9.1).
+ * A rule applied to a function that calls `target` through the rewrite engine
+ * (`user->rewrite<rules>`): the result drops the `+ 1`; the function it was given and the running
+ * `target` stay as they were (design principles 9.1).
  */
-import { Graph, Node, Program, constant, current, graph_of, graphs, inputs, name, nodes, op, op_name } from graph
+import { Graph, Node, constant, graph_of, inputs, name, nodes, op, op_name, graphs_of } from graph
 import { Rule, rewrite } from rewrite
 import { ends_with } from str
 
@@ -19,7 +19,7 @@ func opText(n: Node): string {
 }
 
 func isOne(n: Node): bool {
-    return match constant(n, 0) {
+    return match constant::<int>(n) {
         case null => false
         case v => v == 1
     }
@@ -47,20 +47,25 @@ func isTarget(g: Graph): bool {
     return name(g)->ends_with<'target'>
 }
 
-func targetIn(p: Program): Graph {
-    let found = graphs(p)->filter<isTarget>
+func targetIn::<F>(p: F): Graph {
+    let found = graphs_of(p)->filter<isTarget>
     return found[0]
 }
 
+/// The function the rule is applied to: it reaches `target`, so the rewrite reaches it too.
+func user(): int {
+    return target(5)
+}
+
 func main(): int sync {
-    let p = current()
+    let p = user
     let rules: Rule[] = [drop_one]
-    let q = rewrite(p, rules) !! p
+    let q = p->rewrite<rules> !! p
     println(`rewritten: ${addOnes(targetIn(q))}`)
     println(`given: ${addOnes(targetIn(p))}`)
     println(`running: ${target(5)} ${addOnes(graph_of(target))}`)
     let later = (x: int): int => target(x) + 1000
     println(`made after: ${later(5)}`)
-    println(`current: ${addOnes(targetIn(current()))}`)
+    println(`current: ${addOnes(targetIn(main))}`)
     return 0
 }

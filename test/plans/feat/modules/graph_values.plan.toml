@@ -11,7 +11,7 @@ tags = ["feat", "modules", "graph"]
 
 [[tests]]
 name = "function_txn_leaves_the_original"
-desc = "open_function/replace/to_function make a function without the `+ 1`; target still computes 18, its own graph still has the `+ 1` and the same number of nodes, and a closure made before and two callers by name still see the original."
+desc = "open/replace/commit make a function without the `+ 1`; target still computes 18, its own graph still has the `+ 1` and the same number of nodes, and a closure made before and two callers by name still see the original."
 kind = "behavior"
 case = "../../../cases/modules/graph_values/function_txn.cml"
 backends = ["nvm", "fvm", "jit"]
@@ -22,7 +22,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "program_txn_leaves_the_program_and_the_running_code"
-desc = "open/replace/commit over current(): the committed Program has no `+ 1`, the Program the transaction was opened on still has it, and the running target -- called by name, read through graph_of, and through a closure made after the commit -- is the original."
+desc = "open/replace/commit over a function that reaches `target`: the committed function has no `+ 1`, the function the transaction was opened on still has it, and the running target -- called by name, read through graph_of, and through a closure made after the commit -- is the original."
 kind = "behavior"
 case = "../../../cases/modules/graph_values/program_txn.cml"
 backends = ["nvm", "fvm", "jit"]
@@ -33,7 +33,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "program_txn_does_not_republish_current"
-desc = "A commit made by the program itself gives a value and changes nothing another holder sees (design principles 9.1), so current() still names the running program afterwards."
+desc = "A commit made by the program itself gives a value and changes nothing another holder sees (design principles 9.1), so `main` still names the running program afterwards."
 kind = "behavior"
 case = "../../../cases/modules/graph_values/program_txn.cml"
 backends = ["nvm", "fvm", "jit"]
@@ -44,7 +44,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rewrite_leaves_the_program_and_the_running_code"
-desc = "rewrite(current(), [x + 1 => x]): the result has no `+ 1`, the Program it was given still has it, and the running target -- by name, through graph_of, and through a closure made afterwards -- is the original."
+desc = "user->rewrite<[x + 1 => x]>: the result has no `+ 1`, the function it was given still has it, and the running target -- by name, through graph_of, and through a closure made afterwards -- is the original."
 kind = "behavior"
 case = "../../../cases/modules/graph_values/rewrite_rule.cml"
 backends = ["nvm", "fvm", "jit"]
@@ -55,7 +55,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rewrite_does_not_republish_current"
-desc = "rewrite(p, rules) gives a Program and changes nothing another holder sees (design principles 9.1), so current() still names the running program afterwards."
+desc = "p->rewrite<rules> gives a function and changes nothing another holder sees (design principles 9.1), so `main` still names the running program afterwards."
 kind = "behavior"
 case = "../../../cases/modules/graph_values/rewrite_rule.cml"
 backends = ["nvm", "fvm", "jit"]
@@ -131,7 +131,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "discarded_rewrite_does_not_become_current"
-desc = "The same run: the rewrite the pass threw away is no holder's value, so current() inside the run still names the Program the pass returned, with the `+ 1`."
+desc = "The same run: the rewrite the pass threw away is no holder's value, so `main` inside the run still names the Program the pass returned, with the `+ 1`."
 kind = "behavior"
 case = "../../../cases/modules/graph_values/discard_target.cml"
 backends = ["nvm", "fvm", "jit"]

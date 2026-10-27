@@ -225,8 +225,15 @@ for (const entry of fs.readdirSync(path.join(REPO_ROOT, 'stdlib'))) {
     )) {
         const lineEnd = text.indexOf('\n', match.index)
         const line = text.slice(match.index, lineEnd < 0 ? undefined : lineEnd)
-        if (!line.replace(/\s+/g, '').includes('whenis_function::<') ||
-            ordinaryParameterCount(line) !== 1) {
+        const compact = line.replace(/\s+/g, '')
+        if (!compact.includes('whenis_function::<')) {
+            continue
+        }
+        // A pass is a function transform, `(f: F): F!` (design principles 9.1); a declaration of
+        // another shape declares an operator of a function value, and one with a body is a pass
+        // written in Camel: neither has a registration in C++.
+        const shaped = compact.match(/\(([A-Za-z_][A-Za-z0-9_]*):([A-Za-z_][A-Za-z0-9_]*)\):([A-Za-z_][A-Za-z0-9_]*)!/)
+        if (!shaped || shaped[2] !== shaped[3] || compact.endsWith('{')) {
             continue
         }
         moduleDeclarations.add(`${module}::${match[1]}`)
@@ -334,6 +341,36 @@ if (declaringModules.size === 0 || registeredModules.size === 0) {
 for (const module of registeredModules) {
     if (!declaringModules.has(module)) {
         problems.push(`the module '${module}' contributes a pass and no declaration of it was read`)
+    }
+}
+// A function transform a module implements as an operator of its own (an engine of `rewrite`,
+// called as `f->rewrite<rules>`) is declared in the same shape as a pass and has a kernel table
+// entry of the same name in the module's C++, but no pass registration: it is no pass.
+const operatorNames = (module) => {
+    const names = new Set()
+    for (const file of files(path.join(REPO_ROOT, 'modules', module))) {
+        if (!file.endsWith('.cpp')) {
+            continue
+        }
+        for (const match of fs.readFileSync(file, 'utf8').matchAll(/\{\s*"([a-z_0-9]+)"\s*,/g)) {
+            names.add(match[1])
+        }
+    }
+    return names
+}
+for (const declared of [...moduleDeclarations]) {
+    const module = declared.slice(0, declared.indexOf('::'))
+    const name = declared.slice(declared.indexOf('::') + 2)
+    if (!registrations.has(declared) && operatorNames(module).has(name)) {
+        moduleDeclarations.delete(declared)
+    }
+}
+const declaringModulesNow = new Set(
+    [...moduleDeclarations].map((path) => path.slice(0, path.indexOf('::')))
+)
+for (const module of [...declaringModules]) {
+    if (!declaringModulesNow.has(module)) {
+        declaringModules.delete(module)
     }
 }
 for (const module of declaringModules) {

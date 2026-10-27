@@ -324,9 +324,31 @@ std::optional<FunctionType *> DeclaredFuncTypeResolver::resolveForCall(
     // and an argument that states none of them -- the empty literal `[]` -- is refused here like
     // any other mismatch. Its answer is the instance, so a call that says `::<f32>` is not asked
     // again what it already said.
-    return resolve(
-        type_vec_t(concrete->withTypesSpan().begin(), concrete->withTypesSpan().end()),
-        type_vec_t(concrete->normTypesSpan().begin(), concrete->normTypesSpan().end()));
+    if (auto instance = resolve(
+            type_vec_t(concrete->withTypesSpan().begin(), concrete->withTypesSpan().end()),
+            type_vec_t(concrete->normTypesSpan().begin(), concrete->normTypesSpan().end()))) {
+        return instance;
+    }
+    // A variable that only the result mentions (`constant::<int>(n): int?`) is read from no
+    // argument, so the call must have written it: when it has written every variable the
+    // declaration is the instance, provided the arguments the call gave fit it.
+    if (containsTypeVar(concrete)) {
+        return std::nullopt;
+    }
+    if (with.size() != concrete->withTypesCount() || norm.size() != concrete->normTypesCount()) {
+        return std::nullopt;
+    }
+    for (size_t i = 0; i < with.size(); ++i) {
+        if (!concrete->withTypeAt(i)->assignableFrom(valueTypeOf(with[i]))) {
+            return std::nullopt;
+        }
+    }
+    for (size_t i = 0; i < norm.size(); ++i) {
+        if (!concrete->normTypeAt(i)->assignableFrom(valueTypeOf(norm[i]))) {
+            return std::nullopt;
+        }
+    }
+    return concrete;
 }
 
 std::optional<FunctionType *> StaticFuncTypeResolver::resolve(

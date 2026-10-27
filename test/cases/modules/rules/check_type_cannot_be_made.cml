@@ -11,20 +11,20 @@
  * The row is `sampled` with `evidence none` and the reason names the parameter's own type, in the
  * reason column and not in the verdict or the evidence (the rule on
  * `verification-licence-to-precondition`, licence 3, option A: a `sampled` that sampled and a
- * `sampled` that could not are written apart). The same call carries the library's `float_add_self`,
+ * `sampled` that could not are written apart). The same call carries the library's `add_self`,
  * whose `bf16` and `f16` instances are checked with 200 values each: the reason for one is no
  * reason at all for the others, and neither answer is allowed to stand in for the other.
  */
 
-import { check, check_text, check_row_count } from rewrite
+import { check, check_text } from rewrite
 import { is_string } from types
-import { float_add_self } from rules
+import { add_self } from rules
 
 rule join::<T>(x: T) when is_string::<T>() { x + 'a' => x }
 
 func main(): int sync {
-    let report = check([join, float_add_self], 200, 7)
+    let report = [join, add_self]->check<200, 7>
     print(check_text(report))
-    println("rows", check_row_count(report))
+    println("rows", len(report.rows))
     return 0
 }

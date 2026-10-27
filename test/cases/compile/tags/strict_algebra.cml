@@ -5,7 +5,7 @@
  * to change the rounding path.
  *
  * So the strict functions below may keep `x*0.1 + x*0.1`, or let CSE merge the two products into
- * `p` and then double `p` exactly with `float_add_self` (`x + x => x*2.0`, no permission: 7.4 and
+ * `p` and then double `p` exactly with `add_self` (`x + x => x*2.0`, no permission: 7.4 and
  * stdlib/rules.cml). They may not combine the two `0.1` coefficients into `0.2`: that changes the
  * rounding path and needs `reassociate`. `tightPair` has two different coefficients, so no exact
  * transformation exists and the sum must stay; the default policy still folds it into `x*0.4`.

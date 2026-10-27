@@ -137,7 +137,7 @@ export func error(kind: string, message: string): Error
 /// also without a line end.
 /// @example print('a', 1)    // a 1
 #op(':io/print')
-export func print(x: T, ...rest: U...): T
+export func print(x: T, ..rest): T
 
 /// Writes the arguments, separated by spaces, and a line end, and gives back the first one (so
 /// that the write can be part of the data flow). The other arguments may each have a type of
@@ -145,7 +145,7 @@ export func print(x: T, ...rest: U...): T
 /// one line end.
 /// @example println('a', 1)    // a 1
 #op(':io/println')
-export func println(x: T, ...rest: U...): T
+export func println(x: T, ..rest): T
 
 /// Writes the arguments, separated by spaces, and a line end, to standard error, and gives back
 /// the first one (so that the write can be part of the data flow). The other arguments may each
@@ -153,7 +153,7 @@ export func println(x: T, ...rest: U...): T
 /// arguments put in and one line end.
 /// @example eprintln('a', 1)    // a 1
 #op(':io/eprintln')
-export func eprintln(x: T, ...rest: U...): T
+export func eprintln(x: T, ..rest): T
 
 // ---- strings ----
 
@@ -171,7 +171,7 @@ export func eprintln(x: T, ...rest: U...): T
 /// @fails fault `FormatFailed` when the placeholders and the arguments do not fit
 /// @example '{} is {:.2f}'->format<'x', 2.5>    // 'x is 2.50'
 #op(':str/format')
-with <...args: T...>
+with <args: T[]>
 export func format(fmt: string): string
 
 /// The strings of xs joined with sep between them.
@@ -203,7 +203,7 @@ export func len(x: Bytes): int
 /// @example range(10, 0, -3)    // [10, 7, 4, 1]
 /// @example-fragment the interval is written `a..b`; the stepped form is `range(a, b, step)`
 #op(':struct/range')
-export func range(start: int, end: int, step?: int): int[]
+export func range(start: int, end: int, step: int = 1): int[]
 
 /// The last element. An empty array has none: check len first. Negative indices are not
 /// counted from the end (a negative index is a fault), so this is how the last element is
@@ -335,7 +335,7 @@ export func fail(message: string): never
 /// @example attempt((x: int) => 10 / x)(2) !! -1    // 5
 /// @example attempt((x: int) => 10 / x)(0) !! -1    // -1: the division fault becomes an error value
 #op(':mark/attempt')
-export func attempt(f: (...args: A) => T): (...args: A) => T!
+export func attempt(f: F): F!
 
 // ---- Map<K, V> and Set<T> ---------------------------------------------------------------------
 // Built-in collection types (docs/technical/31_map_and_set.md). Every operator returns a new

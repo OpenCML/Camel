@@ -1,15 +1,17 @@
 /**
- * The second parameter of `rewrite:extract` is the declaration's `string`: an `int` there is
- * refused at the call, and the overload the message lists is the declaration's
- * `(p: Program, cost: string) => Program!` —
- * `stdlib/rewrite.cml`, not the C++ module.
+ * The with parameter of `rewrite:extract` is the declaration's cost function: an `int` there is
+ * refused at the call, and the candidate the message lists is the declaration's
+ * `(f: F): F!` with `cost: (o: Op, inputs: float[]) => float` — `stdlib/rewrite.cml`, not the C++
+ * module.
  */
 
 import { extract } from rewrite
-import { Program, current } from graph
+
+func target(): int {
+    return 0
+}
 
 func main(): int sync {
-    let p: Program = current()
-    let q = extract(p, 1)
+    let q = target->extract<1>
     return 0
 }

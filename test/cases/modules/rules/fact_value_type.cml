@@ -4,7 +4,7 @@
  * writing a type argument, because the node's own type gives it. A node a pass read out of a graph
  * states no value type, so the query on it writes `depth::<int>(n)`; the two read the same fact.
  */
-import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
+import { Node, Graph, nodes, op, op_name, name, graphs_of } from graph
 import { max } from math
 
 fact depth::<T>(v: T): int match v {
@@ -28,12 +28,12 @@ func opText(n: Node): string {
     }
 }
 
-func addsOf(p: Program, function: string): Node[] {
-    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+func addsOf::<F>(p: F, function: string): Node[] {
+    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
     return nodes(found[0])->filter<(n: Node): bool => opText(n) == ':op/add_l'>
 }
 
-export func report(p: Program): Program! sync {
+export func report::<F>(p: F): F! sync {
     let adds = addsOf(p, 'target')
     let written = loop t = 0 for n in adds do t + depthOfWritten(n)
     let bare = loop t = 0 for n in adds do t + depthOfBare(n)

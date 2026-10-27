@@ -56,7 +56,7 @@ const TABLES = {
         reference: 'algebra_rules.tensor.cpp.txt',
         graphs: 5,
         rewritten: 2,
-        doubling: ['tensor_double'],
+        doubling: ['array_double'],
     },
 }
 
