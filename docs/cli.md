@@ -151,7 +151,7 @@ Both streams carry the same bytes on every platform: a line ends with a line fee
 
 ### Modules that start a runtime: `python` and `pyplot`
 
-`import` executes no code (design principles 3.1), so importing these two modules creates nothing. They share one embedded CPython per process, and it is created by the **first operator call** that needs it — `plot`, or any `py_exec`/`py_eval`/`py_run`/`py_call`/`py_import`/... — or, if the other module already created it, that call attaches to the same interpreter. A program that imports `pyplot` and never plots never starts Python.
+`import` executes no code (design principles 3.1), so importing these two modules creates nothing. They share one embedded CPython per process, and it is created by the **first operator call** that needs it — `plot`, or any `exec`/`eval`/`run_file`/`call`/`import_module`/... — or, if the other module already created it, that call attaches to the same interpreter. A program that imports `pyplot` and never plots never starts Python.
 
 - **A CPython that cannot start is reported at that call, not at the import.** `import python` / `import pyplot` then succeed; the first operator call fails with `RuntimeDiag::RuntimeError`, located at the call, and the run exits 1. CPython's own diagnostic (for example the path configuration it prints when `PYTHONHOME` names no Python) is on standard error, as it was. The same failure used to happen during the import, so a script that checked the exit code of an import-only run saw 1; it now sees 0. The active venv's version is checked at the same moment, for the same reason.
 - **`camel inspect --ops` does not prove an interpreter is available.** It lists `pyplot:plot` and `python`'s operators without creating one; an operator that cannot start Python fails when it runs.
@@ -483,7 +483,7 @@ Errors are printed on stdout, after any program output, as a JSON array of objec
 
 ### Effect trace (`std::profile effect_trace="..."`)
 
-Giving `std::profile effect_trace="<file>"` in the pipeline makes the process append one JSON line per executed effectful operator (any operator not registered as pure or as state-only in the operator-traits registry: `println`, file I/O, `py_*`, assignment `:op/assn*`, including `:op/assn_append`, the statement `acc = acc->append<v>`, ...), in call order. `report=false` keeps the text report of `std::profile` out of the program's output:
+Giving `std::profile effect_trace="<file>"` in the pipeline makes the process append one JSON line per executed effectful operator (any operator not registered as pure or as state-only in the operator-traits registry: `println`, file I/O, the operators of `python`, assignment `:op/assn*`, including `:op/assn_append`, the statement `acc = acc->append<v>`, ...), in call order. `report=false` keeps the text report of `std::profile` out of the program's output:
 
     camel m.cml 'std::profile effect_trace="trace.jsonl" report=false' std::nvm
 

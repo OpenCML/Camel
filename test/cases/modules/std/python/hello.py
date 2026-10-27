@@ -1,3 +1,3 @@
-"""Simple Python script for py_run test - prints greeting."""
+"""Simple Python script for run_file test - prints greeting."""
 print("Hello from Python script!")
 print("Script executed successfully.")

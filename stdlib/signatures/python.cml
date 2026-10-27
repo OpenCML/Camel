@@ -4,11 +4,8 @@
 /**
  * Computed signatures of the `python` module (C++ operators, modules/python).
  *
- * Of the eleven operators the module exports, six have fixed signatures and are declared in
- * stdlib/python.cml. The five entries here take a signature a declaration cannot write:
- *   - `py_call` accepts any number of `PyObject` arguments (and its second URI adds optional
- *     positional and keyword collections), which a declaration cannot say;
- *   - `py_print` and `py_println` accept any number of `PyObject` arguments;
+ * Of the nine operators the module exports, seven have fixed signatures and are declared in
+ * stdlib/python.cml. The two entries here take a signature a declaration cannot write:
  *   - `py_wrap` and `py_unwrap` move a type through the module type `PyObject<T>`, and a type
  *     variable cannot be an argument of a module type in a declaration
  *     (`SemanticDiag::InvalidTypeArgument`).
@@ -19,33 +16,6 @@
  * For reference only: these declarations are not compiled. They are checked against the operators
  * the module registers, and docs/stdlib-reference.md is generated from them.
  */
-
-/// Calls the Python callable `fn` -- a `PyObject`, or a dotted name such as `"math.sqrt"` -- with
-/// the `PyObject` arguments `args`, and returns its result. Any number of arguments is accepted.
-/// @effect runs arbitrary Python code
-/// @fails error `PythonError` when the call raises; the message starts with the exception class
-/// @example py_call("math.sqrt", py_wrap(2.0))
-#op('python:py_call')
-export func py_call(fn: string | PyObject, ...args: PyObject[]): PyObject!
-
-/// Calls `fn` with a tuple (or an array) of positional arguments and a struct of keyword
-/// arguments. Both collections are optional; every element is a `PyObject`.
-/// @fails error `PythonError` when the call raises; the message starts with the exception class
-/// @example py_call(fn, (py_wrap(2.0),), {x: py_wrap(1)})
-#op('python:py_call_kw')
-export func py_call(fn: string | PyObject, args?: (...PyObject) | PyObject[], kwargs?: Struct<...PyObject>): PyObject!
-
-/// Writes the printed form of every `PyObject` argument to Python's standard output, with no
-/// separator and no newline, and returns the last argument (or `void` when there is none).
-/// @effect writes the interpreter's standard output
-/// @example py_print(py_wrap(1), py_wrap(2))
-export func py_print(...objs: PyObject[]): PyObject?
-
-/// Writes the printed form of every `PyObject` argument and a newline, as `py_print` does, and
-/// returns the last argument (or `void` when there is none).
-/// @effect writes the interpreter's standard output
-/// @example py_eval("1 + 1") -> (o: PyObject): PyObject? => py_println(o)
-export func py_println(...objs: PyObject[]): PyObject?
 
 /// Wraps the value `x` in a new Python object, keeping its Camel type as the type argument of
 /// `PyObject<T>`.

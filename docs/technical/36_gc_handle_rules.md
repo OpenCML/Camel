@@ -139,7 +139,7 @@ one step of a pass.
    A wrapper dies when the collector finds it unreachable: a young one at the next minor
    collection, an old one at the next major one. There is no promptness guarantee and none at
    exit; a resource that must be released at a known point is released explicitly
-   (`ForeignResourceObject::dispose`, `python:py_dispose`), after which the wrapper stays valid
+   (`ForeignResourceObject::dispose`), after which the wrapper stays valid
    and reports the disposed state. `onMoved` exists so that an object can re-derive pointers
    into itself (`Array::dataPtr_`, the shape and data pointers of a tensor); nothing outside
    the object may hold its address in the first place (rule 4).

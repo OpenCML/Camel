@@ -34,8 +34,8 @@ How to read an entry:
   form runs (`len`'s one parameter is `x` for a string, an array, a map and a set, so one name
   reaches all four). The name is written in the list that holds the parameter: an ordinary one
   in the parentheses (`len(x: xs)`), a `with` one in the angle brackets (`j->get<key: 'port'>`).
-  A form that gives a position no name, or leaves its count to the arguments (a rest list --
-  `py_call`'s two forms differ in arity as well), is one no named argument reaches: the call
+  A form that gives a position no name, or leaves its count to the arguments (a rest list,
+  as `println` takes), is one no named argument reaches: the call
   reports that the signature is not known where the call is written. `contains` refuses a named
   argument for a reason of its own: its position 0 means an element in two forms and the
   substring in the third, so the name would mean another thing in one of them.
@@ -5676,71 +5676,23 @@ plot. matplotlib is used when it is importable, and an SVG file is written other
 
 ## `python`: the embedded interpreter
 
-The Python bridge: run code in the embedded interpreter, import modules, read attributes and
-dispose of the handles the calls return. Every operator observes or advances the interpreter,
-which no argument names, so every one has effects and is never folded, merged or dropped by a
-pass. A result of type `PyObject` is a handle into the interpreter, not a value of the program.
+Camel calling Python: run code in an embedded interpreter, import modules, read attributes and
+call what they hold. A `PyObject` is a handle into the interpreter, not a value of the program;
+it is released when nothing refers to it any more, so there is nothing to dispose of by hand.
+Values cross the boundary with `py_wrap` (a Camel value becomes a Python object of the matching
+kind) and `py_unwrap` (a Python object becomes a value of the type it was wrapped from, or an
+error value `PythonTypeError` that gives the path of the mismatch); both are in
+`stdlib/signatures/python.cml`. A numeric array is converted by copy.
 
-The declarations of the operators of the C++ module `modules/python` (design principles 6.4).
-This file is the one source of the six fixed signatures; the C++
-side keeps the kernels, the executor, the operator traits and the purity.
+Python code can do anything, including write files and print, and the interpreter holds state
+between calls. So no function here names a resource of its own: each is a use of everything, in
+the written order, never folded, merged or dropped, and it runs when its result is needed or it
+is in a `sync` block. Whatever Python itself refuses -- an exception, a missing module, a missing
+attribute -- is an error value of kind `PythonError` whose message is the exception, its text and
+its traceback, never a fault of Camel's.
 
-Five operators stay in C++ and are recorded as computed signatures in
-`stdlib/signatures/python.cml`:
-  - `py_call` (two URIs, `python:py_call` and `python:py_call_kw`) and `py_print`/`py_println`
-    are variadic: a declaration cannot say "any number of `PyObject` arguments";
-  - `py_wrap` and `py_unwrap` move a type through the module type `PyObject<T>`, and a type
-    variable cannot be an argument of a module type in a declaration
-    (`SemanticDiag::InvalidTypeArgument`).
-
-#### `py_call`
-
-```camel
-py_call: (fn: string | PyObject, ...args: PyObject[]) => PyObject!
-```
-
-Calls the Python callable `fn` -- a `PyObject`, or a dotted name such as `"math.sqrt"` -- with
-the `PyObject` arguments `args`, and returns its result. Any number of arguments is accepted.
-
-- With effects: runs arbitrary Python code.
-- Failure: error `PythonError` when the call raises; the message starts with the exception class.
-- Example: `py_call("math.sqrt", py_wrap(2.0))`
-
-#### `py_call`
-
-```camel
-py_call: (fn: string | PyObject, args?: (...PyObject) | PyObject[], kwargs?: Struct<...PyObject>) => PyObject!
-```
-
-Calls `fn` with a tuple (or an array) of positional arguments and a struct of keyword
-arguments. Both collections are optional; every element is a `PyObject`.
-
-- Failure: error `PythonError` when the call raises; the message starts with the exception class.
-- Example: `py_call(fn, (py_wrap(2.0),), {x: py_wrap(1)})`
-
-#### `py_print`
-
-```camel
-py_print: (...objs: PyObject[]) => PyObject?
-```
-
-Writes the printed form of every `PyObject` argument to Python's standard output, with no
-separator and no newline, and returns the last argument (or `void` when there is none).
-
-- With effects: writes the interpreter's standard output.
-- Example: `py_print(py_wrap(1), py_wrap(2))`
-
-#### `py_println`
-
-```camel
-py_println: (...objs: PyObject[]) => PyObject?
-```
-
-Writes the printed form of every `PyObject` argument and a newline, as `py_print` does, and
-returns the last argument (or `void` when there is none).
-
-- With effects: writes the interpreter's standard output.
-- Example: `py_eval("1 + 1") -> (o: PyObject): PyObject? => py_println(o)`
+The interpreter is started the first time a function here runs.
+The other direction, Python calling Camel, is the package `camel` (`pip install camel-lang`).
 
 #### `py_wrap`
 
@@ -5770,79 +5722,90 @@ list, a tuple a tuple or list of its length, a struct a dict with its fields.
 - Failure: error `PythonTypeError` when the object is not of the kind `T` names; the message gives the path and what was found.
 - Example: `py_unwrap(py_wrap(2.0)) !! 0.0` gives `2.0`
 
-#### `py_exec`
+#### `exec`
 
 ```camel
-py_exec: (code: string) => PyObject!
+exec: (code: string) => void!
 ```
 
-Runs Python statements `code` in the interpreter and returns its `None`. Definitions and
-assignments stay visible to later calls, as in a Python session.
+Runs Python statements in the interpreter. Definitions and assignments stay visible to later
+calls, as in a Python session.
 
-- With effects: runs arbitrary Python code.
-- Failure: error `PythonError` when the code raises; the message starts with the exception class.
-- Example: `py_exec("x = 1")`
+- Failure: error value `PythonError` when the code raises.
+- Example (a fragment, not compiled): `exec('x = 1')`
+- Why it is not compiled: runs Python code when it runs, and the example only has the `void!` result to show
 
-#### `py_eval`
+#### `eval`
 
 ```camel
-py_eval: (expr: string) => PyObject!
+eval: (expression: string) => PyObject!
 ```
 
-Evaluates the Python expression `expr` and returns its value as a `PyObject`.
+Evaluates a Python expression and gives its value.
 
-- With effects: runs arbitrary Python code.
-- Failure: error `PythonError` when the expression raises; the message starts with the exception class.
-- Example: `py_eval("1 + 2 * 3")` gives `7`
+- Failure: error value `PythonError` when the expression raises.
+- Example: `eval('1 + 2 * 3')->to_string !! ''` gives `'7'`
 
-#### `py_run`
+#### `run_file`
 
 ```camel
-py_run: (file_path: string) => PyObject!
+run_file: (path: string) => void!
 ```
 
-Runs the Python script at `file_path` and returns its `None`.
+Runs the Python script at the path.
 
-- With effects: runs arbitrary Python code.
-- Failure: error `PythonError` when the file cannot be read or the script raises; the message starts with the exception class.
-- Example: `py_run("scripts/hello.py")`
+- Failure: error value `PythonError` when the file cannot be read or the script raises.
+- Example (a fragment, not compiled): `'scripts/hello.py'->run_file`
+- Why it is not compiled: runs Python code when it runs, and the example only has the `void!` result to show
 
-#### `py_attr`
+#### `import_module`
 
 ```camel
-py_attr: (obj: PyObject, attr: string) => PyObject!
+import_module: (name: string) => PyObject!
 ```
 
-The attribute `attr` of the Python object `obj`; a dotted `attr` walks the chain. Asking may
-run a property or a descriptor, so the read is an effect.
+Imports a Python module (`'math'`, `'numpy'`, `'matplotlib.pyplot'`) and gives it. Importing runs
+the body of the module and records it in `sys.modules`.
 
-- With effects: reads interpreter state and may run Python code.
-- Failure: error `PythonError` when the attribute does not exist; the message starts with the exception class.
-- Example: `py_import("math") -> (m: PyObject): PyObject! => py_attr(m, "sqrt")`
+- Failure: error value `PythonError` when the import raises.
+- Example: `import_module('math')->attr<'pi'>->to_string !! ''` gives `'3.141592653589793'`
 
-#### `py_import`
+#### `attr`
 
 ```camel
-py_import: (module_name: string) => PyObject!
+attr: <name: string> (obj: PyObject) => PyObject!
 ```
 
-Imports the Python module `module_name` and returns it. Importing runs the module body and
-records the module in `sys.modules`.
+The attribute of a Python object; a dotted name walks the chain. Asking may run a property or
+a descriptor, so it can raise.
 
-- With effects: imports a module and runs its body.
-- Failure: error `PythonError` when the import raises; the message starts with the exception class.
-- Example: `py_import("math")`
+- Failure: error value `PythonError` when the attribute does not exist or its getter raises.
+- Example: `import_module('math')->attr<'pi'>`
 
-#### `py_dispose`
+#### `call`
 
 ```camel
-py_dispose: (obj: PyObject) => void
+call: <fn: PyObject, kwargs: Map<string, PyObject>? = null> (args: PyObject[]) => PyObject!
 ```
 
-Drops this program's reference to the Python object `obj`.
+Calls a Python callable with the arguments the array holds, in order, and the keyword arguments
+the callable was bound with. `call<fn>` is a function from an array of arguments to a result, so
+it can be bound once and applied again.
 
-- With effects: advances the interpreter's reference counts.
-- Example: `py_import("math") -> py_dispose`
+- Failure: error value `PythonError` when the call raises.
+- Example (a fragment, not compiled): `[py_wrap(2.0)]->call<sqrt>`
+- Why it is not compiled: the callable is a Python object from `attr`, which the page does not show
+
+#### `to_string`
+
+```camel
+to_string: (obj: PyObject) => string!
+```
+
+The `str()` of a Python object, as text.
+
+- Failure: error value `PythonError` when `__str__` raises.
+- Example: `eval('[1, 2]')->to_string !! ''` gives `'[1, 2]'`
 
 <a id="nn"></a>
 

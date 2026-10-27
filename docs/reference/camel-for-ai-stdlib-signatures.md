@@ -642,21 +642,18 @@ plot: (data: f32[], filename: string) => void
 plot: (data: float[], filename: string) => void
 ```
 
-**`python`** — import { ... } from python — 12 name(s)
+**`python`** — import { ... } from python — 9 name(s)
 
 ```text
-py_call: (fn: string | PyObject, ...args: PyObject[]) => PyObject!
-py_call: (fn: string | PyObject, args?: (...PyObject) | PyObject[], kwargs?: Struct<...PyObject>) => PyObject!
-py_print: (...objs: PyObject[]) => PyObject?
-py_println: (...objs: PyObject[]) => PyObject?
 py_wrap: (x: T) => PyObject<T>
 py_unwrap: (obj: PyObject<T>) => T!
-py_exec: (code: string) => PyObject!
-py_eval: (expr: string) => PyObject!
-py_run: (file_path: string) => PyObject!
-py_attr: (obj: PyObject, attr: string) => PyObject!
-py_import: (module_name: string) => PyObject!
-py_dispose: (obj: PyObject) => void
+exec: (code: string) => void!
+eval: (expression: string) => PyObject!
+run_file: (path: string) => void!
+import_module: (name: string) => PyObject!
+attr: <name: string> (obj: PyObject) => PyObject!
+call: <fn: PyObject, kwargs: Map<string, PyObject>? = null> (args: PyObject[]) => PyObject!
+to_string: (obj: PyObject) => string!
 ```
 
 **`nn`** — import { ... } from nn — 19 name(s)

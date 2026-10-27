@@ -6735,10 +6735,8 @@ Name one function, or give the arguments positionally.
 **Example** (`test/cases/compile/param_defaults/stdlib_no_place_for_name.cml`, run as `camel test/cases/compile/param_defaults/stdlib_no_place_for_name.cml`)
 
 ```camel
-import python
-
 func main(): int sync {
-    println(python::py_call(fn: 'printf'))
+    println(fn: 'printf')
     return 0
 }
 ```

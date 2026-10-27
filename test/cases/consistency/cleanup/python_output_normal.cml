@@ -2,14 +2,24 @@
  * The same program without the fault, as the reference for where Python's output appears.
  */
 
-import { py_call, py_wrap, py_eval, py_unwrap, PyObject } from python
+import { import_module, attr, call, eval, py_wrap, PyObject } from python
+
+// A Python call is an error value; these programs expect every call to succeed.
+func must(r: PyObject!): PyObject {
+    return r !! py_wrap('python failed')
+}
+
+func say(text: string): void sync {
+    let print = must(import_module('builtins')->attr<'print'>)
+    let _ = [py_wrap(text)]->call<print>
+}
 
 func main(): int sync {
     println('camel 1')
-    let _ = py_call('print', py_wrap('python 1'))
-    let held = py_eval('[1, 2, 3]') !! py_wrap(0)
+    say('python 1')
+    let held = eval('[1, 2, 3]') !! py_wrap(0)
     println('camel 2')
-    let _ = py_call('print', py_wrap('python 2'))
+    say('python 2')
     println('camel 3')
     return 0
 }

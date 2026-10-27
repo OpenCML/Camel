@@ -313,10 +313,9 @@ const MODULES = [
         name: 'python',
         title: '`python`: the embedded interpreter',
         kind: 'cpp',
-        // Six fixed signatures are declared in stdlib/python.cml; `py_call` (two URIs),
-        // `py_print`/`py_println` are variadic and `py_wrap`/`py_unwrap` move a type through the
-        // module type `PyObject<T>`, so their reference entries live in the signature file named
-        // by `computed:`.
+        // Seven fixed signatures are declared in stdlib/python.cml; `py_wrap`/`py_unwrap` move a
+        // type through the module type `PyObject<T>`, so their reference entries live in the
+        // signature file named by `computed:`.
         source: 'python.cml',
         declaration: true,
         computed: 'signatures/python.cml',
@@ -411,8 +410,8 @@ function splitParams(text) {
 
 // -1 for a list with a variadic parameter, as `camel inspect --ops` reports it. A parameter can
 // be variadic without being spelled `...name`: an optional parameter collected into a variadic
-// tuple, `args?: (...PyObject) | PyObject[]` (`py_call`'s keyword URI), accepts any number of
-// arguments too, and the C++ resolver reports its count as -1.
+// tuple, `args?: (...T) | T[]`, accepts any number of arguments too, and the C++ resolver
+// reports its count as -1.
 function countParams(params) {
     return params.some((p) => p.startsWith('...') || /\(\s*\.\.\./.test(p)) ? -1 : params.length
 }
@@ -882,8 +881,8 @@ function renderDoc() {
     out.push("  form runs (`len`'s one parameter is `x` for a string, an array, a map and a set, so one name")
     out.push('  reaches all four). The name is written in the list that holds the parameter: an ordinary one')
     out.push("  in the parentheses (`len(x: xs)`), a `with` one in the angle brackets (`j->get<key: 'port'>`).")
-    out.push('  A form that gives a position no name, or leaves its count to the arguments (a rest list --')
-    out.push("  `py_call`'s two forms differ in arity as well), is one no named argument reaches: the call")
+    out.push('  A form that gives a position no name, or leaves its count to the arguments (a rest list,')
+    out.push("  as `println` takes), is one no named argument reaches: the call")
     out.push('  reports that the signature is not known where the call is written. `contains` refuses a named')
     out.push('  argument for a reason of its own: its position 0 means an element in two forms and the')
     out.push('  substring in the third, so the name would mean another thing in one of them.')
