@@ -47,11 +47,25 @@ func nested(): int sync {
     return 0
 }
 
+func bump(var x: int): void sync {
+    x += 1
+}
+
+func unused_read(): int sync {
+    var c = 0
+    bump(c)
+    let after1 = c
+    bump(c)
+    println(c)
+    return 0
+}
+
 func main(): int sync {
     read_twice()
     declared_first()
     declared_last()
     three()
     nested()
+    unused_read()
     return 0
 }
