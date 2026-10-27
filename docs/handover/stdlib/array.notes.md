@@ -215,3 +215,7 @@ export func is_same::<T, U>(): bool {
 ## S4. 空数组的 `sum`（作者裁定后）
 
 `sum` 对空数组或空轴得单位元 0，不是故障；`some_elements` 不再用于 `sum`（函数体直接 `flatten`），`sum` 沿轴形式在长度为 0 的轴上也答 0。上文 R1、R2、R3 与 R4 中凡把 `sum` 列为故障的、以及“空数组求和”需要改的用例清单（`reduced_sum_refused.cml:67`、`core_views.cml:31`）一律作废，不需要迁移。`mean`、`min`、`max`、`argmax`、`argmin` 仍是故障。
+
+## 2026-10-27 更正
+
+Q4 的 `merge_sorted_arrays` 删除撤回（负责人：归并用于验证并行加速，不能让 Camel 的调度开销掩盖多线程效果）。恢复为原生算子 `merge_sorted(xs, ys)`，执行走 C++ 线性内核，函数体 `sort(concat(xs, ys))` 只作语义定义。排序变体的删除不变。
