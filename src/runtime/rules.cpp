@@ -98,7 +98,12 @@ class SideReader {
                     return false;
                 }
             }
-            return graph_.withInputsOf(ref).empty() && graph_.ctrlInputsOf(ref).empty();
+            // A statement of a `sync` block is written after the one before it, and that is an order
+            // the rule layer may not step over: the block's chain is that order, whether it is named
+            // by a control edge or by the sync edge it is moving to
+            // (docs/design/effects/edges.cn.md 1, 4.6).
+            return graph_.withInputsOf(ref).empty() && graph_.ctrlInputsOf(ref).empty() &&
+                   graph_.syncPredsOf(ref).empty();
         default:
             return false;
         }
@@ -130,7 +135,8 @@ class SideReader {
             return patLiteral(graph_.staticSlots()[index], node->dataType());
         }
         case GCNodeKind::Oper: {
-            if (!graph_.withInputsOf(ref).empty() || !graph_.ctrlInputsOf(ref).empty()) {
+            if (!graph_.withInputsOf(ref).empty() || !graph_.ctrlInputsOf(ref).empty() ||
+                !graph_.syncPredsOf(ref).empty()) {
                 fail("has an operator with a context argument or an order dependency");
             }
             const auto *body = graph_.nodeBodyAs<GCOperBody>(ref);

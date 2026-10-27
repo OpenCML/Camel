@@ -223,9 +223,11 @@ bool mayRemoveDead(const GCGraph &graph) {
         if (anchor[ref]) {
             continue;
         }
-        // A gate that waits and forwards its value hands its waits to its consumers.
+        // A gate that waits and forwards its value hands its waits to its consumers. The wait is
+        // read in either kind: a gate the block's chain runs through waits through the sync edge.
         if (node->kind == GCNodeKind::Gate && graph.normInputsOf(ref).size() == 1 &&
-            graph.withInputsOf(ref).empty() && !graph.ctrlInputsOf(ref).empty() &&
+            graph.withInputsOf(ref).empty() &&
+            (!graph.ctrlInputsOf(ref).empty() || !graph.syncPredsOf(ref).empty()) &&
             valueUsers[ref] > 0 && !joinOrBrchUser[ref]) {
             return true;
         }
