@@ -50,6 +50,9 @@ class LowerContext {
     Emitter &emitter() const { return emitter_; }
     int64_t opset() const { return emitter_.opset(); }
     std::string_view uri() const { return uri_; }
+    /// Name of the export target the model is written for ("onnxruntime-cpu"), empty when none
+    /// was declared; a lowering reads the target table (loweringTarget, below) with it.
+    const std::string &target() const { return emitter_.target(); }
 
     size_t size() const { return args_.size(); }
     bool has(size_t index) const { return index < args_.size(); }
@@ -111,6 +114,32 @@ class LowerContext {
 
 /// Lowers one operator call.
 using LowerFn = std::function<Value(const LowerContext &ctx)>;
+
+/// What one export target needs written differently, in one place: the same operator has a
+/// different ONNX form per target and per element width, which is legitimate lowering content
+/// and not an inconsistency between two spellings (ruling 2026-10-26,
+/// onnx-gradient-width-and-fused-matmul: "the rule is written in the lowering's target table,
+/// defined in one place").
+struct LoweringTarget {
+    /// `true` when the target's *default* session optimization fuses a MatMul beside a Transpose
+    /// into an operator it has no kernel for on doubles. onnxruntime-cpu's level-2
+    /// MatmulTransposeFusion rewrites `MatMul(Transpose(a), b)` into com.microsoft.FusedMatMul,
+    /// whose CPU kernel exists for float only: the session then fails to load an f64 model that
+    /// is valid ONNX and that MatMul itself runs. A transposed product on doubles is therefore
+    /// written as Gemm (rank 2) or Einsum (batched), neither of which the fusion touches.
+    bool transposedProductNeedsGemmOrEinsumForDouble = false;
+};
+
+/// The entry of `target` in that table. A target the table does not cover (including none at
+/// all: no declared target means nothing to satisfy) needs nothing special.
+const LoweringTarget &loweringTarget(std::string_view target);
+
+/// Whether a product with one transposed operand on `dtype` elements must be written as Gemm or
+/// Einsum for `target`: the one reading of the table above, so the sites that emit a transposed
+/// product ask the same question. False for every width but f64 and for every target that does
+/// not fuse the pair, which is what keeps the existing float32 models byte for byte as they were.
+bool transposedProductNeedsGemmOrEinsum(
+    std::string_view target, std::optional<type::TypeCode> dtype);
 
 struct Lowering {
     LowerFn lower;
