@@ -1,0 +1,10 @@
+// `(..A) => R` is a function type with any parameter list.
+func run(f: (..A) => int): int {
+    return 1
+}
+
+func main(): int sync {
+    println(run((x: int, y: int): int => x + y))
+    println(run((): int => 7))
+    return 0
+}

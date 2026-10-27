@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-292 diagnostics: 272 errors, 20 warnings. 15 carry a machine-applicable edit, 277 say why they carry none.
+293 diagnostics: 273 errors, 20 warnings. 15 carry a machine-applicable edit, 278 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -164,6 +164,7 @@ prints one entry.
 | `0x0300018E` | [SemanticDiag::RestArgumentNotTuple](#restargumentnottuple) | Error | no |
 | `0x0300018F` | [SemanticDiag::RestFunctionNeedsExpansion](#restfunctionneedsexpansion) | Error | no |
 | `0x03000190` | [SemanticDiag::RestArgumentsMismatch](#restargumentsmismatch) | Error | no |
+| `0x03000191` | [SemanticDiag::WithPackNeedsNativeDeclaration](#withpackneedsnativedeclaration) | Error | no |
 | `0x03000193` | [SemanticDiag::ConstasTypeRequired](#constastyperequired) | Error | no |
 | `0x03000195` | [SemanticDiag::ConstasValueNotConstant](#constasvaluenotconstant) | Error | no |
 | `0x03000199` | [SemanticDiag::ConstasFunctionNeedsCall](#constasfunctionneedscall) | Error | no |
@@ -5113,6 +5114,40 @@ func first(a: int, ..ts): int {
 
 func main(): int sync {
     return first()
+}
+```
+
+### WithPackNeedsNativeDeclaration
+
+`0x03000191` · Error · `SemanticDiag::WithPackNeedsNativeDeclaration`
+
+**Fix**
+
+None: choice: whether to name the parameters or move the pack into a function type is the writer's decision
+
+**Message**
+
+```text
+The pack '..{0}' among the 'with' parameters needs a declaration without a body.
+```
+
+**Help**
+
+```text
+A pack among the 'with' parameters stands for the arguments a call gives beyond the fixed ones, and only a declaration of a native operator, which takes them as they come, can use them. A function with a body names each 'with' parameter; write them out, or write the pack in a function type.
+```
+
+**Example** (`test/cases/compile/prelude_signatures/with_pack_with_body.cml`, run as `camel test/cases/compile/prelude_signatures/with_pack_with_body.cml`)
+
+```camel
+// A pack among the `with` parameters needs a declaration without a body.
+with <..args>
+func bad(x: int): int {
+    return x
+}
+
+func main(): int sync {
+    return 0
 }
 ```
 

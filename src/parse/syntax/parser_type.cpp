@@ -275,6 +275,8 @@ void ParserImpl::parsePrimaryType() {
         if (!typeHead &&
             (t1 == TK::KwVar || (t1 == TK::Identifier && peek(2) == TK::Colon) ||
              (t1 == TK::RParen && peek(2) == TK::FatArrow) ||
+             (t1 == TK::DotDot && peek(2) == TK::Identifier && peek(3) == TK::RParen &&
+              peek(4) == TK::FatArrow) ||
              (t1 == TK::Comma && peek(2) == TK::RParen && peek(3) == TK::FatArrow))) {
             return parseFuncType();
         }
@@ -348,13 +350,13 @@ void ParserImpl::parseStructType() {
 void ParserImpl::parseFuncType() {
     const size_t m = mark();
     if (cur_ == TK::Lt || cur_ == TK::LAngle) {
-        parseAngledParams();
+        parseAngledParams(true);
     }
     if (cur_ != TK::LParen) {
         unexpected({e(TK::LParen)});
         return close(m, NK::FuncType);
     }
-    parseParentParams();
+    parseParentParams(true);
     if (!panic_ && expect(TK::FatArrow)) {
         parseType();
     }

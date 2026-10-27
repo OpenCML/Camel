@@ -22,6 +22,12 @@
  * names (stdlib-conventions.cn.md, section 4).
  */
 
+import { is_complex, is_real, is_string } from types
+
+/// The value an error carries: its kind, its message and the position it was made at. `error(...)`
+/// makes one, and a `T!` that failed holds one. The module provides the type.
+export type Error
+
 // ---- memory ----
 //
 // Data blocks (design principles 10.5): the process-wide counters, read between two operations.
@@ -156,7 +162,7 @@ export func c128::<S>(x: S): c128 when is_real::<S>() || is_complex::<S>()
 /// the same number: string(2.5) is '2.5', string(2.0) is '2.0'.
 /// @example string(42)    // '42'
 #op(':op/*tos')
-export func string(x: T): string
+export func string::<T>(x: T): string
 
 /// The integer a text spells, or an error value.
 /// @fails error `ParseError` when the text is not, as a whole, one integer (blanks are not skipped)
@@ -184,7 +190,7 @@ export func error(kind: string, message: string): Error
 /// also without a line end.
 /// @example print('a', 1)    // a 1
 #op(':io/print')
-export func print(x: T, ..rest): T
+export func print::<T>(x: T, ..rest): T
 
 /// Writes the arguments, separated by spaces, and a line end, and gives back the first one (so
 /// that the write can be part of the data flow). The other arguments may each have a type of
@@ -192,7 +198,7 @@ export func print(x: T, ..rest): T
 /// one line end.
 /// @example println('a', 1)    // a 1
 #op(':io/println')
-export func println(x: T, ..rest): T
+export func println::<T>(x: T, ..rest): T
 
 /// Writes the arguments, separated by spaces, and a line end, to standard error, and gives back
 /// the first one (so that the write can be part of the data flow). The other arguments may each
@@ -200,7 +206,7 @@ export func println(x: T, ..rest): T
 /// arguments put in and one line end.
 /// @example eprintln('a', 1)    // a 1
 #op(':io/eprintln')
-export func eprintln(x: T, ..rest): T
+export func eprintln::<T>(x: T, ..rest): T
 
 // ---- strings ----
 
@@ -218,7 +224,7 @@ export func eprintln(x: T, ..rest): T
 /// @fails fault `FormatFailed` when the placeholders and the arguments do not fit
 /// @example '{} is {:.2f}'->format<'x', 2.5>    // 'x is 2.50'
 #op(':str/format')
-with <args: T[]>
+with <..args>
 export func format(fmt: string): string
 
 /// The strings of xs joined with sep between them.
@@ -233,7 +239,7 @@ export func join(xs: string[]): string
 #op(':struct/len_*')
 export func len(x: string): int
 #op(':struct/len_*')
-export func len(x: T[..]): int
+export func len::<T>(x: T[..]): int
 #op(':struct/len_*')
 export func len(x: Bytes): int
 
@@ -258,7 +264,7 @@ export func range(start: int, end: int, step: int = 1): int[]
 /// @fails fault `IndexOutOfRange` when the array is empty
 /// @example last([1, 2, 3])    // 3
 #op(':struct/last_arr')
-export func last(xs: T[]): T
+export func last::<T>(xs: T[]): T
 
 /// The part of x from start up to, not including, end along one axis, taking every step-th
 /// position (a step of 1 by default, any non-zero value allowed). x is an array of any rank, a
@@ -270,7 +276,7 @@ export func last(xs: T[]): T
 /// @example [1, 2, 3, 4]->slice<0, 1, 3>    // [2, 3]
 #op(':op/slice_sub')
 with <axis: int, start: int, end: int, step: int = 1>
-export func slice(x: T[]): T[]
+export func slice::<T>(x: T[]): T[]
 
 /// The same slice of a string, by code point: a string has the one axis 0, and the result is a
 /// string. `'中文字'[1:3]` and `'中文字'->slice<0, 1, 3>` are both `'文字'`.
@@ -289,14 +295,14 @@ export func slice(x: Bytes): Bytes
 /// The elements of xs followed by those of ys, as a new array.
 /// @example concat([1], [2, 3])    // [1, 2, 3]
 #op(':struct/concat_arr')
-export func concat(xs: T[], ys: T[]): T[]
+export func concat::<T>(xs: T[], ys: T[]): T[]
 
 /// Whether an element of xs equals value, by the `==` of the element type (by content for
 /// arrays, tuples and structs).
 /// @example [1, 2, 3]->contains<2>    // true
 #op(':struct/contains_arr')
 with <value: T>
-export func contains(xs: T[]): bool
+export func contains::<T>(xs: T[]): bool
 
 /// Whether sub occurs in the string s (bytes are compared). The empty string occurs in every
 /// string.
@@ -310,7 +316,7 @@ export func contains(s: string): bool
 /// @fails fault `InvalidArgument` when the lengths differ
 /// @example zip([1, 2], ['a', 'b'])    // [(1, 'a'), (2, 'b')]
 #op(':struct/zip')
-export func zip(xs: T[], ys: U[]): (T, U)[]
+export func zip::<T, U>(xs: T[], ys: U[]): (T, U)[]
 
 /// A new array: the elements of xs, then value. xs is unchanged; to add to a variable, bind it
 /// to the result: `acc = acc->append<4>` (as a statement, that form grows the array in place
@@ -318,7 +324,7 @@ export func zip(xs: T[], ys: U[]): (T, U)[]
 /// @example [1, 2, 3]->append<4>    // [1, 2, 3, 4]
 #op(':struct/append_arr')
 with <value: T>
-export func append(xs: T[]): T[]
+export func append::<T>(xs: T[]): T[]
 
 // ---- higher-order functions ----
 //
@@ -329,28 +335,28 @@ export func append(xs: T[]): T[]
 // call does is what f does.
 
 /// f applied to every element; the calls have no order among them.
-/// @example [1, 2, 3]->map<(x: int) => x * 2>    // [2, 4, 6]
+/// @example [1, 2, 3]->map<(x) => x * 2>    // [2, 4, 6]
 #op(':mark/map_arr')
 with <f: (item: T) => U>
-export func map(xs: T[]): U[]
+export func map::<T, U>(xs: T[]): U[]
 
 /// The elements for which f is true, in order; the calls of f have no order among them.
-/// @example [1, 2, 3, 4]->filter<(x: int) => x % 2 == 0>    // [2, 4]
+/// @example [1, 2, 3, 4]->filter<(x) => x % 2 == 0>    // [2, 4]
 #op(':mark/filter_arr')
 with <f: (item: T) => bool>
-export func filter(xs: T[]): T[]
+export func filter::<T>(xs: T[]): T[]
 
 /// The elements combined from left to right: f(...f(f(initial, xs[0]), xs[1])..., xs[n-1]).
 /// @example [1, 2, 3]->reduce<(acc: int, x: int) => acc + x, 0>    // 6
 #op(':mark/reduce_arr')
 with <f: (acc: U, item: T) => U, initial: U>
-export func reduce(xs: T[]): U
+export func reduce::<U, T>(xs: T[]): U
 
 /// Calls f for every element, in order.
-/// @example [1, 2, 3]->foreach<(x: int) => println(x)>
+/// @example [1, 2, 3]->foreach<(x) => println(x)>
 #op(':mark/foreach_arr')
 with <f: (item: T) => void>
-export func foreach(xs: T[]): void
+export func foreach::<T>(xs: T[]): void
 
 // ---- fault isolation ----
 //
@@ -382,7 +388,7 @@ export func fail(message: string): never
 /// @example attempt((x: int) => 10 / x)(2) !! -1    // 5
 /// @example attempt((x: int) => 10 / x)(0) !! -1    // -1: the division fault becomes an error value
 #op(':mark/attempt')
-export func attempt(f: F): F!
+export func attempt::<F>(f: F): F!
 
 // ---- Map<K, V> and Set<T> ---------------------------------------------------------------------
 // Built-in collection types (docs/technical/31_map_and_set.md). Every operator returns a new
@@ -394,100 +400,100 @@ export func attempt(f: F): F!
 /// whose length is asked for, whatever its type.
 /// @example len([('a', 1), ('b', 2)] as Map<string, int>)    // 2
 #op(':coll/len')
-export func len(x: Map<K, V>): int
+export func len::<K, V>(x: Map<K, V>): int
 #op(':coll/len')
-export func len(x: Set<T>): int
+export func len::<T>(x: Set<T>): int
 
 /// The value stored under key, or null when the map has no such key. `m[key]` is the same lookup.
 /// @example ([('a', 1)] as Map<string, int>)->get<'z'> ?? 0    // 0 when the map has no 'z'
 #op(':coll/map_get')
 with <key: K>
-export func get(m: Map<K, V>): V?
+export func get::<K, V>(m: Map<K, V>): V?
 
 /// The value stored under key, or fallback when the map has no such key.
 /// @example ([('a', 1)] as Map<string, int>)->get_or<'z', -1>    // -1 when the map has no 'z'
 #op(':coll/map_get_or')
 with <key: K, fallback: V>
-export func get_or(m: Map<K, V>): V
+export func get_or::<K, V>(m: Map<K, V>): V
 
 /// A map with value stored under key; an existing entry of that key is replaced. m is unchanged.
 /// @example ([('a', 1), ('b', 2)] as Map<string, int>)->put<'c', 3>    // {a: 1, b: 2, c: 3}
 #op(':coll/map_put')
 with <key: K, value: V>
-export func put(m: Map<K, V>): Map<K, V>
+export func put::<K, V>(m: Map<K, V>): Map<K, V>
 
 /// A map without the entry of key, or a set without the element; a key or element that is not there changes nothing. The argument is unchanged.
 /// @example ([('a', 1), ('b', 2)] as Map<string, int>)->remove<'a'>    // {b: 2}
 #op(':coll/remove')
 with <key: K>
-export func remove(c: Map<K, V>): Map<K, V>
+export func remove::<K, V>(c: Map<K, V>): Map<K, V>
 #op(':coll/remove')
-export func remove(c: Set<K>): Set<K>
+export func remove::<K>(c: Set<K>): Set<K>
 
 /// Whether a map has an entry of key. (A set is asked with `contains`.)
 /// @example ([('a', 1)] as Map<string, int>)->has<'a'>    // true
 #op(':coll/has')
 with <key: K>
-export func has(c: Map<K, V>): bool
+export func has::<K, V>(c: Map<K, V>): bool
 
 /// The keys of a map, in ascending order.
 /// @example keys([('b', 2), ('a', 1)] as Map<string, int>)    // [a, b]
 #op(':coll/keys')
-export func keys(m: Map<K, V>): K[]
+export func keys::<K, V>(m: Map<K, V>): K[]
 
 /// The values of a map, in the ascending order of their keys.
 /// @example values([('b', 2), ('a', 1)] as Map<string, int>)    // [1, 2]
 #op(':coll/map_values')
-export func values(m: Map<K, V>): V[]
+export func values::<K, V>(m: Map<K, V>): V[]
 
 /// The entries of a map as (key, value) tuples, in ascending order of the keys.
 /// @example items([('b', 2), ('a', 1)] as Map<string, int>)    // [(a, 1), (b, 2)]
 #op(':coll/map_items')
-export func items(m: Map<K, V>): (K, V)[]
+export func items::<K, V>(m: Map<K, V>): (K, V)[]
 
 /// The elements of a set as an array, in ascending order. The collection is `m`, the name the
 /// map declaration above gives its one parameter: the position means the collection whose items
 /// are listed.
 /// @example items([3, 1, 2] as Set<int>)    // [1, 2, 3]
 #op(':coll/set_items')
-export func items(m: Set<T>): T[]
+export func items::<T>(m: Set<T>): T[]
 
 /// A map with the entries of both maps; for a key in both, the entry of other is taken. Neither argument is changed.
 /// @example merge([('a', 1), ('b', 2)] as Map<string, int>, [('b', 20), ('c', 30)] as Map<string, int>)    // {a: 1, b: 20, c: 30}
 #op(':coll/merge')
-export func merge(m: Map<K, V>, other: Map<K, V>): Map<K, V>
+export func merge::<K, V>(m: Map<K, V>, other: Map<K, V>): Map<K, V>
 
 /// Whether value is an element of the set.
 /// @example ([1, 2, 3] as Set<int>)->contains<9>    // false
 #op(':coll/set_contains')
 with <value: T>
-export func contains(s: Set<T>): bool
+export func contains::<T>(s: Set<T>): bool
 
 /// A set with value added; s is unchanged.
 /// @example ([1, 2, 3] as Set<int>)->add<9>    // {1, 2, 3, 9}
 #op(':coll/set_add')
 with <value: T>
-export func add(s: Set<T>): Set<T>
+export func add::<T>(s: Set<T>): Set<T>
 
 /// The set of the elements that are in either set.
 /// @example union([1, 2, 3] as Set<int>, [3, 4] as Set<int>)    // {1, 2, 3, 4}
 #op(':coll/set_union')
-export func union(s: Set<T>, other: Set<T>): Set<T>
+export func union::<T>(s: Set<T>, other: Set<T>): Set<T>
 
 /// The set of the elements that are in both sets.
 /// @example intersect([1, 2, 3] as Set<int>, [3, 4] as Set<int>)    // {3}
 #op(':coll/set_intersect')
-export func intersect(s: Set<T>, other: Set<T>): Set<T>
+export func intersect::<T>(s: Set<T>, other: Set<T>): Set<T>
 
 /// The set of the elements of s that are not in other.
 /// @example difference([1, 2, 3] as Set<int>, [3, 4] as Set<int>)    // {1, 2}
 #op(':coll/set_difference')
-export func difference(s: Set<T>, other: Set<T>): Set<T>
+export func difference::<T>(s: Set<T>, other: Set<T>): Set<T>
 
 /// Whether every element of s is an element of other.
 /// @example is_subset([1, 2] as Set<int>, [1, 2, 3] as Set<int>)    // true
 #op(':coll/set_is_subset')
-export func is_subset(s: Set<T>, other: Set<T>): bool
+export func is_subset::<T>(s: Set<T>, other: Set<T>): bool
 
 // ---- streams ----
 
@@ -500,4 +506,4 @@ export func is_subset(s: Set<T>, other: Set<T>): bool
 /// @example tee_note(8, 64, 2, 2, s)    // the tee written `s->tee<8>` reports itself this way
 /// @example-fragment the last operand is the stream a tee reads, and no example program has one
 #op(':stream/tee_note')
-export func tee_note(hint: int, cap: int, elements: int, peak: int, s: T..): void
+export func tee_note::<T>(hint: int, cap: int, elements: int, peak: int, s: T..): void

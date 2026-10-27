@@ -103,6 +103,18 @@ class FuncTypeResolver {
     virtual FunctionType *declaredSignature() const { return nullptr; }
 
     /**
+     * Gives a rule whose result is computed the signature a declaration of it writes (the
+     * prelude's declaration file): the parameter types every call is held to, type variables and
+     * all, so an argument that needs them (a lambda with unwritten parameters) takes its types
+     * from them. The rule keeps computing its result. A rule that has a signature of its own
+     * ignores it.
+     */
+    virtual void graftDeclaredSignature(FunctionType *) {}
+    /// The signature given by graftDeclaredSignature, else null. It gives the arguments of a call
+    /// their expected types and nothing else: the rule still decides which calls it takes.
+    virtual FunctionType *graftedSignature() const { return nullptr; }
+
+    /**
      * The names this rule gives its parameters, the `with` ones first and the ordinary ones
      * after: what a named argument binds to (`len(x: xs)`). A rule whose signature is fixed
      * answers from it; a rule whose result follows its arguments has no signature object to
@@ -279,6 +291,12 @@ class DynamicFuncTypeResolver : public FuncTypeResolver {
         return this;
     }
     FunctionType *fixedSignature() const override { return fixed_; }
+    FunctionType *graftedSignature() const override { return declared_; }
+    void graftDeclaredSignature(FunctionType *signature) override {
+        if (fixed_ == nullptr) {
+            declared_ = signature;
+        }
+    }
 
     /// A rule that fixes its signature answers from it, as any fixed rule does. A rule whose
     /// result follows its arguments answers from the signature it writes, and only when that
@@ -316,7 +334,8 @@ class DynamicFuncTypeResolver : public FuncTypeResolver {
 
   private:
     std::string signature_;
-    FunctionType *fixed_ = nullptr;
+    FunctionType *fixed_    = nullptr;
+    FunctionType *declared_ = nullptr;
     var_declare_t withVars_, normVars_;
     ResolverFunc resolver_;
     /// The callback that also reads the call's constants; null for a rule whose result follows

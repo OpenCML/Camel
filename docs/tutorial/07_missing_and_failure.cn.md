@@ -173,7 +173,7 @@ help: Ensure the index is within the valid range of the collection.
 // Run: camel docs/tutorial/examples/07_exercise.cml
 
 func sum_ints(words: string[]): int {
-    return words->map<(s: string): int => parse_int(s) !! 0>->reduce<(acc: int, x: int): int => acc + x, 0>
+    return words->map<(s) => parse_int(s) !! 0>->reduce<(acc: int, x: int): int => acc + x, 0>
 }
 
 func main(): int sync {

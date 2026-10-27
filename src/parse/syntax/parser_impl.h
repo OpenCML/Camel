@@ -263,7 +263,7 @@ class ParserImpl {
     void parseKeyParamPair(bool allowRest, bool allowConstas);
     void parsePairedParams(TK closer, bool allowRest, bool allowConstas);
     void parseParentParams(bool allowRest = false, bool allowConstas = false);
-    void parseAngledParams();
+    void parseAngledParams(bool allowRest = false);
     void parseEnumType();
     void parseEnumVariant();
     void parseEnumField();

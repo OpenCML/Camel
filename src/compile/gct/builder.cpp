@@ -5257,6 +5257,12 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     // (step 1) -- unless its condition is the pass applicability, in which case it
     // declares a pass and the pipeline reads it (design principles 9.3).
     const bool nativeDeclaration = ast->size() < 2;
+    if (!nativeDeclaration && funcType->hasWithRest()) {
+        diags_->of(SemanticDiag::WithPackNeedsNativeDeclaration)
+            .at(ast->atAs<AST::FuncTypeLoad>(0)->load()->tokenRange())
+            .commit(std::string(funcType->argNameAt(funcType->withTypesCount() - 1)));
+        throw BuildAbortException();
+    }
     // A `.cml` found beside a `.cmo` of the same name is that C++ module's *declaration*
     // module, in which the C++ operators are declared; it may also hold Camel definitions
     // (rule impl-kernel-site, 2026-10-23: "声明模块可以有函数体，`DeclarationModuleHasBody`
@@ -5769,11 +5775,39 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
     // The last `with` parameter that wrote a default: a later parameter without one is refused,
     // since a call that leaves the earlier ones out can then only give the others by name.
     std::string lastDefaultName;
-    for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(0)) {
+    const auto &withParams = *ast->atAs<AST::RepeatedLoad>(0);
+    for (size_t wi = 0; wi < withParams.size(); ++wi) {
+        const auto &paramPair = withParams[wi];
         const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
         const bool isVar     = paramLoad->isVar();
         const Reference &paramRef = paramLoad->getRef();
         const string &name        = paramRef.ident();
+        if (paramLoad->isRest()) {
+            // A pack among the `with` parameters (`with <..args>`): untyped and last, like
+            // the rest parameter of the ordinary ones. A lambda does not write one (the parser
+            // refuses it); a declaration with a body is refused where its body is known.
+            if (wi + 1 != withParams.size()) {
+                diags_->of(SemanticDiag::RestParameterNotLast)
+                    .at(paramLoad->tokenRange())
+                    .commit(name);
+                throw BuildAbortException();
+            }
+            if (paramPair->size() > 0) {
+                diags_->of(SemanticDiag::RestParameterTypeNotSupported)
+                    .at(paramLoad->tokenRange())
+                    .commit(name);
+                throw BuildAbortException();
+            }
+            if (!paramNames.insert(name).second) {
+                diags_->of(SemanticDiag::DuplicateParameter)
+                    .at(paramLoad->tokenRange())
+                    .commit(name);
+                throw BuildAbortException();
+            }
+            defaults.with.push_back({nullptr, camel::source::kInvalidOriginId});
+            factory.addWithRest(name);
+            continue;
+        }
         Type *type                = nullptr;
         {
             dimBindAllowed_ = signature;
@@ -5850,11 +5884,10 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
         if (paramLoad->isRest()) {
             // A rest parameter is untyped and last (design principles 5.5); it stands in the
             // signature as a `void` parameter that no call passes a value for.
-            if (!signature) {
-                // The parser admits `..` only in a declaration's own parameter list
-                // (`parseParentParams(true, true)`, the single call site in parser.cpp), so this
-                // is a compiler bug rather than anything a program can write.
-                ASSERT(false, "A rest parameter outside a function declaration.");
+            if (open && !signature) {
+                // The parser admits `..` in a declaration's parameter list and in a function
+                // type (`(..A) => R`), never in a lambda's.
+                ASSERT(false, "A rest parameter in a lambda.");
                 throw BuildAbortException();
             }
             if (pi + 1 != normParams.size()) {

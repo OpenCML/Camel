@@ -28,8 +28,8 @@ a location (chapter 7).
 
 func main(): int sync {
     let xs = 1..11    // [1, ..., 10]
-    let squares = xs->map<(x: int): int => x * x>
-    let evens = squares->filter<(x: int): bool => x % 2 == 0>
+    let squares = xs->map<(x) => x * x>
+    let evens = squares->filter<(x) => x % 2 == 0>
     let total = evens->reduce<(acc: int, x: int): int => acc + x, 0>
 
     println(xs)
@@ -42,7 +42,7 @@ func main(): int sync {
     println(ys, len(ys), ys[0])
 
     // foreach runs its function for each element, in order.
-    ['a', 'b', 'c']->foreach<(s: string) => sync { println('item', s) }>
+    ['a', 'b', 'c']->foreach<(s) => sync { println('item', s) }>
     return 0
 }
 ```
@@ -139,7 +139,7 @@ import { seed, randint, next_key } from random
 func main(): int sync {
     seed(42)
     // Wrong tool: next_key advances a hidden state, so each element depends on which ran first.
-    let drawn = 0..8->map<(i: int): int => next_key()->randint<0, 100>>
+    let drawn = 0..8->map<(i) => next_key()->randint<0, 100>>
     println(drawn)
 
     seed(42)
@@ -174,7 +174,7 @@ import { seed, randint, next_key } from random
 func main(): int sync {
     seed(42)
     // Wrong tool: next_key advances a hidden state, so each element depends on which ran first.
-    let drawn = 0..8->map<(i: int): int => next_key()->randint<0, 100>>
+    let drawn = 0..8->map<(i) => next_key()->randint<0, 100>>
     println(drawn)
 
     seed(42)
@@ -211,7 +211,7 @@ import { any, flat_map, sort_by, take } from array
 // The words of one line: lower case, punctuation removed, empty pieces dropped.
 func words_of(line: string): string[] {
     let plain = line->to_lower->replace<',', ' '>->replace<'.', ' '>
-    return plain->split<' '>->filter<(w: string): bool => len(w) > 0>
+    return plain->split<' '>->filter<(w) => len(w) > 0>
 }
 
 // `counts` with one more for `w`, adding `w` when it is new.
@@ -233,8 +233,8 @@ func main(): int sync {
 
     // Cut the text into lines, and the lines into words.
     let lines = text->split<'\n'>
-        ->map<(l: string): string => trim(l)>
-        ->filter<(l: string): bool => len(l) > 0>
+        ->map<(l) => trim(l)>
+        ->filter<(l) => len(l) > 0>
     let words = lines->flat_map<words_of>
     println('lines:', len(lines), 'words:', len(words))
 

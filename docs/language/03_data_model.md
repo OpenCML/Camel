@@ -196,7 +196,7 @@ func main(): int sync {
 import { split, trim, to_upper } from str
 
 func main(): int sync {
-    println('a, b ,c'->split<','>->map<(w: string): string => trim(w)>)
+    println('a, b ,c'->split<','>->map<(w) => trim(w)>)
     println('héllo'->to_upper, len('héllo'), 'héllo'[1], 'hello'[1])
     return 0
 }
