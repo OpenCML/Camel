@@ -1,20 +1,28 @@
 /**
  * The declarations of `python`, read from `stdlib/python.cml`: `exec`, `eval`, `run_file`,
- * `import_module`, `attr`, `call` and `to_string` have fixed signatures and are declared;
- * `py_wrap` and `py_unwrap` stay computed in C++.
+ * `import_module`, `attr`, `call`, `to_string`, `to_py` and `from_py` are declared.
  * The calls are type-checked and never run: this case stays compile-only.
  */
 
-import { exec, eval, run_file, import_module, attr, call, to_string, py_wrap } from python
+import { exec, eval, run_file, import_module, attr, call, to_string, to_py, from_py, PyObject } from python
+
+func must(r: PyObject!): PyObject {
+    return match r {
+        case error e => fail<'InvalidArgument'>(e.message)
+        case v => v
+    }
+}
 
 func fixed_signatures(): void sync {
     let _ = exec("x = 1")
     let _ = eval("1 + 2")
     let _ = run_file("script.py")
-    let math = import_module("math") !! py_wrap(0)
-    let sqrt = math->attr<"sqrt"> !! py_wrap(0)
-    let _ = [py_wrap(16)]->call<sqrt>
-    let _ = to_string(sqrt)
+    let math = must(import_module("math"))
+    let sqrt = must(math->attr<"sqrt">)
+    let argument = must(to_py(16))
+    let result = must([argument]->call<sqrt>)
+    let _ = to_string(result)
+    let _ = from_py::<float>(result)
 }
 
 func main(): int {

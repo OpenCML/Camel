@@ -2,17 +2,24 @@
  * Output printed by Python before exit(6).
  */
 
-import { import_module, attr, call, eval, py_wrap, PyObject } from python
+import { import_module, attr, call, eval, to_py, PyObject } from python
 import { exit } from process
 
 // A Python call is an error value; these programs expect every call to succeed.
 func must(r: PyObject!): PyObject {
-    return r !! py_wrap('python failed')
+    return match r {
+        case error e => fail<'InvalidArgument'>(e.message)
+        case v => v
+    }
+}
+
+func wrap::<T>(x: T): PyObject {
+    return must(to_py(x))
 }
 
 func say(text: string): void sync {
     let print = must(import_module('builtins')->attr<'print'>)
-    let _ = [py_wrap(text)]->call<print>
+    let _ = [wrap(text)]->call<print>
 }
 
 func main(): int sync {

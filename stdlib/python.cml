@@ -5,10 +5,19 @@
  * Camel calling Python: run code in an embedded interpreter, import modules, read attributes and
  * call what they hold. A `PyObject` is a handle into the interpreter, not a value of the program;
  * it is released when nothing refers to it any more, so there is nothing to dispose of by hand.
- * Values cross the boundary with `py_wrap` (a Camel value becomes a Python object of the matching
- * kind) and `py_unwrap` (a Python object becomes a value of the type it was wrapped from, or an
- * error value `PythonTypeError` that gives the path of the mismatch); both are in
- * `stdlib/signatures/python.cml`. A numeric array is converted by copy.
+ * Values cross the boundary by copy: `to_py` makes the Python object of a Camel value, in the
+ * Python form of its type, and `from_py` reads a Python object as a value of the type the call
+ * names.
+ *
+ * The Python form of a type:
+ *   - `bool`, the integer types, the float types and `string` are the Python scalars of the same
+ *     name, by value; `Bytes` is `bytes`;
+ *   - a tuple is a `tuple`, a struct a `dict` of its fields by name, an array a `list`, and a map
+ *     with string keys a `dict`, each of them by its parts;
+ *   - `PyObject` itself passes through as it is.
+ * What converts is a table, never whatever Python would accept: `bool` takes a bool only (not `5`),
+ * the integers take an int that fits and not a bool or a float, the floats take a float or an int
+ * and refuse a number the type cannot hold, `string` takes a str and not bytes.
  *
  * Python code can do anything, including write files and print, and the interpreter holds state
  * between calls. So no function here names a resource of its own: each is a use of everything, in
@@ -60,7 +69,7 @@ export func attr(obj: PyObject): PyObject!
 /// it can be bound once and applied again.
 /// @fails error value `PythonError` when the call raises
 /// @example-fragment the callable is a Python object from `attr`, which the page does not show
-/// @example [py_wrap(2.0)]->call<sqrt>
+/// @example [2.0->to_py !! eval('0')]->call<sqrt>
 with <fn: PyObject, kwargs: Map<string, PyObject>? = null>
 export func call(args: PyObject[]): PyObject!
 
@@ -68,3 +77,14 @@ export func call(args: PyObject[]): PyObject!
 /// @fails error value `PythonError` when `__str__` raises
 /// @example eval('[1, 2]')->to_string !! ''    // '[1, 2]'
 export func to_string(obj: PyObject): string!
+
+/// The Python object that stands for a Camel value, in the Python form of its type.
+/// @fails error value `PythonError` when the interpreter cannot make the object
+/// @example 2.0->to_py->to_string !! ''    // '2.0'
+export func to_py::<T>(x: T): PyObject!
+
+/// The Camel value of type T that a Python object holds. T is written at the call
+/// (`from_py::<int>(obj)`) or taken from the type of the position the call stands in.
+/// @fails error value `PythonTypeError` when the object does not have the type T (the message gives the path of the mismatch and what was found there); error value `PythonError` when reading it raises
+/// @example eval('1 + 2')->from_py::<int> !! 0    // 3
+export func from_py::<T>(obj: PyObject): T!

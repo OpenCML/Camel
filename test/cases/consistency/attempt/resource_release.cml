@@ -12,13 +12,20 @@
  * while it is still in use: 'release a' and 'release b' both appear, after the 'use' lines.
  */
 
-import { exec, import_module, attr, call, py_wrap, PyObject } from python
+import { exec, import_module, attr, call, to_py, PyObject } from python
 import { get_env } from env
 import { exit } from process
 
 // A Python call is an error value; these programs expect every call to succeed.
 func must(r: PyObject!): PyObject {
-    return r !! py_wrap('python failed')
+    return match r {
+        case error e => fail<'InvalidArgument'>(e.message)
+        case v => v
+    }
+}
+
+func wrap::<T>(x: T): PyObject {
+    return must(to_py(x))
 }
 
 // A name of the program's `__main__`, or of `builtins`.
@@ -32,7 +39,7 @@ func builtin(name: string): PyObject sync {
 
 func say(text: string): void sync {
     let print = builtin('print')
-    let _ = [py_wrap(text)]->call<print>
+    let _ = [wrap(text)]->call<print>
 }
 
 func touch(resource: PyObject): void sync {
@@ -43,7 +50,7 @@ func touch(resource: PyObject): void sync {
 
 func open_resource(name: string): PyObject sync {
     let resource = main_name('Resource')
-    return must([py_wrap(name)]->call<resource>)
+    return must([wrap(name)]->call<resource>)
 }
 
 func hold_and_fault(d: int): int sync {

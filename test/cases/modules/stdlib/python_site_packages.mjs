@@ -42,14 +42,14 @@ function run(program, env) {
 
 const probe = {
     name: 'probe',
-    text: `import { import_module, attr, py_unwrap, PyObject } from python
+    text: `import { import_module, attr, from_py, PyObject } from python
 
 func main(): int sync {
     let value = match import_module("camel_site_probe") {
         case error e => -1
         case m => match m->attr<"VALUE"> {
             case error e => -2
-            case v => py_unwrap(v as PyObject<int>) !! -3
+            case v => from_py::<int>(v) !! -3
         }
     }
     println(value)
@@ -61,16 +61,16 @@ func main(): int sync {
 // The Python this binary embeds, asked of the interpreter itself.
 const versionProbe = run({
     name: 'which_python',
-    text: `import { eval, py_unwrap, PyObject } from python
+    text: `import { eval, from_py, PyObject } from python
 
 func main(): int sync {
     let major = match eval("__import__('sys').version_info[0]") {
         case error e => -1
-        case v => py_unwrap(v as PyObject<int>) !! -1
+        case v => from_py::<int>(v) !! -1
     }
     let minor = match eval("__import__('sys').version_info[1]") {
         case error e => -1
-        case v => py_unwrap(v as PyObject<int>) !! -1
+        case v => from_py::<int>(v) !! -1
     }
     println(major, minor)
     return 0

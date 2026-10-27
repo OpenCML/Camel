@@ -960,13 +960,12 @@ expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "pyplot_type.cml:10:5", "argument types: <> (string)", "<pyplot:plot>: (data: float[]) => void"]
 #  ---- The declarations of `python` ----
 #
-# Seven of the nine operators have fixed signatures and are declared in stdlib/python.cml;
-# `py_wrap`/`py_unwrap` stay computed in C++ and are recorded in stdlib/signatures/python.cml. The calls are
+# The nine operators of `python` are declared in stdlib/python.cml. The calls are
 # compile-only: they type-check against the declarations and are never run.
 
 [[tests]]
 name = "native.python_declaration_import"
-desc = "`python`'s seven fixed operators are declared: `exec`, `eval`, `run_file`, `import_module`, `attr`, `call` and `to_string` type-check against `stdlib/python.cml`, and the case never runs them."
+desc = "`python`'s nine operators are declared: `exec`, `eval`, `run_file`, `import_module`, `attr`, `call`, `to_string`, `to_py` and `from_py` type-check against `stdlib/python.cml`, and the case never runs them."
 kind = "behavior"
 case = "../../../cases/compile/native/python_declaration_import.cml"
 args = ["${case}"]

@@ -3,22 +3,29 @@
  */
 
 // 最简 python 模块测试
-import { import_module, eval, attr, call, to_string, py_wrap, py_unwrap, PyObject } from python
+import { import_module, eval, attr, call, to_string, to_py, from_py, PyObject } from python
 
 // A Python call is an error value; these programs expect every call to succeed.
 func must(r: PyObject!): PyObject {
-    return r !! py_wrap('python failed')
+    return match r {
+        case error e => fail<'InvalidArgument'>(e.message)
+        case v => v
+    }
+}
+
+func wrap::<T>(x: T): PyObject {
+    return must(to_py(x))
 }
 
 func main(): int sync {
     println("=== Python Module Basic Tests ===")
 
-    println("\n[1] [py_wrap('hello')]->call<print>")
+    println("\n[1] [wrap('hello')]->call<print>")
     let print = must(import_module("builtins")->attr<"print">)
-    let _ = [py_wrap("hello")]->call<print>
+    let _ = [wrap("hello")]->call<print>
 
     println("\n[2] eval('1 + 2') -> py_unwrap as int")
-    let r = py_unwrap(must(eval("1 + 2")) as PyObject<int>) !! -1
+    let r = from_py::<int>(must(eval("1 + 2"))) !! -1
     '  1 + 2 = {}'->format<r>->println
 
     println("\n[3] to_string is the str() of the object")

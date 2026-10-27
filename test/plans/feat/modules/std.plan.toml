@@ -184,7 +184,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "python.errors"
-desc = "A Python exception is an error value of kind PythonError whose message starts with the exception class (a missing module, a missing attribute, a bad call, a syntax error), and py_unwrap refuses with PythonTypeError and a path when the object is not the kind asked for: 5 is not a bool, bytes is not a string, 1e300 is not an f32, True is not an int, 1.5 is not an int, and a list, tuple or dict must have the right elements."
+desc = "A Python exception is an error value of kind PythonError whose message starts with the exception class (a missing module, a missing attribute, a bad call, a syntax error), and from_py refuses with PythonTypeError and a path when the object is not the kind asked for: 5 is not a bool, bytes is not a string, 1e300 is not an f32, True is not an int, 1.5 is not an int, and a list, tuple or dict must have the right elements."
 kind = "behavior"
 case = "../../../cases/modules/std/python/errors.cml"
 args = ["${case}"]
