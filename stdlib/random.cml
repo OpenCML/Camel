@@ -120,9 +120,9 @@ with <shape: int[]>
 func normal_array_b(k: Key): bf16[..]
 
 /// An array of the given shape; element i (row-major) is the scalar `uniform` of `fold(k, i)`.
-/// @example key(42)->uniform_array::<f32><shape: [3, 4]>
+/// @example key(42)->uniform::<f32><shape: [3, 4]>
 with <shape: int[]>
-export func uniform_array::<T>(k: Key): T[..] when is_float::<T>() {
+export func uniform::<T>(k: Key): T[..] when is_float::<T>() {
     return match type T {
         case float => k->uniform_array_d<shape>
         case f32 => k->uniform_array_f<shape>
@@ -154,9 +154,9 @@ func below(k: Key, span: int): int {
 }
 
 /// An array of the given shape; element i (row-major) is the scalar `normal` of `fold(k, i)`.
-/// @example key(42)->normal_array::<f32><shape: [3, 4]>
+/// @example key(42)->normal::<f32><shape: [3, 4]>
 with <shape: int[]>
-export func normal_array::<T>(k: Key): T[..] when is_float::<T>() {
+export func normal::<T>(k: Key): T[..] when is_float::<T>() {
     return match type T {
         case float => k->normal_array_d<shape>
         case f32 => k->normal_array_f<shape>
@@ -180,7 +180,7 @@ export func randint(k: Key): int {
 /// uniform draw each (the key folded with the position), ties keeping position order. Empty when n is not positive.
 /// @example key(42)->permutation(4)
 export func permutation(k: Key, n: int): int[] {
-    return if n <= 0 then [] else argsort(k->uniform_array::<float><shape: [n]> as float[])
+    return if n <= 0 then [] else argsort(k->uniform::<float><shape: [n]> as float[])
 }
 
 /// The elements of xs in a random order, as a new array; xs is not changed.

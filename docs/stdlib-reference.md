@@ -3539,15 +3539,15 @@ A number drawn uniformly from 0 (included) to 1 (excluded).
 
 - Example: `key(42)->uniform::<f32>`
 
-#### `uniform_array`
+#### `uniform`
 
 ```camel
-uniform_array: <shape: int[]> (k: Key) => T[..] when is_float::<T>()
+uniform: <shape: int[]> (k: Key) => T[..] when is_float::<T>()
 ```
 
 An array of the given shape; element i (row-major) is the scalar `uniform` of `fold(k, i)`.
 
-- Example: `key(42)->uniform_array::<f32><shape: [3, 4]>`
+- Example: `key(42)->uniform::<f32><shape: [3, 4]>`
 
 #### `normal`
 
@@ -3559,15 +3559,15 @@ A number drawn from the normal distribution with mean 0 and deviation 1 (Box-Mul
 
 - Example: `key(42)->normal::<f32>`
 
-#### `normal_array`
+#### `normal`
 
 ```camel
-normal_array: <shape: int[]> (k: Key) => T[..] when is_float::<T>()
+normal: <shape: int[]> (k: Key) => T[..] when is_float::<T>()
 ```
 
 An array of the given shape; element i (row-major) is the scalar `normal` of `fold(k, i)`.
 
-- Example: `key(42)->normal_array::<f32><shape: [3, 4]>`
+- Example: `key(42)->normal::<f32><shape: [3, 4]>`
 
 #### `randint`
 
