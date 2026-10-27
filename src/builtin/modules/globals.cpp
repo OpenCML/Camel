@@ -2506,56 +2506,11 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
             }),
-        OperatorGroup::create(
-            "join",
-            {
-                {
-                    ":str/join",
-                    DynamicFuncTypeResolver::create(
-                        {{1, {false}}, {1, {false}}},
-                        "<sep: string> (xs: string[]) => string",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            if (!with[0]->equals(Type::String()))
-                                return nullopt;
-                            const auto &type = norm[0];
-                            if (type->code() != TypeCode::Array) {
-                                return nullopt;
-                            }
-                            const auto &arrType = tt::as_ptr<ArrayType>(type);
-                            if (arrType->elemType()->code() != TypeCode::String) {
-                                return nullopt;
-                            }
-                            return Type::String();
-                        }),
-                },
-            }),
+        // The rules of `join` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("join", {}),
         // ======= struct =======
-        OperatorGroup::create(
-            "len",
-            {
-                {
-                    ":struct/len_str",
-                    namedStaticSignature("x", Type::String(), Type::Int64()),
-                },
-                {
-                    ":struct/len_bytes",
-                    namedStaticSignature("x", BytesType::get(), Type::Int64()),
-                },
-                {
-                    ":struct/len_arr",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        // One position, one name: the collection rule below is `len(x: …)` too.
-                        "<> (x: T[]) => int",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            return Type::Int64();
-                        }),
-                },
-            }),
+        // The rules of `len` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("len", {}),
         // The elements a `for` takes from a string (design principles 11.1): its code points,
         // each a one-character string. The loop builder converts a string to that array once,
         // before the first round; a program does not write `__iter__` itself. A map adds its
@@ -2605,50 +2560,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
             }),
-        OperatorGroup::create(
-            "last",
-            {
-                {
-                    ":struct/last_arr",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "<> (xs: T[]) => T",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
-                            return arrType->elemType();
-                        }),
-                },
-            }),
-        OperatorGroup::create(
-            "range",
-            {
-                {
-                    ":struct/range",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {3, {false, false, false}}},
-                        "(start: int, end: int, step: int) => int[]",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            // `range(a, b, step)` is the integers `a`, `a + step`, ... below `b`; the interval
-                            // `a..b` is the step-1 case of it and lowers to exactly this call, `range(a, b, 1)`
-                            // (design principles 4.2). The two-argument spelling is gone, and the count below is
-                            // exactly three, so `range(a, b)` -- and any other arity -- is an ordinary no-match;
-                            // the interval keeps writing the step out so that this stays the only rule of the URI.
-                            if (norm.size() != 3) {
-                                return nullopt;
-                            }
-                            for (Type *type : norm) {
-                                if (type->code() != TypeCode::Int64) {
-                                    return nullopt;
-                                }
-                            }
-                            return ArrayType::create(Type::Int64());
-                        }),
-                },
-            }),
+        // The rules of `last` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("last", {}),
+        // The rules of `range` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("range", {}),
         OperatorGroup::create(
             "slice",
             {

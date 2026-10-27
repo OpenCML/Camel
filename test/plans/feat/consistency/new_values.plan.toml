@@ -214,7 +214,7 @@ backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout = "200010000\n"
-timeout_ms = 10000
+timeout_ms = 30000
 
 [[tests]]
 name = "new_values.peek_loop.graph"

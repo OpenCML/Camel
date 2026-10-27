@@ -482,21 +482,42 @@ The strings of xs joined with sep between them.
 
 ```camel
 len: (x: string) => int
-len: (x: T[..]) => int
+```
+
+The number of code points of a string.
+
+- Pure.
+- Example: `len('h€')` gives `2`
+
+#### `len`
+
+```camel
+len: (x: A) => int when is_array::<A>()
+```
+
+The length of the first dimension of an array of any rank.
+
+- Pure.
+- Example: `len([1, 2, 3])` gives `3`
+
+#### `len`
+
+```camel
 len: (x: Bytes) => int
 ```
 
-The number of code points of a string, of bytes of a `Bytes`, or the length of the first
-dimension of an array of any rank.
+The number of bytes of a `Bytes`.
 
-- Example: `len('h€')` gives `2`
+- Pure.
+- Example (a fragment, not compiled): `len(encode('h€'))` gives `4`
+- Why it is not compiled: the example builds its `Bytes` with `encode` from the `bytes` module, which this page does not import
 
 ### Arrays
 
 #### `range`
 
 ```camel
-range: (start: int, end: int, step: int = 1) => int[]
+range: (start: int, end: int, step: int) => int[]
 ```
 
 The integers of a step: `start`, `start + step`, ... up to, not including, `end`; with no step

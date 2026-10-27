@@ -19,7 +19,7 @@ Source: `docs/stdlib-reference.md`, generated from the declarations in `stdlib/*
 `node scripts/stdlib-reference.mjs --write`.
 
 <!-- camel-for-ai region: stdlib-signatures (generated from docs/stdlib-reference.md; node scripts/camel-for-ai.mjs --write) -->
-**`Built-in functions`** — no import — 63 name(s)
+**`Built-in functions`** — no import — 65 name(s)
 
 ```text
 std::mem::blocks: () => { allocs: int, frees: int, live: int, bytes: int }
@@ -51,9 +51,9 @@ eprintln: (x: T, ..rest) => T
 format: <..args> (fmt: string) => string
 join: <sep: string> (xs: string[]) => string
 len: (x: string) => int
-len: (x: T[..]) => int
+len: (x: A) => int when is_array::<A>()
 len: (x: Bytes) => int
-range: (start: int, end: int, step: int = 1) => int[]
+range: (start: int, end: int, step: int) => int[]
 last: (xs: T[]) => T
 slice: <axis: int, start: int, end: int, step: int = 1> (x: T[]) => T[]
 slice: <axis: int, start: int, end: int, step: int = 1> (x: string) => string

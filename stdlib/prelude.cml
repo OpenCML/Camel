@@ -23,7 +23,7 @@
  * names (stdlib-conventions.cn.md, section 4).
  */
 
-import { ElementOf, WithElement, is_complex, is_numeric, is_real, is_same, is_string } from types
+import { ElementOf, WithElement, is_array, is_complex, is_numeric, is_real, is_same, is_string } from types
 
 // An array of numbers or booleans (the element types an array stores compactly): the argument the
 // elementwise conversions below take.
@@ -243,14 +243,23 @@ export func format(fmt: string): string
 with <sep: string>
 export func join(xs: string[]): string
 
-/// The number of code points of a string, of bytes of a `Bytes`, or the length of the first
-/// dimension of an array of any rank.
+/// The number of code points of a string.
+/// @pure
 /// @example len('h€')    // 2
-#op(':struct/len_*')
+#op(':struct/len_str')
 export func len(x: string): int
-#op(':struct/len_*')
-export func len::<T>(x: T[..]): int
-#op(':struct/len_*')
+
+/// The length of the first dimension of an array of any rank.
+/// @pure
+/// @example len([1, 2, 3])    // 3
+#op(':struct/len_arr')
+export func len::<A>(x: A): int when is_array::<A>()
+
+/// The number of bytes of a `Bytes`.
+/// @pure
+/// @example len(encode('h€'))    // 4
+/// @example-fragment the example builds its `Bytes` with `encode` from the `bytes` module, which this page does not import
+#op(':struct/len_bytes')
 export func len(x: Bytes): int
 
 // ---- arrays ----
@@ -266,7 +275,7 @@ export func len(x: Bytes): int
 /// @example range(10, 0, -3)    // [10, 7, 4, 1]
 /// @example-fragment the interval is written `a..b`; the stepped form is `range(a, b, step)`
 #op(':struct/range')
-export func range(start: int, end: int, step: int = 1): int[]
+export func range(start: int, end: int, step: int): int[]
 
 /// The last element. An empty array has none: check len first. Negative indices are not
 /// counted from the end (a negative index is a fault), so this is how the last element is
