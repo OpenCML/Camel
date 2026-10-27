@@ -82,8 +82,8 @@ digraph GraphIR {
         N28 [label="JOIN", type="JOIN", role="branch-contract", origin=<ORIGIN>, span="23:50-23:52", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="string"];
         N29 [label="BRCH", type="BRCH", origin=<ORIGIN>, span="23:50-23:52", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="int"];
         N2A [label="Function(graph=__g_4__, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="23:57-23:99", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="(t: f32[..]) => f32[..] pure"];
-        N2B [label="[]", type="DATA", origin=<ORIGIN>, span="47:42-47:44", srcfile="<ROOT>/out/latest/stdlib/onnx.cml", value_type="[]"];
-        N2C [label="onnxruntime-cpu", type="DATA", origin=<ORIGIN>, span="47:63-47:80", srcfile="<ROOT>/out/latest/stdlib/onnx.cml", value_type="string"];
+        N2B [label="[]", type="DATA", origin=<ORIGIN>, span="50:41-50:43", srcfile="<ROOT>/out/latest/stdlib/onnx.cml", value_type="int[]"];
+        N2C [label="onnxruntime-cpu", type="DATA", origin=<ORIGIN>, span="50:62-50:79", srcfile="<ROOT>/out/latest/stdlib/onnx.cml", value_type="string"];
         N2D [label="onnx:export_model", type="OPER", role="effect;export-capability", origin=<ORIGIN>, span="23:24-23:56", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="void!"];
         N2E [label="exported", type="DATA", origin=<ORIGIN>, span="24:12-24:22", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="string"];
         N2F [label=":io/println", type="OPER", role="effect;export-capability", origin=<ORIGIN>, span="24:4-24:11", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="string"];

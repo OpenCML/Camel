@@ -239,7 +239,7 @@ conversion as bf16, at the other reduced precision (design principles 7.3).
 #### `i32`
 
 ```camel
-i32: (x: number[]) => i32[..]
+i32: (x: T[]) => i32[..] when is_numeric::<T>()
 ```
 
 The conversion `i32` applied to every element of a numeric array: the result has the input's extents and element type `i32`. A scalar converts by the declaration above.
@@ -250,7 +250,7 @@ The conversion `i32` applied to every element of a numeric array: the result has
 #### `i64`
 
 ```camel
-i64: (x: number[]) => int64[..]
+i64: (x: T[]) => int[..] when is_numeric::<T>()
 ```
 
 The conversion `i64` applied to every element of a numeric array: the result has the input's extents and element type `int64`. A scalar converts by the declaration above.
@@ -261,7 +261,7 @@ The conversion `i64` applied to every element of a numeric array: the result has
 #### `int`
 
 ```camel
-int: (x: number[]) => int64[..]
+int: (x: T[]) => int[..] when is_numeric::<T>()
 ```
 
 The conversion `int` applied to every element of a numeric array: the result has the input's extents and element type `int64`. A scalar converts by the declaration above.
@@ -272,7 +272,7 @@ The conversion `int` applied to every element of a numeric array: the result has
 #### `f32`
 
 ```camel
-f32: (x: number[]) => f32[..]
+f32: (x: T[]) => f32[..] when is_numeric::<T>()
 ```
 
 The conversion `f32` applied to every element of a numeric array: the result has the input's extents and element type `f32`. A scalar converts by the declaration above.
@@ -283,7 +283,7 @@ The conversion `f32` applied to every element of a numeric array: the result has
 #### `f64`
 
 ```camel
-f64: (x: number[]) => f64[..]
+f64: (x: T[]) => float[..] when is_numeric::<T>()
 ```
 
 The conversion `f64` applied to every element of a numeric array: the result has the input's extents and element type `f64`. A scalar converts by the declaration above.
@@ -294,7 +294,7 @@ The conversion `f64` applied to every element of a numeric array: the result has
 #### `float`
 
 ```camel
-float: (x: number[]) => f64[..]
+float: (x: T[]) => float[..] when is_numeric::<T>()
 ```
 
 The conversion `float` applied to every element of a numeric array: the result has the input's extents and element type `f64`. A scalar converts by the declaration above.
@@ -305,7 +305,7 @@ The conversion `float` applied to every element of a numeric array: the result h
 #### `bf16`
 
 ```camel
-bf16: (x: number[]) => bf16[..]
+bf16: (x: T[]) => bf16[..] when is_numeric::<T>()
 ```
 
 The conversion `bf16` applied to every element of a numeric array: the result has the input's extents and element type `bf16`. A scalar converts by the declaration above. A conversion into `bf16` or `f16` rounds (to nearest, ties to even); writing it asks for that precision, so it needs no numeric permission (`change_precision` governs a computation the compiler moves to lower precision, design principles 7.2-7.3).
@@ -316,7 +316,7 @@ The conversion `bf16` applied to every element of a numeric array: the result ha
 #### `f16`
 
 ```camel
-f16: (x: number[]) => f16[..]
+f16: (x: T[]) => f16[..] when is_numeric::<T>()
 ```
 
 The conversion `f16` applied to every element of a numeric array: the result has the input's extents and element type `f16`. A scalar converts by the declaration above. A conversion into `bf16` or `f16` rounds (to nearest, ties to even); writing it asks for that precision, so it needs no numeric permission (`change_precision` governs a computation the compiler moves to lower precision, design principles 7.2-7.3).

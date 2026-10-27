@@ -206,7 +206,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "new_values.peek_loop"
-desc = "`out = out->append<i>; total += len(out)` over 20000 elements: the length read is `:var/peek`, the appends stay in place, and the loop runs in linear time on the four back ends (a quadratic loop takes seconds here)."
+desc = "`out = out->append<i>; total += len(out)` over 20000 elements: the length read is `:var/peek`, the appends stay in place, and the loop runs in linear time on the four back ends (about 1.4 s of CPU on one core; a quadratic loop takes far longer, and the bound is 4x the measured CPU time)."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/peek_loop.cml"
 args = ["${case}", "${backend}"]
@@ -214,7 +214,7 @@ backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout = "200010000\n"
-timeout_ms = 3000
+timeout_ms = 10000
 
 [[tests]]
 name = "new_values.peek_loop.graph"

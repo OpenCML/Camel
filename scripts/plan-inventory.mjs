@@ -279,7 +279,9 @@ const CASE_ROOT = 'test/cases'
 // wrote it, which is not a plan. Interpreter caches that are hidden directories (`.pytest_cache`,
 // `.mypy_cache`) are already skipped with the hidden files, and no other directory of this kind
 // exists in the tree.
-const PYTHON_CACHE = /(^|\/)__pycache__\//
+// A `tmp` directory is a test's scratch space (a dataset a case downloads, a plot it writes): no
+// commit carries one (`git ls-files` holds no path with a `tmp` segment), so it is not a case.
+const PYTHON_CACHE = /(^|\/)(__pycache__|tmp)\//
 const CASE_REFERENCE_KEYS = new Set(['case', 'verify_script_path', 'compare_to', 'golden', 'args', 'envs', 'plans'])
 
 // A plan is an index of the cases it runs, and `test/plan-selection.json` is an index of the
