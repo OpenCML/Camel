@@ -380,6 +380,19 @@ void GraphDraft::appendInput(
         if (already) {
             return;
         }
+        if (kind == DraftEdgeKind::Sync) {
+            const auto present = inputsOf(userId, kind, role);
+            if (!present.empty()) {
+                // A sync edge is one link of one chain: a statement is written directly after one
+                // other statement, so a node takes one sync predecessor (setSyncInputs, and the
+                // seal check of docs/design/effects/edges.cn.md 4.6, refuse a second).
+                throw std::logic_error(std::format(
+                    "A statement of a sync block already follows node {}, so it cannot follow node "
+                    "{} as well.",
+                    present[0],
+                    inputId));
+            }
+        }
     }
     appendInputEntry(userId, slot, inputId);
     appendUserRef(inputId, userId, slot);

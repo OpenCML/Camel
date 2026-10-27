@@ -483,9 +483,9 @@ const runtime::Program *outlineRegions(
             // written around the segment keep their order against it; erasing the members then
             // closes the chains over the call. What a replaced statement was ordered by, and what
             // it ordered, goes to the call in every kind that carries that order: the sync kind and
-            // the order kind (takeStatementPlace), and the control kind that still names the same
-            // pair beside the sync one while it exists (docs/design/effects/edges.cn.md 4,
-            // src/runtime/draft.cpp closeChainOver). An effect written around the segment is
+            // the order kind (takeStatementPlace), and the control kind, which closeChainOver writes
+            // beside the sync one and which this outline moves itself below
+            // (docs/design/effects/edges.cn.md 4). An effect written around the segment is
             // ordered by this edge alone, so a kind left behind takes the effect with it: with no
             // edge to the graph it is not executed, and the statement it observed is not
             // transferred either.

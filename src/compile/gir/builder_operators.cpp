@@ -4123,9 +4123,9 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
     }
 
     if (synced_) {
-        if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, targetNode)) {
-            linkNodes(LinkType::Ctrl, lastSyncedNode_, targetNode);
-        }
+        // The call is a statement of the block: the statement written before it follows into it by
+        // a sync edge (the control edge the kind names the same pair with goes beside it).
+        linkSyncStatement(lastSyncedNode_, targetNode);
         lastSyncedNode_ = targetNode;
         chainedNodes_.insert(targetNode);
     }

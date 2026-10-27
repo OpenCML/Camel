@@ -19,6 +19,13 @@ bool bypassValueGate(GraphDraft &draft, gc_node_ref_t id, size_t &edgeBudget) {
         draft.ctrlInputsOf(id).empty()) {
         return false;
     }
+    // A gate that waits through the sync edge of a block's chain carries that chain: the statements
+    // before it run because the graph's result is reached through them (docs/design/effects/
+    // edges.cn.md 2 and 5.3), so moving its wait to its consumers steps over them. It stays, the
+    // way the gate a function returns through stays (isFoldable, generic.cpp).
+    if (!draft.syncInputsOf(id).empty()) {
+        return false;
+    }
     const size_t valueUses = draft.normUsersOf(id).size() + draft.withUsersOf(id).size();
     const size_t allUses   = valueUses + draft.ctrlUsersOf(id).size();
     // Unread gates have their own DCE rule. Bound both local inspection and potential fanout

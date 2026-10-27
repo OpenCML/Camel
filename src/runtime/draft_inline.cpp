@@ -1316,30 +1316,6 @@ bool splicedBodyNeedsOrder(const GraphDraft &draft, gc_node_ref_t id) {
     return !nodeIsFreelySchedulable(draft, id);
 }
 
-/// The innermost control region a region lies in (or is): an arm of a branch, a part of a loop.
-/// Everything else (the graph's own frame and the regions that only annotate where a node came
-/// from: Inline, Block) is looked through, which is the notion the region rules and the layout use
-/// (camel/runtime/control_regions.h).
-bool isControlRegionKind(GCRegionKind kind) {
-    return kind == GCRegionKind::Arm || kind == GCRegionKind::LoopCond ||
-           kind == GCRegionKind::LoopBody;
-}
-
-/// The control region a node's region lies in, 0 for the graph's own frame. An ordering never
-/// leaves the region that holds it (docs/design/effects/edges.cn.md 4), so this is the boundary
-/// an order edge of the splice may not cross.
-uint32_t controlRegionOf(const GraphDraft &draft, gc_node_ref_t id) {
-    uint32_t region = draft.nodeRegion(id);
-    while (region != 0) {
-        const GCRegion &enclosing = draft.region(region);
-        if (isControlRegionKind(enclosing.kind)) {
-            return region;
-        }
-        region = enclosing.parent;
-    }
-    return 0;
-}
-
 /// The node that takes the call's place in the chain of its block (docs/design/effects/edges.cn.md
 /// 5.7): the body's result, when the splice made it and nothing has written it into a chain yet. A
 /// node the caller brought in (a forwarded argument, a constant) is not the splice's to make one
@@ -1925,6 +1901,54 @@ DraftInlineResult inlineCallableInDraft(
         const gc_node_ref_t chainAnchor =
             spliceChainAnchor(draft, slotsBefore, result.valueExit, draft.nodeRegion(funcNodeId));
         draft.takeStatementPlace(funcNodeId, chainAnchor);
+        // 5.7: the caller's chain reaches the body's result by a sync edge. The body's statements are
+        // reached from the graph's result through that chain (2), so the place the call had is handed
+        // to the tail of the body's chain -- the statement the body's value reads, or the last
+        // statement that stands in the body's chain -- rather than closed over the call. Closing it
+        // over the call steps over the body, and a body whose value nothing reads (a call whose result
+        // is unused) then keeps its statements reached by nothing.
+        const auto inBody  = [&](gc_node_ref_t n) { return n >= slotsBefore; };
+        const auto related = [&](gc_node_ref_t n) {
+            return draft.regionWithin(draft.nodeRegion(n), draft.nodeRegion(funcNodeId)) ||
+                   draft.regionWithin(draft.nodeRegion(funcNodeId), draft.nodeRegion(n));
+        };
+        // The body's result reads the tail of the body's chain: with the value standing in a chain of
+        // its own, the caller's chain reaches the value itself and the body's tail stays on it
+        // (edges.cn.md 5.3). A value that carries no chain (a constant) leaves the chain ending at the
+        // body's last statement, so that statement takes the place instead.
+        gc_node_ref_t bodyTail = kInvalidNodeRef;
+        bool valueInChain      = false;
+        for (gc_node_ref_t pred : draft.syncInputsOf(result.valueExit)) {
+            if (inBody(pred) && related(pred)) {
+                valueInChain = true;
+                break;
+            }
+        }
+        if (valueInChain) {
+            bodyTail = result.valueExit;
+        }
+        for (gc_node_ref_t n = static_cast<gc_node_ref_t>(slotsBefore);
+             bodyTail == kInvalidNodeRef && n < draft.nodeSlotCount();
+             ++n) {
+            const auto *h = draft.header(n);
+            if (!draft.alive(n) || !related(n) || h == nullptr ||
+                (h->runtimeFlags & camel::runtime::kGCNodeFlagSyncStatement) == 0) {
+                continue;
+            }
+            bool followed = false;
+            for (gc_node_ref_t user : draft.syncUsersOf(n)) {
+                if (inBody(user)) {
+                    followed = true;
+                    break;
+                }
+            }
+            if (!followed) {
+                bodyTail = n;
+            }
+        }
+        if (bodyTail != kInvalidNodeRef) {
+            draft.handChainPlaceTo(funcNodeId, bodyTail);
+        }
     }
     // The statements written directly after the call keep their place in the chain of the block
     // they are written in: the call is gone, so they follow what the call followed. They do not

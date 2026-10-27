@@ -35,13 +35,13 @@ const CASES = {
         old: 'sys',
         now: 'env',
         file: 'env_identity.cml',
-        expected: 'f907be16febdf9fd649a1f41c7b8dff2f6ea5cec0f51e657c2322c5b5e07dfb8',
+        expected: '0e6a6004eb35c4dc95cfdb7728223be195ace3626a91ee9fe66364e5bde838d5',
     },
     process: {
         old: 'os',
         now: 'process',
         file: 'process_identity.cml',
-        expected: 'c5c8874afa38fdfec998971f97ce713e6d71cdce122960d399d3efcb9a5e1326',
+        expected: '62a5ec2d39f630ea23abc5e8002538703f9f29918dffe9b84d7ec6ae0c7b1360',
     },
 }
 

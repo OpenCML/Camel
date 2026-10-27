@@ -66,6 +66,7 @@ digraph GraphIR {
         N14 -> N15 [label="0|0", type="NORM"];
         N16 -> N17 [label="0|0", type="NORM"];
         N15 -> N17 [label="0|0", type="CTRL", style=dashed, arrowhead=empty];
+        N15 -> N17 [label="SYNC", type="SYNC", style=solid, arrowhead=diamond];
     }
     O00 [label="EXIT", type="EXIT", style=dashed, shape=circle];
     N18 [label="Functio\nn(gr...", type="DATA", shape=circle, style=solid, value_type="() => int uses stdout", origin=<ORIGIN>, span="17:0-21:1", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="Function(graph=main, tupleSlots=0)\n__root__::node#n0"];

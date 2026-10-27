@@ -1285,6 +1285,35 @@ void GraphDraft::appendInputEntry(gc_node_ref_t userId, DraftEdgeSlot slot, gc_n
     slotCountRef(h, slot)++;
 }
 
+uint32_t controlRegionOf(const GraphDraft &draft, gc_node_ref_t id) {
+    uint32_t region = draft.nodeRegion(id);
+    while (region != 0) {
+        const GCRegion &enclosing = draft.region(region);
+        if (enclosing.kind == GCRegionKind::Arm || enclosing.kind == GCRegionKind::LoopCond ||
+            enclosing.kind == GCRegionKind::LoopBody) {
+            return region;
+        }
+        region = enclosing.parent;
+    }
+    return 0;
+}
+
+/// The region a node's code is written in, with the region a splice gave the code it moved (Inline)
+/// looked through: that code is the code of the block it was moved into (docs/design/effects/
+/// edges.cn.md 5.7), so the region annotating it is not a block of its own. Nothing else is looked
+/// through: a region that holds code of its own -- an arm, a part of a loop -- separates blocks.
+uint32_t statementRegionOf(const GraphDraft &draft, gc_node_ref_t id) {
+    uint32_t region = draft.nodeRegion(id);
+    while (region != 0 && draft.region(region).kind == GCRegionKind::Inline) {
+        region = draft.region(region).parent;
+    }
+    return region;
+}
+
+bool sameSyncBlock(const GraphDraft &draft, gc_node_ref_t a, gc_node_ref_t b) {
+    return statementRegionOf(draft, a) == statementRegionOf(draft, b);
+}
+
 void GraphDraft::closeChainOver(gc_node_ref_t id) {
     requireOneWriting("closeChainOver");
     ++mutations_;
@@ -1314,13 +1343,25 @@ void GraphDraft::closeChainOver(gc_node_ref_t id) {
         if (user == id || !alive(user)) {
             continue;
         }
+// A sync edge joins two statements of one block, so a predecessor of the node this chain
+        // closes over that belongs to another block cannot become the successor's predecessor: the
+        // successor heads its own block's chain instead (docs/design/effects/edges.cn.md 4.6). The
+        // code a splice moved into this block (the body of an inlined call) is a statement of it
+        // (section 5.7), so the region a node was annotated with is looked through and the block a
+        // statement is written in is what decides (statementRegionOf). The node the chain closes
+        // over, and the user itself, are no predecessors of the user either.
         std::vector<gc_node_ref_t> kept;
         for (gc_node_ref_t pred : syncInputs) {
-            if (survives(pred, user)) {
+            if (pred != user && pred != id && alive(pred) && sameSyncBlock(*this, pred, user)) {
                 kept.push_back(pred);
             }
         }
         setSyncInputs(user, kept);
+        // The control edge names the same pair beside the sync edge: every consumer of the chain
+        // that reads only that kind has to keep reading it, and the seal check reads the sync edge
+        // back against the control one (src/runtime/graph_edges.cpp, `checkSyncEdges`). The edge is
+        // written rather than inferred, because the path through the node this chain closes over is
+        // the one about to disappear.
         for (gc_node_ref_t pred : kept) {
             nameControlPair(user, pred);
         }
@@ -1401,7 +1442,7 @@ void GraphDraft::handChainPlaceTo(gc_node_ref_t id, gc_node_ref_t tail) {
     markStatement(tail);
     // The statements written after `id` are written after the code that replaced it: they were
     // waiting on the place `id` had, and that place is `tail`'s now. The edge is written in both
-    // kinds while the control kind exists (src/runtime/graph_edges.cpp, `checkSyncEdges`).
+    // kinds the ordering is carried as (src/runtime/graph_edges.cpp, `checkSyncEdges`).
     for (gc_node_ref_t user : users) {
         if (user != tail && alive(user)) {
             chainTo(user, tail);
@@ -1513,7 +1554,7 @@ void GraphDraft::takeStatementPlace(gc_node_ref_t oldId, gc_node_ref_t newId) {
         // Nothing stood in a chain, so there is no chain place to take.
         return;
     }
-    if (!sameRegion) {
+    if (!sameSyncBlock(*this, oldId, newId)) {
         // The replacer is not a statement of the block the replaced one was written in: the chain
         // closes over the replaced node instead (closeChainOver).
         return;
@@ -1545,7 +1586,7 @@ void GraphDraft::takeStatementPlace(gc_node_ref_t oldId, gc_node_ref_t newId) {
         }
     }
     for (gc_node_ref_t user : users) {
-        if (user == newId || !alive(user) || nodeRegion(user) != nodeRegion(newId)) {
+        if (user == newId || !alive(user) || !sameSyncBlock(*this, user, newId)) {
             continue;
         }
         const gc_node_ref_t only[1] = {newId};
