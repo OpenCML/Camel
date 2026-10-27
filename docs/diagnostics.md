@@ -4265,7 +4265,6 @@ A requirement names a permission of design principles 7.2: reassociate, contract
 
 ```camel
 /// A requirement that names no permission: reported at the argument, where it is written.
-module err_requires_unknown
 import { rewrite } from rewrite
 
 #requires(reassociate2)
@@ -5813,8 +5812,6 @@ A rule's condition decides whether the rule applies to a redex, and the engine e
 **Example** (`test/cases/modules/rules/condition_rewrite.cml`, run as `camel test/cases/modules/rules/condition_rewrite.cml`)
 
 ```camel
-module condition_rewrite
-
 import { rewrite } from rewrite
 
 rule add_zero(x: int) when publish_now() { x + 0 => x }
@@ -6396,7 +6393,6 @@ A fact is computed once for the arguments it is queried with, and two different 
 **Example** (`test/cases/modules/rules/fact_arg_not_constant.cml`, run as `camel test/cases/modules/rules/fact_arg_not_constant.cml`)
 
 ```camel
-module fact_arg_not_constant
 import { Node } from graph
 import { max } from math
 import { rewrite } from rewrite
@@ -7128,7 +7124,6 @@ A rule whose declaration writes `with` parameters is a function of them, and onl
 **Example** (`test/cases/modules/rules/err_rule_with_unbound.cml`, run as `camel test/cases/modules/rules/err_rule_with_unbound.cml std::nvm`)
 
 ```camel
-module err_rule_with_unbound
 import { rewrite } from rewrite
 
 with <shift: int>
@@ -7167,8 +7162,6 @@ node_of reaches the node of a const parameter, so that a condition can read a fa
 **Example** (`test/cases/modules/rules/node_of_misuse.cml`, run as `camel test/cases/modules/rules/node_of_misuse.cml std::nvm`)
 
 ```camel
-module node_of_misuse
-
 import { Node } from graph
 import { rewrite } from rewrite
 
@@ -7542,8 +7535,6 @@ A `const` parameter means the left side matches a constant there: in the rule r(
 **Example** (`test/cases/modules/rules/const_param_unbound.cml`, run as `camel test/cases/modules/rules/const_param_unbound.cml const_param_unbound::apply std::nvm`)
 
 ```camel
-module const_param_unbound
-
 import { Node, type_of, type_name } from graph
 import { rewrite } from rewrite
 
@@ -7869,8 +7860,6 @@ A rule's `with` value is part of what selects the instance the rule's sides and 
 **Example** (`test/cases/modules/rules/err_rule_with_not_constant.cml`, run as `camel test/cases/modules/rules/err_rule_with_not_constant.cml std::nvm`)
 
 ```camel
-module err_rule_with_not_constant
-
 import { rewrite } from rewrite
 
 with <tile: int>

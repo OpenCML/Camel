@@ -307,7 +307,7 @@ position of the call. `return error(...)` hands it out of a function declared `T
 #### `print`
 
 ```camel
-print: (x: T, ...rest: U...) => T
+print: (x: T, ..rest) => T
 ```
 
 Writes the arguments, separated by spaces, without a line end, and gives back the first one
@@ -320,7 +320,7 @@ also without a line end.
 #### `println`
 
 ```camel
-println: (x: T, ...rest: U...) => T
+println: (x: T, ..rest) => T
 ```
 
 Writes the arguments, separated by spaces, and a line end, and gives back the first one (so
@@ -333,7 +333,7 @@ one line end.
 #### `eprintln`
 
 ```camel
-eprintln: (x: T, ...rest: U...) => T
+eprintln: (x: T, ..rest) => T
 ```
 
 Writes the arguments, separated by spaces, and a line end, to standard error, and gives back
@@ -348,7 +348,7 @@ arguments put in and one line end.
 #### `format`
 
 ```camel
-format: <...args: T...> (fmt: string) => string
+format: <args: T[]> (fmt: string) => string
 ```
 
 The text fmt with each `{}` placeholder replaced by the next argument; placeholders take
@@ -394,7 +394,7 @@ dimension of an array of any rank.
 #### `range`
 
 ```camel
-range: (start: int, end: int, step?: int) => int[]
+range: (start: int, end: int, step: int = 1) => int[]
 ```
 
 The integers of a step: `start`, `start + step`, ... up to, not including, `end`; with no step
@@ -590,7 +590,7 @@ into an error value whose kind is the name in the angle brackets.
 #### `attempt`
 
 ```camel
-attempt: (f: (...args: A) => T) => (...args: A) => T!
+attempt: (f: F) => F!
 ```
 
 The function f with the faults of its calls turned into error values: `attempt(f)` takes the
@@ -4576,6 +4576,27 @@ libraries written in Camel (for example `array`); the imports are declared and b
 
 ### The graphs of a function
 
+#### `graph_of`
+
+```camel
+graph_of: (f: F) => Graph when is_function::<F>()
+```
+
+The graph of a function value: its body.
+
+- Example: `graph_of((x: int): int => x + 1)`
+
+#### `graphs_of`
+
+```camel
+graphs_of: (f: F) => Graph[] when is_function::<F>()
+```
+
+The graph of a function value and every graph it calls, directly or not, in the order of
+their ids; each graph once.
+
+- Example: `len(graphs_of((x: int): int => x + 1))`
+
 #### `name`
 
 ```camel
@@ -4912,6 +4933,18 @@ The numeric permissions the program granted the node, as a bit set (0 for none).
 
 ### Transactions
 
+#### `open`
+
+```camel
+open: (f: F) => Txn<F> when is_function::<F>()
+```
+
+Opens a transaction on a function: a private workspace in which its graphs are edited.
+Nothing changes until `commit`.
+
+- Example (a fragment, not compiled): `let t = open((x: int): int => x + 1)`
+- Why it is not compiled: the transaction is closed by commit or abort
+
 #### `replace`
 
 ```camel
@@ -5008,6 +5041,61 @@ The module also exports the reserved groups the language's own `rule`, `rule` wi
 `fact` declarations compile to (`rewrite:rule`, `rewrite:rule_when`, `rewrite:fact`). They have
 no callable Camel name, so they are not declared here.
 
+### The passes
+
+#### `rewrite`
+
+```camel
+rewrite: <rules: Rule[], strict: bool = false> (f: F) => F! when is_function::<F>()
+```
+
+Applies `rules` until no rule changes the function, and gives the rewritten function.
+
+- Failure: error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow.
+- Example (a fragment, not compiled): `f->rewrite<rules>`
+- Why it is not compiled: a rule set comes from the caller
+
+#### `saturate`
+
+```camel
+saturate: <rules: Rule[], rounds: int = 6, strict: bool = false> (f: F) => F! when is_function::<F>()
+```
+
+Applies the rearranging rules too, for at most `rounds` rounds, and leaves the function with
+every writing the saturation found; `extract` chooses among them.
+
+- Failure: error value `RuleInvalid` when a rule does not compile.
+- Example (a fragment, not compiled): `f->saturate<rules, rounds: 20>`
+- Why it is not compiled: a rule set comes from the caller
+
+#### `extract`
+
+```camel
+extract: <cost: (o: Op, inputs: float[]) => float> (f: F) => F! when is_function::<F>()
+```
+
+Chooses one writing of every value that has several, the one of least total cost. The cost of
+a writing is `cost(o, inputs)`: the operator and the costs of the writings of its inputs.
+
+- Example (a fragment, not compiled): `f->extract<rules::nodes>`
+- Why it is not compiled: the cost function comes from `rules`
+
+#### `run`
+
+```camel
+run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false> (f: F) => Run<F>! when is_function::<F>()
+```
+
+Applies `rules` one way, for at most `rounds` rounds, and gives the function it produced and
+what the application cost. This is `rewrite` with the round budget explicit and the cost kept.
+`explain: true` opens the attribution record (rewrite design 8.7): `explain` then reads back
+the shortest chain between two values, and `explain_all` every rewrite that was made.
+Recording is off unless it is asked for, so a plain application pays nothing for it.
+
+- Failure: error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow.
+- Example (a fragment, not compiled): `f->run<rules, rounds: 8, explain: true>`
+- Why it is not compiled: a rule set comes from the caller
+
 ### Checking rules
 
 #### `check`
@@ -5025,6 +5113,18 @@ checked at the types every operator group registered.
 
 - Example (a fragment, not compiled): `rules->check<samples: 1000, seed: 7>`
 - Why it is not compiled: a rule set comes from the caller
+
+#### `check`
+
+```camel
+check: <over: F, samples: int = 100, seed: int = 0> (rules: Rule[]) => CheckReport when is_function::<F>()
+```
+
+The same, with the law also checked at the types of the values `over` has, each once, in the
+order its graphs write them.
+
+- Example (a fragment, not compiled): `rules->check<over: f>`
+- Why it is not compiled: a rule set and a function come from the caller
 
 #### `check_text`
 
@@ -5273,6 +5373,17 @@ memory.
 
 - Failure: error value `DeviceUnavailable` when this build or this machine has no CUDA device.
 - Example: `device() !! 'no device'`
+
+#### `compile`
+
+```camel
+compile: (f: F) => F! uses driver when is_function::<F>()
+```
+
+Outlines the regions the device can run, compiles them and executes the program; the card is
+chosen at run time with `--devices`, never by a pass parameter.
+
+- Failure: error value `GpuScopeUnsupported` when a `#gpu` scope holds an operator the device cannot run (the error names the operator and the scope).
 
 <a id="pyplot"></a>
 
