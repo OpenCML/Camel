@@ -211,8 +211,8 @@ ${body}
     m = edit(MAIN.replace('import { now } from time', 'import { now } from time\nimport math')
         .replace('    return 0\n}', '    let r = math::abs(/*m*/1)\n    return 0\n}'))
     sh = await help(m, 'm')
-    check(sh !== null && sh.signatures.some((s) => s.label.includes('abs: (x: i32) => i32')),
-        'signature help on a declared member of a migrated module', sh)
+    check(sh !== null && sh.signatures.some((s) => s.label.includes('abs: (x: T) => T')),
+        'signature help on a generic member of a migrated module, one signature per declaration', sh)
 
     // ---- rename ----
     edit(MAIN)

@@ -898,6 +898,12 @@ class ModelBuilder {
                     }
                 }
             }
+        } else if (EntityAccess::isGenericTemplate(entity)) {
+            // A generic function of Camel (`math::abs`, `array::take`): one signature per
+            // declaration, the type variables as the declaration writes them.
+            for (const std::string &signature : camel::compile::gir::genericSignaturesOf(entity)) {
+                ext.signatures.push_back(sourceSpelling(signature));
+            }
         } else if (EntityAccess::isDecoratedGraph(entity)) {
             const auto &graph = EntityAccess::decoratedGraph(entity);
             if (graph && graph->funcType()) {

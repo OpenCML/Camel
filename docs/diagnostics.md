@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-292 diagnostics: 272 errors, 20 warnings. 15 carry a machine-applicable edit, 277 say why they carry none.
+291 diagnostics: 271 errors, 20 warnings. 15 carry a machine-applicable edit, 276 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -71,7 +71,6 @@ prints one entry.
 | `0x0300001C` | [SemanticDiag::ArgumentsRejected](#argumentsrejected) | Error | no |
 | `0x0300001D` | [SemanticDiag::ImmutablePassedToVarParam](#immutablepassedtovarparam) | Error | no |
 | `0x0300001E` | [SemanticDiag::AssignmentTargetNotVariable](#assignmenttargetnotvariable) | Error | no |
-| `0x0300001F` | [SemanticDiag::ConstructNotSupported](#constructnotsupported) | Error | no |
 | `0x03000020` | [SemanticDiag::InvalidTypeArgument](#invalidtypeargument) | Error | no |
 | `0x03000021` | [SemanticDiag::ArgumentNeedsConversion](#argumentneedsconversion) | Error | no |
 | `0x03000022` | [SemanticDiag::ReturnNeedsConversion](#returnneedsconversion) | Error | no |
@@ -1996,37 +1995,6 @@ func point(): P {
 
 func main(): int sync {
     point().x = 9
-    return 0
-}
-```
-
-### ConstructNotSupported
-
-`0x0300001F` · Error · `SemanticDiag::ConstructNotSupported`
-
-**Fix**
-
-None: context: the construct is not built here, so the program has to be restructured and there is no one text to write
-
-**Message**
-
-```text
-'{0}' is not supported: {1}.
-```
-
-**Help**
-
-```text
-The grammar accepts this construct, but the compiler does not implement it. Remove it; nothing in the language replaces it yet.
-```
-
-**Example** (`test/cases/compile/module_imports/d2_value.cml`, run as `camel -E short test/cases/compile/module_imports/d2_value.cml`)
-
-```camel
-import { pi } from mi_values
-
-func main(): int sync {
-    println(pi)
     return 0
 }
 ```

@@ -49,11 +49,11 @@ enum class SemanticDiag : uint32_t {
     ArgumentsRejected           = 0x00001C,
     ImmutablePassedToVarParam   = 0x00001D,
     AssignmentTargetNotVariable = 0x00001E,
-    ConstructNotSupported       = 0x00001F,
-    InvalidTypeArgument         = 0x000020,
-    NativeTypeNotProvided       = 0x0001FD,
-    ArgumentNeedsConversion     = 0x000021,
-    ReturnNeedsConversion       = 0x000022,
+    // 0x00001F: empty. The number is not reused.
+    InvalidTypeArgument     = 0x000020,
+    NativeTypeNotProvided   = 0x0001FD,
+    ArgumentNeedsConversion = 0x000021,
+    ReturnNeedsConversion   = 0x000022,
     // 0x000023: empty. The number is not reused.
     // 0x000025: empty. The number is not reused.
     // 0x000026: empty. The number is not reused.
