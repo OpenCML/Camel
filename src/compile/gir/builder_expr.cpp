@@ -1471,6 +1471,9 @@ node_handle_t Builder::readVariableThrough(
         linkNodes(LinkType::Order, lastIndirectCall_, value);
     }
     if (synced_) {
+        // A read is not a statement of the sync block's chain (the ruling this tree carries): it
+        // takes its place from the version it reads, so the link the chain would write here is not
+        // written at all.
         syncedReads_.push_back(value);
         if (nodeKindOf(variable) == camel::runtime::GCNodeKind::Port) {
             if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, value)) {

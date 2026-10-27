@@ -55,9 +55,12 @@ digraph GraphIR {
         N0D -> N0E [label="0|0", type="NORM"];
         N0E -> N0F [label="0|0", type="NORM"];
         N0F -> N10 [label="0|0", type="CTRL"];
+        N0F -> N10 [label="SYNC", type="SYNC"];
         N0C -> N11 [label="0|0", type="NORM"];
         N10 -> N11 [label="0|0", type="CTRL"];
+        N10 -> N11 [label="SYNC", type="SYNC"];
         N11 -> N12 [label="0|0", type="CTRL"];
+        N11 -> N12 [label="SYNC", type="SYNC"];
         N12 -> N13 [label="0|0", type="NORM"];
         N10 -> N13 [label="0|1", type="NORM"];
         N0C -> N15 [label="1|0", type="WITH"];
@@ -67,6 +70,7 @@ digraph GraphIR {
         N15 -> N16 [label="0|0", type="NORM"];
         N17 -> N18 [label="0|0", type="NORM"];
         N16 -> N18 [label="0|0", type="CTRL"];
+        N16 -> N18 [label="SYNC", type="SYNC"];
     }
     O00 [label="EXIT", type="EXIT"];
     N19 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="10:0-18:1", srcfile="<ROOT>/test/cases/smoke/core/fib10_pipeline.cml", value_type="() => int uses clock, stdout"];

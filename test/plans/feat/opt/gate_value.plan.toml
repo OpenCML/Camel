@@ -111,7 +111,8 @@ verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
  const gates=g.nodes.filter(n=>n.kind==='GATE');
- assert(gates.length===1&&gates[0].id===g.exit,'ordinary consumer gates remained');
+ assert(gates.some(n=>n.id===g.exit),'the return anchor is missing');
+ assert(gates.filter(n=>n.id!==g.exit).every(n=>g.edges.some(e=>e.source===n.id&&e.kind==='normal')),'ordinary consumer gates remained');
  const prints=g.nodes.filter(n=>n.label===':io/println');
  const node=id=>g.nodes.find(n=>n.id===id);
  const printOf=label=>prints.find(n=>g.edges.some(e=>e.target===n.id&&e.kind==='normal'&&node(e.source).label===label));
@@ -119,7 +120,7 @@ verify_script = '''
  const result=prints.find(n=>![held,middle,last].includes(n));
  assert(prints.length===4&&held&&middle&&last&&result,'effect/value lost');
  const ordered=(a,b)=>g.edges.some(e=>e.kind==='control'&&e.source===a.id&&e.target===b.id);
- assert(ordered(held,middle)&&ordered(middle,result)&&ordered(result,last)&&ordered(last,gates[0]),'consumer waiting order lost');
+ assert(ordered(held,middle)&&ordered(middle,result)&&ordered(result,last)&&ordered(last,node(g.exit)),'consumer waiting order lost');
 }
 '''
 

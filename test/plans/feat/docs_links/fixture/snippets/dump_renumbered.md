@@ -26,5 +26,6 @@ camel dump_renumbered.cml std::gir
         N7A -> N7B [label="0|0", type="NORM"];
         N7C -> N7D [label="0|0", type="NORM"];
         N7B -> N7D [label="0|0", type="CTRL"];
+        N7B -> N7D [label="SYNC", type="SYNC"];
     }
 ```

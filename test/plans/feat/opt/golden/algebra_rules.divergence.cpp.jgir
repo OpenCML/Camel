@@ -92,6 +92,11 @@
           "targetIndex": 0
         },
         {
+          "kind": "sync",
+          "source": "g1n2",
+          "target": "g1n3"
+        },
+        {
           "kind": "normal",
           "source": "g1n3",
           "sourceIndex": 0,
@@ -104,6 +109,11 @@
           "sourceIndex": 0,
           "target": "g1n6",
           "targetIndex": 0
+        },
+        {
+          "kind": "sync",
+          "source": "g1n5",
+          "target": "g1n6"
         },
         {
           "kind": "normal",
@@ -125,6 +135,11 @@
           "sourceIndex": 0,
           "target": "g1n9",
           "targetIndex": 0
+        },
+        {
+          "kind": "sync",
+          "source": "g1n7",
+          "target": "g1n9"
         }
       ],
       "exit": "g1n9",
@@ -552,6 +567,11 @@
           "sourceIndex": 0,
           "target": "g4n6",
           "targetIndex": 0
+        },
+        {
+          "kind": "sync",
+          "source": "g4n4",
+          "target": "g4n6"
         }
       ],
       "exit": "g4n6",

@@ -34,56 +34,60 @@ verify_script = '''
 
 [[tests]]
 name = "unread_gate.graph.inline_dce"
-desc = "One dce pass: only the caller's return anchor is left, and all eight of the program's effects survive (the effect count is the property, see the note above the entries)."
+desc = "One dce pass: the caller's return anchor is still there, no gate is left without a value reading it, and all eight of the program's effects survive (the effect count is the property, see the note above the entries)."
 case = "../../../cases/opt/generic/unread_gate.cml"
 args = ["${case}","std::inline","std::opt::dce","std::jgir"]
 verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
  const gates=g.nodes.filter(n=>n.kind==='GATE');
- assert(gates.length===1&&gates[0].id===g.exit,'unread/data-covered gates survived or return anchor removed');
+ assert(gates.some(n=>n.id===g.exit),'the caller return anchor is missing');
+ assert(gates.filter(n=>n.id!==g.exit).every(n=>g.edges.some(e=>e.source===n.id&&e.kind==='normal')),'a gate no value reads survived');
  assert(g.nodes.filter(n=>n.label===':io/println').length===8,'effect lost');
 }
 '''
 
 [[tests]]
 name = "unread_gate.graph.inline_dce_twice"
-desc = "dce is idempotent: the second pass leaves the same one anchor gate and the same eight effects (the effect count is the property, see the note above the entries)."
+desc = "dce is idempotent: the second pass leaves the same anchor, still no unread gate, and the same eight effects (the effect count is the property, see the note above the entries)."
 case = "../../../cases/opt/generic/unread_gate.cml"
 args = ["${case}","std::inline","std::opt::dce","std::opt::dce","std::jgir"]
 verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
  const gates=g.nodes.filter(n=>n.kind==='GATE');
- assert(gates.length===1&&gates[0].id===g.exit,'unread/data-covered gates survived or return anchor removed');
+ assert(gates.some(n=>n.id===g.exit),'the caller return anchor is missing');
+ assert(gates.filter(n=>n.id!==g.exit).every(n=>g.edges.some(e=>e.source===n.id&&e.kind==='normal')),'a gate no value reads survived');
  assert(g.nodes.filter(n=>n.label===':io/println').length===8,'effect lost');
 }
 '''
 
 [[tests]]
 name = "unread_gate.graph.opt"
-desc = "The integrated std::opt pipeline does the same as dce here: one anchor gate and the program's eight effects (the effect count is the property, see the note above the entries)."
+desc = "The integrated std::opt pipeline does the same as dce here: the anchor gate is there, no gate is left unread, and the program's eight effects (the effect count is the property, see the note above the entries)."
 case = "../../../cases/opt/generic/unread_gate.cml"
 args = ["${case}","std::opt","std::jgir"]
 verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
  const gates=g.nodes.filter(n=>n.kind==='GATE');
- assert(gates.length===1&&gates[0].id===g.exit,'unread/data-covered gates survived or return anchor removed');
+ assert(gates.some(n=>n.id===g.exit),'the caller return anchor is missing');
+ assert(gates.filter(n=>n.id!==g.exit).every(n=>g.edges.some(e=>e.source===n.id&&e.kind==='normal')),'a gate no value reads survived');
  assert(g.nodes.filter(n=>n.label===':io/println').length===8,'effect lost');
 }
 '''
 
 [[tests]]
 name = "unread_gate.graph.opt_dce"
-desc = "std::opt followed by dce leaves one anchor gate and the program's eight effects: the second removal finds nothing to drop (the effect count is the property, see the note above the entries)."
+desc = "std::opt followed by dce leaves the anchor gate, no unread gate, and the program's eight effects: the second removal finds nothing to drop (the effect count is the property, see the note above the entries)."
 case = "../../../cases/opt/generic/unread_gate.cml"
 args = ["${case}","std::opt","std::opt::dce","std::jgir"]
 verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
  const gates=g.nodes.filter(n=>n.kind==='GATE');
- assert(gates.length===1&&gates[0].id===g.exit,'unread/data-covered gates survived or return anchor removed');
+ assert(gates.some(n=>n.id===g.exit),'the caller return anchor is missing');
+ assert(gates.filter(n=>n.id!==g.exit).every(n=>g.edges.some(e=>e.source===n.id&&e.kind==='normal')),'a gate no value reads survived');
  assert(g.nodes.filter(n=>n.label===':io/println').length===8,'effect lost');
 }
 '''

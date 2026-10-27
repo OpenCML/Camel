@@ -98,12 +98,15 @@ digraph GraphIR {
         N17 -> N1B [label="1|0", type="NORM"];
         N1A -> N1B [label="0|1", type="NORM"];
         N19 -> N1B [label="0|0", type="CTRL"];
+        N19 -> N1B [label="SYNC", type="SYNC"];
         N17 -> N1D [label="2|0", type="NORM"];
         N1C -> N1D [label="0|1", type="NORM"];
         N1B -> N1D [label="0|0", type="CTRL"];
+        N1B -> N1D [label="SYNC", type="SYNC"];
         N17 -> N1F [label="3|0", type="NORM"];
         N1E -> N1F [label="0|1", type="NORM"];
         N1D -> N1F [label="0|0", type="CTRL"];
+        N1D -> N1F [label="SYNC", type="SYNC"];
         N19 -> N21 [label="0|0", type="WITH"];
         N1B -> N21 [label="0|1", type="WITH"];
         N1D -> N21 [label="0|2", type="WITH"];
@@ -112,6 +115,7 @@ digraph GraphIR {
         N21 -> N22 [label="0|0", type="NORM"];
         N23 -> N24 [label="0|0", type="NORM"];
         N22 -> N24 [label="0|0", type="CTRL"];
+        N22 -> N24 [label="SYNC", type="SYNC"];
         N24 -> N25 [label="0|0", type="NORM"];
         N24 -> N27 [label="1|0", type="NORM"];
         N29 -> N27 [label="0|0", type="CTRL"];
@@ -127,8 +131,10 @@ digraph GraphIR {
         N16 -> N2D [label="1|1", type="NORM"];
         N2E -> N2F [label="0|0", type="NORM"];
         N2D -> N2F [label="0|0", type="CTRL"];
+        N2D -> N2F [label="SYNC", type="SYNC"];
         N30 -> N31 [label="0|0", type="NORM"];
         N2F -> N31 [label="0|0", type="CTRL"];
+        N2F -> N31 [label="SYNC", type="SYNC"];
     }
     O00 [label="EXIT", type="EXIT"];
     N32 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="19:0-26:1", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="() => int uses env, stdout"];
