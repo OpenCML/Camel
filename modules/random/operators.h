@@ -15,5 +15,9 @@ slot_t __rand_next_key__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __rand_philox__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __rand_uniform_array__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __rand_normal_array__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __rand_shuffle_i__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __rand_shuffle_l__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __rand_shuffle_f__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __rand_shuffle_d__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 
 std::unordered_map<std::string, operator_t> getRandomOpsMap();

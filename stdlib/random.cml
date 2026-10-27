@@ -24,7 +24,7 @@
 import { argsort } from array
 import { reshape } from tensor
 import { cos, log, sqrt } from math
-import { is_float } from types
+import { is_float, is_same } from types
 
 /// The global stream of keys, `seed` and `next_key` use it.
 export resource rng
@@ -159,8 +159,27 @@ export func permutation(k: Key, n: int): int[] {
     return if n <= 0 then [] else argsort(k->uniform::<float><shape: [n]> as float[])
 }
 
-/// The elements of xs in a random order, as a new array; xs is not changed.
+// The kernels of the shuffle of numbers: the same permutation as the body, made without the
+// array of draws and the array of positions.
+#op('rand:shuffle_i')
+with <k: Key>
+func shuffle_kernel::<T>(xs: T[]): T[] when is_same::<T, i32>()
+#op('rand:shuffle_l')
+with <k: Key>
+func shuffle_kernel::<T>(xs: T[]): T[] when is_same::<T, int>()
+#op('rand:shuffle_f')
+with <k: Key>
+func shuffle_kernel::<T>(xs: T[]): T[] when is_same::<T, f32>()
+#op('rand:shuffle_d')
+with <k: Key>
+func shuffle_kernel::<T>(xs: T[]): T[] when is_same::<T, float>()
+
+/// The elements of xs in a random order, as a new array; xs is not changed. The meaning is
+/// `xs[permutation(k, len(xs))]`; numbers are shuffled by a kernel that makes the same
+/// permutation in O(n log n) time (the cost of ordering n draws) and 16 bytes of working memory
+/// for each element.
 /// @example [1, 2, 3]->shuffle<key(42)>
+#impl(shuffle_kernel)
 with <k: Key>
 export func shuffle::<T>(xs: T[]): T[] {
     return xs[permutation(k, len(xs))]

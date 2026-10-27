@@ -3893,7 +3893,10 @@ uniform draw each (the key folded with the position), ties keeping position orde
 shuffle: <k: Key> (xs: T[]) => T[]
 ```
 
-The elements of xs in a random order, as a new array; xs is not changed.
+The elements of xs in a random order, as a new array; xs is not changed. The meaning is
+`xs[permutation(k, len(xs))]`; numbers are shuffled by a kernel that makes the same
+permutation in O(n log n) time (the cost of ordering n draws) and 16 bytes of working memory
+for each element.
 
 - Example: `[1, 2, 3]->shuffle<key(42)>`
 

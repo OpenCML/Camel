@@ -1,0 +1,30 @@
+/**
+ * `xs->shuffle<k>` is `xs[permutation(k, len(xs))]`, and a kernel per element type makes the same
+ * permutation without building the array of draws and the array of positions: `rand:shuffle_i` for
+ * `i32`, `_l` for `int`, `_f` for `f32`, `_d` for `float`. The kernel gives the same bits as the
+ * body, so this program prints each shuffle beside the body spelled out, for several keys, for the
+ * empty array and for one element, and the shuffle of a longer array agrees in a checksum.
+ */
+
+import { key, shuffle, permutation, split } from random
+
+func main(): int sync {
+    let k = key(42)
+    let a_i: i32[] = [10, 20, 30, 40, 50, 60]
+    let a_l: int[] = [1, 2, 3, 4, 5, 6, 7, 8]
+    let a_f: f32[] = [0.5, 1.5, 2.5, 3.5, 4.5]
+    let a_d: float[] = [-1.5, 0.0, 1.5, 3.0, 4.5, 6.0, 7.5]
+    println('shuffle', shuffle<k>(a_i), shuffle<k>(a_l), shuffle<k>(a_f), shuffle<k>(a_d))
+    println('body', a_i[permutation(k, 6)], a_l[permutation(k, 8)], a_f[permutation(k, 5)], a_d[permutation(k, 7)])
+    let (k1, k2) = split(k)
+    println('keys', shuffle<k1>(a_l), a_l[permutation(k1, 8)], shuffle<k2>(a_l), a_l[permutation(k2, 8)])
+    let e_l: int[] = []
+    let one: int[] = [7]
+    println('small', shuffle<k>(e_l), shuffle<k>(one))
+    println('input', a_i, a_l, a_f, a_d)
+    let big: int[] = [i for i in 0..5000]
+    let s = shuffle<k>(big)
+    let b = big[permutation(k, 5000)]
+    println('long', s == b, s[0], s[4999], loop t = 0 for x in s do t + x)
+    return 0
+}
