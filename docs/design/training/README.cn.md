@@ -173,12 +173,12 @@ export func sq_norm::<P>(p: P): float {
 计数器式随机数（与 JAX 同一思路）是 `random` 模块的主模型：带键的函数是纯函数；全局流只是它上面的一层薄壳，`seed(v)` 与 `next_key()` 是唯一的两个有状态原子，`rand()`、`randn()` 是 `next_key()` 加一个带键函数。
 
 ```cml
-import { key, fold, split, normal_array, uniform, randint } from random
+import { key, fold, split, normal, uniform, randint } from random
 
 let k     = key(20261018)                 // 由种子得到的键
 let ks    = fold(k, step)                 // 由键与整数派生新键
 let (a, b) = split(k)                     // 一个键拆成两个互不相关的键
-let noise = ks->normal_array::<f32><shape: [batch, 784]>   // 只由键与形状决定
+let noise = ks->normal::<f32><shape: [batch, 784]>   // 只由键与形状决定
 let t     = fold(ks, 1)->randint<0, 1000>                  // 左闭右开
 ```
 
@@ -208,7 +208,7 @@ func train_step(s: Device<State>, data: Device<Tensor<f32>>, cfg: Config): (Devi
     let idx   = randints(fold(k, 0), 0, cfg.count, [cfg.batch])   // a batch of indices (a whole-array integer draw is not in the module yet)
     let clean = gather(data, idx)
     let t     = fold(k, 1)->randint<0, cfg.timesteps - 1>
-    let noise = fold(k, 2)->normal_array::<f32><shape: [cfg.batch, 784]>
+    let noise = fold(k, 2)->normal::<f32><shape: [cfg.batch, 784]>
     let noisy = q_sample(clean, noise, cfg.abar[t])
     let (l, g) = with_grad(loss)<s.params>(noisy, noise, embedding(t))
     let (p, m, v) = adam(s.params, g, s.m, s.v, hyper(cfg, s.step))

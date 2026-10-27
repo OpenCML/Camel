@@ -52,7 +52,7 @@ func main(): int sync {
 | `str` | 字符串：按字节的切分、修剪、大小写、替换、查找、截取；按码点的计数、读取、编解码 |
 | `array` | 数组：`sort`、`argsort`、`reverse`、`take`、`drop`、`chunks`、`unique`、`find`、`find_index`、`sum`、`mean`、`min`、`max`、`argmax`、`argmin`、`sort_by`、`flat_map` 等（大部分是用 Camel 写的泛型函数，原生的只有 `argsort`、形状与布局的原子和排序、求和、最值的内核） |
 | `math` | 常量 `pi`、`e`、`inf`、`nan`（值）；初等函数、取整、`min`/`max`/`clamp`、`gcd`/`lcm`、进制转换、位运算 `bit_and` 等 |
-| `random` | 类型 `Key`；纯的键式随机 `key`、`fold`、`split`、`uniform`、`normal`、`uniform_array`、`normal_array`、`randint`、`permutation`、`shuffle`、`choice`、`sample`（键是数据或配置：`k->randint<1, 7>`、`xs->shuffle<k>`）；全局流 `seed`、`next_key`（资源 `rng`）和便利函数 `rand`、`randn` |
+| `random` | 类型 `Key`；纯的键式随机 `key`、`fold`、`split`、`uniform`、`normal`、`uniform`、`normal`、`randint`、`permutation`、`shuffle`、`choice`、`sample`（键是数据或配置：`k->randint<1, 7>`、`xs->shuffle<k>`）；全局流 `seed`、`next_key`（资源 `rng`）和便利函数 `rand`、`randn` |
 | `time` | `now`、`strftime`、`strptime` |
 | `fs` | `exists`、`is_file`、`is_dir`、`mkdir`、`mkdirs`、`remove`、`remove_dir`、`list_dir`、`read_text`、`write_text`、`append_text`、`file_size`、`read_chunk`、`read_bytes`、`write_bytes`、`append_bytes` |
 | `json` | 类型 `Json`；`encode`、`decode`、`decode_as`；`kind`、`is_null`、`get`、`as_bool`、`as_int`、`as_float`、`as_string`、`as_array`、`as_object` |

@@ -717,11 +717,15 @@ size_t foldDraft(
                 // left as written, to fault with its position if the run reaches it, so the
                 // program behaves the same with and without the pass. The user is told once,
                 // where the expression is written (design principles 3.9).
-                raisePassWarning(
-                    ctx,
-                    camel::core::error::RuntimeDiag::ConstantExpressionFaults,
-                    draft.nodeOrigin(id),
-                    fault.what());
+                // `fail` is the exception: it states a fault on purpose, and the warning is for
+                // the accident.
+                if (body->uri() != ":op/fail") {
+                    raisePassWarning(
+                        ctx,
+                        camel::core::error::RuntimeDiag::ConstantExpressionFaults,
+                        draft.nodeOrigin(id),
+                        fault.what());
+                }
                 continue;
             } catch (...) {
                 continue; // leave the failure to be reported when the program runs

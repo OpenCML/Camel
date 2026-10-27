@@ -4,6 +4,7 @@
 // Explicit types are consumed while building concrete graphs, never passed as values.
 
 #include "builder.h"
+#include "builder_helpers.h"
 #include "builder_support.h"
 #include "camel/core/data/primary.h"
 #include "camel/utils/str.h"
@@ -133,6 +134,12 @@ node_handle_t Builder::visitTypeApplication(const GCT::node_ptr_t &gct) {
         }
         types.push_back(resolveTypeNode(gct->at(i)->dataType(), gct->at(i)));
     }
+    // The `with` arguments written after these types and the names they carry (visitWithNode); the
+    // outer application's are not this one's.
+    const size_t withWritten = std::exchange(typeApplicationWithWritten_, 0);
+    const std::vector<std::optional<std::string>> withNames =
+        std::exchange(typeApplicationWithNames_, {});
+    const std::vector<Type *> withWrittenTypes = std::exchange(typeApplicationWithTypes_, {});
     if (const auto found = genericDrefs_.find(target); found != genericDrefs_.end()) {
         // The explicit types go to one function, so they choose among the overloads of the
         // name when it has several: the ones whose type parameters are exactly the names given
@@ -145,6 +152,69 @@ node_handle_t Builder::visitTypeApplication(const GCT::node_ptr_t &gct) {
                 const std::vector<std::string> names = typeParameterNames(candidate);
                 if (names.size() != types.size()) {
                     continue;
+                }
+                // The `with` parameters tell overloads of one name apart as the ordinary ones do:
+                // the arguments written fit when they are not more than the parameters, not fewer
+                // than the ones without a default, and every name written is a parameter's.
+                {
+                    const FunctionType *signature = candidate->funcType;
+                    const size_t declared         = signature->withTypesCount();
+                    size_t required               = declared;
+                    if (const auto defaults = defaults_.find(candidate.get());
+                        defaults != defaults_.end()) {
+                        required = 0;
+                        for (const auto &value : defaults->second.with) {
+                            required += value.has_value() ? 0 : 1;
+                        }
+                    }
+                    if (withWritten > declared || withWritten < required) {
+                        continue;
+                    }
+                    bool namesFit = true;
+                    for (const auto &written : withNames) {
+                        if (!written.has_value()) {
+                            continue;
+                        }
+                        bool found = false;
+                        for (size_t i = 0; signature->hasArgNames() && i < declared; ++i) {
+                            found = found || signature->argNameAt(i) == *written;
+                        }
+                        namesFit = namesFit && found;
+                    }
+                    if (!namesFit) {
+                        continue;
+                    }
+                    // And so do their types, where the argument's type is known: a parameter
+                    // that mentions no type variable must take it (a number enters a number).
+                    bool typesFit = true;
+                    for (size_t w = 0; w < withWrittenTypes.size() && typesFit; ++w) {
+                        Type *argument = withWrittenTypes[w];
+                        if (argument == nullptr) {
+                            continue;
+                        }
+                        size_t slot = w;
+                        if (w < withNames.size() && withNames[w].has_value()) {
+                            for (size_t p = 0; signature->hasArgNames() && p < declared; ++p) {
+                                if (signature->argNameAt(p) == *withNames[w]) {
+                                    slot = p;
+                                }
+                            }
+                        }
+                        if (slot >= declared) {
+                            continue;
+                        }
+                        Type *parameter = signature->withTypeAt(slot);
+                        if (containsTypeVar(parameter)) {
+                            continue;
+                        }
+                        Type *given = valueTypeOf(argument);
+                        typesFit = parameter->assignableFrom(given) ||
+                                   (isNumericScalar(parameter->code()) &&
+                                    isNumericScalar(given->code()));
+                    }
+                    if (!typesFit) {
+                        continue;
+                    }
                 }
                 if (given.empty()) {
                     fits.push_back(candidate); // positional: the count is what can be checked
@@ -271,6 +341,21 @@ node_handle_t Builder::visitTypeApplication(const GCT::node_ptr_t &gct) {
             throw BuildAbortException();
         }
         currGraph_->addDependencyGraph(graph);
+        // An instance of an `#impl` function that has an executor, called directly, is a call of
+        // its kernel (design principles 10.4); the type arguments the call wrote are the kernel's
+        // own when its variable is stated by them alone. Anywhere but the callee position the
+        // instance is the function value, which is the body.
+        if (outerAllowed && !insideImplBody()) {
+            if (std::optional<ImplKernel> kernel = implKernelOfGraph(graph); kernel.has_value()) {
+                node_handle_t drefNode{currGraph_->addDrefNode(
+                    std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{kernel->group})};
+                registerNodeOrigin(context_, drefNode, gct, "gir.dref.impl");
+                if (!kernel->types.empty()) {
+                    explicitOperatorTypes_[drefNode] = kernel->types;
+                }
+                return drefNode;
+            }
+        }
         node_handle_t value = createFuncDataNode(graph, true, false);
         // The instance is made here, so a call of `f::<int>(...)` reaches the value, not the
         // declaration: the declaration's parameter defaults travel with the value.

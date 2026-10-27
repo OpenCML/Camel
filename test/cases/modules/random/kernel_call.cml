@@ -1,0 +1,14 @@
+/**
+ * A direct call of the whole-array draws is one kernel operator: `uniform` and `normal` are Camel
+ * functions with a kernel (`#impl`), and the kernel's variable `T` is stated by the call's type
+ * argument alone (it only appears in the result `T[..]`).
+ */
+import { key, uniform, normal } from random
+
+func main(): int sync {
+    let k = key(1)
+    println(k->uniform::<f32><shape: [4]>)
+    println(k->uniform::<float><shape: [2, 2]>)
+    println(k->normal::<f32><shape: [3]>)
+    return 0
+}
