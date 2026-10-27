@@ -18,6 +18,7 @@
 #include "camel/core/context/context.h"
 #include "camel/core/module/builtin.h"
 #include "camel/core/operator_traits.h"
+#include "camel/core/resource_semantics.h"
 #include "camel/core/rtdata/variant.h"
 #include "camel/core/type/enum.h"
 #include "camel/core/type/resolver.h"
@@ -37,7 +38,6 @@ using camel::graphmod::nodeKindType;
 using camel::graphmod::regionKindType;
 using camel::graphmod::factKernels;
 using camel::graphmod::readKernels;
-using camel::graphmod::txnGroups;
 using camel::graphmod::txnKernels;
 
 namespace {
@@ -56,14 +56,6 @@ constexpr HandleKind kHandleKinds[] = {
     HandleKind::Tag,
     HandleKind::Txn,
 };
-
-slot_t currentKernel(ArgsView &, ArgsView &, Context &ctx) {
-    const camel::runtime::Program *program = ctx.currentRuntimeProgram();
-    if (program == nullptr) {
-        program = ctx.runtimeProgram();
-    }
-    return toSlot(const_cast<camel::runtime::Program *>(program));
-}
 
 slot_t equalHandles(ArgsView &norm) {
     using camel::core::rtdata::Object;
@@ -93,7 +85,6 @@ class GraphExecutor final : public Executor {
         auto out = readKernels();
         out.insert(txnKernels().begin(), txnKernels().end());
         out.insert(factKernels().begin(), factKernels().end());
-        out.emplace("current", currentKernel);
         out.emplace("eq", eqKernel);
         out.emplace("ne", neKernel);
         out.emplace("id", idKernel);
@@ -116,9 +107,6 @@ class GraphModule final : public BuiltinModule {
         // function value take the type of an argument, so a declaration cannot express them.
         // Everything else is declared in stdlib/graph.cml, including the per-sample-type
         // `constant` and `add_constant`.
-        for (const auto &group : txnGroups()) {
-            exportEntity(group->name(), group);
-        }
         // `==` of the handle types is declared in stdlib/graph.cml (design principles 4.3): two
         // handles are equal when they name the same thing of the same Program. `!=` cannot be
         // declared — an overload of `==` gives it, and `operator !=` is OperatorNotOverloadable
@@ -127,6 +115,10 @@ class GraphModule final : public BuiltinModule {
         // finds them among a type's operators without naming them.
         std::vector<std::pair<std::string, resolver_ptr_t>> ne;
         for (HandleKind kind : kHandleKinds) {
+            // A Program is the implementation's own and a transaction is never compared.
+            if (kind == HandleKind::Program || kind == HandleKind::Txn) {
+                continue;
+            }
             Type *type = HandleType::get(kind);
             ne.emplace_back("graph:ne", StaticFuncTypeResolver::create({}, {{type, false}, {type, false}}, Type::Bool()));
         }
@@ -149,13 +141,13 @@ class GraphModule final : public BuiltinModule {
             "graph",
             {
                 // the reads: a Program is not changed by them
-                {"graphs", true},
-                {"root", true},
+                {"graphs_of", true},
                 {"name", true},
                 {"nodes", true},
                 {"inputs", true},
                 {"with_inputs", true},
-                {"ctrl_inputs", true},
+                {"sync_inputs", true},
+                {"order_inputs", true},
                 {"users", true},
                 {"value_users", true},
                 {"is_constant", true},
@@ -176,11 +168,10 @@ class GraphModule final : public BuiltinModule {
                 {"region_parent", true},
                 // the value's type: the program itself, the number a handle is known by, the
                 // constant a node holds, and the three facts
-                {"current", true},
                 {"id", true},
                 {"constant", true},
                 {"effects", true},
-                {"shape", true},
+                {"shape_text", true},
                 {"permissions", true},
                 // equality of two handles
                 {"eq", true},
@@ -193,12 +184,28 @@ class GraphModule final : public BuiltinModule {
                 {"commit", false},
                 {"abort", false},
                 {"eval", false},
-                {"open_function", false},
-                {"to_function", false},
-                {"program_of", true},
                 {"graph_of", true},
                 {"add_constant", false},
             });
+        // What a transaction operator touches: the transaction, whole (the declarations say
+        // `uses t`). Edits to one transaction keep the order they are written in.
+        {
+            using camel::core::sem::AccessMode;
+            using camel::core::sem::operandAccess;
+            using camel::core::sem::ResourceClass;
+            camel::core::sem::ResourceSpec onTxn;
+            onTxn.accesses = {operandAccess(ResourceClass::Handle, 0, AccessMode::ReadModifyWrite, "graph::Txn")};
+            table.declareResources(
+                "graph",
+                {
+                    {"replace", onTxn},
+                    {"erase", onTxn},
+                    {"eval", onTxn},
+                    {"add_constant", onTxn},
+                    {"commit", onTxn},
+                    {"abort", onTxn},
+                });
+        }
         loaded_ = true;
         return true;
     }

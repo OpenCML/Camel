@@ -101,7 +101,7 @@ OperatorGroup::create(
 
 - `:op/add_i` → protocol 为空，suffix=`op/add_i`
 - `array:sort` → protocol=`array`，suffix=`sort`
-- `python:py_call` → protocol=`python`，suffix=`py_call`
+- `python:call` → protocol=`python`，suffix=`call`
 
 ### 3.2 Executor 与 opsMap
 

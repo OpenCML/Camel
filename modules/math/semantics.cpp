@@ -281,7 +281,7 @@ void declareElementaryFunctions() {
                 "x with its fractional part removed, as a float; NaN and +-inf are unchanged and "
                 "+-0 are preserved"));
     }
-    // abs, min, max, clamp and sign are overloaded over the four numeric types.
+    // abs, min, max and sign are overloaded over the four numeric types.
     declare(
         "math:abs_i",
         exactInteger(
@@ -306,12 +306,6 @@ void declareElementaryFunctions() {
         exactInteger("the larger of two strings by their bytes (a proper prefix comes first)"));
     declare("math:min_b", exactInteger("the smaller of two bools, false below true"));
     declare("math:max_b", exactInteger("the larger of two bools, false below true"));
-    declare(
-        "math:clamp_i",
-        exactInteger("x bounded to [lo, hi]; lo above hi is a fault (the result is one operand)"));
-    declare(
-        "math:clamp_l",
-        exactInteger("x bounded to [lo, hi]; lo above hi is a fault (the result is one operand)"));
     declare("math:sign_i", exactInteger("-1, 0 or +1 by the sign of x; -0 does not exist here"));
     declare("math:sign_l", exactInteger("-1, 0 or +1 by the sign of x; -0 does not exist here"));
 
@@ -330,24 +324,10 @@ void declareElementaryFunctions() {
                 "IEEE 754-2019 maximum per element: a NaN on either side gives the canonical "
                 "quiet NaN, -0 < +0"));
         declare(
-            std::string("math:clamp") + type.suffix,
-            exactFloat(
-                type.code,
-                "x bounded to [lo, hi] (one of the operands, no arithmetic): a NaN bound or lo "
-                "above hi is a fault; a NaN x gives that NaN"));
-        declare(
             std::string("math:sign") + type.suffix,
             exactFloat(
                 type.code,
                 "-1, 0 or +1 by the sign of x; NaN gives NaN and both zeros give +0"));
-        declare(
-            std::string("math:is_nan") + type.suffix,
-            exactFloat(type.code, "true when x is a NaN, false otherwise (a test, no arithmetic)"));
-        declare(
-            std::string("math:is_inf") + type.suffix,
-            exactFloat(
-                type.code,
-                "true when x is an infinity, false otherwise (a test, no arithmetic)"));
     }
 
     // The two reduced-precision floating types take `abs`, `min` and `max` and nothing else of
@@ -486,32 +466,9 @@ void declareBoundedFunctions() {
 // ---- Integers and conversions ---------------------------------------------------------------
 
 void declareIntegerFunctions() {
-    forIntegerWidths("gcd", [] {
-        return exactInteger(
-            "the non-negative greatest common divisor; a result that does not fit the type is a "
-            "fault");
-    });
-    forIntegerWidths("lcm", [] {
-        return exactInteger(
-            "the non-negative least common multiple; a product that does not fit the type is a "
-            "fault");
-    });
     forIntegerWidths("bit_and", [] { return exactInteger("x & y, two's complement"); });
     forIntegerWidths("bit_or", [] { return exactInteger("x | y, two's complement"); });
     forIntegerWidths("bit_xor", [] { return exactInteger("x ^ y, two's complement"); });
-    forIntegerWidths("bit_not", [] { return exactInteger("~x, two's complement"); });
-    // shl shifts the unsigned value, so shifting into the sign bit is defined; shr is
-    // arithmetic. A count outside 0..width-1 is a fault rather than C++'s undefined behaviour.
-    declare(
-        "math:shl",
-        exactInteger(
-            "x << count on the unsigned value (bits shifted out are lost, zeros come in); a "
-            "count outside 0..width-1 is a fault"));
-    declare(
-        "math:shr",
-        exactInteger(
-            "x >> count, arithmetic (the sign bit is copied in); a count outside 0..width-1 is a "
-            "fault"));
     // The same two with the count in angle brackets, one operator per width.
     for (const char *name : {"math:shl_i", "math:shl_l"}) {
         declare(
@@ -527,19 +484,6 @@ void declareIntegerFunctions() {
                 "x >> count, arithmetic (the sign bit is copied in); a count outside 0..width-1 is "
                 "a fault"));
     }
-    // The base conversions of integers: no arithmetic, only the digits of the value.
-    forIntegerWidths("bin", [] {
-        return exactInteger(
-            "the 0b-prefixed binary digits; a negative value is its 64-bit two's-complement "
-            "pattern, leading zeros dropped (0 is 0b0), exact");
-    });
-    forIntegerWidths("oct", [] {
-        return exactInteger("the 0o-prefixed octal digits; a negative value keeps its sign, exact");
-    });
-    forIntegerWidths("hex", [] {
-        return exactInteger(
-            "the 0x-prefixed uppercase hexadecimal digits; a negative value keeps its sign, exact");
-    });
 }
 
 } // namespace

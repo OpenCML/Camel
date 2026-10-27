@@ -347,6 +347,56 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "when.generic_overload_disjoint"
+desc = "Two generic functions of one name and one signature, told apart by their `when` conditions on their own type parameter: `is_int::<T>()` holds for the `int` call and `is_float::<T>()` for the `float` one, so each call is the declaration its argument's type satisfies. The selection reads the conditions like the non-generic path does; before that, both declarations took both calls and every call was an ambiguity."
+kind = "behavior"
+case = "../../../cases/compile/when/generic_overload_disjoint.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "int\nfloat\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.generic_overload_overlap"
+desc = "Two generic functions of one name and one signature whose `when` conditions are not disjoint (`is_integer::<T>()` and `is_numeric::<T>()` both hold for `int`): neither covers a family of types the other does not, so the second is refused where it is declared with WhenDeclarationOverlap, naming the type both apply to and both declarations with their conditions -- the same report two `#impl` arms of one signature get, and not an ordinary Redeclaration."
+kind = "negative"
+case = "../../../cases/compile/when/generic_overload_overlap.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenDeclarationOverlap"
+expect_diagnostic_line = 29
+expect_output_contains = ["Two declarations of 'both' both apply to the type 'int': '(x: T) => string — when is_integer::<T>()' and '(x: T) => string — when is_numeric::<T>()'."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.generic_overload_both_hold"
+desc = "Two generic functions of one name whose conditions both hold for one call (`T` is `i32`, `U` is `int`): the call has no answer, and the call site lists the two candidates with the condition each of them wrote (design principles 4.4: '带 `when` 的候选都适用时，调用处报歧义，列出两条候选与各自成立的条件'). The declaration-time separation check asks one registered type at a time, so it never sees the overlap."
+kind = "negative"
+case = "../../../cases/compile/when/generic_overload_both_hold.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::AmbiguousCall"
+expect_diagnostic_line = 36
+expect_output_contains = ["The call to 'dual' with (i32, int) fits more than one overload", "The overloads that take them: dual: (a: T, b: U) => string — when is_first_i32::<T>(); dual: (a: T, b: U) => string — when is_second_int::<U>()"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.generic_overload_none_apply"
+desc = "Two generic functions of one name whose conditions are both false for the call's type (`string`): no declaration is the call's overload, and the report names the conditions that were not met rather than a mismatch of types (design principles 4.4; '条件不满足与类型不匹配分开报')."
+kind = "negative"
+case = "../../../cases/compile/when/generic_overload_none_apply.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenConditionUnmet"
+expect_diagnostic_line = 32
+expect_output_contains = ["No candidate of 'pick' applies to (string): every candidate's 'when' condition is false", "Candidates: pick: (x: T) => string — when is_float::<T>(); pick: (x: T) => string — when is_int::<T>()"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "when.nested_open_type"
 desc = "A type variable that reaches an inner predicate through an outer one is reported as not concrete, never taken for false (the `_` arm of a `match type` is not chosen for a type that is not known yet)."
 kind = "negative"
@@ -356,4 +406,15 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::WhenTypeQueryNotConcrete"
 expect_output_contains = ["still has a type variable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.predicate_calls_library_predicates"
+desc = "A predicate written in Camel that asks the library's predicates by name (`is_real` over `is_integer` and `is_float`) conditions a generic function: it is applicable at `int` and `float`."
+kind = "behavior"
+case = "../../../cases/compile/when/predicate_calls_library_predicates.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "42 2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000

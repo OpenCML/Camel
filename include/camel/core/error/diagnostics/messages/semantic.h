@@ -49,11 +49,11 @@ enum class SemanticDiag : uint32_t {
     ArgumentsRejected           = 0x00001C,
     ImmutablePassedToVarParam   = 0x00001D,
     AssignmentTargetNotVariable = 0x00001E,
-    ConstructNotSupported       = 0x00001F,
-    InvalidTypeArgument         = 0x000020,
-    NativeTypeNotProvided       = 0x0001FD,
-    ArgumentNeedsConversion     = 0x000021,
-    ReturnNeedsConversion       = 0x000022,
+    // 0x00001F: empty. The number is not reused.
+    InvalidTypeArgument     = 0x000020,
+    NativeTypeNotProvided   = 0x0001FD,
+    ArgumentNeedsConversion = 0x000021,
+    ReturnNeedsConversion   = 0x000022,
     // 0x000023: empty. The number is not reused.
     // 0x000025: empty. The number is not reused.
     // 0x000026: empty. The number is not reused.
@@ -411,7 +411,7 @@ enum class SemanticDiag : uint32_t {
     // sees the same stream. A value a round may consume is the loop's own state, which the round takes
     // from its port and hands back as the next state (design principles 5.4 and 3.10).
     StreamConsumedInLoop = 0x0001ED,
-    // `tee(s, n)` reads one stream from two places (design principles 5.4): the two streams it gives
+    // `s->tee<n>` reads one stream from two places (design principles 5.4): the two streams it gives
     // share one buffer, and `n` is a hint at the width of that buffer -- the executor grows the buffer
     // rather than block the side that runs ahead -- but no buffer holds fewer than the one element
     // being handed over, so a constant width below 1 is refused where it is written.

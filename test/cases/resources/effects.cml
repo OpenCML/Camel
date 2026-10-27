@@ -2,6 +2,7 @@
 // cells through assignments, var parameters, captures and a recursion; an array sorted in
 // place; the generator, the file system and the console.
 import { exists } from fs
+import io
 import { seed, rand } from random
 import { sort } from array
 

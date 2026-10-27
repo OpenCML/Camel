@@ -142,14 +142,14 @@ const EXCERPTS = [
 const PENDING = [
     {
         file: 'docs/tutorial/17_teaching_a_law.cn.md',
-        key: '5ffb278a87e871fa',
+        key: '3782129450a658f3',
         reason:
             'chapter 18: the `fact` compiles now; the text block asks for `check` to fire a law on ' +
             'a fact\'s conclusion (rewrite design 8.1), and `math:abs_l` is not translated',
     },
     {
         file: 'docs/tutorial/17_teaching_a_law.en.md',
-        key: '5ffb278a87e871fa',
+        key: '3782129450a658f3',
         reason:
             'chapter 18: the `fact` compiles now; the text block asks for `check` to fire a law on ' +
             'a fact\'s conclusion (rewrite design 8.1), and `math:abs_l` is not translated',

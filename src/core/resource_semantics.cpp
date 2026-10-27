@@ -15,6 +15,7 @@
 #include "camel/core/type/base.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/enum.h"
+#include "camel/core/type/other.h"
 
 namespace camel::core::sem {
 
@@ -462,12 +463,18 @@ bool isHandleType(const type::Type *type) {
         const auto *enumType = static_cast<const type::EnumType *>(type);
         return enumType->decl() != nullptr && enumType->decl()->handle();
     }
+    if (type->isOtherType()) {
+        return static_cast<const type::OtherType *>(type)->isResourceHandle();
+    }
     return false;
 }
 
 std::string handleResourceName(const type::Type *type) {
     if (!isHandleType(type)) {
         return {};
+    }
+    if (type->isOtherType()) {
+        return static_cast<const type::OtherType *>(type)->resourceHandleName();
     }
     std::string name;
     std::string module;

@@ -267,15 +267,12 @@ const MODULES = [
     },
     {
         name: 'graph',
-        title: '`graph`: a program as a value',
+        title: '`graph`: the graph of a function as a value',
         kind: 'cpp',
-        // The declarations, and, in the signature file, the reference entries of the four
-        // operators whose type C++ computes (a function value's type). `constant` and
-        // `add_constant` take the type of their sample and are written out per sample type
-        // 
+        // The declarations only: every signature is stated, a function-valued argument is `F`
+        // with `when is_function::<F>()`.
         source: 'graph.cml',
         declaration: true,
-        computed: 'signatures/graph.cml',
     },
     {
         name: 'rewrite',
@@ -313,10 +310,9 @@ const MODULES = [
         name: 'python',
         title: '`python`: the embedded interpreter',
         kind: 'cpp',
-        // Six fixed signatures are declared in stdlib/python.cml; `py_call` (two URIs),
-        // `py_print`/`py_println` are variadic and `py_wrap`/`py_unwrap` move a type through the
-        // module type `PyObject<T>`, so their reference entries live in the signature file named
-        // by `computed:`.
+        // Seven fixed signatures are declared in stdlib/python.cml; `py_wrap`/`py_unwrap` move a
+        // type through the module type `PyObject<T>`, so their reference entries live in the
+        // signature file named by `computed:`.
         source: 'python.cml',
         declaration: true,
         computed: 'signatures/python.cml',
@@ -411,8 +407,8 @@ function splitParams(text) {
 
 // -1 for a list with a variadic parameter, as `camel inspect --ops` reports it. A parameter can
 // be variadic without being spelled `...name`: an optional parameter collected into a variadic
-// tuple, `args?: (...PyObject) | PyObject[]` (`py_call`'s keyword URI), accepts any number of
-// arguments too, and the C++ resolver reports its count as -1.
+// tuple, `args?: (...T) | T[]`, accepts any number of arguments too, and the C++ resolver
+// reports its count as -1.
 function countParams(params) {
     return params.some((p) => p.startsWith('...') || /\(\s*\.\.\./.test(p)) ? -1 : params.length
 }
@@ -706,9 +702,18 @@ function readDeclarations(file, module, options = {}) {
             // can declare a pass: a file under stdlib/signatures/ is reference text that is never
             // compiled, and describes operators the C++ resolver gives a computed type, where the
             // same condition is the type's (`grad::<F>(f: F): Gradient<F> when is_function::<F>()`).
+            // A pass has the shape of a function transform, `(f: F): F!`; a declaration of
+            // another shape that is conditioned the same way is an operator of a function value
+            // (`graph_of::<F>(f: F): Graph`), and one that names its operator with `#op` is an
+            // engine the module implements (`rewrite`, called as `f->rewrite<rules>`).
+            const passShaped = (() => {
+                const one = /^\s*\w+\s*:\s*(\w+)\s*$/.exec(args.inner)
+                const answer = /^\s*:\s*(\w+)!\s*when\b/.exec(after)
+                return one !== null && answer !== null && one[1] === answer[1]
+            })()
             if (!relative.startsWith('stdlib/signatures/') && !declarationBody(after, lines, i) &&
-                /\bwhen\s+is_function::<\w+>\(\)\s*$/.test(after) &&
-                splitParams(args.inner).length === 1) {
+                passShaped && pendingUri === null &&
+                /\bwhen\s+is_function::<\w+>\(\)\s*$/.test(after)) {
                 doc = []
                 withText = ''
                 pendingUri = null
@@ -882,8 +887,8 @@ function renderDoc() {
     out.push("  form runs (`len`'s one parameter is `x` for a string, an array, a map and a set, so one name")
     out.push('  reaches all four). The name is written in the list that holds the parameter: an ordinary one')
     out.push("  in the parentheses (`len(x: xs)`), a `with` one in the angle brackets (`j->get<key: 'port'>`).")
-    out.push('  A form that gives a position no name, or leaves its count to the arguments (a rest list --')
-    out.push("  `py_call`'s two forms differ in arity as well), is one no named argument reaches: the call")
+    out.push('  A form that gives a position no name, or leaves its count to the arguments (a rest list,')
+    out.push("  as `println` takes), is one no named argument reaches: the call")
     out.push('  reports that the signature is not known where the call is written. `contains` refuses a named')
     out.push('  argument for a reason of its own: its position 0 means an element in two forms and the')
     out.push('  substring in the third, so the name would mean another thing in one of them.')

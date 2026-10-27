@@ -1,17 +1,17 @@
-import { Program, graphs, nodes, name } from graph
+import { nodes, name, graphs_of } from graph
 
-export func keep(p: Program): Program! {
+export func keep::<F>(p: F): F! {
     return p
 }
 
-export func report(p: Program): Program! sync {
-    let all = graphs(p)
+export func report::<F>(p: F): F! sync {
+    let all = graphs_of(p)
     println(len(all))
     println(all->map<name>)
     return p
 }
 
-export func refuse(p: Program): Program! {
+export func refuse::<F>(p: F): F! {
     return error('NotSupported', 'this program has too few graphs')
 }
 
@@ -19,6 +19,6 @@ export func helper(x: int): int {
     return x
 }
 
-export func broken(p: Program): int {
+export func broken::<F>(p: F): int {
     return 1
 }

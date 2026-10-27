@@ -1,12 +1,11 @@
 /**
  * `graph:constant` is declared with a node: a number is refused at the call, and the message
- * names the declarations' parameter (`n`) — `stdlib/graph.cml`, not the C++, is the source
- * (bucket 1).
+ * names the declaration's parameter (`n`): `stdlib/graph.cml`, not the C++, is the source.
  */
 
 import { constant } from graph
 
 func main(): int sync {
-    println(constant(0, 0))
+    println(constant::<int>(0))
     return 0
 }

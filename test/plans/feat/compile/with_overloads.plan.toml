@@ -19,13 +19,13 @@ timeout_ms = 20000
 
 [[tests]]
 name = "with_overloads.generic_explicit"
-desc = "Generic functions of one name that differ in their `with` parameters: explicit type arguments choose among them by the count of `with` arguments written and by their names (`pick::<int>(1)` and `pick::<int><n: 2>(1)`; `tag::<int><label: 'a'>` and `tag::<int><times: 7>`)."
+desc = "Generic functions of one name that differ in their `with` parameters: explicit type arguments choose among them by the count of `with` arguments written and by their names (`pick::<int>(1)` and `pick::<int><n: 2>(1)`; `tag::<int><label: 'a'>` and `tag::<int><times: 7>`; by type: `mark::<int><'b'>` and `mark::<int><9>`)."
 kind = "behavior"
 case = "../../../cases/compile/with_overloads/generic_explicit.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_exact = "1\n[1, 1]\n[1, 1, 1]\na\n7\n"
+expect_stdout_exact = "1\n[1, 1]\n[1, 1, 1]\na\n7\nb\n9\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

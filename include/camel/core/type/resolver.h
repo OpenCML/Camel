@@ -391,14 +391,13 @@ class DeclaredFuncTypeResolver : public FuncTypeResolver {
         return namesOfSignature(funcType_, with, norm);
     }
 
-    /// The names of the type variables the declaration binds, in the order its parameters and
-    /// result mention them; empty for a fixed signature.
-    const std::vector<std::string> &bindableNames() const { return bindable_; }
-
     /// The declared signature, with its parameter names.
     FunctionType *funcType() const { return funcType_; }
     size_t withCount() const { return funcType_->withTypesCount(); }
     size_t normCount() const { return funcType_->normTypesCount(); }
+
+    /// The names of the type variables a call's `::<...>` writes, in the order it writes them.
+    const std::vector<std::string> &bindableNames() const { return bindable_; }
 
   private:
     FunctionType *funcType_;

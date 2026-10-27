@@ -266,3 +266,20 @@
 `statistics`、`random` 接入时（决策者这边，即将合入）测出，`std::cpp` 翻译不了 `:op/fail`、`array:argsort` 和 `tensor` 的核函数。结果 `permutation`、`shuffle`、`sample` 和 `statistics` 在 C++ 导出时被拒，cppexec 的一致性列表只能裁到标量核心。
 - **排进你们的主线**：`fail` 翻成带位置的故障，`argsort` 照核函数翻，`tensor` 核函数按已有的数组运算翻。补齐后把 cppexec 列表恢复。
 - 与写捕获变量的调用（上文已记）同属"标准库里有的，C++ 导出都要能翻"。
+
+## 给协调者：已答的页不再修改，力量回到主线
+
+`four-pending-author-decisions.md` 已在本文件答复（见"four-pending-author-decisions"一节），fsh-dev 上已删除；之后对它的三次修订（`2b8889a3c`、`d0c58bfd3`、`a114629aa`）不必再做。按交接说明 5.00 的价值判据，账本、计数这类修订不单独立项。
+你们手上该推进的，按优先级排：
+1. **H242 同步边的整批集成与 P4 张量翻转**：仍是最优先。其中包括上文的四条模型级裁定、`progen` (c) 的效应顺序，以及 H242 落地后的附一（赋值目标不算逃逸）。
+2. **语法层收口**：交接说明 5.00 里的 1–7 项，`module` 已删完；格式化器对超宽 `when`/`uses` 另起一行，对不带右边的 `export type X` 也要能格式化。
+3. **本文件里排给你们的几项**：
+   - 回退 `19cfe42c9`；
+   - 优化器用汇合配对参数与梯度（`perf/training_steps`）；
+   - `std::cpp` 的翻译覆盖（`fail`、`argsort`、`tensor` 核函数、写捕获变量的调用）；
+   - JIT 编译写捕获变量的调用；
+   - `Context::handle()` 的返工；
+   - 导出器两条拒绝补上位置。
+4. **H49 GPU G1–G3**，以及文档清理第 1 步。
+
+H233（`graph`、`rewrite`、`rules`、`opt` 改成以函数为中心，`Program` 从接口删除）由决策者这边做完了，在第一条车道上，正在合入 fsh-dev，你们不用再排。

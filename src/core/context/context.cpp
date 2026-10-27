@@ -717,6 +717,37 @@ Context::importModule(const std::string &rawModuleName, const module::Module *im
     throw DiagnosticBuilder::of(SemanticDiag::ModuleNotFound).commit(rawModuleName, reasonStr);
 }
 
+std::string Context::checkPreludeDeclarations() {
+    if (preludeChecked_) {
+        return preludeProblem_;
+    }
+    preludeChecked_ = true;
+    for (const std::string &root : resolver_.searchRoots(std::string())) {
+        const fs::path file = camel::utils::pathFromUtf8(root) / "signatures" / "globals.cml";
+        std::error_code ec;
+        if (!fs::is_regular_file(file, ec) || ec) {
+            continue;
+        }
+        const std::string path = camel::utils::pathToUtf8(file);
+        auto prelude = std::static_pointer_cast<UserDefinedModule>(
+            UserDefinedModule::fromFile("prelude", path, shared_from_this()));
+        preludeModule_ = prelude;
+        try {
+            prelude->compile(CompileStage::AST);
+        } catch (...) {
+            // A file that does not parse is reported by its own diagnostics, below.
+            if (!prelude->diagnostics() || !prelude->diagnostics()->hasErrors()) {
+                throw;
+            }
+        }
+        if (prelude->diagnostics() && prelude->diagnostics()->hasErrors()) {
+            preludeProblem_ = path;
+        }
+        return preludeProblem_;
+    }
+    return preludeProblem_;
+}
+
 std::string Context::importerDirectory(const module::Module *importer) const {
     if (importer != nullptr && !importer->path().empty()) {
         return camel::utils::pathToUtf8(

@@ -139,6 +139,7 @@ node_handle_t Builder::visitTypeApplication(const GCT::node_ptr_t &gct) {
     const size_t withWritten = std::exchange(typeApplicationWithWritten_, 0);
     const std::vector<std::optional<std::string>> withNames =
         std::exchange(typeApplicationWithNames_, {});
+    const std::vector<Type *> withWrittenTypes = std::exchange(typeApplicationWithTypes_, {});
     if (const auto found = genericDrefs_.find(target); found != genericDrefs_.end()) {
         // The explicit types go to one function, so they choose among the overloads of the
         // name when it has several: the ones whose type parameters are exactly the names given
@@ -181,6 +182,37 @@ node_handle_t Builder::visitTypeApplication(const GCT::node_ptr_t &gct) {
                         namesFit = namesFit && found;
                     }
                     if (!namesFit) {
+                        continue;
+                    }
+                    // And so do their types, where the argument's type is known: a parameter
+                    // that mentions no type variable must take it (a number enters a number).
+                    bool typesFit = true;
+                    for (size_t w = 0; w < withWrittenTypes.size() && typesFit; ++w) {
+                        Type *argument = withWrittenTypes[w];
+                        if (argument == nullptr) {
+                            continue;
+                        }
+                        size_t slot = w;
+                        if (w < withNames.size() && withNames[w].has_value()) {
+                            for (size_t p = 0; signature->hasArgNames() && p < declared; ++p) {
+                                if (signature->argNameAt(p) == *withNames[w]) {
+                                    slot = p;
+                                }
+                            }
+                        }
+                        if (slot >= declared) {
+                            continue;
+                        }
+                        Type *parameter = signature->withTypeAt(slot);
+                        if (containsTypeVar(parameter)) {
+                            continue;
+                        }
+                        Type *given = valueTypeOf(argument);
+                        typesFit = parameter->assignableFrom(given) ||
+                                   (isNumericScalar(parameter->code()) &&
+                                    isNumericScalar(given->code()));
+                    }
+                    if (!typesFit) {
                         continue;
                     }
                 }

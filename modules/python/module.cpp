@@ -52,109 +52,11 @@ void checkActiveVenvVersion() {
 
 namespace {
 
-// The operators whose signature C++ computes stay here (design principles 6.4).
-// `py_call` (two URIs), `py_print` and `py_println` are variadic, and
-// `py_wrap`/`py_unwrap` move a type through the module type `PyObject<T>`; neither can be
-// written as a body-less declaration. The other six are declared in stdlib/python.cml.
+// The operators whose signature C++ computes stay here (design principles 6.4):
+// `py_wrap`/`py_unwrap` move a type through the module type `PyObject<T>`, which a declaration
+// cannot write. The other seven are declared in stdlib/python.cml.
 const std::vector<oper_group_ptr_t> &getOperatorGroups() {
     static const std::vector<oper_group_ptr_t> groups = {
-        OperatorGroup::create(
-            "py_call",
-            {
-                {
-                    "python:py_call",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {-1, {}}},
-                        "(fn: string | PyObject, ...args: PyObject[]) => PyObject!",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> std::optional<Type *> {
-                            if (norm.size() < 1)
-                                return std::nullopt;
-                            if (norm[0]->code() != TypeCode::String &&
-                                norm[0]->code() != PyObjectType::typeCode())
-                                return std::nullopt;
-                            for (size_t i = 1; i < norm.size(); ++i)
-                                if (!norm[i] || norm[i]->code() != PyObjectType::typeCode())
-                                    return std::nullopt;
-                            return TupleType::fallible(getPyObjectType());
-                        }),
-                },
-                {
-                    "python:py_call_kw",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {-1, {}}},
-                        "(fn: string | PyObject, args?: (...PyObject) | PyObject[], kwargs?: "
-                        "Struct<...PyObject>) => PyObject!",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> std::optional<Type *> {
-                            if (norm.size() < 1 || norm.size() > 3)
-                                return std::nullopt;
-                            if (norm[0]->code() != TypeCode::String &&
-                                norm[0]->code() != PyObjectType::typeCode())
-                                return std::nullopt;
-                            if (norm.size() >= 2) {
-                                if (norm[1]->code() == TypeCode::Array) {
-                                    auto *arr = static_cast<ArrayType *>(norm[1]);
-                                    if (!arr->elemType() ||
-                                        arr->elemType()->code() != PyObjectType::typeCode())
-                                        return std::nullopt;
-                                } else if (norm[1]->code() == TypeCode::Tuple) {
-                                    auto *tup = static_cast<TupleType *>(norm[1]);
-                                    for (size_t i = 0; i < tup->size(); ++i)
-                                        if (!tup->typeAt(i) ||
-                                            tup->typeAt(i)->code() != PyObjectType::typeCode())
-                                            return std::nullopt;
-                                } else {
-                                    return std::nullopt;
-                                }
-                            }
-                            if (norm.size() == 3) {
-                                if (norm[2]->code() != TypeCode::Struct)
-                                    return std::nullopt;
-                                auto *st = static_cast<StructType *>(norm[2]);
-                                for (size_t i = 0; i < st->size(); ++i)
-                                    if (!st->typeAt(i) ||
-                                        st->typeAt(i)->code() != PyObjectType::typeCode())
-                                        return std::nullopt;
-                            }
-                            return TupleType::fallible(getPyObjectType());
-                        }),
-                },
-            }),
-        OperatorGroup::create(
-            "py_print",
-            {
-                {
-                    "python:py_print",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {-1, {false}}},
-                        "(...objs: PyObject[]) => PyObject?",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> std::optional<Type *> {
-                            for (Type *t : norm)
-                                if (!t->isOtherType() || t->code() != PyObjectType::typeCode())
-                                    return std::nullopt;
-                            return norm.empty() ? Type::Void() : norm[0];
-                        }),
-                },
-            }),
-        OperatorGroup::create(
-            "py_println",
-            {
-                {
-                    "python:py_println",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {-1, {false}}},
-                        "(...objs: PyObject[]) => PyObject?",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> std::optional<Type *> {
-                            for (Type *t : norm)
-                                if (!t->isOtherType() || t->code() != PyObjectType::typeCode())
-                                    return std::nullopt;
-                            return norm.empty() ? Type::Void() : norm[0];
-                        }),
-                },
-            }),
         OperatorGroup::create(
             "py_wrap",
             {
@@ -251,28 +153,24 @@ bool PythonModule::load() {
     context_->registerExecutorFactory("python", [ctx]() { return createPythonExecutor(ctx); });
     // The purity of every operator of the module (design principles 3.3), which the declaration
     // loader requires before it accepts a body-less declaration (`Builder::declareNativeOperator`,
-    // src/compile/gir/builder_modules.cpp#declareNativeOperator). All twelve are effectful:
-    // each one observes or advances the interpreter, which no argument names. `py_call`, `py_exec`,
-    // `py_eval` and `py_run` execute arbitrary Python; `py_attr` may run a descriptor or a
-    // property; `py_import` runs a module body and writes `sys.modules`; `py_print`/`py_println`
-    // write the interpreter's standard output; `py_wrap` creates an object whose identity and
-    // reference count are interpreter state, `py_unwrap` reads an object that Python code can
-    // have changed, and `py_dispose` drops a reference. None is state-only: their state is the
+    // src/compile/gir/builder_modules.cpp#declareNativeOperator). All nine are effectful: each one
+    // observes or advances the interpreter, which no argument names. `exec`, `eval`, `run_file`
+    // and `call` execute arbitrary Python; `attr` and `to_string` may run a descriptor, a property
+    // or `__str__`; `import_module` runs a module body and writes `sys.modules`; `py_wrap` creates
+    // an object whose identity and reference count are interpreter state and `py_unwrap` reads an
+    // object that Python code can have changed. None is state-only: their state is the
     // interpreter, not a variable of the program.
     camel::core::OperatorTable::instance().declare(
         "python",
-        {{"py_call", false},
-         {"py_call_kw", false},
-         {"py_exec", false},
-         {"py_eval", false},
-         {"py_run", false},
-         {"py_attr", false},
-         {"py_import", false},
-         {"py_print", false},
-         {"py_println", false},
+        {{"exec", false},
+         {"eval", false},
+         {"run_file", false},
+         {"import_module", false},
+         {"attr", false},
+         {"call", false},
+         {"to_string", false},
          {"py_wrap", false},
-         {"py_unwrap", false},
-         {"py_dispose", false}});
+         {"py_unwrap", false}});
     loaded_ = true;
     return true;
 }

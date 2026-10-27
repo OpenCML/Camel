@@ -790,23 +790,10 @@ bool Builder::sameImplSignature(FunctionType *function, FunctionType *kernel) {
     return !function->hasExitType() || function->exitType()->equals(kernel->exitType());
 }
 
-camel::core::type::type_bindings_t Builder::statedBindings(
-    const camel::core::type::resolver_ptr_t &rule, const type_vec_t &explicitTypes) {
-    camel::core::type::type_bindings_t stated;
-    if (const auto *declared = dynamic_cast<const DeclaredFuncTypeResolver *>(rule.get());
-        declared != nullptr && !explicitTypes.empty() &&
-        declared->bindableNames().size() == explicitTypes.size()) {
-        for (size_t i = 0; i < explicitTypes.size(); ++i) {
-            stated.emplace_back(declared->bindableNames()[i], explicitTypes[i]);
-        }
-    }
-    return stated;
-}
-
 Builder::RuleVerdict Builder::ruleVerdictForCall(
     const camel::core::type::resolver_ptr_t &rule, const std::string &name,
     const type_vec_t &withTypes, const type_vec_t &normTypes, std::string *conditionText,
-    const camel::core::type::type_bindings_t &given) {
+    const type_vec_t &explicitTypes) {
     const auto found = nativeRuleConditions_.find(rule.get());
     if (found == nativeRuleConditions_.end()) {
         // No condition: the rule applies wherever its signature does.
@@ -825,12 +812,10 @@ Builder::RuleVerdict Builder::ruleVerdictForCall(
     if (const auto *generic = dynamic_cast<const DeclaredFuncTypeResolver *>(rule.get());
         generic != nullptr) {
         declared = generic->funcType();
-        // Variables the instance's own type arguments state (a kernel whose variable only the
-        // result mentions) are bound before the arguments are read.
-        for (const std::string &variable : generic->bindableNames()) {
-            if (Type *stated = findTypeBinding(given, variable); stated != nullptr) {
-                bindings.emplace_back(variable, stated);
-            }
+        // The variables the call writes (`constant::<int>(n)`) are bound before the arguments are
+        // read: a variable only the result mentions has no other binding.
+        for (size_t i = 0; i < explicitTypes.size() && i < generic->bindableNames().size(); ++i) {
+            bindings.emplace_back(generic->bindableNames()[i], explicitTypes[i]);
         }
         if (declared->withTypesCount() != withTypes.size() ||
             declared->normTypesCount() != normTypes.size()) {
@@ -864,13 +849,12 @@ Builder::RuleVerdict Builder::ruleVerdictForCall(
 
 bool Builder::declaredRuleApplies(
     const camel::core::type::resolver_ptr_t &rule, const std::string &name,
-    const type_vec_t &withTypes, const type_vec_t &normTypes,
-    const camel::core::type::type_bindings_t &given) {
+    const type_vec_t &withTypes, const type_vec_t &normTypes, const type_vec_t &explicitTypes) {
     // The same question a call asks, with one answer instead of three. An `#impl` instance asks
     // it after checking that the rule's signature names the instance (sameImplSignature, or the
     // rule's own resolve), so the rule's parameters always take the instance's types and
     // NotThisRule cannot arise here.
-    return ruleVerdictForCall(rule, name, withTypes, normTypes, nullptr, given) ==
+    return ruleVerdictForCall(rule, name, withTypes, normTypes, nullptr, explicitTypes) ==
            RuleVerdict::Applies;
 }
 
@@ -930,7 +914,7 @@ void Builder::adoptImplKernel(
                             .has_value();
             }
         }
-        if (takes && declaredRuleApplies(resolver, kernel.name, withTypes, normTypes, bindings)) {
+        if (takes && declaredRuleApplies(resolver, kernel.name, withTypes, normTypes, stated)) {
             uri         = ruleUri;
             executor    = resolver;
             statedTypes = stated;

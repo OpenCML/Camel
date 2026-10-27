@@ -1,0 +1,36 @@
+/**
+ * Two generic functions of one name and one signature whose `when` conditions are not disjoint:
+ * `is_integer::<T>()` and `is_numeric::<T>()` both hold for `int`, so neither declaration covers
+ * a family of types the other does not, and the second is refused where it is declared (design
+ * principles 4.4: "规则统一：同一检查适用于所有带 `when` 的同名重载（有函数体的普通函数也一样）").
+ *
+ * The report names the type both apply to and both declarations with their conditions; it is not
+ * an ordinary `Redeclaration`, which is what a pair that writes no answerable `when` still gets.
+ */
+
+func is_integer::<T>(): bool {
+    return match type T {
+        case int | i32 => true
+        case _ => false
+    }
+}
+
+func is_numeric::<T>(): bool {
+    return match type T {
+        case int | i32 | float | f32 | c64 | c128 => true
+        case _ => false
+    }
+}
+
+func both::<T>(x: T): string when is_integer::<T>() {
+    return 'integer'
+}
+
+func both::<T>(x: T): string when is_numeric::<T>() {
+    return 'numeric'
+}
+
+func main(): int sync {
+    println(both(1))
+    return 0
+}

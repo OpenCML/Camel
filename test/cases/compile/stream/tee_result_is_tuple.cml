@@ -18,7 +18,7 @@ func step(n: int): () => (int, int..)? {
 /// The tuple itself: the two streams are the items of one value, which this signature takes and
 /// gives as one value.
 func sides(s: int.., n: int): (int.., int..) {
-    return stream::tee(s, n)
+    return stream::tee<n>(s)
 }
 
 func total(s: int..): int {

@@ -300,7 +300,7 @@ Expected evidence:
   language-level Python module tests cover the public Python API.
 
 The Python module also has a language-level FFI smoke case in
-`test/cases/modules/std/python/basic.cml` that calls `py_dispose` twice. That case belongs to the
+`test/cases/modules/std/python/basic.cml` that calls Python and reads an object back. That case belongs to the
 Python module plan because it verifies the public Python API, while the GC/MM lifetime assertions
 remain centralized in `feat/mm`.
 

@@ -1644,6 +1644,23 @@ std::optional<std::string> Builder::immutableNameOf(const GCT::node_ptr_t &expr)
     return name;
 }
 
+/// The type of a `with` argument as far as it is known before the callee is chosen: a literal has
+/// the type it is written with, a name has the type it was bound at; anything else takes its type
+/// from the parameter it enters (nullptr).
+Type *Builder::writtenArgumentType(const GCT::node_ptr_t &argument) {
+    if (argument->type() == GCT::NodeKind::DATA) {
+        // A composite literal takes its element types from the position it stands in.
+        Type *literal = argument->data() != nullptr ? argument->data()->type() : nullptr;
+        return literal != nullptr && !isComposite(literal->code()) ? literal : nullptr;
+    }
+    if (argument->type() == GCT::NodeKind::DREF) {
+        if (const auto node = nodeAt(moduleLevelName(argument->name())); node.has_value()) {
+            return valueTypeOf(nodeTypeOf(*node));
+        }
+    }
+    return nullptr;
+}
+
 node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     ENTER("WITH");
     // `f<w>(x)`: the callee of the call is the target of the binding.
@@ -1657,9 +1674,14 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     // follow them.
     const size_t outerWithWritten = typeApplicationWithWritten_;
     const auto outerWithNames     = typeApplicationWithNames_;
+    const auto outerWithTypes     = typeApplicationWithTypes_;
     if (gct->at(0)->type() == GCT::NodeKind::TAPP) {
         typeApplicationWithWritten_ = gct->size() - 1;
         typeApplicationWithNames_.clear();
+        typeApplicationWithTypes_.clear();
+        for (size_t i = 1; i < gct->size(); ++i) {
+            typeApplicationWithTypes_.push_back(writtenArgumentType(gct->at(i)));
+        }
         if (const auto *written = GCT::Tree::of(gct)->argumentNamesOf(gct)) {
             typeApplicationWithNames_ = *written;
         }
@@ -1667,6 +1689,7 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     any targetNodeRes = visit(gct->at(0));
     typeApplicationWithWritten_ = outerWithWritten;
     typeApplicationWithNames_   = outerWithNames;
+    typeApplicationWithTypes_   = outerWithTypes;
     ruleBindingCallee_          = outerRuleBindingCallee;
     genericCalleeAllowed_             = false;
     // As in visitLinkNode: a lambda written in place gives its graph.
@@ -1742,6 +1765,14 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
                 argumentSignature->withTypeAt(slot)->toString());
         throw BuildAbortException();
     };
+    // The angled values are not the callee: a rule bound inside them (`f->rewrite<[r<7>]>`) is a
+    // use of the rule as a value, whatever the binding itself stands beside.
+    struct CalleeContext {
+        bool &flag;
+        bool outer;
+        ~CalleeContext() { flag = outer; }
+    } calleeContext{ruleBindingCallee_, ruleBindingCallee_};
+    ruleBindingCallee_ = false;
     for (size_t i = 1; i < gct->size(); i++) {
         const size_t slot = slotOf(i - 1);
         Type *wanted      = argumentSignature && slot < argumentSignature->withTypesCount()
@@ -1812,7 +1843,7 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     // statement it is written in (1.6). Its span is derived where the binding is used as a
     // value (partialApplicationOf), so an ordinary `f<w>(x)` allocates nothing extra.
     boundWithOrigin_.try_emplace(targetNode, gct);
-    if (!ruleBindingCallee_ && isRuleBindingTarget(targetNode)) {
+    if (!calleeContext.outer && isRuleBindingTarget(targetNode)) {
         // `name<value>` where the name is the function a rule with `with` parameters is written
         // as: the values bind the rule's parameters and the value is the `Rule` (design
         // principles 5.5). What `f<w>` makes of a function -- a function value that has the

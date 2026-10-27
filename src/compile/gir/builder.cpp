@@ -61,6 +61,22 @@ void Builder::buildEntryCall() {
         entryGraph = *decoratedMain;
     } else if (auto gv = graphsAt(entryName); gv.has_value() && !gv.value()->empty()) {
         entryGraph = gv.value()->front();
+    } else if (libraryEntryExpected_ != nullptr) {
+        // A pass is a generic function of the function it transforms (`(f: F) => F!`, design
+        // principles 9.1): the entry is its instance that is a function of the expected type.
+        if (auto group = templateScope_->get(entryName); group.has_value()) {
+            if (GenericGroup *templates = genericGroupOf(group.value()); templates != nullptr) {
+                for (const generic_template_ptr_t &tmpl : *templates) {
+                    std::string why;
+                    if (compile_graph_ptr_t instance = instantiateGenericAs(
+                            tmpl, libraryEntryExpected_, tmpl->func, why)) {
+                        entryGraph = instance;
+                        break;
+                    }
+                    libraryEntryProblem_ = why;
+                }
+            }
+        }
     }
     if (entryGraph) {
         // The entry graph stands for the entry function where a diagnostic is about the
@@ -283,21 +299,20 @@ void Builder::rejectRedeclaredFunction(
     }
     // A second generic declaration whose parameters are the same types is the same family of
     // signatures, one with other names for the type variables, so the second is a
-    // redeclaration too: the two write the same call (`generic_same_signature`).
+    // redeclaration too: the two write the same call (`generic_same_signature`). Two that write
+    // `when` conditions are told apart by them, exactly as two ordinary declarations of one
+    // signature are (design principles 4.4: "同一检查适用于所有带 `when` 的同名重载（有函数体的
+    // 普通函数也一样），不是 `#impl` 声明的特例"): the same separation the loop below asks about
+    // ordinary functions, asked here about two generic ones.
     if (auto group = templateScope_->get(name, false); group.has_value() &&
         !genericGroupOf(group.value())->empty()) {
+        const auto *ownWhen = GCT::Tree::of(gct)->whenOf(gct);
         for (const auto &other : *genericGroupOf(group.value())) {
-            if (other != nullptr && sameGenericSignature(other->funcType, funcType)) {
-                // Two declarations of one signature are told apart by their conditions, if both
-                // write one (design principles 4.4): where a condition does not hold the overload
-                // does not apply. Conditions that exclude each other make two overloads; ones that
-                // can both hold are WhenDeclarationOverlap, and ones no registered type decides
-                // are left to the call, which reports the ambiguity if two apply.
-                const auto *ownWhen   = GCT::Tree::of(gct)->whenOf(gct);
-                const auto *otherWhen = other->func != nullptr
-                                            ? GCT::Tree::of(other->func)->whenOf(other->func)
-                                            : nullptr;
-                if (ownWhen != nullptr && otherWhen != nullptr) {
+            if (other == nullptr || !sameGenericSignature(other->funcType, funcType)) {
+                continue;
+            }
+            if (ownWhen != nullptr) {
+                if (const auto *otherWhen = GCT::Tree::of(other->func)->whenOf(other->func)) {
                     SpeculativeInstantiation quiet(*this);
                     std::string overlappingType;
                     const ConditionSeparation separation = separateWhenConditions(
@@ -313,19 +328,12 @@ void Builder::rejectRedeclaredFunction(
                                 other->funcType,
                                 bindings,
                                 {},
-                                nullptr,
+                                other,
                                 unit_);
                         },
                         overlappingType);
                     if (separation == ConditionSeparation::Disjoint) {
-                        continue;
-                    }
-                    // No registered type decides two conditions that read a value: they are two
-                    // overloads, and a call to which both apply is the ambiguity (design
-                    // principles 4.4). The same condition written twice is a redeclaration.
-                    if (separation == ConditionSeparation::NotComputable &&
-                        ownWhen->text != otherWhen->text) {
-                        continue;
+                        continue; // one family of types each
                     }
                     if (separation == ConditionSeparation::Overlapping) {
                         redeclaredFuncTypes_.insert(funcType);
@@ -339,10 +347,10 @@ void Builder::rejectRedeclaredFunction(
                         throw BuildAbortException();
                     }
                 }
-                redeclaredFuncTypes_.insert(funcType);
-                diags_->of(SemanticDiag::Redeclaration).atOrigin(gct->origin()).commit(name);
-                throw BuildAbortException();
             }
+            redeclaredFuncTypes_.insert(funcType);
+            diags_->of(SemanticDiag::Redeclaration).atOrigin(gct->origin()).commit(name);
+            throw BuildAbortException();
         }
     }
     auto graphs = graphScope_->get(name, false);
@@ -643,6 +651,19 @@ bool Builder::isPassDeclaration(const GCT::node_ptr_t &gct) {
     if (when == nullptr) {
         return false;
     }
+    // A pass is a function transform `(f: F) => F!` (design principles 9.1): one ordinary
+    // parameter and the same type, failable, as the result, and `when is_function::<F>()`. That is
+    // the whole classification; what implements it does not enter. A body-less declaration of
+    // another shape that is conditioned the same way declares an operator of a function value
+    // (`graph_of::<F>(f: F): Graph when is_function::<F>()`).
+    const auto *signature = tt::as_ptr<FunctionType>(gct->at(0)->dataType());
+    if (signature == nullptr || signature->normTypesCount() != 1 || !signature->hasExitType()) {
+        return false;
+    }
+    const auto *answer = asFallible(signature->exitType());
+    if (answer == nullptr || !answer->payloadType()->equals(signature->normTypeAt(0))) {
+        return false;
+    }
     // The text the pipeline reads, normalized the same way: `is_function::<T>()` with any
     // identifier for the type parameter (pass_declarations.cpp, passDeclarationApplies). A
     // body-less declaration without that condition declares an operator, as before.
@@ -672,6 +693,39 @@ bool Builder::isPassDeclaration(const GCT::node_ptr_t &gct) {
                                      });
 }
 
+/// Whether the module implements the operator this body-less declaration names (`#op`, or the
+/// declaration's own `module:name`) for it. A name declared more than once is an operator beside
+/// something else of the same name (`export_model`: the operator takes the function and an example,
+/// the pass takes the function), and then the operator is the declaration that writes `#op`.
+bool Builder::declarationHasOperator(const GCT::node_ptr_t &gct) {
+    const std::string &declared = unit_->module->declaredName();
+    std::string uri = (declared.empty() ? unit_->module->name() : declared) + ":" + gct->name();
+    const auto tagged = nativeOperatorUri(gct);
+    if (tagged.has_value()) {
+        uri = *tagged;
+    }
+    if (!camel::core::OperatorTable::instance().find(uri).has_value()) {
+        return false;
+    }
+    if (tagged.has_value()) {
+        return true;
+    }
+    size_t same = 0;
+    const std::function<void(const GCT::node_ptr_t &)> count = [&](const GCT::node_ptr_t &node) {
+        if (node->type() == GCT::NodeKind::DECL && node->nativeDeclaration() &&
+            node->name() == gct->name()) {
+            ++same;
+        }
+        for (size_t i = 0; i < node->size(); ++i) {
+            count(node->at(i));
+        }
+    };
+    if (unit_->tree != nullptr && unit_->tree->root() != nullptr) {
+        count(unit_->tree->root());
+    }
+    return same <= 1;
+}
+
 std::vector<camel::source::origin_id_t> parameterPortOrigins(
     const context_ptr_t &context, const GCT::node_ptr_t &gct);
 
@@ -684,8 +738,13 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
             // declaration is the pipeline's (design principles 9.3); this records the name so
             // the export list does not look for an entity that will not exist.
             unit_->passDeclarations.insert(gct->name());
-            LEAVE("DECL");
-            return nullptr;
+            // A pass is told by its type alone, whatever implements it: a module that also
+            // implements the operator (an engine of `rewrite`, called as `f->rewrite<rules>`)
+            // declares that operator as well.
+            if (!declarationHasOperator(gct)) {
+                LEAVE("DECL");
+                return nullptr;
+            }
         }
         // A body-less declaration declares an operator of a C++ module (design principles 6.4):
         // it is checked and kept as an operator rule, not as a graph (step 1).

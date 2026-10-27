@@ -5,7 +5,7 @@
  * reference 9). `depth::<int>(n)` on a bare `Node` is how a node whose value type the program did
  * not state is queried.
  */
-import { Program, Node, Graph, graphs, nodes, name } from graph
+import { Node, Graph, nodes, name } from graph
 import { max } from math
 
 fact depth::<T>(v: T): int match v {

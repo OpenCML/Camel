@@ -10,7 +10,7 @@
  * product by 1 and a product by 2 -- the first fires once and the second never, so which constant
  * the rule rewrites is decided by the value the case read, not by the shape of the pattern.
  */
-import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
+import { Node, Graph, nodes, op, op_name, name, graphs_of } from graph
 import { max } from math
 import { rewrite } from rewrite
 
@@ -31,25 +31,25 @@ func opText(n: Node): string {
     }
 }
 
-func nodesOf(p: Program, function: string): Node[] {
-    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+func nodesOf::<F>(p: F, function: string): Node[] {
+    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
     return nodes(found[0])
 }
 
-func mulsOf(p: Program, function: string): int {
+func mulsOf::<F>(p: F, function: string): int {
     let muls = nodesOf(p, function)->filter<(n: Node): bool => opText(n) == ':op/mul_l'>
     return loop total = 0 for n in muls do total + 1
 }
 
-export func apply_two(p: Program): Program! {
-    return rewrite(p, [mul_by_two])
+export func apply_two::<F>(p: F): F! {
+    return p->rewrite<[mul_by_two]>
 }
 
-export func apply_three(p: Program): Program! {
-    return rewrite(p, [mul_by_three])
+export func apply_three::<F>(p: F): F! {
+    return p->rewrite<[mul_by_three]>
 }
 
-export func report(p: Program): Program! sync {
+export func report::<F>(p: F): F! sync {
     println('one', mulsOf(p, 'one'), 'two', mulsOf(p, 'two'))
     return p
 }

@@ -25,7 +25,7 @@ await runTest(async (t) => {
     check(/^\s+= .*  by zero_to_one  \(round 1, graph f\)$/m.test(runOut || ''), 'the library named the rule that fired', runOut)
     const libReason = (runOut || '').match(/^`mul_zero` did not fire at (.*)$/m)
     check(libReason, 'the library answered why_not with the rule and the reason', runOut)
-    check(new RegExp(`^Stopped \\(breakpoint\\) in show .*explain\\.cml:${stop}:`, 'm').test(runOut || ''), 'the program stopped where the run can be read', runOut)
+    check(new RegExp(`^Stopped \\(breakpoint\\) in show.*explain\\.cml:${stop}:`, 'm').test(runOut || ''), 'the program stopped where the run can be read', runOut)
 
     // explain: the same rule and the same two positions as the library's own print.
     const chain = await repl.command('explain r before after')

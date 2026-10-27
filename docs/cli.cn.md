@@ -168,7 +168,7 @@
 | --- | --- |
 | `std::opt`、`std::opt::algebra` | `safe_fp: bool = false`（严格等价的浮点算式；设计原则 7.4） |
 | `std::opt::dce` | `values_only: bool = false`（只删除无人读取的常量与纯运算，不动 GATE 与 SYNC；用作同类遍（例如用 Camel 写的遍）的对照基准） |
-| `std::opt::algebra` | 规则库的遍（`rules::simplify`，`safe_fp` 下为 `rules::simplify_strict`）；`neutral_only: bool = false` 只做整数的单位元化简 `x + 0`、`0 + x`、`x - 0`、`x * 1`、`1 * x`，不做同类项与常数因子合并（这是没有库对应物的 C++ 对照模式，供同类遍（例如用 Camel 写的遍）对照） |
+| `std::opt::algebra` | 规则库的遍（`rules::simplify`，`safe_fp` 下为 `rules::simplify strict=true`）；`neutral_only: bool = false` 只做整数的单位元化简 `x + 0`、`0 + x`、`x - 0`、`x * 1`、`1 * x`，不做同类项与常数因子合并（这是没有库对应物的 C++ 对照模式，供同类遍（例如用 Camel 写的遍）对照） |
 | `std::opt`、`std::opt::inline`（及 `::small` / `::arm` / `::hybrid`）、`std::opt::specialize`、`std::opt::devirtualize` | `growth_budget: int = 4096`（特化和内联可复制的节点数；用完后剩下的调用仍是调用；0 表示不再复制；`std::opt` 的所有轮次共用一个预算） |
 | `std::fvm`、`std::jit` | `stats: string = ""`（把本次运行每张图的字节码数与执行计数追加写入该文件） |
 | `std::jit` | `hot_threshold: int = 1`（同一调用点调用多少次后编译一张图；0 表示第一次调用就编译）。**含循环区域的图在 0 与 1（默认）这两个"尽早编译"的阈值下第一次调用就编译**：使图变贵的是轮次，调用次数看不见轮次；显式把阈值设到 1 以上仍按调用次数走（`hot_threshold=1000000000` 因此仍表示"什么都不编译"） |
@@ -189,7 +189,7 @@
 - `std::opt::small` / `std::opt::arm` / `std::opt::hybrid`：显式的内联目标策略
 - `std::opt::specialize`：运行时原生的特化遍
 - `std::opt`：集成优化总入口；循环执行去虚化、特化、内联、fold、cse、algebra 和 dce，直到稳定或达到共享的增长及轮数预算
-- `std::opt::algebra`：就是规则库的化简遍 `rules::simplify`，定律即 `stdlib/rules.cml` 里的规则，一条定律只写一次；`safe_fp=true` 时运行 `rules::simplify_strict`（设计原则 7.4：严格等价的浮点算式）。默认 `safe_fp=false`，不自动允许降精度、近似函数或任意特殊值假设。它不要求前面先有 `std::opt::fold`；`std::opt` 会先跑 fold，以得到语料对照所用的系数形式。`neutral_only=true` 保留 C++ 对照模式（只做整数单位元）。PowerShell 中带参数的遍须加引号（这是普通的遍参数）；所有参数在运行第一个遍之前校验。
+- `std::opt::algebra`：就是规则库的化简遍 `rules::simplify`，定律即 `stdlib/rules.cml` 里的规则，一条定律只写一次；`safe_fp=true` 时运行 `rules::simplify strict=true`（设计原则 7.4：严格等价的浮点算式）。默认 `safe_fp=false`，不自动允许降精度、近似函数或任意特殊值假设。它不要求前面先有 `std::opt::fold`；`std::opt` 会先跑 fold，以得到语料对照所用的系数形式。`neutral_only=true` 保留 C++ 对照模式（只做整数单位元）。PowerShell 中带参数的遍须加引号（这是普通的遍参数）；所有参数在运行第一个遍之前校验。
 - `std::opt::fold` / `std::opt::cse` / `std::opt::dce`：分别运行常量折叠、公共子表达式消除、死代码消除
 - `std::opt::order`：顺序边的传递约简——A→B→C 已在时删去 A→C（设计稿 `docs/design/effects/edges.cn.md` 第 5 节第 4 条）；同步边是一条链，没有冗余，不动。CTRL 边还没有从图里删掉，所以在它消失之前这一遍同时继续做控制边的传递约简：删掉被必需的数据/控制路径覆盖的 CTRL 边，保留分支及循环边界、臂锚点，不把未选中的分支当作必需依赖。`std::opt` 的其他阶段结束后默认执行一次
 - `std::inline`（含 `small` / `arm` / `hybrid`）：`std::opt::inline` 及其策略的别名
@@ -294,7 +294,7 @@
 
 ### 效应追踪（`std::profile effect_trace="..."`）
 
-在流水线里给出 `std::profile effect_trace="<file>"` 后，进程为每个被执行的有效应算子追加一行 JSON，按调用顺序排列（有效应算子指任何没有在算子特性注册表里登记为纯的或仅状态的算子：`println`、文件 I/O、`py_*`、赋值 `:op/assn*`，包括写成语句的 `acc = acc->append<v>` 所用的 `:op/assn_append`……）。`report=false` 使 `std::profile` 的文本报告不进入程序的输出：
+在流水线里给出 `std::profile effect_trace="<file>"` 后，进程为每个被执行的有效应算子追加一行 JSON，按调用顺序排列（有效应算子指任何没有在算子特性注册表里登记为纯的或仅状态的算子：`println`、文件 I/O、`python` 的算子、赋值 `:op/assn*`，包括写成语句的 `acc = acc->append<v>` 所用的 `:op/assn_append`……）。`report=false` 使 `std::profile` 的文本报告不进入程序的输出：
 
     camel m.cml 'std::profile effect_trace="trace.jsonl" report=false' std::nvm
 

@@ -860,7 +860,7 @@ name = "tensor.rules_simplify_strict"
 desc = "rules::simplify_strict is the rule library under NumericPolicy::strict(), the policy safe_fp=true gives: merged and merged_explicit are not regrouped (1 add and 2 products), chain keeps its 2 products and rounded_coefficients keeps its add and its 2 products (the coefficient law needs reassociate, which strict withholds, as it withholds it for the scalar case), and shared_product still becomes t * 2 because doubling a coefficient is exact and 7.4 lets a strict pass keep it. That last count is the one place where the library differs from algebra(safe_fp=true), which leaves t + t alone (tensor.graph.safe counts 1 add and 1 product there); the library follows 7.4, so the difference is the pass's and not the laws'."
 kind = "behavior"
 case = "../../../cases/opt/generic/algebra_tensor.cml"
-args = ["${case}","rules::simplify_strict","std::jgir"]
+args = ["${case}","rules::simplify", "strict=true","std::jgir"]
 verify_script = '''
 ({input,assert})=>{
  const d=JSON.parse(input.normalized.stdout);
@@ -887,7 +887,7 @@ verify_script = '''
  const d=JSON.parse(input.normalized.stdout);
  const g=name=>{const v=d.graphs.find(g=>g.name===name);assert(v,'missing '+name);return v};
  const ops=name=>g(name).nodes.filter(n=>n.label.startsWith(':op/')||n.label.startsWith('tensor:')).length;
- for(const name of ['int_zero','int_sub_self','int_div_one','int_neg_neg','tensor_div_one','tensor_neg_neg'])
+ for(const name of ['int_zero','int_sub_self','div_one','neg_neg','array_div_one','array_neg_neg'])
    assert(ops(name)===0,name+': law did not fire ('+ops(name)+' operators left)');
  assert(ops('int_combine')===1,'coefficient law did not fold to one product');
  assert(g('int_combine').nodes.some(n=>n.label==='8'),'coefficient eight missing');

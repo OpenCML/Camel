@@ -898,7 +898,7 @@ node_handle_t Builder::overloadValueFor(
                     withTypes,
                     normTypes,
                     nullptr,
-                    statedBindings(resolver, explicitTypes)) != RuleVerdict::Applies) {
+                    explicitTypes) != RuleVerdict::Applies) {
                 continue;
             }
             if (chosen) {
@@ -954,13 +954,7 @@ std::optional<oper_idx_ptr_t> Builder::resolveGroupedCall(
         // unmet, only when no rule at all takes it.
         std::string condition;
         const RuleVerdict verdict =
-            ruleVerdictForCall(
-                resolver,
-                ops->name(),
-                ruleWith,
-                normTypes,
-                &condition,
-                statedBindings(resolver, explicitTypes));
+            ruleVerdictForCall(resolver, ops->name(), ruleWith, normTypes, &condition, explicitTypes);
         if (verdict == RuleVerdict::ConditionUnmet) {
             unmet.emplace_back(resolver->signature(), std::move(condition));
             continue;
@@ -1972,15 +1966,29 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     withArgsOfCall_                = gct->at(0)->type() == GCT::NodeKind::WITH;
     // The callee of a call is a name: a rule's binding function called here is called, not made
     // the `Rule` its name gives (visitDRefNode).
+    // A lambda written after `->` that leaves a parameter's type out (`v -> (x) => x + 1`) takes the
+    // type from the receiver: the position of its parameter is that value (design principles 5.1,
+    // 5.9). A lambda called with parentheses, `((x) => x + 1)(2)`, is not in such a position. It is built after the arguments, which are typed without it.
+    const bool lambdaCalleeAfterArguments =
+        gct->at(0)->type() == GCT::NodeKind::FUNC && !gct->at(0)->decoratedBlock() &&
+        gct->at(0)->name().empty() && GCT::Tree::of(gct)->isPipe(gct) &&
+        [&] {
+            const auto *unwritten = GCT::Tree::of(gct->at(0))->unwrittenParamsOf(gct->at(0));
+            return unwritten != nullptr && !unwritten->empty();
+        }();
     const bool outerRuleBindingCallee = std::exchange(ruleBindingCallee_, true);
-    any targetNodeRes                 = visit(gct->at(0));
+    any targetNodeRes;
+    if (!lambdaCalleeAfterArguments) {
+        targetNodeRes = visit(gct->at(0));
+    }
     ruleBindingCallee_                = outerRuleBindingCallee;
     withArgsOfCall_                = outerWithArgsOfCall;
     genericCalleeAllowed_          = false;
     // The callee may be a lambda written in place (`((x: int): int => x + 1)(3)`,
     // `v -> (x: int): int => x * 2`): visiting it gives its graph, and what is called is the
     // function value of that graph. (The graph was cast to a node: `bad any_cast`, bare.)
-    node_handle_t targetNode = valueNodeOf(targetNodeRes);
+    node_handle_t targetNode =
+        lambdaCalleeAfterArguments ? nullptr : valueNodeOf(targetNodeRes);
 
     compile_graph_ptr_t targetGraph = nullptr;
     oper_idx_ptr_t targetOperator   = nullptr;
@@ -2019,8 +2027,12 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         return nodeTypeOf(inputNode);
     };
 
-    FunctionType *argumentSignature = signatureForArgumentContext(
-        targetNode, gct->at(0)->type() == GCT::NodeKind::WITH ? gct->at(0)->size() - 1 : 0);
+    FunctionType *argumentSignature =
+        lambdaCalleeAfterArguments
+            ? nullptr
+            : signatureForArgumentContext(
+                  targetNode,
+                  gct->at(0)->type() == GCT::NodeKind::WITH ? gct->at(0)->size() - 1 : 0);
     // The type of the position the call stands in, aligned with the callee's result type, solves
     // the type variables that result mentions (design principles 5.1, 5.5; the rule of
     // 2026-10-23 on `expected-type-through-literals-and-calls`). Every variable the result
@@ -2181,6 +2193,18 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 assignedType = place;
             }
         }
+    }
+    if (lambdaCalleeAfterArguments) {
+        // A lambda that writes no parameter type takes the value of a tagged receiver out: it is
+        // never the overload that takes the tagged value as it is.
+        yieldToPipe(gct);
+        FunctionTypeFactory parameters;
+        for (const Argument &input : normInputs) {
+            parameters.addNormArg("", valueTypeOf(nodeTypeOf(input.node)), false);
+        }
+        ExpectedValueScope calleeScope(expectedValueType_, parameters.buildOpen());
+        any lambdaRes = visit(gct->at(0));
+        targetNode    = valueNodeOf(lambdaRes);
     }
     // An ordinary argument may be written by name, and an ordinary parameter may have a
     // default (design principles 4.4): the same binding as the `with` arguments,
@@ -3876,7 +3900,7 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
     // A function value has no name of its own; its type stands for it in diagnostics.
     const std::string calleeLabel = targetName.empty() ? targetFuncType->toString() : targetName;
 
-    // `tee(s, n)` reads one stream from two places: the two streams it gives share one buffer,
+    // `s->tee<n>` reads one stream from two places: the two streams it gives share one buffer,
     // which holds the elements one side has read and the other has not (design principles 5.4).
     // `n` says how wide that buffer is expected to be -- a hint the executor may exceed by growing
     // the buffer -- but no buffer holds fewer than one element, the one being handed over, so a
@@ -3891,7 +3915,7 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
         return generic == std::string::npos ? name : name.substr(0, generic);
     };
     if (targetGraph != nullptr && baseGraphName(targetGraph->name()) == "stream::tee" &&
-        normInputs.size() == 2 && targetFuncType->normTypesCount() == 2 &&
+        normInputs.size() == 1 && withInputs.size() == 1 && targetFuncType->normTypesCount() == 1 &&
         targetFuncType->normTypeAt(0) != nullptr &&
         targetFuncType->normTypeAt(0)->code() == TypeCode::Stream) {
         const auto widthBelowOne = [](const data_ptr_t &data) {
@@ -3901,15 +3925,15 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
             const auto integer = std::dynamic_pointer_cast<IntData>(data);
             return integer != nullptr && integer->data() < 1;
         };
-        if (widthBelowOne(constantOfNode(normInputs[1].node))) {
+        if (widthBelowOne(constantOfNode(withInputs[0].node))) {
             // The caret is under the width, the argument that says why the call can never be right.
-            const GCT::node_ptr_t &widthExpr = normInputs[1].expr;
+            const GCT::node_ptr_t &widthExpr = withInputs[0].expr;
             const auto where                 = widthExpr != nullptr && widthExpr->origin() != 0
                                                    ? widthExpr->origin()
                                                    : gct->origin();
             diags_->of(SemanticDiag::TeeHintNotPositive)
                 .atOrigin(where)
-                .commit(sourceTextOf(normInputs[1].expr));
+                .commit(sourceTextOf(withInputs[0].expr));
             throw BuildAbortException();
         }
     }

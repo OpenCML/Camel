@@ -93,7 +93,7 @@ struct FactOp {
 const std::vector<FactOp> &factOps() {
     static const std::vector<FactOp> ops = {
         {"effects", effectsKernel},
-        {"shape", shapeKernel},
+        {"shape_text", shapeKernel},
         {"permissions", permissionsKernel},
     };
     return ops;

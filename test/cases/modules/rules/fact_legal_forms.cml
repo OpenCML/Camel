@@ -9,7 +9,6 @@
  */
 
 import { max } from math
-import { Program } from graph
 import { rewrite } from rewrite
 
 fact sign(v: int): int match v {
@@ -25,8 +24,8 @@ fact one: int match v {
 
 rule mul_by_sign(y: int, x: int) when sign(y) == 2 { x * y => x + 100 }
 
-export func apply(p: Program): Program! {
-    return rewrite(p, [mul_by_sign])
+export func apply::<F>(p: F): F! {
+    return p->rewrite<[mul_by_sign]>
 }
 
 func left(x: int): int { return x * 2 }

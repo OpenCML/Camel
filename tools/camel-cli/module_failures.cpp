@@ -72,6 +72,13 @@ ModuleFailures findModuleFailures(
             failures.declarationModules.push_back(userModule.get());
         }
     }
+    // The prelude's declaration file is read with every program, and is in no module list: it is
+    // not a module the program imports, and it declares what no module can (the built-ins).
+    if (const auto prelude = std::dynamic_pointer_cast<UserDefinedModule>(ctx->preludeModule());
+        prelude && prelude->diagnostics() && prelude->diagnostics()->hasErrors()) {
+        failures.any = true;
+        failures.modules.push_back(prelude);
+    }
     return failures;
 }
 

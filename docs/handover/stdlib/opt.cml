@@ -75,7 +75,7 @@ func mergeable_constant(n: Node): bool {
 
 // Whether the two lists name the same nodes in the same order.
 func same_nodes(xs: Node[], ys: Node[]): bool {
-    return len(xs) == len(ys) && zip(xs, ys)->all<((a, b)) => a == b>
+    return len(xs) == len(ys) && zip(xs, ys)->all<(p: (Node, Node)): bool => p.0 == p.1>
 }
 
 // A pure operation the sweep may merge: reading no value that may be written in place, and not
@@ -106,7 +106,7 @@ func same_node(a: Node, b: Node): bool {
 // itself when it is the first. That first node is never a node the same round merges away, which
 // is what makes one transaction enough for a round.
 func keep_of(ns: Node[], n: Node): Node {
-    let earlier = ns->filter<(m) => id(m) < id(n) && same_node(n, m)>
+    let earlier = ns->filter<(m: Node): bool => id(m) < id(n) && same_node(n, m)>
     return if len(earlier) == 0 then n else earlier[0]
 }
 
@@ -116,17 +116,17 @@ func is_hit(ns: Node[], n: Node): bool {
 
 func graph_has_hit(g: Graph): bool {
     let ns = nodes(g)
-    return ns->any<(n) => is_hit(ns, n)>
+    return ns->any<(n: Node): bool => is_hit(ns, n)>
 }
 
 func merge_hits_of::<F>(t: Txn<F>, g: Graph): void {
     let ns = nodes(g)
-    ns->filter<(n) => is_hit(ns, n)>->foreach<(n) => replace(t, n, keep_of(ns, n))>
+    ns->filter<(n: Node): bool => is_hit(ns, n)>->foreach<(n: Node): void => replace(t, n, keep_of(ns, n))>
 }
 
 func merge_hits::<F>(f: F): F! sync {
     let t = open(f)
-    graphs_of(f)->foreach<(g) => merge_hits_of(t, g)>
+    graphs_of(f)->foreach<(g: Graph): void => merge_hits_of(t, g)>
     return commit(t)
 }
 
@@ -155,11 +155,11 @@ func dead_value(n: Node): bool {
 
 func erase_hits::<F>(f: F, hits: Node[]): F! sync {
     let t = open(f)
-    hits->foreach<(n) => erase(t, n)>
+    hits->foreach<(n: Node): void => erase(t, n)>
     return commit(t)
 }
 
-func dead_values::<F>(f: F): F! sync {
+func dead_values::<F>(f: F): F! when is_function::<F>() sync {
     let hits = all_nodes(graphs_of(f))->filter<dead_value>
     return if len(hits) == 0 then f else erase_hits(f, hits) -> dead_values
 }
@@ -225,7 +225,7 @@ func fold_one::<F>(t: Txn<F>, n: Node): bool sync {
 
 // One round over the nodes it evaluates: whether it replaced anything.
 func fold_round::<F>(t: Txn<F>, hits: Node[]): bool {
-    return hits->map<(n) => fold_one(t, n)>->any<(did) => did>
+    return hits->map<(n: Node): bool => fold_one(t, n)>->any<(did: bool): bool => did>
 }
 
 // Commits a round that replaced something, and abandons one that replaced nothing: the program the
@@ -245,7 +245,7 @@ func abandoned::<F>(t: Txn<F>, f: F): F! sync {
 // `eval` all refused (a constant expression that can only fault is left as written and warned
 // about) is such a round, and recursing on the function it started from would not stop, so it is
 // abandoned.
-func fold_rounds::<F>(f: F): F! sync {
+func fold_rounds::<F>(f: F): F! when is_function::<F>() sync {
     let t = open(f)
     let changed = fold_round(t, all_nodes(graphs_of(f))->filter<evaluated>)
     return if changed then committed(t) -> fold_rounds else abandoned(t, f)

@@ -948,8 +948,8 @@ any Formatter::visitResourceClause(cst::ResourceClause context) {
 
 /*
 typeDecl
-    : TYPE identRef ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
-      (typeExpr | STRING)
+    : TYPE identRef ('<' identDef (',' identDef)* ','? ('>' | '>='))?
+      ('=' (typeExpr | STRING))?
     ;
 */
 any Formatter::visitTypeDecl(cst::TypeDecl context) {
@@ -968,11 +968,11 @@ any Formatter::visitTypeDecl(cst::TypeDecl context) {
         }
         result += ">";
     }
-    result += " = ";
+    // An opaque type has no right side: `export type Graph`.
     if (context->type()) {
-        result += any_cast<string>(visitType(context->type()));
-    } else {
-        result += formatStringLiteral(context->tok(TK::String)->text());
+        result += " = " + any_cast<string>(visitType(context->type()));
+    } else if (context->tokCount(TK::String) > 0) {
+        result += " = " + formatStringLiteral(context->tok(TK::String)->text());
     }
     return result;
 }
