@@ -125,4 +125,5 @@ struct OptimizeRewriteConfig;
  */
 const camel::runtime::Program *simplifyGraph(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    const OptimizeRewriteConfig &config, std::ostream &os, size_t maxRounds = 16);
+    const OptimizeRewriteConfig &config, std::ostream &os, size_t maxRounds = 16,
+    GraphIRPass *caller = nullptr);

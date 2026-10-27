@@ -1,0 +1,101 @@
+id = "opt.never_exit"
+order = 325
+tier = "fast"
+tags = ["feat", "opt", "faults", "never", "negative"]
+desc = "A sync main that ends in a node of type never (exit, fail) keeps the output before it under every optimizer pass alone"
+
+# A node of type `never` ends the run (design principles 3.9): no pass may treat the value it does
+# not give as a value a law is written for, or drop what stands before it. The entries run each
+# pass alone, then the default pipeline, on every back end.
+
+[defaults]
+kind = "negative"
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+expect_stdout_starts_with = "before\n"
+timeout_ms = 20000
+
+[[tests]]
+name = "exit_last.algebra"
+desc = "exit(3) ends a sync main: the output before it is there and the run ends with exit code 3. Pass: std::opt::algebra."
+case = "../../../cases/opt/never_exit/exit_last.cml"
+args = ["${case}", "std::opt::algebra", "${backend}"]
+expect_exit = 3
+
+[[tests]]
+name = "exit_last.dce"
+desc = "exit(3) ends a sync main: the output before it is there and the run ends with exit code 3. Pass: std::opt::dce."
+case = "../../../cases/opt/never_exit/exit_last.cml"
+args = ["${case}", "std::opt::dce", "${backend}"]
+expect_exit = 3
+
+[[tests]]
+name = "exit_last.inline"
+desc = "exit(3) ends a sync main: the output before it is there and the run ends with exit code 3. Pass: std::opt::inline."
+case = "../../../cases/opt/never_exit/exit_last.cml"
+args = ["${case}", "std::opt::inline", "${backend}"]
+expect_exit = 3
+
+[[tests]]
+name = "exit_last.fold"
+desc = "exit(3) ends a sync main: the output before it is there and the run ends with exit code 3. Pass: std::opt::fold."
+case = "../../../cases/opt/never_exit/exit_last.cml"
+args = ["${case}", "std::opt::fold", "${backend}"]
+expect_exit = 3
+
+[[tests]]
+name = "exit_last.cse"
+desc = "exit(3) ends a sync main: the output before it is there and the run ends with exit code 3. Pass: std::opt::cse."
+case = "../../../cases/opt/never_exit/exit_last.cml"
+args = ["${case}", "std::opt::cse", "${backend}"]
+expect_exit = 3
+
+[[tests]]
+name = "exit_last.opt"
+desc = "exit(3) ends a sync main: the output before it is there and the run ends with exit code 3. Pass: std::opt."
+case = "../../../cases/opt/never_exit/exit_last.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 3
+
+[[tests]]
+name = "fail_last.algebra"
+desc = "fail ends a sync main: the output before it is there and the run ends with exit code 1. Pass: std::opt::algebra."
+case = "../../../cases/opt/never_exit/fail_last.cml"
+args = ["${case}", "std::opt::algebra", "${backend}"]
+expect_exit = 1
+
+[[tests]]
+name = "fail_last.dce"
+desc = "fail ends a sync main: the output before it is there and the run ends with exit code 1. Pass: std::opt::dce."
+case = "../../../cases/opt/never_exit/fail_last.cml"
+args = ["${case}", "std::opt::dce", "${backend}"]
+expect_exit = 1
+
+[[tests]]
+name = "fail_last.inline"
+desc = "fail ends a sync main: the output before it is there and the run ends with exit code 1. Pass: std::opt::inline."
+case = "../../../cases/opt/never_exit/fail_last.cml"
+args = ["${case}", "std::opt::inline", "${backend}"]
+expect_exit = 1
+
+[[tests]]
+name = "fail_last.fold"
+desc = "fail ends a sync main: the output before it is there and the run ends with exit code 1. Pass: std::opt::fold."
+case = "../../../cases/opt/never_exit/fail_last.cml"
+args = ["${case}", "std::opt::fold", "${backend}"]
+expect_exit = 1
+
+[[tests]]
+name = "fail_last.cse"
+desc = "fail ends a sync main: the output before it is there and the run ends with exit code 1. Pass: std::opt::cse."
+case = "../../../cases/opt/never_exit/fail_last.cml"
+args = ["${case}", "std::opt::cse", "${backend}"]
+expect_exit = 1
+
+[[tests]]
+name = "fail_last.opt"
+desc = "fail ends a sync main: the output before it is there and the run ends with exit code 1. Pass: std::opt."
+case = "../../../cases/opt/never_exit/fail_last.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 1
