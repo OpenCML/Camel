@@ -3010,8 +3010,15 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     // `int[]` the rule gives it, and the loop iterates that value like any other sequence.
     if (hasIterable && isIntervalExpr(gct->loopSequence())) {
         const auto &interval = gct->loopSequence();
-        node_handle_t from   = argumentNodeOf(visit(interval->at(1)), interval->at(1));
-        node_handle_t to     = argumentNodeOf(visit(interval->at(2)), interval->at(2));
+        // The sequence is not the loop's value, so the position the loop stands in does not reach
+        // it (design principles 5.1): its literals have the types they are written with.
+        node_handle_t from{};
+        node_handle_t to{};
+        {
+            ExpectedValueScope sequenceScope(expectedValueType_, nullptr);
+            from = argumentNodeOf(visit(interval->at(1)), interval->at(1));
+            to   = argumentNodeOf(visit(interval->at(2)), interval->at(2));
+        }
         if (intervalBounds(from, to)) {
             sequence         = intervalSequenceValue(from, to, interval);
             elementType      = Type::Int64();
@@ -3026,7 +3033,11 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         }
     } else if (hasIterable) {
         const auto &expr = gct->loopSequence();
-        sequence         = valueOf(functionValueOf(valueNodeOf(visit(expr)), expr));
+        {
+            // The sequence is not the loop's value (see above).
+            ExpectedValueScope sequenceScope(expectedValueType_, nullptr);
+            sequence = valueOf(functionValueOf(valueNodeOf(visit(expr)), expr));
+        }
         Type *sequenceType = valueTypeOf(nodeTypeOf(sequence));
         // `for x in s` where `s` is a stream: the rounds are the pulls of the stream's step
         // function, and the graph already has the loop for that (the `while`, with a condition

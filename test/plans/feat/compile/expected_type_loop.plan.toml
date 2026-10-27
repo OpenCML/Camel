@@ -1,0 +1,20 @@
+id = "compile.expected_type_loop"
+order = 941
+tier = "fast"
+tags = ["feat", "compile", "loop", "expected-type"]
+desc = "The type a position expects reaches a loop through its value only: not through the sequence after `for`, the condition after `while`, or the condition and scrutinee of an `if` or `match`"
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "expected_type_loop.parts"
+desc = "A float sequence in a `for` under an array of `int`, in an `if` arm and in a `match` arm compiles and runs; so do a `while` condition and `if`/`match` conditions that write float literals."
+kind = "behavior"
+case = "../../../cases/compile/expected_type_loop/loop_parts.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[3, 1]\n5\n[6, 5]\n[5] [0]\n[2]\n[1, 4] [0, 4]\n"
