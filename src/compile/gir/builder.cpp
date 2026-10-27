@@ -652,8 +652,9 @@ bool Builder::isPassDeclaration(const GCT::node_ptr_t &gct) {
         return false;
     }
     // A pass is a function transform `(f: F) => F!` (design principles 9.1): one ordinary
-    // parameter and the same type, failable, as the result. A body-less declaration of another
-    // shape that is conditioned on `is_function` declares an operator of a function value
+    // parameter and the same type, failable, as the result, and `when is_function::<F>()`. That is
+    // the whole classification; what implements it does not enter. A body-less declaration of
+    // another shape that is conditioned the same way declares an operator of a function value
     // (`graph_of::<F>(f: F): Graph when is_function::<F>()`).
     const auto *signature = tt::as_ptr<FunctionType>(gct->at(0)->dataType());
     if (signature == nullptr || signature->normTypesCount() != 1 || !signature->hasExitType()) {
@@ -662,38 +663,6 @@ bool Builder::isPassDeclaration(const GCT::node_ptr_t &gct) {
     const auto *answer = asFallible(signature->exitType());
     if (answer == nullptr || !answer->payloadType()->equals(signature->normTypeAt(0))) {
         return false;
-    }
-    // A function transform the module implements as an operator of its own (an engine of
-    // `rewrite`, which is called as `f->rewrite<rules>`) is no pass of the pipeline: a pass has a
-    // kernel of the core and no operator.
-    {
-        const std::string &declared = unit_->module->declaredName();
-        std::string uri = (declared.empty() ? unit_->module->name() : declared) + ":" + gct->name();
-        if (auto tagged = nativeOperatorUri(gct); tagged.has_value()) {
-            uri = std::move(*tagged);
-        }
-        if (camel::core::OperatorTable::instance().find(uri).has_value()) {
-            // The operator is the declaration's only when the module declares the name once: a
-            // name declared again is an operator beside a pass of the same name (`export_model`),
-            // and the pass-shaped declaration is the pass.
-            size_t declared = 0;
-            const std::function<void(const GCT::node_ptr_t &)> count =
-                [&](const GCT::node_ptr_t &node) {
-                    if (node->type() == GCT::NodeKind::DECL && node->nativeDeclaration() &&
-                        node->name() == gct->name()) {
-                        ++declared;
-                    }
-                    for (size_t i = 0; i < node->size(); ++i) {
-                        count(node->at(i));
-                    }
-                };
-            if (unit_->tree != nullptr && unit_->tree->root() != nullptr) {
-                count(unit_->tree->root());
-            }
-            if (declared <= 1) {
-                return false;
-            }
-        }
     }
     // The text the pipeline reads, normalized the same way: `is_function::<T>()` with any
     // identifier for the type parameter (pass_declarations.cpp, passDeclarationApplies). A
@@ -724,6 +693,39 @@ bool Builder::isPassDeclaration(const GCT::node_ptr_t &gct) {
                                      });
 }
 
+/// Whether the module implements the operator this body-less declaration names (`#op`, or the
+/// declaration's own `module:name`) for it. A name declared more than once is an operator beside
+/// something else of the same name (`export_model`: the operator takes the function and an example,
+/// the pass takes the function), and then the operator is the declaration that writes `#op`.
+bool Builder::declarationHasOperator(const GCT::node_ptr_t &gct) {
+    const std::string &declared = unit_->module->declaredName();
+    std::string uri = (declared.empty() ? unit_->module->name() : declared) + ":" + gct->name();
+    const auto tagged = nativeOperatorUri(gct);
+    if (tagged.has_value()) {
+        uri = *tagged;
+    }
+    if (!camel::core::OperatorTable::instance().find(uri).has_value()) {
+        return false;
+    }
+    if (tagged.has_value()) {
+        return true;
+    }
+    size_t same = 0;
+    const std::function<void(const GCT::node_ptr_t &)> count = [&](const GCT::node_ptr_t &node) {
+        if (node->type() == GCT::NodeKind::DECL && node->nativeDeclaration() &&
+            node->name() == gct->name()) {
+            ++same;
+        }
+        for (size_t i = 0; i < node->size(); ++i) {
+            count(node->at(i));
+        }
+    };
+    if (unit_->tree != nullptr && unit_->tree->root() != nullptr) {
+        count(unit_->tree->root());
+    }
+    return same <= 1;
+}
+
 std::vector<camel::source::origin_id_t> parameterPortOrigins(
     const context_ptr_t &context, const GCT::node_ptr_t &gct);
 
@@ -736,8 +738,13 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
             // declaration is the pipeline's (design principles 9.3); this records the name so
             // the export list does not look for an entity that will not exist.
             unit_->passDeclarations.insert(gct->name());
-            LEAVE("DECL");
-            return nullptr;
+            // A pass is told by its type alone, whatever implements it: a module that also
+            // implements the operator (an engine of `rewrite`, called as `f->rewrite<rules>`)
+            // declares that operator as well.
+            if (!declarationHasOperator(gct)) {
+                LEAVE("DECL");
+                return nullptr;
+            }
         }
         // A body-less declaration declares an operator of a C++ module (design principles 6.4):
         // it is checked and kept as an operator rule, not as a graph (step 1).

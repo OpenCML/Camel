@@ -95,35 +95,8 @@ bool hasPassShape(const ast::node_ptr_t &funcType) {
     return payload != nullptr && payload->ref().toString() == parameter->ref().toString();
 }
 
-/// How many function declarations of each name the module writes (a namespace's prefix and the
-/// module's own are left off the name, as a pass's name is read).
-void countDeclarations(
-    const ast::node_ptr_t &node, const std::string &module, std::map<std::string, size_t> &counts) {
-    if (node->type() == ast::LoadType::Stmt) {
-        const auto stmt = node->loadAs<ast::StmtLoad>();
-        if (stmt->stmtType() == ast::StmtType::Func) {
-            if (const auto func = funcDataOf(node)) {
-                const auto data = std::dynamic_pointer_cast<ast::FuncDataLoad>(func->load());
-                std::string name = data->ref().toString();
-                if (const std::string prefix = module + "::"; name.rfind(prefix, 0) == 0) {
-                    name = name.substr(prefix.size());
-                }
-                ++counts[name];
-            }
-            return;
-        }
-        if (stmt->stmtType() == ast::StmtType::Data) {
-            return;
-        }
-    }
-    for (size_t i = 0; i < node->size(); ++i) {
-        countDeclarations(node->at(i), module, counts);
-    }
-}
-
 void collectDeclarations(
-    const ast::node_ptr_t &node, const std::string &module,
-    const std::map<std::string, size_t> &counts, std::vector<PassDeclaration> &out) {
+    const ast::node_ptr_t &node, const std::string &module, std::vector<PassDeclaration> &out) {
     if (node->type() == ast::LoadType::Stmt) {
         const auto stmt = node->loadAs<ast::StmtLoad>();
         if (stmt->stmtType() == ast::StmtType::Func) {
@@ -145,16 +118,9 @@ void collectDeclarations(
             // A pass declares when it applies (`when is_function::<F>()`). An ordinary body-less
             // declaration of the module (`func argsort(...)`) has no such condition and is not a
             // pass: the pipeline resolves it through the module's own exports.
-            // A function transform the module implements as an operator of the same name is no
-            // pass (`rewrite`, called as `f->rewrite<rules>`); a name that is declared more than
-            // once is the exception, because the operator is then the other declaration's (the
-            // two-argument `export_model`) and this one, the pass-shaped one, is the pass.
-            const bool namedOperator =
-                camel::core::OperatorTable::instance()
-                    .find(module + ":" + declaration.name)
-                    .has_value() &&
-                counts.at(declaration.name) == 1;
-            if (declaration.when.empty() || !hasPassShape(funcType) || namedOperator) {
+            // A pass is told by its type, `(f: F): F!` under `when is_function::<F>()`, and by nothing
+            // else: not by whether the module also implements an operator of the name.
+            if (declaration.when.empty() || !hasPassShape(funcType)) {
                 return;
             }
             // A pass takes the function it is applied to and nothing else: one ordinary
@@ -168,16 +134,16 @@ void collectDeclarations(
                     declaration.params =
                         readPassParams(funcType->at(0), module + "::" + declaration.name);
                 } catch (const std::exception &e) {
-                    // A body-less transform whose parameters no pass can take (a rule set, a
-                    // cost function) is an engine the module implements as an operator, called
-                    // as `f->rewrite<rules>`: it is not a pass, and the pipeline does not read
-                    // it as one. A declaration with a body is a pass, and its parameters are
-                    // refused.
+                    // A body-less declaration whose parameters no pass can take (a rule set, a cost
+                    // function) is a pass by its type and is implemented as something else (an
+                    // operator of the module): it is listed, and its parameters are the ones of the
+                    // operator. A declaration with a body is a pass, and its parameters are refused.
                     if (func->size() == 1) {
-                        return;
+                        declaration.params.clear();
+                    } else {
+                        throw std::runtime_error(
+                            std::format("{}: {}", module + ".cml", e.what()));
                     }
-                    throw std::runtime_error(
-                        std::format("{}: {}", module + ".cml", e.what()));
                 }
             }
             out.push_back(std::move(declaration));
@@ -189,7 +155,7 @@ void collectDeclarations(
         }
     }
     for (size_t i = 0; i < node->size(); ++i) {
-        collectDeclarations(node->at(i), module, counts, out);
+        collectDeclarations(node->at(i), module, out);
     }
 }
 
@@ -213,9 +179,7 @@ std::vector<PassDeclaration> readDeclarations(
     }
     std::vector<PassDeclaration> declarations;
     // Module -> Stmts.
-    std::map<std::string, size_t> counts;
-    countDeclarations(parser.ast()->at(2), module, counts);
-    collectDeclarations(parser.ast()->at(2), module, counts, declarations);
+    collectDeclarations(parser.ast()->at(2), module, declarations);
     return declarations;
 }
 
