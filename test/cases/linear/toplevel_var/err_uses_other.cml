@@ -1,0 +1,15 @@
+/** A clause that leaves the variable out does not keep its promise: reading `cnt` is a use of it. */
+module err_uses_other
+
+resource db
+
+var cnt: int = 0
+
+func peek(): int uses db {
+    return cnt
+}
+
+func main(): int sync {
+    println(peek())
+    return 0
+}

@@ -407,6 +407,15 @@ void Builder::buildTopLevelValue(TopLevelDeclaration &declaration) {
     try {
         (void)visit(declaration.gct);
         declaration.state = BuildState::Built;
+        if (declaration.isVar) {
+            for (const std::string &name : declaration.names) {
+                if (const auto cell = declaration.unit->nodeScope->get(name, false);
+                    cell.has_value()) {
+                    moduleVariableResources_[*cell] =
+                        declaration.unit->module->name() + "::" + name;
+                }
+            }
+        }
     } catch (...) {
         declaration.state = BuildState::Failed;
         for (const std::string &name : declaration.names) {

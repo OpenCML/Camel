@@ -1484,6 +1484,39 @@ void Builder::collapseNonEscapingVariableReads() {
     if (variableReadSource_.empty() || currGraph_ == nullptr) {
         return;
     }
+    // A read nothing uses is no statement and runs for nobody (`let after = c` that is never read):
+    // it is not on the chain any more, so nothing would reach it, and the writer's order edge to it
+    // would name a node the graph does not keep. It goes before the reads that are folded, with the
+    // order edge that kept the next write after it.
+    {
+        auto &graphDraft = currGraph_->draft();
+        std::vector<node_handle_t> unused;
+        for (const auto &entry : variableReadSource_) {
+            const node_handle_t read = entry.first;
+            if (!sameGraph(read, currGraph_) || graphDraft.header(nodeIdOf(read)) == nullptr ||
+                !graphDraft.alive(nodeIdOf(read))) {
+                continue;
+            }
+            const draft_node_ref_t readId = nodeIdOf(read);
+            if (readId == graphDraft.exitNode() || readId == graphDraft.outputNode() ||
+                readId == graphDraft.returnNode()) {
+                continue;
+            }
+            bool used = false;
+            for (const auto &users :
+                 {graphDraft.normUsersOf(readId), graphDraft.withUsersOf(readId),
+                  graphDraft.ctrlUsersOf(readId), graphDraft.syncUsersOf(readId)}) {
+                used = used || !users.empty();
+            }
+            if (!used) {
+                unused.push_back(read);
+            }
+        }
+        for (const node_handle_t read : unused) {
+            graphDraft.eraseNode(nodeIdOf(read));
+            variableReadSource_.erase(read);
+        }
+    }
     // The reads recorded for this graph, grouped by the cell they read. A cell of an outer graph
     // belongs to that graph's own turn, so it is skipped here.
     std::unordered_map<node_handle_t, std::vector<std::pair<node_handle_t, node_handle_t>>> byCell;

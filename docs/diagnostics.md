@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-293 diagnostics: 273 errors, 20 warnings. 15 carry a machine-applicable edit, 278 say why they carry none.
+292 diagnostics: 272 errors, 20 warnings. 15 carry a machine-applicable edit, 277 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -98,7 +98,6 @@ prints one entry.
 | `0x030000B3` | [SemanticDiag::PartialApplicationRefused](#partialapplicationrefused) | Error | no |
 | `0x030000B4` | [SemanticDiag::ComprehensionSourceRefused](#comprehensionsourcerefused) | Error | no |
 | `0x030000C0` | [SemanticDiag::LogicalOperandNotBool](#logicaloperandnotbool) | Error | no |
-| `0x030000D0` | [SemanticDiag::ExportedVariable](#exportedvariable) | Error | no |
 | `0x030000D1` | [SemanticDiag::ModuleValueCycle](#modulevaluecycle) | Error | no |
 | `0x030000D2` | [SemanticDiag::CaptureAfterRecursiveCall](#captureafterrecursivecall) | Error | no |
 | `0x030000D3` | [SemanticDiag::AmbiguousName](#ambiguousname) | Error | no |
@@ -3013,37 +3012,6 @@ func main(): int sync {
     let o: bool? = true
     let p = o || false
     println(p)
-    return 0
-}
-```
-
-### ExportedVariable
-
-`0x030000D0` · Error · `SemanticDiag::ExportedVariable`
-
-**Fix**
-
-None: choice: the repair is a decision only the writer can make
-
-**Message**
-
-```text
-The variable '{0}' cannot be exported.
-```
-
-**Help**
-
-```text
-A 'var' of the top level of a module is read and written only by the module's own functions: export the functions that read and write it ('export func bump(): int sync { cnt += 1; return cnt }'). A 'let' can be exported.
-```
-
-**Example** (`test/cases/compile/module_root/export_var.cml`, run as `camel -E short test/cases/compile/module_root/export_var.cml`)
-
-```camel
-// A `var` cannot be exported (design principles 10.1).
-import export_var_lib
-
-func main(): int sync {
     return 0
 }
 ```
