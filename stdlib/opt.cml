@@ -3,309 +3,267 @@
 
 /**
  * The optimization passes of the standard library written in Camel: `opt::fold`, `opt::cse` and
- * `opt::dce`. A pass is a function `(p: Program) => Program!` exported by this module, so the
- * pipeline names it by its module: `camel prog.cml opt::fold std::nvm`.
+ * `opt::dce`. A pass is a function from a function to a function of the same type,
+ * `(f: F) => F!`, so it applies to one function, `loss->opt::fold->opt::cse`, and the pipeline
+ * names it by its module: `camel prog.cml opt::fold std::nvm`. They are the meaning of the
+ * native passes of the same names, `std::opt::fold`, `std::opt::cse` and `std::opt::dce`, which
+ * run by default; a differential test keeps the two together (design principles 10.4).
  *
- * A pass is a transaction over the snapshot the `graph` module hands out: read a node, `replace`
+ * A pass is a transaction over the function the `graph` module hands out: read a node, `replace`
  * it by another, `erase` one nobody reads, evaluate an operator over constants with `eval`,
- * `commit`, and read the next round from the new snapshot.
+ * `commit`, and read the next round from the function that comes back.
  *
- *     func shrink(p: Program): Program! sync {
- *         return fold(p) -> cse
+ *     func shrink::<F>(f: F): F! {
+ *         return f->fold -> cse
  *     }
  *
  * The arithmetic is `eval`'s and follows the C++ pass: an integer operation is exact and a float
  * operation is the double one, computed the way the operator's kernel computes it, once per
  * folding. No other number is computed here.
  */
-module opt
 
 import { flatten, all, any } from array
-import { Program, Node, Graph, Txn, NodeKind, graphs, nodes, inputs, with_inputs, value_users, id, kind, op, op_name, is_pure, is_anchor, is_written_slot, is_constant, type_of, type_name, region_of, permissions, tags, constant, open, replace, erase, eval, commit, abort } from graph
+import { Node, Graph, Txn, NodeKind, graphs_of, nodes, inputs, with_inputs, value_users, id, kind, op, op_name, is_pure, is_anchor, is_written_slot, is_constant, type_of, type_name, region_of, permissions, tags, constant, open, replace, erase, eval, commit, abort } from graph
+import { is_function } from types
 
 // ---- reading a node as the key of a comparison ----
 
-func opText(n: Node): string {
+func op_text(n: Node): string {
     return match op(n) {
         case null => ''
         case o => op_name(o)
     }
 }
 
-func typeText(n: Node): string {
+func type_text(n: Node): string {
     return match type_of(n) {
         case null => ''
         case t => type_name(t)
     }
 }
 
-func allNodes(p: Program): Node[] {
-    return flatten(graphs(p)->map<(g: Graph): Node[] => nodes(g)>)
+func all_nodes(gs: Graph[]): Node[] {
+    return flatten(gs->map<nodes>)
 }
 
 // ---- common subexpressions ----
 
-/// The types whose `==` in Camel is the equality of the graph's values too. A float is left out
-/// on purpose: Camel cannot read the bits of a scalar, so `0.0 == -0.0` holds while the two
-/// constants are different values of the graph, and merging them would change the program.
-func bitEqualType(ty: string): bool {
-    return ty == 'int' || ty == 'i32' || ty == 'bool'
+// Whether the two nodes hold the same value of the type T.
+func same_value::<T>(a: Node, b: Node): bool {
+    let x = constant::<T>(a)
+    let y = constant::<T>(b)
+    return if x != null && y != null then x == y else false
 }
 
-func sameIntValue(b: Node, x: int): bool {
-    return match constant(b, 0) {
-        case null => false
-        case y => x == y
+// Whether the two nodes are constants of one type and one value. Only the types whose `==` in
+// Camel is the equality of the graph's values are compared: a float is left out on purpose, for
+// Camel cannot read the bits of a scalar, so `0.0 == -0.0` holds while the two constants are
+// different values of the graph, and merging them would change the program.
+func same_constant(a: Node, b: Node): bool {
+    return match type_text(a) {
+        case 'int' => same_value::<int>(a, b)
+        case 'i32' => same_value::<i32>(a, b)
+        case 'bool' => same_value::<bool>(a, b)
+        case _ => false
     }
 }
 
-func sameI32Value(b: Node, x: i32): bool {
-    let zero: i32 = 0
-    return match constant(b, zero) {
-        case null => false
-        case y => x == y
-    }
+// A constant the sweep may merge: a static value that no node may write in place.
+func mergeable_constant(n: Node): bool {
+    return kind(n) == NodeKind::Data && is_constant(n) && !is_written_slot(n)
 }
 
-func sameBoolValue(b: Node, x: bool): bool {
-    return match constant(b, false) {
-        case null => false
-        case y => x == y
-    }
+// Whether the two lists name the same nodes in the same order.
+func same_nodes(xs: Node[], ys: Node[]): bool {
+    return len(xs) == len(ys) && zip(xs, ys)->all<(p: (Node, Node)): bool => p.0 == p.1>
 }
 
-/// Whether the two nodes are constants of the same type and the same value.
-func sameConstant(a: Node, b: Node, ty: string): bool {
-    return if ty == 'int' then sameIntConstant(a, b) else if ty == 'i32' then sameI32Constant(a, b) else sameBoolConstant(a, b)
+// A pure operation the sweep may merge: reading no value that may be written in place, and not
+// one itself. An operation over such a value is not one value: the two times it is written are
+// two results.
+func mergeable_operation(n: Node): bool {
+    return kind(n) == NodeKind::Oper && is_pure(n) && op_text(n) != '' && !is_written_slot(n)
+        && !inputs(n)->any<is_written_slot> && !with_inputs(n)->any<is_written_slot>
 }
 
-func sameIntConstant(a: Node, b: Node): bool {
-    return match constant(a, 0) {
-        case null => false
-        case x => sameIntValue(b, x)
-    }
+// Whether the two operations are the same computation: the same operator on values of the same
+// type, the same operands in the same order, in the same region, with the same permissions and
+// the same attributes.
+func same_operation(a: Node, b: Node): bool {
+    return op_text(a) == op_text(b) && type_text(a) == type_text(b)
+        && permissions(a) == permissions(b) && tags(a) == tags(b) && region_of(a) == region_of(b)
+        && same_nodes(inputs(a), inputs(b)) && same_nodes(with_inputs(a), with_inputs(b))
 }
 
-func sameI32Constant(a: Node, b: Node): bool {
-    let zero: i32 = 0
-    return match constant(a, zero) {
-        case null => false
-        case x => sameI32Value(b, x)
-    }
+// Whether one node may stand for the other in a graph: as a constant of the same value, or as
+// the same operation.
+func same_node(a: Node, b: Node): bool {
+    return (mergeable_constant(a) && mergeable_constant(b) && same_constant(a, b))
+        || (mergeable_operation(a) && mergeable_operation(b) && same_operation(a, b))
 }
 
-func sameBoolConstant(a: Node, b: Node): bool {
-    return match constant(a, false) {
-        case null => false
-        case x => sameBoolValue(b, x)
-    }
-}
-
-/// A constant the sweep may merge: a static value of a type whose `==` is bit equality, which no
-/// node may write in place.
-func mergeableConstant(n: Node): bool {
-    return kind(n) == NodeKind::Data && is_constant(n) && bitEqualType(typeText(n)) && !is_written_slot(n)
-}
-
-/// Whether the two lists name the same nodes in the same order.
-func sameNodes(xs: Node[], ys: Node[]): bool {
-    return len(xs) == len(ys) && 0..len(xs)->all<(i: int): bool => xs[i] == ys[i]>
-}
-
-/// Whether one of the nodes may be written in place. An operation over such a value is not one
-/// value: the two times it is written are two results.
-func anyWritten(ns: Node[]): bool {
-    return ns->any<is_written_slot>
-}
-
-/// A pure operation the sweep may merge: reading no value that may be written in place, and not
-/// one itself.
-func mergeableOperation(n: Node): bool {
-    return kind(n) == NodeKind::Oper && is_pure(n) && opText(n) != '' && !is_written_slot(n) && !anyWritten(inputs(n)) && !anyWritten(with_inputs(n))
-}
-
-/// Whether the two operations are the same computation: the same operator on values of the same
-/// type, the same operands in the same order, in the same region, with the same permissions and
-/// the same attributes.
-func sameOperation(a: Node, b: Node): bool {
-    return opText(a) == opText(b) && typeText(a) == typeText(b) && permissions(a) == permissions(b) && tags(a) == tags(b) && region_of(a) == region_of(b) && sameNodes(inputs(a), inputs(b)) && sameNodes(with_inputs(a), with_inputs(b))
-}
-
-/// Whether one node may stand for the other in a graph: as a constant of the same value, or as
-/// the same operation.
-func sameValue(a: Node, b: Node): bool {
-    return (mergeableConstant(a) && mergeableConstant(b) && sameConstant(a, b, typeText(a))) || (mergeableOperation(a) && mergeableOperation(b) && sameOperation(a, b))
-}
-
-/// The node `n` is replaced by: the first node of its graph that has the same value, or `n`
-/// itself when it is the first. That first node is never a node the same round merges away,
-/// which is what makes one transaction enough for a round.
-func keepOf(ns: Node[], n: Node): Node {
-    let earlier = ns->filter<(m: Node): bool => id(m) < id(n) && sameValue(n, m)>
+// The node `n` is replaced by: the first node of its graph that has the same value, or `n`
+// itself when it is the first. That first node is never a node the same round merges away, which
+// is what makes one transaction enough for a round.
+func keep_of(ns: Node[], n: Node): Node {
+    let earlier = ns->filter<(m: Node): bool => id(m) < id(n) && same_node(n, m)>
     return if len(earlier) == 0 then n else earlier[0]
 }
 
-func isHit(ns: Node[], n: Node): bool {
-    return keepOf(ns, n) != n
+func is_hit(ns: Node[], n: Node): bool {
+    return keep_of(ns, n) != n
 }
 
-func graphHasHit(g: Graph): bool {
+func graph_has_hit(g: Graph): bool {
     let ns = nodes(g)
-    return ns->any<(n: Node): bool => isHit(ns, n)>
+    return ns->any<(n: Node): bool => is_hit(ns, n)>
 }
 
-func hasHit(p: Program): bool {
-    return graphs(p)->any<graphHasHit>
-}
-
-func mergeHitsOf(t: Txn, g: Graph): void {
+func merge_hits_of::<F>(t: Txn<F>, g: Graph): void {
     let ns = nodes(g)
-    ns->filter<(n: Node): bool => isHit(ns, n)>->foreach<(n: Node) => replace(t, n, keepOf(ns, n))>
+    ns->filter<(n: Node): bool => is_hit(ns, n)>->foreach<(n: Node): void => replace(t, n, keep_of(ns, n))>
 }
 
-func mergeHits(p: Program): Program! sync {
-    let t = open(p)
-    graphs(p)->foreach<(g: Graph) => mergeHitsOf(t, g)>
+func merge_hits::<F>(f: F): F! sync {
+    let t = open(f)
+    graphs_of(f)->foreach<(g: Graph): void => merge_hits_of(t, g)>
     return commit(t)
 }
 
 /// Equal values written twice are one node, until none is left.
-export func cse(p: Program): Program! {
-    return if hasHit(p) then mergeHits(p) -> cse else p
+/// @example ((x: int): int => x * 2 + x * 2)->cse
+export func cse::<F>(f: F): F! when is_function::<F>() {
+    return if graphs_of(f)->any<graph_has_hit> then match merge_hits(f) {
+        case error e => error(e.kind, e.message)
+        case merged => cse(merged)
+    } else f
 }
 
 // ---- dead values ----
 
-/// Whether the node computes a value: a constant, a conversion, a copy, an access, a fill or a
-/// pure operation. This is `isValueOnly` of the C++ pass, which the `graph` module reads as the
-/// kinds of a node and the declarations of its operator.
-func valueOnly(n: Node): bool {
+// Whether the node computes a value: a constant, a conversion, a copy, an access, a fill or a pure
+// operation. This is `isValueOnly` of the C++ pass, which the `graph` module reads as the kinds of
+// a node and the declarations of its operator.
+func value_only(n: Node): bool {
     let k = kind(n)
-    return (k == NodeKind::Data && is_constant(n)) || k == NodeKind::Cast || k == NodeKind::Copy || k == NodeKind::Accs || k == NodeKind::Fill || (k == NodeKind::Oper && is_pure(n))
+    return (k == NodeKind::Data && is_constant(n)) || k == NodeKind::Cast || k == NodeKind::Copy
+        || k == NodeKind::Accs || k == NodeKind::Fill || (k == NodeKind::Oper && is_pure(n))
 }
 
-/// Whether the node computes a value no node reads. A node that anchors its graph is not one:
-/// a transaction refuses to erase it, and the graph would lose its exit.
-func deadValue(n: Node): bool {
-    return valueOnly(n) && len(value_users(n)) == 0 && !is_anchor(n)
+// Whether the node computes a value no node reads. A node that anchors its graph is not one: a
+// transaction refuses to erase it, and the graph would lose its exit.
+func dead_value(n: Node): bool {
+    return value_only(n) && len(value_users(n)) == 0 && !is_anchor(n)
 }
 
-func eraseHits(p: Program, hits: Node[]): Program! sync {
-    let t = open(p)
-    hits->foreach<(n: Node) => erase(t, n)>
+func erase_hits::<F>(f: F, hits: Node[]): F! sync {
+    let t = open(f)
+    hits->foreach<(n: Node): void => erase(t, n)>
     return commit(t)
 }
 
-func deadValues(p: Program): Program! sync {
-    let hits = allNodes(p)->filter<deadValue>
-    return if len(hits) == 0 then p else eraseHits(p, hits) -> deadValues
+func dead_values::<F>(f: F): F! sync {
+    let hits = all_nodes(graphs_of(f))->filter<dead_value>
+    return if len(hits) == 0 then f else match erase_hits(f, hits) {
+        case error e => error(e.kind, e.message)
+        case erased => dead_values(erased)
+    }
 }
 
 /// Values nobody reads are erased, until none is left: the value half of `std::opt::dce`.
-export func dce(p: Program): Program! {
-    return deadValues(p)
+/// @example ((x: int): int => x + 1)->dce
+export func dce::<F>(f: F): F! when is_function::<F>() {
+    return dead_values(f)
 }
 
 // ---- constant folding ----
 
-/// Whether the node is one this pass may put a value in the place of: not one that anchors its
-/// graph, and not one whose value may be written in place. In a function graph the returned value
-/// is also the graph's exit and output value, and the module's `replace` refuses a node that
-/// anchors its graph, so a returned constant expression is left as written. A value that may be
-/// written in place is left too: a constant replacing it would share one object between every run
-/// of the graph.
+// Whether the node is one this pass may put a value in the place of: not one that anchors its
+// graph, and not one whose value may be written in place. In a function graph the returned value
+// is also the graph's exit and output value, and `replace` refuses a node that anchors its graph,
+// so a returned constant expression is left as written. A value that may be written in place is
+// left too: a constant replacing it would share one object between every run of the graph.
 func foldable(n: Node): bool {
     return !is_anchor(n) && !is_written_slot(n)
 }
 
-/// Whether the node is a pure operation: the one kind of node this pass evaluates. The
-/// conversions, copies, accesses and fills are not evaluated here; the `graph` module evaluates an
-/// operation.
-func operation(n: Node): bool {
+// Whether the node is a pure operation: the one kind of node this pass evaluates. The
+// conversions, copies, accesses and fills are not evaluated here.
+func is_operation(n: Node): bool {
     return kind(n) == NodeKind::Oper && is_pure(n)
 }
 
-/// Whether every value the node reads is a constant of the graph: what its operator is computed
-/// over. An operation that reads nothing is not one: `eval` has nothing to compute it from.
-func constantOperands(n: Node): bool {
+// Whether every value the node reads is a constant of the graph: what its operator is computed
+// over. An operation that reads nothing is not one: `eval` has nothing to compute it from.
+func constant_operands(n: Node): bool {
     let ins = inputs(n)
     return len(ins) > 0 && ins->all<is_constant>
 }
 
-/// Whether the round evaluates this node: a pure operation whose operands are all constants. A
-/// node the round may not replace is evaluated all the same, because `eval` is what warns about a
-/// constant expression that can only fault: the C++ fold evaluates such a node "to tell the user of
-/// a constant that faults where it is written" (`generic.cpp`) and leaves it where it is.
+// Whether the round evaluates this node: a pure operation whose operands are all constants. A
+// node the round may not replace is evaluated all the same, because `eval` is what warns about a
+// constant expression that can only fault: the C++ fold evaluates such a node "to tell the user
+// of a constant that faults where it is written" (`generic.cpp`) and leaves it where it is.
 func evaluated(n: Node): bool {
-    return operation(n) && constantOperands(n)
+    return is_operation(n) && constant_operands(n)
 }
 
-/// The value the round computes for this node, or null when there is nothing to compute or when the
-/// expression can only fault — which is left as written and warned about.
-func computed(t: Txn, n: Node): Node? {
-    let can = evaluated(n)
-    return if can then eval(t, n) else null
-}
-
-/// Replaces one operation by the value its operator computes; the answer is whether it did.
-func foldOne(t: Txn, n: Node): bool sync {
-    return match computed(t, n) {
-        case null => false
-        case v => putValue(t, n, v)
-    }
-}
-
-/// Puts the value in the place of the node it was computed from, when the node may be replaced at
-/// all: a node that anchors its graph is evaluated for the warning and then left as written.
-func putValue(t: Txn, n: Node, value: Node): bool sync {
+// Replaces one operation by the value its operator computes; the answer is whether it did. The
+// arm of a `match` is a graph of its own, so the edit is a call of its own: a statement inside an
+// arm has nothing that depends on it and does not run.
+func put_value::<F>(t: Txn<F>, n: Node, value: Node): bool sync {
     return if foldable(n) then replaced(t, n, value) else false
 }
 
-/// Performs the replacement. The arm of a `match` is a graph of its own, so the edit is a call of
-/// its own: a statement inside an arm has nothing that depends on it and does not run.
-func replaced(t: Txn, n: Node, value: Node): bool sync {
+func replaced::<F>(t: Txn<F>, n: Node, value: Node): bool sync {
     replace(t, n, value)
     return true
 }
 
-/// One round over the whole program: whether it replaced anything.
-func foldRound(t: Txn, hits: Node[]): bool {
-    return hits->map<(n: Node): bool => foldOne(t, n)>->any<(did: bool): bool => did>
+// The value the round computes for this node, or null when there is nothing to compute or when
+// the expression can only fault, which is left as written and warned about.
+func fold_one::<F>(t: Txn<F>, n: Node): bool sync {
+    return match eval(t, n) {
+        case null => false
+        case v => put_value(t, n, v)
+    }
 }
 
-/// The nodes one round evaluates, read off the program the round starts from.
-func foldHits(p: Program): Node[] {
-    return allNodes(p)->filter<evaluated>
+// One round over the nodes it evaluates: whether it replaced anything.
+func fold_round::<F>(t: Txn<F>, hits: Node[]): bool {
+    return hits->map<(n: Node): bool => fold_one(t, n)>->any<(did: bool): bool => did>
 }
 
-/// Commits a round that replaced something. The commit is a function of its own because the round
-/// that replaced nothing is not the only outcome: an effect written inside an arm of a `match` or
-/// an `if` does not run, so the one branch cannot commit inline while the other abandons.
-func committed(t: Txn): Program! sync {
+// Commits a round that replaced something, and abandons one that replaced nothing: the program the
+// round started from is then the answer. Each is a function of its own because an effect written
+// inside an arm of a `match` or an `if` does not run, so one branch cannot commit inline while the
+// other abandons.
+func committed::<F>(t: Txn<F>): F! sync {
     return commit(t)
 }
 
-/// Abandons a transaction: nothing the round did takes effect, and the program is the one the
-/// round started from.
-func abandoned(t: Txn, p: Program): Program! sync {
+func abandoned::<F>(t: Txn<F>, f: F): F! sync {
     abort(t)
-    return p
+    return f
 }
 
-/// Folds round after round until a round replaces nothing, which is the end. A round whose nodes
-/// `eval` all refused — a constant expression that can only fault is left as written and warned
-/// about — is such a round, and recursing on the program it started from would not stop, so it is
-/// abandoned and the program the round started from is the answer.
-func foldRounds(p: Program): Program! sync {
-    let t = open(p)
-    let changed = foldRound(t, foldHits(p))
-    return if changed then committed(t) -> foldRounds else abandoned(t, p)
+// Folds round after round until a round replaces nothing, which is the end. A round whose nodes
+// `eval` all refused (a constant expression that can only fault is left as written and warned
+// about) is such a round, and recursing on the function it started from would not stop, so it is
+// abandoned.
+func fold_rounds::<F>(f: F): F! sync {
+    let t = open(f)
+    let changed = fold_round(t, all_nodes(graphs_of(f))->filter<evaluated>)
+    return if changed then match committed(t) {
+        case error e => error(e.kind, e.message)
+        case folded => fold_rounds(folded)
+    } else abandoned(t, f)
 }
 
 /// A pure operation whose operands are all constants is the value they compute, until none is
-/// left. A program that holds no node to evaluate at all is answered without opening a
+/// left. A function that holds no node to evaluate at all is answered without opening a
 /// transaction.
-export func fold(p: Program): Program! {
-    return if len(foldHits(p)) > 0 then foldRounds(p) else p
+/// @example ((x: int): int => 1 + 2 + x)->fold
+export func fold::<F>(f: F): F! when is_function::<F>() {
+    return if all_nodes(graphs_of(f))->any<evaluated> then fold_rounds(f) else f
 }
-
