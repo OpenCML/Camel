@@ -1459,6 +1459,11 @@ node_handle_t Builder::readVariableThrough(
     // on the chain when the read is folded into its version. The exception is a `var` parameter:
     // it may be the caller's variable passed twice, a name the callee cannot tell from another, so
     // only the place the read is written in orders it against the writes of the other name.
+    if (synced_ && lastIndirectCall_ != nullptr && sameGraph(lastIndirectCall_, currGraph_) &&
+        linkCheek(lastIndirectCall_, value) && nodeTakesAnOrder(value) &&
+        nodeTakesAnOrder(lastIndirectCall_) && !hasDirectDataDependency(lastIndirectCall_, value)) {
+        linkNodes(LinkType::Order, lastIndirectCall_, value);
+    }
     if (synced_) {
         syncedReads_.push_back(value);
         if (nodeKindOf(variable) == camel::runtime::GCNodeKind::Port) {

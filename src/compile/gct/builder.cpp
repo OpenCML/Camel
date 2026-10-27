@@ -1333,7 +1333,7 @@ bool Builder::resolveAmbientResource(
                     out.push_back(
                         in.get() == module_.get() && !decl->variable
                             ? written
-                            : in->name() + "::" + written);
+                            : in->name() + (decl->variable ? ":" : "::") + written);
                     return true;
                 }
                 for (const Reference &member : decl->members) {

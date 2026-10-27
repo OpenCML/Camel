@@ -428,6 +428,14 @@ bool covers(const ResourceSignature &target, const ResourceSignature &source) {
     return true;
 }
 
+std::string resourceDisplayName(std::string_view key) {
+    const size_t colon = key.find(':');
+    if (colon == std::string_view::npos || (colon + 1 < key.size() && key[colon + 1] == ':')) {
+        return std::string(key);
+    }
+    return std::string(key.substr(0, colon)) + "::" + std::string(key.substr(colon + 1));
+}
+
 std::span<const std::string_view> standardResourceNames() {
     // Design principles 3.3: the state the language gives every program, with the names a
     // declaration uses for it. `rng`, `tensor:generator` and the other module resources are
@@ -492,7 +500,7 @@ std::string toString(const ResourceSignature &signature) {
         add(std::format("#{}", use.index));
     }
     for (const auto &use : signature.ambient) {
-        add(use.name);
+        add(resourceDisplayName(use.name));
     }
     for (ResourceClass cls : signature.anyOf) {
         add(std::format("any {}", resourceClassName(cls)));

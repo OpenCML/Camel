@@ -412,7 +412,7 @@ void Builder::buildTopLevelValue(TopLevelDeclaration &declaration) {
                 if (const auto cell = declaration.unit->nodeScope->get(name, false);
                     cell.has_value()) {
                     moduleVariableResources_[*cell] =
-                        declaration.unit->module->name() + "::" + name;
+                        declaration.unit->module->name() + ":" + name;
                 }
             }
         }

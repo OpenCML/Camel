@@ -261,6 +261,90 @@ assert(out === '105 | 106', `unexpected output: ${out}`)
 """
 
 [[tests]]
+name = "argument_order.default"
+desc = "Two uses of one resource in one expression are ordered as written: a read argument before a call that writes the variable sees the value from before it, for a top-level var, a closure-written local and a var parameter. Pipeline: default."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/argument_order.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '100 110 | 120 120 | 250 | 1 2 | 10 11 | 1 2', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "argument_order.nvm"
+desc = "Two uses of one resource in one expression are ordered as written: a read argument before a call that writes the variable sees the value from before it, for a top-level var, a closure-written local and a var parameter. Pipeline: nvm."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/argument_order.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '100 110 | 120 120 | 250 | 1 2 | 10 11 | 1 2', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "argument_order.fvm"
+desc = "Two uses of one resource in one expression are ordered as written: a read argument before a call that writes the variable sees the value from before it, for a top-level var, a closure-written local and a var parameter. Pipeline: fvm."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/argument_order.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '100 110 | 120 120 | 250 | 1 2 | 10 11 | 1 2', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "argument_order.jit"
+desc = "Two uses of one resource in one expression are ordered as written: a read argument before a call that writes the variable sees the value from before it, for a top-level var, a closure-written local and a var parameter. Pipeline: jit."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/argument_order.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '100 110 | 120 120 | 250 | 1 2 | 10 11 | 1 2', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "argument_order.opt"
+desc = "Two uses of one resource in one expression are ordered as written: a read argument before a call that writes the variable sees the value from before it, for a top-level var, a closure-written local and a var parameter. Pipeline: opt."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/argument_order.cml"
+args = ["${case}", "std::opt"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '100 110 | 120 120 | 250 | 1 2 | 10 11 | 1 2', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
+name = "argument_order.opt_jit"
+desc = "Two uses of one resource in one expression are ordered as written: a read argument before a call that writes the variable sees the value from before it, for a top-level var, a closure-written local and a var parameter. Pipeline: opt_jit."
+kind = "behavior"
+case = "../../../cases/linear/toplevel_var/argument_order.cml"
+args = ["${case}", "std::opt", "std::jit"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n').join(' | ')
+assert(out === '100 110 | 120 120 | 250 | 1 2 | 10 11 | 1 2', `unexpected output: ${out}`)
+}
+"""
+
+[[tests]]
 name = "unread_write.default"
 desc = "A write in a function that is not a sync block, with nothing reading it, does not run. Pipeline: default."
 kind = "behavior"
