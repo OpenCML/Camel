@@ -61,6 +61,21 @@ void Builder::buildEntryCall() {
         entryGraph = *decoratedMain;
     } else if (auto gv = graphsAt(entryName); gv.has_value() && !gv.value()->empty()) {
         entryGraph = gv.value()->front();
+    } else if (libraryEntryExpected_ != nullptr) {
+        // A pass is a generic function of the function it transforms (`(f: F) => F!`, design
+        // principles 9.1): the entry is its instance that is a function of the expected type.
+        if (auto group = templateScope_->get(entryName); group.has_value()) {
+            if (GenericGroup *templates = genericGroupOf(group.value()); templates != nullptr) {
+                for (const generic_template_ptr_t &tmpl : *templates) {
+                    std::string why;
+                    if (compile_graph_ptr_t instance = instantiateGenericAs(
+                            tmpl, libraryEntryExpected_, tmpl->func, why)) {
+                        entryGraph = instance;
+                        break;
+                    }
+                }
+            }
+        }
     }
     if (entryGraph) {
         // The entry graph stands for the entry function where a diagnostic is about the

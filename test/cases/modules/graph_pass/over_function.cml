@@ -1,0 +1,17 @@
+module over_function
+
+import { is_function } from types
+
+// A pass is a function transform `(f: F) => F!`: it takes the function the pipeline offers (the
+// whole program is its root function) and hands back a function of the same type.
+export func keep::<F>(f: F): F! when is_function::<F>() {
+    return f
+}
+
+export func refuse::<F>(f: F): F! when is_function::<F>() {
+    return error('NotSupported', 'this pass refuses every function')
+}
+
+export func helper(x: int): int {
+    return x
+}

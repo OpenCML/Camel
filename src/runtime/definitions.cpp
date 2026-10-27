@@ -250,9 +250,13 @@ DefinitionStore::library(const std::string &name, std::string &problem) {
 
 std::optional<DefinitionStore::LibraryFunction> DefinitionStore::libraryFunction(
     const std::string &moduleName, const std::string &functionName, std::string &problem,
-    std::optional<core::error::DiagLabel> *errorLocation, LibraryLookup *lookup) {
+    std::optional<core::error::DiagLabel> *errorLocation, LibraryLookup *lookup,
+    core::type::FunctionType *expected) {
     std::lock_guard lock(mutex_);
-    const std::string key = moduleName + "::" + functionName;
+    std::string key = moduleName + "::" + functionName;
+    if (expected != nullptr) {
+        key += "@" + std::to_string(reinterpret_cast<uintptr_t>(expected));
+    }
     if (auto it = functions_.find(key); it != functions_.end()) {
         problem = it->second.problem;
         if (lookup != nullptr) {
@@ -292,7 +296,7 @@ std::optional<DefinitionStore::LibraryFunction> DefinitionStore::libraryFunction
     std::shared_ptr<camel::compile::gir::DraftGraphBuilder> rootGraph;
     UserDefinedModule::ProgramStatus status = UserDefinedModule::ProgramStatus::Failed;
     try {
-        status = module->compileAsProgram(functionName, problem, rootGraph);
+        status = module->compileAsProgram(functionName, problem, rootGraph, expected);
     } catch (const core::error::DiagnosticsLimitExceededBaseException &) {
         // The compile stopped at the diagnostics limit of the context. In a `--timeit` context
         // that limit is the first error, which is a property of the iteration, not of the

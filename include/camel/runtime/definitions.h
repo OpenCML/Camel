@@ -59,6 +59,10 @@
 #include <unordered_map>
 #include <vector>
 
+namespace camel::core::type {
+class FunctionType;
+} // namespace camel::core::type
+
 namespace camel::core::context {
 class Context;
 } // namespace camel::core::context
@@ -137,10 +141,13 @@ class DefinitionStore {
     /// its file, range and text (the same sentence the diagnostic table gives it). It is empty
     /// when the library could not be loaded, or when its first error has no position; the
     /// reason then stays in `problem`.
+    /// `expected`, when given, makes the function a generic one: the program's entry is its
+    /// instance that is a function of that type (a pass `(f: F) => F!` over the function `F`,
+    /// design principles 9.1); one program per type is kept.
     std::optional<LibraryFunction> libraryFunction(
         const std::string &module, const std::string &function, std::string &problem,
         std::optional<camel::core::error::DiagLabel> *errorLocation = nullptr,
-        LibraryLookup *lookup = nullptr);
+        LibraryLookup *lookup = nullptr, camel::core::type::FunctionType *expected = nullptr);
 
   private:
     struct Entry {

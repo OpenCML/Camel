@@ -293,7 +293,8 @@ class Builder {
     /// (UserDefinedModule::compileAsProgram). False when the function has no graph or a module
     /// is in error.
     bool buildLibraryEntry(
-        const camel::core::module::module_ptr_t &module, const std::string &entryFunction);
+        const camel::core::module::module_ptr_t &module, const std::string &entryFunction,
+        FunctionType *expected = nullptr);
 
     compile_graph_ptr_t rootGraph() const { return rootGraph_; }
 
@@ -597,6 +598,9 @@ class Builder {
     // The function the root graph calls, when the build is a library used as a program of its
     // own (buildLibraryEntry); empty for a program, whose entry is `main`.
     std::string libraryEntryFunction_;
+    // The type of the entry function when it is generic (a pass `(f: F) => F!`): the instance
+    // that is a function of this type is the one the root graph calls (instantiateGenericAs).
+    FunctionType *libraryEntryExpected_ = nullptr;
 
     node_scope_ptr_t nodeScope_;
     graph_scope_ptr_t graphScope_;
