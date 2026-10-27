@@ -40,7 +40,7 @@ func run(t: int, steps: int, h: f32[..]): f32[..] {
 
 with <m: Gru>
 func loss(x: f32[..]): float {
-    let h = run<m, x>(0, shape(x)[1], zeros([shape(x)[0], shape(m.w_hr)[0]]))
+    let h = run<m, x>(0, shape(x)[1], zeros::<f32>([shape(x)[0], shape(m.w_hr)[0]]))
     let y = h @ m.fc_w + m.fc_b
     return float(mean(y * y))
 }

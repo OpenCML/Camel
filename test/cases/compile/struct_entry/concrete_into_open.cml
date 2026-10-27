@@ -19,12 +19,12 @@ func open(p: { w: f32[..], b: f32[..] }): float {
 }
 
 func make(): Mlp {
-    return { w: ones([784, 10]), b: ones([10]) }
+    return { w: ones::<f32>([784, 10]), b: ones::<f32>([10]) }
 }
 
 func main(): int sync {
-    let w = ones([784, 10])
-    let b = ones([10])
+    let w = ones::<f32>([784, 10])
+    let b = ones::<f32>([10])
     let concrete = { w: w, b: b }
     println(total(concrete), open(concrete), total(make()))
     let m: Mlp = concrete

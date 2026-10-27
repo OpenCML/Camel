@@ -21,7 +21,7 @@ func gate(t: f32[..]): f32[..] {
 
 func forward(x: f32[..], w: f32[..]): f32[..] {
     let n = shape(x)[0]
-    let h = zeros([n, shape(w)[1]]) + x @ w
+    let h = zeros::<f32>([n, shape(w)[1]]) + x @ w
     return reshape(h, [n * shape(w)[1]])
 }
 

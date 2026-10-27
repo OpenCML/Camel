@@ -59,19 +59,19 @@ func main(rounds: int, reps: int): int sync {
     // the kernel rather than of the pool.
     set_num_threads(1)
     seed(7)
-    let a1 = zeros([256, 256]) + 0.001
-    let b1 = zeros([256, 64]) + 0.001
-    let a2 = zeros([256, 64]) + 0.001
-    let b2 = zeros([64, 256]) + 0.001
-    let a3 = zeros([512, 256]) + 0.001
-    let b3 = zeros([256, 512]) + 0.001
-    let a4 = zeros([512, 256]) + 0.001
-    let b4 = zeros([256, 768]) + 0.001
-    let a5 = zeros([512, 512]) + 0.001
-    let b5 = zeros([512, 256]) + 0.001
-    let a6 = zeros([32, 32]) + 0.001
-    let b6 = zeros([32, 16]) + 0.001
-    let reference = zeros([128, 128]) + 0.001
+    let a1 = zeros::<f32>([256, 256]) + 0.001
+    let b1 = zeros::<f32>([256, 64]) + 0.001
+    let a2 = zeros::<f32>([256, 64]) + 0.001
+    let b2 = zeros::<f32>([64, 256]) + 0.001
+    let a3 = zeros::<f32>([512, 256]) + 0.001
+    let b3 = zeros::<f32>([256, 512]) + 0.001
+    let a4 = zeros::<f32>([512, 256]) + 0.001
+    let b4 = zeros::<f32>([256, 768]) + 0.001
+    let a5 = zeros::<f32>([512, 512]) + 0.001
+    let b5 = zeros::<f32>([512, 256]) + 0.001
+    let a6 = zeros::<f32>([32, 32]) + 0.001
+    let b6 = zeros::<f32>([32, 16]) + 0.001
+    let reference = zeros::<f32>([128, 128]) + 0.001
     let done = loop round = 0 while round < rounds do sync {
         bench(round, '256x64x256', 256, 64, 256, a1, b1, 40 * reps)
         bench(round, '256x256x64', 256, 256, 64, a2, b2, 40 * reps)

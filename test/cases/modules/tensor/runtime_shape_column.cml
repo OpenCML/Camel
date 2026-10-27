@@ -12,6 +12,6 @@ func f(a: f32[..], b: f32[..]): f32[..] {
 
 func main(): int sync {
     let n = 3
-    println(f(ones([2, n]), ones([2, n])))
+    println(f(ones::<f32>([2, n]), ones::<f32>([2, n])))
     return 0
 }

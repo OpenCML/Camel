@@ -23,7 +23,7 @@ with <model: GruLite>
 func gru_cell(x: f32[..], h: f32[..]): f32[..] {
     let z = sigmoid((x @ model.wxz) + (h @ model.whz) + model.bz)
     let n = tanh((x @ model.wxn) + (h @ model.whn) + model.bn)
-    return (z * n) + ((ones([1, 2]) - z) * h)
+    return (z * n) + ((ones::<f32>([1, 2]) - z) * h)
 }
 
 with <model: GruLite>
@@ -39,7 +39,7 @@ func mse_loss(pred: f32[..], target: f32[..]): float {
 
 with <model: GruLite>
 func sequence_loss(x0: f32[..], x1: f32[..], target: f32[..]): float {
-    let h0 = zeros([1, 2])
+    let h0 = zeros::<f32>([1, 2])
     let h1 = gru_cell<model>(x0, h0)
     let h2 = gru_cell<model>(x1, h1)
     let pred = predict<model>(h2)
@@ -50,12 +50,12 @@ func init(): GruLite {
     return {
         wxz: full([2, 2], f32(0.1)),
         whz: full([2, 2], f32(0.1)),
-        bz: zeros([2]),
+        bz: zeros::<f32>([2]),
         wxn: full([2, 2], f32(0.1)),
         whn: full([2, 2], f32(0.1)),
-        bn: zeros([2]),
+        bn: zeros::<f32>([2]),
         why: full([2, 1], f32(0.1)),
-        by: zeros([1])
+        by: zeros::<f32>([1])
     }
 }
 

@@ -80,7 +80,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "refuse_tensor"
-desc = "std::cpp does not translate tensors. The refusal is located at the operator use that needs one -- 	ensor:ones in main, line 16 column 19 -- and names the operator and the type of its argument (int[], the shape); the Tensor-returning scale is never reached (the operator use in the body stands in main, which the pass walks first). It used to be the unlocated PassInternalError \"runtime graph 'scale' is not supported by the direct C++ path: node#N: non-bridgeable return type\"."
+desc = "std::cpp does not translate tensors. The refusal is located at the operator use that needs one -- 	ensor:ones in main, line 15 column 23 -- and names the operator and the type of its argument (int[], the shape); the Tensor-returning scale is never reached (the operator use in the body stands in main, which the pass walks first). It used to be the unlocated PassInternalError \"runtime graph 'scale' is not supported by the direct C++ path: node#N: non-bridgeable return type\"."
 kind = "negative"
 case = "../../../cases/trans/cpp/refuse_tensor.cml"
 args = ["${case}", "std::cpp"]
@@ -88,7 +88,7 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
 expect_diagnostic_line = 15
-expect_diagnostic_column = 19
+expect_diagnostic_column = 23
 expect_output_contains = ["Translation pass 'std::cpp' refused the graph: function 'main' uses the operator 'tensor:ones' on a value of type 'int[]', which has no translation in std::cpp yet"]
 expect_output_not_contains = ["internal error", "node#", "non-bridgeable", ":?:?:", "#include"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -110,7 +110,7 @@ const d = diags[0]
 assert(d.data.name === 'RuntimeDiag::TranslationRefused' && d.data.stage === 'pass:std::cpp', `unexpected diagnostic ${d.data.name} at stage ${d.data.stage}`)
 assert(d.code === '0x0400000B', `code ${d.code}`)
 assert(d.message.includes("function 'main' uses the operator 'tensor:ones' on a value of type 'int[]'"), `unexpected message: ${d.message}`)
-assert(d.range.start.line === 14 && d.range.start.character === 18 && d.range.end.line === 14, `unexpected range ${JSON.stringify(d.range)}`)
+assert(d.range.start.line === 14 && d.range.start.character === 22 && d.range.end.line === 14, `unexpected range ${JSON.stringify(d.range)}`)
 }
 """
 timeout_ms = 8000

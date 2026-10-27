@@ -2,9 +2,9 @@ import { ones } from tensor
 // The return type says the result has extent n. The body returns an extent of its own; the
 // relation is checked where the call runs, like an argument's extent.
 func bad(x: f32[n]): f32[n] {
-    return ones([4])
+    return ones::<f32>([4])
 }
 func main(): int sync {
-    println(bad(ones([3])))
+    println(bad(ones::<f32>([3])))
     return 0
 }

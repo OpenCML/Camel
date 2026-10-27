@@ -1,7 +1,7 @@
 import { ones, sum, load_npy } from tensor
 func main(): int sync {
     println('ran')
-    let t = ones([3])
+    let t = ones::<f32>([3])
     let u = t as f32[4]
     println(sum(u))
     return 0

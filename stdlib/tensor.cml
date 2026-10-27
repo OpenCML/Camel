@@ -26,7 +26,7 @@ import { is_numeric, is_plain } from types
 // instantiates it (design principles 4.1 and 5.5): a tensor type always states its element type,
 // so no signature writes a name that leaves it out and no arm takes a value whose element type
 // nobody stated. The operators of this module answer with
-// a numeric array whose element type the operation fixes (`ones` and `zeros` an f32 one, an
+// a numeric array whose element type the operation fixes (`ones` and `zeros` the one the call states, an
 // elementwise operator the promoted element type of its operands), and a `T[..]` parameter binds
 // `T` from it.
 //
@@ -62,7 +62,7 @@ export func shape::<T>(t: T[..]): int[] when is_numeric::<T>()
 
 /// The number of elements in a tensor: the product of its extents.
 /// @pure
-/// @example numel(zeros([2, 3]))    // 6
+/// @example numel(zeros::<f32>([2, 3]))    // 6
 export func numel::<T>(t: T[..]): int when is_numeric::<T>()
 
 /// The extent of one axis; a negative axis counts from the last one (`-1` is the last axis).
@@ -85,7 +85,7 @@ export func to_bytes::<T>(t: T[..]): Bytes when is_plain::<T>()
 /// Writes a tensor to a NumPy `.npy` file, replacing it.
 /// @effect writes a file
 /// @fails fault `RuntimeError` when the file cannot be written
-/// @example save_npy(zeros([2, 2]), 'x.npy')
+/// @example save_npy(zeros::<f32>([2, 2]), 'x.npy')
 export func save_npy::<T>(t: T[..], path: string): void when is_numeric::<T>()
 
 // ---- conversion and display ----

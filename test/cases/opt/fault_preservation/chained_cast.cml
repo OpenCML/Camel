@@ -7,7 +7,7 @@
 import { zeros } from tensor
 
 func shaped(rows: int, cols: int): f32[..] {
-    return zeros([rows, cols])
+    return zeros::<f32>([rows, cols])
 }
 
 func main(): int sync {

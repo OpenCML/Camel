@@ -41,7 +41,7 @@ func init(): Classifier {
     return {
         head: {
             weight: reshape([0.1, 0.1, 0.1, 0.1] as f32[], [2, 2]),
-            bias: zeros([2])
+            bias: zeros::<f32>([2])
         }
     }
 }

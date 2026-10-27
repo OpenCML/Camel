@@ -4,8 +4,8 @@
 import { ones } from tensor
 
 func main(): int sync {
-    var w = ones([2, 3])
-    w = ones([5])
+    var w = ones::<f32>([2, 3])
+    w = ones::<f32>([5])
     println(len(w))
     return 0
 }

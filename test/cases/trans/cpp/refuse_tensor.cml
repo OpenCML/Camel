@@ -12,6 +12,6 @@ func scale(x: f32[..], k: f32): f32[..] {
 }
 
 func main(): int sync {
-    println(scale(ones([2, 3]), 2.0))
+    println(scale(ones::<f32>([2, 3]), 2.0))
     return 0
 }

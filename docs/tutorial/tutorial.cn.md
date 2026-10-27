@@ -1006,8 +1006,8 @@ camel docs/tutorial/examples/14_passes.cml --dump-after-each-pass snap std::opt:
 import { Tensor, ones, zeros, shape, sum, transpose } from tensor
 
 func main(): int sync {
-    let a = ones([2, 3])
-    let b = ones([3, 1])
+    let a = ones::<f32>([2, 3])
+    let b = ones::<f32>([3, 1])
     let c = a @ b                    // matrix product: 2x3 @ 3x1
     println(shape(a), shape(c))
     println(c)
@@ -1031,7 +1031,7 @@ func main(): int sync {
 import { Tensor, ones, relu, sum } from tensor
 
 func main(x: f32[2, 3]): f32[..] {
-    let w = ones([3, 1])
+    let w = ones::<f32>([3, 1])
     return relu(x @ w)
 }
 ```

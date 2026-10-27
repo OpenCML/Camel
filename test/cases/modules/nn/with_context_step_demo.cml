@@ -26,13 +26,13 @@ func mse_loss(x: f32[..], y: f32[..]): float {
 }
 
 func init(): Linear {
-    return { weight: zeros([2, 1]) }
+    return { weight: zeros::<f32>([2, 1]) }
 }
 
 func main(): int sync {
     let layer = init()
-    let X = ones([4, 2])
-    let y = ones([4, 1])
+    let X = ones::<f32>([4, 2])
+    let y = ones::<f32>([4, 1])
 
     let before = mse_loss<layer>(X, y)
     let vg = with_grad(mse_loss)<layer>(X, y)

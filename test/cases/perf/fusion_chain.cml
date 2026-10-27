@@ -31,9 +31,9 @@ func declined_chain(): float {
 }
 
 func main(steps: int, rows: int, d: int, fused: int): int sync {
-    let x = zeros([rows, d]) + 1.5
-    let a = zeros([rows, d]) + 1.5
-    let w = zeros([d]) + 3.0
+    let x = zeros::<f32>([rows, d]) + 1.5
+    let a = zeros::<f32>([rows, d]) + 1.5
+    let w = zeros::<f32>([d]) + 3.0
     let g = with_grad(fused_chain)
     let h = with_grad(declined_chain)
     'perf chain rows={} d={} steps={} fused={}'->format<rows, d, steps, fused>->println

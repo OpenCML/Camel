@@ -6,6 +6,6 @@ func fit(a: f32[n], b: f32[n]): float {
 }
 func main(): int sync {
     let t = load_npy::<f32>('test/cases/compile/entry_args/b.npy') as f32[?]
-    println(fit(t, ones([3])))
+    println(fit(t, ones::<f32>([3])))
     return 0
 }

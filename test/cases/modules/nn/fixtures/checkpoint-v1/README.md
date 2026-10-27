@@ -20,7 +20,7 @@ type Record = {
 
 func main(dir: string): int sync {
     let record: Record = {
-        w: new([1.0, -2.0]), odd: new([9007199254740993, -2]), empty: zeros([2, 0]),
+        w: new([1.0, -2.0]), odd: new([9007199254740993, -2]), empty: zeros::<f32>([2, 0]),
         note: '中文 checkpoint', cursor: (3, 0.5), enabled: true
     }
     save_tree(dir, record)

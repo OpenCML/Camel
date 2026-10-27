@@ -1378,7 +1378,7 @@ func count(t: Tensor): int {
 
 func main(): int sync {
     let ints: int[3] = [1, 2, 3]
-    let floats: f32[2, 3] = ones([2, 3])
+    let floats: f32[2, 3] = ones::<f32>([2, 3])
     println(count(ints))
     println(count(floats))
     return 0
@@ -2278,7 +2278,7 @@ func total(constas n: int, x: f32[n]): float {
 
 func main(): int sync {
     // The instance for n = 3 takes a f32[3]; this argument has extent 4.
-    println(total(3, ones([4])))
+    println(total(3, ones::<f32>([4])))
     return 0
 }
 ```
@@ -5215,7 +5215,7 @@ func total(constas n: int, x: f32[n]): float {
 }
 
 func use(m: int): float {
-    return total(m, ones([3]))
+    return total(m, ones::<f32>([3]))
 }
 
 func main(): int sync {
@@ -5259,7 +5259,7 @@ func apply(f: (x: f32[..]) => float, x: f32[..]): float {
 
 func main(): int sync {
     // The value must be known where the call is written, so `total` has no function value.
-    println(apply(total, ones([3])))
+    println(apply(total, ones::<f32>([3])))
     return 0
 }
 ```
@@ -9141,7 +9141,7 @@ func toShape::<T>(t: T[..], s: int[]): T[..] {
 
 func main(): int sync {
     let no: int[] = []
-    let s  = toShape(zeros([2]), no)
+    let s  = toShape(zeros::<f32>([2]), no)
     let n  = loop c = 0 for x in s do c + 1
     println(n)
     return 0
@@ -9507,8 +9507,8 @@ import { conv2d } from nn
 func main(): int sync {
     let values: f64[] = [1.0, 2.0, 3.0, 4.0]
     let x = reshape(new(values), [1, 1, 2, 2])
-    let kernel = ones([1, 1, 1, 1])
-    let bias = ones([1])
+    let kernel = ones::<f32>([1, 1, 1, 1])
+    let bias = ones::<f32>([1])
     let y = conv2d(x, kernel, bias, 1, 0)
     println(sum(y))
     return 0

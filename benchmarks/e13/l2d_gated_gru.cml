@@ -53,7 +53,7 @@ func run(t: int, steps: int, h: f32[..]): f32[..] {
 
 with <m: Gru>
 func forward(x: f32[..]): f32[..] {
-    let h = run<m, x>(0, shape(x)[1], zeros([shape(x)[0], shape(m.w_hr)[0]]))
+    let h = run<m, x>(0, shape(x)[1], zeros::<f32>([shape(x)[0], shape(m.w_hr)[0]]))
     return h @ m.fc_w + m.fc_b
 }
 
@@ -105,7 +105,7 @@ func do_run(m: Gru): int sync {
         [1.0, -0.75, 0.75, 1.0, -1.0, 0.75, 0.75, -1.0, 1.0, -0.75, 0.75, 1.0],
         [2, 3, 2]
     )
-    let x0 = zeros([2, 3, 2])
+    let x0 = zeros::<f32>([2, 3, 2])
     save_params(m, dump + '/init')
     save_npy(xa, dump + '/xa.npy')
     save_npy(xb, dump + '/xb.npy')

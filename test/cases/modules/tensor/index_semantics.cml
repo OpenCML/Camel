@@ -48,13 +48,13 @@ func pooled(x: f32[1, 1, 4, 4]): f32[..] {
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3]) as f32[2, 3]
     let b = reshape([0.5, -0.5, 1.5] as f32[], [3]) as f32[3]
-    let w = ones([3, 4]) as f32[3, 4]
+    let w = ones::<f32>([3, 4]) as f32[3, 4]
     println(layers(x, b, w))
     println(rows(x, b))
     println(open(x, x))
     println(unknown(x, x))
-    println(regrouped(ones([4, 5]) as f32[4, 5]))
-    println(pooled(ones([1, 1, 4, 4]) as f32[1, 1, 4, 4]))
+    println(regrouped(ones::<f32>([4, 5]) as f32[4, 5]))
+    println(pooled(ones::<f32>([1, 1, 4, 4]) as f32[1, 1, 4, 4]))
     println(unordered_reduce<(acc: int, item: int): int => acc + item, 0>(1..11))
     return 0
 }

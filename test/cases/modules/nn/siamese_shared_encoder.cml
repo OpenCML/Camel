@@ -43,7 +43,7 @@ func init(): Siamese {
     return {
         encoder: {
             weight: full([2, 2], f32(0.1)),
-            bias: zeros([2])
+            bias: zeros::<f32>([2])
         }
     }
 }

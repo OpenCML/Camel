@@ -1,4 +1,4 @@
 import { mean, zeros } from tensor
 import { source } from tiles
 func average(x: f32[..]): float { return float(mean(x)) }
-func main(): string { return source<average>(zeros([0])) }
+func main(): string { return source<average>(zeros::<f32>([0])) }

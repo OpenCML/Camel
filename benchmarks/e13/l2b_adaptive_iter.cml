@@ -33,7 +33,7 @@ func newton(v: f32[..]): f32[..] {
 
 with <m: Sc>
 func loss(x: f32[..]): float {
-    let d = newton<m, x>(ones([1])) - 1.0
+    let d = newton<m, x>(ones::<f32>([1])) - 1.0
     return float(mean(d * d))
 }
 

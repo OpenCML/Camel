@@ -13,7 +13,7 @@ func count(t: Tensor): int {
 
 func main(): int sync {
     let ints: int[3] = [1, 2, 3]
-    let floats: f32[2, 3] = ones([2, 3])
+    let floats: f32[2, 3] = ones::<f32>([2, 3])
     println(count(ints))
     println(count(floats))
     return 0

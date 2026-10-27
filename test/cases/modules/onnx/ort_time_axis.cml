@@ -18,15 +18,15 @@ func scan(t: int, steps: int, x: f32[..], h: f32[..]): f32[..] {
 }
 
 func back(t: int, steps: int, x: f32[..]): f32[..] {
-    return if t >= steps then zeros([shape(x)[0], shape(x)[2]]) else tanh(back(t + 1, steps, x) * 0.5 + at(x, t))
+    return if t >= steps then zeros::<f32>([shape(x)[0], shape(x)[2]]) else tanh(back(t + 1, steps, x) * 0.5 + at(x, t))
 }
 
 func main(): int sync {
     let steps = int(get_env('STEPS') ?? '')
-    let x = ones([2, steps, 3]) * 0.1
+    let x = ones::<f32>([2, steps, 3]) * 0.1
     let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(
         (x: f32[..]): (f32[..], f32[..]) =>
-            (scan(0, shape(x)[1], x, zeros([shape(x)[0], shape(x)[2]])), back(0, shape(x)[1], x)),
+            (scan(0, shape(x)[1], x, zeros::<f32>([shape(x)[0], shape(x)[2]])), back(0, shape(x)[1], x)),
         x
     )
     println('exported')

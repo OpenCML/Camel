@@ -5,7 +5,7 @@ func spin(i: int, n: int, acc: f32[3], x: f32[?, 3]): f32[3] {
     return if i >= n then acc else spin(i + 1, n, acc + reshape(slice(x, 0, i, i + 1), [3]), x)
 }
 func rows(x: f32[?, 3]): f32[3] {
-    return spin(0, dim(x, 0), zeros([dim(x, 1)]), x)
+    return spin(0, dim(x, 0), zeros::<f32>([dim(x, 1)]), x)
 }
 func twice(x: f32[?, 3], n: int): f32[?, 3] {
     return concat(reshape(x, [n, 3]), x, 0)
