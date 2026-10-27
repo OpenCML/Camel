@@ -46,6 +46,28 @@ expect_stdout_exact = "TILES_OUTLINED 2\n23296.0\n"
 timeout_ms = 180000
 
 [[tests]]
+name = "with_after_norm_plans_like_the_written_call"
+desc = "reshape<shape> and sum<axis> reach the device compiler in the kernel's argument order: the derivative written with angle brackets has the plan of the one written with the shape and the axis in parentheses, and the same value."
+kind = "behavior"
+case = "../../../cases/modules/tiles/with_after_norm.cml"
+args = ["--devices", "cpu", "${case}", "std::macro"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split('\n');
+assert(lines.length === 4, 'expected the value, the error and two plans');
+assert(lines[0] === '[1.0, 1.0, 1.0, 1.0, 1.0, 1.0]', 'the gradient is not the all-ones value');
+assert(lines[1] === '0.0', 'the two spellings give different gradients');
+const angled = JSON.parse(lines[2]);
+const written = JSON.parse(lines[3]);
+assert(JSON.stringify(angled.stages) === JSON.stringify(written.stages), 'the angled call changed the stage plan');
+for (const key of ['values', 'kernels', 'materialized_values', 'allocations', 'logical_bytes', 'allocated_bytes'])
+    assert(angled[key] === written[key], 'the angled call changed ' + key);
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
 name = "cast_like_aliases_the_same_element_type"
 kind = "behavior"
 case = "../../../cases/modules/tiles/cast_like.cml"

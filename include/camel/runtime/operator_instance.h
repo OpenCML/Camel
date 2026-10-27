@@ -21,8 +21,21 @@
 
 #include <iosfwd>
 #include <optional>
+#include <vector>
 
 namespace camel::runtime {
+
+/// The arguments of the OPER node `node` as its kernel reads them. The graph keeps a
+/// with-argument on its own edge; an operator registered with `withAfterNorm`
+/// (OperatorTraits) has a kernel that takes the ordinary arguments and then the with-arguments as
+/// one list, and for it `norm` is that list and `with` is empty. For every other operator the two
+/// are the node's own. A reader that hands arguments to a kernel, a derivative rule, a lowering
+/// or an index instance reads them here, not off the node's edge lists.
+struct KernelArguments {
+    std::vector<gc_node_ref_t> norm;
+    std::vector<gc_node_ref_t> with;
+};
+KernelArguments kernelArgumentsOf(const GCGraph &graph, gc_node_ref_t node);
 
 /// The index semantics of the OPER node `node` of `graph`, or nullopt when the node is not an
 /// OPER, its operator declares none, or the facts at the node do not fix it (sem::instantiate).

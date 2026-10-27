@@ -3204,6 +3204,11 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             for (const Argument &input : normInputs) {
                 normStatics.push_back(staticArgOf(input.node));
             }
+            // The constants among the with-arguments follow them: an operator whose kernel takes
+            // its with-arguments after the ordinary ones reads one list (kernelArgumentsOf).
+            for (const Argument &input : withInputs) {
+                normStatics.push_back(staticArgOf(input.node));
+            }
             type_vec_t explicitTypes;
             if (auto typed = explicitOperatorTypes_.find(targetNode);
                 typed != explicitOperatorTypes_.end()) {

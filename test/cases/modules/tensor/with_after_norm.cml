@@ -1,0 +1,24 @@
+/**
+ * The configuration of a tensor operator is written in angle brackets, and the operator reads it
+ * after the ordinary arguments: `reshape<[2, 3]>(x)` is the kernel's `(x, shape)`, `sum<0>(x)` its
+ * `(x, axis)`. The input is computed from the entry argument, so nothing is folded; the gradient
+ * goes through both operators.
+ */
+import { reshape, sum } from tensor
+import { grad } from autodiff
+
+with <x: f32[..]>
+func loss(): float {
+    let rows = reshape<[2, 3]>(x)
+    let columns = sum<0>(rows)
+    return float(sum(columns * columns))
+}
+
+func main(n: int): int sync {
+    let xs = [f32(i + 1) for i in 0..n]
+    let rows = reshape<[2, 3]>(xs)
+    println(rows)
+    println(sum<0>(rows), sum<1>(rows))
+    println(grad(loss)<xs>())
+    return 0
+}

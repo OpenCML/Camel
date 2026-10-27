@@ -189,6 +189,11 @@ struct OperatorTraits {
     /// `fact` installs the fact of its declaration, and neither is a value a pass may
     /// compute, move, merge or drop.
     bool foldable = true;
+    /// The operator's kernel takes the with-arguments of a call after the ordinary ones, as one
+    /// list (`kernelArgumentsOf`): a fact about the kernel's argument order, not about the
+    /// language, where the graph keeps a with-argument on its own edge. `reshape<shape>(x)` is
+    /// the kernel's `(x, shape)`.
+    bool withAfterNorm = false;
 };
 
 /**
@@ -319,6 +324,9 @@ class OperatorTable {
     std::optional<OperatorTraits> find(std::string_view uri) const;
 
     /// True when the operator is declared pure.
+    /// Whether the operator's kernel takes the with-arguments after the ordinary ones
+    /// (OperatorTraits::withAfterNorm).
+    bool withAfterNorm(std::string_view uri) const;
     bool isPure(OperId id) const;
     bool isPure(std::string_view uri) const;
 

@@ -76,6 +76,22 @@ std::optional<slot_t> staticValueOf(const GCGraph &graph, gc_node_ref_t ref) {
 
 } // namespace
 
+KernelArguments kernelArgumentsOf(const GCGraph &graph, gc_node_ref_t node) {
+    KernelArguments out;
+    const auto norm = graph.normInputsOf(node);
+    const auto with = graph.withInputsOf(node);
+    out.norm.assign(norm.begin(), norm.end());
+    const bool joined = graph.node(node)->kind == GCNodeKind::Oper &&
+                        core::OperatorTable::instance().withAfterNorm(
+                            graph.nodeBodyAs<GCOperBody>(node)->uri());
+    if (joined) {
+        out.norm.insert(out.norm.end(), with.begin(), with.end());
+    } else {
+        out.with.assign(with.begin(), with.end());
+    }
+    return out;
+}
+
 std::optional<core::sem::IndexedInstance> instanceOf(const GCGraph &graph, gc_node_ref_t node) {
     if (!graph.containsNodeRef(node) || graph.node(node)->kind != GCNodeKind::Oper) {
         return std::nullopt;
@@ -96,6 +112,7 @@ std::optional<core::sem::IndexedInstance> instanceOf(const GCGraph &graph, gc_no
             return std::nullopt;
         }
         with.push_back(t);
+        statics.emplace_back(staticValueOf(graph, in));
     }
     return core::sem::instantiate(
         graph.nodeBodyAs<GCOperBody>(node)->oper,

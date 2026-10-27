@@ -15,6 +15,7 @@
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/runtime/operator_instance.h"
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/loop.h"
@@ -118,7 +119,7 @@ void checkAttributeFates(const rt::GCGraph &g, rt::gc_node_ref_t id) {
 // the shape a graph fact holds depend on the types, never on which object each of them is.
 static bool sameOperandTypes(
     const rt::GCGraph &graph, rt::gc_node_ref_t node, const std::vector<Value> &args) {
-    const auto inputs = graph.normInputsOf(node);
+    const auto inputs = rt::kernelArgumentsOf(graph, node).norm;
     if (inputs.size() != args.size())
         return false;
     for (size_t i = 0; i < args.size(); ++i) {
@@ -659,10 +660,11 @@ class Compiler {
             case rt::GCNodeKind::Oper: {
                 const auto oper = g->nodeBodyAs<rt::GCOperBody>(id)->oper;
                 std::vector<Value> args;
-                if (!g->withInputsOf(id).empty())
+                const auto kernelArguments = rt::kernelArgumentsOf(*g, id);
+                if (!kernelArguments.with.empty())
                     throw UnsupportedComputation(
                         "operator context arguments are not supported yet");
-                for (auto in : ins)
+                for (auto in : kernelArguments.norm)
                     args.push_back(eval(f, in));
                 const auto first      = program.nodes.size();
                 const auto semantic   = contract(oper);
