@@ -5,7 +5,7 @@ func weighted(x: f32[n], w: f32[n]): float {
     return float(sum(x)) + float(sum(w))
 }
 func main(): int sync {
-    println(weighted(ones([3]), ones([3])))
-    println(weighted(ones([5]), ones([5])))
+    println(weighted(ones::<f32>([3]), ones::<f32>([3])))
+    println(weighted(ones::<f32>([5]), ones::<f32>([5])))
     return 0
 }

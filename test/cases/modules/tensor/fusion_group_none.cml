@@ -22,9 +22,9 @@ func loss(x: f32[..]): float {
 }
 
 func main(steps: int): int sync {
-    let x = zeros([64]) + 0.25
+    let x = zeros::<f32>([64]) + 0.25
     let model: Model = {
-        w: zeros([64]) + 1.5
+        w: zeros::<f32>([64]) + 1.5
     }
     let grad = with_grad(loss)
     let (trained, done) = loop m = model, step = 0

@@ -10,6 +10,6 @@ func apply(f: (x: f32[..]) => float, x: f32[..]): float {
 
 func main(): int sync {
     // The value must be known where the call is written, so `total` has no function value.
-    println(apply(total, ones([3])))
+    println(apply(total, ones::<f32>([3])))
     return 0
 }

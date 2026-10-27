@@ -1400,39 +1400,30 @@ boolean.
 - Pure.
 - Example: `new([[1.0, 2.0], [3.0, 4.0]])`
 
-#### `empty`
-
-```camel
-empty: (shape: int[]) => f32[..]
-```
-
-A tensor of the given extents; the allocation is zeroed, so it reads as `zeros` of the same
-shape.
-
-- Pure.
-- Example: `empty([2, 3])`
-
 #### `zeros`
 
 ```camel
-zeros: (shape: int[]) => f32[..]
+zeros: (shape: int[]) => T[..] when is_numeric::<T>()
 ```
 
-A tensor of `f32` zeros with the given extents.
+An array of the given extents whose elements are all 0. The element type is written
+(`zeros::<f32>([2, 3])`) or comes from the position of the call (`let x: f32[2, 3] =
+zeros([2, 3])`); there is no default.
 
 - Pure.
-- Example: `zeros([2, 3])`
+- Example: `zeros::<f32>([2, 3])`
 
 #### `ones`
 
 ```camel
-ones: (shape: int[]) => f32[..]
+ones: (shape: int[]) => T[..] when is_numeric::<T>()
 ```
 
-A tensor of `f32` ones with the given extents.
+An array of the given extents whose elements are all 1; the element type is the call's, as for
+`zeros`.
 
 - Pure.
-- Example: `ones([2, 3])`
+- Example: `ones::<f32>([2, 3])`
 
 #### `full`
 
@@ -1448,13 +1439,13 @@ A tensor of the given extents whose elements are all value; the element type is 
 #### `eye`
 
 ```camel
-eye: (n: int) => f32[..]
+eye: (n: int) => T[..] when is_numeric::<T>()
 ```
 
-The `f32` n by n identity matrix.
+The n by n identity matrix; the element type is the call's, as for `zeros`.
 
 - Pure.
-- Example: `eye(2)`
+- Example: `eye::<f32>(2)`
 
 #### `range`
 
@@ -1847,7 +1838,7 @@ numel: (t: T[..]) => int when is_numeric::<T>()
 The number of elements in a tensor: the product of its extents.
 
 - Pure.
-- Example: `numel(zeros([2, 3]))` gives `6`
+- Example: `numel(zeros::<f32>([2, 3]))` gives `6`
 
 #### `dim`
 
@@ -2157,7 +2148,7 @@ Writes a tensor to a NumPy `.npy` file, replacing it.
 
 - With effects: writes a file.
 - Failure: fault `RuntimeError` when the file cannot be written.
-- Example: `save_npy(zeros([2, 2]), 'x.npy')`
+- Example: `save_npy(zeros::<f32>([2, 2]), 'x.npy')`
 
 ### Module state
 

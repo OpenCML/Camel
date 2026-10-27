@@ -33,10 +33,10 @@ func main(): int sync {
     let dk = grad(keep_loss)
     let ds = grad(narrow_loss)
     let dw = grad(wide_loss)
-    let a = zeros([2, 4, 3])
+    let a = zeros::<f32>([2, 4, 3])
     println(sum(df<a>()), sum(dn<a>()), sum(dk<a>()))
-    let small = ds<zeros([2, 3, 2])>()
-    println(shape(small), sum(small), sum(dw<zeros([2, 3, 4, 5])>()))
+    let small = ds<zeros::<f32>([2, 3, 2])>()
+    println(shape(small), sum(small), sum(dw<zeros::<f32>([2, 3, 4, 5])>()))
     println(sum(df<a>()))
     return 0
 }

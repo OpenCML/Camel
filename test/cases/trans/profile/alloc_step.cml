@@ -5,7 +5,7 @@
 import { zeros } from tensor
 
 func main(): int sync {
-    let start = zeros([1024])
+    let start = zeros::<f32>([1024])
     let (i, x) = loop i = 0, x = start while i < 8 do {
         let y = x + 1.0
         (i + 1, y)

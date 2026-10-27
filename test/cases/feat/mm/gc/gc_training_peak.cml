@@ -22,9 +22,9 @@ func loss(X: f32[?, ?], labels: int[?]): float {
 }
 
 func main(steps: int, batch: int, width: int): int sync {
-    let X = ones([batch, width])
-    let labels = int(zeros([batch]))
-    let w = zeros([width, 4])
+    let X = ones::<f32>([batch, width])
+    let labels = int(zeros::<f32>([batch]))
+    let w = zeros::<f32>([width, 4])
     let loss_grad = grad(loss)
     let start = std::mem::blocks()
     let (iLeft, wf, peak, low, released, total) = loop i = steps, wf = w, peak = 0, low = 1000000000000, released = 0, total = 0.0 while i > 0 do {

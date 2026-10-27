@@ -13,7 +13,7 @@
  *   stepped    sum(slice(x, 0, 0, 6, 2) * [2,3,5]) = x0*2 + x2*3 + x4*5 -> [2, 0, 3, 0, 5, 0]
  *   roundtrip  sum(reshape(transpose(transpose(reshape(x, [2,3]))), [6]) * w) with w = 1..6
  *              must give exactly the gradient of the unreshaped sum(x * w), which is w itself.
- *   query      sum(x * x) + sum(zeros([dim(x, 0)])) + sum(zeros([numel(x)])): a shape query is
+ *   query      sum(x * x) + sum(zeros::<f32>([dim(x, 0)])) + sum(zeros::<f32>([numel(x)])): a shape query is
  *              locally constant in the tensor it reads, so its contribution is exactly zero and
  *              the gradient is 2 * x = [2, 4, 6, 8, 10, 12].
  *
@@ -58,8 +58,8 @@ func plain(): float {
 
 with <x: f32[..]>
 func shape_queries(): float {
-    let a = zeros([dim(x, 0)])
-    let b = zeros([numel(x)])
+    let a = zeros::<f32>([dim(x, 0)])
+    let b = zeros::<f32>([numel(x)])
     return float(sum(x * x)) + float(sum(a)) + float(sum(b))
 }
 

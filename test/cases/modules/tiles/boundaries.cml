@@ -12,7 +12,7 @@ func main(): int sync {
     println(sum(abs(download(run_preferred_resident<captured>(x)) - captured(x))))
     println(sum(abs(download(run_preferred_resident<nested>(x)) - nested(x))))
     println(sum(abs(download(run_preferred_resident<reduce>(x)) - reduce(x))))
-    println(sum(download(run_preferred_resident<add>((zeros([0, 3]), zeros([1, 3]))))))
-    println(sum(download(run_preferred_resident<product>((zeros([2, 0]), zeros([0, 3]))))))
+    println(sum(download(run_preferred_resident<add>((zeros::<f32>([0, 3]), zeros::<f32>([1, 3]))))))
+    println(sum(download(run_preferred_resident<product>((zeros::<f32>([2, 0]), zeros::<f32>([0, 3]))))))
     return 0
 }

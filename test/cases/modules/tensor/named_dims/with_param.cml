@@ -5,6 +5,6 @@ func scale(x: f32[n]): float {
     return float(sum(x)) + float(sum(w))
 }
 func main(): int sync {
-    println(scale<ones([3])>(ones([3])))
+    println(scale<ones::<f32>([3])>(ones::<f32>([3])))
     return 0
 }

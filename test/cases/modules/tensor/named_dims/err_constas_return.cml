@@ -4,6 +4,6 @@ func bad(x: f32[..]): f32[n] {
     return x as f32[?]
 }
 func main(): int sync {
-    println(bad(ones([3])))
+    println(bad(ones::<f32>([3])))
     return 0
 }

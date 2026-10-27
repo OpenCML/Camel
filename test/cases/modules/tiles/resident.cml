@@ -13,6 +13,6 @@ func main(): int sync {
     println(sum(abs(download(second) - (x + 7.0))))
     println(churn(x, 40))
     println(sum(abs(download(first) - x)))
-    println(sum(download(upload(zeros([0, 3])))))
+    println(sum(download(upload(zeros::<f32>([0, 3])))))
     return 0
 }

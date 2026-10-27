@@ -51,7 +51,7 @@ func forward(t: Tree): (f32[..], f32[..]) {
     return match t {
         case Tree::Leaf(onehot) => {
             let x = onehot @ p.emb
-            let empty = zeros([1, shape(p.emb)[1]])
+            let empty = zeros::<f32>([1, shape(p.emb)[1]])
             cell<p>(x, empty, empty, empty, empty)
         }
         case Tree::Node(left, right) => {

@@ -26,8 +26,8 @@ func shared_chain(): float {
 }
 
 func main(fused: int): int sync {
-    let x = zeros([8, 8]) + 1.0
-    let w = zeros([8, 8]) + 0.5
+    let x = zeros::<f32>([8, 8]) + 1.0
+    let w = zeros::<f32>([8, 8]) + 0.5
     if fused != 0 then {
         let g = with_grad(private_chain)
         let (value, gradient) = g<{w: w}>(x)

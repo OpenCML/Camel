@@ -12,11 +12,11 @@ func twice(x: f32[..]): f32[..] {
 func main(): int sync {
     let values: f32[] = [1.0, 2.0, 3.0, 4.0]
     let a = reshape(new(values), [2, 2])
-    let z = zeros([2, 2])
+    let z = zeros::<f32>([2, 2])
     println(sum(a))
     println(sum(twice(a)))
     println(sum(z))
-    println(sum(ones([2, 2])))
+    println(sum(ones::<f32>([2, 2])))
     println(to_array(to_bytes(a)))
     return 0
 }

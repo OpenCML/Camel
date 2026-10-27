@@ -5,6 +5,6 @@
 import { ones, relu, sum } from tensor
 
 func main(x: f32[2, 3]): f32[..] {
-    let w = ones([3, 1])
+    let w = ones::<f32>([3, 1])
     return relu(x @ w)
 }

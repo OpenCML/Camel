@@ -3,6 +3,6 @@ func f(b: f32[3]): float {
     return float(sum(b))
 }
 func main(): int sync {
-    println(f(ones([4])))
+    println(f(ones::<f32>([4])))
     return 0
 }

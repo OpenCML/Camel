@@ -7,9 +7,9 @@ import { add, subtract, multiply, matmul, ones, zeros, sum, eye, transpose, show
 func svm_train(X: f32[..], y: f32[..], learning_rate: float, epochs: int, lambda: float): f32[..] sync {
     let m = shape(X)[0]
     let n = shape(X)[1]
-    let X_bias = concat(X, ones([m, 1]), 1)
+    let X_bias = concat(X, ones::<f32>([m, 1]), 1)
     let y_col = reshape(subtract(multiply(y, 2.0), 1.0), [m, 1])
-    let w0 = zeros([n + 1, 1])
+    let w0 = zeros::<f32>([n + 1, 1])
 
     func svm_epoch(epoch: int, weights: f32[..]): f32[..] sync {
         if (epoch >= epochs) then {
@@ -34,7 +34,7 @@ func svm_train(X: f32[..], y: f32[..], learning_rate: float, epochs: int, lambda
 
 func svm_predict(X: f32[..], model: f32[..]): f32[..] sync {
     let n = shape(X)[0]
-    let X_bias = concat(X, ones([n, 1]), 1)
+    let X_bias = concat(X, ones::<f32>([n, 1]), 1)
     let predictions = matmul(X_bias, model)
     return subtract(multiply((predictions > 0), 2.0), 1.0)
 }

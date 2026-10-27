@@ -6,7 +6,7 @@
 import { zeros, permute } from tensor
 
 func main(): int sync {
-    let r = permute(zeros([2, 3]), [0, 0])
+    let r = permute(zeros::<f32>([2, 3]), [0, 0])
     println('unreachable')
     return 0
 }

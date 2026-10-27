@@ -501,8 +501,8 @@ import {{ now }} from time
 func main(reps: int): int sync {{
     set_num_threads(1)
     seed(7)
-    let x = zeros([{rows}, {cols}]) + 0.5
-    let y = zeros([{rows}, {cols}]) + 1.5
+    let x = zeros::<f32>([{rows}, {cols}]) + 0.5
+    let y = zeros::<f32>([{rows}, {cols}]) + 1.5
     let warm = loop i = 0 while i < 32 do {{
         let product = x {op} y
         return i + 1
@@ -695,8 +695,8 @@ import {{ Tensor, gelu, neg, seed, set_num_threads, sum, zeros }} from tensor
 func main(bench: bool, init_dir: string, final_dir: string): int sync {{
     set_num_threads(1)
     seed(7)
-    let x = zeros([{dims}]) + 0.5
-    let y = zeros([{dims}]) + 1.5
+    let x = zeros::<f32>([{dims}]) + 0.5
+    let y = zeros::<f32>([{dims}]) + 1.5
     let (i_last, kept) = loop i = 0, k = x while i < {rounds} do {{
         let p = {body}
         return (i + 1, p)

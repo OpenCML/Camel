@@ -6,15 +6,15 @@ import { reshape, range, ones, zeros, matmul, linear, layer_norm, permute, slice
 
 func main(): int sync {
     let a = reshape(f32(0..24), [2, 3, 4])
-    let b = ones([4, 5])
+    let b = ones::<f32>([4, 5])
     let c = a @ b
-    let w = ones([4, 2])
+    let w = ones::<f32>([4, 2])
     let bias = f32(reshape([0.5, -0.5], [2]))
     let y = linear(a, w, bias)
     'linalg matmul_shape={} matmul_sum={} linear_shape={} linear_sum={}'->format<shape(c), sum(c), shape(y), sum(y)>->println
-    let v = matmul(ones([3, 4]), f32(reshape([1.0, 2.0, 3.0, 4.0], [4])))
+    let v = matmul(ones::<f32>([3, 4]), f32(reshape([1.0, 2.0, 3.0, 4.0], [4])))
     'linalg matvec_shape={} matvec_sum={}'->format<shape(v), sum(v)>->println
-    let n = layer_norm(a, ones([4]), zeros([4]))
+    let n = layer_norm(a, ones::<f32>([4]), zeros::<f32>([4]))
     'linalg layernorm_sum={}'->format<sum(n)>->println
     let p = permute(a, [2, 0, 1])
     let s = slice(a, 2, 1, 4, 2)

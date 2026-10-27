@@ -3482,6 +3482,15 @@ Value Evaluator::applyOper(
         constants.push_back(constArgOf(v));
     }
     tensor::ops::InferContext inferContext(types, constants);
+    // A creation operator's element type was settled by the call (`zeros::<f32>(shape)`): it is
+    // the element type of the type its node carries.
+    if (def != nullptr && def->elementFromCall && resultType != nullptr) {
+        if (const auto *array = camel::core::type::asArrayType(
+                camel::core::type::valueTypeOf(resultType));
+            array != nullptr && array->elemType() != nullptr) {
+            inferContext.withCallElement(array->elemTypeCode());
+        }
+    }
     if (def && def->infer) {
         try {
             if (auto inferred = def->infer(inferContext)) {

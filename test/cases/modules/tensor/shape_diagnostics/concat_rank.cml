@@ -6,7 +6,7 @@
 import { zeros, concat } from tensor
 
 func main(): int sync {
-    let r = concat(zeros([2, 3]), zeros([3]), 0)
+    let r = concat(zeros::<f32>([2, 3]), zeros::<f32>([3]), 0)
     println('unreachable')
     return 0
 }

@@ -1,0 +1,14 @@
+/**
+ * The element type of `zeros`, `ones` and `eye` is written (`zeros::<f64>([2])`) or comes from the
+ * position of the call (`let x: f32[2, 2] = ones([2, 2])`): they have no default element type.
+ */
+import { zeros, ones, eye } from tensor
+
+func main(): int sync {
+    let a: f32[2, 2] = ones([2, 2])
+    let b = zeros::<f64>([3])
+    let c = eye::<i32>(2)
+    let d: f16[2] = zeros([2])
+    println(a, b, c, d)
+    return 0
+}

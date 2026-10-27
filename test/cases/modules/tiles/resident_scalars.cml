@@ -35,6 +35,6 @@ func main(): int sync {
     println(read(run_preferred_resident<identity>(p.0)) - 16777217.0)
     println(download(run_preferred_resident<identity>(p.0)) - 16777217.0)
     println(read(upload(1.0000000000000002)) - 1.0000000000000002)
-    println(read(run_preferred_resident<total>(zeros([0]))))
+    println(read(run_preferred_resident<total>(zeros::<f32>([0]))))
     return 0
 }

@@ -57,7 +57,7 @@ func do_run(m: Mlp): int sync {
     let dump = get_env('DUMP') ?? ''
     let xa = input_a()
     let xb = reshape([0.1, -0.1, 0.05, 0.0], [2, 2])
-    let x0 = zeros([2, 2])
+    let x0 = zeros::<f32>([2, 2])
     save_params(m, dump + '/init')
     save_npy(xa, dump + '/xa.npy')
     save_npy(xb, dump + '/xb.npy')

@@ -107,6 +107,38 @@ class OpDefResolver final : public FuncTypeResolver {
 
     std::optional<FunctionType *> resolveWith(
         const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics) const override {
+        // An operator whose element type only the call can give has no answer without one.
+        if (def_->elementFromCall) {
+            return std::nullopt;
+        }
+        return resolveFor(with, norm, normStatics, std::nullopt);
+    }
+
+    /// The element type of a creation operator is written (`zeros::<f32>(shape)`) or comes from
+    /// the position of the call; neither is a default.
+    std::optional<FunctionType *> resolveForCall(
+        const type_vec_t &types, Type *expectedResult, const type_vec_t &with,
+        const type_vec_t &norm, static_args_t normStatics) const override {
+        if (!def_->elementFromCall) {
+            return types.empty() ? resolveFor(with, norm, normStatics, std::nullopt) : std::nullopt;
+        }
+        std::optional<TypeCode> element;
+        if (types.size() == 1 && types[0] != nullptr) {
+            element = types[0]->code();
+        } else if (types.empty() && expectedResult != nullptr) {
+            if (const ArrayType *array = asArrayType(valueTypeOf(expectedResult))) {
+                element = array->elemTypeCode();
+            }
+        }
+        if (!element || !isNumericScalar(*element)) {
+            return std::nullopt;
+        }
+        return resolveFor(with, norm, normStatics, element);
+    }
+
+    std::optional<FunctionType *> resolveFor(
+        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics,
+        std::optional<TypeCode> element) const {
         // An operator whose kernel takes the with-arguments after the ordinary ones is asked about
         // the joined list, its statics aligned with it (norm, then with).
         if (!with.empty() && !def_->withAfterNorm) {
@@ -118,7 +150,7 @@ class OpDefResolver final : public FuncTypeResolver {
         }
         std::optional<Type *> result;
         try {
-            result = infer(all, normStatics);
+            result = infer(all, normStatics, element);
         } catch (const std::invalid_argument &) {
             return std::nullopt; // statically known shapes or dtypes conflict (see explain)
         }
@@ -165,11 +197,14 @@ class OpDefResolver final : public FuncTypeResolver {
         return all;
     }
 
-    std::optional<Type *> infer(const type_vec_t &norm, static_args_t normStatics) const {
+    std::optional<Type *> infer(
+        const type_vec_t &norm, static_args_t normStatics,
+        std::optional<TypeCode> element = std::nullopt) const {
         const StaticFacts facts(norm, normStatics);
         // A call the program wrote: design principles 5.1's literal rule has run, so a scalar of
         // another type than the element type is a value to report.
-        return def_->infer(InferContext(norm, facts.constants, facts.partials, true));
+        return def_->infer(
+            InferContext(norm, facts.constants, facts.partials, true).withCallElement(element));
     }
 
     std::shared_ptr<const OpDef> def_;

@@ -11,12 +11,12 @@ digraph GraphIR {
             F02 [label="ARGS", type="ARGS"];
             O02 [label="EXIT", type="EXIT"];
             N00 [label="flag", type="PORT", param_name="flag", param_kind="normal", param_index="0", value_type="bool", origin=<ORIGIN>, span="11:10-11:20", srcfile="exemplars/02_branch_shape_contract/program.cml"];
-            N01 [label="JOIN", type="JOIN", role="branch-contract", origin=<ORIGIN>, span="12:11-12:55", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="f32[?, ?]"];
-            N02 [label="BRCH", type="BRCH", origin=<ORIGIN>, span="12:11-12:55", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="int"];
-            N03 [label="[2, 3]", type="DATA", origin=<ORIGIN>, span="12:30-12:36", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="int[]"];
-            N04 [label="tensor:zeros", type="OPER", origin=<ORIGIN>, span="12:24-12:29", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="f32[2, 3]"];
-            N05 [label="[3, 2]", type="DATA", origin=<ORIGIN>, span="12:48-12:54", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="int[]"];
-            N06 [label="tensor:ones", type="OPER", origin=<ORIGIN>, span="12:43-12:47", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="f32[3, 2]"];
+            N01 [label="JOIN", type="JOIN", role="branch-contract", origin=<ORIGIN>, span="12:11-12:69", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="f32[?, ?]"];
+            N02 [label="BRCH", type="BRCH", origin=<ORIGIN>, span="12:11-12:69", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="int"];
+            N03 [label="[2, 3]", type="DATA", origin=<ORIGIN>, span="12:37-12:43", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="int[]"];
+            N04 [label="tensor:zeros", type="OPER", origin=<ORIGIN>, span="12:29-12:36", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="f32[2, 3]"];
+            N05 [label="[3, 2]", type="DATA", origin=<ORIGIN>, span="12:62-12:68", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="int[]"];
+            N06 [label="tensor:ones", type="OPER", origin=<ORIGIN>, span="12:54-12:61", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="f32[3, 2]"];
             F02 -> N00 [label="0", type="NORM_PORT"];
             N01 -> O02 [label="0", type="EXIT"];
             N04 -> N01 [label="0|0", type="WITH"];
@@ -29,8 +29,8 @@ digraph GraphIR {
             N02 -> N06 [label="1|0", type="CTRL"];
         }
         O01 [label="EXIT", type="EXIT"];
-        N07 [label="[3, 4]", type="DATA", origin=<ORIGIN>, span="16:17-16:23", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="int[]"];
-        N08 [label="tensor:ones", type="OPER", origin=<ORIGIN>, span="16:12-16:16", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="f32[3, 4]"];
+        N07 [label="[3, 4]", type="DATA", origin=<ORIGIN>, span="16:24-16:30", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="int[]"];
+        N08 [label="tensor:ones", type="OPER", origin=<ORIGIN>, span="16:16-16:23", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="f32[3, 4]"];
         N09 [label="FLAG", type="DATA", origin=<ORIGIN>, span="17:26-17:32", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="string"];
         N0A [label="env:get_env", type="OPER", role="effect", origin=<ORIGIN>, span="17:18-17:25", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="string?"];
         N0B [label=":op/tag_is_null", type="OPER", origin=<ORIGIN>, span="17:34-17:36", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="bool"];

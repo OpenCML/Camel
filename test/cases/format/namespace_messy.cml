@@ -7,6 +7,6 @@ func new(x:int,y:int):Point{return {x:x,y:y}}
 
 func main():int sync{
 let p=Foo::new(1,2)
-let q=tensor::ones([2,2])
+let q=tensor::ones::<f32>([2,2])
 return 0
 }

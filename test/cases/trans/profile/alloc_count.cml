@@ -6,8 +6,8 @@
 import { zeros } from tensor
 
 func main(): int sync {
-    let a = zeros([1024])
-    let b = zeros([1024])
+    let a = zeros::<f32>([1024])
+    let b = zeros::<f32>([1024])
     let c = a + b
     println(c[0])
     return 0

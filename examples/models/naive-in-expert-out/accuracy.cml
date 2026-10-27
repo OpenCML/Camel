@@ -61,7 +61,7 @@ func main(): int sync {
 
     let offsets = [85.0, 87.0, 88.0, 89.0, 100.0, 1000.0]
     let _ = loop n = 0 for k in offsets do sync {
-        let logits = zeros([1, 8]) + k
+        let logits = zeros::<f32>([1, 8]) + k
         let bad = !finite(naive_cross_entropy(logits, 0))
         let ok = finite(softmax_cross_entropy(logits, new([0])))
         'accuracy camel cross_entropy_offset k={} naive_bad={} expert_finite={}'->format<k, bad, ok>->println
@@ -69,7 +69,7 @@ func main(): int sync {
     }
 
     let _ = loop n = 0 for m in underflow_values do sync {
-        let logits = zeros([1, 8]) - f32(one_hot(new([0]), 8)) * m
+        let logits = zeros::<f32>([1, 8]) - f32(one_hot(new([0]), 8)) * m
         let bad = !finite(naive_cross_entropy(logits, 0))
         let ok = finite(softmax_cross_entropy(logits, new([0])))
         'accuracy camel cross_entropy_true_class m={} naive_bad={} expert_finite={}'->format<m, bad, ok>->println
