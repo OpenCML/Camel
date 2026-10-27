@@ -345,6 +345,7 @@ def func_src(n: N, ind: int) -> list:
     # No `sync` prefix on a declaration: it was retired with `wait` (design principles 3.3), and
     # order comes from the `sync { }` of the body, which `block` writes. `syncfn` still says what
     # the model knows about the function; it is no longer a spelling.
+    body = n.c[0]
     mods = "#macro " if n.a.get("macro") else ""
     head = f"{pad}{mods}func {n.a['name']}({params_src(n.a['params'])}): {type_src(n.a['ret'])} "
     lines = [head + block(body, ind)]
