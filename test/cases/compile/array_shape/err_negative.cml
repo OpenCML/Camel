@@ -1,5 +1,4 @@
 // A negative extent is not a dimension: `?` is the unknown extent.
-module array_shape_err_negative
 
 func bad(x: f32[-1]): int {
     return 0

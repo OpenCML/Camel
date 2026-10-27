@@ -3,7 +3,6 @@
  * function, so the condition cannot call it, and the report says that rather than taking the
  * condition for true.
  */
-module when_import_not_predicate
 
 import { ready } from predicates
 

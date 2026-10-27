@@ -19,7 +19,6 @@
  *   54      unused_case   the return value is not read, the write still happens
  *   95      used_case     the return value read beside the version
  */
-module captured_write_value
 
 var p = 0
 var q = 0

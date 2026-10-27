@@ -1,9 +1,9 @@
 20
 -1
 40
-DivisionByZero at nested.cml:9:38
+DivisionByZero at nested.cml:8:38
 -12
 -1
-DivisionByZero at nested.cml:9:38
+DivisionByZero at nested.cml:8:38
 7
 end

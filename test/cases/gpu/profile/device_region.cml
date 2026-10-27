@@ -4,7 +4,6 @@
  * waits, and names the `tiles:` operator the device work happened inside.
  */
 
-module profile_device_region
 
 import { new, sum } from tensor
 import { upload, download, run_preferred_resident } from tiles

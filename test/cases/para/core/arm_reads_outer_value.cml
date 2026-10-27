@@ -6,7 +6,6 @@
  * instead of 9). Two calls, so that the top level is not a single chain.
  * Expected output: 1010, then 9.
  */
-module arm_reads_outer_value
 
 func train(base: int, epochs: int, k: int): int sync {
     let b2 = base + 1

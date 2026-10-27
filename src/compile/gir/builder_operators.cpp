@@ -2626,6 +2626,53 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         }
     }
 
+    // A call with an argument of type `never` never runs (design principles 3.9; the author's
+    // ruling of 2026-10-26 on `never-argument-scope`): an argument is evaluated before the call
+    // it is written in, and this one never gives a value, so the call itself is typed `never` and
+    // no overload is chosen for it. The reading stands before the resolution -- a set of
+    // overloads that fits is not the question for a call that never runs, and a call that never
+    // runs says nothing about a signature either. A `with` argument is evaluated before the call
+    // like an ordinary one, so this is one reading over every argument the call is written with:
+    // the two lists are walked here, `with` arguments first, and not in two places. The call is
+    // not built: what the expression gives is the argument's own node, which is the value that
+    // ends the program. One warning per call, naming the argument that causes it.
+    for (const bool inWith : {true, false}) {
+        const std::vector<Argument> &inputs = inWith ? withInputs : normInputs;
+        const type_vec_t &types            = inWith ? withInputTypes : normInputTypes;
+        for (size_t i = 0; i < inputs.size() && i < types.size(); ++i) {
+            if (types[i] == nullptr || inputs[i].node == nullptr ||
+                valueTypeOf(types[i])->code() != TypeCode::Never) {
+                continue;
+            }
+            // Which argument the program wrote: the name it gave the argument, or its position
+            // among the arguments as written. An ordinary argument's position is looked up in the
+            // call itself, because the binding put the arguments in the declaration's order; a
+            // `with` argument is written in the callee's angle brackets, which the call node does
+            // not carry, so it is named by its place among the `with` arguments.
+            std::string written;
+            if (inputs[i].name.has_value()) {
+                written = std::format("the argument '{}'", *inputs[i].name);
+            } else if (inWith) {
+                written = std::format("the `with` argument {}", i + 1);
+            } else {
+                size_t position = i + 1;
+                for (size_t j = 1; j < gct->size(); ++j) {
+                    if (inputs[i].expr != nullptr && gct->at(j) == inputs[i].expr) {
+                        position = j;
+                        break;
+                    }
+                }
+                written = std::format("argument {}", position);
+            }
+            diags_->of(SemanticDiag::NeverArgumentCall)
+                .atOrigin(inputs[i].expr != nullptr ? inputs[i].expr->origin() : gct->origin())
+                .commit(written);
+            node_handle_t given = inputs[i].node;
+            LEAVE("LINK");
+            return given;
+        }
+    }
+
     // An operator with overloads of the program: one of them, or the built-in group below.
     // `a != b` by an overload of `==` is the negation of that call (`negateResult`).
     compile_graph_ptr_t operatorOverload = nullptr;

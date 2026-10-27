@@ -4,7 +4,6 @@
  * condition's evaluator handles. A place that needs a constant refuses the call by name
  * (FoldCallNotEvaluable) with the construct it stopped at, rather than guessing a value.
  */
-module fold_call_not_evaluable
 
 func first_of_list(): int {
     let step = (n: int): int => n + 1

@@ -1,7 +1,6 @@
 // A resource another module exports is imported by name like any other exported name (design
 // principles 10.2): `import { rendezvous_point } from test_support` binds it, and a clause then
 // writes it bare. The module prefix is not needed where the name is imported.
-module imports_exported_resource
 
 import { rendezvous_point } from test_support
 

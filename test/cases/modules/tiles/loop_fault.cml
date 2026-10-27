@@ -1,4 +1,3 @@
-module tiles_loop_fault
 import { run_preferred_resident, download } from tiles
 func divide(x: float): float {
     return loop s = 1.0 for k in [1, 2] do s / x

@@ -3,7 +3,6 @@
  * and what the arm gives is dropped. On the graph it is a branch with two arms, the one not
  * written being empty; the arm written is evaluated like any arm.
  */
-module statement
 
 func noisy(debug: bool, x: int): int sync {
     // an arm that is a call with a value (println gives its argument)

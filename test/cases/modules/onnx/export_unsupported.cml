@@ -2,7 +2,6 @@
  * A training loss has no ONNX lowering; exporting a function that applies it
  * to the model input reports the operator.
  */
-module export_unsupported
 
 import { reshape } from tensor
 import { softmax_cross_entropy } from nn

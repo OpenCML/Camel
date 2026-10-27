@@ -2,7 +2,6 @@
  * A text in a struct literal inside another struct literal is the type mismatch of the inner
  * field, reported where it is written (design principles 5.1).
  */
-module literal_context_nested_field_text
 
 type Point = { x: float, y: float }
 type Outer = { nest: Point, tag: int }

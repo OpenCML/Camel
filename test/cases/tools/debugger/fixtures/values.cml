@@ -1,5 +1,3 @@
-module main
-
 func risky(d: int): int {
     return 100 / d
 }

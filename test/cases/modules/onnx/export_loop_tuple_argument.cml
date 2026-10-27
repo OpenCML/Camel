@@ -4,7 +4,6 @@
  * one carried value per element at the loop's entry and rebuilt at both ends (the outline,
  * item 3); the model has one Loop and the tuple's two values as outputs.
  */
-module export_loop_tuple_argument
 import { reshape, sum, tanh } from tensor
 import { export_model } from onnx
 import { get_env } from env

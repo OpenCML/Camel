@@ -1,7 +1,6 @@
 /**
  * Reading past the end of an array inside a function: IndexOutOfRange at the bracket.
  */
-module index_out_of_range
 
 func at(xs: int[], i: int): int { return xs[i] }
 

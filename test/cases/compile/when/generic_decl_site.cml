@@ -6,7 +6,6 @@
  * declaration is written). Whether a well-formed condition *holds* is
  * still the instance's question: cases/compile/when/open_type.cml.
  */
-module when_generic_decl_site
 
 import { is_integer } from types
 

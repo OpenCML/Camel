@@ -3,7 +3,6 @@
  * selects `Point`, so the identity case after it is dead, and it is reported rather than
  * silently ignored (design principles 5.5).
  */
-module type_identity_shape_shadowed
 
 type Point = { x: int }
 

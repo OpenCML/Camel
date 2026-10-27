@@ -10,7 +10,6 @@
  * rounding path and needs `reassociate`. `tightPair` has two different coefficients, so no exact
  * transformation exists and the sum must stay; the default policy still folds it into `x*0.4`.
  */
-module strict_algebra
 
 func loose(x: float): float {
     return x * 0.1 + x * 0.1

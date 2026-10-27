@@ -3,7 +3,6 @@
  * the functions passed in. Their calls have no order among them; the results are put
  * together by position and are the same on every back end.
  */
-module array_large
 
 import { reverse, take, drop, enumerate, flatten, unique, index_of, sum, min, max, find, any, all, count, flat_map, sort_by, zip_with } from array
 

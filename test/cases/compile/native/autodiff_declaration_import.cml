@@ -3,7 +3,6 @@
  * type variable, and the result of the same type. Each call reaches the C++ operator, which
  * returns its argument (step 10).
  */
-module autodiff_declaration_import
 
 import { stop_gradient } from autodiff
 import { new, shape } from tensor

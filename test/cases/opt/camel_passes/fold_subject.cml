@@ -1,5 +1,3 @@
-module fold_subject
-
 // The corpus of the constant-folding comparison: operations whose operands are all
 // constants and that the front end leaves in the graph, beside an operation that must not fold.
 //

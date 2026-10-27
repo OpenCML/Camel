@@ -1,0 +1,24 @@
+/**
+ * A `with` argument of type `never` (design principles 3.9; the author's ruling of 2026-10-26 on
+ * `never-argument-scope`): a `with` argument is evaluated before the call it is written in like
+ * an ordinary argument, so one that never gives a value never reaches the call at all. The call
+ * itself is typed `never`, no overload is chosen for it, and the warning names the argument --
+ * its place among the `with` arguments where the program gave it no name. Its result stands
+ * where the declared type is, because a value that never comes fits any position: an `int[]`
+ * here, which is what the call was asked for. Every argument the call is written with is read
+ * together, `with` arguments and ordinary ones alike.
+ */
+
+func stop(m: string): never {
+    return fail<'Stopped'>(m)
+}
+
+with <rounds: int>
+func repeat(x: int): int {
+    return x + rounds
+}
+
+func main(): int[] sync {
+    println('before')
+    return repeat<stop('no rounds by position')>(3)
+}

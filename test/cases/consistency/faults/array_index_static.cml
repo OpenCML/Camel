@@ -1,7 +1,6 @@
 /**
  * A constant index past the end of an array literal.
  */
-module array_index_static
 
 func main(): int sync {
     println('before')

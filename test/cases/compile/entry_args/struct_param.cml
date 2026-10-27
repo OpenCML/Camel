@@ -4,7 +4,6 @@
  * an f32 like the tensor it multiplies: a `float` one is a type error, not a conversion
  * (design principles 5.1).
  */
-module struct_param
 
 import { tanh } from tensor
 

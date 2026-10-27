@@ -5,7 +5,6 @@
  * Go: `[1, 2.0]` is a float array. The pattern of a `match` case takes the type of the value
  * matched.
  */
-module literal_context_data
 
 type Point = { x: float, y: float }
 

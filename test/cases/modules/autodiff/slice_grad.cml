@@ -22,7 +22,6 @@
  * the reshape/transpose adjoints lose the permutation (roundtrip_d != 0.0), or the numel/dim
  * noGradient entries are removed (the case refuses at the shape query).
  */
-module slice_grad
 
 import { abs, dim, numel, reshape, sum, transpose, zeros } from tensor
 import { grad, with_grad } from autodiff

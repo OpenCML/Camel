@@ -3,7 +3,6 @@
  * order of their lines is not defined, but every line comes out whole: 3000 map elements each
  * print one line, and the output is 3000 lines of the form "line <i> of the map", each i once.
  */
-module println_whole_lines
 
 func show(i: int): int sync {
     println('line {} of the map'->format<i>)

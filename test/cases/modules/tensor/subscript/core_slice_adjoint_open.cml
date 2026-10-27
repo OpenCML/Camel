@@ -13,7 +13,6 @@
  * Red when: the gradient has no element type (`sum(g)` refuses, exit 1), the gradient is the zero
  * of the wrong shape, or the value's element type is lost on the way back.
  */
-module core_slice_adjoint_open
 
 import { sum } from tensor
 import { grad } from autodiff

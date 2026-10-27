@@ -1,7 +1,6 @@
 /**
  * sleep takes a number of seconds as a float: a fraction of a second waits and the program goes on.
  */
-module sleep_seconds
 
 import { sleep } from process
 

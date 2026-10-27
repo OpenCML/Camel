@@ -1,7 +1,6 @@
 /**
  * The array module (written in Camel): rearranging, searching and aggregating.
  */
-module array_basic
 
 import { reverse, take, drop, enumerate, flatten, unique, index_of, sum, min, max } from array
 

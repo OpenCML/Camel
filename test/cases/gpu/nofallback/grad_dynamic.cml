@@ -15,7 +15,6 @@
  * cannot), or the refusal is the missing-prerequisite report instead (which would name a pass to
  * add, and no pass can repair a function the run chooses).
  */
-module gpu_grad_dynamic
 
 import { reshape, sum } from tensor
 import { with_grad } from autodiff

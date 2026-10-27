@@ -1,5 +1,4 @@
 // Multiple state values share one recurrence and update simultaneously.
-module tiles_loop_multi_device
 import { load_npy, save_npy } from tensor
 import { download, source, inspect, benchmark, run_preferred_resident } from tiles
 import { get_env } from env

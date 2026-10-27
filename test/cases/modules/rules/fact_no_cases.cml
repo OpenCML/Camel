@@ -2,7 +2,6 @@
  * The cases of a fact say what it is, and every fact needs the one that takes whatever the others
  * do not (`case _`, written last, rewrite design 7.5). This declaration writes no case at all.
  */
-module fact_no_cases
 import { max } from math
 
 fact sign(v: int): int match v {

@@ -1,0 +1,32 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * A slice on two axes with one bound the program writes and one the run reads (design principles
+ * 5.4): the axis whose bounds are constants states the length they give it, the axis whose bound
+ * is the run's states `?`, and every axis the slice does not cut keeps the length the value's type
+ * states. `m` is an `f32[2, 3]`; the subscript writes the range `0:2` on the last axis and `0:k`
+ * on the first, and the lowering goes from the last written dimension back, so the inner node
+ * (axis 1, the constants) makes it an `f32[2, 2]` and the outer one (axis 0, the run's bound) an
+ * `f32[?, 2]` -- `block`'s parameter states exactly that, and the call needs no conversion. What
+ * the run reads is the same either way: `m[0:2, 0:2]` is `[[1, 2], [4, 5]]`, shape `[2, 2]`, sum
+ * 12.0. The axis that stays `?` is what `si_computed_slice` pins with its diagnostic.
+ */
+import { reshape, shape, sum } from tensor
+
+func block(a: f32[?, 2]): float {
+    return float(sum(a))
+}
+
+func cut(m: f32[2, 3], k: int): float {
+    return block(m[0:k, 0:2])
+}
+
+func main(): int sync {
+    println('ran')
+    let m = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3])
+    println(shape(m[0:2, 0:2]))
+    println("value={}"->format<block(m[0:2, 0:2])>)
+    println("computed={}"->format<cut(m, 2)>)
+    return 0
+}

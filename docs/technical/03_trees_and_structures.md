@@ -32,7 +32,6 @@
 
 - 根节点为 **Program**，其子节点为 **Decl** 序列，最后为 **\<EOF\>**。
 - 每个 **Decl** 可为：
-  - **ModuleDecl**：`module` + **IdentDef**（模块名）
   - **ImportDecl**：`import` + **BracedIdents** / 列表 + `from` + **ModuleName**
   - **FuncDecl**：`func` + **IdentDef** + **ParentParams** + `:` + **TypeExpr** + **StmtBlock**
 
@@ -56,7 +55,6 @@
 
 ```
 Program
-|-Decl -> ModuleDecl (module, main)
 |-Decl -> FuncDecl
 |     func, IdentDef(main), ParentParams( ), :, TypeExpr(..., int),
 |     StmtBlock

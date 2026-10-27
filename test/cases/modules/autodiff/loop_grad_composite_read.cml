@@ -8,7 +8,6 @@
  * gradient is 6. `table` keeps an array state grown by `append<a>`, with `a = w + 1` computed
  * outside the loop: the gradient of `xs[1] + xs[2]` is 2.
  */
-module loop_grad_composite_read
 
 import { grad, with_grad } from autodiff
 

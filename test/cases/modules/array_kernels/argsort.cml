@@ -3,7 +3,6 @@
  * NaN comes after every number, and -0 is below +0, so that the order of two zeros does not
  * depend on where they stand (design principles 7.7).
  */
-module array_kernels_argsort
 
 import { argsort } from array
 import math

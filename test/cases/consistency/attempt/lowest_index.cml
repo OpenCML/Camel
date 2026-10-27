@@ -7,7 +7,6 @@
  * Every fault here is an index out of range whose message names the index, which tells the
  * elements apart: element x of the first map reads tbl[x + 10], and so on.
  */
-module lowest_index
 
 import { unordered_foreach } from para
 

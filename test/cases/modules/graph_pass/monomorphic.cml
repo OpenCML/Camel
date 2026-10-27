@@ -1,4 +1,3 @@
-module monomorphic
 import { Program } from graph
 import { nine, addOne } from libvals
 

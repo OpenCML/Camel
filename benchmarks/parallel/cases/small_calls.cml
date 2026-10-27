@@ -1,6 +1,5 @@
 // Many calls of small functions from a tail-recursive loop: 2e6 iterations, two calls each.
 // Nothing here is independent of anything else; a scheduler can only add cost.
-module small_calls
 
 func sq(x: int): int {
     return x * x

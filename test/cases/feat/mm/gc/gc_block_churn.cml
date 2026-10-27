@@ -6,7 +6,6 @@
  * not grow with the number of steps. `dropped` counts the samples in which the live block bytes
  * fell, that is, a collection released blocks.
  */
-module gc_block_churn
 
 func main(steps: int, temp: int): int sync {
     let start = std::mem::blocks()

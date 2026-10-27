@@ -1,7 +1,6 @@
 /// trap 4: the file `up/../lib` would name if an import were a file path. `up/main.cml`
 /// writes `import ../lib`, which is a syntax error: an import names a module, and the
 /// own-directory rule adds no way to walk up out of the module's directory.
-module lib
 
 export func name(): string {
     return 'parent'

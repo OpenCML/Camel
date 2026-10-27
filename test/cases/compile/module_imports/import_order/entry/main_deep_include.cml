@@ -2,7 +2,6 @@
 /// library's import resolves through the `-I` roots and never through the entry directory, so
 /// this prints `helper+root1`; under the old order the entry directory came first and printed
 /// `helper+root`.
-module main_deep_include
 
 import deep.helper
 

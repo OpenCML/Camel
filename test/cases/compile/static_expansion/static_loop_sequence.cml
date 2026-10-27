@@ -7,7 +7,6 @@
  * 0, 1, 2, 3, 4). The rounds are unrolled where the loop stands, so `i` is a compile-time
  * constant: it is an ordinary `int` value and a `t.[i]` key at the same time.
  */
-module static_loop_sequence
 
 func sumTo5(): int {
     return static loop acc = 0 for i in 0..5 do acc + i

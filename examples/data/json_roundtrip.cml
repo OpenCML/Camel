@@ -1,7 +1,6 @@
 // Encodes a value as JSON and decodes JSON text into a typed value; text of the wrong shape
 // gives an error value, not a crash.
 // Run: camel examples/data/json_roundtrip.cml
-module json_roundtrip
 
 import json
 

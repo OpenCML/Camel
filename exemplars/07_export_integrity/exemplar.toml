@@ -15,6 +15,6 @@ name = "effect"
 env = ["MODE=effect", "ONNX_OUT={tmp}/noisy.onnx"]
 exit = 1
 diagnostic = "RuntimeDiag::UnhandledError"
-diagnostic_line = 33
+diagnostic_line = 32
 diagnostic_column = 16
 output_contains = ["impure operator 'tensor:randn' cannot be exported"]

@@ -1,7 +1,6 @@
 /**
  * Verifies JIT execution can chain builtin collection and string helpers without breaking intermediate values.
  */
-module jit_builtin_operator_chain
 
 func main(): int sync {
     let xs = [1, 2, 3, 4]

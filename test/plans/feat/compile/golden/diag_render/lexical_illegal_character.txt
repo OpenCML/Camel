@@ -1,12 +1,12 @@
 error[LexicalDiag::IllegalCharacter]: Illegal character '$'.
-  --> <ROOT>/test/cases/compile/diag_render/lexical_illegal_character.cml:4:15
+  --> <ROOT>/test/cases/compile/diag_render/lexical_illegal_character.cml:2:15
    |
- 4 |     let x = 1 $ 2
+ 2 |     let x = 1 $ 2
    |               ^
 help: No token starts with this character. Outside strings and comments a program consists of ASCII characters; a name is made of letters, digits and '_'.
 help: remove it
    |
- 4 |     let x = 1 $ 2
+ 2 |     let x = 1 $ 2
    |               -
 
 camel: 1 error

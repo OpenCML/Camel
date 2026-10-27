@@ -2,7 +2,6 @@
 /// a template whose element type is open has the type its instantiation fixes (5.5): `half::<int>`
 /// is a `0.5` the element type cannot hold, refused at the literal rather than left to the
 /// operator's "no matching function".
-module element_literal_not_representable_array
 
 func half::<T>(x: T[..]): T[..] {
     return x * 0.5

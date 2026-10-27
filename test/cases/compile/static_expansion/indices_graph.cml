@@ -3,7 +3,6 @@
  * position, in order, and no SFOR, SLOOP, SACC or LOOP node. (A tuple comprehension of `j` is
  * covered by its value in `indices.cml`; its graph is the FILL of the positions.)
  */
-module indices_graph
 
 func loopSum(t: (int, int, int)): int {
     return static loop acc = 0 for j in indices t do acc + t.[j]

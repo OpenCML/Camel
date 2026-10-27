@@ -3,7 +3,6 @@
  * a MatrixFactorization-shaped gradient (only the selected user/item rows are non-zero), one
  * sgd step lowers the loss, and a recursive train loop repeats the step.
  */
-module matrix_factorization
 
 import { grad, with_grad } from autodiff
 import { full, reshape, sum } from tensor

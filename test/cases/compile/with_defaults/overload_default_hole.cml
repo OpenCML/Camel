@@ -3,7 +3,6 @@
  * means, for the two lists alike: `rounds` has a default in both declarations of `show`, and
  * `show<label: 'p'>(3)` reaches the one whose ordinary parameter takes the 3 (design principles 4.4).
  */
-module with_overload_default_hole
 
 with <rounds: int = 8, label: string = 'x'>
 func show(a: int): int {

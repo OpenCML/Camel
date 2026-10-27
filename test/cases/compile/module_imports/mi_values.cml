@@ -1,5 +1,3 @@
-module mi_values
-
 let base = 10
 var cnt = 0
 

@@ -1,5 +1,3 @@
-module runtime_number_text
-
 func main(): int sync {
     let s = 'abc'
     println(int(s))

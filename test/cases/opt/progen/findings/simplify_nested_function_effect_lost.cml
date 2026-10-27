@@ -6,7 +6,6 @@
  * Actual: (nothing)
  * Reduced by test/tools/progen from seed 284 (generator version 1, all features).
  */
-module simplify_nested_function_effect_lost
 
 func main(): int sync {
     let n24 = '';

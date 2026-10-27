@@ -1,7 +1,6 @@
 /**
  * Verifies nested local-function recursion keeps captured outer state intact across repeated JIT frames.
  */
-module jit_nested_call_state
 
 func run(depth: int): int {
     let base = 11

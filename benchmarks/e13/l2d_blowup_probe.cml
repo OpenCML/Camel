@@ -11,7 +11,6 @@
  *
  * MODE=export STEPS=4|6 ONNX_OUT=...
  */
-module e13_l2d_blowup_probe
 
 import { sigmoid, tanh, reshape, shape, zeros, mean, abs } from tensor
 import { get_env } from env

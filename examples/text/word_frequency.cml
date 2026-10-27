@@ -1,7 +1,6 @@
 // Counts the words of a text: lines and words with `split`, `trim` and `to_lower` of `str`,
 // the counts in a Map<string, int>, the most frequent words with `sort_by` and `take` of `array`.
 // Run: camel examples/text/word_frequency.cml
-module word_frequency
 
 import { split, trim, to_lower, replace } from str
 import { flat_map, sort_by, take } from array

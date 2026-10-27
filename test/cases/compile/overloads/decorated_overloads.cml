@@ -4,7 +4,6 @@
  * first). It used to see the decorated function declared last only, and passed it the
  * arguments unchecked: `scale(1.5)` handed a float to a function that takes an int.
  */
-module decorated_overloads
 
 func twice(f: (x: int) => int): (x: int) => int {
     return (x: int) => f(f(x))

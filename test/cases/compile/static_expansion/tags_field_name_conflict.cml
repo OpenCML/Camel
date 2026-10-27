@@ -4,7 +4,6 @@
  * struct, because `tags` names a field by the tag alone. The reading therefore reports both
  * qualified names rather than keeping the first one and dropping the second.
  */
-module tags_field_name_conflict
 
 import tags_second_width
 

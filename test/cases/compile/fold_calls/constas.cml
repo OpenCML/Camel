@@ -3,7 +3,6 @@
  * is handed on as the `constas` value, so it selects the instance and is read by the body
  * (design principles 5.4).
  */
-module fold_call_constas
 
 type Point = { x: int, y: int }
 type Pair = (int, int)

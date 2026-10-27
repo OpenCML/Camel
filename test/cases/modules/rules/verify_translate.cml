@@ -25,7 +25,6 @@
  * covers, what it refuses, and that a condition is not a premise yet. A design section drifts from
  * the code; this table is what the code says, and the plan asserts it line by line.
  */
-module verify_translate
 
 import { check, check_text, check_row_count, check_coverage, check_coverage_table } from rewrite
 import { int_add_zero, float_add_minus_zero, tensor_mul_one } from rules

@@ -3,7 +3,6 @@
  * pull of `s` are two consumers of one stream, and the second is refused with the two places named.
  * To read one stream from two places, write `tee(s, n)` and consume each of the two streams once.
  */
-module stream_consumed_twice
 
 func count(n: int): int.. {
     return step(n)

@@ -6,7 +6,6 @@
  * now at the inference, where `T := Void` is not a type a call can be made at, and the kernel
  * never meets such a value (docs/stdlib-conventions.cn.md 第 8 节).
  */
-module tensor_show_empty_array
 
 import { show } from tensor
 

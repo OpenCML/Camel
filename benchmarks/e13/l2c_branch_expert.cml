@@ -14,7 +14,6 @@
  * MODE=run    : native run; dumps init params, inputs, losses, updated params
  * MODE=export : WHAT=fwd exports the loss, WHAT=step exports the training step
  */
-module e13_l2c_branch_expert
 
 import { relu, mean, reshape, save_npy } from tensor
 import { with_grad } from autodiff

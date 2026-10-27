@@ -1,7 +1,6 @@
 // Lookups that may find nothing return T?: `find` and `index_of` of `array`, a Map lookup.
 // `??` supplies a default and `match` tells the two cases apart.
 // Run: camel examples/data/nullable_lookup.cml
-module nullable_lookup
 
 import { find, index_of } from array
 

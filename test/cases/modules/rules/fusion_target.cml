@@ -5,7 +5,6 @@
  * becoming one. `after_matmul` is the barrier case: the elementwise chain that follows a matmul
  * fuses into `sigmoid`, and the matmul stays a node of its own (the cost line counts it).
  */
-module fusion_target
 
 import { reshape, abs, exp, sigmoid, sum } from tensor
 

@@ -1,7 +1,6 @@
 /**
  * Signatures that the built-in operators implement with C++ type rules, written in Camel.
  */
-module stdlike
 
 // head: (xs: T[]) => T
 func my_head::<T>(xs: T[]): T {

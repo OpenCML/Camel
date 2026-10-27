@@ -2,7 +2,6 @@
  * `operator` is not a keyword: a function may still be called `operator`. Only `func operator`
  * followed by an operator symbol declares an overload.
  */
-module named_operator
 
 func operator(x: int): int { return x + 1 }
 

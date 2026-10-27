@@ -1,5 +1,4 @@
 // The operator of a namespace block is used in the module itself, outside the block.
-module in_module
 
 namespace Geo {
     export type P = { x: int }

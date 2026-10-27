@@ -10,7 +10,6 @@
  * element type and refused a `bool[]` (and a `c64[]`, and a `string[]`) inside the executor at run
  * time.
  */
-module array_sort_no_declaration
 
 import { sort } from array
 

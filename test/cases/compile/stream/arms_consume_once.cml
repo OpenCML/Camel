@@ -4,7 +4,6 @@
  * are here -- a pull and a `for` over it -- and the arms of either function are the pair that would
  * be refused if they stood on one path.
  */
-module stream_arms
 
 func count(n: int): int.. {
     return step(n)

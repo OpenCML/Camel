@@ -1,18 +1,18 @@
 4
-DivisionByZero at library.cml:14:36
+DivisionByZero at library.cml:13:36
 true
-DivisionByZero at library.cml:14:36
+DivisionByZero at library.cml:13:36
 false
 4
-DivisionByZero at library.cml:14:36
+DivisionByZero at library.cml:13:36
 [4, 60, 5, 30, 6, 20, 8, 12]
 [-1]
 [8, 6, 5, 4]
 [-2]
 10
-DivisionByZero at library.cml:47:67
-InvalidArgument at array.cml:304:12
-InvalidNumberText at library.cml:51:72
+DivisionByZero at library.cml:46:67
+InvalidArgument at array.cml:303:12
+InvalidNumberText at library.cml:50:72
 9
 4 4 23
 end

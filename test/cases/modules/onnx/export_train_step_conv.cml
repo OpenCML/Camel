@@ -4,7 +4,6 @@
  * ReduceSum (bias), and max_pool2d's gradient becomes MaxPool-with-indices
  * feeding MaxUnpool — all standard opset-17 inference operators.
  */
-module export_train_step_conv
 
 import { relu, mean, reshape, flatten, new } from tensor
 import { with_grad } from autodiff

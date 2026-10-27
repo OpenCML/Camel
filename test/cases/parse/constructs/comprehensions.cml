@@ -3,7 +3,6 @@
  * struct with the fields of the type it walks, `( ... )` a tuple with its elements; the block of
  * a round keeps its value, and the empty struct has no round.
  */
-module parse_constructs_comprehensions
 
 func doubled(t: {a: int, b: int}): {a: int, b: int} {
     return { static for n, F in fields {a: int, b: int} => t.[n] * 2 }

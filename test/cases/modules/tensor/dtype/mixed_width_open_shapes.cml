@@ -4,7 +4,6 @@
  * an open element type - the element type is written in the type - so an operand whose shape is
  * open meets another width exactly as a known-shaped one does.
  */
-module mixed_width_open_shapes
 
 import { load_npy, sum } from tensor
 

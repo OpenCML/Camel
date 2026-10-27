@@ -5,7 +5,6 @@
  * silent result; recorded because the language reference lists the operator.
  * Expected output: 2
  */
-module mod_assign
 
 func main(): int sync {
     var v = 17

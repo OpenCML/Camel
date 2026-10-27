@@ -3,7 +3,6 @@
 // gradient from autodiff, one SGD step per iteration, 60 iterations as a tail recursion.
 // The time is in the tensor kernels; the scheduler runs a few dozen nodes per step.
 // Needs std::macro before the scheduler (autodiff).
-module tensor_train
 
 import { ones, relu, mean } from tensor
 import { with_grad } from autodiff

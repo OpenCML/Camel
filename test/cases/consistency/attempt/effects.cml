@@ -4,7 +4,6 @@
  * cell: nothing is rolled back); what would have run after the fault did not run. Outside the
  * boundary nothing is disturbed: the nodes after the `attempt` run as after any call.
  */
-module effects
 
 func main(): int sync {
     var total = 1

@@ -30,7 +30,6 @@
  * primal's placement (the report does not show `grad(loss)` as a `#gpu` body), or the expansion
  * changes the value (the run with the pass prints another gradient than the run without it).
  */
-module gpu_grad_expand
 
 import { abs, reshape, sum } from tensor
 import { with_grad } from autodiff

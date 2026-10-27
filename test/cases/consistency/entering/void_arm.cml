@@ -4,7 +4,6 @@
  * without a value giving `null`; and `xs->slice<2, 1>`, whose start is after its end, is
  * the empty array (not a fault).
  */
-module void_arm
 
 func nothing(): void {
 }

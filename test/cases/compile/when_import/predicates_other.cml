@@ -2,7 +2,6 @@
  * A second module that exports a predicate of the same name as `predicates`, for the report
  * that two imports bring one name and neither is chosen.
  */
-module when_import_predicates_other
 
 export func is_compound::<T>(): bool {
     return match type T {

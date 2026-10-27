@@ -1,4 +1,3 @@
-module graph_program
 import { current, root, name, program_of, graph_of } from graph
 
 func target(x: int): int {

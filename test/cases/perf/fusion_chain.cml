@@ -11,7 +11,6 @@
  *   camel fusion_chain.cml --arg steps=50 --arg rows=512 --arg d=2048 --arg fused=1 std::nvm
  */
 
-module perf_fusion_chain
 
 import { sum, zeros } from tensor
 import { with_grad } from autodiff

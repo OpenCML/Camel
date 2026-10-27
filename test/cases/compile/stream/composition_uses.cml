@@ -1,7 +1,6 @@
 // A composition is a function value like any other: it goes in the angle brackets of a
 // higher-order call (`map<inc..dbl>`, the spelling `rules::fusion` needs) and behind `->`, where
 // `..` binds more tightly than `->`: `3->inc..dbl` is `3->(inc..dbl)`, not `(3->inc)..dbl`.
-module h405_composition_uses
 
 func inc(x: int): int { return x + 1 }
 func dbl(x: int): int { return x * 2 }

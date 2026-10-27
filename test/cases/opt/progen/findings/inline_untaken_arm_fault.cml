@@ -7,7 +7,6 @@
  * Actual: RUN_ERROR RuntimeDiag::RuntimeError: An error has occurred: Array index out of bounds..
  * Reduced by test/tools/progen from seed 5 (generator version 1, all features).
  */
-module inline_untaken_arm_fault
 
 func f10(a11: (a0: string) => float, a12: int[], a13: string): string {
     return '<{}|{}|'->format<a11('a'), a12[1]>;

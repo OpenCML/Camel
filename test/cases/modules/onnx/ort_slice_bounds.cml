@@ -4,7 +4,6 @@
  * on ONNX Runtime where Camel faults and agree with Camel elsewhere (checked by
  * ort_slice_bounds.py, for the slice alone and inside a branch on the data: MODE=branch).
  */
-module ort_slice_bounds
 import { reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env

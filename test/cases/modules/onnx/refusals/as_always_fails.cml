@@ -3,7 +3,6 @@
  * contradict ([2, 3] where the conversion says [3, 2]): the export is refused at the
  * conversion (line 12); it was exported as if the conversion were not there.
  */
-module as_always_fails
 
 import { reshape, tanh } from tensor
 import { export_model } from onnx

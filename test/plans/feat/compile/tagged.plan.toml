@@ -55,13 +55,13 @@ const want = [
   "5",
   "-1",
   "ok 5",
-  "DivByZero: the divisor is zero at fallible.cml:10:16",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 10",
-  "DivByZero: the divisor is zero at fallible.cml:10:16",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 4",
-  "DivByZero: the divisor is zero at fallible.cml:10:16",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 6",
-  "DivByZero: the divisor is zero at fallible.cml:10:16",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
@@ -322,13 +322,13 @@ const want = [
   "5",
   "-1",
   "ok 5",
-  "DivByZero: the divisor is zero at fallible.cml:10:16",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 10",
-  "DivByZero: the divisor is zero at fallible.cml:10:16",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 4",
-  "DivByZero: the divisor is zero at fallible.cml:10:16",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 6",
-  "DivByZero: the divisor is zero at fallible.cml:10:16",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
@@ -413,13 +413,13 @@ const want = [
   "5",
   "-1",
   "ok 5",
-  "DivByZero: the divisor is zero at fallible.cml:10:16",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 10",
-  "DivByZero: the divisor is zero at fallible.cml:10:16",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 4",
-  "DivByZero: the divisor is zero at fallible.cml:10:16",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 6",
-  "DivByZero: the divisor is zero at fallible.cml:10:16",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
@@ -504,13 +504,13 @@ const want = [
   "5",
   "-1",
   "ok 5",
-  "DivByZero: the divisor is zero at fallible.cml:10:16",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 10",
-  "DivByZero: the divisor is zero at fallible.cml:10:16",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 4",
-  "DivByZero: the divisor is zero at fallible.cml:10:16",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 6",
-  "DivByZero: the divisor is zero at fallible.cml:10:16",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
@@ -595,13 +595,13 @@ const want = [
   "5",
   "-1",
   "ok 5",
-  "DivByZero: the divisor is zero at fallible.cml:10:16",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 10",
-  "DivByZero: the divisor is zero at fallible.cml:10:16",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 4",
-  "DivByZero: the divisor is zero at fallible.cml:10:16",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 6",
-  "DivByZero: the divisor is zero at fallible.cml:10:16",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
@@ -686,13 +686,13 @@ const want = [
   "5",
   "-1",
   "ok 5",
-  "DivByZero: the divisor is zero at fallible.cml:10:16",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 10",
-  "DivByZero: the divisor is zero at fallible.cml:10:16",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 4",
-  "DivByZero: the divisor is zero at fallible.cml:10:16",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 6",
-  "DivByZero: the divisor is zero at fallible.cml:10:16",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
@@ -770,13 +770,13 @@ const want = [
   "5",
   "-1",
   "ok 5",
-  "DivByZero: the divisor is zero at fallible.cml:10:16",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 10",
-  "DivByZero: the divisor is zero at fallible.cml:10:16",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 4",
-  "DivByZero: the divisor is zero at fallible.cml:10:16",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 6",
-  "DivByZero: the divisor is zero at fallible.cml:10:16",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
@@ -1061,7 +1061,7 @@ assert(next, 'the thrown value is used')
 const cast = next.trim().split(' ')[2]
 assert(lines.some((l) => l.trim().startsWith(cast + ' [label="CAST"')), 'throw feeds a CAST')
 assert(lines.some((l) => l.trim().startsWith(cast + ' -> O') && l.includes('type="EXIT"')), 'the CAST is the exit of the graph')
-assert(out.includes('label="graph_throw_pass.cml:9:12"'), 'the position of error(...) is a constant argument')
+assert(out.includes('label="graph_throw_pass.cml:8:12"'), 'the position of error(...) is a constant argument')
 }
 """
 timeout_ms = 8000
@@ -1093,7 +1093,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::BranchReturnTypeMismatch"
 expect_diagnostic_code = "0x0300000C"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 8
 expect_diagnostic_column = 5
 expect_output_contains = ["Return type mismatch between branches (in function 'check: (x: int) => int')"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -1109,7 +1109,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::BranchReturnTypeMismatch"
 expect_diagnostic_code = "0x0300000C"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_diagnostic_column = 5
 expect_output_contains = ["Return type mismatch between branches (in function 'check: (x: int) => int!')"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -1137,7 +1137,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TaggedMatchCases"
 expect_diagnostic_code = "0x03000076"
-expect_diagnostic_line = 10
+expect_diagnostic_line = 9
 expect_diagnostic_column = 13
 expect_output_contains = ["This 'match' on a value of type 'int?!' is not well formed: 'case null' needs a value that may be null."]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -1153,7 +1153,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TaggedMatchCases"
 expect_diagnostic_code = "0x03000076"
-expect_diagnostic_line = 10
+expect_diagnostic_line = 9
 expect_diagnostic_column = 13
 expect_output_contains = ["This 'match' on a value of type 'int!?' is not well formed: 'case error' needs a value that may have failed."]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -1169,7 +1169,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TaggedTypeNesting"
 expect_diagnostic_code = "0x03000072"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_diagnostic_column = 11
 expect_output_contains = ["The type 'int??' marks 'int' twice."]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -1185,7 +1185,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TaggedTypeNesting"
 expect_diagnostic_code = "0x03000072"
-expect_diagnostic_line = 13
+expect_diagnostic_line = 12
 expect_diagnostic_column = 17
 expect_output_contains = ["The type 'int??' marks 'int' twice."]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -1201,7 +1201,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TaggedValueNotOpened"
 expect_diagnostic_code = "0x03000073"
-expect_diagnostic_line = 10
+expect_diagnostic_line = 9
 expect_diagnostic_column = 13
 expect_output_contains = ["A value of type 'int!' cannot be used here: a member cannot be read from it."]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -1218,7 +1218,7 @@ expect_exit = 0
 expect_stdout_exact = "1\n"
 expect_diagnostic_name = "SemanticDiag::KnownNotNull"
 expect_diagnostic_code = "0x03100111"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 8
 expect_diagnostic_column = 15
 expect_output_contains = ["is known not to be null here (it has type 'int'): the null case of '??' is never taken."]
 expect_output_not_contains = ["TaggedOperandMismatch", "UnknownInternalError"]
@@ -1234,7 +1234,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TaggedOperandMismatch"
 expect_diagnostic_code = "0x03000075"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 8
 expect_diagnostic_column = 15
 expect_output_contains = ["'!!' cannot be applied here: its left side has type 'int?', which is not a 'T!'."]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -1250,7 +1250,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TaggedOperandMismatch"
 expect_diagnostic_code = "0x03000075"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 8
 expect_diagnostic_column = 15
 expect_output_contains = ["'??' cannot be applied here: its right side has type 'string', but the left side holds a 'int'."]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -1266,7 +1266,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TaggedOperandMismatch"
 expect_diagnostic_code = "0x03000075"
-expect_diagnostic_line = 10
+expect_diagnostic_line = 9
 expect_diagnostic_column = 18
 expect_output_contains = ["'??' cannot be applied here: its left side has type 'void', which is not a 'T?'."]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -1282,7 +1282,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TaggedMatchCases"
 expect_diagnostic_code = "0x03000076"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 8
 expect_diagnostic_column = 13
 expect_output_contains = ["This 'match' on a value of type 'int!' is not well formed: 'case error e' is missing."]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -1298,7 +1298,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TaggedMatchCases"
 expect_diagnostic_code = "0x03000076"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 8
 expect_diagnostic_column = 13
 expect_output_contains = ["a literal case cannot be compared with a value that is not opened yet"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -1324,7 +1324,7 @@ kind = "negative"
 case = "../../../cases/compile/tagged/err_plain_use.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "err_plain_use.cml:8:30:", "<> (int!, int)"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "err_plain_use.cml:7:30:", "<> (int!, int)"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -1338,7 +1338,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::IdentifierPatternNeedsNullableOrErrorType"
 expect_diagnostic_code = "0x030001F5"
-expect_diagnostic_line = 10
+expect_diagnostic_line = 9
 expect_diagnostic_column = 9
 expect_output_contains = ["takes a value of type 'T?' or 'T!' apart", "has type 'int'"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -1352,9 +1352,9 @@ kind = "negative"
 case = "../../../cases/compile/tagged/error_position_pipeline.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_line = 8
+expect_diagnostic_line = 6
 expect_diagnostic_column = 12
-expect_output_contains = ["An error value reached the exit of 'main' without being handled: Zero: zero.", "error_position_pipeline.cml:8:12", "(name=RuntimeDiag::UnhandledError"]
+expect_output_contains = ["An error value reached the exit of 'main' without being handled: Zero: zero.", "error_position_pipeline.cml:6:12", "(name=RuntimeDiag::UnhandledError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 
 [[tests]]
@@ -1376,7 +1376,7 @@ case = "../../../cases/compile/tagged/err_optional_operand.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LogicalOperandNotBool"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 8
 expect_diagnostic_column = 13
 expect_output_contains = ["The left side of '||' has type 'bool?', not 'bool'."]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -1408,7 +1408,7 @@ const lines = out.split('\n')
 const nulls = lines.filter((l) => l.includes('label="null"') && l.includes('type="DATA"'))
 const typed = nulls.filter((l) => l.includes('value_type="int?"'))
 assert(typed.length === 1, 'one null constant of the position\'s type, got ' + typed.length + ': ' + nulls.join(' | '))
-assert(typed[0].includes('span="16:16-16:20"'), "the constant stands where the default is written: " + typed[0])
+assert(typed[0].includes('span="15:16-15:20"'), "the constant stands where the default is written: " + typed[0])
 const id = typed[0].trim().split(' ')[0]
 assert(out.split(id + ' ->').length - 1 === 2, 'both calls that leave the parameter out read that one node')
 }

@@ -4,7 +4,6 @@
  * the element functions may run concurrently and the order of their effects is not defined;
  * see map_result_order.)
  */
-module map_ordered_effects
 
 func show(i: int): int sync {
     println(i)

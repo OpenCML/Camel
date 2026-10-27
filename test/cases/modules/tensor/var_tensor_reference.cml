@@ -5,7 +5,6 @@
  *   10 10    forwarded twice to another var parameter; the callee's result and the caller's view
  *   20 20    doubled by a lambda that captured the variable
  */
-module var_tensor_reference
 
 import { zeros, sum } from tensor
 

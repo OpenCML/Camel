@@ -4,7 +4,6 @@
  * whether the value the rule was bound to let it fire, and one holds the shape of the rule whose
  * parameter has a default.
  */
-module with_target
 
 /// x + 0: matched by the rule when the value bound to its `with` parameter is positive.
 func left(x: int): int { return x + 0 }

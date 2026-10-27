@@ -371,12 +371,11 @@ const MODULES = [
         name: 'onnx',
         title: '`onnx`: export a program as an ONNX model',
         kind: 'cpp',
-        // `supported_operators` is declared in stdlib/onnx.cml; `export_model` takes a function
-        // of any parameter list and an example that must be its parameter tree, so its reference
-        // entry is in the signature file named by `computed:`.
+        // Both operators are declared in stdlib/onnx.cml: `supported_operators`, and
+        // `export_model` with the `with` parameters and the defaults a call reads its arguments
+        // by (the module keeps the kernel, the executor and the purity).
         source: 'onnx.cml',
         declaration: true,
-        computed: 'signatures/onnx.cml',
     },
 ]
 

@@ -4,7 +4,6 @@
  * `(p: Program, cost: string) => Program!` —
  * `stdlib/rewrite.cml`, not the C++ module.
  */
-module rewrite_type
 
 import { extract } from rewrite
 import { Program, current } from graph

@@ -8,7 +8,6 @@
  * predicate has no instance is not an error (the rule on
  * `generic-rule-instantiation-set-and-predicate`); `generic_law.cml` covers it.
  */
-module err_when_unknown_name
 
 import { is_integer } from types
 

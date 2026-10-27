@@ -4,7 +4,6 @@
  * `b`, then gives the default, and a right side is evaluated only when it is needed. Each
  * `??` is one branch on the graph.
  */
-module fallback_chain
 
 func look(tag: string, x: int?): int? sync {
     println('look ' + tag)

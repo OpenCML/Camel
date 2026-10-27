@@ -1,21 +1,21 @@
 error[SemanticDiag::UnresolvedReference]: Unresolved reference: 'u0'.
-  --> <ROOT>/test/cases/compile/diag_render/sem_error_limit.cml:4:13
+  --> <ROOT>/test/cases/compile/diag_render/sem_error_limit.cml:2:13
    |
- 4 |     println(u0)
+ 2 |     println(u0)
    |             ^^
 help: Make sure the name is declared and in scope.
 
 error[SemanticDiag::UnresolvedReference]: Unresolved reference: 'u1'.
-  --> <ROOT>/test/cases/compile/diag_render/sem_error_limit.cml:5:13
+  --> <ROOT>/test/cases/compile/diag_render/sem_error_limit.cml:3:13
    |
- 5 |     println(u1)
+ 3 |     println(u1)
    |             ^^
 help: Make sure the name is declared and in scope.
 
 error[SemanticDiag::UnresolvedReference]: Unresolved reference: 'u2'.
-  --> <ROOT>/test/cases/compile/diag_render/sem_error_limit.cml:6:13
+  --> <ROOT>/test/cases/compile/diag_render/sem_error_limit.cml:4:13
    |
- 6 |     println(u2)
+ 4 |     println(u2)
    |             ^^
 help: Make sure the name is declared and in scope.
 

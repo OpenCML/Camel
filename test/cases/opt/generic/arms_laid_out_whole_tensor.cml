@@ -11,7 +11,6 @@
  *
  * Expected: "r 0.4375" (the four elements of the fixture sum to 1.75; two halvings).
  */
-module arms_laid_out_whole_tensor
 
 import { load_npy, sum } from tensor
 

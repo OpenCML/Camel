@@ -4,7 +4,6 @@
  * After inlining the variable is declared, read and assigned in one function, which the
  * exporter accepts. Both routes are used: the operator, and the pass on the simplified graph.
  */
-module export_var_parameter
 
 import { reshape, tanh } from tensor
 import { export_model } from onnx

@@ -40,7 +40,7 @@ await runTest(async (t) => {
     const callDouble = nodes.find((n) => n.type === 'FUNC' && n.funcGraph === 'double')
     const callNext = nodes.find((n) => n.type === 'FUNC' && n.funcGraph === 'next')
     check(callDouble?.originId > 0 && callNext?.originId > 0, 'call nodes carry origins', nodes.slice(0, 5))
-    checkEq(callDouble?.span?.startLine, 13, 'the origin of a node resolves to its source line (0-based)')
+    checkEq(callDouble?.span?.startLine, 11, 'the origin of a node resolves to its source line (0-based)')
 
     r = await gw.post('/api/gir-breakpoints', { target: task, originIds: [callDouble.originId] })
     checkEq(r.json?.ok, true, 'a node breakpoint is accepted')

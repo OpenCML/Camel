@@ -1,0 +1,21 @@
+/**
+ * `m[i, j]`: a position on every dimension of a rank-2 value (design principles 5.4). Each written
+ * dimension is one node -- the position on axis 1 first, so the position on axis 0 still names axis
+ * 0 -- and both dimensions are dropped, so the result is one element: an `f32`, which `element`'s
+ * parameter states and the call needs no conversion for. Reading the positions in the other order,
+ * or dropping only one dimension, breaks the type and the value.
+ *
+ *   m = [[1, 2, 3], [4, 5, 6]];  m[1, 2] = 6.0
+ */
+import { reshape } from tensor
+
+func element(a: f32): float {
+    return float(a)
+}
+
+func main(): int sync {
+    println('ran')
+    let m = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3])
+    println("value={}"->format<element(m[1, 2])>)
+    return 0
+}

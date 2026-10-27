@@ -6,7 +6,6 @@
  * Actual: a
  * Reduced by test/tools/progen from seed 75 (generator version 1, all features).
  */
-module inline_untaken_arm_effect
 
 func e9(): (string, int) sync {
     println('a');

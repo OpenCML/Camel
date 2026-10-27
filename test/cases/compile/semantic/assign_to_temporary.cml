@@ -3,7 +3,6 @@
  * would be lost without a trace. A field or an element of a name is a target; a field of a
  * temporary is not (design principles 3.5, 6.11).
  */
-module assign_to_temporary
 
 type P = { x: int, y: int }
 

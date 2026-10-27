@@ -3,7 +3,6 @@
  * and the message prints the declaration's own parameter names (`text`) — the one
  * source is `stdlib/re.cml`, not the C++ module (step 10).
  */
-module re_type
 
 import { has_match } from re
 

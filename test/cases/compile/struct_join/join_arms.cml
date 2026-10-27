@@ -3,7 +3,6 @@
  * type, whichever arm comes first (design principles 5.2: the unnamed value enters the named type).
  * The result is a `Point`, so it stands in an array of `Point` and in a call that asks for one.
  */
-module struct_join_arms
 
 type Point = { x: int, y: int }
 

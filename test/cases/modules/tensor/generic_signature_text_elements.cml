@@ -2,7 +2,6 @@
 /// signature states it: `func f::<T>(x: T[..]) when is_numeric::<T>()` applies exactly where `T` is
 /// a number (design principles 4.1). An array of text fills neither arm of `shape`, so the call is
 /// refused at the declaration rather than at a kernel.
-module tensor_generic_signature_text_elements
 
 import { shape } from tensor
 

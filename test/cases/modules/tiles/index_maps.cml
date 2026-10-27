@@ -1,4 +1,3 @@
-module tiles_index_maps
 import { random, seed, sum, abs, transpose, permute, dim, reshape, zeros } from tensor
 import { run_preferred_resident, download } from tiles
 

@@ -10,7 +10,6 @@
  * asserts the difference is inside that bound; a library whose results left the licence's bound
  * would fail it.
  */
-module gemm_library
 
 import { abs, max, randn, seed, sum } from tensor
 import { is_numeric } from types

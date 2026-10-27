@@ -28,7 +28,6 @@
  * A rule that no line of the report mentions is a rule this case did not reach, and the check in
  * `verify/` fails on it.
  */
-module check_every_rule
 import { check } from rewrite
 import {
         int_add_self, int_add_zero, int_combine, int_combine_one, int_distribute, int_div_one, int_fold, int_fold_add, int_mul_one, int_mul_zero, int_neg_neg, int_sub_self, int_sub_zero,

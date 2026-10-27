@@ -1,5 +1,4 @@
 /** `N` is `int`: a leaf has no fields to fill, so `N { ... }` is refused. */
-module shape_not_composite
 
 type N = int
 

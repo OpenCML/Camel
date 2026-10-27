@@ -39,7 +39,7 @@ await withServer(async (ls) => {
     })
     check(Array.isArray(d) && d.length === 1 && d[0].uri === uri,
         'the definition of a name inside an interpolation is in the same file', d)
-    checkEq(d[0].range.start.line, 3, 'at its declaration')
+    checkEq(d[0].range.start.line, 2, 'at its declaration')
 
     // Semantic string tokens must leave room for the names the index resolved inside them.
     const semantic = await ls.request('textDocument/semanticTokens/full', { textDocument: { uri } })

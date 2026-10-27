@@ -2,7 +2,6 @@
  * `void` is not the type of a value, so an identity pattern naming it cannot select a subject:
  * the pattern is reported instead of being kept as a case that never matches.
  */
-module type_identity_void
 
 func bad::<T>(t: T): int {
     return match type T {

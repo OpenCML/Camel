@@ -3,7 +3,6 @@
  * refused at the declared types, and the one source is `stdlib/tensor.cml`, not the C++ module
  * 
  */
-module tensor_show_type
 
 import { show } from tensor
 

@@ -1,4 +1,3 @@
-module bounds_index_declared_shape
 import { reshape, sum, shape, load_npy } from tensor
 func f(b: f64[3]): float {
     return b[5]

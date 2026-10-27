@@ -7,6 +7,5 @@
 /// the terminal token: that token then stood in the tree twice - once as the bracket and once as
 /// the end of the Program node - and `camel-parsecheck fuzz` reported "the leaves of the tree are
 /// not the tokens of the text". This is that input, written down instead of drawn from a seed.
-module syntax_resource_group_open
 
 resource a =

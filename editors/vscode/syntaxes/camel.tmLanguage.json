@@ -281,7 +281,6 @@
     },
     "declarations": {
       "patterns": [
-        { "include": "#module-declaration" },
         { "include": "#import-declaration" },
         { "include": "#namespace-declaration" },
         { "include": "#with-parameters" },
@@ -290,14 +289,6 @@
         { "include": "#let-declaration" },
         { "include": "#var-declaration" }
       ]
-    },
-    "module-declaration": {
-      "comment": "moduleDecl: MODULE identDef",
-      "match": "\\b(module)\\s+([A-Za-z_][A-Za-z_0-9]*)",
-      "captures": {
-        "1": { "name": "keyword.control.import.module.camel" },
-        "2": { "name": "entity.name.namespace.module.camel" }
-      }
     },
     "import-declaration": {
       "comment": "importDecl: IMPORT (moduleName | (identDef | bracedIdents) FROM moduleName); moduleName: ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)*",
@@ -426,10 +417,10 @@
       ]
     },
     "carrier-punctuation": {
-      "comment": "carrier: identList | parentIdents | bracedIdents | bracketIdents",
+      "comment": "carrier: identList | parentIdents",
       "patterns": [
         { "name": "punctuation.separator.comma.camel", "match": "," },
-        { "name": "punctuation.definition.binding-pattern.camel", "match": "[(){}\\[\\]]" }
+        { "name": "punctuation.definition.binding-pattern.camel", "match": "[()]" }
       ]
     },
     "parameter-name": {
@@ -474,7 +465,7 @@
         },
         {
           "name": "keyword.control.import.camel",
-          "match": "\\b(?:module|import|export|from|using)\\b"
+          "match": "\\b(?:import|export|from|using)\\b"
         },
         {
           "name": "storage.type.function.camel",

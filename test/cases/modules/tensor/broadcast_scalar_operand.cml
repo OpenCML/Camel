@@ -7,7 +7,6 @@
  * rank the operator declares (design principles 5.1): nothing here converts the tensor, widens the
  * scalar to f64, or hands the operator a tensor where it asked for a value.
  */
-module broadcast_scalar_operand
 
 import { new, sum, zeros } from tensor
 

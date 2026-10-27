@@ -4,7 +4,6 @@
  * allows to be a `T?`, is called with the wrapped value, and the pipe takes it apart only when none
  * does.
  */
-module pipe_propagation_wrapped_first
 
 func describe(x: int): string { return 'a number' }
 func describe(x: int?): string { return 'maybe a number' }

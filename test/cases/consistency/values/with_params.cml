@@ -1,7 +1,6 @@
 /**
  * with parameters: the configuration of a function, given in angle brackets, also in a chain.
  */
-module with_params
 
 with <k: int>
 func scale(x: int): int { return x * k }

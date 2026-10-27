@@ -4,7 +4,6 @@
 /// (property 2). It exports only `answer`, so a standard-library graph used in its place
 /// fails at `graph::answer`, and this file used in place of the standard library fails at
 /// `Program` inside rules.cml.
-module graph
 
 export func answer(): int {
     return 41

@@ -1,7 +1,6 @@
 /**
  * A type function exported by one module is applied in another.
  */
-module type_import
 
 import type_lib
 

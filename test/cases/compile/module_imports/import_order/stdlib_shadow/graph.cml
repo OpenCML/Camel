@@ -1,7 +1,6 @@
 /// trap 2: deliberately named like the standard library's module. It sits beside the
 /// library below, so the library's own `import graph` takes this file and not stdlib/graph.cmo,
 /// silently: the own-directory rule comes before the standard library (design principles 10.2).
-module graph
 
 export func answer(): int {
     return 41

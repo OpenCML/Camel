@@ -4,9 +4,7 @@
 
 import { withServer, check, checkEq, marked } from '../../../tools/lsp/client.mjs'
 
-const MAIN = `module main
-
-namespace Tools {
+const MAIN = `namespace Tools {
     /// One more.
     export func inc(x: int): int { return x + 1 }
     export type Pair = (int, int)

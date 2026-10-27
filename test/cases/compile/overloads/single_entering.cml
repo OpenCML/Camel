@@ -2,7 +2,6 @@
  * One candidate that a literal enters is accepted: there is no ambiguity when only one
  * overload takes the arguments in the entering pass.
  */
-module single_entering
 
 func bump(x: f32): f32 {
     return x + 0.5

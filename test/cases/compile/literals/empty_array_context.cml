@@ -5,7 +5,6 @@
  * has the state's type, so the loop's own position types `loop acc = []`; when that position is
  * open too, the value the body appends provides the element type.
  */
-module empty_array_context
 
 type Box = { xs: int[] }
 

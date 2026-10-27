@@ -1,7 +1,6 @@
 /**
  * Modulo by zero inside a called function: DivisionByZero at the operator.
  */
-module mod_zero_in_function
 
 func rem(a: int, b: int): int { return a % b }
 

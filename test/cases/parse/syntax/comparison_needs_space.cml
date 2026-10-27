@@ -1,5 +1,4 @@
 /// A '<' written directly after a name opens an argument list, not a comparison.
-module comparison_needs_space
 
 func main(): int {
     let i = 1

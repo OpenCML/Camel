@@ -1,6 +1,5 @@
 // Step 5 of the word counter: the words of the text with their counts, carried by a `loop`.
 // Run: camel examples/wordcount/step5.cml
-module wordcount
 
 import { split, trim, to_lower, replace } from str
 import { any, flat_map, sort_by, take } from array

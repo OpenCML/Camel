@@ -3,7 +3,6 @@
  * head wins inside its declaration (design principles 5.5), so `T` in `id` is the type
  * parameter, and the call instantiates it with `int`.
  */
-module type_param_collision
 
 type T = int
 

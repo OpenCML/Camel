@@ -1,5 +1,4 @@
 /** Branch-local waits must not become unconditional dependencies of JOIN. */
-module gate_branch_wait
 
 import { seed, rand } from random
 

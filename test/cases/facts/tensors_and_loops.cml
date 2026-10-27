@@ -1,6 +1,5 @@
 // The program the fact tests read: tensor shapes, index instances, a reduction, effects, two
 // loops (one over a constant array, one with a condition) and granted permissions.
-module tensors_and_loops
 import { reshape, sum, matmul } from tensor
 
 func layer(x: f32[2, 3], w: f32[3, 4]): f32[2, 4] {

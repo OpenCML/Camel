@@ -3,7 +3,6 @@
  * ordinary ones are (design principles 4.4): a call takes the one whose parameter accepts its
  * argument, and each is instantiated at the type variables its own signature left open.
  */
-module generic_overloads
 
 type Sgd = { rate: float }
 type Adam = { beta1: float, beta2: float }

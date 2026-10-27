@@ -29,7 +29,7 @@ fs.mkdirSync(SCRATCH, { recursive: true })
 
 function program(name, body) {
     const file = path.join(SCRATCH, name)
-    fs.writeFileSync(file, `module family\n\n${body}\n`)
+    fs.writeFileSync(file, `${body}\n`)
     return file
 }
 

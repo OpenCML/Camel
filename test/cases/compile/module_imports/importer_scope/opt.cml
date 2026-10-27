@@ -2,7 +2,6 @@
 /// resolves next to rules (stdlib/graph.cmo), not the graph.cml of this directory. The pass
 /// therefore runs here, next to a program file that would break it if it were taken for the
 /// library's `graph`.
-module importer_scope_opt
 
 func twice(x: int): int {
     return x + x

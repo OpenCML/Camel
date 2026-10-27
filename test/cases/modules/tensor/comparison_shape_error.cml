@@ -4,7 +4,6 @@
  * the error names the operator that could not broadcast them. `a == b` on the same two arrays
  * is `false` instead, because different shapes are simply not equal.
  */
-module comparison_shape_error
 
 import { new } from tensor
 

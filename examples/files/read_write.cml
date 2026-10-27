@@ -2,7 +2,6 @@
 // not exist without stopping: `try_read_text` returns a string! that is opened with `!!` or
 // `match`.
 // Run: camel examples/files/read_write.cml
-module read_write
 
 import { split, trim_end } from str
 import { exists, is_file, mkdirs, write_text, read_text, file_size } from fs

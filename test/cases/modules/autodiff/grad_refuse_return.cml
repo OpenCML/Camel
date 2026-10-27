@@ -1,5 +1,4 @@
 /** Refused: the function returns an int, not a float (9.9). */
-module grad_refuse_return
 import { grad } from autodiff
 
 with <x: float>

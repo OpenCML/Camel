@@ -3,7 +3,6 @@
  * ones (design principles 4.3 prefers only an overload whose parameter types are exactly the
  * operands). The call is ambiguous.
  */
-module ambiguous_generic
 
 func operator +::<T>(a: T[], b: T[]): T[] { return a->extend<b> }
 func operator +::<T, U>(a: T[], b: U[]): T[] { return a }

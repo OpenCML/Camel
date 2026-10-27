@@ -4,7 +4,6 @@
  * stress, a tail-call frame released out of stack order left live frames
  * unscanned and let the next frame overwrite them.
  */
-module gc_tail_chain
 
 import {
     add, concat, eye, matmul, ones, shape, sum, transpose

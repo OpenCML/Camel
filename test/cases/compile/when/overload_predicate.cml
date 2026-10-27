@@ -3,7 +3,6 @@
  * arguments: `pick('s')` is the `string` one, which holds. The first declaration of the name is
  * not the answer to every call (design principles 4.3).
  */
-module when_overload_predicate
 
 func pick::<T>(a: int): bool {
     return false

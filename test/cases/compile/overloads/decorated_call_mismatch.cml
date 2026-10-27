@@ -2,7 +2,6 @@
  * The arguments of a call of a decorated function are checked against the function its
  * decorators return. They were not checked: the float was read as an int.
  */
-module decorated_call_mismatch
 
 func twice(f: (x: int) => int): (x: int) => int {
     return (x: int) => f(f(x))

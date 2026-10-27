@@ -3,7 +3,6 @@
  * 11.1): `codepoints` cannot fail, `from_codepoints` returns `string!` for a number that is
  * not a code point.
  */
-module str_chars
 
 import { codepoints, from_codepoints } from str
 import { encode, decode, from_array } from bytes

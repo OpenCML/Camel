@@ -1,7 +1,6 @@
 /**
  * Verifies one macro can expand into another so simple multi-step expansion remains compositional.
  */
-module macro_chain
 
 #macro func add_one(x: int): int {
     return x + 1

@@ -8,23 +8,20 @@
  * needs neither the ONNX runtime nor a GPU; only a run of `export_model` writes a file.
  */
 
-// The declaration of the one fixed signature of the C++ module `modules/onnx` (design
-// principles 6.4). This file is the one source of
-// `supported_operators`'s signature; the C++ side keeps the kernel, the executor and the purity.
+// The declarations of the C++ module `modules/onnx` (design principles 6.4). This file is the one
+// source of both operators' signatures; the C++ side keeps the kernels, the executor and the
+// purity.
 //
-// `export_model` stays in C++ and is recorded as a computed signature in
-// `stdlib/signatures/onnx.cml`: its first parameter is a function of any parameter list and
-// result (`(...) => R`), its `example` parameter is a tensor, a tuple or a struct whose leaves
-// have to be the function's parameter tree (a predicate on the type variable), and the file it
-// writes, the axes it leaves dynamic and the target it checks names are `with` arguments, one
-// rule per number of them (one to three). None of that is expressible in a declaration, and a
-// declaration that wrote one instance of it would accept calls the resolver refuses.
+// `export_model`'s `with` parameters are declared once, with their defaults: a call gives them by
+// name, leaves out the ones with a default, and the value it left out is this declaration's
+// constant (design principles 4.4). `fn` and `example` are ordinary parameters, and the module's
+// kernel is where the two facts a declaration cannot write are settled: `fn` is a function, and
+// `example` is the argument of a one-parameter `fn` or one example per parameter.
 //
 // `supported_operators` only reads the lowering table compiled into the module: it is registered
 // pure, and the declaration carries that (a declaration carries types, not effects), so a call
 // may be folded, merged or run concurrently and its result may not be dropped.
 
-module onnx
 
 /// Lists the operator URIs the ONNX backend can lower at its default opset, in the order the
 /// lowering table reports them. A capability report only: it reads the table compiled into the
@@ -32,6 +29,24 @@ module onnx
 /// @pure
 /// @example let uris = supported_operators()
 export func supported_operators(): string[]
+
+/// Writes the ONNX model of `fn` applied to arguments like `example` to the file `out`, at the
+/// backend's default opset. `example` is one argument of a one-parameter `fn`, or a tuple with
+/// one example per parameter; the function's graph is translated after the generic passes, and a
+/// node the backend cannot lower is refused. `out`, `dynamic_axes` and `target` are `with`
+/// parameters because they are runtime values: `dynamic_axes` names the axes of the tensor inputs
+/// that are left unknown in the model (which is what lets one model run at several shapes), and
+/// `target` names the runtime whose capability data decides whether a node this backend lowers is
+/// one that runtime has (`'none'` switches the check off).
+/// @effect writes a file and reads the function's graph
+/// @fails error value `ExportUnsupported` when `fn` is not a function, when the graph cannot be translated (a call that remains, an operator without an ONNX lowering, a dtype or shape the exporter cannot name), or when the target runtime rejects a node; error value `IOError` when the model cannot be written
+/// @example export_model<out: "/tmp/model.onnx">(fn, example)
+/// @example export_model<out: "/tmp/model.onnx", dynamic_axes: [0]>(fn, example)
+/// @example export_model<out: "/tmp/model.onnx", target: "onnxruntime-cpu">(fn, example)
+/// @example-fragment the call needs a function value and an example of the arguments that function takes, which the description introduces (the exporter reads the function's graph, so no value a fragment can write stands for it)
+#op('onnx:export_model')
+with <out: string, dynamic_axes: void[] = [], target: string = 'onnxruntime-cpu'>
+export func export_model::<F, E>(fn: F, example: E): void!
 
 // -----------------------------------------------------------------------------
 // Passes: functions the pipeline applies to the program

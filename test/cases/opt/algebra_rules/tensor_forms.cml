@@ -1,5 +1,3 @@
-module tensor_forms
-
 // The element-wise tensor forms of the same laws. The deleted C++ law table applied its laws to
 // elementwise operators through the same `simplify<T>` (`elementwise` families in
 // `e8c290554:algebra.cpp`), and the rules library states the f32 element laws

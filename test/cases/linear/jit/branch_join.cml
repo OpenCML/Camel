@@ -1,7 +1,6 @@
 /**
  * Verifies JIT lowering preserves multi-level branch joins and returns the correct value from each control-flow arm.
  */
-module jit_branch_join
 
 func select_value(flag: int, lhs: int, rhs: int): int {
     return if flag != 0 then lhs + 1 else rhs + 2

@@ -1,0 +1,20 @@
+/**
+ * The export request that names only `out`, the first parameter of the declaration: the other
+ * two are left out entirely, so the call gives one `with` argument to a signature that declares
+ * three.
+ */
+
+import { reshape } from tensor
+import { export_model } from onnx
+import { get_env } from env
+
+func f(x: f32[2, 2]): f32[2, 2] {
+    return x * 2.0
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [2, 2])
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(f, x)
+    println('exported')
+    return 0
+}

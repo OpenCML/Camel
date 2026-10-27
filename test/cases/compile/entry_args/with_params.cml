@@ -4,7 +4,6 @@
  * chain layers, as `x->layer<w, b>`. Both kinds get their values the same way when the
  * program is run.
  */
-module with_params
 
 import { tanh } from tensor
 

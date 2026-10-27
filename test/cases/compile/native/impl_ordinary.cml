@@ -4,7 +4,6 @@
  * operator that runs it. The ordinary pipeline shows one OPER of `:op/add_l` and none of the
  * body's nodes (`:op/sub_l`, `:op/neg_l`), which are in the semantic body graph.
  */
-module impl_ordinary
 
 #op(':op/add_l')
 func add_kernel(a: int, b: int): int

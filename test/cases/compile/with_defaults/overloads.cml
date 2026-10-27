@@ -4,7 +4,6 @@
  * arguments from its required ones to its full arity, a named argument may skip a defaulted one in
  * the middle, and the declarations are told apart by the arguments that are written.
  */
-module with_defaults_overloads
 
 with <axis: int, keepdims: bool = false>
 func g(xs: float[..]): int { return if keepdims then axis + 100 else axis }

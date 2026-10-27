@@ -1,29 +1,29 @@
 error[SemanticDiag::UnresolvedReference]: Unresolved reference: 'aaa'.
-  --> <ROOT>/test/cases/compile/diag_render/sem_independent.cml:3:24
+  --> <ROOT>/test/cases/compile/diag_render/sem_independent.cml:1:24
    |
- 3 | func f(): int { return aaa }
+ 1 | func f(): int { return aaa }
    |                        ^^^
 help: Make sure the name is declared and in scope.
 
 error[SemanticDiag::ReturnTypeMismatch]: Return type 'string' does not match the function's declared return type 'int'.
-  --> <ROOT>/test/cases/compile/diag_render/sem_independent.cml:5:17
+  --> <ROOT>/test/cases/compile/diag_render/sem_independent.cml:3:17
    |
- 5 | func g(): int { return 'text' }
+ 3 | func g(): int { return 'text' }
    |                 ^^^^^^^^^^^^^
 help: Ensure that the value returned from the function matches the type specified in the function signature: () => int. No implicit conversion is applied: convert explicitly, for example float(x) for a number or 'x as T' for a module type.
 
 error[SemanticDiag::NoMatchingFunction]: No matching function found for argument types: <> (int).
-   --> <ROOT>/test/cases/compile/diag_render/sem_independent.cml:11:16
-    |
- 11 |     println(add(1))
-    |                ^^^
+  --> <ROOT>/test/cases/compile/diag_render/sem_independent.cml:9:16
+   |
+ 9 |     println(add(1))
+   |                ^^^
 help: Check the number and types of arguments to ensure they match one of the available overloaded function signatures. Available overloads:
           add: (a: int, b: int) => int pure
 
 error[SemanticDiag::NoMatchingFunction]: No matching function found for argument types: <> (int, string).
-   --> <ROOT>/test/cases/compile/diag_render/sem_independent.cml:12:16
+   --> <ROOT>/test/cases/compile/diag_render/sem_independent.cml:10:16
     |
- 12 |     println(add(1, 'x'))
+ 10 |     println(add(1, 'x'))
     |                ^^^^^^^^
 help: Check the number and types of arguments to ensure they match one of the available overloaded function signatures. Available overloads:
           add: (a: int, b: int) => int pure

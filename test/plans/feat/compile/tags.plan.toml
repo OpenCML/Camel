@@ -68,12 +68,12 @@ const only = (line, value) => {
   assert(found.length > 0, `no OPER at line ${line}`)
   for (const l of found) assert(attrs(l) === value, `line ${line}: attrs="${attrs(l)}", expected "${value}": ${l}`)
 }
-only(10, 'graph::scale=2')           // doubled: the tag before the function
-only(15, 'graph::heavy')             // weighed: the nodes half of `on func, nodes`
-only(20, 'graph::scale=3')           // main: the tag before the function
-only(23, 'graph::plain, graph::scale=3') // the block adds plain to the enclosing scale
-only(27, 'graph::scale=5')           // the inner same-name tag wins
-assert(at(27).every((l) => !attrs(l).includes('graph::plain')), 'the inner block does not carry the outer block')
+only(9, 'graph::scale=2')            // doubled: the tag before the function
+only(14, 'graph::heavy')             // weighed: the nodes half of `on func, nodes`
+only(19, 'graph::scale=3')           // main: the tag before the function
+only(22, 'graph::plain, graph::scale=3') // the block adds plain to the enclosing scale
+only(26, 'graph::scale=5')           // the inner same-name tag wins
+assert(at(26).every((l) => !attrs(l).includes('graph::plain')), 'the inner block does not carry the outer block')
 }
 """
 
@@ -114,7 +114,7 @@ case = "../../../cases/compile/tags/err_position.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagNotAtPosition"
-expect_diagnostic_line = 6
+expect_diagnostic_line = 5
 expect_diagnostic_column = 2
 expect_output_contains = ["The tag 'shape' may not be written at a func: it is declared for type."]
 
@@ -126,7 +126,7 @@ case = "../../../cases/compile/tags/err_undeclared.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagUndeclared"
-expect_diagnostic_line = 4
+expect_diagnostic_line = 3
 expect_diagnostic_column = 2
 expect_output_contains = ["No tag 'nope' is declared."]
 
@@ -138,7 +138,7 @@ case = "../../../cases/compile/tags/err_arity.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagArgumentCount"
-expect_diagnostic_line = 6
+expect_diagnostic_line = 5
 expect_diagnostic_column = 2
 expect_output_contains = ["The tag 'width' takes 1 parameter(s), but 0 argument(s) are written."]
 
@@ -150,7 +150,7 @@ case = "../../../cases/compile/tags/err_const.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagArgumentNotConstant"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 6
 expect_diagnostic_column = 6
 expect_output_contains = ["The argument 'n' of the tag 'width' is not a compile-time value."]
 
@@ -182,7 +182,7 @@ case = "../../../cases/compile/tags/err_float.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagArgumentType"
-expect_diagnostic_line = 6
+expect_diagnostic_line = 5
 expect_diagnostic_column = 2
 expect_output_contains = ["The parameter 'w' of the tag 'width' is declared 'int', but the argument is '1.5' (float)."]
 
@@ -194,7 +194,7 @@ case = "../../../cases/compile/tags/err_type.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagArgumentType"
-expect_diagnostic_line = 6
+expect_diagnostic_line = 5
 expect_diagnostic_column = 2
 expect_output_contains = ["The parameter 'w' of the tag 'width' is declared 'int', but the argument is 'true' (bool)."]
 
@@ -206,7 +206,7 @@ case = "../../../cases/compile/tags/err_param_type.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagParameterType"
-expect_diagnostic_line = 6
+expect_diagnostic_line = 5
 expect_diagnostic_column = 2
 expect_output_contains = ["The parameter 'xs' of the tag 'callback' is declared 'int[]': a tag parameter is an int, a float, a bool, a string, a concrete function type, or a type parameter the condition selects with is_function."]
 
@@ -236,7 +236,7 @@ case = "../../../cases/compile/tags/err_func_signature.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagArgumentType"
-expect_diagnostic_line = 11
+expect_diagnostic_line = 10
 expect_diagnostic_column = 6
 expect_output_contains = ["The parameter 'f' of the tag 'rule' is declared '(x: int) => int', but the argument is 'twice_float' ((x: float) => float)."]
 
@@ -248,7 +248,7 @@ case = "../../../cases/compile/tags/err_old_annotation.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::InvalidAnnotation"
-expect_diagnostic_line = 4
+expect_diagnostic_line = 3
 expect_diagnostic_column = 1
 expect_output_contains = ["an annotation takes '<...>' arguments, not '(...)'", "'#name', '#name(args)' or '#[a, b(v)]'"]
 [[tests]]
@@ -279,7 +279,7 @@ case = "../../../cases/compile/tags/err_reads_empty.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagArgumentCount"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 6
 expect_diagnostic_column = 2
 expect_output_contains = ["The tag 'reads' takes 1 or more parameter(s), but 0 argument(s) are written."]
 
@@ -291,7 +291,7 @@ case = "../../../cases/compile/tags/err_reads_undeclared.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagUndeclared"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 6
 expect_diagnostic_column = 2
 expect_output_contains = ["No tag 'nowhere' is declared."]
 
@@ -312,7 +312,7 @@ case = "../../../cases/compile/tags/err_tag_shadows_permission.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagShadowsPermission"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_diagnostic_column = 1
 expect_output_contains = ["The tag 'reassociate' is declared with the name of a tag of the language."]
 
@@ -342,7 +342,7 @@ const body = (name) => {
 assert(body('on_device').includes('tiles.placement=\\"gpu\\"'), body('on_device'))
 assert(body('on_host').includes('tiles.placement=\\"cpu\\"'), body('on_host'))
 assert(!body('plain').includes('body_attrs'), body('plain'))
-// 0-based lines: 9 on_device, 14 on_host, 23 the gpu block, 25 the cpu block inside it.
+// 0-based lines: 8 on_device, 13 on_host, 22 the gpu block, 24 the cpu block inside it.
 const attrs = (l) => { const m = l.match(/attrs="(.*)"/); return m ? m[1].replace(/\\/g, '') : '' }
 const oper = (line) => lines.filter((l) => l.includes('type="OPER"') && l.includes(`span="${line}:`))
 const value = (line, expected) => {
@@ -350,10 +350,10 @@ const value = (line, expected) => {
   assert(found.length > 0, `no OPER at line ${line}`)
   for (const l of found) assert(attrs(l) === expected, `line ${line}: ${attrs(l)}`)
 }
-value(9, 'tiles.placement="gpu"')
-value(14, 'tiles.placement="cpu"')
-value(23, 'tiles.placement="gpu"')
-value(25, 'tiles.placement="cpu"')
+value(8, 'tiles.placement="gpu"')
+value(13, 'tiles.placement="cpu"')
+value(22, 'tiles.placement="gpu"')
+value(24, 'tiles.placement="cpu"')
 // The compact view prints a tagged region's fact without drawing a cluster. The number in
 // `region #N` is the region's index in the graph's region table, and the builder hands those out
 // in allocation order: an unrelated construct written earlier in this function that allocates a
@@ -464,12 +464,12 @@ const nodeAt = (line) => {
   assert(nodes.length > 0, `no attributed node at line ${line}`)
   return nodes
 }
-for (const n of nodeAt(23)) {
-  assert(n.region === outer.id, `line 23 node ${n.id} in ${n.region}`)
+for (const n of nodeAt(22)) {
+  assert(n.region === outer.id, `line 22 node ${n.id} in ${n.region}`)
   assert(n.attrs['tiles.placement'] === 'gpu', JSON.stringify(n.attrs))
 }
-for (const n of nodeAt(25)) {
-  assert(n.region === inner.id, `line 25 node ${n.id} in ${n.region}`)
+for (const n of nodeAt(24)) {
+  assert(n.region === inner.id, `line 24 node ${n.id} in ${n.region}`)
   assert(n.attrs['tiles.placement'] === 'cpu', JSON.stringify(n.attrs))
 }
 }
@@ -483,7 +483,7 @@ case = "../../../cases/compile/tags/placement_conflict.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagValueConflict"
-expect_diagnostic_line = 5
+expect_diagnostic_line = 4
 expect_diagnostic_column = 8
 expect_output_contains = ["The tag 'cpu' gives the fact 'tiles.placement' the value \"cpu\", but the node already says \"gpu\"."]
 
@@ -548,7 +548,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagOnUnnamedField"
 expect_diagnostic_code = "0x03000167"
-expect_diagnostic_line = 6
+expect_diagnostic_line = 5
 expect_diagnostic_column = 14
 expect_output_contains = ["A tag on the field 'a' of an unnamed struct type belongs to no declaration."]
 
@@ -561,6 +561,6 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagArgumentNamed"
 expect_diagnostic_code = "0x03000168"
-expect_diagnostic_line = 6
+expect_diagnostic_line = 5
 expect_diagnostic_column = 7
 expect_output_contains = ["A tag argument is positional: 'NamedData: w' is named."]

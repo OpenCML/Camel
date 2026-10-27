@@ -1,4 +1,3 @@
-module return_accepted
 // What stays accepted: the declared type itself, an undeclared return type, and a function
 // declared void whose body ends in a value. (A nullable of the type, `int?`, used to be listed
 // here: it was compiled as `int`. `int?` is now a type of its own, and `return x` under it

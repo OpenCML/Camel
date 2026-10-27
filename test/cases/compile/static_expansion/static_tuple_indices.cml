@@ -4,7 +4,6 @@
  * `ts.[j]` reads the argument node itself, and an `indices` operand that is a tuple
  * comprehension keeps its elements separate (no FILL) as well.
  */
-module static_tuple_indices
 
 func total(..ts): int {
     return static loop acc = 0 for j in indices ts do acc + ts.[j]

@@ -1,6 +1,5 @@
 // A `loop` in a function exported to ONNX is refused where it is written: the translation of a
 // LOOP node to an ONNX Loop is the next step (design principles 3.10).
-module onnx_refused
 import { reshape, tanh } from tensor
 import { export_model } from onnx
 

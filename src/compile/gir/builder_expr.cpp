@@ -178,6 +178,7 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
                         targetElem = joinTypes(targetElem, valueTypeOf(refTypes[i]));
                     }
                 }
+                const auto *written = GCT::Tree::of(gct)->literalElementsOf(data);
                 for (size_t i = 0; i < refTypes.size(); ++i) {
                     Type *have = valueTypeOf(refTypes[i]);
                     if (targetElem == nullptr || targetElem->assignableFrom(have)) {
@@ -188,10 +189,19 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
                         refTypes[i] = targetElem;
                         continue;
                     }
-                    // Reported at the element (the literal itself carries no position).
-                    const camel::source::origin_id_t at = nodeDraftOf(refNodes[i])->nodeOrigin(nodeIdOf(refNodes[i])) != 0
-                                                              ? nodeDraftOf(refNodes[i])->nodeOrigin(nodeIdOf(refNodes[i]))
-                                                              : gct->origin();
+                    // A value the element type does not take as it stands: nothing is converted
+                    // here beyond what entering the type means (`int` into `int?` is a cast, an
+                    // `int` into an `f32` is not a conversion at all -- design principles 3.8,
+                    // 5.1), and what does not fit is reported at the element itself, where the
+                    // literal wrote it, not at the name it is read from.
+                    const GCT::Tree::LiteralElement *element = nullptr;
+                    if (written != nullptr && i < holes.size() && holes[i] < written->size()) {
+                        element = &(*written)[holes[i]];
+                    }
+                    const camel::source::origin_id_t at =
+                        element != nullptr && element->origin != camel::source::kInvalidOriginId
+                            ? element->origin
+                            : gct->origin();
                     diags_->of(SemanticDiag::ElementTypeMismatch)
                         .atOrigin(at)
                         .commit("array", have->toString(), targetElem->toString());
@@ -1215,10 +1225,13 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     }
     ASSERT(valueNode != nullptr, "Cast node value is null.");
     Type *sourceType = nodeTypeOf(valueNode);
-    if (valueTypeOf(sourceType)->code() == TypeCode::Never && asTagged(targetType) == nullptr) {
+    if (valueTypeOf(sourceType)->code() == TypeCode::Never) {
         // A value of `never` never exists (design principles 3.9): the position takes the node as
         // it stands, because there is nothing to convert -- and nothing that could fail to be
-        // what the position asks for. A tagged position still enters its tag below.
+        // what the position asks for. A tagged position is no exception (the author's ruling of
+        // 2026-10-26 on `never-argument-scope`): `never` is the bottom type and enters any
+        // expected position without a conversion, tag or no tag, so a CAST is not built for it
+        // here either.
         LEAVE("CAST");
         return valueNode;
     }

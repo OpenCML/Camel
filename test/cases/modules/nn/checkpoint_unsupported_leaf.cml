@@ -3,7 +3,6 @@
 // It is a tensor now, and a checkpoint holds tensors (`checkpoint_tensor.cml`), so the refusal is
 // gone for a flat numeric array and the case has to name a leaf that is still unholdable: an
 // array of arrays, whose elements are themselves arrays.
-module checkpoint_unsupported_leaf
 import { save_tree } from ckpt
 
 func main(): int sync {

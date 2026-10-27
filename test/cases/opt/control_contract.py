@@ -69,7 +69,7 @@ for backend in ("std::nvm", "std::fvm", "std::jit", "std::tf", "std::prl"):
 
 with tempfile.TemporaryDirectory() as folder:
     source = Path(folder) / "long_chain.cml"
-    source.write_text("module long_chain\nfunc main(): int sync {\n" +
+    source.write_text("func main(): int sync {\n" +
                       "".join(f"println({i})\n" for i in range(256)) + "return 0\n}\n")
     main = next(g for g in export(source)["graphs"] if g["name"] == "main")
     assert sum(e["kind"] == "control" for e in main["edges"]) == 256

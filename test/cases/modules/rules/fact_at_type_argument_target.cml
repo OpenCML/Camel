@@ -3,7 +3,6 @@
  * itself an addition, so the fact of that operand is deeper than a constant's, and `keep` is an
  * addition of two parameters, whose second operand is as deep as a constant.
  */
-module fact_at_type_argument_target
 import fact_at_type_argument
 
 func target(a: int, b: int): int {

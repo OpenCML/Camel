@@ -2,7 +2,6 @@
  * Allocation benchmark: chains of map / filter / reduce over arrays of boxed values. Every stage
  * makes a new array of new small objects; only the last result of a round is used.
  */
-module map_chain
 
 func round(n: int, k: int): int {
     return 0..n

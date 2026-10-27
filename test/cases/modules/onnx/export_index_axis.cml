@@ -1,0 +1,32 @@
+/**
+ * The index forms on a dimension other than the first export to ONNX (design principles 5.4). The
+ * operator names the dimension it reads, so a position on axis 1 is one Gather along axis 1 with
+ * the index as a scalar -- the dimension it drops -- and a take on axis 1 is the same Gather with
+ * the indices as an i64 tensor, which keeps that axis at their length. Each model is exported from
+ * a rank-2 value and its graph io is the value it was exported from; the shape a rank-2 reshape
+ * puts in front of each is a Reshape, which the checker allows for.
+ */
+import { reshape } from tensor
+import { export_model } from onnx
+import { get_env } from env
+
+/// The position 0 on axis 1 of a rank-2 value.
+func position(x: f32[..]): f32[..] {
+    return reshape(x, [2, 3])[:, 0]
+}
+
+/// The positions an integer array names on axis 1, in that order, a repeated index among them.
+func taken(x: f32[..]): f32[..] {
+    let idx = [2, 0, 2]
+    return reshape(x, [2, 3])[:, idx]
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [6])
+    let _ = export_model<out: get_env('ONNX_OUT_A') ?? ''>(
+        (x: f32[..]): f32[..] => position(x), x)
+    let _ = export_model<out: get_env('ONNX_OUT_B') ?? ''>(
+        (x: f32[..]): f32[..] => taken(x), x)
+    println('exported')
+    return 0
+}

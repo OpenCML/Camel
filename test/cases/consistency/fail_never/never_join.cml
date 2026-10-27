@@ -3,7 +3,6 @@
  * stand where any type is expected, and an arm that gives no value joins with the arm that does,
  * so the branch is that value's type. The failing arm is never taken here.
  */
-module never_join
 
 // A function that gives no value back at all.
 func stop(m: string): never {

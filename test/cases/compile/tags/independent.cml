@@ -2,7 +2,6 @@
 /// standard tag `#independent` on the declaration. The fact reaches the runtime graph (the
 /// function's exit node) and the runtime query `tag::declaresIndependentElements`; a function
 /// without the tag does not carry it.
-module tags_independent
 
 #independent
 func twice(x: int): int {

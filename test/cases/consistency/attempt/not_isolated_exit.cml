@@ -2,7 +2,6 @@
  * exit(n) is not a fault: called inside a boundary it ends the program with its code, and the
  * `!!` fallback is not taken.
  */
-module not_isolated_exit
 
 import { exit } from process
 

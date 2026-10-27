@@ -11,7 +11,6 @@
  * `combine_nonzero` is therefore a rule for the floating sites of the target alone: the `int` site
  * is left as the program wrote it, and nothing of the attempt that `int` cost reaches the program.
  */
-module generic_guard_law
 
 import { Graph, Node, NodeKind, Program, graphs, kind, name, nodes } from graph
 import { explain_all, rule_name, run, why_not } from rewrite

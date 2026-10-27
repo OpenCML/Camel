@@ -1,4 +1,3 @@
-module tiles_benchmark
 import { random, seed, exp, relu, sum, max } from tensor
 import { benchmark } from tiles
 func pipeline(x: f32[..], b: f32[..]): f32[..] {

@@ -20,7 +20,6 @@
  * and `adamw` follows the trajectory of `adam` on a parameter tree independently decayed before
  * every step (`tree_map`), which is what "decoupled" means.
  */
-module optim_agreement
 
 import math
 import { abs, full, range, reshape, sum, tanh } from tensor

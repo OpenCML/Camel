@@ -2,7 +2,6 @@
  * Every field of a comprehension is one value: a block that gives none (here an empty block)
  * has no element to pack, and is reported instead of building a struct of the wrong shape.
  */
-module comprehension_void_element
 
 func broken(t: {a: int, b: int}) {
     return { static for n, F in fields {a: int, b: int} => {} }

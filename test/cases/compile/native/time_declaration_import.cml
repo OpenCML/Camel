@@ -3,7 +3,6 @@
  * timestamp, with the format as its with-argument, and gives a string, `strptime` takes a text and
  * gives a float or an error. Every call reaches the C++ operator.
  */
-module time_declaration_import
 
 import { now, strftime, strptime } from time
 

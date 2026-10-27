@@ -31,12 +31,12 @@
           "source": {
             "end": {
               "character": 1,
-              "line": 14
+              "line": 13
             },
             "file": "<ROOT>/test/cases/opt/camel_passes/fold_fault.cml",
             "start": {
               "character": 0,
-              "line": 7
+              "line": 6
             }
           }
         },
@@ -113,12 +113,12 @@
           "source": {
             "end": {
               "character": 13,
-              "line": 8
+              "line": 7
             },
             "file": "<ROOT>/test/cases/opt/camel_passes/fold_fault.cml",
             "start": {
               "character": 12,
-              "line": 8
+              "line": 7
             }
           }
         },
@@ -132,12 +132,12 @@
           "source": {
             "end": {
               "character": 17,
-              "line": 8
+              "line": 7
             },
             "file": "<ROOT>/test/cases/opt/camel_passes/fold_fault.cml",
             "start": {
               "character": 16,
-              "line": 8
+              "line": 7
             }
           }
         },
@@ -152,12 +152,12 @@
           "source": {
             "end": {
               "character": 15,
-              "line": 8
+              "line": 7
             },
             "file": "<ROOT>/test/cases/opt/camel_passes/fold_fault.cml",
             "start": {
               "character": 14,
-              "line": 8
+              "line": 7
             }
           }
         },
@@ -172,12 +172,12 @@
           "source": {
             "end": {
               "character": 13,
-              "line": 9
+              "line": 8
             },
             "file": "<ROOT>/test/cases/opt/camel_passes/fold_fault.cml",
             "start": {
               "character": 12,
-              "line": 9
+              "line": 8
             }
           }
         },
@@ -192,12 +192,12 @@
           "source": {
             "end": {
               "character": 13,
-              "line": 10
+              "line": 9
             },
             "file": "<ROOT>/test/cases/opt/camel_passes/fold_fault.cml",
             "start": {
               "character": 12,
-              "line": 10
+              "line": 9
             }
           }
         },
@@ -213,12 +213,12 @@
           "source": {
             "end": {
               "character": 11,
-              "line": 12
+              "line": 11
             },
             "file": "<ROOT>/test/cases/opt/camel_passes/fold_fault.cml",
             "start": {
               "character": 4,
-              "line": 12
+              "line": 11
             }
           }
         },
@@ -239,12 +239,12 @@
           "source": {
             "end": {
               "character": 15,
-              "line": 11
+              "line": 10
             },
             "file": "<ROOT>/test/cases/opt/camel_passes/fold_fault.cml",
             "start": {
               "character": 14,
-              "line": 11
+              "line": 10
             }
           }
         }

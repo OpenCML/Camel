@@ -4,7 +4,6 @@
  * way it folds the expression itself. This is what `first_leaf` in the tree library uses to
  * read the first field's name once and use it on both trees.
  */
-module static_access_named_constant
 
 func first_of::<T>(t: T) {
     let first = ( static for n, _ in fields T => n ).[0]

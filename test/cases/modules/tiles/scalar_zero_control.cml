@@ -1,4 +1,3 @@
-module tiles_scalar_zero_control
 import { zeros } from tensor
 import { upload, run_preferred_resident, download } from tiles
 func check(x: f32[..], b: float): f32[..] sync {

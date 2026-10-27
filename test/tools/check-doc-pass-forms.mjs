@@ -991,7 +991,7 @@ if (!fs.existsSync(CAMEL)) {
 
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-doc-pass-form-'))
 const program = path.join(tempDir, 'entry.cml')
-fs.writeFileSync(program, 'module doc_form_probe\n\nfunc main(): int sync {\n    return 0\n}\n')
+fs.writeFileSync(program, 'func main(): int sync {\n    return 0\n}\n')
 
 // The pipeline is resolved and refused before any pass runs, so the invocation never executes.
 // Reaching the probe means the parser read the specification; a name this build does not

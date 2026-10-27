@@ -2,7 +2,6 @@
  * `println` names an operator with several signatures and `over` two functions: neither has
  * one function value, so neither can be an element of a literal or the value of an arm.
  */
-module literal_operator_name
 
 func inc(x: int): int { return x + 1 }
 func over(x: int): int { return x }

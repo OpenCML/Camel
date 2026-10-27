@@ -1,4 +1,3 @@
-module tiles_runtime_scalars
 import { reshape, sum, abs } from tensor
 import { download, source, inspect, benchmark, run_preferred_resident } from tiles
 func arithmetic(a: float, b: float): float { return (a + b) * 0.5 - a / b }

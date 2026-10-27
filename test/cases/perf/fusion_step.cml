@@ -13,7 +13,6 @@
  *     std::profile std::nvm
  */
 
-module perf_fusion_step
 
 import { sum, zeros } from tensor
 import { with_grad } from autodiff

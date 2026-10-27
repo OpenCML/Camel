@@ -1,20 +1,19 @@
 /**
  * the other side of the rule. The position types the literals written in it
- * (design principles 5.1); a value the program computes keeps its own type. When a computed
- * element is not of the type the position gives that element, the position does not fit: the
- * literal keeps the type its own elements give it, its literal siblings are not converted, and
- * the place it was written in reports the mismatch as it did before.
+ * (design principles 5.1); a value the program computes keeps its own type. A struct field is
+ * a position with an expected type like an array or a tuple element, so a computed field that
+ * is not of the type the position gives that field is reported at the field itself, naming the
+ * field and the type the field states.
  */
-module literal_context_composite_holes_mismatch
 
 type MA = { n: int, t: (f32, f32) }
 type MB = { n: int, v: f32[2] }
 
-// `n` is a float and the field is an int: the literal does not take MA, and the tuple of
-// literals beside it stays a `(float, float)` rather than becoming an `(f32, f32)`.
+// `n` is a float and the field is an int: the field is reported, and the tuple of literals
+// beside it stays a `(float, float)` rather than becoming an `(f32, f32)`.
 func wrongSibling(n: float): MA { return { n: n, t: (1.0, 2.0) } }
 
-// `v` is a computed `f64[]` where the field is an `f32[2]`: no element is narrowed into it.
+// `v` is a computed `f64[]` where the field is an `f32[2]`: the field is reported.
 func computedArray(v: f64[]): MB { return { n: 1, v: v } }
 
 func main(): int {

@@ -4,7 +4,6 @@
  * Any number of names is read by the parser: how many fit is a question about the element, so the
  * count is checked where the walked shape is known.
  */
-module static_loop_head_name_count
 
 type Box = { low: int, high: int }
 

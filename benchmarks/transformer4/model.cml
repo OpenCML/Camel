@@ -4,7 +4,6 @@
  * `transformer` benchmark's single block (4-head self-attention, GELU(tanh)
  * FFN of width 512). Parameters of block i live under prefix b<i>_.
  */
-module transformer4
 
 import { layer_norm, softmax, gelu, reshape, permute, transpose, shape, mean } from tensor
 import { sqrt } from math

@@ -3,7 +3,6 @@
  * that field changed (docs/design-principles.cn.md 3.5, 6.11). A path from a `var` is a
  * target, and the store happens in place when the value is not shared.
  */
-module field_assigned
 
 func main(): int sync {
     var p = { x: 1, y: 2 }

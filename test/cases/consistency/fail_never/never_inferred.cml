@@ -1,10 +1,10 @@
 /**
- * `never` is a type the compiler reasons with (design principles 3.9): the argument of a generic
- * call gives no value, so the parameter is inferred as `never`, and the call's result stands
- * where an int is declared. Everything here is settled on the types, so the module is checked
- * rather than run: the program never reaches a value.
+ * `never` is a type the compiler reasons with (design principles 3.9): the argument of the generic
+ * call gives no value, so the call itself is typed `never` and no overload is chosen for it (the
+ * warning says which argument; the ruling of 2026-10-26), and its result stands where an int is
+ * declared. Everything here is settled on the types, so the module is checked rather than run: the
+ * program never reaches a value.
  */
-module never_inferred
 
 func pick::<T>(x: T): T { return x }
 

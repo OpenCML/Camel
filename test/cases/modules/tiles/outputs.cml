@@ -1,4 +1,3 @@
-module tiles_outputs
 import { reshape, sum, abs, transpose } from tensor
 import { inspect, benchmark, run_preferred_resident, download } from tiles
 

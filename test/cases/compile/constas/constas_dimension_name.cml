@@ -1,6 +1,5 @@
 /// The retired `const constas n` spelling of a dimension name: a constant type argument cannot
 /// bind a dimension name, only a parameter type can bind one.
-module constas_dimension_name
 
 type Vec<T> = { data: T }
 

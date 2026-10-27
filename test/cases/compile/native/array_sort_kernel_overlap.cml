@@ -17,7 +17,6 @@
  * (src/core/operator_group: resolveForCall; the sort arm of each element type is what
  * the declarations above state).
  */
-module array_sort_kernel_overlap
 
 import { is_integer, is_ordered } from types
 

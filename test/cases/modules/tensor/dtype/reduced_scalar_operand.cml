@@ -21,7 +21,6 @@
  *   sum(b * a)     20           sum(h * a)     20      a: f32 = 2.0
  *   sum(where(b > 2.0, b, 0.0)) 7
  */
-module tensor_dtype_reduced_scalar_operand
 
 import { reshape, sum, where } from tensor
 

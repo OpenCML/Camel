@@ -4,7 +4,6 @@
 // instance, so a distribution that handed all three the same type could not build this
 // program (design principles 5.5: each operand takes the instance its own
 // position fixes).
-module h428_comp_chain
 
 func wrap::<T>(x: T): T[] {
     return [x]

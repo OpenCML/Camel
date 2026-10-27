@@ -2,7 +2,6 @@
  * A function whose body does not build is not folded: its own error is the one reported, once,
  * and the call is not given a value computed from a body that has a diagnostic.
  */
-module fold_broken_body
 
 func broken(): int {
     return missing_name

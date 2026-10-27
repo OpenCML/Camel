@@ -1,7 +1,6 @@
 /**
  * A limit of 8 open calls does not bound tail recursion: a million rounds run.
  */
-module tail_under_limit
 
 func spin(i: int, n: int, acc: int): int {
     return if i > n then acc else spin(i + 1, n, acc + i)

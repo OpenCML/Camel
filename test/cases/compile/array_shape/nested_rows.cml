@@ -1,7 +1,6 @@
 // Without an annotation a nested literal is still an array of arrays, not a rank-2 array: the
 // type is `f32[][]`, one bracket per dimension, and rows may differ in length (design principles
 // 5.1, 5.4). The annotation is what makes the brackets one shape.
-module array_shape_nested_rows
 
 func main(): int sync {
     let rows = [[1.0, 2.0], [3.0, 4.0]]

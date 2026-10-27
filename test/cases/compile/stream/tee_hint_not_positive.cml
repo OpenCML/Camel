@@ -5,7 +5,6 @@
  * 5.4). The width here is 0, which is the one thing the hint cannot be; a width that is not
  * constant is the executor's to clamp and grow, and never faults.
  */
-module stream_tee_hint_not_positive
 
 import stream
 

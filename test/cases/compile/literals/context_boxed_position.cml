@@ -16,7 +16,6 @@
  * `with` parameter whose own type is the concrete `int?` (there the position does give the type)
  * and the literal `5` in an `int?` declaration, which still takes the form.
  */
-module literal_context_boxed_position
 
 type Box = { count: int? }
 

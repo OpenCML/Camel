@@ -6,7 +6,6 @@
  * another type is refused at the call rather than narrowed, and `rounded_coefficients` writes the
  * ones f32 rounds to show that the law reads them as the f32 values they are.
  */
-module algebra_tensor
 
 import { reshape } from tensor
 

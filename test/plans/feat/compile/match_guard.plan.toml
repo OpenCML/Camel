@@ -34,7 +34,7 @@ case = "../../../cases/compile/match_guard/not_exhaustive.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::MatchWithoutDefault"
-expect_diagnostic_line = 13
+expect_diagnostic_line = 12
 expect_output_contains = ["has no 'case _'"]
 
 [[tests]]
@@ -45,7 +45,7 @@ case = "../../../cases/compile/match_guard/enum_not_exhaustive.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::EnumMatchNotExhaustive"
-expect_diagnostic_line = 17
+expect_diagnostic_line = 16
 expect_output_contains = ["has no case for 'A'"]
 
 [[tests]]
@@ -56,7 +56,7 @@ case = "../../../cases/compile/match_guard/tagged_missing_null.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TaggedMatchCases"
-expect_diagnostic_line = 11
+expect_diagnostic_line = 10
 expect_output_contains = ["'case null' is missing"]
 
 [[tests]]
@@ -67,7 +67,7 @@ case = "../../../cases/compile/match_guard/faulting_guard.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
-expect_diagnostic_line = 12
+expect_diagnostic_line = 11
 expect_output_contains = ["Index 5 is out of range for an array of length 3"]
 
 [[tests]]
@@ -89,5 +89,5 @@ case = "../../../cases/compile/match_guard/case_type_mismatch.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::MatchCaseTypeMismatch"
-expect_diagnostic_line = 11
+expect_diagnostic_line = 10
 expect_output_contains = ["'string'", "'int'"]

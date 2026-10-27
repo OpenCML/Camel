@@ -6,7 +6,6 @@
  * profile's operator executions are compared with.
  */
 
-module fusion_group_step
 
 import { sum, zeros } from tensor
 import { with_grad } from autodiff

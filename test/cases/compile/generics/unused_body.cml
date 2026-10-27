@@ -8,7 +8,6 @@
  * or not an instance is ever made.
  * `err_decl_name.cml` is the case that pins that half.
  */
-module unused_body
 
 func never_called::<T>(x: T): T {
     return x + x

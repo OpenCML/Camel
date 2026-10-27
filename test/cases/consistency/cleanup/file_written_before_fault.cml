@@ -2,7 +2,6 @@
  * A file written before a fault is complete on disk after the program has stopped. The path
  * comes from the environment so that every back end writes its own file.
  */
-module file_written_before_fault
 
 import { write_text, read_text, mkdirs } from fs
 import { get_env } from env

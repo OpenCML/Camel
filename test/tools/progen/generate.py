@@ -1056,7 +1056,7 @@ class Gen:
         return N("let", [call], name=r.name)
 
     def effect_lambda(self, d):
-        """sync (x: int): int => sync { ...; return e }"""
+        """(x: int): int => sync { ...; return e }"""
         mark = len(self.scope)
         x = Sym(self.fresh("p"), INT, "let")
         self.scope.append(x)
@@ -1294,7 +1294,7 @@ class Gen:
         return N("let", [N("reduce", [arr, lam, init], t=t, eff=True)], name=s.name)
 
     def writer_closure(self, d):
-        """let f = sync (x: int): int => sync { c += ...; return ... }, called later."""
+        """let f = (x: int): int => sync { c += ...; return ... }, called later."""
         lam = self.effect_lambda(max(d, 1))
         s = Sym(self.fresh("h"), FN([INT], INT), "let", eff=True)
         self.scope.append(s)

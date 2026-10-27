@@ -7,7 +7,6 @@
  * program runs, so the `if` stays): nothing faults, 7 is printed and the exit code is 0, with or
  * without passes.
  */
-module fold_constant_fault
 
 import { now } from time
 

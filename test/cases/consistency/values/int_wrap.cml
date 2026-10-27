@@ -2,7 +2,6 @@
  * 64-bit integer arithmetic past the ends of the range wraps around. The largest and smallest
  * int are computed, not written as literals.
  */
-module int_wrap
 
 func add(a: int, b: int): int { return a + b }
 func sub(a: int, b: int): int { return a - b }

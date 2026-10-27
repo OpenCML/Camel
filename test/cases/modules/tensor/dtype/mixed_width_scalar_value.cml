@@ -4,7 +4,6 @@
  * is the mixed call, not a literal to read at x's width. Only a *literal* takes its element type
  * from the context it is written in, which is why `x * 2.0` needs no conversion.
  */
-module mixed_width_scalar_value
 
 import { reshape, sum } from tensor
 

@@ -1,5 +1,3 @@
-module runtime_regex
-
 import { has_match } from re
 
 func main(): int sync {

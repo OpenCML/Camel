@@ -152,13 +152,13 @@ args = ["${case}", "std::macro", "std::nvm"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MacroEvaluationFailed"
 expect_diagnostic_code = "0x0400000E"
-expect_diagnostic_line = 19
+expect_diagnostic_line = 17
 expect_diagnostic_column = 13
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.output
-assert(/failed_evaluation\.cml:19:13: \[Error\]: 'boom' could not be evaluated by std::macro: DivisionByZero: Attempted division by zero\./.test(out), `error missing: ${out}`)
+assert(/failed_evaluation\.cml:17:13: \[Error\]: 'boom' could not be evaluated by std::macro: DivisionByZero: Attempted division by zero\./.test(out), `error missing: ${out}`)
 assert(!out.includes('main start'), `the program must not run: ${out}`)
 assert(!out.includes("'fine'"), `a call that evaluated was reported: ${out}`)
 assert(!out.includes('[Warn]'), `no warning is left: ${out}`)
@@ -182,7 +182,7 @@ assert(diags.length === 1, `one diagnostic: ${out}`)
 const d = diags[0]
 assert(d.data.name === 'RuntimeDiag::MacroEvaluationFailed' && d.severity === 'Error' && d.code === '0x0400000E', `name/severity/code: ${JSON.stringify(d)}`)
 assert(d.data.stage === 'pass:std::macro', `stage: ${d.data.stage}`)
-assert(d.range.start.line === 18 && d.range.start.character === 12, `range: ${JSON.stringify(d.range)}`)
+assert(d.range.start.line === 16 && d.range.start.character === 12, `range: ${JSON.stringify(d.range)}`)
 assert(d.message === "'boom' could not be evaluated by std::macro: DivisionByZero: Attempted division by zero.", `message: ${d.message}`)
 }
 """
@@ -214,13 +214,13 @@ case = "../../../cases/trans/macro/failed_no_rule.cml"
 args = ["${case}", "std::macro", "std::fvm"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MacroEvaluationFailed"
-expect_diagnostic_line = 10
+expect_diagnostic_line = 8
 expect_diagnostic_column = 12
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.output
-assert(/'autodiff:grad' could not be evaluated by std::macro: RuntimeError: An error has occurred: autodiff: no derivative rule for operator 'math:sin_d'/.test(out) && out.includes('failed_no_rule.cml:10:12'), `error missing: ${out}`)
+assert(/'autodiff:grad' could not be evaluated by std::macro: RuntimeError: An error has occurred: autodiff: no derivative rule for operator 'math:sin_d'/.test(out) && out.includes('failed_no_rule.cml:8:12'), `error missing: ${out}`)
 assert(!out.includes('main start'), `the program must not run: ${out}`)
 }
 """
@@ -234,13 +234,13 @@ case = "../../../cases/trans/macro/failed_depth.cml"
 args = ["${case}", "std::macro", "std::nvm"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MacroEvaluationFailed"
-expect_diagnostic_line = 17
+expect_diagnostic_line = 15
 expect_diagnostic_column = 13
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.output
-assert(/failed_depth\.cml:17:13: \[Error\]: 'count' could not be evaluated by std::macro: the evaluation needs more than 64 nested calls \(at 'count'\)\./.test(out), `error missing: ${out}`)
+assert(/failed_depth\.cml:15:13: \[Error\]: 'count' could not be evaluated by std::macro: the evaluation needs more than 64 nested calls \(at 'count'\)\./.test(out), `error missing: ${out}`)
 assert((out.match(/MacroEvaluationFailed/g) || []).length === 1, `expected one error: ${out}`)
 assert(!/^20$/m.test(input.normalized.stdout), `the program must not run: ${input.normalized.stdout}`)
 }
@@ -271,7 +271,7 @@ case = "../../../cases/trans/macro/failed_unreached.cml"
 args = ["${case}", "std::macro", "std::nvm"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MacroEvaluationFailed"
-expect_diagnostic_line = 11
+expect_diagnostic_line = 9
 expect_diagnostic_column = 12
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 verify_script = """
@@ -307,7 +307,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 verify_script = """
 ({ input, assert }) => {
 const err = input.normalized.stderr
-assert(/<Macro> 'count' at .*not_static\.cml:10:12 stays a run-time call: argument 1 is not a constant\./.test(err), `note missing: ${err}`)
+assert(/<Macro> 'count' at .*not_static\.cml:8:12 stays a run-time call: argument 1 is not a constant\./.test(err), `note missing: ${err}`)
 assert(!input.normalized.output.includes('MacroEvaluationFailed'), 'not a failure')
 assert(input.normalized.stdout.trim() === '20\n7', `unexpected stdout: ${input.normalized.stdout}`)
 }
@@ -353,7 +353,7 @@ case = "../../../cases/trans/macro/tag_on_block.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagNotAtPosition"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 5
 expect_diagnostic_column = 6
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -366,7 +366,7 @@ case = "../../../cases/trans/macro/tag_with_argument.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagArgumentCount"
-expect_diagnostic_line = 6
+expect_diagnostic_line = 4
 expect_diagnostic_column = 2
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -379,7 +379,7 @@ case = "../../../cases/trans/macro/round_budget.cml"
 args = ["--max-macro-rounds", "3", "${case}", "std::macro", "std::nvm"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MacroEvaluationFailed"
-expect_diagnostic_line = 12
+expect_diagnostic_line = 10
 expect_diagnostic_column = 13
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 verify_script = """

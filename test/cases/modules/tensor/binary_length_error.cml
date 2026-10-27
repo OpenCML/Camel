@@ -1,4 +1,3 @@
-module binary_length_error
 import { from_bytes, sum } from tensor
 import { from_array } from bytes
 func main(): int sync {

@@ -13,7 +13,6 @@
  * value the binding gave: the rewrite adds `tile` (7), and `3 + 0` printed without it is the
  * program as it was written.
  */
-module rule_both_heads
 
 import { Program } from graph
 import { is_integer } from types

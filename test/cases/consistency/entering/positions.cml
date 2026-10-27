@@ -4,7 +4,6 @@
  * branch, `return`. `null` likewise. On the graph each is the CAST node a program would
  * write with `as`.
  */
-module positions
 
 func or_else(x: int?, d: int): int { return x ?? d }
 func show(r: int!): string {

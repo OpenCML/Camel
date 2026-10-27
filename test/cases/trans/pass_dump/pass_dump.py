@@ -82,8 +82,8 @@ def main() -> int:
         check(added == [("DATA", "42")], f"added is the materialized constant (got {added})")
         call = report["removed"][0]
         check(call["srcfile"].replace("\\", "/").endswith("trans/macro/basic.cml")
-              and call["span"].startswith("10:"),
-              f"the removed call is located at its call site, line 11 (got {call['location']})")
+              and call["span"].startswith("9:"),
+              f"the removed call is located at its call site, line 10 (got {call['location']})")
 
         same = subprocess.run(
             [sys.executable, str(GRAPH_DIFF),

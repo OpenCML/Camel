@@ -2,7 +2,6 @@
  * A function that returns closures over its own var: each call makes a new variable, and the
  * closures of one call share it.
  */
-module counter_closure
 
 func counter(start: int): () => int sync {
     var n = start

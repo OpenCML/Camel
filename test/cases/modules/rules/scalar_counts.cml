@@ -3,7 +3,6 @@
  * count of the scalar operators the two f64/f32 rules move (log, add, exp, subtract, and the two
  * accurate operators they write). Printed before and after a pass it is the cost of the rewrite.
  */
-module scalar_counts
 
 import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
 

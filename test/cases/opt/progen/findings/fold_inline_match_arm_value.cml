@@ -8,7 +8,6 @@
  * Reduced by test/tools/progen from seed 2632 (generator version 1, features without capture,
  *   effects, var, varparam).
  */
-module fold_inline_match_arm_value
 
 func f10(a11: int, a12: int): int {
     return match a12 {

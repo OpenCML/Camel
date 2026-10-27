@@ -9,7 +9,6 @@
  * positive, so the value the program prints says whether the condition saw the coefficient --
  * `positive_case` loses its product, `negative_case` keeps it.
  */
-module when_values
 
 import { Program } from graph
 import { rewrite } from rewrite
