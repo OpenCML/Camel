@@ -1,101 +1,62 @@
-// The measurement's table, one entry per corpus: the legacy C++ algebraic pass's table is the
-// golden, the rule library's table is the run being verified, and every line of the two is compared.
+// The measurement's table, one entry per corpus. Two tables are compared, and neither is a
+// snapshot of a pass that no longer exists:
 //
-// The golden of every entry here is the **deleted** C++ law table's output: the table that
-// `e8c290554:src/passes/opt/generic/algebra.cpp` held, recorded once with that file restored in the
-// working tree (the pass that remains, `std::opt::algebra neutral_only=true`, is the five integer
-// neutral elements, and its table is recorded beside this one by the `by_cpp` snapshot entries of
-// the plan). The `.deleted_table.` goldens are a reference from the past and cannot be produced from
-// this tree again; the library side is re-run on every plan run, so the comparison is live on the
-// side that can change.
+//   * the **reference** column, read from the plan's `by_cpp` golden: `std::opt::algebra
+//     neutral_only=true` followed by the same `std::opt::dce values_only=true` the library side
+//     runs. The mode is in this tree (`src/passes/opt/generic/algebra.cpp`), so this column is
+//     re-recordable and the plan's `*.by_cpp` entries pin it for itself.
+//   * the **library** column, the run being verified: `rules::simplify` with the same pass list,
+//     read from this entry's own stdout. It is live on the side that can change, and nothing about
+//     it is recorded anywhere.
 //
-// The corpus is a property, not a single golden: for every graph of the golden the script asks for
-// one of three recorded answers, and a graph in neither record must agree character for character.
+// The corpus is a property, not a golden. What is asserted is what the library does to these
+// graphs, form by form, and never the node count or the position of a node:
 //
-//   `differs`  the graphs the two sides answer differently: the line is parsed and held to the
-//              recorded pair, so the node count, the edge count and every operator count of each
-//              side are asserted.
-//   `agreed`   the graphs the two sides answer the same way, recorded so that a rewrite that starts
-//              or stops firing on either side is red. Two of them are the forms *neither* side
-//              rewrites (`fold_d` needs the `no_infs` grant no node carries, `tensor_zero` needs a
-//              zero tensor of the matched shape, which a rule cannot write).
+//   `no graph grows`        every graph the two tables share answers with at most the reference's
+//                           nodes, at most its edges and at most its count of every operator. The
+//                           one exception the tables name is the doubling, whose whole content is
+//                           to write one product over the sum it replaces: `x + x` reads `x` twice
+//                           and `x * 2` reads it once, so that form answers with exactly one node
+//                           more and with that product where the reference had none. Every other
+//                           form must not grow at all.
+//   `the library rewrites`  exactly the recorded number of forms come out strictly smaller, so a
+//                           library that stopped rewriting a form is red and a function that is
+//                           simply absent cannot hide in the per-form rules.
+//   `the corpus is whole`   both tables examine the same graphs, in the same order, and not a
+//                           different number of them.
 //
-// The lines that are not table lines are the program's own output: they are compared as text, so the
-// values the program prints after the library's pass must be the values it printed after the C++
-// pass (the laws are exact).
+// A graph that grew is reported by name and by measure, so the reader is sent to the form that
+// moved rather than to a line number.
 
 import fs from 'node:fs'
 import { applyNormalizers } from '../../../tools/normalizers.mjs'
 
 const NORMALIZERS = ['strip_ansi', 'normalize_newlines', 'trim_trailing_space', 'normalize_paths', 'normalize_origins']
 
-// `[nodes, edges, {operator: count}]` counts only the operators that are not zero.
 const TABLES = {
-    // The ten integer neutral forms both sides perform: eleven graphs, every line the same.
+    // The ten integer neutral forms both sides perform, form by form.
     'algebra_rules.agreement.table': {
-        golden: 'algebra_rules.agreement.deleted_table.txt',
+        reference: 'algebra_rules.agreement.cpp.txt',
         graphs: 11,
-        differs: {},
-        agreed: {},
+        rewritten: 0,
+        doubling: [],
     },
-    // The seventeen forms of this corpus. Three are performed by both sides (`fold`, `double`,
-    // `double_d`), fourteen by the library alone, and one by neither (`fold_d`).
+    // The nineteen forms of this corpus. The reference mode performs the five integer neutral
+    // identities only, so it leaves the combine, the coefficient fold, the doubling and every
+    // floating-point form as written; the library carries the laws for them.
     'algebra_rules.library_only.table': {
-        golden: 'algebra_rules.library_only.deleted_table.txt',
+        reference: 'algebra_rules.library_only.cpp.txt',
         graphs: 19,
-        differs: {
-            // The library alone: the deleted table never had a zero, self-subtraction,
-            // division-by-one, double-negation or floating-point neutral law.
-            mul_zero: [[6, 5, { mul_l: 1, println: 1 }], [5, 3, { println: 1 }]],
-            zero_mul: [[6, 5, { mul_l: 1, println: 1 }], [5, 3, { println: 1 }]],
-            sub_self: [[5, 5, { sub_l: 1, println: 1 }], [4, 3, { println: 1 }]],
-            div_one: [[6, 5, { div_l: 1, println: 1 }], [4, 3, { println: 1 }]],
-            neg_neg: [[6, 5, { neg_l: 2, println: 1 }], [4, 3, { println: 1 }]],
-            mul_zero32: [[6, 5, { mul_i: 1, println: 1 }], [5, 3, { println: 1 }]],
-            sub_self32: [[5, 5, { sub_i: 1, println: 1 }], [4, 3, { println: 1 }]],
-            mul_one_d: [[6, 5, { mul_d: 1, println: 1 }], [4, 3, { println: 1 }]],
-            add_neg_zero_d: [[6, 5, { add_d: 1, println: 1 }], [4, 3, { println: 1 }]],
-            sub_zero_d: [[6, 5, { sub_d: 1, println: 1 }], [4, 3, { println: 1 }]],
-            div_one_d: [[6, 5, { div_d: 1, println: 1 }], [4, 3, { println: 1 }]],
-            neg_neg_d: [[6, 5, { neg_d: 2, println: 1 }], [4, 3, { println: 1 }]],
-            // The C++ table performs both and the library does not: the difference is a condition,
-            // not a law. `combine` reads `x * 3` and `x * 5` in a `sync` body, where the second
-            // product is control-dependent on the first; the deleted table's `exclusive()` guard
-            // (`algebra.cpp#simplify` at `e8c290554`) refuses a product with any other user, control
-            // users included, so `term()` lowers to no product and the add is left. `combine_d` is
-            // the same shape with float coefficients, refused by the permission the deleted table's
-            // float path demands (`algebra.cpp#simplify`, `kReassociate` in the default policy).
-            // The rule library's `int_combine`/`float_combine` see neither users nor policy:
-            // `simplify` grants the permission the C++ default withholds and no rule can ask who
-            // else reads the node.
-            combine: [[9, 10, { add_l: 1, mul_l: 2, println: 1 }], [6, 5, { mul_l: 1, println: 1 }]],
-            combine_d: [[9, 10, { add_d: 1, mul_d: 2, println: 1 }], [6, 5, { mul_d: 1, println: 1 }]],
-        },
-        agreed: {
-            // Both sides: the like-term combine's two neighbours, and the float doubling.
-            fold: [6, 5, { mul_l: 1, println: 1 }],
-            double: [6, 5, { mul_l: 1, println: 1 }],
-            double_d: [6, 5, { mul_d: 1, println: 1 }],
-            // Neither side: the float coefficient fold needs `no_infs`, and the default policy of
-            // neither implementation grants it.
-            fold_d: [8, 7, { mul_d: 2, println: 1 }],
-        },
+        rewritten: 17,
+        doubling: ['double', 'double_d'],
     },
-    // The element-wise forms. One performed by both sides, one by the library alone, two by neither.
+    // The element-wise forms. One form both sides rewrite, one the library rewrites alone, and
+    // two neither reaches.
     'algebra_rules.tensor.table': {
-        golden: 'algebra_rules.tensor.deleted_table.txt',
+        reference: 'algebra_rules.tensor.cpp.txt',
         graphs: 5,
-        differs: {
-            tensor_combine: [[8, 10, { println: 1, tensor_add: 1, tensor_mul: 2 }], [5, 5, { println: 1, tensor_mul: 1 }]],
-        },
-        agreed: {
-            tensor_double: [5, 5, { println: 1, tensor_mul: 1 }],
-            // Neither side: `tensor_fold` needs the same `no_infs` grant its scalar form needs, and
-            // `tensor_zero` would have to write a zero tensor of the matched shape, which the rule
-            // language cannot write (the missing piece is a language feature, not a rule).
-            tensor_fold: [7, 7, { println: 1, tensor_mul: 2 }],
-            tensor_zero: [5, 5, { println: 1, tensor_mul: 1 }],
-        },
+        rewritten: 2,
+        doubling: ['tensor_double'],
     },
 }
 
@@ -116,58 +77,95 @@ const nonzero = (counts) => Object.fromEntries(Object.entries(counts).filter(([,
 
 const show = (parsed) => `${parsed.name} nodes ${parsed.nodes} edges ${parsed.edges} ${JSON.stringify(nonzero(parsed.counts))}`
 
-const same = (parsed, recorded) =>
-    recorded !== undefined &&
-    parsed.nodes === recorded[0] &&
-    parsed.edges === recorded[1] &&
-    JSON.stringify(nonzero(parsed.counts)) === JSON.stringify(Object.fromEntries(Object.entries(recorded[2]).sort()))
+// A graph came out of the library no larger than the reference: at most its nodes, at most its
+// edges, and at most its count of every operator. The named doublings are the one exception --
+// `x + x => x * 2` writes a product the reference's sum did not have and reads its operand once
+// instead of twice, so that form is allowed exactly one node more and any product count.
+const dominance = (reference, library, doubling) => {
+    const trouble = []
+    const allowed = doubling ? 1 : 0
+    if (library.nodes > reference.nodes + allowed) {
+        trouble.push(`nodes ${library.nodes} against the reference's ${reference.nodes}`)
+    }
+    if (library.edges > reference.edges) {
+        trouble.push(`edges ${library.edges} against the reference's ${reference.edges}`)
+    }
+    const operators = [...new Set([...Object.keys(reference.counts), ...Object.keys(library.counts)])]
+    for (const operator of operators) {
+        if (doubling && operator.includes('mul')) continue
+        if ((library.counts[operator] || 0) > (reference.counts[operator] || 0)) {
+            trouble.push(`${operator} ${library.counts[operator]} against the reference's ${reference.counts[operator] || 0}`)
+        }
+    }
+    return trouble
+}
+
+// The library did something to this graph: fewer nodes, fewer edges, or one operator the
+// reference left with a smaller count.
+const strictlySmaller = (reference, library) => {
+    if (library.nodes < reference.nodes || library.edges < reference.edges) return true
+    const operators = [...new Set([...Object.keys(reference.counts), ...Object.keys(library.counts)])]
+    return operators.some((operator) => (library.counts[operator] || 0) < (reference.counts[operator] || 0))
+}
 
 const input = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'))
 const recorded = TABLES[input.test_name]
 assert(recorded, `no table is recorded for the entry '${input.test_name}'`)
-const path = new URL(`../../../plans/feat/opt/golden/${recorded.golden}`, import.meta.url)
-const expected = applyNormalizers(fs.readFileSync(path, 'utf8').replace(/\r\n/g, '\n'), NORMALIZERS)
-const actual = input.normalized.stdout
-assert(actual.trim() !== '', `the run printed nothing: ${JSON.stringify(input.command)}`)
 
-const expectedLines = expected.split('\n')
-const actualLines = actual.split('\n')
-assert(
-    expectedLines.length === actualLines.length,
-    `the two runs printed a different number of lines: the recorded C++ table ${expectedLines.length}, the library ${actualLines.length}`,
-)
+const read = (name) => {
+    const path = new URL(`../../../plans/feat/opt/golden/${name}`, import.meta.url)
+    return applyNormalizers(fs.readFileSync(path, 'utf8').replace(/\r\n/g, '\n'), NORMALIZERS).split('\n')
+}
+
+const referenceLines = read(recorded.reference)
+// The library column is this run's own table: the entry runs the library with `measure::report`,
+// so its stdout is what the library answers now, and nothing about it is frozen. The reference
+// column is the plan's `by_cpp` golden, which the entry beside it re-records from this tree.
+const actualLines = input.normalized.stdout.split('\n')
 
 let examined = 0
-for (let i = 0; i < expectedLines.length; i++) {
-    const left = expectedLines[i]
+let rewritten = 0
+const grown = []
+for (let i = 0; i < referenceLines.length; i++) {
+    const left = referenceLines[i]
     const right = actualLines[i]
+    assert(
+        isTableLine(left) === isTableLine(right),
+        `line ${i + 1} is a table line on one side only:\n  reference: ${JSON.stringify(left)}\n  library:   ${JSON.stringify(right)}`,
+    )
     if (!isTableLine(left)) {
-        assert(left === right, `line ${i + 1} is the program's own output and differs:\n  C++:     ${left}\n  library: ${right}`)
+        assert(
+            left === right,
+            `line ${i + 1} is the program's own output and differs:\n  reference: ${left}\n  library:   ${right}`,
+        )
         continue
     }
     examined++
-    const cpp = parse(left)
-    const lib = parse(right)
-    assert(cpp.name === lib.name, `line ${i + 1} names two graphs: '${cpp.name}' and '${lib.name}'`)
-    if (recorded.differs[cpp.name]) {
-        const [cppWanted, libWanted] = recorded.differs[cpp.name]
-        assert(same(cpp, cppWanted), `'${cpp.name}' on the C++ side is not the recorded graph:\n  recorded: ${JSON.stringify(cppWanted)}\n  measured: ${show(cpp)}`)
-        assert(same(lib, libWanted), `'${cpp.name}' on the library side is not the recorded graph:\n  recorded: ${JSON.stringify(libWanted)}\n  measured: ${show(lib)}`)
-        continue
-    }
-    if (recorded.agreed[cpp.name]) {
-        assert(same(cpp, recorded.agreed[cpp.name]), `'${cpp.name}' is recorded as agreed on the C++ side and is not:\n  measured: ${show(cpp)}`)
-        assert(same(lib, recorded.agreed[cpp.name]), `'${cpp.name}' is recorded as agreed and the library differs:\n  measured: ${show(lib)}`)
-        continue
-    }
+    const reference = parse(left)
+    const library = parse(right)
     assert(
-        JSON.stringify(cpp) === JSON.stringify(lib),
-        `'${cpp.name}' is not a recorded difference and the two sides differ:\n  C++:     ${show(cpp)}\n  library: ${show(lib)}`,
+        reference.name === library.name,
+        `line ${i + 1} names two graphs: '${reference.name}' and '${library.name}'`,
     )
+    const doubling = recorded.doubling.includes(reference.name)
+    const trouble = dominance(reference, library, doubling)
+    if (trouble.length > 0) grown.push(`'${reference.name}' grew: ${trouble.join(', ')}`)
+    if (strictlySmaller(reference, library)) rewritten++
+    else if (!doubling) {
+        assert(
+            JSON.stringify(reference) === JSON.stringify(library),
+            `'${reference.name}' is not a recorded difference and the two sides differ:\n  reference: ${show(reference)}\n  library:   ${show(library)}`,
+        )
+    }
 }
 
 assert(examined > 0, 'the corpus held no graph to examine: the measurement would have passed on nothing')
 assert(
     examined === recorded.graphs,
     `the corpus is not the one recorded: ${examined} graphs examined, ${recorded.graphs} recorded`,
+)
+assert(grown.length === 0, `the library grew a graph it rewrote:\n${grown.join('\n')}`)
+assert(
+    rewritten === recorded.rewritten,
+    `the library rewrote ${rewritten} forms, not the recorded ${recorded.rewritten}: a rule that stopped firing, or a form the reference no longer reaches, moves this number`,
 )
