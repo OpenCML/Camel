@@ -4319,14 +4319,14 @@ void Builder::markLoopStateInPlace(
     // state is an array, its first value is a literal (a Data or FILL node), its next value is
     // `state->append<v>`, and the body uses that state's port nowhere else. Anything else -- a
     // struct or tuple state, a first value that is a parameter or an array element, a body that
-    // also reads the state or ends in `return` -- keeps the copying `append`; the values are the
+    // also reads the state -- keeps the copying `append`; the values are the
     // same either way, and only the allocation differs (10.5's in-place guarantee is about the
     // state's data block, not about a promise on the source).
     // A state that was split out of a struct is a component of the states the loop's parts
     // declare, so the count is the initial values', not the LOOP node's names; its first value
     // is a projection of the struct (a value the loop does not own) and is copied once.
     const size_t stateCount = initial.size();
-    if (stateCount == 0 || body->returned) {
+    if (stateCount == 0) {
         return;
     }
     node_handle_t returned = loopStateValueOf(body->value);

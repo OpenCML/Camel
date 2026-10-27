@@ -812,3 +812,16 @@ expect_exit = 0
 expect_stdout_exact = "500\ndone\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
+
+[[tests]]
+name = "loops.state_in_place.block_body"
+desc = "The in-place append of a loop state does not depend on how the body is written (design principles 10.5): the body that is one expression, a block that binds names and ends in `return xs->append<v>`, and a block that returns the tuple of an array and a counter each take one block for 200 rounds (`std::mem::blocks()` between the operations). The `return` once kept the copying append, which made a merge written that way quadratic."
+kind = "behavior"
+case = "../../../cases/loops/state_in_place_block.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "200 200 200 199\n1 1 1\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
