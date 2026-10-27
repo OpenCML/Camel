@@ -3,15 +3,14 @@
  * and written back out. `roundtrip.mjs` supplies the input through a pipe (not a terminal) and
  * checks what comes back, so the case needs no interactive terminal.
  */
-module main
 
 import { set_terminal_raw_mode, has_input, get_char, get_chars } from io
 
 func main(): int sync {
     println(has_input())
-    let first = get_char()
+    let first = get_char() ?? ''
     let rest = get_chars(4)
-    set_terminal_raw_mode(false)
+    let _ = set_terminal_raw_mode(false)
     print(first)
     println(rest)
     return 0

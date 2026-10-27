@@ -26,7 +26,7 @@
 //     `match type` case (`typeCasePattern`); they are listed in the reserved table, not here;
 //   * `yield` was listed as a contextual keyword by, and the author corrected
 //     that: it
-//     is an ordinary keyword, in the Control row with `return` and `throw`. Its lexical half is not
+//     is an ordinary keyword, in the Control row with `return`. Its lexical half is not
 //     on develop (no `KwYield` in token_kinds.def).
 
 export const CONTEXT_KEYWORD_GROUPS = [
@@ -140,14 +140,49 @@ export const CONTEXT_KEYWORDS = [
         group: 'type',
         zh: '`match type` 的 `case` 模式里，命名结构体这种形状',
         en: 'in a `match type` case pattern: names the shape of a struct',
-        evidence: ['if (word == "struct" || word == "tuple") {'],
+        evidence: ['if (camel::parse::ast::typeCaseKindOfWord(word).has_value()) {'],
     },
     {
         word: 'tuple',
         group: 'type',
         zh: '`match type` 的 `case` 模式里，命名元组这种形状',
         en: 'in a `match type` case pattern: names the shape of a tuple',
-        evidence: ['if (word == "struct" || word == "tuple") {'],
+        evidence: ['if (camel::parse::ast::typeCaseKindOfWord(word).has_value()) {'],
+    },
+    {
+        word: 'array',
+        group: 'type',
+        zh: '`match type` 的 `case` 模式里，命名数组这种形状',
+        en: 'in a `match type` case pattern: names the shape of an array',
+        evidence: ['if (camel::parse::ast::typeCaseKindOfWord(word).has_value()) {'],
+    },
+    {
+        word: 'nullable',
+        group: 'type',
+        zh: '`match type` 的 `case` 模式里，命名 `T?` 这种形状',
+        en: 'in a `match type` case pattern: names the shape of a `T?`',
+        evidence: ['if (camel::parse::ast::typeCaseKindOfWord(word).has_value()) {'],
+    },
+    {
+        word: 'fallible',
+        group: 'type',
+        zh: '`match type` 的 `case` 模式里，命名 `T!` 这种形状',
+        en: 'in a `match type` case pattern: names the shape of a `T!`',
+        evidence: ['if (camel::parse::ast::typeCaseKindOfWord(word).has_value()) {'],
+    },
+    {
+        word: 'map',
+        group: 'type',
+        zh: '`match type` 的 `case` 模式里，命名映射这种形状',
+        en: 'in a `match type` case pattern: names the shape of a map',
+        evidence: ['if (camel::parse::ast::typeCaseKindOfWord(word).has_value()) {'],
+    },
+    {
+        word: 'set',
+        group: 'type',
+        zh: '`match type` 的 `case` 模式里，命名集合这种形状',
+        en: 'in a `match type` case pattern: names the shape of a set',
+        evidence: ['if (camel::parse::ast::typeCaseKindOfWord(word).has_value()) {'],
     },
     {
         word: 'leaf',

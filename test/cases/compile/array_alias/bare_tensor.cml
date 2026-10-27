@@ -4,7 +4,6 @@
 // signature that takes a tensor of any element type declares a type variable in its head
 // (`func count::<T>(t: T[..])`), whose call's argument fixes it. That positive spelling is
 // test/cases/loops/iterate_tensor.cml.
-module array_alias_bare_tensor
 
 import { ones } from tensor
 

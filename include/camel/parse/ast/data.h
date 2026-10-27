@@ -42,7 +42,8 @@ enum class DataType {
 };
 
 /// What a `match type` case selects (design principles 5.5, R3): the shape of a type
-/// (a structure, an ordinary tuple, a function, every leaf, or anything) or its identity
+/// (a structure, an ordinary tuple, a function, an array, a `T?`, a `T!`, a map, a set, every leaf,
+/// or anything) or its identity
 /// (`case int`, `case MyStruct`, `case T`).
 enum class TypeCaseKind : uint8_t {
     Struct   = 0,
@@ -50,7 +51,12 @@ enum class TypeCaseKind : uint8_t {
     Leaf     = 2,
     Wildcard = 3,
     Func     = 4,
-    Identity = 5
+    Identity = 5,
+    Array    = 6,
+    Nullable = 7,
+    Fallible = 8,
+    Map      = 9,
+    Set      = 10
 };
 
 std::string to_string(TypeCaseKind kind);
@@ -93,7 +99,6 @@ enum class BinaryDataOp {
 enum class ReservedDataOp {
     NullThen,
     ErrorThen,
-    NotNullThen,
     Access,
     Call,
     Bind,
@@ -175,8 +180,14 @@ class ReservedExprLoad : public DataLoad {
         return positionalAfterNamed_;
     }
 
+    /// A call written with the pipe `x -> f` (design principles 3.9): when `x` is a `T?` or a `T!`
+    /// that no overload of `f` takes as it is, the call takes the value out of it.
+    void setPipe(bool pipe) { pipe_ = pipe; }
+    bool pipe() const { return pipe_; }
+
   private:
     ReservedDataOp op_;
+    bool pipe_                                       = false;
     camel::source::origin_id_t positionalAfterNamed_ = camel::source::kInvalidOriginId;
 };
 

@@ -4,6 +4,7 @@
 #pragma once
 
 #include "camel/core/context/context.h"
+#include "camel/core/slot.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/program.h"
 
@@ -28,12 +29,29 @@ class GraphIRPass {
     virtual const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) = 0;
 
+    // A pass is `(f: F) => F!` (design principles 9.1): it can fail, and its failure is an error
+    // value, not a diagnostic. A pass that cannot produce the program calls failWithErrorValue
+    // with the value camel::core::rtdata::makeError made and returns nullptr; the pipeline stops
+    // at that pass, and the error is reported the way an error value nobody handled is (3.9): on
+    // standard error, with a non-zero exit code. A failure that is already decided while compiling
+    // is still a diagnostic (the comment a pass writes about itself): only what the pass finds out
+    // when it runs belongs here.
+    void failWithErrorValue(slot_t error) { errorValue_ = error; }
+    bool hasErrorValue() const { return errorValue_ != NullSlot; }
+    slot_t errorValue() const { return errorValue_; }
+
     // A pass that reads or rewrites graphs with several writings (writings.h). The pass driver
     // extracts one writing per value before a pass that consumes the program (a back end, an
     // exporter), and refuses the others; a pass that declares it reads the state is given the
     // program with its equivalences instead, whether it consumes it (the dumps: `std::gir`,
     // `std::rgir`, `std::jgir` draw the classes) or rewrites it (the rules library).
     virtual bool acceptsWritings() const { return false; }
+
+  private:
+    /// The error value this pass ended with, or NullSlot when it did not fail (failWithErrorValue).
+    /// The driver reads it in the same safepoint window as `apply`, so a value the pass made is
+    /// still live when it is reported.
+    slot_t errorValue_ = NullSlot;
 };
 
 class NullGraphIRPass : public GraphIRPass {
@@ -61,14 +79,29 @@ enum class PassApplyStatus {
     Transformed,
     Consumed,
     Failed,
+    /// A pass ended with an error value (`(f: F) => F!`, design principles 9.1). The pipeline
+    /// stopped at that pass; the run reports the value with `reportPassErrorValue`
+    /// (camel/execute/entry_args.h), the way an error value nobody handled is reported (3.9). A
+    /// driver must not report it a second time, and must not run the passes after it.
+    Errored,
 };
 
 struct PassApplyResult {
     const camel::runtime::Program *program = nullptr;
     PassApplyStatus status{PassApplyStatus::Transformed};
+    /// The error value the pass ended with, when the status is `Errored` and NullSlot otherwise.
+    /// The run reports it with `reportPassErrorValue` (camel/execute/entry_args.h) before the next
+    /// safepoint: nothing roots the value but the frame the pass made it in.
+    slot_t errorValue = NullSlot;
 
-    bool failed() const { return status == PassApplyStatus::Failed; }
+    /// The pass list did not finish: nothing after the pass that stopped it runs, the fallback
+    /// list included.
+    bool failed() const {
+        return status == PassApplyStatus::Failed || status == PassApplyStatus::Errored;
+    }
     bool consumed() const { return status == PassApplyStatus::Consumed; }
+    /// The pass ended with an error value, which the driver has already reported.
+    bool errored() const { return status == PassApplyStatus::Errored; }
 };
 
 /**
@@ -139,6 +172,10 @@ std::vector<camel::core::error::Diagnostic> tagsNeverReadWarnings(
  *
  * Return value contract:
  * - `PassApplyStatus::Failed`: pass execution failed; caller should inspect `ctx->rtmDiags()`
+ * - `PassApplyStatus::Errored`: a pass ended with an error value (`(f: F) => F!`, design
+ *   principles 9.1) and the pipeline stopped there; the caller reports it with
+ *   `reportPassErrorValue` (camel/execute/entry_args.h). `failed()` is true for this too, so a
+ *   caller that only asks whether the list finished still stops.
  * - `PassApplyStatus::Consumed`: execution/scheduling finished successfully and consumed the graph
  * - non-null graph: pass transformed the graph and left it for later passes
  */
@@ -164,7 +201,10 @@ struct PassRunResult {
 /// importing the module that contributes a `<module>::<pass>` name. This is the same resolution
 /// and stage handling the pipeline uses, without the pipeline's own bookkeeping: a rewrite pass
 /// that itself names another pass uses it. Returns {nullptr, true} when the pass failed (the
-/// diagnostics say why).
+/// diagnostics say why). A pass that ends with an error value (design principles 9.1) hands it to
+/// `caller`, the pass that named it, which then ends with the same value: the error is reported
+/// once, by the driver, and is not lost with the inner pass.
 PassRunResult applyRegisteredPass(
     const camel::runtime::Program *program, const std::string &spec,
-    const camel::core::context::context_ptr_t &ctx, std::ostream &os);
+    const camel::core::context::context_ptr_t &ctx, std::ostream &os,
+    GraphIRPass *caller = nullptr);

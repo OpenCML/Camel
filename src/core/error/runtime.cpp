@@ -95,9 +95,10 @@ std::string defaultModuleName(const ExecutionSite &site, const std::string &sour
 RuntimeFault::RuntimeFault(
     RuntimeDiag diag, std::vector<std::string> formatArgs, std::string detail,
     std::exception_ptr cause, ExecutionSiteHint hint, RuntimeFaultPolicy policy,
-    std::vector<CarriedReport> carried)
-    : diag_(diag), formatArgs_(std::move(formatArgs)), detail_(std::move(detail)), cause_(cause),
-      hint_(std::move(hint)), policy_(policy), carried_(std::move(carried)) {}
+    std::vector<CarriedReport> carried, std::string kind)
+    : diag_(diag), formatArgs_(std::move(formatArgs)), detail_(std::move(detail)),
+      kind_(std::move(kind)), cause_(cause), hint_(std::move(hint)), policy_(policy),
+      carried_(std::move(carried)) {}
 
 std::string runtimeDiagMessage(RuntimeDiag diag, const std::vector<std::string> &args) {
     return formatIndexedMessage(getDiagInfo(diag).message, args);
@@ -108,7 +109,7 @@ const char *RuntimeFault::what() const noexcept {
         return what_.c_str();
     }
     const auto info = getDiagInfo(diag_);
-    what_           = std::string(info.name);
+    what_           = kind_.empty() ? std::string(info.name) : kind_;
     if (!detail_.empty()) {
         what_ += ": " + detail_;
     }
@@ -145,7 +146,8 @@ RuntimeErrorReporter::describe(const RuntimeFault &fault, const ExecutionSite &s
     d.type          = diagTypeOf(fault.diag());
     d.specific      = extractSpecific(key);
     d.severity      = extractSeverity(key);
-    d.name          = std::string(to_string(d.type)) + "::" + info.name;
+    d.name          = std::string(to_string(d.type)) + "::" +
+             (fault.kind().empty() ? info.name : fault.kind());
     d.message       = formatIndexedMessage(info.message, fault.formatArgs());
     d.suggestion    = formatIndexedMessage(info.suggestion, fault.formatArgs());
     d.sourceContext = sink_ ? sink_->sourceContext() : nullptr;
@@ -249,6 +251,9 @@ bool isIsolatableFault(RuntimeDiag diag) {
     case RuntimeDiag::RuntimeError:
     case RuntimeDiag::DivisionByZero:
     case RuntimeDiag::IndexOutOfRange:
+    // `fail<'Kind'>(message)`: the program's own premise check, as isolatable as the faults of
+    // the operators it stands beside (design principles 3.9).
+    case RuntimeDiag::ProgramFault:
     case RuntimeDiag::SliceOutOfRange:
     case RuntimeDiag::ConversionOutOfRange:
     case RuntimeDiag::FieldNotFound:
@@ -261,7 +266,6 @@ bool isIsolatableFault(RuntimeDiag diag) {
     case RuntimeDiag::OperandTypeUnsupported:
     case RuntimeDiag::InvalidArgument:
     // A library operator that is not declared `T!` failed.
-    case RuntimeDiag::FileOpenFailed:
     case RuntimeDiag::FileSystemError:
     case RuntimeDiag::RegexInvalid:
     case RuntimeDiag::TimeFormatFailed:

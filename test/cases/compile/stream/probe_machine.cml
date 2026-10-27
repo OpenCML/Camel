@@ -1,0 +1,49 @@
+/**
+ * A probe, removed before the case set is finished: the shape the generator lowering emits for
+ * `count(3)`, written out by hand. It fixes the state in one struct (the resume point, the argument
+ * and the loop's own state), runs the body as segments each of which answers the state to carry on
+ * from together with the element it hands out, and builds the stream value as a step function over
+ * that state.
+ */
+
+/// The resume point and every value that lives across a `yield`.
+type CountState = { pc: int, n: int, i: int }
+
+/// The value a segment hands out: the element and the state its reader carries on from.
+func handed(x: int, s: CountState): (int, CountState)? {
+    return (x, s)
+}
+
+/// From the state, run segments until one hands out an element or the stream ends.
+func step(s: CountState): (int, CountState)? {
+    let nothing: (int, CountState)? = null
+    let (st, out) = loop st = s, out = nothing while st.pc >= 0 do match st.pc {
+        case 0 => ({ pc: 1, n: st.n, i: 0 }, nothing)
+        case 1 => if st.i < st.n
+            then ({ pc: 2, n: st.n, i: st.i }, nothing)
+            else ({ pc: -1, n: st.n, i: st.i }, nothing)
+        case 2 => ({ pc: -2, n: st.n, i: st.i }, handed(st.i, { pc: 3, n: st.n, i: st.i }))
+        case 3 => ({ pc: 1, n: st.n, i: st.i + 1 }, nothing)
+        case _ => ({ pc: -1, n: st.n, i: st.i }, nothing)
+    }
+    return out
+}
+
+/// The stream value: this state, and the step function that takes it to the next one.
+func pull(s: CountState): int.. {
+    return () => match step(s) {
+        case null => null
+        case p => (p.0, pull(p.1))
+    }
+}
+
+func count(n: int): int.. {
+    return pull({ pc: 0, n: n, i: 0 })
+}
+
+func main(): int sync {
+    let (sum, count) = loop acc = 0, seen = 0 for x in count(3) do (acc + x, seen + 1)
+    println(sum)
+    println(count)
+    return 0
+}

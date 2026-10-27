@@ -1,0 +1,11 @@
+/**
+ * The value `attempt(f)` keeps the parameters of `f`: it is called like any function value, and
+ * an argument of the wrong type is refused at that call.
+ */
+
+func risky(d: int): int { return 100 / d }
+
+func main(): int sync {
+    println(attempt(risky)('one') !! -1)
+    return 0
+}

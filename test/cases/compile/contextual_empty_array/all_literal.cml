@@ -1,7 +1,6 @@
 // The all-literal spellings of the same positions keep compiling, and says what they print: the
 // empty array takes the element type of the field it stands in, and a literal that has elements
 // keeps the join of them (design principles 5.1). This is the case the fix must not disturb.
-module contextual_empty_array_all_literal
 
 type Tree = { value: int, children: Tree[] }
 type Move = { value: int, moves: int[], children: Move[] }

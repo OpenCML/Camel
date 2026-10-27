@@ -2,7 +2,6 @@
  * Helper module: exports generic functions. Their instances are built by the modules that
  * call them; the names their bodies use are resolved here.
  */
-module export_lib
 
 import { sqrt } from math
 
@@ -22,7 +21,7 @@ export func inc(x: int): int {
 }
 
 export func rev::<T>(xs: T[]): T[] {
-    return if len(xs) <= 1 then keep(xs) else concat(rev(tail(xs)), [head(xs)])
+    return if len(xs) <= 1 then keep(xs) else concat(rev(xs[1:]), [xs[0]])
 }
 
 export func plus_helper::<T>(xs: T[]): int {
@@ -30,7 +29,7 @@ export func plus_helper::<T>(xs: T[]): int {
 }
 
 export func root_len::<T>(xs: T[]): float {
-    return sqrt(len(xs) as float)
+    return sqrt(float(len(xs)))
 }
 
 export func biased::<T>(x: T): int {

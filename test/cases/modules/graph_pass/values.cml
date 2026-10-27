@@ -3,8 +3,6 @@
 // computed before the pass runs, as a program computes its top-level values before `main`
 // (design principles 10.1): the pass runs as the entry of a program of its own, not as a
 // function graph encoded alone (task).
-module values
-import { Program } from graph
 
 let two = 2
 let four = two + two
@@ -18,7 +16,7 @@ func scaled(x: int): int {
     return x * two
 }
 
-export func show(p: Program): Program! sync {
+export func show::<F>(p: F): F! sync {
     println(two, four, computed, total)
     println(scaled(3))
     return p

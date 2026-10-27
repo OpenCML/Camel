@@ -11,6 +11,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/execute/executor.h"
 #include "camel/utils/type.h"
+#include "camel/core/rtdata/bytes.h"
 #include "camel/utils/utf8.h"
 #include "ops.h"
 #include <format>
@@ -101,33 +102,6 @@ slot_t __zip__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return rtdata::toSlot(result);
 }
 
-slot_t __head_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *arr = norm.get<Array *>(0);
-    if (!arr || arr->size() == 0) {
-        // An empty array has no first element: the same fault as `xs[0]`. It used to return
-        // a zero slot (0, 0.0, or a null object the caller then read as a value).
-        throwRuntimeFault(RuntimeDiag::IndexOutOfRange, Int64{0}, "an array", size_t{0});
-    }
-    return arr->get<slot_t>(0);
-}
-
-slot_t __tail_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *arr    = norm.get<Array *>(0);
-    auto *arrType = tt::as_ptr<ArrayType>(norm.type(0));
-
-    size_t n = arr->size();
-    if (n <= 1) {
-        Array *empty = Array::create(mm::autoSpace(), arrType, 0);
-        return rtdata::toSlot(empty);
-    }
-
-    Array *res = Array::create(mm::autoSpace(), arrType, n - 1);
-    for (size_t i = 1; i < n; ++i) {
-        res->set<slot_t>(i - 1, arr->get<slot_t>(i), arrType);
-    }
-    return toSlot(res);
-}
-
 slot_t __range__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Int64 start = norm.get<Int64>(0);
     Int64 stop  = norm.get<Int64>(1);
@@ -160,34 +134,6 @@ slot_t __range__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return rtdata::toSlot(result);
 }
 
-slot_t __slice_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *arr    = norm.get<Array *>(0);
-    auto *arrType = tt::as_ptr<ArrayType>(norm.type(0));
-    Int64 start   = with.get<Int64>(0);
-    Int64 end     = with.get<Int64>(1);
-
-    // A bound outside the array is a fault, as an index out of range is (design principles
-    // 3.9): a bound is a position from 0 to the length, the end one past the last element
-    // taken. It used to be cut to the array, and a negative bound counted from the end.
-    // `take` and `drop` of the `array` module are the operations that cut by definition.
-    const Int64 size = static_cast<Int64>(arr->size());
-    if (start < 0 || start > size || end < 0 || end > size) {
-        throwRuntimeFault(RuntimeDiag::SliceOutOfRange, start, end, "an array", arr->size());
-    }
-    // Both bounds inside the array and the end before the start is the empty range, not a
-    // fault (design principles 3.9): `xs->slice<2, 1>` is `[]`.
-    if (end < start)
-        end = start;
-
-    size_t newSize = static_cast<size_t>(end - start);
-    Array *res     = Array::create(mm::autoSpace(), arrType, newSize);
-
-    for (size_t i = 0; i < newSize; ++i)
-        res->set<slot_t>(i, arr->get<slot_t>(start + i), arrType);
-
-    return rtdata::toSlot(res);
-}
-
 namespace {
 
 // The positions a slice takes along the one axis it names. The bounds follow the rules of the
@@ -214,7 +160,9 @@ struct SliceRange {
     Int64 step  = 1; // the distance between two positions taken
 };
 
-SliceRange sliceRange(Int64 extent, Int64 startRaw, Int64 endRaw, Int64 step, Int64 written) {
+SliceRange sliceRange(
+    Int64 extent, Int64 startRaw, Int64 endRaw, Int64 step, Int64 written,
+    std::string_view what = "an array") {
     const bool wroteEnd   = (written & 1) != 0;
     const bool wroteStart = (written & 2) != 0;
     if (step == 0) {
@@ -227,7 +175,7 @@ SliceRange sliceRange(Int64 extent, Int64 startRaw, Int64 endRaw, Int64 step, In
         const Int64 end = wroteEnd ? endRaw : extent;
         if (range.start < 0 || range.start > extent || end < 0 || end > extent) {
             throwRuntimeFault(
-                RuntimeDiag::SliceOutOfRange, range.start, end, "an array", extent);
+                RuntimeDiag::SliceOutOfRange, range.start, end, what, extent);
         }
         range.count = range.start < end ? (end - range.start + step - 1) / step : 0;
         return range;
@@ -236,7 +184,7 @@ SliceRange sliceRange(Int64 extent, Int64 startRaw, Int64 endRaw, Int64 step, In
     const Int64 end = wroteEnd ? endRaw : -1;
     if ((wroteStart && (range.start < 0 || range.start >= extent)) ||
         (wroteEnd && (end < 0 || end > extent))) {
-        throwRuntimeFault(RuntimeDiag::SliceOutOfRange, range.start, end, "an array", extent);
+        throwRuntimeFault(RuntimeDiag::SliceOutOfRange, range.start, end, what, extent);
     }
     range.count = range.start > end ? (range.start - end + (-step) - 1) / (-step) : 0;
     return range;
@@ -276,6 +224,68 @@ Int64 parentIndexOfSlice(
             rest /= extent;
         }
         parent += (k == axis ? range.start + coord * range.step : coord) * parentStrides[k];
+    }
+    return parent;
+}
+
+/// The axis an index node names, read the way a slice's is (`sliceAxis`): the position it is,
+/// counting from the end when it is negative, `-1` being the last one, and a fault when the value
+/// does not have it. A subscript names the axis of every written dimension, and the one it leaves
+/// out is 0 -- the first dimension, which is what `t[i]` is (design principles 5.4).
+Int64 indexAxis(const Array *arr, Int64 axisArg) {
+    const auto rank  = static_cast<Int64>(arr->rank());
+    const Int64 axis = axisArg < 0 ? axisArg + rank : axisArg;
+    if (axis < 0 || axis >= rank) {
+        throwRuntimeFault(
+            RuntimeDiag::InvalidArgument,
+            "[]",
+            std::format("an index axis must be between 0 and {}, not {}", rank - 1, axisArg));
+    }
+    return axis;
+}
+
+/// How a fault names the dimension an index was read on: the first one is what a position on it
+/// has always been called, and a deeper one is named by its position. A rank-1 array is read
+/// whole, so its dimension is the array (the name its element read has).
+std::string indexDimensionName(size_t axis, size_t rank) {
+    if (rank <= 1) {
+        return "an array";
+    }
+    if (axis == 0) {
+        return "the first dimension of the input array";
+    }
+    return std::format("dimension {} of the input array", axis);
+}
+
+/// The flat index in the parent of the element at flat index `flat` of a subscript's result: the
+/// result's extents are the parent's with `axis` at the number of positions the subscript takes
+/// there, and `positions` are those positions. Every coordinate but the one on the axis is the
+/// coordinate the element has in the result, and the one on the axis is `positions[coord]`. The
+/// parent's row-major strides are computed from its own extents, so a parent whose element type is
+/// not pure data (a slot array) maps by the same arithmetic as a compact one. A position on an
+/// axis is the same arithmetic with one position, which is why the forward read and the two
+/// scatters of its gradient all read the axes here.
+Int64 parentIndexOfTake(
+    Int64 flat,
+    const std::vector<int64_t> &resultExtents,
+    const std::vector<int64_t> &parentStrides,
+    size_t axis,
+    std::span<const Int64> positions) {
+    Int64 rest   = flat;
+    Int64 parent = 0;
+    for (size_t k = resultExtents.size(); k-- > 0;) {
+        const Int64 extent = resultExtents[k];
+        const Int64 coord  = extent != 0 ? rest % extent : 0;
+        if (extent != 0) {
+            rest /= extent;
+        }
+        const Int64 at = k == axis ? positions[static_cast<size_t>(coord)] : coord;
+        // The extents the caller passes have the parent's own rank -- the axis' length is the
+        // number of positions the subscript takes there, one for a position -- so a coordinate
+        // names a dimension of the parent itself and maps with that dimension's stride. The
+        // dimensions after the axis need no shift: the coordinate is a position in the dimension,
+        // not an offset in a flat run.
+        parent += at * parentStrides[k];
     }
     return parent;
 }
@@ -381,6 +391,108 @@ slot_t __slice_sub__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return rtdata::toSlot(res);
 }
 
+// `s[a:b]`, `s[a:b:s]` and `slice(s, 0, a, b, s)` on a string: the same slice as an array's, over
+// the string's code points (design principles 5.4, 11.1), so `'中文字'[1:3]` is `'文字'`. A string
+// has one axis; naming another is the same fault an array of rank 1 gives.
+slot_t __slice_str__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    (void)with;
+    (void)ctx;
+    const std::string_view text = norm.get<String *>(0)->view();
+    const size_t words          = norm.size();
+    const Int64 axisArg         = norm.get<Int64>(1);
+    if (axisArg != 0) {
+        throwRuntimeFault(
+            RuntimeDiag::InvalidArgument,
+            "[]",
+            std::format("a slice axis must be between 0 and 0, not {}", axisArg));
+    }
+    const Int64 step    = words >= 5 ? norm.get<Int64>(4) : 1;
+    const Int64 written = words >= 6 ? norm.get<Int64>(5) : 3;
+    // The byte offset of every code point, and of the end: a slice takes code points by position.
+    std::vector<size_t> offsets;
+    offsets.reserve(text.size() + 1);
+    for (size_t at = 0; at < text.size();
+         at += camel::utf8::sequenceLength(static_cast<unsigned char>(text[at]))) {
+        offsets.push_back(at);
+    }
+    const auto count = static_cast<Int64>(offsets.size());
+    offsets.push_back(text.size());
+    const SliceRange range = sliceRange(
+        count, norm.get<Int64>(2), norm.get<Int64>(3), step, written, "a string");
+    std::string out;
+    if (range.step == 1) {
+        out.assign(
+            text.substr(
+                offsets[static_cast<size_t>(range.start)],
+                offsets[static_cast<size_t>(range.start + range.count)] -
+                    offsets[static_cast<size_t>(range.start)]));
+    } else {
+        for (Int64 k = 0; k < range.count; ++k) {
+            const auto at = static_cast<size_t>(range.start + k * range.step);
+            out.append(text.substr(offsets[at], offsets[at + 1] - offsets[at]));
+        }
+    }
+    return rtdata::toSlot(String::from(std::move(out), mm::autoSpace()));
+}
+
+// `len(b)` of a `Bytes`: the number of bytes.
+slot_t __len_bytes__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    (void)with;
+    (void)ctx;
+    return rtdata::toSlot(static_cast<Int64>(norm.get<BytesObject *>(0)->view().size()));
+}
+
+// `a == b` and `a != b` of two `Bytes`: the same bytes in the same order.
+slot_t __eq_bytes__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    (void)with;
+    (void)ctx;
+    return rtdata::toSlot(
+        norm.get<BytesObject *>(0)->view() == norm.get<BytesObject *>(1)->view());
+}
+
+slot_t __ne_bytes__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    (void)with;
+    (void)ctx;
+    return rtdata::toSlot(
+        norm.get<BytesObject *>(0)->view() != norm.get<BytesObject *>(1)->view());
+}
+
+// `a + b` of two `Bytes`: the bytes of a followed by those of b, as for two strings.
+slot_t __add_bytes__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    (void)with;
+    (void)ctx;
+    std::string out(norm.get<BytesObject *>(0)->view());
+    out.append(norm.get<BytesObject *>(1)->view());
+    return rtdata::toSlot(BytesObject::from(out, mm::autoSpace()));
+}
+
+// `b[a:b]`, `b[a:b:s]` and `slice(b, 0, a, b, s)` on a `Bytes`: the same slice as an array's of
+// rank 1, by byte, and a `Bytes` again.
+slot_t __slice_bytes__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    (void)with;
+    (void)ctx;
+    const std::string_view data = norm.get<BytesObject *>(0)->view();
+    const size_t words          = norm.size();
+    const Int64 axisArg         = norm.get<Int64>(1);
+    if (axisArg != 0) {
+        throwRuntimeFault(
+            RuntimeDiag::InvalidArgument,
+            "[]",
+            std::format("a slice axis must be between 0 and 0, not {}", axisArg));
+    }
+    const Int64 step       = words >= 5 ? norm.get<Int64>(4) : 1;
+    const Int64 written    = words >= 6 ? norm.get<Int64>(5) : 3;
+    const SliceRange range = sliceRange(
+        static_cast<Int64>(data.size()), norm.get<Int64>(2), norm.get<Int64>(3), step, written,
+        "a Bytes");
+    std::string out;
+    out.reserve(static_cast<size_t>(range.count));
+    for (Int64 k = 0; k < range.count; ++k) {
+        out.push_back(data[static_cast<size_t>(range.start + k * range.step)]);
+    }
+    return rtdata::toSlot(BytesObject::from(out, mm::autoSpace()));
+}
+
 namespace {
 
 /// The type a shape-changing result is built with: the declared result type when it states an
@@ -400,12 +512,72 @@ resultArrayType(Type *declared, const Array *values, std::span<const int64_t> ex
 
 } // namespace
 
-// `t[idx]` with `idx` an int array: the rows the indices name, in that order, along the first
-// dimension (the `take` of design principles 5.4). The result's shape is
-// `[len(idx)] + shape(t)[1:]` -- for a rank-1 array the row is the element -- and it is a copy:
-// an arbitrary row order shares no block with the array it was taken from. An index outside the
-// first dimension, negative included, is a fault with the index as written; a repeated index
-// repeats its row, and its gradient accumulates there (design principles 9.9).
+// `t[i]` on an array, along the axis the call names (design principles 5.4): the i-th position on
+// that dimension, with every other coordinate left as it is. The result is the value's type one
+// dimension fewer -- the element itself for a rank-1 array, and the whole row, or a deeper slab,
+// for a higher rank. `t[i]` is the first dimension's, which is the case a two-word call is;
+// `m[:, 0]` is the second dimension's. The elements along the first dimension are what the core
+// already hands a loop's round (`Array::firstDimensionElement`), a view of the row when the array
+// is compact; a deeper axis has no run of the block to share and is copied, which is the deviation
+// a slice of another axis records. The string, tuple and struct positions of the same operator are
+// read by its own dispatch (`__builtin__idx__`, src/builtin/operators/ops.cpp).
+slot_t __index_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    (void)with;
+    (void)ctx;
+    auto *const arr     = norm.get<Array *>(0);
+    const Int64 raw     = norm.get<Int64>(1);
+    const Int64 axisArg = norm.size() >= 3 ? norm.get<Int64>(2) : 0;
+    const Int64 axis    = indexAxis(arr, axisArg);
+    const auto at       = static_cast<size_t>(axis);
+    const Int64 extent  = arr->dim(at);
+    if (raw < 0 || raw >= extent) {
+        throwRuntimeFault(
+            RuntimeDiag::IndexOutOfRange,
+            raw,
+            indexDimensionName(at, arr->rank()),
+            static_cast<size_t>(extent));
+    }
+    if (arr->rank() <= 1) {
+        // A rank-1 array's position is the element itself, which is the slot the array holds.
+        return arr->getSlot(static_cast<uint64_t>(raw));
+    }
+    if (at == 0) {
+        // The first dimension's position is the row the core hands a loop's round
+        // (`Array::firstDimensionElement`), a view of the row when the array is compact -- unless
+        // the type says the read is the element itself, which is how an open-rank value (`f32[..]`)
+        // is read as the numbers it holds: that one takes the slot, the element read the value's
+        // own type states (design principles 5.4).
+        const Type *const result = norm.resultType();
+        if (result != nullptr && result->code() != TypeCode::Array) {
+            return arr->getSlot(static_cast<uint64_t>(raw));
+        }
+        return arr->firstDimensionElement(static_cast<uint64_t>(raw));
+    }
+    // The result is the value's type with that dimension dropped: every other coordinate is the
+    // one it had, so the elements are gathered by the parent's own strides.
+    std::vector<int64_t> extents = arr->shapeVector();
+    extents.erase(extents.begin() + static_cast<std::ptrdiff_t>(at));
+    std::vector<int64_t> taken = arr->shapeVector();
+    taken[at]                  = 1; // the position is one position on that dimension
+    auto *const resType        = resultArrayType(norm.resultType(), arr, extents);
+    Array *res                 = Array::create(mm::autoSpace(), resType, extents);
+    const std::vector<int64_t> strides = rowMajorStrides(arr->shapeVector());
+    const std::vector<Int64> positions{raw};
+    const uint64_t count = res->numel();
+    for (uint64_t i = 0; i < count; ++i) {
+        const Int64 src = parentIndexOfTake(static_cast<Int64>(i), taken, strides, at, positions);
+        res->setSlot(i, arr->getSlot(static_cast<uint64_t>(src)), resType);
+    }
+    return rtdata::toSlot(res);
+}
+
+// `t[idx]` with `idx` an int array: the positions the indices name, in that order, along the
+// dimension the third word names -- 0, the first dimension, when the call writes no third word
+// (the `take` of design principles 5.4). The result keeps the value's rank: its length on that
+// dimension is the number of indices and every other dimension keeps its own. It is a copy: an
+// arbitrary order of positions shares no block with the array they were taken from. An index
+// outside that dimension, negative included, is a fault with the index as written; a repeated
+// index repeats its position, and its gradient accumulates there (design principles 9.9).
 slot_t __idx_take_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)with;
     (void)ctx;
@@ -413,40 +585,41 @@ slot_t __idx_take_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     auto *const idx   = norm.get<Array *>(1);
     const size_t rank = arr->rank();
     if (rank < 1) {
-        // A rank-0 array has no first dimension to take a row from. The type system states a
-        // rank of at least one for this operator, so this is a defect rather than something a
-        // program writes.
+        // A rank-0 array has no dimension to take a position from. The type system states a rank
+        // of at least one for this operator, so this is a defect rather than something a program
+        // writes.
         throwRuntimeFault(
             RuntimeDiag::InvalidArgument, "[]", "a subscript of an array of rank 0");
     }
-    const uint64_t rows    = static_cast<uint64_t>(arr->dim(0));
-    const uint64_t rowSize = rows == 0 ? 0 : arr->numel() / rows;
-    const size_t take      = static_cast<size_t>(idx->numel());
-    std::vector<int64_t> extents;
-    extents.reserve(rank);
-    extents.push_back(static_cast<int64_t>(take));
-    for (size_t i = 1; i < rank; ++i) {
-        extents.push_back(arr->dim(i));
-    }
-    auto *const resType = resultArrayType(norm.resultType(), arr, extents);
-    Array *res          = Array::create(mm::autoSpace(), resType, extents);
+    const Int64 axisArg = norm.size() >= 3 ? norm.get<Int64>(2) : 0;
+    const Int64 axis    = indexAxis(arr, axisArg);
+    const auto at       = static_cast<size_t>(axis);
+    const Int64 extent  = arr->dim(at);
+    const size_t take   = static_cast<size_t>(idx->numel());
+    std::vector<Int64> positions(take);
     for (size_t k = 0; k < take; ++k) {
         const Int64 raw = idx->get<Int64>(k);
-        if (raw < 0 || static_cast<uint64_t>(raw) >= rows) {
+        if (raw < 0 || raw >= extent) {
             // A rank-1 array is read whole, so the length is the array's; a deeper one is read
-            // one row at a time, and the length the index must stay under is the first
+            // one position at a time, and the length the index must stay under is that
             // dimension's.
             throwRuntimeFault(
                 RuntimeDiag::IndexOutOfRange,
                 raw,
-                rank == 1 ? "an array" : "the first dimension of the input array",
-                rows);
+                indexDimensionName(at, rank),
+                static_cast<size_t>(extent));
         }
-        const uint64_t src = static_cast<uint64_t>(raw) * rowSize;
-        for (uint64_t j = 0; j < rowSize; ++j) {
-            res->setSlot(
-                static_cast<uint64_t>(k) * rowSize + j, arr->getSlot(src + j), resType);
-        }
+        positions[k] = raw;
+    }
+    std::vector<int64_t> extents = arr->shapeVector();
+    extents[at]                  = static_cast<int64_t>(take);
+    auto *const resType = resultArrayType(norm.resultType(), arr, extents);
+    Array *res          = Array::create(mm::autoSpace(), resType, extents);
+    const std::vector<int64_t> strides = rowMajorStrides(arr->shapeVector());
+    const uint64_t count               = res->numel();
+    for (uint64_t i = 0; i < count; ++i) {
+        const Int64 src = parentIndexOfTake(static_cast<Int64>(i), extents, strides, at, positions);
+        res->setSlot(i, arr->getSlot(static_cast<uint64_t>(src)), resType);
     }
     return rtdata::toSlot(res);
 }
@@ -538,19 +711,6 @@ slot_t __append_owned_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 // someone else holds) it copies exactly like `append`; the result is the same either way.
 slot_t __append_in_place_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return __append_owned_arr__(with, norm, ctx);
-}
-
-// `xs->extend<ys>`: a new array, the elements of xs and then those of ys. xs is unchanged.
-slot_t __extend_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    const Array *arr  = norm.get<Array *>(0);
-    const Array *more = with.get<Array *>(0);
-    auto *arrType     = tt::as_ptr<ArrayType>(norm.type(0));
-    const size_t n2   = more->size();
-    Array *res        = copyWithRoom(arr, n2, arrType);
-    for (size_t i = 0; i < n2; ++i) {
-        res->append(more->get<slot_t>(i), arrType);
-    }
-    return rtdata::toSlot(res);
 }
 
 slot_t __contains_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
@@ -908,84 +1068,132 @@ slot_t __tangent_zeros_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return rtdata::toSlot(zero);
 }
 
-// `tangent/scatter_add_arr(dx, i, dy)`: `dx` with `dy` added at index `i`. The reverse of
-// `xs[i]`: the gradient of one element goes back to its place in the array's gradient.
+// `tangent/scatter_add_arr(dx, i, dy[, axis])`: `dx` with `dy` added at the position `i` along
+// `axis`, which is the call's fourth word and 0 -- the first dimension -- when the call writes no
+// fourth word. The reverse of `t[i]` (design principles 5.4, 9.9): the gradient of what a position
+// took goes back to that position in the array's gradient. What a position takes is the element it
+// names for a rank-1 array -- one slot, the case a three-word call is -- and the whole slab along
+// the axis for a higher rank, which is the row of a rank-2 array. `dx` is the zero tangent of the
+// array the subscript read: its shape is the array's, its elements give the zeros, so every
+// position the subscript did not take keeps the zero it holds.
 slot_t __tangent_scatter_add_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)with;
-    auto *arrayType   = tt::as_ptr<ArrayType>(norm.type(0));
-    auto *base        = norm.get<Array *>(0);
-    const Int64 index = norm.get<Int64>(1);
-    const slot_t delta = norm.slot(2);
-    if (index < 0 || static_cast<size_t>(index) >= base->size()) {
-        throwRuntimeFault(RuntimeDiag::IndexOutOfRange, index, "an array", base->size());
+    auto *arrayType     = tt::as_ptr<ArrayType>(norm.type(0));
+    auto *base          = norm.get<Array *>(0);
+    const Int64 index   = norm.get<Int64>(1);
+    const Int64 axisArg = norm.size() >= 4 ? norm.get<Int64>(3) : 0;
+    const Int64 axis    = indexAxis(base, axisArg);
+    const auto at       = static_cast<size_t>(axis);
+    const Int64 extent  = base->dim(at);
+    if (index < 0 || index >= extent) {
+        throwRuntimeFault(
+            RuntimeDiag::IndexOutOfRange,
+            index,
+            indexDimensionName(at, base->rank()),
+            static_cast<size_t>(extent));
     }
     // The gradient carries the element type of the array it is the gradient of: an array created
     // without its type holds bare slots, and the next operator to read it finds no element type
     // at all (the `sum: Unsupported Tensor dtype` of the flip line).
-    Array *result = Array::create(mm::autoSpace(), arrayType, base->size());
-    for (size_t i = 0; i < base->size(); ++i) {
-        result->set<slot_t>(i, base->get<slot_t>(i), arrayType);
+    Array *result = Array::create(mm::autoSpace(), arrayType, base->shapeSpan());
+    for (uint64_t i = 0; i < base->numel(); ++i) {
+        result->setSlot(i, base->getSlot(i), arrayType);
     }
-    const size_t at = static_cast<size_t>(index);
-    result->set<slot_t>(
-        at, addTangent(ctx, arrayType->elemType(), base->get<slot_t>(at), delta), arrayType);
+    if (base->rank() <= 1) {
+        // A rank-1 array's position is the element itself, so the gradient of the position is one
+        // slot (which is the element's own tangent, an array for an array of arrays).
+        const auto slot = static_cast<uint64_t>(index);
+        result->setSlot(
+            slot, addTangent(ctx, arrayType->elemType(), base->getSlot(slot), norm.slot(2)), arrayType);
+        return rtdata::toSlot(result);
+    }
+    // A position on a deeper dimension takes the slab along it (a row, for a rank-2 array), so the
+    // gradient of that slab goes back to the positions the slab holds, one element at a time.
+    auto *const delta = norm.get<Array *>(2);
+    std::vector<int64_t> taken = base->shapeVector();
+    taken[at]                  = 1; // the position is one position on that dimension
+    if (delta->numel() != numelOf(taken)) {
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            std::format(
+                "autodiff: the gradient of a position on one dimension has {} elements, the "
+                "position takes {}",
+                delta->numel(),
+                numelOf(taken)));
+    }
+    const std::vector<int64_t> strides = rowMajorStrides(base->shapeVector());
+    const std::vector<Int64> positions{index};
+    for (uint64_t i = 0; i < delta->numel(); ++i) {
+        const auto dst = static_cast<uint64_t>(
+            parentIndexOfTake(static_cast<Int64>(i), taken, strides, at, positions));
+        result->setSlot(
+            dst,
+            addTangent(
+                ctx, arrayType->elemType(), result->getSlot(dst), delta->getSlot(i)),
+            arrayType);
+    }
     return rtdata::toSlot(result);
 }
 
-// `tangent/scatter_take_arr(base, indices, delta)`: `base` with `delta`'s rows added back into
-// the rows the indices name, a repeated index accumulating. The reverse of `t[idx]`, which takes
-// whole rows along the first dimension (design principles 5.4, 9.9): the gradient of the rows a
-// gather took goes back to the rows it took them from, and every other row of `base` keeps the
-// zero tangent it holds. `base` is the zero tangent of the array the subscript was taken from:
-// its shape is the array's, its elements give the zeros. The indices are discrete, so nothing
-// reaches them.
+// `tangent/scatter_take_arr(base, indices, delta[, axis])`: `base` with `delta`'s elements added
+// back at the positions the indices name along `axis`, a repeated index accumulating, and 0 -- the
+// first dimension -- when the call writes no fourth word. The reverse of `t[idx]`, which takes
+// whole slabs along that dimension (design principles 5.4, 9.9): the gradient of the slabs a take
+// gathered goes back to where it gathered them, and every other position of `base` keeps the zero
+// tangent it holds. `base` is the zero tangent of the array the subscript was taken from: its
+// shape is the array's, its elements give the zeros. The indices are discrete, so nothing reaches
+// them.
 slot_t __tangent_scatter_take_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)with;
     auto *arrayType   = tt::as_ptr<ArrayType>(norm.type(0));
     auto *base        = norm.get<Array *>(0);
     auto *indices     = norm.get<Array *>(1);
     auto *delta       = norm.get<Array *>(2);
+    const Int64 axisArg = norm.size() >= 4 ? norm.get<Int64>(3) : 0;
     if (base->rank() < 1) {
         throwRuntimeFault(
             RuntimeDiag::RuntimeError,
-            "autodiff: the gradient of a row take needs an array of rank at least one");
+            "autodiff: the gradient of a take needs an array of rank at least one");
     }
-    const uint64_t rows    = static_cast<uint64_t>(base->dim(0));
-    const uint64_t rowSize = rows == 0 ? 0 : base->numel() / rows;
-    const size_t take      = static_cast<size_t>(indices->numel());
-    if (delta->numel() != static_cast<uint64_t>(take) * rowSize) {
+    const Int64 axis   = indexAxis(base, axisArg);
+    const auto at      = static_cast<size_t>(axis);
+    const Int64 extent = base->dim(at);
+    const size_t take  = static_cast<size_t>(indices->numel());
+    std::vector<int64_t> taken = base->shapeVector();
+    taken[at]                  = static_cast<int64_t>(take);
+    if (delta->numel() != numelOf(taken)) {
         throwRuntimeFault(
             RuntimeDiag::RuntimeError,
             std::format(
-                "autodiff: the gradient of a row take has {} elements, the take result has {}",
+                "autodiff: the gradient of a take has {} elements, the take result has {}",
                 delta->numel(),
-                static_cast<uint64_t>(take) * rowSize));
+                numelOf(taken)));
     }
     Array *result = Array::create(mm::autoSpace(), arrayType, base->shapeSpan());
     for (uint64_t i = 0; i < base->numel(); ++i) {
         result->setSlot(i, base->getSlot(i), arrayType);
     }
+    const std::vector<int64_t> strides = rowMajorStrides(base->shapeVector());
+    std::vector<Int64> positions(take);
     for (size_t k = 0; k < take; ++k) {
-        const Int64 row = indices->get<Int64>(k);
-        if (row < 0 || static_cast<uint64_t>(row) >= rows) {
+        const Int64 raw = indices->get<Int64>(k);
+        if (raw < 0 || raw >= extent) {
             throwRuntimeFault(
                 RuntimeDiag::IndexOutOfRange,
-                row,
-                base->rank() == 1 ? "an array" : "the first dimension of the input array",
-                rows);
+                raw,
+                indexDimensionName(at, base->rank()),
+                static_cast<size_t>(extent));
         }
-        const uint64_t dst = static_cast<uint64_t>(row) * rowSize;
-        const uint64_t src = static_cast<uint64_t>(k) * rowSize;
-        for (uint64_t j = 0; j < rowSize; ++j) {
-            result->setSlot(
-                dst + j,
-                addTangent(
-                    ctx,
-                    arrayType->elemType(),
-                    result->getSlot(dst + j),
-                    delta->getSlot(src + j)),
-                arrayType);
-        }
+        positions[k] = raw;
+    }
+    for (uint64_t i = 0; i < delta->numel(); ++i) {
+        const auto dst = static_cast<uint64_t>(
+            parentIndexOfTake(static_cast<Int64>(i), taken, strides, at, positions));
+        result->setSlot(
+            dst,
+            addTangent(
+                ctx, arrayType->elemType(), result->getSlot(dst), delta->getSlot(i)),
+            arrayType);
     }
     return rtdata::toSlot(result);
 }

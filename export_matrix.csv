@@ -1,6 +1,7 @@
 operator,forward_lowering_min_opset,gradient_lowering_min_opset
 :op/and,1,
 :op/idx_arr,1,
+:op/idx_take,1,
 :op/not,1,
 :op/or,1,
 :op/slice_sub,10,
@@ -33,7 +34,6 @@ tensor:abs,1,
 tensor:add,1,
 tensor:argmax_axis,12,
 tensor:broadcast_like,,8
-tensor:cast,1,
 tensor:cast_like,,1
 tensor:concat,1,
 tensor:dim,1,

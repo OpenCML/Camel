@@ -50,17 +50,17 @@ Names that can be used without an import (global built-ins): `print`, `println`,
 | Module | Contents |
 |---|---|
 | `str` | Strings: by byte, splitting, trimming, case conversion, replacing, searching, taking substrings; by code point, counting, reading, encoding and decoding |
-| `array` | Arrays: `sort`, `merge_sort`, `quick_sort`, `insert_sort`, `merge_sorted_arrays`, `argsort`, `reverse`, `take`, `drop`, `unique`, `find`, `sum`, `min`, `max`, `sort_by`, `flat_map` and others (mostly generic functions written in Camel; the sorting kernels are native operators) |
+| `array` | Arrays: `sort`, `argsort`, `reverse`, `take`, `drop`, `chunks`, `unique`, `find`, `find_index`, `sum`, `mean`, `min`, `max`, `argmax`, `argmin`, `sort_by`, `flat_map` and others (mostly generic functions written in Camel; the native parts are `argsort`, the shape and layout atoms, and the kernels of the sort, the sum and the extremes) |
 | `math` | The constants `pi`, `e`, `inf`, `nan` (values); elementary functions, rounding, `min`/`max`/`clamp`, `gcd`/`lcm`, base conversion, bit operations such as `bit_and` |
-| `random` | The type `Key`; `seed`, `rand`, `randint`, `randn`, `choice`, `sample`, `shuffle`, and the pure keyed `key`, `split`, `permutation` |
+| `random` | The type `Key`; the pure keyed draws `key`, `fold`, `split`, `uniform`, `normal`, `uniform`, `normal`, `randint`, `permutation`, `shuffle`, `choice`, `sample` (the key is data or configuration: `k->randint<1, 7>`, `xs->shuffle<k>`); the global stream `seed`, `next_key` (the resource `rng`) and the conveniences `rand`, `randn` |
 | `time` | `now`, `strftime`, `strptime` |
-| `fs` | `exists`, `is_file`, `is_dir`, `mkdir`, `mkdirs`, `remove`, `remove_dir`, `read_text`, `try_read_text`, `write_text`, `file_size`, `read_chunk`, `read_bytes`, `write_bytes`, `replace` |
+| `fs` | `exists`, `is_file`, `is_dir`, `mkdir`, `mkdirs`, `remove`, `remove_dir`, `list_dir`, `read_text`, `write_text`, `append_text`, `file_size`, `read_chunk`, `read_bytes`, `write_bytes`, `append_bytes` |
 | `json` | the type `Json`; `encode`, `decode`, `decode_as`; `kind`, `is_null`, `get`, `as_bool`, `as_int`, `as_float`, `as_string`, `as_array`, `as_object` |
-| `process`, `env` | `whoami`, `cpu_count`, terminal input; `get_cwd`, `get_env` |
+| `process`, `env` | `user_name`, `cpu_count`, terminal input; `get_cwd`, `get_env` |
 | `re` | `test` |
-| `hash` | `sha256`, `sha256_rounds` |
+| `hash` | `sha256` |
 | `this` | `zen` |
-| `statistics` | `mean`, `stdev`, `variance`, `median`, `quantile` |
+| `statistics` | `stdev`, `variance`, `median`, `quantile` (`mean` is in `array`); the elements are a float type and the answer is that type; too few elements is an `InvalidArgument` fault |
 | `para` | `unordered_foreach`, `unordered_reduce` |
 | `tensor`, `nn`, `autodiff`, `onnx` | Tensors, network layers and optimisers, gradients, ONNX export; the row gather `take`, `one_hot`, and `softmax_cross_entropy` overloaded on the target's type (one-hot rows or integer class labels) |
 | `python` | Embedded Python (must be enabled at build time) |
@@ -73,7 +73,6 @@ By default the names in a module are visible only inside the module. `export` ma
 
 ```cml
 // shapes.cml
-module shapes
 
 import { sqrt } from math
 
@@ -113,7 +112,6 @@ func main(): int sync {
 
 ```cml
 // counter.cml
-module counter
 var cnt = 0
 let step = 2
 export func bump(): int sync { cnt += step; return cnt }
@@ -141,7 +139,6 @@ All modules of a program are built into one `__root__` graph: each value of the 
 
 ```cml
 // geometry.cml
-module geometry
 export let pi = 3.14159
 export let tau = pi * 2.0
 ```
@@ -163,7 +160,11 @@ func main(): int sync {
 
 An exported value is that very node of the common `__root__` graph: the importing module uses it directly at its top level and through a capture port in its functions; it is neither copied nor evaluated again. An exported value that nothing uses is not evaluated (an effect in its initializer does not run, and in an imported module this gives no warning).
 
-- **A `var` cannot be exported**: `export var count = 0` is `SemanticDiag::ExportedVariable`, located at the variable. Export the functions that read and write it (`counter` above).
+- **A `var` at the top level of a module is a resource of that module** (design principles 3.5): the resource is named by the variable, and its identity is the module plus the name, like a `resource` declaration. `export var count = 0` exports the resource; an importing module reads it and assigns it, and it is the same variable.
+  - A function that reads it is recorded as reading the resource, and one that writes it (path assignments `v[i] = x` included) as writing it. The compiler infers this, and `uses` can name it (`func bump(): int uses count sync`). A function that reads or writes it is not pure: a `pure` function that reads it is `SemanticDiag::UsesPromiseViolated`, its type carries `uses module::count`, and a `pure` parameter does not accept it.
+  - Reads and writes are effects: in a sync block they happen in written order; in a function body that is not a sync block, a write that stands as a statement and whose value nobody uses does not run.
+  - The initial value is evaluated by dependency before the first read, like a top-level `let`.
+  - In a function being differentiated, a gradient that would have to pass through it is refused, as for any `var`.
 - Two imports by name that bring values of one name (or a value and a function) are `SemanticDiag::ImportNameConflict`; values are not overloaded.
 
 ## 5.4 Namespaces
@@ -193,7 +194,7 @@ func main(): int sync {
 
 - A namespace is not an object: it is a path in a name. An `f` declared in `namespace A { namespace B { ... } }` is `A::B::f`; one namespace can be written in several blocks.
 - **Unqualified names in a block**: a name written in a namespace is looked up in that namespace, then in the enclosing namespaces, then at the top level of the module, and the first one found is taken; types too (`namespace Models { type Box = ...; func mk(): Box }`).
-- **A namespace can hold values**: `namespace Config { export let limit = 10 }`, used as `Config::limit`. It differs from a top-level `let` only by the path in its name. A `var` can be written, not exported.
+- **A namespace can hold values**: `namespace Config { export let limit = 10 }`, used as `Config::limit`. It differs from a top-level `let` only by the path in its name. A `var` can be written, and exported: it is a resource of the module.
 - **A module can qualify its own names with its own name**: in `module shapes`, `shapes::area` is the same as `area` (also when the file name is the module name).
 - A namespace may share its name with a type, which makes `Type::name` the usual way to write the constructors and helpers of a type (an `enum`'s variants are exactly that: `Shape::Circle`, `Shape::Empty`).
 - A name exported inside a namespace keeps its qualified name: `namespace Tools { export func inc(...) }` is `module::Tools::inc` in other modules, and `import { inc } from module::Tools` imports it.
@@ -234,7 +235,7 @@ For the functions each module exports (signature, whether it is pure, behaviour 
   import { trim, split, to_upper } from str
   import { sort_by, take } from array
 
-  let words = '  pear, fig ,apple '->trim->split<','>->map<(w: string) => trim(w)>
+  let words = '  pear, fig ,apple '->trim->split<','>->map<(w) => trim(w)>
   let shortest = words->sort_by<(w: string) => len(w)>->take<2>     // ['fig', 'pear']
   ```
 

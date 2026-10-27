@@ -1,0 +1,20 @@
+id = "compile.struct_entry"
+order = 938
+tier = "fast"
+tags = ["feat", "compile", "struct", "tensor"]
+desc = "A struct whose fields are tensors enters a parameter or a declared type whose fields write the open shape"
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "struct_entry.concrete_into_open"
+desc = "A struct built from `f32[784, 10]` and `f32[10]` values enters a named struct type and an inline struct type whose fields are `f32[..]`, as an argument, as a returned value and in a typed let."
+kind = "behavior"
+case = "../../../cases/compile/struct_entry/concrete_into_open.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "2.0 1.0 2.0\n2.0\n"

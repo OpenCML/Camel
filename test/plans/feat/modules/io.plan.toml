@@ -38,12 +38,12 @@ timeout_ms = 20000
 
 [[tests]]
 name = "raw_mode_needs_a_terminal"
-desc = "Turning raw mode off is a no-op that returns `void`; turning it on where stdin is not a terminal is a `RuntimeError` fault value at the call, not an exit."
+desc = "Turning raw mode off is a no-op that returns `void`; turning it on where stdin is not a terminal is a `NotATerminal` error value, not a fault and not an exit."
 kind = "behavior"
 case = "../../../cases/modules/io/raw_mode.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "ok\nRuntimeError\n"
+expect_stdout_exact = "ok\nNotATerminal\n"
 timeout_ms = 10000
 
 [[tests]]
@@ -80,7 +80,6 @@ const byUri = Object.fromEntries(ops.map((o) => [o.uri, o]))
 const resources = (uri) => byUri[uri] && byUri[uri].semantics && byUri[uri].semantics.resources
 assert(resources('io:set_terminal_raw_mode') === 'write ambient stdin; external', resources('io:set_terminal_raw_mode'))
 assert(resources('io:has_input') === 'read ambient stdin; external', resources('io:has_input'))
-assert(resources('io:get_char') === 'rmw ambient stdin; external', resources('io:get_char'))
 assert(resources('io:get_chars') === 'rmw ambient stdin; external', resources('io:get_chars'))
 assert(resources('io:clear_input_buffer') === 'rmw ambient stdin; external', resources('io:clear_input_buffer'))
 }

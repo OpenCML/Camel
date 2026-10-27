@@ -1,12 +1,11 @@
 /**
- * `x as bf16` is a dynamic cast between primitive types, which `as` refuses the same way it
- * refuses `x as i32` on a float that may not fit: the static type of x is `f32`, and not every
- * f32 is a bf16 (the conversion rounds). The written conversion `bf16(x)` is how a program asks
- * for that rounding, and it needs no numeric permission, because writing it is asking for that
- * precision (design principles 7.2-7.3,
- * which is where the written conversion is grounded). Widening the other way — `b as f32` — is a cast that loses nothing and is accepted.
+ * `x as bf16` is a cast between two numeric types, which `as` never does: it is the checked
+ * conversion of module types and shapes, and a number of another type is made by the conversion
+ * function of the target (design principles 5.1). `bf16(x)` is how a program asks for the
+ * rounding, and it needs no numeric permission, because writing it is asking for that precision
+ * (design principles 7.2-7.3, which is where the written conversion is grounded). Widening the
+ * other way, `b as f32`, is refused for the same reason; the conversion is `f32(b)`.
  */
-module stdlib_reduced_narrowing_as_refused
 
 func main(): int sync {
     let x: f32 = 0.1

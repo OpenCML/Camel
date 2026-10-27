@@ -411,7 +411,7 @@ std::string describeResources(
         }
     }
     for (const auto &use : signature.ambient) {
-        add(use.name);
+        add(camel::core::sem::resourceDisplayName(use.name));
     }
     for (camel::core::sem::ResourceClass cls : signature.anyOf) {
         add(std::format("any {}", camel::core::sem::resourceClassName(cls)));
@@ -439,6 +439,47 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
     if (uri.find(':') == std::string::npos) {
         diags_->of(SemanticDiag::InvalidOperatorURI).atOrigin(gct->origin()).commit(uri);
         throw BuildAbortException();
+    }
+    // The prelude's declaration file declares the built-in operators, whose rules the core
+    // computes: the declaration gives each rule it names the parameter types every call is held
+    // to, and declares nothing of its own. A `*` in the URI stands for the family of operators one
+    // declaration covers (`:op/*tol`: one per source type).
+    if (context_->preludeModule() != nullptr && unit_->module == context_->preludeModule()) {
+        const auto matches = [](const std::string &pattern, const std::string &candidate) {
+            const size_t star = pattern.find('*');
+            if (star == std::string::npos) {
+                return pattern == candidate;
+            }
+            return candidate.size() >= pattern.size() - 1 &&
+                   candidate.compare(0, star, pattern, 0, star) == 0 &&
+                   candidate.compare(
+                       candidate.size() - (pattern.size() - star - 1),
+                       std::string::npos,
+                       pattern,
+                       star + 1,
+                       std::string::npos) == 0;
+        };
+        bool claimed = false;
+        if (const auto builtins = context_->importModule("")) {
+            if (const auto entity = builtins->getNativeEntity(Reference(name));
+                entity.has_value() && entity->isOperGroup()) {
+                for (const auto &[ruleUri, rule] : entity->operGroup()->resolvers()) {
+                    if (rule != nullptr && matches(uri, ruleUri)) {
+                        context_->claimBuiltinSignature(rule, funcType);
+                        claimed = true;
+                    }
+                }
+            }
+        }
+        if (!claimed) {
+            diags_->of(SemanticDiag::NativeDeclarationNotLoaded)
+                .atOrigin(gct->origin())
+                .commit(name, uri);
+            throw BuildAbortException();
+        }
+        // Nothing is exported: the name is the built-in operator's own.
+        unit_->passDeclarations.insert(name);
+        return;
     }
     // The declaration is the signature of an operator of a loaded module: an operator no executor
     // answers cannot be called, and a mistake of the declaration (a wrong module, a typo) must be
@@ -679,7 +720,10 @@ void Builder::exportNativeOperators(const GCT::node_ptr_t &exportList) {
         const Reference ref(group.name);
         // A declaration the module does not export is a private operator of the module: its own
         // bodies call it, an importer cannot. Either way it is the
-        // module's own group, kept here and not in the program's export table.
+        // module's own group, kept here and not in the program's export table. It is still an
+        // operator of the module, so it is registered as a private entity: `inspect --ops` lists
+        // it marked private and the reference checker verifies its signature and its purity
+        // against this registration, which is what a kernel nobody exported used to escape.
         const bool isExported = exported.contains(group.name);
         std::optional<camel::core::module::entity> existing;
         if (isExported) {
@@ -705,6 +749,7 @@ void Builder::exportNativeOperators(const GCT::node_ptr_t &exportList) {
             OperatorGroup::create(group.name, std::move(group.rules));
         unit_->nativeOperatorGroups[group.name] = ops;
         if (!isExported) {
+            unit_->module->declarePrivateEntity(ref, ops);
             group.rules.clear();
             continue;
         }
@@ -743,6 +788,26 @@ std::optional<Builder::ImplKernel> Builder::implKernelOfGraph(
     return found->second;
 }
 
+// The kernel group of an `#impl` function holds exactly the one rule a direct call of the
+// function resolves in, and its key is the kernel operator's URI: the declared name is what the
+// group says about the call, and the kernel's own name stays where it is written.
+std::string Builder::calleeNameForMessage(const std::string &uri) const {
+    const auto found = implDeclaredNames_.find(uri);
+    return found != implDeclaredNames_.end() ? found->second : "<" + uri + ">";
+}
+
+std::string Builder::declaredNameOfKernelGroup(const oper_group_ptr_t &ops) const {
+    if (ops == nullptr) {
+        return {};
+    }
+    for (const auto &[uri, resolver] : ops->resolvers()) {
+        if (implDeclaredNames_.contains(uri)) {
+            return calleeNameForMessage(uri);
+        }
+    }
+    return {};
+}
+
 bool Builder::sameImplSignature(FunctionType *function, FunctionType *kernel) {
     if (function == nullptr || kernel == nullptr ||
         function->withTypesCount() != kernel->withTypesCount() ||
@@ -768,7 +833,8 @@ bool Builder::sameImplSignature(FunctionType *function, FunctionType *kernel) {
 
 Builder::RuleVerdict Builder::ruleVerdictForCall(
     const camel::core::type::resolver_ptr_t &rule, const std::string &name,
-    const type_vec_t &withTypes, const type_vec_t &normTypes, std::string *conditionText) {
+    const type_vec_t &withTypes, const type_vec_t &normTypes, std::string *conditionText,
+    const type_vec_t &explicitTypes) {
     const auto found = nativeRuleConditions_.find(rule.get());
     if (found == nativeRuleConditions_.end()) {
         // No condition: the rule applies wherever its signature does.
@@ -787,6 +853,11 @@ Builder::RuleVerdict Builder::ruleVerdictForCall(
     if (const auto *generic = dynamic_cast<const DeclaredFuncTypeResolver *>(rule.get());
         generic != nullptr) {
         declared = generic->funcType();
+        // The variables the call writes (`constant::<int>(n)`) are bound before the arguments are
+        // read: a variable only the result mentions has no other binding.
+        for (size_t i = 0; i < explicitTypes.size() && i < generic->bindableNames().size(); ++i) {
+            bindings.emplace_back(generic->bindableNames()[i], explicitTypes[i]);
+        }
         if (declared->withTypesCount() != withTypes.size() ||
             declared->normTypesCount() != normTypes.size()) {
             return RuleVerdict::NotThisRule;
@@ -819,16 +890,18 @@ Builder::RuleVerdict Builder::ruleVerdictForCall(
 
 bool Builder::declaredRuleApplies(
     const camel::core::type::resolver_ptr_t &rule, const std::string &name,
-    const type_vec_t &withTypes, const type_vec_t &normTypes) {
+    const type_vec_t &withTypes, const type_vec_t &normTypes, const type_vec_t &explicitTypes) {
     // The same question a call asks, with one answer instead of three. An `#impl` instance asks
     // it after checking that the rule's signature names the instance (sameImplSignature, or the
     // rule's own resolve), so the rule's parameters always take the instance's types and
     // NotThisRule cannot arise here.
-    return ruleVerdictForCall(rule, name, withTypes, normTypes) == RuleVerdict::Applies;
+    return ruleVerdictForCall(rule, name, withTypes, normTypes, nullptr, explicitTypes) ==
+           RuleVerdict::Applies;
 }
 
 void Builder::adoptImplKernel(
-    const generic_template_ptr_t &tmpl, const compile_graph_ptr_t &graph, FunctionType *funcType) {
+    const generic_template_ptr_t &tmpl, const compile_graph_ptr_t &graph, FunctionType *funcType,
+    const camel::core::type::type_bindings_t &bindings) {
     if (tmpl == nullptr || graph == nullptr || funcType == nullptr) {
         return;
     }
@@ -849,6 +922,7 @@ void Builder::adoptImplKernel(
     const type_vec_t normTypes(funcType->normTypesSpan().begin(), funcType->normTypesSpan().end());
     std::string uri;
     camel::core::type::resolver_ptr_t executor;
+    type_vec_t statedTypes;
     for (const auto &[ruleUri, resolver] : kernel.group->resolvers()) {
         if (FunctionType *fixed = resolver->fixedSignature(); fixed != nullptr) {
             if (sameImplSignature(funcType, fixed) &&
@@ -862,10 +936,29 @@ void Builder::adoptImplKernel(
         if (executor != nullptr) {
             continue;
         }
-        if (resolver->resolve(withTypes, normTypes, Modifier::None).has_value() &&
-            declaredRuleApplies(resolver, kernel.name, withTypes, normTypes)) {
-            uri      = ruleUri;
-            executor = resolver;
+        bool takes = resolver->resolve(withTypes, normTypes).has_value();
+        type_vec_t stated;
+        if (!takes) {
+            // A variable only the result mentions is not read from the arguments: the instance's
+            // own type arguments state it.
+            if (const auto *declaredRule =
+                    dynamic_cast<const DeclaredFuncTypeResolver *>(resolver.get());
+                declaredRule != nullptr && !declaredRule->bindableNames().empty()) {
+                for (const std::string &variable : declaredRule->bindableNames()) {
+                    if (Type *type = findTypeBinding(bindings, variable); type != nullptr) {
+                        stated.push_back(type);
+                    }
+                }
+                takes = stated.size() == declaredRule->bindableNames().size() &&
+                        resolver
+                            ->resolveForCall(stated, funcType->exitType(), withTypes, normTypes, {})
+                            .has_value();
+            }
+        }
+        if (takes && declaredRuleApplies(resolver, kernel.name, withTypes, normTypes, stated)) {
+            uri         = ruleUri;
+            executor    = resolver;
+            statedTypes = stated;
         }
     }
     // The instance is a semantic body of its `#impl` function whether or not an executor was
@@ -883,10 +976,13 @@ void Builder::adoptImplKernel(
     ImplKernel adopted;
     adopted.name  = kernel.name;
     adopted.uri   = uri;
+    adopted.types = statedTypes;
     adopted.group = OperatorGroup::create(
         kernel.group->name(),
         std::vector<std::pair<std::string, camel::core::type::resolver_ptr_t>>{
             {uri, executor}});
+    // A call of the instance resolves in this group, and what it says is the function's name.
+    implDeclaredNames_[uri] = tmpl->name;
     implKernels_[graph.get()] = std::move(adopted);
 }
 
@@ -1042,7 +1138,20 @@ void Builder::resolveImplDeclarations(const GCT::node_ptr_t &root) {
                 adopted.name  = tag->kernel;
                 adopted.uri   = group->resolvers().front().first;
                 adopted.group = group;
-                implTemplateKernels_[genericTemplate.one().get()] = std::move(adopted);
+                // The template this very declaration made: a name with several generic
+                // declarations (`abs` for the reals and for each complex width) has a group, and
+                // the kernel belongs to the one that wrote the tag.
+                generic_template_ptr_t own = genericTemplate.one();
+                if (GenericGroup *templates = genericGroupOf(genericTemplate);
+                    templates != nullptr) {
+                    for (const generic_template_ptr_t &candidate : *templates) {
+                        if (candidate != nullptr && candidate->func == child) {
+                            own = candidate;
+                            break;
+                        }
+                    }
+                }
+                implTemplateKernels_[own.get()] = std::move(adopted);
                 continue;
             }
             if (funcType->hasConstas()) {
@@ -1114,6 +1223,10 @@ void Builder::resolveImplDeclarations(const GCT::node_ptr_t &root) {
                 group->name(),
                 std::vector<std::pair<std::string, camel::core::type::resolver_ptr_t>>{
                     {uri, executor}});
+            // A call of the function is a call of this kernel, so a message about the call says
+            // the name the function is declared under, never the kernel's own (design principles
+            // 10.4: the kernel is private to the module that writes it).
+            implDeclaredNames_[uri] = functionName;
             implKernels_[body.get()] = std::move(record);
             // The graph stays the semantic body: expanding the function means reading this
             // graph, and a consumer that asks for it (autodiff, fusion, export, a rule) gets
@@ -1228,22 +1341,6 @@ void Builder::exportDeclarations(const GCT::node_ptr_t &gct, bool decorated) {
         }
         if (auto value = unit_->values.find(name); value != unit_->values.end()) {
             TopLevelDeclaration &declaration = *value->second;
-            if (declaration.isVar) {
-                // Design principles 10.1: a `var` of the top level is written by the module's
-                // own functions only, which are exported instead.
-                camel::source::origin_id_t origin = gct->origin();
-                for (const auto &child : *declaration.gct) {
-                    if (child->type() == GCT::NodeKind::NREF && child->name() == name) {
-                        origin = child->origin();
-                    }
-                }
-                if (declaration.gct->type() == GCT::NodeKind::NREF) {
-                    origin = declaration.gct->origin();
-                }
-                diags_->of(SemanticDiag::ExportedVariable).atOrigin(origin).commit(name);
-                failed = true;
-                continue;
-            }
             // A value of the top level is a node of the root graph, which every module of the
             // program builds into: the importing module captures that very node, made when
             // a module first uses it (exportedValueNode).

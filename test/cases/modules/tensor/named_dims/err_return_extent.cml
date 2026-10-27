@@ -1,4 +1,3 @@
-module named_dims_err_return_extent
 import { ones } from tensor
 // The return type says the result has extent n. The body returns an extent of its own; the
 // relation is checked where the call runs, like an argument's extent.

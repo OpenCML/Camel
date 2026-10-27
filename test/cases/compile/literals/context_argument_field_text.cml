@@ -4,7 +4,6 @@
  * written. The fields are written out of name order, as in the declaration case, so the
  * position follows the field and not its slot in the data.
  */
-module literal_context_argument_field_text
 
 type Point = { x: float, y: float }
 

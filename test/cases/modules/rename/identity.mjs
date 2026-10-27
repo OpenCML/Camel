@@ -35,19 +35,13 @@ const CASES = {
         old: 'sys',
         now: 'env',
         file: 'env_identity.cml',
-        expected: 'bdfca7bab26ddbb00227bcb92ee94983d1c021bc4716b6d24b1c3b1bbc4d0020',
+        expected: 'f907be16febdf9fd649a1f41c7b8dff2f6ea5cec0f51e657c2322c5b5e07dfb8',
     },
     process: {
         old: 'os',
         now: 'process',
         file: 'process_identity.cml',
-        expected: 'd08da5491e23d6999032d46e703435cb17e8973fe45327eba4ca6dfe218d7c49',
-    },
-    hash: {
-        old: 'crypto',
-        now: 'hash',
-        file: 'hash_identity.cml',
-        expected: '4e3858820c04c8b127d8e2caa79f29f95fd79e523755f6df257b545fb9a7b700',
+        expected: 'c5c8874afa38fdfec998971f97ce713e6d71cdce122960d399d3efcb9a5e1326',
     },
 }
 

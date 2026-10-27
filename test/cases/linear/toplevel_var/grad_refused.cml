@@ -1,0 +1,18 @@
+/** Gradients do not flow through a top-level `var` either, as for any `var`. */
+
+
+import { grad } from autodiff
+
+var acc: float = 0.0
+
+with <p: float>
+func f(x: float): float sync {
+    acc = p * x
+    return acc * 2.0
+}
+
+func main(): int sync {
+    let g = grad(f)
+    println(g<3.0>(2.0))
+    return 0
+}

@@ -8,7 +8,6 @@
  * Actual: L8 0 0 0
  * Reduced by test/tools/progen from seed 1892 (generator version 1, all features).
  */
-module inline_jit_argument_value
 
 import { get_env } from env
 
@@ -19,7 +18,7 @@ func r1(a2: int, a3: int): int {
 }
 
 func main(): int sync {
-    let n20 = int(get_env('PROGEN_I1'));
+    let n20 = int(get_env('PROGEN_I1') ?? '');
     func g34(a35: int): int sync {
         println('L8 {} {} {}'->format<0, 0, a35>);
         return 31;

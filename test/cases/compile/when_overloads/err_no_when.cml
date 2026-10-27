@@ -1,0 +1,15 @@
+
+
+import { is_float } from types
+
+func kind::<T>(x: T): string when is_float::<T>() {
+    return 'float'
+}
+
+func kind::<T>(x: T): string {
+    return 'any'
+}
+
+func main(): int sync {
+    return 0
+}

@@ -7,7 +7,6 @@
  * conditions could not tell them apart even if a call consulted them (see
  * `array_sort_kernel_overlap.cml`).
  */
-module array_sort_redeclaration
 
 #op(':op/add_i')
 func dup_sort(xs: i32[]): i32[]

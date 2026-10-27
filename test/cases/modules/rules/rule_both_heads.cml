@@ -13,9 +13,7 @@
  * value the binding gave: the rewrite adds `tile` (7), and `3 + 0` printed without it is the
  * program as it was written.
  */
-module rule_both_heads
 
-import { Program } from graph
 import { is_integer } from types
 import { rewrite } from rewrite
 
@@ -23,8 +21,8 @@ with <tile: int>
 rule scaled_zero::<T>(x: T, const c: T) when is_integer::<T>() && tile > 0 { x + c => x + tile }
 
 /// The rule, bound to a tile of 7, as the pass the test runs.
-export func apply(p: Program): Program! {
-    return rewrite(p, [scaled_zero<7>])
+export func apply::<F>(p: F): F! {
+    return p->rewrite<[scaled_zero<7>]>
 }
 
 func left(x: int): int { return x + 0 }

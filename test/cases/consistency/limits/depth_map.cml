@@ -2,7 +2,6 @@
  * Non-tail recursion inside the element function of a map, to the depth given by the
  * environment variable N. The element call is one open call more than in depth_direct.
  */
-module depth_map
 
 import { get_env } from env
 
@@ -11,7 +10,7 @@ func depth(n: int): int {
 }
 
 func main(): int sync {
-    let n = int(get_env('N'))
+    let n = int(get_env('N') ?? '')
     println('start')
     println([n, 3, 1]->map<(x: int): int => 0 + depth(x)>)
     println('done')

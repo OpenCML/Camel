@@ -5,7 +5,6 @@
  * every leaf a `float`. This is the shape `tree_map` has when its callback changes the leaves'
  * type, and the recursive rebuild is written with comprehensions only.
  */
-module comprehension_value_type
 
 func widen::<T>(t: T) {
     return match type T {

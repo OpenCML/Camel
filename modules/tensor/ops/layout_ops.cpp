@@ -618,28 +618,41 @@ void concatVjp(VjpBuilder &b, const VjpCall &call) {
 // take(t, indices): rows are selected with repetition, so the reverse scatters dy back and
 // sums where an index repeats. The indices take no gradient.
 void takeVjp(VjpBuilder &b, const VjpCall &call) {
-    requireVjpInputs(call, 2, 2);
-    if (auto dy = b.gradientOf(call.output)) {
-        b.accumulateGradient(
-            call.inputs[0],
-            addTensorOperFor(
-                b,
-                call.inputs[0],
-                "tensor:take_grad",
-                {call.inputs[0], call.inputs[1], *dy}));
+    requireVjpInputs(call, 2, 3);
+    auto dy = b.gradientOf(call.output);
+    if (!dy) {
+        return;
     }
+    if (call.inputs.size() > 2) {
+        // The same take on the dimension the third word names (`m[:, idx]`, design principles
+        // 5.4). `tensor:take_grad` is the first dimension's scatter; the core's own scatter is the
+        // reverse of the read along any dimension (`:tangent/scatter_take_arr`, built from the
+        // zero array, design principles 9.9), and the core's rule for `:op/idx_take` builds
+        // exactly this node, so the three-word call is answered with it and the axis has one
+        // reading in every program.
+        type::Type *const tangent =
+            camel::core::machineryTangentTypeOf(b.nodeType(call.inputs[0]));
+        if (tangent == nullptr) {
+            return; // an array whose elements have no tangent: the take has none either
+        }
+        const std::array<vjp_node_t, 1> zeroInputs{call.inputs[0]};
+        const vjp_node_t zero = b.addOper(tangent, ":tangent/zeros_arr", zeroInputs);
+        const std::array<vjp_node_t, 4> scatter{
+            zero, call.inputs[1], *dy, call.inputs[2]};
+        b.accumulateGradient(
+            call.inputs[0], b.addOper(tangent, ":tangent/scatter_take_arr", scatter));
+        return;
+    }
+    b.accumulateGradient(
+        call.inputs[0],
+        addTensorOperFor(
+            b,
+            call.inputs[0],
+            "tensor:take_grad",
+            {call.inputs[0], call.inputs[1], *dy}));
 }
 
 } // namespace
-
-// `t[idx]` with an int array over a rank-1 array of numbers is answered by the core's
-// `:op/idx_take` -- the element take. The adjoint of the element take is the same one `take`
-// has: `tensor:take_grad` scatters the gradient of each element taken back into its own
-// position, and for a rank-1 input that is the whole of it. Publishing the rule for the core's
-// URI keeps `xs[idx]` differentiable where the core answers it.
-void registerSubscriptTakeRule() {
-    camel::core::DerivativeRegistry::instance().setRule(":op/idx_take", &takeVjp);
-}
 
 std::vector<OpDef> layoutOps() {
     std::vector<OpDef> defs;
@@ -711,7 +724,8 @@ std::vector<OpDef> layoutOps() {
         .traits    = {}});
     // The subscript forms of design principles 5.4: `t[a:b]` and `t[idx]` on a tensor. Both are
     // the core's own operators (`t[a:b]` is `:op/slice_sub`), so only the index form needs a
-    // declaration of its own.
+    // declaration of its own; a call that names the dimension it takes on (three words) is the
+    // core's declaration's, and this one answers the first dimension's two-word call.
     defs.push_back(OpDef{
         .name      = "idx_take",
         .exports   = {"__idx__"},

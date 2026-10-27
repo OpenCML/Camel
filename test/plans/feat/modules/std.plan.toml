@@ -5,7 +5,7 @@ tags = ["feat", "modules", "std"]
 
 [[tests]]
 name = "array.sort_basic"
-desc = "Exercises the sorting and merge functions of the array module, which now owns the algorithms the deleted algo module used to load."
+desc = "Exercises the sort of the array module on a new array and the merge of two sorted arrays written as `sort(concat(a, b))`."
 kind = "behavior"
 case = "../../../cases/modules/std/array/sort_basic.cml"
 args = ["${case}"]
@@ -15,12 +15,12 @@ timeout_ms = 10000
 
 [[tests]]
 name = "array.every_operator"
-desc = "Every native operator of array, called through `array::`, answers the value it answered as an operator of algo: sort, insert_sort, quick_sort, merge_sort, merge_sorted_arrays, argsort, flatten and unique, and sort leaves its argument unchanged."
+desc = "Every function of array that has a native atom, called through `array::`, answers the value it answered as an operator of algo: sort, argsort, flatten and unique, and sort leaves its argument unchanged."
 kind = "behavior"
 case = "../../../cases/modules/std/array/every_operator.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_exact = "[1, 2, 3]\n[1, 2, 3]\n[1, 2, 3]\n[1, 2, 3]\n[1, 2, 3, 4]\n[1, 2, 0]\n[1, 2, 3]\n[3, 1, 2]\n[1, 2, 3] [3, 1, 2]\n"
+expect_stdout_exact = "[1, 2, 3]\n[1, 2, 0]\n[1, 2, 3]\n[3, 1, 2]\n[1, 2, 3] [3, 1, 2]\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
@@ -183,6 +183,28 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "python.errors"
+desc = "A Python exception is an error value of kind PythonError whose message starts with the exception class (a missing module, a missing attribute, a bad call, a syntax error), and from_py refuses with PythonTypeError and a path when the object is not the kind asked for: 5 is not a bool, bytes is not a string, 1e300 is not an f32, True is not an int, 1.5 is not an int, and a list, tuple or dict must have the right elements."
+kind = "behavior"
+case = "../../../cases/modules/std/python/errors.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "PythonError: KeyError: 'missing'\nPythonError: ModuleNotFoundError: No module named 'no_such_module_zzz'\nPythonError: AttributeError: 'int' object has no attribute 'nope'\nPythonError: ValueError: invalid literal for int() with base 10: 'x'\nPythonError: AttributeError: module 'math' has no attribute 'nope'\nPythonError: SyntaxError\nok\nok 5\nok 2.0\nok 1.5\nok text\nPythonTypeError: value: expected a bool, found int\nok true\nPythonTypeError: value: expected a str, found bytes\nPythonTypeError: value: the number 1e+300 does not fit an f32\nPythonTypeError: value: expected an int, found bool\nPythonTypeError: value: expected an int, found float\nPythonTypeError: value: the int 1099511627776 does not fit an i32\nPythonTypeError: value[1]: expected an int, found str\nPythonTypeError: value: expected a tuple of 2 element(s), found 3\nPythonTypeError: value: missing field 'b'\nok [1, 2, 3]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "python.no_python_form"
+desc = "A value without a Python form (a map) is refused where `to_py` is called: the condition `has_python_form` of the declaration is false for it."
+kind = "negative"
+case = "../../../cases/modules/std/python/err_no_python_form.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["err_no_python_form.cml:6:18", "No candidate of 'to_py' applies to", "when has_python_form::<T>()", "name=SemanticDiag::WhenConditionUnmet"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
 name = "random.basic"
 desc = "Exercises seeded random generation APIs so deterministic behavior can be observed."
 kind = "behavior"
@@ -245,13 +267,58 @@ timeout_ms = 10000
 
 [[tests]]
 name = "array.sort_reference"
-desc = "Every sorting operator of the array module (sort, quick_sort, insert_sort, merge_sort, merge_sorted_arrays; the `-ed` twins are gone, design principles 11.3) against Python's sorted() on generated int and float arrays (random, duplicates, sorted, reversed, constant; lengths 1 to 257; fixed seed), the input of every form unchanged (no operator sorts its argument in place, 11.3), also as the rebinding `v = v->sort` that sorts in place when nothing else holds the array (11.3), and 200000 already sorted / reversed elements. The sorts once returned unsorted arrays (wrong quicksort partition), and no sort ordered floats (slots were compared as unsigned integers)."
+desc = "The `sort` of the array module (the `-ed` twin is gone, design principles 11.3) against Python's sorted() on generated int and float arrays (random, duplicates, sorted, reversed, constant; lengths 1 to 257; fixed seed), the input of every form unchanged (no operator sorts its argument in place, 11.3), also as the rebinding `v = v->sort` that sorts in place when nothing else holds the array (11.3), and 200000 already sorted / reversed elements. The sorts once returned unsorted arrays (wrong quicksort partition), and no sort ordered floats (slots were compared as unsigned integers)."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/modules/std/array/sort_reference.py"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["1890 results and one large program, 0 wrong", "PASS"]
+expect_stdout_contains = ["450 results and one large program, 0 wrong", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
+
+[[tests]]
+name = "env.unset_and_empty"
+desc = "An environment variable that is not set is null, and one set to a value gives that value; `??` supplies the default for the first only."
+kind = "behavior"
+case = "../../../cases/modules/std/env/unset_and_empty.cml"
+args = ["${case}"]
+envs = ["CAMEL_TEST_ENV_SET=abc"]
+expect_exit = 0
+expect_stdout_exact = "unset\nset to abc\ndefault\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "time.utc_text"
+desc = "A moment is written and read in UTC: the fields of a text are the fields of the moment, and a text without the format is an error value that `!!` replaces."
+kind = "behavior"
+case = "../../../cases/modules/std/time/utc_text.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "86400.0\n1000000000.0\n1970-01-02 00:00\n2001-09-09T01:46:40\n-1.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "re.match"
+desc = "`find` returns the first `Match` or null with positions in code points (text outside ASCII and above the BMP) and null for a group that took no part; `find_all`, `replace`, `replace_with`, `split`, `validate` and `has_match` are written on it."
+kind = "behavior"
+case = "../../../cases/modules/std/re/match.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "5-7:42 none\n12-13:7 2-2:\n4-6:42 1-3:本語\n2-3:1\n[key, val, null]\n[1, 22]\n[0, 1, 2, 3]\na+b+c a!b 日・本\na<1>b<22>\n[a, b, c] 1\n[0-9]+ bad\ntrue true\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "re.find_start_out_of_range"
+desc = "A search that starts after the end of the text is the fault InvalidArgument, naming the start and the length."
+kind = "negative"
+case = "../../../cases/modules/std/re/invalid_start.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["start 9 is outside 0..3"]
+expect_output_not_contains = ["not reached"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

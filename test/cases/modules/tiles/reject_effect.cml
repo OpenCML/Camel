@@ -1,4 +1,3 @@
-module tiles_reject_effect
 import { reshape } from tensor
 import { source } from tiles
 func noisy(x: f32[..]): f32[..] sync {

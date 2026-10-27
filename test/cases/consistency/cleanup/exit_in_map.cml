@@ -2,7 +2,8 @@
  * exit(9) in one element function of a map (element 3 of 8), after main has printed. Nothing
  * after the map runs; the exit code is 9.
  */
-module exit_in_map
+
+import { exit } from process
 
 func check(x: int): int sync {
     if x == 3 then sync { exit(9) }

@@ -4,7 +4,6 @@
  * model is exported, and an ONNX model checks nothing when it runs: the export is refused at
  * the conversion (line 13) instead of leaving the check out.
  */
-module as_unproven
 
 import { reshape, tanh } from tensor
 import { export_model } from onnx
@@ -14,8 +13,7 @@ func f(x: f32[..]): f32[..] {
     return y * 2.0
 }
 
-func main(): int sync {
+func main(): void! sync {
     let ex = reshape([1.0, -1.0, 0.5, 2.0, 3.0, -2.0] as f32[], [2, 3])
-    export_model(f, ex, 'tmp/test/onnx/refusal_as_unproven.onnx', [0])
-    return 0
+    export_model<out: 'tmp/test/onnx/refusal_as_unproven.onnx', dynamic_axes: [0]>(f, ex)
 }

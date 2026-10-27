@@ -7,7 +7,6 @@
  * read from the working directory, the native values are saved there, and the step is exported
  * when ONNX_OUT is set.
  */
-module ort_grad_loop_values
 import { load_npy, reshape, save_npy, sum, tanh } from tensor
 import { with_grad } from autodiff
 import { export_model } from onnx
@@ -92,11 +91,10 @@ func main(): int sync {
     save_npy(r.6, 'native_6.npy')
     save_npy(r.7, 'native_7.npy')
     save_npy(reshape([r.8], [1]), 'native_8.npy')
-    let exported = if get_env('ONNX_OUT') != '' then sync {
-        export_model(
+    let exported = if (get_env('ONNX_OUT') ?? '') != '' then sync {
+        let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(
             (w: f32[..], x: f32[..]): (float[..], f32[..], float[..], f32[..], float[..], f32[..], float[..], f32[..], int) => step(w, x),
-            (w, x),
-            get_env('ONNX_OUT')
+            (w, x)
         )
         1
     } else 0

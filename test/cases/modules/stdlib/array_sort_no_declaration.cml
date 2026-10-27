@@ -1,21 +1,15 @@
 /**
- * An element type the sorts have no declaration for is refused where the call is written, not at
- * run time (the rule's 「bf16/f16 要么有自己的臂，要么在编译期就没有匹配的内核而走函数体
- * （不在运行期拒绝）」 read for a family with no Camel body: there is no body to fall back to, so the
- * call has no declaration to compile through at all).
- *
- * `bool` is the element type that says it most plainly: `argsort` has a declaration for a `bool[]`
- * and the sorts do not, so `sort` is refused with the four declarations it does have, each with its
- * own element type in the signature. The old spelling declared `sort::<T>(xs: T[]): T[]` for every
- * element type and refused a `bool[]` (and a `c64[]`, and a `string[]`) inside the executor at run
- * time.
+ * `sort` orders what `argsort` orders: the real numbers, `string` and `bool` (`is_ordered`). A
+ * complex array has no order, so the call is refused where it is written, with the condition it
+ * does not meet, not by an executor at run time.
  */
-module array_sort_no_declaration
 
 import { sort } from array
 
 func main(): int sync {
-    let xs: bool[] = [true, false]
+    let z0: c64 = 1 + 2i
+    let z1: c64 = 3 + 4i
+    let xs: c64[] = [z0, z1]
     println(sort(xs))
     return 0
 }

@@ -1,0 +1,12 @@
+/**
+ * `??` needs a left side that carries the nullable mark: `null` has type `void`, so there is
+ * nothing to open. A plain value, by contrast, is allowed with a warning (KnownNotNull;
+ * design principles 3.8).
+ */
+
+func main(): int sync {
+    println('never printed')
+    let b = null ?? 7
+    println(b)
+    return 0
+}

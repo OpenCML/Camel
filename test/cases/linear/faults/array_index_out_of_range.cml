@@ -2,7 +2,6 @@
  * An array index past the end is IndexOutOfRange at the index expression (line 7, column 44), with the
  * index and the length in the message, on every back end.
  */
-module array_index_out_of_range
 
 func at(xs: int[], i: int): int { return xs[i] }
 

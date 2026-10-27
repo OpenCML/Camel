@@ -3,17 +3,13 @@
 
 import { withServer, check, checkEq, fmtRange } from '../../../tools/lsp/client.mjs'
 
-const GOOD = `module main
-
-func main() sync {
+const GOOD = `func main() sync {
     println('hi')
     return 0
 }
 `
 
-const BAD = `module main
-
-func main() sync {
+const BAD = `func main() sync {
     let r = nope + 1
     println(other_missing)
     return 0
@@ -37,7 +33,7 @@ await withServer(async (ls) => {
     report = await ls.request('textDocument/diagnostic', { textDocument: { uri } })
     checkEq(report.items.length, 2, 'two independent errors are reported', report.items)
     const first = report.items[0]
-    checkEq(fmtRange(first.range), '3:12-3:16', 'the range of the first error is the name')
+    checkEq(fmtRange(first.range), '1:12-1:16', 'the range of the first error is the name')
     checkEq(first.severity, 1, 'severity error')
     checkEq(first.source, 'Camel', 'source')
     check(/^0x[0-9A-F]{8}$/.test(first.code), 'the code is the catalog code', first.code)
@@ -45,7 +41,7 @@ await withServer(async (ls) => {
     check(first.message.includes('nope'), 'the message names the reference', first.message)
 
     // A syntax error: one diagnostic, the file is not compiled further.
-    ls.change(uri, 'module main\n\nfunc main( {\n', 3)
+    ls.change(uri, 'func main( {\n', 3)
     report = await ls.request('textDocument/diagnostic', { textDocument: { uri } })
     check(report.items.length >= 1, 'a syntax error is reported', report.items)
 
@@ -56,19 +52,19 @@ await withServer(async (ls) => {
     checkEq(report.items, [], 'an unknown document has no diagnostics')
 
     // ---- formatting ----
-    const messy = 'module main\n\nfunc main()   sync {\n      println( "hi" )\n  return 0\n}\n'
+    const messy = 'func main()   sync {\n      println( "hi" )\n  return 0\n}\n'
     ls.change(uri, messy, 4)
     let edits = await ls.request('textDocument/formatting', {
         textDocument: { uri },
         options: { tabSize: 4, insertSpaces: true },
     })
     checkEq(edits.length, 1, 'formatting answers with one edit')
-    checkEq(fmtRange(edits[0].range), '0:0-6:0', 'the edit replaces the whole document')
+    checkEq(fmtRange(edits[0].range), '0:0-4:0', 'the edit replaces the whole document')
     check(edits[0].newText.includes("\n    println('hi')\n"), 'the text is formatted', edits[0].newText)
 
     // A subscript is formatted by its own rule: a slice writes its colons without spaces,
     // `xs[a:2]`, however they were spaced in the source (design principles 5.4).
-    ls.change(uri, 'module main\n\nfunc part(xs: int[], a: int): int[] {\nreturn xs[a : 2]\n}\n', 5)
+    ls.change(uri, 'func part(xs: int[], a: int): int[] {\nreturn xs[a : 2]\n}\n', 5)
     edits = await ls.request('textDocument/formatting', {
         textDocument: { uri },
         options: { tabSize: 4, insertSpaces: true },

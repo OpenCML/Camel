@@ -1,0 +1,92 @@
+/**
+ * What goes wrong on the Python side is an error value, not a fault of the program: a Python
+ * exception is `PythonError` and its message starts with the exception class, and an object that
+ * is not the kind `from_py` was asked for is `PythonTypeError` with the path and what was found.
+ * Nothing converts silently: `5` is not a `bool`, `bytes` is not a `string`, `1e300` is not an f32.
+ */
+
+import { exec, eval, import_module, attr, call, to_py, from_py, PyObject } from python
+import { split } from str
+
+func first_line(text: string): string {
+    let lines = text->split<'\n'>
+    return lines[0]
+}
+
+func class_of(text: string): string {
+    let parts = first_line(text)->split<':'>
+    return parts[0]
+}
+
+func class_name(r: PyObject!): string {
+    return match r {
+        case error e => format<e.kind, class_of(e.message)>('{}: {}')
+        case v => 'ok'
+    }
+}
+
+func shown(r: PyObject!): string {
+    return match r {
+        case error e => format<e.kind, first_line(e.message)>('{}: {}')
+        case v => 'ok'
+    }
+}
+
+func shown_void(r: void!): string {
+    return match r {
+        case error e => format<e.kind, first_line(e.message)>('{}: {}')
+        case v => 'ok'
+    }
+}
+
+func expr(code: string): PyObject {
+    return eval(code) !! wrap('python failed')
+}
+
+func outcome::<T>(r: T!): string {
+    return match r {
+        case error e => format<e.kind, e.message>('{}: {}')
+        case v => format<v>('ok {}')
+    }
+}
+
+func must(r: PyObject!): PyObject {
+    return match r {
+        case error e => fail<'InvalidArgument'>(e.message)
+        case v => v
+    }
+}
+
+func wrap::<T>(x: T): PyObject {
+    return must(to_py(x))
+}
+
+func main(): int sync {
+    // an exception is an error value that keeps its class
+    println(shown_void(exec('raise KeyError("missing")')))
+    println(shown(import_module('no_such_module_zzz')))
+    println(shown(expr('1')->attr<'nope'>))
+    let int_fn = expr('int')
+    println(shown([wrap('x')]->call<int_fn>))
+    println(shown(import_module('math')->attr<'nope'>))
+    println(class_name(eval('1 +')))
+    println(shown(eval('1 + 1')))
+
+    // what converts, and what is refused with the path and the kind found
+    println(outcome(from_py::<int>(expr('5'))))
+    println(outcome(from_py::<float>(expr('2'))))
+    println(outcome(from_py::<f32>(expr('1.5'))))
+    println(outcome(from_py::<string>(expr('"text"'))))
+    println(outcome(from_py::<bool>(expr('5'))))
+    println(outcome(from_py::<bool>(expr('True'))))
+    println(outcome(from_py::<string>(expr('b"x"'))))
+    println(outcome(from_py::<f32>(expr('1e300'))))
+    println(outcome(from_py::<int>(expr('True'))))
+    println(outcome(from_py::<int>(expr('1.5'))))
+    println(outcome(from_py::<i32>(expr('2 ** 40'))))
+    println(outcome(from_py::<int[]>(expr('[1, "a"]'))))
+    println(outcome(from_py::<(int, int)>(expr('(1, 2, 3)'))))
+    println(outcome(from_py::<{ a: int, b: int }>(expr('{"a": 1}'))))
+    println(outcome(from_py::<int[]>(expr('[1, 2, 3]'))))
+    return 0
+}

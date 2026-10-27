@@ -5,9 +5,8 @@
  * b [0.1628, -0.2505]; NumPy with the declared rule and the exported model on ONNX Runtime
  * agree (checked by hand, artifacts: b2/probes/p11_vjp_step.cml).
  */
-module export_train_step_vjp
 import { reshape, sum, tanh, where } from tensor
-import { with_grad } from autodiff
+import { with_grad, vjp } from autodiff
 import { sgd } from nn
 import { export_model } from onnx
 import { get_env } from env
@@ -43,7 +42,7 @@ func main(): int sync {
     println(r.0)
     println(r.1.w)
     println(r.1.b)
-    export_model(step, (m, x), get_env('ONNX_OUT'))
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, x))
     println('exported')
     return 0
 }

@@ -1,6 +1,5 @@
 // Rows of one rank-2 array are one length: `[[1.0, 2.0], [3.0]]` is not an `f32[2, 2]`, and it is
 // not read as one either (design principles 5.1, 5.4).
-module array_shape_err_literal_ragged
 
 func main(): int {
     let b: f32[2, 2] = [[1.0, 2.0], [3.0]]

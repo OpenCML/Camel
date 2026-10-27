@@ -11,9 +11,8 @@
  * `combine_nonzero` is therefore a rule for the floating sites of the target alone: the `int` site
  * is left as the program wrote it, and nothing of the attempt that `int` cost reaches the program.
  */
-module generic_guard_law
 
-import { Graph, Node, NodeKind, Program, graphs, kind, name, nodes } from graph
+import { Graph, Node, NodeKind, kind, name, nodes, graphs_of } from graph
 import { explain_all, rule_name, run, why_not } from rewrite
 
 /// A condition on the matched constant that only a floating type can evaluate. `0.0` beside `!=`
@@ -25,25 +24,25 @@ func nonzero::<T>(c: T): bool {
 
 rule combine_nonzero::<T>(x: T, const c: T) when nonzero::<T>(c) { x * c + x => x * (c + 1.0) }
 
-func nodesOf(p: Program, function: string): Node[] {
-    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+func nodesOf::<F>(p: F, function: string): Node[] {
+    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
     return nodes(found[0])
 }
 
-func portOf(p: Program, function: string): Node {
+func portOf::<F>(p: F, function: string): Node {
     let ports = nodesOf(p, function)->filter<(n: Node): bool => kind(n) == NodeKind::Port>
     return ports[0]
 }
 
 /// The rule applied once, with the proof: the `float` site is rewritten and the `int` site is not,
 /// so the run shows which types the condition admitted.
-export func counted(p: Program): Program! sync {
+export func counted::<F>(p: F): F! sync {
     return match p->run<[combine_nonzero], explain: true> {
-        case error e => { throw e }
+        case error e => { return e }
         case r => sync {
             println('rewrites', r.rewrites, 'rule', rule_name(combine_nonzero))
             return match explain_all(r) {
-                case error e => { throw e }
+                case error e => { return e }
                 case proof => sync {
                     println(proof)
                     return r.result
@@ -56,11 +55,11 @@ export func counted(p: Program): Program! sync {
 /// What `why_not` answers at the integer site: the rule is a generic one, no instance could be made
 /// for `int`, and the reason is the verdict the body gave -- the missing `!=` -- not a phrase the
 /// maker guessed about the condition.
-export func why_int(p: Program): Program! sync {
+export func why_int::<F>(p: F): F! sync {
     return match p->run<[combine_nonzero], explain: true> {
-        case error e => { throw e }
+        case error e => { return e }
         case r => sync {
-            return match why_not(r, combine_nonzero, portOf(r.result, 'whole')) {
+            return match r->why_not<combine_nonzero, portOf(r.result, 'whole')> {
                 case error e => sync { println(e); return r.result }
                 case reason => sync { println(reason); return r.result }
             }

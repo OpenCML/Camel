@@ -7,7 +7,6 @@
  * gradient of the same shape gives dL/dx, dL/dgamma, dL/dbeta and the (zero) running-statistics
  * gradients together.
  */
-module bn_train_grad_sanity
 
 import { reshape, mean, sum, abs, sqrt } from tensor
 import { grad } from autodiff

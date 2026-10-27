@@ -9,15 +9,14 @@
  * The program below asks for the node of `x`, which the rule declares without `const`: the
  * declaration is refused, and the message names both the argument and the rule.
  */
-module node_of_misuse
 
-import { Program, Node } from graph
+import { Node } from graph
 import { rewrite } from rewrite
 
 rule drop_by_node(x: int, const c: int) when node_of(x) == node_of(c) { x * c => x }
 
-export func apply(p: Program): Program! {
-    return rewrite(p, [drop_by_node])
+export func apply::<F>(p: F): F! {
+    return p->rewrite<[drop_by_node]>
 }
 
 func scaled(x: int): int { return x * 2 }

@@ -3,7 +3,6 @@
  * (not returned directly as the loss). Companion to X1 (scalar arms returned
  * directly, exports fine) and X2 (tensor arms, fails).
  */
-module e13_l2x3_scalar_downstream
 
 import { relu, mean, reshape } from tensor
 import { with_grad } from autodiff
@@ -35,7 +34,7 @@ func main(): int sync {
         b2: reshape([0.2], [1])
     }
     let x = reshape([1.0, 2.0, -1.0, 0.5], [2, 2])
-    export_model(step, (m, x), get_env('ONNX_OUT'))
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, x))
     println('exported step')
     return 0
 }

@@ -2,7 +2,6 @@
  * Nodes that look alike and are not one value: `0.0` and `-0.0` differ bit for bit, and two
  * calls of an operator with an effect are two events (test::writings).
  */
-module apart
 
 func g(x: float): float sync {
     let a = x + 0.0

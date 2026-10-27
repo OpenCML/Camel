@@ -1,5 +1,3 @@
-module cast_out
-
 import { Json, decode } from json
 
 // Nothing reads a decoded value as another type unchecked. `decode('12345') as string` (an
@@ -13,5 +11,5 @@ func show(a: Json): int sync {
 }
 
 func main(): int sync {
-    return decode('12345') ?-> show !! 1
+    return decode('12345') -> show !! 1
 }

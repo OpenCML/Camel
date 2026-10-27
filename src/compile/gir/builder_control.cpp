@@ -83,6 +83,21 @@ node_handle_t loopStateValueOf(node_handle_t node) {
     return node;
 }
 
+/// The results of the arms a loop body ends in: the value itself, or, behind a JOIN (an `if` or a
+/// `match`), the result of each arm, looking through the JOINs of an `else if` chain.
+std::vector<node_handle_t> loopArmResultsOf(node_handle_t node) {
+    node = loopStateValueOf(node);
+    if (node == nullptr || !nodeIsKind(node, runtime::GCNodeKind::Join)) {
+        return {node};
+    }
+    std::vector<node_handle_t> arms;
+    for (runtime::gc_node_ref_t input : withInputsOf(node)) {
+        const std::vector<node_handle_t> inner = loopArmResultsOf(nodeDraftOf(node)->ref(input));
+        arms.insert(arms.end(), inner.begin(), inner.end());
+    }
+    return arms;
+}
+
 /// Gives `node` a new value type, moving it to a slot of that type. Used when the element type
 /// of an empty-array loop state is learned from the body's append after the graph was built.
 void retypeValueNode(DraftGraphBuilder *graph, node_handle_t node, Type *type) {
@@ -561,14 +576,11 @@ node_handle_t Builder::convertStructValue(
         return nullptr;
     }
     auto *source = tt::as_ptr<StructType>(sourceType);
-    if (source == nullptr || source->size() != target->size()) {
+    // The fields must be the same ones, by name, before anything is copied: the relation of the
+    // type layer (relateStructs) says so, as it does for every other conversion of a struct.
+    if (source == nullptr ||
+        relateStructs(target, source) == StructRelation::None) {
         return nullptr;
-    }
-    // The fields must be the same ones, by name, before anything is copied.
-    for (size_t i = 0; i < target->size(); ++i) {
-        if (!source->findField(target->fieldName(i)).has_value()) {
-            return nullptr;
-        }
     }
     // A struct of `target`'s shape, its slots filled from the source's fields in the target's
     // order: the copy is what makes `{ y: 1, x: 2 }` a `Point` (fields by name, declaration
@@ -671,6 +683,20 @@ node_handle_t Builder::coerceTo(node_handle_t node, Type *target, const GCT::nod
                 return copied;
             }
         }
+    }
+    // An error value in a position of a `T!` is that type's failed form: the written failed arm
+    // (design principles 3.9). It is how `return if c then error(...) else v` is accepted
+    // under a declared `T!` -- the position's type is what each arm takes, and the error arm is
+    // the failing one. Without an expected type nothing joins the error value with the other
+    // arm, and the branch is still refused. This is a rule of the position, like the literal
+    // rules above, not a general entrance: `entersImplicitly` is unchanged.
+    if (TupleType *fallible = asFallible(target);
+        fallible != nullptr && source->equals(errorType())) {
+        const std::string name = bindTemporary(valueOf(node));
+        node_handle_t failed =
+            applyTagOperator(camel::core::oper::TagThrow, name, origin);
+        return nodeTypeOf(failed)->equals(fallible) ? failed
+                                                    : castNodeTo(failed, fallible, origin);
     }
     if (!entersImplicitly(target, source)) {
         return nullptr;
@@ -949,6 +975,39 @@ data_ptr_t Builder::compositeWithHolesInType(
         }
         return types;
     };
+    // A computed element is a value of its own type: it takes no type from the position, it is
+    // checked against the type the position gives that element (design principles 5.1). Failing
+    // that check is reported here, at the element, and not left to the place the literal stands
+    // in: the argument position, the declaration position and the receiver of `->` then report
+    // the same diagnostic, pointing at the computed element, instead of the call ending in "no
+    // matching function" because the literal keeps its own type. An array element, a tuple
+    // element and a struct field are the same position here: a composite literal enters a
+    // position element by element whatever it is made of.
+    const auto rejectHole = [&](const std::string &kind, size_t index, Type *have, Type *wanted) {
+        const GCT::Tree::LiteralElement *element = literalElementAt(written, index);
+        const bool writtenHere =
+            element != nullptr && element->origin != camel::source::kInvalidOriginId;
+        diags_->of(SemanticDiag::ElementTypeMismatch)
+            .atOrigin(writtenHere ? element->origin : origin->origin())
+            .commit(kind, have->toString(), wanted->toString());
+        throw BuildAbortException();
+    };
+    // Whether the literal wrote an element of its own: a literal whose elements are all computed
+    // has no element type either — nothing in it took the element type this position gives the
+    // elements it wrote — so it does not fit the position at all and stays a name without a
+    // matching function, as `pick([n])` does. Once it wrote one, the elements it wrote take this
+    // element type, and a computed element of another type is the mismatch reported at it. A
+    // nested literal is such an element (its own computed elements are placeholders of the
+    // enclosing literal's type, not values of a type of their own), so it is built from what its
+    // names stand for and keeps the reading it had.
+    const auto wroteAnElement = [](const std::vector<Type *> &holeTypes) {
+        for (Type *holeType : holeTypes) {
+            if (holeType == nullptr) {
+                return true;
+            }
+        }
+        return false;
+    };
     const auto holeTypeNamed = [&](const data_ptr_t &value) -> Type * {
         // The placeholder a computed element left in the literal: its name is the reference the
         // GCT gave it, and the node it stands for is the one holding that reference's value.
@@ -978,10 +1037,17 @@ data_ptr_t Builder::compositeWithHolesInType(
         }
         ArrayDataFactory factory;
         factory.setElemType(elemType);
+        const bool wrote = wroteAnElement(holeTypes);
         for (size_t i = 0; i < array->raw().size(); ++i) {
             if (holeTypes[i] != nullptr) {
                 if (!elemType->assignableFrom(holeTypes[i])) {
-                    return nullptr;
+                    if (!wrote) {
+                        return nullptr;
+                    }
+                    // The element the literal computed is not of the type this position gives
+                    // that element: the element is checked, not converted, and the mismatch is
+                    // reported at it (design principles 5.1).
+                    rejectHole("array", i, holeTypes[i], elemType);
                 }
                 factory.add(array->raw()[i]);
                 continue;
@@ -1026,8 +1092,19 @@ data_ptr_t Builder::compositeWithHolesInType(
             }
             Type *fieldType = structType->typeAt(*fieldIndex);
             if (Type *hole = holeTypeNamed(value); hole != nullptr) {
-                if (fieldType == nullptr || !fieldType->assignableFrom(hole)) {
+                if (fieldType == nullptr) {
                     return nullptr;
+                }
+                if (!fieldType->assignableFrom(hole)) {
+                    // A struct field is a position with an expected type like an array element or
+                    // a tuple element (design principles 5.1): the field the literal computed is
+                    // checked against the type the position gives that field, not converted, and
+                    // the mismatch is reported at the field with the same diagnostic -- the field
+                    // it is about named in the message. A literal whose fields are all computed
+                    // is judged the same way.
+                    rejectHole(
+                        "field '" + name + "' of '" + structType->toString() + "'", index, hole,
+                        fieldType);
                 }
                 factory.add(name, value);
             } else {
@@ -1061,11 +1138,20 @@ data_ptr_t Builder::compositeWithHolesInType(
             return nullptr;
         }
         TupleDataFactory factory;
+        const bool wrote = wroteAnElement(holeTypes);
         for (size_t i = 0; i < object->raw().size(); ++i) {
             Type *elemType = tupleType->typeAt(i);
             if (holeTypes[i] != nullptr) {
-                if (elemType == nullptr || !elemType->assignableFrom(holeTypes[i])) {
+                if (elemType == nullptr) {
                     return nullptr;
+                }
+                if (!elemType->assignableFrom(holeTypes[i])) {
+                    if (!wrote) {
+                        return nullptr;
+                    }
+                    // As at an array element: the computed element is checked against the type
+                    // this position gives it, and the mismatch is reported at it.
+                    rejectHole("tuple", i, holeTypes[i], elemType);
                 }
                 factory.add(object->raw()[i]);
                 continue;
@@ -1137,7 +1223,21 @@ void Builder::coerceArmExit(const arm_ptr_t &arm, Type *target, const GCT::node_
     draft.setInsertRegion(arm->region);
     node_handle_t output  = arm->output;
     node_handle_t coerced = coerceTo(output, target, origin);
-    ASSERT(coerced != nullptr, "A branch arm is joined only with a type its value enters.");
+    if (coerced == nullptr) {
+        // The caller asks with `entersImplicitly`, which is the check `coerceTo` makes last, so
+        // this is a compiler defect and not an error in the program: the assertion below is the
+        // debug build's, and a release build reports it at the branch instead of handing a null
+        // node to `normInputsOf` and the join (that was a segmentation fault).
+        ASSERT(coerced != nullptr, "A branch arm is joined only with a type its value enters.");
+        diags_->of(InternalDiag::UnknownInternalError)
+            .atOrigin(origin != nullptr ? origin->origin() : arm->origin)
+            .commit(
+                "the value of a branch arm is not joined: the arm gives '" +
+                (exitType != nullptr ? exitType->toString() : std::string("?")) +
+                "' and the join takes '" + (target != nullptr ? target->toString() : std::string("?")) +
+                "', which the value does not enter");
+        throw BuildAbortException();
+    }
     if (normInputsOf(coerced).empty() && !ctrlInputsOf(output).empty()) {
         // A literal took the place of the output (`[]`): what the output waited for (the
         // statements of a sync arm) is still waited for.
@@ -1150,6 +1250,57 @@ void Builder::coerceArmExit(const arm_ptr_t &arm, Type *target, const GCT::node_
     arm->output = coerced;
     arm->value  = coerced;
     arm->type   = target;
+}
+
+bool Builder::branchTakesNoValue(const GCT::node_ptr_t &gct) const {
+    // A `return` in a function declared `: void`, and the tail of such a body, stand in a
+    // position whose type is `void`: nothing takes what the branch gives there (design
+    // principles 3.7, and the ruling on the arm of a branch at a position that takes no value).
+    if (expectedValueType_ != nullptr && expectedValueType_->code() == TypeCode::Void) {
+        return true;
+    }
+    // A branch written as a statement is the statement whose value the block drops
+    // (visitExecNode): the same position.
+    return gct != nullptr && unusedStatement_ == gct;
+}
+
+void Builder::readArmCellValue(const arm_ptr_t &arm) {
+    Type *type = arm->type;
+    if (type == nullptr || valueTypeOf(type) == type) {
+        return;
+    }
+    // A cell is not a value: an arm that gives one gives the value the cell holds, and the
+    // cell's type never reaches the join (the ruling on the cell-typed arm of a branch). The
+    // read takes the data edge every read has -- the version the last write made, or the cell
+    // itself before any write (`valueVersionOf`), and the cell itself for a write that gives
+    // the cell it wrote into (`__assn__`) -- and nothing else: it stands in the arm's region,
+    // behind the GATE an arm with statements hands its value on through, so the arm's own chain
+    // carries the order and the block's chain is not moved by a read that belongs to the arm
+    // (readVariable would make this read the block's last node).
+    node_handle_t cell = arm->output;
+    node_handle_t version{};
+    if (isVariable(cell)) {
+        version = valueVersionOf(cell);
+    }
+    runtime::GraphDraft &draft = arm->graph->draft();
+    const uint32_t outerRegion = draft.insertRegion();
+    draft.setInsertRegion(arm->region);
+    node_handle_t read = variableOperator(
+        camel::core::oper::VarGet, version != nullptr ? version : cell);
+    if (version == nullptr) {
+        // The write gave no version of the cell, so the cell is the read's data port and the
+        // write that must execute first is what a control input stands for (readVariableThrough,
+        // orderAfterLastWriter; design principles 3.5, F3).
+        if (auto modifier = modifierOf(cell); modifier.has_value()) {
+            if (sameGraph(*modifier, currGraph_) && linkCheek(*modifier, read)) {
+                linkNodes(LinkType::Ctrl, *modifier, read);
+            }
+        }
+    }
+    draft.setInsertRegion(outerRegion);
+    arm->output = read;
+    arm->value  = read;
+    arm->type   = valueTypeOf(type);
 }
 
 Type *Builder::declaredExitTypeHere() const {
@@ -1199,37 +1350,29 @@ Type *Builder::expectedExitTypeHere() const {
 }
 
 node_handle_t Builder::adaptExitValue(const GCT::node_ptr_t &gct, node_handle_t value) {
-    Type *declared   = declaredExitTypeHere();
-    Type *valueType  = valueTypeOf(nodeTypeOf(value));
-    const auto where = gct->origin() != 0 ? gct->origin() : gct->at(0)->origin();
-    if (gct->exitType() == ExitType::Throw) {
-        // `throw e`: the exit `return` is, with the failed form of the declared `T!` as its
-        // value (design principles 3.9). OPER __throw__ makes the failed value, the CAST
-        // gives it the declared type; both are the same object.
-        TupleType *fallible = asFallible(declared);
-        if (fallible == nullptr) {
-            diags_->of(SemanticDiag::ThrowOutsideFallible)
-                .atOrigin(where)
-                .commit(
-                    declared == nullptr
-                        ? "the function around it declares no return type"
-                        : "the function around it returns '" + declared->toString() + "'");
-            throw BuildAbortException();
+    Type *declared  = declaredExitTypeHere();
+    Type *valueType = valueTypeOf(nodeTypeOf(value));
+    if (valueType != nullptr && valueType->equals(errorType())) {
+        // An error value handed out by a function that declares a `T!` is that type's failed
+        // arm (design principles 3.9): `return error('DivByZero', '...')` fails with that
+        // error. This holds wherever the exit stands, an arm of a branch included -- there the
+        // arm's own position may be nothing at all (the branch is a statement whose value
+        // nothing uses), and the function's declaration is what the error value is read
+        // against. OPER __throw__ makes the failed value and the CAST gives it the declared
+        // type; both are the same object. A function that declares no `T!` leaves the value as
+        // it is, and the diagnostic for an exit that does not fit its position is the one the
+        // position gives.
+        if (TupleType *fallible = asFallible(declared); fallible != nullptr) {
+            node_handle_t failed =
+                applyTagOperator(camel::core::oper::TagThrow, bindTemporary(value), gct->at(0));
+            return fallible->equals(nodeTypeOf(failed)) ? failed
+                                                        : castNodeTo(failed, fallible, gct->at(0));
         }
-        // Design principles 3.9: `throw` takes an error value (made by `error(kind,
-        // message)` or bound by `case error e`), nothing else.
-        if (!valueType->equals(errorType())) {
-            diags_->of(SemanticDiag::ThrowNotAnError).atOrigin(where).commit(valueType->toString());
-            throw BuildAbortException();
-        }
-        node_handle_t thrown =
-            applyTagOperator(camel::core::oper::TagThrow, bindTemporary(value), gct->at(0));
-        return fallible->equals(nodeTypeOf(thrown)) ? thrown
-                                                    : castNodeTo(thrown, fallible, gct->at(0));
     }
-    // `return v` under a declared `T?` / `T!` puts `v` into that form: the counterpart of
-    // `throw`, and one of the positions where a value enters by itself (design principles
-    // 3.8; coerceTo). The declared type is also the name the value is used as: an unnamed
+    // `return v` under a declared `T?` / `T!` puts `v` into that form (design principles 3.8;
+    // coerceTo): it is the position a value enters by itself, and an error value written there
+    // becomes the failed arm of that `T!`. The declared type is also the name the value is used
+    // as: an unnamed
     // struct value in a declared named type is given that type here (a CAST that moves
     // nothing, or a copy when the fields are written in another order; design principles
     // 5.1, 5.2), so a named type is never erased to its shape. Applying the position's type
@@ -1380,7 +1523,7 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
     using Kind         = GCT::BranchKind;
     const Kind kind    = gct->branchKind();
     const bool onNull  = kind == Kind::NullThen;
-    const char *symbol = onNull ? "??" : kind == Kind::ErrorThen ? "!!" : "?->";
+    const char *symbol = onNull ? "??" : "!!";
 
     // The left side is a `T?` (`T!`) as the name it is, and the right side is a `T` or the
     // same `T?` (design principles 3.8): neither is in the position the whole expression
@@ -1392,16 +1535,20 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
         ExpectedValueScope subjectScope(expectedValueType_, nullptr);
         subject = valueNodeOf(visit(gct->at(0)));
     }
-    if (onNull && asTagged(valueTypeOf(nodeTypeOf(subject))) == nullptr &&
-        isNarrowedName(gct->at(0))) {
-        // `x ?? d` where an `if` around it already narrowed `x` to a `T` (design principles
-        // 3.8): allowed, with a warning.
-        subject = reopenNarrowedName(gct->at(0), subject, gct, "??");
+    // `a ?? d` where `a` cannot be null is allowed, with a warning (design principles 3.8): a
+    // plain value has no null case at all, and a name an `if` around it already narrowed to a
+    // `T` is that same case one step later, so both are put back into `T?` and built as an
+    // ordinary `??`. A `void` left side is not a value and a `T!` carries the other mark:
+    // both keep the refusal below.
+    Type *unopened    = valueTypeOf(nodeTypeOf(subject));
+    const bool noTag  = asTagged(unopened) == nullptr;
+    const bool valued = unopened != nullptr && unopened->code() != TypeCode::Void;
+    if (onNull && noTag && valued) {
+        subject = reopenKnownNotNull(gct->at(0), subject, gct, "??");
     }
     Type *subjectType = valueTypeOf(nodeTypeOf(subject));
     TupleType *tagged = asTagged(subjectType);
     if (tagged == nullptr || tagged->isNullable() != onNull) {
-        // DESIGN-QUESTION(nullable-error) Q6: `?->` is defined for errors only.
         diags_->of(SemanticDiag::TaggedOperandMismatch)
             .atOrigin(gct->origin())
             .commit(
@@ -1421,76 +1568,100 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
     const GCT::node_ptr_t exec = gct->at(1)->at(0);
     std::vector<arm_ptr_t> arms(2);
 
-    if (kind != Kind::ErrorPass) {
-        // Arm 0 is the right-hand side, a subgraph of its own: it is entered, and so
-        // evaluated, only when the tag selects it. Arm 1 takes the value out. The right
-        // side's position is the payload type: a plain `T` is what it is, and a `T?` is what
-        // the chained form hands on (a value of another form is left as it is, and the test
-        // below names it).
-        {
-            ExpectedValueScope fallbackScope(expectedValueType_, payload);
-            arms[0] = buildArm(exec);
-        }
-        // Design principles 3.8: the right-hand side is a `T`, and the result is a `T`; or
-        // it is itself a `T?` (`T!` for `!!`), and the result is that: `a ?? b ?? 9` tries
-        // `a`, then `b`, then gives the default. Arm 1 then hands on `a` as it is instead of
-        // taking the value out. Either way it is one branch.
-        Type *fallback   = arms[0]->exitType();
-        const bool plain = fallback != nullptr && (payload->unify(fallback) != nullptr ||
-                                                   entersImplicitly(payload, fallback));
-        const bool chained =
-            !plain && fallback != nullptr && entersImplicitly(subjectType, fallback);
-        if (plain) {
-            if (payload->unify(fallback) == nullptr) {
-                coerceArmExit(arms[0], payload, gct);
-            }
-            arms[1] = buildArm(exec, [&] { return applyTagOperator(valueOp, name, gct); });
-        } else if (chained) {
-            coerceArmExit(arms[0], subjectType, gct);
-            arms[1] = buildArm(exec, [&] {
-                const GCT::node_ptr_t dref = tree_->makeDRef(name);
-                dref->setOrigin(gct->origin());
-                return valueNodeOf(visitDRefNode(dref));
-            });
-        } else {
-            diags_->of(SemanticDiag::TaggedOperandMismatch)
-                .atOrigin(gct->origin())
-                .commit(
-                    symbol,
-                    "its right side has type '" +
-                        (fallback ? fallback->toString() : std::string("void")) +
-                        "', but the left side holds a '" + payload->toString() + "'");
-            throw BuildAbortException();
-        }
-        return buildBranch(gct, tagNode, &arms);
+    // Arm 0 is the right-hand side, a subgraph of its own: it is entered, and so
+    // evaluated, only when the tag selects it. Arm 1 takes the value out. The right
+    // side's position is the payload type: a plain `T` is what it is, and a `T?` is what
+    // the chained form hands on (a value of another form is left as it is, and the test
+    // below names it).
+    {
+        ExpectedValueScope fallbackScope(expectedValueType_, payload);
+        arms[0] = buildArm(exec);
     }
+    // Design principles 3.8: the right-hand side is a `T`, and the result is a `T`; or
+    // it is itself a `T?` (`T!` for `!!`), and the result is that: `a ?? b ?? 9` tries
+    // `a`, then `b`, then gives the default. Arm 1 then hands on `a` as it is instead of
+    // taking the value out. Either way it is one branch.
+    Type *fallback   = arms[0]->exitType();
+    const bool plain = fallback != nullptr && (payload->unify(fallback) != nullptr ||
+                                               entersImplicitly(payload, fallback));
+    const bool chained =
+        !plain && fallback != nullptr && entersImplicitly(subjectType, fallback);
+    if (plain) {
+        if (payload->unify(fallback) == nullptr) {
+            coerceArmExit(arms[0], payload, gct);
+        }
+        arms[1] = buildArm(exec, [&] { return applyTagOperator(valueOp, name, gct); });
+    } else if (chained) {
+        coerceArmExit(arms[0], subjectType, gct);
+        arms[1] = buildArm(exec, [&] {
+            const GCT::node_ptr_t dref = tree_->makeDRef(name);
+            dref->setOrigin(gct->origin());
+            return valueNodeOf(visitDRefNode(dref));
+        });
+    } else {
+        diags_->of(SemanticDiag::TaggedOperandMismatch)
+            .atOrigin(gct->origin())
+            .commit(
+                symbol,
+                "its right side has type '" +
+                    (fallback ? fallback->toString() : std::string("void")) +
+                    "', but the left side holds a '" + payload->toString() + "'");
+        throw BuildAbortException();
+    }
+    return buildBranch(gct, tagNode, &arms);
+}
 
-    // `x ?-> f`: arm 1 calls `f` with the value and yields a `U!` (put into that form when
-    // `f` returns a plain `U`); arm 0 hands the failed `x` on as that `U!`. Arm 1 is built
-    // first because it is what determines `U`.
+// `x -> f` where `x` is a `T?` or a `T!` and no overload of `f` takes it as it is (design
+// principles 3.9): a branch on the tag of `x`. The arm taken when `x` is null (has failed) hands it
+// on as the result; the other arm calls `f` with the value taken out, and gives a `U?` (`U!`; a
+// `U` that is already of that form is kept). The value taken out may itself be tagged (`T?!`), in
+// which case the call there takes it apart again.
+node_handle_t Builder::peelPipeReceiver(const GCT::node_ptr_t &call, node_handle_t receiver) {
+    Type *subjectType = valueTypeOf(nodeTypeOf(receiver));
+    TupleType *tagged = asTagged(subjectType);
+    ASSERT(tagged != nullptr, "A pipe takes a receiver apart only when it is tagged.");
+    const bool onNull      = tagged->isNullable();
+    const std::string name = bindTemporary(receiver);
+    node_handle_t tagNode  = applyTagOperator(
+        onNull ? camel::core::oper::TagIsNull : camel::core::oper::TagIsError,
+        name,
+        call);
+    const camel::core::OperId valueOp =
+        onNull ? camel::core::oper::TagNullValue : camel::core::oper::TagErrorValue;
+    GCT::node_ptr_t passed = tree_->makeDRef(GCT::kPassedValueName);
+    passed->setOrigin(call->at(1)->origin());
+
+    std::vector<arm_ptr_t> arms(2);
     Type *resultType = nullptr;
-    arms[1]          = buildArm(exec, [&] {
-        insertNode(GCT::kPassedValueName, applyTagOperator(valueOp, name, gct));
-        node_handle_t result = visitBodyNode(exec);
-        ASSERT(result != nullptr, "The call of '?->' produced no node.");
+    arms[1]          = buildArm(call, [&] {
+        insertNode(GCT::kPassedValueName, applyTagOperator(valueOp, name, call));
+        ExpectedValueScope noPosition(expectedValueType_, nullptr);
+        node_handle_t result = visitPipeLink(call, passed);
         if (nodeIsKind(result, runtime::GCNodeKind::Gate) && !normInputsOf(result).empty()) {
             result = nodeDraftOf(result)->ref(normInputsOf(result).front());
         }
         Type *type = valueTypeOf(nodeTypeOf(result));
-        if (asFallible(type) != nullptr) {
-            resultType = type;
-            return result;
+        if (onNull) {
+            resultType = type->code() == TypeCode::Void || asNullable(type) != nullptr
+                             ? type
+                             : TupleType::nullable(type);
+        } else {
+            resultType = asFallible(type) != nullptr ? type : TupleType::fallible(type);
         }
-        resultType = TupleType::fallible(type);
-        return castNodeTo(result, resultType, gct);
+        return resultType == type ? result : castNodeTo(result, resultType, call);
     });
-    arms[0]          = buildArm(exec, [&] {
+    arms[0]          = buildArm(call, [&] {
+        if (onNull) {
+            node_handle_t none = currGraph_->addStaticDataNode(Data::null());
+            registerNodeOrigin(context_, none, call, "gir.data");
+            return resultType->code() == TypeCode::Void ? none : castNodeTo(none, resultType, call);
+        }
         const GCT::node_ptr_t dref = tree_->makeDRef(name);
-        dref->setOrigin(gct->origin());
+        dref->setOrigin(call->origin());
         node_handle_t failed = valueNodeOf(visitDRefNode(dref));
-        return resultType->equals(subjectType) ? failed : castNodeTo(failed, resultType, gct);
+        return resultType->equals(subjectType) ? failed : castNodeTo(failed, resultType, call);
     });
-    return buildBranch(gct, tagNode, &arms);
+    return buildBranch(call, tagNode, &arms);
 }
 
 node_handle_t
@@ -1794,17 +1965,23 @@ bool Builder::isNarrowedName(const GCT::node_ptr_t &expr) {
     return bound.has_value() && narrowedValues_.contains(*bound);
 }
 
-node_handle_t Builder::reopenNarrowedName(
+node_handle_t Builder::reopenKnownNotNull(
     const GCT::node_ptr_t &expr, node_handle_t subject, const GCT::node_ptr_t &at,
     const char *construct) {
-    // Design principles 3.8: the construct is still allowed on the name; it is applied to the
-    // value put back into `T?`, so that it is checked and built exactly as on the name before
-    // narrowing (the right side of `??` still has to fit, the cases of the `match` still have
-    // to be its fixed patterns), and only its null arm can never be taken.
+    // Design principles 3.8: the construct is still allowed on a left side that cannot be
+    // null; it is applied to the value put back into `T?`, so that it is checked and built
+    // exactly as on a `T?` (the right side of `??` still has to fit, the cases of the `match`
+    // still have to be its fixed patterns), and only its null arm can never be taken.
     Type *type = valueTypeOf(nodeTypeOf(subject));
+    // A name is named as it is written; anything else (`a + 1`, `f()`) is named by the text
+    // that produced it, so the reader is told which value cannot be null.
+    std::string who = expr->type() == GCT::NodeKind::DREF ? expr->name() : sourceTextOf(expr);
+    if (who.empty()) {
+        who = "This value";
+    }
     diags_->of(SemanticDiag::KnownNotNull)
         .atOrigin(at->origin())
-        .commit(expr->name(), type->toString(), construct);
+        .commit(who, type->toString(), construct);
     node_handle_t reopened = coerceTo(subject, TupleType::nullable(type), at);
     ASSERT(reopened != nullptr, "A value always enters the nullable form of its own type.");
     return reopened;
@@ -1998,8 +2175,7 @@ node_handle_t Builder::visitConditionBrchNode(const GCT::node_ptr_t &gct) {
 node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
     ENTER("BRCH");
     const auto kind = gct->branchKind();
-    if (kind == GCT::BranchKind::NullThen || kind == GCT::BranchKind::ErrorThen ||
-        kind == GCT::BranchKind::ErrorPass) {
+    if (kind == GCT::BranchKind::NullThen || kind == GCT::BranchKind::ErrorThen) {
         node_handle_t node = visitTaggedBrchNode(gct);
         LEAVE("BRCH");
         return node;
@@ -2023,6 +2199,10 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
         condNode = valueNodeOf(visit(gct->at(0)));
     }
     node_handle_t node{};
+    // A `match` on a value that cannot be null is left to the plain match below: only the
+    // narrowed name is put back into `T?` here, so that `case null` over it is still checked
+    // as it is over a `T?` (`??` treats every value that cannot be null the same way, see
+    // visitTaggedBrchNode).
     if (asTagged(valueTypeOf(nodeTypeOf(condNode))) == nullptr && isNarrowedName(gct->at(0))) {
         // `match x { case null => ...  case v => ... }` where an `if` around it already
         // narrowed `x` to a `T` (design principles 3.8): allowed, with a warning. A match
@@ -2031,7 +2211,7 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
             return c->caseType() == GCT::CaseType::Value && isNullLiteral(c->at(0));
         });
         if (nullCase) {
-            condNode = reopenNarrowedName(gct->at(0), condNode, gct, "match");
+            condNode = reopenKnownNotNull(gct->at(0), condNode, gct, "match");
         }
     }
     if (TupleType *tagged = asTagged(valueTypeOf(nodeTypeOf(condNode)))) {
@@ -2301,6 +2481,13 @@ node_handle_t Builder::buildBranch(
                             last->caseType() == GCT::CaseType::Else && last->size() == 1 &&
                             last->at(0)->size() == 0;
     }
+    // A position that takes no value joins nothing: an `if` without `else` is one (`valueless`,
+    // `dropsArmValues`), and so is a branch at a `void` position or written as a statement whose
+    // value the block drops. One rule (design principles 3.7, and the ruling on the arm of a
+    // branch at a position that takes no value): the arms' effects happen, no value is joined,
+    // and what the arms give is dropped. It is known before the arms are added, and an `if` that
+    // does write an `else` does not undo it.
+    const bool joinsNoValue = dropsArmValues || branchTakesNoValue(gct);
 
     linkNodes(LinkType::Norm, condNode, brchNode);
     std::vector<arm_ptr_t> armList;
@@ -2313,12 +2500,19 @@ node_handle_t Builder::buildBranch(
         }
         bodyValueStatement_.erase(arm.get());
         armList.push_back(arm);
+        if (!joinsNoValue && !absentElse) {
+            // A position that takes a value reads a cell out before the arms are joined: an arm
+            // of `var T` joins as its `T` (design principles 3.8, and the ruling on the
+            // cell-typed arm). Nothing is read where the join takes no value.
+            readArmCellValue(arm);
+        }
         Type *exitType = arm->exitType();
 
-        if (absentElse) {
-            // Design principles 3.7: an `if` without `else` has no value. Its arm may be of
-            // any type and what the arm gives is dropped: the join takes nothing. The arm
-            // written is evaluated as any arm is; the one not written is an empty arm.
+        if (absentElse || joinsNoValue) {
+            // Design principles 3.7: an `if` without `else` has no value, and neither has a
+            // branch at a position that takes no value. Its arm may be of any type and what the
+            // arm gives is dropped: the join takes nothing. The arm written is evaluated as any
+            // arm is; the one not written is an empty arm.
             joinType = Type::Void();
             setNodeType(joinNode, joinType);
         } else if (joinType == nullptr) {
@@ -2426,7 +2620,7 @@ node_handle_t Builder::buildBranch(
         }
         addArm(subGraph);
     }
-    if (joinType != nullptr && !absentElse) {
+    if (joinType != nullptr && !absentElse && !joinsNoValue) {
         for (const arm_ptr_t &arm : armList) {
             Type *exitType = arm->exitType();
             if (exitType != nullptr && !joinType->assignableFrom(exitType) &&
@@ -2502,9 +2696,9 @@ node_handle_t Builder::buildBranch(
 
     linkNodes(LinkType::Norm, brchNode, joinNode);
     linkArmEntries(armList, brchNode);
-    // The arms of this branch exclude each other: a stream consumed in one of them is not
-    // consumed twice by a use in another (design principles 5.4).
-    noteArmGroup(armList);
+    // The arms of this branch exclude each other (design principles 5.4): the check on the built
+    // graph reads which arm a read stands in from the region of the BRCH node, so nothing is
+    // recorded here.
 
     // The branch is the user of the variables its arms used, and the writer of those they
     // wrote. It begins at BRCH and is complete at JOIN.
@@ -2820,7 +3014,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             // looked up by the group's name.
             if (const auto group = importedEntity("__iter__");
                 group.has_value() && group->isOperGroup()) {
-                elements = group->operGroup()->resolve({}, {type}, statics, Modifier::None);
+                elements = group->operGroup()->resolve({}, {type}, statics);
             }
             if (!elements.has_value()) {
                 diags_->of(SemanticDiag::LoopSequenceNotIterable)
@@ -2847,8 +3041,15 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     // `int[]` the rule gives it, and the loop iterates that value like any other sequence.
     if (hasIterable && isIntervalExpr(gct->loopSequence())) {
         const auto &interval = gct->loopSequence();
-        node_handle_t from   = argumentNodeOf(visit(interval->at(1)), interval->at(1));
-        node_handle_t to     = argumentNodeOf(visit(interval->at(2)), interval->at(2));
+        // The sequence is not the loop's value, so the position the loop stands in does not reach
+        // it (design principles 5.1): its literals have the types they are written with.
+        node_handle_t from{};
+        node_handle_t to{};
+        {
+            ExpectedValueScope sequenceScope(expectedValueType_, nullptr);
+            from = argumentNodeOf(visit(interval->at(1)), interval->at(1));
+            to   = argumentNodeOf(visit(interval->at(2)), interval->at(2));
+        }
         if (intervalBounds(from, to)) {
             sequence         = intervalSequenceValue(from, to, interval);
             elementType      = Type::Int64();
@@ -2863,7 +3064,11 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         }
     } else if (hasIterable) {
         const auto &expr = gct->loopSequence();
-        sequence         = valueOf(functionValueOf(valueNodeOf(visit(expr)), expr));
+        {
+            // The sequence is not the loop's value (see above).
+            ExpectedValueScope sequenceScope(expectedValueType_, nullptr);
+            sequence = valueOf(functionValueOf(valueNodeOf(visit(expr)), expr));
+        }
         Type *sequenceType = valueTypeOf(nodeTypeOf(sequence));
         // `for x in s` where `s` is a stream: the rounds are the pulls of the stream's step
         // function, and the graph already has the loop for that (the `while`, with a condition
@@ -2904,7 +3109,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         part.graph->draft().setRegionParams(part.region, params.build());
     };
     const auto declarePorts = [&](ArmBuild &part, bool withElement, const GCT::node_ptr_t &exec) {
-        const auto add = [&](const std::string &name, Type *type) {
+        const auto add = [&](const std::string &name, Type *type) -> node_handle_t {
             node_handle_t port = currGraph_->addRegionPortNode(type, name);
             // A port belongs to its region, as the nodes that read it do.
             part.graph->draft().setNodeRegion(nodeIdOf(port), part.region);
@@ -2913,12 +3118,19 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                 recordDeclaration(name, port, exec);
             }
             part.ports.push_back(port);
+            return port;
         };
         if (withElement) {
             add(gct->loopElementName(), elementType);
         }
         for (size_t j = 0; j < k; ++j) {
-            add(stateNames[j], stateTypes[j]);
+            node_handle_t port = add(stateNames[j], stateTypes[j]);
+            // The value a state's port stands for: what the round starts from, which is the state's
+            // initial value. A loop that carries a stream is the loop that reads it, so the port and
+            // the value handed to the loop are one value (noteMachinePortOrigin).
+            if (j < initial.size()) {
+                noteMachinePortOrigin(port, initial[j]);
+            }
         }
         refreshPorts(part, withElement);
     };
@@ -3495,8 +3707,8 @@ node_handle_t Builder::buildStreamLoop(
     Type *pullType         = stepType->exitType();
     Type *elementType      = stream->elemType();
     // A `for` over a stream is one consumer of it (design principles 5.4: a stream is read once on
-    // each execution path).
-    consumeStream(sequence, gct);
+    // each execution path), and the loop reads the stream through the data edge the call below
+    // writes, so the check on the built graph sees this read like any other.
 
     // The names of the machine's parts. They are no names a program writes -- the names of the
     // head are the states and the element -- and the parts read the round through them.
@@ -3592,10 +3804,20 @@ node_handle_t Builder::buildStreamLoop(
         part.graph->draft().setRegionParams(part.region, params.build());
     };
     const auto declarePorts = [&](ArmBuild &part, const GCT::node_ptr_t &exec) {
+        // The value each port stands for: the machine is handed the sequence, the flag that says it
+        // is over and the states, in that order (`machineInitial`), and inside a round those values
+        // are the round's ports. The port is recorded against what it stands for, so the value the
+        // program wrote outside and the slot that carries it inside are one value (design principles
+        // 3.7 C1, `noteMachinePortOrigin`).
+        size_t handed = 0;
         const auto add = [&](const std::string &name, Type *type) {
             node_handle_t port = currGraph_->addRegionPortNode(type, name);
             part.graph->draft().setNodeRegion(nodeIdOf(port), part.region);
             insertNode(name, port);
+            if (handed < machineInitial.size()) {
+                noteMachinePortOrigin(port, machineInitial[handed]);
+            }
+            ++handed;
             if (recorder_) {
                 recordDeclaration(name, port, exec);
             }
@@ -3802,111 +4024,6 @@ node_handle_t Builder::buildStreamLoop(
     return loopValue;
 }
 
-void Builder::noteArmGroup(const std::vector<arm_ptr_t> &arms) {
-    // One arm excludes nothing: an `if` without `else` has a path where no arm ran and the value
-    // passed on, so only two arms or more say which uses cannot both happen.
-    if (arms.size() < 2 || currGraph_ == nullptr) {
-        return;
-    }
-    std::vector<uint32_t> regions;
-    regions.reserve(arms.size());
-    for (const arm_ptr_t &arm : arms) {
-        regions.push_back(arm->region);
-    }
-    armGroups_.emplace_back(currGraph_.get(), std::move(regions));
-}
-
-void Builder::consumeStream(node_handle_t value, const GCT::node_ptr_t &at) {
-    if (value == nullptr || currGraph_ == nullptr || at == nullptr) {
-        return;
-    }
-    StreamConsumption use;
-    use.graph  = currGraph_.get();
-    use.value  = value;
-    use.origin = at->origin();
-    use.arms.reserve(armStack_.size());
-    for (ArmBuild *arm : armStack_) {
-        // A loop's condition and body run again on every round, so a use standing in one of them
-        // consumes the value once per round; the ports of the region are the values the round
-        // starts from (the element, the states), and one of them is the loop's own state, which
-        // is what a value consumed per round has to be.
-        const bool round = arm->kind == runtime::GCRegionKind::LoopCond ||
-                           arm->kind == runtime::GCRegionKind::LoopBody;
-        use.arms.push_back({arm->region, round, round ? arm->ports : std::vector<node_handle_t>{},
-                            arm->origin});
-    }
-    streamConsumptions_.push_back(std::move(use));
-}
-
-void Builder::checkStreamConsumption(DraftGraphBuilder *graph) {
-    // A value consumed in a loop's round region is consumed once per round (design principles
-    // 5.4): under value semantics every round sees the same stream, so the value has to be the
-    // loop's own state -- which the round takes from its port and gives back as the next state --
-    // and a value written outside the loop is consumed again by each round.
-    for (const StreamConsumption &use : streamConsumptions_) {
-        if (use.graph != graph) {
-            continue;
-        }
-        for (const StreamConsumption::ArmUse &arm : use.arms) {
-            if (!arm.round ||
-                std::find(arm.ports.begin(), arm.ports.end(), use.value) != arm.ports.end()) {
-                continue;
-            }
-            Type *valueType = valueTypeOf(nodeTypeOf(use.value));
-            diags_->of(SemanticDiag::StreamConsumedInLoop)
-                .atOrigin(use.origin)
-                .relatedOrigin(arm.origin, "the loop this use stands in")
-                .commit(valueType != nullptr ? valueType->toString() : std::string("a stream"));
-            throw BuildAbortException();
-        }
-    }
-    // Two uses of one stream are one consumer when one of them stands in an arm the other does
-    // not: only one arm of a branch runs, so the two uses cannot both happen on one path. The arms
-    // of a branch are complete only once it is, and the uses stand in the arms while those are
-    // built, so this runs where the graph is complete.
-    const auto apart = [&](const StreamConsumption &left, const StreamConsumption &right) {
-        for (const auto &group : armGroups_) {
-            if (group.first != graph) {
-                continue;
-            }
-            const auto regionOf = [&](const std::vector<StreamConsumption::ArmUse> &use) -> uint32_t {
-                for (const StreamConsumption::ArmUse &arm : use) {
-                    if (std::find(group.second.begin(), group.second.end(), arm.region) !=
-                        group.second.end()) {
-                        return arm.region;
-                    }
-                }
-                return 0;
-            };
-            const uint32_t mine   = regionOf(left.arms);
-            const uint32_t theirs = regionOf(right.arms);
-            if (mine != 0 && theirs != 0 && mine != theirs) {
-                return true;
-            }
-        }
-        return false;
-    };
-    for (size_t i = 0; i < streamConsumptions_.size(); ++i) {
-        const StreamConsumption &first = streamConsumptions_[i];
-        if (first.graph != graph) {
-            continue;
-        }
-        for (size_t j = i + 1; j < streamConsumptions_.size(); ++j) {
-            const StreamConsumption &second = streamConsumptions_[j];
-            if (second.graph != graph || second.value != first.value || apart(first, second)) {
-                continue;
-            }
-            // The later use is the second consumer, and the first is where the stream was read.
-            Type *valueType = valueTypeOf(nodeTypeOf(second.value));
-            diags_->of(SemanticDiag::StreamConsumedTwice)
-                .atOrigin(second.origin)
-                .relatedOrigin(first.origin, "the stream is consumed here first")
-                .commit(valueType != nullptr ? valueType->toString() : std::string("a stream"));
-            throw BuildAbortException();
-        }
-    }
-}
-
 node_handle_t Builder::visitAnnoNode(const GCT::node_ptr_t &gct) {
     ENTER("ANNO");
     ASSERT(gct->size() == 1, "ANNO node should have exactly one child.");
@@ -4075,7 +4192,7 @@ bool Builder::inferLoopStateFromAppend(
     const auto group = importedOperatorGroupNamed("append");
     if (group != nullptr) {
         const std::vector<StaticArg> statics(1);
-        const auto resolved = group->resolve({element}, {newType}, statics, Modifier::None);
+        const auto resolved = group->resolve({element}, {newType}, statics);
         if (resolved.has_value()) {
             graph->retargetOperNode(next, *resolved);
         }
@@ -4217,60 +4334,70 @@ void Builder::markLoopStateInPlace(
     // state is an array, its first value is a literal (a Data or FILL node), its next value is
     // `state->append<v>`, and the body uses that state's port nowhere else. Anything else -- a
     // struct or tuple state, a first value that is a parameter or an array element, a body that
-    // also reads the state or ends in `return` -- keeps the copying `append`; the values are the
+    // also reads the state -- keeps the copying `append`; the values are the
     // same either way, and only the allocation differs (10.5's in-place guarantee is about the
     // state's data block, not about a promise on the source).
     // A state that was split out of a struct is a component of the states the loop's parts
     // declare, so the count is the initial values', not the LOOP node's names; its first value
     // is a projection of the struct (a value the loop does not own) and is copied once.
     const size_t stateCount = initial.size();
-    if (stateCount == 0 || body->returned) {
+    if (stateCount == 0) {
         return;
     }
     node_handle_t returned = loopStateValueOf(body->value);
     if (returned == nullptr) {
         return;
     }
-    // The next value of each state, in state order. One state hands the append call back
-    // directly. Two or more return a tuple, a FILL whose With inputs are the computed
-    // components and whose payload says which component each one fills; a component written as
-    // a constant there (`(xs->append<7>, 0)`) has no value node and no rewrite of its own.
+    // The next value of each state, in state order, for each arm the body can end in: a body that
+    // ends in an `if` or `match` has one result per arm, behind the JOIN that forwards the one
+    // that ran, and only one arm runs, so a state each arm uses once is held once. One state
+    // hands the append call back directly. Two or more return a tuple, a FILL whose With inputs
+    // are the computed components and whose payload says which component each one fills; a
+    // component written as a constant there (`(xs->append<7>, 0)`) has no value node and no
+    // rewrite of its own.
+    const std::vector<node_handle_t> arms = loopArmResultsOf(returned);
     if (stateCount == 1) {
         markLoopStateInPlaceOne(
             body,
             loop,
             initial,
             0,
-            returned,
+            arms,
             !privateInitial.empty() && privateInitial[0]);
         return;
     }
-    if (!nodeIsKind(returned, runtime::GCNodeKind::Fill)) {
-        return;
-    }
-    const Type *returnType = valueTypeOf(nodeTypeOf(returned));
-    if (returnType == nullptr || returnType->code() != TypeCode::Tuple) {
-        return;
-    }
-    const auto withIns = withInputsOf(returned);
-    const auto payload = nodeDraftOf(returned)->payloadOf(nodeIdOf(returned));
-    if (payload.size() < sizeof(runtime::GCFillBody)) {
-        return;
-    }
-    const auto *fill = reinterpret_cast<const runtime::GCFillBody *>(payload.data());
-    if (fill->fillKind != runtime::GCFillKind::Tuple) {
-        return;
-    }
-    const auto slots = fill->slots();
-    if (slots.size() != withIns.size()) {
-        return;
-    }
-    std::vector<node_handle_t> next(stateCount, nullptr);
-    for (size_t i = 0; i < slots.size(); ++i) {
-        if (static_cast<size_t>(slots[i]) >= stateCount) {
+    std::vector<std::vector<node_handle_t>> nexts(stateCount);
+    for (node_handle_t arm : arms) {
+        if (arm == nullptr || !nodeIsKind(arm, runtime::GCNodeKind::Fill)) {
             return;
         }
-        next[slots[i]] = nodeDraftOf(returned)->ref(withIns[i]);
+        const Type *returnType = valueTypeOf(nodeTypeOf(arm));
+        if (returnType == nullptr || returnType->code() != TypeCode::Tuple) {
+            return;
+        }
+        const auto withIns = withInputsOf(arm);
+        const auto payload = nodeDraftOf(arm)->payloadOf(nodeIdOf(arm));
+        if (payload.size() < sizeof(runtime::GCFillBody)) {
+            return;
+        }
+        const auto *fill = reinterpret_cast<const runtime::GCFillBody *>(payload.data());
+        if (fill->fillKind != runtime::GCFillKind::Tuple) {
+            return;
+        }
+        const auto slots = fill->slots();
+        if (slots.size() != withIns.size()) {
+            return;
+        }
+        std::vector<node_handle_t> next(stateCount, nullptr);
+        for (size_t i = 0; i < slots.size(); ++i) {
+            if (static_cast<size_t>(slots[i]) >= stateCount) {
+                return;
+            }
+            next[slots[i]] = nodeDraftOf(arm)->ref(withIns[i]);
+        }
+        for (size_t j = 0; j < stateCount; ++j) {
+            nexts[j].push_back(next[j]);
+        }
     }
     for (size_t j = 0; j < stateCount; ++j) {
         markLoopStateInPlaceOne(
@@ -4278,15 +4405,15 @@ void Builder::markLoopStateInPlace(
             loop,
             initial,
             j,
-            next[j],
+            nexts[j],
             !privateInitial.empty() && j < privateInitial.size() && privateInitial[j]);
     }
 }
 
 void Builder::markLoopStateInPlaceOne(
     const arm_ptr_t &body, const GCT::node_ptr_t &loop, std::vector<node_handle_t> &initial,
-    size_t index, node_handle_t next, bool initialIsPrivate) {
-    if (next == nullptr || !nodeIsKind(next, runtime::GCNodeKind::Oper)) {
+    size_t index, const std::vector<node_handle_t> &nexts, bool initialIsPrivate) {
+    if (nexts.empty()) {
         return;
     }
     // The first value has to be a literal: a name, a call or a projection can name an array
@@ -4301,42 +4428,60 @@ void Builder::markLoopStateInPlaceOne(
     if (stateType == nullptr || stateType->code() != TypeCode::Array) {
         return;
     }
-    const oper_idx_ptr_t op = nodeGraphOf(next)->operTarget(next);
-    if (op == nullptr || op->uri() != ":struct/append_arr") {
-        return;
-    }
-    // The array the call appends to is this state's parameter, and the body uses that
-    // parameter nowhere else: once the round returns, the value it was bound to is gone (the
-    // driver binds the round's own state), so nothing can see it as it was.
-    const auto normIns = normInputsOf(next);
-    if (normIns.size() != 1) {
-        return;
-    }
-    node_handle_t port  = nodeDraftOf(next)->ref(normIns.front());
     const size_t portAt = index + (camel::core::loopHasIterable(loop->loopKind()) ? 1 : 0);
-    if (port == nullptr || portAt >= body->ports.size() || body->ports[portAt] != port) {
+    if (portAt >= body->ports.size()) {
         return;
     }
-    if (normUsersOf(port).size() + withUsersOf(port).size() != 1) {
+    node_handle_t port = body->ports[portAt];
+    if (port == nullptr) {
         return;
     }
-    // The appended value is the call's only With input; the owned form takes the same.
-    const auto withIns = withInputsOf(next);
-    if (withIns.size() != 1) {
-        return;
-    }
-    Type *valueType = nodeTypeOf(nodeDraftOf(next)->ref(withIns.front()));
-    if (valueType == nullptr) {
-        return;
-    }
+    // Each next value is the call `state->append<v>` on this state's parameter, or the parameter
+    // itself (an arm that leaves the state as it was). The body uses the parameter nowhere else:
+    // once the round returns, the value it was bound to is gone (the driver binds the round's own
+    // state), so nothing can see it as it was. The arms are exclusive, so one use in each is one
+    // holder.
     const oper_group_ptr_t group =
         context_->importModule("")->nativeOperatorGroup(camel::core::oper::AppendOwned);
     if (group == nullptr) {
         return;
     }
     const std::vector<StaticArg> statics(1);
-    const auto owned = group->resolve({valueType}, {nodeTypeOf(port)}, statics, Modifier::None);
-    if (!owned.has_value()) {
+    std::vector<std::pair<node_handle_t, oper_idx_ptr_t>> appends;
+    for (node_handle_t next : nexts) {
+        if (next == nullptr) {
+            return;
+        }
+        if (next == port) {
+            continue;
+        }
+        if (!nodeIsKind(next, runtime::GCNodeKind::Oper)) {
+            return;
+        }
+        const oper_idx_ptr_t op = nodeGraphOf(next)->operTarget(next);
+        if (op == nullptr || op->uri() != ":struct/append_arr") {
+            return;
+        }
+        const auto normIns = normInputsOf(next);
+        if (normIns.size() != 1 || nodeDraftOf(next)->ref(normIns.front()) != port) {
+            return;
+        }
+        // The appended value is the call's only With input; the owned form takes the same.
+        const auto withIns = withInputsOf(next);
+        if (withIns.size() != 1) {
+            return;
+        }
+        Type *valueType = nodeTypeOf(nodeDraftOf(next)->ref(withIns.front()));
+        if (valueType == nullptr) {
+            return;
+        }
+        const auto owned = group->resolve({valueType}, {nodeTypeOf(port)}, statics);
+        if (!owned.has_value()) {
+            return;
+        }
+        appends.emplace_back(next, *owned);
+    }
+    if (appends.empty() || normUsersOf(port).size() + withUsersOf(port).size() != nexts.size()) {
         return;
     }
     // The loop starts from a private copy of its first value. A literal is a constant of the
@@ -4348,7 +4493,7 @@ void Builder::markLoopStateInPlaceOne(
         return;
     }
     const auto copyOp =
-        copyGroup->resolve({}, {nodeTypeOf(initial[index])}, statics, Modifier::None);
+        copyGroup->resolve({}, {nodeTypeOf(initial[index])}, statics);
     if (!copyOp.has_value()) {
         return;
     }
@@ -4358,7 +4503,9 @@ void Builder::markLoopStateInPlaceOne(
     registerNodeOrigin(context_, copy, loop->loopInitial(initialAt), "gir.loop.copy");
     linkNodes(LinkType::Norm, initial[index], copy);
     initial[index] = copy;
-    nodeGraphOf(next)->retargetOperNode(next, *owned);
+    for (const auto &[next, owned] : appends) {
+        nodeGraphOf(next)->retargetOperNode(next, owned);
+    }
 }
 
 void Builder::setBodyResult(const compile_graph_ptr_t &graph, node_handle_t result) {

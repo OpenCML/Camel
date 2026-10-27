@@ -1,0 +1,17 @@
+/**
+ * One process, two `Context`s (mm/gc): a second context is built beside the running one, inside a
+ * pass, and used and dropped there. Whether it is destroyed at the end of that scope is what
+ * `test::context_lifetime` reads, and the program's own line is the control: a collection taken
+ * after the second context was destroyed must not sweep the static data this run reaches through
+ * its own graphs.
+ * Run: camel context_lifetime.cml test::context_lifetime std::nvm
+ */
+
+func label(i: int): string {
+    return if i == 0 then 'contexts' else label(i - 1) + '-' + string(i)
+}
+
+func main(): int sync {
+    println(label(3))
+    return 0
+}

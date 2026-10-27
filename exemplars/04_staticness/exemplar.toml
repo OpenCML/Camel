@@ -1,5 +1,5 @@
 title = "Staticness"
-summary = "Recursion whose depth follows from the input's shape unrolls at export; tail recursion whose depth depends on input values exports as a Loop; a linear recursion (one recursive call whose result is used afterwards) exports as paired Loops; a recursion that two branches decide stops the export with a diagnostic at the recursion. Tree recursion is refused."
+summary = "Recursion whose depth follows from the input's shape unrolls at export; tail recursion whose depth depends on input values exports as a Loop; a linear recursion (one recursive call whose result is used afterwards) exports as paired Loops; a recursion that two branches decide gives an error value at the recursion, which is what the program's result is. Tree recursion is refused."
 
 [[runs]]
 name = "run"
@@ -35,5 +35,7 @@ onnx_ops = "Cast,ReduceSum,Greater,If,Identity"
 name = "nontail-export"
 env = ["MODE=nontail", "ONNX_OUT={tmp}/settle.onnx"]
 exit = 1
-diagnostic = "RuntimeDiag::RuntimeError"
-output_contains = ["several branches decide whether a function calls itself outside tail position", "04_staticness/program.cml:44:73)"]
+diagnostic = "RuntimeDiag::UnhandledError"
+diagnostic_line = 43
+diagnostic_column = 73
+output_contains = ["several branches decide whether a function calls itself outside tail position"]

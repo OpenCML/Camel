@@ -14,7 +14,6 @@
  * the refusal of `+`, which was true before then; it is re-pointed at the operation that is
  * genuinely refused rather than deleted, so the diagnostic keeps a case that exercises it.
  */
-module stdlib_reduced_arithmetic_refused
 
 func main(): int sync {
     let xs: bf16[] = []

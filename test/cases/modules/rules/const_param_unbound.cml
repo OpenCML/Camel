@@ -9,9 +9,8 @@
  * with a diagnostic that names the parameter and the rule, rather than reaching the engine with a
  * rule whose match binds no constant for one of its `const` parameters.
  */
-module const_param_unbound
 
-import { Program, Node, type_of, type_name } from graph
+import { Node, type_of, type_name } from graph
 import { rewrite } from rewrite
 
 func typeText(n: Node): string {
@@ -23,8 +22,8 @@ func typeText(n: Node): string {
 
 rule drop_by_shape(x: int, const c: int) when typeText(node_of(c)) == 'int' { x + 1 => x }
 
-export func apply(p: Program): Program! {
-    return rewrite(p, [drop_by_shape])
+export func apply::<F>(p: F): F! {
+    return p->rewrite<[drop_by_shape]>
 }
 
 func shifted(a: int): int { return a + 1 }

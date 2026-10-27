@@ -4,7 +4,6 @@
  * belongs (line 11, column 16): `Expected '=>' before 'b'.` It was a `ConstructNotSupported`
  * naming the one two-word pattern.
  */
-module no_two_word_pattern
 
 func f(n: int): int {
     return match n {

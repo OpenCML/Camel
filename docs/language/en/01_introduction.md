@@ -25,7 +25,6 @@ Camel is a graph-native general-purpose programming language; AI is its primary 
 The smallest program:
 
 ```cml
-module hello
 
 func main(): int sync {
     println('Hello, Camel!')
@@ -52,7 +51,7 @@ Hello, Camel!
 | [4 Execution model](04_execution_model.md) | Evaluation by dependency, `sync`, references, faults and exit, passes |
 | [5 Modules](05_modules.md) | `module`, `import`, `export`, `namespace` |
 | [6 Expressions](06_expressions.md) | Literals, access, calls, pipes, operators, `if`, `match`, lambdas |
-| [7 Statements and declarations](07_statements.md) | `let`/`var`, `return`/`throw`, blocks, functions, generics, type declarations |
+| [7 Statements and declarations](07_statements.md) | `let`/`var`, `return`, blocks, functions, generics, type declarations |
 | [8 Program and grammar](08_top_level_and_grammar.md) | Top-level structure, entry, grammar summary |
 | [9 Rules and facts](09_rules_and_facts.md) | `rule` and conditions, type and `with` parameters, rule sets, `fact`, checking and explaining |
 

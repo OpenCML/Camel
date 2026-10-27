@@ -5,7 +5,6 @@
  * another -- and it is not refused, because the two readers are the two streams the `tee` gave
  * and neither stream has a second consumer.
  */
-module stream_tee_consumers
 
 import stream
 
@@ -25,7 +24,7 @@ func firstOf(p: (int, int..)?): int {
 }
 
 func twice(s: int..): int {
-    let (left, right) = stream::tee(s, 2)
+    let (left, right) = stream::tee<2>(s)
     let whole = loop acc = 0 for x in left do acc + x
     return whole + firstOf(right())
 }

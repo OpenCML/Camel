@@ -8,7 +8,6 @@
  * input"). `s` is used twice on purpose: the shared shape value is what makes
  * the step count a specialized-away argument.
  */
-module arm_tail_gate
 
 import { ones, zeros, shape } from tensor
 

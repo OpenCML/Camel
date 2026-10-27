@@ -1,6 +1,5 @@
 /// `var` variables: assigned in a function (a C++ local), passed as `var` arguments and captured
 /// by a closure (a shared cell: every holder sees the same value, design principles 3.5).
-module variables
 
 func bump(var x: int) {
     x += 1
@@ -25,7 +24,7 @@ func main(): int sync {
     s += 'c'
     println(s)
     var acc = 0
-    let add = sync (x: int): int => sync {
+    let add = (x: int): int => sync {
         acc += x
         return acc
     }

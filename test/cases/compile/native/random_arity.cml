@@ -1,12 +1,11 @@
 /**
- * The declaration of `rand:randint` takes two ordinary arguments: a second one is missing, and
- * the overload the message lists is the declaration's (step 10).
+ * The declaration of `rand:seed` takes one ordinary argument: a second one is refused at the
+ * call, and the overload the message lists is the declaration's.
  */
-module random_arity
 
-import { randint } from random
+import { seed } from random
 
 func main(): int sync {
-    println(randint(1))
+    seed(1, 2)
     return 0
 }

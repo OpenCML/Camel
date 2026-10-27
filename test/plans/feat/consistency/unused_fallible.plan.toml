@@ -22,7 +22,7 @@ expect_stdout_starts_with = "12\n-1\n"
 verify_script = """
 const lines = input.stderr.split('\n').filter((l) => l.includes("[Warn]: This value has type 'int!'"))
 assert(lines.length === 3, 'three warnings: ' + input.stderr)
-for (const line of [':12:', ':13:', ':17:']) {
+for (const line of [':11:', ':12:', ':16:']) {
   assert(lines.some((l) => l.includes(line)), 'a warning at ' + line + ': ' + input.stderr)
 }
 """
@@ -50,7 +50,7 @@ expect_output_not_contains = ["UnusedFallibleValue"]
 
 [[tests]]
 name = "unused_fallible.used"
-desc = "`!!`, `?->`, `match`, an argument and a return use the value: no warning."
+desc = "`!!`, `->`, `match`, an argument and a return use the value: no warning."
 kind = "behavior"
 case = "../../../cases/consistency/unused_fallible/used.cml"
 args = ["${case}"]

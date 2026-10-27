@@ -3,7 +3,6 @@
  * the declaration is written, when the module
  * is loaded, not when a call reaches it.
  */
-module missing_module
 
 #op('nowhere:absent')
 export func absent(x: int): int

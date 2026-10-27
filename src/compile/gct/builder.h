@@ -41,6 +41,7 @@ class Builder {
     /// at all; errors that leave a tree behind are in `diags`.
     std::unique_ptr<Tree> build(AST::node_ptr_t node, camel::core::error::diagnostics_ptr_t diags) {
         idIndex_ = 0;
+        pendingNames_.clear();
         diags_   = diags;
         tree_    = std::make_unique<Tree>();
         initInnerTypes();
@@ -108,6 +109,16 @@ class Builder {
     void initInnerTypes();
 
     std::pair<node_ptr_t, data_ptr_t> makeRefData(const node_ptr_t &expr);
+    // The elements of a literal that are plain names and have not been hoisted: they are read
+    // where the literal is built, which is after every element hoisted before it. When a computed
+    // element is hoisted after them, they are hoisted first (`pendingNames_`), so the uses of one
+    // variable in a literal happen from left to right, like the arguments of a call. Keyed by the
+    // block the literal hoists into, which the entry keeps alive.
+    struct PendingName {
+        std::shared_ptr<camel::core::data::RefData> data;
+        node_ptr_t expr;
+    };
+    std::vector<std::pair<node_ptr_t, std::vector<PendingName>>> pendingNames_;
     std::pair<data_ptr_t, bool> extractData(const node_ptr_t &node, node_ptr_t &execNode);
     std::pair<data_ptr_t, bool>
     extractData(const node_ptr_t &node, node_ptr_t &execNode, bool &dangling);
@@ -168,7 +179,7 @@ class Builder {
     bool dimBindAllowed_ = false;
 
     // Where the value of what is being lowered goes, as far as the warning
-    // ExitInUnusedBranch needs it. A `return` / `throw` in a branch arm ends the arm and
+    // ExitInUnusedBranch needs it. A `return` in a branch arm ends the arm and
     // gives the value of the `if` / `match` (an arm is a graph of its own); when nothing
     // takes that value the statement has no effect at all, and the program most likely
     // meant to leave the function.
@@ -196,7 +207,7 @@ class Builder {
     std::set<std::pair<size_t, size_t>> reportedExits_;
     // The next block lowered is an arm of `ctrl`, whose value is unused or not.
     void enterArmOf(const AST::node_ptr_t &ctrl, bool valueUnused);
-    void reportExitInUnusedArm(const AST::node_ptr_t &exit, bool isThrow);
+    void reportExitInUnusedArm(const AST::node_ptr_t &exit);
 
     void pushScope() { typeScope_ = std::make_shared<Scope<Reference, Type *>>(typeScope_); }
     void popScope() { typeScope_ = typeScope_->outer(); } // TODO: Shall we free the scope?
@@ -380,6 +391,7 @@ class Builder {
         const AST::node_ptr_t &ast, Tree::ParameterDefaults *defaultsOut = nullptr);
     Type *visitRefType(const AST::node_ptr_t &ast);
     Type *visitSpecType(const AST::node_ptr_t &ast);
+    Type *visitMatchTypeType(const AST::node_ptr_t &ast);
     /// The extents of one `[...]` as linear forms (design principles 5.4). An unknown extent
     /// (`?`, or the empty `[]`) is `ExtentForm::unknown()`; nullptr with a diagnostic reported.
     std::shared_ptr<const std::vector<camel::core::type::ExtentForm>>

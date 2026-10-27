@@ -9,7 +9,6 @@
  * different element type cannot be instantiated into infinitely many concrete types and is
  * reported as a compile error (design principles 5.5).
  */
-module specialize_element_type_nest
 
 import { get_env } from env
 
@@ -18,6 +17,6 @@ func nest::<T>(xs: T[n], k: int): int {
 }
 
 func main(): int sync {
-    println(nest([1.0, 2.0], int(get_env('H476_NEST_DEPTH'))))
+    println(nest([1.0, 2.0], int(get_env('H476_NEST_DEPTH') ?? '')))
     return 0
 }

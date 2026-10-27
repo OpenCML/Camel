@@ -1,7 +1,6 @@
 /**
  * int('12abc'): a number followed by something else is not a number (it used to give 12).
  */
-module int_text_trailing
 
 func conv(s: string): int { return int(s) }
 

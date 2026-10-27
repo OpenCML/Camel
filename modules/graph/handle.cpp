@@ -5,6 +5,7 @@
 
 #include "camel/core/mm.h"
 #include "camel/core/type/intern.h"
+#include "camel/core/type/text.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/program.h"
 #include "camel/utils/assert.h"
@@ -65,6 +66,24 @@ HandleType *HandleType::get(HandleKind kind) {
     return types[static_cast<size_t>(kind)];
 }
 
+// One object per kind and argument, from the type table (see intern.h): `equals` compares the
+// argument types, so the argument enters by canonical id and `Txn<F>` is one type wherever it is
+// written, instead of one per argument object.
+HandleType *HandleType::internWithArgument(HandleType *bare, Type *argument) {
+    const uintptr_t parts[1] = {typeKeyWord(TypeTable::instance().canonical(argument))};
+    return static_cast<HandleType *>(TypeTable::instance().internOther(
+        bare->code(), std::span<const uintptr_t>(parts, 1), [&]() -> Type * {
+            void *mem = mm::permSpace().alloc(sizeof(HandleType), alignof(HandleType));
+            ASSERT(mem != nullptr, "Failed to allocate HandleType from permSpace");
+            return new (mem) HandleType(bare->code(), bare->kind(), argument);
+        }));
+}
+
+HandleType *HandleType::ofFunctionType(Type *functionType) {
+    HandleType *bare = get(HandleKind::Txn);
+    return functionType == nullptr ? bare : internWithArgument(bare, functionType);
+}
+
 HandleType *HandleType::ofValueType(Type *valueType) {
     HandleType *bare = get(HandleKind::Node);
     if (valueType == nullptr) {
@@ -111,7 +130,10 @@ std::string HandleType::mangle() const {
 
 Type *HandleType::clone(bool deep) const {
     (void)deep;
-    return paramCount_ == 1 ? ofValueType(params_[0]) : get(kind_);
+    if (paramCount_ != 1) {
+        return get(kind_);
+    }
+    return kind_ == HandleKind::Txn ? ofFunctionType(params_[0]) : ofValueType(params_[0]);
 }
 
 Type *HandleType::unify(Type *other) const {
@@ -128,7 +150,10 @@ Type *HandleType::unify(Type *other) const {
         return const_cast<HandleType *>(this);
     }
     Type *united = mine->unify(theirs);
-    return united == nullptr ? nullptr : ofValueType(united);
+    if (united == nullptr) {
+        return nullptr;
+    }
+    return kind_ == HandleKind::Txn ? ofFunctionType(united) : ofValueType(united);
 }
 
 bool HandleType::equals(Type *other) const {
@@ -165,18 +190,21 @@ bool HandleType::assignableFrom(Type *source) const {
 }
 
 OtherType *HandleType::cloneWithParams(std::span<Type *const> params) const {
-    if (kind_ != HandleKind::Node) {
+    if (kind_ != HandleKind::Node && kind_ != HandleKind::Txn) {
         return params.empty() ? get(kind_) : nullptr;
     }
     if (params.empty()) {
         return get(kind_);
     }
-    return params.size() == 1 ? ofValueType(params[0]) : nullptr;
+    if (params.size() != 1) {
+        return nullptr;
+    }
+    return kind_ == HandleKind::Txn ? ofFunctionType(params[0]) : ofValueType(params[0]);
 }
 
 Type *
 HandleType::cloneWithArguments(std::span<const TypeArgument> arguments, std::string &error) const {
-    if (kind_ != HandleKind::Node) {
+    if (kind_ != HandleKind::Node && kind_ != HandleKind::Txn) {
         if (!arguments.empty()) {
             error = std::string(handleKindName(kind_)) + " takes no type argument";
             return nullptr;
@@ -187,10 +215,13 @@ HandleType::cloneWithArguments(std::span<const TypeArgument> arguments, std::str
         return get(kind_);
     }
     if (arguments.size() != 1 || arguments[0].type == nullptr) {
-        error = "Node takes one type argument: the type of the value the node stands for";
+        error = kind_ == HandleKind::Node
+                    ? "Node takes one type argument: the type of the value the node stands for"
+                    : "Txn takes one type argument: the type of the function the transaction is on";
         return nullptr;
     }
-    return ofValueType(arguments[0].type);
+    return kind_ == HandleKind::Txn ? ofFunctionType(arguments[0].type)
+                                    : ofValueType(arguments[0].type);
 }
 
 // ---- the object ----
@@ -225,8 +256,12 @@ bool Handle::equals(const rtdata::Object *other, const Type *type, bool deep) co
         return false;
     }
     const auto *that = static_cast<const Handle *>(other);
+    // A type is its structure and nothing else (design principles 5.2): two handles of the same
+    // structure name the same type, whatever names (dimensions, parameters) they were written with.
+    const bool sameType = typeRef_ == that->typeRef_ ||
+                          (kind_ == HandleKind::TypeRef && type::sameCanonicalType(typeRef_, that->typeRef_));
     return kind_ == that->kind_ && program_ == that->program_ && draft_ == that->draft_ &&
-           graph_ == that->graph_ && index_ == that->index_ && typeRef_ == that->typeRef_;
+           graph_ == that->graph_ && index_ == that->index_ && sameType;
 }
 
 rtdata::Object *Handle::clone(mm::IAllocator &allocator, const Type *type, bool deep) const {

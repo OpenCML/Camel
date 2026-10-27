@@ -34,7 +34,7 @@ Camel 的同步执行语义要求：
 `sync` 只有一个意思：**它使它后面那个块成为同步块**。函数声明里它写在函数体位置——`func f(...): T sync { ... }`
 （也就是 `stmtBlock` 的 `'sync'?`）与单独的 `sync { ... }` 都是这个写法：块自己直接写着的语句按书写顺序执行
 （等价于编译器在相邻语句之间插入控制边）；写在里面的分支臂、循环体与嵌套块不继承这个顺序（2.2 的“不向内继承”）。
-lambda 与函数类型的位置上，同一个 `sync` 写在实参表之前（`sync (x: int) => ...`），落在函数类型的 `modifiers` 上。
+lambda 的函数体是块，`sync` 写在块前（`(x: int) => sync { ... }`）；lambda 头和函数类型上都没有修饰符，`sync` 是块的性质，不是类型的性质（设计原则 3.4）。
 
 ### 2.2 求值规则与 `sync` 块
 
@@ -140,7 +140,6 @@ func g(): int sync {
 ## 附：代码示例（sync 与函数体）
 
 ```camel
-module sync_body_demo
 
 // 修改 var 形参。函数体是同步块：修改与读取按书写顺序执行。
 func bump(var x: int): void sync {
@@ -165,7 +164,6 @@ func main(): int sync {
 ```
 
 ```camel
-module order_demo
 
 func bump(var x: int): void sync {
     x += 1

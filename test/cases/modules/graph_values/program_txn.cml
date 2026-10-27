@@ -1,0 +1,64 @@
+/**
+ * A transaction over the running Program (`current`, `open`, `commit`): the committed Program
+ * drops the `+ 1` from `target`. The Program the transaction was opened on, and the code that is
+ * running, must still see the original `target` (design principles 9.1).
+ */
+import { Graph, Node, commit, constant, graph_of, inputs, name, nodes, op, op_name, open, replace, graphs_of } from graph
+import { ends_with } from str
+
+func target(x: int): int {
+    return (x + 1) * 3
+}
+
+func opText(n: Node): string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+func isOne(n: Node): bool {
+    return match constant::<int>(n) {
+        case null => false
+        case v => v == 1
+    }
+}
+
+/// The `x + 1` of `target`: an int addition whose second operand is the constant 1.
+func isAddOne(n: Node): bool {
+    let ins = inputs(n)
+    return opText(n) == ':op/add_l' && len(ins) == 2 && isOne(ins[1])
+}
+
+/// How many `+ 1` nodes the graph of a function has.
+func addOnes(g: Graph): int {
+    return len(nodes(g)->filter<isAddOne>)
+}
+
+/// The number of nodes of a function's graph.
+func size(g: Graph): int {
+    return len(nodes(g))
+}
+
+func isTarget(g: Graph): bool {
+    return name(g)->ends_with<'target'>
+}
+
+func targetIn::<F>(p: F): Graph {
+    let found = graphs_of(p)->filter<isTarget>
+    return found[0]
+}
+
+func main(): int sync {
+    let p = main
+    let t = open(p)
+    nodes(targetIn(p))->filter<isAddOne>->foreach<(n: Node) => replace(t, n, inputs(n)[0])>
+    let q = commit(t) !! p
+    println(`committed: ${addOnes(targetIn(q))}`)
+    println(`opened on: ${addOnes(targetIn(p))}`)
+    println(`running: ${target(5)} ${addOnes(graph_of(target))}`)
+    let later = (x: int): int => target(x) + 1000
+    println(`made after: ${later(5)}`)
+    println(`current: ${addOnes(targetIn(main))}`)
+    return 0
+}

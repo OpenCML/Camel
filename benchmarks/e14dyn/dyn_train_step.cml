@@ -14,7 +14,6 @@
  *      DYN ('1' = export with dynamic axis 0), DUMP (dir for updated params),
  *      LOSS ('mean' | 'summean', default 'summean').
  */
-module dyn_train_step
 
 import { relu, mean, sum, reshape, shape, load_npy } from tensor
 import { with_grad } from autodiff
@@ -59,18 +58,20 @@ func main(): int sync {
         w2: reshape([1.0, -1.0, 0.5], [3, 1]),
         b2: reshape([0.2], [1])
     }
-    let x = load_npy::<f32>(get_env('X'))
-    let useMean = get_env('LOSS') == 'mean'
+    let x = load_npy::<f32>(get_env('X') ?? '')
+    let useMean = (get_env('LOSS') ?? '') == 'mean'
     let vg = if useMean then step_mean(m, x) else step_summean(m, x)
     'CAMEL loss={}'->format<vg.0>->println
-    save_params(vg.1, get_env('DUMP'))
-    let out = get_env('ONNX_OUT')
-    if out != '' then
-        if get_env('DYN') == '1' then
-            (if useMean then export_model(step_mean, (m, x), out, [0])
-            else export_model(step_summean, (m, x), out, [0]))
-        else
-            (if useMean then export_model(step_mean, (m, x), out)
-            else export_model(step_summean, (m, x), out))
+    save_params(vg.1, get_env('DUMP') ?? '')
+    let out = get_env('ONNX_OUT') ?? ''
+    if out != '' then {
+        if (get_env('DYN') ?? '') == '1' then {
+            let _ = (if useMean then export_model<out: out, dynamic_axes: [0]>(step_mean, (m, x))
+            else export_model<out: out, dynamic_axes: [0]>(step_summean, (m, x)))
+        } else {
+            let _ = (if useMean then export_model<out: out>(step_mean, (m, x))
+            else export_model<out: out>(step_summean, (m, x)))
+        }
+    }
     return 0
 }

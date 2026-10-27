@@ -1,4 +1,3 @@
-module generic_explicit_types
 func id::<T>(x: T): T { return x }
 with <n: int>
 func repeat::<T>(x: T): T[] { return 0..n->map<(i: int): T => x> }

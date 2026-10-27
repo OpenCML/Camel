@@ -2,7 +2,6 @@
 // command line; the program does not change and the results keep the order of the elements.
 // Run: camel examples/parallel/parallel_map.cml
 //      camel examples/parallel/parallel_map.cml std::prl
-module parallel_map
 
 // Number of steps the Collatz sequence takes from `n` down to 1.
 func collatz_steps(n: int, steps: int): int {

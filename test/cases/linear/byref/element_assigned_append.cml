@@ -5,7 +5,6 @@
  * criterion is asked. `std::jgir` of this program and of `element_assigned.cml` show the same
  * three nodes.
  */
-module element_assigned_append
 
 func main(): int sync {
     var v = [1, 2, 3]

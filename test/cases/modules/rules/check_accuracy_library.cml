@@ -13,22 +13,22 @@
  * 2026-10-23 on `generic-rule-instantiation-set-and-predicate`, §3 -- `why_not` is where that
  * reason is read).
  *
- * `tensor_log_softmax_of_softmax` is measured at the first entry of its own call, and the verdict
+ * `array_log_softmax_of_softmax` is measured at the first entry of its own call, and the verdict
  * is sample-dependent: `check` seeds each entry with `seed * 1000003 + index`, and draws with large
  * magnitudes make the rule fail (measured 2026-10-24: FAIL at seeds 3, 7 and 17 over 100 samples,
  * and at 1000 samples with seed 11, on samples such as `{inf, 2.955, -2, 906.555, -0, -1}` and
- * `{3.4e+38, 2, 377.894}`). Recorded in the rule §accuracy-check-sampling`: the
+ * `{3.4e+38, 2, 377.894}`; the stream follows the rule's name, so the rename from `tensor_` to `array_`
+ * moved the failing seeds, and the case runs it at seed 1). Recorded in the rule §accuracy-check-sampling`: the
  * rule is not this lane's, and neither is the measure.
  */
-module check_accuracy_library
 
-import { check } from rewrite
+import { check, check_text } from rewrite
 import {
-        float_expm1, float_log1p, tensor_log_softmax_of_softmax
+        float_expm1, float_log1p, array_log_softmax_of_softmax
 } from rules
 
 func main(): int sync {
-    println(check([float_log1p, float_expm1], 100, 11))
-    println(check([tensor_log_softmax_of_softmax], 100, 11))
+    println(check_text([float_log1p, float_expm1]->check<100, 11>))
+    println(check_text([array_log_softmax_of_softmax]->check<100, 1>))
     return 0
 }

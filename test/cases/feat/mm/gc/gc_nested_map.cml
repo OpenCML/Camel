@@ -5,7 +5,6 @@
  * collections. Every table is checked at three cells per row (first, diagonal, last) and the
  * checks are summed.
  */
-module gc_nested_map
 
 type Row = int[]
 

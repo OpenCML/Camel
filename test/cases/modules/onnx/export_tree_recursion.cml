@@ -3,7 +3,6 @@
  * depends on the model input. Unrolling doubles the graph with every level; the export says so
  * at the second recursive call instead of failing with an allocation error.
  */
-module export_tree_recursion
 import { reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env
@@ -12,9 +11,7 @@ func tree(h: float[..]): float[..] {
     return if float(sum(h)) < 1.0 then h else tree(h * 0.5) + tree(h * 0.25)
 }
 
-func main(): int sync {
+func main(): void! sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
-    export_model((x: float[..]): float[..] => tree(x), x, get_env('ONNX_OUT'))
-    println('exported')
-    return 0
+    export_model<out: get_env('ONNX_OUT') ?? ''>((x: float[..]): float[..] => tree(x), x)
 }

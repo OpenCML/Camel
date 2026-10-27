@@ -1,7 +1,6 @@
 /**
  * Floating-point division by zero, after a line of output.
  */
-module float_div_zero
 
 func div(a: float, b: float): float { return a / b }
 

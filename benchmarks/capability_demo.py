@@ -55,12 +55,16 @@ def camel_path(tmp: Path) -> bool:
     env.setdefault("CAMEL_HOME", str(REPO_ROOT / "out" / "latest"))
     proc = subprocess.run([str(camel_binary()), str(CASE)], capture_output=True, text=True, env=env)
     out = re.sub(r"\x1b\[[0-9;]*m", "", proc.stdout + proc.stderr)
-    found = re.search(r"(has no kernel for Relu on int64 tensors at opset \d+)[^(]*\(at ([^)]+)\)", out)
-    ok = proc.returncode != 0 and found is not None and not checked.exists()
-    print("camel:  export rejected" if found else "camel:  export NOT rejected")
+    # The refusal is an error value of the export_model call, and nothing handles it, so the
+    # exit reports it: the reason is the message, the source the position the value carries.
+    found = re.search(r"(has no kernel for Relu on int64 tensors at opset \d+)", out)
+    located = re.search(r"([^ ]*export_capability[.]cml:\d+:\d+):", out)
+    ok = proc.returncode != 0 and found is not None and located is not None and not checked.exists()
+    print("camel:  export rejected" if found and located else "camel:  export NOT rejected")
     if found:
         print(f"        reason: {found.group(1)}")
-        print(f"        source: {found.group(2)}")
+    if located:
+        print(f"        source: {located.group(1)}")
     load = ort_load_error(unchecked) if unchecked.exists() else "model not written"
     print(f"        same model without the check: ONNX Runtime load -> {load or 'ok'}")
     return ok and load is not None and "NOT_IMPLEMENTED" in load

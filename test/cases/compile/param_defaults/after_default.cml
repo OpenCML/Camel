@@ -2,7 +2,6 @@
  * A parameter without a default may not follow one with a default: a call that
  * leaves `a` out could not go on to give `b` by position (design principles 4.4).
  */
-module param_after_default
 
 func f(a: int = 1, b: int): int {
     return a + b

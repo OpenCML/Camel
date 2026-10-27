@@ -551,7 +551,12 @@ class GraphDraft {
     uint32_t payloadGraphIndexOf(GraphId graph);
     gc_node_ref_t addFuncNode(
         GraphId calleeGraph, camel::core::type::Type *type, uint8_t runtimeFlags = 0,
-        gc_slot_idx_t dataIndex = 0);
+        gc_slot_idx_t dataIndex = 0, uint32_t writtenCaptures = 0);
+    /// Which of a FUNC node's callee's captured variables the call writes, as a bit per capture
+    /// of the callee's capture table, in the order its captures were made: the value the call
+    /// hands on carries the new version of each (camel::runtime::GCFuncRef::reserved).
+    uint32_t funcWriteMaskOf(gc_node_ref_t id) const;
+    void setFuncWriteMask(gc_node_ref_t id, uint32_t writtenCaptures);
     /// A LOOP node calling `body.condGraph` and `body.bodyGraph` (camel/runtime/loop.h); the
     /// caller links its inputs and keeps the two graphs among the draft's dependencies.
     gc_node_ref_t
@@ -916,6 +921,28 @@ class GraphDraft {
 /// step recorded with draft ids can name a node of the program the commit made (rewrite design
 /// 8.7, `explain`: a `Node` of the program finds the rewrite it was made by).
 std::vector<gc_node_ref_t> draftRuntimeNodeRefs(const GraphDraft &draft);
+
+/// `nodeIsFreelySchedulable` (camel/runtime/graph.h) asked of a node of a draft. `byShape` lets
+/// the shapes of the types decide for an elementwise operator (it cannot fail when every shape is
+/// fixed); only a question about one decision of one pass may ask it, never the question of
+/// whether a node takes an order edge, which must not change as types are refined.
+bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byShape = false);
+
+/// Whether a node carries the program's order instead of being a value a pass may compute for
+/// itself: a call runs a graph, a branch, join, sync or loop runs (or orders) what it holds, a gate
+/// waits -- for its control inputs, or for the sync edge the chain of a `sync` block is written as
+/// (docs/design/effects/edges.cn.md 5.3) -- and every other node that is not freely schedulable (an
+/// operator with an effect, one that may fault, one that must run where the program writes it, a
+/// conversion that can fail). The rewrite engine and the generic passes refuse to reorder, drop or
+/// recompute such a node.
+bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node, bool byShape = false);
+
+/// Whether a node is a pure computation that no statement waits for and that waits for none: an
+/// operator that may be recomputed, or a conversion, with no control, order or sync edge on either
+/// side. Nothing anchors it, so when nothing reads its value it is not run and not kept, even if it
+/// may fault (design principles 3.1: a node runs iff the run uses it); a node on a chain is a
+/// statement and stays.
+bool isUnanchoredPure(const GraphDraft &draft, gc_node_ref_t node);
 
 } // namespace camel::runtime
 

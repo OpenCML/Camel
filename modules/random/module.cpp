@@ -10,7 +10,6 @@
 #include "camel/utils/type.h"
 #include "camel/core/operator_traits.h"
 #include "executor.h"
-#include "key.h"
 #include "operators.h"
 
 #include <optional>
@@ -19,16 +18,12 @@ using namespace camel::core::context;
 using namespace camel::core::module;
 using namespace camel::core::type;
 
-// Every operator of this module is declared in `stdlib/random.cml`, `choice`, `sample` and
-// `shuffle` included: their result type is the element type of their array argument, which a
-// head declaration `::<T>` states exactly (design principles 6.4).
-// The C++ side keeps the kernels, the executor, the operator traits and the resources. The
-// module answers on `rand:`, not on its name, so the declaration module reads `rand:` from
-// `operatorProtocols()` (module.h) now that no group is exported to read it from.
+// The operators of this module are declared in `stdlib/random.cml`, which also defines in Camel
+// everything built on them (design principles 6.4, 10.4). The C++ side keeps the kernels, the
+// executor, the operator traits and the resources. The module answers on `rand:`, not on its name,
+// so the declaration module reads `rand:` from `operatorProtocols()` (module.h).
 
-RandomModule::RandomModule(context_ptr_t ctx) : BuiltinModule("random", ctx) {
-    exportType(Reference("Key"), camel::random::keyType());
-}
+RandomModule::RandomModule(context_ptr_t ctx) : BuiltinModule("random", ctx) {}
 
 module_ptr_t RandomModule::create(context_ptr_t ctx) { return std::make_shared<RandomModule>(ctx); }
 
@@ -37,24 +32,19 @@ bool RandomModule::load() {
         return true;
     context_ptr_t ctx = context_;
     context_->registerExecutorFactory("rand", [ctx]() { return createRandomExecutor(ctx); });
-    // The purity of every operator (design principles 3.3).
+    // The purity of every operator (design principles 3.3): the keyed primitive and the kernels of
+    // the whole-array draws are functions of their arguments; `seed` and `next_key` move the
+    // global stream.
     camel::core::OperatorTable::instance().declare(
         "rand",
         {
-            // The generator functions read or advance it; keyed random is pure.
             {"seed", false},
-            {"rand", false},
-            {"randn", false},
-            {"randint", false},
-            {"choice", false},
-            {"sample", false},
-            {"shuffle", false},
-            {"key", true},
-            {"split", true},
-            {"permutation", true},
+            {"next_key", false},
+            {"philox", true},
+            {"uniform_array", true},
+            {"normal_array", true},
         });
-    // What each touches (docs/design/op-semantics 8): the module's generator. Its draws are
-    // effects the program orders like any other (the operators are not pure).
+    // What each touches (docs/design/op-semantics 8): the global stream, the resource `rng`.
     {
         using camel::core::sem::AccessMode;
         using camel::core::sem::externalAmbient;
@@ -62,12 +52,7 @@ bool RandomModule::load() {
             "rand",
             {
                 {"seed", externalAmbient("rng", AccessMode::Write)},
-                {"rand", externalAmbient("rng", AccessMode::ReadModifyWrite)},
-                {"randn", externalAmbient("rng", AccessMode::ReadModifyWrite)},
-                {"randint", externalAmbient("rng", AccessMode::ReadModifyWrite)},
-                {"choice", externalAmbient("rng", AccessMode::ReadModifyWrite)},
-                {"sample", externalAmbient("rng", AccessMode::ReadModifyWrite)},
-                {"shuffle", externalAmbient("rng", AccessMode::ReadModifyWrite)},
+                {"next_key", externalAmbient("rng", AccessMode::ReadModifyWrite)},
             });
     }
     loaded_ = true;

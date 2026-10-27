@@ -51,7 +51,7 @@ case = "../../../cases/modules/autodiff/value_with_refusal.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::ValueWithNoDerivativeRule"
-expect_diagnostic_line = 14
+expect_diagnostic_line = 13
 expect_output_contains = [":coll/map_get_or", "with parameter 2 (counting from 1)", "of type 'float'", "no derivative rule is registered for it"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -64,7 +64,7 @@ case = "../../../cases/modules/autodiff/value_with_reduce.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::ValueWithNoDerivativeRule"
-expect_diagnostic_line = 14
+expect_diagnostic_line = 13
 expect_output_contains = [":mark/reduce_arr", "with parameter 2 (counting from 1)", "of type 'float'", "no derivative rule is registered for it"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -137,11 +137,9 @@ const valueWith = ops.filter((o) => o.with !== 0).map((o) => ({
 // How each operator's value `with` parameter is handled. 'rule' sends the gradient back;
 // 'refused' has no rule and the backward pass refuses at the operator, naming the parameter;
 // 'no-channel' has a result with no tangent (a bool, a collection), so nothing can be lost;
-// 'type-argument' is a type witness, not a value read from the graph.
 const handled = {
   ':struct/append_arr': 'rule',
   ':struct/append_arr_owned': 'rule',
-  ':struct/extend_arr': 'rule',
   ':struct/contains_arr': 'no-channel',
   ':mark/reduce_arr': 'refused',
   ':mark/unordered_reduce_arr': 'refused',
@@ -149,8 +147,6 @@ const handled = {
   ':coll/map_put': 'refused-at-construction',
   ':coll/set_add': 'refused-at-construction',
   ':coll/set_contains': 'no-channel',
-  'statistics:quantile': 'refused',
-  'json:decode_as': 'type-argument',
 }
 const known = new Set(Object.keys(handled))
 const missing = valueWith.filter((o) => !known.has(o.uri)).map((o) => o.uri + ' <' + o.params.map((p) => p.name + ': ' + p.type).join(', ') + '>')
@@ -158,7 +154,7 @@ assert(missing.length === 0, 'unclassified value with operator(s): ' + missing.j
 const listed = new Set(valueWith.map((o) => o.uri))
 const stale = Object.keys(handled).filter((uri) => !listed.has(uri))
 assert(stale.length === 0, 'classified operators not listed by inspect --ops (stale entry): ' + stale.join(', '))
-const unexpected = Object.entries(handled).filter(([, how]) => !['rule', 'refused', 'refused-at-construction', 'no-channel', 'type-argument'].includes(how))
+const unexpected = Object.entries(handled).filter(([, how]) => !['rule', 'refused', 'refused-at-construction', 'no-channel'].includes(how))
 assert(unexpected.length === 0, 'unknown classification: ' + JSON.stringify(unexpected))
 }
 """

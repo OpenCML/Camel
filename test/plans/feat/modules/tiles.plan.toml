@@ -58,22 +58,21 @@ assert(lines.length === 4, 'expected the value, the error and two plans');
 // The one print form  writes an array as its own shape in brackets and
 // each element in the shortest text of its own type; it carries no `dtype=` tag, so `dtype=float32`
 // here was reading a vehicle that no longer exists, not a changed element type. Line 0 is the
-// gradient of `sum(cast(x, "float32"))`, the case's first program. The value itself is pinned
+// gradient of `sum(f32(x))`, the case's first program. The value itself is pinned
 // exactly, and the element type stays pinned twice: statically by the case's own two lambdas
 // (`(v: f32[..]): f32[..]`, so a gradient of another element type does not compile), and at
 // run time by the plan numbers below -- cast_like/cast to a different element type cannot keep
 // materialized_values, allocations, logical_bytes, allocated_bytes and borrowed_bytes equal to the
 // cast-free derivative (an f64 buffer is twice as wide).
-assert(lines[0] === '[1.0, 1.0, 1.0]', 'the gradient of sum(cast(x, "float32")) is not the all-ones f32 value');
+assert(lines[0] === '[1.0, 1.0, 1.0]', 'the gradient of sum(f32(x)) is not the all-ones f32 value');
 assert(lines[1] === '0.0', 'gradient of sum(x) is not all ones');
 const withCast = JSON.parse(lines[2]);
 const plain = JSON.parse(lines[3]);
 for (const key of ['values', 'kernels', 'materialized_values', 'allocations', 'logical_bytes', 'allocated_bytes', 'borrowed_inputs', 'borrowed_bytes'])
     assert(withCast[key] === plain[key], 'cast or cast_like materialized a value: ' + key);
 assert(JSON.stringify(withCast.stages) === JSON.stringify(plain.stages), 'cast or cast_like changed the stage plan');
-assert(withCast.operator_contracts.some(c => c.identity === 'tensor:cast'), 'the cast was not seen');
-assert(withCast.operator_contracts.some(c => c.identity === 'tensor:cast_like'), 'the cast_like was not seen');
-assert(!plain.operator_contracts.some(c => c.identity === 'tensor:cast' || c.identity === 'tensor:cast_like'), 'the plain derivative names a cast');
+assert(withCast.operator_contracts.some(c => c.identity === ':op/atof'), 'the conversion was not seen (the forward one, and the gradient converts back with the same operator)');
+assert(!plain.operator_contracts.some(c => c.identity === ':op/atof'), 'the plain derivative names a conversion');
 }
 """
 timeout_ms = 180000
@@ -84,7 +83,7 @@ kind = "negative"
 case = "../../../cases/modules/tiles/cast_dtype.cml"
 args = ["--devices", "cpu", "${case}"]
 expect_exit = 1
-expect_output_contains = ["operator 'tensor:cast' needs a statically known f32 tensor result"]
+expect_output_contains = ["operator ':op/atol' needs a statically known f32 tensor result"]
 timeout_ms = 10000
 
 [[tests]]
@@ -653,13 +652,16 @@ name = "gpu_scope.unsupported_operator_is_a_compile_error"
 kind = "negative"
 case = "../../../cases/modules/tiles/gpu_scope_refusal.cml"
 # `tanh` is pure, but the device back end does not lower it. A `#gpu` scope promises the device
-# runs everything written in it, so the pass refuses instead of falling back silently: the
-# report names the scope and the operator, and no CUDA device is needed to produce it.
+# runs everything written in it, so the pass fails instead of falling back silently: `compile` is
+# `(f: F) => F!` (design principles 9.1), and its failure is the error value `GpuScopeUnsupported`,
+# which names the scope and the operator. It reaches the exit unhandled, so it is reported on
+# standard error, and no CUDA device is needed to produce it.
 args = ["${case}", "tiles::compile", "std::nvm"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::GpuScopeUnsupported"
-expect_output_contains = ["`#gpu` scope 'activate'", "operator 'tensor:tanh'", "no device implementation"]
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_stderr_contains = ["GpuScopeUnsupported", "`#gpu` scope 'activate'", "operator 'tensor:tanh'", "no device implementation"]
+expect_stdout_not_contains = ["`#gpu` scope 'activate'"]
 timeout_ms = 30000
 
 [[tests]]
@@ -1049,34 +1051,6 @@ normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 30000
 
 [[tests]]
-name = "gpu_scope.module_tag_propagates"
-desc = "A tag written before `module` (design principles 13.4) is the fact of every top-level function of that module, and a fact a function writes itself is the inner one and wins: `#gpu module m` makes `scaled` a device unit and leaves `kept` (which writes `#cpu`) on the host."
-kind = "behavior"
-case = "../../../cases/modules/tiles/gpu_scope_module.cml"
-args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
-envs = ["CUDA_VISIBLE_DEVICES=-1"]
-expect_exit = 0
-verify_script = """
-({ input, assert }) => {
-const NL = String.fromCharCode(10)
-const lines = (input.normalized.stdout + input.normalized.stderr).split(NL).filter(Boolean)
-const rows = lines.filter((line) => line.startsWith('TILES_PLACEMENT '))
-  .map((line) => JSON.parse(line.slice('TILES_PLACEMENT '.length)))
-const row = (name) => {
-  const found = rows.find((r) => r.graph === name)
-  assert(found, `no placement row for ${name}: ${JSON.stringify(rows.map((r) => r.graph))}`)
-  return found
-}
-assert(row('scaled').body === 'gpu-required' && row('scaled').body_fact === 'gpu',
-  `the module's tag did not reach scaled: ${JSON.stringify(row('scaled'))}`)
-assert(row('kept').body === 'host' && row('kept').body_fact === 'cpu',
-  `the function's own tag did not win: ${JSON.stringify(row('kept'))}`)
-assert(input.stdout.includes('value 30.0'), input.stdout)
-}
-"""
-timeout_ms = 30000
-
-[[tests]]
 name = "gpu_scope.macro_needs_the_expansion_pass"
 desc = "A `#gpu` scope that still holds a macro operator is a pipeline defect, and the report names the pass that carries the expansion: `tiles::compile` consumes the derived graph, it never authors it (plan 2.6)."
 kind = "negative"
@@ -1097,8 +1071,8 @@ case = "../../../cases/gpu/nofallback/grad_dynamic.cml"
 args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::GpuScopeUnsupported"
-expect_output_contains = ["`#gpu` scope 'step'", "operator 'autodiff:with_grad'", "needs a function known at compile time"]
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_stderr_contains = ["GpuScopeUnsupported", "`#gpu` scope 'step'", "operator 'autodiff:with_grad'", "needs a function known at compile time"]
 expect_output_not_contains = ["is a macro operator no pass has expanded"]
 timeout_ms = 30000
 
@@ -1167,7 +1141,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "gpu_scope.report_without_a_pass_reads_the_whole_graph"
-desc = "The same program without `tiles::compile`: no pass has cut anything, so the same three operators read the whole graph — one plan (`values:7`, `kernels:1`, no `segments` reading), one region whose three members are the scope's statements, one upload and one download, and one generated program with no segment header. Red when the segment reading is taken without a cut scope (it would have nothing to read), or when the whole-graph reading is lost."
+desc = "The same program without `tiles::compile`: no pass has cut anything, so the same three operators read the whole graph — one plan (`values:7`, `kernels:1`, no `segments` reading), one region whose three members are the scope's statements, one upload and one download, and one generated program with no segment header. The report's `schema` is 1, and stays 1 while fields are only added: it goes up when a field that is already there changes meaning or is removed, so a reader finds the reading by its leading `{\"schema\":1,`. Red when the segment reading is taken without a cut scope (it would have nothing to read), when the whole-graph reading is lost, or when the number moves for a field that was only added."
 kind = "behavior"
 case = "../../../cases/modules/tiles/gpu_scope_report.cml"
 args = ["--devices", "cpu", "${case}"]
@@ -1185,6 +1159,13 @@ const plan = JSON.parse(inspect.slice('inspect '.length))
 assert(plan.segments === undefined, inspect)
 assert(plan.values === 7 && plan.kernels === 1, JSON.stringify(plan))
 const analysis = JSON.parse(regions)
+// The number says when the report's meaning changed, not how many fields it has: a field that is
+// only added leaves it where it is, so the documented keys are all present and none of them had to
+// be paid for with a new number (docs/design/gpu/plan.cn.md, section on the residency conclusion).
+assert(analysis.schema === 1, `the regions report says schema ${analysis.schema}`)
+for (const key of ['segments', 'regions', 'transfers']) {
+assert(key in analysis, `the regions report has no ${key}`)
+}
 assert(analysis.segments.length === 0, regions)
 assert(analysis.regions.length === 1 && analysis.regions[0].members.length === 3, regions)
 assert(analysis.transfers.uploads.length === 1 && analysis.transfers.downloads.length === 1, regions)

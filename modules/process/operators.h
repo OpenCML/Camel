@@ -14,8 +14,7 @@ namespace ctx = camel::core::context;
 // 算子实现
 slot_t __process_exit__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __process_sleep__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
-slot_t __process_whoami__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __process_user_name__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __process_cpu_count__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
-slot_t __process_thread_count__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 
 std::unordered_map<std::string, operator_t> getProcessOpsMap();

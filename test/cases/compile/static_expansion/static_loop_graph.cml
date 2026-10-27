@@ -2,7 +2,6 @@
  * The graph of a `static loop`. is the hand-written unfolded fold: one ACCS per
  * field in declaration order, one addition per round, and no SLOOP, LOOP, SFOR or SACC node.
  */
-module static_loop_graph
 
 func loopSum(t: {a: int, b: int, c: int}): int {
     return static loop acc = 0

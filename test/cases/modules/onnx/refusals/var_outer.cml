@@ -1,7 +1,6 @@
 /**
  * Refused: the exported function reads a variable of the enclosing function (state outside the model).
  */
-module var_outer
 import { reshape } from tensor
 import { export_model } from onnx
 import { get_env } from env
@@ -9,7 +8,7 @@ import { get_env } from env
 func main(): int sync {
     let x = reshape([1.0, -2.0, 3.0, 4.0], [2, 2])
     var state = reshape([10.0, 10.0, 10.0, 10.0], [2, 2])
-    export_model((x: float[..]): float[..] => x + state, x, get_env('ONNX_OUT'))
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((x: float[..]): float[..] => x + state, x)
     println('exported')
     return 0
 }

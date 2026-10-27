@@ -5,7 +5,6 @@
  * two are different functions and the tag is refused (SemanticDiag::ImplSignatureMismatch),
  * printing the stream where the signatures differ.
  */
-module stream_type_impl_signature
 
 #op(':op/add_l')
 func kernel(a: int, b: int): int

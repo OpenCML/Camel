@@ -82,9 +82,6 @@ const std::string TypeDeclLoad::toString() const {
         }
         result += ">";
     }
-    if (!uri_.empty()) {
-        result += " [" + uri_ + "]";
-    }
     return result + docSuffix();
 }
 
@@ -121,12 +118,8 @@ const std::string ExitStmtLoad::toString() const {
     switch (type_) {
     case ExitType::Yield:
         return "ExitStmt: yield";
-    case ExitType::Raise:
-        return "ExitStmt: raise";
     case ExitType::Return:
         return "ExitStmt: return";
-    case ExitType::Throw:
-        return "ExitStmt: throw";
     default:
         throw std::runtime_error("Unknown ExitType");
     }
@@ -269,12 +262,8 @@ const std::string ExitStmtLoad::geneCode() const {
     switch (type_) {
     case ExitType::Yield:
         return "yield";
-    case ExitType::Raise:
-        return "raise";
     case ExitType::Return:
         return "return";
-    case ExitType::Throw:
-        return "throw";
     default:
         return "exit";
     }

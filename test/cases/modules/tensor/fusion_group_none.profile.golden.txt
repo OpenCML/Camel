@@ -11,7 +11,7 @@ PROFILE camel
  transfers 0 in all: host->device <bytes>, device->host <bytes>
  synchronisations 0
 
-steps - the loop at test/cases/modules/tensor/fusion_group_none.cml:30:26: 3 rounds (2 measured)
+steps - the loop at test/cases/modules/tensor/fusion_group_none.cml:29:26: 3 rounds (2 measured)
  operators per step 17 (min 17, max 17)
  kernels per step 0.00 (max 0)
  transfers per step 0.00 (0 host->device, 0 device->host, max 0 bytes)
@@ -37,7 +37,7 @@ operators (device, calls, total, first call, mean after the first, share of oper
  cpu tensor:zeros 2 <time> <time> <time> <pct> <time> (<pct>) 3 0 <bytes>
 
 hints - loops that run on the host element by element
- test/cases/modules/tensor/fusion_group_none.cml:30:26 (main) - element-wise loop
+ test/cases/modules/tensor/fusion_group_none.cml:29:26 (main) - element-wise loop
  operators tensor:multiply, tensor:subtract, :op/add_l
  rounds 3
  why on the host no device region covers this loop, and its body could not be one kernel even then: the body calls a function. It runs in the host interpreter.
@@ -45,6 +45,15 @@ hints - loops that run on the host element by element
 compilation - self time by phase
  parse fusion_group_none <time>
  compile fusion_group_none <time>
+ parse prelude <time>
+ gct prelude <time>
+ resolve types <time>
+ parse types <time>
+ gct types <time>
+ (counting) <time>
+ declare types <time>
+ (counting) <time>
+ declare prelude <time>
  gct fusion_group_none <time>
  resolve tensor <time>
  cmo_load tensor <time>
@@ -53,10 +62,6 @@ compilation - self time by phase
  parse tensor <time>
  gct tensor <time>
  resolve types <time>
- parse types <time>
- gct types <time>
- (counting) <time>
- declare types <time>
  (counting) <time>
  declare tensor <time>
  parse autodiff <time>

@@ -5,7 +5,6 @@
  * is out of range (ConversionOutOfRange), which is not the same fault as text that is not a
  * number (InvalidNumberText). The faults are shown through `attempt`.
  */
-module number_text
 
 func to_int(s: string): int { return int(s) }
 func to_i32(s: string): i32 { return i32(s) }
@@ -15,9 +14,9 @@ func main(): int sync {
     let texts = ['12', '-12', '+12', ' 7', '7 ', '12abc', '', '1.5', '1e3', '0x10', '1_000', '3000000000', '99999999999999999999', '.5', 'inf', '-inf', 'nan', 'Infinity', '1e999', '1e-9999', '077', '09', '0o77']
     texts->foreach<(s: string) => sync {
         println('[' + s + ']')
-        println(attempt(to_int, s))
-        println(attempt(to_i32, s))
-        println(attempt(to_float, s))
+        println(attempt(to_int)(s))
+        println(attempt(to_i32)(s))
+        println(attempt(to_float)(s))
         println(parse_int(s))
         println(parse_float(s))
     }>

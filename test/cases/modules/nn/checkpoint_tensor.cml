@@ -1,4 +1,3 @@
-module checkpoint_tensor
 import { new, from_bytes, to_bytes } from tensor
 import { from_array, to_array } from bytes
 import { save_tree, load_tree } from ckpt

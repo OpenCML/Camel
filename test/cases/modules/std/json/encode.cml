@@ -1,7 +1,6 @@
 /**
  * Exercises JSON encoding for primitives, tuples, arrays, and pretty-printed structured values.
  */
-module main
 
 import { encode } from json
 
@@ -28,8 +27,8 @@ func main(): int sync {
 
     println("\n[4] encode with indent")
     let orig = { id: 1, name: "test", vals: [10, 20] }
-    println("  encode(orig, 2) pretty =")
-    println(encode(orig, 2))
+    println("  orig->encode<indent: 2> pretty =")
+    println(orig->encode<indent: 2>)
 
     println("\n=== JSON encode tests completed ===")
     return 0

@@ -1,5 +1,4 @@
 // Operators and punctuation: the tokens of the parser grammar (include/camel/parse/syntax/token_kinds.def).
-module operators
 
 func compare(a: int, b: int): bool {
     let strict = a === b
@@ -39,7 +38,7 @@ func assign(var x: int, var t: f32[..], u: f32[..]) {
 func tagged(m: Map<string, int>, r: int!, o: int?): int {
     let a = m['a'] ?? 0
     let b = r !! 0
-    let c = r ?-> double
+    let c = r -> double
     let d = o ?? 1
     let e: int! = r
     let not_e = !(a == b) && !flag

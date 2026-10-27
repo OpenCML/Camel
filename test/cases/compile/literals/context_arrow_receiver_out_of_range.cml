@@ -1,0 +1,15 @@
+/**
+ * An element of a composite literal written in the receiver of `->` takes the element type of
+ * the parameter it enters, so an element the parameter cannot hold is refused once the callee is
+ * known (`LiteralNotRepresentable`, at the argument) rather than left as an `int[]` with no
+ * matching function — the same refusal an ordinary argument gets.
+ */
+
+func sum32(xs: i32[]): i32 {
+    return xs[0] + xs[1]
+}
+
+func main(): int sync {
+    println([1, 3000000000]->sum32)
+    return 0
+}

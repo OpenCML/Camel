@@ -7,7 +7,6 @@
  * type where it meets it -- `f32(s)`, `f32(k)` -- and the graph carries the Cast for it (P4: the
  * conversion is written, not assumed).
  */
-module export_var_compound
 import { reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env
@@ -26,7 +25,7 @@ func forward(x: f32[..]): f32[..] sync {
 func main(): int sync {
     let x = reshape([1.0, -2.0, 3.0, 4.0] as f32[], [2, 2])
     println(forward(x))
-    export_model((x: f32[..]): f32[..] => forward(x), x, get_env('ONNX_OUT'))
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((x: f32[..]): f32[..] => forward(x), x)
     println('exported')
     return 0
 }

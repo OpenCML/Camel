@@ -1,0 +1,108 @@
+id = "modules.math_kernels"
+order = 936
+tier = "fast"
+tags = ["feat", "modules", "stdlib", "math"]
+desc = "The kernels under the functions of `math`: the f64 square root and the shifts that give their count in angle brackets, called as any program calls them, and the values of the module that its C++ side registers"
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "math_kernels.values"
+desc = "`inf` and `nan` are the values the C++ module registers (stdlib/math.cml declares them with no right side). `sqrt`: exact squares, sqrt(-0) is -0, +inf is +inf, a negative number is NaN. `shl_i/l` and `shr_i/l`: the unsigned shift into the sign bit, the arithmetic shift keeping the sign, count 0 and the largest count."
+kind = "behavior"
+case = "../../../cases/modules/math_calls/kernel_values.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "3.0 1.5 0.0 -0.0\ninf nan false true\n16 -2147483648 -4 16 -4\n-9223372036854775808 1 -1\n"
+
+[[tests]]
+name = "math_kernels.shl_i32_width"
+desc = "A shift count outside 0..width-1 is a fault of kind InvalidArgument."
+kind = "negative"
+case = "../../../cases/modules/math_calls/err_shl_i32.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["Invalid argument of 'math.shl': the shift count 32 is not in 0..31 for a 32-bit integer"]
+
+[[tests]]
+name = "math_kernels.shl_int_width"
+desc = "A shift count outside 0..width-1 is a fault of kind InvalidArgument."
+kind = "negative"
+case = "../../../cases/modules/math_calls/err_shl_int.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["Invalid argument of 'math.shl': the shift count 64 is not in 0..63 for a 64-bit integer"]
+
+[[tests]]
+name = "math_kernels.shr_negative"
+desc = "A shift count outside 0..width-1 is a fault of kind InvalidArgument."
+kind = "negative"
+case = "../../../cases/modules/math_calls/err_shr_negative.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["Invalid argument of 'math.shr': the shift count -1 is not in 0..63 for a 64-bit integer"]
+
+[[tests]]
+name = "math_kernels.value_type_mismatch"
+desc = "A value declared without a right side whose type is not the one the module registers is NativeValueMismatch, as a body-less function with another signature than its operator's is an error."
+kind = "negative"
+case = "../../../cases/modules/math_kernels/err_value_type/math.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NativeValueMismatch"
+expect_diagnostic_line = 3
+
+[[tests]]
+name = "math_kernels.value_missing"
+desc = "A value declared without a right side that no loaded module registers is NativeValueNotLoaded."
+kind = "negative"
+case = "../../../cases/modules/math_kernels/err_value_missing/math.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NativeValueNotLoaded"
+expect_diagnostic_line = 3
+
+# ---- the functions of math stand on kernels per hot type ----
+
+[[tests]]
+name = "math_kernels.kernel_calls"
+desc = "A call of a `math` function at `f32`, `float` or an integer width is one operator of that type, and at `bf16`/`f16` (except `abs`, which has them) it runs the body over the f64 kernel: `exp` at float, f32, bf16 and f16 is `math:exp_d` (once, with the body's call twice more), `math:exp_f` (once); the complex `exp` and `abs` are `math:exp_c`/`exp_z` and `math:abs_c`/`abs_z`; `abs`, `min`, `max`, `sign` and `sqrt` are the operators of their type."
+kind = "behavior"
+case = "../../../cases/modules/math_calls/kernel_calls.cml"
+args = ["${case}", "std::profile top=0 json=\"${test_tmp}/profile.json\"", "std::nvm"]
+expect_exit = 0
+verify_script = """
+async ({ input, assert }) => {
+    const fs = await import('node:fs')
+    const report = JSON.parse(fs.readFileSync(input.test_tmp + '/profile.json', 'utf8'))
+    const calls = Object.fromEntries(report.operator_rows.map(row => [row.uri, row.calls]))
+    const expected = {
+        'math:exp_d': 3, 'math:exp_f': 1, 'math:exp_c': 1, 'math:exp_z': 1,
+        'math:sqrt': 1, 'math:sqrt_d': 1, 'math:log_d': 1,
+        'math:abs_i': 1, 'math:abs_l': 1, 'math:abs_d': 1, 'math:abs_f6': 1, 'math:abs_c': 1, 'math:abs_z': 1,
+        'math:min_l': 1, 'math:max_f': 1, 'math:sign_d': 1,
+    }
+    const shown = JSON.stringify(Object.fromEntries(Object.entries(calls).filter(([uri]) => uri.startsWith('math:'))))
+    for (const [uri, count] of Object.entries(expected)) {
+        assert(calls[uri] === count, `${uri} ran ${calls[uri]} times, not ${count}: ${shown}`)
+    }
+    const rows = Object.keys(calls).filter((uri) => uri.startsWith('math:')).sort()
+    assert(JSON.stringify(rows) === JSON.stringify(Object.keys(expected).sort()), `the math rows are ${shown}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "math_kernels.kernel_calls_values"
+desc = "The values of that program: the same under the kernel and under the body."
+kind = "behavior"
+case = "../../../cases/modules/math_calls/kernel_calls.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "4.0 4.0 1.0 1.0 1.0 1.0\n3 3 2.5 2.5 3 2.5 -1.0\n1+0i 1+0i 5.0 5.0 0.0\n"

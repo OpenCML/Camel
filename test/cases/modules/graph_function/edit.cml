@@ -1,0 +1,24 @@
+
+import { graph_of, nodes, inputs, op, op_name, open, replace, commit, abort, Node } from graph
+
+func plus_zero(x: int): int {
+    return (x + 0) * 2
+}
+
+func is_add(n: Node): bool {
+    return match op(n) {
+        case null => false
+        case o => op_name(o) == ':op/add_l'
+    }
+}
+
+func main(): int sync {
+    let t = open(plus_zero)
+    let adds = nodes(graph_of(plus_zero))->filter<is_add>
+    println(len(adds))
+    replace(t, adds[0], inputs(adds[0])[0])
+    let g = commit(t) !! plus_zero
+    println(plus_zero(5), g(5))
+    println(len(nodes(graph_of(g))) < len(nodes(graph_of(plus_zero))))
+    return 0
+}

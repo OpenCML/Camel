@@ -1,5 +1,3 @@
-module err_tf_unused
-
 type Tag<T> = int
 
 func f::<T>(p: Tag<T>): int {

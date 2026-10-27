@@ -25,9 +25,8 @@
  * by column through the readers, which is what a tool consumes. Both have to agree, and both are
  * the same table -- `check_text` is the rendering of the rows `check_verdict` reads a column of.
  */
-module verify_report
 
-import { check, check_text, check_row_count, check_rule, check_instance, check_verdict, check_proposition, check_evidence, check_reason } from rewrite
+import { check, check_text } from rewrite
 import { log, log1p } from math
 
 rule holds(x: float) { x * 1.0 => x }
@@ -48,13 +47,13 @@ rule fold(x: float, const c1: float, const c2: float) { x * c1 + x * c2 => x * (
 rule near_zero(x: float) { log(1.0 + x) => log1p(x) }
 
 func main(): int sync {
-    let r = check([holds, differ, anywhere, fold, near_zero], 100, 7)
+    let r = [holds, differ, anywhere, fold, near_zero]->check<100, 7>
     print(check_text(r))
-    println("rows", check_row_count(r))
-    println("0", check_verdict(r, 0), check_proposition(r, 0), check_evidence(r, 0), "[", check_reason(r, 0), "]")
-    println("1", check_verdict(r, 1), check_proposition(r, 1), check_evidence(r, 1), "[", check_reason(r, 1), "]")
-    println("2", check_verdict(r, 2), check_proposition(r, 2), check_evidence(r, 2), "[", check_reason(r, 2), "]")
-    println("3", check_verdict(r, 3), check_proposition(r, 3), check_evidence(r, 3), "[", check_rule(r, 3), "]")
-    println("4", check_verdict(r, 4), check_proposition(r, 4), check_evidence(r, 4), "[", check_instance(r, 4), "]")
+    println("rows", len(r.rows))
+    println("0", r.rows[0].verdict, r.rows[0].proposition, r.rows[0].evidence, "[", r.rows[0].reason, "]")
+    println("1", r.rows[1].verdict, r.rows[1].proposition, r.rows[1].evidence, "[", r.rows[1].reason, "]")
+    println("2", r.rows[2].verdict, r.rows[2].proposition, r.rows[2].evidence, "[", r.rows[2].reason, "]")
+    println("3", r.rows[3].verdict, r.rows[3].proposition, r.rows[3].evidence, "[", r.rows[3].rule, "]")
+    println("4", r.rows[4].verdict, r.rows[4].proposition, r.rows[4].evidence, "[", r.rows[4].instance, "]")
     return 0
 }

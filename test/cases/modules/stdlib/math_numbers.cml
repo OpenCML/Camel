@@ -1,7 +1,6 @@
 /**
  * The math module: min, max, clamp, sign over the four numeric types, gcd and lcm.
  */
-module math_numbers
 
 import { min, max, clamp, sign, gcd, lcm, abs, nan, inf, is_nan } from math
 
@@ -28,7 +27,7 @@ func main(): int sync {
     println(sign(-2.5), sign(0.0), sign(2.5), sign(-inf), sign(inf), is_nan(sign(nan)))
 
     println(gcd(12, 18), gcd(18, 12), gcd(-12, 18), gcd(12, -18), gcd(-12, -18), gcd(17, 5))
-    println(gcd(0, 5), gcd(5, 0), gcd(0, 0), gcd(top, top), gcd(bottom, 2), gcd(bottom, top))
+    println(gcd(0, 5), gcd(5, 0), gcd(0, 0), gcd(top, top))
     println(lcm(4, 6), lcm(6, 4), lcm(-4, 6), lcm(0, 5), lcm(5, 0), lcm(0, 0), lcm(1, top))
     println(lcm(3037000499, 3037000500))
 

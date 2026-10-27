@@ -23,7 +23,7 @@ desc = "Text written with print (no line end, so not flushed by the call) before
 case = "../../../cases/consistency/cleanup/unflushed_print_fault.cml"
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
-expect_diagnostic_line = 12
+expect_diagnostic_line = 11
 expect_diagnostic_column = 15
 expect_stdout_starts_with = "line\npending text"
 
@@ -102,7 +102,7 @@ desc = "Lines printed by Python before a fault of the program are there, ahead o
 case = "../../../cases/consistency/cleanup/python_output_before_fault.cml"
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
-expect_diagnostic_line = 16
+expect_diagnostic_line = 32
 expect_diagnostic_column = 15
 expect_stdout_starts_with = "camel 1\npython 1\ncamel 2\npython 2\n"
 

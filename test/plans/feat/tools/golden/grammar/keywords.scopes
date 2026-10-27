@@ -1,18 +1,15 @@
 >// Every keyword of the lexer in a position the parser accepts it in, where there is one.
 #^^ comment.line.double-slash.camel punctuation.definition.comment.camel
 #  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
->// `inner`, `outer`, `atomic`, `shared`, `is`, `of`, `keyof`, `try`, `catch` and `finally` are
+>// `inner`, `outer`, `atomic`, `shared`, `is`, `of`, `keyof`, `try`, `catch`, `finally` and
 #^^ comment.line.double-slash.camel punctuation.definition.comment.camel
-#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
->// not keywords: they are ordinary names, so they appear
+#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
+>// `throw` are not keywords: they are ordinary names, so they appear
 #^^ comment.line.double-slash.camel punctuation.definition.comment.camel
-#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
+#  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
 >// below as values.
 #^^ comment.line.double-slash.camel punctuation.definition.comment.camel
 #  ^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
->module keywords
-#^^^^^^ keyword.control.import.module.camel
-#       ^^^^^^^^ entity.name.namespace.module.camel
 >
 >import { now } from time
 #^^^^^^ keyword.control.import.camel
@@ -65,13 +62,10 @@
 #     ^^^^^ meta.type.definition.camel entity.name.type.camel
 #           ^ keyword.operator.assignment.camel
 #             ^^^ support.type.primitive.camel
->type Handle = 'handle'
-#^^^^ meta.type.definition.camel storage.type.type.camel
-#     ^^^^^^ meta.type.definition.camel entity.name.type.camel
-#            ^ keyword.operator.assignment.camel
-#              ^ string.quoted.single.camel punctuation.definition.string.begin.camel
-#               ^^^^^^ string.quoted.single.camel
-#                     ^ string.quoted.single.camel punctuation.definition.string.end.camel
+>export type Handle
+#^^^^^^ keyword.control.import.camel
+#       ^^^^ meta.type.definition.camel storage.type.type.camel
+#            ^^^^^^ meta.type.definition.camel entity.name.type.camel
 >type Raw = string
 #^^^^ meta.type.definition.camel storage.type.type.camel
 #     ^^^ meta.type.definition.camel entity.name.type.camel
@@ -264,11 +258,23 @@
 #        ^^^^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
 #                ^ meta.block.camel keyword.operator.assignment.camel
 #                  ^^ meta.block.camel constant.numeric.integer.decimal.camel
->    throw 'failed'
-#    ^^^^^ meta.block.camel keyword.control.flow.camel
-#          ^ meta.block.camel string.quoted.single.camel punctuation.definition.string.begin.camel
-#           ^^^^^^ meta.block.camel string.quoted.single.camel
-#                 ^ meta.block.camel string.quoted.single.camel punctuation.definition.string.end.camel
+>    let throw = 14
+#    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
+#        ^^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
+#              ^ meta.block.camel keyword.operator.assignment.camel
+#                ^^ meta.block.camel constant.numeric.integer.decimal.camel
+>    return error('Failed', 'failed')
+#    ^^^^^^ meta.block.camel keyword.control.flow.camel
+#           ^^^^^ meta.block.camel entity.name.function.call.camel
+#                ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                 ^ meta.block.camel meta.parens.camel string.quoted.single.camel punctuation.definition.string.begin.camel
+#                  ^^^^^^ meta.block.camel meta.parens.camel string.quoted.single.camel
+#                        ^ meta.block.camel meta.parens.camel string.quoted.single.camel punctuation.definition.string.end.camel
+#                         ^ meta.block.camel meta.parens.camel punctuation.separator.comma.camel
+#                           ^ meta.block.camel meta.parens.camel string.quoted.single.camel punctuation.definition.string.begin.camel
+#                            ^^^^^^ meta.block.camel meta.parens.camel string.quoted.single.camel
+#                                  ^ meta.block.camel meta.parens.camel string.quoted.single.camel punctuation.definition.string.end.camel
+#                                   ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
 >}
 #^ meta.block.camel punctuation.section.block.end.camel
 >

@@ -8,7 +8,6 @@
  * fits there (about 1.5 KiB of native stack per open call, and the guard keeps a sixteenth of
  * a 32 MiB thread stack usable on Windows).
  */
-module recursion_too_deep
 
 func depth(n: int): int {
     return if n == 0 then 0 else 1 + depth(n - 1)

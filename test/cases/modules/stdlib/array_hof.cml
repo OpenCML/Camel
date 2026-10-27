@@ -3,7 +3,6 @@
  * them is applied with map: there is no order among its calls and the result is by position,
  * the same on every back end (including the parallel one).
  */
-module array_hof
 
 import { find, any, all, count, flat_map, sort_by, zip_with } from array
 import { to_lower } from str
@@ -24,7 +23,7 @@ func label(w: string, n: int): string {
 
 func main(): int sync {
     let xs = [3, 1, 4, 1, 5, 9, 2, 6]
-    let none = tail([0])
+    let none = [0][1:]
     let words = ['pear', 'Apple', 'fig', 'apple', 'Fig']
 
     println(xs->find<is_even> ?? -1, xs->find<(x: int) => x > 4> ?? -1, xs->find<(x: int) => x > 9> ?? -1, none->find<is_even> ?? -1)
@@ -35,7 +34,7 @@ func main(): int sync {
 
     println(xs->flat_map<(x: int) => [x, x * 10]>->len, [1, 2, 3]->flat_map<(x: int) => 0..x>)
     println(words->flat_map<(w: string) => [w, to_lower(w)]>->len, none->flat_map<(x: int) => [x]>)
-    println([1, 2]->flat_map<(x: int) => tail([x])>)
+    println([1, 2]->flat_map<(x: int) => [x][1:]>)
 
     println(xs->sort_by<(x: int) => x>, xs->sort_by<(x: int) => -x>, none->sort_by<(x: int) => x>)
     // stable: equal keys keep their order

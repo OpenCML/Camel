@@ -2,11 +2,10 @@
  * A foreach whose closure writes a captured var and faults at the fourth element: the three
  * writes before it are visible in what was printed.
  */
-module fault_in_foreach_closure
 
 func main(): int sync {
     var total = 0
-    0..8->foreach<sync (x: int) => sync {
+    0..8->foreach<(x: int) => sync {
         total = total + 12 / (3 - x)
         println(total)
     }>

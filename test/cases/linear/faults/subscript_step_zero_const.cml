@@ -2,7 +2,6 @@
  * A subscript slice whose step is the constant 0 takes no element at all, so it is refused where
  * the step is written (design principles 5.4), as the step of a range is (4.2).
  */
-module subscript_step_zero_const
 
 func main(): int sync {
     let xs = [1, 2, 3, 4, 5, 6]

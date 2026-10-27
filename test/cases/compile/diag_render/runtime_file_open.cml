@@ -1,8 +1,0 @@
-module runtime_file_open
-
-import { read_text } from fs
-
-func main(): int sync {
-    println(read_text('no/such/dir/file.txt'))
-    return 0
-}

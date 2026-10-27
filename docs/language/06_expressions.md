@@ -8,7 +8,7 @@ Camel 里几乎一切都是表达式：`if`、`match`、块、赋值都有值。
 
 ## 6.1 求值
 
-表达式是图上的节点，操作数是它的输入边。一个表达式是否求值、何时求值，由依赖决定（[4.2](04_execution_model.md#42-按依赖求值)）；运算符的优先级与结合性只决定图的形状（[6.12](#612-运算符优先级)）。`&&`、`||`、`??`、`!!`、`?->` 与 `if`、`match` 是分支：没有被选中的一侧不求值。
+表达式是图上的节点，操作数是它的输入边。一个表达式是否求值、何时求值，由依赖决定（[4.2](04_execution_model.md#42-按依赖求值)）；运算符的优先级与结合性只决定图的形状（[6.12](#612-运算符优先级)）。`&&`、`||`、`??`、`!!`、`->` 与 `if`、`match` 是分支：没有被选中的一侧不求值。
 
 ## 6.2 字面量与构造
 
@@ -100,7 +100,7 @@ func main(): int sync {
   - 名字下不止一个函数时没有函数值：重载的内建算子（如 `len` 有三个签名）就是这样，报 `SemanticDiag::FunctionNameAsValue`。把调用写在 lambda 里。
 - 实参可以按名字给（`f(x: 1)`）：位置实参写在前面，按名字给的写在后面；名字不是被调函数声明的形参时是 `SemanticDiag::ParamArgumentUnknown`。
 - 同一个实参表里写两个带尖括号的调用（`f<a>(x), g<b>(y)`）会被读成比较；带尖括号的调用后面再接带尖括号的管道（`f<a>(x)->g<b>`）也可能如此。把它们分成两条语句。
-- 写在括号里的 lambda 可以直接调用：`((x: int): int => x + 1)(3)`；也可以直接写在 `->`、`?->` 的右边：`3->(x: int): int => x + 1`、`parse_int(s) ?-> (x: int): int => x * 2`。
+- 写在括号里的 lambda 可以直接调用：`((x: int): int => x + 1)(3)`；也可以直接写在 `->` 的右边：`3->(x: int): int => x + 1`、`parse_int(s) -> (x: int): int => x * 2`。
 
 ## 6.5 管道
 
@@ -109,8 +109,8 @@ func main(): int sync {
 ```cml
 func main(): int sync {
     let total = 1..6
-        ->map<(x: int): int => x * x>
-        ->filter<(x: int): bool => x % 2 == 1>
+        ->map<(x) => x * x>
+        ->filter<(x) => x % 2 == 1>
         ->reduce<(acc: int, x: int): int => acc + x, 0>
     println(`total = ${total}`)
     return 0
@@ -121,7 +121,7 @@ func main(): int sync {
 total = 35
 ```
 
-- `x ?-> f` 见 [6.6](#66-空值与错误的运算符)。
+- 管道 `x -> f` 作用在 `T?`、`T!` 上时把空值或错误传下去，见 [6.6](#66-空值与错误的运算符)。
 - `f..g` 是函数组合：`(f..g)(x)` 即 `g(f(x))`，与管道 `x->f->g` 同向；两边是整数时 `a..b` 是左闭右开的区间，得到 `int[]`，带步长写 `range(a, b, step)`。`for i in 0..n` 由编译器融合，不物化数组。`..` 比 `->` 紧：`x->f..g` 读作 `x->(f..g)`。
 
 ## 6.6 空值与错误的运算符
@@ -132,17 +132,17 @@ total = 35
 |---|---|---|---|
 | `a ?? b` | `T?` | `T` | `a` 为空取 `b`，否则取 `a` 里的值 |
 | `a !! b` | `T!` | `T` | `a` 出错取 `b`，否则取 `a` 里的值 |
-| `x ?-> f` | `T!` | 接受 `T` 的函数 | `x` 出错时把错误原样传下去，否则调用 `f`；结果是 `U!`（`f` 返回 `U` 或 `U!` 都可以） |
+| `x -> f` | `T?` 或 `T!` | 不接受 `T?` / `T!` 本身的函数 | `x` 为空就得到空、出错就把错误原样传下去，否则用里面的值调用 `f`；结果是 `U?` 或 `U!`（`f` 返回 `U` 或已经是该形式的值都可以） |
 
 ```cml
 func half(x: int): int! {
-    return if x % 2 == 0 then x / 2 else { throw error('Odd', 'not even') }
+    return if x % 2 == 0 then x / 2 else { return error('Odd', 'not even') }
 }
 
 func main(): int sync {
     println(parse_int('12') !! 0, parse_int('twelve') !! 0)
-    println(parse_int('12') ?-> half ?-> half !! -1)
-    println(parse_int('10') ?-> half ?-> half !! -1)
+    println(parse_int('12') -> half -> half !! -1)
+    println(parse_int('10') -> half -> half !! -1)
     return 0
 }
 ```
@@ -155,8 +155,9 @@ func main(): int sync {
 
 - 右侧只在被选中时求值。
 - **右侧可以是可空的。** `a ?? b` 的 `b` 是 `T` 时结果是 `T`；`b` 是 `T?` 时结果是 `T?`。所以 `a ?? b ?? 9` 是“先试 `a`，再试 `b`，最后给默认值”，不论怎样加括号结果都一样。`!!` 同理（`b` 是 `T!` 时结果是 `T!`）。图上每个 `??` 仍是一个分支。右侧是 `[]` 时取左侧的元素类型。
+- **`->` 先按值本身的类型找 `f` 的重载。** 在同名函数里按 `x` 自己的类型（`T?` 或 `T!`）找，连同 `when` 条件：有函数接受它（参数类型是 `T?`，或者是条件允许它为 `T?` 的泛型 `T`），就把整个 `x` 传进去。都不接受时才拆开：`x` 为空得到空，`x` 出错得到原样的错误，否则用里面的值调用 `f`。调用里写的其他实参属于被选中的那次调用，只在那时求值。同时带两层标记的值（`T?!`）逐层同样处理。
 - `??`、`!!` 的右侧一直延伸到表达式结束：`x ?? 0 + 1` 是 `x ?? (0 + 1)`。要先取值再运算，加括号：`(x ?? 0) + 1`。
-- 左侧不是所要求的形式（对普通的 `int` 用 `??`，对 `T?` 用 `!!` 或 `?->`），或右侧类型不对，是 `SemanticDiag::TaggedOperandMismatch`。
+- 左侧不是所要求的形式（对 `T?` 用 `!!`，对 `T!` 用 `??`），或右侧类型不对，是 `SemanticDiag::TaggedOperandMismatch`。`??` 用在不能为空的值上（普通的 `int`，或一个已被收窄成 `T` 的名字）是允许的：空值那条臂不会走到，结果就是那个值；编译器给出警告 `SemanticDiag::KnownNotNull`（设计原则 3.8）。
 
 ## 6.7 其他运算符
 
@@ -174,7 +175,7 @@ func main(): int sync {
 | 一元 `-` | 四种实数值类型、`c64`、`c128` | |
 | `~` | `int`、`i32` | 按位取反：`~5` 是 `-6` |
 
-两个操作数的类型必须相同。没有按位与、或、异或、移位运算符；用 `math` 模块的 `bit_and`、`bit_or`、`bit_xor`、`bit_not`、`shl`、`shr`。
+两个操作数的类型必须相同。没有按位与、或、异或、移位运算符；用 `math` 模块的 `bit_and`、`bit_or`、`bit_xor` 和 `x->shl<n>`、`x->shr<n>`（移位量写在尖括号里）；按位取反是 `~x`。
 
 **两个容易出错的地方：**
 
@@ -231,8 +232,11 @@ false
 - 构造映射与集合：`[...] as Map<K, V>`、`[...] as Set<T>`；
 - 模块类型的检查式转换：在转换处检查该类型自己的条件。
 - 数组的检查式转换：`a as f32[4]`，形状在转换处检查；`f32[3]` 是数值数组的另一种拼写（过渡期保留），`t as f32[3]` 是同一种转换。
+- 把一个值转成它自己的类型，什么也不做（`n as int`）。
 
-`as` 不会不经检查地改变一个值的类型。`json::decode` 的结果是 `Json`，不能 `as` 成别的类型；已知形状的 JSON 用 `json::decode_as(s, [0])`，它在解码时检查形状，结果是 `T!`。
+`as` 不在数值之间转换，字面量与变量一样：`5 as float` 与 `n as float` 都是 `SemanticDiag::DynamicCastForbidden`，`true as int`、`n as bool` 也是。数值之间的转换用目标类型的转换函数（`float(n)`、`int(x)`、`i32(n)`、`f32(x)`），它们的损失规则（越界是故障）写在设计原则 5.1。
+
+`as` 不会不经检查地改变一个值的类型。`json::decode` 的结果是 `Json`，不能 `as` 成别的类型；已知形状的 JSON 用 `json::decode_as::<int[]>(s)`，它在解码时检查形状，结果是 `T!`。
 
 数值之间的转换用 `float(x)` 等函数（[3.2](03_data_model.md#32-数值)）。`is` 不是关键字：`e is T` 里的 `is` 是一个普通的名字，写出来是语法错误（运行时没有类型信息）。后缀的 `!` 不是语言里的写法：`T!` 的那个 `!` 属于类型，一个 `T?` 的值用 `x ?? 默认值` 取出来，所以 `x!` 是普通语法错误（在 `!` 处）。
 
@@ -272,13 +276,13 @@ func sign(x: int): string {
   - 只收窄 `let` 绑定与参数，不收窄 `var`（它可能在判断与使用之间被别处改写；先用 `let` 绑定它的值）；
   - 只认直接的写法，两边顺序不限（`x != null`、`null != x`）：判断是整个条件，或是 `&&` 连起来的一项时，收窄 then 臂（`if x != null && ready then ...`）。else 臂只在整个条件是 `x == null` 时收窄，`&&` 连起来的条件不收窄 else 臂。`||` 或 `!` 之下的判断（`x != null || ready`、`!(x == null)`）、存在 `let` 里的判断都不收窄；需要时嵌套 `if`，或用 `match`、`??`；
   - 只在臂内：`if` 之后 `x` 又是 `T?`。在臂内再写 `let x = ...` 是重复声明。
-  - 收窄之后，臂内对 `x` 仍可写针对 `T?` 的 `??` 与带 `case null` 的 `match`：它们作用于重新装回 `T?` 的值，检查与收窄之前相同，只是空值那条臂不会走到；编译器给出警告 `SemanticDiag::KnownNotNull`。在臂内再判 `x == null`、`x != null`，按上一条（非可空的值与 `null` 比较）给出警告，结果恒定。
+  - 收窄之后，臂内对 `x` 仍可写针对 `T?` 的 `??` 与带 `case null` 的 `match`：它们作用于重新装回 `T?` 的值，检查与收窄之前相同，只是空值那条臂不会走到；编译器给出警告 `SemanticDiag::KnownNotNull`（对不是被收窄、本来就非可空的值用 `??`，同样允许并给这条警告）。在臂内再判 `x == null`、`x != null`，按上一条（非可空的值与 `null` 比较）给出警告，结果恒定。
 
   因为 `a && b` 就是 `if a then b else false`，`x != null && ...` 的右侧就是这样一条臂，`x == null || ...` 的右侧也是。判断了一个名字、又在不收窄的地方把它当 `T` 用时，报出的错误带一条说明，讲明为什么没有收窄。
 
 > **块里的 `return` 给出的是这个块的值，不是离开函数。**
 >
-> 分支的每个臂是它自己的一张子图。臂里的 `return v` 结束的是这条臂，`v` 成为这个 `if`（或 `match`）的值；`throw e` 同理。如果这个 `if` 只是一条语句、它的值没有被使用，那么臂里的 `return` 什么都没做，函数继续执行后面的语句。
+> 分支的每个臂是它自己的一张子图。臂里的 `return v` 结束的是这条臂，`v` 成为这个 `if`（或 `match`）的值；交出一个错误值的 `return e` 同理。如果这个 `if` 只是一条语句、它的值没有被使用，那么臂里的 `return` 什么都没做，函数继续执行后面的语句。
 
 ```cml
 // 错误的写法：if 是一条值没人用的语句，两个 return 都没有效果
@@ -386,7 +390,7 @@ func main(): int sync {
 
 元组模式与结构体模式不在语言里：`case (...)`、`case {...}` 是普通语法错误。对普通类型的值的标识符模式（`case n => ...`），以及配普通类型的 `error e`，报 `SemanticDiag::IdentifierPatternNeedsNullableOrErrorType`：能拆开的只有 `T?` 与 `T!` 这两个标记（3.8），要读值或接住错误就写 `??`、`!!`，或 `match` 的字面量模式与 `_`。枚举变体的元组、结构体模式已经实现，但字段位置只能写名字或 `_`。
 
-`try`/`catch`/`finally` 不属于 Camel（它在图上没有稳定的映射），它们也不是关键字：这三个词是普通的名字，用它们写出的 `try { ... }` 是普通的语法错误。可能失败的操作返回 `T!`，用 `!!`、`?->` 与 `case error e` 处理。
+`try`/`catch`/`finally` 不属于 Camel（它在图上没有稳定的映射），它们也不是关键字：这三个词是普通的名字，用它们写出的 `try { ... }` 是普通的语法错误。可能失败的操作返回 `T!`，用 `!!`、`->` 与 `case error e` 处理。
 
 ### 6.8.3 `match type`
 
@@ -395,6 +399,11 @@ func main(): int sync {
 ```
 match type 类型 {
     case struct => 分支
+    case array  => 分支
+    case nullable => 分支
+    case fallible => 分支
+    case map    => 分支
+    case set    => 分支
     case tuple  => 分支
     case func   => 分支
     case #leaf  => 分支
@@ -405,7 +414,7 @@ match type 类型 {
 }
 ```
 
-- `struct` 匹配结构体；`tuple` 匹配**普通**元组；`func` 匹配函数类型；`#leaf` 匹配其余所有类型（标量、`string`、数组、函数、`T?`、`T!`、单元格等）。`struct` 和 `tuple` 是 [R3 内部节点](../design/generic-structure/README.cn.md)的两种形状：`T?`、`T!` 是带标记的元组，和可变单元格一样落在 `#leaf`，不算 `tuple`。
+- `struct` 匹配结构体；`tuple` 匹配**普通**元组；`array` 匹配所有数组类型（不论元素是什么）；`func` 匹配函数类型；`nullable` 匹配所有 `T?`，`fallible` 匹配所有 `T!`，`map` 匹配所有映射，`set` 匹配所有集合；`#leaf` 匹配其余所有类型（标量、`string`、数组、函数、`T?`、`T!`、映射、集合、单元格等）。`struct` 和 `tuple` 是 [R3 内部节点](../design/generic-structure/README.cn.md)的两种形状：`T?`、`T!` 是带标记的元组，和可变单元格一样落在 `#leaf`，不算 `tuple`。
 - 类型位置写一个类型名就是**身份模式**：`case int`、`case Json`、`case MyStruct`、`case T`。身份是**精确**的：`case float` 不选 `int`（`float` 与 `f64` 是同一个类型，`int` 与 `i64` 也是；`int` 与 `i32` 不是）；`case f32` 不选 `f64`；`case MyStruct` 按声明的名字选，不选另一个字段形状相同的结构体；`case T` 在实例化时先代入 `T` 的绑定，所以它选的正是那个类型。形状与身份可以写在同一个 case 里（`case tuple | MyStruct`），按书写顺序判断：前面的 case 已经选中的类型，后面的同一身份是 `SemanticDiag::StaticMatchPatternCannotMatch`。
 - `_` 与 `#leaf` 一样匹配一切，只作为“兜底”写法；两者都必须是最后一个 case。`case struct | tuple` 用 `|` 合并几种形状。`case int` 写在 `case #leaf` 之前是正常的；写在 `#leaf`/`_` 之后是 `SemanticDiag::StaticMatchUnreachableCase`。
 - `match type` 后面是类型位置：紧跟的 `(` 一律读作类型的开头，所以 `match type () { ... }` 匹配空元组类型；函数类型要再包一层括号，写成 `match type ((x: int) => int) { ... }`。`case` 后面也是类型位置，同样的规则：`case (int, int)`、`case ()` 是元组，函数类型写成 `case ((x: int) => int)`。
@@ -413,6 +422,8 @@ match type 类型 {
 - 没有 case 命中时是 `SemanticDiag::StaticMatchNotExhaustive`；`#leaf`/`_` 后面还有 case 是 `SemanticDiag::StaticMatchUnreachableCase`。`match type` 比较具体类型名：`case int`、`case MyStruct` 是这个构造的一部分，标量类型直接写类型名。
 - 选中的分支直接成为当前位置的直线代码，运行时没有分支节点。分支的值就是整个 `match type` 的值；空分支的值为 `void`。
 - 泛型函数的返回类型可以省略，由每个实例选中的分支推出（返回类型推断）。如果递归调用回到**同一个类型实例**、而该实例的返回类型还没有推出，报 `SemanticDiag::GenericInstantiationCycle`；递归到严格更小的类型参数则照常先完成子实例。
+
+**类型函数。** 类型也可以由类型算出（设计原则 5.6）：类型函数用 `type` 声明，`type F<T> = 体`，在类型位置写成 `F<...>` 调用；函数体是类型表达式，各 case 给出类型的 `match type` 也是：`type ElemOrSelf<T> = match type T { case array => ElementOf<T>  case _ => T }`。`types` 声明了四个 `match type` 取不出的部分：`ElementOf<T>` 是数组或集合的元素类型，`PayloadOf<T>` 是 `U?` 或 `U!` 里的 `U`，`KeyOf<T>` 与 `ValueOf<T>` 是映射的键类型与值类型。调用本身就是一个类型，和别的类型一样用：`is_integer::<ElementOf<T>>()` 里它是类型实参，`func first::<T>(xs: T): ElementOf<T>` 里它是结果类型。`T` 还是类型变量时调用等着；实例绑定 `T` 之后，调用被它算出的类型取代。函数不接受的类型（`ElementOf<int>`，或没有 case 选中的 `match type`）是 `SemanticDiag::TypeFunctionNotApplicable`：参数是具体类型时在类型写出处报，否则在造出实例的调用处报。
 
 ```cml
 func duplicate::<T>(t: T) {
@@ -594,14 +605,14 @@ lambda 的写法是 `(形参): 返回类型 => 体`，返回类型可以省略�
 (x: int): int => { let y = x * 2; return y + 1 }
 (x) => x + 1                                    // 形参类型从所在位置推出（见下）
 (s: string) => sync { println(s) }              // 同步块作函数体
-sync (x: int) => sync { total = total + x }     // 写入被捕获的变量：加函数修饰符 sync
+(x: int) => sync { total = total + x }          // 写入被捕获的变量：函数体写成同步块
 ```
 
 函数类型写作 `(x: T) => R`，形参要写名字：`(x: int) => int`、`(acc: int, x: int) => int`。
 
 **形参类型从哪里来。** lambda 不写类型的形参，其类型从 lambda 所在位置的函数类型推出，省略的返回类型同样如此。这样的位置有三种：
 
-- 实参：调用一个形参是函数类型的函数，`with` 实参同理。
+- 实参：调用一个形参是函数类型的函数，`with` 实参同理。内建函数也一样，它们的签名写在标准库的 `stdlib/prelude.cml` 里：`xs->filter<(x) => x > 0>`、`xs->foreach<(x) => println(x)>` 的 `x` 是 `xs` 的元素类型。`->` 之后直接写的 lambda 取左边那个值的类型（`x->(v) => v + 1`）。
 
   <!-- camel-snippet: fragment: a call shown inside the block it would be written in -->
 
@@ -625,6 +636,16 @@ sync (x: int) => sync { total = total + x }     // 写入被捕获的变量：�
   ```cml
   func adder(n: int): (x: int) => int {
       return (x) => x + n              // x: int，返回类型也是 int
+  }
+  ```
+
+- `->` 后面的 lambda：形参就是接收者，所以它的类型是接收者的类型，或者从 `T?`、`T!` 里取出的值的类型（3.9 的流水线）：
+
+  ```cml
+  func main(): int sync {
+      let a = 5 -> (y) => y + 1                  // y: int
+      println(a)
+      return 0
   }
   ```
 
@@ -679,10 +700,10 @@ func main(): int sync {
 ```cml
 func main(): int sync {
     let xs = 1..6
-    println(xs->map<(x: int): int => x * x>)
-    println(xs->filter<(x: int): bool => x % 2 == 0>)
+    println(xs->map<(x) => x * x>)
+    println(xs->filter<(x) => x % 2 == 0>)
     println(xs->reduce<(acc: int, x: int): int => acc + x, 0>)
-    xs->filter<(x: int): bool => x > 3>->foreach<(x: int) => sync { println('item', x) }>
+    xs->filter<(x) => x > 3>->foreach<(x) => sync { println('item', x) }>
     return 0
 }
 ```
@@ -699,16 +720,16 @@ item 5
 
 ### 6.10.1 故障隔离 `attempt`
 
-错误与故障是两回事：只有声明为返回 `T!` 的操作才产生错误值；除零、下标越界、递归过深等是故障，带位置终止程序，`!!` 接不住它。`attempt(f, a, b)` 调用函数值 `f`，实参是 `a, b`；这次调用里（包括它直接或间接调用的一切）发生的故障，在 `attempt` 处变成一个错误值，再用 `!!`、`?->` 或 `match ... case error e` 处理。任意表达式用闭包包起来：`attempt(() => expr)`。
+错误与故障是两回事：只有声明为返回 `T!` 的操作才产生错误值；除零、下标越界、递归过深等是故障，带位置终止程序，`!!` 接不住它。`attempt` 是**函数变换**：`attempt(f)` 得到一个函数，参数与 `f` 相同，结果类型是 `f` 的结果加上 `!`；调用它是 `attempt(f)(a, b)`。这次调用里（包括它直接或间接调用的一切）发生的故障，在边界处变成一个错误值，再用 `!!`、`->` 或 `match ... case error e` 处理。任意表达式用闭包包起来：`attempt(() => expr)()`。这个函数值可以像别的函数值一样传递、放进尖括号：`rows->map<attempt(parse_row)>`。
 
 ```cml
 func risky(d: int): int { return 100 / d }
 
 func main(): int sync {
-    println(attempt(risky, 4) !! -1)
-    println(attempt(risky, 0) !! -1)
-    println(attempt(() => [1, 0, 4]->map<risky>) !! [-1])
-    let r = attempt(risky, 0)
+    println(attempt(risky)(4) !! -1)
+    println(attempt(risky)(0) !! -1)
+    println(attempt(() => [1, 0, 4]->map<risky>)() !! [-1])
+    let r = attempt(risky)(0)
     println(match r {
         case error e => e.kind + ' at ' + e.location
         case v => 'no fault'
@@ -724,12 +745,12 @@ func main(): int sync {
 DivisionByZero at main.cml:1:38
 ```
 
-- 类型：`f: (A...) => T` 得到 `T!`；`f` 本身返回 `U!` 时得到 `U!`（它自己返回的错误值原样传出）。带 `with` 参数或 `var` 参数的函数不能直接传入，用闭包。
+- 类型：`f: (A...) => T` 得到 `(A...) => T!`；`f` 本身返回 `U!` 时得到 `(A...) => U!`（它自己返回的错误值原样传出）。带 `with` 参数或 `var` 参数的函数不能直接传入，用闭包。
 - 错误值的 `kind` 是故障的名字（如 `DivisionByZero`、`IndexOutOfRange`、`MaxRecursionDepthExceeded`），`message` 是故障的消息，`location` 是故障发生处的 `文件:行:列`。
 - 边界就是那一次调用：实参的求值在边界之外；边界之内在故障之前已经发生的效应不收回（打印的行、写过的 `var`、写过的文件都保留）。
 - `exit(n)` 不是故障，不被隔离；内存耗尽与编译器自身的错误也不被隔离。
 - 并行调度器下，`map` 的一个元素故障时，已经开始的元素运行到结束，尚未开始的不再开始；`attempt` 在已开始的全部结束之后才给出错误值。
-- 在图上它是一个 `OPER` 节点（`:mark/isolate`），第一个输入是函数值，其余是实参。实现与尚待裁定的问题见 [技术说明](../technical/33_fault_isolation.md)。
+- 在图上，`attempt(f)` 的值持有它自己的一个小图，图体是一个 `OPER` 节点（`:mark/isolate`），第一个输入是捕获的 `f`，其余是实参。实现与尚待裁定的问题见 [技术说明](../technical/33_fault_isolation.md)。
 
 ## 6.11 赋值
 
@@ -767,7 +788,7 @@ DivisionByZero at main.cml:1:38
 | 9 | `??` `!!` | 右侧是一个完整的表达式 |
 | 10 | `as` | |
 | 10a | 一元 `-` `!` `~` | 比 `->` 与 `^` 松：`!xs->is_empty()` 是 `!(xs->is_empty())`，`-a->f` 是 `-(a->f)`，`-a ^ 2` 是 `-(a ^ 2)`；字面量与名字读法相同（`-1->abs` 是 `-(1->abs)`，先取负写 `(-1)->abs`） |
-| 11 | `->` `?->` | 左结合 |
+| 11 | `->` | 左结合 |
 | 12 | `..` | 区间（两边是数）与函数组合（两边是函数）|
 | 13 | 后缀：`.字段`、`[下标]`、`(实参)`、`<with 实参>` | 必须紧贴 |
 

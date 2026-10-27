@@ -4,7 +4,6 @@
  * the call of `main`, and onnx::export sees no request. The refusal, at `main` (line 14),
  * says that the budget was exhausted, what it is and which pass parameter raises it.
  */
-module growth_budget
 
 import { reshape } from tensor
 import { export_model } from onnx
@@ -14,6 +13,6 @@ func double(t: float[..]): float[..] {
 }
 
 func main(): int sync {
-    export_model(double, reshape([1.0, 2.0], [2]), 'tmp/test/onnx/refusal_growth_budget.onnx')
+    let _ = export_model<out: 'tmp/test/onnx/refusal_growth_budget.onnx'>(double, reshape([1.0, 2.0], [2]))
     return 0
 }

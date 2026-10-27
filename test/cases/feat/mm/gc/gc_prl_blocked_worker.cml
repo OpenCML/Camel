@@ -8,7 +8,6 @@
  * birth space is born in the elder space, which grows, and is reclaimed once the sleeper is
  * back.
  */
-module gc_prl_blocked_worker
 
 import { sleep } from process
 
@@ -21,7 +20,7 @@ func churn(k: int, left: int, total: int): int {
 }
 
 func nap(millis: int): int sync {
-    sleep(millis)
+    sleep(float(millis) / 1000.0)
     return 1
 }
 

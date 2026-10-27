@@ -1,7 +1,6 @@
 /**
  * Conversion to int of a float outside the range of int, of an infinity and of NaN.
  */
-module float_to_int_range
 
 func conv(x: float): int { return int(x) }
 func mul(a: float, b: float): float { return a * b }

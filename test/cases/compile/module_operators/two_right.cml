@@ -1,5 +1,4 @@
 /** The other module that offers `+` for a type declared elsewhere. */
-module two_right
 
 import { Box } from two_models
 

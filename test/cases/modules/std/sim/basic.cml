@@ -1,7 +1,6 @@
 /**
  * Exercises simulation helpers with fixed seeds so Monte Carlo style APIs remain deterministic when asked to be.
  */
-module main
 
 import { pi_hits, asian_call_price } from sim
 

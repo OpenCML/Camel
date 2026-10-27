@@ -5,7 +5,6 @@
  * expression of literals only, which the front end computes (design
  * principles 5.1), and the add node this checks would not be in the graph.
  */
-module compile_sync_ctrl_dedup
 
 func main(): int sync {
     let a: int = 40

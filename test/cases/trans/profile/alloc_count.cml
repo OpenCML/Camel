@@ -2,7 +2,6 @@
 // 1024 f32 (4096 bytes each) and one `add` output (4096 bytes). The profile's allocation row
 // must report exactly that count and those bytes; the counts are deterministic, the times are
 // not, so the guard test asserts only the counts.
-module profile_alloc_count
 
 import { zeros } from tensor
 

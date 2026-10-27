@@ -471,18 +471,15 @@ inline bool nodeTakesAnOrder(node_handle_t node) {
         return false;
     }
     const runtime::GCNodeKind kind = nodeKindOf(node);
-    camel::core::OperId oper      = camel::core::kNoOper;
     if (kind == runtime::GCNodeKind::Oper) {
+        // The operator of a node being built is named by its target, not yet by a payload.
         const auto &op = nodeGraphOf(node)->operTarget(node);
         const auto id  = op == nullptr
                              ? std::optional<camel::core::OperId>{}
                              : camel::core::OperatorTable::instance().lookup(op->uri());
-        if (!id.has_value()) {
-            return false;
-        }
-        oper = *id;
+        return id.has_value() && !camel::runtime::nodeIsFreelySchedulable(kind, *id);
     }
-    return !camel::runtime::nodeIsFreelySchedulable(kind, oper);
+    return !camel::runtime::nodeIsFreelySchedulable(*nodeDraftOf(node), nodeIdOf(node));
 }
 
 inline bool shouldAddSyncCtrlLink(node_handle_t from, node_handle_t to) {
@@ -523,6 +520,18 @@ inline bool valueReadsThrough(node_handle_t value, node_handle_t producer) {
 /// written.
 inline bool valueNeedsSyncEdge(node_handle_t value, node_handle_t chainEnd) {
     return chainEnd != nullptr && !valueReadsThrough(value, chainEnd);
+}
+
+/// Whether `node` is the call `fail<'Kind'>(message)` (design principles 3.9), the operator whose
+/// result is the bottom type `never`: the fault is raised where its value is wanted, and the call
+/// is no effect of its own. The builder reads the calls back by this to say what a `fail` written
+/// as a statement of its own means and which statements it leaves unreachable.
+inline bool isFailCall(node_handle_t node) {
+    if (node == nullptr || !nodeIsKind(node, runtime::GCNodeKind::Oper)) {
+        return false;
+    }
+    const auto &op = nodeGraphOf(node)->operTarget(node);
+    return op != nullptr && op->uri() == camel::core::kFailOperatorUri;
 }
 
 /// A statement one `sync` block writes directly: the edge that joins it to the statement written

@@ -1,10 +1,9 @@
 /**
  * Exercises the sorting functions of the `array` module: a new array (the argument is unchanged)
- * and deterministic merge behavior for sorted inputs.
+ * and the merge of two sorted inputs written as a sort of their concatenation.
  */
-module main
 
-import { sort, merge_sorted_arrays } from array
+import { sort } from array
 
 func main(): int sync {
     println("=== Array Sorting Tests ===")
@@ -14,11 +13,11 @@ func main(): int sync {
     let sorted_arr = sort(arr)
     println("  sort([3,1,2]) ->", sorted_arr, "unchanged:", arr)
 
-    println("\n[2] merge_sorted_arrays")
+    println("\n[2] merge")
     let a = [1, 3, 5]
     let b = [2, 4, 6]
-    let merged = merge_sorted_arrays(a, b)
-    println("  merge_sorted_arrays([1,3,5], [2,4,6]) ->", merged)
+    let merged = sort(concat(a, b))
+    println("  sort(concat([1,3,5], [2,4,6])) ->", merged)
 
     println("\n=== Sorting tests completed ===")
     return 0

@@ -266,8 +266,8 @@ There is no "early return" in Camel. Make the branch the last expression of the 
 
 func main(): int sync {
     let xs = 1..11    // [1, ..., 10]
-    let squares = xs->map<(x: int): int => x * x>
-    let evens = squares->filter<(x: int): bool => x % 2 == 0>
+    let squares = xs->map<(x) => x * x>
+    let evens = squares->filter<(x) => x % 2 == 0>
     let total = evens->reduce<(acc: int, x: int): int => acc + x, 0>
 
     println(xs)
@@ -276,11 +276,11 @@ func main(): int sync {
     println(total)
 
     // Arrays are values: slice and concat return new arrays.
-    let ys = concat(xs->slice<0, 3>, [99])
-    println(ys, len(ys), head(ys))
+    let ys = concat(xs[0:3], [99])
+    println(ys, len(ys), ys[0])
 
     // foreach runs its function for each element, in order.
-    ['a', 'b', 'c']->foreach<(s: string) => sync { println('item', s) }>
+    ['a', 'b', 'c']->foreach<(s) => sync { println('item', s) }>
     return 0
 }
 ```
@@ -306,17 +306,17 @@ There is **no agreed order of execution** between the elements of a `map`. When 
 
 ```cml
 
-import { seed, randint } from random
+import { seed, randint, next_key } from random
 
 func main(): int sync {
     seed(42)
-    // Wrong tool: randint advances a hidden state, so each element depends on which ran first.
-    let drawn = 0..8->map<(i: int): int => randint(0, 99)>
+    // Wrong tool: next_key advances a hidden state, so each element depends on which ran first.
+    let drawn = 0..8->map<(i) => next_key()->randint<0, 100>>
     println(drawn)
 
     seed(42)
     // reduce runs in element order on every back end.
-    let ordered = 0..8->reduce<(acc: int[], i: int): int[] => concat(acc, [randint(0, 99)]), [0]->slice<0, 0>>
+    let ordered = 0..8->reduce<(acc: int[], i: int): int[] => concat(acc, [next_key()->randint<0, 100>]), [0][0:0]>
     println(ordered)
     return 0
 }
@@ -325,15 +325,15 @@ func main(): int sync {
 On the sequential back ends (the default `std::nvm`, and also `std::fvm` and `std::jit`), the two lines are the same, and the same on every run:
 
 ```text
-[75, 63, 75, 13, 90, 9, 57, 37]
-[75, 63, 75, 13, 90, 9, 57, 37]
+[22, 72, 89, 99, 60, 96, 66, 2]
+[22, 72, 89, 99, 60, 96, 66, 2]
 ```
 
 Switch to parallel scheduling, `camel docs/tutorial/examples/05_map_order.cml std::prl`, and the order of the first line is no longer guaranteed and may differ from run to run; below is the output of one such run:
 
 ```text
-[37, 57, 9, 90, 13, 75, 63, 75]
-[75, 63, 75, 13, 90, 9, 57, 37]
+[2, 66, 96, 60, 99, 89, 72, 22]
+[22, 72, 89, 99, 60, 96, 66, 2]
 ```
 
 This is behaviour laid down by the language (design principles, 3.6), not a defect: it is precisely because there is no order between the elements that `map` can run in parallel. The `reduce` used for the second line runs in element order, and its result is the same on all back ends. The rule is simple: **keep the functions passed to `map` and `filter` pure; do what must be done in order with `foreach`, `reduce` or tail recursion.**
@@ -463,7 +463,7 @@ g
 3
 ```
 
-A `sync` written before a lambda (`sync (x: int) => ...`) is a different use: it modifies the function type, and is unchanged.
+When the body of a lambda has to run in order, write the `sync` before the block: `(x: int) => sync { ... }`. A lambda head has no `sync`.
 
 ### 6.5 `var`, references and order
 
@@ -540,7 +540,7 @@ func main(): int sync {
     println(ops->map<(f: (x: int) => int): int => f(10)>)
 
     var total = 0                            // captured by reference
-    [1, 2, 3]->foreach<sync (x: int) => sync { total = total + x }>
+    [1, 2, 3]->foreach<(x) => sync { total = total + x }>
     println(total)
     return 0
 }
@@ -627,7 +627,7 @@ Camel has no exceptions and no `try`/`catch`. A function that may fail declares 
 
 func safe_div(a: int, b: int): int! {
     return if b == 0 then {
-        throw error('DivByZero', 'the divisor is zero')
+        return error('DivByZero', 'the divisor is zero')
     } else {
         return a / b
     }
@@ -645,8 +645,8 @@ func describe(r: int!): string {
 func main(): int sync {
     println(safe_div(9, 3) !! -1)            // 3
     println(safe_div(9, 0) !! -1)            // -1: the substitute
-    println(describe(safe_div(8, 2) ?-> inc))
-    println(describe(safe_div(8, 0) ?-> inc))
+    println(describe(safe_div(8, 2) -> inc))
+    println(describe(safe_div(8, 0) -> inc))
     println(parse_int('12') !! 0, parse_int('twelve') !! 0)
     println(safe_div(1, 0))
     return 0
@@ -662,10 +662,10 @@ DivByZero: the divisor is zero
 error DivByZero: the divisor is zero
 ```
 
-- **`throw e` returns an error value**; it is the same kind of construct as `return`. It does not unwind the call stack; what the caller gets is simply a value of type `int!`.
+- **An error value is handed out by `return e`**: it does not unwind the call stack; what the caller gets is simply a value of type `int!`.
 - An `int!` cannot be used as an `int`; it must be unwrapped first:
   - `a !! b`: takes `b` on an error, otherwise the value inside;
-  - `x ?-> f`: on an error passes the error on unchanged, otherwise calls `f`; these can be chained;
+  - `x -> f`: on an error passes the error on unchanged, otherwise calls `f`; these can be chained;
   - `match` with `case error e` (`e.kind`, `e.message`, `e.location`) and `case v`.
 - In the graph, all three forms are a branch whose condition is a one-bit tag on the value; it is the same kind of structure as `if`.
 
@@ -809,26 +809,26 @@ The modules that come with Camel are `str` (strings), `array` (arrays), `math`, 
 
 ```cml
 
-import { split, trim, to_upper, replace, find } from str
+import { split, trim, to_upper, replace, index_of } from str
 import { sort_by, take, sum, reverse, unique } from array
 import { abs, hypot, bit_and, pi } from math
-import { mean } from statistics
+import { mean } from array
 
 func main(): int sync {
     // Strings: the value goes in on the left, what configures the call goes in angle brackets.
-    let words = '  pear, fig ,apple, fig '->trim->split<','>->map<(w: string): string => trim(w)>
+    let words = '  pear, fig ,apple, fig '->trim->split<','>->map<(w) => trim(w)>
     println(words)
     println(words->unique->sort_by<(w: string): int => len(w)>->take<2>)
     println('hello'->to_upper, 'a-b-c'->replace<'-', '+'>, len('héllo'))
 
     // A result that may not exist is a T?.
-    let at_l = 'hello'->find<'l'> ?? -1
-    let at_z = 'hello'->find<'z'> ?? -1
+    let at_l = 'hello'->index_of<'l'> ?? -1
+    let at_z = 'hello'->index_of<'z'> ?? -1
     println(at_l, at_z)
 
     // Arrays and numbers.
     let xs = [3, -1, 4, -1, 5]
-    println(sum(xs), reverse(xs), xs->map<(x: int): int => abs(x)>)
+    println(sum(xs), reverse(xs), xs->map<(x) => abs(x)>)
     println(mean([1.0, 2.0, 4.0]), hypot(3.0, 4.0), bit_and(6, 3))
     println('{:.4f}'->format<pi>)
     return 0

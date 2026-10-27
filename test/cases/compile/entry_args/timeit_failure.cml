@@ -4,16 +4,15 @@
  * `CAMEL_TIMEIT_COUNTER`; the third one divides by zero. The failure is what the iteration field
  * of the `--timeit` report must name.
  */
-module timeit_failure
 
 import { get_env } from env
-import { try_read_text, write_text } from fs
+import { read_text, write_text } from fs
 
 func main(): int sync {
-    let path = get_env('CAMEL_TIMEIT_COUNTER')
-    let count = int(try_read_text(path) !! '0')
+    let path = get_env('CAMEL_TIMEIT_COUNTER') ?? ''
+    let count = int(path->read_text !! '0')
     let next = count + 1
-    write_text(path, string(next))
+    let _ = (string(next))->write_text<path>
     // Only the third execution has a zero here; the compiler cannot fold the division because
     // `next` comes from a file at run time.
     return 1 / (next - 3)

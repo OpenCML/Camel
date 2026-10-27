@@ -29,6 +29,7 @@
 #include "tiles/internal/kernel_ir.h"
 #include "tiles/program.h"
 #include <algorithm>
+#include <array>
 #include <bit>
 #include <cmath>
 #include <format>
@@ -770,7 +771,7 @@ class Compiler {
             statics.emplace_back(arg.staticSlot);
         }
         try {
-            const auto resolved = resolver->resolveWith({}, types, statics, ModifierSet{});
+            const auto resolved = resolver->resolveWith({}, types, statics);
             if (!resolved || !*resolved)
                 return nullptr;
             return (*resolved)->exitType();
@@ -795,7 +796,7 @@ class Compiler {
             statics.emplace_back(arg.staticSlot);
         }
         try {
-            const auto reason = resolver->explainRejection({}, types, statics, ModifierSet{});
+            const auto reason = resolver->explainRejection({}, types, statics);
             return reason ? *reason : std::string();
         } catch (const std::exception &) {
             return {};
@@ -990,6 +991,45 @@ class Compiler {
             }
             return {.type = inferred, .tensor = append(std::move(n))};
         }
+        // A type name applied to an array is the core's conversion (`:op/atof` and its kin), no
+        // module's definition. Converting to the element type the input already has does nothing;
+        // any other element type would have to convert, which this backend cannot represent, so
+        // the region stays on the CPU, where the kernel converts.
+        {
+            static const std::array<core::OperId, 6> coreConversions = {
+                core::OperatorTable::instance().intern(":op/atoi"),
+                core::OperatorTable::instance().intern(":op/atol"),
+                core::OperatorTable::instance().intern(":op/atof"),
+                core::OperatorTable::instance().intern(":op/atod"),
+                core::OperatorTable::instance().intern(":op/atobf"),
+                core::OperatorTable::instance().intern(":op/atof6")};
+            if (std::ranges::find(coreConversions, id) != coreConversions.end()) {
+                ty::Type *inferred = knownResult != nullptr ? knownResult : coreResult(id, args);
+                const tensor::TensorFacts result =
+                    inferred != nullptr ? tensor::tensorFactsOf(inferred) : tensor::TensorFacts{};
+                if (inferred == nullptr || result.dtype != ty::TypeCode::Float32 ||
+                    !result.isStaticShape())
+                    throw UnsupportedComputation(
+                        "operator '" + uri() + "' needs a statically known f32 tensor result",
+                        uri(),
+                        UnsupportedComputation::Reason::Shape);
+                if (!tensor::isTensorType(args.at(0).type))
+                    throw UnsupportedComputation(
+                        "'" + uri() + "' needs a tensor operand here",
+                        uri(),
+                        UnsupportedComputation::Reason::Shape);
+                const size_t input = tensorValue(args.at(0));
+                const Node &source = program.nodes[input];
+                if (source.shape != tensor::extentsOf(*result.shape))
+                    throw std::runtime_error("array conversion shape mismatch");
+                if (source.dtype == DType::F32)
+                    return {.type = inferred, .tensor = input};
+                throw UnsupportedComputation(
+                    "element type conversion in '" + uri() + "' is not supported",
+                    uri(),
+                    UnsupportedComputation::Reason::Shape);
+            }
+        }
         const auto *def = tensor::ops::OpRegistry::instance().find(id);
         if (!def || !def->traits.pure)
             throw UnsupportedComputation(
@@ -1065,9 +1105,17 @@ class Compiler {
                 return {.type = *inferred, .tensor = n.inputs[0]};
             return {.type = *inferred, .tensor = append(std::move(n))};
         }
-        if (n.op == "cast" || n.op == "cast_like") {
+        // What makes a conversion an alias is the element type, not the spelling: the target
+        // either equals the source's element type -- return the source -- or it does not, and
+        // this backend converts nothing, so the region stays on the CPU. A type-name conversion
+        // is the core's and is read above; the module keeps the transitional `cast` beside the
+        // `cast_like` a conversion's VJP emitted.
+        static const std::string conversions =
+            "|cast|cast_like|";
+        if (conversions.find("|" + n.op + "|") != std::string::npos) {
             // `cast_like` keeps the source's shape but takes `like`'s element type; `cast`
-            // names its target type in the second argument. The check above leaves only f32
+            // names its target type in the second argument, and a type-name conversion names
+            // it in the operator itself. The check above leaves only f32
             // results, and `tensorValue` has already converted an f64 scalar source, so the
             // source is f32 whenever the target is: returning it is then the documented
             // "converting a value to its own type does nothing". A different element type

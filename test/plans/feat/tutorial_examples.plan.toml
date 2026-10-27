@@ -305,7 +305,7 @@ assert(lines.length === 2, 'the program prints two lines, got ' + lines.length)
 const drawn = numbers(lines[0])
 const ordered = numbers(lines[1])
 assert(drawn.length === 8 && ordered.length === 8, 'eight numbers per line, got ' + drawn.length + ' and ' + ordered.length)
-assert(ordered.join(', ') === '75, 63, 75, 13, 90, 9, 57, 37', 'the reduced line is in element order, got ' + lines[1])
+assert(ordered.join(', ') === '22, 72, 89, 99, 60, 96, 66, 2', 'the reduced line is in element order, got ' + lines[1])
 assert(
   drawn.every((n) => Number.isInteger(n) && n >= 0 && n <= 99),
   'the first line holds eight draws of randint(0, 99), whatever order they happened in: ' + lines[0]
@@ -459,7 +459,7 @@ golden = "golden/tutorial_examples/07_nullable.txt"
 # The dropped value at the end of the file warns on standard error, which the page does not show.
 [[tests]]
 name = "tutorial.examples.07_errors"
-desc = "A function that may fail returns `T!`, and `throw` returns an error value. The value dropped at the end of the file is reported as a warning on standard error."
+desc = "A function that may fail returns `T!`, and an error value is handed out by `return`. The value dropped at the end of the file is reported as a warning on standard error."
 case = "../../../docs/tutorial/examples/07_errors.cml"
 golden = "golden/tutorial_examples/07_errors.txt"
 expect_output_contains = ["SemanticDiag::UnusedFallibleValue"]

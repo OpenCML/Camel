@@ -23,7 +23,8 @@ enum class TypeType {
     Spec,
     Infer,
     Ref,
-    Enum
+    Enum,
+    Match
 };
 
 /// What a `TypeExprLoad` does, and `typeof` is the only one left. The reserved type operators
@@ -86,6 +87,15 @@ class SpecTypeLoad : public TypeLoad {
     SpecTypeLoad() : TypeLoad(TypeType::Spec) {}
     const std::string toString() const override { return "SpecType"; }
     const std::string geneCode() const override;
+};
+
+/// `match type T { case ... => U }` in a type position (design principles 5.6): children [0] the
+/// subject type, [1] Repeated TypeCase, each holding the type the case gives as its child.
+class MatchTypeTypeLoad : public TypeLoad {
+  public:
+    MatchTypeTypeLoad() : TypeLoad(TypeType::Match) {}
+    const std::string toString() const override { return "MatchTypeType"; }
+    const std::string geneCode() const override { return "match type"; }
 };
 
 /// How a dimension group ends (design principles 5.4): no pack, `..`, or `..name`.

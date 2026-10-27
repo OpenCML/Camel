@@ -4,7 +4,6 @@
  * result to an `int` is refused with the value's type taken from the declaration (
  * step 10). With a type-variable parameter this is the type case the declaration can have.
  */
-module autodiff_result_type
 
 import { stop_gradient } from autodiff
 

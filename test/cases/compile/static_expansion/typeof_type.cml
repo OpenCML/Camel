@@ -3,7 +3,6 @@
  * `pair_of(t)` inside a generic function has no name, so `fields typeof(...)` and
  * `match type typeof(...)` are the two places that can state it without a sample value.
  */
-module typeof_type
 
 /// A pair of the type parameter: `(T, T)` is not a name the function could write.
 func pair_of::<T>(t: T): (T, T) {

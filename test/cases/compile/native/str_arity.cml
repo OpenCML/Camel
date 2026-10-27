@@ -1,12 +1,11 @@
 /**
- * The declaration of `str:trim` takes one ordinary argument: a second one is refused at the
+ * The declaration of `str:to_upper` takes one ordinary argument: a second one is refused at the
  * call, and the overload the message lists is the declaration's (step 10).
  */
-module str_arity
 
-import { trim } from str
+import { to_upper } from str
 
 func main(): int sync {
-    println(trim(' a ', ' b '))
+    println(to_upper(' a ', ' b '))
     return 0
 }

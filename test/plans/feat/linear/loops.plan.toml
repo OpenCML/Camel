@@ -266,7 +266,7 @@ case = "../../../cases/loops/open_rank_round_scalar_read.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
-expect_diagnostic_line = 11
+expect_diagnostic_line = 10
 expect_diagnostic_column = 39
 expect_output_contains = ["Invalid call to '__add__' with argument types <> (float, f32[..])", "the scalar operand has type 'float', but the tensor's element type is 'f32'", "write the conversion, f32(value)", "a scalar read out of the array is written sum(v) or an explicit conversion"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -280,9 +280,9 @@ case = "../../../cases/loops/open_rank_round_iterate_round.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 13
+expect_diagnostic_line = 12
 expect_diagnostic_column = 14
-expect_output_contains = ["a value with no dimension has no first dimension to iterate over", "open_rank_round_iterate_round.cml:13:"]
+expect_output_contains = ["a value with no dimension has no first dimension to iterate over", "open_rank_round_iterate_round.cml:12:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -455,7 +455,7 @@ case = "../../../cases/loops/err_tensor_rank0.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LoopSequenceNotIterable"
-expect_diagnostic_line = 13
+expect_diagnostic_line = 12
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -469,7 +469,7 @@ backends = ["nvm", "fvm"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TensorDimensionMismatch"
 expect_output_contains = ["reshape changes tensor element count: [2] -> []"]
-expect_diagnostic_line = 13
+expect_diagnostic_line = 12
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -511,13 +511,16 @@ timeout_ms = 8000
 
 [[tests]]
 name = "loops.onnx_refused"
-desc = "The program runs onnx.export_model on a function with a loop: the exporter refuses the loop where it is written (line 8), before the export's own simplification rewrites the function's graphs, and no model is written. No pass is needed: the exporter reads the program's own graph when the program calls it, so the default pipeline reaches the refusal. (The entry used to name std::macro, which does nothing here: the program declares no macro.)"
+desc = "The program runs onnx.export_model on a function with a loop: the exporter refuses the loop where it is written (line 8), before the export's own simplification rewrites the function's graphs, and no model is written. No pass is needed: the exporter reads the program's own graph when the program calls it, so the default pipeline reaches the refusal. (The entry used to name std::macro, which does nothing here: the program declares no macro.) The refusal is the error value of the export_model call (`ExportUnsupported`), which nothing handles, so the exit reports it as an unhandled error at the loop."
 kind = "negative"
 case = "../../../cases/loops/onnx_refused.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_output_contains = ["onnx.export_model:", "a 'loop' expression is not exported to ONNX yet", "onnx_refused.cml:8:13"]
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_diagnostic_code = "0x04000051"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 13
+expect_output_contains = ["ExportUnsupported", "a 'loop' expression is not exported to ONNX yet"]
 expect_output_not_contains = ["RewriteInvalid", "rules::simplify"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
@@ -605,13 +608,16 @@ timeout_ms = 20000
 
 [[tests]]
 name = "loops.onnx_refused_prl"
-desc = "The same refusal by export_model run by std::prl: the back end lowers the loop in its own copy, so the export still reads the program's own graph and refuses the loop at line 8."
+desc = "The same refusal by export_model run by std::prl: the back end lowers the loop in its own copy, so the export still reads the program's own graph and refuses the loop at line 8. The refusal is the error value of the export_model call (`ExportUnsupported`), which nothing handles, so the exit reports it as an unhandled error."
 kind = "negative"
 case = "../../../cases/loops/onnx_refused.cml"
 args = ["-E", "short", "${case}", "std::prl"]
 expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_output_contains = ["onnx.export_model:", "a 'loop' expression is not exported to ONNX yet", "onnx_refused.cml:8:13"]
+expect_diagnostic_name = "RuntimeDiag::UnhandledError"
+expect_diagnostic_code = "0x04000051"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 13
+expect_output_contains = ["ExportUnsupported", "a 'loop' expression is not exported to ONNX yet"]
 expect_output_not_contains = ["RewriteInvalid", "rules::simplify"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
@@ -806,3 +812,16 @@ expect_exit = 0
 expect_stdout_exact = "500\ndone\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
+
+[[tests]]
+name = "loops.state_in_place.block_body"
+desc = "The in-place append of a loop state does not depend on how the body is written (design principles 10.5): the body that is one expression, a block that binds names and ends in `return xs->append<v>`, and a block that returns the tuple of an array and a counter each take one block for 200 rounds (`std::mem::blocks()` between the operations). The `return` once kept the copying append, which made a merge written that way quadratic. A body that ends in an `if` or a `match` is the same: arms that each build the tuple with the append, an arm that leaves the state as it was, an `else if` chain and the arms of a `match` take one block too (the join forwards the array the arm appended to)."
+kind = "behavior"
+case = "../../../cases/loops/state_in_place_block.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "200 200 200 199\n1 1 1\n200 199 0 -1 198 1\n151 200 1 2 5 1\n200 199 1 2 3 1 1\n200 199 10 20 30 10 1\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

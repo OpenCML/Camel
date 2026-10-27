@@ -14,7 +14,6 @@
  *
  * Exit 1 is more threads than the budget, 2 a `-t 1` run with more than the caller.
  */
-module thread_pools
 
 import { num_threads, sum, zeros } from tensor
 import { thread_count } from test_support

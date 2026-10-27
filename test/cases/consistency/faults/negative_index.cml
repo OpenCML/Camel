@@ -1,7 +1,6 @@
 /**
  * A negative array index computed at run time.
  */
-module negative_index
 
 func at(xs: int[], i: int): int { return xs[i] }
 

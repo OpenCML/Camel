@@ -23,10 +23,9 @@
  * the same type is refused, docs/technical/optim.md), and its two leaves are checked first: a
  * tangent has the element type of the parameter it belongs to.
  */
-module optim_native_dtype_exact
 
 import { numel, new, sum, to_bytes } from tensor
-import { size, to_array } from bytes
+import { to_array } from bytes
 import { adam as native_adam, adam_state, sgd as native_sgd } from nn
 import { adam, constant, init, update } from optim
 import { with_grad } from autodiff
@@ -62,8 +61,8 @@ func main(): int sync {
     // gather_grad_f64), so the step below is only meaningful with this held.
     leaves = leaves + 2
     elements = elements + 4
-    if size(to_bytes(gradient.wide)) != 8 * numel(gradient.wide) then failures = failures + 1
-    if size(to_bytes(gradient.narrow)) != 4 * numel(gradient.narrow) then failures = failures + 1
+    if len(to_bytes(gradient.wide)) != 8 * numel(gradient.wide) then failures = failures + 1
+    if len(to_bytes(gradient.narrow)) != 4 * numel(gradient.narrow) then failures = failures + 1
 
     // ---- one `sgd` step of each leaf, through the native path ----
     let stepped = native_sgd(model, gradient, 0.5)
@@ -75,11 +74,11 @@ func main(): int sync {
     // and the f32 leaf's as a float -- a length alone would not say what the bytes hold.
     leaves = leaves + 2
     elements = elements + 4
-    if size(to_bytes(stepped.wide)) != 8 * numel(stepped.wide) then failures = failures + 1
-    if size(to_bytes(stepped.narrow)) != 4 * numel(stepped.narrow) then failures = failures + 1
+    if len(to_bytes(stepped.wide)) != 8 * numel(stepped.wide) then failures = failures + 1
+    if len(to_bytes(stepped.narrow)) != 4 * numel(stepped.narrow) then failures = failures + 1
 
     'optim native_dtype_exact sgd leaves={} elements={} wide_bytes={} narrow_bytes={} wide_elements={} total={}'
-    ->format<leaves, elements, size(to_bytes(stepped.wide)), size(to_bytes(stepped.narrow)), numel(stepped.wide), value>
+    ->format<leaves, elements, len(to_bytes(stepped.wide)), len(to_bytes(stepped.narrow)), numel(stepped.wide), value>
     ->println
     'optim native_dtype_exact wide_bytes={}'->format<wide>->println
     'optim native_dtype_exact narrow_bytes={}'->format<narrow>->println
@@ -103,13 +102,13 @@ func main(): int sync {
     // is the f32 one (the Camel module's f32 arm narrows once, as the native kernel does).
     leaves = leaves + 2
     elements = elements + 4
-    if size(to_bytes(second.0.wide)) != 8 * numel(second.0.wide) then failures = failures + 1
-    if size(to_bytes(second.0.narrow)) != 4 * numel(second.0.narrow) then failures = failures + 1
+    if len(to_bytes(second.0.wide)) != 8 * numel(second.0.wide) then failures = failures + 1
+    if len(to_bytes(second.0.narrow)) != 4 * numel(second.0.narrow) then failures = failures + 1
     if agrees_wide != 1 then failures = failures + 1
     if agrees_narrow != 1 then failures = failures + 1
 
     'optim native_dtype_exact adam leaves={} elements={} wide_bytes={} narrow_bytes={} wide_agrees={} narrow_agrees={}'
-    ->format<leaves, elements, size(to_bytes(second.0.wide)), size(to_bytes(second.0.narrow)), agrees_wide, agrees_narrow>
+    ->format<leaves, elements, len(to_bytes(second.0.wide)), len(to_bytes(second.0.narrow)), agrees_wide, agrees_narrow>
     ->println
     'optim native_dtype_exact failures={}'->format<failures>->println
     return failures

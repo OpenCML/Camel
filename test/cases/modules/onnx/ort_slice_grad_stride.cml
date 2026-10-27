@@ -17,7 +17,6 @@
  * values this program prints and the model it exports are both checked against those by
  * ort_slice_grad_stride.py.
  */
-module ort_slice_grad_stride
 import { reshape, sum } from tensor
 import { with_grad } from autodiff
 import { export_model } from onnx
@@ -46,10 +45,10 @@ func main(): int sync {
     println(r.0)
     println(r.1)
     println(r.2)
-    export_model(
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(
         (w: f32[6], x: f32[6], a: f32[2, 4], b: f32[2, 4]): (f32[..], f32[..], f32[..]) => step(
             w, x, a, b),
-        (w, x, a, b), get_env('ONNX_OUT'))
+        (w, x, a, b))
     println('exported')
     return 0
 }

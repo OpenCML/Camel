@@ -152,6 +152,26 @@ Value LowerContext::emitScalar(
 
 // ---------------------------------------------------------------- lowerings
 
+const LoweringTarget &loweringTarget(std::string_view target) {
+    static const LoweringTarget nothingSpecial;
+    // onnxruntime-cpu at its defaults: MatmulTransposeFusion (level 2, i.e. the EXTENDED and ALL
+    // levels a plain InferenceSession asks for) turns a MatMul beside a Transpose into
+    // com.microsoft.FusedMatMul, and the CPU provider's kernel for that operator is registered
+    // for float alone (measured on onnxruntime 1.23.2: the session fails to load an f64 model).
+    static const LoweringTarget onnxruntimeCpu{
+        .transposedProductNeedsGemmOrEinsumForDouble = true};
+    if (target == "onnxruntime-cpu") {
+        return onnxruntimeCpu;
+    }
+    return nothingSpecial;
+}
+
+bool transposedProductNeedsGemmOrEinsum(
+    std::string_view target, std::optional<TypeCode> dtype) {
+    return dtype == TypeCode::Float64 &&
+           loweringTarget(target).transposedProductNeedsGemmOrEinsumForDouble;
+}
+
 namespace {
 
 Attribute ints(std::string name, std::vector<int64_t> values) {
@@ -277,7 +297,7 @@ Value lowerWhere(const LowerContext &ctx) {
 
 Value lowerCast(const LowerContext &ctx) {
     if (!ctx.result().dtype) {
-        throw ExportError("'tensor:cast': the target dtype must be an export-time constant");
+        throw ExportError("the target dtype of an array conversion must be an export-time constant");
     }
     return ctx.emit(
         "Cast",
@@ -853,6 +873,39 @@ LowerFn constantOfShapeOp(std::optional<double> fill) {
 /// tensor index does (Gather along axis 0, one per index).
 Value lowerArrayIndex(const LowerContext &ctx) {
     const Value &array = ctx.arg(0);
+    // The dimension the position is on is the call's third word, and the first dimension when it
+    // writes none (design principles 5.4: `t[i]` is axis 0). A position drops that dimension, and
+    // ONNX Gather with a scalar index drops exactly it, so the axis is the attribute of the same
+    // node. The value's own element type is kept: a position on a dimension of a rank-2 array is
+    // a row of it, not one number.
+    const bool hasAxis = ctx.size() > 2;
+    if (hasAxis) {
+        // The call's own result is the value one dimension fewer (design principles 5.4), and the
+        // export states it the way the core's slice lowering states its slice: the element type
+        // the value holds and every extent but the one the position is on. The core's index has no
+        // module definition behind it, so its facts are not computed for it -- the lowering takes
+        // them from the value it reads.
+        const auto facts = ctx.facts(0);
+        if (!facts.shape) {
+            throw ExportError("':op/idx_arr' of a tensor of unknown rank is not supported");
+        }
+        const int64_t rank  = static_cast<int64_t>(facts.shape->size());
+        const int64_t rawAt = ctx.constInt(2);
+        const int64_t at    = rawAt < 0 ? rawAt + rank : rawAt;
+        if (at < 0 || at >= rank) {
+            throw ExportError(
+                std::format("':op/idx_arr': the axis {} is out of range for rank {}", rawAt, rank));
+        }
+        tensor::StaticShape shape = *facts.shape;
+        shape.erase(shape.begin() + static_cast<std::ptrdiff_t>(at));
+        return Value::symbolic(
+            ctx.emitter().node(
+                "Gather",
+                {ctx.input(0), ctx.input(1, TypeCode::Int64)},
+                {intAttr("axis", at)}),
+            facts.dtype,
+            shape);
+    }
     if (array.isSymbolic() && array.form == Value::Form::IntArray && ctx.arg(1).isConstant()) {
         const int64_t i = ctx.constInt(1);
         const auto n    = static_cast<int64_t>(array.elements.size());
@@ -1189,6 +1242,47 @@ Value lowerEmbedding(const LowerContext &ctx) {
     return ctx.emit("Gather", {ctx.input(0), ctx.input(1, TypeCode::Int64)}, {intAttr("axis", 0)});
 }
 
+/// arr[idx]: the core's own take with an integer array, along the axis the call names or the
+/// first dimension when it writes none (design principles 5.4). ONNX Gather with an index tensor
+/// keeps the axis at the indices' length, which is what taking with an integer array is -- the
+/// index may name one position several times -- so one node is both `t[idx]` and the same take on
+/// another dimension (`m[:, idx]`); this is the node the module's `tensor:take` is as well.
+Value lowerArrayTake(const LowerContext &ctx) {
+    std::string indices;
+    if (ctx.arg(1).kind == Value::Kind::Constant && ctx.arg(1).ty &&
+        ctx.arg(1).ty->code() == type::TypeCode::Array) {
+        // An array has no operand name of its own, so it becomes an i64 initializer directly.
+        indices = ctx.emitter().int64s(ctx.constInts(1));
+    }
+    if (indices.empty()) {
+        indices = ctx.input(1, TypeCode::Int64);
+    }
+    // The result keeps the value's rank, with the dimension the take is on at the length of the
+    // indices (design principles 5.4): the same facts the core's slice lowering states for its own
+    // node, taken from the value read, because the core's index has no module definition whose
+    // inference would compute them.
+    const auto facts = ctx.facts(0);
+    if (!facts.shape) {
+        throw ExportError("':op/idx_take' of a tensor of unknown rank is not supported");
+    }
+    const int64_t rank  = static_cast<int64_t>(facts.shape->size());
+    const int64_t rawAt = ctx.has(2) ? ctx.constInt(2) : 0;
+    const int64_t at    = rawAt < 0 ? rawAt + rank : rawAt;
+    if (at < 0 || at >= rank) {
+        throw ExportError(
+            std::format("':op/idx_take': the axis {} is out of range for rank {}", rawAt, rank));
+    }
+    const auto indicesFacts = ctx.facts(1);
+    const std::optional<int64_t> count =
+        indicesFacts.shape && !indicesFacts.shape->empty() ? (*indicesFacts.shape)[0] : std::nullopt;
+    tensor::StaticShape shape = *facts.shape;
+    shape[static_cast<size_t>(at)] = count;
+    return Value::symbolic(
+        ctx.emitter().node("Gather", {ctx.input(0), indices}, {intAttr("axis", at)}),
+        facts.dtype,
+        shape);
+}
+
 } // namespace
 
 // ---------------------------------------------------------------- registry
@@ -1226,7 +1320,10 @@ LoweringRegistry::LoweringRegistry() {
     add("tensor:gelu", lowerGelu);
     add("tensor:erf", sameTypeOp("Erf", 1));
     add("tensor:where", lowerWhere);
-    add("tensor:cast", lowerCast);
+    // A type name applied to an array is the core's conversion (src/builtin/operators/array_convert.h).
+    for (const char *uri : {":op/atoi", ":op/atol", ":op/atof", ":op/atod", ":op/atobf", ":op/atof6"}) {
+        add(uri, lowerCast);
+    }
 
     // Linear algebra and layout.
     add("tensor:matmul", sameTypeOp("MatMul", 2));
@@ -1292,6 +1389,10 @@ LoweringRegistry::LoweringRegistry() {
         }
     }
     add(":op/idx_arr", lowerArrayIndex);
+    // The take of an integer array, the second index form a subscript writes (design principles
+    // 5.4): `t[idx]` is the take along the first dimension, `m[:, idx]` the same take along the
+    // dimension it names, both one Gather.
+    add(":op/idx_take", lowerArrayTake);
     // The core's own slice: the node `t[a:b:s]` and `slice(t, axis, a, b, s)` both build, for
     // any rank, any axis and any element type. It is the only slice the language has, so every
     // slice in a program reaches this lowering.

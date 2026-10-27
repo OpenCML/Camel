@@ -1,12 +1,11 @@
 /**
- * An error value made by `throw` reaches the exit of `main` without being handled: it is
- * reported on standard error, at the place it was made, and the exit code is not zero.
+ * An error value handed out by a `return` reaches the exit of `main` without being handled: it
+ * is reported on standard error, at the place it was made, and the exit code is not zero.
  */
-module error_thrown
 
 func check(x: int): int! {
     if x < 0 then {
-        throw error('Negative', 'the argument is negative')
+        return error('Negative', 'the argument is negative')
     } else {
         return x
     }

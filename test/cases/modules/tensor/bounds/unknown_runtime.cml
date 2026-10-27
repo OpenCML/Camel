@@ -1,4 +1,3 @@
-module bounds_unknown_runtime
 import { reshape, sum, shape, load_npy } from tensor
 func main(): int sync {
     println('ran')

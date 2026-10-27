@@ -1,0 +1,56 @@
+/**
+ * A value enters a `T?` / `T!` position by itself wherever the target type is known (design
+ * principles 3.8). An assignment to a `var` of the form is one of those positions: the place's
+ * declared type is known, so `best = hi` with `best: float?` and `hi: float` puts `hi` into the
+ * form, `slot = x` writes a `T` into a `T!`, a literal takes the place's type, and `gone = null`
+ * writes the null slot. On the graph each is the CAST node a program would write with `as`. The
+ * reverse never enters: see `err_assignment_reverse` and `err_assignment_other_payload`.
+ */
+
+// A `var` captured by a closure and written inside a `sync` body (section 7 of the primer).
+func make_best(): (x: float) => float {
+    var best: float? = null
+    return (x: float): float => sync {
+        let m = best ?? x
+        let hi = if x > m then x else m
+        best = hi
+        hi
+    }
+}
+
+// The null slot: `null` enters a `T?` place as it enters an annotated `let`.
+func clear(): int? sync {
+    var gone: int? = 7
+    gone = null
+    gone
+}
+
+// A literal takes the place's type, as a literal takes the type of any other position.
+func five(): int? sync {
+    var n: int? = 0
+    n = 5
+    n
+}
+
+// The fallible form.
+func lifted(x: int): int! sync {
+    var slot: int! = 0
+    slot = x
+    slot
+}
+
+func show(r: int!): string {
+    return match r {
+        case error e => 'error ' + e.kind
+        case v => 'ok ' + string(v)
+    }
+}
+
+func main(): int sync {
+    let f = make_best()
+    println(f(2.0), f(-1.0), f(1.5), f(3.0))
+    println(clear() ?? -1)
+    println(five() ?? -1)
+    println(show(lifted(7)))
+    return 0
+}

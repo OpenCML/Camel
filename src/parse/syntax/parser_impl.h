@@ -185,9 +185,6 @@ class ParserImpl {
     void parseStmtBlock();
     void parseBlockExpr();
     void parseModuleName();
-    void parseModuleDecl();
-    /// moduleDecl after the tags that may precede it; `m` marks where it began.
-    void parseModuleDeclRest(size_t m);
     void parseImportDecl();
     void parseBracedImports();
     void parseImportItem();
@@ -242,7 +239,7 @@ class ParserImpl {
     uint32_t tokenIndexAt(uint32_t n) const;
     /// The offset just after the `<...>` whose `<` is at the offset `angle`, or kNone.
     uint32_t afterAngledParams(uint32_t angle) const;
-    void parseDataDecl();
+    void parseDataDecl(bool exported = false);
     void parseTypeDecl();
     /// typeDecl after the tags and decorators that may precede it; `m` marks where it began.
     void parseTypeDeclRest(size_t m);
@@ -266,7 +263,7 @@ class ParserImpl {
     void parseKeyParamPair(bool allowRest, bool allowConstas);
     void parsePairedParams(TK closer, bool allowRest, bool allowConstas);
     void parseParentParams(bool allowRest = false, bool allowConstas = false);
-    void parseAngledParams();
+    void parseAngledParams(bool allowRest = false);
     void parseEnumType();
     void parseEnumVariant();
     void parseEnumField();
@@ -400,6 +397,8 @@ class ParserImpl {
     void parseArrayType();
     void parseArrayDim();
     void parseSpecType();
+    void parseMatchTypeType();
+    void parseTypeArm();
     void parsePrimaryType();
     void parseStructType();
     void parseFuncType();

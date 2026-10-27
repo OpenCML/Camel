@@ -1,0 +1,24 @@
+/**
+ * A `match type` on a type that still has a type variable does not take its `_` arm: it is not
+ * known yet, so the condition is refused as not answerable (WhenTypeQueryNotConcrete), not taken
+ * for false. The variable here reaches the inner predicate through the outer one.
+ */
+
+func inner::<U>(): bool {
+    return match type U {
+        case int => true
+        case _ => false
+    }
+}
+
+func outer::<T>(): bool {
+    return inner::<T[]>()
+}
+
+func bad::<T>(x: int): int when outer::<T>() {
+    return x
+}
+
+func main(): int sync {
+    return bad(1)
+}

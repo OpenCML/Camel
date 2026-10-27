@@ -13,7 +13,6 @@
 // 0.0 -- beside the real 20 and 10, which a pass that returned nothing would not print. Without
 // the rule the build refuses with "no derivative rule for operator
 // ':tangent/scatter_slice_arr'" (exit 1).
-module second_order_array_slice
 
 import { grad } from autodiff
 

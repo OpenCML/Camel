@@ -3496,6 +3496,13 @@ Value Evaluator::applyOper(
             unsupported(act, std::format("'{}': {}", uri, e.what()));
         }
     }
+    // A type name applied to an array is the core's conversion, not a tensor definition: the
+    // type its node was resolved to is the answer (extents of the input, element type of the name).
+    if (def == nullptr && uri.starts_with(":op/ato") && resultType != nullptr) {
+        if (type::Type *answer = camel::core::type::valueTypeOf(resultType); tensor::isTensorType(answer)) {
+            facts = tensor::tensorFactsOf(answer);
+        }
+    }
     // The operator's index semantics declaration for this call: lowerings read the rules of
     // the operator from it (the legal range of a slice bound, the check that faults) instead
     // of restating them.
@@ -4601,7 +4608,7 @@ Model exportBound(
     GCGraph *graph = fn->graph();
     checkArity(graph, examples.size());
 
-    Emitter emitter(options.opset, capabilitiesFor(options));
+    Emitter emitter(options.opset, capabilitiesFor(options), options.target);
     emitter.graph().name                        = options.graphName;
     const BoundInputs bound                     = bindInputs(emitter, options, examples);
     const std::vector<Value> &inputs            = bound.values;
@@ -4955,7 +4962,7 @@ Model translateEntryGraph(
     core::context::Context &ctx, const camel::runtime::Program *program,
     const ExportOptions &options) {
     GCGraph *root = program->root();
-    Emitter emitter(options.opset, capabilitiesFor(options));
+    Emitter emitter(options.opset, capabilitiesFor(options), options.target);
     emitter.graph().name = options.graphName;
 
     // One model input per parameter the entry graph still has, `with` ones first: the order

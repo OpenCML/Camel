@@ -7,6 +7,16 @@
             "plans": "feat/mm/"
         },
         {
+"comment": "The process-state cases are fast mm cases that live in the GC directory: the generic test/cases rule below resolves that directory to feat/mm/gc.plan.toml, the slow GC-stress plan, which runs neither of them. These exact paths come first and name no fall-through, so a change to either selects the feat/mm directory (layered, so the slow plans there still follow --tier).",
+            "paths": ["test/cases/feat/mm/gc/contexts.cml", "test/cases/feat/mm/gc/gc_prl_blocked_worker.cml"],
+            "plans": "feat/mm/"
+        },
+        {
+            "comment": "The context-lifetime case is a fast mm case that lives in the GC directory as well: the generic test/cases rule below resolves that directory to feat/mm/gc.plan.toml, the slow GC-stress plan, which does not run it. This exact path comes first and names no fall-through, so the file rule for the case selects the plan that reads it.",
+            "paths": ["test/cases/feat/mm/gc/context_lifetime.cml"],
+            "plans": "feat/mm/"
+        },
+        {
             "comment": "The formatted-print case is a fast consistency program that happens to live under the cpp exec dump directory: the generic test/cases rule below resolves it to feat/trans/cpp.plan.toml, whose agree_with_fvm test compiles and runs C++ for up to ten minutes, and which does not run this case. This exact path comes first and falls through to the file rule that names print_formats.",
             "paths": ["test/cases/trans/cpp/exec/print_formats.cml"],
             "plans": "feat/consistency/"
@@ -159,10 +169,10 @@
             "plans": ["feat/modules/tiles.plan.toml", "feat/modules/ddpm_primitives.plan.toml", "gpu/profile.plan.toml", { "plan": "gpu/tiles.plan.toml", "ownCases": true }, { "plan": "gpu/tiles_rows.plan.toml", "ownCases": true }, { "plan": "gpu/tiles_transfer.plan.toml", "ownCases": true }]
         },
         {
-            "comment": "The ONNX exporter. `layer` is true because the plan's four slow cases are ONNX Runtime and PyTorch comparisons: under --tier fast the fast exporter tests run and those are filtered; --tier all runs them. `feat/trans` holds the dumps that print the exported graph.",
+            "comment": "The ONNX exporter. `layer` is true because the plan's four slow cases are ONNX Runtime and PyTorch comparisons: under --tier fast the fast exporter tests run and those are filtered; --tier all runs them. `feat/trans` holds the dumps that print the exported graph. `onnx_with_forms` pins the three call forms of `export_model`'s `with` list (only `out`; `out` with `target`; `out` with `dynamic_axes`), one case under `test/cases/modules/onnx/with_forms/` each.",
             "paths": ["modules/onnx/", "test/cases/modules/onnx/"],
             "layer": true,
-            "plans": ["feat/modules/onnx.plan.toml", "feat/trans", "feat/compile/enum.plan.toml"]
+            "plans": ["feat/modules/onnx.plan.toml", "feat/modules/onnx_with_forms.plan.toml", "feat/trans", "feat/compile/enum.plan.toml"]
         },
         {
             "comment": "Neural-network operators: the nn plan and the plans that train with them.",
@@ -181,9 +191,10 @@
             "plans": ["feat/modules/tensor.plan.toml", "feat/modules/tensor", "feat/modules/threads.plan.toml", "feat/modules/index_semantics.plan.toml", "feat/modules/operator_semantics.plan.toml", "feat/compile/numeric_permissions.plan.toml", { "plan": "feat/modules/autodiff.plan.toml", "layer": true }]
         },
         {
-            "comment": "Keyed random: the random plan (named, so its slow std::cpp comparison runs) and the registry that lists it.",
-            "paths": ["modules/random/"],
-            "plans": ["feat/modules/random.plan.toml", "feat/modules/stdlib_registry.plan.toml"]
+            "comment": "Keyed random: the random plan, whose slow std::cpp comparison follows --tier (`layer`) so a change to a case does not run it in full, the reference plan that runs the Philox cases, and the registry that lists them.",
+            "paths": ["modules/random/", "test/cases/modules/random/"],
+            "layer": true,
+            "plans": ["feat/modules/random.plan.toml", "feat/modules/random_reference.plan.toml", "feat/modules/stdlib_registry.plan.toml"]
         },
         {
             "comment": "Graph values and passes, and the rewrite rules built on them.",
@@ -227,7 +238,7 @@
         },
         {
             "comment": "The declaration modules with no plan of their own: their cases live under test/cases/modules/std, which feat/modules/std.plan.toml runs, and their signatures are checked by the registry plan.",
-            "paths": ["modules/env/", "modules/fs/", "modules/hash/", "modules/process/", "modules/pyplot/", "modules/re/", "modules/sim/", "modules/statistics/", "modules/str/", "modules/this/", "modules/time/"],
+            "paths": ["modules/env/", "modules/fs/", "modules/hash/", "modules/process/", "modules/pyplot/", "modules/re/", "modules/sim/", "modules/str/", "modules/this/", "modules/time/"],
             "plans": ["feat/modules/std.plan.toml", "feat/modules/stdlib_registry.plan.toml"]
         },
         {
@@ -374,6 +385,16 @@
             "comment": "The graph-space gradient case: the directory rule above keeps the slow GC plan off it, and this is the fast plan that runs it.",
             "paths": ["test/cases/feat/mm/gc/graph_space_grad.cml"],
             "plans": ["feat/mm/graph_space.plan.toml"]
+        },
+        {
+"comment": "The process-state cases: the directory rule above keeps the slow GC plan off them, and this is the fast plan that runs them.",
+            "paths": ["test/cases/feat/mm/gc/contexts.cml", "test/cases/feat/mm/gc/gc_prl_blocked_worker.cml"],
+            "plans": ["feat/mm/process_state.plan.toml"]
+        },
+        {
+            "comment": "The context-lifetime case: the directory rule above keeps the slow GC plan off it, and this is the fast plan that runs it.",
+            "paths": ["test/cases/feat/mm/gc/context_lifetime.cml"],
+            "plans": ["feat/mm/context_lifetime.plan.toml"]
         },
         {
             "comment": "The smoke cases: test/plans/smoke is outside the feat/ tree, so no directory rule can mirror test/cases/smoke.",

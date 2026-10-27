@@ -643,8 +643,6 @@ class Formatter {
 
     std::any visitModuleName(cst::ModuleName context);
 
-    std::any visitModuleDecl(cst::ModuleDecl context);
-
     std::any visitImportDecl(cst::ImportDecl context);
 
     std::any visitExportDecl(cst::ExportDecl context);
@@ -755,6 +753,8 @@ class Formatter {
     std::string formatTypeInTypePosition(syn::Node type);
 
     std::any visitTypeCase(cst::TypeCase context);
+    std::any visitMatchTypeType(cst::MatchTypeType context);
+    std::any visitTypeArm(cst::TypeArm context);
 
     std::any visitStaticForExpr(cst::StaticForExpr context);
 

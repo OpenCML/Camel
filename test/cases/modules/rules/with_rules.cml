@@ -7,8 +7,7 @@
  * function of them and reads them by name, `name<value>` binds them and gives the `Rule`, and a
  * rule whose parameters all have a default is a `Rule` by its name alone.
  */
-module with_rules
-import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
+import { Node, Graph, nodes, op, op_name, name, graphs_of } from graph
 import { rewrite } from rewrite
 
 /// x + 0 => x, but only where the condition holds: the `when` reads the `with` parameter, which
@@ -22,14 +21,14 @@ with <scale: int = 1>
 rule mul_one_scaled(x: int) when scale > 0 { x * 1 => x }
 
 /// The rules as `Rule` values: one bound where it is written, one by its default.
-export func apply(p: Program): Program! {
+export func apply::<F>(p: F): F! {
     let rules = [add_zero_tiled<1>, mul_one_scaled]
-    return rewrite(p, rules)
+    return p->rewrite<rules>
 }
 
 /// The same set with the tile rule bound to 0: its condition refuses and the additions stay.
-export func apply_refusing(p: Program): Program! {
-    return rewrite(p, [add_zero_tiled<0>, mul_one_scaled])
+export func apply_refusing::<F>(p: F): F! {
+    return p->rewrite<[add_zero_tiled<0>, mul_one_scaled]>
 }
 
 func opText(n: Node): string {
@@ -39,18 +38,18 @@ func opText(n: Node): string {
     }
 }
 
-func nodesOf(p: Program, function: string): Node[] {
-    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+func nodesOf::<F>(p: F, function: string): Node[] {
+    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
     return nodes(found[0])
 }
 
-func countOf(p: Program, function: string, operator: string): int {
+func countOf::<F>(p: F, function: string, operator: string): int {
     return len(nodesOf(p, function)->filter<(n: Node): bool => opText(n) == operator>)
 }
 
 /// Prints the addition and product count of every function of the target, so the tests can see
 /// which rule the binding let through and which one the condition of the rule refused.
-export func report(p: Program): Program! sync {
+export func report::<F>(p: F): F! sync {
     println('left', countOf(p, 'left', ':op/add_l'), countOf(p, 'left', ':op/mul_l'))
     println('right', countOf(p, 'right', ':op/add_l'), countOf(p, 'right', ':op/mul_l'))
     println('folded', countOf(p, 'folded', ':op/add_l'), countOf(p, 'folded', ':op/mul_l'))

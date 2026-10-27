@@ -1,6 +1,6 @@
-module mixed_checks
 import { ones, reshape, sum, abs, randn, seed, set_num_threads } from tensor
 import { inspect, run_preferred_resident, download } from tiles
+import { exit } from process
 
 #[reassociate, change_precision, finite_math]
 func mixed(a: f32[..], b: f32[..]): f32[..] { return a @ b }

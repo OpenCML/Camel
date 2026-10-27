@@ -2,7 +2,7 @@
 
 English | [中文](../07_statements.md)
 
-A block is made up of statements. A statement is: an expression, a `let`/`var` declaration, `return`/`throw`, a nested block, or a declaration of a function or a type.
+A block is made up of statements. A statement is: an expression, a `let`/`var` declaration, `return`/`yield`, a nested block, or a declaration of a function or a type.
 
 ---
 
@@ -27,7 +27,7 @@ func main(): int sync {
 
 **An unused result of a pure operation is an error.** When a statement is a call of an operator declared pure (`xs->append<5>`, `sort(xs)`, `a + b`) and its value is not used (it is not the last statement of its block, or the block's value is dropped: a body declared `: void`, an element function written in place for `foreach`, the arm of an `if` without `else`, a block written as a statement), it does nothing: such an operator returns a new value and changes none of its arguments (design principles 11.3). This is the compile-time error `SemanticDiag::UnusedPureResult`; when `xs` is a variable, the diagnostic suggests the rebinding `xs = xs->append<5>` ([3.7](03_data_model.md#37-let-var-and-references)).
 
-Using the value means taking it apart with `!!`, `?->` or `match`, passing it on, or returning it. To drop it on purpose write `let _ = ...` ([7.2](#72-let-and-var)). The same warning is given for what the arm of an `if` without `else` gives, and for the value a `main` **without a declared return type** ends with: only a `main` that declares its return type has a result ([4.1](04_execution_model.md#41-program-and-entry)), so an error value at the end of an undeclared one goes nowhere. Outside a sync block there is nothing to warn about: a value nothing uses is not evaluated at all. The warning can be turned off with `-Wno-unused-fallible-value`.
+Using the value means taking it apart with `!!`, `->` or `match`, passing it on, or returning it. To drop it on purpose write `let _ = ...` ([7.2](#72-let-and-var)). The same warning is given for what the arm of an `if` without `else` gives, and for the value a `main` **without a declared return type** ends with: only a `main` that declares its return type has a result ([4.1](04_execution_model.md#41-program-and-entry)), so an error value at the end of an undeclared one goes nowhere. Outside a sync block there is nothing to warn about: a value nothing uses is not evaluated at all. The warning can be turned off with `-Wno-unused-fallible-value`.
 
 ## 7.2 `let` and `var`
 
@@ -53,21 +53,19 @@ var count = 0
 
   Struct destructuring `let { x, y } = p` and array destructuring `let [a, b] = xs` are not in the language: a `{` or a `[` where a name stands is an ordinary syntax error. Use `p.x`, `xs[0]`.
 - **`let _ = e` drops the value of `e` on purpose.** `_` is not a name: nothing is bound, so it can be written any number of times in one block, and it cannot be read. The expression is evaluated like the initial value of any `let` (in a sync block, in order). It is the way to say that a `T!` is ignored deliberately ([7.1](#71-expression-statements)). Only this form exists: `var _`, and `_` among several names, are syntax errors.
-- A `let` at the module top level is a global constant; a top-level `var` can be read and written by functions, also by an imported function of the module that declares it ([5.3](05_modules.md#53-exports)). **The top-level declarations do not depend on the order they are written in, only on what they use**: `let area = pi * r * r` may come before `let pi`; top-level values that depend on each other are `SemanticDiag::ModuleValueCycle` ([5.6](05_modules.md#56-loading-modules)). A local `let` in a function body is still declared before it is used.
+- A `let` at the module top level is a global constant; a top-level `var` is a resource of its module: functions read and write it, it can be exported, and `uses` can name it ([5.3](05_modules.md#53-exports)). **The top-level declarations do not depend on the order they are written in, only on what they use**: `let area = pi * r * r` may come before `let pi`; top-level values that depend on each other are `SemanticDiag::ModuleValueCycle` ([5.6](05_modules.md#56-loading-modules)). A local `let` in a function body is still declared before it is used.
 
-## 7.3 `return` and `throw`
+## 7.3 `return`
 
 - `return e` gives the value of **the block it is in**. A function body is a block, so a `return` written at the top level of the function body gives the return value of the function; a `return` written in the block of a branch arm gives the value of that branch, and does not leave the function ([6.8.1](06_expressions.md#681-if)).
 - A `return` without a value and `return null` are used in blocks that have no value.
-- `throw e` gives an error value and has the same structure as `return`: it does not unwind the call stack, and there is no "propagation" or "catching".
-  - The enclosing function must declare its return type as `T!`; otherwise it is `SemanticDiag::ThrowOutsideFallible`.
-  - `e` must be an error value: one constructed by `error(kind, message)`, or one bound by `case error e`; otherwise it is `SemanticDiag::ThrowNotAnError`.
-- `raise` is not part of the language and is not a reserved word (it is an ordinary name); an error value is returned with `throw`.
+- Handing out an error value is `return error('Kind', 'message')`: `error(...)` builds an ordinary value, and `return` hands it out as it hands out any other value -- it does not unwind the call stack, and there is no "propagation" or "catching" (design principles 3.9). A function that declares its return type as `T!` takes a value built by `error(...)` in that position as its failed arm.
+- To let the caller take another path on a missing or failed value without unwinding the call stack, leave it to `->` (which passes both on), or take it up at the call with `??` and `!!`.
 
 ```cml
 func check_age(age: int): int! {
-    return if age < 0 then {
-        throw error('InvalidAge', 'age is negative')
+    if age < 0 then {
+        return error('InvalidAge', 'age is negative')
     } else {
         return age
     }
@@ -99,7 +97,7 @@ error InvalidAge: age is negative
 - The other reading holds too: **exactly that** signature makes a function value a `T..` (`let s: int.. = step(3)`), any other signature does not, and a `T..` is not converted from anything else. `T..` and its step signature are two writings of one runtime value, and the conversion moves nothing.
 - Consuming is a pull through that signature: `s()` pulls one element. A stream is a value and is pure, so pulling the same stream value twice answers the same element, and **the consumer holds the rest it was handed and passes it on** -- an empty stream is one that answers `null` at once (see [7.3.1](#731-yield)).
 - `s()` takes no arguments: the step signature has none, and `s(1)` is an ordinary mismatch report.
-- On each execution path a stream value has **one consumer at most**: a `s()` and a `for x in s` are both consumption, reading one value twice is a compile error, and the diagnostic names **both places** and writes out the primitive `tee(s, n)` (which is not in the standard library yet); two arms of one branch that each consume once **count as one**, because one path takes one of them (design principles 5.4).
+- On each execution path a stream value has **one consumer at most**: a `s()` and a `for x in s` are both consumption, reading one value twice is a compile error, and the diagnostic names **both places** and writes out the primitive `s->tee<n>` (which is not in the standard library yet); two arms of one branch that each consume once **count as one**, because one path takes one of them (design principles 5.4).
 - A stream writes directly in a `for`: every round of `for x in s` is one pull, expanded on the graph into the `while` that already exists (no new node kind, no new driver, no new loop form; a back end sees the LOOP node it always saw). The state of the head is the state of the loop, and `x` is the element of this round's pull. Every round **judges its condition first and takes its element afterwards**, the order an array takes: `for x in s while c` asks `c` first and calls the step function only where `c` holds, and a pull that answers `null` ends the loop -- so `for line in read_lines(f) while n < 10` does not read line 11. An impure call in the condition without `sync` is not executed and is warned about, exactly as in a statement. An empty stream asks `c` once, pulls nothing and runs no round, and its value is the initial state (see [7.3.1](#731-yield)).
 
 ## 7.4 Functions
@@ -157,7 +155,7 @@ func clamp(x: int): int {
 
 func main(): int sync {
     println(clamp<0, 10>(42))
-    println([-5, 3, 99]->map<(x: int): int => x->clamp<0, 10>>)
+    println([-5, 3, 99]->map<(x) => x->clamp<0, 10>>)
     return 0
 }
 ```
@@ -219,7 +217,7 @@ int 1 string a
 |---|---|
 | `sync` | The function's body is a sync block ([4.3.3](04_execution_model.md#433-sync-on-a-function-body-function-modifier)) |
 
-There are no other modifiers. A function implemented in C++ is a body-less `export func` declaration (design principles 6.4); a helper used only inside its module is a plain `func` without `export`, since `func` is module-private already.
+There are no other modifiers. A function implemented in C++ is a body-less `export func` declaration (design principles 6.4); a value C++ supplies is the same rule, written without a right side: `export let inf: float` is the value the C++ module registers under the name `inf`, and a type that differs from the registered one is `SemanticDiag::NativeValueMismatch` (no value of the name at all is `SemanticDiag::NativeValueNotLoaded`); a helper used only inside its module is a plain `func` without `export`, since `func` is module-private already.
 
 `#macro` is not a modifier but a standard tag written before a function declaration ([4.5](04_execution_model.md#45-macro-functions)).
 
@@ -257,7 +255,7 @@ func main(): int sync {
 
 - **Can be overloaded**: the binary `+` `-` `*` `/` `%` `^` `@` `==` `<` `<=` `>` `>=` `&` `|`, indexing `[]` (the indexed value and at least one index), and the unary `-` `!` `~`. `-` with one parameter is negation, with two subtraction.
 - **Overloading `==` gives `!=`** (design principles 4.3): an `a != b` that uses that overload of `==` is `!(a == b)`, so the two cannot disagree. The overload must return a `bool`, otherwise the `!=` that uses it is `SemanticDiag::OperatorOverloadInvalid`. `!=` cannot be overloaded by itself (`SemanticDiag::OperatorNotOverloadable`).
-- **Cannot be overloaded**: `&&`, `||` (branches), `??`, `!!`, `?->` (branches on a null or an error), `->` (passes a value to a function), `..`, `as`, assignment, `!=` (it follows `==`), and `===`, `!==`. Declaring one is `SemanticDiag::OperatorNotOverloadable`, with the reason. A compound assignment has no overload of its own: `a += b` is `a = a + b` and follows the overload of `+`.
+- **Cannot be overloaded**: `&&`, `||` (branches), `??`, `!!` (branches on a null or an error), `->` (passes a value to a function, and carries a null or an error along), `..`, `as`, assignment, `!=` (it follows `==`), and `===`, `!==`. Declaring one is `SemanticDiag::OperatorNotOverloadable`, with the reason. A compound assignment has no overload of its own: `a += b` is `a = a + b` and follows the overload of `+`.
 - An operator with the wrong number of parameters, with with-parameters or with a `var` parameter is `SemanticDiag::OperatorOverloadInvalid`. A generic overload declares its type parameters after the operator's name (`func operator +::<T>(a: T[], b: T[]): T[]`), not in a parameter's type.
 - **The overloads of every layer form one set.** Every other name takes the nearest layer only (local > this module > imported > built-in); operators are the exception (design principles 10.2): the overloads of this module, those exported by imported modules, and the built-in and C++ module ones are one set, and a call takes the one that accepts its operands.
 - **The more specific overload wins** (design principles 4.3). "More specific" means: an overload of the program whose parameter types are exactly the operands' types (without a value entering `T?` or `T!`), while every other one that accepts the operands takes them only as members of a family of types: a built-in or C++ module operator whose type rule accepts several types (comparing arrays, tuples and structs by content, arithmetic over tensors), or a generic overload. The call then takes the program's overload. So a struct can have an equality of its own: `func operator ==(a: V, b: V): bool` makes `p == q` (both `V`) call it instead of comparing by content; other struct types are still compared by content. A built-in operator declared for exactly those types (`int + int`, `float == float`) is as specific: declaring such an overload is `SemanticDiag::OperatorOverloadConflict`.
@@ -373,7 +371,8 @@ func main(): int sync {
 - **The call is expanded at compile time.** A function with a rest parameter has no runtime arity, so no instance graph is built for it and no call node is made: every direct call expands its body into the caller's graph, with the fixed parameters bound to the argument nodes and `ts` bound to the remaining nodes. `ts` may have 0 elements.
 - **`ts` is a compile-time tuple, not a value.** It has three uses only: `indices ts` reads its positions, `ts.[j]` reads one element, and `..ts` spreads the elements as arguments. None of the three builds a `FILL` for `ts` or an `ACCS` for an element. Putting `ts` itself where a runtime value is needed (printing it, returning it, assigning it, passing it as an ordinary argument) reports `SemanticDiag::StaticTupleEscapes`; it is not silently materialized into a runtime tuple. Write a tuple literal `(a, b)` when a runtime tuple is wanted.
 - **A rest argument** is written `..e` and must be the last argument of the call. `e` must be a compile-time tuple: a tuple literal, a tuple comprehension, or the `..ts` of an enclosing rest function. A runtime tuple value has no fixed arity and is `SemanticDiag::RestArgumentNotTuple`; an argument after `..e` is `SemanticDiag::RestArgumentNotLast`.
-- A rest parameter must be last (`SemanticDiag::RestParameterNotLast`), cannot write a type (`SemanticDiag::RestParameterTypeNotSupported`), and can appear only in a function declaration (writing `..` in a lambda, a function type or a rule is a syntax error). Too few arguments for the fixed parameters is `SemanticDiag::RestArgumentsMismatch`.
+- A rest parameter must be last (`SemanticDiag::RestParameterNotLast`), cannot write a type (`SemanticDiag::RestParameterTypeNotSupported`), and can appear only in a function declaration and a function type (writing `..` in a lambda or a rule is a syntax error).
+- **The same spelling serves the `with` parameters and function types.** `with <..args>` says that the `with` arguments may go on, after the fixed ones, for any number and of any types; `(..A) => R` is a function type with any parameter list, which any function with a fitting result can be put into. `with <..args>` is written only in a declaration without a body (it declares an operator implemented in C++: this is how `format` and `print` declare their shape in the standard library's `prelude.cml`); writing it on a function with a body is `SemanticDiag::WithPackNeedsNativeDeclaration`. Too few arguments for the fixed parameters is `SemanticDiag::RestArgumentsMismatch`.
 - A function with a rest parameter is **not a value**: it cannot be assigned, passed as an argument, or exported and used as a function value (`SemanticDiag::RestFunctionNeedsExpansion`); it can only be called directly. A call may be in another module: the body's names are still resolved in the module that declares it (as for a generic instance), while the expansion happens in the caller's graph. A body that names a top-level **value** of its own module has no node for it in the caller's graph and reports `SemanticDiag::RestFunctionNeedsExpansion`; functions and the call's own arguments are unaffected.
 - A `with`-argument that names a generic function or a set of overloads (`tree_map<twice>`, `tree_map<bump>`) is resolved inside the callee for each call's argument types; this needs a callee with a rest parameter (the instance is expanded at the call). An ordinary generic function still takes one function value, chosen by the parameter types.
 
@@ -679,6 +678,15 @@ id
 - The right-hand side can only refer to types already declared, so a type function cannot refer to itself.
 - It can be `export`ed, and is used in another module as `module::Pair<int>`.
 - The angle brackets of a module type are interpreted by the type itself, and the arguments can be types or `const data`; the angle brackets of `f32[2, 3]`, another spelling of a numeric array, are interpreted by the array type itself (a shape argument is written without `const`: `f32[2, 3]` is `SemanticDiag::InvalidTypeArgument`).
+
+**A type a C++ module provides is declared without a right side**, as a function it provides is declared without a body (design principles 6.4, 10.4):
+
+```text
+export type Graph
+export type Txn<F>
+```
+
+The type is the one the module registered under that name; its identity is the module and the name, so a type of the same name in another module is another type, and a name the module did not register is `SemanticDiag::NativeTypeNotProvided`. The parameters list the arguments the type takes, and an argument is any type expression, a type variable of a generic declaration included: `func same::<F>(t: Txn<F>): Txn<F>`. A type is never named by a string: `type X = 'text'` is a syntax error.
 
 A type expression has no type operations: `A & B`, `A \ B`, `A + B` and `A ^ B` are ordinary syntax errors (`&`, `\`, `+`, `-`, `^` mean nothing in a type position; they are the operators of an expression, so `x as T + U` is `(x as T) + U`). `keyof` and `of` are not keywords: the ones in `keyof T` and `name of T` are ordinary names, and writing them is a syntax error. `typeof e` is a whole type, the type of the value of `e`, expanded by the compiler where the type is used. It cannot be nested inside a larger type (`typeof(1)[]` is `SemanticDiag::TypeOfNotWholeType`), and an operand with no value (`void`) is `SemanticDiag::TypeOfNotAValue`.
 

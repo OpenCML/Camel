@@ -2,7 +2,6 @@
  * The neighbour: an array literal where a text is declared is the same type mismatch, naming
  * the array type and `string`.
  */
-module literal_context_declared_string_array
 
 func main(): int sync {
     let x: string = [1, 2]

@@ -1,0 +1,6 @@
+import { shr } from math
+
+func main(): int sync {
+    println(1->shr<-1>)
+    return 0
+}

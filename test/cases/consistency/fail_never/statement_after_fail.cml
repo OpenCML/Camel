@@ -1,0 +1,13 @@
+/**
+ * A `fail` in a `sync` block runs where it stands (design principles 3.9; the author's ruling of
+ * 2026-10-26): the statement is on the sync chain, so its fault is raised and the statements the
+ * writer put after it in the same block are never reached -- each of them is told, because the
+ * warning belongs to `fail`. What was printed before it stays, and nothing after it is printed.
+ */
+
+func main(): int sync {
+    println('before')
+    fail<'NoPremise'>('the premise of this program does not hold')
+    println('after')
+    return 0
+}

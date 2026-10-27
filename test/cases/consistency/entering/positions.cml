@@ -4,7 +4,6 @@
  * branch, `return`. `null` likewise. On the graph each is the CAST node a program would
  * write with `as`.
  */
-module positions
 
 func or_else(x: int?, d: int): int { return x ?? d }
 func show(r: int!): string {
@@ -29,7 +28,7 @@ func first_or::<T>(x: T?, d: T): T { return x ?? d }
 
 // branch arms: one arm enters the form of the other
 func pick(c: bool, x: int): int? { return if c then x else null }
-func half(x: int): int! { return if x % 2 == 1 then { throw error('Odd', 'odd') } else x / 2 }
+func half(x: int): int! { return if x % 2 == 1 then { return error('Odd', 'odd') } else x / 2 }
 func grade(k: int): string? {
     return match k {
         case 1 => 'one'

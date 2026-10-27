@@ -4,7 +4,6 @@
  * loop node and its value is the last state. The trip count is the arity of T, so a `T` that
  * comes from an enclosing generic gives a count known only at instantiation.
  */
-module static_loop
 
 func sumOf::<T>(t: T): int {
     return static loop acc = 0 for n, F in fields T do acc + t.[n]

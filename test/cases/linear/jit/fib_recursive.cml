@@ -1,7 +1,6 @@
 /**
  * Verifies classic recursive call expansion and return-value joining on JIT across several Fibonacci depths.
  */
-module jit_fib_recursive
 
 func fib(n: int): int {
     return if n <= 1 then n else fib(n - 1) + fib(n - 2)

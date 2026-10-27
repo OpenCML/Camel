@@ -21,7 +21,6 @@ CAMEL_NODE(Error, Other)               // tokens skipped while recovering from a
 CAMEL_NODE(Program, Other)             // SEP? (decl SEP?)* EOF
 CAMEL_NODE(StmtList, Other)            // stmt (SEP? stmt)* SEP?
 CAMEL_NODE(ModuleName, Other)          // ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)*
-CAMEL_NODE(ModuleDecl, Other)          // 'module' identDef
 CAMEL_NODE(ImportDecl, Other)          // 'import' (moduleName | (identDef | bracedImports) 'from' moduleName)
 CAMEL_NODE(BracedImports, Other)       // '{' (importItem (',' importItem)*)? ','? '}'
 CAMEL_NODE(ImportItem, Other)          // identDef ('as' identDef)?
@@ -50,7 +49,7 @@ CAMEL_NODE(FactPattern, Other)         // 'const' identDef (':' typeExpr)? | dat
 CAMEL_NODE(FactClause, Other)          // IDENTIFIER dataExpr
 CAMEL_NODE(DataDecl, Other)            // ('let' | 'var') carrier (':' typeList)? '=' dataList
 CAMEL_NODE(TypeDecl, Other)            // 'type' identRef ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>=')) (typeExpr | STRING), with the tag uses before it
-CAMEL_NODE(RetStmt, Other)             // ('return' | 'throw' | 'yield') dataList
+CAMEL_NODE(RetStmt, Other)             // ('return' | 'yield') dataList
 CAMEL_NODE(Modifiers, Other)           // 'sync'+
 CAMEL_NODE(ParentIdents, Other)        // '(' identList? ','? ')'
 CAMEL_NODE(BracedIdents, Other)        // '{' identList? ','? '}'
@@ -80,6 +79,7 @@ CAMEL_NODE(EnumStructPattern, Other)   // '{' (IDENTIFIER (':' fieldPattern)? ('
 CAMEL_NODE(MatchCase, Other)           // 'case' pattern ('|' pattern)* whenClause? '=>' blockExpr
 CAMEL_NODE(TypeCasePattern, Other)     // 'struct' | 'tuple' | '#' 'leaf' | '_'
 CAMEL_NODE(TypeCase, Other)            // 'case' typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
+CAMEL_NODE(TypeArm, Other)             // 'case' typeCasePattern ('|' typeCasePattern)* '=>' typeExpr
 CAMEL_NODE(MemberAccess, Other)        // '.' (IDENTIFIER | INTEGER | REAL), after a call, a binding or an index
 CAMEL_NODE(TypeList, Other)            // typeExpr (',' typeExpr)*
 CAMEL_NODE(IdentDef, Other)            // IDENTIFIER
@@ -108,7 +108,7 @@ CAMEL_NODE(PowerExpr, Expr)            // nullableExpr ('^' powerExpr)?; also th
 CAMEL_NODE(NullableExpr, Expr)         // unaryExpr (('??' | '!!') dataExpr)?
 CAMEL_NODE(CastExpr, Expr)             // linkExpr ('as' | 'is') typeExpr
 CAMEL_NODE(UnaryExpr, Expr)            // ('!' | '~') linkExpr, '-' negPower
-CAMEL_NODE(LinkExpr, Expr)             // negExpr (('->' | '?->') compExpr)*
+CAMEL_NODE(LinkExpr, Expr)             // negExpr ('->' compExpr)*
 CAMEL_NODE(CompExpr, Expr)             // annoExpr ('..' annoExpr)*
 CAMEL_NODE(AnnoExpr, Expr)             // accessExpr (indices | parentArgues | structData | angledValues | typeArguments | memberAccess)*
 CAMEL_NODE(AccessExpr, Expr)           // primaryData ('.' (IDENTIFIER | INTEGER | REAL))*
@@ -133,6 +133,7 @@ CAMEL_NODE(ParenType, Type)            // '(' typeExpr ')'
 CAMEL_NODE(TupleType, Type)            // '(' typeList? ','? ')'
 CAMEL_NODE(FuncType, Type)             // modifiers? angledParams? parentParams '=>' typeExpr resourceClause?
 CAMEL_NODE(TypeOfType, Type)           // 'typeof' dataExpr
+CAMEL_NODE(MatchTypeType, Type)        // 'match' 'type' typeExpr '{' typeArm* '}'
 CAMEL_NODE(EnumType, Type)             // 'enum' '{' (enumVariant (',' enumVariant)*)? ','? '}'
 CAMEL_NODE(EnumVariant, Other)         // identDef ('(' typeList? ','? ')' | '{' (enumField (',' enumField)*)? ','? '}')?
 CAMEL_NODE(EnumField, Other)           // identDef ':' typeExpr

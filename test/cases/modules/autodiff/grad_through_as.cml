@@ -4,7 +4,6 @@
  * loss(x) = sum(x * x * w), with a constant converted to a shaped type, the product converted
  * to its shape and then to a type that leaves an extent open; grad = 2 * x * w.
  */
-module grad_through_as
 
 import { abs, reshape, sum } from tensor
 import { grad, with_grad } from autodiff

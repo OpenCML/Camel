@@ -2,7 +2,6 @@
  * A `with` parameter is given once: `rounds` here is given by position and again by name
  * (design principles 4.4).
  */
-module with_argument_duplicate
 
 with <rounds: int = 8>
 func f(x: int): int {

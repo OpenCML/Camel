@@ -4,7 +4,6 @@
  *   WHAT=nobranch : export the training step with the branch removed (baseline)
  *   WHAT=step  : export the full branched training step (the failing case)
  */
-module e9_branch_probe
 
 import { relu, mean, reshape } from tensor
 import { with_grad } from autodiff
@@ -53,19 +52,19 @@ func load(): Mlp {
 }
 
 func do_fwd(m: Mlp, x: float[..]): int sync {
-    export_model(fwd_b, (m, x), get_env('ONNX_OUT'))
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(fwd_b, (m, x))
     println('exported fwd_b')
     return 0
 }
 
 func do_nobranch(m: Mlp, x: float[..]): int sync {
-    export_model(step_n, (m, x), get_env('ONNX_OUT'))
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(step_n, (m, x))
     println('exported step_n')
     return 0
 }
 
 func do_step(m: Mlp, x: float[..]): int sync {
-    export_model(step_b, (m, x), get_env('ONNX_OUT'))
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(step_b, (m, x))
     println('exported step_b')
     return 0
 }
@@ -73,6 +72,6 @@ func do_step(m: Mlp, x: float[..]): int sync {
 func main(): int sync {
     let m = load()
     let x = reshape([1.0, 2.0, -1.0, 0.5], [2, 2])
-    let what = get_env('WHAT')
+    let what = get_env('WHAT') ?? ''
     return if what == 'fwd' then do_fwd(m, x) else if what == 'nobranch' then do_nobranch(m, x) else do_step(m, x)
 }

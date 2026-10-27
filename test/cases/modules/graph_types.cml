@@ -1,17 +1,16 @@
-module graph_types
-import { current, id, Node, root, nodes } from graph
-import { Program, NodeKind, Value } from graph
+import { id, Node, nodes, graph_of } from graph
+import { NodeKind, Value } from graph
 func main(): int sync {
-    let p: Program = current()
-    println(p == current())
-    println(p != current())
-    let ns = nodes(root(p))
+    let p = main
+    println(graph_of(p) == graph_of(main))
+    println(graph_of(p) != graph_of(main))
+    let ns = nodes(graph_of(p))
     let first: Value = ns[0]
     println(first == ns[0])
     println(first == ns[1])
     println(id(first))
     println(id(ns[1]))
-    println(id(root(p)))
+    println(id(graph_of(p)))
     let k: NodeKind = NodeKind::Oper
     println(k)
     return 0

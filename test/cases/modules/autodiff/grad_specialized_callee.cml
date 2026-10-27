@@ -6,7 +6,6 @@
  * branch (unroll: the arm takes four with ports under the type `() => float`).
  * Both used to yield a gradient of 0 without any error.
  */
-module grad_specialized_callee
 
 import { grad } from autodiff
 

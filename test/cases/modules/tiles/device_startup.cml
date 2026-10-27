@@ -1,4 +1,3 @@
-module device_startup
 import { available } from tiles
 
 // The startup check of --devices does not depend on a device operation: this program imports

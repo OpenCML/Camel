@@ -1,11 +1,10 @@
-module shape_unshaped_argument
 import { zeros, ones, reshape, sum, tanh, load_npy } from tensor
 import { get_env } from env
 func f(b: f32[3]): float {
     return float(sum(b))
 }
 func main(): int sync {
-    let t = load_npy::<f32>(get_env('X'))
+    let t = load_npy::<f32>(get_env('X') ?? '')
     println(f(t))
     return 0
 }

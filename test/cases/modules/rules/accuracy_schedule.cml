@@ -3,45 +3,43 @@
  * The naive softmax and naive log-softmax are not in the library: the check rejects the first on
  * an f32 sample, so only the accepted log-of-softmax and scalar rules are here.
  */
-module accuracy_schedule
 
-import { Program } from graph
 import { Rule, Run, run } from rewrite
 import {
-    float_expm1, float_log1p, tensor_log_softmax_of_softmax,
+    float_expm1, float_log1p, array_log_softmax_of_softmax,
 } from rules
 
-func reported(label: string, r: Run<Program>): Program sync {
+func reported::<F>(label: string, r: Run<F>): F sync {
     println(label, 'rewrites', r.rewrites, 'rounds', r.rounds)
     return r.result
 }
 
-func one(label: string, p: Program, rules: Rule[]): Program! sync {
-    return p->run<rules, rounds: 16, strict: false> ?-> sync (r: Run<Program>) => reported(label, r)
+func one::<F>(label: string, p: F, rules: Rule[]): F! sync {
+    return p->run<rules, rounds: 16, strict: false> -> (r: Run<F>) => sync { reported(label, r) }
 }
 
-export func only_log_of_softmax(p: Program): Program! sync {
-    return one('only_log_of_softmax', p, [tensor_log_softmax_of_softmax])
+export func only_log_of_softmax::<F>(p: F): F! sync {
+    return one('only_log_of_softmax', p, [array_log_softmax_of_softmax])
 }
 
 /// The accepted accuracy rules as one set; none of the guard functions is licensed, so this is
 /// also the pass that must leave them alone. The scalar rules are one law each for the whole
 /// floating family since the fold, so the f32 site is theirs through their `f32` instance.
-export func all(p: Program): Program! sync {
+export func all::<F>(p: F): F! sync {
     return one(
         'all', p,
-        [tensor_log_softmax_of_softmax, float_log1p, float_expm1])
+        [array_log_softmax_of_softmax, float_log1p, float_expm1])
 }
 
 /// The scalar accuracy rules on their own (log1p), and of expm1.
-export func only_log1p(p: Program): Program! sync {
+export func only_log1p::<F>(p: F): F! sync {
     return one('only_log1p', p, [float_log1p])
 }
 
-export func only_expm1(p: Program): Program! sync {
+export func only_expm1::<F>(p: F): F! sync {
     return one('only_expm1', p, [float_expm1])
 }
 
-export func all_scalar(p: Program): Program! sync {
+export func all_scalar::<F>(p: F): F! sync {
     return one('all_scalar', p, [float_log1p, float_expm1])
 }

@@ -1,0 +1,18 @@
+/**
+ * A checked conversion whose value nothing reads is still a statement that may fault: in a
+ * `sync` block it runs where it is written, with or without a pass.
+ */
+
+
+import { zeros } from tensor
+
+func shaped(rows: int, cols: int): f32[..] {
+    return zeros([rows, cols])
+}
+
+func main(): int sync {
+    println('before')
+    let unused = shaped(3, 2) as f32[2, 3]
+    println('not reached')
+    return 0
+}

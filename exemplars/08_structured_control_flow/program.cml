@@ -8,7 +8,6 @@
  * `gate` is written with its element type and shape (`f32[4]`), the terminal spelling: a bare
  * A parameter that writes no element type leaves it unstated, so `t[0]` had no type for `t[0] > 0.5`.
  */
-module structured_control_flow
 
 import { reshape, relu } from tensor
 import { export_model } from onnx
@@ -22,7 +21,7 @@ func main(): int sync {
     let x = reshape([1.0, -2.0, 3.0, 0.5] as f32[], [4])
     let y = gate(x)
     'camel gate={} {} {} {}'->format<y[0], y[1], y[2], y[3]>->println
-    export_model((t: f32[..]): f32[..] => gate(t as f32[4]), x, get_env('ONNX_OUT'))
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((t: f32[..]): f32[..] => gate(t as f32[4]), x)
     println('exported')
     return 0
 }

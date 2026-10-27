@@ -3,7 +3,6 @@
  * steps of the export_train_step_adam MLP, printing the loss and saving the
  * updated parameters per step.
  */
-module export_train_step_adam_dump
 
 import { relu, mean, reshape } from tensor
 import { with_grad } from autodiff
@@ -37,6 +36,6 @@ func main(): int sync {
         b2: reshape([0.2] as f32[], [1])
     }
     let x = reshape([1.0, 2.0, -1.0, 0.5] as f32[], [2, 2])
-    spin(m, adam_state(m), x, 0, int(get_env('STEPS')), get_env('DUMP_DIR'))
+    spin(m, adam_state(m), x, 0, int(get_env('STEPS') ?? ''), get_env('DUMP_DIR') ?? '')
     return 0
 }

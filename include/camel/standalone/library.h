@@ -10,12 +10,14 @@
 #pragma once
 
 #include "camel/standalone/array.h"
+#include "camel/standalone/opt.h"
 #include "camel/standalone/str.h"
 #include "camel/utils/env.h"
 
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
+#include <optional>
 #include <string>
 
 namespace camel::standalone {
@@ -26,41 +28,13 @@ inline double now() {
     return duration_cast<duration<double>>(system_clock::now().time_since_epoch()).count();
 }
 
-/// `env.get_env(name)` (env:get_env, modules/env/operators.cpp): the variable's value, or the
-/// empty string when it is not set.
-inline Str getEnv(const Str &name) {
+/// `env.get_env(name)` (env:get_env, modules/env/operators.cpp): the variable's value, null when it
+/// is not set; a variable set to the empty text gives the empty text.
+inline Opt<Str> getEnv(const Str &name) {
     // The one place that reads the environment (camel/utils/env.h): through the wide interface
     // on Windows, so that a value the process code page cannot express is not lost here either.
-    const std::string value = ::getEnv(name.str().c_str());
-    return value.empty() ? Str() : Str(value);
-}
-
-/// `statistics.mean(xs)` (statistics:mean, modules/statistics/operators.cpp): the sum in double,
-/// element by element, over the count; 0 for the empty array.
-template <typename T> double statisticsMean(const Array<T> &xs) {
-    if (xs.empty()) {
-        return 0.0;
-    }
-    double sum = 0.0;
-    for (const T &x : xs) {
-        sum += static_cast<double>(x);
-    }
-    return sum / static_cast<double>(xs.size());
-}
-
-/// `statistics.stdev(xs)` (statistics:stdev): the sample standard deviation (over n - 1); 0 for
-/// fewer than two elements.
-template <typename T> double statisticsStdev(const Array<T> &xs) {
-    if (xs.size() <= 1) {
-        return 0.0;
-    }
-    const double mean = statisticsMean(xs);
-    double squares    = 0.0;
-    for (const T &x : xs) {
-        const double d = static_cast<double>(x) - mean;
-        squares += d * d;
-    }
-    return std::sqrt(squares / static_cast<double>(xs.size() - 1));
+    const std::optional<std::string> value = ::getEnvIfSet(name.str().c_str());
+    return value ? Opt<Str>(Str(*value)) : Opt<Str>();
 }
 
 } // namespace camel::standalone

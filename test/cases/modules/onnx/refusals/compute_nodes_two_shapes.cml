@@ -8,11 +8,10 @@
  * 15: the copy of `combine` that had been spliced in, two OPERs behind its own region, and the
  * three GATEs the splice adds for its arguments were counted).
  */
-module compute_nodes_two_shapes
 
 import { reshape } from tensor
 import { export_model } from onnx
-import { get_env } from env
+import { cpu_count } from process
 
 func double(t: float[..]): float[..] {
     return t * 2.0
@@ -28,8 +27,9 @@ func spin(n: int): int sync {
 }
 
 func main(): int sync {
-    export_model(double, reshape([1.0, 2.0], [2]), 'tmp/test/onnx/compute_nodes_two_shapes.onnx')
-    let x = int(get_env('H434_A'))
+    let _ = export_model<out: 'tmp/test/onnx/compute_nodes_two_shapes.onnx'>(double, reshape([1.0, 2.0], [2]))
+    let x = cpu_count()
+    println(x)
     println('before')
     let v = combine(x, x, x)
     println(v)

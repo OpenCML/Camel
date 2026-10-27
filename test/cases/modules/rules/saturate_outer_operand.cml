@@ -1,0 +1,29 @@
+/**
+ * Saturation over a value whose rewriting is a node of an enclosing region: `x + 1` sits in the
+ * arm of `&&`, and `x + 1 => x` names `x`, the parameter outside the arm. The writings of one
+ * value share a region (an arm's node cannot stand for a value read outside the arm), so the
+ * engine does not record that equivalence; saturating, extracting and running give the program
+ * its meaning back.
+ */
+import { Rule, saturate, extract } from rewrite
+import { nodes as sizeCost } from rules
+
+rule drop_one(x: int) { x + 1 => x }
+
+func positiveNext(x: int, c: bool): bool {
+    return c && x + 1 > 0
+}
+
+/// The function the rules are applied to: the program itself would be a recursive reference.
+func target(): int {
+    return 0
+}
+
+func main(): int sync {
+    let p = target
+    let rules: Rule[] = [drop_one]
+    let s = p->saturate<rules, rounds: 2> !! p
+    let q = s->extract<sizeCost> !! s
+    println(`saturated ${positiveNext(-1, true)} ${positiveNext(1, true)} ${positiveNext(5, false)}`)
+    return 0
+}

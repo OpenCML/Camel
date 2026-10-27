@@ -1,0 +1,29 @@
+id = "compile.match_type_array"
+order = 928
+tier = "fast"
+tags = ["feat", "compile", "match_type"]
+desc = "`match type`'s `case array` shape word selects every array type (design principles 5.5)"
+
+[[tests]]
+name = "match_type.array_shape"
+desc = "`case array` selects int[], string[], float[][] and Point[] alike, an identity case before it wins for its own type, and `struct` and `#leaf` after it take the rest."
+kind = "behavior"
+case = "../../../cases/compile/match_type/array_shape.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "ints array array array\nstruct leaf leaf\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "match_type.array_shape_covers_identity"
+desc = "An identity case after `case array` can select nothing: the same diagnostic `case struct` gives."
+kind = "negative"
+case = "../../../cases/compile/match_type/err_unreachable_array.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticMatchPatternCannotMatch"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000

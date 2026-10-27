@@ -11,13 +11,13 @@ This chapter describes the lexical structure of source code. The token table is 
 - Spaces and tabs are only separators. **A line break ends a statement**, unless the line is visibly unfinished:
   - a round bracket, a square bracket, an angle-bracket argument list or the braces of a struct literal are still open;
   - the line ends with a binary operator, `,`, `=`, `=>`, `->`, `:`, `then`, `else`, `return` or another token that must be followed by something;
-  - the next line starts with an operator that **can only be binary**: `->` `?->` `.` `..` `?..` `??` `!!` `*` `/` `%` `^` `&` `|` `&&` `||` `==` `!=` `===` `!==` `<` `>` `<=` `>=` `as` `is` and the assignment operators; in a type also `\`. **A symbol of two roles (`+`, `-`, `@`) that starts a line has the role that starts something new**: `-x` is a new statement, `@name` an annotation. To continue a line, leave it at the end of the line before (a matrix product: `a @`, line break, `b`);
+  - the next line starts with an operator that **can only be binary**: `->` `.` `..` `?..` `??` `!!` `*` `/` `%` `^` `&` `|` `&&` `||` `==` `!=` `===` `!==` `<` `>` `<=` `>=` `as` `is` and the assignment operators; in a type also `\`. **A symbol of two roles (`+`, `-`, `@`) that starts a line has the role that starts something new**: `-x` is a new statement, `@name` an annotation. To continue a line, leave it at the end of the line before (a matrix product: `a @`, line break, `b`);
   - the next line is the next part of the same construct: `else`, `then`, `catch`, `finally`, `=>`, `from`.
 
   A next line that starts with `-`, `+`, `!`, `~`, `@`, `(`, `[`, `{`, a name, a literal or a statement keyword is a **new statement**. To write an addition or a subtraction on two lines, leave the operator at the end of the first (`a +`, then `b`); a line that starts with `+` is not a statement and gives `SyntaxDiag::LineStartsWithOperator`.
 - A `;` still separates statements on one line. Two statements on one line may also have nothing between them (the first ends where its expression cannot go on), but `;` is clearer.
 - **A call, a subscript or angle-bracket arguments must directly follow the expression before them**, with no whitespace in between: `f(1)`, `xs[0]`, `scale<3>`. `f (1)` is the two expressions `f` and `(1)`.
-- **Angle brackets and comparisons.** A `<` that touches a name, a literal, `)`, `]`, `}` or `>` before it opens an angle-bracket argument list; every other `<` is less-than. So **the comparison `<` needs a space before it**: `i < n`. `i<n` is read as "`i` with angle-bracket arguments", the parse then fails, and the diagnostic is `SyntaxDiag::ComparisonNeedsSpace`. `<=` is always the comparison (`<=>` is the two-way arrow of a rule declaration, see [8](08_top_level_and_grammar.md)). Inside an angle-bracket list (not inside a bracket or a block within it), a `>` that touches the token before it, or starts its line, closes the list; a `>` after a space is greater-than. `xs->filter<(x: int): bool => x > 1>` therefore reads as written, and `a<b<c>>` closes two lists. A closing `>` written after a space (`f<a, b >`) gives `SyntaxDiag::AngleCloseAfterSpace`. Outside angle brackets `>` is the comparison with or without a space.
+- **Angle brackets and comparisons.** A `<` that touches a name, a literal, `)`, `]`, `}` or `>` before it opens an angle-bracket argument list; every other `<` is less-than. So **the comparison `<` needs a space before it**: `i < n`. `i<n` is read as "`i` with angle-bracket arguments", the parse then fails, and the diagnostic is `SyntaxDiag::ComparisonNeedsSpace`. `<=` is always the comparison (`<=>` is the two-way arrow of a rule declaration, see [8](08_top_level_and_grammar.md)). Inside an angle-bracket list (not inside a bracket or a block within it), a `>` that touches the token before it, or starts its line, closes the list; a `>` after a space is greater-than. `xs->filter<(x) => x > 1>` therefore reads as written, and `a<b<c>>` closes two lists. A closing `>` written after a space (`f<a, b >`) gives `SyntaxDiag::AngleCloseAfterSpace`. Outside angle brackets `>` is the comparison with or without a space.
 - **A `<` after `::` opens a list too.** Type parameters and explicit type arguments are both written `::<…>` ([7.5](07_statements.md#75-generic-functions)): `func first::<T>(xs: T[]): T`, `first::<int>(xs)`, `let f = id::<int>`. `x::<y` is therefore not read as a comparison: a `<` after `::` (other than `<=`) always opens an angle-bracket argument list.
 - Source files are read as UTF-8.
 
@@ -45,12 +45,12 @@ The following words are reserved and cannot be used as names (using one gives `S
 
 | Category | Keywords |
 |---|---|
-| Declarations | `let` `var` `func` `type` `with` `module` `import` `export` `from` `namespace` `using` |
-| Control | `if` `then` `else` `match` `case` `return` `throw` `yield` `sync` `loop` `while` `do` `for` `in` `static` |
+| Declarations | `let` `var` `func` `type` `with` `import` `export` `from` `namespace` `using` |
+| Control | `if` `then` `else` `match` `case` `return` `yield` `sync` `loop` `while` `do` `for` `in` `static` |
 | Types and conversion | `as` `const` `constas` `enum` `typeof` |
 | Literals | `null` `true` `false` |
 
-`is`, `of`, `keyof`, `try`, `catch` and `finally` are not keywords: they are ordinary names, and writing one is an ordinary name or a syntax error (design principles 3.9).
+`is`, `of`, `keyof`, `throw`, `try`, `catch` and `finally` are not keywords: they are ordinary names, and writing one is an ordinary name or a syntax error (design principles 3.9).
 
 
 Names of the form `__x__` (two underscores on each side) are the compiler's own: the operators are functions of such names (`a + b` is `__add__(a, b)`). A variable, a parameter or a function cannot take one (`SemanticDiag::ReservedIdentifier`). To define an operator for a type of the program, write `func operator +(a: V, b: V): V` ([7.4.5](07_statements.md#745-operator-overloading)); `operator` is not a keyword, and is read this way only right after `func` and before an operator.
@@ -81,6 +81,11 @@ The other way round, `func` and `type` among the position names are reserved wor
 | Clauses of a declaration | `operator` | directly after `func` when an operator follows (`func operator +(a: V, b: V): V`) |
 | Type and pattern positions | `struct` | in a `match type` case pattern: names the shape of a struct |
 | Type and pattern positions | `tuple` | in a `match type` case pattern: names the shape of a tuple |
+| Type and pattern positions | `array` | in a `match type` case pattern: names the shape of an array |
+| Type and pattern positions | `nullable` | in a `match type` case pattern: names the shape of a `T?` |
+| Type and pattern positions | `fallible` | in a `match type` case pattern: names the shape of a `T!` |
+| Type and pattern positions | `map` | in a `match type` case pattern: names the shape of a map |
+| Type and pattern positions | `set` | in a `match type` case pattern: names the shape of a set |
 | Type and pattern positions | `leaf` | in a `match type` case pattern: the `leaf` after a `#` (`case #leaf =>`) |
 | Type and pattern positions | `error` | in a `case` pattern of a `match`: the error taken out of a failed `T!`, written as the two words `error e` |
 | Type and pattern positions | `fields` | in the head of a `static for` or a `static loop`: the `fields` after `in` (a type follows, and it walks names, types and tags) |
@@ -106,7 +111,7 @@ The other way round, `func` and `type` among the position names are reserved wor
 - The default type of an integer literal is `int` (64-bit signed), with range -9223372036854775808 to 9223372036854775807. Where the context asks for another integer type it takes that one ([3.2](03_data_model.md#32-numbers)): the `1` in `let b: i32 = 1` is an `i32`, and in `f(1)` with `f(x: f32)` it is an `f32`.
 - **A literal out of range is a compile-time error** (`SemanticDiag::LiteralNotRepresentable`; the message quotes what was written and gives the reason, such as `out of range (-9223372036854775808 to 9223372036854775807)`): `9223372036854775808`, `1e400` and `0x8000000000000000` all are. `-9223372036854775808` is in range. A declaration with a type that puts a literal into a narrower type is checked in the same way: `let b: i32 = 3000000000` and `let c: f32 = 1.0e39` are errors. A floating-point literal larger than the largest `float` (`1.0e400`) is this error too; **a nonzero real too small to be represented, one that rounds to zero** (`1e-9999`, or `let c: f32 = 1e-50`), is also a value the type cannot hold, with the reason that the nearest value is zero, and is never read as zero. An operation between literals is computed with its exact value before it is put into a type, so `9223372036854775807 + 1` is this error as well (a run-time addition wraps around instead); when the folded value does not fit, the position is the **whole expression**, not its last operand. A decimal put into an integer type (`let x: int = 1.9`) is the same diagnostic, with the reason that the value would be truncated.
 - **A literal with an exponent or a decimal point has `float` as its default type** ([2.5.2](#252-floating-point-numbers)): with no context `1e6` is a `float` with the value `1000000.0`, and `1e-2` is `0.01`; where the context asks for `f32` it takes `f32`. An integer literal has only the four forms of the table above.
-- **A decimal that starts with `0` and is followed by another digit is not a number token**: `09` and `077` are lexical errors (`LexicalDiag::InvalidNumberFormat`, the range covering the whole written run) the whole written run is one token. Octal is written `0o77`, and `0o` must be followed by octal digits. A form with a point (`077.5`) is a real number; a leading zero is unambiguous there.
+- **A decimal that starts with `0` and is followed by another digit is not a number token**: `09` and `077` are lexical errors (`LexicalDiag::InvalidNumberFormat`, the range covering the whole written run) the whole written run is one token. Octal is written `0o77`, and `0o` must be followed by octal digits. A real whose whole part has a leading zero is refused in the same way (`007.5` and `09.5e2` are this error, as `007` is); `0.5` and `0e0` are numbers.
 - An exponent is for decimal numbers only: `0b1e5` is `SemanticDiag::InvalidLiteral` (in a hexadecimal number `e` is a digit); `07e2` is the lexical error above.
 - There are no digit separators (`1_000` is a syntax error).
 - **A number token carries no sign, and a minus is always an operator.** Between two operands `+` and `-` are always the binary operators, whatever the spacing: `n - 1`, `n-1` and `n -1` are all subtractions. Where an operand is expected (no value precedes) `-` is the unary minus, and it reads the same before a literal and before a name: it binds less tightly than `^` and `->` and more tightly than the other binary operators ([6.12](06_expressions.md#612-operator-precedence)). `-2 ^ 2` is `-(2 ^ 2)`, that is `-4`; `-x->f` is `-(x->f)`; `-2->f` is also `-(2->f)`, and to negate first and then call, write `(-2)->f`. A minus applied directly to a number gives the negative literal, so `-1`, `-2.5`, `[-1, 2]`, `f(-1)`, `-9223372036854775808` and `let b: i32 = -2147483648` are written as ever; a `match` pattern may be `case -1 =>`. A `+` before a number is read as its sign (`+2.5`). The sign of an exponent belongs to the number token itself: `1.0e-2`.
@@ -133,7 +138,7 @@ The other way round, `func` and `type` among the position names are reserved wor
   **Data text has exactly two supplements over a literal**. An entry argument reads every base of an integer literal (`0x`, `0b`, `0o`); the integer text of a conversion function is decimal digits (`int('0x10')` and `int('0o77')` are not integer texts). Beyond what the two share:
 
   1. `inf`, `-inf` and `nan`: these are the forms `floatText` prints for the infinities and NaN, and a value a program wrote has to read back (source uses `math::inf` and `math::nan`; there is no literal). A float parameter and `float(s)` / `parse_float(s)` read them; an integer parameter and `int(s)` / `parse_int(s)` have an integer target and do not. A NaN carries no sign; `+inf` and `+nan` take a `+` sign.
-  2. **A leading-zero decimal**: `077` is 77, and `09` and `007` read as usual; an entry argument and all four conversion functions read it so. In source that form is a lexical error and octal is written `0o77`; data text has no leading-zero octal, `0o77` is still 63 as an entry argument, and it is not an integer text for a conversion function.
+  2. **A leading-zero decimal**: `077` is 77, and `09` and `007` read as usual, for all four conversion functions. In source that form is a lexical error and octal is written `0o77`; an entry argument is one number token of the language and refuses it too (`077`, `077.5`), and `0o77` is 63 there. It is not an integer text for a conversion function.
 
   There is no other supplement: a real has digits on both sides of its point (`.5` and `5.` do not read), there is no hexadecimal float, no `Infinity`, and no digit separators. **A nonzero real text that rounds to zero is refused in all three places, never read as zero**: a literal reports `SemanticDiag::LiteralNotRepresentable`, an entry argument and a conversion function report a fault (a conversion folds it into `ConversionOutOfRange`, the same refusal as an overflow).
 
@@ -176,7 +181,7 @@ The other way round, `func` and `type` among the position names are reserved wor
 
 - **An octal digit is not an escape**: only a bare `\0` is the null byte. A `0` followed by another octal digit is an unknown escape, not a byte: `\01` is `\01`, `\012` is `\012`, and `\101` and `\8` are the same; each is kept as written and warns with `LexicalDiag::InvalidEscapeSequence` (one code and one message shape, with no diagnostic of its own for octal). `\x` with no hexadecimal digit and a `\u{...}` that is not a scalar value are still kept as written by the table above; they are not unknown escapes here.
 - `\$` is a `$` in a formatted string too. The one addition is `\${` (a dollar sign immediately followed by a left brace): in a formatted string it is the **structural escape** that writes a literal `${` and starts no interpolation, see [2.5.4.1](#2541-formatted-strings); an ordinary or a triple-quoted string has no `${` meaning, so `\${` there is the character escape `\$` followed by `{`, which is also `${`.
-- A string is a sequence of bytes. `len` gives the number of bytes: `len('héllo')` is 6, `len('中文')` is 6.
+- A string is valid UTF-8 text, and its length and subscripts count code points: `len('héllo')` is 5, `len('中文')` is 2; a sequence of bytes is `Bytes`.
 
 #### 2.5.4.1 Formatted strings
 
@@ -224,8 +229,8 @@ The long form of the same call is still written `'{} + {} = {}'->format<1, 2, 1 
 | `&` `\|` | And, or with both sides evaluated; ordinary operators, which can be overloaded |
 | `~` | Bitwise not |
 | `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `\|=` | Assignment and compound assignment |
-| `??` `!!` `?->` | Unwrap a nullable value, unwrap a fallible value, pass the error on if there is one |
-| `->` | Pipe: the value on the left becomes an argument of the function on the right |
+| `??` `!!` | Unwrap a nullable value, unwrap a fallible value |
+| `->` | Pipe: the value on the left becomes an argument of the function on the right; a `T?` or `T!` on the left that the function does not accept carries its null or error along |
 | `..` `?..` | Function composition (see [6.5](06_expressions.md#65-pipes)) |
 | `.` | Field and tuple member access |
 | `::` | Qualified name |

@@ -1,0 +1,26 @@
+/**
+ * A called declaration's `when` is answered where the declaration is written, not where the call
+ * is. `ns::slot` is declared in a namespace beside the predicate `plain_int` and names it
+ * unqualified; the call is at the top of the module and folds to the key of a static access
+ * (design principles 4.4: a condition reads the names of the declaration's own scope, whoever
+ * calls it).
+ */
+
+namespace ns {
+    func plain_int::<T>(): bool {
+        return match type T {
+            case int => true
+            case _ => false
+        }
+    }
+
+    func slot::<T>(): int when plain_int::<T>() {
+        return 1
+    }
+}
+
+func main(): int sync {
+    let t = (10, 20, 30)
+    println(t.[ns::slot::<int>()])
+    return 0
+}

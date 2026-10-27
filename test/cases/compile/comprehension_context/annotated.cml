@@ -1,0 +1,32 @@
+/**
+ * A comprehension at a position that expects an array type is the comprehension, not an empty
+ * array of that type: `let xs: f32[] = [f32(i) for i in 0..n]` has its elements, as it does
+ * without the annotation, in a `let`, a `var`, a struct field, an argument and a `return`
+ * (design principles 5.1).
+ */
+
+type Box = { values: f32[], count: int }
+
+func total(xs: f32[]): float {
+    return float(loop acc = 0.0 for x in xs do acc + float(x))
+}
+
+func squares(n: int): int[] {
+    return [i * i for i in 0..n]
+}
+
+func kept(xs: int[]): int[] {
+    let big: int[] = [i for i in xs if i > 1]
+    return big
+}
+
+func main(): int sync {
+    let n = 4
+    let a: f32[] = [f32(i) for i in 0..n]
+    let b: int[] = [i * 2 for i in 0..n]
+    var c: f32[] = [f32(i) for i in 0..n]
+    let box: Box = { values: [f32(i) for i in 0..n], count: n }
+    println(a, b, c, box.values, total([f32(i) for i in 0..n]))
+    println(squares(4), kept([1, 2, 3]))
+    return 0
+}

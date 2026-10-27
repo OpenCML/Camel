@@ -1,0 +1,45 @@
+/**
+ * The type a position expects reaches a `loop` through its value only (design principles 3.8, 5.1):
+ * the `do` result, and the initial states by their own types. The sequence after `for` and the
+ * condition after `while` are not the loop's value, so an outer element type does not leak into them.
+ */
+func through_array(a: int, c: float): int[] {
+    return [loop s = a for q in [c, c, 3.0] do a, 1]
+}
+
+func through_call(a: int, c: float): int {
+    let xs: int[] = [loop s = a for q in [c, 2.5] do s + 1]
+    return xs[0]
+}
+
+func through_while(a: int, c: float): int[] {
+    return [(loop s = a, i = 0 while float(i) < c + 1.0 do (s + 1, i + 1)).0, 5]
+}
+
+func through_branch(a: int, c: float, f: bool): int[] {
+    return [if f then loop s = a for q in [c, 2.5] do s + 1 else 0]
+}
+
+func through_match(a: int, c: float): int[] {
+    return [match a {
+        case 1 => loop s = 2 for q in [c, 3.5] do s
+        case _ => 0
+    }]
+}
+
+func through_conditions(c: float): int[] {
+    return [if [c, 2.5][0] > 1.0 then 1 else 0, match [c, 2.5][1] > 1.0 {
+        case true => 4
+        case _ => 5
+    }]
+}
+
+func main(): int sync {
+    println(through_array(3, 1.5))
+    println(through_call(3, 1.5))
+    println(through_while(3, 1.5))
+    println(through_branch(3, 1.5, true), through_branch(3, 1.5, false))
+    println(through_match(1, 0.5))
+    println(through_conditions(1.5), through_conditions(0.5))
+    return 0
+}

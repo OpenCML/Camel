@@ -1,16 +1,11 @@
 /**
  * A rule whose parameter count follows its arguments is not one a name can mark a position in:
- * `py_call` takes a rest list (`(fn: string | PyObject, ...args: PyObject[])`), so which position
- * an argument lands in is decided by the call, and the two forms of the name -- `py_call` and
- * `py_call_kw` -- differ in arity as well (the reference page states this). The call is refused
- * for the signature it cannot settle where the call is written, not bound to a guessed position:
- * ParamArgumentCallee, at the argument.
+ * `println` takes a rest list, so which position an argument lands in is decided by the call. The
+ * call is refused for the signature it cannot settle where the call is written, not bound to a
+ * guessed position: ParamArgumentCallee, at the argument.
  */
-module param_stdlib_no_place_for_name
-
-import python
 
 func main(): int sync {
-    println(python::py_call(fn: 'printf'))
+    println(fn: 'printf')
     return 0
 }

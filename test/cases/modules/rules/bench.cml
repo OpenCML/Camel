@@ -3,25 +3,23 @@
  * rounds, the nodes visited, the nodes erased, whether it reached a fixpoint and the wall time,
  * for the application that rewrites and for a second one that finds the fixpoint at once.
  *
- * The pass is `sync` and so are the callbacks it hands to `?->`: printing is part of the pass's
+ * The pass is `sync` and so are the callbacks it hands to `->`: printing is part of the pass's
  * execution, not a value left unapplied (`SemanticDiag::EffectNotExecuted`).
  */
-module bench
 
-import { Program } from graph
 import { Rule, Run, run } from rewrite
-import { int_add_zero, int_mul_one } from rules
+import { int_add_zero, mul_one } from rules
 
-func report(label: string, r: Run<Program>): void sync {
+func report::<F>(label: string, r: Run<F>): void sync {
     println(label, 'rewrites', r.rewrites, 'rounds', r.rounds, 'visited', r.visited, 'erased',
         r.erased, 'fixpoint', r.fixpoint, 'seconds', r.seconds)
 }
 
-export func measure(p: Program): Program! sync {
-    let rules: Rule[] = [int_add_zero, int_mul_one]
-    return p->run<rules> ?-> sync (first: Run<Program>) => sync {
+export func measure::<F>(p: F): F! sync {
+    let rules: Rule[] = [int_add_zero, mul_one]
+    return p->run<rules> -> (first: Run<F>) => sync {
         report('run_first', first)
-        return first.result->run<rules> ?-> sync (second: Run<Program>) => sync {
+        return first.result->run<rules> -> (second: Run<F>) => sync {
             report('run_again', second)
             return second.result
         }
@@ -31,12 +29,12 @@ export func measure(p: Program): Program! sync {
 /// Runs the same application twice on the same program, once without the attribution record and
 /// once with it (`run`'s `explain` with-parameter), and prints both costs (rewrite design 8.7).
 /// The two applications see the same program, so the record is the only difference between them.
-func one_pair(p: Program): Program! sync {
-    return match p->run<[int_add_zero, int_mul_one]> {
-        case error e => { throw e }
+func one_pair::<F>(p: F): F! sync {
+    return match p->run<[int_add_zero, mul_one]> {
+        case error e => { return e }
         case off => sync {
-            match p->run<[int_add_zero, int_mul_one], explain: true> {
-                case error e => { throw e }
+            match p->run<[int_add_zero, mul_one], explain: true> {
+                case error e => { return e }
                 case on => sync {
                     println(
                         'bench',
@@ -56,9 +54,9 @@ func one_pair(p: Program): Program! sync {
 }
 
 /// Measures the two modes on the same program and leaves the program as it was.
-export func compare(p: Program): Program! sync {
+export func compare::<F>(p: F): F! sync {
     return match one_pair(p) {
-        case error e => { throw e }
+        case error e => { return e }
         case done => done
     }
 }

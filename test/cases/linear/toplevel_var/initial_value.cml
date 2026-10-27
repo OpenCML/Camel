@@ -1,0 +1,22 @@
+/**
+ * The initial value of a top-level `var` is evaluated by dependency before the first read, like a
+ * top-level `let`: `base` is written after `cnt` and is known when `cnt` is first read.
+ *   105
+ *   106
+ */
+
+
+var cnt: int = base + 5
+
+let base = 100
+
+func bump(): int sync {
+    cnt += 1
+    return cnt
+}
+
+func main(): int sync {
+    println(cnt)
+    println(bump())
+    return 0
+}

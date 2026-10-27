@@ -11,7 +11,7 @@ desc = "The forms a call is written in: `x->f(a, b)` is `f(x, a, b)` (design pri
 
 [[tests]]
 name = "call_syntax.pipeline_arguments"
-desc = "The receiver is the first ordinary argument of the call written on the right: an ordinary function (`1->add(2)`), a function with a `with` argument (`1->bump<10>(2)`), a generic function (`1->pick(2)`), through `?->`, with no extra argument (`1->inc()`), and in a chain (`1->add(2)->add(3)`)."
+desc = "The receiver is the first ordinary argument of the call written on the right: an ordinary function (`1->add(2)`), a function with a `with` argument (`1->bump<10>(2)`), a generic function (`1->pick(2)`), through `->`, with no extra argument (`1->inc()`), and in a chain (`1->add(2)->add(3)`)."
 kind = "behavior"
 case = "../../../cases/compile/callform/pipeline_arguments.cml"
 args = ["${case}", "${backend}"]

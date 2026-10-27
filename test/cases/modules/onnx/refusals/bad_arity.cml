@@ -2,12 +2,11 @@
  * Two examples for a one-parameter function... the example tuple is one argument; a
  * two-parameter function given one example is refused at the export_model call (line 11).
  */
-module bad_arity
 
 import { reshape } from tensor
 import { export_model } from onnx
 
 func main(): int sync {
-    export_model((a: float[..], b: float[..]): float[..] => a + b, reshape([1.0, 2.0], [2]), 'tmp/test/onnx/refusal_arity.onnx')
+    let _ = export_model<out: 'tmp/test/onnx/refusal_arity.onnx'>((a: float[..], b: float[..]): float[..] => a + b, reshape([1.0, 2.0], [2]))
     return 0
 }

@@ -18,7 +18,7 @@
 // A module is a *declaration module* when `stdlib/<module>.cml` exists, its header says
 // `module <module>`, and a C++ module of that name registers itself with `BuiltinModule`. The
 // set is read from the tree, not from a list in this script: the next batch (`time`,
-// `statistics`, `tree`/`ckpt`) is covered the day its `.cml` lands.
+// `tree`/`ckpt`) is covered the day its `.cml` lands.
 //
 // The checks, for every declaration module:
 //
@@ -149,10 +149,39 @@ const UNDERIVABLE_OPERATORS = new Set([
 // would be the declaration migration, not coverage. Their purity is
 // checked by `registry.purity_declared_tensor_stack` over `registry_tensor.cml`.
 //
-// Empty since `onnx` was declared (`supported_operators` in stdlib/onnx.cml, `export_model` in
-// stdlib/signatures/onnx.cml): every module that registers operators is now in the probe and in
+// Empty since `onnx` was declared (both of its names, `supported_operators` and `export_model`,
+// in stdlib/onnx.cml): every module that registers operators is now in the probe and in
 // MODULES. The list stays, with its checks, so an exclusion has to be justified the same way.
 const UNCHECKED_MODULES = []
+
+// The number of ordinary parameters a declaration line writes: the commas at the top level of its
+// first parenthesised list, plus one. A pass takes one (the function it is applied to); a
+// declaration with the same condition and more is an operator that wants a function.
+function ordinaryParameterCount(line) {
+    const open = line.indexOf('(')
+    if (open < 0) {
+        return -1
+    }
+    let depth = 0
+    let count = 0
+    let seen = false
+    for (let i = open + 1; i < line.length; i++) {
+        const c = line[i]
+        if ('([<{'.includes(c)) {
+            depth++
+        } else if (')]>}'.includes(c)) {
+            if (depth === 0) {
+                break
+            }
+            depth--
+        } else if (c === ',' && depth === 0) {
+            count++
+        } else if (!/\s/.test(c)) {
+            seen = true
+        }
+    }
+    return seen ? count + 1 : 0
+}
 
 function read(file) {
     return fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n')
@@ -522,7 +551,7 @@ function declarationModules() {
 // The declarations of a file: each `#op('uri')` binds the next `func`, and a default URI is
 // `<module>:<name>`. `// dynamic func` records a signature C++ computes (math); a body-less
 // `func` is the same declaration without an export.
-function readDeclarations(file, moduleName) {
+function readDeclarations(file, moduleName, allowPass = true) {
     const lines = read(file).split('\n')
     const declarations = []
     const dynamic = []
@@ -544,8 +573,12 @@ function readDeclarations(file, moduleName) {
         if (declaration) {
             // A pass declaration (design principles 9.3): a body-less function whose condition is
             // the pass applicability. It is a function the pipeline applies to the program, not
-            // an operator of the module, so it has no registered operator to agree with.
-            if (/\bwhen\s+is_function::<\w+>\(\)\s*$/.test(trimmed)) {
+            // an operator of the module, so it has no registered operator to agree with. Only a
+            // compiled declaration can declare a pass; a file under stdlib/signatures/ is
+            // reference text, and there the same condition is the type's
+            // (`grad::<F>(f: F): Gradient<F> when is_function::<F>()`).
+            if (allowPass && /\bwhen\s+is_function::<\w+>\(\)\s*$/.test(trimmed) &&
+                ordinaryParameterCount(trimmed) === 1) {
                 pendingUri = null
                 continue
             }
@@ -585,7 +618,7 @@ function computedPlaces(module, entry) {
     if (entry && entry.computed) {
         filePath = path.join(STDLIB_DIR, entry.computed)
         if (fs.existsSync(filePath)) {
-            for (const declaration of readDeclarations(filePath, module.name).declarations) {
+            for (const declaration of readDeclarations(filePath, module.name, false).declarations) {
                 if (!file.has(declaration.name)) {
                     file.set(declaration.name, {
                         file: relative(filePath),

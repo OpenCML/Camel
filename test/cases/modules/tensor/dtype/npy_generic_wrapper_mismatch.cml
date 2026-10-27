@@ -2,7 +2,6 @@
 // wrapper's `T` is what `load_npy::<T>` reads the file at, so asking for f32 where the file holds
 // int64 is the same fault at the same call as a direct `load_npy::<f32>`, never a conversion and
 // never a silently erased element type (design principles 5.1, 5.5).
-module tensor_dtype_npy_generic_wrapper_mismatch
 
 import { load_npy } from tensor
 

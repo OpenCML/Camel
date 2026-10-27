@@ -1,5 +1,4 @@
 // Multiple state values share one recurrence and update simultaneously.
-module tiles_loop_multi_device
 import { load_npy, save_npy } from tensor
 import { download, source, inspect, benchmark, run_preferred_resident } from tiles
 import { get_env } from env
@@ -57,7 +56,7 @@ func permission_empty(a: f32[..], b: f32[..]): f32[..] {
     return pair.0
 }
 func main(): int sync {
-    let folder = get_env('TILES_TEST_OUT')
+    let folder = get_env('TILES_TEST_OUT') ?? ''
     let a = load_npy::<f32>(folder + '/a.npy') as f32[..]
     let b = load_npy::<f32>(folder + '/b.npy') as f32[..]
     let c = load_npy::<f32>(folder + '/c.npy') as f32[..]

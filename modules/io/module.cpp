@@ -4,7 +4,7 @@
 /*
  * The terminal module: `io` is the terminal until `Stream` exists. Its operators are
  * the readers of stdin and the writers of the terminal's mode and buffer; the standard streams and
- * `print`/`println`/`input`/`eprintln` are the prelude's.
+ * `print`/`println`/`eprintln` are the prelude's.
  *
  * The signatures are written once, in the declaration module `stdlib/io.cml` (design principles
  * 6.4). What is left here is what only C++ knows: the kernels in
@@ -35,12 +35,21 @@ bool IOModule::load() {
         {
             {"set_terminal_raw_mode", false},
             {"has_input", false},
-            {"get_char", false},
             {"get_chars", false},
             {"clear_input_buffer", false},
+            {"input", false},
         });
+    // `input` writes its prompt and reads a line: stdin and stdout, in the order they are used.
+    const auto inputResources = [] {
+        auto spec = camel::core::sem::externalAmbient(
+            "stdin", camel::core::sem::AccessMode::ReadModifyWrite);
+        const auto out = camel::core::sem::externalAmbient(
+            "stdout", camel::core::sem::AccessMode::Write);
+        spec.accesses.insert(spec.accesses.end(), out.accesses.begin(), out.accesses.end());
+        return spec;
+    };
     // What each touches (docs/design/op-semantics 8): raw mode writes the terminal, the readers
-    // read or read-modify-write stdin, so that they stay ordered against `:io/input`.
+    // read or read-modify-write stdin, so that they stay ordered against `input`.
     //
     // All five operators name the one `stdin` resource (design principles 3.3: terminal mode
     // and reading input must order each other, so raw mode is not a resource of its own).
@@ -52,9 +61,9 @@ bool IOModule::load() {
             {
                 {"set_terminal_raw_mode", externalAmbient("stdin", AccessMode::Write)},
                 {"has_input", externalAmbient("stdin", AccessMode::Read)},
-                {"get_char", externalAmbient("stdin", AccessMode::ReadModifyWrite)},
                 {"get_chars", externalAmbient("stdin", AccessMode::ReadModifyWrite)},
                 {"clear_input_buffer", externalAmbient("stdin", AccessMode::ReadModifyWrite)},
+                {"input", inputResources()},
             });
     }
     loaded_ = true;

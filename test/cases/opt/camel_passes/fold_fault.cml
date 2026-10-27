@@ -3,7 +3,6 @@
 // (ConstantExpressionFaults), and the division is left as written: design principles 3.9, the
 // program behaves the same with and without the pass. The front end folds the two literals of one
 // expression, so the product reaches the graph as an operation over `let`s.
-module fold_fault
 
 func main(): int sync {
     let a = 1 / 0

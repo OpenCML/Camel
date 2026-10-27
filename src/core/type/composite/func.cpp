@@ -35,13 +35,12 @@ namespace {
 /// The parts a factory collected, its names interned as symbols.
 template <typename Parts>
 Parts partsOf(
-    ModifierSet modifiers, const std::vector<param_t> &withTypes,
+    const std::vector<param_t> &withTypes,
     const std::vector<param_t> &normTypes, Type *exitType, bool hasNames,
     const std::vector<std::string> &argNames, bool hasRest,
     const std::vector<uint16_t> &constasIndices, const std::vector<uint16_t> &withConstIndices,
     const sem::ResourceSignature &resources) {
     Parts parts;
-    parts.modifiers = modifiers;
     parts.resources = resources;
     parts.params.reserve(withTypes.size() + normTypes.size());
     parts.params.insert(parts.params.end(), withTypes.begin(), withTypes.end());
@@ -67,8 +66,7 @@ Parts partsOf(
 // The factory reaches FunctionType's protected Parts through friendship; the helper above is
 // instantiated with it here.
 FunctionType *FunctionTypeFactory::build() {
-    return FunctionType::intern(partsOf<FunctionType::Parts>(
-        modifiers_,
+    auto parts = (partsOf<FunctionType::Parts>(
         withTypes_,
         normTypes_,
         exitType_,
@@ -78,11 +76,12 @@ FunctionType *FunctionTypeFactory::build() {
         constasIndices_,
         withConstIndices_,
         resources_));
+    parts.hasWithRest = hasWithRest_;
+    return FunctionType::intern(parts);
 }
 
 OpenFunctionType *FunctionTypeFactory::buildOpen() {
-    return FunctionType::allocate<OpenFunctionType>(partsOf<FunctionType::Parts>(
-        modifiers_,
+    auto parts = (partsOf<FunctionType::Parts>(
         withTypes_,
         normTypes_,
         exitType_,
@@ -92,6 +91,8 @@ OpenFunctionType *FunctionTypeFactory::buildOpen() {
         constasIndices_,
         withConstIndices_,
         resources_));
+    parts.hasWithRest = hasWithRest_;
+    return FunctionType::allocate<OpenFunctionType>(parts);
 }
 
 // ---- Construction ----
@@ -103,9 +104,9 @@ size_t FunctionType::trailingBytes(size_t params, bool hasNames) {
 
 FunctionType::FunctionType(const Parts &parts, bool open)
     : CompositeType(TypeCode::Function), exitType_(parts.exitType),
-      modifiers_(parts.modifiers), withCount_(static_cast<uint16_t>(parts.withCount)),
+      withCount_(static_cast<uint16_t>(parts.withCount)),
       normCount_(static_cast<uint16_t>(parts.params.size() - parts.withCount)),
-      hasNames_(parts.hasNames), hasRest_(parts.hasRest),
+      hasNames_(parts.hasNames), hasRest_(parts.hasRest), hasWithRest_(parts.hasWithRest),
       constasIndices_(parts.constasIndices), withConstIndices_(parts.withConstIndices),
       resources_(parts.resources), open_(open) {
     for (size_t i = 0; i < parts.params.size(); ++i) {
@@ -144,7 +145,7 @@ template <> FunctionType *FunctionType::allocate<FunctionType>(const Parts &part
 
 FunctionType *FunctionType::intern(const Parts &parts) {
     // The key is everything a signature consists of (see intern.h; the component types by id):
-    // the counts, the modifiers, the result type, each parameter with its `var` mark, and the
+    // the counts, the result type, each parameter with its `var` mark, and the
     // names. Parameter names are in the key because a type prints them, but `equals` ignores them
     // (text.cpp: sameType), so the signature of the same parameters with the names erased is this
     // type's canonical form: `(a: int) => int` and `(int) => int` are one type.
@@ -152,10 +153,10 @@ FunctionType *FunctionType::intern(const Parts &parts) {
     key.reserve(6 + parts.params.size() * (parts.hasNames ? 3 : 2));
     key.push_back(parts.withCount);
     key.push_back(parts.params.size());
-    key.push_back(static_cast<uintptr_t>(parts.modifiers.mask));
     key.push_back(typeKeyWord(parts.exitType));
     key.push_back(parts.hasNames ? 1 : 0);
     key.push_back(parts.hasRest ? 1 : 0);
+    key.push_back(parts.hasWithRest ? 1 : 0);
     key.push_back(parts.constasIndices.size());
     key.insert(key.end(), parts.constasIndices.begin(), parts.constasIndices.end());
     // A `with` parameter whose argument is part of what the declaration means is part of what the
@@ -231,11 +232,11 @@ FunctionType *FunctionType::intern(const Parts &parts) {
 
 FunctionType::Parts FunctionType::parts() const {
     Parts parts;
-    parts.modifiers = modifiers_;
     parts.withCount = withCount_;
     parts.exitType  = exitType_;
     parts.hasNames  = hasNames_;
     parts.hasRest   = hasRest_;
+    parts.hasWithRest = hasWithRest_;
     parts.constasIndices = constasIndices_;
     parts.withConstIndices = withConstIndices_;
     parts.resources = resources_;
@@ -256,16 +257,13 @@ FunctionType *FunctionType::create() {
 }
 
 FunctionType *FunctionType::create(
-    const param_init_list_t &withTypes, const param_init_list_t &normTypes, Type *returnType,
-    const ModifierSet &modifiers) {
-    return create(param_vec_t(withTypes), param_vec_t(normTypes), returnType, modifiers);
+    const param_init_list_t &withTypes, const param_init_list_t &normTypes, Type *returnType) {
+    return create(param_vec_t(withTypes), param_vec_t(normTypes), returnType);
 }
 
 FunctionType *FunctionType::create(
-    const param_vec_t &withTypes, const param_vec_t &normTypes, Type *returnType,
-    const ModifierSet &modifiers) {
+    const param_vec_t &withTypes, const param_vec_t &normTypes, Type *returnType) {
     Parts parts;
-    parts.modifiers = modifiers;
     parts.params.reserve(withTypes.size() + normTypes.size());
     parts.params.insert(parts.params.end(), withTypes.begin(), withTypes.end());
     parts.params.insert(parts.params.end(), normTypes.begin(), normTypes.end());
@@ -308,8 +306,6 @@ Type *FunctionType::exitType() const {
     // Without a result type yet (an open signature), void; hasExitType() tells the two apart.
     return exitType_ ? exitType_ : Type::Void();
 }
-
-bool FunctionType::checkModifiers() const { return true; }
 
 std::string_view FunctionType::argNameAt(size_t idx) const {
     ASSERT(hasNames_, "The function type records no parameter names.");
@@ -364,6 +360,32 @@ Type *FunctionType::closed() const {
 
 bool FunctionType::equals(Type *other) const { return typeEquals(this, other); }
 
+// Least common type at a branch join: two signatures of the same shape (parameters of equal
+// types, as a parameter is contravariant and so joins nowhere; the same marks and resources)
+// whose results have a common type are the signature with that result.
+Type *FunctionType::unify(Type *other) const {
+    if (other == nullptr || other->code() != TypeCode::Function) {
+        return nullptr;
+    }
+    if (equals(other)) {
+        return const_cast<FunctionType *>(this);
+    }
+    const auto *rhs = static_cast<const FunctionType *>(other);
+    if (withCount_ != rhs->withCount_ || normCount_ != rhs->normCount_ ||
+        hasRest_ != rhs->hasRest_ || hasWithRest_ != rhs->hasWithRest_ || constasIndices_ != rhs->constasIndices_ ||
+        withConstIndices_ != rhs->withConstIndices_ || !exitType_ || !rhs->exitType_ ||
+        !(resources_ == rhs->resources_)) {
+        return nullptr;
+    }
+    for (size_t i = 0; i < paramCount(); ++i) {
+        if (varMarks()[i] != rhs->varMarks()[i] || !types()[i]->equals(rhs->types()[i])) {
+            return nullptr;
+        }
+    }
+    Type *exit = exitType_->unify(rhs->exitType_);
+    return exit == nullptr ? nullptr : withExitType(exit);
+}
+
 CastSafety FunctionType::castSafetyFrom(Type *sourceType) const {
     if (sourceType == nullptr)
         return CastSafety::Forbidden;
@@ -388,20 +410,34 @@ bool FunctionType::assignableFrom(Type *other) const {
 
     const FunctionType &otherFunc = static_cast<const FunctionType &>(*other);
 
-    if (withCount_ != otherFunc.withCount_ || normCount_ != otherFunc.normCount_ ||
-        hasRest_ != otherFunc.hasRest_ || constasIndices_ != otherFunc.constasIndices_)
+    // A pack (`(..A) => R`, `<..A> (...) => R`) written for one list of parameters takes a function
+    // with any parameters there: it says nothing about them.
+    const bool anyWith = hasWithRest_ && !otherFunc.hasWithRest_;
+    const bool anyNorm = hasRest_ && !otherFunc.hasRest_;
+    if ((!anyWith && (withCount_ != otherFunc.withCount_ ||
+                      withConstIndices_ != otherFunc.withConstIndices_)) ||
+        (!anyNorm && (normCount_ != otherFunc.normCount_ || hasRest_ != otherFunc.hasRest_ ||
+                      constasIndices_ != otherFunc.constasIndices_)) ||
+        (!anyWith && hasWithRest_ != otherFunc.hasWithRest_))
         return false;
 
     // Parameters are contravariant: this type's parameter must be acceptable where the other
     // one's is expected.
     for (size_t i = 0; i < paramCount(); i++) {
-        if (varMarks()[i] != otherFunc.varMarks()[i] ||
-            !otherFunc.types()[i]->assignableFrom(types()[i]))
+        const bool inWith = i < withCount_;
+        if ((inWith && anyWith) || (!inWith && anyNorm)) {
+            continue;
+        }
+        const size_t j = inWith ? i : otherFunc.withCount_ + (i - withCount_);
+        if (varMarks()[i] != otherFunc.varMarks()[j] ||
+            !otherFunc.types()[j]->assignableFrom(types()[i]))
             return false;
     }
 
     if (exitType_ && otherFunc.exitType_) {
-        if (!exitType_->assignableFrom(otherFunc.exitType_))
+        // The result is the one position that discards: a function that gives `void` takes any
+        // function with the same parameters, whatever it gives (a result nobody reads).
+        if (exitType_->code() != TypeCode::Void && !exitType_->assignableFrom(otherFunc.exitType_))
             return false;
     } else if (exitType_ || otherFunc.exitType_) {
         return false;

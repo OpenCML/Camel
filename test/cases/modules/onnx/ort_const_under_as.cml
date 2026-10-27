@@ -13,7 +13,6 @@
  *
  * The models are written next to the working directory (literal paths: the pass reads them).
  */
-module ort_const_under_as
 
 import { reshape, sum, tanh } from tensor
 import { with_grad } from autodiff
@@ -44,9 +43,9 @@ func step(x: f32[..]): (float, f32[..]) {
 
 func main(): int sync {
     let ex = reshape([1.0, -1.0, 0.5, 2.0, 3.0, -2.0] as f32[], [2, 3]) as f32[2, 3]
-    export_model(affine, ex, 'affine.onnx')
-    export_model(checked, ex, 'checked.onnx')
-    export_model(step, ex, 'step.onnx')
+    let _ = export_model<out: 'affine.onnx'>(affine, ex)
+    let _ = export_model<out: 'checked.onnx'>(checked, ex)
+    let _ = export_model<out: 'step.onnx'>(step, ex)
     println('exported')
     return 0
 }

@@ -2,7 +2,6 @@
  * A negative array index is IndexOutOfRange with the index as written (-1), not the unsigned
  * value it wraps to.
  */
-module array_index_negative
 
 func at(xs: int[], i: int): int { return xs[i] }
 

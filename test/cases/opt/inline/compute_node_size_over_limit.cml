@@ -5,11 +5,10 @@
  * which does not fold the `reshape` of the example away). The refusal of an export that hides
  * its request behind that call reports the number and the reason (see the onnx plan).
  */
-module compute_node_size_over_limit
 
 import { reshape } from tensor
 import { export_model } from onnx
-import { get_env } from env
+import { cpu_count } from process
 
 func double(t: f32[..]): f32[..] {
     return t * 2.0
@@ -21,8 +20,9 @@ func spin(n: int): int sync {
 }
 
 func main(): int sync {
-    export_model(double, reshape([1.0, 2.0], [2]), 'tmp/test/onnx/compute_node_size_over_limit.onnx')
-    let x = int(get_env('H434_STEPS'))
+    let _ = export_model<out: 'tmp/test/onnx/compute_node_size_over_limit.onnx'>(double, reshape([1.0, 2.0], [2]))
+    let x = cpu_count()
+    println(x)
     println(x)
     println(x)
     println(x)

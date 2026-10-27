@@ -11,13 +11,14 @@
  * The second map faults in every element: the error value is the fault of element 0
  * (design principles 3.6: the smallest index; lowest_index.cml tells the elements apart).
  */
-module siblings
+
+import { sleep } from process
 
 func work(x: int): int sync {
     println(format<x>('start {}'))
     let d = if x == 0 then 0 else 1
     let q = 100 / d
-    sleep(30)
+    sleep(0.03)
     println(format<x>('end {}'))
     return q + x
 }
@@ -30,10 +31,10 @@ func bad(x: int): int {
 
 func main(): int sync {
     println('before')
-    let ys = attempt(() => 0..48->map<work>) !! [-1]
+    let ys = attempt(() => 0..48->map<work>)() !! [-1]
     println('isolated')
     println(ys)
-    let r = attempt(() => 0..64->map<bad>)
+    let r = attempt(() => 0..64->map<bad>)()
     let text = match r {
         case error e => e.kind
         case v => 'no fault'

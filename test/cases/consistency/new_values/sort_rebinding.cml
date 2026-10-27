@@ -2,12 +2,11 @@
  * `xs = xs->sort` binds the variable to a new, sorted array (design principles 11.3).
  * When nothing but the variable refers to the old array it is sorted in place; when something
  * else does (here `before`, `kept`, the caller's array), that keeps its value. The forms: a
- * local variable, the call written `sort(xs)`, another sorting operator, a `var` parameter, a
+ * local variable, the call written `sort(xs)`, a `var` parameter, a
  * captured variable, and an array of floats.
  */
-module sort_rebinding
 
-import { sort, merge_sort, insert_sort } from array
+import { sort } from array
 
 func sorted_param(var v: int[]): int sync {
     v = v->sort
@@ -26,7 +25,7 @@ func main(): int sync {
     xs = sort(xs)
     let kept = xs
     xs = xs->append<-1>
-    xs = merge_sort(xs)
+    xs = sort(xs)
     println(kept, xs)
 
     var zs = [9, 8, 7]
@@ -34,8 +33,8 @@ func main(): int sync {
     println(n, zs)
 
     var fs = [2.5, -1.0, 0.5]
-    let resort = sync (): int => sync {
-        fs = fs->insert_sort
+    let resort = (): int => sync {
+        fs = fs->sort
         return len(fs)
     }
     println(resort(), fs)

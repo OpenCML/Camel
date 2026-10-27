@@ -1,5 +1,3 @@
-module main
-
 // A pure `main` that goes through a set: what the translation passes (std::cpp,
 // onnx::export) are asked to translate and must refuse with a position.
 

@@ -4,7 +4,6 @@
 // instance, so a distribution that handed all three the same type could not build this
 // program (design principles 5.5: each operand takes the instance its own
 // position fixes).
-module h428_comp_chain
 
 func wrap::<T>(x: T): T[] {
     return [x]
@@ -16,7 +15,7 @@ func head::<T>(xs: T[]): T {
 
 func main(): int sync {
     let chain: (x: int) => int[] = wrap..head..wrap
-    let written: (x: int) => int[] = (x) => wrap(head(wrap(x)))
+    let written: (x: int) => int[] = (x) => wrap(wrap(x)[0])
     println(chain(4))
     println(written(4))
     return 0

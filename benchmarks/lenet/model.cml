@@ -3,7 +3,6 @@
  * Conv(1->6,k5,pad2) -> ReLU -> MaxPool(2) -> Conv(6->16,k5) -> ReLU -> MaxPool(2)
  * -> Flatten -> Linear(400,120) -> ReLU -> Linear(120,84) -> ReLU -> Linear(84,10).
  */
-module lenet
 
 import { relu, flatten, mean } from tensor
 import { grad, with_grad } from autodiff
@@ -51,7 +50,7 @@ func step(m: LeNet, x: f32[..]): (float, LeNet) {
 
 /// Exports `step` to ONNX: the parameters and the input become graph inputs.
 func export_step(m: LeNet, path: string): int sync {
-    export_model(step, (m, bench_input()), path)
+    let _ = export_model<out: path>(step, (m, bench_input()))
     return 0
 }
 
@@ -82,7 +81,7 @@ func save_trained(m: LeNet, dir: string): int sync {
 func train_stateful(m: LeNet, x: f32[..]): int sync {
     let trained = train_loop(m, x, 0, warm_count(), step_count(), now())
     let reported = log_final(loss<trained>(x))
-    let dir = get_env('CAMEL_BENCH_PARAMS')
+    let dir = get_env('CAMEL_BENCH_PARAMS') ?? ''
     return if dir != '' then save_trained(trained, dir) else 0
 }
 
@@ -94,8 +93,8 @@ func main(): int sync {
         fc2_w: weight('fc2_w'), fc2_b: weight('fc2_b'),
         fc3_w: weight('fc3_w'), fc3_b: weight('fc3_b')
     }
-    let workload = get_env('CAMEL_BENCH_WORKLOAD')
-    return if workload == 'train_export' then export_step(m, get_env('CAMEL_BENCH_EXPORT')) else if workload == 'train' then run_training(
+    let workload = get_env('CAMEL_BENCH_WORKLOAD') ?? ''
+    return if workload == 'train_export' then export_step(m, get_env('CAMEL_BENCH_EXPORT') ?? '') else if workload == 'train' then run_training(
         (x: f32[..]): float => { return train_step(m, x) },
         (x: f32[..], dir: string): int => { return dump_grads(m, x, dir) },
         (x: f32[..]): int => { return train_stateful(m, x) }

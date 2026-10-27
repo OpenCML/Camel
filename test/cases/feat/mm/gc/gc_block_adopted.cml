@@ -7,7 +7,6 @@
  * counted (the promotion that could have counted them already happened) and no major collection
  * is asked for. The plan asserts the collection count, not a timing.
  */
-module gc_block_adopted
 
 func churn(rounds: int, seed: int): int {
     let (i, total) = loop i = 0, total = 0 while i < rounds do {

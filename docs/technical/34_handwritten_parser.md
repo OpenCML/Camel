@@ -64,7 +64,7 @@ What needed care, all of it kept as ANTLR read it (checked token for token, sect
   file. `'''…'''` and `"""…"""` run to the first closing triple, without escapes; without one,
   the first two quotes are an empty string.
 - **Identifiers** are ASCII: `[A-Za-z_][A-Za-z_0-9]*`. A lone `_` is the wildcard token.
-- **Operators** are matched longest first (`===`, `!==`, `?->`, `?..`, `...`, then two
+- **Operators** are matched longest first (`===`, `!==`, `->`, `?..`, `...`, then two
   characters, then one). `>=` is always one token; there is no `>>`.
 
 Lexical errors are recorded in the buffer and their text kept as `Error` tokens, which the
@@ -131,7 +131,7 @@ Tokens at the start of a line, in full:
 
 | Continue the expression | Start a statement |
 |---|---|
-| `->` `?->` `.` `..` `?..` `??` `!!` | `-` `+` (sign of a number, negation) |
+| `->` `.` `..` `?..` `??` `!!` | `-` `+` (sign of a number, negation) |
 | `*` `/` `%` `^` | `@` (annotation of a function declaration) |
 | `&&` `\|\|` `==` `!=` `===` `!==` `<` `>` `<=` `>=` | `!` `~` |
 | `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `\|=` | `(` `[` `{` |
@@ -156,7 +156,7 @@ on one line the operator loops behave as they always did, so nothing new can be 
 the first statement ends where its expression cannot go on. `;` separates statements wherever
 the author wants to be explicit.
 
-`return`, `throw`, `let x =`, `import … from` and the like require what follows them, so a line
+`return`, `let x =`, `import … from` and the like require what follows them, so a line
 break after them continues. There is no `return` without a value in the grammar.
 
 ## 4. Grammar and decisions
@@ -255,9 +255,10 @@ into the `LOOP` node of the graph:
 | child 3, StmtBlock | the body; same scope; its value is the state of the next round |
 
 The value of the expression is the last state. With both clauses a round runs while an element
-is left and the condition holds. The GCT builder reports `ConstructNotSupported` at the loop
-for now; the formatter, the syntax index (scopes and bindings) and the editor grammar know the
-form.
+is left and the condition holds. The GCT builder turns it into the `LOOP` node
+(`src/compile/gct/builder.cpp#Builder::visitLoopExpr`), and [39](39_loops.md) describes the node
+and how each back end runs it; the formatter, the syntax index (scopes and bindings) and the
+editor grammar know the form.
 
 What the notation leaves awkward or open (for the language author):
 

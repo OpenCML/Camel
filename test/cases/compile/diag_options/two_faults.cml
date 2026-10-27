@@ -2,7 +2,6 @@
  * Two faults in a row. A run-time fault ends the run: only the first is reported, whatever
  * --max-errors says.
  */
-module two_faults
 
 func at(xs: int[], i: int): int { return xs[i] }
 

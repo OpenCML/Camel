@@ -18,10 +18,11 @@
  *   multiplicative  *  /  @  %                                  left
  *   powerExpr       ^                                           right
  *   nullableExpr    ??  !!           right operand: a whole dataExpr
- *   unaryExpr       prefix !  ~      (operand: linkExpr);  postfix `as T`, `is T`
- *   linkExpr        ->  ?->                                     left
- *   negExpr         prefix -         tighter than `->`, looser than `^`:
- *                                    `-x->f` is `(-x)->f`, `-x ^ 2` is `-(x ^ 2)`
+ *   unaryExpr       postfix `as T`
+ *   negExpr         prefix -  !  ~   looser than `->` and than `^`, tighter than the other binary
+ *                                    operators: `-x->f` is `-(x->f)`, `!xs->is_empty()` is
+ *                                    `!(xs->is_empty())`, `-x ^ 2` is `-(x ^ 2)`, `-a * b` is `(-a) * b`
+ *   linkExpr        ->                                          left
  *   compExpr        ..                                          left
  *   annoExpr        [index]  (arguments)  <arguments>  .member   postfix, touching
  *   accessExpr      .member
@@ -36,6 +37,7 @@
  */
 
 #include "parser_impl.h"
+#include "camel/parse/ast/type_case_words.h"
 
 namespace camel::parse::syntax {
 
@@ -293,15 +295,15 @@ void ParserImpl::parseNullable() {
     }
 }
 
-/// unaryExpr : linkExpr ('as' typeExpr)?
-/// (The prefix operators `-`, `!` and `~` are taken by negExpr, under `->`.)
+/// unaryExpr : negExpr ('as' typeExpr)?
+/// (The prefix operators `-`, `!` and `~` are taken by negExpr, which stands above `->`.)
 /// The right side is always a type, and the type reads its
 /// own marks: `x as int..` is a conversion to the stream type. A number or a name written
 /// directly after the `..` is not a type, though — `x as int..5` is the interval reading of `..`
 /// written where a type stands — and it is reported as such rather than as a stray token.
 void ParserImpl::parseUnary() {
     const size_t m = mark();
-    parseLink();
+    parseNeg(false);
     if (cur_ == TK::KwAs && !panic_) {
         bump();
         const uint32_t opToken = prev_;
@@ -326,12 +328,12 @@ void ParserImpl::parseUnary() {
     }
 }
 
-/// linkExpr : negExpr (('->' | '?->') compExpr)*
+/// linkExpr : compExpr ('->' compExpr)*
 void ParserImpl::parseLink() {
     const size_t m = mark();
-    parseNeg(false);
+    parseComp();
     bool any = false;
-    while ((cur_ == TK::Arrow || cur_ == TK::QuestionArrow) && !panic_) {
+    while (cur_ == TK::Arrow && !panic_) {
         bump();
         parseComp();
         any = true;
@@ -341,13 +343,13 @@ void ParserImpl::parseLink() {
     }
 }
 
-/// negExpr : ('-' | '!' | '~') negPower | compExpr
-/// negPower : ('-' | '!' | '~') negPower | compExpr ('^' negPower)?
+/// negExpr : ('-' | '!' | '~') negPower | linkExpr
+/// negPower : ('-' | '!' | '~') negPower | linkExpr ('^' negPower)?
 /// The minus is always an operator, never part of a number, and reads the same before a
-/// literal and before a name: it binds less tightly than `^` and more tightly than `->` and
-/// every other binary operator. `-2 ^ 2` is `-(2 ^ 2)`, `-x->f` is `(-x)->f`, `-a * b` is
-/// `(-a) * b`. `!` and `~` are at the same level (design principles 4.2): `!x->f` is
-/// `(!x)->f`, `!a ^ b` is `!(a ^ b)`. Under a prefix operator the power is taken here;
+/// literal and before a name: it binds less tightly than `->` and `^` and more tightly than every
+/// other binary operator. `-2 ^ 2` is `-(2 ^ 2)`, `-x->f` is `-(x->f)`, `-a * b` is `(-a) * b`.
+/// `!` and `~` are at the same level (design principles 4.2): `!xs->is_empty()` is
+/// `!(xs->is_empty())`, `!a ^ b` is `!(a ^ b)`. Under a prefix operator the power is taken here;
 /// elsewhere it is powerExpr, whose right operand reaches this function too, so `2 ^ -1` has
 /// a signed exponent.
 void ParserImpl::parseNeg(bool underMinus) {
@@ -358,7 +360,7 @@ void ParserImpl::parseNeg(bool underMinus) {
         parseNeg(true);
         return close(m, NK::UnaryExpr);
     }
-    parseComp();
+    parseLink();
     if (underMinus && cur_ == TK::Caret && !panic_) {
         bump();
         parseNeg(true);
@@ -389,7 +391,7 @@ void ParserImpl::parseComp() {
 /// lexer has decided already (LAngle). `Shape::Rect { w: 2 }` is a struct variant construction:
 /// a struct literal follows a variant path, never a name that could be a value.
 /// The postfix `!` is not in the language: the mark `!` of a `T!` belongs to the type, and a
-/// value of that type is taken hold of with `!!`, `?->` or `case error e`. A `!` after a value
+/// value of that type is taken hold of with `!!`, `->` or `case error e`. A `!` after a value
 /// therefore fits nothing and is an ordinary syntax error.
 void ParserImpl::parseAnno() {
     const size_t m = mark();
@@ -673,7 +675,6 @@ void ParserImpl::parsePrimary() {
         return lambdaAhead() ? parseFuncData() : parseTupleData();
     case TK::Lt:
     case TK::LAngle:
-    case TK::KwSync:
         return parseFuncData();
     default:
         break;
@@ -1050,12 +1051,11 @@ void ParserImpl::parseTupleData() {
     close(m, NK::TupleData);
 }
 
-/// funcData : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr
+/// funcData : angledParams? parentParams (':' typeExpr)? '=>' blockExpr
+/// A lambda has no modifier: `sync` is written before a block (design principles 3.4), so a
+/// lambda that needs a synchronous body writes `(x) => sync { ... }`.
 void ParserImpl::parseFuncData() {
     const size_t m = mark();
-    if (isModifier(cur_)) {
-        parseModifiers();
-    }
     // A lambda's parameters may leave the type out: it comes from the function type of the
     // position the lambda stands in (design principles 5.9). Its return type and the types
     // written inside its parameters are parsed with the flag off, as everywhere else.
@@ -1340,7 +1340,7 @@ void ParserImpl::parseTypeCasePattern() {
     switch (cur_) {
     case TK::Identifier: {
         const std::string_view word = tree_.tokens().text(pos_);
-        if (word == "struct" || word == "tuple") {
+        if (camel::parse::ast::typeCaseKindOfWord(word).has_value()) {
             bump();
             break;
         }

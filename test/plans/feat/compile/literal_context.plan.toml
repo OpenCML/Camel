@@ -53,6 +53,25 @@ expect_stdout = "0\n[0, 1, 4, 9]\n[0.5, 1.0, 1.5]\n[0, 1, 4, 9]\n0\n[[]]\n0\n0\n
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
+# A comprehension is not the empty literal. `[e for x in s]` writes no element list either, so a
+# position that stated an array type used to build it as `[]` and drop every round without a word:
+# the name held an empty array and the rounds were never counted (design principles 4.2, 5.1).
+# A comprehension is a value of its own, and the position's type reaches it the way it reaches the
+# same comprehension returned from a function with that declared type.
+
+[[tests]]
+name = "context.comprehension_position"
+desc = "A comprehension written where a `T[]` is stated keeps its rounds: a declaration's annotation, a `var` declaration, an `as` cast, an element of a tuple, and the declared return type of a function (the position that always worked). It used to be built as the empty array literal, silently."
+kind = "behavior"
+case = "../../../cases/compile/literals/comprehension_in_position.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "[0.0, 1.0, 2.0, 3.0] 4\n[1, 2, 3, 4] 4\n4 7\n[0.0, 0.5, 1.0, 1.5] 4\n[0, 1, 4, 9] 4\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
 # The rule is a compile-time rule: a value that does not fit the type it is given is an error at
 # the position that gave it the type, not a fault at run time (and not a wrap-around).
 
@@ -233,7 +252,7 @@ case = "../../../cases/compile/literals/context_truncated.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 8
 expect_diagnostic_column = 5
 expect_output_contains = ["'1.9'", "type 'int'", "the value would be truncated"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -247,7 +266,7 @@ case = "../../../cases/compile/literals/context_not_a_number.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 6
 expect_diagnostic_column = 16
 expect_output_contains = ["12abc", "type 'int'", "the text is not a number"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -261,7 +280,7 @@ case = "../../../cases/compile/literals/context_text_declared_int.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 8
 expect_diagnostic_column = 5
 expect_output_contains = ["This value has type 'string', which is not the declared type 'int'", "'int(s)' or 'parse_int(s)'"]
 expect_output_not_contains = ["the text is not a number", "LiteralNotRepresentable"]
@@ -276,7 +295,7 @@ case = "../../../cases/compile/literals/context_text_declared_float.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_diagnostic_column = 5
 expect_output_contains = ["This value has type 'string', which is not the declared type 'float'"]
 expect_output_not_contains = ["the text is not a number", "LiteralNotRepresentable"]
@@ -291,7 +310,7 @@ case = "../../../cases/compile/literals/context_text_declared_complex.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_diagnostic_column = 5
 expect_output_contains = ["This value has type 'string', which is not the declared type 'c128'"]
 expect_output_not_contains = ["the text is not a number", "LiteralNotRepresentable"]
@@ -306,7 +325,7 @@ case = "../../../cases/compile/literals/context_text_as_int.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DynamicCastForbidden"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 8
 expect_diagnostic_column = 13
 expect_output_contains = ["Dynamic cast from 'string' to 'int' is not allowed", "'int(s)' or 'parse_int(s)'"]
 expect_output_not_contains = ["the text is not a number", "LiteralNotRepresentable"]
@@ -321,7 +340,7 @@ case = "../../../cases/compile/literals/context_text_out_of_range.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_diagnostic_column = 16
 expect_output_contains = ["99999999999999999999", "type 'int'", "out of range (-9223372036854775808 to 9223372036854775807)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -335,7 +354,7 @@ case = "../../../cases/compile/literals/context_text_float_out_of_range.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_diagnostic_column = 18
 expect_output_contains = ["1e999", "type 'float'", "out of range (at most about 1.8e308 in magnitude)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -349,7 +368,7 @@ case = "../../../cases/compile/literals/context_conversion_out_of_range.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_diagnostic_column = 16
 expect_output_contains = ["'5000000000'", "type 'i32'", "out of range (-2147483648 to 2147483647)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -363,7 +382,7 @@ case = "../../../cases/compile/literals/context_array_element_out_of_range.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_diagnostic_column = 25
 expect_output_contains = ["'3000000000'", "type 'i32'", "out of range (-2147483648 to 2147483647)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -377,7 +396,7 @@ case = "../../../cases/compile/literals/context_pattern_out_of_range.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 8
 expect_diagnostic_column = 14
 expect_output_contains = ["'5000000000'", "type 'i32'", "out of range (-2147483648 to 2147483647)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -385,15 +404,15 @@ timeout_ms = 8000
 
 [[tests]]
 name = "context.struct_field_variable"
-desc = "A field of a struct literal written as a name is a variable: `let p: Point = { x: n, y: 2.0 }` with `n` an int does not meet the declared type (DeclaredTypeMismatch), though its literal fields do take the type."
+desc = "A field of a struct literal written as a name is a variable: it is a value of its own type and takes no type from the position, so `let p: Point = { x: n, y: 2.0 }` with `n` an int reports the field at itself as ElementTypeMismatch, naming the field and the type the field states -- a struct field is a position with an expected type like an array or a tuple element (design principles 5.1)."
 kind = "negative"
 case = "../../../cases/compile/literals/context_struct_field_variable.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
-expect_diagnostic_line = 11
-expect_diagnostic_column = 5
-expect_output_contains = ["type '{ x: int, y: float }'", "declared type 'Point'"]
+expect_diagnostic_name = "SemanticDiag::ElementTypeMismatch"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 25
+expect_output_contains = ["Cannot insert data of type 'int' into a(n) field 'x' of 'Point' with element type 'float'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -420,7 +439,7 @@ case = "../../../cases/compile/literals/context_loop_state_variable.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
-expect_diagnostic_line = 14
+expect_diagnostic_line = 13
 expect_diagnostic_column = 5
 expect_output_contains = ["This value has type 'float', which is not the declared type 'f32'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -500,6 +519,40 @@ expect_stdout = "10 10 10\nabc 10\n10 4.0\n5 0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
+# `x->f` is `f(x, ...)`, so a composite literal in the receiver of the arrow is the first
+# ordinary argument and takes the parameter's type by the same rule (design principles 4.4, 5.1):
+# `[1.0, 2.0]->total` with `total(xs: f32[])` is an `f32[]`, an integer element takes the element
+# type, a struct and a tuple receiver become the parameter's type, and the elements are converted
+# once from the values as they were written (1.00000012, not the 1 the double prints).
+
+[[tests]]
+name = "context.arrow_receiver"
+desc = "A composite literal in the receiver of `->` takes the parameter's type: `[1.0, 2.0]->total` with `xs: f32[]` is an `f32[]` (an integer element too), `[]` is the empty one, a nested array, a struct literal and a struct literal with an array field become the parameter's type, and so does a tuple. The receiver enters the first call of a chain, an argument written after the receiver is an argument like any other, and the element just above the f32 midpoint prints 1.00000012 where the same array written in a declared `f32[]` position prints 1 (that one is a `float[]` rounded through the double)."
+kind = "behavior"
+case = "../../../cases/compile/literals/context_arrow_receiver.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_not_contains = ["Error", "Warn"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+expect_stdout_exact = "3.0 3 0 3.0\n25.0 12.0 3.5\n4.0 3.0\n3 3\n"
+timeout_ms = 8000
+
+[[tests]]
+name = "context.arrow_receiver_out_of_range"
+desc = "An element of a composite literal in the receiver of `->` takes the element type of the parameter: 3000000000 does not fit the i32 of `sum32`, and the arrow call is refused with `LiteralNotRepresentable` (quoting the element) instead of `NoMatchingFunction`."
+kind = "negative"
+case = "../../../cases/compile/literals/context_arrow_receiver_out_of_range.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
+expect_diagnostic_line = 13
+expect_diagnostic_column = 17
+expect_output_contains = ["'3000000000'", "type 'i32'", "out of range (-2147483648 to 2147483647)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
 [[tests]]
 name = "context.array_argument_out_of_range"
 desc = "An element of an array literal argument takes the element type of the parameter: 3000000000 does not fit the i32 of `sum32([1, 3000000000])`, and the call is refused with `LiteralNotRepresentable` (quoting the element) instead of `NoMatchingFunction`."
@@ -508,7 +561,7 @@ case = "../../../cases/compile/literals/context_array_argument_out_of_range.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
-expect_diagnostic_line = 14
+expect_diagnostic_line = 13
 expect_diagnostic_column = 23
 expect_output_contains = ["'3000000000'", "type 'i32'", "out of range (-2147483648 to 2147483647)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -522,7 +575,7 @@ case = "../../../cases/compile/literals/context_struct_argument_out_of_range.cml
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
-expect_diagnostic_line = 13
+expect_diagnostic_line = 12
 expect_diagnostic_column = 21
 expect_output_contains = ["'1e40'", "type 'f32'", "out of range (at most about 3.4e38 in magnitude)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -536,7 +589,7 @@ case = "../../../cases/compile/literals/context_array_argument_element_text.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
-expect_diagnostic_line = 12
+expect_diagnostic_line = 11
 expect_diagnostic_column = 21
 expect_output_contains = ["'1e40'", "type 'f32'", "out of range (at most about 3.4e38 in magnitude)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -549,7 +602,7 @@ kind = "negative"
 case = "../../../cases/compile/literals/context_argument_name.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["context_argument_name.cml:12:17: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "(int[])", "pick: (xs: f32[]) => f32"]
+expect_output_contains = ["context_argument_name.cml:11:17: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "(int[])", "pick: (xs: f32[]) => f32"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -560,7 +613,7 @@ kind = "negative"
 case = "../../../cases/compile/literals/context_struct_argument_shape.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["context_struct_argument_shape.cml:13:17: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "({ x: float })", "norm: (p: Point) => f32"]
+expect_output_contains = ["context_struct_argument_shape.cml:12:17: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "({ x: float })", "norm: (p: Point) => f32"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -575,7 +628,7 @@ case = "../../../cases/compile/literals/context_underflow_float.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_diagnostic_column = 20
 expect_output_contains = ["'1e-9999'", "type 'float'", "too small to be represented (the nearest value is zero)"]
 expect_output_not_contains = ["out of range"]
@@ -590,7 +643,7 @@ case = "../../../cases/compile/literals/context_underflow_f32.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_diagnostic_column = 5
 expect_output_contains = ["'1e-50'", "type 'f32'", "too small to be represented (the nearest value is zero)"]
 expect_output_not_contains = ["out of range"]
@@ -610,7 +663,7 @@ case = "../../../cases/compile/literals/context_struct_field_text.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
-expect_diagnostic_line = 13
+expect_diagnostic_line = 12
 expect_diagnostic_column = 33
 expect_output_contains = ["This value has type 'string', which is not the declared type 'float'", "'string(n)' for a number written as text"]
 expect_output_not_contains = ["LiteralNotRepresentable", "the text is not a number"]
@@ -625,7 +678,7 @@ case = "../../../cases/compile/literals/context_tuple_field_text.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_diagnostic_column = 30
 expect_output_contains = ["This value has type 'string', which is not the declared type 'float'"]
 expect_output_not_contains = ["LiteralNotRepresentable", "the text is not a number"]
@@ -640,7 +693,7 @@ case = "../../../cases/compile/literals/context_tuple_argument_text.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
-expect_diagnostic_line = 10
+expect_diagnostic_line = 9
 expect_diagnostic_column = 22
 expect_output_contains = ["This value has type 'string', which is not the declared type 'float'"]
 expect_output_not_contains = ["NoMatchingFunction", "LiteralNotRepresentable"]
@@ -655,7 +708,7 @@ case = "../../../cases/compile/literals/context_nested_field_text.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
-expect_diagnostic_line = 11
+expect_diagnostic_line = 10
 expect_diagnostic_column = 33
 expect_output_contains = ["This value has type 'string', which is not the declared type 'float'"]
 expect_output_not_contains = ["LiteralNotRepresentable", "the text is not a number"]
@@ -670,7 +723,7 @@ case = "../../../cases/compile/literals/context_argument_field_text.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
-expect_diagnostic_line = 14
+expect_diagnostic_line = 13
 expect_diagnostic_column = 29
 expect_output_contains = ["This value has type 'string', which is not the declared type 'float'"]
 expect_output_not_contains = ["NoMatchingFunction", "LiteralNotRepresentable"]
@@ -685,7 +738,7 @@ case = "../../../cases/compile/literals/context_return_field_text.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 8
 expect_diagnostic_column = 34
 expect_output_contains = ["This value has type 'string', which is not the declared type 'float'"]
 expect_output_not_contains = ["ReturnTypeMismatch", "LiteralNotRepresentable"]
@@ -703,7 +756,7 @@ case = "../../../cases/compile/literals/context_declared_string_int.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 8
 expect_diagnostic_column = 5
 expect_output_contains = ["This value has type 'int', which is not the declared type 'string'", "'string(n)' for a number written as text"]
 expect_output_not_contains = ["LiteralNotRepresentable", "cannot be represented"]
@@ -718,7 +771,7 @@ case = "../../../cases/compile/literals/context_declared_string_array.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_diagnostic_column = 5
 expect_output_contains = ["This value has type 'int[]', which is not the declared type 'string'"]
 expect_output_not_contains = ["LiteralNotRepresentable", "cannot be represented"]
@@ -733,7 +786,7 @@ case = "../../../cases/compile/literals/context_declared_string_complex.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_diagnostic_column = 5
 expect_output_contains = ["This value has type 'c128', which is not the declared type 'string'"]
 expect_output_not_contains = ["LiteralNotRepresentable", "cannot be represented"]
@@ -753,7 +806,7 @@ case = "../../../cases/compile/literals/tensor_literal_out_of_range.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 8
 expect_diagnostic_column = 16
 expect_output_contains = ["The literal '1.0e40' cannot be represented as type 'f32'", "out of range (at most about 3.4e38 in magnitude)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -767,7 +820,7 @@ case = "../../../cases/compile/literals/tensor_scalar_mismatch.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
-expect_diagnostic_line = 10
+expect_diagnostic_line = 9
 expect_diagnostic_column = 16
 expect_output_contains = ["Invalid call to '__mul__'", "(f32[3], float)", "the scalar operand has type 'float', but the tensor's element type is 'f32'", "write the conversion, f32(value)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -788,7 +841,7 @@ case = "../../../cases/compile/literals/element_literal_not_representable.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
-expect_diagnostic_line = 10
+expect_diagnostic_line = 9
 expect_diagnostic_column = 16
 expect_output_contains = ["The literal '0.5' cannot be represented as type 'int'", "the value would be truncated"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -802,7 +855,7 @@ case = "../../../cases/compile/literals/element_literal_not_representable_generi
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
-expect_diagnostic_line = 13
+expect_diagnostic_line = 12
 expect_diagnostic_column = 16
 expect_output_contains = ["The literal '0.5' cannot be represented as type 'int'", "the value would be truncated", "in the instance 'half<int[4]>' of the generic function 'half' with T = int[4]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -816,7 +869,7 @@ case = "../../../cases/compile/literals/element_literal_not_representable_array.
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_diagnostic_column = 16
 expect_output_contains = ["The literal '0.5' cannot be represented as type 'int'", "the value would be truncated"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -859,14 +912,72 @@ timeout_ms = 8000
 
 [[tests]]
 name = "context.composite_holes_mismatch"
-desc = "A computed element is a value of its own type and takes no type from the position: `float` where the field is `int`, and a computed `f64[]` where the field is an `f32[2]`, each leave the literal the type its own elements give it, so its literal siblings are not converted either and the return type mismatch is the one reported before (design principles 5.1)."
+desc = "A field of a struct literal is a position with an expected type like an array or a tuple element (design principles 5.1): a computed field is a value of its own type and takes no type from the position, so `float` where the field is `int`, and a computed `f64[]` where the field is an `f32[2]`, are each reported at the field itself as `ElementTypeMismatch`, naming the field and the type the position gives it."
 kind = "negative"
 case = "../../../cases/compile/literals/context_composite_holes_mismatch.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ReturnTypeMismatch"
-expect_diagnostic_line = 15
-expect_diagnostic_column = 35
-expect_output_contains = ["'{ n: float, t: (float, float) }'", "declared return type 'MA'", "'{ n: int, v: float[] }'", "declared return type 'MB'"]
+expect_diagnostic_name = "SemanticDiag::ElementTypeMismatch"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const diags = input.diagnostics.filter((d) => d.name === 'SemanticDiag::ElementTypeMismatch')
+assert(diags.length === 2, `expected one element type mismatch per struct, got ${JSON.stringify(input.diagnostics)}`)
+const at = diags.map((d) => `${d.line}:${d.column}`).join(',')
+assert(at === '14:47,17:54', `expected the computed fields at 15:47 and 18:54, got ${at}`)
+const out = input.normalized.output
+assert(out.includes("a(n) field 'n' of 'MA' with element type 'int'"), `the field and its type are named: ${out}`)
+assert(out.includes("a(n) field 'v' of 'MB' with element type 'f32[2]'"), `the field and its type are named: ${out}`)
+assert(input.diagnostics.every((d) => d.name === 'SemanticDiag::ElementTypeMismatch'), `unexpected diagnostic: ${JSON.stringify(input.diagnostics)}`)
+}
+"""
+timeout_ms = 8000
+
+# The expected type of a position reaches the elements of a literal with a computed element by
+# one path, in all three positions alike (design principles 5.1): the elements the literal wrote
+# take the position's element type, and the computed element is checked against that type rather
+# than converted. `f32(n)` already is the element type of `f32[]`, so all three pass; `float(n)`
+# is a `float` and is not one, so all three report the element type mismatch at the computed
+# element -- none of them reports "no matching function".
+
+[[tests]]
+name = "context.composite_holes_positions"
+desc = "The expected type of a position reaches a literal with a computed element in the argument position, the declaration position and the receiver of `->` alike: `[1.0000000596046447753906251, f32(n)]` in an `f32[]` is an `f32[]` in each of the three, and the element written just above the f32 midpoint prints 1.00000012 -- the computed element `f32(n)` is checked against the element type, not converted."
+kind = "behavior"
+case = "../../../cases/compile/literals/context_composite_holes_positions.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_not_contains = ["Error", "Warn"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = ["1.00000012", "1.00000012", "1.00000012"].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "context.composite_holes_positions_mismatch"
+desc = "The other side of the same rule, in the three positions alike: `[1.0, float(n)]` does not stand in an `f32[]` -- `float(n)` is a `float` -- and the argument position, the declaration position and the receiver of `->` each report `ElementTypeMismatch` at the computed element. Before this the three reported three different things, a call with no matching function among them."
+kind = "negative"
+case = "../../../cases/compile/literals/context_composite_holes_positions_mismatch.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ElementTypeMismatch"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const diags = input.diagnostics.filter((d) => d.name === 'SemanticDiag::ElementTypeMismatch')
+assert(diags.length === 3, `expected one element type mismatch per position, got ${JSON.stringify(input.diagnostics)}`)
+const lines = diags.map((d) => d.line).join(',')
+assert(lines === '13,16,20', `expected the computed elements at lines 13, 16 and 20, got ${lines}`)
+const at = diags.map((d) => `${d.line}:${d.column}`).join(',')
+assert(at === '13:64,16:32,20:58', `expected the three positions to name the same element, got ${at}`)
+assert(input.diagnostics.every((d) => d.name === 'SemanticDiag::ElementTypeMismatch'), `unexpected diagnostic among the three: ${JSON.stringify(input.diagnostics)}`)
+}
+"""
 timeout_ms = 8000

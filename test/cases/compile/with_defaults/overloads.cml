@@ -1,0 +1,32 @@
+/**
+ * A `with` parameter with a default may be left out, as an ordinary parameter with a default may,
+ * also when the function shares its name with others: a declaration accepts every count of `with`
+ * arguments from its required ones to its full arity, a named argument may skip a defaulted one in
+ * the middle, and the declarations are told apart by the arguments that are written.
+ */
+
+with <axis: int, keepdims: bool = false>
+func g(xs: float[..]): int { return if keepdims then axis + 100 else axis }
+
+func g(xs: float[]): int { return 7 }
+
+with <a: int, b: int = 1, c: int = 2>
+func h(xs: int[]): int { return a * 100 + b * 10 + c }
+
+with <a: int>
+func h(xs: string[]): int { return a }
+
+with <axis: int, keepdims: bool = false, scale: int = 10>
+func gg::<T>(xs: T[..]): int { return if keepdims then axis * scale + 1 else axis * scale }
+
+func gg::<T>(xs: T[]): int { return -1 }
+
+func main(): int sync {
+    let x = [1.0, 2.0]
+    println(g(x), x->g<0>, x->g<3, true>)
+    let n = [1, 2]
+    println(n->h<5>, n->h<5, 3>, n->h<5, 3, 4>, n->h<a: 5, c: 9>)
+    println(['a']->h<8>)
+    println(gg(x), x->gg<2>, x->gg<2, true>, x->gg<2, scale: 5>, x->gg<axis: 3, keepdims: true>)
+    return 0
+}

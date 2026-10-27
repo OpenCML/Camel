@@ -1,18 +1,18 @@
 /**
  * A file written before exit(5) is complete on disk; what follows the exit is not written.
  */
-module file_written_before_exit
 
 import { write_text, read_text, mkdirs } from fs
 import { get_env } from env
+import { exit } from process
 
 func main(): int sync {
-    let dir = get_env('CAMEL_TEST_DIR')
-    mkdirs(dir)
-    let path = dir + '/' + get_env('CAMEL_TEST_FILE')
-    write_text(path, 'complete content, 28 bytes.\n')
-    println(len(read_text(path)))
+    let dir = get_env('CAMEL_TEST_DIR') ?? ''
+    let _ = dir->mkdirs
+    let path = dir + '/' + (get_env('CAMEL_TEST_FILE') ?? '')
+    let _ = 'complete content, 28 bytes.\n'->write_text<path>
+    println(len(path->read_text !! ''))
     exit(5)
-    write_text(path, 'not reached')
+    let _ = 'not reached'->write_text<path>
     return 0
 }

@@ -1,7 +1,6 @@
 /**
  * Checks using namespace over built-in module imports restores direct exported symbols.
  */
-module module_import_using_builtins
 
 import tensor
 using namespace tensor

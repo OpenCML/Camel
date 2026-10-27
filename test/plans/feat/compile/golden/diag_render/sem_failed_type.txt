@@ -1,7 +1,7 @@
 error[SemanticDiag::UnresolvedTypeReference]: Unresolved type reference: 'Unknown'.
-  --> <ROOT>/test/cases/compile/diag_render/sem_failed_type.cml:3:10
+  --> <ROOT>/test/cases/compile/diag_render/sem_failed_type.cml:1:10
    |
- 3 | type T = Unknown
+ 1 | type T = Unknown
    |          ^^^^^^^
 help: Ensure the type is defined and visible in the current scope.
 

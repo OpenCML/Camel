@@ -2,7 +2,6 @@
 // interruptible at the safepoint FastVM has (LEND), so the collector runs while compiled code
 // holds the state in its frame, and a reference kept anywhere but the frame would be moved out
 // from under it.
-module compiled_churn
 
 import { get_env } from env
 
@@ -12,7 +11,7 @@ func churn(n: int): int {
 }
 
 func main(): int sync {
-    let n = int(get_env('N'))
+    let n = int(get_env('N') ?? '')
     println(churn(n))
     println('done')
     return 0

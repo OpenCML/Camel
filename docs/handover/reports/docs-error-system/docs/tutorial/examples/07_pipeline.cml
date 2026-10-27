@@ -1,0 +1,30 @@
+// A pipeline writes only the good path. An error slips past every step after the one that made
+// it, and is handled once, at the end.
+// Run: camel docs/tutorial/examples/07_pipeline.cml
+
+func check_age(age: int): int! {
+    return if age < 0 || age > 150
+        then error('OutOfRange', 'age ' + string(age) + ' is not possible')
+        else age
+}
+
+func decade(age: int): string { return string(age / 10 * 10) + 's' }
+
+func label(text: string): string {
+    return text->parse_int->check_age->decade !! 'unknown'
+}
+
+func why(text: string): string {
+    return match text->parse_int->check_age {
+        case error e => e.kind + ': ' + e.message
+        case v => 'ok ' + string(v)
+    }
+}
+
+func main(): int sync {
+    println(label('34'), label('200'), label('abc'))
+    println(why('34'))
+    println(why('200'))
+    println(why('-5'))
+    return 0
+}

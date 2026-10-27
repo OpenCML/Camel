@@ -266,8 +266,8 @@ Camel 里没有“提前返回”。让分支成为函数体的最后一个表�
 
 func main(): int sync {
     let xs = 1..11    // [1, ..., 10]
-    let squares = xs->map<(x: int): int => x * x>
-    let evens = squares->filter<(x: int): bool => x % 2 == 0>
+    let squares = xs->map<(x) => x * x>
+    let evens = squares->filter<(x) => x % 2 == 0>
     let total = evens->reduce<(acc: int, x: int): int => acc + x, 0>
 
     println(xs)
@@ -276,11 +276,11 @@ func main(): int sync {
     println(total)
 
     // Arrays are values: slice and concat return new arrays.
-    let ys = concat(xs->slice<0, 3>, [99])
-    println(ys, len(ys), head(ys))
+    let ys = concat(xs[0:3], [99])
+    println(ys, len(ys), ys[0])
 
     // foreach runs its function for each element, in order.
-    ['a', 'b', 'c']->foreach<(s: string) => sync { println('item', s) }>
+    ['a', 'b', 'c']->foreach<(s) => sync { println('item', s) }>
     return 0
 }
 ```
@@ -306,17 +306,17 @@ item c
 
 ```cml
 
-import { seed, randint } from random
+import { seed, randint, next_key } from random
 
 func main(): int sync {
     seed(42)
-    // Wrong tool: randint advances a hidden state, so each element depends on which ran first.
-    let drawn = 0..8->map<(i: int): int => randint(0, 99)>
+    // Wrong tool: next_key advances a hidden state, so each element depends on which ran first.
+    let drawn = 0..8->map<(i) => next_key()->randint<0, 100>>
     println(drawn)
 
     seed(42)
     // reduce runs in element order on every back end.
-    let ordered = 0..8->reduce<(acc: int[], i: int): int[] => concat(acc, [randint(0, 99)]), [0]->slice<0, 0>>
+    let ordered = 0..8->reduce<(acc: int[], i: int): int[] => concat(acc, [next_key()->randint<0, 100>]), [0][0:0]>
     println(ordered)
     return 0
 }
@@ -325,15 +325,15 @@ func main(): int sync {
 在顺序执行的后端上（默认的 `std::nvm`，以及 `std::fvm`、`std::jit`），两行相同，每次运行都一样：
 
 ```text
-[75, 63, 75, 13, 90, 9, 57, 37]
-[75, 63, 75, 13, 90, 9, 57, 37]
+[22, 72, 89, 99, 60, 96, 66, 2]
+[22, 72, 89, 99, 60, 96, 66, 2]
 ```
 
 换成并行调度 `camel docs/tutorial/examples/05_map_order.cml std::prl`，第一行的顺序就不再有保证，每次运行可能不同；下面是其中一次的输出：
 
 ```text
-[37, 57, 9, 90, 13, 75, 63, 75]
-[75, 63, 75, 13, 90, 9, 57, 37]
+[2, 66, 96, 60, 99, 89, 72, 22]
+[22, 72, 89, 99, 60, 96, 66, 2]
 ```
 
 这是语言规定的行为（设计原则 3.6），不是缺陷：正因为元素之间没有顺序，`map` 才能并行。第二行用的 `reduce` 按元素顺序执行，在所有后端上结果相同。规则很简单：**传给 `map`、`filter` 的函数保持纯；必须按顺序做的事用 `foreach`、`reduce` 或尾递归。**
@@ -463,7 +463,7 @@ g
 3
 ```
 
-写在 lambda 之前的 `sync`（`sync (x: int) => ...`）是另一种用法：它修饰函数类型，保持不变。
+lambda 的函数体需要按顺序执行时，把 `sync` 写在块前：`(x: int) => sync { ... }`。lambda 头上没有 `sync`。
 
 ### 6.5 `var`、引用与顺序
 
@@ -540,7 +540,7 @@ func main(): int sync {
     println(ops->map<(f: (x: int) => int): int => f(10)>)
 
     var total = 0                            // captured by reference
-    [1, 2, 3]->foreach<sync (x: int) => sync { total = total + x }>
+    [1, 2, 3]->foreach<(x) => sync { total = total + x }>
     println(total)
     return 0
 }
@@ -627,7 +627,7 @@ Camel 没有异常，没有 `try`/`catch`。可能失败的函数把返回类型
 
 func safe_div(a: int, b: int): int! {
     return if b == 0 then {
-        throw error('DivByZero', 'the divisor is zero')
+        return error('DivByZero', 'the divisor is zero')
     } else {
         return a / b
     }
@@ -645,8 +645,8 @@ func describe(r: int!): string {
 func main(): int sync {
     println(safe_div(9, 3) !! -1)            // 3
     println(safe_div(9, 0) !! -1)            // -1: the substitute
-    println(describe(safe_div(8, 2) ?-> inc))
-    println(describe(safe_div(8, 0) ?-> inc))
+    println(describe(safe_div(8, 2) -> inc))
+    println(describe(safe_div(8, 0) -> inc))
     println(parse_int('12') !! 0, parse_int('twelve') !! 0)
     println(safe_div(1, 0))
     return 0
@@ -662,10 +662,10 @@ DivByZero: the divisor is zero
 error DivByZero: the divisor is zero
 ```
 
-- **`throw e` 是返回一个错误值**，与 `return` 是同一种结构。它不展开调用栈；调用方拿到的就是一个 `int!` 的值。
+- **交出一个错误值用 `return e`**：它不展开调用栈；调用方拿到的就是一个 `int!` 的值。
 - `int!` 不能当 `int` 用，必须先拆开：
   - `a !! b`：出错取 `b`，否则取里面的值；
-  - `x ?-> f`：出错就把错误原样传下去，否则调用 `f`，可以连成一串；
+  - `x -> f`：出错就把错误原样传下去，否则调用 `f`，可以连成一串；
   - `match` 的 `case error e`（`e.kind`、`e.message`、`e.location`）与 `case v`。
 - 在图上，这三种写法都是一个分支，条件是值上的一位标记，与 `if` 是同一种结构。
 
@@ -809,26 +809,26 @@ func main(): int sync {
 
 ```cml
 
-import { split, trim, to_upper, replace, find } from str
+import { split, trim, to_upper, replace, index_of } from str
 import { sort_by, take, sum, reverse, unique } from array
 import { abs, hypot, bit_and, pi } from math
-import { mean } from statistics
+import { mean } from array
 
 func main(): int sync {
     // Strings: the value goes in on the left, what configures the call goes in angle brackets.
-    let words = '  pear, fig ,apple, fig '->trim->split<','>->map<(w: string): string => trim(w)>
+    let words = '  pear, fig ,apple, fig '->trim->split<','>->map<(w) => trim(w)>
     println(words)
     println(words->unique->sort_by<(w: string): int => len(w)>->take<2>)
     println('hello'->to_upper, 'a-b-c'->replace<'-', '+'>, len('héllo'))
 
     // A result that may not exist is a T?.
-    let at_l = 'hello'->find<'l'> ?? -1
-    let at_z = 'hello'->find<'z'> ?? -1
+    let at_l = 'hello'->index_of<'l'> ?? -1
+    let at_z = 'hello'->index_of<'z'> ?? -1
     println(at_l, at_z)
 
     // Arrays and numbers.
     let xs = [3, -1, 4, -1, 5]
-    println(sum(xs), reverse(xs), xs->map<(x: int): int => abs(x)>)
+    println(sum(xs), reverse(xs), xs->map<(x) => abs(x)>)
     println(mean([1.0, 2.0, 4.0]), hypot(3.0, 4.0), bit_and(6, 3))
     println('{:.4f}'->format<pi>)
     return 0

@@ -4,7 +4,6 @@
  * copying and full marking) in between, so a view whose owner was freed or
  * moved without it would print different sums.
  */
-module reshape_view_gc
 
 import { reshape, flatten, unsqueeze, new, sum, concat } from tensor
 

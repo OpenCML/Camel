@@ -13,10 +13,12 @@
 #include "camel/core/tags.h"
 #include "camel/core/type/bytes.h"
 #include "camel/core/type/collection.h"
+#include "camel/core/type/native.h"
 #include "camel/core/type/composite/stream.h"
 #include "camel/core/type/enum.h"
 #include "camel/core/type/other.h"
 #include "camel/core/type/text.h"
+#include "camel/core/type/typecall.h"
 #include "camel/core/type/typevar.h"
 #include "camel/parse/ast/type.h"
 #include "camel/utils/escape.h"
@@ -281,8 +283,38 @@ pair<data_ptr_t, bool> Builder::extractData(const node_ptr_t &node, node_ptr_t &
     // expression: `((h, k), 1)` is `let a = (h, k)` then `(a, 1)`. Embedded as a constant it
     // kept its unresolved element types ("(ref, ref)") and its names were never filled.
     if (data && !isUnresolvedLiteral(data)) {
+        if (node->type() == NodeKind::DREF) {
+            // A name: read where the literal is built, unless an element computed after it is
+            // hoisted first.
+            auto entry = std::find_if(
+                pendingNames_.begin(), pendingNames_.end(), [&](const auto &candidate) {
+                    return candidate.first == execNode;
+                });
+            if (entry == pendingNames_.end()) {
+                pendingNames_.emplace_back(execNode, std::vector<PendingName>{});
+                entry = std::prev(pendingNames_.end());
+            }
+            entry->second.push_back(
+                PendingName{std::dynamic_pointer_cast<camel::core::data::RefData>(data), node});
+        }
         return make_pair(data, false);
     } else {
+        // The names written before this element are used before it: they are hoisted ahead of it.
+        const auto entry = std::find_if(
+            pendingNames_.begin(), pendingNames_.end(), [&](const auto &candidate) {
+                return candidate.first == execNode;
+            });
+        if (entry != pendingNames_.end()) {
+            for (const PendingName &name : entry->second) {
+                auto [nameNode, nameData] = makeRefData(name.expr);
+                *execNode << nameNode;
+                if (name.data != nullptr) {
+                    name.data->rename(
+                        std::dynamic_pointer_cast<camel::core::data::RefData>(nameData)->ref());
+                }
+            }
+            entry->second.clear();
+        }
         auto [refNode, refData] = makeRefData(node);
         *execNode << refNode;
         return make_pair(refData, true);
@@ -328,6 +360,9 @@ void Builder::initInnerTypes() {
     // The type of binary data (design principles 11.1), a built-in name like `string`.
     typeScope_->insert(Reference("Bytes"), camel::core::type::BytesType::get());
     typeScope_->insert(Reference("void"), Type::Void());
+    // The bottom type (design principles 3.9): a function that never returns, and an
+    // expression that leaves the function, are written `never`.
+    typeScope_->insert(Reference("never"), Type::Never());
     // The built-in collection types, written `Map<K, V>` and `Set<T>` (design principles 11.3).
     typeScope_->insert(Reference("Map"), MapType::prototype());
     typeScope_->insert(Reference("Set"), SetType::prototype());
@@ -396,10 +431,8 @@ static void reportLiteralCastFailure(
 
 node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
     ENTER("Module");
-    // Ensure the AST node is of the expected type
-    ASSERT(ast->type() == AST::LoadType::Module, "Expected ModuleLoad type");
-
-    module_->setDeclaredName(ast->loadAs<AST::ModuleLoad>()->getModuleNameOrEmpty());
+    // The root of a file, and the module the file is; the file's name is its name.
+    ASSERT(ast->type() == AST::LoadType::Module, "Expected the module load at the root");
     // Extract different parts of the module node
     auto importNodes   = ast->atAs<AST::RepeatedLoad>(0);
     auto exportOptNode = ast->atAs<AST::OptionalLoad>(1);
@@ -560,6 +593,30 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
         try {
             visitResourceDecl(stmt);
         } catch (const BuildAbortException &) {
+        }
+    }
+    // A `var` at the top level is a resource of the module, named by the variable (design
+    // principles 3.5): `uses cnt` names it like any other, and a function that reads or writes it
+    // is measured as touching it. It is declared with the resources, before any clause is read.
+    for (const auto &stmt : *stmtNodes) {
+        if (stmt->type() != AST::LoadType::Stmt ||
+            stmt->loadAs<AST::StmtLoad>()->stmtType() != AST::StmtType::Data) {
+            continue;
+        }
+        const auto &declared = stmt->loadAs<AST::DataDeclLoad>();
+        if (!declared->isVar()) {
+            continue;
+        }
+        for (const Reference &ref : declared->refs()) {
+            if (module_->resource(ref) != nullptr) {
+                continue; // a second declaration of the name is reported where it is built
+            }
+            camel::core::module::Module::ResourceDecl resource;
+            resource.variable = true;
+            module_->declareResource(ref, std::move(resource));
+            if (exportedRefs_.contains(ref.toString())) {
+                module_->setResourceExported(ref);
+            }
         }
     }
     try {
@@ -975,6 +1032,33 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
     // program: in a sync block the initializer keeps its place in the block's order.
     node_ptr_t res = makeExec(false, true);
 
+    if (dataNodes->size() == 0) {
+        // `export let inf: float`: no right side. The value is the one the C++ module of the
+        // declaration registers under the name (design principles 6.4); the declaration is its
+        // type, and the graph builder reads the module.
+        if (refs.size() != 1 || typeNodes->size() != 1 || isVar) {
+            diags_->of(SemanticDiag::TupleUnpackingCountMismatch)
+                .at(ast->load()->tokenRange())
+                .commit();
+            throw BuildAbortException();
+        }
+        if (!validateIdent(refs[0].ident())) {
+            diags_->of(SemanticDiag::ReservedIdentifier).at(dataDeclLoad->tokenRange()).commit();
+            throw BuildAbortException();
+        }
+        Type *declaredType  = visitType(typeNodes->atAs<AST::TypeLoad>(0));
+        node_ptr_t nRefNode = tree_->makeNRef(refs[0].toString());
+        tree_->markNativeValue(nRefNode, declaredType);
+        setOriginFromOrigin(
+            context_,
+            nRefNode,
+            findBindingOrigin(context_, ast, 0),
+            camel::source::OriginKind::GctNode,
+            "gct.nref");
+        LEAVE("DataDecl");
+        return nRefNode;
+    }
+
     // The declaration binds one name, several names, or the elements of a tuple (the
     // parenthesized carrier). A struct or an array carrier is not in the language: the
     // parser refuses it, so no declaration reaches here with one.
@@ -1276,7 +1360,9 @@ bool Builder::resolveAmbientResource(
                     // in is half of its identity, and that is what the operator's own declaration
                     // and this clause are compared as (see resourceIdentities).
                     out.push_back(
-                        in.get() == module_.get() ? written : in->name() + "::" + written);
+                        in.get() == module_.get() && !decl->variable
+                            ? written
+                            : in->name() + (decl->variable ? ":" : "::") + written);
                     return true;
                 }
                 for (const Reference &member : decl->members) {
@@ -1633,7 +1719,6 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
     ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for TypeDecl");
     const auto &typeNode = ast->optAtAs<AST::TypeLoad>(0);
     Type *type;
-    ASSERT(typeNode, "TypeDecl must have a type");
     const auto &typeLoad = ast->loadAs<AST::TypeDeclLoad>();
     // A declaration in error declares nothing; uses of the name follow from that error.
     struct PoisonOnFailure {
@@ -1668,7 +1753,32 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
             : self(b), outer(std::exchange(b.fieldTagOwner_, owner)) {}
         ~FieldTagOwner() { self.fieldTagOwner_ = outer; }
     } fieldTagOwner(*this, declNode);
-    if (typeNode->loadAs<AST::TypeLoad>()->typeType() == AST::TypeType::Enum) {
+    if (!typeNode && !typeLoad->params().empty() && module_->name() == "types" &&
+        TypeCallType::isTypeFunction(typeLoad->ref().toString())) {
+        // `export type ElementOf<T>`: a primitive type function (design principles 5.6), declared
+        // here without a body; the compiler takes the type apart where `match type` cannot.
+        const string typeName = typeLoad->ref().toString();
+        struct TypeScopeGuard {
+            Builder &self;
+            scope_ptr_t<Reference, Type *> outer;
+            ~TypeScopeGuard() { self.typeScope_ = outer; }
+        } typeScopeGuard{*this, typeScope_};
+        pushScope();
+        const std::vector<Type *> parameters = bindTypeParameters(typeLoad.get(), ast, typeName);
+        type = TypeFunctionType::create(
+            typeName, typeLoad->params(), TypeCallType::create(typeName, parameters));
+    } else if (!typeNode) {
+        // `export type Graph`, `export type Txn<F>`: the type is provided by the C++ module of
+        // the same name, under this name (design principles 10.4), like a function without a
+        // body. Its identity is the module and the name.
+        type = camel::core::type::findNativeType(module_->name(), typeLoad->ref().toString());
+        if (type == nullptr) {
+            diags_->of(SemanticDiag::NativeTypeNotProvided)
+                .at(ast->load()->tokenRange())
+                .commit(typeLoad->ref().toString(), module_->name());
+            throw BuildAbortException();
+        }
+    } else if (typeNode->loadAs<AST::TypeLoad>()->typeType() == AST::TypeType::Enum) {
         // The name is in scope before the variants are read, so that a variant field can hold
         // the enum itself (`type Tree = enum { Node(Tree, Tree) }`).
         type = declareEnumType(typeNode, typeLoad.get());
@@ -2041,8 +2151,7 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
     // Ensure the AST node is of the expected type (Stmt)
     ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for ExitStmt");
 
-    // Create an ExitLoad node to represent the exit statement. `throw` is an exit as well:
-    // it returns the failed form of the function's declared `T!` (the graph builder checks).
+    // Create an ExitLoad node to represent the exit statement.
     const AST::ExitType astExit = ast->loadAs<AST::ExitStmtLoad>()->exitType();
     if (astExit == AST::ExitType::Yield) {
         // The syntax reads `yield` (design principles 5.4: a function whose body writes it
@@ -2055,9 +2164,8 @@ node_ptr_t Builder::visitExitStmt(const AST::node_ptr_t &ast) {
         diags_->of(SemanticDiag::FeatureNotSupported).at(ast->load()->tokenRange()).commit("generators");
         throw BuildAbortException();
     }
-    const bool isThrow  = astExit == AST::ExitType::Throw;
-    node_ptr_t exitNode = tree_->makeExit(isThrow ? ExitType::Throw : ExitType::Return);
-    reportExitInUnusedArm(ast, isThrow);
+    node_ptr_t exitNode = tree_->makeExit(ExitType::Return);
+    reportExitInUnusedArm(ast);
 
     // Retrieve the data nodes associated with the exit statement
     const auto &dataNodes = ast->atAs<AST::RepeatedLoad>(0);
@@ -2104,7 +2212,7 @@ void Builder::enterArmOf(const AST::node_ptr_t &ctrl, bool valueUnused) {
     valueUse_.unusedArmOf = valueUnused ? ctrl : nullptr;
 }
 
-void Builder::reportExitInUnusedArm(const AST::node_ptr_t &exit, bool isThrow) {
+void Builder::reportExitInUnusedArm(const AST::node_ptr_t &exit) {
     const AST::node_ptr_t &ctrl = valueUse_.unusedArmOf;
     if (ctrl == nullptr) {
         return;
@@ -2118,7 +2226,7 @@ void Builder::reportExitInUnusedArm(const AST::node_ptr_t &exit, bool isThrow) {
         return;
     }
     const bool isMatch  = ctrl->loadAs<AST::DataLoad>()->dataType() == AST::DataType::MatchExpr;
-    const char *keyword = isThrow ? "throw" : "return";
+    const char *keyword = "return";
     const char *branch  = isMatch ? "match" : "if";
     diags_->of(SemanticDiag::ExitInUnusedBranch)
         .at(range)
@@ -2450,41 +2558,161 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
 
     node_ptr_t opNode = nullptr;
 
-    // A dimension of a subscript that slices is not an element index (design principles 5.4):
-    // `t[a:b]` calls the slice operator, `t[i]` the index operator. The dimensions are counted
-    // because the slice operator names one axis and keeps the other dimensions as they are, so a
-    // subscript that writes bounds on one dimension and `:` for every other one is that one slice,
-    // whichever dimension it slices; a subscript that selects on more than one dimension has no
-    // single node to be.
-    AST::node_ptr_t sliceDimension = nullptr;
-    AST::node_ptr_t writtenSlice   = nullptr;
-    size_t dimension               = 0;
-    size_t sliceDimensionIndex     = 0;
-    size_t writtenSlices           = 0;
-    size_t indexDimensions         = 0;
+    // A subscript writes each dimension of the value it reads: a position `i`, a range `a:b`
+    // (either end left out, a step after a second colon) or an integer array `idx` (design
+    // principles 5.4). A dimension written `:` names nothing and is kept whole. Every written
+    // dimension is one node of the core's own -- the index along that dimension for a position or
+    // an integer array, which drops the dimension, and the slice along it for a range, which keeps
+    // it -- so they are collected here in the order the subscript wrote them and built from the
+    // last one back.
+    struct SubscriptDimension {
+        size_t axis          = 0;       // the dimension of the value the subscript writes on
+        AST::node_ptr_t item = nullptr; // the dimension as written
+        bool namesRange      = false;   // its load names a bound: a range, not a position
+    };
+    std::vector<SubscriptDimension> writtenDimensions;
     if (binaryExpr->op() == AST::BinaryDataOp::Index) {
+        size_t dimension = 0;
         for (const auto &item : *ast->atAs<AST::RepeatedLoad>(1)) {
             const size_t at = dimension++;
-            if (item->type() == AST::LoadType::Data &&
-                item->loadAs<AST::DataLoad>()->dataType() == AST::DataType::Slice) {
-                sliceDimension = item;
-                bool namesRange = false;
-                for (size_t part = 0; part < 3; ++part) {
-                    namesRange = namesRange || item->at(part)->type() != AST::LoadType::Null;
-                }
-                if (namesRange) {
-                    writtenSlice        = item;
-                    sliceDimensionIndex = at;
-                    ++writtenSlices;
-                }
-            } else {
-                ++indexDimensions;
+            if (item->type() != AST::LoadType::Data ||
+                item->loadAs<AST::DataLoad>()->dataType() != AST::DataType::Slice) {
+                writtenDimensions.push_back({at, item, false});
+                continue;
+            }
+            bool namesRange = false;
+            for (size_t part = 0; part < 3; ++part) {
+                namesRange = namesRange || item->at(part)->type() != AST::LoadType::Null;
+            }
+            if (namesRange) {
+                writtenDimensions.push_back({at, item, true});
             }
         }
     }
-    // The dimension the slice runs along: the one the subscript wrote bounds on, and the first
-    // dimension when it wrote none (`t[:]`, `t[:, :]`: every dimension taken whole).
-    const size_t sliceAxis = writtenSlice != nullptr ? sliceDimensionIndex : 0;
+
+    // A subscript is one node per written dimension, from the last dimension written back to the
+    // first (design principles 5.4). Going backwards is what keeps the axis of every dimension the
+    // one the subscript gave it: a node takes or slices one dimension and leaves the number of
+    // every dimension before it as it was, so `t[a:b, c]` slices on axis 0 and then takes the
+    // position on axis 1 of that slice, and the reading of the sliced dimension is the same one
+    // `t[a:b]` has. The dimensions the subscript does not write are kept whole and stay where they
+    // are; the axis of a written dimension is the position it has in the subscript, counted from
+    // the first dimension, so `t[i]` -- the first dimension's position -- is the node a two-word
+    // call is.
+    if (binaryExpr->op() == AST::BinaryDataOp::Index) {
+        const auto intConstant = [this](int64_t value) {
+            return tree_->makeData(makeDataFromLiteral<int64_t>(value));
+        };
+        // The operator of one dimension's node: the subscript's own operator, which is what a
+        // diagnostic about any of the dimensions it wrote points at.
+        const auto makeOperator = [&](const char *group) {
+            node_ptr_t node = tree_->makeDRef(group);
+            setOriginFromOrigin(
+                context_,
+                node,
+                findSemanticOrigin(
+                    astSemantic(context_, ast), camel::source::SemanticRole::Operator),
+                camel::source::OriginKind::GctNode,
+                "gct.binary.operator");
+            return node;
+        };
+        // A dimension written as a position or an integer array: the index node along that
+        // dimension, which is the value with the dimension dropped. The axis is the node's third
+        // word and is written only when it is not the first dimension, so `t[i]` is the two-word
+        // call the module declarations of `__idx__` carry and the adjoints' call sites write.
+        const auto buildIndex = [&](const SubscriptDimension &dim, const node_ptr_t &base) {
+            node_ptr_t indexNode = visitData(dim.item);
+            node_ptr_t opNode    = makeOperator("__idx__");
+            node_ptr_t node      = tree_->makeLink(2);
+            *node << opNode << base << indexNode;
+            if (dim.axis != 0) {
+                *node << intConstant(static_cast<int64_t>(dim.axis));
+            }
+            setOriginFromAst(
+                context_, node, ast, camel::source::OriginKind::GctNode, "gct.binary.link");
+            registerGctSemantic(
+                context_,
+                node,
+                ast,
+                {
+                    semanticPart(
+                        camel::source::SemanticRole::Operator, nodeOrigin(opNode), -1, "operator"),
+                    semanticPart(
+                        camel::source::SemanticRole::Argument, nodeOrigin(base), 0, "lhs"),
+                    semanticPart(
+                        camel::source::SemanticRole::IndexExpr,
+                        nodeOrigin(indexNode),
+                        0,
+                        "index"),
+                },
+                {nodeOrigin(opNode), nodeOrigin(base), nodeOrigin(indexNode)});
+            return node;
+        };
+        // A dimension written as a range: the slice node along it, which is the value with that
+        // dimension taking the positions the range names. The call is the slice node itself: the
+        // value, the axis, the two bounds, the step, and a two-bit mask (bit 0 end, bit 1 start)
+        // saying which of the start and the end the program wrote -- `t[a:]` and `t[:b]` differ,
+        // and a negative step needs to know whether the start was given. A part that was not
+        // written is passed as the value it stands for, 0 for the start and 1 for the step; the
+        // end is read only when written.
+        const auto buildSlice = [&](const SubscriptDimension &dim, const node_ptr_t &base) {
+            const AST::node_ptr_t &boundsOf = dim.item;
+            node_ptr_t bound[3] = {nullptr, nullptr, nullptr};
+            bool written[3]     = {false, false, false};
+            for (size_t i = 0; i < 3; ++i) {
+                written[i] =
+                    boundsOf != nullptr && boundsOf->at(i)->type() != AST::LoadType::Null;
+                if (written[i]) {
+                    bound[i] = visitData(boundsOf->at(i));
+                }
+            }
+            bound[0]                  = written[0] ? bound[0] : intConstant(0);
+            bound[1]                  = written[1] ? bound[1] : intConstant(0);
+            bound[2]                  = written[2] ? bound[2] : intConstant(1);
+            node_ptr_t endWrittenNode = intConstant((written[1] ? 1 : 0) | (written[0] ? 2 : 0));
+            node_ptr_t opNode         = makeOperator("__slice__");
+            node_ptr_t node           = tree_->makeLink(2);
+            *node << opNode << base << intConstant(static_cast<int64_t>(dim.axis));
+            std::vector<camel::source::SemanticPart> parts = {
+                semanticPart(
+                    camel::source::SemanticRole::Operator, nodeOrigin(opNode), -1, "operator"),
+                semanticPart(camel::source::SemanticRole::Argument, nodeOrigin(base), 0, "lhs"),
+            };
+            std::vector<camel::source::origin_id_t> inputs = {
+                nodeOrigin(opNode),
+                nodeOrigin(base)};
+            for (size_t i = 0; i < 3; ++i) {
+                *node << bound[i];
+                if (written[i]) {
+                    inputs.push_back(nodeOrigin(bound[i]));
+                    parts.push_back(semanticPart(
+                        camel::source::SemanticRole::IndexExpr,
+                        nodeOrigin(bound[i]),
+                        static_cast<int32_t>(i),
+                        i == 0 ? "start" : (i == 1 ? "end" : "step")));
+                }
+            }
+            *node << endWrittenNode;
+            setOriginFromAst(
+                context_, node, ast, camel::source::OriginKind::GctNode, "gct.binary.link");
+            registerGctSemantic(
+                context_, node, ast, std::move(parts), std::move(inputs));
+            return node;
+        };
+        if (writtenDimensions.empty()) {
+            // A subscript that writes no bound anywhere (`t[:]`, `t[:, :]`) keeps every dimension,
+            // which is the whole slice of the first axis: the same value, and the one node an
+            // all-`:` subscript builds.
+            writtenDimensions.push_back({0, nullptr, true});
+        }
+        node_ptr_t value = visitData(lhsASTNode);
+        for (size_t i = writtenDimensions.size(); i-- > 0;) {
+            const SubscriptDimension &dim = writtenDimensions[i];
+            value = dim.namesRange ? buildSlice(dim, value) : buildIndex(dim, value);
+        }
+        LEAVE("BinaryExpr");
+        return value;
+    }
 
     // Determine the binary operator and create the corresponding node
     switch (binaryExpr->op()) {
@@ -2504,11 +2732,10 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
     case AST::BinaryDataOp::StrictNeq: {
         opNode = tree_->makeDRef("__strict_neq__");
     } break;
-    case AST::BinaryDataOp::Index: {
-        // `t[a:b]` is the slice operator, `t[i]` the index operator; the table gives `[]` the
-        // index operator, so the slice is named here (design principles 5.4).
-        opNode = tree_->makeDRef(sliceDimension != nullptr ? "__slice__" : "__idx__");
-    } break;
+    case AST::BinaryDataOp::Index:
+        // A subscript is built above, one node per dimension it writes (design principles 5.4).
+        ASSERT(false, "A subscript reached the ordinary binary operands");
+        return nullptr;
     default: {
         // Every other operator is a call of the group the table of operator_names.cpp gives
         // its symbol: plain, compound assignment and `=` alike.
@@ -2539,77 +2766,9 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
         nodeOrigin(opNode),
         nodeOrigin(lhsNode)};
 
-    // Handle the right-hand side (RHS) or indices for specific operators
-    if (binaryExpr->op() == AST::BinaryDataOp::Index) {
-        auto indices = ast->atAs<AST::RepeatedLoad>(1);
-        if (sliceDimension != nullptr) {
-            if (writtenSlices > 1 || indexDimensions > 0) {
-                // `t[a:b, c]`, `t[a:b, c:d]`: the subscript selects on more than one dimension.
-                // The slice operator names one axis and keeps the other dimensions as they are,
-                // and the index operator drops the dimension it names, so the two together are
-                // not one node. Refused here rather than read as a slice of the wrong axis.
-                diags_->of(SemanticDiag::ConstructNotSupported)
-                    .at(indices->load()->tokenRange())
-                    .commit(
-                        "a subscript that names a range or a position on more than one dimension",
-                        "the slice operator takes one axis, and the index operator takes the "
-                        "first dimension");
-                throw BuildAbortException();
-            }
-            // `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]`: the slice of the axis a subscript
-            // writes (design principles 5.4). The call is the slice node itself: the value, the
-            // axis (the dimension the bounds are written on, so `t[:, a:b]` is the same node with
-            // the axis 1), the two bounds, the step, and a two-bit mask (bit 0 end, bit 1 start)
-            // saying which of the start and the end the program wrote: `t[a:]` and `t[:b]` differ,
-            // and a negative step needs to know whether the start was given. A part that was not
-            // written is passed as the value it stands for, 0 for the start and 1 for the step;
-            // the end is read only when written.
-            const AST::node_ptr_t boundsOf = writtenSlice != nullptr ? writtenSlice : sliceDimension;
-            node_ptr_t bound[3] = {nullptr, nullptr, nullptr};
-            bool written[3]     = {false, false, false};
-            for (size_t i = 0; i < 3; ++i) {
-                const auto &part = boundsOf->at(i);
-                written[i]       = part->type() != AST::LoadType::Null;
-                if (written[i]) {
-                    bound[i] = visitData(part);
-                }
-            }
-            const auto intConstant = [this](int64_t value) {
-                return tree_->makeData(makeDataFromLiteral<int64_t>(value));
-            };
-            bound[0]                  = written[0] ? bound[0] : intConstant(0);
-            bound[1]                  = written[1] ? bound[1] : intConstant(0);
-            bound[2]                  = written[2] ? bound[2] : intConstant(1);
-            node_ptr_t endWrittenNode = intConstant((written[1] ? 1 : 0) | (written[0] ? 2 : 0));
-            // The axis: the dimension the subscript wrote the bounds on (the function form writes
-            // the axis itself, and an all-`:` subscript takes the first dimension whole).
-            *res << intConstant(static_cast<int64_t>(sliceAxis));
-            for (size_t i = 0; i < 3; ++i) {
-                *res << bound[i];
-                if (written[i]) {
-                    mergedInputs.push_back(nodeOrigin(bound[i]));
-                    parts.push_back(semanticPart(
-                        camel::source::SemanticRole::IndexExpr,
-                        nodeOrigin(bound[i]),
-                        static_cast<int32_t>(i),
-                        i == 0 ? "start" : (i == 1 ? "end" : "step")));
-                }
-            }
-            *res << endWrittenNode;
-        } else {
-            int32_t indexSlot = 0;
-            for (const auto &index : *indices) {
-                node_ptr_t indexNode = visitData(index);
-                *res << indexNode;
-                mergedInputs.push_back(nodeOrigin(indexNode));
-                parts.push_back(semanticPart(
-                    camel::source::SemanticRole::IndexExpr,
-                    nodeOrigin(indexNode),
-                    indexSlot++,
-                    "index"));
-            }
-        }
-    } else {
+    // The right-hand side of an ordinary binary operator. A subscript never reaches here: it is
+    // built above, one node per dimension it writes (design principles 5.4).
+    {
         const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);
         node_ptr_t rhsNode     = visitData(rhsASTNode);
         *res << rhsNode;
@@ -2679,7 +2838,6 @@ enum ReservedDataOp {
     NullThen,
     NullThen,
     ErrorThen,
-    NotNullThen,
     Call, // Data obj, Data* args, NamedData* kwargs
     Bind, // Data obj, Data* args, NamedData* kwargs
     Comp, // Data lhs, Data rhs
@@ -2727,13 +2885,6 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         *caseNode << execNode;
         *res << lhsNode << caseNode;
     } break;
-    case AST::ReservedDataOp::NotNullThen: {
-        // The marked receiver of `x ?-> f` is taken apart where the call is lowered (Call,
-        // below); it does not occur anywhere else.
-        ASSERT(false, "The receiver of '?->' is lowered with its call.");
-        res = visitData(lhsASTNode);
-    } break;
-
     case AST::ReservedDataOp::Call: {
         // Handle the "Call" operator
         const auto &argsNode   = ast->atAs<AST::RepeatedLoad>(1);
@@ -2780,7 +2931,10 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
             const AST::node_ptr_t literal = spreadLiteral(argNode);
             argCount += literal != nullptr ? literal->atAs<AST::RepeatedLoad>(0)->size() : 1;
         }
-        res                   = tree_->makeLink(argCount);
+        res = tree_->makeLink(argCount);
+        if (reservedExpr->pipe()) {
+            tree_->markPipe(res);
+        }
         node_ptr_t calleeNode = visitData(lhsASTNode);
         *res << calleeNode;
         std::vector<camel::source::SemanticPart> parts = {
@@ -2788,11 +2942,6 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         };
         std::vector<camel::source::origin_id_t> mergedInputs = {nodeOrigin(calleeNode)};
         int32_t argSlot                                      = 0;
-        // `x ?-> f`: the receiver is marked (NotNullThen). The call becomes the arm of a
-        // branch on the tag of `x`, taken when `x` has not failed, and receives the value
-        // taken out of `x` under a reserved name (design principles 3.8).
-        node_ptr_t passedNode        = nullptr;
-        AST::node_ptr_t passOperator = nullptr;
         // The name of each argument, aligned with the arguments in the order written: empty for
         // a positional one. The name is not a child of the LINK; the call checks it against the
         // callee when the call is resolved (design principles 4.4).
@@ -2828,23 +2977,7 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
                 }
                 continue;
             }
-            node_ptr_t gctArg   = nullptr;
-            const auto &argData = argNode->loadAs<AST::DataLoad>();
-            if (argData->dataType() == AST::DataType::ReservedExpr &&
-                argNode->loadAs<AST::ReservedExprLoad>()->op() ==
-                    AST::ReservedDataOp::NotNullThen) {
-                passedNode   = visitData(argNode->atAs<AST::DataLoad>(0));
-                passOperator = argNode;
-                gctArg       = tree_->makeDRef(kPassedValueName);
-                setOriginFromOrigin(
-                    context_,
-                    gctArg,
-                    nodeOrigin(passedNode),
-                    camel::source::OriginKind::GctNode,
-                    "gct.tagged.passed");
-            } else {
-                gctArg = visitData(argNode);
-            }
+            node_ptr_t gctArg = visitData(argNode);
             appendArgument(gctArg);
         }
         for (const auto &argNode : *kwargsNode) {
@@ -2865,28 +2998,6 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         tree_->setArgumentNames(res, std::move(argNames));
         setOriginFromAst(context_, res, ast, camel::source::OriginKind::GctNode, "gct.call");
         registerGctSemantic(context_, res, ast, std::move(parts), std::move(mergedInputs));
-        if (passedNode != nullptr) {
-            node_ptr_t execNode = makeExec();
-            setOriginFromAst(
-                context_,
-                execNode,
-                ast,
-                camel::source::OriginKind::GctNode,
-                "gct.tagged.call");
-            *execNode << res;
-            node_ptr_t caseNode = tree_->makeCase(CaseType::Else);
-            *caseNode << execNode;
-            node_ptr_t brchNode = tree_->makeBrch(BranchKind::ErrorPass);
-            // Located at the operator, as the marked receiver is.
-            setOriginFromAst(
-                context_,
-                brchNode,
-                passOperator,
-                camel::source::OriginKind::GctNode,
-                "gct.tagged.branch");
-            *brchNode << passedNode << caseNode;
-            res = brchNode;
-        }
     } break;
 
     case AST::ReservedDataOp::Instantiate: {
@@ -2897,11 +3008,25 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
                 // `A = int`: the name as a constant, then the type (design principles 5.9).
                 const auto &named = argument->loadAs<AST::NamedTypeLoad>();
                 *res << tree_->makeData(std::make_shared<StringData>(named->getRef().toString()));
-                *res << tree_->makeType(visitType(argument->at(0)));
+                node_ptr_t namedType = tree_->makeType(visitType(argument->at(0)));
+                setOriginFromAst(
+                    context_,
+                    namedType,
+                    argument->at(0),
+                    camel::source::OriginKind::GctNode,
+                    "gct.type_application.argument");
+                *res << namedType;
                 continue;
             }
-            Type *type = visitType(argument);
-            *res << tree_->makeType(type);
+            Type *type          = visitType(argument);
+            node_ptr_t typeNode = tree_->makeType(type);
+            setOriginFromAst(
+                context_,
+                typeNode,
+                argument,
+                camel::source::OriginKind::GctNode,
+                "gct.type_application.argument");
+            *res << typeNode;
         }
         setOriginFromAst(
             context_,
@@ -3024,7 +3149,19 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         if (dataNode->type() == NodeKind::DATA && !containsTypeVar(dstType) &&
             asTagged(dstType) == nullptr && !intoCollection) {
             const auto &data = dataNode->data();
-            if (dstType->castSafetyFrom(data->type()) != CastSafety::Safe) {
+            const CastSafety safety = dstType->castSafetyFrom(data->type());
+            if (safety == CastSafety::Forbidden && data->type()->isPrimitive() &&
+                dstType->isPrimitive()) {
+                // The one table of `as` (Type::castSafetyFrom) refuses a literal as it refuses a
+                // variable: `5 as float` and `n as float` are the same answer (design principles
+                // 5.1). A literal takes the type of its position; a number of another type is made
+                // by the conversion function.
+                diags_->of(SemanticDiag::DynamicCastForbidden)
+                    .at(ast->load()->tokenRange())
+                    .commit(data->type()->toString(), dstType->toString());
+                throw BuildAbortException();
+            }
+            if (safety != CastSafety::Safe) {
                 reportLiteralCastFailure(
                     diags_,
                     ast->load()->tokenRange(),
@@ -4351,6 +4488,12 @@ node_ptr_t Builder::visitDataInto(const AST::node_ptr_t &ast, Type *type, bool &
         // a: 1, b: 2.0 }`), so a literal element is converted now, exactly, and an `int`
         // array is never stored where a `float[]` was declared.
         const auto &load = ast->loadAs<AST::DataLoad>();
+        if (load->dataType() == AST::DataType::Array && ast->size() > 1) {
+            // `[f(x) for x in xs]`: a comprehension, whose elements are not written in the first
+            // child, is a computation and takes the type of its position where it is checked, not
+            // an empty literal of it.
+            return visitData(ast);
+        }
         if (load->dataType() == AST::DataType::Array) {
             const auto &items = *ast->atAs<AST::RepeatedLoad>(0);
             if (type->code() == TypeCode::Array) {
@@ -5128,6 +5271,12 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     // (step 1) -- unless its condition is the pass applicability, in which case it
     // declares a pass and the pipeline reads it (design principles 9.3).
     const bool nativeDeclaration = ast->size() < 2;
+    if (!nativeDeclaration && funcType->hasWithRest()) {
+        diags_->of(SemanticDiag::WithPackNeedsNativeDeclaration)
+            .at(ast->atAs<AST::FuncTypeLoad>(0)->load()->tokenRange())
+            .commit(std::string(funcType->argNameAt(funcType->withTypesCount() - 1)));
+        throw BuildAbortException();
+    }
     // A `.cml` found beside a `.cmo` of the same name is that C++ module's *declaration*
     // module, in which the C++ operators are declared; it may also hold Camel definitions
     // (rule impl-kernel-site, 2026-10-23: "声明模块可以有函数体，`DeclarationModuleHasBody`
@@ -5293,6 +5442,9 @@ Type *Builder::visitType(const AST::node_ptr_t &ast) {
         break;
     case AST::TypeType::Spec:
         res = visitSpecType(ast);
+        break;
+    case AST::TypeType::Match:
+        res = visitMatchTypeType(ast);
         break;
     case AST::TypeType::Ref:
         res = visitRefType(ast);
@@ -5601,7 +5753,6 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
 
     FunctionTypeFactory factory;
 
-    factory.setModifiers(typeLoad->modifiers());
 
     std::unordered_set<string> paramNames;
 
@@ -5638,11 +5789,39 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
     // The last `with` parameter that wrote a default: a later parameter without one is refused,
     // since a call that leaves the earlier ones out can then only give the others by name.
     std::string lastDefaultName;
-    for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(0)) {
+    const auto &withParams = *ast->atAs<AST::RepeatedLoad>(0);
+    for (size_t wi = 0; wi < withParams.size(); ++wi) {
+        const auto &paramPair = withParams[wi];
         const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
         const bool isVar     = paramLoad->isVar();
         const Reference &paramRef = paramLoad->getRef();
         const string &name        = paramRef.ident();
+        if (paramLoad->isRest()) {
+            // A pack among the `with` parameters (`with <..args>`): untyped and last, like
+            // the rest parameter of the ordinary ones. A lambda does not write one (the parser
+            // refuses it); a declaration with a body is refused where its body is known.
+            if (wi + 1 != withParams.size()) {
+                diags_->of(SemanticDiag::RestParameterNotLast)
+                    .at(paramLoad->tokenRange())
+                    .commit(name);
+                throw BuildAbortException();
+            }
+            if (paramPair->size() > 0) {
+                diags_->of(SemanticDiag::RestParameterTypeNotSupported)
+                    .at(paramLoad->tokenRange())
+                    .commit(name);
+                throw BuildAbortException();
+            }
+            if (!paramNames.insert(name).second) {
+                diags_->of(SemanticDiag::DuplicateParameter)
+                    .at(paramLoad->tokenRange())
+                    .commit(name);
+                throw BuildAbortException();
+            }
+            defaults.with.push_back({nullptr, camel::source::kInvalidOriginId});
+            factory.addWithRest(name);
+            continue;
+        }
         Type *type                = nullptr;
         {
             dimBindAllowed_ = signature;
@@ -5719,11 +5898,10 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
         if (paramLoad->isRest()) {
             // A rest parameter is untyped and last (design principles 5.5); it stands in the
             // signature as a `void` parameter that no call passes a value for.
-            if (!signature) {
-                // The parser admits `..` only in a declaration's own parameter list
-                // (`parseParentParams(true, true)`, the single call site in parser.cpp), so this
-                // is a compiler bug rather than anything a program can write.
-                ASSERT(false, "A rest parameter outside a function declaration.");
+            if (open && !signature) {
+                // The parser admits `..` in a declaration's parameter list and in a function
+                // type (`(..A) => R`), never in a lambda's.
+                ASSERT(false, "A rest parameter in a lambda.");
                 throw BuildAbortException();
             }
             if (pi + 1 != normParams.size()) {
@@ -5873,6 +6051,45 @@ void Builder::rejectDuplicateLiteralKeys(
 }
 
 /*
+MatchTypeType : Type subject, RepeatedLoad TypeCase ;
+A `match type` in a type position (design principles 5.6): a type of its own while the subject
+still has a type variable, the type of the case that selects the subject once it has not.
+*/
+Type *Builder::visitMatchTypeType(const AST::node_ptr_t &ast) {
+    ENTER("MatchTypeType");
+    Type *subject = visitType(ast->atAs<AST::TypeLoad>(0));
+    std::vector<MatchTypeArm> arms;
+    bool catchAll = false;
+    for (const auto &armAst : *ast->atAs<AST::RepeatedLoad>(1)) {
+        if (catchAll) {
+            // `#leaf` and `_` select every type, so a case after them selects nothing.
+            diags_->of(SemanticDiag::StaticMatchUnreachableCase)
+                .at(armAst->load()->tokenRange())
+                .commit("this case");
+            throw BuildAbortException();
+        }
+        MatchTypeArm arm;
+        for (const AST::TypeCasePattern &pattern : armAst->loadAs<AST::TypeCaseLoad>()->patterns()) {
+            const GCT::TypeCaseKind kind = static_cast<GCT::TypeCaseKind>(pattern.kind);
+            if (kind == GCT::TypeCaseKind::Identity) {
+                if (Type *identity = visitType(pattern.type)) {
+                    arm.identities.push_back(identity);
+                }
+                continue;
+            }
+            arm.shapes |= typeCaseBit(kind);
+            if (kind == GCT::TypeCaseKind::Leaf || kind == GCT::TypeCaseKind::Wildcard) {
+                catchAll = true;
+            }
+        }
+        arm.result = visitType(armAst->atAs<AST::TypeLoad>(0));
+        arms.push_back(std::move(arm));
+    }
+    LEAVE("MatchTypeType");
+    return MatchTypeType::create(subject, arms);
+}
+
+/*
 SpecType : Type base, RepeatedLoad typeOrData ;
 */
 Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
@@ -5952,8 +6169,22 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
                         types.size()));
             throw BuildAbortException();
         }
+        Type *applied = typeFunc->apply(types);
+        const bool concrete = std::none_of(types.begin(), types.end(), [](Type *argument) {
+            return containsTypeVar(argument);
+        });
+        if (concrete && containsTypeCall(applied)) {
+            // The arguments are concrete and the type function does not accept them.
+            std::string what = applied->toString();
+            std::string why  = "it is not defined for the type it is given";
+            describeUnevaluatedTypeCall(applied, what, why);
+            diags_->of(SemanticDiag::TypeFunctionNotApplicable)
+                .at(ast->load()->tokenRange())
+                .commit(what, why);
+            throw BuildAbortException();
+        }
         LEAVE("SpecType");
-        return typeFunc->apply(types);
+        return applied;
     }
     if (arguments.empty()) {
         LEAVE("SpecType");
@@ -5985,21 +6216,6 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
             }
             diag.commit(keyType->toString(), coll->toString(), problem);
             throw BuildAbortException();
-        }
-    }
-    if (base->isOtherType() && !static_cast<OtherType *>(base)->typeArguments()) {
-        // What the arguments of a module type mean is defined by the type, which sees
-        // concrete types only. A type whose arguments are plain types (Map, Set) takes
-        // variables like an array or a tuple does.
-        for (const TypeArgument &argument : arguments) {
-            if (argument.type != nullptr && containsTypeVar(argument.type)) {
-                diags_->of(SemanticDiag::InvalidTypeArgument)
-                    .at(ast->load()->tokenRange())
-                    .commit(
-                        base->toString(),
-                        "a type variable cannot be an argument of a module type");
-                throw BuildAbortException();
-            }
         }
     }
     std::string error;

@@ -1,9 +1,6 @@
 >// Operators and punctuation: the tokens of the parser grammar (include/camel/parse/syntax/token_kinds.def).
 #^^ comment.line.double-slash.camel punctuation.definition.comment.camel
 #  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
->module operators
-#^^^^^^ keyword.control.import.module.camel
-#       ^^^^^^^^^ entity.name.namespace.module.camel
 >
 >func compare(a: int, b: int): bool {
 #^^^^ meta.function.definition.camel storage.type.function.camel
@@ -238,12 +235,12 @@
 #          ^ meta.block.camel keyword.operator.assignment.camel
 #              ^^ meta.block.camel keyword.operator.fallback.camel
 #                 ^ meta.block.camel constant.numeric.integer.decimal.camel
->    let c = r ?-> double
+>    let c = r -> double
 #    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
 #        ^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
 #          ^ meta.block.camel keyword.operator.assignment.camel
-#              ^^^ meta.block.camel keyword.operator.pipe.camel
-#                  ^^^^^^ meta.block.camel entity.name.function.call.camel
+#              ^^ meta.block.camel keyword.operator.pipe.camel
+#                 ^^^^^^ meta.block.camel entity.name.function.call.camel
 >    let d = o ?? 1
 #    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
 #        ^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel

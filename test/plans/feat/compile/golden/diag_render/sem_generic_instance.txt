@@ -1,40 +1,42 @@
 error[SemanticDiag::NoMatchingFunction]: No matching function found for argument types: <> (int[], int[]); operator '+' is not defined for these operand types.
-   --> <ROOT>/test/cases/compile/diag_render/sem_generic_instance.cml:4:17
-    |
-  4 |     let n = x + x
-    |                 ^
+  --> <ROOT>/test/cases/compile/diag_render/sem_generic_instance.cml:2:17
+   |
+ 2 |     let n = x + x
+   |                 ^
 note: in the instance 'twice<int[]>' of the generic function 'twice' with T = int[], instantiated by the call
-   --> <ROOT>/test/cases/compile/diag_render/sem_generic_instance.cml:10:18
-    |
- 10 |     println(twice([1]))
-    |                  -----
+  --> <ROOT>/test/cases/compile/diag_render/sem_generic_instance.cml:8:18
+   |
+ 8 |     println(twice([1]))
+   |                  -----
 help: Check the number and types of arguments to ensure they match one of the available overloaded function signatures. Available overloads:
           <:op/add_i>: (i32, i32) => i32
           <:op/add_l>: (int, int) => int
           <:op/add_f>: (f32, f32) => f32
           <:op/add_d>: (float, float) => float
           <:op/add_s>: (string, string) => string
+          <:op/add_bytes>: (Bytes, Bytes) => Bytes
           <:op/add_c>: (c64, c64) => c64
           <:op/add_z>: (c128, c128) => c128
           <:op/add_bf>: (bf16, bf16) => bf16
           <:op/add_f6>: (f16, f16) => f16
 
 error[SemanticDiag::NoMatchingFunction]: No matching function found for argument types: <> (bool, bool); operator '+' is not defined for these operand types.
-   --> <ROOT>/test/cases/compile/diag_render/sem_generic_instance.cml:4:17
-    |
-  4 |     let n = x + x
-    |                 ^
+  --> <ROOT>/test/cases/compile/diag_render/sem_generic_instance.cml:2:17
+   |
+ 2 |     let n = x + x
+   |                 ^
 note: in the instance 'twice<bool>' of the generic function 'twice' with T = bool, instantiated by the call
-   --> <ROOT>/test/cases/compile/diag_render/sem_generic_instance.cml:11:18
-    |
- 11 |     println(twice(true))
-    |                  ------
+  --> <ROOT>/test/cases/compile/diag_render/sem_generic_instance.cml:9:18
+   |
+ 9 |     println(twice(true))
+   |                  ------
 help: Check the number and types of arguments to ensure they match one of the available overloaded function signatures. Available overloads:
           <:op/add_i>: (i32, i32) => i32
           <:op/add_l>: (int, int) => int
           <:op/add_f>: (f32, f32) => f32
           <:op/add_d>: (float, float) => float
           <:op/add_s>: (string, string) => string
+          <:op/add_bytes>: (Bytes, Bytes) => Bytes
           <:op/add_c>: (c64, c64) => c64
           <:op/add_z>: (c128, c128) => c128
           <:op/add_bf>: (bf16, bf16) => bf16

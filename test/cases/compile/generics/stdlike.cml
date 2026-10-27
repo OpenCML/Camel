@@ -1,7 +1,6 @@
 /**
  * Signatures that the built-in operators implement with C++ type rules, written in Camel.
  */
-module stdlike
 
 // head: (xs: T[]) => T
 func my_head::<T>(xs: T[]): T {
@@ -10,7 +9,7 @@ func my_head::<T>(xs: T[]): T {
 
 // tail: (xs: T[]) => T[]
 func my_tail::<T>(xs: T[]): T[] {
-    return xs->slice<1, len(xs)>
+    return xs[1:]
 }
 
 // zip of two arrays: (xs: T[], ys: U[]) => (T, U)[]

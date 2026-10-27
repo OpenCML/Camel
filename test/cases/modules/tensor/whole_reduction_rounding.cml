@@ -22,10 +22,9 @@
  * results are already f64, and rounding the f64 accumulation once into f32 gives exactly what the
  * f32 tensor's sum and mean give — the two widths agree under the rule.
  */
-module whole_reduction_rounding
 
 import { sum as array_sum } from array
-import { new, sum, mean, cast, numel } from tensor
+import { new, sum, mean, numel } from tensor
 
 /// The fold written with an f32 accumulator: the accumulator's type is f32, so every addition
 /// rounds — this is what "round after every step" means.
@@ -50,8 +49,8 @@ func main(): int sync {
     let arrayArgA = sum(a)
     // The f64 accumulation of the same elements: the sum this call answered while its result type
     // was float, and the mean's sum before it was divided.
-    let f64A     = float(sum(cast(ta, 'float')))
-    let f64MeanC = float(mean(cast(tc, 'float')))
+    let f64A     = float(sum(float(ta)))
+    let f64MeanC = float(mean(float(tc)))
     // The mean with the sum rounded to the element type first, divided in f64 again: the two
     // roundings the rule rules out.
     let twiceC = float(sum(tc)) / float(numel(tc))

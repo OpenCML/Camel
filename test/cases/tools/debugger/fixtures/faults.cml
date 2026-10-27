@@ -1,12 +1,10 @@
-module main
-
 func risky(d: int): int {
     let q = 100 / d                  // mark:div
     return q
 }
 
 func main(): int sync {
-    let safe = attempt(risky, 0) !! -1   // mark:isolated
+    let safe = attempt(risky)(0) !! -1   // mark:isolated
     println(safe)                        // mark:after
     let boom = risky(0)                  // mark:uncaught
     println(boom)

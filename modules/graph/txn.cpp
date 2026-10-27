@@ -49,7 +49,6 @@ using camel::runtime::GCGraph;
 using camel::runtime::gc_node_ref_t;
 using camel::runtime::GCNodeKind;
 using camel::runtime::GCOperBody;
-using camel::runtime::GraphCommitConflict;
 using camel::runtime::GraphDraft;
 using camel::runtime::kInvalidNodeRef;
 using camel::runtime::Program;
@@ -67,8 +66,14 @@ struct TxnState {
         : base(base), session(context, base), roots(session) {}
     /// A transaction over one function and what it reaches, committed to a Program of its own
     /// that is not the context's (the running program is left as it is).
-    TxnState(const context_ptr_t &context, const Program *base, GCGraph *root)
-        : base(base), session(context, base, root), detached(true), roots(session) {}
+    TxnState(
+        const context_ptr_t &context, const Program *base, ::Function *function, Type *functionType)
+        : base(base),
+          session(context, base, function->graph()),
+          detached(true),
+          function(function),
+          functionType(functionType),
+          roots(session) {}
 
     /// The Program the transaction was opened on. The transaction keeps it alive (the foreign
     /// resource traces it) until the transaction is released.
@@ -76,6 +81,10 @@ struct TxnState {
     RuntimeGraphDraftSession session;
     bool detached = false;
     bool done     = false;
+    /// The function the transaction was opened on, and its type: the function `commit` makes is
+    /// this one over the committed graphs, with the values it captured.
+    ::Function *function = nullptr;
+    Type *functionType   = nullptr;
     /// The drafts stay open across Camel safepoints (the program can keep using the transaction),
     /// so the session must root them from the first edit to the commit. The descriptor's trace
     /// also calls traceStaticSlots; tracing a draft twice is harmless. TxnState is never moved
@@ -110,6 +119,18 @@ ForeignResourceDescriptor txnDescriptor() {
         // transaction value that is still reachable is traced here as well. Tracing the slots
         // twice is harmless.
         state->session.traceStaticSlots(relocate, type);
+        if (state->function != nullptr) {
+            state->function = static_cast<::Function *>(relocate(
+                state->function,
+                state->functionType,
+                RefTraceInfo{
+                    .owner     = nullptr,
+                    .ownerType = type,
+                    .slotType  = state->functionType,
+                    .ownerKind = "Txn",
+                    .slotName  = "function",
+                }));
+        }
     };
     descriptor.clone   = nullptr;
     descriptor.movable = true;
@@ -149,29 +170,27 @@ draftOf(TxnState &state, const Handle *node, const char *site) {
     return {draft, node->index()};
 }
 
-/// The Function that is the root of `program`, of the type of `sample`; an error value when the
-/// graph has another signature or captures values (a function value made here has no closure).
-slot_t functionOf(const Program *program, Type *sample, Context &) {
-    static const char *site = "<graph::to_function>";
+/// The function a commit makes: the one the transaction was opened on, over the committed graphs.
+/// Its closure is the opened function's, so the values it captured are captured still and a
+/// function that captures values commits like one that does not.
+slot_t functionOf(TxnState &state, const Program *program, const TupleType *resultType) {
     const GCGraph *graph = program->root();
-    const TupleType *resultType = TupleType::fallible(sample);
-    if (graph == nullptr || graph->funcType() == nullptr ||
-        !(sample->assignableFrom(graph->funcType()) || graph->funcType()->assignableFrom(sample))) {
-        return makeError("SignatureMismatch", "the function has another signature than the sample", site);
-    }
-    if (!graph->closureNodes().empty()) {
-        return makeError("ClosureNotEmpty", "the function captures values", site);
+    if (graph == nullptr || state.function == nullptr) {
+        return makeError("GraphInvalid", "the committed program has no root function", "<graph::commit>");
     }
     // The program is held by no one but this call until the function is made.
     mm::NoCollectionScope noCollection;
-    static const TupleType *noClosure = TupleType::create();
-    auto *function = ::Function::create(program, graph->id(), noClosure, mm::autoSpace());
+    auto *function = static_cast<::Function *>(
+        state.function->clone(mm::autoSpace(), state.functionType, false));
+    function->rebind(program, graph->id());
     return makeOk(toSlot(function), resultType);
 }
 
+/// `open(f)`: a transaction over a function and the graphs it reaches. The transaction commits
+/// to a program of its own, not the context's: the running program is left as it is.
 slot_t openKernel(ArgsView &, ArgsView &norm, Context &ctx) {
-    const auto *program = norm.get<const Program *>(0);
-    auto *state         = new TxnState(ctx.shared_from_this(), program);
+    auto *function = norm.get<::Function *>(0);
+    auto *state    = new TxnState(ctx.shared_from_this(), function->program(), function, norm.type(0));
     return toSlot(ForeignResourceObject::create(mm::autoSpace(), txnDescriptor(), state));
 }
 
@@ -337,9 +356,12 @@ slot_t evalKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         TupleType::nullable(HandleType::get(HandleKind::Node)));
 }
 
-/// The new Program, or an error value: `GraphConflict` when a graph the transaction read or
-/// wrote has another version in the context's program since, `GraphInvalid` when a graph it
-/// edited breaks an invariant (the message names it). The transaction is over either way.
+/// The changed function (of the type that was opened, `F`), or the error value `GraphInvalid` when a
+/// graph it edited breaks an invariant (the message names it). The transaction is over either
+/// way. The commit is a value: it never installs the context's program, whoever the transaction
+/// was opened on (design principles 9.1: a transform gives a new value and changes nothing
+/// another holder sees). Only the pass driver installs a program, the one a pass hands on
+/// (src/execute/camel_pass.cpp).
 slot_t commitKernel(ArgsView &, ArgsView &norm, Context &) {
     auto *wrapper = norm.get<ForeignResourceObject *>(0);
     if (wrapper->disposed()) {
@@ -349,14 +371,12 @@ slot_t commitKernel(ArgsView &, ArgsView &norm, Context &) {
             "<graph::commit>");
     }
     auto *state = wrapper->resourceAs<TxnState>();
-    static const TupleType *resultType = TupleType::fallible(HandleType::get(HandleKind::Program));
+    const TupleType *resultType = asFallible(norm.resultType());
+    ASSERT(resultType != nullptr, "commit answers an F!");
     slot_t result;
     try {
-        const Program *committed =
-            state->detached ? state->session.commit(true) : state->session.commitChecked();
-        result = makeOk(toSlot(const_cast<Program *>(committed)), resultType);
-    } catch (const GraphCommitConflict &conflict) {
-        result = makeError("GraphConflict", conflict.what(), "<graph::commit>");
+        const Program *committed = state->session.commit(true);
+        result                   = functionOf(*state, committed, resultType);
     } catch (const mm::MemoryExhausted &) {
         throw;
     } catch (const std::exception &failure) {
@@ -365,47 +385,6 @@ slot_t commitKernel(ArgsView &, ArgsView &norm, Context &) {
     state->done = true;
     wrapper->dispose();
     return result;
-}
-
-/// A transaction over a function value and the graphs it reaches.
-slot_t ofKernel(ArgsView &, ArgsView &norm, Context &ctx) {
-    auto *function = norm.get<::Function *>(0);
-    auto *state =
-        new TxnState(ctx.shared_from_this(), function->program(), function->graph());
-    return toSlot(ForeignResourceObject::create(mm::autoSpace(), txnDescriptor(), state));
-}
-
-/// The function value the transaction of `open_function` makes of its function, of the type of the
-/// sample: the commit's errors, and `SignatureMismatch` and `ClosureNotEmpty`.
-slot_t toKernel(ArgsView &, ArgsView &norm, Context &ctx) {
-    auto *wrapper = norm.get<ForeignResourceObject *>(0);
-    if (wrapper->disposed()) {
-        return makeError("TxnUsed", "the transaction was committed or aborted already", "<graph::to_function>");
-    }
-    auto *state = wrapper->resourceAs<TxnState>();
-    if (!state->detached) {
-        err::throwRuntimeFault(
-            err::RuntimeDiag::InvalidArgument,
-            "graph.to_function",
-            "the transaction is not one of a function; commit it");
-    }
-    Type *sample = norm.type(1);
-    slot_t result;
-    try {
-        const Program *committed = state->session.commit(true);
-        result                   = functionOf(committed, sample, ctx);
-    } catch (const mm::MemoryExhausted &) {
-        throw;
-    } catch (const std::exception &failure) {
-        result = makeError("GraphInvalid", failure.what(), "<graph::to_function>");
-    }
-    state->done = true;
-    wrapper->dispose();
-    return result;
-}
-
-slot_t programOfKernel(ArgsView &, ArgsView &norm, Context &) {
-    return toSlot(const_cast<Program *>(norm.get<::Function *>(0)->program()));
 }
 
 slot_t graphOfKernel(ArgsView &, ArgsView &norm, Context &) {
@@ -473,24 +452,6 @@ struct TxnOp {
     operator_t kernel;
 };
 
-/// The type rule of an operator on a function value: `open_function` and the like take one (a function of
-/// any type), `to` a transaction and one. The result is as `make` gives it from the type of the
-/// last operand.
-resolver_ptr_t functionRule(size_t operands, std::string text, Type *(*make)(Type *sample)) {
-    return DynamicFuncTypeResolver::create(
-        {{0, {}}, {static_cast<int>(operands), std::vector<bool>(operands, false)}},
-        std::move(text),
-        [operands, make](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
-            -> std::optional<Type *> {
-            const bool first = operands == 1 ? norm[0]->code() == TypeCode::Function
-                                             : HandleType::is(norm[0], HandleKind::Txn);
-            if (!first || norm.back()->code() != TypeCode::Function) {
-                return std::nullopt;
-            }
-            return make(norm.back());
-        });
-}
-
 const std::vector<TxnOp> &txnOps() {
     static const std::vector<TxnOp> ops = {
         {"open", openKernel},
@@ -505,49 +466,12 @@ const std::vector<TxnOp> &txnOps() {
 
 } // namespace
 
-const std::vector<oper_group_ptr_t> &txnGroups() {
-    static const std::vector<oper_group_ptr_t> groups = [] {
-        std::vector<oper_group_ptr_t> out;
-        // The signatures of this file C++ computes (stdlib/graph.cml keeps their reference
-        // entries): the result of the first three is the type the function value has.
-        out.push_back(OperatorGroup::create(
-            "open_function",
-            {{"graph:open_function",
-              functionRule(1, "(f: F) => Txn", [](Type *) -> Type * {
-                  return HandleType::get(HandleKind::Txn);
-              })}}));
-        out.push_back(OperatorGroup::create(
-            "to_function",
-            {{"graph:to_function",
-              functionRule(2, "(t: Txn, sample: F) => F!", [](Type *sample) -> Type * {
-                  return TupleType::fallible(sample);
-              })}}));
-        out.push_back(OperatorGroup::create(
-            "program_of",
-            {{"graph:program_of",
-              functionRule(1, "(f: F) => Program", [](Type *) -> Type * {
-                  return HandleType::get(HandleKind::Program);
-              })}}));
-        out.push_back(OperatorGroup::create(
-            "graph_of",
-            {{"graph:graph_of",
-              functionRule(1, "(f: F) => Graph", [](Type *) -> Type * {
-                  return HandleType::get(HandleKind::Graph);
-              })}}));
-        return out;
-    }();
-    return groups;
-}
-
 const std::unordered_map<std::string, operator_t> &txnKernels() {
     static const std::unordered_map<std::string, operator_t> kernels = [] {
         std::unordered_map<std::string, operator_t> out;
         for (const TxnOp &op : txnOps()) {
             out.emplace(op.name, op.kernel);
         }
-        out.emplace("open_function", ofKernel);
-        out.emplace("to_function", toKernel);
-        out.emplace("program_of", programOfKernel);
         out.emplace("graph_of", graphOfKernel);
         out.emplace("add_constant", addConstantKernel);
         return out;

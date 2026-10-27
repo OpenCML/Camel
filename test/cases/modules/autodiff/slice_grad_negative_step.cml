@@ -4,7 +4,6 @@
  * element does (design principles 9.9, 5.4). The first extent here is open, so nothing about the
  * step is statically known: the slice runs, and its value and its gradient are the slice's.
  */
-module autodiff_slice_grad_negative_step
 import { reshape, sum } from tensor
 import { grad } from autodiff
 

@@ -35,13 +35,6 @@ using sem::AccessMode;
 using sem::ResourceClass;
 using sem::ResourceSignature;
 
-// Two uses of one resource amount to the wider access: the same access stays itself, and Read with
-// Write is covered by no single access but ReadModifyWrite. Widening two writes into a
-// read-modify-write would make a measured set harder to cover than the uses it stands for.
-AccessMode uniteAccess(AccessMode left, AccessMode right) {
-    return left == right ? left : AccessMode::ReadModifyWrite;
-}
-
 // The bottom of a measurement: a body recorded as reaching nothing. Every body starts here, and no
 // body is ever below it. What a call answers about its result stays the conservative one: the walk
 // says which resources a body reaches, not what its result aliases.
@@ -83,7 +76,7 @@ ResourceSignature uniteReach(const ResourceSignature &a, const ResourceSignature
         if (found->name.empty()) {
             found->name = use.name;
         }
-        found->mode = uniteAccess(found->mode, use.mode);
+        found->mode = sem::uniteAccess(found->mode, use.mode);
     }
     for (const auto &use : b.ambient) {
         const auto found = std::find_if(united.ambient.begin(), united.ambient.end(),
@@ -92,7 +85,7 @@ ResourceSignature uniteReach(const ResourceSignature &a, const ResourceSignature
             united.ambient.push_back(use);
             continue;
         }
-        found->mode = uniteAccess(found->mode, use.mode);
+        found->mode = sem::uniteAccess(found->mode, use.mode);
     }
     united.captures.insert(united.captures.end(), b.captures.begin(), b.captures.end());
     united.anyOf.insert(united.anyOf.end(), b.anyOf.begin(), b.anyOf.end());
@@ -139,6 +132,15 @@ void Builder::numberBodyPorts(BodyReach &walk, const runtime::GraphDraft &draft,
         }
         ++index;
     }
+    // A `with` port the type does not count is a value the function captured from the one around
+    // it; so is a closure node. A use through one is not a use of a parameter of this function, and
+    // which resource of the enclosing function it is cannot be read from here.
+    for (; withAt < withPorts.size(); ++withAt) {
+        walk.captured.insert(withPorts[withAt]);
+    }
+    for (draft_node_ref_t node : draft.closureNodes()) {
+        walk.captured.insert(node);
+    }
 }
 
 void Builder::addParamUse(BodyReach &walk, size_t index, sem::ResourceClass cls,
@@ -167,7 +169,26 @@ void Builder::addParamUse(BodyReach &walk, size_t index, sem::ResourceClass cls,
     if (found->name.empty()) {
         found->name = name;
     }
-    found->mode = uniteAccess(found->mode, mode);
+    found->mode = sem::uniteAccess(found->mode, mode);
+}
+
+std::optional<std::string>
+Builder::moduleVariableOf(const runtime::GraphDraft &draft, draft_node_ref_t port) const {
+    // A capture port stands for the node it captured, which may itself be a capture port of the
+    // function around: follow the chain to the cell, and ask whether it is a module's variable.
+    node_handle_t at = draft.ref(port);
+    for (size_t hops = 0; hops < 64; ++hops) {
+        if (const auto cell = moduleVariableResources_.find(at);
+            cell != moduleVariableResources_.end()) {
+            return cell->second;
+        }
+        const auto origin = captureOriginOf_.find(at);
+        if (origin == captureOriginOf_.end()) {
+            return std::nullopt;
+        }
+        at = origin->second;
+    }
+    return std::nullopt;
 }
 
 void Builder::addAmbientUse(BodyReach &walk, const std::string &name, sem::AccessMode mode) const {
@@ -180,7 +201,7 @@ void Builder::addAmbientUse(BodyReach &walk, const std::string &name, sem::Acces
         out.ambient.push_back(ResourceSignature::AmbientUse{.name = name, .mode = mode});
         return;
     }
-    found->mode = uniteAccess(found->mode, mode);
+    found->mode = sem::uniteAccess(found->mode, mode);
 }
 
 bool Builder::readCalleeSignature(BodyReach &walk, const runtime::GraphDraft &draft,
@@ -217,6 +238,13 @@ bool Builder::readCalleeSignature(BodyReach &walk, const runtime::GraphDraft &dr
                 return false;
             }
             operand = norm[at];
+        }
+        if (walk.captured.contains(operand)) {
+            if (const auto variable = moduleVariableOf(draft, operand); variable.has_value()) {
+                addAmbientUse(walk, *variable, use.mode); // a variable of a module's top level
+                continue;
+            }
+            return false; // a resource of the function around this one
         }
         const auto port = walk.ports.find(operand);
         if (port == walk.ports.end()) {
@@ -291,11 +319,24 @@ bool Builder::reachOfOper(DraftGraphBuilder *graph, const runtime::GraphDraft &d
         }
         const bool isWith = access.binding.kind == sem::ResourceBinding::Kind::With;
         const auto inputs = isWith ? draft.withInputsOf(id) : draft.normInputsOf(id);
-        // A call through a value keeps the value itself as its first `with` input, so an operator
-        // value's `with` operands start after it.
-        const size_t at = size_t(access.binding.index) + (isWith ? 1 : 0);
+        // A call through a value keeps the value itself as its first `with` input, so its `with`
+        // operands start after it. An operator node has no callee among its inputs -- what it calls
+        // is the operator the table holds -- and its `with` operands are the call's `with` arguments
+        // as written. Reading the node's kind is what runtime/resources.cpp does for the same
+        // mapping; counting the callee on an operator node costs the whole body its measurement
+        // (the operand lands past the last `with` input and the walk gives up).
+        const bool isCall = nodeKindOf(draft.ref(id)) == runtime::GCNodeKind::Call;
+        const size_t at = size_t(access.binding.index) + (isWith && isCall ? 1 : 0);
         if (at >= inputs.size()) {
             return false;
+        }
+        if (walk.captured.contains(inputs[at])) {
+            if (const auto variable = moduleVariableOf(draft, inputs[at]);
+                variable.has_value()) {
+                addAmbientUse(walk, *variable, access.mode); // a variable of a module's top level
+                continue;
+            }
+            return false; // a resource of the function around this one
         }
         const auto port = walk.ports.find(inputs[at]);
         if (port == walk.ports.end()) {

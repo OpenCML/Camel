@@ -4,7 +4,6 @@
  * result is `void`. Every call reaches the C++ operator, which writes each tensor leaf of the
  * tree as a `.npy` file (step 10).
  */
-module nn_declaration_import
 
 import { save_params } from nn
 import { new } from tensor
@@ -12,7 +11,7 @@ import { exists } from fs
 import { get_env } from env
 
 func main(): int sync {
-    let root = get_env('CAMEL_TEST_TMPDIR')
+    let root = get_env('CAMEL_TEST_TMPDIR') ?? ''
     let dir = if root == '' then 'test/tmp/nn_declaration' else root + '/nn_declaration'
     let params = { w: new([1.0, 2.0]), b: new([0.0]) }
     save_params(params, dir)

@@ -16,7 +16,6 @@
  * once on one path (tree recursion); the export refuses it at the second
  * recursive call.
  */
-module staticness
 
 import { ones, zeros, shape, reshape, sum } from tensor
 import { export_model } from onnx
@@ -44,25 +43,49 @@ func settle(t: f32[..]): f32[..] {
     return if sum(t) > 1.0 then (if sum(t * t) > 50.0 then t * 0.1 else settle(t * 0.5) + t) else t
 }
 
-func main(): int sync {
+func export_static(x: f32[..]): void! sync {
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(forward, x)
+    println('exported forward')
+    return null
+}
+
+func export_dynamic(x: f32[..]): void! sync {
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(shrink, x)
+    println('exported shrink')
+    return null
+}
+
+func export_linear(x: f32[..]): void! sync {
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(pile, x)
+    println('exported pile')
+    return null
+}
+
+/// `settle` is refused, and its refusal is this function's result: nothing
+/// handles it, so writing the call as the result of the body carries it to the
+/// exit of `main` (design principles 3.9).
+func export_nontail(x: f32[..]): void! sync {
+    return export_model<out: get_env('ONNX_OUT') ?? ''>(settle, x)
+}
+
+/// No mode was asked for: nothing is exported and the result is not an error.
+func no_mode(): void! {
+    return null
+}
+
+func main(): void! sync {
     let x = ones([2, 3, 4])
     println(forward(x))
-    let mode = get_env('MODE')
+    let mode = get_env('MODE') ?? ''
     return if mode == 'static' then sync {
-        export_model(forward, x, get_env('ONNX_OUT'))
-        println('exported forward')
-        return 0
+        export_static(x)
     } else if mode == 'dynamic' then sync {
-        export_model(shrink, x, get_env('ONNX_OUT'))
-        println('exported shrink')
-        return 0
+        export_dynamic(x)
     } else if mode == 'linear' then sync {
-        export_model(pile, x, get_env('ONNX_OUT'))
-        println('exported pile')
-        return 0
+        export_linear(x)
     } else if mode == 'nontail' then sync {
-        export_model(settle, x, get_env('ONNX_OUT'))
-        println('unreachable')
-        return 0
-    } else 0
+        export_nontail(x)
+    } else sync {
+        no_mode()
+    }
 }

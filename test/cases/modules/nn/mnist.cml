@@ -8,7 +8,6 @@
 // mnist.cml - Softmax classifier for handwritten digit recognition (MNIST-style)
 // Uses synthetic data for pipeline validation.
 
-module mnist
 
 import {
     argmax, concat, exp, log, max, ones, random, range, reshape, shape, sum,

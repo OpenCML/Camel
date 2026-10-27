@@ -112,7 +112,7 @@ kind = "negative"
 case = "../../../cases/compile/module_load/value_cycle_modules.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["cycle_x.cml:5:16: [Error]: The value 'cycle_y::y' depends on itself: cycle_y::y (cycle_y.cml:5:8) -> x (cycle_x.cml:5:8) -> cycle_y::y", "name=SemanticDiag::ModuleValueCycle", "name=SemanticDiag::ImportedModuleHasErrors"]
+expect_output_contains = ["cycle_x.cml:4:16: [Error]: The value 'cycle_y::y' depends on itself: cycle_y::y (cycle_y.cml:4:8) -> x (cycle_x.cml:4:8) -> cycle_y::y", "name=SemanticDiag::ModuleValueCycle", "name=SemanticDiag::ImportedModuleHasErrors"]
 
 # ---- Modules that import each other ----
 

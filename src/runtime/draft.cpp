@@ -1289,32 +1289,87 @@ void GraphDraft::closeChainOver(gc_node_ref_t id) {
     requireOneWriting("closeChainOver");
     ++mutations_;
     const std::vector<gc_node_ref_t> syncInputs(syncInputsOf(id).begin(), syncInputsOf(id).end());
+    const std::vector<gc_node_ref_t> ctrlInputs(ctrlInputsOf(id).begin(), ctrlInputsOf(id).end());
     const std::vector<gc_node_ref_t> syncUsers(syncUsersOf(id).begin(), syncUsersOf(id).end());
+    const std::vector<gc_node_ref_t> ctrlUsers(ctrlUsersOf(id).begin(), ctrlUsersOf(id).end());
+    // A predecessor of the node this chain closes over that belongs to another block cannot become
+    // the successor's predecessor, that is not the successor itself and that is gone altogether
+    // cannot either: an ordering joins two statements of one block, so the successor heads its own
+    // block's chain instead (docs/design/effects/edges.cn.md 4.6).
+    const auto survives = [&](gc_node_ref_t pred, gc_node_ref_t user) {
+        return pred != user && pred != id && alive(pred) && nodeRegion(pred) == nodeRegion(user);
+    };
+    // While the control kind still exists it names the same pair beside the sync edge: the two
+    // orderings have to agree until the control edges go (src/runtime/graph_edges.cpp,
+    // `checkSyncEdges` is what reads the sync edge back). The edge is written rather than
+    // inferred, because the path through the node this chain closes over is the one about to
+    // disappear.
+    const auto nameControlPair = [&](gc_node_ref_t user, gc_node_ref_t pred) {
+        const auto ctrl = ctrlInputsOf(user);
+        if (std::ranges::find(ctrl, pred) == ctrl.end()) {
+            appendInput(DraftEdgeKind::Ctrl, user, pred);
+        }
+    };
     for (gc_node_ref_t user : syncUsers) {
         if (user == id || !alive(user)) {
             continue;
         }
-        // A sync edge joins two statements of one block, so a predecessor of the node this chain
-        // closes over that belongs to another block cannot become the successor's predecessor: the
-        // successor heads its own block's chain instead (docs/design/effects/edges.cn.md 4.6).
         std::vector<gc_node_ref_t> kept;
         for (gc_node_ref_t pred : syncInputs) {
-            if (alive(pred) && nodeRegion(pred) == nodeRegion(user)) {
+            if (survives(pred, user)) {
                 kept.push_back(pred);
             }
         }
         setSyncInputs(user, kept);
-        // While the control kind still exists it names the same pair beside the sync edge: the two
-        // orderings have to agree until the control edges go (src/runtime/graph_edges.cpp,
-        // `checkSyncEdges` is what reads the sync edge back). The edge is written rather than
-        // inferred, because the path through the node this chain closes over is the one about to
-        // disappear.
         for (gc_node_ref_t pred : kept) {
-            const auto ctrl = ctrlInputsOf(user);
-            if (std::ranges::find(ctrl, pred) == ctrl.end()) {
-                appendInput(DraftEdgeKind::Ctrl, user, pred);
+            nameControlPair(user, pred);
+        }
+    }
+    // An ordering is not lost when the node that carried it goes: what the node this chain closes
+    // over waited on is what the nodes that waited on it wait for -- the statement written before
+    // it, and the shortcut beside the path the graph already had (`pred -> id -> user`). That is
+    // the design's rule for deleting a node, which reconnects the order edges through it
+    // (docs/design/effects/edges.cn.md 4: `A -> B -> C` keeps `A -> C` once `B` goes). It is
+    // written in the control kind, which carries no `sync` statement mark of its own and is what
+    // the paths that have not moved onto the sync edge yet write a wait in. A node that keeps a
+    // wait of its own is left alone. A GATE is what this was first needed for: the commit refuses
+    // one that waits for nothing (src/runtime/graph.cpp, the GATE check). What the node waited on
+    // through neither kind -- a read of a `var` reads its writer through the data port alone -- is
+    // not here to hand on: the fold that would remove such a read keeps it instead
+    // (src/compile/gir/builder_expr.cpp, `collapseNonEscapingVariableReads`).
+    const auto keepWaiting = [&](gc_node_ref_t user) {
+        if (user == id || !alive(user)) {
+            return;
+        }
+        if (header(user) == nullptr) {
+            return;
+        }
+        for (gc_node_ref_t pred : ctrlInputsOf(user)) {
+            if (pred != id) {
+                return;
             }
         }
+        for (gc_node_ref_t pred : syncInputsOf(user)) {
+            if (pred != id) {
+                return;
+            }
+        }
+        for (gc_node_ref_t pred : syncInputs) {
+            if (survives(pred, user)) {
+                nameControlPair(user, pred);
+            }
+        }
+        for (gc_node_ref_t pred : ctrlInputs) {
+            if (survives(pred, user)) {
+                nameControlPair(user, pred);
+            }
+        }
+    };
+    for (gc_node_ref_t user : ctrlUsers) {
+        keepWaiting(user);
+    }
+    for (gc_node_ref_t user : syncUsers) {
+        keepWaiting(user);
     }
 }
 
@@ -1938,7 +1993,13 @@ gc_slot_idx_t GraphDraft::allocateRuntimeSlot(camel::core::type::Type *type) {
     ASSERT(
         slotIndex < static_cast<size_t>(std::numeric_limits<gc_slot_idx_t>::max()),
         "Draft runtime slot count exceeds the data-index range.");
-    runtimeSlotTypes_.push_back(type);
+    // A value of `never` never exists (design principles 3.9): the expression that has this type
+    // gives no value at all, so its slot holds nothing, like the slot of a `void` value. The
+    // graph keeps the name (the type of an `exit` call, the result type of a function that never
+    // returns), and no runtime layout is ever made of it.
+    runtimeSlotTypes_.push_back(
+        type->code() == camel::core::type::TypeCode::Never ? camel::core::type::Type::Void()
+                                                           : type);
     return static_cast<gc_slot_idx_t>(slotIndex);
 }
 

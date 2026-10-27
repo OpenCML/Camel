@@ -3,7 +3,6 @@
  * the rule (`guarded__when`) and passes it to the Rule value. The
  * surface is the same `when` a function uses (design principles 4.4).
  */
-module when_rule
 
 import { rule_name } from rewrite
 

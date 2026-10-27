@@ -1,0 +1,35 @@
+id = "modules.graph_function"
+order = 930
+tier = "fast"
+tags = ["feat", "modules", "graph"]
+desc = "The graph module takes and gives functions, not snapshots of a program (design principles 9.1): the graphs of a function, a transaction opened on it and the changed function a commit gives back."
+
+[defaults]
+kind = "behavior"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "graph_function.reads"
+desc = "`graph_of(f)` is the body of the function and `graphs_of(f)` the graphs it reaches, each once, in the order of their ids."
+case = "../../../cases/modules/graph_function/reads.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "2\n[helper, f]\nf\ntrue\n"
+
+[[tests]]
+name = "graph_function.edit_and_commit"
+desc = "A transaction on a function: replace a node, commit, and the function that comes back computes the same and has fewer nodes; the function it was opened on is unchanged."
+case = "../../../cases/modules/graph_function/edit.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "1\n10 10\ntrue\n"
+
+[[tests]]
+name = "graph_function.open_wants_a_function"
+desc = "`open(5)` is refused: the declaration takes a function (`when is_function::<F>()`), and the report names the condition."
+kind = "negative"
+case = "../../../cases/modules/graph_function/open_not_function.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenConditionUnmet"

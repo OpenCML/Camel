@@ -39,15 +39,12 @@
 // and --verify-ops refuses a signature file whose entry still has one.
 //
 // A value a module exports (`math::pi`; design principles 10.1) needs neither @pure nor a URI
-// (it is not an operator). A declaration module cannot write it — a `let` needs an initializer —
-// so the value's entry is recorded in a comment, and the C++ module remains the one source of
-// the value itself:
+// (it is not an operator). A declaration module writes it with no right side, and the C++ module
+// is the one source of the value itself:
 //
 //   /// What it is.
 //   /// @example <code>    // <result>
-//   // value name: T
-//
-// (A signature file that is not compiled may write the value itself as `export let name: T = ...`.)
+//   export let name: T
 //
 // A library module written in Camel (stdlib/<module>.cml) is its own signature file: its
 // `export func` declarations and their `///` comments are read the same way.
@@ -136,7 +133,7 @@ const MODULES = [
         title: '`array`: arrays, sorting and higher-order functions',
         kind: 'camel',
         // Most of the module is Camel; a body-less declaration is one of its native operators
-        // (the sorts, argsort, flatten, unique), and the page says so. Those declarations are
+        // (argsort and the kernels of sort, sum, min and max), and the page says so. Those declarations are
         // checked against the registered operators like a C++ module's.
         native: true,
     },
@@ -159,11 +156,8 @@ const MODULES = [
     },
     {
         name: 'statistics',
-        title: '`statistics`',
-        kind: 'cpp',
-        // The declarations, not a signature file: they are what the module compiles.
-        source: 'statistics.cml',
-        declaration: true,
+        title: '`statistics`: variance, standard deviation, median and quantile',
+        kind: 'camel',
     },
     {
         name: 'random',
@@ -234,8 +228,7 @@ const MODULES = [
         name: 'hash',
         title: '`hash`',
         kind: 'cpp',
-        // The declarations, not a signature file: they are what the module compiles (
-        // `sha256` is two declarations with two `#op` URIs.
+        // Written in Camel over one private native kernel: no exported declaration is an operator.
         source: 'hash.cml',
         declaration: true,
     },
@@ -274,15 +267,12 @@ const MODULES = [
     },
     {
         name: 'graph',
-        title: '`graph`: a program as a value',
+        title: '`graph`: the graph of a function as a value',
         kind: 'cpp',
-        // The declarations, and, in the signature file, the reference entries of the four
-        // operators whose type C++ computes (a function value's type). `constant` and
-        // `add_constant` take the type of their sample and are written out per sample type
-        // 
+        // The declarations only: every signature is stated, a function-valued argument is `F`
+        // with `when is_function::<F>()`.
         source: 'graph.cml',
         declaration: true,
-        computed: 'signatures/graph.cml',
     },
     {
         name: 'rewrite',
@@ -320,10 +310,9 @@ const MODULES = [
         name: 'python',
         title: '`python`: the embedded interpreter',
         kind: 'cpp',
-        // Six fixed signatures are declared in stdlib/python.cml; `py_call` (two URIs),
-        // `py_print`/`py_println` are variadic and `py_wrap`/`py_unwrap` move a type through the
-        // module type `PyObject<T>`, so their reference entries live in the signature file named
-        // by `computed:`.
+        // Seven fixed signatures are declared in stdlib/python.cml; `py_wrap`/`py_unwrap` move a
+        // type through the module type `PyObject<T>`, so their reference entries live in the
+        // signature file named by `computed:`.
         source: 'python.cml',
         declaration: true,
         computed: 'signatures/python.cml',
@@ -372,12 +361,11 @@ const MODULES = [
         name: 'onnx',
         title: '`onnx`: export a program as an ONNX model',
         kind: 'cpp',
-        // `supported_operators` is declared in stdlib/onnx.cml; `export_model` takes a function
-        // of any parameter list and an example that must be its parameter tree, so its reference
-        // entry is in the signature file named by `computed:`.
+        // Both operators are declared in stdlib/onnx.cml: `supported_operators`, and
+        // `export_model` with the `with` parameters and the defaults a call reads its arguments
+        // by (the module keeps the kernel, the executor and the purity).
         source: 'onnx.cml',
         declaration: true,
-        computed: 'signatures/onnx.cml',
     },
 ]
 
@@ -419,8 +407,8 @@ function splitParams(text) {
 
 // -1 for a list with a variadic parameter, as `camel inspect --ops` reports it. A parameter can
 // be variadic without being spelled `...name`: an optional parameter collected into a variadic
-// tuple, `args?: (...PyObject) | PyObject[]` (`py_call`'s keyword URI), accepts any number of
-// arguments too, and the C++ resolver reports its count as -1.
+// tuple, `args?: (...T) | T[]`, accepts any number of arguments too, and the C++ resolver
+// reports its count as -1.
 function countParams(params) {
     return params.some((p) => p.startsWith('...') || /\(\s*\.\.\./.test(p)) ? -1 : params.length
 }
@@ -541,11 +529,17 @@ function signatureBodyProblems() {
     return problems
 }
 
-function readDeclarations(file, module) {
+function readDeclarations(file, module, options = {}) {
     const lines = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n').split('\n')
     const relative = path.relative(REPO_ROOT, file).replace(/\\/g, '/')
     const keyword = 'export func'
     const entries = []
+    // The private operators of the module, when the caller asks for them: a body-less `func` a
+    // library module declares without exporting is the kernel an `#impl` function runs (design
+    // principles 10.4). They are not part of the reference page, so they are collected
+    // separately instead of joining `entries`.
+    const kernels = []
+    entries.kernels = kernels
     const sectionNotes = new Map()
     const sections = []
     entries.sectionNotes = sectionNotes
@@ -620,42 +614,9 @@ function readDeclarations(file, module) {
             pendingUri = null
             continue
         }
-        // A C++ module's value has no declaration to write: the declaration file records its
-        // reference entry in a comment, and the C++ module stays the one source of the value
-        // It carries the same doc comment as an
-        // operator, above the `// value` line.
-        const docValue = module.kind === 'cpp' && trimmed.match(/^\/\/ value (\w+)\s*:\s*(.+)$/)
-        if (docValue) {
-            const entry = {
-                module: module.name,
-                name: docValue[1],
-                section,
-                line: i + 1,
-                file: relative,
-                value: true,
-                with: [],
-                norm: [],
-                result: docValue[2],
-                doc: [],
-                purity: 'value',
-                effect: '',
-                fails: [],
-                examples: [],
-                fragments: [],
-                uri: null,
-            }
-            for (const text of doc) {
-                if (text.startsWith('@example-fragment')) entry.fragments.push(text.slice('@example-fragment'.length).trim())
-                else if (text.startsWith('@example')) entry.examples.push(text.slice('@example'.length).trim())
-                else if (!text.startsWith('@')) entry.doc.push(text)
-            }
-            entries.push(entry)
-            doc = []
-            withText = ''
-            pendingUri = null
-            continue
-        }
-        const valueMatch = module.kind === 'cpp' && trimmed.match(/^export let (\w+)\s*:\s*([^=]+?)\s*=/)
+        // A C++ module's value is declared with no right side (`export let inf: float`), as a function
+        // with no body stands for its operator; it carries the same doc comment as an operator.
+        const valueMatch = module.kind === 'cpp' && trimmed.match(/^export let (\w+)\s*:\s*([^=]+?)\s*(?:=|$)/)
         if (valueMatch) {
             const entry = {
                 module: module.name,
@@ -698,6 +659,9 @@ function readDeclarations(file, module) {
             const tagged = trimmed.match(/^#\[?op\(['"]([^'"]+)['"]\)/)
             if (tagged) {
                 pendingUri = tagged[1]
+            } else if (/^#impl\(/.test(trimmed)) {
+                // `#impl(kernel)`: a Camel definition that carries a native kernel for speed. The
+                // definition is what the page documents; the kernel is private to the module.
             } else if (module.kind === 'cpp') {
                 // A signature file writes `#op(...)` and nothing else: another tag there is a typo,
                 // not a declaration.
@@ -716,16 +680,40 @@ function readDeclarations(file, module) {
         pendingUri = null
         continue
     }
-    if (trimmed.startsWith(keyword + ' ')) {
-            const rest = trimmed.slice(keyword.length + 1)
+    if (trimmed.startsWith(keyword + ' ') ||
+        (options.kernels === true && /^func\s+\S/.test(trimmed))) {
+            const isKernel = !trimmed.startsWith(keyword + ' ')
+            const rest = trimmed.slice(isKernel ? 'func'.length + 1 : keyword.length + 1)
             const name = rest.slice(0, rest.indexOf('(')).replace(/::<.*>$/, '')
             const args = bracketed(rest, rest.indexOf('('))
             const after = rest.slice(args.end + 1)
+            // A private function with a body is not an operator at all: it ends the pending
+            // comment as any other private declaration of a library does.
+            if (isKernel && declarationBody(after, lines, i)) {
+                doc = []
+                withText = ''
+                pendingUri = null
+                continue
+            }
             // A pass declaration (design principles 9.3): a body-less function whose condition
             // is the pass applicability. A pass is a function the pipeline applies to the
             // program, not an operator the module registers; it is documented in docs/cli.md,
-            // and its parameters are the declaration's `with` list.
-            if (!declarationBody(after, lines, i) &&
+            // and its parameters are the declaration's `with` list. Only a compiled declaration
+            // can declare a pass: a file under stdlib/signatures/ is reference text that is never
+            // compiled, and describes operators the C++ resolver gives a computed type, where the
+            // same condition is the type's (`grad::<F>(f: F): Gradient<F> when is_function::<F>()`).
+            // A pass has the shape of a function transform, `(f: F): F!`; a declaration of
+            // another shape that is conditioned the same way is an operator of a function value
+            // (`graph_of::<F>(f: F): Graph`), and one that names its operator with `#op` is an
+            // engine the module implements (`rewrite`, called as `f->rewrite<rules>`).
+            const passShaped = (() => {
+                const one = /^\s*\w+\s*:\s*(\w+)\s*$/.exec(args.inner)
+                // A pass may name the resources it uses (`uses driver`) before its condition.
+                const answer = /^\s*:\s*(\w+)!\s*(?:uses\s+[\w:, ]+?\s+)?when\b/.exec(after)
+                return one !== null && answer !== null && one[1] === answer[1]
+            })()
+            if (!relative.startsWith('stdlib/signatures/') && !declarationBody(after, lines, i) &&
+                passShaped && pendingUri === null &&
                 /\bwhen\s+is_function::<\w+>\(\)\s*$/.test(after)) {
                 doc = []
                 withText = ''
@@ -746,7 +734,8 @@ function readDeclarations(file, module) {
                 // A body-less `export func` in a library module written in Camel declares one of
                 // the module's native operators (`array`'s sorts and primitives): there is no
                 // subgraph, and the kernel is the operator's.
-                native: module.kind === 'camel' && !declarationBody(after, lines, i),
+native: !declarationBody(after, lines, i),
+                private: isKernel,
                 doc: [],
                 purity: null,
                 effect: '',
@@ -766,11 +755,15 @@ function readDeclarations(file, module) {
                 else entry.doc.push(text)
             }
             // A native entry names its operator like a C++ module's declaration does.
-            if (module.kind === 'cpp' || entry.native) {
+            if (entry.native) {
                 // `module:function`, or what the `#op` tag above says.
                 entry.uri = pendingUri || `${module.name}:${name}`
             }
-            entries.push(entry)
+            if (isKernel) {
+                kernels.push(entry)
+            } else {
+                entries.push(entry)
+            }
             doc = []
             withText = ''
             pendingUri = null
@@ -814,6 +807,20 @@ function parseDeclarations(module) {
     entries.sectionNotes = sectionNotes
     entries.sections = sections
     return entries
+}
+
+// The private operators of a module: the kernels its `#impl` functions run. They are body-less
+// declarations the module does not export, so the reference page does not list them (a private name
+// is not the module's interface) and `--verify-ops` checks them against the operators the module
+// registers, marked private in the listing.
+//
+// The module's own file is read whichever language implements the module: `str`, `re` and `hash`
+// are compiled by C++ and still declare their kernels in Camel, with the `#op` tag that names the
+// operator they answer. A signature file declares no private kernel at all (it writes `#op(...)`
+// and exported prototypes only), so reading every module's source collects exactly the kernels
+// that exist. The kind of the module says what compiles it, not what its declaration file is.
+function parseKernels(module) {
+    return readDeclarations(sourceOf(module), module, { kernels: true }).kernels
 }
 
 // The comment at the top of the file, without the two-line header, the blank line after it and the
@@ -873,7 +880,7 @@ function renderDoc() {
     out.push('  principles 3.1). Every operator of these modules declares which it is.')
     out.push('- **Failure**: a *fault* stops the program with a located diagnostic (an index out of range, an')
     out.push('  argument outside what the operator defines). An *error* is a value: the function returns')
-    out.push('  `T!` and the program handles it with `!!`, `?->` or `match`. A result that may not exist is')
+    out.push('  `T!` and the program handles it with `!!`, `->` or `match`. A result that may not exist is')
     out.push('  `T?`, handled with `??`. An entry without a failure line does not fail.')
     out.push("- **Named arguments**: a call may give a parameter by name (`f(x: 1)`, `len(x: xs)`) when")
     out.push('  the name gives that position the same name in every form the callee has, whether the callee is')
@@ -881,8 +888,8 @@ function renderDoc() {
     out.push("  form runs (`len`'s one parameter is `x` for a string, an array, a map and a set, so one name")
     out.push('  reaches all four). The name is written in the list that holds the parameter: an ordinary one')
     out.push("  in the parentheses (`len(x: xs)`), a `with` one in the angle brackets (`j->get<key: 'port'>`).")
-    out.push('  A form that gives a position no name, or leaves its count to the arguments (a rest list --')
-    out.push("  `py_call`'s two forms differ in arity as well), is one no named argument reaches: the call")
+    out.push('  A form that gives a position no name, or leaves its count to the arguments (a rest list,')
+    out.push("  as `println` takes), is one no named argument reaches: the call")
     out.push('  reports that the signature is not known where the call is written. `contains` refuses a named')
     out.push('  argument for a reason of its own: its position 0 means an element in two forms and the')
     out.push('  substring in the third, so the name would mean another thing in one of them.')
@@ -1009,7 +1016,7 @@ out.push('Not in this reference: the profiler (`perf`).')
     return out.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd() + '\n'
 }
 
-const STATEMENT_STARTS = /^(let|var|if|for|while|return|sync|match|throw)\b/
+const STATEMENT_STARTS = /^(let|var|if|for|while|return|sync|match)\b/
 const BUILTIN_TYPES = new Set([
     'int', 'i8', 'i16', 'i32', 'i64', 'u8', 'u16', 'u32', 'u64', 'usize',
     'float', 'f32', 'f64', 'bool', 'string', 'char', 'void', 'null', 'any', 'never',
@@ -1098,7 +1105,7 @@ const NAME = /^[A-Za-z_]\w*$/
 // A keyword is not a name: `set_terminal_raw_mode(true)` must not make `true` a parameter.
 const RESERVED = new Set([
     'true', 'false', 'null', 'func', 'let', 'var', 'if', 'else', 'for', 'while', 'match', 'return',
-    'throw', 'sync', 'with', 'type', 'struct', 'enum', 'rule', 'export', 'module', 'import', 'as', 'is',
+    'sync', 'with', 'type', 'struct', 'enum', 'rule', 'export', 'module', 'import', 'as', 'is',
 ])
 
 function bindArguments(entry, code) {
@@ -1228,7 +1235,9 @@ async function exampleSource(module, entries, entry, code, asStatement = false) 
     }
     for (const [name, owner] of types) lines.push(`import { ${name} } from ${owner}`)
     const params = bindings.map((binding) => `${binding.name}: ${binding.type}`).join(', ')
-    const fallible = /^throw\b/.test(code.trim())
+    // An example that returns an error value leaves a function declared to return a `T!`, so it
+    // compiles in a fallible body.
+    const fallible = /^return\s+error\(/.test(code.trim())
     lines.push(`func __doc_example(${params}): ${fallible ? 'int!' : 'void'} {`)
     // A call of a `void` function has no value to bind, so it is a statement, not an expression.
     if (asStatement || entry.result === 'void' || STATEMENT_STARTS.test(code.trim())) {
@@ -1582,15 +1591,24 @@ function verifyOps() {
         )
         const ops = allOps.filter((op) => !op.name.includes('::'))
         if (allOps.length === 0) {
+            // A module whose only native kernels are private exports no operator to verify.
+            if (!parseDeclarations(module).some((e) => !e.value && e.native)) continue
             problems.push(`${file}: the module '${registeredName}' registers no operator (is it imported by ${path.relative(REPO_ROOT, PROBE)}?)`)
             continue
         }
-        // Values are not operators: inspect --ops does not list them. A module written in Camel
-        // is verified only for its native declarations: its Camel functions are bodies, not
-        // operators.
+        // Values are not operators: inspect --ops does not list them. Only the body-less
+        // declarations are verified, whichever language the module is written in: a function
+        // with a body is a Camel function, not an operator.
         const entries = parseDeclarations(module).filter(
-            (e) => !e.value && (module.kind === 'cpp' || e.native),
+            (e) => !e.value && e.native,
         )
+        // The same module's private operators: a kernel an `#impl` function runs is declared
+        // body-less in the module's own file and registered by the compiler, so `inspect --ops`
+        // lists it marked private and it is checked here like any other declaration. Leaving it
+        // out was the gap: a private kernel's signature and purity went unread.
+        const kernels = parseKernels(module)
+        // A module whose only operators are private kernels is verified too: `allOps` above holds
+        // them, so it is not skipped for registering nothing.
         const declaredNames = new Set(entries.filter((e) => e.file === file).map((e) => e.name))
         // A module may publish an operator under a type namespace too (`Tensor.shape`). That
         // name is C++'s, because a declaration cannot write it, and the compiler points it at
@@ -1637,9 +1655,16 @@ function verifyOps() {
             }
         }
         for (const op of ops) {
-            const sameName = entries.filter((e) => e.name === op.name)
+            // A private operator is answered by the module's private declarations: an exported
+            // declaration that happened to have the same name is a different operator.
+            const pool = op.private === true ? kernels : entries
+            const sameName = pool.filter((e) => e.name === op.name)
             if (sameName.length === 0) {
-                problems.push(`${file}: '${op.name}' (${op.uri}) is registered but not declared`)
+                problems.push(
+                    `${file}: '${op.name}' (${op.uri}) is registered${
+                        op.private === true ? ' as a private kernel' : ''
+                    } but not declared`,
+                )
                 continue
             }
             const matching = sameName.filter(
@@ -1707,6 +1732,14 @@ function verifyOps() {
                         `${entry.file}:${entry.line}: '${entry.name}' is ${declaredPure ? '@pure' : '@effect'} but ${op.uri} is registered ${op.purity}`,
                     )
                 }
+            }
+        }
+        for (const kernel of kernels) {
+            const hit = allOps.some((op) => op.private === true && op.name === kernel.name && uriMatches(kernel.uri, op.uri))
+            if (!hit) {
+                problems.push(
+                    `${kernel.file}:${kernel.line}: the private kernel '${kernel.name}' (${kernel.uri}) is declared but no such operator is registered`,
+                )
             }
         }
         for (const entry of entries) {

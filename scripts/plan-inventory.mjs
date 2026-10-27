@@ -279,7 +279,9 @@ const CASE_ROOT = 'test/cases'
 // wrote it, which is not a plan. Interpreter caches that are hidden directories (`.pytest_cache`,
 // `.mypy_cache`) are already skipped with the hidden files, and no other directory of this kind
 // exists in the tree.
-const PYTHON_CACHE = /(^|\/)__pycache__\//
+// A `tmp` directory is a test's scratch space (a dataset a case downloads, a plot it writes): no
+// commit carries one (`git ls-files` holds no path with a `tmp` segment), so it is not a case.
+const PYTHON_CACHE = /(^|\/)(__pycache__|tmp)\//
 const CASE_REFERENCE_KEYS = new Set(['case', 'verify_script_path', 'compare_to', 'golden', 'args', 'envs', 'plans'])
 
 // A plan is an index of the cases it runs, and `test/plan-selection.json` is an index of the
@@ -294,11 +296,17 @@ const INDEX_FILES = new Set(['test/plan-selection.json'])
 // benchmark pipeline, which is a harness of its own outside the plans.
 const NAMING_ROOTS = ['test/', 'scripts/', 'src/', 'include/', 'stdlib/', 'modules/', 'tools/', 'examples/', 'exemplars/']
 
+// What the runner writes while it runs (a million files after a few weeks of runs) is not part of
+// the tree the ledger judges: the walk would read it all, and the check would grow with the
+// history of the checkout instead of with the repository.
+const RUN_OUTPUT_DIRS = new Set(['test/results', 'test/tmp', 'node_modules'])
+
 function walkTreeFiles(dir) {
     const out = []
     const walk = (abs, prefix) => {
         for (const name of fs.readdirSync(abs).sort()) {
             const child = `${abs}/${name}`
+            if (RUN_OUTPUT_DIRS.has(`${prefix}/${name}`) || name === 'node_modules') continue
             if (fs.statSync(child).isDirectory()) walk(child, `${prefix}/${name}`)
             else out.push(`${prefix}/${name}`)
         }

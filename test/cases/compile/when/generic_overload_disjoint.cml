@@ -1,0 +1,37 @@
+/**
+ * Two generic functions of one name and one signature, told apart by their `when` conditions on
+ * the declaration's own type parameter (design principles 4.4: `when` is the applicability
+ * condition of an overload, and the same rule holds for a generic function as for a kernel).
+ *
+ * `is_int::<T>()` holds for the `int` call and `is_float::<T>()` for the `float` one, so each
+ * call is the declaration whose condition the argument's type satisfies. The order the two
+ * declarations are written in decides nothing, and neither call is ambiguous.
+ */
+
+func is_int::<T>(): bool {
+    return match type T {
+        case int => true
+        case _ => false
+    }
+}
+
+func is_float::<T>(): bool {
+    return match type T {
+        case float => true
+        case _ => false
+    }
+}
+
+func pick::<T>(x: T): string when is_int::<T>() {
+    return 'int'
+}
+
+func pick::<T>(x: T): string when is_float::<T>() {
+    return 'float'
+}
+
+func main(): int sync {
+    println(pick(3))
+    println(pick(1.5))
+    return 0
+}

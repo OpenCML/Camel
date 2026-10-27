@@ -2,7 +2,6 @@
  * The same through a selective import: `import { has_field }` brings the predicate by name,
  * and its body folds `fields T` with a `static loop` and `==`, all at compile time.
  */
-module when_import_selective
 
 import { has_field } from predicates
 

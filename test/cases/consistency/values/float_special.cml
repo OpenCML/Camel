@@ -1,7 +1,6 @@
 /**
  * Floating point: infinities, NaN, negative zero and how they print and compare.
  */
-module float_special
 
 import { nan } from math
 

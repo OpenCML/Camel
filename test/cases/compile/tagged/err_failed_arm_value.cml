@@ -1,0 +1,16 @@
+/**
+ * The failed arm takes an error value: a plain string is not one, so the arm does not join
+ * with the arm that gives an `int` (design principles 3.9).
+ */
+
+func check(x: int): int! {
+    if x > 0 then { return x } else {
+        return 'x is not positive'
+    }
+}
+
+func main(): int sync {
+    println('never printed')
+    println(check(1) !! 0)
+    return 0
+}

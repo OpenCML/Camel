@@ -17,7 +17,7 @@ namespace camel::core::error {
 
 enum class SemanticDiag : uint32_t {
     // Errors
-    // 0x0001F6 vacant
+    // 0x0001F8 vacant
     Redeclaration               = 0x000001,
     ModuleNotFound              = 0x000002,
     ReservedIdentifier          = 0x000003,
@@ -49,10 +49,11 @@ enum class SemanticDiag : uint32_t {
     ArgumentsRejected           = 0x00001C,
     ImmutablePassedToVarParam   = 0x00001D,
     AssignmentTargetNotVariable = 0x00001E,
-    ConstructNotSupported       = 0x00001F,
-    InvalidTypeArgument         = 0x000020,
-    ArgumentNeedsConversion     = 0x000021,
-    ReturnNeedsConversion       = 0x000022,
+    // 0x00001F: empty. The number is not reused.
+    InvalidTypeArgument     = 0x000020,
+    NativeTypeNotProvided   = 0x0001FD,
+    ArgumentNeedsConversion = 0x000021,
+    ReturnNeedsConversion   = 0x000022,
     // 0x000023: empty. The number is not reused.
     // 0x000025: empty. The number is not reused.
     // 0x000026: empty. The number is not reused.
@@ -73,9 +74,10 @@ enum class SemanticDiag : uint32_t {
     FunctionNameAsValue = 0x000060,
     // Nullable and fallible values (design principles 3.8;
     // docs/technical/29_nullable_and_fallible_values.md).
+    // 0x000070 and 0x000071 are retired: there is no `throw` statement, and an error value
+    // handed to a function that declares a `T!` is the failed arm of that `T!` (design
+    // principles 3.9). The numbers are not reused.
     // 0x000074: empty. The number is not reused.
-    ThrowOutsideFallible  = 0x000070,
-    ThrowNotAnError       = 0x000071,
     TaggedTypeNesting     = 0x000072,
     TaggedValueNotOpened  = 0x000073,
     TaggedOperandMismatch = 0x000075,
@@ -94,7 +96,6 @@ enum class SemanticDiag : uint32_t {
     // Design principles log 2.11: 0xC0 and up.
     LogicalOperandNotBool = 0x0000C0,
     // Modules and namespaces (design principles 10.1, 10.2): 0xD0 and up.
-    ExportedVariable          = 0x0000D0,
     ModuleValueCycle          = 0x0000D1,
     CaptureAfterRecursiveCall = 0x0000D2,
     AmbiguousName             = 0x0000D3,
@@ -295,6 +296,8 @@ enum class SemanticDiag : uint32_t {
     //  6.4, step 1). 0x17B and up.
     NativeDeclarationIncomplete = 0x00017B,
     NativeDeclarationNotLoaded  = 0x00017C,
+    NativeValueNotLoaded        = 0x0001FB,
+    NativeValueMismatch         = 0x0001FC,
     // Body-less declarations: 0x17E and up.
     /// Two generic declarations of one name can take the same call (rule 2).
     NativeDeclarationOverlap = 0x000180,
@@ -382,8 +385,9 @@ enum class SemanticDiag : uint32_t {
     RangeStepZero = 0x0001E6,
     /// A subscript slice with a constant step of 0 takes no element: `t[a:b:0]` (design principles 5.4;
     /// the step of a slice follows the same rule the step of a range does).
-    SliceStepZero               = 0x0001E9,
-    ReducedPrecisionUnsupported = 0x0001D7,
+    SliceStepZero                  = 0x0001E9,
+    WithPackNeedsNativeDeclaration = 0x000191,
+    ReducedPrecisionUnsupported    = 0x0001D7,
     // #impl(f) (design principles 10.4): the Camel body of the function is its semantics and the
     // body-less declaration f of the same module is the operator that runs it. The graph builder
     // resolves the tag when it declares the module, so no pass reads it and it names no reader.
@@ -408,11 +412,12 @@ enum class SemanticDiag : uint32_t {
     // sees the same stream. A value a round may consume is the loop's own state, which the round takes
     // from its port and hands back as the next state (design principles 5.4 and 3.10).
     StreamConsumedInLoop = 0x0001ED,
-    // `tee(s, n)` reads one stream from two places (design principles 5.4): the two streams it gives
+    // `s->tee<n>` reads one stream from two places (design principles 5.4): the two streams it gives
     // share one buffer, and `n` is a hint at the width of that buffer -- the executor grows the buffer
     // rather than block the side that runs ahead -- but no buffer holds fewer than the one element
     // being handed over, so a constant width below 1 is refused where it is written.
     TeeHintNotPositive  = 0x0001EF,
+    StreamCaptured      = 0x0001FA,
     NodeOfNotAParameter = 0x0001DE,
     // The element type of a value is in its type (design principles 5.1), so an array type writes one:
     // a shape with no element type in front of it asks a question the type of a value answers. A
@@ -453,7 +458,8 @@ enum class SemanticDiag : uint32_t {
     /// A `const` case whose constant has no type to take.
     FactConstCaseTypeRequired = 0x0001F7,
     /// A case whose pattern names no variable.
-    FactCaseBindsNoVariable = 0x0001F8,
+    FactCaseBindsNoVariable   = 0x0001F8,
+    TypeFunctionNotApplicable = 0x0001FE,
 
     // Warnings
     IgnoredSideEffect = 0x100002,
@@ -481,6 +487,21 @@ enum class SemanticDiag : uint32_t {
     /// A type parameter is declared at the head of a declaration and written nowhere in its
     /// signature, so no argument could ever give it a type.
     TypeVariableUnused = 0x1001A5,
+    // `never` as an argument and `fail` as a statement (design principles 3.9; the author's ruling of
+    // 2026-10-26). An argument of type `never` never gives a value, and an argument is evaluated
+    // before the call it is written in, so such a call never runs: its own type is `never` and no
+    // overload is chosen for it. A `fail` written as a statement of its own is no effect, so it runs
+    // only where its value is wanted, and a statement after it is never reached.
+    // 0x1C0 and up: the band is new, and the one above it (0x1A5) is the type variables.
+    /// A call with an argument of type `never`: the argument is evaluated before the call and never
+    /// gives a value, so the call never runs, no overload is chosen for it, and its type is `never`.
+    NeverArgumentCall = 0x1001C0,
+    /// A `fail` written as a statement whose value nothing takes: a `fail` is no effect of its own, so
+    /// outside a sync block nothing runs it.
+    FailNotExecuted = 0x1001C1,
+    /// A statement written after a `fail` in the same block: the `fail` never returns, so the statement
+    /// is never reached.
+    StatementAfterFail = 0x1001C2,
 };
 
 constexpr DiagType diagTypeOf(SemanticDiag) { return DiagType::SemanticDiag; }

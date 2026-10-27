@@ -1,10 +1,8 @@
-module fault_shl_width
-
 import { shl } from math
 
 func main(): int sync {
     println('before')
-    println(shl(1, 64))
+    println(1->shl<64>)
     println('not reached')
     return 0
 }

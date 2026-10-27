@@ -27,7 +27,9 @@
 // `save_params` is fixed: it takes a value and a directory, writes the tensor leaves of the value,
 // and returns nothing. A declaration can say that with a type variable over the value.
 
-module nn
+
+/// The state an optimiser carries between steps; the module provides the type.
+export type OptimizerState
 
 // ---- optimizers ----
 

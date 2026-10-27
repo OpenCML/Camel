@@ -9,7 +9,6 @@
  * type. The value is an effect either way; what a sync block adds is that the effects written in
  * it happen.
  */
-module partial_application_var_parameter_effect
 
 with <var total: int>
 func add(x: int): int sync {

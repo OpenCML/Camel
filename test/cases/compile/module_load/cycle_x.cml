@@ -1,5 +1,4 @@
 /** Helper module: a value that needs cycle_y's, which needs this one's. */
-module cycle_x
 import cycle_y
 
 export let x = cycle_y::y + 1

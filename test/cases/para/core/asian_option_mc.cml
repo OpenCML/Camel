@@ -1,7 +1,6 @@
 /**
  * Parallel Monte Carlo pricing workload used to stress independent worker scheduling over a compute-heavy finance kernel.
  */
-module asian_option_mc
 
 import { now } from time
 import { asian_call_price } from sim
@@ -22,7 +21,7 @@ func main(): int sync {
     let duration = now() - start
     let price = total / float(workers)
 
-    'Worker prices (first 8 shown) = {}'->format<prices->slice<0, 8>>->println
+    'Worker prices (first 8 shown) = {}'->format<prices[0:8]>->println
     'Estimated Asian call price = {:.6f}'->format<price>->println
     'Asian option Monte Carlo completed in {:.2f} seconds'->format<duration>->println
     return 0

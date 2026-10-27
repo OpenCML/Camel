@@ -11,7 +11,7 @@ kind = "negative"
 case = "../../../cases/compile/operators/string_sub_assign.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "string_sub_assign.cml:9:5:", "(string, string)", "operator '-=' is not defined for these operand types"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "string_sub_assign.cml:8:5:", "(string, string)", "operator '-=' is not defined for these operand types"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -23,7 +23,7 @@ kind = "negative"
 case = "../../../cases/compile/operators/bool_add_assign.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "bool_add_assign.cml:9:5:", "(bool, bool)", "operator '+=' is not defined for these operand types"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "bool_add_assign.cml:8:5:", "(bool, bool)", "operator '+=' is not defined for these operand types"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -35,7 +35,7 @@ kind = "negative"
 case = "../../../cases/compile/operators/float_mod_assign.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "float_mod_assign.cml:9:5:", "(float, float)", "operator '%=' is not defined for these operand types"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "float_mod_assign.cml:8:5:", "(float, float)", "operator '%=' is not defined for these operand types"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -47,7 +47,7 @@ kind = "negative"
 case = "../../../cases/compile/operators/int_and_assign.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "int_and_assign.cml:9:5:", "(int, int)", "operator '&=' is not defined for these operand types"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "int_and_assign.cml:8:5:", "(int, int)", "operator '&=' is not defined for these operand types"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -59,7 +59,7 @@ kind = "negative"
 case = "../../../cases/compile/operators/array_add_assign.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "array_add_assign.cml:9:5:", "(int[], int[])", "operator '+=' is not defined for these operand types"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "array_add_assign.cml:8:5:", "(int[], int[])", "operator '+=' is not defined for these operand types"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -71,7 +71,7 @@ kind = "negative"
 case = "../../../cases/compile/operators/int_mat_assign.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "int_mat_assign.cml:9:5:", "(int, int)", "operator '@=' is not defined for these operand types"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "int_mat_assign.cml:8:5:", "(int, int)", "operator '@=' is not defined for these operand types"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -83,7 +83,7 @@ kind = "negative"
 case = "../../../cases/compile/operators/string_pow_assign.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "string_pow_assign.cml:9:5:", "(string, string)", "operator '^=' is not defined for these operand types"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "string_pow_assign.cml:8:5:", "(string, string)", "operator '^=' is not defined for these operand types"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -95,7 +95,7 @@ kind = "negative"
 case = "../../../cases/compile/operators/neg_string.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "neg_string.cml:9:13:", "(string)", "operator '-' is not defined for these operand types"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "neg_string.cml:8:13:", "(string)", "operator '-' is not defined for these operand types"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -107,7 +107,7 @@ kind = "negative"
 case = "../../../cases/compile/operators/inv_float.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "inv_float.cml:9:13:", "(float)", "operator '~' is not defined for these operand types"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "inv_float.cml:8:13:", "(float)", "operator '~' is not defined for these operand types"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -119,7 +119,7 @@ kind = "negative"
 case = "../../../cases/compile/operators/contains_string.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "contains_string.cml:8:21:", "(string, string)", "write contains<'b'>('abc') or 'abc'->contains<'b'>"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "contains_string.cml:7:21:", "(string, string)", "write contains<'b'>('abc') or 'abc'->contains<'b'>"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -131,19 +131,30 @@ kind = "negative"
 case = "../../../cases/compile/operators/int_of_bool.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "int_of_bool.cml:8:16:", "(bool)"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "int_of_bool.cml:7:16:", "(bool)"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
 name = "float_of_array"
-desc = "float of an array is rejected when compiled"
-kind = "negative"
+desc = "float of an array converts every element (the core's conversion of an array, no import): it is the array of floats, not an error"
+kind = "behavior"
 case = "../../../cases/compile/operators/float_of_array.cml"
 args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["[1.0]", "never printed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "float_of_struct"
+desc = "float of a value that is neither a number nor an array of numbers is rejected when compiled"
+kind = "negative"
+case = "../../../cases/compile/operators/float_of_struct.cml"
+args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "float_of_array.cml:8:18:", "(int[])"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "float_of_struct.cml:8:18:", "({ a: int })"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -177,7 +188,7 @@ kind = "negative"
 case = "../../../cases/compile/operators/struct_no_add_assign.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "struct_no_add_assign.cml:12:5:", "(P, P)", "operator '+=' is not defined for these operand types"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "struct_no_add_assign.cml:11:5:", "(P, P)", "operator '+=' is not defined for these operand types"]
 expect_output_not_contains = ["never printed", "UnknownInternalError", "operator '=' is not defined"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -189,7 +200,7 @@ kind = "negative"
 case = "../../../cases/compile/operators/add_assign_result_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "add_assign_result_type.cml:18:5:", "(A, A)", "operator '+=' is not defined for these operand types"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "add_assign_result_type.cml:17:5:", "(A, A)", "operator '+=' is not defined for these operand types"]
 expect_output_not_contains = ["never printed", "UnknownInternalError", "operator '=' is not defined"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

@@ -6,9 +6,8 @@
  * The differentiated value is the first `with` parameter (9.9); the rule's tuple has one entry
  * per differentiable parameter of the decorated function.
  */
-module custom_rule
 
-import { grad } from autodiff
+import { grad, vjp } from autodiff
 
 // A deliberately different rule, so the test can tell which derivative was used: 10 * dy.
 func cube_rule(x: float, dy: float): float {

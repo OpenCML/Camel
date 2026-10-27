@@ -1,5 +1,3 @@
-module failed_unreached
-
 // A consequence of the macro-failure rule: the failing macro call is in a function nothing
 // calls, so the program runs fine without std::macro (it prints 42), and std::macro still
 // fails on it, at the call (line 11).

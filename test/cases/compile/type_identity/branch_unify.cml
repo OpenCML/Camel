@@ -1,0 +1,49 @@
+/**
+ * The two arms of a branch have the type they have in common (design principles 5.1): arrays that
+ * differ in length are an array of unknown length, and so are the same arrays inside a tuple, a
+ * struct, a nullable and the result of a function.
+ */
+
+func pair(c: bool): (int[], int) {
+    return if c then ([1, 2], 0) else ([1, 2, 3], 0)
+}
+
+func record(c: bool): { xs: int[], n: int } {
+    return if c then { xs: [1, 2], n: 1 } else { xs: [1, 2, 3], n: 2 }
+}
+
+func two(): int[2] {
+    let xs = [1, 2]
+    return xs as int[2]
+}
+
+func three(): int[3] {
+    let xs = [1, 2, 3]
+    return xs as int[3]
+}
+
+func maybe(c: bool): int[]? {
+    let a: int[2]? = two()
+    let b: int[3]? = three()
+    return if c then a else b
+}
+
+func producer(c: bool): (x: int) => int[] {
+    let a = (x: int): int[2] => {
+        let xs = [x, x]
+        return xs as int[2]
+    }
+    let b = (x: int): int[3] => {
+        let xs = [x, x, x]
+        return xs as int[3]
+    }
+    return if c then a else b
+}
+
+func main(): int sync {
+    println(pair(true), pair(false))
+    println(record(true).xs, record(false).xs)
+    println(maybe(true), maybe(false))
+    println(producer(true)(7), producer(false)(7))
+    return 0
+}

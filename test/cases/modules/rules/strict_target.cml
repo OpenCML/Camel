@@ -4,9 +4,8 @@
  * `std::opt safe_fp=true` does. The reassociating coefficient law therefore does not fire under
  * the strict policy while the exact doubling law still does. The counts show which law fired.
  */
-module strict_target
 
-import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
+import { Node, Graph, nodes, op, op_name, name, graphs_of } from graph
 
 func combine(x: float): float { return x * 3.0 + x * 5.0 }
 func double(x: float): float { return x * 3.0 + x * 3.0 }
@@ -18,16 +17,16 @@ func opText(n: Node): string {
     }
 }
 
-func nodesOf(p: Program, function: string): Node[] {
-    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+func nodesOf::<F>(p: F, function: string): Node[] {
+    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
     return nodes(found[0])
 }
 
-func countOf(p: Program, function: string, operator: string): int {
+func countOf::<F>(p: F, function: string, operator: string): int {
     return len(nodesOf(p, function)->filter<(n: Node): bool => opText(n) == operator>)
 }
 
-export func report(p: Program): Program! sync {
+export func report::<F>(p: F): F! sync {
     println('combine', countOf(p, 'combine', ':op/add_d'), countOf(p, 'combine', ':op/mul_d'))
     println('double', countOf(p, 'double', ':op/add_d'), countOf(p, 'double', ':op/mul_d'))
     return p

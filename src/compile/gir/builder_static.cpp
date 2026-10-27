@@ -24,6 +24,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/text.h"
 #include "camel/core/type/tree.h"
+#include "camel/parse/ast/type_case_words.h"
 #include "camel/utils/scope.h"
 
 #include <charconv>
@@ -64,20 +65,17 @@ std::string sequenceElementName(const data_ptr_t &data) {
 std::string typePatternText(const GCT::node_ptr_t &caseNode) {
     const uint16_t patterns = caseNode->typeCasePatterns();
     std::string text;
-    const auto add = [&](GCT::TypeCaseKind kind, const char *name) {
+    // The shape words are the table the syntax tree builder reads (type_case_words.h).
+    for (const camel::parse::ast::TypeCaseWord &entry : camel::parse::ast::kTypeCaseWords) {
+        const auto kind = static_cast<GCT::TypeCaseKind>(entry.kind);
         if ((patterns & GCT::typeCaseBit(kind)) == 0) {
-            return;
+            continue;
         }
         if (!text.empty()) {
             text += " | ";
         }
-        text += name;
-    };
-    add(GCT::TypeCaseKind::Struct, "struct");
-    add(GCT::TypeCaseKind::Tuple, "tuple");
-    add(GCT::TypeCaseKind::Func, "func");
-    add(GCT::TypeCaseKind::Leaf, "#leaf");
-    add(GCT::TypeCaseKind::Wildcard, "_");
+        text += entry.word;
+    }
     for (size_t i = 0; i < caseNode->typeCaseTypeCount(); ++i) {
         if (!text.empty()) {
             text += " | ";
@@ -130,6 +128,16 @@ void Builder::resolveGenericTemplateNames(const generic_template_ptr_t &tmpl) {
     // read here; only the names are.
     locals.emplace_back();
     insertParameterNames(tmpl->func, tmpl->funcType, locals.back());
+    // The type parameters of the head are names of the body too: `T(x)` converts to the type `T`
+    // is bound to at each instance (resolveDRefNode).
+    for (const std::string &param : tmpl->headParams) {
+        locals.back().insert(param);
+    }
+    std::vector<std::string> variables;
+    camel::core::type::collectTypeVars(tmpl->funcType, variables);
+    for (const std::string &variable : variables) {
+        locals.back().insert(variable);
+    }
     walkStaticBodyNames(tmpl->func->at(1), locals, true);
     // A `when` clause is not a body: it belongs to the condition evaluator, which already answers
     // the declaration-site half of it for a function that is not generic, where it is written
@@ -269,7 +277,19 @@ void Builder::walkStaticBodyNames(
         if (!found && restBindingNamed(node->name()) != nullptr) {
             found = true;
         }
+        // The value an arrow hands to the call it names (`$passed`, design principles 3.9) is the
+        // arrow's own name, bound where the arrow is built and not by the source: a body read
+        // ahead of its instance has nothing to look it up in, and the call it stands in is what
+        // receives it.
+        if (!found && node->name() == GCT::kPassedValueName) {
+            found = true;
+        }
         if (!found && staticValueNamed(node->name()).has_value()) {
+            found = true;
+        }
+        // A type variable the instance binds is read as the conversion of its type (`T(x)`,
+        // resolveDRefNode): a case that is not selected must see it as the selected one does.
+        if (!found && camel::core::type::findTypeBinding(typeBindings_, node->name()) != nullptr) {
             found = true;
         }
         // The declaration-site check of a generic template is the one caller that reads a body
@@ -393,17 +413,16 @@ bool Builder::typeCaseMatches(Type *subject, const GCT::node_ptr_t &caseNode) co
     const uint16_t patterns = caseNode->typeCasePatterns();
     const bool isStruct     = subject->code() == TypeCode::Struct;
     const bool isTuple = subject->code() == TypeCode::Tuple && tree::isInternal(subject);
-    const bool isFunc  = subject->code() == TypeCode::Function;
     if ((patterns & typeCaseBit(GCT::TypeCaseKind::Wildcard)) != 0) {
+        return true;
+    }
+    if ((patterns & extraTypeShapes(subject)) != 0) {
         return true;
     }
     if (isStruct && (patterns & typeCaseBit(GCT::TypeCaseKind::Struct)) != 0) {
         return true;
     }
     if (isTuple && (patterns & typeCaseBit(GCT::TypeCaseKind::Tuple)) != 0) {
-        return true;
-    }
-    if (isFunc && (patterns & typeCaseBit(GCT::TypeCaseKind::Func)) != 0) {
         return true;
     }
     if ((patterns & typeCaseBit(GCT::TypeCaseKind::Leaf)) != 0 && !isStruct && !isTuple) {
@@ -494,12 +513,11 @@ node_handle_t Builder::visitTypeMatchNode(const GCT::node_ptr_t &gct) {
                 const bool isStruct = pattern->code() == TypeCode::Struct;
                 const bool isTuple =
                     pattern->code() == TypeCode::Tuple && tree::isInternal(pattern);
-                const bool isFunc = pattern->code() == TypeCode::Function;
                 const bool coveredByShape =
+                    (earlierShapes & extraTypeShapes(pattern)) != 0 ||
                     (isStruct &&
                      (earlierShapes & typeCaseBit(GCT::TypeCaseKind::Struct)) != 0) ||
-                    (isTuple && (earlierShapes & typeCaseBit(GCT::TypeCaseKind::Tuple)) != 0) ||
-                    (isFunc && (earlierShapes & typeCaseBit(GCT::TypeCaseKind::Func)) != 0);
+                    (isTuple && (earlierShapes & typeCaseBit(GCT::TypeCaseKind::Tuple)) != 0);
                 if (coveredByShape) {
                     diags_->of(SemanticDiag::StaticMatchPatternCannotMatch)
                         .atOrigin(caseNode->origin())
@@ -1261,7 +1279,7 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
                     throw BuildAbortException();
                 }
             }
-            // A body that ends with `return` (or `throw`) leaves the function; the rounds after
+            // A body that ends with `return` leaves the function; the rounds after
             // it are unreachable and keep the state as it was.
         } else if (value != nullptr) {
             Type *bodyType = valueTypeOf(nodeTypeOf(value));

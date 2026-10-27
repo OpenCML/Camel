@@ -1,5 +1,4 @@
 /// A tag written where its declaration does not list it (design principles 6.2).
-module err_position
 
 export tag shape on type
 

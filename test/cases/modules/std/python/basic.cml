@@ -1,26 +1,36 @@
 /**
  * Exercises the minimal embedded-Python bridge: call a builtin, evaluate an expression, and unwrap the result.
  */
-module main
 
 // 最简 python 模块测试
-import { py_eval, py_call, py_wrap, py_unwrap, py_dispose, PyObject } from python
+import { import_module, eval, attr, call, to_string, to_py, from_py, PyObject } from python
+
+// A Python call is an error value; these programs expect every call to succeed.
+func must(r: PyObject!): PyObject {
+    return match r {
+        case error e => fail<'InvalidArgument'>(e.message)
+        case v => v
+    }
+}
+
+func wrap::<T>(x: T): PyObject {
+    return must(to_py(x))
+}
 
 func main(): int sync {
     println("=== Python Module Basic Tests ===")
 
-    println("\n[1] py_call('print', py_wrap('hello'))")
-    py_call("print", py_wrap("hello"))
+    println("\n[1] [wrap('hello')]->call<print>")
+    let print = must(import_module("builtins")->attr<"print">)
+    let _ = [wrap("hello")]->call<print>
 
-    println("\n[2] py_eval('1 + 2') -> py_unwrap as int")
-    let r = py_unwrap(py_eval("1 + 2") as PyObject<int>)
+    println("\n[2] eval('1 + 2') -> py_unwrap as int")
+    let r = from_py::<int>(must(eval("1 + 2"))) !! -1
     '  1 + 2 = {}'->format<r>->println
 
-    println("\n[3] py_dispose releases a PyObject explicitly and is idempotent")
-    let obj = py_eval("'dispose-me'")
-    py_dispose(obj)
-    py_dispose(obj)
-    println("  disposed PyObject twice")
+    println("\n[3] to_string is the str() of the object")
+    let obj = must(eval("'text-of-object'"))
+    println("  " + (to_string(obj) !! "failed"))
 
     println("\n=== Basic tests completed ===")
     return 0

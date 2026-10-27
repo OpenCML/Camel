@@ -9,9 +9,18 @@
  *
  * One family, one spelling: `is_<property>::<T>()` asks one type, and `is_same::<T, U>()` asks two.
  * The identity predicates (`is_integer`, `is_float`, `is_complex`, `is_string`, `is_bool`,
- * `is_function`) carry the `match type` cases; the others ask them (`is_numeric`, `is_ordered`,
+ * `is_function`, and the shapes `is_array`, `is_nullable`, `is_fallible`, `is_map`, `is_set`) carry the
+ * `match type` cases; the others ask them (`is_numeric`, `is_ordered`,
  * `is_plain`), so a type is named in one place and a new integer width is added to `is_integer`
  * alone. A single type (`i32`, `f32`, `int`) is asked with `is_same`.
+ *
+ * Types are also computed from types, in the one language (design principles 5.6, 21): a type
+ * function is declared with `type`, takes its arguments in the angle brackets of a type position
+ * and has a type expression for its body, a `match type` among them. `ElementOf<T>` (the element
+ * of an array or a set), `PayloadOf<T>` (the `U` of `U?` or `U!`), `KeyOf<T>` and `ValueOf<T>` (the
+ * key and value types of a map) take a type apart where `match type` cannot, and are declared
+ * below without a body: the compiler provides them. They are evaluated when the instance that
+ * binds `T` is made, so `is_integer::<ElementOf<T>>()` asks the element type of `T`.
  *
  * `match type` compares a type's identity as well as its shape (design principles 5.5): the
  * cases below name the types the language spells (`int`, `i32`, `float`, `f32`, `bf16`, `f16`,
@@ -19,6 +28,24 @@
  * `bf16` and `f16` are floating-point types (design principles 7.3), so they belong to
  * `is_float` and inherit `is_numeric` and `is_ordered` from it.
  */
+
+/// The element type of an array or a set type; any other type is refused.
+/// @example is_same::<ElementOf<int[]>, int>()    // true
+/// @example is_same::<ElementOf<Set<i32>>, i32>()    // true
+export type ElementOf<T>
+
+/// The `U` of `U?` or `U!`; any other type is refused.
+/// @example is_same::<PayloadOf<float?>, float>()    // true
+/// @example is_same::<PayloadOf<int!>, int>()    // true
+export type PayloadOf<T>
+
+/// The key type of a map type; any other type is refused.
+/// @example is_same::<KeyOf<Map<string, int>>, string>()    // true
+export type KeyOf<T>
+
+/// The value type of a map type; any other type is refused.
+/// @example is_same::<ValueOf<Map<string, int[]>>, int[]>()    // true
+export type ValueOf<T>
 
 /// True when `T` and `U` are the same type. Identity, not shape: two named types with the same
 /// fields are different, `i32` and `int` are different.
@@ -94,6 +121,59 @@ export func is_ordered::<T>(): bool {
 export func is_function::<T>(): bool {
     return match type T {
         case func => true
+        case _ => false
+    }
+}
+
+/// True when `T` is an array type, of any rank.
+/// @example is_array::<int[]>()    // true
+/// @example is_array::<f32[..]>()    // true
+/// @example is_array::<int>()    // false
+export func is_array::<T>(): bool {
+    return match type T {
+        case array => true
+        case _ => false
+    }
+}
+
+/// True when `T` is `U?` for some `U`.
+/// @example is_nullable::<int?>()    // true
+/// @example is_nullable::<int!>()    // false
+/// @example is_nullable::<int>()    // false
+export func is_nullable::<T>(): bool {
+    return match type T {
+        case nullable => true
+        case _ => false
+    }
+}
+
+/// True when `T` is `U!` for some `U`.
+/// @example is_fallible::<int!>()    // true
+/// @example is_fallible::<int?>()    // false
+/// @example is_fallible::<int>()    // false
+export func is_fallible::<T>(): bool {
+    return match type T {
+        case fallible => true
+        case _ => false
+    }
+}
+
+/// True when `T` is a map, `Map<K, V>`.
+/// @example is_map::<Map<string, int>>()    // true
+/// @example is_map::<Set<int>>()    // false
+export func is_map::<T>(): bool {
+    return match type T {
+        case map => true
+        case _ => false
+    }
+}
+
+/// True when `T` is a set, `Set<E>`.
+/// @example is_set::<Set<int>>()    // true
+/// @example is_set::<Map<string, int>>()    // false
+export func is_set::<T>(): bool {
+    return match type T {
+        case set => true
         case _ => false
     }
 }

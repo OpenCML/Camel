@@ -17,10 +17,9 @@
  * and the counts printed with every check say how many leaves and elements it looked at, so a walk
  * that examined nothing cannot pass.
  */
-module optim_written_dtype_exact
 
 import { full, numel, sum, to_bytes } from tensor
-import { size, to_array } from bytes
+import { to_array } from bytes
 import { adam as native_adam, adam_state, sgd as native_sgd } from nn
 import { adam, constant, init, sgd, update } from optim
 import { with_grad } from autodiff
@@ -55,10 +54,10 @@ func main(): int sync {
     // leaf and four for the f32 one. A gradient read at the wrong width is not the derivative
     // (modules.tensor.dtype, `gather_grad_f64`), so the steps below are only meaningful with this
     // held.
-    if size(to_bytes(gradient.wide)) != 8 * numel(gradient.wide) then failures = failures + 1
-    if size(to_bytes(gradient.narrow)) != 4 * numel(gradient.narrow) then failures = failures + 1
+    if len(to_bytes(gradient.wide)) != 8 * numel(gradient.wide) then failures = failures + 1
+    if len(to_bytes(gradient.narrow)) != 4 * numel(gradient.narrow) then failures = failures + 1
     'optim written_dtype_exact gradient leaves={} elements={} wide_bytes={} narrow_bytes={} total={}'
-    ->format<2, 4, size(to_bytes(gradient.wide)), size(to_bytes(gradient.narrow)), value>
+    ->format<2, 4, len(to_bytes(gradient.wide)), len(to_bytes(gradient.narrow)), value>
     ->println
 
     // ---- one `sgd` step of each leaf, through both paths ----
@@ -69,12 +68,12 @@ func main(): int sync {
     let narrow = to_array(to_bytes(stepped.narrow))
     let agrees_wide = if wide == to_array(to_bytes(camel_stepped.0.wide)) then 1 else 0
     let agrees_narrow = if narrow == to_array(to_bytes(camel_stepped.0.narrow)) then 1 else 0
-    if size(to_bytes(stepped.wide)) != 8 * numel(stepped.wide) then failures = failures + 1
-    if size(to_bytes(stepped.narrow)) != 4 * numel(stepped.narrow) then failures = failures + 1
+    if len(to_bytes(stepped.wide)) != 8 * numel(stepped.wide) then failures = failures + 1
+    if len(to_bytes(stepped.narrow)) != 4 * numel(stepped.narrow) then failures = failures + 1
     if agrees_wide != 1 then failures = failures + 1
     if agrees_narrow != 1 then failures = failures + 1
     'optim written_dtype_exact sgd leaves={} elements={} wide_bytes={} narrow_bytes={} agrees_wide={} agrees_narrow={}'
-    ->format<2, 4, size(to_bytes(stepped.wide)), size(to_bytes(stepped.narrow)), agrees_wide, agrees_narrow>
+    ->format<2, 4, len(to_bytes(stepped.wide)), len(to_bytes(stepped.narrow)), agrees_wide, agrees_narrow>
     ->println
     'optim written_dtype_exact sgd wide={}'->format<wide>->println
     'optim written_dtype_exact sgd narrow={}'->format<narrow>->println
@@ -92,16 +91,16 @@ func main(): int sync {
         if to_array(to_bytes(second.0.wide)) == to_array(to_bytes(camel_second.0.wide)) then 1 else 0
     let adam_narrow =
         if to_array(to_bytes(second.0.narrow)) == to_array(to_bytes(camel_second.0.narrow)) then 1 else 0
-    if size(to_bytes(second.0.wide)) != 8 * numel(second.0.wide) then failures = failures + 1
-    if size(to_bytes(second.0.narrow)) != 4 * numel(second.0.narrow) then failures = failures + 1
-    if size(to_bytes(camel_second.1.m.wide)) != 8 * numel(camel_second.1.m.wide) then failures = failures + 1
-    if size(to_bytes(camel_second.1.m.narrow)) != 4 * numel(camel_second.1.m.narrow) then failures = failures + 1
-    if size(to_bytes(camel_second.1.v.wide)) != 8 * numel(camel_second.1.v.wide) then failures = failures + 1
-    if size(to_bytes(camel_second.1.v.narrow)) != 4 * numel(camel_second.1.v.narrow) then failures = failures + 1
+    if len(to_bytes(second.0.wide)) != 8 * numel(second.0.wide) then failures = failures + 1
+    if len(to_bytes(second.0.narrow)) != 4 * numel(second.0.narrow) then failures = failures + 1
+    if len(to_bytes(camel_second.1.m.wide)) != 8 * numel(camel_second.1.m.wide) then failures = failures + 1
+    if len(to_bytes(camel_second.1.m.narrow)) != 4 * numel(camel_second.1.m.narrow) then failures = failures + 1
+    if len(to_bytes(camel_second.1.v.wide)) != 8 * numel(camel_second.1.v.wide) then failures = failures + 1
+    if len(to_bytes(camel_second.1.v.narrow)) != 4 * numel(camel_second.1.v.narrow) then failures = failures + 1
     if adam_wide != 1 then failures = failures + 1
     if adam_narrow != 1 then failures = failures + 1
     'optim written_dtype_exact adam leaves={} elements={} wide_bytes={} narrow_bytes={} moment_wide={} moment_narrow={} agrees_wide={} agrees_narrow={}'
-    ->format<4, 8, size(to_bytes(second.0.wide)), size(to_bytes(second.0.narrow)), size(to_bytes(camel_second.1.m.wide)), size(to_bytes(camel_second.1.m.narrow)), adam_wide, adam_narrow>
+    ->format<4, 8, len(to_bytes(second.0.wide)), len(to_bytes(second.0.narrow)), len(to_bytes(camel_second.1.m.wide)), len(to_bytes(camel_second.1.m.narrow)), adam_wide, adam_narrow>
     ->println
     'optim written_dtype_exact adam wide={}'->format<to_array(to_bytes(second.0.wide))>->println
     'optim written_dtype_exact adam narrow={}'->format<to_array(to_bytes(second.0.narrow))>->println

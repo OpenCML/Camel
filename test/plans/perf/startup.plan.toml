@@ -49,9 +49,12 @@
 #
 # Every round of the measurement asserts that each (phase, module) among parse, GCT and declare
 # appears exactly once -- a module compiled twice names itself, which no ratio and no total can -- and
-# the round's parse + GCT + declare CPU is read against an absolute total (12 ms: 's
-# candidate, sized for the 4.6 ms regression the per-declaration ceiling cannot see, and 1.2 times the
-# busiest median measured here). The 30% share of the compile work is deleted, not commented out: it
+# the round's parse + GCT + declare CPU is read against an absolute total (20 ms since 2026-10-27,
+# re-baselined by that bound's own calibration rather than weakened: this tree's 371-372 declarations
+# at 41.3, 44.1 and 42.7 us each read 15.3, 16.4 and 15.9 ms against the 12 ms bound, and the load
+# average fell from 83.7 to 58.9 across those three readings without moving the per-declaration cost,
+# so the total is structurally over; 1.2 times the busiest median is 1.2 x 15.9 = 19.1, rounded to 20.
+# The per-declaration 60 us ceiling is unchanged and is the one that does not move with the count). The 30% share of the compile work is deleted, not commented out: it
 # was the load-invariant half of a pair whose other half was the wall clock, and with CPU time there
 # is nothing left for it to excuse. Its numbers stay in
 # docs/technical/50_pyplot_cpython_init.md §4.3 as the record of the unit and rule it belonged to.

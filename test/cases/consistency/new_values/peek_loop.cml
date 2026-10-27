@@ -2,12 +2,11 @@
  * `out = out->append<i>` with `len(out)` read between the appends: the read cannot keep the
  * array, so every append is in place and the loop is linear (the graph has `:var/peek`).
  */
-module peek_loop
 
 func build(n: int): int sync {
     var out: int[] = []
     var total = 0
-    0..n->foreach<sync (i: int) => sync {
+    0..n->foreach<(i: int) => sync {
         out = out->append<i>
         total += len(out)
         return null

@@ -14,7 +14,6 @@
  * so A + B + 3 calls: the program runs when A + B + 3 <= limit and stops with
  * MaxRecursionDepthExceeded at the recursive call of `depth` when it is one more.
  */
-module depth_across
 
 import { get_env } from env
 
@@ -32,8 +31,8 @@ func descend(a: int, b: int): int {
 }
 
 func main(): int sync {
-    let a = int(get_env('A'))
-    let b = int(get_env('B'))
+    let a = int(get_env('A') ?? '')
+    let b = int(get_env('B') ?? '')
     println('start')
     println(descend(a, b))
     println('done')

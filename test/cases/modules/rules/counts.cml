@@ -2,8 +2,7 @@
  * Prints how many additions and products the functions `coefficients` and `chain` have, then the
  * program goes on.
  */
-module counts
-import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
+import { Node, Graph, nodes, op, op_name, name, graphs_of } from graph
 
 func opText(n: Node): string {
     return match op(n) {
@@ -12,23 +11,23 @@ func opText(n: Node): string {
     }
 }
 
-func nodesOf(p: Program, function: string): Node[] {
-    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+func nodesOf::<F>(p: F, function: string): Node[] {
+    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
     return nodes(found[0])
 }
 
-func countOf(p: Program, function: string, operator: string): int {
+func countOf::<F>(p: F, function: string, operator: string): int {
     return len(nodesOf(p, function)->filter<(n: Node): bool => opText(n) == operator>)
 }
 
-export func report(p: Program): Program! sync {
+export func report::<F>(p: F): F! sync {
     println('coefficients', countOf(p, 'coefficients', ':op/add_l'), countOf(p, 'coefficients', ':op/mul_l'))
     println('chain', countOf(p, 'chain', ':op/add_l'), countOf(p, 'chain', ':op/mul_l'))
     return p
 }
 
 /// The products of `scaled` and `kept`, for the rules whose requirement is a permission.
-export func report_requires(p: Program): Program! sync {
+export func report_requires::<F>(p: F): F! sync {
     println('scaled', countOf(p, 'scaled', ':op/mul_d'), 'kept', countOf(p, 'kept', ':op/mul_d'))
     return p
 }

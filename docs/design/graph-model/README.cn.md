@@ -541,7 +541,7 @@ subgraph "adder" {
 
 | | |
 |---|---|
-| 语法元素 | 值进入 `T?`/`T!` 的位置（每一层一个 `CAST`，设计原则 3.8）；`null` 进入 `T?`；`v as T`；`?->` 把错误原样传下去时换载荷类型 |
+| 语法元素 | 值进入 `T?`/`T!` 的位置（每一层一个 `CAST`，设计原则 3.8）；`null` 进入 `T?`；`v as T`；`->` 把错误原样传下去时换载荷类型 |
 | 输入 | `Norm` 一条 |
 | 输出与类型 | 节点的类型就是目标类型 |
 | 纯度与故障 | 纯（装入时分配一个盒子）；带检查的 `as`（如 `t as Tensor<const [3]>`）可能故障，其余不故障 |
@@ -561,7 +561,7 @@ subgraph "adder" {
 
 | | `BRCH` | `JOIN` |
 |---|---|---|
-| 语法元素 | `if`、`match`、`a ?? b`、`a !! b`、`x ?-> f`、`a && b`、`a \|\| b`、可空收窄（3.6） | 同左，与 `BRCH` 成对 |
+| 语法元素 | `if`、`match`、`a ?? b`、`a !! b`、`x -> f`、`a && b`、`a \|\| b`、可空收窄（3.6） | 同左，与 `BRCH` 成对 |
 | 输入 | `Norm` 第 0 条：选择子（`if` 与标记分支是 `bool`，`match` 是被匹配的值）；`With`：`match` 各 `case` 的比较值，按书写顺序；`Ctrl`：顺序，以及各臂捕获的外部值（保证它们先于分支就绪） | `Norm` 第 0 条：配对的 `BRCH`；`With`：各臂的臂尾，按臂序 |
 | 负载 | 配对的 `JOIN`；臂表：每臂一对（臂头，臂尾） | 配对的 `BRCH`；臂数 |
 | 输出与类型 | 被选中的臂的序号（内部用） | 被选中的那条臂的值；类型是各臂类型的汇合（一条臂可以装入另一条的形式，如 `int` 与 `null` 汇合成 `int?`）。没有 `else` 的 `if` 类型是 `void`，不取值 |
@@ -708,12 +708,12 @@ subgraph "twice" {
 | 函数 | 一张图 | 已有 |
 | lambda、函数作为值 | 无捕获：一个函数常量 `DATA`；有捕获：`DATA` 函数常量 + `FILL` | 建议写入 |
 | `if`、`match` | `BRCH`/`JOIN`，每条臂一张子图 | 建议写入（现表只在 `??` 一行顺带提到） |
-| `a ?? b`、`a !! b`、`x ?-> f` | 以标记为选择子的分支：`OPER :op/tag_is_null`（或 `tag_is_error`）→ `BRCH`；臂 0 是替代，臂 1 取出原值 | 已有 |
+| `a ?? b`、`a !! b`、`x -> f` | 以标记为选择子的分支：`OPER :op/tag_is_null`（或 `tag_is_error`）→ `BRCH`；臂 0 是替代，臂 1 取出原值 | 已有 |
 | **`a && b`、`a \|\| b`** | 分支：`a && b` ≡ `if a then b else false`，`a \|\| b` ≡ `if a then true else b`；右边是一条臂的子图，只在被选中时求值。不可重载 | 建议写入 |
 | `a & b`、`a \| b` | 普通的 `OPER`，两边都求值，可重载 | 建议写入 |
 | **`if x != null then A else B`**（`x` 是 `let` 或形参，条件就是这个比较本身） | 与 `match x { case null => B  case v => A }` 同一张图：`OPER :op/tag_is_null` → `BRCH`；臂 0（空）是 `B`；臂 1 的子图以 `OPER :op/tag_null_value` 开头，臂内 `x` 这个名字绑定到拆开后的值 | 建议写入 |
 | 值进入 `T?`/`T!` | 每层一个 `CAST` | 建议写入 |
-| `throw e` | 图的出口，与 `return` 相同 | 已有 |
+| `return e`（错误值） | 图的出口，与 `return` 相同 | 已有 |
 | `attempt(f, args…)` | `OPER :mark/isolate`：`Norm` 第 0 条是函数值，其余是实参；类型 `T!`。算子带 `callsGraphs` 标志 | 已有 |
 | `map`、`filter`、`reduce`、`foreach` | `OPER :mark/…`：`With` 第 0 条是元素函数的函数值，`Norm` 是被处理的值 | 建议写入 |
 | **`f<w>` 作为值（部分应用）** | 一个带捕获槽的函数值：一张 `role = Forwarder` 的图，它的普通形参是 `f` 剩下的参数，捕获是被绑定的 `w`，图体是一个把两者都传给 `f` 的 `FUNC`；使用处是 `DATA` 函数常量 + `FILL` 装入 `w` | 建议写入 |
@@ -1541,7 +1541,7 @@ export func simplify(p: Program): Program! {
 | 步 | 状态 | 做了什么 | 与设计不同或没做的 |
 |---|---|---|---|
 | 6 | **已完成** | 全程序一个建图器（`camel::compile::gir::Builder::of(context)`，`src/compile/gir/program.cpp`），每个模块一组顶层作用域，所有模块建在同一张 `__root__` 上；捕获端口绑定到它代表的节点（"来源"，模块顶层的值即 root 上的节点），调用处与函数值处按来源在调用者里取值，不再按名字重找（`src/compile/gir/captures.cpp`）；直接调用的捕获在链接步按被调图的端口次序接线，取到不动点；泛型实例全程序每组类型一张、挂在声明它的图下 | 实体表没有单独做成一张表：值的实体就是 root 上的节点（`topLevelValues_` 记着它属于哪个模块、叫什么）；捕获的绑定只用到"来源节点"，3.7 的 `Local`/`Entity` 两种绑定在实现里是同一种。被导入模块的函数图不登记为 root 的子图，可达性与以前一样只沿调用与函数值 |
-| 7 | **已完成** | 导出值：`export let` 导出的是 root 上的那个节点，导入方在 root 上直接用、在函数里经捕获端口取（`import { pi } from m`、`m::pi`）；不能导出 `var`（`ExportedVariable`）；按名字导入的同名值是 `ImportNameConflict`；语言服务器把导入的值作为值显示。泛型实例全程序每组类型一张已在第 6 步完成 | C++ 模块没有"值"这种导出物（`math::pi()` 是无参算子），本步没有给模块接口加这一类（属于公开接口的改动，见报告的问题） |
+| 7 | **已完成** | 导出值：`export let` 导出的是 root 上的那个节点，导入方在 root 上直接用、在函数里经捕获端口取（`import { pi } from m`、`m::pi`）；`var` 也可导出，是模块的资源（原先的 `ExportedVariable` 已删除）；按名字导入的同名值是 `ImportNameConflict`；语言服务器把导入的值作为值显示。泛型实例全程序每组类型一张已在第 6 步完成 | C++ 模块没有"值"这种导出物（`math::pi()` 是无参算子），本步没有给模块接口加这一类（属于公开接口的改动，见报告的问题） |
 | 8 | **已完成** | 三步加载：`import` 只绑定名字；每个模块先声明类型，再把被导入的模块编译到"已声明"（`CompileStage::Declared`：函数图无函数体、模板、顶层值、导出表），最后建自己的其余部分；入口模块建全程序（`Builder::buildProgram`）：按导入次序建函数体与顶层值，第一次用到时按需建（跨模块也是），之后链接（捕获接线的不动点、入口调用、效应摘要的不动点与告警）。模块可以互相导入；顶层声明与书写顺序无关；`ModuleValueCycle` 带整条链；被导入模块的 `main` 是普通函数；`ImportCycle`、`ClosureCaptureAfterSelfCall` 退役，后者在递归里余下的情形改为带位置的 `CaptureAfterRecursiveCall` | 写入追踪（`recordWrite`）仍在建图时做：被调函数在调用处之前按需建完，所以调用处看到的变量集合是完整的；只有递归中"调用自己之后才第一次用到变量"这一种得不到完整集合，报错而不是在链接步补顺序。类型在互相导入中可以互用，但类型定义本身互相依赖成环时报 `UnresolvedTypeReference` |
 | 12 | **已完成** | N1 命名空间块内不带前缀的查找（名字与类型）；N2 `using namespace` 可对本模块的命名空间用、按块生效（模块顶层、命名空间块、函数体里的块），歧义在使用处报 `AmbiguousName`；N3 一条优先级规则（局部 > 本模块 > 按名字导入 > `using` > 内建，跨层不合并，运算符例外）；N4 `import a from m` 引入一个名字、`import m as x` 起别名（仓库里依赖旧含义的程序只有探针 `p09`）；N5 命名空间块里的 `let`/`var`；N6 `use` 退役、`import { … } from m::N`；N7 模块用自己的名字（`module` 声明的名字或文件名）限定自己的东西；N8 别的模块的函数图与泛型实例名带模块名。8.1 表的各行在 `test/plans/feat/compile/namespace_rules.plan.toml` 里逐行有测试 | 再次打开的同名命名空间块不共享各自块里的 `using`（按块而不是按命名空间）。语言服务器的查询层没有为命名空间成员做新的显示 |
 

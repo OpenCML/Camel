@@ -1,0 +1,32 @@
+/**
+ * A position that takes no value (the ruling of 2026-10-26 on the arm of a branch): no value
+ * is joined and what the arms give is dropped, while the arms' effects happen as they do
+ * anywhere. It is one rule with an `if` written without an `else` (design principles 3.7).
+ * The first function is the program the ruling was written from, verbatim.
+ */
+
+func visit(i: int): void {
+    var x: int = i
+    return if i > 3 then null else (x = x + 1)
+}
+
+// The same position as a statement, with the effect made visible.
+func bump(i: int): int sync {
+    var x: int = i
+    if i > 3 then null else (x = x + 1)
+    return x
+}
+
+// The tail of a body that returns nothing.
+func tail(i: int): void {
+    var x: int = i
+    if i > 3 then null else (x = x + 1)
+}
+
+func main(): int sync {
+    visit(1)
+    visit(9)
+    tail(1)
+    println(bump(1), bump(9))
+    return 0
+}

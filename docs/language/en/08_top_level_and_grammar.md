@@ -31,7 +31,7 @@ The module top level contains only declarations and no executable statements; ex
 
 ```
 stmt      : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | retStmt | blockStmt
-retStmt   : (return | throw) dataList
+retStmt   : (return | yield) dataList
 stmtBlock : sync? '{' (stmt ';'?)* '}'
 blockExpr : stmtBlock | dataExpr            // branch arm, lambda body
 ```
@@ -58,7 +58,7 @@ nullable   : unary (('??' | '!!') dataExpr)?
 unary      : neg (as type)?
 neg        : ('-' | '!' | '~') negPower | link
 negPower   : ('-' | '!' | '~') negPower | link ('^' negPower)?
-link       : comp (('->' | '?->') comp)*
+link       : comp ('->' comp)*
 comp       : anno ('..' anno)*
 anno       : primary ( '.'field | '[' subscript ']' | '(' arguments ')' | '<' with arguments '>' )*
 primary    : name | literal | '[' element, ... ']' | '{' key: value, ... '}' | '(' expression, ... ')' | lambda
@@ -71,7 +71,7 @@ Subscripts, arguments and `with` arguments must directly follow the expression b
 ## 8.4 Types
 
 ```
-typeDecl  : 'type' name ('<' parameters, ... '>')? '=' (type | enumBody)
+typeDecl  : 'type' name ('<' parameters, ... '>')? ('=' (type | enumBody))?
 typeExpr  : arrayType ('?' | '!')*
 arrayType : specType ('[' ']')*
 specType  : primaryType ('<' (type | const data), ... '>')?
@@ -95,7 +95,7 @@ Every production of the language, one for one with the parser: each production i
 
 ```
 program            : SEP? (decl SEP?)* EOF
-decl               : moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceDecl
+decl               : importDecl | exportDecl | namespaceDecl | usingNamespaceDecl
                      | tagDecl | resourceDecl | dataDecl | funcDecl | typeDecl | ruleDecl | factDecl
 stmt               : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | retStmt
                      | blockStmt | staticForExpr
@@ -104,7 +104,6 @@ stmtList           : stmt (SEP? stmt)* SEP?
 stmtBlock          : 'sync'? '{' stmtList? '}'
 blockExpr          : stmtBlock | dataExpr
 moduleName         : ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)* ('::' IDENTIFIER)*
-moduleDecl         : frontMatter? 'module' identDef
 importDecl         : 'import' (moduleName ('as' identDef)? | (importItem | bracedImports) 'from'
 bracedImports      : '{' (importItem (',' importItem)*)? ','? '}'
 importItem         : identDef ('as' identDef)?
@@ -133,10 +132,10 @@ dataDecl           : ('let' | 'var') carrier (':' typeList)? '=' dataList
                      | 'let' '_' (':' typeList)? '=' dataList
 carrier            : identList | parentIdents
 typeDecl           : frontMatter? 'type' identRef
-                     ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
-                     (typeExpr | STRING)
+                     ('<' identDef (',' identDef)* ','? ('>' | '>='))?
+                     ('=' typeExpr)?
 resourceDecl       : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered')?
-retStmt            : ('return' | 'throw' | 'yield') dataList
+retStmt            : ('return' | 'yield') dataList
 modifiers          : 'sync'+
 identDef           : IDENTIFIER
 identRef           : (IDENTIFIER '::')* IDENTIFIER
@@ -166,10 +165,10 @@ additiveExpr       : multiplicativeExpr (('+' | '-') multiplicativeExpr)*
 multiplicativeExpr : powerExpr (('*' | '/' | '@' | '%') powerExpr)*
 powerExpr          : nullableExpr ('^' powerExpr)?
 nullableExpr       : unaryExpr (('??' | '!!') dataExpr)?
-unaryExpr          : linkExpr ('as' typeExpr)?
-linkExpr           : negExpr (('->' | '?->') compExpr)*
-negExpr            : ('-' | '!' | '~') negPower | compExpr
-negPower           : ('-' | '!' | '~') negPower | compExpr ('^' negPower)?
+unaryExpr          : negExpr ('as' typeExpr)?
+linkExpr           : compExpr ('->' compExpr)*
+negExpr            : ('-' | '!' | '~') negPower | linkExpr
+negPower           : ('-' | '!' | '~') negPower | linkExpr ('^' negPower)?
 compExpr           : annoExpr ('..' annoExpr)*
 annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments
 memberAccess       : '.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']')
@@ -197,7 +196,7 @@ arrayData          : '[' ((indexValues ','?) | dataExpr 'for' identRef 'in' data
                      ']'
 structData         : '{' (pairedValues ','?)? '}' | '{' staticForExpr '}'
 tupleData          : '(' dataList? ','? ')' | '(' staticForExpr ')'
-funcData           : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr
+funcData           : angledParams? parentParams (':' typeExpr)? '=>' blockExpr
 matchTypeExpr      : 'match' 'type' typeExpr '{' typeCase* '}'
 typeCase           : 'case' typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
 staticForExpr      : 'static' staticForHeader '=>' blockExpr
@@ -225,12 +224,15 @@ arrayDim           : '[' (']' | arrayDimItem (',' arrayDimItem)* ','?)? ']'
 arrayDimItem       : '?' | '..' identDef? | dataExpr
 specType           : primaryType ('<' typeOrData (',' typeOrData)* '>')?
 typeOrData         : typeExpr | arrayDim | 'const' dataExpr
+matchTypeType      : 'match' 'type' typeExpr '{' typeArm* '}'
+typeArm            : 'case' typeCasePattern ('|' typeCasePattern)* '=>' typeExpr
 primaryType        : structType | enumType | identRef | '(' typeExpr ')' | tupleType | funcType
+                     | matchTypeType
                      | 'typeof' dataExpr
 tupleType          : '(' typeList? ','? ')'
 structType         : '{' (keyTypePair (',' keyTypePair)*)? ','? '}'
 keyTypePair        : tagUse* identDef ':' typeExpr
-funcType           : modifiers? angledParams? parentParams '=>' typeExpr resourceClause?
+funcType           : angledParams? parentParams '=>' typeExpr resourceClause?
 resourceClause     : ('uses' identRef (',' identRef)* | 'pure')+
 typeList           : typeExpr (',' typeExpr)*
 enumType           : 'enum' '{' (enumVariant (',' enumVariant)*)? ','? '}'

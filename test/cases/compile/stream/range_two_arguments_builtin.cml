@@ -2,7 +2,6 @@
 // `range` in hand is the deleted two-parameter spelling, refused under the name the program wrote
 // (SemanticDiag::RangeTwoArgumentsRemoved), and the refusal does not reach tensor's own `range`,
 // which is reached by its qualified name or at another arity.
-module h426_range_two_arguments_builtin
 
 func main(): int sync {
     println(range(0, 2))

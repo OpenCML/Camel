@@ -1,0 +1,30 @@
+/**
+ * The functions the array module gained when it was rewritten on its own primitives, and the
+ * reductions over an array of any rank (design principles 7.7, the module header of
+ * stdlib/array.cml): `find_index`, `chunks`, `flatten` of a rank and of nested arrays, `mean`, `argmax` and
+ * `argmin` with their tie, NaN and zero rules, and `sum`, `min`, `max` reducing every element in
+ * row-major order.
+ */
+
+
+import { find_index, chunks, flatten, mean, argmax, argmin, sum, min, max, sort_by, unique, take, drop } from array
+import { nan } from math
+
+func main(): int sync {
+    let xs = [3, 9, 2, 9]
+    println(xs->find_index<(x) => x > 4> ?? -1, xs->find_index<(x) => x > 99> ?? -1)
+    println([1, 2, 3, 4, 5]->chunks<2>, [1, 2]->chunks<5>, xs->chunks<4>)
+    println(xs->argmax, [3, 1, 2, 1]->argmin, [1.0, nan, 3.0, nan]->argmax, [1.0, 3.0, nan, 0.5]->argmin)
+    println([0.0, -0.0]->argmax, [-0.0, 0.0]->argmin)
+    println([1.0, 2.0, 3.0, 4.0]->mean, [f32(1.0), f32(2.0)]->mean)
+
+    // ---- every element of an array of any rank, in row-major order ----
+    let grid = [[1, 2], [3, 4]] as int[2, 2]
+    println(flatten(grid), sum(grid), min(grid), max(grid), argmax(grid), argmin(grid))
+    let gridF = [[1.0, 5.0], [3.0, 4.0]] as float[2, 2]
+    println(sum(gridF), mean(gridF), min(gridF), max(gridF), argmax(gridF), argmin(gridF))
+    println(flatten([[1, 2], [3], []]), flatten([['a'], ['b', 'c']]))
+    println(sum([1, 2, 3]->take<0>), unique([3, 1, 3, 2, 1]), xs->drop<3>, xs->take<-1>)
+    println(['pear', 'fig', 'apple']->sort_by<(w) => len(w)>)
+    return 0
+}

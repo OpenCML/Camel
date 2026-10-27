@@ -1,0 +1,6 @@
+error[RuntimeDiag::InvalidArgument]: Invalid argument of 'fs.read_chunk': the offset is -1 and the size is 4; neither may be negative.
+  --> <ROOT>/test/cases/compile/diag_render/runtime_chunk_range.cml:5:40
+   |
+ 5 |     println('some/file.bin'->read_chunk<-1, 4> -> len !! 0)
+   |                                        ^^^^^^^
+help: The operator was given an argument it cannot take; the message names the argument and why. The value comes from the program, so what to change is where it was made.

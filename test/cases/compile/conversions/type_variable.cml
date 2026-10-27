@@ -1,0 +1,22 @@
+/**
+ * A type variable written as a function is the conversion of the type it is bound to: `T(x)` in
+ * `widen::<T>` is `f32(x)` at `T = f32`, `int(x)` at `T = int`. It is the same name the type is
+ * written with, so a scalar converts as `f32(x)` does and an array elementwise (design
+ * principles 5.1).
+ */
+
+import { ones } from tensor
+
+func from_int::<T>(n: int): T {
+    return T(n)
+}
+
+func from_ints::<T>(xs: int[]): T[] {
+    return T(xs)
+}
+
+func main(): int sync {
+    println(from_int::<f32>(3), from_int::<float>(3), from_int::<int>(3))
+    println(from_ints::<f32>([1, 2, 3]), from_ints::<float>([4, 5]))
+    return 0
+}

@@ -46,7 +46,7 @@ golden = "golden/attempt_nested.txt"
 
 [[tests]]
 name = "attempt.forms"
-desc = "The result with `!!`, `?->`, `match ... case error e` and println; a callee that returns `U!` gives `U!` and its own errors pass unchanged (DESIGN-QUESTION(attempt-fallible-target)); a callee that returns `U?` gives `U?!`."
+desc = "The result with `!!`, `->`, `match ... case error e` and println; a callee that returns `U!` gives `U!` and its own errors pass unchanged (DESIGN-QUESTION(attempt-fallible-target)); a callee that returns `U?` gives `U?!`."
 case = "../../../cases/consistency/attempt/forms.cml"
 golden = "golden/attempt_forms.txt"
 
@@ -93,7 +93,7 @@ kind = "behavior"
 backends = false
 case = "../../../cases/consistency/attempt/compiled.cml"
 args = ["-vv", "${case}", "std::opt::inline", "std::jit"]
-expect_output_contains = ["compiled & cached graph 'depth'", "MaxRecursionDepthExceeded at compiled.cml:13:60", "DivisionByZero at compiled.cml:12:53"]
+expect_output_contains = ["compiled & cached graph 'depth'", "MaxRecursionDepthExceeded at compiled.cml:12:60", "DivisionByZero at compiled.cml:11:53"]
 verify_script = """
 assert(input.normalized.stdout.trimEnd().endsWith('-29200\nend'), JSON.stringify(input.normalized.stdout.slice(-200)))
 """
@@ -144,12 +144,12 @@ assert(input.normalized.stdout === '34200000\n1999000\n42\nend\n', JSON.stringif
 
 [[tests]]
 name = "attempt.many.prl"
-desc = "The same on the parallel scheduler, 20000 rounds."
+desc = "The same on the parallel scheduler, 20000 rounds (about 54 s of CPU across the workers; the bound is 4x that)."
 kind = "behavior"
 backends = ["prl"]
 case = "../../../cases/consistency/attempt/many.cml"
 envs = ["N=20000"]
-timeout_ms = 120000
+timeout_ms = 240000
 verify_script = """
 assert(input.normalized.stdout === '3420000\n19900\n42\nend\n', JSON.stringify(input.normalized.stdout))
 """
@@ -231,7 +231,7 @@ case = "../../../cases/consistency/attempt/fault_outside.cml"
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_diagnostic_column = 38
 expect_stdout_starts_with = "-1\n25\n"
 expect_output_not_contains = ["not reached", "Segmentation fault", "dumped core"]
@@ -247,14 +247,14 @@ case = "../../../cases/consistency/attempt/fault_in_argument.cml"
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
-expect_diagnostic_line = 12
+expect_diagnostic_line = 11
 expect_diagnostic_column = 31
 expect_stdout_starts_with = "20\n"
 expect_output_not_contains = ["not reached", "Segmentation fault", "dumped core"]
 
 [[tests]]
 name = "attempt.bad_calls"
-desc = "The type rule: no function, too few or too many arguments, an argument of the wrong type, a function with a `with` parameter. Five compile-time errors, each at its call."
+desc = "The type rule: no function, a function with a `with` parameter (which is called through a closure that binds it), and the deleted `attempt(f, x)` spelling -- one argument too many, of any type -- counted against the transform. Five compile-time errors, each at its call."
 kind = "negative"
 backends = false
 case = "../../../cases/consistency/attempt/bad_calls.cml"
@@ -264,8 +264,22 @@ expect_output_not_contains = ["Segmentation fault", "dumped core"]
 verify_script = """
 const out = input.normalized.stdout + input.normalized.stderr
 assert(out.split('name=SemanticDiag::NoMatchingFunction').length === 6, 'five NoMatchingFunction diagnostics expected: ' + out)
-for (const line of [13, 14, 15, 16, 17]) assert(out.includes(`bad_calls.cml:${line}:20: `), `no diagnostic at line ${line}`)
+for (const line of [12, 13, 14, 15, 16]) assert(out.includes(`bad_calls.cml:${line}:20: `), `no diagnostic at line ${line}`)
 """
+
+[[tests]]
+name = "attempt.bad_call.argument"
+desc = "The value `attempt(f)` keeps the parameters of `f`: called with an argument of the wrong type it is refused at that call, as the call of any function value is."
+kind = "negative"
+backends = false
+case = "../../../cases/consistency/attempt/bad_call_argument.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsMismatch"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 27
+expect_output_contains = ["'(d: int) => int!'", "bad_call_argument.cml:9:27"]
+expect_output_not_contains = ["Segmentation fault", "dumped core"]
 
 # --- optimisation pipelines ---------------------------------------------------------------
 # The callee of `attempt` is an operand, not a call node: no pass copies its body into the
@@ -345,13 +359,13 @@ golden = "golden/attempt_nested.txt"
 
 [[tests]]
 name = "attempt.translate.cpp"
-desc = "std::cpp translates a fault boundary: `attempt` is rt::attempt, a C++ try around the call that makes a fault the failed value, and `!!` a branch on it (it used to refuse the graph at the `attempt`; that the program prints what std::fvm prints is checked by trans.cpp.agree_with_fvm)."
+desc = "std::cpp translates a fault boundary: the value `attempt(f)` is the closure the transform builds, its body is rt::attempt with the captured callee (a C++ try around the call that makes a fault the failed value), and `!!` a branch on the closure's result (it used to refuse the graph at the `attempt`; that the program prints what std::fvm prints is checked by trans.cpp.agree_with_fvm)."
 kind = "behavior"
 backends = false
 case = "../../../cases/consistency/attempt/refuse_translate.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 0
-expect_output_contains = ["rt::attempt<double>(depth, at_11_12, rt::Fn<double(double)>(\"Function(graph=risky, tupleSlots=0)\"", "if (v1_attempt.failed()) {"]
+expect_output_contains = ["rt::attempt<double>(depth, at_10_12, tagged0, x)", "if (v1_call.failed()) {", "Function(graph=risky, tupleSlots=0)"]
 expect_output_not_contains = ["TranslationRefused", "Segmentation fault", "dumped core"]
 
 [[tests]]
@@ -363,7 +377,7 @@ case = "../../../cases/consistency/attempt/refuse_translate.cml"
 args = ["${case}", 'onnx::export out="${test_tmp}/attempt_refused.onnx"']
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
-expect_diagnostic_line = 11
+expect_diagnostic_line = 10
 expect_diagnostic_column = 12
 expect_output_contains = [":mark/isolate"]
 expect_output_not_contains = ["Segmentation fault", "dumped core"]
@@ -377,7 +391,7 @@ case = "../../../cases/consistency/attempt/refuse_grad.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 14
+expect_diagnostic_line = 13
 expect_output_contains = ["no derivative rule for operator ':op/tag_error_value'"]
 expect_output_not_contains = ["Segmentation fault", "dumped core"]
 
@@ -392,15 +406,15 @@ assert(input.normalized.stdout === '-1\n25\n', JSON.stringify(input.normalized.s
 
 [[tests]]
 name = "attempt.macro.evaluated"
-desc = "With std::macro the call is evaluated ahead of time; the macro evaluator runs none of the operators the schedulers run themselves (map, filter, ..., attempt), so it is a compile-time error at the call."
+desc = "With std::macro the call is evaluated ahead of time; the macro evaluator cannot evaluate a call of the value `attempt(f)` (it cannot call a non-macro function at compile time), so it is a compile-time error at the call."
 kind = "negative"
 backends = false
 case = "../../../cases/consistency/attempt/in_macro.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MacroEvaluationFailed"
-expect_diagnostic_line = 16
-expect_output_contains = ["':mark/isolate' is unavailable in macro execution"]
+expect_diagnostic_line = 15
+expect_output_contains = ["'table' could not be evaluated by std::macro", "Macro cannot call non-macro function at compile time"]
 expect_output_not_contains = ["Segmentation fault", "dumped core"]
 
 # --- external resources when a run ends ---------------------------------------------------

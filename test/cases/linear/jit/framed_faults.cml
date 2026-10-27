@@ -7,7 +7,6 @@
  * the fault named by the environment variable FAULT is raised without isolation and must give
  * the same located diagnostic on every back end.
  */
-module jit_framed_faults
 
 import { get_env } from env
 
@@ -48,15 +47,15 @@ func kind(r: int!): string {
 
 func main(): int sync {
     let xs = [3, 1, 4, 1, 5, 9, 2, 6]
-    let fault = get_env('FAULT')
+    let fault = get_env('FAULT') ?? ''
     println(picks(xs, 0, 8, 0))
     println(rems(100, 7, 1, 0))
     println(quots(xs, 3, 1, 0))
     println(depth(xs, 50))
-    println(kind(attempt(picks, xs, 0, 9, 0)))
-    println(kind(attempt(rems, 100, 7, 0, 0)))
-    println(kind(attempt(quots, xs, 3, 0, 0)))
-    println(kind(attempt(depth, xs, 5000)))
+    println(kind(attempt(picks)(xs, 0, 9, 0)))
+    println(kind(attempt(rems)(100, 7, 0, 0)))
+    println(kind(attempt(quots)(xs, 3, 0, 0)))
+    println(kind(attempt(depth)(xs, 5000)))
     println(picks(xs, 0, 8, 0))
     println(depth(xs, 50))
     println('isolated')

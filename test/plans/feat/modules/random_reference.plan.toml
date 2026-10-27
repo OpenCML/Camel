@@ -1,0 +1,110 @@
+id = "modules.random_reference"
+order = 366
+tier = "fast"
+tags = ["feat", "modules", "random", "philox", "kernels"]
+desc = "The keyed draws against a Philox4x32-10 written outside the compiler: the Random123 known answers pin the reference, then key, fold, uniform at four widths, randint, the global stream and the whole-array draw must print its values"
+
+[[tests]]
+name = "reference.philox_values"
+desc = "fold, uniform (f64, f32, f16, bf16), randint (narrow and wide range), the keys of seed(7)'s stream and a rand(), and the 2x3 whole-array draw equal the reference; the array's elements are the scalar draws of the folded keys. Four schedulers."
+kind = "behavior"
+case = "../../../cases/modules/random/philox_reference.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const M32 = 0xFFFFFFFFn
+const u64 = (x) => BigInt.asUintN(64, BigInt(x))
+const i64 = (x) => BigInt.asIntN(64, BigInt(x))
+// Philox4x32-10 from the published constants (Salmon et al., SC11; Random123 philox4x32).
+function block(key, lo, hi) {
+  let c0 = Number(lo & M32), c1 = Number(lo >> 32n), c2 = Number(hi & M32), c3 = Number(hi >> 32n)
+  let k0 = Number(key & M32), k1 = Number(key >> 32n)
+  for (let r = 0; r < 10; r++) {
+    const p0 = 0xD2511F53n * BigInt(c0), p1 = 0xCD9E8D57n * BigInt(c2)
+    const hi0 = Number(p0 >> 32n), lo0 = Number(p0 & M32), hi1 = Number(p1 >> 32n), lo1 = Number(p1 & M32)
+    c0 = (hi1 ^ c1 ^ k0) >>> 0; c1 = lo1; c2 = (hi0 ^ c3 ^ k1) >>> 0; c3 = lo0
+    k0 = (k0 + 0x9E3779B9) >>> 0; k1 = (k1 + 0xBB67AE85) >>> 0
+  }
+  return [c0, c1, c2, c3]
+}
+const hex = (w) => w.map((x) => x.toString(16).padStart(8, '0')).join(' ')
+// The Random123 known answers: counter 0 with key 0, and all ones with key all ones.
+assert(hex(block(0n, 0n, 0n)) === '6627e8d5 e169c58d bc57ac4c 9b00dbd8', 'known answer 1: ' + hex(block(0n, 0n, 0n)))
+assert(hex(block(u64(-1), u64(-1), u64(-1))) === '408f276d 41c83b0e a20bc7c6 6d5451fd', 'known answer 2: ' + hex(block(u64(-1), u64(-1), u64(-1))))
+const philox = (k, counter) => block(u64(k.lo), u64(k.hi), u64(counter))
+const pack = (h, l) => i64(BigInt(h) * 4294967296n + BigInt(l))
+const derive = (k, counter) => { const w = philox(k, counter); return { hi: pack(w[0], w[1]), lo: pack(w[2], w[3]) } }
+const fold = (k, i) => derive(k, -3n - BigInt(i))
+const keyText = (k) => '{ hi: ' + k.hi + ', lo: ' + k.lo + ' }'
+const uniformAt = (k, counter, bits) => {
+  const w = philox(k, counter)
+  if (bits === 53) return Number(BigInt(w[0] >>> 5) * 67108864n + BigInt(w[1] >>> 6)) * 1.1102230246251565e-16
+  if (bits === 24) return Math.fround((w[0] >>> 8) * 5.9604644775390625e-8)
+  if (bits === 11) return (w[0] >>> 21) * 0.00048828125
+  return (w[0] >>> 24) * 0.00390625
+}
+const below = (k, span) => {
+  const limit = 4611686018427387904n / span * span
+  for (let c = 0n; ; c++) { const w = philox(k, c); const v = BigInt(w[0] % 1073741824) * 4294967296n + BigInt(w[1]); if (v < limit) return v % span }
+}
+const lines = input.normalized.stdout.trim().split('\n')
+const at = (name) => lines.find((l) => l.startsWith(name + ' ')).slice(name.length + 1)
+const k = { hi: 0n, lo: 42n }
+assert(at('fold') === keyText(fold(k, 3)), 'fold: ' + at('fold') + ' vs ' + keyText(fold(k, 3)))
+const u = at('uniform').split(' ')
+assert(Number(u[0]) === uniformAt(k, 0, 53), 'uniform float ' + u[0])
+assert(Math.fround(Number(u[1])) === uniformAt(k, 0, 24), 'uniform f32 ' + u[1])
+assert(Math.abs(Number(u[2]) - uniformAt(k, 0, 11)) < 0.0005, 'uniform f16 ' + u[2])
+assert(Math.abs(Number(u[3]) - uniformAt(k, 0, 8)) < 0.005, 'uniform bf16 ' + u[3])
+const r = at('randint').split(' ')
+assert(BigInt(r[0]) === 1n + below(k, 6n), 'randint ' + r[0])
+assert(BigInt(r[1]) === below(k, 1000000007n), 'randint wide ' + r[1])
+// The stream: seed(7) makes the key {0, 7}; the i-th key taken is fold(key, i), and rand() is the third.
+const s = { hi: 0n, lo: 7n }
+const text = at('stream')
+const expectKeys = keyText(fold(s, 0)) + ' ' + keyText(fold(s, 1)) + ' '
+assert(text.startsWith(expectKeys), 'stream keys: ' + text + ' vs ' + expectKeys)
+assert(Number(text.slice(expectKeys.length)) === uniformAt(fold(s, 2), 0, 53), 'stream rand ' + text.slice(expectKeys.length))
+const normalOf = (key) => { const u = 1 - uniformAt(key, 0, 53), v = uniformAt(key, 1, 53); return Math.sqrt(-2 * Math.log(u)) * Math.cos(6.283185307179586 * v) }
+const nrm = at('normal').split(' ')
+assert(Math.abs(Number(nrm[0]) - normalOf(k)) < 1e-12, 'normal float ' + nrm[0])
+assert(Math.abs(Number(nrm[1]) - normalOf(k)) < 1e-6, 'normal f32 ' + nrm[1])
+const normals = JSON.parse(at('normal').slice(nrm[0].length + nrm[1].length + 2))
+for (let i = 0; i < 3; i++) assert(Math.abs(normals[i] - normalOf(fold(k, i))) < 1e-12, 'normal array element ' + i + ': ' + normals[i])
+// permutation: the positions ordered by one uniform each (the key folded with the position), ties in position order.
+const perm = (n) => Array.from({ length: n }, (_, i) => [uniformAt(fold(k, i), 0, 53), i]).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map((x) => x[1])
+const pl = at('permutation')
+assert(pl === JSON.stringify(perm(8)).split(',').join(', ') + ' [] []', 'permutation: ' + pl)
+// The whole-array draw: element i is the scalar draw of fold(k, i), in row-major order.
+const arr = JSON.parse(at('array')).flat()
+assert(arr.length === 6, 'array length ' + arr.length)
+for (let i = 0; i < 6; i++) assert(Math.fround(arr[i]) === uniformAt(fold(k, i), 0, 24), 'array element ' + i + ': ' + arr[i])
+const sc = at('scalars').split(' ').map(Number)
+assert(sc[0] === arr[0] && sc[1] === arr[1] && sc[2] === arr[5], 'the scalar draws are the elements')
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "reference.kernel_call"
+desc = "A direct call of the whole-array draws is one kernel operator in the graph of main (rand:uniform_array, rand:normal_array), not the body's per-element philox calls: the kernel's type variable is stated by the call's type argument alone."
+kind = "behavior"
+case = "../../../cases/modules/random/kernel_call.cml"
+args = ["${case}", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const doc = JSON.parse(input.normalized.stdout)
+const main = doc.graphs.find((g) => g.name === 'main')
+const labels = main.nodes.map((n) => n.label)
+assert(labels.filter((l) => l === 'rand:uniform_array').length === 2, 'two uniform kernels: ' + labels.join(' '))
+assert(labels.filter((l) => l === 'rand:normal_array').length === 1, 'one normal kernel: ' + labels.join(' '))
+assert(!labels.includes('rand:philox'), 'the body ran: ' + labels.join(' '))
+}
+"""
+timeout_ms = 20000

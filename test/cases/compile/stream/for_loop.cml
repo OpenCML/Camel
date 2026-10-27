@@ -7,7 +7,6 @@
  * that answers `null` at once is the empty stream, and `for ... while c` folds `c` in after the
  * test that the pull has a value.
  */
-module stream_for_loop
 
 func count(n: int): int.. {
     return step(n)

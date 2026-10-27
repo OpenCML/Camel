@@ -5,7 +5,6 @@
  * For each function f and direction v, sum(grad(f)(x) * v) must match
  * (f(x + h v) - f(x - h v)) / 2h; the weights and bias receive gradients through w_of and b_of.
  */
-module fused_grad_check
 
 import { grad } from autodiff
 import { new, sum, relu } from tensor

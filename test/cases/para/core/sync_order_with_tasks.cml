@@ -5,13 +5,12 @@
  * also has two independent calls (they do run concurrently: they meet at a rendezvous), and for
  * a variable written by ordered calls.
  */
-module sync_order_with_tasks
 
 import { sleep } from process
 import { rendezvous } from test_support
 
 func step(tag: int, delay_ms: int): int sync {
-    sleep(delay_ms)
+    sleep(float(delay_ms) / 1000.0)
     println('step {}'->format<tag>)
     return tag
 }
@@ -28,7 +27,7 @@ func meet(timeout: float): int sync {
 }
 
 func bump(var total: int, delay_ms: int, by: int): int sync {
-    sleep(delay_ms)
+    sleep(float(delay_ms) / 1000.0)
     total = total * 2 + by
     return total
 }

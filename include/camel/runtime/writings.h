@@ -123,6 +123,22 @@ class CostModel {
     virtual ~CostModel() = default;
     /// The cost of computing `node` from the values it reads; positive.
     virtual double nodeCost(const CostContext &context, gc_node_ref_t node) const = 0;
+    /// The cost of the cheapest writing of the value `node` computes, given `own` (its
+    /// `nodeCost`) and the costs of the cheapest writings of the values it reads, in the order it
+    /// reads them. The default is the sum, which makes a writing cost its own plus its inputs';
+    /// a model written as a function of the operator and the costs of its inputs (egg's
+    /// `CostFunction`) overrides it.
+    virtual double totalCost(
+        const CostContext &context, gc_node_ref_t node, double own,
+        std::span<const double> inputs) const {
+        (void)context;
+        (void)node;
+        double total = own;
+        for (double cost : inputs) {
+            total += cost;
+        }
+        return total;
+    }
 };
 
 /// The models by name: "nodes" (every node costs one), "weighted" (a division costs more than a
@@ -362,10 +378,14 @@ struct ExtractStats {
 bool hasWritings(const Program &program);
 
 /// The program with one writing per value in every graph that has several, chosen by `model`
-/// (the program itself when it has none).
+/// (the program itself when it has none). `detached` for a caller that holds the result as a
+/// value (the Camel `extract`): the commit then leaves the context's program as it is (design
+/// principles 9.1); the pipeline's own extraction installs it.
+/// `root`, when given, limits the extraction to the graphs reachable from it (the function a
+/// Camel `extract` is applied to), and the committed program is the one of that function.
 const Program *extractWritings(
     const std::shared_ptr<camel::core::context::Context> &context, const Program *program,
-    const CostModel &model);
+    const CostModel &model, bool detached = false, GCGraph *root = nullptr);
 
 /// The writings of the values of a draft: the classes (WritingStore) and the congruence closure
 /// over them. Nodes that compute the same thing from the same classes are one value, so

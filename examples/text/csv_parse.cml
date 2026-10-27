@@ -2,7 +2,6 @@
 // a field into a number, and a line that does not fit becomes an error value that is
 // reported with its line number; the other lines are still used.
 // Run: camel examples/text/csv_parse.cml
-module csv_parse
 
 import { split, trim } from str
 import { enumerate, drop, sum, count } from array
@@ -10,7 +9,7 @@ import { enumerate, drop, sum, count } from array
 type Row = { city: string, year: int, people: int }
 
 // The values already read are `with` parameters, so each step is a function of the one field
-// it parses and the steps chain with `?->`.
+// it parses and the steps chain with `->`.
 with <city: string, year: int>
 func add_people(people: int): Row {
     return { city: city, year: year, people: people }
@@ -18,7 +17,7 @@ func add_people(people: int): Row {
 
 with <city: string, people_text: string>
 func add_year(year: int): Row! {
-    return parse_int(people_text) ?-> add_people<city, year>
+    return parse_int(people_text) -> add_people<city, year>
 }
 
 // The first step that fails decides the result: a wrong number of fields, or a field that
@@ -26,8 +25,8 @@ func add_year(year: int): Row! {
 func parse_row(line: string): Row! {
     let f = line->split<','>->map<(s: string): string => trim(s)>
     return if len(f) != 3 then {
-        throw error('FieldCount', 'expected 3 fields, got ' + string(len(f)))
-    } else parse_int(f[1]) ?-> add_year<f[0], f[2]>
+        return error('FieldCount', 'expected 3 fields, got ' + string(len(f)))
+    } else parse_int(f[1]) -> add_year<f[0], f[2]>
 }
 
 func describe(r: Row!): string {
@@ -67,7 +66,7 @@ Tartu, 2022, 97435
     }>
 
     // A rejected line counts as 0 people.
-    let people = rows->map<(r: Row!): int => r ?-> people_of !! 0>
+    let people = rows->map<(r: Row!): int => r -> people_of !! 0>
     println('rows read:', rows->count<is_ok>)
     println('people in all:', sum(people))
     return 0

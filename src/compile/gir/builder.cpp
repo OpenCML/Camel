@@ -61,6 +61,22 @@ void Builder::buildEntryCall() {
         entryGraph = *decoratedMain;
     } else if (auto gv = graphsAt(entryName); gv.has_value() && !gv.value()->empty()) {
         entryGraph = gv.value()->front();
+    } else if (libraryEntryExpected_ != nullptr) {
+        // A pass is a generic function of the function it transforms (`(f: F) => F!`, design
+        // principles 9.1): the entry is its instance that is a function of the expected type.
+        if (auto group = templateScope_->get(entryName); group.has_value()) {
+            if (GenericGroup *templates = genericGroupOf(group.value()); templates != nullptr) {
+                for (const generic_template_ptr_t &tmpl : *templates) {
+                    std::string why;
+                    if (compile_graph_ptr_t instance = instantiateGenericAs(
+                            tmpl, libraryEntryExpected_, tmpl->func, why)) {
+                        entryGraph = instance;
+                        break;
+                    }
+                    libraryEntryProblem_ = why;
+                }
+            }
+        }
     }
     if (entryGraph) {
         // The entry graph stands for the entry function where a diagnostic is about the
@@ -156,6 +172,19 @@ void Builder::buildEntryCall() {
         auto empty = rootGraph_->addStaticDataNode(Data::null());
         setGraphReturnFromResult(rootGraph_, nodeIdOf(empty), nodeIdOf(empty), Type::Void());
     }
+}
+
+void Builder::registerBuiltBody(const compile_graph_ptr_t &graph) {
+    ASSERT(graph != nullptr, "A built body is a graph.");
+    // A body is registered where it finishes, and a graph that is registered twice would be judged
+    // twice by a pass over the built bodies (settleStreamLinearity counts the reads of each graph):
+    // one graph is one body, once.
+    for (const compile_graph_ptr_t &known : unit_->builtBodies) {
+        if (known.get() == graph.get()) {
+            return;
+        }
+    }
+    unit_->builtBodies.push_back(graph);
 }
 
 compile_graph_ptr_t Builder::enterScope(
@@ -270,15 +299,58 @@ void Builder::rejectRedeclaredFunction(
     }
     // A second generic declaration whose parameters are the same types is the same family of
     // signatures, one with other names for the type variables, so the second is a
-    // redeclaration too: the two write the same call (`generic_same_signature`).
+    // redeclaration too: the two write the same call (`generic_same_signature`). Two that write
+    // `when` conditions are told apart by them, exactly as two ordinary declarations of one
+    // signature are (design principles 4.4: "同一检查适用于所有带 `when` 的同名重载（有函数体的
+    // 普通函数也一样），不是 `#impl` 声明的特例"): the same separation the loop below asks about
+    // ordinary functions, asked here about two generic ones.
     if (auto group = templateScope_->get(name, false); group.has_value() &&
         !genericGroupOf(group.value())->empty()) {
+        const auto *ownWhen = GCT::Tree::of(gct)->whenOf(gct);
         for (const auto &other : *genericGroupOf(group.value())) {
-            if (other != nullptr && sameGenericSignature(other->funcType, funcType)) {
-                redeclaredFuncTypes_.insert(funcType);
-                diags_->of(SemanticDiag::Redeclaration).atOrigin(gct->origin()).commit(name);
-                throw BuildAbortException();
+            if (other == nullptr || !sameGenericSignature(other->funcType, funcType)) {
+                continue;
             }
+            if (ownWhen != nullptr) {
+                if (const auto *otherWhen = GCT::Tree::of(other->func)->whenOf(other->func)) {
+                    SpeculativeInstantiation quiet(*this);
+                    std::string overlappingType;
+                    const ConditionSeparation separation = separateWhenConditions(
+                        ownWhen->condition,
+                        otherWhen->condition,
+                        [&](const camel::core::type::type_bindings_t &bindings) {
+                            return evaluateWhenCondition(
+                                ownWhen->condition, funcType, bindings, {}, nullptr, unit_);
+                        },
+                        [&](const camel::core::type::type_bindings_t &bindings) {
+                            return evaluateWhenCondition(
+                                otherWhen->condition,
+                                other->funcType,
+                                bindings,
+                                {},
+                                other,
+                                unit_);
+                        },
+                        overlappingType);
+                    if (separation == ConditionSeparation::Disjoint) {
+                        continue; // one family of types each
+                    }
+                    if (separation == ConditionSeparation::Overlapping) {
+                        redeclaredFuncTypes_.insert(funcType);
+                        diags_->of(SemanticDiag::WhenDeclarationOverlap)
+                            .atOrigin(gct->origin())
+                            .commit(
+                                name,
+                                overlappingType,
+                                other->funcType->toString() + " — when " + otherWhen->text,
+                                funcType->toString() + " — when " + ownWhen->text);
+                        throw BuildAbortException();
+                    }
+                }
+            }
+            redeclaredFuncTypes_.insert(funcType);
+            diags_->of(SemanticDiag::Redeclaration).atOrigin(gct->origin()).commit(name);
+            throw BuildAbortException();
         }
     }
     auto graphs = graphScope_->get(name, false);
@@ -342,6 +414,10 @@ void Builder::rejectRedeclaredFunction(
                     if (separation == ConditionSeparation::Disjoint) {
                         continue; // one family of argument types each
                     }
+                    if (separation == ConditionSeparation::NotComputable &&
+                        ownWhen->text != other->second.text) {
+                        continue; // two conditions on a value: the call that meets both is ambiguous
+                    }
                     if (separation == ConditionSeparation::Overlapping) {
                         redeclaredFuncTypes_.insert(funcType);
                         diags_->of(SemanticDiag::WhenDeclarationOverlap)
@@ -376,11 +452,6 @@ void Builder::enterGraphScope(const compile_graph_ptr_t &graph, const std::strin
 }
 
 void Builder::leaveScope() {
-    // A stream is read once on each execution path (design principles 5.4). The arms of this graph
-    // are complete here, so its consumers of one stream can be told apart from one another.
-    if (currGraph_ != nullptr) {
-        checkStreamConsumption(currGraph_.get());
-    }
     // The body of this graph is complete, so its captures and its calls are known: a `var` of it
     // that no closure captured, no call was handed and that is not its own parameter becomes SSA
     // here (collapseNonEscapingVariableReads).
@@ -580,6 +651,19 @@ bool Builder::isPassDeclaration(const GCT::node_ptr_t &gct) {
     if (when == nullptr) {
         return false;
     }
+    // A pass is a function transform `(f: F) => F!` (design principles 9.1): one ordinary
+    // parameter and the same type, failable, as the result, and `when is_function::<F>()`. That is
+    // the whole classification; what implements it does not enter. A body-less declaration of
+    // another shape that is conditioned the same way declares an operator of a function value
+    // (`graph_of::<F>(f: F): Graph when is_function::<F>()`).
+    const auto *signature = tt::as_ptr<FunctionType>(gct->at(0)->dataType());
+    if (signature == nullptr || signature->normTypesCount() != 1 || !signature->hasExitType()) {
+        return false;
+    }
+    const auto *answer = asFallible(signature->exitType());
+    if (answer == nullptr || !answer->payloadType()->equals(signature->normTypeAt(0))) {
+        return false;
+    }
     // The text the pipeline reads, normalized the same way: `is_function::<T>()` with any
     // identifier for the type parameter (pass_declarations.cpp, passDeclarationApplies). A
     // body-less declaration without that condition declares an operator, as before.
@@ -594,6 +678,12 @@ bool Builder::isPassDeclaration(const GCT::node_ptr_t &gct) {
         text.compare(text.size() - 3, 3, ">()") != 0) {
         return false;
     }
+    // A pass takes the function it is applied to and nothing else. The same condition on a
+    // declaration with more ordinary parameters is an operator that wants a function.
+    if (const auto *declared = tt::as_ptr<FunctionType>(gct->at(0)->dataType());
+        declared != nullptr && declared->normTypesCount() != 1) {
+        return false;
+    }
     const std::string parameter =
         text.substr(prefix.size(), text.size() - prefix.size() - 3);
     return !parameter.empty() && std::all_of(
@@ -601,6 +691,39 @@ bool Builder::isPassDeclaration(const GCT::node_ptr_t &gct) {
                                          return std::isalnum(static_cast<unsigned char>(c)) ||
                                                 c == '_';
                                      });
+}
+
+/// Whether the module implements the operator this body-less declaration names (`#op`, or the
+/// declaration's own `module:name`) for it. A name declared more than once is an operator beside
+/// something else of the same name (`export_model`: the operator takes the function and an example,
+/// the pass takes the function), and then the operator is the declaration that writes `#op`.
+bool Builder::declarationHasOperator(const GCT::node_ptr_t &gct) {
+    const std::string &declared = unit_->module->declaredName();
+    std::string uri = (declared.empty() ? unit_->module->name() : declared) + ":" + gct->name();
+    const auto tagged = nativeOperatorUri(gct);
+    if (tagged.has_value()) {
+        uri = *tagged;
+    }
+    if (!camel::core::OperatorTable::instance().find(uri).has_value()) {
+        return false;
+    }
+    if (tagged.has_value()) {
+        return true;
+    }
+    size_t same = 0;
+    const std::function<void(const GCT::node_ptr_t &)> count = [&](const GCT::node_ptr_t &node) {
+        if (node->type() == GCT::NodeKind::DECL && node->nativeDeclaration() &&
+            node->name() == gct->name()) {
+            ++same;
+        }
+        for (size_t i = 0; i < node->size(); ++i) {
+            count(node->at(i));
+        }
+    };
+    if (unit_->tree != nullptr && unit_->tree->root() != nullptr) {
+        count(unit_->tree->root());
+    }
+    return same <= 1;
 }
 
 std::vector<camel::source::origin_id_t> parameterPortOrigins(
@@ -615,8 +738,13 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
             // declaration is the pipeline's (design principles 9.3); this records the name so
             // the export list does not look for an entity that will not exist.
             unit_->passDeclarations.insert(gct->name());
-            LEAVE("DECL");
-            return nullptr;
+            // A pass is told by its type alone, whatever implements it: a module that also
+            // implements the operator (an engine of `rewrite`, called as `f->rewrite<rules>`)
+            // declares that operator as well.
+            if (!declarationHasOperator(gct)) {
+                LEAVE("DECL");
+                return nullptr;
+            }
         }
         // A body-less declaration declares an operator of a C++ module (design principles 6.4):
         // it is checked and kept as an operator rule, not as a graph (step 1).
@@ -894,7 +1022,6 @@ FunctionType *Builder::completeLambdaSignature(
         return funcType->hasArgNames() ? std::string(funcType->argNameAt(index)) : std::string{};
     };
     FunctionTypeFactory factory;
-    factory.setModifiers(funcType->modifiers());
     factory.setHasCompileInfo(funcType->hasArgNames());
     // The result type: the one written, or the one the expected function type gives. An
     // expected result that still holds a type variable says nothing, and the body decides.
@@ -1090,7 +1217,7 @@ void Builder::buildFuncBody(
             rejectDiscardedValue(graph.get());
         }
         bodyStates_[graph.get()] = BodyState::Built;
-        unit_->builtBodies.push_back(graph);
+        registerBuiltBody(graph);
         // A function that wrote no clause about resources promises what its body reaches
         // (design principles 3.3, effects plan 5). What it reaches is measured here, while the
         // body is in hand, and written onto its own signature -- the open one, which no other
@@ -1236,6 +1363,10 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
     };
     bool failed                     = false;
     const GCT::Node *outerStatement = unusedStatement_;
+    // The statements of this block that a `fail` written in it leaves behind, by the entry they
+    // belong to in statementsAfterFail_ (nothing when the block has met no `fail` yet, or the
+    // entry the last one opened).
+    std::optional<size_t> afterFailEntry;
     // A block that is itself a statement whose value nothing takes drops the value of its last
     // statement too.
     const bool valueDropped = gct == unusedStatement_ || droppedBodies_.contains(gct);
@@ -1282,6 +1413,22 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
             }
             if (unused && result.has_value() && result.type() == typeid(node_handle_t)) {
                 rejectUnusedPureResult(child, any_cast<node_handle_t>(result));
+            }
+            // A statement written after a `fail` in the same block (design principles 3.9; the
+            // author's ruling of 2026-10-26): the `fail` never returns, so where it is executed
+            // nothing written after it in the block is reached. Recorded here and reported when
+            // the body is complete, because whether the `fail` runs at all is a fact about the
+            // whole body: a `fail` whose value nothing wants does not run, and the statements
+            // after it are reached then (FailNotExecuted says so).
+            if (!gct->operands() && result.has_value() && result.type() == typeid(node_handle_t)) {
+                if (afterFailEntry.has_value()) {
+                    statementsAfterFail_[*afterFailEntry].statements.push_back(child->origin());
+                }
+                node_handle_t built = any_cast<node_handle_t>(result);
+                if (isFailCall(built)) {
+                    afterFailEntry = statementsAfterFail_.size();
+                    statementsAfterFail_.push_back({currGraph_, built, {}});
+                }
             }
             if (result.has_value() && result.type() == typeid(node_handle_t)) {
                 res = any_cast<node_handle_t>(result);

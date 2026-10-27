@@ -1,7 +1,6 @@
 /**
  * Support-vector-machine example used to exercise heavier tensor control flow, optimization updates, and prediction passes.
  */
-module svm
 
 import { add, subtract, multiply, matmul, ones, zeros, sum, eye, transpose, show, pow, shape, concat, range, reshape, where } from tensor
 

@@ -13,7 +13,6 @@
  *
  * Run it:  python examples/python/rules/basket.py
  */
-module rules
 
 /// The discount a basket earns, one threshold per tier.
 export func discount(total: float): float {

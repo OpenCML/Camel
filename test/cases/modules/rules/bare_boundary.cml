@@ -4,9 +4,7 @@
  * would collapse the pair. `apply` is the same program under the law without its guards, which the
  * last test of the plan runs: both lines then collapse.
  */
-module bare_boundary
 
-import { Program } from graph
 import { rewrite } from rewrite
 
 /// `c = -1`: the sum is zero, and the law would multiply by a zero of the other sign.
@@ -27,6 +25,6 @@ func main(): int sync {
 }
 
 /// The unguarded law, applied to the same program: the two boundary lines collapse.
-export func apply(p: Program): Program! {
-    return rewrite(p, [combine_one_unguarded])
+export func apply::<F>(p: F): F! {
+    return p->rewrite<[combine_one_unguarded]>
 }

@@ -2,15 +2,14 @@
 // because it is the subject of the example: a program that needs sorted data calls `sort`
 // or `sort_by` of `array`, and the result is checked against both here.
 // Run: camel examples/algorithms/merge_sort.cml
-module merge_sort
 
 import { sort, sort_by, zip_with, all } from array
 
 // Merges two sorted arrays. The recursive call is the last thing done, so the depth of the
 // recursion is not limited.
 func merge(a: int[], b: int[], i: int, j: int, out: int[]): int[] {
-    return if i >= len(a) then concat(out, slice<j, len(b)>(b))
-        else if j >= len(b) then concat(out, slice<i, len(a)>(a))
+    return if i >= len(a) then concat(out, b[j:len(b)])
+        else if j >= len(b) then concat(out, a[i:len(a)])
         else if a[i] <= b[j] then merge(a, b, i + 1, j, concat(out, [a[i]]))
         else merge(a, b, i, j + 1, concat(out, [b[j]]))
 }
@@ -19,8 +18,8 @@ func sort(xs: int[]): int[] {
     let n = len(xs)
     let no_ints: int[] = []
     return if n <= 1 then xs else {
-        let left = sort(slice<0, n / 2>(xs))
-        let right = sort(slice<n / 2, n>(xs))
+        let left = sort(xs[0:n / 2])
+        let right = sort(xs[n / 2:n])
         return merge(left, right, 0, 0, no_ints)
     }
 }

@@ -1,7 +1,6 @@
 // Every contextual keyword of the language reference (2.4.1) in a position the parser reads it in,
 // and the same words as ordinary names at the bottom. A contextual keyword is not a reserved word:
 // outside the positions below it is a name like any other.
-module context_keywords
 
 export resource fs
 export resource tracer = [stdout, fs]
@@ -53,6 +52,11 @@ type Shape = enum { Circle(float), Rect { w: float, h: float } }
 type Kind<T> = match type T {
     case struct => 'struct'
     case tuple => 'tuple'
+    case array => 'array'
+    case nullable => 'nullable'
+    case fallible => 'fallible'
+    case map => 'map'
+    case set => 'set'
     case #leaf => 'leaf'
 }
 

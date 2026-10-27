@@ -1,0 +1,18 @@
+/**
+ * `->` hands on a value that is missing as well as one that failed (design principles 3.9):
+ * over a `T?` the missing value is passed on unchanged, and the call happens only where there
+ * is a value to call it with.
+ */
+
+func inc(x: int): int { return x + 1 }
+
+func maybe(c: bool): int? {
+    return if c then 7 else null
+}
+
+func main(): int sync {
+    println(maybe(true) -> inc)
+    println(maybe(false) -> inc)
+    println(maybe(false) -> inc ?? -1)
+    return 0
+}

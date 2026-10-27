@@ -4,7 +4,6 @@
  * the effect that comes with it (design principles 3.3). The resource and the fact that reaching it
  * is visible outside the program are not two things the writer has to say.
  */
-module uses_ambient_covers_body
 
 func shout(): int uses stdout sync {
     println('x')

@@ -291,8 +291,6 @@ class Walker {
             return;
         }
         switch (node.kind()) {
-        case NK::ModuleDecl:
-            return moduleDecl(cst::ModuleDecl(node));
         case NK::ImportDecl:
             return importDecl(cst::ImportDecl(node));
         case NK::ExportDecl:
@@ -392,13 +390,6 @@ class Walker {
     void addKey(cst::IdentDef ident, bool inType) {
         if (ident && nameOf(ident)) {
             index_.keys.push_back({nameOf(ident).text(), rangeOf(nameOf(ident)), inType});
-        }
-    }
-
-    void moduleDecl(cst::ModuleDecl ctx) {
-        if (auto ident = ctx.get<cst::IdentDef>(); ident && nameOf(ident)) {
-            index_.moduleName      = nameOf(ident).text();
-            index_.moduleNameRange = rangeOf(nameOf(ident));
         }
     }
 

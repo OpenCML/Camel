@@ -1,0 +1,71 @@
+id = "compile.pipe_propagation"
+order = 931
+tier = "fast"
+tags = ["feat", "compile", "pipe", "tagged"]
+desc = "The pipe `->` carries null and errors along (design principles 3.9): the overloads are asked with the value as it is first, and the call takes it apart only when none takes it"
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "pipe.propagate"
+desc = "A null `x` gives null and a failed `x` gives its error through `x -> f`; the result is a `U?` (`U!`), a result already of that form is kept, and a chain handles the failure once at its end."
+kind = "behavior"
+case = "../../../cases/compile/pipe_propagation/propagate.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "2 -1\n3 -1\n6 -1\n2 -1 -1\n6 -1\n"
+
+[[tests]]
+name = "pipe.wrapped_first"
+desc = "A function that takes the `T?` itself, or a generic `T` whose `when` allows it to be a `T?`, is called with the wrapped value; the pipe takes it apart only when none does."
+kind = "behavior"
+case = "../../../cases/compile/pipe_propagation/wrapped_first.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "maybe a number maybe a number a number\n1 -1\n1 -1\n"
+
+[[tests]]
+name = "pipe.call_forms"
+desc = "The other arguments of the call run once when the value is there and not at all when it is null; a `with` argument, a module's operator and a lambda in place are callees like any other."
+kind = "behavior"
+case = "../../../cases/compile/pipe_propagation/call_forms.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "bump\n2\n-1\n3\n2.5\n[a, b]\n11\n"
+
+[[tests]]
+name = "pipe.err_not_tagged"
+desc = "A receiver that is not tagged and no overload takes is the ordinary refusal."
+kind = "negative"
+case = "../../../cases/compile/pipe_propagation/err_not_tagged.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+
+[[tests]]
+name = "pipe.err_payload_mismatch"
+desc = "A tagged receiver whose value no overload takes either is refused for the value that was taken out."
+kind = "negative"
+case = "../../../cases/compile/pipe_propagation/err_payload_mismatch.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+
+[[tests]]
+name = "pipe.lambda_takes_receiver_type"
+desc = "A lambda written in place after `->` that leaves its parameter's type out takes the receiver's type, or the type of the value taken out of a `T?` or a `T!`."
+kind = "behavior"
+case = "../../../cases/compile/pipe_propagation/lambda_takes_receiver_type.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "6 3 8 -1\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

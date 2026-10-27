@@ -1,7 +1,6 @@
 /// Arrays, tuples and structs: constants, values built from computed elements, elements and
 /// fields, the operators on arrays, and their text. `append` gives a new array (design
 /// principles 11.3).
-module composites
 
 type Point = { x: int, y: int }
 
@@ -17,8 +16,8 @@ func main(): int sync {
     let xs = [3, 1, 4, 1, 5]
     var base = [3, 1, 4, 1, 5]
     let ys = base->append<9>
-    println(ys, len(ys), ys[5], ys->slice<1, 3>, ys->contains<4>, ys->contains<7>)
-    println(0..4, 5..1, concat([1], [2, 3]), head(xs), tail(xs))
+    println(ys, len(ys), ys[5], ys[1:3], ys->contains<4>, ys->contains<7>)
+    println(0..4, 5..1, concat([1], [2, 3]), xs[0], xs[1:])
     let n = 7
     let p = { x: n, y: 0 - n * 2 }
     println(p, p.x, norm1(p), norm1({ x: 1, y: 2 }))

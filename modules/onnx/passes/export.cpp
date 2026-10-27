@@ -116,10 +116,10 @@ uint64_t argOrigin(const GCGraph *g, gc_node_ref_t node, gc_node_ref_t arg) {
     return origin != camel::source::kInvalidOriginId ? origin : originNear(g, node);
 }
 
-/// Reads argument `index` of the request `node` as a constant; refuses when the preceding
-/// passes did not reduce it to one. The pass does not execute the program to obtain it.
-Example constantArg(const GCGraph *g, gc_node_ref_t node, size_t index, std::string_view what) {
-    const gc_node_ref_t arg = g->normInputsOf(node)[index];
+/// Reads `arg` of the request `node` as a constant; refuses when the preceding passes did not
+/// reduce it to one. The pass does not execute the program to obtain it.
+Example constantArgAt(
+    const GCGraph *g, gc_node_ref_t node, gc_node_ref_t arg, std::string_view what) {
     if (auto value = constantOf(g, arg)) {
         return *value;
     }
@@ -131,6 +131,17 @@ Example constantArg(const GCGraph *g, gc_node_ref_t node, size_t index, std::str
             "build it from constants only",
             what,
             describeNode(g, arg))};
+}
+
+/// Ordinary argument `index` of the request: `fn` and `example` stay positional.
+Example constantArg(const GCGraph *g, gc_node_ref_t node, size_t index, std::string_view what) {
+    return constantArgAt(g, node, g->normInputsOf(node)[index], what);
+}
+
+/// `with` argument `index` of the request: `out`, `dynamic_axes` and `target` carry runtime
+/// values, so the call gives them by name.
+Example constantWithArg(const GCGraph *g, gc_node_ref_t node, size_t index, std::string_view what) {
+    return constantArgAt(g, node, g->withInputsOf(node)[index], what);
 }
 
 /// The exported function: a constant function value, or a closure built (FILL) from a
@@ -189,7 +200,7 @@ void readFunction(const GCGraph *g, gc_node_ref_t node, Request &request) {
 Request readRequest(const GCGraph *g, gc_node_ref_t node, const std::string &out) {
     Request request;
     request.origin  = originNear(g, node);
-    const auto args = g->normInputsOf(node);
+    const auto with = g->withInputsOf(node);
     readFunction(g, node, request);
     if (!request.graph) {
         throw Refusal{originNear(g, node), "onnx.export_model expects a function value"};
@@ -210,24 +221,30 @@ Request readRequest(const GCGraph *g, gc_node_ref_t node, const std::string &out
 
     if (!out.empty()) {
         request.path = out;
-    } else if (const auto path = constantOf(g, args[2])) {
+    } else if (with.empty()) {
+        throw Refusal{
+            originNear(g, node),
+            "the onnx.export_model call names no model file: give it as the `out` argument "
+            "(export_model<out: \"model.onnx\">(fn, example)), or name it with the parameter "
+            "out of the pass (onnx::export out=\"model.onnx\")"};
+    } else if (const auto path = constantOf(g, with[0])) {
         request.path = rtdata::fromSlot<::String *>(path->value)->toString();
     } else {
         throw Refusal{
-            argOrigin(g, node, args[2]),
+            argOrigin(g, node, with[0]),
             std::format(
                 "the output path of onnx.export_model is {}, not a constant of the graph; "
                 "name the model file with the parameter out of the pass "
                 "(onnx::export out=\"model.onnx\"), or write the path as a string literal",
-                describeNode(g, args[2]))};
+                describeNode(g, with[0]))};
     }
-    if (args.size() > 3) {
-        const Example axes = constantArg(g, node, 3, "dynamic_axes argument");
+    if (with.size() > 1) {
+        const Example axes = constantWithArg(g, node, 1, "dynamic_axes argument");
         request.options.dynamicAxes =
             tensor::parseIntArray(rtdata::fromSlot<::Array *>(axes.value), axes.type);
     }
-    if (args.size() > 4) {
-        const Example target   = constantArg(g, node, 4, "target argument");
+    if (with.size() > 2) {
+        const Example target   = constantWithArg(g, node, 2, "target argument");
         request.options.target = rtdata::fromSlot<::String *>(target.value)->toString();
     }
     return request;
@@ -670,7 +687,7 @@ void exportEntry(
         throw Refusal{
             camel::source::kInvalidOriginId,
             std::format(
-                "the program contains no onnx.export_model(fn, example, path) call, so "
+                "the program contains no export_model<out: path>(fn, example) call, so "
                 "onnx::export translates 'main' itself, and the model file is not named: give "
                 "it as the parameter out, onnx::export out=\"model.onnx\"")};
     }

@@ -147,7 +147,6 @@ void Formatter::insertComment(size_t index, string &result) {
 program : SEP? (decl SEP?)* EOF;
 */
 any Formatter::visitProgram(cst::Program context) {
-    syn::Node moduleDecl;
     vector<syn::Node> head, tail;
     vector<pair<syn::Node, size_t>> headWithIndex, tailWithIndex;
     vector<pair<size_t, size_t>> declTokenRanges, headTokenRanges, tailTokenRanges;
@@ -156,9 +155,7 @@ any Formatter::visitProgram(cst::Program context) {
     const vector<syn::Node> decls = vec(context->nodes());
     for (size_t i = 0; i < decls.size(); i++) {
         auto child = decls[i];
-        if (child.is(NK::ModuleDecl)) {
-            moduleDecl = child;
-        } else if (child.is(NK::ImportDecl)) {
+        if (child.is(NK::ImportDecl)) {
             headWithIndex.push_back({child, i});
         } else {
             tailWithIndex.push_back({child, i});
@@ -209,13 +206,14 @@ any Formatter::visitProgram(cst::Program context) {
     }
 
     string headStr, tailStr;
-    if (moduleDecl) {
-        // The comments above `module` (the description of the file) stay above it; they used
-        // to be dropped. A blank line between two of them is kept: it is what separates the
-        // licence header from the file's own description, and without it the two runs of
-        // comments become one, which changes how the parser reads the file.
+    // The comments above the first declaration (the description of the file) stay above it; they
+    // used to be dropped. A blank line between two of them is kept: it is what separates the
+    // licence header from the file's own description, and without it the two runs of comments
+    // become one, which changes how the parser reads the file.
+    {
+        const size_t limit = decls.empty() ? tokens.size() - 1 : decls.front().firstToken().index();
         size_t previousEnd = 0;
-        for (size_t i = 0; i < moduleDecl.firstToken().index(); i++) {
+        for (size_t i = 0; i < limit; i++) {
             if (tokens[i].channel > 1) {
                 const size_t line = tokens[i].line();
                 if (previousEnd != 0 && line > previousEnd + 1) {
@@ -228,11 +226,12 @@ any Formatter::visitProgram(cst::Program context) {
                 previousEnd = line + std::count(tokens[i].text().begin(), tokens[i].text().end(), '\n');
             }
         }
-        headStr += any_cast<string>(visit(moduleDecl));
-        if (this->preferSemis) {
-            headStr += ";";
+        // The blank line the file leaves between its comments and the first declaration is kept: a
+        // doc comment standing against a declaration belongs to it, and one separated from it does
+        // not, so writing them together would change the tree.
+        if (previousEnd != 0 && limit < tokens.size() && tokens[limit].line() > previousEnd + 1) {
+            headStr += lineEnd();
         }
-        headStr += lineEnd(2);
     }
     // pass nullptr to avoid auto comment processing for empty head
     headStr += formatList(
@@ -273,22 +272,6 @@ any Formatter::visitStmtList(cst::StmtList context) {
 moduleName : ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)* ;
 */
 any Formatter::visitModuleName(cst::ModuleName context) { return context->text(); }
-
-/*
-moduleDecl : frontMatter? MODULE identDef ;
-*/
-any Formatter::visitModuleDecl(cst::ModuleDecl context) {
-    string result;
-    // The tags written before the declaration (`#gpu module m`): a module carries the placement of
-    // the functions it declares (design principles 13.4, 6.2), so the tag stands before the
-    // keyword, one per line, and the formatter writes it back where the reader put it.
-    for (const auto &tagUse : context->all<cst::TagUse>()) {
-        result += any_cast<string>(visitTagUse(tagUse)) +
-                  commentsInFrontMatter(tagUse->lastToken()->index());
-    }
-    result += "module " + any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
-    return result;
-}
 
 /*
 importDecl : IMPORT (moduleName | (identDef | bracedIdents) FROM moduleName) ;
@@ -965,8 +948,8 @@ any Formatter::visitResourceClause(cst::ResourceClause context) {
 
 /*
 typeDecl
-    : TYPE identRef ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
-      (typeExpr | STRING)
+    : TYPE identRef ('<' identDef (',' identDef)* ','? ('>' | '>='))?
+      ('=' (typeExpr | STRING))?
     ;
 */
 any Formatter::visitTypeDecl(cst::TypeDecl context) {
@@ -985,17 +968,17 @@ any Formatter::visitTypeDecl(cst::TypeDecl context) {
         }
         result += ">";
     }
-    result += " = ";
+    // An opaque type has no right side: `export type Graph`.
     if (context->type()) {
-        result += any_cast<string>(visitType(context->type()));
-    } else {
-        result += formatStringLiteral(context->tok(TK::String)->text());
+        result += " = " + any_cast<string>(visitType(context->type()));
+    } else if (context->tokCount(TK::String) > 0) {
+        result += " = " + formatStringLiteral(context->tok(TK::String)->text());
     }
     return result;
 }
 
 /*
-retStmt    : (RETURN | RAISE | THROW) dataList ;
+retStmt    : (RETURN | YIELD) dataList ;
 */
 any Formatter::visitRetStmt(cst::RetStmt context) {
     return context->child(0)->text() + " " +
@@ -1343,6 +1326,33 @@ any Formatter::visitTypeCase(cst::TypeCase context) {
 }
 
 /*
+matchTypeType
+    : 'match' 'type' typeExpr '{' typeArm* '}'
+    ;
+*/
+any Formatter::visitMatchTypeType(cst::MatchTypeType context) {
+    return "match type " + formatTypeInTypePosition(context->type()) + " {" +
+           formatList(
+               vec(context->all<cst::TypeArm>()),
+               context,
+               " ",
+               "",
+               PaddingNL | Multiline | PushScope) +
+           "}";
+}
+
+/*
+typeArm
+    : CASE typeCasePattern ('|' typeCasePattern)* '=>' typeExpr
+    ;
+*/
+any Formatter::visitTypeArm(cst::TypeArm context) {
+    return "case " +
+           formatList(vec(context->all<cst::TypeCasePattern>()), context, " | ", " |") + " => " +
+           any_cast<string>(visit(context->type()));
+}
+
+/*
 typeCasePattern
     : 'struct' | 'tuple' | '#' 'leaf' | '_'
     ;
@@ -1612,7 +1622,7 @@ any Formatter::visitUnaryExpr(syn::Node context) {
 
 /*
 linkExpr
-    : compExpr (('->' | '?->') compExpr)*
+    : compExpr ('->' compExpr)*
     ;
 */
 any Formatter::visitLinkExpr(cst::LinkExpr context) { return formatBiOpsList(context, false); }
@@ -2077,7 +2087,6 @@ any Formatter::dispatch(syn::Node context) {
         return visit##name(cst::name(context));
         CAMEL_FORMAT(StmtList)
         CAMEL_FORMAT(ModuleName)
-        CAMEL_FORMAT(ModuleDecl)
         CAMEL_FORMAT(ImportDecl)
         CAMEL_FORMAT(ExportDecl)
         CAMEL_FORMAT(UsingNamespaceDecl)
@@ -2189,6 +2198,8 @@ any Formatter::dispatch(syn::Node context) {
         CAMEL_FORMAT(ArrayType)
         CAMEL_FORMAT(ArrayDim)
         CAMEL_FORMAT(SpecType)
+        CAMEL_FORMAT(MatchTypeType)
+        CAMEL_FORMAT(TypeArm)
         CAMEL_FORMAT(ConstData)
         CAMEL_FORMAT(StructType)
         CAMEL_FORMAT(EnumType)

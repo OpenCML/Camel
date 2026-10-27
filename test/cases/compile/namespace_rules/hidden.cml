@@ -1,4 +1,3 @@
-module hidden
 namespace Tools {
     func secret(): int { return 7 }
     export func open(): int { return secret() }

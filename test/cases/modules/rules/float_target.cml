@@ -4,7 +4,6 @@
  * may drop an overflowing intermediate, so they need `no_infs` and `no_signed_zeros`;
  * `double` doubles an integral coefficient, which is exact and needs nothing.
  */
-module float_target
 
 func combine(x: float): float {
     return x * 3.0 + x * 5.0

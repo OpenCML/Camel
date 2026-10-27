@@ -9,6 +9,7 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/core/type/intern.h"
 #include "modules/tensor/type.h"
 #include "tiles/device.h"
 #include <mutex>
@@ -50,13 +51,18 @@ Type *buildResidentType(Type *type) {
 }
 } // namespace
 Type *residentType(Type *type) {
+    // Keyed by canonical id: two spellings of one type (the same shape under other dimension
+    // names) have one resident type.
+    const core::type::TypeId key = core::type::TypeTable::instance().canonicalId(type);
+    if (key == core::type::kNoTypeId)
+        return buildResidentType(type);
     static std::mutex mutex;
-    static std::unordered_map<Type *, Type *> types;
+    static std::unordered_map<core::type::TypeId, Type *> types;
     std::lock_guard lock(mutex);
-    if (auto it = types.find(type); it != types.end())
+    if (auto it = types.find(key); it != types.end())
         return it->second;
     auto *result = buildResidentType(type);
-    types.emplace(type, result);
+    types.emplace(key, result);
     return result;
 }
 runtime::gc_node_ref_t packGraphAggregate(

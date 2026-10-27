@@ -1,0 +1,60 @@
+id = "modules.array_kernels"
+order = 932
+tier = "fast"
+tags = ["feat", "modules", "stdlib", "array"]
+desc = "The layout atoms and the reductions along an axis of `array` (`shape`, `numel`, `dim`, `to_bytes`, and `sum`, `mean`, `min`, `max`, `argmax`, `argmin` with an axis in angle brackets): the values, the rules of the element types and of the order (f64 accumulation rounded once, IEEE minimum and maximum, the first NaN, +0 above -0, the earlier position on a tie), and the faults of an axis outside the rank and of an empty axis."
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "array_kernels.layout"
+desc = "The extents, the element count, one extent by axis (a negative axis counts from the last) and the elements as little-endian bytes (f32, i32, bool)."
+kind = "behavior"
+case = "../../../cases/modules/array_kernels/layout.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[2, 3] 6 2 3\n[3] 3\n[0, 0, 128, 63, 0, 0, 0, 64]\n[1, 0, 0, 0, 2, 1, 0, 0]\n[1, 0]\n"
+
+[[tests]]
+name = "array_kernels.axis"
+desc = "Every reduction along an axis, the axis removed or kept, in floats, integers, f32, bf16 and f16, and the order rules of NaN, -0 and ties."
+kind = "behavior"
+case = "../../../cases/modules/array_kernels/axis.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[5.0, 7.0, 9.0] [6.0, 15.0] [6.0, 15.0]\n[[6.0], [15.0]]\n[2.5, 3.5, 4.5] [2.0, 5.0]\n[1.0, 2.0, 3.0] [3.0, 6.0]\n[2, 2] [0, 0, 0]\n[[1, 1, 1]]\n[6, 24] [1, 7] [9, 8, 7]\n[1, 1, 1] [1, 2]\n16777218.0\n6.0 3.0\nnan nan\n1 1\n-0.0 0.0\n1 1\n0 0\n"
+
+[[tests]]
+name = "array_kernels.axis_outside_rank"
+desc = "An axis outside the rank is a fault of kind InvalidArgument."
+kind = "negative"
+case = "../../../cases/modules/array_kernels/err_axis_range.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["Invalid argument of 'array.sum_axis': the axis 2 is outside the rank 2"]
+
+[[tests]]
+name = "array_kernels.axis_empty"
+desc = "A `max` along an axis of no element is a fault of kind InvalidArgument."
+kind = "negative"
+case = "../../../cases/modules/array_kernels/err_axis_empty.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["Invalid argument of 'array.max_axis': the axis 0 has no element"]
+
+[[tests]]
+name = "array_kernels.argsort"
+desc = "`argsort` of bf16 and f16 keys (ordered as the f32 they widen to, a NaN last) and the order of zeros: -0 below +0, equal keys in their order."
+kind = "behavior"
+case = "../../../cases/modules/array_kernels/argsort.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[1, 2, 0] [2, 0, 1]\n[2, 1, 0] [0, 2, 1]\n"

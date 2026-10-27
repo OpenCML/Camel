@@ -10,7 +10,6 @@
  * a kernel declares none (its semantics is `Program::implBodies`, not a `Definition`) — reads 42
  * as well, having expanded no kernel.
  */
-module impl_kernel_arms_agreement
 
 /// The element type the kernel implements: `i32` alone (design principles 4.4 on a body-less
 /// declaration, 10.4 on the body of an instance with no executor).

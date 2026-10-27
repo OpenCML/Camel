@@ -2,7 +2,6 @@
  * Refused declaration of an operator overload (design principles 4.3): an operator has no
  * with-parameters.
  */
-module with_param
 
 type M = { v: int }
 

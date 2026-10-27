@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
 #include <filesystem>
 #include <format>
@@ -12,9 +13,11 @@
 #include <unordered_set>
 
 #include "camel/core/context/context.h"
+#include "camel/core/type/resolver.h"
 
 #include "camel/core/global_config.h"
 #include "camel/core/mm.h"
+#include "camel/core/mm/deferred.h"
 #include "camel/core/module/builtin.h"
 #include "camel/core/module/dynamic.h"
 #include "camel/core/module/introspect.h"
@@ -40,6 +43,26 @@ using namespace camel::core::module;
 using namespace camel::core::type;
 
 namespace camel::core::context {
+
+namespace {
+
+/// The `Context` objects alive right now, for liveContextCount(): a reading that builds a context
+/// in a scope reads it on both sides of that scope to see whether the context was destroyed.
+std::atomic<size_t> gLiveContexts{0};
+
+} // namespace
+
+size_t liveContextCount() noexcept {
+    return gLiveContexts.load(std::memory_order_acquire);
+}
+
+context_ptr_t Context::handle() const {
+    // A control block of this object's own with a deleter that does nothing: the handle never
+    // keeps the context alive and never frees it, and it is not the control block of the owning
+    // pointer, so taking one changes no reference count and the context keeps whatever lifetime
+    // its owner gave it (see the declaration in context.h).
+    return context_ptr_t(const_cast<Context *>(this), [](Context *) noexcept {});
+}
 
 namespace {
 
@@ -267,13 +290,16 @@ size_t hardwareThreadCount() {
 
 Context::Context(const EntryConfig &entryConf, const DiagsConfig &diagConf)
     : entryConfig_(entryConf), diagConfig_(diagConf),
-      resolver_(entryConf.entryDir, entryConf.searchPaths) {}
+      resolver_(entryConf.entryDir, entryConf.searchPaths) {
+    gLiveContexts.fetch_add(1, std::memory_order_acq_rel);
+}
 
 size_t Context::threadLimit() const {
     return entryConfig_.maxThreads != 0 ? entryConfig_.maxThreads : hardwareThreadCount();
 }
 
 Context::~Context() {
+    gLiveContexts.fetch_sub(1, std::memory_order_acq_rel);
     // Runtime function objects stored inside modules may consult GCGraph-backed
     // closure metadata during teardown. Release module-owned runtime data before
     // dropping the graph closure so those metadata pointers stay valid for the
@@ -288,10 +314,21 @@ Context::~Context() {
     builtinModules_.clear();
     exeMgr_.reset();
     if (runtimeGraphMgr_) {
-        camel::core::mm::autoSpace().setObjectRootSet(nullptr);
-        camel::core::mm::autoSpace().setGraphSweeper(nullptr);
+        // The allocator is one per process and holds one root set and one sweeper per context:
+        // this destructor gives back its own, and only its own, so a context that keeps running
+        // beside this one keeps its graph roots marked and its graph space swept.
+        camel::core::mm::autoSpace().unregisterObjectRootSet(this);
+        camel::core::mm::autoSpace().unregisterGraphSweeper(this);
     }
     runtimeGraphMgr_.reset();
+// The deferred-release queue is drained here, as the last step. The queue is one per process,
+    // and the blocks the last collection found dead carry release callbacks (a DLPack producer's
+    // deleter, a Python buffer's release) that no later collection will run when this is the end of
+    // the runtime; the destruction above has just queued everything the modules' and the graph
+    // manager's own teardown finalized. A context that is not the last one of the process needs
+    // this as much as the last one does: a context whose destructor never runs leaves its releases
+    // to whoever drains next (mm/deferred.h).
+    camel::core::mm::runDeferredReleases();
 }
 
 camel::core::module::ProgramExports &Context::programExports() {
@@ -389,9 +426,15 @@ context_ptr_t Context::create(const EntryConfig &entryConf, const DiagsConfig &d
     context_ptr_t ctx     = std::shared_ptr<Context>(new Context(entryConf, diagConf));
     ctx->exeMgr_          = std::make_unique<ExecutorManager>(ctx);
     ctx->runtimeGraphMgr_ = std::make_unique<camel::runtime::GCGraphManager>();
-    camel::core::mm::autoSpace().setObjectRootSet(&ctx->runtimeGraphMgr_->gcRoots());
-    camel::core::mm::autoSpace().setGraphSweeper(
-        [manager = ctx->runtimeGraphMgr_.get()] { manager->sweepMarked(); });
+    // Registered under this context's address, so a second context beside this one (a language
+    // server, a tool's second context, the Python binding) adds its roots instead of replacing
+    // them, and destroying either one gives back only its own.
+    camel::core::mm::autoSpace().registerObjectRootSet(
+        ctx.get(), "runtimeGraphRoots", &ctx->runtimeGraphMgr_->gcRoots());
+    camel::core::mm::autoSpace().registerGraphSweeper(
+        ctx.get(), "runtimeGraphSweeper", [manager = ctx->runtimeGraphMgr_.get()] {
+            manager->sweepMarked();
+        });
     ctx->sourceContext_   = std::make_shared<camel::source::SourceContext>();
     ctx->runtimeDiagSink_ = std::make_shared<DiagnosticSink>("", "", ctx->sourceContext_);
     ctx->runtimeDiagSink_->setConfig(diagConf);
@@ -673,6 +716,56 @@ Context::importModule(const std::string &rawModuleName, const module::Module *im
         reasonStr.pop_back();
     reasonStr += "\n";
     throw DiagnosticBuilder::of(SemanticDiag::ModuleNotFound).commit(rawModuleName, reasonStr);
+}
+
+void Context::claimBuiltinSignature(
+    const std::shared_ptr<camel::core::type::FuncTypeResolver> &rule,
+    camel::core::type::FunctionType *signature) {
+    for (auto &[claimed, signatures] : builtinClaims_) {
+        if (claimed == rule) {
+            signatures.push_back(signature);
+            return;
+        }
+    }
+    builtinClaims_.push_back({rule, {signature}});
+}
+
+std::string Context::checkPreludeDeclarations() {
+    if (preludeChecked_) {
+        return preludeProblem_;
+    }
+    preludeChecked_ = true;
+    for (const std::string &root : resolver_.searchRoots(std::string())) {
+        const fs::path file = camel::utils::pathFromUtf8(root) / "prelude.cml";
+        std::error_code ec;
+        if (!fs::is_regular_file(file, ec) || ec) {
+            continue;
+        }
+        const std::string path = camel::utils::pathToUtf8(file);
+        auto prelude = std::static_pointer_cast<UserDefinedModule>(
+            UserDefinedModule::fromFile("prelude", path, shared_from_this()));
+        preludeModule_ = prelude;
+        try {
+            prelude->compile(CompileStage::Declared);
+        } catch (...) {
+            // A file that does not parse is reported by its own diagnostics, below.
+            if (!prelude->diagnostics() || !prelude->diagnostics()->hasErrors()) {
+                throw;
+            }
+        }
+        if (prelude->diagnostics() && prelude->diagnostics()->hasErrors()) {
+            preludeProblem_ = path;
+        } else {
+            for (const auto &[rule, signatures] : builtinClaims_) {
+                if (signatures.size() == 1) {
+                    rule->graftDeclaredSignature(signatures.front());
+                }
+            }
+        }
+        builtinClaims_.clear();
+        return preludeProblem_;
+    }
+    return preludeProblem_;
 }
 
 std::string Context::importerDirectory(const module::Module *importer) const {

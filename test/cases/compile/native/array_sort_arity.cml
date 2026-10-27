@@ -1,8 +1,6 @@
 /**
- * `array:sort` is declared with one array argument: a second one is refused at the call, and the
- * overload the message lists is the declaration's (bucket 1).
+ * `sort` is declared with one array argument: a second one is refused at the call.
  */
-module array_sort_arity
 
 import { sort } from array
 

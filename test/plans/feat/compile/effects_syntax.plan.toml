@@ -78,19 +78,17 @@ expect_exit = 0
 expect_stdout_exact = "0\n"
 
 # ---- A body-less native declaration carries the operator's signature ----
-
-[[tests]]
-name = "native.same_signature"
-desc = "`fs:exists` declares `uses fs`; a body-less declaration in a module named `fs` that writes the same clause is accepted, and the call reaches the operator."
-kind = "behavior"
-case = "../../../cases/effects/native_clause.cml"
-args = ["${case}"]
-expect_exit = 0
-expect_stdout_exact = "false\n"
+#
+# The declaration of an operator of a C++ module is the module's own: with the module's name
+# coming from the file name, only the module's own file may declare its operators, and the
+# standard library's declaration of `fs:exists` is that declaration (the acceptance side is
+# covered by test/cases/compile/native/fs_declaration_import.cml, which reaches the operator).
+# What a case file can still write is a declaration that names an operator through `#op` and
+# disagrees with it: the clause is compared with the operator's own resources.
 
 [[tests]]
 name = "native.wrong_signature"
-desc = "The same declaration written `pure`: the operator reads the file system, so the declaration promises what the operator does not keep. One diagnostic at the declaration, naming both sides."
+desc = "The declaration written `pure` names the operator `fs:exists`, which reads the file system, so the declaration promises what the operator does not keep. One diagnostic at the declaration, naming both sides."
 kind = "negative"
 case = "../../../cases/effects/native_clause_wrong.cml"
 args = ["${case}"]
@@ -125,7 +123,7 @@ kind = "behavior"
 case = "../../../cases/effects/effect_through_parameter.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_output_contains = ["SemanticDiag::EffectNotExecuted", "effect_through_parameter.cml:21:", "0 0 1 2"]
+expect_output_contains = ["SemanticDiag::EffectNotExecuted", "effect_through_parameter.cml:20:", "0 0 1 2"]
 
 [[tests]]
 name = "effect.parameter_promises_pure"
@@ -184,7 +182,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
 expect_diagnostic_code = "0x0300000F"
-expect_output_contains = ["err_inferred_not_pure.cml:19:", "uses stdout", "(x: int) => int pure"]
+expect_output_contains = ["err_inferred_not_pure.cml:18:", "uses stdout", "(x: int) => int pure"]
 
 [[tests]]
 name = "err.pure_parameter_write"
@@ -195,7 +193,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
 expect_diagnostic_code = "0x0300000F"
-expect_output_contains = ["err_pure_parameter_write.cml:21:", "usePure: (f: (x: int) => int pure) => int pure"]
+expect_output_contains = ["err_pure_parameter_write.cml:20:", "usePure: (f: (x: int) => int pure) => int pure"]
 
 [[tests]]
 name = "err.promise_through_parameter"
@@ -205,7 +203,7 @@ case = "../../../cases/effects/err_promise_through_parameter.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
-expect_output_contains = ["err_promise_through_parameter.cml:9:", "write 'pure' on the parameter", "an effect outside the program"]
+expect_output_contains = ["err_promise_through_parameter.cml:8:", "write 'pure' on the parameter", "an effect outside the program"]
 
 [[tests]]
 name = "err.unknown_resource"
@@ -260,7 +258,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["err_pure_body.cml:7:", "pure", "stdout"]
+expect_output_contains = ["err_pure_body.cml:6:", "pure", "stdout"]
 
 [[tests]]
 name = "err.pure_body2"
@@ -271,7 +269,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["err_pure_body2.cml:13:", "(x: int) => int pure", "stdout", "err_pure_body2.cml:14:"]
+expect_output_contains = ["err_pure_body2.cml:12:", "(x: int) => int pure", "stdout", "err_pure_body2.cml:13:"]
 
 [[tests]]
 name = "err.uses_live"
@@ -282,7 +280,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["err_uses_live.cml:8:", "uses fs", "stdout"]
+expect_output_contains = ["err_uses_live.cml:7:", "uses fs", "stdout"]
 
 [[tests]]
 name = "err.group_cycle"
@@ -315,7 +313,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["err_callee_clause_reaches.cml:16:", "uses db", "cache"]
+expect_output_contains = ["err_callee_clause_reaches.cml:15:", "uses db", "cache"]
 
 [[tests]]
 name = "err.promise_note"
@@ -326,7 +324,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["err_promise_note.cml:8:", "stdout", "at 10:5]"]
+expect_output_contains = ["err_promise_note.cml:7:", "stdout", "at 9:5]"]
 
 [[tests]]
 name = "err.pure_recursive"
@@ -348,4 +346,59 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["err_wide_parameters.cml:11:", "does not keep its resource promise"]
+expect_output_contains = ["err_wide_parameters.cml:10:", "does not keep its resource promise"]
+
+# ---- The measurement is a fixed point, and a use it cannot place is never dropped ----
+
+[[tests]]
+name = "err.recursive_pure"
+desc = "A recursive function is measured from the empty set and iterated to stability: `count_down` prints and calls itself, so its `pure` is refused where it is written. It used to be accepted, because a body that calls itself was never measured."
+kind = "negative"
+case = "../../../cases/effects/err_recursive_pure.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_diagnostic_code = "0x030001F1"
+expect_output_contains = ["err_recursive_pure.cml:7:", "pure", "stdout"]
+
+[[tests]]
+name = "err.mutual_recursive_pure"
+desc = "Two functions that call each other settle against each other: `ping` calls only `pong`, `pong` prints, and the cycle carries `stdout` back to `ping`, whose `pure` is refused."
+kind = "negative"
+case = "../../../cases/effects/err_mutual_recursive_pure.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_diagnostic_code = "0x030001F1"
+expect_output_contains = ["err_mutual_recursive_pure.cml:5:", "pure", "stdout"]
+
+[[tests]]
+name = "err.closure_capture_pure"
+desc = "A function declared inside another one writes a variable of the function around it. Which capture that is cannot be read from its own body; the use is read as touching any variable, not skipped, so the `pure` it wrote is refused and the report says what could not be determined."
+kind = "negative"
+case = "../../../cases/effects/err_closure_capture_pure.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_diagnostic_code = "0x030001F1"
+expect_output_contains = ["err_closure_capture_pure.cml:8:", "pure"]
+
+[[tests]]
+name = "err.many_parameters_pure"
+desc = "A parameter index is a byte in a signature. A use through the 300th parameter used to be dropped, so a `pure` that cannot hold passed; the use is now read as touching any handle and the clause is refused, with the reason."
+kind = "negative"
+case = "../../../cases/effects/err_many_parameters_pure.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_diagnostic_code = "0x030001F1"
+expect_output_contains = ["err_many_parameters_pure.cml:14:", "pure"]
+
+[[tests]]
+name = "ok.recursive_pure"
+desc = "A recursion that touches nothing keeps its `pure` (the fixed point only grows from the empty set), two functions that call only each other too, and a recursion whose clause names what it does touch, or that writes none, stays accepted."
+kind = "behavior"
+case = "../../../cases/effects/ok_recursive_pure.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["120 true true"]

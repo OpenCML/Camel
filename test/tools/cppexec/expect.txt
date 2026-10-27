@@ -48,7 +48,6 @@ test/cases/linear/nvm/mutual_tail.cml
 
 # Operators of runtime modules (the program links libcamel).
 test/cases/compile/diag_render/runtime_regex.cml
-test/cases/modules/stdlib/fault_substr_start.cml
 
 # Composite values, function values, T? and T!, var variables.
 test/cases/consistency/values/structs_tuples.cml
@@ -69,9 +68,6 @@ test/cases/trans/cpp/named_structs.cml
 test/cases/consistency/logical/short_circuit.cml
 test/cases/consistency/logical/pure.cml
 test/cases/consistency/narrowing/narrow.cml
-
-# Seeded random numbers, drawn as the random module draws them.
-test/cases/modules/std/random/basic.cml
 
 # `acc = acc->append<v>` (:op/assn_owned, the in-place form of append) and reads that leave
 # the array growable (:var/peek).
@@ -118,7 +114,7 @@ test/cases/compile/entry_args/complex.cml --arg z=1+0x10i --arg w=0x10-0o77i
 
 # One number grammar for an entry argument and a source literal: the integer tokens are
 # hexadecimal, binary and 0o octal too, and a float parameter reads one as a source literal in a
-# float position does. A leading-zero decimal is data text (n=077 and n=09 are decimal 77 and 9);
+# float position does. A leading zero before another digit is no number token, as in source (n=077 and n=09 are refused);
 # the float still has no hexadecimal form, an integer token too large for an int64 is refused,
 # and text that is not one token is refused; the translated program and camel agree on each.
 test/cases/compile/entry_args/scalars.cml --arg n=0x10 --arg rate=0xFF --arg name=hi --arg loud=true

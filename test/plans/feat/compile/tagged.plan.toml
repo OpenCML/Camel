@@ -2,7 +2,7 @@ id = "compile.tagged"
 order = 324
 tier = "fast"
 tags = ["feat", "compile", "nullable", "fallible", "types"]
-desc = "The tagged forms `T?` and `T!`, the operators `??`, `!!`, `?->`, the fixed `match` patterns and `throw` (design principles 3.9; docs/technical/29_nullable_and_fallible_values.md)."
+desc = "The tagged forms `T?` and `T!`, the operators `??`, `!!`, `->`, the fixed `match` patterns and the failed form an error value takes in a function declared `T!` (design principles 3.9; docs/technical/29_nullable_and_fallible_values.md)."
 
 [[tests]]
 name = "nullable"
@@ -40,7 +40,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "fallible"
-desc = "`T!`: `throw error(kind, message)` with the position of the call, `return` under a declared `T!`, `!!`, `?->` (one step and chained, with a callee that returns `U` or `U!`), `match` with `case error e`, rethrowing a caught error."
+desc = "`T!`: `return error(kind, message)` with the position of the call, `return` under a declared `T!`, `!!`, `->` (one step and chained, with a callee that returns `U` or `U!`), `match` with `case error e`, rethrowing a caught error."
 kind = "behavior"
 case = "../../../cases/compile/tagged/fallible.cml"
 args = ["${case}"]
@@ -55,13 +55,13 @@ const want = [
   "5",
   "-1",
   "ok 5",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 10",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 4",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 6",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
@@ -89,7 +89,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "stdlib"
-desc = "Library operators that can fail return a `T!`: parse_int, parse_float, fs::try_read_text."
+desc = "Library operators that can fail return a `T!`: parse_int, parse_float, fs::read_text."
 kind = "behavior"
 case = "../../../cases/compile/tagged/stdlib.cml"
 args = ["${case}"]
@@ -106,7 +106,7 @@ const want = [
   "ParseError: '99999999999999999999' is out of the range of an integer at <parse_int>",
   "2.5",
   "-1.0",
-  "error IOError: cannot open 'tagged_no_such_file.txt'",
+  "error NotFound: 'tagged_no_such_file.txt': No such file or directory",
   "<no file>",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
@@ -322,13 +322,13 @@ const want = [
   "5",
   "-1",
   "ok 5",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 10",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 4",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 6",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
@@ -413,13 +413,13 @@ const want = [
   "5",
   "-1",
   "ok 5",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 10",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 4",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 6",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
@@ -504,13 +504,13 @@ const want = [
   "5",
   "-1",
   "ok 5",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 10",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 4",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 6",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
@@ -595,13 +595,13 @@ const want = [
   "5",
   "-1",
   "ok 5",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 10",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 4",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 6",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
@@ -686,13 +686,13 @@ const want = [
   "5",
   "-1",
   "ok 5",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 10",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 4",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 6",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
@@ -770,13 +770,13 @@ const want = [
   "5",
   "-1",
   "ok 5",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 10",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 4",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
   "ok 6",
-  "DivByZero: the divisor is zero at fallible.cml:10:15",
+  "DivByZero: the divisor is zero at fallible.cml:9:16",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
@@ -1035,7 +1035,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "graph.throw_and_pass"
-desc = "`throw e` is the exit of its graph (OPER, CAST, EXIT, no branch); `x ?-> f` is one BRCH/JOIN."
+desc = "`return e` in a function declared `T!` is the exit of its graph (OPER, CAST, EXIT, no branch); `x -> f` is one BRCH/JOIN."
 kind = "behavior"
 case = "../../../cases/compile/tagged/graph_throw_pass.cml"
 args = ["${case}", "std::gir"]
@@ -1051,7 +1051,7 @@ const idOf = (text) => {
   assert(line, 'a node ' + text)
   return line.trim().split(' ')[0]
 }
-assert(count('type="BRCH"') === 1 && count('type="JOIN"') === 1, 'one branch: the one of ?->')
+assert(count('type="BRCH"') === 1 && count('type="JOIN"') === 1, 'one branch: the one of ->')
 assert(count('label=":op/tag_throw"') === 1, 'one throw')
 assert(count('label=":op/tag_is_error"') === 1, 'one tag read')
 assert(count('label=":op/tag_error_value"') === 1, 'one value read')
@@ -1061,7 +1061,7 @@ assert(next, 'the thrown value is used')
 const cast = next.trim().split(' ')[2]
 assert(lines.some((l) => l.trim().startsWith(cast + ' [label="CAST"')), 'throw feeds a CAST')
 assert(lines.some((l) => l.trim().startsWith(cast + ' -> O') && l.includes('type="EXIT"')), 'the CAST is the exit of the graph')
-assert(out.includes('label="graph_throw_pass.cml:9:11"'), 'the position of error(...) is a constant argument')
+assert(out.includes('label="graph_throw_pass.cml:8:12"'), 'the position of error(...) is a constant argument')
 }
 """
 timeout_ms = 8000
@@ -1085,34 +1085,46 @@ assert(count(':op/tag_') === 0 && count('type="CAST"') === 0, 'no tagged operato
 timeout_ms = 8000
 
 [[tests]]
-name = "throw_outside_fallible"
-desc = "`throw` in a function that does not declare a `T!`."
+name = "error_outside_fallible"
+desc = "An error value is handed out by a function that declares a `T!`: here the function returns `int`, so the arm that hands the error out does not join with the arm that gives an `int`."
 kind = "negative"
-case = "../../../cases/compile/tagged/err_throw_plain.cml"
+case = "../../../cases/compile/tagged/err_error_outside_fallible.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ThrowOutsideFallible"
-expect_diagnostic_code = "0x03000070"
+expect_diagnostic_name = "SemanticDiag::BranchReturnTypeMismatch"
+expect_diagnostic_code = "0x0300000C"
 expect_diagnostic_line = 8
-expect_diagnostic_column = 9
-expect_output_contains = ["'throw' needs a function declared to return 'T!': the function around it returns 'int'."]
+expect_diagnostic_column = 5
+expect_output_contains = ["Return type mismatch between branches (in function 'check: (x: int) => int')"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
-name = "throw_not_an_error"
-desc = "`throw` takes an error value."
+name = "failed_arm_takes_an_error"
+desc = "The failed arm takes an error value: a plain string is not one, so the arm does not join with the arm that gives an `int`."
 kind = "negative"
-case = "../../../cases/compile/tagged/err_throw_value.cml"
+case = "../../../cases/compile/tagged/err_failed_arm_value.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ThrowNotAnError"
-expect_diagnostic_code = "0x03000071"
-expect_diagnostic_line = 8
-expect_diagnostic_column = 9
-expect_output_contains = ["'throw' takes an error value, not a value of type 'string'."]
+expect_diagnostic_name = "SemanticDiag::BranchReturnTypeMismatch"
+expect_diagnostic_code = "0x0300000C"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 5
+expect_output_contains = ["Return type mismatch between branches (in function 'check: (x: int) => int!')"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "pass_over_nullable"
+desc = "`->` hands on a value that is missing as well as one that failed (design principles 3.9): over a `T?` the missing value is passed on unchanged, and the call happens only where there is a value."
+kind = "behavior"
+case = "../../../cases/compile/tagged/pass_nullable.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["8", "null", "-1"]
+expect_output_not_contains = ["UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -1125,7 +1137,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TaggedMatchCases"
 expect_diagnostic_code = "0x03000076"
-expect_diagnostic_line = 10
+expect_diagnostic_line = 9
 expect_diagnostic_column = 13
 expect_output_contains = ["This 'match' on a value of type 'int?!' is not well formed: 'case null' needs a value that may be null."]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -1141,7 +1153,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TaggedMatchCases"
 expect_diagnostic_code = "0x03000076"
-expect_diagnostic_line = 10
+expect_diagnostic_line = 9
 expect_diagnostic_column = 13
 expect_output_contains = ["This 'match' on a value of type 'int!?' is not well formed: 'case error' needs a value that may have failed."]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -1157,7 +1169,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TaggedTypeNesting"
 expect_diagnostic_code = "0x03000072"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_diagnostic_column = 11
 expect_output_contains = ["The type 'int??' marks 'int' twice."]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -1173,7 +1185,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TaggedTypeNesting"
 expect_diagnostic_code = "0x03000072"
-expect_diagnostic_line = 13
+expect_diagnostic_line = 12
 expect_diagnostic_column = 17
 expect_output_contains = ["The type 'int??' marks 'int' twice."]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -1189,7 +1201,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TaggedValueNotOpened"
 expect_diagnostic_code = "0x03000073"
-expect_diagnostic_line = 10
+expect_diagnostic_line = 9
 expect_diagnostic_column = 13
 expect_output_contains = ["A value of type 'int!' cannot be used here: a member cannot be read from it."]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -1198,17 +1210,18 @@ timeout_ms = 8000
 
 [[tests]]
 name = "null_then_plain_left"
-desc = "`??` over a plain `int`, at the operator. (It used to be reported as not implemented.)"
-kind = "negative"
+desc = "`??` over a plain `int`: allowed, with the warning that its null case is never taken (KnownNotNull), at the operator; design principles 3.8."
+kind = "behavior"
 case = "../../../cases/compile/tagged/err_plain_left.cml"
 args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::TaggedOperandMismatch"
-expect_diagnostic_code = "0x03000075"
-expect_diagnostic_line = 9
+expect_exit = 0
+expect_stdout_exact = "1\n"
+expect_diagnostic_name = "SemanticDiag::KnownNotNull"
+expect_diagnostic_code = "0x03100111"
+expect_diagnostic_line = 8
 expect_diagnostic_column = 15
-expect_output_contains = ["'??' cannot be applied here: its left side has type 'int', which is not a 'T?'."]
-expect_output_not_contains = ["never printed", "UnknownInternalError"]
+expect_output_contains = ["is known not to be null here (it has type 'int'): the null case of '??' is never taken."]
+expect_output_not_contains = ["TaggedOperandMismatch", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -1221,7 +1234,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TaggedOperandMismatch"
 expect_diagnostic_code = "0x03000075"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 8
 expect_diagnostic_column = 15
 expect_output_contains = ["'!!' cannot be applied here: its left side has type 'int?', which is not a 'T!'."]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -1237,7 +1250,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TaggedOperandMismatch"
 expect_diagnostic_code = "0x03000075"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 8
 expect_diagnostic_column = 15
 expect_output_contains = ["'??' cannot be applied here: its right side has type 'string', but the left side holds a 'int'."]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -1245,17 +1258,17 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
-name = "pass_over_nullable"
-desc = "`?->` hands on errors only: over a `T?` it is rejected, at the start of the expression."
+name = "null_then_null_literal_left"
+desc = "`??` over `null`: `null` has type `void`, so there is no value to put back into a `T?` and the operator is refused at its own position. A value that cannot be null is allowed there with a warning (KnownNotNull); `void` is not a value."
 kind = "negative"
-case = "../../../cases/compile/tagged/err_pass_nullable.cml"
+case = "../../../cases/compile/tagged/err_null_left.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TaggedOperandMismatch"
 expect_diagnostic_code = "0x03000075"
-expect_diagnostic_line = 11
-expect_diagnostic_column = 13
-expect_output_contains = ["'?->' cannot be applied here: its left side has type 'int?', which is not a 'T!'."]
+expect_diagnostic_line = 9
+expect_diagnostic_column = 18
+expect_output_contains = ["'??' cannot be applied here: its left side has type 'void', which is not a 'T?'."]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -1269,7 +1282,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TaggedMatchCases"
 expect_diagnostic_code = "0x03000076"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 8
 expect_diagnostic_column = 13
 expect_output_contains = ["This 'match' on a value of type 'int!' is not well formed: 'case error e' is missing."]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -1285,7 +1298,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TaggedMatchCases"
 expect_diagnostic_code = "0x03000076"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 8
 expect_diagnostic_column = 13
 expect_output_contains = ["a literal case cannot be compared with a value that is not opened yet"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -1311,7 +1324,7 @@ kind = "negative"
 case = "../../../cases/compile/tagged/err_plain_use.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "err_plain_use.cml:8:30:", "<> (int!, int)"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "err_plain_use.cml:7:30:", "<> (int!, int)"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -1325,7 +1338,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::IdentifierPatternNeedsNullableOrErrorType"
 expect_diagnostic_code = "0x030001F5"
-expect_diagnostic_line = 10
+expect_diagnostic_line = 9
 expect_diagnostic_column = 9
 expect_output_contains = ["takes a value of type 'T?' or 'T!' apart", "has type 'int'"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -1339,9 +1352,9 @@ kind = "negative"
 case = "../../../cases/compile/tagged/error_position_pipeline.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_line = 8
-expect_diagnostic_column = 11
-expect_output_contains = ["An error value reached the exit of 'main' without being handled: Zero: zero.", "error_position_pipeline.cml:8:11", "(name=RuntimeDiag::UnhandledError"]
+expect_diagnostic_line = 6
+expect_diagnostic_column = 12
+expect_output_contains = ["An error value reached the exit of 'main' without being handled: Zero: zero.", "error_position_pipeline.cml:6:12", "(name=RuntimeDiag::UnhandledError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 
 [[tests]]
@@ -1363,7 +1376,7 @@ case = "../../../cases/compile/tagged/err_optional_operand.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LogicalOperandNotBool"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 8
 expect_diagnostic_column = 13
 expect_output_contains = ["The left side of '||' has type 'bool?', not 'bool'."]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -1395,7 +1408,7 @@ const lines = out.split('\n')
 const nulls = lines.filter((l) => l.includes('label="null"') && l.includes('type="DATA"'))
 const typed = nulls.filter((l) => l.includes('value_type="int?"'))
 assert(typed.length === 1, 'one null constant of the position\'s type, got ' + typed.length + ': ' + nulls.join(' | '))
-assert(typed[0].includes('span="16:16-16:20"'), "the constant stands where the default is written: " + typed[0])
+assert(typed[0].includes('span="15:16-15:20"'), "the constant stands where the default is written: " + typed[0])
 const id = typed[0].trim().split(' ')[0]
 assert(out.split(id + ' ->').length - 1 === 2, 'both calls that leave the parameter out read that one node')
 }

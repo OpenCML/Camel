@@ -1,7 +1,6 @@
 /**
  * Refused: the variable is assigned in branch arms, outside the function body that declares it.
  */
-module var_arm
 import { reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env
@@ -14,7 +13,7 @@ func forward(x: float[..]): float[..] sync {
 
 func main(): int sync {
     let x = reshape([1.0, -2.0, 3.0, 4.0], [2, 2])
-    export_model((x: float[..]): float[..] => forward(x), x, get_env('ONNX_OUT'))
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((x: float[..]): float[..] => forward(x), x)
     println('exported')
     return 0
 }

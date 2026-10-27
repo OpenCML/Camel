@@ -1,0 +1,22 @@
+/**
+ * A `with` argument of type `never` stops the call (design principles 3.9; the author's ruling of
+ * 2026-10-26 on `never-argument-scope`): a `with` argument is evaluated before the call it is
+ * written in like an ordinary one, and this one never gives a value, so the fault it raises is
+ * what ends the program. The call never runs -- it is typed `never` and no overload is chosen for
+ * it -- and the value the call would have made is never made.
+ */
+
+func stop(m: string): never {
+    return fail<'Stopped'>(m)
+}
+
+with <rounds: int>
+func repeat(x: int): int {
+    return x + rounds
+}
+
+func main(): int sync {
+    println('before')
+    let n: int = repeat<stop('no rounds by position')>(3)
+    return 0
+}

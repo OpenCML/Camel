@@ -9,9 +9,7 @@
  * positive, so the value the program prints says whether the condition saw the coefficient --
  * `positive_case` loses its product, `negative_case` keeps it.
  */
-module when_values
 
-import { Program } from graph
 import { rewrite } from rewrite
 
 /// The guard on the coefficient's value: the type is the parameter's own, so no dummy sample
@@ -22,8 +20,8 @@ func positive(c: float): bool {
 
 rule keep_positive(x: float, const c: float) when positive(c) { x * c => x }
 
-export func apply(p: Program): Program! {
-    return rewrite(p, [keep_positive])
+export func apply::<F>(p: F): F! {
+    return p->rewrite<[keep_positive]>
 }
 
 func positive_case(x: float): float { return x * 3.0 }

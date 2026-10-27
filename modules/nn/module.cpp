@@ -1,6 +1,7 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
+#include "camel/core/type/native.h"
 #include "module.h"
 
 #include <algorithm>
@@ -41,7 +42,7 @@ NnModule::NnModule(context_ptr_t ctx) : BuiltinModule("nn", ctx) {
     // nn's operators rely on the tensor catalog (and its tangent space) being registered.
     camel::tensor::ops::registerTensorOps();
     camel::nn::registerNnTensorOps();
-    exportType(Reference("OptimizerState"), camel::nn::OptimizerStateType::Default());
+    camel::core::type::registerNativeType("nn", "OptimizerState", camel::nn::OptimizerStateType::Default());
     for (const auto &group : camel::tensor::ops::OpRegistry::instance().operatorGroups("nn")) {
         if (!isDeclaredOperator(group->name())) {
             exportEntity(group->name(), group);

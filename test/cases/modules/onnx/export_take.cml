@@ -2,7 +2,6 @@
  * `take` with a constant index array exports as one ONNX Gather on axis 0, with the indices as an
  * i64 initializer (the same mapping nn embedding uses).
  */
-module export_take
 
 import { reshape, take } from tensor
 import { export_model } from onnx
@@ -15,7 +14,7 @@ func forward(x: float[..], indices: int[]): float[..] {
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0], [4, 2])
     let indices = [2, 0, 2]
-    export_model((x: float[..]): float[..] => forward(x, indices), x, get_env('ONNX_OUT'))
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((x: float[..]): float[..] => forward(x, indices), x)
     println('exported')
     return 0
 }

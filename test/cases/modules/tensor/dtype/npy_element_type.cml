@@ -5,7 +5,6 @@
 //
 // The int64 array is the tree's only non-f32 `.npy`: the tensor a checkpoint's `odd` entry holds
 // (`test/cases/modules/nn/fixtures/checkpoint-v1/odd.npy`, element type int64, one extent of 2).
-module tensor_dtype_npy_element_type
 
 import { load_npy, numel } from tensor
 

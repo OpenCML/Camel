@@ -9,7 +9,6 @@
  * the plan pins them, so a later rewriting that re-associates a chain is visible even when the
  * error is small. `gemm_canonical.cml` and `gemm_consistency.cml` remain the numeric cases.
  */
-module gemm_canonical_bits
 
 import { random, seed, to_bytes } from tensor
 import { sha256 } from hash

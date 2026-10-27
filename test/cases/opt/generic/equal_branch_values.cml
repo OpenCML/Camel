@@ -2,7 +2,6 @@
  * Equal scalar branch results can feed constant folding without dropping the
  * condition or taken arm's effects. Different values and signed zeros stay distinct.
  */
-module equal_branch_values
 
 import { get_env } from env
 
@@ -17,7 +16,7 @@ func right(): float sync {
 }
 
 func main(): int sync {
-    let flag = get_env('CAMEL_EQUAL_BRANCH') == ''
+    let flag = (get_env('CAMEL_EQUAL_BRANCH') ?? '') == ''
     let x = if flag then left() else right()
     println(x * x)
     let different = if flag then 2.0 else 3.0

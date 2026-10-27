@@ -6,6 +6,7 @@
 |---|---|---|
 | `:op/and` | ✓ | ✗ |
 | `:op/idx_arr` | ✓ | ✗ |
+| `:op/idx_take` | ✓ | ✗ |
 | `:op/not` | ✓ | ✗ |
 | `:op/or` | ✓ | ✗ |
 | `:op/slice_sub` | ✓ ≥10 | ✗ |
@@ -38,7 +39,6 @@
 | `tensor:add` | ✓ | ✗ |
 | `tensor:argmax_axis` | ✓ ≥12 | ✗ |
 | `tensor:broadcast_like` | ✗ | ✓ ≥8 |
-| `tensor:cast` | ✓ | ✗ |
 | `tensor:cast_like` | ✗ | ✓ ≥1 |
 | `tensor:concat` | ✓ | ✗ |
 | `tensor:dim` | ✓ | ✗ |

@@ -7,7 +7,6 @@
  * make_data.py), prints `CAMEL_BENCH step=<i> loss=<v>`, and dumps the updated
  * parameters to CAMEL_FT_DUMP/step_<i>/ for the three-way alignment.
  */
-module native_train_transformer
 
 import { layer_norm, softmax, gelu, reshape, permute, transpose, shape, mean, load_npy } from tensor
 import { with_grad } from autodiff
@@ -42,7 +41,7 @@ func attention(x: f32[..]): f32[..] {
     let q = split_heads(x @ m.q_w + m.q_b, heads)
     let k = split_heads(x @ m.k_w + m.k_b, heads)
     let v = split_heads(x @ m.v_w + m.v_b, heads)
-    let scale = 1.0 / sqrt(float(shape(q)[3]))
+    let scale = f32(1.0 / sqrt(float(shape(q)[3])))
     let weights = softmax((q @ transpose(k)) * scale)
     return merge_heads(weights @ v) @ m.o_w + m.o_b
 }
@@ -70,10 +69,10 @@ func spin(m: Block, i: int, steps: int, nb: int): Block {
     return if i >= steps then m else sync {
         let si = '{}'->format<i>
         let bi = '{}'->format<i % nb>
-        let x = load_npy::<f32>(get_env('CAMEL_FT_BATCHES') + '/batch_' + bi + '.npy')
+        let x = load_npy::<f32>((get_env('CAMEL_FT_BATCHES') ?? '') + '/batch_' + bi + '.npy')
         let vg = step(m, x)
         'CAMEL_BENCH step={} loss={}'->format<i, vg.0>->println
-        let dump = get_env('CAMEL_FT_DUMP')
+        let dump = get_env('CAMEL_FT_DUMP') ?? ''
         if dump != '' then save_params(vg.1, dump + '/step_' + si)
         return spin(vg.1, i + 1, steps, nb)
     }
@@ -88,8 +87,8 @@ func main(): int sync {
         ffn1_w: weight('ffn1_w'), ffn1_b: weight('ffn1_b'),
         ffn2_w: weight('ffn2_w'), ffn2_b: weight('ffn2_b')
     }
-    let steps = int(get_env('CAMEL_FT_STEPS'))
-    let nb = int(get_env('CAMEL_FT_NBATCHES'))
+    let steps = int(get_env('CAMEL_FT_STEPS') ?? '')
+    let nb = int(get_env('CAMEL_FT_NBATCHES') ?? '')
     let final = spin(m, 0, steps, nb)
     return 0
 }

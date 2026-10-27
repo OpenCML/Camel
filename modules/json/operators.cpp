@@ -393,62 +393,36 @@ bool jsonToTyped(const json &j, Type *type, const std::string &path, slot_t &out
     return false;
 }
 
-/// Whether jsonToTyped can produce a value of `type` at all, so that a call asking for a
-/// type without a JSON form is rejected when it is compiled.
-bool hasJsonForm(Type *type) {
-    if (isJsonType(type)) {
-        return true;
-    }
-    switch (type->code()) {
-    case TypeCode::Bool:
-    case TypeCode::Int64:
-    case TypeCode::Int32:
-    case TypeCode::Float64:
-    case TypeCode::Float32:
-    case TypeCode::String:
-        return true;
-    case TypeCode::Array:
-        return hasJsonForm(static_cast<ArrayType *>(type)->elemType());
-    case TypeCode::Tuple: {
-        auto *tupleType = static_cast<TupleType *>(type);
-        if (tupleType->isNullable())
-            return hasJsonForm(tupleType->payloadType());
-        if (tupleType->isTagged() || tupleType->isCell())
-            return false;
-        for (Type *member : tupleType->types()) {
-            if (!hasJsonForm(member))
-                return false;
-        }
-        return true;
-    }
-    case TypeCode::Struct:
-        for (Type *member : static_cast<StructType *>(type)->types()) {
-            if (!hasJsonForm(member))
-                return false;
-        }
-        return true;
-    default:
-        break;
-    }
-    if (const CollectionType *coll = asCollectionType(type)) {
-        if (!coll->isMap())
-            return hasJsonForm(coll->keyType());
-        return coll->keyType()->code() == TypeCode::String && hasJsonForm(coll->valueType());
-    }
-    return false;
-}
-
 } // namespace
 
-slot_t __json_encode__(ArgsView &, ArgsView &norm, Context &ctx) {
+// encode(value) and encode<indent: n>(value): a null or absent indent is one line.
+slot_t __json_encode__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Type *t  = norm.type(0);
     slot_t s = norm.slot(0);
     auto opt = camelToJson(t, s, ctx);
     if (!opt)
         return NullSlot;
-    int indent = norm.size() >= 2 ? static_cast<int>(fromSlot<Int64>(norm.slot(1))) : -1;
-    if (indent < 0)
-        indent = -1;
+    int indent = -1;
+    if (with.size() >= 1) {
+        slot_t slot = with.slot(0);
+        bool given  = true;
+        if (asNullable(with.type(0)) != nullptr) {
+            given = !isNullValue(slot);
+            slot  = nullablePayload(slot);
+        } else if (with.type(0)->code() != TypeCode::Int64) {
+            given = false; // the type of `null`
+        }
+        if (given) {
+            const Int64 n = fromSlot<Int64>(slot);
+            if (n < 0) {
+                throwRuntimeFault(
+                    RuntimeDiag::InvalidArgument,
+                    "json.encode",
+                    std::format("the indent is {}; it must not be negative", n));
+            }
+            indent = static_cast<int>(n);
+        }
+    }
     std::string out = indent >= 0 ? opt->dump(indent, ' ') : opt->dump();
     return toSlot(String::from(out, mm::autoSpace()));
 }
@@ -494,58 +468,14 @@ slot_t __json_decode__(ArgsView &, ArgsView &norm, Context &) {
     }
 }
 
-bool jsonTypeHasForm(Type *type) { return type != nullptr && hasJsonForm(type); }
-
-bool jsonTypeEncodable(Type *type) {
-    if (type == nullptr) {
-        return false;
-    }
-    if (isJsonType(type)) {
-        return true;
-    }
-    // The cases of camelToJson, which faults on anything else.
-    switch (type->code()) {
-    case TypeCode::Int32:
-    case TypeCode::Int64:
-    case TypeCode::Float32:
-    case TypeCode::Float64:
-    case TypeCode::Bool:
-    case TypeCode::Void:
-    case TypeCode::String:
-        return true;
-    case TypeCode::Array:
-        return jsonTypeEncodable(static_cast<ArrayType *>(type)->elemType());
-    case TypeCode::Tuple:
-        for (Type *member : static_cast<TupleType *>(type)->types()) {
-            if (!jsonTypeEncodable(member))
-                return false;
-        }
-        return true;
-    case TypeCode::Struct:
-        for (Type *member : static_cast<StructType *>(type)->types()) {
-            if (!jsonTypeEncodable(member))
-                return false;
-        }
-        return true;
-    default:
-        break;
-    }
-    if (const CollectionType *coll = asCollectionType(type)) {
-        if (!coll->isMap())
-            return jsonTypeEncodable(coll->keyType());
-        return coll->keyType()->code() == TypeCode::String && jsonTypeEncodable(coll->valueType());
-    }
-    return false;
-}
-
-// decode_as<shape>(text), decode_as(text, shape): the type of `shape` is the type decoded to;
-// its value is not read (DESIGN-QUESTION(json-typed-decode)). The result is a `T!`: text that
-// is not JSON, JSON that does not have the shape of `T`, and a document deeper than the limit
-// (JsonTooDeep) are error values, not faults.
+// decode_as::<T>(source): the type T is the one the call names, or the one the position it stands
+// in determines (`let cfg: Config! = text->decode_as`); the call's own result type carries it
+// here. The result is a `T!`: text that is not JSON, JSON that does not have the shape of `T`, and
+// a document deeper than the limit (JsonTooDeep) are error values, not faults.
 slot_t __json_decode_as__(ArgsView &with, ArgsView &norm, Context &ctx) {
     static const char *kWhere = "<json::decode_as>";
-    Type *target              = with.size() > 0 ? with.type(0) : norm.type(1);
-    const TupleType *result   = TupleType::fallible(target);
+    const TupleType *result   = asFallible(norm.resultType());
+    Type *target              = result->payloadType();
     json document;
     if (isJsonType(norm.type(0))) {
         // A Json decoded before: its document, read again with a type.
@@ -654,10 +584,6 @@ slot_t __json_kind__(ArgsView &, ArgsView &norm, Context &) {
     return toSlot(String::from(JsonValue::kindName(value->kind()), mm::autoSpace()));
 }
 
-slot_t __json_is_null__(ArgsView &, ArgsView &norm, Context &) {
-    return toSlot<Bool>(fromSlot<JsonValue *>(norm.slot(0))->kind() == JsonValue::Kind::Null);
-}
-
 slot_t __json_as_bool__(ArgsView &, ArgsView &norm, Context &) {
     return payloadIf(norm, JsonValue::Kind::Bool, Type::Bool());
 }
@@ -731,7 +657,6 @@ std::unordered_map<std::string, operator_t> getJsonOpsMap() {
         {"decode", __json_decode__},
         {"decode_as", __json_decode_as__},
         {"kind", __json_kind__},
-        {"is_null", __json_is_null__},
         {"as_bool", __json_as_bool__},
         {"as_int", __json_as_int__},
         {"as_float", __json_as_float__},

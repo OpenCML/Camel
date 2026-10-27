@@ -11,9 +11,8 @@
  * This is the case the new refusal must not touch: the labels' zero is what a discrete input's
  * derivative is, and it is decided by `take`'s rule, not by the accumulator guessing from a type.
  */
-module gather_discrete_index_zero
 
-import { cast, reshape, sum } from tensor
+import { reshape, sum } from tensor
 import { with_grad } from autodiff
 
 type Model = {
@@ -29,11 +28,11 @@ func gather_loss(): float {
 func main(): int sync {
     let model = {
         weights: reshape([1.0, 2.0, 3.0, -4.0, 5.0, -6.0] as f32[], [2, 3]),
-        labels: cast([1, 0], 'int64'),
+        labels: int([1, 0]),
     }
     let (v, g) = with_grad(gather_loss)<model>()
     let weights_grad = sum(g.weights)
-    let index_grad = sum(cast(g.labels, 'float32'))
+    let index_grad = sum(f32(g.labels))
     'gather_discrete_index_zero value={:.1f} weights_grad={:.1f} index_grad={:.1f}'->format<
         v,
         weights_grad,

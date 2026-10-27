@@ -1,7 +1,6 @@
 // One loop round allocates exactly one data block (the `add` result, 1024 f32 = 4096 bytes);
 // the `zeros` before the loop is the other block of the run. The step line and the aggregate
 // line of the profile must agree with that, and the per-operator rows must add up to them.
-module profile_alloc_step
 
 import { zeros } from tensor
 

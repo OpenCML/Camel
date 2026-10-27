@@ -12,9 +12,8 @@
  * The loss curve is collected from the Camel path and the last loss of both paths is printed: the
  * same number means the two trained models are the same model.
  */
-module optim_training
 
-import { abs, cast, range, relu, reshape, sum } from tensor
+import { abs, range, relu, reshape, sum } from tensor
 import { with_grad } from autodiff
 import { adam as native_adam, adam_state, softmax_cross_entropy } from nn
 import { adam, cosine_decay, init, update } from optim
@@ -41,19 +40,19 @@ func logits(x: f32[..]): f32[..] {
 
 with <m: Mlp>
 func loss(x: f32[..], labels: i64[..]): float {
-    return softmax_cross_entropy(logits<m>(x), cast(labels, 'int64'))
+    return softmax_cross_entropy(logits<m>(x), int(labels))
 }
 
 // The starting weights: values with binary digits below the point.
 func model_at(): Mlp {
     return {
         l0: {
-            weight: reshape(cast(range(12), 'float32'), [3, 4]) * 0.05 - 0.3,
-            bias: reshape(cast(range(4), 'float32'), [4]) * 0.01
+            weight: reshape(f32(range(12)), [3, 4]) * 0.05 - 0.3,
+            bias: reshape(f32(range(4)), [4]) * 0.01
         },
         l1: {
-            weight: reshape(cast(range(16), 'float32'), [4, 4]) * 0.05 - 0.4,
-            bias: reshape(cast(range(4), 'float32'), [4]) * 0.01 + 0.02
+            weight: reshape(f32(range(16)), [4, 4]) * 0.05 - 0.4,
+            bias: reshape(f32(range(4)), [4]) * 0.01 + 0.02
         }
     }
 }
@@ -68,8 +67,8 @@ func drift(a: Mlp, b: Mlp): float {
 
 func main(steps: int): int sync {
     // A tiny deterministic batch: four samples of three features, four class ids.
-    let x = reshape(cast(range(12), 'float32'), [4, 3]) * 0.125 - 0.5
-    let labels = cast(range(4), 'int64')
+    let x = reshape(f32(range(12)), [4, 3]) * 0.125 - 0.5
+    let labels = int(range(4))
     let model = model_at()
     let loss_with_grad = with_grad(loss)
     let opt = adam(cosine_decay(0.02, 10, 0.002))

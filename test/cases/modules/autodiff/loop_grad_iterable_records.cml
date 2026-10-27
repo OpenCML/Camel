@@ -4,7 +4,6 @@
  * the value is 14 and the gradient is 7. The elements are structs, so the structural zero and sum
  * of tangents run one level down from the array.
  */
-module loop_grad_iterable_records
 
 import { grad } from autodiff
 

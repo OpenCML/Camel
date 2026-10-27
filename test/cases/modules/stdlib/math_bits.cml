@@ -3,32 +3,31 @@
  * complement; shr is arithmetic (it keeps the sign); a shift count outside 0..width-1 is a
  * fault (see the fault cases).
  */
-module math_bits
 
-import { bit_and, bit_or, bit_xor, bit_not, shl, shr } from math
+import { bit_and, bit_or, bit_xor, shl, shr } from math
 
 func main(): int sync {
     let top = 9223372036854775807
     let bottom = -9223372036854775807 - 1
 
-    println(bit_and(12, 10), bit_or(12, 10), bit_xor(12, 10), bit_not(12))
-    println(bit_and(-1, 255), bit_or(0, 0), bit_xor(-1, -1), bit_not(0), bit_not(-1))
-    println(bit_and(top, bottom), bit_or(top, bottom), bit_xor(top, bottom), bit_not(top), bit_not(bottom))
+    println(bit_and(12, 10), bit_or(12, 10), bit_xor(12, 10), ~12)
+    println(bit_and(-1, 255), bit_or(0, 0), bit_xor(-1, -1), ~0, ~-1)
+    println(bit_and(top, bottom), bit_or(top, bottom), bit_xor(top, bottom), ~top, ~bottom)
 
-    println(shl(1, 0), shl(1, 1), shl(1, 62), shl(1, 63), shl(3, 62), shl(-1, 63), shl(top, 1))
-    println(shr(8, 0), shr(8, 1), shr(8, 3), shr(8, 4), shr(-8, 1), shr(-1, 63), shr(bottom, 63), shr(top, 62))
+    println(1->shl<0>, 1->shl<1>, 1->shl<62>, 1->shl<63>, 3->shl<62>, (-1)->shl<63>, top->shl<1>)
+    println(8->shr<0>, 8->shr<1>, 8->shr<3>, 8->shr<4>, (-8)->shr<1>, (-1)->shr<63>, bottom->shr<63>, top->shr<62>)
 
     // i32: the width is 32
     let one = i32(1)
     let minus = i32(-8)
-    println(shl(one, 31), shl(one, 30), shr(minus, 1), shr(minus, 31), bit_not(one), bit_and(minus, one))
-    // the count may be either integer type
-    let n = i32(4)
-    println(shl(1, n), shr(256, n), shl(one, n), shl(one, 4))
+    println(one->shl<31>, one->shl<30>, minus->shr<1>, minus->shr<31>, ~one, bit_and(minus, one))
+    // the count is an int, a value of the program or a literal
+    let n = 4
+    println(1->shl<n>, 256->shr<n>, one->shl<n>, one->shl<4>)
 
     // the usual identities
     let x = 123456789
-    println(bit_xor(bit_xor(x, 4242), 4242) == x, bit_not(bit_not(x)) == x, bit_or(bit_and(x, 255), bit_and(x, bit_not(255))) == x)
-    println(shr(shl(x, 8), 8) == x, bit_and(shr(x, 4), 15))
+    println(bit_xor(bit_xor(x, 4242), 4242) == x, ~(~x) == x, bit_or(bit_and(x, 255), bit_and(x, ~255)) == x)
+    println(x->shl<8>->shr<8> == x, bit_and(x->shr<4>, 15))
     return 0
 }

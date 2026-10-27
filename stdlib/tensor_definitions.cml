@@ -18,9 +18,8 @@
  * definitions.h). The functions take f32 tensors: an operator applied to another element type
  * is not expanded. This file imports modules written in C++ only.
  */
-module tensor_definitions
 
-import { max, sum, exp, log, maximum, numel, cast } from tensor
+import { max, sum, exp, log, maximum, numel } from tensor
 
 /// tensor:softmax along `axis` (negative counts from the end), made stable by subtracting the
 /// maximum: m = max(x, axis) (IEEE maximum: a NaN gives NaN), e = exp(x - m) (an f32
@@ -55,11 +54,11 @@ export func log_softmax(x: f32[..], axis: int): f32[..] {
 /// `mean::<T>(x: T[..]): T = T(sum(float(x)) / float(numel(x)))` (stdlib/signatures/tensor.cml).
 /// A definition has one graph and is written at the element type this library serves, f32; a mean
 /// of another element type is the operator's own kernel, not an expansion. The widening is written
-/// `cast(x, "f64")` because `float(x)` is a scalar conversion and a conversion does not map over an
+/// `f64(x)` because `float(x)` is a scalar conversion and a conversion does not map over an
 /// array (measured: `No matching function found for argument types: <> (f32[..])`). A tensor
 /// without elements is a fault.
 export func mean(x: f32[..]): f32 {
-    return f32(sum(cast(x, "f64")) / float(numel(x)))
+    return f32(sum(f64(x)) / float(numel(x)))
 }
 
 /// tensor:relu: maximum(x, +0) (design principles 7.7): a NaN gives NaN, -0 gives +0.

@@ -4,7 +4,6 @@
  *   scalar: f(x) = x^3, f'(x) = 3x^2, f''(x) = 6x          -> f''(2) = 12
  *   tensor: g(x) = sum(x^3), h(x) = sum(grad(g)(x)) = sum(3x^2), grad(h)(x) = 6x
  */
-module second_order
 
 import { reshape, sum } from tensor
 import { grad } from autodiff
@@ -32,7 +31,7 @@ func h(): float {
 
 func main(): int sync {
     // Read at run time, so the gradient graphs stay general rather than folding to constants.
-    let x = if get_env('SECOND_ORDER_X') == '' then 2.0 else 2.0
+    let x = if (get_env('SECOND_ORDER_X') ?? '') == '' then 2.0 else 2.0
     'scalar d2={}'->format<grad(dcube)<x>()>->println
     let t = reshape([1.0, -2.0, 0.5] as f32[], [3])
     println(grad(h)<t>())

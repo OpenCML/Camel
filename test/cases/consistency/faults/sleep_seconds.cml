@@ -1,0 +1,12 @@
+/**
+ * sleep takes a number of seconds as a float: a fraction of a second waits and the program goes on.
+ */
+
+import { sleep } from process
+
+func main(): int sync {
+    println('before')
+    sleep(0.001)
+    println('after')
+    return 0
+}

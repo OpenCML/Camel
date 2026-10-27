@@ -1,7 +1,8 @@
 /**
  * print (no line end) before exit(4): the text is written, the exit code is 4.
  */
-module unflushed_print_exit
+
+import { exit } from process
 
 func main(): int sync {
     println('line')

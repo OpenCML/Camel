@@ -100,7 +100,7 @@ void fusionGroup(
     std::string_view key, std::string_view name,
     std::span<const std::string_view> members, uint64_t ns);
 
-/// One `tee` of the run (design principles 5.4). `tee(s, n)` reads `s` once and gives two streams
+/// One `tee` of the run (design principles 5.4). `s->tee<n>` reads `s` once and gives two streams
 /// over the same elements, each read once; a side that runs ahead of the other buffers what the
 /// other has not read yet, so `n` is a hint -- the buffer is unbounded in meaning and the executor
 /// grows it rather than make the leading side wait -- and the implementation clamps it to `cap`.

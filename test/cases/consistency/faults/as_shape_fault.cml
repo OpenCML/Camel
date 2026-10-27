@@ -1,7 +1,6 @@
 /**
  * `as` on a tensor whose shape is only known at run time and is not the one asserted.
  */
-module as_shape_fault
 
 import { reshape, zeros } from tensor
 

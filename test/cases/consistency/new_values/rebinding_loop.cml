@@ -5,13 +5,12 @@
  * elements. Run under collection stress with both collectors (std::gc::verify), the output must
  * be that of an undisturbed run.
  */
-module rebinding_loop
 
 type Box = { label: string, values: int[] }
 
 func collect(n: int): int[] sync {
     var out: int[] = []
-    0..n->foreach<sync (i: int) => sync {
+    0..n->foreach<(i: int) => sync {
         out = out->append<i * i>
         return null
     }>
@@ -19,7 +18,7 @@ func collect(n: int): int[] sync {
 }
 
 func push_all(var xs: int[], n: int): int sync {
-    0..n->foreach<sync (i: int) => sync {
+    0..n->foreach<(i: int) => sync {
         xs = xs->append<i>
         return null
     }>
@@ -29,7 +28,7 @@ func push_all(var xs: int[], n: int): int sync {
 func snapshots(n: int): int[][] sync {
     var acc: int[] = []
     var seen: int[][] = []
-    0..n->foreach<sync (i: int) => sync {
+    0..n->foreach<(i: int) => sync {
         acc = acc->append<i>
         // A read of acc: the array seen holds never changes afterwards.
         seen = (if i % 3 == 0 then seen->append<acc> else seen)
@@ -40,7 +39,7 @@ func snapshots(n: int): int[][] sync {
 
 func boxes(n: int): Box[] sync {
     var out: Box[] = []
-    0..n->foreach<sync (i: int) => sync {
+    0..n->foreach<(i: int) => sync {
         out = out->append<{ label: 'b{}'->format<i>, values: [i, i + 1] }>
         return null
     }>

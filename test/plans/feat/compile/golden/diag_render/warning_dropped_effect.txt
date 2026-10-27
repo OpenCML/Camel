@@ -1,7 +1,7 @@
 warning[SemanticDiag::EffectNotExecuted]: The call of 'println' has side effects but is never executed: nothing depends on it and it is not in a sync block.
-  --> <ROOT>/test/cases/compile/diag_render/warning_dropped_effect.cml:4:5
+  --> <ROOT>/test/cases/compile/diag_render/warning_dropped_effect.cml:2:5
    |
- 4 |     println('never printed')
+ 2 |     println('never printed')
    |     ^^^^^^^
 help: Evaluation is driven by dependencies: an expression whose result (or the variable it writes) nothing needs does not run, and a sync block nothing needs does not run either, so the effects written directly in it do not run with it. This is legal. To run it, put it on a sync chain ('sync { ... }' in a function body, or use the block's value), or use its result.
 

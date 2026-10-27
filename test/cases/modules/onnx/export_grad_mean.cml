@@ -3,7 +3,6 @@
  * input Camel prints the value 7.889 and the gradient [[1.278, 2.778], [3.833, 5.556],
  * [6.389, 8.333]]; the exported model gives the same on ONNX Runtime (checked by hand).
  */
-module export_grad_mean
 import { reshape, sum, mean } from tensor
 import { with_grad } from autodiff
 import { export_model } from onnx
@@ -29,7 +28,7 @@ func main(): int sync {
     let r = step(w, x)
     println(r.0)
     println(r.1)
-    export_model((w: f32[..], x: f32[..]): (f32[..], f32[..]) => step(w, x), (w, x), get_env('ONNX_OUT'))
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((w: f32[..], x: f32[..]): (f32[..], f32[..]) => step(w, x), (w, x))
     println('exported')
     return 0
 }

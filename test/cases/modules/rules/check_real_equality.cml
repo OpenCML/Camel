@@ -1,7 +1,7 @@
 /**
  * What a `reassociate` rule is checked against: real equality on the finite values, and IEEE
  * equality, bit for bit, on the special ones (which corrected the method the
- * library's `tensor_combine_mixed` was refused by) -- over the points the rule's
+ * library's `array_combine_mixed` was refused by) -- over the points the rule's
  * own licences claim, which is
  * the second half of that rule: `no_infs` and `no_nans` assume that no value is an infinity or
  * a NaN, the intermediate results of the two sides included (design principles 7.2), so a point
@@ -13,7 +13,7 @@
  * to cancellation and the right side is the exact value -- the two element-type results are 27 ulps
  * of the result apart, far outside the 11 the reassociate contract allows, and they are one real
  * number. A reassociation is allowed to change the rounding, so the comparison is made in the
- * reference's precision and the rule is `sampled`; the line `refuted tensor_combine_mixed` this
+ * reference's precision and the rule is `sampled`; the line `refuted array_combine_mixed` this
  * case's library twin used to print, with `1.0000041e+30` and `1e+30` as its two values, is the
  * method that rule withdrew.
  *
@@ -38,8 +38,7 @@
  *     reassociation is allowed to change the rounding, never the value, so the rule is `refuted`
  *     with the real values named as what differs.
  */
-module check_real_equality
-import { check } from rewrite
+import { check, check_text } from rewrite
 
 /// `x*48 + x*(-47)` and `x*1` are two roundings of one real number: at the sample the check draws
 /// (`x = 1e+30`) the element-type results are `1.0000041e+30` and `1e+30`.
@@ -77,6 +76,6 @@ rule zero_sign_exact(x: f32) { x * -0.0 => x * 0.0 }
 func main(): int sync {
     let x: f32 = 1e30
     println("at x = 1e+30", x * 48.0 + x * (-47.0), x * 1.0)
-    print(check([real_cancel, overflow_to_nan, overflow_licensed, nan_licensed, real_difference, zero_sign, zero_sign_licensed, zero_sign_exact], 200, 7))
+    print(check_text([real_cancel, overflow_to_nan, overflow_licensed, nan_licensed, real_difference, zero_sign, zero_sign_licensed, zero_sign_exact]->check<200, 7>))
     return 0
 }

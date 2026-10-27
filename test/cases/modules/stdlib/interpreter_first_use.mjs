@@ -14,7 +14,7 @@
  *       path configuration, which is the measurement's first observable (§3.1);
  *    2. `camel inspect --ops` on the import-only program exits 0 and lists `pyplot:plot`;
  *      measured exit 1 and no listing;
- *   3. one `plot` / one `py_exec` under the same environment exits 1, and the diagnostic is a
+ *   3. one `plot` / one `exec` under the same environment exits 1, and the diagnostic is a
  *      `RuntimeError` at that call's source position that names the first use — the failure moved,
  *      it did not vanish, and its kind and exit code are the ones it had at import;
  *   4. with a healthy environment: `python` first and then `pyplot`, and `pyplot` first and then
@@ -42,63 +42,62 @@ const BROKEN_HOME = path.join(SCRATCH, 'broken-python-home')
 fs.mkdirSync(BROKEN_HOME, { recursive: true })
 
 const programs = {
-    import_pyplot: `module import_pyplot
-import pyplot
+    import_pyplot: `import pyplot
 
 func main(): int {
     return 0
 }
 `,
-    import_python: `module import_python
-import python
+    import_python: `import python
 
 func main(): int {
     return 0
 }
 `,
-    use_pyplot: `module use_pyplot
-import { plot } from pyplot
+    use_pyplot: `import { plot } from pyplot
 
 func main(): int sync {
     plot([1.0, 2.0, 3.0], "${SCRATCH}/use-pyplot.svg")
     return 0
 }
 `,
-    use_python: `module use_python
-import { py_exec } from python
+    use_python: `import { exec } from python
 
 func main(): int sync {
-    py_exec("x = 1")
+    let _ = exec("x = 1")
     return 0
 }
 `,
-    python_then_plot: `module python_then_plot
-import { py_import } from python
+    python_then_plot: `import { import_module } from python
 import { plot } from pyplot
 
 func main(): int sync {
-    py_import("_ssl")
+    let failed = match import_module("_ssl") {
+        case error e => 1
+        case v => 0
+    }
     plot([1.0, 2.0, 3.0], "${SCRATCH}/python-then-plot.svg")
-    return 0
+    return failed
 }
 `,
-    plot_then_python: `module plot_then_python
-import { plot } from pyplot
-import { py_import } from python
+    plot_then_python: `import { plot } from pyplot
+import { import_module } from python
 
 func main(): int sync {
     plot([1.0, 2.0, 3.0], "${SCRATCH}/plot-then-python.svg")
-    py_import("_ssl")
-    return 0
+    let failed = match import_module("_ssl") {
+        case error e => 1
+        case v => 0
+    }
+    return failed
 }
 `,
-    twice: `module twice
-import { plot } from pyplot
-import { py_exec } from python
+    twice: `import { plot } from pyplot
+import { exec } from python
 
 func main(): int sync {
     plot([1.0, 2.0, 3.0], "${SCRATCH}/twice-1.svg")
-    py_exec("x = 1")
+    let _ = exec("x = 1")
     plot([3.0, 2.0, 1.0], "${SCRATCH}/twice-2.svg")
     return 0
 }

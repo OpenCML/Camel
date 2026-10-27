@@ -89,6 +89,8 @@ enum class EvalProblem {
     Effects,
     TooDeep,
     ResultNotConstantKind,
+    /// A query on a type that still has a type variable: not known yet, so neither true nor false.
+    TypeNotConcrete,
     Construct,
 };
 
@@ -390,6 +392,14 @@ class GctConstantEvaluator {
 
     data_ptr_t evalTypeMatch(const GCT::node_ptr_t &node) {
         Type *subject = bound(node->at(0)->dataType());
+        if (subject == nullptr || containsTypeVar(subject)) {
+            // Not known yet: the `_` arm is not the answer for a type nobody has bound.
+            fail(
+                EvalProblem::TypeNotConcrete, {},
+                "it asks a 'match type' about " +
+                    (subject != nullptr ? subject->toString() : std::string("an unknown type")) +
+                    ", which still has a type variable");
+        }
         uint16_t shape = 0;
         if (subject->code() == TypeCode::Struct) {
             shape = GCT::typeCaseBit(GCT::TypeCaseKind::Struct);
@@ -399,13 +409,11 @@ class GctConstantEvaluator {
             // Every other type, a function included, is a leaf: `#leaf` still selects it.
             shape = GCT::typeCaseBit(GCT::TypeCaseKind::Leaf);
         }
-        const bool isFunc       = subject->code() == TypeCode::Function;
         const uint16_t wildcard = GCT::typeCaseBit(GCT::TypeCaseKind::Wildcard);
+        const uint16_t extra    = extraTypeShapes(subject);
         for (size_t i = 1; i < node->size(); ++i) {
             const GCT::node_ptr_t &arm = node->at(i);
-            bool selected              = (arm->typeCasePatterns() & (shape | wildcard)) != 0 ||
-                            (isFunc && (arm->typeCasePatterns() &
-                                        GCT::typeCaseBit(GCT::TypeCaseKind::Func)) != 0);
+            bool selected = (arm->typeCasePatterns() & (shape | wildcard | extra)) != 0;
             for (size_t k = 0; !selected && k < arm->typeCaseTypeCount(); ++k) {
                 Type *pattern = bound(arm->typeCaseTypeAt(k));
                 selected      = pattern != nullptr && !containsTypeVar(pattern) &&
@@ -460,6 +468,11 @@ class GctConstantEvaluator {
             return;
         }
         Type *subject = bound(operand->dataType());
+        if (subject == nullptr || containsTypeVar(subject)) {
+            fail(
+                EvalProblem::TypeNotConcrete, {},
+                "it walks the fields of a type that still has a type variable");
+        }
         if (!tree::isInternal(subject)) {
             fail(
                 EvalProblem::Construct, {},
@@ -990,7 +1003,7 @@ bool Builder::whenPredicateAmbiguous(const std::string &written, WhenResult &pro
 
 auto Builder::whenPredicateNamed(
     const std::string &written, const GCT::node_ptr_t &at, WhenResult &problem)
-    -> std::optional<generic_template_ptr_t> {
+    -> std::optional<generic_ref_t> {
     using camel::core::module::detail::EntityAccess;
     const auto templateOf = [](const camel::core::module::entity &ent) -> generic_template_ptr_t {
         if (!EntityAccess::isGenericTemplate(ent)) {
@@ -1002,7 +1015,7 @@ auto Builder::whenPredicateNamed(
     // as a prefix (design principles 10.2, layers 1 and 2).
     const std::string own = moduleLevelName(written);
     if (const auto tmpl = templateScope_->get(own); tmpl.has_value()) {
-        return tmpl.value().one();
+        return tmpl.value();
     }
     // The module declares the name itself, as something that is not a generic function: the
     // name is resolved, and the ordinary report says why a condition cannot call it.
@@ -1024,7 +1037,7 @@ auto Builder::whenPredicateNamed(
             return std::nullopt;
         }
         if (const generic_template_ptr_t tmpl = templateOf(*entity); tmpl != nullptr) {
-            return tmpl;
+            return generic_ref_t(tmpl);
         }
         problem.outcome = WhenOutcome::NotCompileTime;
         problem.subject = written;
@@ -1042,7 +1055,7 @@ auto Builder::whenPredicateNamed(
     if (const auto match = throughUsing(written, at); match.has_value()) {
         if (!match->ownName.empty()) {
             if (const auto tmpl = templateScope_->get(match->ownName); tmpl.has_value()) {
-                return tmpl.value().one();
+                return tmpl.value();
             }
             problem.outcome = WhenOutcome::NotCompileTime;
             problem.subject = written;
@@ -1053,7 +1066,7 @@ auto Builder::whenPredicateNamed(
             return std::nullopt;
         }
         if (const generic_template_ptr_t tmpl = templateOf(*match->entity); tmpl != nullptr) {
-            return tmpl;
+            return generic_ref_t(tmpl);
         }
         problem.outcome = WhenOutcome::NotCompileTime;
         problem.subject = written;
@@ -1066,7 +1079,7 @@ auto Builder::whenPredicateNamed(
         const auto entity = importedEntity(written, ImportLayer::Ambient);
         if (entity.has_value()) {
             if (const generic_template_ptr_t tmpl = templateOf(*entity); tmpl != nullptr) {
-                return tmpl;
+                return generic_ref_t(tmpl);
             }
             problem.outcome = WhenOutcome::NotCompileTime;
             problem.subject = written;
@@ -1099,414 +1112,440 @@ std::string Builder::whenPredicateElsewhere(const std::string &written) const {
     return {};
 }
 
+namespace {
+
+WhenResult whenResultOf(WhenOutcome outcome, std::string subject = {}, std::string detail = {}) {
+    WhenResult result;
+    result.outcome = outcome;
+    result.subject = std::move(subject);
+    result.detail  = std::move(detail);
+    return result;
+}
+
+WhenResult whenFromBool(bool value) {
+    return whenResultOf(value ? WhenOutcome::Holds : WhenOutcome::Fails);
+}
+
+/// Whether the condition came out true or false, as against a problem with it.
+bool whenDecided(const WhenResult &result) { return result.holds() || result.fails(); }
+
+/// The condition's arms are `EXEC` blocks; a compile-time expression has exactly one value.
+GCT::node_ptr_t whenSoleValue(const GCT::node_ptr_t &node) {
+    if (node == nullptr) {
+        return nullptr;
+    }
+    if (node->type() == GCT::NodeKind::EXEC) {
+        return node->size() == 1 ? node->at(0) : nullptr;
+    }
+    return node;
+}
+
+/// Whether a value of type `actual` can be passed to a parameter declared as `declared`, whose
+/// type variables `bindings` solves (and learns from `actual`): choosing among overloads needs the
+/// types to agree, not only the variables to be readable.
+bool argumentFits(Type *declared, Type *actual, type_bindings_t &bindings) {
+    Type *pattern = substituteTypeVars(declared, bindings);
+    if (pattern == nullptr || actual == nullptr || !unifyTypeVars(pattern, actual, bindings)) {
+        return false;
+    }
+    Type *solved = substituteTypeVars(declared, bindings);
+    return solved != nullptr && (containsTypeVar(solved) || solved->assignableFrom(actual));
+}
+
+} // namespace
+
 WhenResult Builder::evaluateWhenCondition(
     const GCT::node_ptr_t &condition, FunctionType *signature,
     const type_bindings_t &bindings,
     const std::unordered_map<std::string, data_ptr_t> &withValues,
     const generic_template_ptr_t &declaring, const ModuleUnit *contextUnit) {
-    WhenResult result;
     if (condition == nullptr) {
-        result.outcome = WhenOutcome::NotEvaluable;
-        result.detail  = "the declaration has no condition";
-        return result;
+        return whenResultOf(WhenOutcome::NotEvaluable, {}, "the declaration has no condition");
     }
     // Where the declaration is written, not where the call that selects it is: the predicate
     // lookup below is the declaration's own.
     ConditionContext context(*this, declaring, contextUnit);
+    const WhenFrame frame{signature, bindings, withValues};
+    return whenOf(frame, whenSoleValue(condition));
+}
 
-    // The condition's arms are `EXEC` blocks; a compile-time expression has exactly one value.
-    const auto soleValue = [](const GCT::node_ptr_t &node) -> GCT::node_ptr_t {
-        if (node == nullptr) {
-            return nullptr;
+WhenResult Builder::whenOf(const WhenFrame &frame, const GCT::node_ptr_t &node) {
+    if (node == nullptr) {
+        return whenResultOf(WhenOutcome::NotEvaluable, {}, "the condition has no value here");
+    }
+    switch (node->type()) {
+    case GCT::NodeKind::DATA: {
+        bool value = false;
+        const data_ptr_t &data = node->data();
+        if (data != nullptr && asBool(data, value)) {
+            return whenFromBool(value);
         }
-        if (node->type() == GCT::NodeKind::EXEC) {
-            return node->size() == 1 ? node->at(0) : nullptr;
+        return whenResultOf(
+            WhenOutcome::NotBool,
+            data != nullptr && data->type() != nullptr ? data->type()->toString()
+                                                       : std::string("a value without a type"),
+            "the condition is not a bool");
+    }
+    case GCT::NodeKind::EXEC:
+        if (node->size() == 1) {
+            return whenOf(frame, node->at(0));
         }
-        return node;
+        return whenResultOf(
+            WhenOutcome::NotEvaluable, {}, "the condition is more than one expression");
+    case GCT::NodeKind::NREF:
+        return node->size() == 1 ? whenOf(frame, node->at(0)) : WhenResult{};
+    case GCT::NodeKind::CAST:
+        return whenOf(frame, node->at(0));
+    case GCT::NodeKind::BRCH:
+        return whenOfBranch(frame, node);
+    case GCT::NodeKind::LINK:
+        return whenOfCall(frame, node);
+    case GCT::NodeKind::DREF:
+        return whenOfParameter(frame, node);
+    default:
+        return whenResultOf(
+            WhenOutcome::NotEvaluable, {}, "the condition is not computed at compile time");
+    }
+}
+
+WhenResult Builder::whenOfBranch(const WhenFrame &frame, const GCT::node_ptr_t &node) {
+    const GCT::node_ptr_t &test = node->at(0);
+    const GCT::BranchKind kind  = node->branchKind();
+    // The arm of a branch whose test came out as it did: `&&` goes on when the left holds, `||`
+    // when it fails, a conditional takes the arm its test chose.
+    const auto armValue = [&](const auto &wanted) -> std::optional<WhenResult> {
+        for (size_t i = 1; i < node->size(); ++i) {
+            const GCT::node_ptr_t &arm = node->at(i);
+            if (arm->type() == GCT::NodeKind::CASE && wanted(arm) && arm->size() == 1) {
+                return whenOf(frame, whenSoleValue(arm->at(0)));
+            }
+        }
+        return std::nullopt;
     };
-
-    const auto boolOf = [](const data_ptr_t &data, std::optional<bool> &value) {
-        if (auto flag = std::dynamic_pointer_cast<PrimaryData<bool>>(data)) {
-            value = flag->data();
-            return true;
+    if (kind == GCT::BranchKind::LogicalAnd || kind == GCT::BranchKind::LogicalOr) {
+        const WhenResult left = whenOf(frame, test);
+        if (!whenDecided(left)) {
+            return left;
         }
-        return false;
+        const bool decides = kind == GCT::BranchKind::LogicalOr ? left.holds() : left.fails();
+        if (decides) {
+            return left;
+        }
+        const auto right = armValue([&](const GCT::node_ptr_t &arm) {
+            return kind == GCT::BranchKind::LogicalAnd ? arm->caseType() == GCT::CaseType::True
+                                                       : arm->caseType() == GCT::CaseType::Else;
+        });
+        return right.value_or(whenResultOf(
+            WhenOutcome::NotEvaluable, {}, "the condition's second operand is not one expression"));
+    }
+    if (kind == GCT::BranchKind::Cond) {
+        const WhenResult testResult = whenOf(frame, test);
+        if (!whenDecided(testResult)) {
+            return testResult;
+        }
+        const auto taken = armValue([&](const GCT::node_ptr_t &arm) {
+            return testResult.holds() ? arm->caseType() == GCT::CaseType::True
+                                      : arm->caseType() == GCT::CaseType::Else;
+        });
+        if (taken.has_value()) {
+            return *taken;
+        }
+    }
+    return whenResultOf(
+        WhenOutcome::NotEvaluable, {}, "the condition is not a compile-time bool expression");
+}
+
+WhenResult Builder::whenOfCall(const WhenFrame &frame, const GCT::node_ptr_t &node) {
+    const GCT::node_ptr_t &callee = node->at(0);
+    // `is_numeric::<T>()`: the type application is the callee; there are no runtime arguments.
+    if (callee->type() == GCT::NodeKind::TAPP) {
+        return whenOfPredicateCall(frame, node);
+    }
+    if (callee->type() == GCT::NodeKind::DREF) {
+        return whenOfOperatorCall(frame, node);
+    }
+    return whenResultOf(
+        WhenOutcome::NotEvaluable, {},
+        "the condition calls something that is not a compile-time query");
+}
+
+generic_template_ptr_t Builder::pickPredicateOverload(
+    const generic_ref_t &named, const std::vector<Type *> &typeArguments,
+    const std::vector<data_ptr_t> &valueArguments, size_t &fitting) {
+    const GenericGroup &group = *named.group();
+    if (group.size() == 1) {
+        fitting = 1;
+        return group.front();
+    }
+    // A name with several declarations is chosen the way a call chooses: by the type arguments
+    // it gives and by the values it passes, not by the order of the declarations.
+    std::vector<generic_template_ptr_t> fits;
+    for (const generic_template_ptr_t &candidate : group) {
+        const std::vector<std::string> parameters = typeParameterNames(candidate);
+        if (candidate->funcType == nullptr || parameters.size() != typeArguments.size() ||
+            candidate->funcType->withTypesCount() != 0 ||
+            candidate->funcType->normTypesCount() != valueArguments.size()) {
+            continue;
+        }
+        type_bindings_t bindings = candidate->outerBindings;
+        for (size_t i = 0; i < parameters.size(); ++i) {
+            bindings.emplace_back(parameters[i], typeArguments[i]);
+        }
+        bool fit = true;
+        for (size_t i = 0; fit && i < valueArguments.size(); ++i) {
+            fit = valueArguments[i] != nullptr &&
+                  argumentFits(candidate->funcType->normTypeAt(i), valueArguments[i]->type(), bindings);
+        }
+        if (fit) {
+            fits.push_back(candidate);
+        }
+    }
+    fitting = fits.size();
+    return fits.size() == 1 ? fits.front() : nullptr;
+}
+
+WhenResult Builder::whenOfPredicateCall(const WhenFrame &frame, const GCT::node_ptr_t &node) {
+    const GCT::node_ptr_t &callee = node->at(0);
+    if (callee->size() < 2 || callee->at(0)->type() != GCT::NodeKind::DREF) {
+        return whenResultOf(
+            WhenOutcome::NotEvaluable, {}, "a type application in a condition names no function");
+    }
+    const std::string written = callee->at(0)->name();
+    // Every predicate is a function of the library, resolved where the declaration is written:
+    // the module's own generic functions, then what its imports bring by name (selectively,
+    // through a module prefix or an alias), then the prelude.
+    WhenResult problem;
+    const std::optional<generic_ref_t> resolved =
+        whenPredicateNamed(written, callee->at(0), problem);
+    if (!resolved.has_value() && problem.outcome != WhenOutcome::NotEvaluable) {
+        return problem;
+    }
+    if (!resolved.has_value() || !*resolved) {
+        // Not found by the declaration's own names: name the module that declares it without
+        // being imported, rather than call the name unknown.
+        const std::string elsewhere = whenPredicateElsewhere(written);
+        if (!elsewhere.empty()) {
+            return whenResultOf(WhenOutcome::NotImported, written, elsewhere);
+        }
+        return whenResultOf(
+            WhenOutcome::NotEvaluable, written,
+            "no compile-time function of that name is visible here; a condition calls a generic "
+            "function of this module or of one it imports");
+    }
+    std::vector<Type *> typeArguments;
+    for (size_t i = 1; i < callee->size(); ++i) {
+        if (callee->at(i)->type() != GCT::NodeKind::TYPE) {
+            return whenResultOf(WhenOutcome::NotEvaluable, {}, "a type argument here is not a type");
+        }
+        typeArguments.push_back(substituteTypeVars(callee->at(i)->dataType(), frame.bindings));
+    }
+    for (Type *argument : typeArguments) {
+        if (argument == nullptr || containsTypeVar(argument)) {
+            return whenResultOf(
+                WhenOutcome::TypeNotConcrete, written,
+                argument != nullptr ? argument->toString() : std::string("?"));
+        }
+    }
+    // A value argument has to be a constant; the instance's body may read it, and only a
+    // constant is available while the declaration is being selected.
+    std::vector<data_ptr_t> valueArguments;
+    for (size_t i = 1; i < node->size(); ++i) {
+        const GCT::node_ptr_t &argument = node->at(i);
+        if (argument->type() != GCT::NodeKind::DATA) {
+            return whenResultOf(
+                WhenOutcome::NeedsWithValue, written,
+                "the predicate is called with a value that is not a compile-time constant");
+        }
+        valueArguments.push_back(argument->data());
+    }
+    size_t fitting                  = 0;
+    const generic_template_ptr_t tmpl =
+        pickPredicateOverload(*resolved, typeArguments, valueArguments, fitting);
+    if (tmpl == nullptr) {
+        if (fitting == 0) {
+            return whenResultOf(
+                WhenOutcome::NotEvaluable, written,
+                "no declaration of that name takes these type arguments and values");
+        }
+        return whenResultOf(
+            WhenOutcome::PredicateAmbiguous, written,
+            "several declarations of that name fit this call");
+    }
+    const std::vector<std::string> parameters = typeParameterNames(tmpl);
+    if (typeArguments.size() != parameters.size()) {
+        return whenResultOf(
+            WhenOutcome::NotEvaluable, written,
+            std::format(
+                "the condition gives {} type argument(s) and the predicate declares {}",
+                typeArguments.size(),
+                parameters.size()));
+    }
+    type_bindings_t callBindings = tmpl->outerBindings;
+    for (size_t i = 0; i < parameters.size(); ++i) {
+        callBindings.emplace_back(parameters[i], typeArguments[i]);
+    }
+    return whenOfPredicateInstance(tmpl, callBindings, valueArguments, callee, written);
+}
+
+WhenResult Builder::whenOfPredicateInstance(
+    const generic_template_ptr_t &tmpl, const type_bindings_t &callBindings,
+    const std::vector<data_ptr_t> &valueArguments, const GCT::node_ptr_t &callee,
+    const std::string &written) {
+    // The instance's graph answers when its result is a constant of the graph (the common case:
+    // every arm of `match type` ends in `true` or `false`).
+    compile_graph_ptr_t graph = instantiateGeneric(tmpl, callBindings, {}, {}, callee);
+    if (graph == nullptr || graph->draft().returnNode() == camel::runtime::kInvalidNodeRef) {
+        return whenResultOf(
+            WhenOutcome::NotEvaluable, written, "the predicate's instance has no result");
+    }
+    const data_ptr_t result =
+        constantOfNode(graph->draft().ref(graph->draft().returnNode()));
+    bool value = false;
+    if (result != nullptr && asBool(result, value)) {
+        return whenFromBool(value);
+    }
+    // The instance's result is computed rather than written (`has_field` folds the field names
+    // of T against the argument). The same GCT the graph came from is walked over the constants
+    // the call gave; a body this evaluation cannot read says why, and the declaration stays
+    // inapplicable rather than becoming false.
+    //
+    // The body is read where it is written, not where the declaration was selected: `is_numeric`
+    // is declared in `types` and asks `is_integer`, which `types` also declares, while the
+    // consumer that selected it need not have imported `is_integer` at all. `ConditionContext` is
+    // the scope switch that makes the callee's names the ones that are looked up.
+    try {
+        ConditionContext body(*this, tmpl, nullptr);
+        const data_ptr_t folded = GctConstantEvaluator::runFunction(
+            tmpl->func, callBindings, valueArguments, {}, nullptr,
+            [this](
+                const GCT::node_ptr_t &call, const GCT::node_ptr_t &nestedCallee,
+                const std::vector<data_ptr_t> &arguments,
+                const std::function<data_ptr_t(const GCT::node_ptr_t &)> &evalArg,
+                const type_bindings_t &vars, size_t depth) {
+                return evaluateCallInsideBody(call, nestedCallee, arguments, evalArg, vars, depth);
+            },
+            [this](const GCT::node_ptr_t &subject) { return staticLoopIntSequenceOf(subject); },
+            0);
+        if (folded != nullptr && asBool(folded, value)) {
+            return whenFromBool(value);
+        }
+    } catch (const EvalFailure &failure) {
+        // A query on a type that is not known yet is that, not a body this evaluation cannot read.
+        return whenResultOf(
+            failure.kind == EvalProblem::TypeNotConcrete ? WhenOutcome::TypeNotConcrete
+                                                         : WhenOutcome::NotEvaluable,
+            written, failure.why);
+    }
+    return whenResultOf(
+        WhenOutcome::NotEvaluable, written,
+        "the predicate's result is not a compile-time constant; a condition can call a function "
+        "only where its body reduces to one over the types");
+}
+
+WhenResult Builder::whenOfOperatorCall(const WhenFrame &frame, const GCT::node_ptr_t &node) {
+    const GCT::node_ptr_t &callee = node->at(0);
+    const std::string written     = callee->name();
+    const std::string op          = plainName(written);
+    const auto argument = [&](size_t index) -> GCT::node_ptr_t {
+        return node->size() > index + 1 ? whenSoleValue(node->at(index + 1)) : nullptr;
     };
+    if (op == "__not__" && node->size() == 2) {
+        WhenResult inner = whenOf(frame, argument(0));
+        if (!whenDecided(inner)) {
+            return inner;
+        }
+        return whenFromBool(inner.fails());
+    }
+    if ((op == "__and__" || op == "__or__") && node->size() == 3) {
+        const WhenResult left  = whenOf(frame, argument(0));
+        const WhenResult right = whenOf(frame, argument(1));
+        if (!whenDecided(left)) {
+            return left;
+        }
+        if (!whenDecided(right)) {
+            return right;
+        }
+        return whenFromBool(
+            op == "__and__" ? left.holds() && right.holds() : left.holds() || right.holds());
+    }
+    // A direct call of an imported ordinary function is a condition that cannot be answered: say
+    // that, rather than that the name is not one of `!`, `&&`, `||`. A generic predicate written
+    // without its type arguments is named as such.
+    if (!isOperatorName(written)) {
+        WhenResult problem;
+        const std::optional<generic_ref_t> resolved = whenPredicateNamed(written, callee, problem);
+        if (resolved.has_value()) {
+            return whenResultOf(
+                WhenOutcome::NotEvaluable, written,
+                "a predicate is called with its type arguments, as '" + written +
+                    "::<...>(...)'");
+        }
+        if (problem.outcome != WhenOutcome::NotEvaluable) {
+            return problem;
+        }
+    }
+    // Any other call: a type function is an ordinary function that runs at compile time (design
+    // principles 5.5), so a condition evaluates a call the same way a folded body's own calls are
+    // evaluated -- an operator over constants, an ordinary function of this module or of one it
+    // imports, or a predicate this condition reaches through one of them.
+    // `evaluateCallInsideBody` refuses what is not a pure body over compile-time constants (a
+    // `sync` function, a `var`, a body reading a name other than its parameters), which is what
+    // keeps a condition that really reads a run-time value refused.
+    const std::string shown = written.empty() ? callee->name() : written;
+    std::vector<data_ptr_t> callArguments;
+    for (size_t i = 1; i < node->size(); ++i) {
+        const GCT::node_ptr_t &value = whenSoleValue(node->at(i));
+        if (value == nullptr || value->type() != GCT::NodeKind::DATA || value->data() == nullptr) {
+            return whenResultOf(
+                WhenOutcome::NeedsWithValue, shown,
+                "the call gives a value that is not a compile-time constant");
+        }
+        callArguments.push_back(value->data());
+    }
+    try {
+        const data_ptr_t folded = evaluateCallInsideBody(
+            node, callee, callArguments,
+            [](const GCT::node_ptr_t &) -> data_ptr_t { return nullptr; }, frame.bindings, 0);
+        bool value = false;
+        if (folded != nullptr && asBool(folded, value)) {
+            return whenFromBool(value);
+        }
+        return whenResultOf(WhenOutcome::NotBool, shown, "the call's value is not a bool");
+    } catch (const EvalFailure &failure) {
+        return whenResultOf(
+            failure.kind == EvalProblem::TypeNotConcrete ? WhenOutcome::TypeNotConcrete
+                                                         : WhenOutcome::NotEvaluable,
+            shown, failure.why);
+    }
+}
 
-    std::function<WhenResult(const GCT::node_ptr_t &)> eval =
-        [&](const GCT::node_ptr_t &node) -> WhenResult {
-        WhenResult local;
-        if (node == nullptr) {
-            local.outcome = WhenOutcome::NotEvaluable;
-            local.detail  = "the condition has no value here";
-            return local;
+WhenResult Builder::whenOfParameter(const WhenFrame &frame, const GCT::node_ptr_t &node) {
+    const std::string plain = plainName(node->name());
+    // A `with` parameter is in scope; its value is a compile-time constant only when the call
+    // wrote one.
+    if (node->name().find("::") == std::string::npos && frame.signature != nullptr) {
+        const size_t withCount = frame.signature->withTypesCount();
+        for (size_t i = 0; i < withCount; ++i) {
+            if (plain != frame.signature->argNameAt(i)) {
+                continue;
+            }
+            const auto found = frame.withValues.find(plain);
+            if (found == frame.withValues.end()) {
+                return whenResultOf(
+                    WhenOutcome::NeedsWithValue, plain,
+                    "the call did not give a compile-time value for this 'with' parameter");
+            }
+            bool value = false;
+            if (found->second != nullptr && asBool(found->second, value)) {
+                return whenFromBool(value);
+            }
+            return whenResultOf(WhenOutcome::NotBool, plain, "the 'with' parameter is not a bool");
         }
-        switch (node->type()) {
-        case GCT::NodeKind::DATA: {
-            std::optional<bool> value;
-            const data_ptr_t &data = node->data();
-            if (data != nullptr && boolOf(data, value)) {
-                local.outcome = *value ? WhenOutcome::Holds : WhenOutcome::Fails;
-                return local;
-            }
-            local.outcome = WhenOutcome::NotBool;
-            local.subject = data != nullptr && data->type() != nullptr
-                                ? data->type()->toString()
-                                : std::string("a value without a type");
-            local.detail = "the condition is not a bool";
-            return local;
-        }
-        case GCT::NodeKind::EXEC:
-            if (node->size() == 1) {
-                return eval(node->at(0));
-            }
-            local.outcome = WhenOutcome::NotEvaluable;
-            local.detail  = "the condition is more than one expression";
-            return local;
-        case GCT::NodeKind::NREF:
-            return node->size() == 1 ? eval(node->at(0)) : local;
-        case GCT::NodeKind::CAST:
-            return eval(node->at(0));
-        case GCT::NodeKind::BRCH: {
-            const GCT::node_ptr_t &test = node->at(0);
-            const GCT::BranchKind kind   = node->branchKind();
-            if (kind == GCT::BranchKind::LogicalAnd ||
-                kind == GCT::BranchKind::LogicalOr) {
-                WhenResult left = eval(test);
-                if (!left.holds() && !left.fails()) {
-                    return left;
-                }
-                const bool decides = kind == GCT::BranchKind::LogicalOr ? left.holds()
-                                                                        : left.fails();
-                if (decides) {
-                    return left;
-                }
-                for (size_t i = 1; i < node->size(); ++i) {
-                    const GCT::node_ptr_t &arm = node->at(i);
-                    if (arm->type() != GCT::NodeKind::CASE) {
-                        continue;
-                    }
-                    const bool wanted = kind == GCT::BranchKind::LogicalAnd
-                                            ? arm->caseType() == GCT::CaseType::True
-                                            : arm->caseType() == GCT::CaseType::Else;
-                    if (wanted && arm->size() == 1) {
-                        return eval(soleValue(arm->at(0)));
-                    }
-                }
-                local.outcome = WhenOutcome::NotEvaluable;
-                local.detail  = "the condition's second operand is not one expression";
-                return local;
-            }
-            if (kind == GCT::BranchKind::Cond) {
-                WhenResult testResult = eval(test);
-                if (!testResult.holds() && !testResult.fails()) {
-                    return testResult;
-                }
-                for (size_t i = 1; i < node->size(); ++i) {
-                    const GCT::node_ptr_t &arm = node->at(i);
-                    if (arm->type() != GCT::NodeKind::CASE) {
-                        continue;
-                    }
-                    const bool wanted = testResult.holds()
-                                            ? arm->caseType() == GCT::CaseType::True
-                                            : arm->caseType() == GCT::CaseType::Else;
-                    if (wanted && arm->size() == 1) {
-                        return eval(soleValue(arm->at(0)));
-                    }
-                }
-            }
-            local.outcome = WhenOutcome::NotEvaluable;
-            local.detail  = "the condition is not a compile-time bool expression";
-            return local;
-        }
-        case GCT::NodeKind::LINK: {
-            const GCT::node_ptr_t &callee = node->at(0);
-            // `is_numeric::<T>()`: the type application is the callee; there are no runtime
-            // arguments.
-            if (callee->type() == GCT::NodeKind::TAPP) {
-                if (callee->size() < 2 || callee->at(0)->type() != GCT::NodeKind::DREF) {
-                    local.outcome = WhenOutcome::NotEvaluable;
-                    local.detail  = "a type application in a condition names no function";
-                    return local;
-                }
-const std::string written = callee->at(0)->name();
-                // Every predicate is a function of the library now, resolved where the
-                // declaration is written: the module's own generic functions, then what its
-                // imports bring by name (selectively, through a module prefix or an alias),
-                // then the prelude.
-                WhenResult problem;
-                const std::optional<generic_template_ptr_t> resolved =
-                    whenPredicateNamed(written, callee->at(0), problem);
-                if (!resolved.has_value() && problem.outcome != WhenOutcome::NotEvaluable) {
-                    return problem;
-                }
-                const generic_template_ptr_t tmpl = resolved.value_or(nullptr);
-                if (tmpl == nullptr) {
-                    // Not found by the declaration's own names: name the module that declares
-                    // it without being imported, rather than call the name unknown.
-                    const std::string elsewhere = whenPredicateElsewhere(written);
-                    if (!elsewhere.empty()) {
-                        local.outcome = WhenOutcome::NotImported;
-                        local.subject = written;
-                        local.detail  = elsewhere;
-                        return local;
-                    }
-                    local.outcome = WhenOutcome::NotEvaluable;
-                    local.subject = written;
-                    local.detail =
-                        "no compile-time function of that name is visible here; a condition "
-                        "calls a generic function of this module or of one it imports";
-                    return local;
-                }
-                std::vector<std::string> parameters = typeParameterNames(tmpl);
-                std::vector<Type *> arguments;
-                for (size_t i = 1; i < callee->size(); ++i) {
-                    if (callee->at(i)->type() != GCT::NodeKind::TYPE) {
-                        local.outcome = WhenOutcome::NotEvaluable;
-                        local.detail  = "a type argument here is not a type";
-                        return local;
-                    }
-                    arguments.push_back(substituteTypeVars(callee->at(i)->dataType(), bindings));
-                }
-                if (arguments.size() != parameters.size()) {
-                    local.outcome = WhenOutcome::NotEvaluable;
-                    local.subject = written;
-                    local.detail  = std::format(
-                        "the condition gives {} type argument(s) and the predicate declares {}",
-                        arguments.size(),
-                        parameters.size());
-                    return local;
-                }
-                for (Type *argument : arguments) {
-                    if (argument == nullptr || containsTypeVar(argument)) {
-                        local.outcome = WhenOutcome::TypeNotConcrete;
-                        local.subject = written;
-                        local.detail  = argument != nullptr ? argument->toString() : std::string("?");
-                        return local;
-                    }
-                }
-                // A value argument has to be a constant; the instance's body may read it, and
-                // only a constant is available while the declaration is being selected.
-                std::vector<data_ptr_t> valueArgs;
-                for (size_t i = 1; i < node->size(); ++i) {
-                    const GCT::node_ptr_t &argument = node->at(i);
-                    if (argument->type() != GCT::NodeKind::DATA) {
-                        local.outcome = WhenOutcome::NeedsWithValue;
-                        local.subject = written;
-                        local.detail =
-                            "the predicate is called with a value that is not a compile-time "
-                            "constant";
-                        return local;
-                    }
-                    valueArgs.push_back(argument->data());
-                }
-                type_bindings_t callBindings = tmpl->outerBindings;
-                for (size_t i = 0; i < parameters.size(); ++i) {
-                    callBindings.emplace_back(parameters[i], arguments[i]);
-                }
-                compile_graph_ptr_t graph =
-                    instantiateGeneric(tmpl, callBindings, {}, {}, callee);
-                if (graph == nullptr || graph->draft().returnNode() ==
-                                             camel::runtime::kInvalidNodeRef) {
-                    local.outcome = WhenOutcome::NotEvaluable;
-                    local.subject = written;
-                    local.detail  = "the predicate's instance has no result";
-                    return local;
-                }
-                node_handle_t returned = graph->draft().ref(graph->draft().returnNode());
-                const data_ptr_t result = constantOfNode(returned);
-                std::optional<bool> value;
-                if (result != nullptr && boolOf(result, value)) {
-                    local.outcome = *value ? WhenOutcome::Holds : WhenOutcome::Fails;
-                    return local;
-                }
-                // The instance's result is computed rather than written (`has_field` folds the
-                // field names of T against the argument). The same GCT the graph came from is
-                // walked over the constants the call gave; a body this evaluation cannot read
-                // says why, and the declaration stays inapplicable rather than becoming false.
-                //
-                // The body is read where it is written, not where the declaration was selected:
-                // `is_numeric` is declared in `types` and asks `is_integer`, which `types` also
-                // declares, while the consumer that selected it (a program's `classify`) need not
-                // have imported `is_integer` at all. Folding the body with the consumer's
-                // `templateScope_` looks the callee up among the names the consumer can see and
-                // refuses it as "not a generic declaration" -- a scope, not a missing capability.
-                // `ConditionContext` is exactly that scope switch, and it is all this needs.
-                try {
-                    ConditionContext body(*this, tmpl, nullptr);
-                    data_ptr_t folded = GctConstantEvaluator::runFunction(
-                        tmpl->func, callBindings, valueArgs, {}, nullptr,
-                        [this](
-                            const GCT::node_ptr_t &call, const GCT::node_ptr_t &callee,
-                            const std::vector<data_ptr_t> &arguments,
-                            const std::function<data_ptr_t(const GCT::node_ptr_t &)> &evalArg,
-                            const type_bindings_t &vars, size_t depth) {
-                            return evaluateCallInsideBody(
-                                call, callee, arguments, evalArg, vars, depth);
-                        },
-                        [this](const GCT::node_ptr_t &subject) {
-                            return staticLoopIntSequenceOf(subject);
-                        },
-                        0);
-                    std::optional<bool> foldedValue;
-                    if (folded != nullptr && boolOf(folded, foldedValue)) {
-                        local.outcome = *foldedValue ? WhenOutcome::Holds : WhenOutcome::Fails;
-                        return local;
-                    }
-                } catch (const EvalFailure &failure) {
-                    local.outcome = WhenOutcome::NotEvaluable;
-                    local.subject = written;
-                    local.detail  = failure.why;
-                    return local;
-                }
-                local.outcome = WhenOutcome::NotEvaluable;
-                local.subject = written;
-                local.detail =
-                    "the predicate's result is not a compile-time constant; a condition can "
-                    "call a function only where its body reduces to one over the types";
-                return local;
-            }
-            if (callee->type() == GCT::NodeKind::DREF) {
-                const std::string written = callee->name();
-                const std::string op      = plainName(written);
-                const auto argument = [&](size_t index) -> GCT::node_ptr_t {
-                    return node->size() > index + 1 ? soleValue(node->at(index + 1)) : nullptr;
-                };
-                if (op == "__not__" && node->size() == 2) {
-                    WhenResult inner = eval(argument(0));
-                    if (!inner.holds() && !inner.fails()) {
-                        return inner;
-                    }
-                    inner.outcome = inner.holds() ? WhenOutcome::Fails : WhenOutcome::Holds;
-                    return inner;
-                }
-                if ((op == "__and__" || op == "__or__") && node->size() == 3) {
-                    WhenResult left  = eval(argument(0));
-                    WhenResult right = eval(argument(1));
-                    if (!left.holds() && !left.fails()) {
-                        return left;
-                    }
-                    if (!right.holds() && !right.fails()) {
-                        return right;
-                    }
-                    const bool value = op == "__and__" ? left.holds() && right.holds()
-                                                       : left.holds() || right.holds();
-                    local.outcome = value ? WhenOutcome::Holds : WhenOutcome::Fails;
-                    return local;
-                }
-                // A direct call of an imported ordinary function is a condition that cannot be
-                // answered: say that, rather than that the name is not one of `!`, `&&`, `||`.
-                // A generic predicate written without its type arguments is named as such.
-                if (!isOperatorName(written)) {
-                    WhenResult problem;
-                    const std::optional<generic_template_ptr_t> resolved =
-                        whenPredicateNamed(written, callee, problem);
-                    if (resolved.has_value()) {
-                        local.outcome = WhenOutcome::NotEvaluable;
-                        local.subject = written;
-                        local.detail  = "a predicate is called with its type arguments, as "
-                                        "'" +
-                                        written + "::<...>(...)'";
-                        return local;
-                    }
-                    if (problem.outcome != WhenOutcome::NotEvaluable) {
-                        return problem;
-                    }
-                }
-                // Any other call: a type function is an ordinary function that runs at compile
-                // time (design principles 5.5), so a condition evaluates a call the same way a
-                // folded body's own calls are evaluated -- an operator over constants, an
-                // ordinary function of this module or of one it imports, or a predicate this
-                // condition reaches through one of them. `evaluateCallInsideBody` is that path,
-                // and it refuses what is not a pure body over compile-time constants (a `sync`
-                // function, a `var`, a body reading a name other than its parameters), which is
-                // what keeps a condition that really reads a run-time value refused.
-                std::vector<data_ptr_t> callArguments;
-                for (size_t i = 1; i < node->size(); ++i) {
-                    const GCT::node_ptr_t &argument = soleValue(node->at(i));
-                    if (argument == nullptr || argument->type() != GCT::NodeKind::DATA ||
-                        argument->data() == nullptr) {
-                        local.outcome = WhenOutcome::NeedsWithValue;
-                        local.subject = written.empty() ? callee->name() : written;
-                        local.detail  = "the call gives a value that is not a compile-time "
-                                        "constant";
-                        return local;
-                    }
-                    callArguments.push_back(argument->data());
-                }
-                try {
-                    const data_ptr_t folded = evaluateCallInsideBody(
-                        node, callee, callArguments,
-                        [](const GCT::node_ptr_t &) -> data_ptr_t { return nullptr; }, bindings,
-                        0);
-                    std::optional<bool> value;
-                    if (folded != nullptr && boolOf(folded, value)) {
-                        local.outcome = *value ? WhenOutcome::Holds : WhenOutcome::Fails;
-                        return local;
-                    }
-                    local.outcome = WhenOutcome::NotBool;
-                    local.subject = written.empty() ? callee->name() : written;
-                    local.detail  = "the call's value is not a bool";
-                    return local;
-                } catch (const EvalFailure &failure) {
-                    local.outcome = WhenOutcome::NotEvaluable;
-                    local.subject = written.empty() ? callee->name() : written;
-                    local.detail  = failure.why;
-                    return local;
-                }
-            }
-            local.outcome = WhenOutcome::NotEvaluable;
-            local.detail  = "the condition calls something that is not a compile-time query";
-            return local;
-        }
-        case GCT::NodeKind::DREF: {
-            const std::string plain = plainName(node->name());
-            if (node->name().find("::") == std::string::npos) {
-                // A `with` parameter is in scope; its value is a compile-time constant only
-                // when the call wrote one.
-                if (signature != nullptr) {
-                    const size_t withCount = signature->withTypesCount();
-                    for (size_t i = 0; i < withCount; ++i) {
-                        if (plain != signature->argNameAt(i)) {
-                            continue;
-                        }
-                        const auto found = withValues.find(plain);
-                        if (found == withValues.end()) {
-                            local.outcome = WhenOutcome::NeedsWithValue;
-                            local.subject = plain;
-                            local.detail  =
-                                "the call did not give a compile-time value for this "
-                                "'with' parameter";
-                            return local;
-                        }
-                        std::optional<bool> value;
-                        if (found->second != nullptr && boolOf(found->second, value)) {
-                            local.outcome =
-                                *value ? WhenOutcome::Holds: WhenOutcome::Fails;
-                            return local;
-                        }
-                        local.outcome = WhenOutcome::NotBool;
-                        local.subject = plain;
-                        local.detail  = "the 'with' parameter is not a bool";
-                        return local;
-                    }
-                }
-            }
-            local.outcome = WhenOutcome::UnknownName;
-            local.subject = node->name();
-            local.detail =
-                "a condition sees the declaration's type parameters and 'with' parameters, "
-                "not its ordinary parameters or body";
-            return local;
-        }
-        default:
-            local.outcome = WhenOutcome::NotEvaluable;
-            local.detail  = "the condition is not computed at compile time";
-            return local;
-        }
-    };
-
-    return eval(soleValue(condition));
+    }
+    return whenResultOf(
+        WhenOutcome::UnknownName, node->name(),
+        "a condition sees the declaration's type parameters and 'with' parameters, not its "
+        "ordinary parameters or body");
 }
 
 namespace {
@@ -1601,6 +1640,12 @@ Builder::FoldedCall Builder::foldConstantCall(const GCT::node_ptr_t &call) {
     return result;
 }
 
+bool Builder::refuseFold(FoldedCall &result, FoldRefusal refusal, std::string reason) {
+    result.refusal = refusal;
+    result.reason  = std::move(reason);
+    return false;
+}
+
 Builder::FoldedCall Builder::evaluateCallAtBuildTime(
     const GCT::node_ptr_t &call, GCT::node_ptr_t callee,
     const std::vector<data_ptr_t> &arguments,
@@ -1609,272 +1654,376 @@ Builder::FoldedCall Builder::evaluateCallAtBuildTime(
     FoldedCall result;
     result.call = writtenCallName(call);
     if (depth >= kMaxFoldedCallDepth) {
-        result.refusal = FoldRefusal::TooDeep;
-        result.reason  = "the call nests more than " + std::to_string(kMaxFoldedCallDepth) +
-                        " calls deep; a recursion that has no base case for these constants has "
-                        "no value at build time";
+        refuseFold(
+            result, FoldRefusal::TooDeep,
+            "the call nests more than " + std::to_string(kMaxFoldedCallDepth) +
+                " calls deep; a recursion that has no base case for these constants has no value "
+                "at build time");
         return result;
     }
+    FoldRequest request;
+    request.arguments  = &arguments;
+    request.vars       = &vars;
+    request.depth      = depth;
+    request.buildFirst = buildFirst;
+    if (!foldNameCallee(callee, evalArgument, request, result)) {
+        return result;
+    }
+    result.call = request.name;
+    if (foldBuiltinOperator(request, result)) {
+        return result;
+    }
+
+    FoldTarget target;
+    auto templateFound = templateScope_->get(request.name);
+    // A generic predicate a body calls with its type arguments (`is_integer::<T>()`) is found the
+    // way a condition finds one: among the module's own names, then what its imports bring by name
+    // or through a prefix or an alias, then the prelude. The scope above holds only the first.
+    if (!(templateFound.has_value() && static_cast<bool>(templateFound.value())) &&
+        request.typeApplied && request.callee != nullptr && request.callee->size() > 0) {
+        WhenResult unresolved;
+        if (const auto named = whenPredicateNamed(request.name, request.callee->at(0), unresolved);
+            named.has_value() && static_cast<bool>(*named)) {
+            templateFound = *named;
+        }
+    }
+    const bool generic = templateFound.has_value() && static_cast<bool>(templateFound.value());
+    if (generic ? !foldTargetOfGeneric(templateFound.value(), request, target, result)
+                : !foldTargetOfFunction(request, target, result)) {
+        return result;
+    }
+    if (!foldCheckPurity(*target.signature, result)) {
+        return result;
+    }
+    const FunctionType &signature = *target.signature;
+    std::unordered_map<std::string, data_ptr_t> withValues;
+    for (size_t i = 0; i < signature.withTypesCount() && i < request.withArguments.size(); ++i) {
+        withValues[std::string(signature.argNameAt(i))] = request.withArguments[i];
+    }
+    if (!foldCheckCondition(target, withValues, result) ||
+        !foldCheckResultType(target, result)) {
+        return result;
+    }
+    foldRunBody(target, request, result);
+    return result;
+}
+
+bool Builder::foldNameCallee(
+    GCT::node_ptr_t callee, const std::function<data_ptr_t(const GCT::node_ptr_t &)> &evalArgument,
+    FoldRequest &request, FoldedCall &result) {
     // A `with` application gives its own arguments in front of the call.
-    std::vector<data_ptr_t> withArguments;
     while (callee != nullptr && callee->type() == GCT::NodeKind::WITH) {
         for (size_t i = 1; i < callee->size(); ++i) {
-            withArguments.push_back(evalArgument(callee->at(i)));
+            request.withArguments.push_back(evalArgument(callee->at(i)));
         }
         callee = callee->at(0);
     }
-    const bool typeApplied = callee != nullptr && callee->type() == GCT::NodeKind::TAPP;
-    if (callee == nullptr ||
-        (callee->type() != GCT::NodeKind::DREF && !typeApplied)) {
-        result.refusal = FoldRefusal::NotAProgramCall;
-        result.reason  = "the callee is an expression, not a name the compiler knows";
-        return result;
+    request.typeApplied = callee != nullptr && callee->type() == GCT::NodeKind::TAPP;
+    if (callee == nullptr || (callee->type() != GCT::NodeKind::DREF && !request.typeApplied)) {
+        return refuseFold(
+            result, FoldRefusal::NotAProgramCall,
+            "the callee is an expression, not a name the compiler knows");
     }
-    const GCT::node_ptr_t &nameNode = typeApplied ? callee->at(0) : callee;
+    const GCT::node_ptr_t &nameNode = request.typeApplied ? callee->at(0) : callee;
     if (nameNode == nullptr || nameNode->type() != GCT::NodeKind::DREF) {
-        result.refusal = FoldRefusal::NotAProgramCall;
-        result.reason  = "the callee names no function";
-        return result;
+        return refuseFold(result, FoldRefusal::NotAProgramCall, "the callee names no function");
     }
-    const std::string name = nameNode->name();
-    result.call            = name;
+    request.callee = callee;
+    request.name   = nameNode->name();
+    return true;
+}
 
+bool Builder::foldBuiltinOperator(const FoldRequest &request, FoldedCall &result) {
     // An operator over constants is computed by the evaluator itself; this is how an arithmetic
     // expression over folded calls becomes a constant too.
-    const std::string operatorName = plainName(name);
-    if (!operatorName.empty() && isBuiltinOperatorName(operatorName)) {
-        try {
-            result.data = GctConstantEvaluator::runBuiltinCall(operatorName, arguments);
-        } catch (const EvalFailure &failure) {
-            result.refusal = FoldRefusal::NotEvaluable;
-            result.reason  = failure.why;
-            return result;
-        }
-        if (result.data == nullptr || result.data->type() == nullptr ||
-            !isConstantKind(result.data->type())) {
-            result.refusal = FoldRefusal::ResultNotConstantKind;
-            result.reason  = "its value is not a kind a compile-time constant has";
-            return result;
-        }
-        result.refusal = FoldRefusal::None;
-        return result;
+    const std::string operatorName = plainName(request.name);
+    if (operatorName.empty() || !isBuiltinOperatorName(operatorName)) {
+        return false;
     }
+    try {
+        result.data = GctConstantEvaluator::runBuiltinCall(operatorName, *request.arguments);
+    } catch (const EvalFailure &failure) {
+        refuseFold(result, FoldRefusal::NotEvaluable, failure.why);
+        return true;
+    }
+    if (result.data == nullptr || result.data->type() == nullptr ||
+        !isConstantKind(result.data->type())) {
+        refuseFold(
+            result, FoldRefusal::ResultNotConstantKind,
+            "its value is not a kind a compile-time constant has");
+        return true;
+    }
+    result.refusal = FoldRefusal::None;
+    return true;
+}
 
-    type_bindings_t bindings;
-    GCT::node_ptr_t func;
-    FunctionType *signature = nullptr;
-    std::vector<std::string> parameters;
-
-    const auto templateFound = templateScope_->get(name);
-    if (templateFound.has_value() && templateFound.value().one() != nullptr) {
-        const generic_template_ptr_t tmpl = templateFound.value().one();
-        parameters                 = typeParameterNames(tmpl);
-        bindings                   = tmpl->outerBindings;
-        if (tmpl->funcType == nullptr || tmpl->funcType->hasRest()) {
-            result.refusal = FoldRefusal::NotAProgramCall;
-            result.reason  = "its declaration has no fixed parameter list";
-            return result;
+std::optional<Builder::FoldTarget> Builder::bindFoldTemplate(
+    const generic_template_ptr_t &tmpl, const FoldRequest &request, bool checkTypes,
+    std::string &why) {
+    const std::vector<std::string> parameters = typeParameterNames(tmpl);
+    FoldTarget target;
+    target.bindings = tmpl->outerBindings;
+    if (tmpl->funcType == nullptr || tmpl->funcType->hasRest()) {
+        why = "its declaration has no fixed parameter list";
+        return std::nullopt;
+    }
+    const std::vector<data_ptr_t> &arguments = *request.arguments;
+    if (request.typeApplied) {
+        if (request.callee->size() - 1 != parameters.size()) {
+            why = "its type arguments do not match its type parameters";
+            return std::nullopt;
         }
-        if (typeApplied) {
-            if (callee->size() - 1 != parameters.size()) {
-                result.refusal = FoldRefusal::NotAProgramCall;
-                result.reason  = "its type arguments do not match its type parameters";
-                return result;
+        for (size_t i = 0; i < parameters.size(); ++i) {
+            Type *type =
+                substituteTypeVars(request.callee->at(i + 1)->dataType(), *request.vars);
+            if (type == nullptr || type->code() == TypeCode::TypeVar || containsTypeVar(type)) {
+                why = "a type argument is not concrete in this body";
+                return std::nullopt;
             }
-            for (size_t i = 0; i < parameters.size(); ++i) {
-                Type *type = substituteTypeVars(callee->at(i + 1)->dataType(), vars);
-                if (type == nullptr || type->code() == TypeCode::TypeVar ||
-                    containsTypeVar(type)) {
-                    result.refusal = FoldRefusal::NotAProgramCall;
-                    result.reason  = "a type argument is not concrete in this body";
-                    return result;
-                }
-                bindings.emplace_back(parameters[i], type);
-            }
-        } else {
-            if (tmpl->funcType->withTypesCount() != withArguments.size() ||
-                tmpl->funcType->normTypesCount() != arguments.size()) {
-                result.refusal = FoldRefusal::NotAProgramCall;
-                result.reason  = "the call does not give its parameters";
-                return result;
-            }
-            for (size_t i = 0; i < withArguments.size(); ++i) {
-                Type *pattern =
-                    substituteTypeVars(tmpl->funcType->withTypeAt(i), bindings);
-                if (pattern == nullptr || withArguments[i] == nullptr ||
-                    !unifyTypeVars(pattern, withArguments[i]->type(), bindings)) {
-                    result.refusal = FoldRefusal::NotAProgramCall;
-                    result.reason  = "its type parameters cannot be read from this call";
-                    return result;
-                }
-            }
-            for (size_t i = 0; i < arguments.size(); ++i) {
-                Type *pattern = substituteTypeVars(tmpl->funcType->normTypeAt(i), bindings);
-                if (pattern == nullptr || arguments[i] == nullptr ||
-                    !unifyTypeVars(pattern, arguments[i]->type(), bindings)) {
-                    result.refusal = FoldRefusal::NotAProgramCall;
-                    result.reason  = "its type parameters cannot be read from this call";
-                    return result;
-                }
-            }
-        }
-        for (const std::string &parameter : parameters) {
-            if (findTypeBinding(bindings, parameter) == nullptr) {
-                result.refusal = FoldRefusal::NotAProgramCall;
-                result.reason  = "its type parameters cannot be read from this call";
-                return result;
-            }
-        }
-        func      = tmpl->func;
-        signature = instantiateFunctionType(tmpl->funcType, bindings);
-        if (signature->withTypesCount() != withArguments.size() ||
-            signature->normTypesCount() != arguments.size()) {
-            result.refusal = FoldRefusal::NotAProgramCall;
-            result.reason  = "the call does not give its parameters";
-            return result;
-        }
-        // Build the instance before reading its body: where a call becomes a constant, the
-        // instance is still a graph of the program and its body keeps its own diagnostics.
-        // A `constas` parameter is left to the ordinary build (the instance key carries the
-        // constant's extent, which is not known here).
-        bool hasConstas = false;
-        for (size_t i = 0; i < signature->normTypesCount(); ++i) {
-            hasConstas = hasConstas || signature->normIsConstasAt(i);
-        }
-        if (buildFirst && !hasConstas) {
-            try {
-                (void)instantiateGeneric(tmpl, bindings, {}, {}, callee);
-            } catch (Diagnostic &diagnostic) {
-                diags_->add(std::move(diagnostic));
-            } catch (...) {
-                // The instance does not build; the call keeps the ordinary build, which reports
-                // what went wrong with it.
-                result.refusal = FoldRefusal::NotAProgramCall;
-                result.reason  = "its instance does not build";
-                return result;
-            }
+            target.bindings.emplace_back(parameters[i], type);
         }
     } else {
-        if (typeApplied) {
-            result.refusal = FoldRefusal::NotAProgramCall;
-            result.reason  = "the name is not a generic declaration";
-            return result;
+        if (tmpl->funcType->withTypesCount() != request.withArguments.size() ||
+            tmpl->funcType->normTypesCount() != arguments.size()) {
+            why = "the call does not give its parameters";
+            return std::nullopt;
         }
-        const auto graphs = graphsAt(name);
-        if (!graphs.has_value() || (*graphs)->size() != 1) {
-            result.refusal = FoldRefusal::NotAProgramCall;
-            result.reason  = !graphs.has_value()
-                                 ? "no function of that name is declared here"
-                                 : "more than one declaration of that name can be called here";
-            return result;
+        // The type parameters are read from the arguments' types.
+        const auto readFrom = [&](Type *declared, const data_ptr_t &argument) {
+            if (argument == nullptr) {
+                return false;
+            }
+            if (checkTypes) {
+                return argumentFits(declared, argument->type(), target.bindings);
+            }
+            Type *pattern = substituteTypeVars(declared, target.bindings);
+            return pattern != nullptr && unifyTypeVars(pattern, argument->type(), target.bindings);
+        };
+        for (size_t i = 0; i < request.withArguments.size(); ++i) {
+            if (!readFrom(tmpl->funcType->withTypeAt(i), request.withArguments[i])) {
+                why = "its type parameters cannot be read from this call";
+                return std::nullopt;
+            }
         }
-        const compile_graph_ptr_t &graph = (*graphs)->front();
-        if (decoratedOf_.contains(graph.get())) {
-            result.refusal = FoldRefusal::NotAProgramCall;
-            result.reason  = "it is decorated, and a decoration is code the call runs";
-            return result;
-        }
-        const auto declaration = topLevelFunctions_.find(graph.get());
-        if (declaration == topLevelFunctions_.end() || declaration->second == nullptr) {
-            result.refusal = FoldRefusal::NotAProgramCall;
-            result.reason  = "it has no body this evaluation can read";
-            return result;
-        }
-        func = declaration->second->gct;
-        if (func == nullptr || func->nativeDeclaration() || func->size() < 2) {
-            result.refusal = FoldRefusal::NotAProgramCall;
-            result.reason  = "it is a body-less declaration";
-            return result;
-        }
-        signature = graph->funcType();
-        if (signature == nullptr || !signature->hasExitType()) {
-            result.refusal = FoldRefusal::NotAProgramCall;
-            result.reason  = "its signature has no result type yet";
-            return result;
-        }
-        if (signature->withTypesCount() != withArguments.size() ||
-            signature->normTypesCount() != arguments.size()) {
-            result.refusal = FoldRefusal::NotAProgramCall;
-            result.reason  = "the call does not give its parameters";
-            return result;
-        }
-        if (buildFirst) {
-            // The body is built before it is read: a call that becomes a constant still leaves
-            // the graph of the function it calls, and a body that does not build keeps its own
-            // diagnostics instead of disappearing into a folded value.
-            ensureFunctionBuilt(graph);
+        for (size_t i = 0; i < arguments.size(); ++i) {
+            if (!readFrom(tmpl->funcType->normTypeAt(i), arguments[i])) {
+                why = "its type parameters cannot be read from this call";
+                return std::nullopt;
+            }
         }
     }
+    for (const std::string &parameter : parameters) {
+        if (findTypeBinding(target.bindings, parameter) == nullptr) {
+            why = "its type parameters cannot be read from this call";
+            return std::nullopt;
+        }
+    }
+    target.func      = tmpl->func;
+    target.declaring = tmpl;
+    target.signature = instantiateFunctionType(tmpl->funcType, target.bindings);
+    if (target.signature->withTypesCount() != request.withArguments.size() ||
+        target.signature->normTypesCount() != arguments.size()) {
+        why = "the call does not give its parameters";
+        return std::nullopt;
+    }
+    return target;
+}
 
+bool Builder::foldTargetOfGeneric(
+    const generic_ref_t &named, const FoldRequest &request, FoldTarget &target,
+    FoldedCall &result) {
+    // A name with several declarations is chosen the way a call chooses: by the type arguments
+    // it gives and by the arguments it passes, and when two fit, the call is not one this
+    // evaluation reads (the ordinary build reports the ambiguity), never "the first".
+    const GenericGroup &group = *named.group();
+    std::vector<FoldTarget> fits;
+    std::string firstWhy;
+    for (const generic_template_ptr_t &candidate : group) {
+        std::string why;
+        if (auto bound = bindFoldTemplate(candidate, request, group.size() > 1, why)) {
+            fits.push_back(std::move(*bound));
+        } else if (firstWhy.empty()) {
+            firstWhy = why;
+        }
+    }
+    if (fits.empty()) {
+        return refuseFold(
+            result, FoldRefusal::NotAProgramCall,
+            group.size() == 1 ? firstWhy
+                              : "no declaration of that name fits this call (" + firstWhy + ")");
+    }
+    if (fits.size() > 1) {
+        return refuseFold(
+            result, FoldRefusal::NotAProgramCall, "several declarations of that name fit this call");
+    }
+    target = std::move(fits.front());
+    return buildFoldInstance(target, request, result);
+}
+
+bool Builder::buildFoldInstance(
+    const FoldTarget &target, const FoldRequest &request, FoldedCall &result) {
+    // Build the instance before reading its body: where a call becomes a constant, the instance
+    // is still a graph of the program and its body keeps its own diagnostics. A `constas`
+    // parameter is left to the ordinary build (the instance key carries the constant's extent,
+    // which is not known here).
+    bool hasConstas = false;
+    for (size_t i = 0; i < target.signature->normTypesCount(); ++i) {
+        hasConstas = hasConstas || target.signature->normIsConstasAt(i);
+    }
+    if (!request.buildFirst || hasConstas) {
+        return true;
+    }
+    const size_t errorsBefore = diags_->count(camel::core::error::Severity::Error);
+    try {
+        (void)instantiateGeneric(target.declaring, target.bindings, {}, {}, request.callee);
+    } catch (const BuildAbortException &) {
+        throw; // a diagnostic has been committed: the whole build stops
+    } catch (Diagnostic &diagnostic) {
+        diags_->add(std::move(diagnostic));
+        return refuseFold(result, FoldRefusal::NotAProgramCall, "its instance does not build");
+    }
+    if (diags_->count(camel::core::error::Severity::Error) > errorsBefore) {
+        // The instance reported its own errors: it is not folded as if it were sound.
+        return refuseFold(result, FoldRefusal::NotAProgramCall, "its instance does not build");
+    }
+    return true;
+}
+
+bool Builder::foldTargetOfFunction(
+    const FoldRequest &request, FoldTarget &target, FoldedCall &result) {
+    if (request.typeApplied) {
+        return refuseFold(
+            result, FoldRefusal::NotAProgramCall, "the name is not a generic declaration");
+    }
+    const auto graphs = graphsAt(request.name);
+    if (!graphs.has_value() || (*graphs)->size() != 1) {
+        return refuseFold(
+            result, FoldRefusal::NotAProgramCall,
+            !graphs.has_value() ? "no function of that name is declared here"
+                                : "more than one declaration of that name can be called here");
+    }
+    const compile_graph_ptr_t &graph = (*graphs)->front();
+    if (decoratedOf_.contains(graph.get())) {
+        return refuseFold(
+            result, FoldRefusal::NotAProgramCall,
+            "it is decorated, and a decoration is code the call runs");
+    }
+    const auto declaration = topLevelFunctions_.find(graph.get());
+    if (declaration == topLevelFunctions_.end() || declaration->second == nullptr) {
+        return refuseFold(
+            result, FoldRefusal::NotAProgramCall, "it has no body this evaluation can read");
+    }
+    target.func = declaration->second->gct;
+    if (target.func == nullptr || target.func->nativeDeclaration() || target.func->size() < 2) {
+        return refuseFold(result, FoldRefusal::NotAProgramCall, "it is a body-less declaration");
+    }
+    target.signature = graph->funcType();
+    if (target.signature == nullptr || !target.signature->hasExitType()) {
+        return refuseFold(
+            result, FoldRefusal::NotAProgramCall, "its signature has no result type yet");
+    }
+    if (target.signature->withTypesCount() != request.withArguments.size() ||
+        target.signature->normTypesCount() != request.arguments->size()) {
+        return refuseFold(
+            result, FoldRefusal::NotAProgramCall, "the call does not give its parameters");
+    }
+    target.declaringUnit = unitOfFunction(graph);
+    if (!request.buildFirst) {
+        return true;
+    }
+    // The body is built before it is read: a call that becomes a constant still leaves the
+    // graph of the function it calls, and a body that does not build keeps its own diagnostics
+    // instead of disappearing into a folded value -- and is not folded as if it were sound.
+    if (brokenBodies_.contains(graph.get())) {
+        return refuseFold(result, FoldRefusal::NotAProgramCall, "its body does not build");
+    }
+    const size_t errorsBefore = diags_->count(camel::core::error::Severity::Error);
+    ensureFunctionBuilt(graph);
+    if (diags_->count(camel::core::error::Severity::Error) > errorsBefore ||
+        declaration->second->state == BuildState::Failed) {
+        brokenBodies_.insert(graph.get());
+        return refuseFold(result, FoldRefusal::NotAProgramCall, "its body does not build");
+    }
+    return true;
+}
+
+bool Builder::foldCheckPurity(const FunctionType &signature, FoldedCall &result) {
     // Purity: a `sync` function, a `var` parameter and a declared resource use are effects. A
     // declaration that says nothing (the default) is evaluated, and the evaluation refuses the
     // effectful constructs it meets (`println`, a `var`), so a body whose effects come from an
     // untaken branch is folded and one whose effects are on the path is not.
-    if (signature->modifiers().sync()) {
-        result.refusal = FoldRefusal::HasEffects;
-        result.reason  = "it is a 'sync' function";
-        return result;
-    }
-    const size_t withCount = signature->withTypesCount();
+    const size_t withCount = signature.withTypesCount();
     for (size_t i = 0; i < withCount; ++i) {
-        if (signature->withIsVarAt(i)) {
-            result.refusal = FoldRefusal::HasEffects;
-            result.reason  = "its 'with' parameter '" + std::string(signature->argNameAt(i)) +
-                            "' is a 'var'";
-            return result;
+        if (signature.withIsVarAt(i)) {
+            return refuseFold(
+                result, FoldRefusal::HasEffects,
+                "its 'with' parameter '" + std::string(signature.argNameAt(i)) + "' is a 'var'");
         }
     }
-    for (size_t i = 0; i < signature->normTypesCount(); ++i) {
-        if (signature->normIsVarAt(i)) {
-            result.refusal = FoldRefusal::HasEffects;
-            result.reason  = "its parameter '" + std::string(signature->argNameAt(withCount + i)) +
-                            "' is a 'var'";
-            return result;
+    for (size_t i = 0; i < signature.normTypesCount(); ++i) {
+        if (signature.normIsVarAt(i)) {
+            return refuseFold(
+                result, FoldRefusal::HasEffects,
+                "its parameter '" + std::string(signature.argNameAt(withCount + i)) +
+                    "' is a 'var'");
         }
     }
-    const auto &resources = signature->resources();
+    const auto &resources = signature.resources();
     if (resources.mode == camel::core::sem::ResourceSignature::Mode::Concrete &&
         !resources.pure()) {
-        result.refusal = FoldRefusal::HasEffects;
-        result.reason  = "it declares effects: " + camel::core::sem::toString(resources);
-        return result;
+        return refuseFold(
+            result, FoldRefusal::HasEffects,
+            "it declares effects: " + camel::core::sem::toString(resources));
     }
+    return true;
+}
 
-    std::unordered_map<std::string, data_ptr_t> withValues;
-    for (size_t i = 0; i < withCount && i < withArguments.size(); ++i) {
-        withValues[std::string(signature->argNameAt(i))] = withArguments[i];
+bool Builder::foldCheckCondition(
+    const FoldTarget &target, const std::unordered_map<std::string, data_ptr_t> &withValues,
+    FoldedCall &result) {
+    if (target.func == nullptr) {
+        return true;
     }
-    if (func != nullptr) {
-        if (const auto *when = GCT::Tree::of(func)->whenOf(func)) {
-            const WhenResult condition =
-                evaluateWhenCondition(when->condition, signature, bindings, withValues);
-            if (!condition.holds()) {
-                result.refusal = FoldRefusal::NotAProgramCall;
-                result.reason  = "the declaration's 'when' condition is not shown to hold here";
-                return result;
-            }
-        }
+    const auto *when = GCT::Tree::of(target.func)->whenOf(target.func);
+    if (when == nullptr) {
+        return true;
     }
+    // The condition is the declaration's: its names are read in the module that wrote it, not in
+    // the module that calls it.
+    const WhenResult condition = evaluateWhenCondition(
+        when->condition, target.signature, target.bindings, withValues, target.declaring,
+        target.declaringUnit);
+    if (condition.holds()) {
+        return true;
+    }
+    std::string reason = "the declaration's 'when' condition is not shown to hold here";
+    if (!condition.detail.empty()) {
+        reason += ": " + condition.detail;
+    }
+    return refuseFold(result, FoldRefusal::NotAProgramCall, std::move(reason));
+}
 
-    if (!signature->hasExitType() || signature->exitType() == nullptr) {
-        result.refusal = FoldRefusal::ResultNotConstantKind;
-        result.reason  = "it has no result type";
-        return result;
+bool Builder::foldCheckResultType(const FoldTarget &target, FoldedCall &result) {
+    if (!target.signature->hasExitType() || target.signature->exitType() == nullptr) {
+        return refuseFold(result, FoldRefusal::ResultNotConstantKind, "it has no result type");
     }
-    Type *resultType = substituteTypeVars(signature->exitType(), bindings);
+    Type *resultType = substituteTypeVars(target.signature->exitType(), target.bindings);
     if (resultType == nullptr || !isConstantKind(resultType)) {
-        result.refusal = FoldRefusal::ResultNotConstantKind;
-        result.reason  = "its result type is '" +
-                        (resultType != nullptr ? resultType->toString() : std::string("unknown")) +
-                        "', not a number, a bool or a string";
-        return result;
+        return refuseFold(
+            result, FoldRefusal::ResultNotConstantKind,
+            "its result type is '" +
+                (resultType != nullptr ? resultType->toString() : std::string("unknown")) +
+                "', not a number, a bool or a string");
     }
+    return true;
+}
 
-    // A name the body reads is not resolved: it would be looked up where the call is written,
-    // not where the body is (a local of the caller can shadow a top-level value the callee
-    // uses), so the value read could be the wrong one. A body that reads a name other than its
-    // parameters is not folded.
-    const EvalDataResolver dataResolver = nullptr;
+void Builder::foldRunBody(
+    const FoldTarget &target, const FoldRequest &request, FoldedCall &result) {
+    // A name the body reads is not resolved: it would be looked up where the call is written, not
+    // where the body is (a local of the caller can shadow a top-level value the callee uses), so
+    // the value read could be the wrong one. A body that reads a name other than its parameters
+    // is not folded.
     const auto callResolver = [this](
                                   const GCT::node_ptr_t &nestedCall,
                                   const GCT::node_ptr_t &nestedCallee,
@@ -1886,10 +2035,12 @@ Builder::FoldedCall Builder::evaluateCallAtBuildTime(
     };
     try {
         result.data = GctConstantEvaluator::runFunction(
-            func, bindings, arguments, withArguments, dataResolver, callResolver,
+            target.func, target.bindings, *request.arguments, request.withArguments, nullptr,
+            callResolver,
             [this](const GCT::node_ptr_t &subject) { return staticLoopIntSequenceOf(subject); },
-            depth + 1);
+            request.depth + 1);
     } catch (const EvalFailure &failure) {
+        // How the evaluator's problem is told to the caller of a fold.
         switch (failure.kind) {
         case EvalProblem::ArgumentNotConstant:
             result.refusal = FoldRefusal::ArgumentNotConstant;
@@ -1903,26 +2054,26 @@ Builder::FoldedCall Builder::evaluateCallAtBuildTime(
         case EvalProblem::ResultNotConstantKind:
             result.refusal = FoldRefusal::ResultNotConstantKind;
             break;
+        case EvalProblem::TypeNotConcrete:
         case EvalProblem::Construct:
             result.refusal = FoldRefusal::NotEvaluable;
             break;
         }
-        result.call   = failure.call.empty() ? name : failure.call;
-        result.reason = failure.why;
-        return result;
+        result.call    = failure.call.empty() ? request.name : failure.call;
+        result.reason  = failure.why;
+        return;
     }
     if (result.data == nullptr) {
-        result.refusal = FoldRefusal::NotEvaluable;
-        result.reason  = "its body produces no value";
-        return result;
+        refuseFold(result, FoldRefusal::NotEvaluable, "its body produces no value");
+        return;
     }
     if (result.data->type() == nullptr || !isConstantKind(result.data->type())) {
-        result.refusal = FoldRefusal::ResultNotConstantKind;
-        result.reason  = "its value is not a kind a compile-time constant has";
-        return result;
+        refuseFold(
+            result, FoldRefusal::ResultNotConstantKind,
+            "its value is not a kind a compile-time constant has");
+        return;
     }
     result.refusal = FoldRefusal::None;
-    return result;
 }
 
 data_ptr_t Builder::evaluateCallInsideBody(

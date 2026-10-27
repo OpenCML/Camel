@@ -59,7 +59,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 212
+**Semantic — errors** (`SemanticDiag`) — 214
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -87,8 +87,8 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ArgumentsRejected` | Invalid call to '{0}' with argument types {1}: {2}. |
 | `ImmutablePassedToVarParam` | '{0}' is immutable and cannot be passed to a var parameter of '{1}'. |
 | `AssignmentTargetNotVariable` | The target of an assignment must be a variable, or a path from one. |
-| `ConstructNotSupported` | '{0}' is not supported: {1}. |
 | `InvalidTypeArgument` | The arguments of the type '{0}<...>' are not accepted: {1}. |
+| `NativeTypeNotProvided` | The type '{0}' is declared without a right side, so a C++ module has to provide it, and the module '{1}' registered no type of that name. |
 | `ArgumentNeedsConversion` | The call to '{0}' needs an explicit conversion: {1}. |
 | `ReturnNeedsConversion` | The returned value needs an explicit conversion to the function's declared return type '{0}': {1}. |
 | `ImportNameConflict` | The name '{0}' is imported from the modules '{1}' and '{2}' with {3}. |
@@ -101,8 +101,6 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `TypeFunctionArguments` | The type function '{0}' cannot be used this way: {1}. |
 | `GenericFunctionUnsupported` | The generic function '{0}' cannot be {1}. |
 | `FunctionNameAsValue` | '{0}' is used as a value here, but it names {1}, not one function. |
-| `ThrowOutsideFallible` | 'throw' needs a function declared to return 'T!': {0}. |
-| `ThrowNotAnError` | 'throw' takes an error value, not a value of type '{0}'. |
 | `TaggedTypeNesting` | The type '{0}' marks '{1}' twice. |
 | `TaggedValueNotOpened` | A value of type '{0}' cannot be used here: {1}. |
 | `TaggedOperandMismatch` | '{0}' cannot be applied here: {1}. |
@@ -116,7 +114,6 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `PartialApplicationRefused` | The context arguments <{0}> cannot be bound to '{1}' as a value: {2}. |
 | `ComprehensionSourceRefused` | The source of this list comprehension has type '{0}', which has no elements to take. |
 | `LogicalOperandNotBool` | The {1} side of '{0}' has type '{2}', not 'bool'. |
-| `ExportedVariable` | The variable '{0}' cannot be exported. |
 | `ModuleValueCycle` | The value '{0}' depends on itself: {1}. |
 | `CaptureAfterRecursiveCall` | The function '{1}' uses '{0}' only after it is called in its own recursion, where the call could not pass it. |
 | `AmbiguousName` | The name '{0}' is ambiguous here: {1}. |
@@ -219,6 +216,8 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `WhenPredicateAmbiguous` | The 'when' condition of '{0}' calls '{1}', and that name is ambiguous: it is imported from {2}. |
 | `NativeDeclarationIncomplete` | The body-less declaration '{0}' is incomplete: it has no result type. |
 | `NativeDeclarationNotLoaded` | The declaration '{0}' names the operator '{1}', which no loaded module implements. |
+| `NativeValueNotLoaded` | The declaration '{0}' has no right side, and no loaded module registers a value of that name. |
+| `NativeValueMismatch` | The declaration '{0}' says '{1}', but the module registers a value of type '{2}'. |
 | `NativeDeclarationOverlap` | Two declarations of '{0}' can take the same call: '{1}' and '{2}'. |
 | `WhenDeclarationOverlap` | Two declarations of '{0}' both apply to the type '{1}': '{2}' and '{3}'. |
 | `NativeDeclarationForeignOperator` | The declaration '{0}' names the operator '{1}', which another module declares. |
@@ -250,6 +249,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `CompOperandGenericWithoutType` | '..' composes two functions, and its {0} operand, the generic function '{1}', has no instance here: write its type arguments ('{1}::<int>'), or give the whole expression an expected function type. |
 | `RangeStepZero` | The range 'range({0}, {1}, 0)' has a step of 0, so it is no sequence of integers. |
 | `SliceStepZero` | The slice 't[a:b:s]' has a step of 0, so it takes no element at all, whatever its bounds are. |
+| `WithPackNeedsNativeDeclaration` | The pack '..{0}' among the 'with' parameters needs a declaration without a body. |
 | `ReducedPrecisionUnsupported` | The call of '{0}' cannot take a value of the reduced-precision element type '{1}'. |
 | `ImplOnBodylessDeclaration` | The body-less declaration '{0}' cannot carry '#impl({1})': it has no Camel body. |
 | `ImplKernelUnknown` | The '#impl' tag of '{0}' names '{1}', which is no body-less declaration. |
@@ -260,6 +260,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `StreamConsumedTwice` | '{0}' is consumed twice: a stream is read once on each execution path. |
 | `StreamConsumedInLoop` | '{0}' is consumed once per round of this loop. |
 | `TeeHintNotPositive` | The `tee` width '{0}' is below 1. |
+| `StreamCaptured` | '{0}' cannot be captured: a stream is read once, and a closure outlives the read. |
 | `NodeOfNotAParameter` | '{0}' is not a const parameter of the rule '{1}', so node_of({0}) names no node. |
 | `BranchElementTypeMismatch` | The two arms of the branch have different element types: '{0}' and '{1}'. An array's element type is part of its type, and a number of one element type does not become a number of another by itself. |
 | `RuleConstParamNotMatched` | '{0}' is a `const` parameter of the rule '{1}', and the left side matches no constant for it. |
@@ -273,8 +274,9 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `FactJoinRequired` | The fact '{0}' writes no 'join'. |
 | `FactConstCaseTypeRequired` | The 'const' case '{0}' of the fact '{1}' writes no type. |
 | `FactCaseBindsNoVariable` | This case of the fact '{0}' names no variable. |
+| `TypeFunctionNotApplicable` | The type function '{0}' is not applicable: {1}. |
 
-**Semantic — warnings** (`SemanticDiag`) — 12
+**Semantic — warnings** (`SemanticDiag`) — 15
 
 | `IgnoredSideEffect` | {0} is not in a sync block, and {1}. |
 | `EffectNotExecuted` | {0} has side effects but is never executed: {1}. |
@@ -288,12 +290,16 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `TagHasNoReader` | The tag '{0}' is written, but none of the passes it names ({1}) is in the pipeline. |
 | `DimensionNameUsedOnce` | The dimension name '{0}' is written once in this signature, so it relates nothing. |
 | `TypeVariableUnused` | The type parameter '{0}' is declared at the head but never written in the signature. |
+| `NeverArgumentCall` | This call never runs: {0} has type 'never', and an argument is evaluated before the call it is written in. |
+| `FailNotExecuted` | This 'fail' is not executed: {0}. |
+| `StatementAfterFail` | This statement cannot run: the 'fail' written before it never returns. |
 
-**Run time and passes — errors** (`RuntimeDiag`) — 38
+**Run time and passes — errors** (`RuntimeDiag`) — 36
 
 | `RuntimeError` | An error has occurred: {0}. |
 | `DivisionByZero` | Attempted division by zero. |
 | `IndexOutOfRange` | Index {0} is out of range for {1} of length {2}. |
+| `ProgramFault` | {0} |
 | `MaxRecursionDepthExceeded` | Maximum recursion depth ({1}) exceeded when evaluating graph '{0}'. |
 | `TensorDimensionMismatch` | Array shape mismatch in '{0}': {1}. |
 | `UnrecognizedGraphPass` | Unrecognized graph rewriting/scheduling/translation pass '{0}'. |
@@ -309,7 +315,6 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `OperandTypeUnsupported` | '{0}' does not support a value of type '{1}'; it takes {2}. |
 | `FieldNotFound` | The struct has no field '{0}'. |
 | `InvalidArgument` | Invalid argument of '{0}': {1}. |
-| `FileOpenFailed` | '{0}' cannot open the file '{1}': {2}. |
 | `FileSystemError` | '{0}' failed for '{1}': {2}. |
 | `RegexInvalid` | '{0}': '{1}' is not a valid regular expression: {2}. |
 | `TimeFormatFailed` | '{0}' failed: {1}. |
@@ -319,12 +324,10 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `UnhandledError` | An error value reached the exit of 'main' without being handled: {0}: {1}. |
 | `SliceOutOfRange` | The range {0} to {1} is out of range for {2} of length {3}. |
 | `InvalidPassParameter` | Invalid pass specification '{0}': {1}. |
-| `GraphPassFailed` | Pass '{0}' failed: {1}. |
 | `PassNeedsExtraction` | Pass '{0}' cannot take the program: some values of it have several writings. |
 | `PassNotProvidedByModule` | Module '{0}' provides no pass '{1}'; it provides {2}. |
 | `PassNotExportedByModule` | Module '{0}' declares '{1}' but does not export it, so it cannot be named as a pass; it provides {2}. |
 | `DeviceUnavailable` | CUDA device {0} was named by --devices but is not available: {1}. |
-| `GpuScopeUnsupported` | `#gpu` scope '{0}': {1} cannot run on the device ({2}). |
 | `GpuScopeNoDeviceProgram` | `#gpu` scope '{0}': {1} ({2}). |
 | `GraphNoDeviceProgram` | '{0}' has no device program for '{1}': {2}. |
 | `DeviceNotSelected` | No device to run '{0}' on: {1}. |

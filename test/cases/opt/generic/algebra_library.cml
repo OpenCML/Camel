@@ -4,7 +4,6 @@
  * is the library's pass now, so these are the observables that say so: each function's graph
  * keeps no operator for the law that fired, while the printed values stay what the source says.
  */
-module algebra_library
 import tensor
 
 
@@ -18,11 +17,11 @@ func int_sub_self(x: int): int {
     return x - x
 }
 
-func int_div_one(x: int): int {
+func div_one(x: int): int {
     return x / 1
 }
 
-func int_neg_neg(x: int): int {
+func neg_neg(x: int): int {
     return -(-x)
 }
 
@@ -30,15 +29,15 @@ func int_combine(x: int): int {
     return x * 3 + x * 5
 }
 
-func tensor_div_one(x: Vec): Vec {
+func array_div_one(x: Vec): Vec {
     return x / 1.0
 }
 
-func tensor_neg_neg(x: Vec): Vec {
+func array_neg_neg(x: Vec): Vec {
     return -(-x)
 }
 
 func main(): int sync {
-    println(int_zero(7), int_sub_self(7), int_div_one(7), int_neg_neg(7), int_combine(2))
+    println(int_zero(7), int_sub_self(7), div_one(7), neg_neg(7), int_combine(2))
     return 0
 }

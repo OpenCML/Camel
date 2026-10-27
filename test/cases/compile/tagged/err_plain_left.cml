@@ -1,10 +1,9 @@
 /**
- * `??` needs a `T?` on its left: TaggedOperandMismatch at the operator.
+ * `??` over a value that cannot be null is allowed, with a warning: its null case is never
+ * taken (KnownNotNull, design principles 3.8), so the result is the value itself.
  */
-module err_plain_left
 
 func main(): int sync {
-    println('never printed')
     let a = 1
     let b = a ?? 7
     println(b)

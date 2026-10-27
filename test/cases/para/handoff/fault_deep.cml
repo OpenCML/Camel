@@ -10,7 +10,6 @@
  * smallest index ends the program (design principles 3.6), with one located diagnostic that
  * names index 105.
  */
-module fault_deep
 
 func down(n: int, d: int): int {
     return if n == 0 then 1000 / d else 1 + down(n - 1, d)
@@ -37,7 +36,7 @@ func late(i: int): int {
 
 func main(): int sync {
     0..30->foreach<(round: int) => sync {
-        let r = attempt(row, round)
+        let r = attempt(row)(round)
         let line = match r {
             case error e => e.message
             case v => 'no fault'

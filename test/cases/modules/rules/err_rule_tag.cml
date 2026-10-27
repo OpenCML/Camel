@@ -1,5 +1,4 @@
 /// A tag other than `#requires` before a rule: a rule states requirements, not facts.
-module err_rule_tag
 
 tag fast on nodes
 

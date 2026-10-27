@@ -1,5 +1,3 @@
-module agreement
-
 // The corpus of the measurement: the rewrites the legacy C++ algebraic pass performs and the
 // rule library can perform, one form per function, so a difference is one line of the table and one
 // graph.
@@ -9,7 +7,7 @@ module agreement
 // (`e8c290554:src/passes/opt/generic/algebra.cpp`, `simplify<T>`) and the ones the documented
 // reference mode that remains applies (`src/passes/opt/generic/algebra.cpp`, `neutral_only=true`),
 // and the rules library carries them as folded laws of `stdlib/rules.cml`: `int_add_zero`,
-// `int_sub_zero` and `int_mul_one`, one rule per family, the mirror read by commutation (6).
+// `sub_zero` and `mul_one`, one rule per family, the mirror read by commutation (6).
 //
 // Every form is written so that the expression is not its graph's named node: the value is printed
 // and the function returns 0. A node that anchors its graph is kept by the C++ pass's

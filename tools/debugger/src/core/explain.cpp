@@ -294,7 +294,9 @@ json DebugCore::evaluationFailure(const ShadowFrame &f, const std::string &why) 
 }
 
 DebugCore::CallAnswer
-DebugCore::callAtFrame(ShadowFrame &f, const std::string &uri, const std::vector<std::string> &arguments) {
+DebugCore::callAtFrame(
+    ShadowFrame &f, const std::string &uri, const std::vector<std::string> &arguments,
+    const std::vector<std::string> &withArguments) {
     CallAnswer answer;
     auto context = index_.context();
     if (!context) {
@@ -316,8 +318,11 @@ DebugCore::callAtFrame(ShadowFrame &f, const std::string &uri, const std::vector
         return answer;
     }
     std::vector<ValueView> values;
-    values.reserve(arguments.size());
-    for (const std::string &argument : arguments) {
+    values.reserve(withArguments.size() + arguments.size());
+    // The angled values first, then the ordinary ones: one list is rooted and read back below.
+    std::vector<std::string> expressions = withArguments;
+    expressions.insert(expressions.end(), arguments.begin(), arguments.end());
+    for (const std::string &argument : expressions) {
         ResolvedValue resolved;
         std::string why;
         if (!resolveValueAt(f, argument, resolved, why)) {
@@ -338,13 +343,14 @@ DebugCore::callAtFrame(ShadowFrame &f, const std::string &uri, const std::vector
         answer.diagnostic = locatedDiagnostic(f, "the operator '" + uri + "' has no type rule");
         return answer;
     }
+    type::type_vec_t withTypes;
     type::type_vec_t norm;
-    for (const ValueView &value : values) {
-        norm.push_back(value.type);
+    for (size_t i = 0; i < values.size(); ++i) {
+        (i < withArguments.size() ? withTypes : norm).push_back(values[i].type);
     }
     type::FunctionType *signature = nullptr;
     try {
-        signature = resolver->resolve({}, norm, ModifierSet{}).value_or(nullptr);
+        signature = resolver->resolve(withTypes, norm).value_or(nullptr);
     } catch (const std::exception &e) {
         answer.diagnostic = locatedDiagnostic(f, e.what());
         return answer;
@@ -384,8 +390,13 @@ DebugCore::callAtFrame(ShadowFrame &f, const std::string &uri, const std::vector
 
     ObservationPause pause(observingRun_);
     try {
-        SlotArgs with{std::span<slot_t>(), std::span<type::Type *>()};
-        SlotArgs normal(slots, types);
+        const size_t withCount = withArguments.size();
+        SlotArgs with{
+            std::span<slot_t>(slots.data(), withCount),
+            std::span<type::Type *>(types.data(), withCount)};
+        SlotArgs normal(
+            std::span<slot_t>(slots.data() + withCount, slots.size() - withCount),
+            std::span<type::Type *>(types.data() + withCount, types.size() - withCount));
         normal.setResultType(answer.type);
         answer.slot = (*kernel)(with, normal, *context);
         answer.ok   = true;
@@ -436,8 +447,8 @@ json DebugCore::explainJson(const json &args) {
         return fail("explain: give the run, or the run and two values");
     }
     const CallAnswer answer = callAtFrame(
-        f, all ? "rewrite:explain_all" : "rewrite:explain",
-        all ? std::vector<std::string>{run} : std::vector<std::string>{run, a, b});
+        f, all ? "rewrite:explain_all" : "rewrite:explain", std::vector<std::string>{run},
+        all ? std::vector<std::string>{} : std::vector<std::string>{a, b});
     if (!answer.ok) {
         return json{
             {"ok", false},
@@ -485,7 +496,7 @@ json DebugCore::whyNotJson(const json &args) {
         return fail("why_not: the run, the rule and the value are required");
     }
     const CallAnswer answer =
-        callAtFrame(f, "rewrite:why_not", std::vector<std::string>{run, rule, value});
+        callAtFrame(f, "rewrite:why_not", std::vector<std::string>{run}, std::vector<std::string>{rule, value});
     if (!answer.ok) {
         return json{
             {"ok", false},

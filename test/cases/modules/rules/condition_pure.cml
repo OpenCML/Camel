@@ -3,9 +3,7 @@
  * the coefficient's value and nothing else happens. The rule applies and the program is
  * rewritten, which is what the check above must leave alone.
  */
-module condition_pure
 
-import { Program, current } from graph
 import { rewrite } from rewrite
 
 /// The guard of the law: the coefficient is positive.
@@ -20,8 +18,8 @@ func redex(x: float): float {
 }
 
 func main(): int sync {
-    let p = current()
-    return match rewrite(p, [keep_positive]) {
+    let p = redex
+    return match p->rewrite<[keep_positive]> {
         case error e => sync { println('outer error value: ', e.kind); return 1 }
         case q => sync { println('rewritten'); return 0 }
     }

@@ -3,7 +3,6 @@
  * and a write is not merged or dropped while a later read is reachable. One function per
  * rewriting sub-pass, each built to tempt that sub-pass.
  */
-module var_rule_subpasses
 
 func bump(var c: int, by: int): int sync {
     c += by

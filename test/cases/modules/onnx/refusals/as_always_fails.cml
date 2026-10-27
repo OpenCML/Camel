@@ -3,7 +3,6 @@
  * contradict ([2, 3] where the conversion says [3, 2]): the export is refused at the
  * conversion (line 12); it was exported as if the conversion were not there.
  */
-module as_always_fails
 
 import { reshape, tanh } from tensor
 import { export_model } from onnx
@@ -13,8 +12,7 @@ func f(x: f32[..]): f32[..] {
     return y * 2.0
 }
 
-func main(): int sync {
+func main(): void! sync {
     let ex = reshape([1.0, -1.0, 0.5, 2.0, 3.0, -2.0] as f32[], [2, 3])
-    export_model(f, ex, 'tmp/test/onnx/refusal_as_always_fails.onnx')
-    return 0
+    export_model<out: 'tmp/test/onnx/refusal_as_always_fails.onnx'>(f, ex)
 }

@@ -1,0 +1,42 @@
+/**
+ * The reductions along an axis (stdlib/array.cml): `sum`, `mean`, `min`, `max`, `argmax` and
+ * `argmin` with an axis in angle brackets, the axis removed or kept with extent 1 (`<axis, true>`),
+ * a negative axis counting from the last. A float element type is summed in f64 and rounded once
+ * into the element type, an integer one wraps; `min` and `max` are the IEEE 754-2019 pair (a NaN
+ * wins, -0 is below +0); `argmax` and `argmin` take the first NaN, put +0 above -0 and keep the
+ * earlier position on a tie.
+ */
+
+import { sum, mean, min, max, argmax, argmin } from array
+import math
+import { reshape } from tensor
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3])
+    println(x->sum<0>, x->sum<1>, x->sum<-1>)
+    println(x->sum<1, true>)
+    println(x->mean<0>, x->mean<1>)
+    println(x->min<0>, x->max<1>)
+    println(x->argmax<1>, x->argmin<0>)
+    println(x->argmax<0, true>)
+
+    let n = reshape([3, 1, 2, 9, 8, 7], [2, 3])
+    println(n->sum<1>, n->min<1>, n->max<0>)
+    println(n->argmax<0>, n->argmin<1>)
+
+    // The sum of a float element type is taken in f64 and rounded once: an f32 sum that rounded
+    // after each addition would stop at 16777216.0.
+    let big = f32([16777216.0, 1.0, 1.0])
+    println(big->sum<0>)
+    println(bf16([1.0, 2.0, 3.0])->sum<0>, f16([1.0, 2.0, 4.0, 5.0])->mean<0>)
+
+    // A NaN wins a minimum and a maximum and is the first position of argmax and argmin; -0 is
+    // below +0; the earlier position wins a tie.
+    let nan = math::nan
+    println([1.0, nan, 3.0]->max<0>, [1.0, nan, 3.0]->min<0>)
+    println([1.0, nan, 3.0]->argmax<0>, [1.0, nan, 3.0]->argmin<0>)
+    println([0.0, -0.0]->min<0>, [-0.0, 0.0]->max<0>)
+    println([-0.0, 0.0]->argmax<0>, [0.0, -0.0]->argmin<0>)
+    println([5, 5, 1]->argmax<0>, [1, 1, 5]->argmin<0>)
+    return 0
+}

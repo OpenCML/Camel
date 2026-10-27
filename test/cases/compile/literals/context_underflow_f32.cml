@@ -2,7 +2,6 @@
  * The same refusal at a narrower context: 1e-50 is a double, but at an `f32` position its
  * nearest `f32` is zero, so it is refused.
  */
-module literal_context_underflow_f32
 
 func main(): int sync {
     let x: f32 = 1e-50

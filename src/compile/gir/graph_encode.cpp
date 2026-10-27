@@ -415,6 +415,17 @@ class EncodeSession {
             prepared.draft->appendStaticSlot(sourceStaticSlots[i], sourceStaticTypes[i]);
         }
 
+        // The front-end freeze dissolves a GATE that waits on nothing and has a value user: it is
+        // plain forwarding, and both places a graph is submitted dissolve it (the review of
+        // 2026-10-26, docs/handover/reviews/questions-2026-10-26-late.md, answer 3 -- "没有任何
+        // 等待、只有数据使用者的 GATE 就是纯转发，运行时提交与前端冻结都把它溶解掉"). The
+        // runtime commit already does it (src/runtime/draft_session.cpp, dissolveUnorderedGates);
+        // this is the freeze's half, so validateRuntimeGraphPayload below never sees such a gate.
+        // Whether an effect was dropped beside it is reportDroppedEffects' to say, not this
+        // structural check's. A gate that still waits -- on the sync chain's tail or on a control
+        // input -- and one with no value input are not this case and keep their node.
+        graph->draft().dissolveUnorderedGates();
+
         const std::vector<draft_node_ref_t> liveNodes = collectLiveDraftNodes(graph->draft());
         CAMEL_LOG_INFO_S(
             "GIREncode",
@@ -469,7 +480,17 @@ class EncodeSession {
 
             switch (header->kind) {
             case GCNodeKind::Func: {
-                payloadStorage = toPayloadBytes(camel::runtime::GCFuncRef{});
+                // The callee's index is patched in once every runtime graph has its place
+                // (patchPreparedFuncPayloads); the rest of the payload is the node's own and
+                // says which captured variables the call writes, which is what its value
+                // carries the new versions of (GCFuncRef::reserved).
+                camel::runtime::GCFuncRef body{};
+                const auto source = graph->draft().payloadOf(sourceId);
+                if (source.size_bytes() >= sizeof(body)) {
+                    std::memcpy(&body, source.data(), sizeof(body));
+                }
+                body.ref       = camel::runtime::kNoLoopGraph;
+                payloadStorage = toPayloadBytes(body);
             } break;
             case GCNodeKind::Loop: {
                 // The graphs are patched in once every runtime graph has its place

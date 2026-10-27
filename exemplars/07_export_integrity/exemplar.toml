@@ -1,5 +1,5 @@
 title = "Export graph integrity"
-summary = "The training step exports as one graph (parameters and data in, loss and every updated parameter out); an effect cannot be represented and stops the export at the effect."
+summary = "The training step exports as one graph (parameters and data in, loss and every updated parameter out); an effect cannot be represented and the export gives an error value at the effect, which is what the program's result is."
 
 [[runs]]
 name = "step"
@@ -14,5 +14,7 @@ onnx_outputs = "output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2"
 name = "effect"
 env = ["MODE=effect", "ONNX_OUT={tmp}/noisy.onnx"]
 exit = 1
-diagnostic = "RuntimeDiag::RuntimeError"
-output_contains = ["impure operator 'tensor:randn' cannot be exported", "07_export_integrity/program.cml:33:16)"]
+diagnostic = "RuntimeDiag::UnhandledError"
+diagnostic_line = 32
+diagnostic_column = 16
+output_contains = ["impure operator 'tensor:randn' cannot be exported"]

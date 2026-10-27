@@ -4,7 +4,6 @@
  * is and filled into each call that leaves the parameter out; a call may give the parameters
  * by position, or by name after the positional ones.
  */
-module with_defaults
 
 // A defaulted `with` parameter is omitted at the call, or given another value by position or
 // by name. The parameter a call leaves out takes the declaration's value.

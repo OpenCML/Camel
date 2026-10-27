@@ -1,0 +1,11 @@
+/**
+ * The Camel side of the Python boundary test: a module-level table that every call returns, so
+ * that a write through one result would be seen by the next call if the boundary let it through.
+ */
+
+let TABLE: f32[] = [1.0, 2.0, 3.0]
+
+/// The same array on every call: the block the module level built.
+export func table(): f32[] {
+    return TABLE
+}

@@ -3,7 +3,6 @@
  * build-time evaluator runs the recursion. `depth(2)` is the index of the third element, so the
  * result is a constant in the two places that need one.
  */
-module fold_call_recursive
 
 /// The depth of `n` by counting down: a pure recursion with a base case.
 func depth(n: int): int {

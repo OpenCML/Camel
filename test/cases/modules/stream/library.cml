@@ -1,0 +1,24 @@
+/// The producers, the transformations and the consumer of the stream library: every example the
+/// declarations carry, and the edges (an empty stream, a stream that ends before `take` or a
+/// chunk is full, streams of different lengths in `zip`).
+import stream
+import { sum } from array
+
+func main(): int sync {
+    println(loop acc = 0 for x in stream::unfold(3, (n: int) => if n > 0 then (n, n - 1) else null) do acc + x)
+    println(loop n = 0 for x in stream::empty::<int>() do n + 1)
+    println(stream::from_array([1, 2, 3])->stream::collect)
+    println(1->stream::iterate<(x: int) => x * 2>->stream::take<4>->stream::collect)
+    println(stream::from_array([1, 2, 3])->stream::map<(x: int) => x * 2>->stream::collect)
+    println(stream::from_array([1, 2, 3, 4])->stream::filter<(x: int) => x % 2 == 0>->stream::collect)
+    println(1->stream::iterate<(x: int) => x + 1>->stream::take<3>->stream::collect)
+    println(stream::from_array([1, 2, 3])->stream::take<0>->stream::collect, stream::from_array([1])->stream::take<5>->stream::collect)
+    println(stream::from_array([1, 2, 3])->stream::scan<(acc: int, x: int) => acc + x, 0>->stream::collect)
+    println(stream::from_array([1, 2, 3])->stream::chunks<2>->stream::collect)
+    println(stream::from_array([1, 2, 3, 4])->stream::chunks<2>->stream::collect, stream::empty::<int>()->stream::chunks<2>->stream::collect)
+    println(stream::zip(stream::from_array([1, 2]), stream::from_array(['a', 'b', 'c']))->stream::collect)
+    println(stream::empty::<int>()->stream::collect, len(stream::empty::<int>()->stream::collect))
+    let (a, b) = stream::from_array([1, 2, 3])->stream::tee
+    println(a->stream::collect, b->stream::map<(x: int) => x * 10>->stream::collect)
+    return 0
+}

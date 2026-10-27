@@ -312,8 +312,8 @@ verify_script = """
 ({ input, assert }) => {
 const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
 assert(lines.length === 3, `unexpected output: ${lines.join(' | ')}`)
-assert(lines[0] === '[294880, 250036, 203681, 167028, 133532, 99833, 74523, 50133, 31172, 18243, 7369, 1666]', `sums: ${lines[0]}`)
-assert(lines[1] === '[294880, 250036, 203681, 167028, 133532]', `filtered: ${lines[1]}`)
+assert(lines[0] === '[294880, 249840, 201416, 162396, 127812, 97923, 70556, 50397, 32017, 18355, 8342, 2073]', `sums: ${lines[0]}`)
+assert(lines[1] === '[294880, 249840, 201416, 162396, 127812]', `filtered: ${lines[1]}`)
 assert(lines[2] === '[' + Array.from({ length: 96 }, (_, i) => i).join(', ') + ']', `not sorted: ${lines[2]}`)
 }
 """
@@ -332,8 +332,8 @@ verify_script = """
 ({ input, assert }) => {
 const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
 assert(lines.length === 3, `unexpected output: ${lines.join(' | ')}`)
-assert(lines[0] === '[294880, 250036, 203681, 167028, 133532, 99833, 74523, 50133, 31172, 18243, 7369, 1666]', `sums: ${lines[0]}`)
-assert(lines[1] === '[294880, 250036, 203681, 167028, 133532]', `filtered: ${lines[1]}`)
+assert(lines[0] === '[294880, 249840, 201416, 162396, 127812, 97923, 70556, 50397, 32017, 18355, 8342, 2073]', `sums: ${lines[0]}`)
+assert(lines[1] === '[294880, 249840, 201416, 162396, 127812]', `filtered: ${lines[1]}`)
 assert(lines[2] === '[' + Array.from({ length: 96 }, (_, i) => i).join(', ') + ']', `not sorted: ${lines[2]}`)
 }
 """

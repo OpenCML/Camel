@@ -1,0 +1,34 @@
+/**
+ * The match of a pattern: `find` returns the first `Match` or null, with positions in code
+ * points and null for a group that took no part; `find_all`, `replace`, `replace_with`, `split`
+ * and `validate` are written on it.
+ */
+
+import { Match, find, find_all, has_match, replace, replace_with, split, validate } from re
+
+func show(m: Match?): string {
+    return match m {
+        case null => 'none'
+        case x => '{}-{}:{}'->format<x.start, x.end, x.text>
+    }
+}
+
+func main(): int sync {
+    println(show('room 42 and 7'->find<'[0-9]+'>), show('room'->find<'[0-9]+'>))
+    println(show('room 42 and 7'->find<'[0-9]+', 8>), show('ab'->find<'', 2>))
+    println(show('日本語 42'->find<'[0-9]+'>), show('日本語'->find<'本.'>))
+    println(show('😀a1'->find<'[0-9]'>))
+    let m = 'key=val'->find<'([a-z]+)=([a-z]*)(x)?'>
+    println(match m {
+        case null => []
+        case x => x.groups
+    })
+    println('a1b22'->find_all<'[0-9]+'>->map<(x: Match): string => x.text>)
+    println('abc'->find_all<''>->map<(x: Match): int => x.start>)
+    println('a-b-c'->replace<'-', '+'>, 'a.b'->replace<'\\.', '!'>, '日-本'->replace<'-', '・'>)
+    println('a1b22'->replace_with<'[0-9]+', (x: Match): string => '<' + x.text + '>'>)
+    println('a, b,c'->split<', *'>, len(''->split<','>))
+    println(validate('[0-9]+') !! 'bad', validate('(') !! 'bad')
+    println('x'->has_match<'a|x'>, ''->has_match<'^$'>)
+    return 0
+}

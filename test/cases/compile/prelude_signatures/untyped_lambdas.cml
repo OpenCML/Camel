@@ -1,0 +1,14 @@
+// The signatures of the built-in functions are declared in the prelude, so a lambda written for
+// one of them leaves its parameter types out and takes them from the declaration.
+func main(): int sync {
+    let xs = [1, 2, 3, 4]
+    println(xs->filter<(x) => x % 2 == 0>)
+    println(xs->map<(x) => x * 10>)
+    xs->foreach<(x) => println(x)>
+    let total: int = xs->reduce<(a, x) => a + x, 0>
+    println(total)
+    let words = ['a', 'bb', 'ccc']
+    println(words->filter<(w) => len(w) > 1>)
+    println([1.5, 2.5]->map<(v) => v * 2.0>)
+    return 0
+}

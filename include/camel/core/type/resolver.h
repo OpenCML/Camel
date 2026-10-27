@@ -17,7 +17,7 @@
 namespace camel::core::type {
 
 using ResolverFunc = std::function<std::optional<Type *>(
-    const type_vec_t &, const type_vec_t &, const ModifierSet &)>;
+    const type_vec_t &, const type_vec_t &)>;
 
 /**
  * What is known at compile time about the value of one argument of a call.
@@ -53,7 +53,7 @@ using static_args_t = std::span<const StaticArg>;
  * with constants reaches -- and keeps the plain callback above for a caller that has none.
  */
 using ResolverWithStaticsFunc = std::function<std::optional<Type *>(
-    const type_vec_t &, const type_vec_t &, static_args_t, const ModifierSet &)>;
+    const type_vec_t &, const type_vec_t &, static_args_t)>;
 
 /// The names a signature gives its parameters, the `with` ones first and the ordinary ones after;
 /// false when it records no name for some position (see FuncTypeResolver::parameterNames).
@@ -71,7 +71,7 @@ class FuncTypeResolver {
     virtual ~FuncTypeResolver() = default;
 
     virtual std::optional<FunctionType *>
-    resolve(const type_vec_t &with, const type_vec_t &norm, const ModifierSet &modifiers) const = 0;
+    resolve(const type_vec_t &with, const type_vec_t &norm) const = 0;
 
     virtual std::string signature() const = 0;
 
@@ -103,6 +103,18 @@ class FuncTypeResolver {
     virtual FunctionType *declaredSignature() const { return nullptr; }
 
     /**
+     * Gives a rule whose result is computed the signature a declaration of it writes (the
+     * prelude's declaration file): the parameter types every call is held to, type variables and
+     * all, so an argument that needs them (a lambda with unwritten parameters) takes its types
+     * from them. The rule keeps computing its result. A rule that has a signature of its own
+     * ignores it.
+     */
+    virtual void graftDeclaredSignature(FunctionType *) {}
+    /// The signature given by graftDeclaredSignature, else null. It gives the arguments of a call
+    /// their expected types and nothing else: the rule still decides which calls it takes.
+    virtual FunctionType *graftedSignature() const { return nullptr; }
+
+    /**
      * The names this rule gives its parameters, the `with` ones first and the ordinary ones
      * after: what a named argument binds to (`len(x: xs)`). A rule whose signature is fixed
      * answers from it; a rule whose result follows its arguments has no signature object to
@@ -127,19 +139,18 @@ class FuncTypeResolver {
      * The default ignores the values.
      */
     virtual std::optional<FunctionType *> resolveWith(
-        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics,
-        const ModifierSet &modifiers) const {
+        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics) const {
         (void)normStatics;
-        return resolve(with, norm, modifiers);
+        return resolve(with, norm);
     }
 
     /// Types supplied with f::<T> and the expected result are compile-time context only.
     /// Ordinary resolvers reject explicit types; they never become with-argument values.
     virtual std::optional<FunctionType *> resolveForCall(
         const type_vec_t &types, Type *expectedResult, const type_vec_t &with,
-        const type_vec_t &norm, static_args_t normStatics, const ModifierSet &modifiers) const {
+        const type_vec_t &norm, static_args_t normStatics) const {
         (void)expectedResult;
-        return types.empty() ? resolveWith(with, norm, normStatics, modifiers) : std::nullopt;
+        return types.empty() ? resolveWith(with, norm, normStatics) : std::nullopt;
     }
 
     /**
@@ -149,18 +160,16 @@ class FuncTypeResolver {
      */
     virtual std::optional<std::string> explainCallRejection(
         const type_vec_t &types, Type *expectedResult, const type_vec_t &with,
-        const type_vec_t &norm, static_args_t normStatics, const ModifierSet &modifiers) const {
+        const type_vec_t &norm, static_args_t normStatics) const {
         (void)expectedResult;
-        return types.empty() ? explainRejection(with, norm, normStatics, modifiers) : std::nullopt;
+        return types.empty() ? explainRejection(with, norm, normStatics) : std::nullopt;
     }
 
     virtual std::optional<std::string> explainRejection(
-        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics,
-        const ModifierSet &modifiers) const {
+        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics) const {
         (void)with;
         (void)norm;
         (void)normStatics;
-        (void)modifiers;
         return std::nullopt;
     }
 
@@ -184,15 +193,13 @@ class StaticFuncTypeResolver : public FuncTypeResolver {
         return std::make_unique<StaticFuncTypeResolver>(funcType);
     }
     static resolver_ptr_t create(
-        const param_init_list_t &withTypes, const param_init_list_t &normTypes, Type *returnType,
-        const ModifierSet &modifiers = Modifier::None) {
+        const param_init_list_t &withTypes, const param_init_list_t &normTypes, Type *returnType) {
         return std::make_unique<StaticFuncTypeResolver>(
-            FunctionType::create(withTypes, normTypes, returnType, modifiers));
+            FunctionType::create(withTypes, normTypes, returnType));
     }
 
     std::optional<FunctionType *> resolve(
-        const type_vec_t &with, const type_vec_t &norm,
-        const ModifierSet &modifiers) const override;
+        const type_vec_t &with, const type_vec_t &norm) const override;
 
     std::string signature() const override { return funcType_->toString(); }
 
@@ -250,15 +257,13 @@ class DynamicFuncTypeResolver : public FuncTypeResolver {
     }
 
     std::optional<FunctionType *> resolve(
-        const type_vec_t &with, const type_vec_t &norm,
-        const ModifierSet &modifiers) const override;
+        const type_vec_t &with, const type_vec_t &norm) const override;
 
     /// The same resolution with the call's constants in hand: a rule that declared a callback
     /// reading them (withStatics) answers from it, so its result type may follow the values the
     /// program wrote, and a rule that declared none answers as it always did.
     std::optional<FunctionType *> resolveWith(
-        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics,
-        const ModifierSet &modifiers) const override;
+        const type_vec_t &with, const type_vec_t &norm, static_args_t normStatics) const override;
 
     /// Declares that this rule's result may also follow the call's constant arguments, for an
     /// operator whose result type depends on their values. The plain callback above stays: it
@@ -286,6 +291,12 @@ class DynamicFuncTypeResolver : public FuncTypeResolver {
         return this;
     }
     FunctionType *fixedSignature() const override { return fixed_; }
+    FunctionType *graftedSignature() const override { return declared_; }
+    void graftDeclaredSignature(FunctionType *signature) override {
+        if (fixed_ == nullptr) {
+            declared_ = signature;
+        }
+    }
 
     /// A rule that fixes its signature answers from it, as any fixed rule does. A rule whose
     /// result follows its arguments answers from the signature it writes, and only when that
@@ -323,7 +334,8 @@ class DynamicFuncTypeResolver : public FuncTypeResolver {
 
   private:
     std::string signature_;
-    FunctionType *fixed_ = nullptr;
+    FunctionType *fixed_    = nullptr;
+    FunctionType *declared_ = nullptr;
     var_declare_t withVars_, normVars_;
     ResolverFunc resolver_;
     /// The callback that also reads the call's constants; null for a rule whose result follows
@@ -356,8 +368,7 @@ class DeclaredFuncTypeResolver : public FuncTypeResolver {
     }
 
     std::optional<FunctionType *> resolve(
-        const type_vec_t &with, const type_vec_t &norm,
-        const ModifierSet &modifiers) const override;
+        const type_vec_t &with, const type_vec_t &norm) const override;
 
     /// The declaration's own variables, fixed by the call's `::<...>` type arguments before the
     /// arguments are read: a variable the call writes is what the call is an instance of, so the
@@ -366,8 +377,7 @@ class DeclaredFuncTypeResolver : public FuncTypeResolver {
     /// resolver does.
     std::optional<FunctionType *> resolveForCall(
         const type_vec_t &types, Type *expectedResult, const type_vec_t &with,
-        const type_vec_t &norm, static_args_t normStatics,
-        const ModifierSet &modifiers) const override;
+        const type_vec_t &norm, static_args_t normStatics) const override;
 
     std::string signature() const override { return funcType_->toString(); }
 
@@ -404,6 +414,9 @@ class DeclaredFuncTypeResolver : public FuncTypeResolver {
     FunctionType *funcType() const { return funcType_; }
     size_t withCount() const { return funcType_->withTypesCount(); }
     size_t normCount() const { return funcType_->normTypesCount(); }
+
+    /// The names of the type variables a call's `::<...>` writes, in the order it writes them.
+    const std::vector<std::string> &bindableNames() const { return bindable_; }
 
   private:
     FunctionType *funcType_;

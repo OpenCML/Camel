@@ -2,7 +2,6 @@
  * Object constants produced by std::macro: several macro calls in one round, so that values
  * evaluated earlier are held while later calls reach safepoints.
  */
-module gc_macro_constants
 
 #macro func table(n: int): (int, string)[] { return concat([(1, 'one')], [(n, 'more')]) }
 #macro func names(): string[] { return concat(['beta'], ['gamma']) }

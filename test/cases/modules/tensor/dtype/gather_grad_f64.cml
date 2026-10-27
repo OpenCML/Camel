@@ -12,9 +12,8 @@
  * nvm and on fvm, and not 0.0234375 (the f32 fill) or a fault. The f32 gather in
  * `gather_discrete_index_zero` stays at 6.0 beside it.
  */
-module dtype_gather_grad_f64
 
-import { cast, reshape, sum, take } from tensor
+import { reshape, sum, take } from tensor
 import { with_grad } from autodiff
 
 type M = {
@@ -35,13 +34,13 @@ func gather_loss(): float {
 func main(): int sync {
     let model = {
         w: reshape([1.0, 2.0, 3.0, -4.0, 5.0, -6.0] as f64[], [2, 3]),
-        labels: cast([1, 0], 'int64'),
+        labels: int([1, 0]),
     }
     let (v1, g1) = with_grad(total)<model>()
     'total={:.1f} grad_sum={:.1f}'->format<v1, sum(g1.w)>->println
     let (v2, g2) = with_grad(gather_loss)<model>()
-    let row0 = sum(take(g2.w, cast([0], 'int64')))
-    let row1 = sum(take(g2.w, cast([1], 'int64')))
+    let row0 = sum(take(g2.w, int([0])))
+    let row1 = sum(take(g2.w, int([1])))
     'gather={:.1f} grad_sum={:.1f} row0={:.1f} row1={:.1f}'->format<v2, sum(g2.w), row0, row1>->println
     return 0
 }

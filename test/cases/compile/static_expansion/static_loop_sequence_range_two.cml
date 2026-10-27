@@ -4,7 +4,6 @@
  * one spelling. The sequence of a `static loop` is no exception -- the call is refused where it
  * is written, pointing at the name, before the sequence is worked out.
  */
-module static_loop_sequence_range_two
 
 func sum(): int {
     return static loop acc = 0 for i in range(0, 3) do acc + i

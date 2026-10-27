@@ -2,6 +2,7 @@
 // cells through assignments, var parameters, captures and a recursion; an array sorted in
 // place; the generator, the file system and the console.
 import { exists } from fs
+import io
 import { seed, rand } from random
 import { sort } from array
 
@@ -23,7 +24,7 @@ func main(): int sync {
     c = c + 2
     bump(c)
     countdown(d, 3)
-    let inc = sync () => { c += 1 }
+    let inc = () => sync { c += 1 }
     inc()
     var xs = [3, 1, 2]
     xs = xs->sort

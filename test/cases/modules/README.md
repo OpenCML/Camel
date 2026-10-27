@@ -6,7 +6,7 @@
 # io 模块（print/println，globals 预加载）
 camel test/modules/io/basic.cml
 
-# process 模块（whoami, sleep 等）
+# process 模块（user_name, sleep 等）
 camel test/cases/modules/std/process/basic.cml
 
 # math 模块
@@ -18,7 +18,7 @@ camel test/modules/time/basic.cml
 # random 模块
 camel test/modules/random/basic.cml
 
-# array 模块的排序（sort, merge_sorted_arrays）
+# array 模块的排序（sort）
 camel test/cases/modules/std/array/sort_basic.cml
 
 # statistics 模块（mean, stdev）

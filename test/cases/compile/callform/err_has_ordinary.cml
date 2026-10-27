@@ -1,7 +1,5 @@
-module err_has_ordinary
-
 func main(): int sync {
-    let s = [1, 2, 3] as Set<int>
+    let s = [(1, 10)] as Map<int, int>
     println(has(s, 2))
     return 0
 }

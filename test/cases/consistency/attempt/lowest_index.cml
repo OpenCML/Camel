@@ -7,7 +7,6 @@
  * Every fault here is an index out of range whose message names the index, which tells the
  * elements apart: element x of the first map reads tbl[x + 10], and so on.
  */
-module lowest_index
 
 import { unordered_foreach } from para
 
@@ -31,28 +30,28 @@ func each(): int sync {
 func main(): int sync {
     // The same question many times: the answer may not depend on the run.
     0..40->foreach<(round: int) => sync {
-        let r = attempt(all)
+        let r = attempt(all)()
         println(match r {
             case error e => e.message
             case v => 'no fault'
         })
     }>
-    let s = attempt(some)
+    let s = attempt(some)()
     println(match s {
         case error e => e.message
         case v => 'no fault'
     })
-    let k = attempt(kept)
+    let k = attempt(kept)()
     println(match k {
         case error e => e.message
         case v => 'no fault'
     })
-    let n = attempt(nested)
+    let n = attempt(nested)()
     println(match n {
         case error e => e.message
         case v => 'no fault'
     })
-    let f = attempt(each)
+    let f = attempt(each)()
     println(match f {
         case error e => e.message
         case v => 'no fault'

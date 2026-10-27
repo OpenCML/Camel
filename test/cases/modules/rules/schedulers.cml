@@ -6,11 +6,9 @@
  *
  * A combinator answers a `Run`: `rewrites`, `rounds`, `visited` are read as fields, and the
  * program is `.result`. The pass hands the run to `reported`, which prints the three counts and
- * answers the program; `?->` carries an error on unchanged.
+ * answers the program; `->` carries an error on unchanged.
  */
-module schedulers
 
-import { Program } from graph
 import { Rule, Run, rule_name, rewrite } from rewrite
 import {
     int_add_zero, int_mul_zero, seq, first, repeat, until, alternate,
@@ -26,11 +24,11 @@ func helper(x: int): int {
 }
 rule bad(x: int) { helper(x) => x }
 
-func always(q: Program): bool {
+func always::<F>(q: F): bool {
     return true
 }
 
-func never(q: Program): bool {
+func never::<F>(q: F): bool {
     return false
 }
 
@@ -46,69 +44,69 @@ func choose(which: int): Rule[] {
 }
 
 /// Prints what the schedule cost, and answers the program it produced.
-func reported(label: string, r: Run<Program>): Program sync {
+func reported::<F>(label: string, r: Run<F>): F sync {
     println(label, r.rewrites, r.rounds, r.visited)
     return r.result
 }
 
-export func values(p: Program): Program! sync {
+export func values::<F>(p: F): F! sync {
     let firstSet: Rule[] = choose(0)
     let secondSet: Rule[] = choose(1)
     let all: Rule[] = [secondSet[0], secondSet[1], firstSet[0]]
     println('values', rule_name(all[0]), rule_name(all[1]), rule_name(all[2]), len(all))
-    return rewrite(p, all)
+    return p->rewrite<all>
 }
 
-export func seq_order(p: Program): Program! sync {
-    return p->seq<[[bump_one], [bump_ten]], false>
-        ?-> sync (r: Run<Program>) => reported('seq_order', r)
+export func seq_order::<F>(p: F): F! sync {
+    return p->seq<[[bump_one], [bump_ten]], strict: false>
+        -> (r: Run<F>) => sync { reported('seq_order', r) }
 }
 
-export func seq_reverse(p: Program): Program! sync {
-    return p->seq<[[bump_ten], [bump_one]], false>
-        ?-> sync (r: Run<Program>) => reported('seq_reverse', r)
+export func seq_reverse::<F>(p: F): F! sync {
+    return p->seq<[[bump_ten], [bump_one]], strict: false>
+        -> (r: Run<F>) => sync { reported('seq_reverse', r) }
 }
 
-export func first_zero(p: Program): Program! sync {
-    return p->first<[[int_add_zero], [bump_one]], false>
-        ?-> sync (r: Run<Program>) => reported('first_zero', r)
+export func first_zero::<F>(p: F): F! sync {
+    return p->first<[[int_add_zero], [bump_one]], strict: false>
+        -> (r: Run<F>) => sync { reported('first_zero', r) }
 }
 
-export func first_bump(p: Program): Program! sync {
-    return p->first<[[bump_one], [int_add_zero]], false>
-        ?-> sync (r: Run<Program>) => reported('first_bump', r)
+export func first_bump::<F>(p: F): F! sync {
+    return p->first<[[bump_one], [int_add_zero]], strict: false>
+        -> (r: Run<F>) => sync { reported('first_bump', r) }
 }
 
-export func repeat_five(p: Program): Program! sync {
+export func repeat_five::<F>(p: F): F! sync {
     return p->repeat<[step], 5, false>
-        ?-> sync (r: Run<Program>) => reported('repeat_five', r)
+        -> (r: Run<F>) => sync { reported('repeat_five', r) }
 }
 
-export func repeat_two(p: Program): Program! sync {
+export func repeat_two::<F>(p: F): F! sync {
     return p->repeat<[step], 2, false>
-        ?-> sync (r: Run<Program>) => reported('repeat_two', r)
+        -> (r: Run<F>) => sync { reported('repeat_two', r) }
 }
 
-export func alternate_three(p: Program): Program! sync {
+export func alternate_three::<F>(p: F): F! sync {
     return p->alternate<[step], [step_ten], 3, false>
-        ?-> sync (r: Run<Program>) => reported('alternate_three', r)
+        -> (r: Run<F>) => sync { reported('alternate_three', r) }
 }
 
-export func until_now(p: Program): Program! sync {
+export func until_now::<F>(p: F): F! sync {
     return p->until<[step], always, 10, false>
-        ?-> sync (r: Run<Program>) => reported('until_now', r)
+        -> (r: Run<F>) => sync { reported('until_now', r) }
 }
 
-export func until_budget(p: Program): Program! sync {
+export func until_budget::<F>(p: F): F! sync {
     return p->until<[step], never, 2, false>
-        ?-> sync (r: Run<Program>) => reported('until_budget', r)
+        -> (r: Run<F>) => sync { reported('until_budget', r) }
 }
 
-export func nothing(p: Program): Program! sync {
-    return p->seq<[[int_mul_zero]], false>
-        ?-> sync (r: Run<Program>) => reported('nothing', r)
+export func nothing::<F>(p: F): F! sync {
+    return p->seq<[[int_mul_zero]], strict: false>
+        -> (r: Run<F>) => sync { reported('nothing', r) }
 }
 
-export func refuse(p: Program): Program! {
-    return rewrite(p, [bad])
+export func refuse::<F>(p: F): F! {
+    return p->rewrite<[bad]>
 }

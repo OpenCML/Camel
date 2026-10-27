@@ -1,0 +1,15 @@
+/* Copyright (c) the OpenCML Organization */
+/* SPDX-License-Identifier: MIT */
+
+/* Promo Mono NL: JetBrains Mono 2.304 without its ligatures (derive.py; SIL OFL 1.1, OFL.txt), so
+   the code on screen shows the characters a viewer types and `->` stays two characters. */
+@font-face {
+  font-family: 'Promo Mono NL';
+  src: url('./PromoMonoNL-Regular.ttf') format('truetype');
+  font-weight: 400;
+}
+@font-face {
+  font-family: 'Promo Mono NL';
+  src: url('./PromoMonoNL-Medium.ttf') format('truetype');
+  font-weight: 500;
+}

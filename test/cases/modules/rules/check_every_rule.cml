@@ -11,7 +11,7 @@
  * `verify/check_covers_every_rule.mjs` asserts against this case's source and this case's output
  * that the library's exports and the check's input are the same set, name by name:
  *
- *   * the 39 rules of `check_library.cml` plus `tensor_sigmoid_chain`, which this case adds -- the
+ *   * the 39 rules of `check_library.cml` plus `array_sigmoid_chain`, which this case adds -- the
  *     folding lane measured that it was the one exported rule no `check` reached (68 of the
  *     library's 69 rules before the fold, and no test named it after), in one call of 300 samples;
  *   * `float_log1p` and `float_expm1` in a call of their own: they ask for `refine_accuracy`, and
@@ -20,7 +20,7 @@
  *     name and its instance's type tuple, not its place in the array, so
  *     re-deriving the arrangement would move the verdicts and the numbers
  *     this case pins;
- *   * `tensor_log_softmax_of_softmax` in a call of its own, over the 100 samples and the seed its
+ *   * `array_log_softmax_of_softmax` in a call of its own, over the 100 samples and the seed its
  *     verdict was measured at (`worst error ratio 1`, which the new 7.2 definition accepts: the
  *      right side is never worse and the bound holds -- the rule
  *     `verification-report-surface-s0`).
@@ -28,25 +28,20 @@
  * A rule that no line of the report mentions is a rule this case did not reach, and the check in
  * `verify/` fails on it.
  */
-module check_every_rule
-import { check } from rewrite
+import { check, check_text } from rewrite
 import {
-        int_add_self, int_add_zero, int_combine, int_combine_one, int_distribute, int_div_one, int_fold, int_fold_add, int_mul_one, int_mul_zero, int_neg_neg, int_sub_self, int_sub_zero,
-        float_add_minus_zero, float_add_self, float_combine, float_combine_mixed, float_combine_one, float_combine_one_mixed, float_div_one, float_double, float_expm1, float_fold, float_log1p, float_mul_one, float_neg_neg, float_sub_zero,
-        float32_double,
-        tensor_add_minus_zero, tensor_add_self, tensor_combine, tensor_combine_mixed, tensor_combine_one, tensor_combine_one_mixed, tensor_div_one, tensor_double, tensor_fold, tensor_mul_one, tensor_neg_neg, tensor_sub_zero, tensor_distribute,
-        tensor_log_softmax_of_softmax, tensor_sigmoid_chain
+        add_self, int_add_zero, int_combine, int_combine_one, int_distribute, div_one, int_fold, int_fold_add, mul_one, int_mul_zero, neg_neg, int_sub_self, sub_zero,
+        float_add_neg_zero, float_combine, float_combine_mixed, float_combine_one, float_combine_one_mixed, float_double, float_expm1, float_fold, float_log1p, array_add_neg_zero, array_add_self, array_combine, array_combine_mixed, array_combine_one, array_combine_one_mixed, array_div_one, array_double, array_fold, array_mul_one, array_neg_neg, array_sub_zero, array_distribute,
+        array_log_softmax_of_softmax, array_sigmoid_chain
 } from rules
 
 func main(): int sync {
-    print(check([
-        int_add_self, int_add_zero, int_combine, int_combine_one, int_distribute, int_div_one, int_fold, int_fold_add, int_mul_one, int_mul_zero, int_neg_neg, int_sub_self, int_sub_zero,
-        float_add_minus_zero, float_add_self, float_combine, float_combine_mixed, float_combine_one, float_combine_one_mixed, float_div_one, float_double, float_fold, float_mul_one, float_neg_neg, float_sub_zero,
-        float32_double,
-        tensor_add_minus_zero, tensor_add_self, tensor_combine, tensor_combine_mixed, tensor_combine_one, tensor_combine_one_mixed, tensor_div_one, tensor_double, tensor_fold, tensor_mul_one, tensor_neg_neg, tensor_sub_zero, tensor_distribute,
-        tensor_sigmoid_chain
-    ], 200, 7))
-    print(check([float_log1p, float_expm1], 100, 11))
-    print(check([tensor_log_softmax_of_softmax], 100, 11))
+    print(check_text([
+        add_self, int_add_zero, int_combine, int_combine_one, int_distribute, div_one, int_fold, int_fold_add, mul_one, int_mul_zero, neg_neg, int_sub_self, sub_zero,
+        float_add_neg_zero, float_combine, float_combine_mixed, float_combine_one, float_combine_one_mixed, float_double, float_fold, array_add_neg_zero, array_add_self, array_combine, array_combine_mixed, array_combine_one, array_combine_one_mixed, array_div_one, array_double, array_fold, array_mul_one, array_neg_neg, array_sub_zero, array_distribute,
+        array_sigmoid_chain
+    ]->check<200, 1>))
+    print(check_text([float_log1p, float_expm1]->check<100, 11>))
+    print(check_text([array_log_softmax_of_softmax]->check<100, 1>))
     return 0
 }

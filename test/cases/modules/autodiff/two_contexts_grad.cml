@@ -1,0 +1,35 @@
+/**
+ * A tensor gradient in the process whose second `Context` is built beside the running one
+ * (C24, AD/H1).
+ *
+ * The derivative registry is one per process. The core registers its tangent spaces every time a
+ * `Context` is built, while the tensor module registers its own subset space once; a registration
+ * that replaced the whole code used to drop the tensor space in the second context, so a tensor
+ * gradient was accumulated through the generic slot-wise array space instead of the tensor's own.
+ *
+ * The loss is `mean(m.w * x, 0)` squared plus `mean(m.w * x)`, so `m.w` gets two contributions and
+ * the pullback accumulates them: that accumulation is what reads the tangent space. The plan runs
+ * this program with the `test::derivatives` pass, which builds a second context and reads the
+ * registry on both sides of it, and the program's own gradient is printed underneath.
+ */
+
+import { mean, reshape, sum } from tensor
+import { with_grad } from autodiff
+
+type P = { w: f32[..] }
+
+with <m: P>
+func loss(x: f32[..]): float {
+    let rows = mean(m.w * x, 0)
+    return float(sum(rows * rows)) + float(mean(m.w * x))
+}
+
+func main(): int sync {
+    let w = reshape([0.5, 0.25, -1.0, 2.0, 1.5, -0.5] as f32[], [3, 2])
+    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [3, 2])
+    let m = { w: w }
+    let vg = with_grad(loss)<m>(x)
+    println('two_contexts_grad value={}'->format<vg.0>)
+    println('two_contexts_grad grad={}'->format<vg.1.w>)
+    return 0
+}

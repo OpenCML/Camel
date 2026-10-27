@@ -6,7 +6,6 @@
  * shape, the sum of the elements and the distance to the same elements written out by hand, so a
  * slice that read the bounds on the first dimension instead fails on all three.
  */
-module subscript_slice_multidim
 import { abs, reshape, shape, sum } from tensor
 
 func main(): int sync {

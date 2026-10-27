@@ -194,13 +194,38 @@ std::string TokenBuffer::docAbove(size_t index) const {
     if (index >= tokens_.size()) {
         return {};
     }
-    std::vector<std::string_view> lines;
-    size_t expectLine = lineOf(tokens_[index].begin);
-    for (size_t i = index; i-- > 0;) {
-        const Token &token = tokens_[i];
-        const size_t line  = lineOf(token.begin);
-        if (token.kind != TokenKind::DocComment || line + 1 != expectLine) {
-            break;
+    // The documentation of a declaration is decided by syntax, not by white space: the `///`
+    // lines written above it belong to it, and a blank line between the last of them and the
+    // declaration changes nothing (the author's ruling of 2026-10-26). A blank line is the
+    // absence of a token, so the run of comments is read back from the declaration in the token
+    // stream, which is what makes a blank line inside a block of `///` lines part of the block
+    // rather than a gap in it.
+    //
+    // What does end the run is a declaration: the `///` lines below a declaration describe what
+    // comes next, never what came before, so the run may not reach back over code. The token
+    // before the first comment is therefore the boundary: an ordinary `//` comment there ends the
+    // run as well, because what stands above it is not documentation of this declaration.
+    size_t i = index;
+    while (i > 0 && isTrivia(tokens_[i - 1].kind)) {
+        --i;
+    }
+    // A blank line stands between the declaration before and the first comment of the run: the
+    // comment is below a declaration, so the run starts here and not above it.
+    if (i < index && i > 0 && lineOf(tokens_[i].begin) > lineOf(tokens_[i - 1].begin) + 1) {
+        size_t first = i;
+        while (first < index && tokens_[first].kind != TokenKind::DocComment) {
+            ++first;
+        }
+        i = first;
+    }
+    if (i < index && tokens_[i].kind == TokenKind::LineComment) {
+        i = index; // the run is ended by a comment that documents nothing
+    }
+    std::string doc;
+    for (size_t j = i; j < index; ++j) {
+        const Token &token = tokens_[j];
+        if (token.kind != TokenKind::DocComment) {
+            continue;
         }
         std::string_view body = text(token).substr(3);
         if (!body.empty() && body.front() == ' ') {
@@ -209,15 +234,10 @@ std::string TokenBuffer::docAbove(size_t index) const {
         while (!body.empty() && (body.back() == '\r' || body.back() == ' ')) {
             body.remove_suffix(1);
         }
-        lines.push_back(body);
-        expectLine = line;
-    }
-    std::string doc;
-    for (auto it = lines.rbegin(); it != lines.rend(); ++it) {
         if (!doc.empty()) {
             doc += '\n';
         }
-        doc.append(*it);
+        doc.append(body);
     }
     return doc;
 }
@@ -242,8 +262,8 @@ std::vector<FStringInterpolation> TokenBuffer::interpolationsOf(uint32_t token) 
 namespace {
 
 /// The end of the string that starts at `i` (s[i] is `'`, `"` or a backtick), just past its
-/// closing quote; npos when it does not close. It is what the lexer does, without the fallback
-/// of an unclosed string: used to skip the strings inside a `${...}`.
+/// closing quote; npos when it does not close. It is what the lexer does for a string that closes:
+/// used to skip the strings inside a `${...}`.
 size_t skipQuoted(const char *s, size_t n, size_t i);
 
 /// Finds the `}` that ends the `${` at `open`; `close` is set to it. Strings, comments and
@@ -496,7 +516,8 @@ TokenBuffer Lexer::tokenizeImpl(std::string source, size_t from, size_t to) {
         }
         case kDigit: {
             // REAL: digits '.' digits, with an exponent; it is the longest match whenever it
-            // applies (`007.5` is a real). `1.` and `1..2` leave the dot to the next token.
+            // applies. `1.` and `1..2` leave the dot to the next token. The whole part has no
+            // leading zero, as an integer has none: `007.5` is refused as `007` is.
             size_t j = i + 1;
             while (isDigit(at(j))) {
                 ++j;
@@ -507,6 +528,20 @@ TokenBuffer Lexer::tokenizeImpl(std::string source, size_t from, size_t to) {
                     ++k;
                 }
                 k = exponentEnd(k);
+                if (c == '0' && isDigit(at(i + 1))) {
+                    size_t refusedEnd = k;
+                    if (at(refusedEnd) == 'i' && !isIdentPart(at(refusedEnd + 1))) {
+                        ++refusedEnd;
+                    }
+                    buffer.errors_.push_back(
+                        LexError{
+                            LexErrorKind::InvalidNumber,
+                            static_cast<uint32_t>(i),
+                            static_cast<uint32_t>(refusedEnd)});
+                    emitTrivia(TokenKind::Error, i, refusedEnd, false);
+                    i = refusedEnd;
+                    continue;
+                }
                 if (at(k) == 'i' && !isIdentPart(at(k + 1))) {
                     // `4.5i`: an imaginary literal. The suffix belongs to the number only when
                     // no identifier character follows, so `4if` stays `4` and `if`.
@@ -634,9 +669,8 @@ TokenBuffer Lexer::tokenizeImpl(std::string source, size_t from, size_t to) {
                 // Camel source (strings and braces nest); `\${` is a literal `${`; other
                 // braces are literal; it may span lines. The interpolation entries remember
                 // where each expression is, for the AST and the language server.
-                size_t j           = i + 1;
-                size_t fallbackEnd = 0;
-                bool closed        = false;
+                size_t j    = i + 1;
+                bool closed = false;
                 std::vector<FStringInterpolation> parts;
                 while (j < n) {
                     const char d = s[j];
@@ -651,7 +685,6 @@ TokenBuffer Lexer::tokenizeImpl(std::string source, size_t from, size_t to) {
                             continue;
                         }
                         if (s[j + 1] == '`') {
-                            fallbackEnd = j + 2;
                             j += 2;
                             continue;
                         }
@@ -677,10 +710,6 @@ TokenBuffer Lexer::tokenizeImpl(std::string source, size_t from, size_t to) {
                     }
                     ++j;
                 }
-                if (!closed && fallbackEnd != 0) {
-                    j      = fallbackEnd;
-                    closed = true;
-                }
                 if (closed) {
                     noteLines(i, j);
                     const uint32_t tokenIndex = static_cast<uint32_t>(tokens.size());
@@ -693,20 +722,26 @@ TokenBuffer Lexer::tokenizeImpl(std::string source, size_t from, size_t to) {
                     i = j;
                     continue;
                 }
+                // Unclosed: the error is the line the string opened on. What follows is source
+                // again, not more of the string (a string that was never closed would swallow
+                // everything to the end of the file, and the next error would be far from the
+                // mistake).
+                const void *lineEnd = std::memchr(s + i, '\n', n - i);
+                const size_t errorEnd =
+                    lineEnd == nullptr ? n : static_cast<size_t>(static_cast<const char *>(lineEnd) - s);
                 buffer.errors_.push_back(
                     {LexErrorKind::UnclosedString,
                      static_cast<uint32_t>(i),
-                     static_cast<uint32_t>(n)});
-                emitTrivia(TokenKind::Error, i, n, noteLines(i, n));
-                i = n;
+                     static_cast<uint32_t>(errorEnd)});
+                emitTrivia(TokenKind::Error, i, errorEnd, false);
+                i = errorEnd;
                 continue;
             }
             // '...', "...", `...`: to the closing quote; `\\` and an escaped quote do not
-            // close. A string may span lines. When no quote closes it, the string ends at its
-            // last escaped quote if it has one ('C:\dir\' is a string), as it always did.
+            // close. A string may span lines. A string no quote closes is an error on the line it
+            // opened on ('C:\dir\' is not closed, its last quote is escaped: write
+            // 'C:\\dir\\').
             size_t j               = i + 1;
-            size_t fallbackEnd     = 0;
-            size_t fallbackLines   = 0;
             const size_t lineCount = lines.size();
             bool closed            = false;
             while (j < n) {
@@ -720,8 +755,6 @@ TokenBuffer Lexer::tokenizeImpl(std::string source, size_t from, size_t to) {
                     const unsigned char e = static_cast<unsigned char>(s[j + 1]);
                     if (e == c) {
                         j += 2;
-                        fallbackEnd   = j;
-                        fallbackLines = lines.size();
                         continue;
                     }
                     if (e == '\\') {
@@ -734,21 +767,23 @@ TokenBuffer Lexer::tokenizeImpl(std::string source, size_t from, size_t to) {
                 }
                 ++j;
             }
-            if (!closed && fallbackEnd != 0) {
-                lines.resize(fallbackLines);
-                j      = fallbackEnd;
-                closed = true;
-            }
             if (closed) {
                 emit(c == '`' ? TokenKind::FString : TokenKind::String, i, j);
                 i = j;
                 continue;
             }
-            // Unclosed: everything to the end of the file is the error.
+            // Unclosed: the error is the line the string opened on, and what follows is source
+            // again; the lines the scan passed are noted again when the lexer reaches them.
+            lines.resize(lineCount);
+            const void *lineEnd = std::memchr(s + i, '\n', n - i);
+            const size_t errorEnd =
+                lineEnd == nullptr ? n : static_cast<size_t>(static_cast<const char *>(lineEnd) - s);
             buffer.errors_.push_back(
-                {LexErrorKind::UnclosedString, static_cast<uint32_t>(i), static_cast<uint32_t>(n)});
-            emitTrivia(TokenKind::Error, i, n, lines.size() > lineCount);
-            i = n;
+                {LexErrorKind::UnclosedString,
+                 static_cast<uint32_t>(i),
+                 static_cast<uint32_t>(errorEnd)});
+            emitTrivia(TokenKind::Error, i, errorEnd, false);
+            i = errorEnd;
             continue;
         }
         case kHash: {
@@ -919,11 +954,7 @@ TokenBuffer Lexer::tokenizeImpl(std::string source, size_t from, size_t to) {
                 }
                 break;
             case '?':
-                if (c1 == '-' && c2 == '>') {
-                    three(TokenKind::QuestionArrow);
-                } else {
-                    c1 == '?' ? two(TokenKind::QuestionQuestion) : one(TokenKind::Question);
-                }
+                c1 == '?' ? two(TokenKind::QuestionQuestion) : one(TokenKind::Question);
                 break;
             default:
                 break;

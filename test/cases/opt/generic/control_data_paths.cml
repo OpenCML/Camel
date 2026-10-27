@@ -3,7 +3,6 @@
  * the post-JOIN ordering, but the selected arm's effects must still run. The
  * differentiated value is the first `with` parameter.
  */
-module control_data_paths
 
 import { grad } from autodiff
 

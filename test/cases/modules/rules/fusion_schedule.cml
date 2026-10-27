@@ -3,18 +3,16 @@
  * cost line before it and after it is what shows four kernels becoming one; the values on either
  * side are the same bits.
  */
-module fusion_schedule
 
-import { Program } from graph
 import { Run, run } from rewrite
-import { tensor_sigmoid_chain } from rules
+import { array_sigmoid_chain } from rules
 
-func reported(label: string, r: Run<Program>): Program sync {
+func reported::<F>(label: string, r: Run<F>): F sync {
     println(label, 'rewrites', r.rewrites, 'rounds', r.rounds)
     return r.result
 }
 
-export func only_sigmoid(p: Program): Program! sync {
-    return p->run<[tensor_sigmoid_chain], rounds: 16, strict: false>
-        ?-> sync (r: Run<Program>) => reported('only_sigmoid', r)
+export func only_sigmoid::<F>(p: F): F! sync {
+    return p->run<[array_sigmoid_chain], rounds: 16, strict: false>
+        -> (r: Run<F>) => sync { reported('only_sigmoid', r) }
 }

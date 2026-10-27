@@ -11,10 +11,9 @@
  * shape-carrying parameter types of the draft's `T[m, k]` come from the tensor module and are not
  * written here; what the case pins is the channel.
  */
-module with_generic_rules
 
-import { Graph, Node, Program, graphs, name, nodes, op, op_name } from graph
-import { Run, check, explain_all, rule_name, run } from rewrite
+import { Graph, Node, name, nodes, op, op_name, graphs_of } from graph
+import { Run, check, explain_all, rule_name, run, check_text } from rewrite
 
 /// The draft's rule, over the types this branch writes: `x * tile` becomes `x + x * (tile - 1)`,
 /// with the value read by the pattern and by the replacement.
@@ -28,19 +27,19 @@ func opText(n: Node): string {
     }
 }
 
-func nodesOf(p: Program, function: string): Node[] {
-    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+func nodesOf::<F>(p: F, function: string): Node[] {
+    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
     return nodes(found[0])
 }
 
-func countOf(p: Program, function: string, operator: string): int {
+func countOf::<F>(p: F, function: string, operator: string): int {
     return len(nodesOf(p, function)->filter<(n: Node): bool => opText(n) == operator>)
 }
 
 /// One line per function: how many additions and how many products it holds. The pattern of the
 /// rule bound to 2 matches the products of `wide` and `again` and not the one of `thrice`, and the
 /// replacement it builds from the value adds an addition -- what the value was read for.
-export func report(p: Program): Program! sync {
+export func report::<F>(p: F): F! sync {
     println('wide', countOf(p, 'wide', ':op/add_l'), countOf(p, 'wide', ':op/mul_l'))
     println('again', countOf(p, 'again', ':op/add_l'), countOf(p, 'again', ':op/mul_l'))
     println('thrice', countOf(p, 'thrice', ':op/add_l'), countOf(p, 'thrice', ':op/mul_l'))
@@ -50,14 +49,14 @@ export func report(p: Program): Program! sync {
 
 /// The rule bound to 2: the proof of the application, whose steps name the instance each rewrite
 /// came from -- the one instance of the two sites, `tile_scale<int>(tile = 2)`.
-export func counted_two(p: Program): Program! sync {
+export func counted_two::<F>(p: F): F! sync {
     let rules = [tile_scale<2>]
     return match p->run<rules, explain: true> {
-        case error e => { throw e }
+        case error e => { return e }
         case r => sync {
             println('rewrites', r.rewrites, 'rule', rule_name(tile_scale<2>))
             return match explain_all(r) {
-                case error e => { throw e }
+                case error e => { return e }
                 case proof => sync {
                     println(proof)
                     return r.result
@@ -69,14 +68,14 @@ export func counted_two(p: Program): Program! sync {
 
 /// The same rule bound to 3: another instance of the one declaration, `tile_scale<int>(tile = 3)`,
 /// which fires once.
-export func counted_three(p: Program): Program! sync {
+export func counted_three::<F>(p: F): F! sync {
     let rules = [tile_scale<3>]
     return match p->run<rules, explain: true> {
-        case error e => { throw e }
+        case error e => { return e }
         case r => sync {
             println('rewrites', r.rewrites, 'rule', rule_name(tile_scale<3>))
             return match explain_all(r) {
-                case error e => { throw e }
+                case error e => { return e }
                 case proof => sync {
                     println(proof)
                     return r.result
@@ -88,14 +87,14 @@ export func counted_three(p: Program): Program! sync {
 
 /// The same rule bound to 0: its pattern matches `x * 0`, its condition refuses, and nothing is
 /// rewritten -- the third instance, and the value is what the run differs by.
-export func counted_zero(p: Program): Program! sync {
+export func counted_zero::<F>(p: F): F! sync {
     let rules = [tile_scale<0>]
     return match p->run<rules, explain: true> {
-        case error e => { throw e }
+        case error e => { return e }
         case r => sync {
             println('rewrites', r.rewrites, 'rule', rule_name(tile_scale<0>))
             return match explain_all(r) {
-                case error e => { throw e }
+                case error e => { return e }
                 case proof => sync {
                     println(proof)
                     return r.result
@@ -107,8 +106,8 @@ export func counted_zero(p: Program): Program! sync {
 
 /// What `check` says about the rule bound to 2: one row per instance, each named with the type it
 /// was made at and the value it was bound to.
-export func checked(p: Program): Program! sync {
+export func checked::<F>(p: F): F! sync {
     let rules = [tile_scale<2>]
-    println(check(rules, 100, 7))
+    println(check_text(rules->check<100, 7>))
     return p
 }

@@ -58,6 +58,8 @@ std::string to_string(TypeType type) {
         return "Infer";
     case TypeType::Ref:
         return "Ref";
+    case TypeType::Match:
+        return "Match";
     default:
         ASSERT(false, "Unknown TypeType");
         return "Unknown";

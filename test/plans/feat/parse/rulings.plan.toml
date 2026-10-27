@@ -43,14 +43,14 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rulings.import_rename_hides_original"
-desc = "After `find as str_find` the original name is not visible in the importing module."
+desc = "After `index_of as str_find` the original name is not visible in the importing module."
 kind = "negative"
 case = "../../../cases/parse/rulings/import_rename_hides.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
 expect_diagnostic_line = 5
-expect_output_contains = ["'find'"]
+expect_output_contains = ["'index_of'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -63,6 +63,18 @@ args = ["${inspect_ast}", "${case}"]
 expect_exit = 0
 expect_stdout_contains = ["FuncDecl: square /// The square of a number. (+1 line)", "DataDecl: answer /// The answer.", "DataDecl: common /// Exported and documented."]
 expect_output_not_contains = ["FuncDecl: plain ///", "TypeDecl: Pair ///"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.doc_comment_attribution_is_syntax"
+desc = "A `///` line belongs to the declaration that follows it, and a blank line between the two changes nothing (the author's ruling of 2026-10-26): `with_gap`, `exported` and `gap_constant` each carry the documentation written one blank line above them. A blank line inside a block of `///` lines does not split it either, so `two_paragraphs` carries both paragraphs. An ordinary `//` comment belongs to no declaration and ends the documentation of what follows it, so `separated` carries none; the blank line after a declaration ends a block that reaches back over it, so `later` does not take the documentation of `separated`."
+kind = "behavior"
+case = "../../../cases/parse/rulings/doc_comment_blank_line.cml"
+args = ["${inspect_ast}", "${case}"]
+expect_exit = 0
+expect_stdout_contains = ["FuncDecl: with_gap /// A blank line is not a gap between a declaration and its documentation.", "FuncDecl: exported /// Documentation written above an exported name, with a blank line between the two.", "DataDecl: gap_constant /// The answer, written below a blank line.", "FuncDecl: two_paragraphs /// The first paragraph of the documentation of `two_paragraphs`. (+1 line)", "FuncDecl: later /// The documentation of `two_paragraphs` above is not documentation of `later`: the `///` lines (+2 lines)"]
+expect_output_not_contains = ["FuncDecl: separated ///", "DataDecl: separated ///", "FuncDecl: two_paragraphs /// The second paragraph"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -149,14 +161,14 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rulings.minus_by_precedence"
-desc = "The minus is always an operator (design principles 4.2): looser than `^`, tighter than `->` and the other binary operators, the same before a literal and a name. `-2 ^ 2` and `-x ^ 2` are -4, `-2->inc` and `-x->inc` are -1; the smallest int and i32 can still be written; `2.0 ^ -1.0 ^ 2.0` has a signed exponent."
+desc = "The minus is always an operator (design principles 4.2): looser than `^` and `->`, tighter than the other binary operators, the same before a literal and a name. `-2 ^ 2` and `-x ^ 2` are -4, `-2->inc` and `-x->inc` are -3; the smallest int and i32 can still be written; `2.0 ^ -1.0 ^ 2.0` has a signed exponent."
 kind = "behavior"
 case = "../../../cases/parse/rulings/minus.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_contains = ["-4 -4 4 0.5", "-1 -1 -6 7 4 1", "-9223372036854775808 -2.5 [-1, 2] -3", "-2147483648"]
+expect_stdout_contains = ["-4 -4 4 0.5", "-3 -3 -6 7 4 1", "-9223372036854775808 -2.5 [-1, 2] -3", "-2147483648"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -208,14 +220,14 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rulings.not_by_precedence"
-desc = "`!` and `~` are at the level of the unary minus (design principles 4.2): looser than `^`, tighter than `->` and the other binary operators. `!t->show` is `(!t)->show`, `~n->inc` is `(~n)->inc`, `~n * 3` is `(~n) * 3`."
+desc = "`!` and `~` are at the level of the unary minus (design principles 4.2): looser than `^` and `->`, tighter than the other binary operators. `!t->always` is `!(t->always)`, `~n->inc` is `~(n->inc)`, `~n * 3` is `(~n) * 3`."
 kind = "behavior"
 case = "../../../cases/parse/rulings/not_by_precedence.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_contains = ["no no false\n-2 -4 -9 3\ntrue true true"]
+expect_stdout_contains = ["false true false\n-4 -4 -9 3\ntrue true true"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -228,10 +240,10 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
 expect_diagnostic_code = "0x0200000A"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 8
 expect_diagnostic_column = 16
 expect_output_contains = ["Unexpected '?'"]
-expect_output_not_contains = ["never printed", "UnknownInternalError", "ConstructNotSupported"]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -256,7 +268,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SyntaxDiag::AsRightSideIsType"
 expect_diagnostic_code = "0x02000011"
-expect_diagnostic_line = 11
+expect_diagnostic_line = 10
 expect_diagnostic_column = 21
 expect_output_contains = ["The right side of 'as' is a type; write the interval as '(a..b)'."]
 expect_output_not_contains = ["UnknownInternalError", "Unexpected"]
@@ -272,7 +284,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SyntaxDiag::LambdaParametersNeedParentheses"
 expect_diagnostic_code = "0x02000012"
-expect_diagnostic_line = 17
+expect_diagnostic_line = 16
 expect_diagnostic_column = 38
 expect_output_contains = ["A lambda's parameters need their parentheses: write '(x) => e', not 'x => e'."]
 expect_output_not_contains = ["UnknownInternalError", "Unexpected"]

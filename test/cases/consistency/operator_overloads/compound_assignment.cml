@@ -1,7 +1,6 @@
 /**
  * Refused declaration of an operator overload (design principles 4.3).
  */
-module compound_assignment
 
 type M = { v: int }
 

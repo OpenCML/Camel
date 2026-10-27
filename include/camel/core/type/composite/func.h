@@ -4,8 +4,7 @@
 /*
  * Function types: the signature of a function, and the type of a function value.
  *
- * A signature is the implementation mark, the modifiers (`sync`, `macro`), the `with` and the
- * ordinary parameters (each a type and a `var` mark), the parameter names and the result
+ * A signature is the `with` and the ordinary parameters (each a type and a `var` mark), the parameter names and the result
  * type. It is an immutable object, interned in the type table (camel/core/type/intern.h):
  * equal signatures are one object. Parameter names do not take part in compatibility (equals
  * and assignableFrom ignore them); they are part of the interning key because a type prints
@@ -61,7 +60,6 @@ class FunctionTypeFactory {
   public:
     FunctionTypeFactory() = default;
 
-    void setModifiers(ModifierSet mod) { modifiers_ = mod; }
     void setExitType(Type *type) { exitType_ = type; }
     /// The resources the signature publishes (design effects plan 2.2); Generic when not set.
     void setResources(const sem::ResourceSignature &resources) { resources_ = resources; }
@@ -93,6 +91,17 @@ class FunctionTypeFactory {
         argNames_.push_back(ident);
     }
 
+    /// The `with` parameters end in a pack (`with <..args>`): it stands for the `with` arguments
+    /// a call gives beyond the fixed ones, of any types, and is added after every other `with`
+    /// parameter as a `void` parameter no call passes a value for. Only a declaration without a
+    /// body (the rule of a native operator, which takes its arguments as they come) and a
+    /// function type write one.
+    void addWithRest(const std::string &ident) {
+        hasWithRest_ = true;
+        withTypes_.emplace_back(Type::Void(), false);
+        argNames_.push_back(ident);
+    }
+
     /// A `constas n: T` parameter: it records a compile-time value that is part of the
     /// declaration's identity, not a runtime argument (design principles 5.4). Its type stays in
     /// the signature so that the call site is checked against it, and the recorded index tells it
@@ -116,12 +125,12 @@ class FunctionTypeFactory {
     OpenFunctionType *buildOpen();
 
   private:
-    ModifierSet modifiers_ = Modifier::None;
     std::vector<param_t> withTypes_;
     std::vector<param_t> normTypes_;
     Type *exitType_ = nullptr;
     bool hasNames_  = true;
     bool hasRest_   = false;
+    bool hasWithRest_ = false;
     std::vector<std::string> argNames_;
     sem::ResourceSignature resources_;
     /// The parameters written with `constas`, as indices over all parameters (`with` first).
@@ -143,11 +152,9 @@ class FunctionType : public CompositeType {
     static FunctionType *create();
     /// The interned signature with these parameters and result type, without names.
     static FunctionType *create(
-        const param_init_list_t &withTypes, const param_init_list_t &normTypes, Type *returnType,
-        const ModifierSet &modifiers = Modifier::None);
+        const param_init_list_t &withTypes, const param_init_list_t &normTypes, Type *returnType);
     static FunctionType *create(
-        const param_vec_t &withTypes, const param_vec_t &normTypes, Type *returnType,
-        const ModifierSet &modifiers = Modifier::None);
+        const param_vec_t &withTypes, const param_vec_t &normTypes, Type *returnType);
 
     /// The interned signature equal to this one in everything but the result type.
     FunctionType *withExitType(Type *exitType) const;
@@ -160,10 +167,6 @@ class FunctionType : public CompositeType {
     /// This signature as an OpenFunctionType, or nullptr when it is not open.
     OpenFunctionType *asOpen() const;
     bool isOpen() const { return open_; }
-
-    ModifierSet modifiers() const { return modifiers_; }
-    bool hasModifier(Modifier mod) const { return modifiers_.has(mod); }
-    bool checkModifiers() const;
 
     size_t withTypesCount() const { return withCount_; }
     size_t normTypesCount() const { return normCount_; }
@@ -195,6 +198,9 @@ class FunctionType : public CompositeType {
     /// Whether the last ordinary parameter is a rest parameter (`..ts`). Its type in this
     /// signature is `void`; the tuple of the arguments it receives is made at the call.
     bool hasRest() const { return hasRest_; }
+
+    /// Whether the last `with` parameter is a pack (`with <..args>`); its type here is `void`.
+    bool hasWithRest() const { return hasWithRest_; }
 
     /// Whether the signature has a `constas n: T` parameter, which ones they are (indices over
     /// all parameters, `with` parameters first), and whether a given parameter is one.
@@ -244,6 +250,7 @@ class FunctionType : public CompositeType {
     /// object a compiler is still writing) the interned signature of its parts as they stand.
     virtual Type *closed() const override;
     virtual bool equals(Type *type) const override;
+    virtual Type *unify(Type *other) const override;
     virtual CastSafety castSafetyFrom(Type *sourceType) const override;
     virtual bool assignableFrom(Type *sourceType) const override;
 
@@ -251,12 +258,12 @@ class FunctionType : public CompositeType {
     /// Everything a signature consists of. `names` has one entry per parameter (`with` first)
     /// when `hasNames`, and is empty otherwise.
     struct Parts {
-        ModifierSet modifiers = Modifier::None;
         std::vector<param_t> params; // `with` parameters first
         size_t withCount = 0;
         Type *exitType   = nullptr;
         bool hasNames    = false;
         bool hasRest     = false;
+        bool hasWithRest = false;
         std::vector<uint16_t> constasIndices;
         /// The `with` parameters whose argument must be a compile-time value (see addWithArg).
         std::vector<uint16_t> withConstIndices;
@@ -299,11 +306,11 @@ class FunctionType : public CompositeType {
             paramCount() * (sizeof(Type *) + sizeof(TypeCode) + (hasNames_ ? sizeof(SymId) : 0)));
     }
 
-    ModifierSet modifiers_;
     uint16_t withCount_ = 0;
     uint16_t normCount_ = 0;
     bool hasNames_      = false;
     bool hasRest_       = false;
+    bool hasWithRest_   = false;
     /// The parameters written with `constas`, as indices over all parameters (`with` first):
     /// a compile-time value at the call, not a runtime parameter (design principles 5.4).
     std::vector<uint16_t> constasIndices_;
@@ -335,5 +342,13 @@ class OpenFunctionType final : public FunctionType {
   private:
     OpenFunctionType(const Parts &parts) : FunctionType(parts, true) {}
 };
+
+/// Whether a value of type `value` may be the result of a function declared to give `declared`.
+/// A function declared `void` discards whatever its body ends with; this is the one position
+/// where `void` takes any type (`Type::assignableFrom` gives `void` to `void` only).
+inline bool acceptsAsResult(Type *declared, Type *value) {
+    return declared != nullptr &&
+           (declared->code() == TypeCode::Void || declared->assignableFrom(value));
+}
 
 } // namespace camel::core::type

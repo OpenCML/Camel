@@ -4,7 +4,6 @@
  * constant it was skipped, and forced collection printed wrong values or crashed). decode
  * gives a `Json!` (design principles 11.2): the constant is that value.
  */
-module json_gc_macro
 
 import { Json, decode, get, as_string, as_array } from json
 
@@ -25,5 +24,5 @@ func show(t: Json, n: int): int sync {
 
 func main(n: int): int sync {
     let t = table()
-    return t ?-> ((j: Json): int => show(j, n)) !! 1
+    return t -> ((j: Json): int => show(j, n)) !! 1
 }

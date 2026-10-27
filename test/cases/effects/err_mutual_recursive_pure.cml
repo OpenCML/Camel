@@ -1,0 +1,17 @@
+// Two functions that call each other settle against each other: `ping` only calls `pong`, and
+// `pong` prints, so `ping` reaches `stdout` through the cycle and its `pure` is broken.
+
+/// The clause promises the empty set; the body reaches `stdout` through `pong`.
+func ping(n: int): int pure sync {
+    return if n <= 0 then 0 else pong(n - 1)
+}
+
+func pong(n: int): int sync {
+    println(n)
+    return if n <= 0 then 0 else ping(n - 1)
+}
+
+func main(): int sync {
+    println(ping(3))
+    return 0
+}

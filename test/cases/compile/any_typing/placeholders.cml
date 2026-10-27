@@ -1,5 +1,3 @@
-module placeholders
-
 import { encode } from json
 
 // The operators whose signatures used `any` as a placeholder take each argument with its own
@@ -10,6 +8,6 @@ func main(): int sync {
     let n = println(41) + 1
     println(n)
     println('{} and {}'->format<[1], (2, 'b')>)
-    println(encode({ a: [1, 2], b: (true, 'x') }), encode([1.5], 2))
+    println(encode({ a: [1, 2], b: (true, 'x') }), [1.5]->encode<indent: 2>)
     return 0
 }

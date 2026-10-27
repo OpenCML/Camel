@@ -10,7 +10,6 @@
  *   h0 = x        h1 = h0 @ (I + d0 * s)        h2 = h1 @ (I + d1 * 2s)
  *   f  = sum(h2)  df/ds = sum(h0 @ d0 @ (I + 2 d1 s)) + sum(h1 @ 2 d1)
  */
-module loop_grad_record_tensor_fd
 
 import { reshape, sum } from tensor
 import { abs } from math

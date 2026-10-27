@@ -2,7 +2,6 @@
  * A negative bound of a subscript slice is a fault, not a count from the end (design principles
  * 3.9, 5.4): SliceOutOfRange at the bracket, with both bounds and the length.
  */
-module subscript_slice_negative
 
 func part(xs: int[], a: int, b: int): int[] {
     return xs[a:b]

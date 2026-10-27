@@ -3,7 +3,6 @@
  * Documentation block comment
  * with 'quotes' and // slashes inside.
  */
-module comments
 
 // line comment with "a string" and /* a block opener
 let a = 1 // trailing comment

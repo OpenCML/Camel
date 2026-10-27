@@ -2,10 +2,9 @@
  * A module-level `let` whose initial value writes a file, behind an import nothing uses
  * (design principles 3.1: importing executes no code). The flag must never appear..
  */
-module unused_let_writer
 
 import { get_env } from env
 import { write_text } from fs
 
-let path = get_env('CAMEL_TEST_TMPDIR') + '/h222_unused_let_flag.txt'
-export let wrote = write_text(path, 'the root graph of an unused import ran')
+let path = (get_env('CAMEL_TEST_TMPDIR') ?? '') + '/h222_unused_let_flag.txt'
+export let wrote = 'the root graph of an unused import ran'->write_text<path>

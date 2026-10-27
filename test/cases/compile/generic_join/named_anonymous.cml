@@ -1,0 +1,22 @@
+/**
+ * Generic inference joins a named struct and an anonymous one with the same fields to the named
+ * one, as the other joins do (a branch, an array literal): the anonymous value enters the named type.
+ */
+type P = { x: int, y: int }
+
+func same(a: P, b: P): P { return a }
+
+func main(): int sync {
+    let ps = [{ x: 7, y: 10 }]->map<(p: P): P => p>
+    println(ps[0].x)
+    let q: P = { x: 1, y: 2 }
+    let both = [q, { x: 3, y: 4 }]
+    println(len(both), both[1].y)
+    println(same({ x: 5, y: 6 }, q).x)
+    let kept = [{ x: 1, y: 2 }, { x: 8, y: 9 }]->filter<(p: P): bool => p.x > 4>
+    println(len(kept), kept[0].y)
+    [{ x: 4, y: 4 }]->foreach<(p: P): void => sync { println(p.x + p.y) }>
+    let named = [q]->map<(p: { x: int, y: int }): int => p.y>
+    println(named[0])
+    return 0
+}

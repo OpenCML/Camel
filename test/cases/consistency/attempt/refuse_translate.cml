@@ -3,12 +3,11 @@
  * the boundary (no value that "may have failed" in this sense), so onnx::export refuses the
  * graph with a diagnostic at the `attempt`; std::cpp translates it (a C++ try around the call).
  */
-module refuse_translate
 
 func risky(x: float): float { return 6.0 / x }
 
 func safe(x: float): float {
-    return attempt(risky, x) !! 0.0
+    return attempt(risky)(x) !! 0.0
 }
 
 func main(): float {

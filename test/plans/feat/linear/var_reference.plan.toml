@@ -11,7 +11,7 @@ case = "../../../cases/linear/byref/let_to_var_param.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
-expect_diagnostic_line = 14
+expect_diagnostic_line = 13
 expect_diagnostic_column = 10
 expect_output_contains = ["'k' is immutable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -25,7 +25,7 @@ case = "../../../cases/linear/byref/let_assigned.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
-expect_diagnostic_line = 10
+expect_diagnostic_line = 9
 expect_diagnostic_column = 5
 expect_output_contains = ["'k' is immutable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -39,7 +39,7 @@ case = "../../../cases/linear/byref/let_to_var_param_indirect.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
-expect_diagnostic_line = 15
+expect_diagnostic_line = 14
 expect_diagnostic_column = 7
 expect_output_contains = ["'k' is immutable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -53,7 +53,7 @@ case = "../../../cases/linear/byref/let_field_to_var_param.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
-expect_diagnostic_line = 14
+expect_diagnostic_line = 13
 expect_diagnostic_column = 10
 expect_output_contains = ["'s' is immutable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -67,7 +67,7 @@ case = "../../../cases/linear/byref/param_to_var_param.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
-expect_diagnostic_line = 13
+expect_diagnostic_line = 12
 expect_diagnostic_column = 10
 expect_output_contains = ["'x' is immutable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -81,7 +81,7 @@ case = "../../../cases/linear/byref/let_captured_to_var_param.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
-expect_diagnostic_line = 15
+expect_diagnostic_line = 14
 expect_diagnostic_column = 14
 expect_output_contains = ["'k' is immutable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -95,7 +95,7 @@ case = "../../../cases/linear/byref/let_to_var_with_param.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
-expect_diagnostic_line = 16
+expect_diagnostic_line = 15
 expect_diagnostic_column = 17
 expect_output_contains = ["'total' is immutable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -109,7 +109,7 @@ case = "../../../cases/linear/byref/var_function_to_operator.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
-expect_diagnostic_line = 13
+expect_diagnostic_line = 12
 expect_diagnostic_column = 24
 expect_output_contains = ["a function with a var parameter must be given a variable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -1207,7 +1207,7 @@ case = "../../../cases/linear/byref/param_assigned.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 8
 expect_diagnostic_column = 5
 expect_output_contains = ["'x' is immutable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -1221,7 +1221,7 @@ case = "../../../cases/linear/byref/let_compound_assigned.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
-expect_diagnostic_line = 10
+expect_diagnostic_line = 9
 expect_diagnostic_column = 5
 expect_output_contains = ["'k' is immutable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -1235,7 +1235,7 @@ case = "../../../cases/linear/byref/let_appended.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UnusedPureResult"
-expect_diagnostic_line = 11
+expect_diagnostic_line = 10
 expect_diagnostic_column = 5
 expect_output_contains = ["'append' changes nothing", "use the result"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -1249,7 +1249,7 @@ case = "../../../cases/linear/byref/param_sorted.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UnusedPureResult"
-expect_diagnostic_line = 12
+expect_diagnostic_line = 11
 expect_diagnostic_column = 5
 expect_output_contains = ["'sort' changes nothing"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -1263,7 +1263,7 @@ case = "../../../cases/linear/byref/let_alias_to_var_param.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
-expect_diagnostic_line = 15
+expect_diagnostic_line = 14
 expect_diagnostic_column = 10
 expect_output_contains = ["'a' is immutable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -1438,7 +1438,7 @@ kind = "negative"
 case = "../../../cases/linear/byref/var_function_as_value_function.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "var_function_as_value_function.cml:18:17"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "var_function_as_value_function.cml:17:17"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
@@ -3859,6 +3859,48 @@ const reads = (out.match(/:var\/get/g) || []).length
 assert(reads > 0, `a var handed out as a var argument keeps its cell and its reads, found ${reads} :var/get nodes`)
 const cells = (out.match(/:var\/new/g) || []).length
 assert(cells > 0, `an escaping var keeps its cell, found ${cells} :var/new nodes`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "var_argument_reads_the_nearest_write"
+desc = "A `var` handed to a function is read before the callee writes it, and the port carries the version the variable's nearest write made as a data edge: the write that made it is a direct input of the call and no control input stands in for it (the placeholder an order edge would leave the read behind a write with). The version is the same cell the write stored into, so the callee writes the one cell and the value read back is 2."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_argument_reads_the_nearest_write.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout = "2\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+
+[[tests]]
+name = "var_argument_reads_the_nearest_write.the_edge_is_data"
+desc = "The graph of the same case: the `var` argument's port is a data edge from the version the nearest write made, and that write is not a control input of the call (a control edge there is the placeholder the read is owed a data edge for, docs/design/effects/edges.cn.md 5.6)."
+kind = "behavior"
+case = "../../../cases/linear/byref/var_argument_reads_the_nearest_write.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const lines = out.split(String.fromCharCode(10))
+const callLine = lines.find((l) => l.includes(' [label="bump", type="FUNC"'))
+assert(callLine !== undefined, 'the call of bump is in the graph')
+const call = callLine.trim().split(' ')[0]
+const link = (l) => {
+  const parts = l.split(' -> ')
+  if (parts.length !== 2) return null
+  const kind = parts[1].includes('type="NORM"') ? 'NORM'
+             : parts[1].includes('type="CTRL"') ? 'CTRL' : 'other'
+  return { from: parts[0].trim(), to: parts[1].split(' ')[0], kind }
+}
+const into = lines.map(link).filter((e) => e !== null && e.to === call)
+const port = into.find((e) => e.kind === 'NORM')
+assert(port !== undefined, `the call takes the variable's port as a data edge: ${JSON.stringify(into)}`)
+const write = lines.find((l) => l.trim().startsWith(port.from + ' [') && l.includes('label=":op/assn_l"'))
+assert(write !== undefined, `the port carries the version the nearest write made, an assignment node: ${port.from}`)
+assert(!into.some((e) => e.from === port.from && e.kind === 'CTRL'), `and that write is not also a control input of the call: ${JSON.stringify(into)}`)
 }
 """
 timeout_ms = 8000

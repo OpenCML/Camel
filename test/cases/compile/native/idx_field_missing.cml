@@ -3,7 +3,6 @@
 /// The declaration is the only way to reach it: `s['y']` is refused when the program is
 /// compiled (the '[]' overloads take an array or a string), while a body-less declaration
 /// names the built-in operator with its own signature.
-module idx_field_missing
 
 type S = { x: int }
 

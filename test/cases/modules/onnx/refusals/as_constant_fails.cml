@@ -5,7 +5,6 @@
  * error to report), and the export refuses at the conversion (line 16) with what the
  * conversion itself says.
  */
-module as_constant_fails
 
 import { reshape } from tensor
 import { export_model } from onnx
@@ -17,8 +16,7 @@ func f(x: f32[..]): f32[..] {
     return x @ w
 }
 
-func main(): int sync {
+func main(): void! sync {
     let ex = reshape([1.0, -1.0, 0.5, 2.0, 3.0, -2.0] as f32[], [2, 3])
-    export_model(f, ex, 'tmp/test/onnx/refusal_as_constant_fails.onnx')
-    return 0
+    export_model<out: 'tmp/test/onnx/refusal_as_constant_fails.onnx'>(f, ex)
 }

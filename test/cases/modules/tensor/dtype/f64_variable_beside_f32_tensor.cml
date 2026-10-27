@@ -8,7 +8,6 @@
  * The same holds for a value whose extents no fact pins down: `x: f64[..]` beside a tensor of
  * another width is refused for its element type, whatever is known of the shape.
  */
-module f64_variable_beside_f32_tensor
 
 import { sum } from tensor
 

@@ -1,4 +1,3 @@
-module tiles_max_special
 import { reshape, max, save_npy } from tensor
 import { nan, inf } from math
 import { get_env } from env
@@ -20,10 +19,10 @@ func sample(i: int): f32 {
 }
 func maximum(x: f32[..]): f32[..] { return max(x, -1) }
 func main(): int sync {
-    let width = int(get_env('TILES_TEST_WIDTH'))
+    let width = int(get_env('TILES_TEST_WIDTH') ?? '')
     let x = reshape(0..(8 * width)->map<sample<width>>, [8, width])
     println(inspect<maximum>(x))
-    save_npy(maximum(x), get_env('TILES_TEST_OUT') + '/cpu.npy')
-    save_npy(download(run_preferred_resident<maximum>(x)), get_env('TILES_TEST_OUT') + '/gpu.npy')
+    save_npy(maximum(x), (get_env('TILES_TEST_OUT') ?? '') + '/cpu.npy')
+    save_npy(download(run_preferred_resident<maximum>(x)), (get_env('TILES_TEST_OUT') ?? '') + '/gpu.npy')
     return 0
 }

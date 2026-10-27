@@ -2,12 +2,11 @@
  * A dynamic axis out of range is an error about the request, not about a node of the
  * function: onnx::export reports it at the export_model call (line 11).
  */
-module bad_axis
 
 import { reshape } from tensor
 import { export_model } from onnx
 
 func main(): int sync {
-    export_model((t: float[..]): float[..] => t * 2.0, reshape([1.0, 2.0], [2]), 'tmp/test/onnx/refusal_axis.onnx', [5])
+    let _ = export_model<out: 'tmp/test/onnx/refusal_axis.onnx', dynamic_axes: [5]>((t: float[..]): float[..] => t * 2.0, reshape([1.0, 2.0], [2]))
     return 0
 }

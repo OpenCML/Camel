@@ -1,6 +1,5 @@
 /** The operator counts of the typed target, by element type (design 7: the counts are the test). */
-module typed_counts
-import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
+import { Node, Graph, nodes, op, op_name, name, graphs_of } from graph
 
 func opText(n: Node): string {
     return match op(n) {
@@ -9,17 +8,17 @@ func opText(n: Node): string {
     }
 }
 
-func nodesOf(p: Program, function: string): Node[] {
-    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+func nodesOf::<F>(p: F, function: string): Node[] {
+    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
     return nodes(found[0])
 }
 
-func countOf(p: Program, function: string, operator: string): int {
+func countOf::<F>(p: F, function: string, operator: string): int {
     return len(nodesOf(p, function)->filter<(n: Node): bool => opText(n) == operator>)
 }
 
 /// add, sub, mul, div, neg counts of the element type with this suffix.
-func show(p: Program, function: string, suffix: string) {
+func show::<F>(p: F, function: string, suffix: string) {
     println('f ' + function,
         countOf(p, function, ':op/add_' + suffix),
         countOf(p, function, ':op/sub_' + suffix),
@@ -28,7 +27,7 @@ func show(p: Program, function: string, suffix: string) {
         countOf(p, function, ':op/neg_' + suffix))
 }
 
-export func report(p: Program): Program! sync {
+export func report::<F>(p: F): F! sync {
     show(p, 'i32_neutral', 'i')
     show(p, 'i32_mul_one', 'i')
     show(p, 'i32_mul_zero', 'i')

@@ -1,4 +1,3 @@
-module tiles_loop_device
 import { load_npy, save_npy } from tensor
 import { source, run_preferred_resident, download } from tiles
 import { get_env } from env
@@ -17,7 +16,7 @@ func rounding(a: f32[..], b: f32[..]): f32[..] {
     return loop s = a for k in [1, 2, 3] do s + b
 }
 func main(): int sync {
-    let folder = get_env('TILES_TEST_OUT')
+    let folder = get_env('TILES_TEST_OUT') ?? ''
     let a = load_npy::<f32>(folder + '/a.npy') as f32[..]
     let b = load_npy::<f32>(folder + '/b.npy') as f32[..]
     println(scalar(1.0, 0.25), download(run_preferred_resident<scalar>((1.0, 0.25))))

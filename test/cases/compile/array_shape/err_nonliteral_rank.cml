@@ -3,7 +3,6 @@
 // and that alone does not make it one array of that shape (design principles 5.1, 5.4): only a
 // source whose own nesting already gives the shape -- a nested literal, a constant a folded
 // `reshape` names -- is read as the shape the position states. Nothing is reshaped to fit.
-module array_shape_err_nonliteral_rank
 
 func main(): int sync {
     let flat: f32[] = [1.0, 2.0, 3.0, 4.0]

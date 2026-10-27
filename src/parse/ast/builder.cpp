@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "camel/parse/ast/builder.h"
+#include "camel/parse/ast/type_case_words.h"
 #include "camel/core/operator_names.h"
 #include "camel/core/operator_semantics.h"
 #include "camel/core/tags.h"
@@ -437,26 +438,18 @@ Value Builder::visitProgram(cst::Program context) {
 
     *root_ << stmts;
 
-    // The tags written before `module` (visitModuleDecl): the module's child, after the
-    // statements, so that the three children a module has always had keep their indices.
-    if (moduleTagUses_) {
-        *root_ << moduleTagUses_;
-    }
-
     LEAVE("Program");
     return root_;
 }
 
 /*
-decl : moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceDecl
+decl : importDecl | exportDecl | namespaceDecl | usingNamespaceDecl
      | dataDecl | funcDecl | typeDecl ;
-namespaceItem : the same without moduleDecl.
+namespaceItem : the same without the module-level declarations.
 The tree has no node for either rule: the declaration itself is the child.
 */
 Value Builder::visitDecl(syn::Node context) {
     switch (context.kind()) {
-    case NK::ModuleDecl:
-        return visitModuleDecl(cst::ModuleDecl(context));
     case NK::ImportDecl:
         return visitImportDecl(cst::ImportDecl(context));
     case NK::ExportDecl:
@@ -534,21 +527,6 @@ Value Builder::visitStmtList(cst::StmtList context) {
     *block << rep;
     LEAVE("StmtList");
     return block;
-}
-
-/*
-moduleDecl : frontMatter? MODULE identDef ;
-*/
-Value Builder::visitModuleDecl(cst::ModuleDecl context) {
-    ENTER("ModuleDecl");
-    Reference ref(context->get<cst::IdentDef>()->text());
-    module_->setRef(ref);
-    // The tags written before `module` (`#gpu module m`, design principles 13.4) are the module's
-    // facts; they are put on the module node by visitProgram, once it exists. The list is made
-    // only when there are uses, so a module that writes none has exactly the tree it had before.
-    moduleTagUses_ = tagUseListOf(context);
-    LEAVE("ModuleDecl");
-    return Value();
 }
 
 /*
@@ -2379,7 +2357,14 @@ Value Builder::visitDataDecl(cst::DataDecl context, bool topLevel) {
         *dataDeclNode << typeListNode;
     }
 
-    *dataDeclNode << any2node(visitDataList(context->get<cst::DataList>()));
+    if (context->get<cst::DataList>()) {
+        *dataDeclNode << any2node(visitDataList(context->get<cst::DataList>()));
+    } else {
+        // `export let inf: float`: no right side, the value the C++ module supplies.
+        node_ptr_t none = createNodeAs<RepeatedLoad>("Data");
+        setNodeTokenRangeByContext(none, context);
+        *dataDeclNode << none;
+    }
     std::vector<camel::source::SemanticPart> parts;
     if (context->tok(TK::KwLet)) {
         parts.push_back(semanticPart(
@@ -2415,8 +2400,7 @@ Value Builder::visitDataDecl(cst::DataDecl context, bool topLevel) {
 
 /*
 typeDecl
-    : TYPE identRef ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
-      (typeExpr | STRING)
+    : TYPE identRef ('<' identDef (',' identDef)* ','? ('>' | '>='))? ('=' typeExpr)?
     ;
 */
 /*
@@ -2477,15 +2461,9 @@ Value Builder::visitResourceClause(cst::ResourceClause context) {
 
 Value Builder::visitTypeDecl(cst::TypeDecl context) {
     ENTER("TypeDecl");
-    string uri;
     Reference ref = qualifyRef(value_cast<Reference>(visitIdentRef(context->get<cst::IdentRef>())));
-    if (context->tok(TK::String)) {
-        uri = context->tok(TK::String)->text();
-        // Remove quotes from the string
-        uri = uri.substr(1, uri.size() - 2);
-    }
 
-    node_ptr_t typeDeclNode = createNodeAs<TypeDeclLoad>(ref, uri);
+    node_ptr_t typeDeclNode = createNodeAs<TypeDeclLoad>(ref);
     setNodeTokenRangeByContext(typeDeclNode, context);
     unwrapNodeAs<TypeDeclLoad>(typeDeclNode)->setDoc(docOf(context));
     if (!context->all<cst::IdentDef>().empty()) {
@@ -2513,17 +2491,15 @@ Value Builder::visitTypeDecl(cst::TypeDecl context) {
 }
 
 /*
-retStmt    : (RETURN | THROW | YIELD) dataList ;
+retStmt    : (RETURN | YIELD) dataList ;
 */
 Value Builder::visitRetStmt(cst::RetStmt context) {
     ENTER("RetStmt");
-    // `throw e` returns an error value: an exit like `return`, whose value is the failed form
-    // of the function's declared `T!` (design principles 3.9; the graph builder checks the
-    // declaration). `yield e` is the third exit the production reads: it gives one element of
-    // the stream the function's head declares (design principles 5.4).
-    ExitType exitType   = context->tok(TK::KwThrow) ? ExitType::Throw
-                        : context->tok(TK::KwYield) ? ExitType::Yield
-                                                    : ExitType::Return;
+    // `yield e` is the second exit the production reads: it gives one element of the stream the
+    // function's head declares (design principles 5.4). An error value is returned like any
+    // other value; the function's declared `T!` makes it the failed arm (the graph builder
+    // checks the declaration).
+    ExitType exitType   = context->tok(TK::KwYield) ? ExitType::Yield : ExitType::Return;
     node_ptr_t exitNode = createNodeAs<ExitStmtLoad>(exitType);
     setNodeTokenRangeByContext(exitNode, context);
     if (context->get<cst::DataList>()) {
@@ -2641,8 +2617,10 @@ Value Builder::visitTupleParam(cst::TupleParam context) {
     for (const auto &identDef : context->all<cst::IdentDef>()) {
         names.push_back(identDef->text());
     }
-    // The name is internal: no program writes it, and the position makes it unique.
-    Reference ref("_tuple_" + std::to_string(context->begin()));
+    // The name is internal: no program writes it, and the count of such parameters before it in
+    // the file makes it unique. It does not depend on where the parameter is written, so a file
+    // formatted differently has the same tree.
+    Reference ref("_tuple_" + std::to_string(tupleParams_++));
     node_ptr_t namedPairNode = createNodeAs<NamedPairLoad>(ref);
     namedPairNode->loadAs<NamedPairLoad>()->setTupleNames(std::move(names));
     setNodeTokenRangeByContext(namedPairNode, context);
@@ -3169,31 +3147,28 @@ Value Builder::visitStaticLoopExpr(cst::StaticLoopExpr context) {
 
 TypeCaseKind Builder::typeCaseKindOf(cst::TypeCasePattern pattern) {
     const std::string text = pattern.text();
-    if (text == "struct") {
-        return TypeCaseKind::Struct;
+    if (const auto kind = typeCaseKindOfWord(text)) {
+        return *kind;
     }
-    if (text == "tuple") {
-        return TypeCaseKind::Tuple;
-    }
-    if (text == "func") {
-        return TypeCaseKind::Func;
-    }
-    if (text == "#leaf") {
-        return TypeCaseKind::Leaf;
-    }
-    ASSERT(text == "_", "Unknown match type pattern");
+    // A word that names no shape is told, where it is written, instead of being read as `_`.
+    diags_->of(SemanticDiag::StaticMatchPatternCannotMatch)
+        .at(rangeOf(pattern->firstToken(), pattern->lastToken()))
+        .commit(text, "it is not a shape word (struct, tuple, array, func, nullable, fallible, map, set, #leaf, _)");
     return TypeCaseKind::Wildcard;
 }
 
-/*
-typeCase
-    : CASE typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
-    ;
-*/
-Value Builder::visitTypeCase(cst::TypeCase context) {
-    ENTER("TypeCase");
+template <class List> static std::vector<cst::TypeCasePattern> patternsOf(const List &list) {
+    std::vector<cst::TypeCasePattern> out;
+    for (const auto pattern : list) {
+        out.push_back(pattern);
+    }
+    return out;
+}
+
+std::vector<TypeCasePattern>
+Builder::typeCasePatternsOf(const std::vector<cst::TypeCasePattern> &written) {
     std::vector<TypeCasePattern> patterns;
-    for (const auto pattern : context->all<cst::TypeCasePattern>()) {
+    for (const auto pattern : written) {
         TypeCasePattern entry;
         // A pattern with a type child is an identity pattern (`case int`, `case T`); the
         // shape words carry no type.
@@ -3205,7 +3180,18 @@ Value Builder::visitTypeCase(cst::TypeCase context) {
         }
         patterns.push_back(std::move(entry));
     }
-    node_ptr_t caseNode = createNodeAs<TypeCaseLoad>(std::move(patterns));
+    return patterns;
+}
+
+/*
+typeCase
+    : CASE typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
+    ;
+*/
+Value Builder::visitTypeCase(cst::TypeCase context) {
+    ENTER("TypeCase");
+    node_ptr_t caseNode = createNodeAs<TypeCaseLoad>(
+        typeCasePatternsOf(patternsOf(context->all<cst::TypeCasePattern>())));
     setNodeTokenRangeByContext(caseNode, context);
     node_ptr_t bodyNode = any2node(visitBlockExpr(context->lastChild().node()));
     *caseNode << bodyNode;
@@ -3942,7 +3928,7 @@ Value Builder::visitUnaryExpr(syn::Node context) {
 
 /*
 linkExpr
-    : compExpr (('->' | '?->') compExpr)*
+    : compExpr ('->' compExpr)*
     ;
 */
 Value Builder::visitLinkExpr(cst::LinkExpr context) {
@@ -3951,21 +3937,9 @@ Value Builder::visitLinkExpr(cst::LinkExpr context) {
     for (size_t i = 1; i < context->exprs().size(); i++) {
         string strOp       = context->child(i * 2 - 1)->text();
         node_ptr_t rhsNode = any2node(visitExpr(context->expr(i)));
-        if (strOp == "?->") {
-            // `x ?-> f`: a branch on the tag of `x`; the call is the arm taken when `x` has
-            // not failed (design principles 3.9). The marked receiver tells the GCT builder.
-            node_ptr_t notNullNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::NotNullThen);
-            syn::TokenRef opToken  = tokenOf(context->child(i * 2 - 1));
-            setNodeTokenRange(notNullNode, opToken->index(), opToken->index() + 1);
-            setNodeOriginByOffsets(
-                notNullNode,
-                static_cast<size_t>(opToken->begin()),
-                static_cast<size_t>(opToken->end()));
-            *notNullNode << lhsNode;
-            lhsNode = notNullNode;
-        }
         node_ptr_t linkNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
         setNodeTokenRangeByContext(linkNode, context);
+        linkNode->loadAs<ReservedExprLoad>()->setPipe(true);
         // What the arrow hands on is the receiver of the call, wherever the call is written.
         node_ptr_t dataList      = nullptr;
         node_ptr_t calleeNode    = rhsNode;
@@ -5142,6 +5116,32 @@ Value Builder::visitRefType(cst::RefType context) {
     return res;
 }
 
+/*
+matchTypeType : 'match' 'type' typeExpr '{' typeArm* '}'
+typeArm       : 'case' typeCasePattern ('|' typeCasePattern)* '=>' typeExpr
+The cases are the cases of `match type` over values, and each holds the type it gives.
+*/
+Value Builder::visitMatchTypeType(cst::MatchTypeType context) {
+    node_ptr_t res = createNodeAs<MatchTypeTypeLoad>();
+    setNodeTokenRangeByContext(res, context);
+    *res << any2node(visitType(context->type()));
+    node_ptr_t arms = createNodeAs<RepeatedLoad>("TypeCase");
+    setNodeTokenRangeByContext(arms, context);
+    for (const auto arm : context->all<cst::TypeArm>()) {
+        *arms << any2node(visitTypeArm(arm));
+    }
+    *res << arms;
+    return res;
+}
+
+Value Builder::visitTypeArm(cst::TypeArm context) {
+    node_ptr_t arm = createNodeAs<TypeCaseLoad>(
+        typeCasePatternsOf(patternsOf(context->all<cst::TypeCasePattern>())));
+    setNodeTokenRangeByContext(arm, context);
+    *arm << any2node(visitType(context->type()));
+    return arm;
+}
+
 Value Builder::visitTypeOfType(cst::TypeOfType context) {
     node_ptr_t res = createNodeAs<TypeExprLoad>(TypeOp::TypeOf);
     setNodeTokenRangeByContext(res, context);
@@ -5409,6 +5409,8 @@ Value Builder::visitType(syn::Node context) {
         return visitFuncType(cst::FuncType(context));
     case NK::TypeOfType:
         return visitTypeOfType(cst::TypeOfType(context));
+    case NK::MatchTypeType:
+        return visitMatchTypeType(cst::MatchTypeType(context));
     case NK::EnumType:
         return visitEnumType(cst::EnumType(context));
     default:

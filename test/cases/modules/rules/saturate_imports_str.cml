@@ -1,0 +1,10 @@
+/**
+ * A program that imports str: the pipeline's saturation goes over str's graphs too, `cut`
+ * among them, whose loop condition does not read every state.
+ */
+import { ends_with } from str
+
+func main(): int sync {
+    println('abc'->ends_with<'bc'>)
+    return 0
+}

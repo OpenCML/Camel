@@ -356,7 +356,7 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
     }
     if (armTail == kInvalidNodeRef) {
         for (gc_node_ref_t n : armNodes) {
-            if (!carriesOrdering(draft, n)) {
+            if (!carriesOrdering(draft, n, true)) {
                 continue;
             }
             bool followed = false;
@@ -717,11 +717,15 @@ size_t foldDraft(
                 // left as written, to fault with its position if the run reaches it, so the
                 // program behaves the same with and without the pass. The user is told once,
                 // where the expression is written (design principles 3.9).
-                raisePassWarning(
-                    ctx,
-                    camel::core::error::RuntimeDiag::ConstantExpressionFaults,
-                    draft.nodeOrigin(id),
-                    fault.what());
+                // `fail` is the exception: it states a fault on purpose, and the warning is for
+                // the accident.
+                if (body->uri() != ":op/fail") {
+                    raisePassWarning(
+                        ctx,
+                        camel::core::error::RuntimeDiag::ConstantExpressionFaults,
+                        draft.nodeOrigin(id),
+                        fault.what());
+                }
                 continue;
             } catch (...) {
                 continue; // leave the failure to be reported when the program runs
@@ -912,7 +916,7 @@ size_t dceDraft(GraphDraft &draft, bool valuesOnly = false) {
             const bool isDeadGate =
                 !valuesOnly && h && h->kind == GCNodeKind::Gate &&
                 (!draft.ctrlUsersOf(id).empty() || gateInputsSurvive(draft, id));
-            if ((isValueOnly(draft, id) || isJoin || isDeadGate) && draft.normUsersOf(id).empty() &&
+            if ((isDeadWhenUnread(draft, id) || isJoin || isDeadGate) && draft.normUsersOf(id).empty() &&
                 draft.withUsersOf(id).empty() && isReplaceable(draft, id)) {
                 replaceNode(draft, id, kInvalidNodeRef);
                 ++removed;
@@ -977,7 +981,8 @@ OrderReductionPass::apply(const camel::runtime::Program *program, std::ostream &
 
 const camel::runtime::Program *simplifyGraph(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    const OptimizeRewriteConfig &baseConfig, std::ostream &os, size_t maxRounds) {
+    const OptimizeRewriteConfig &baseConfig, std::ostream &os, size_t maxRounds,
+    GraphIRPass *caller) {
     // One growth budget for all rounds: each round unrolls a recursion with constant arguments
     // one level further, so a budget per round would only be reached after maxRounds of them.
     size_t growthSpent           = 0;
@@ -1022,12 +1027,12 @@ const camel::runtime::Program *simplifyGraph(
             mayMerge,
             config.checkScreens);
         // The algebraic stage is the pass itself: std::opt::algebra is the rules library's
-        // `rules::simplify` (`rules::simplify_strict` for safe_fp), so the laws are written once,
+        // `rules::simplify` (`rules::simplify strict=true` for safe_fp), so the laws are written once,
         // in stdlib/rules.cml. std::opt orders it after fold, as the library's corpus
         // measurements assume.
         const std::string algebraPass =
             config.safeFloatingPoint ? "std::opt::algebra safe_fp=true" : "std::opt::algebra";
-        const PassRunResult algebra = applyRegisteredPass(program, algebraPass, context, os);
+        const PassRunResult algebra = applyRegisteredPass(program, algebraPass, context, os, caller);
         if (algebra.program == nullptr) {
             return nullptr;
         }

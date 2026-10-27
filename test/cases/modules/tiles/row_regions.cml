@@ -1,4 +1,3 @@
-module tiles_row_regions
 import { random, seed, exp, sum, mean, max, sqrt, abs, reshape } from tensor
 import { inspect, run_preferred_resident, download } from tiles
 func softmax(x: f32[..]): f32[..] {

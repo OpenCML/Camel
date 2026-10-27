@@ -1,6 +1,5 @@
 // Shadows the standard library's `rules` for a run from this directory (module search: the
 // entry directory first). It compiles and provides no pass at all.
-module rules
 
 export func twice(n: int): int {
     return n * 2

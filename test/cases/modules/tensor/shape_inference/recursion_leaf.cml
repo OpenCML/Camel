@@ -1,4 +1,3 @@
-module shape_inference_recursion_leaf
 import { reshape, sum } from tensor
 // That the vector has one element where the recursion ends is known when the program runs.
 func tree(x: f32[?], n: int): f32[1] {

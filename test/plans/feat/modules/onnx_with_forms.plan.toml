@@ -1,0 +1,79 @@
+id = "modules.onnx_with_forms"
+order = 364
+tier = "fast"
+tags = ["feat", "modules", "onnx"]
+
+# The three call forms of `onnx::export_model`'s `with` list, one per case: only `out` (both
+# later parameters left out), `out` with `target` (a named argument jumping over the parameter
+# in between), and `out` with `dynamic_axes`. Each form must be readable from the declaration
+# alone, and the model each one writes must be the one the request asked for.
+
+[[tests]]
+name = "with_forms_all_defaults"
+desc = "Only `out` is given: `dynamic_axes` and `target` keep the defaults of the declaration, and the model has the static shape the example has."
+kind = "behavior"
+case = "../../../cases/modules/onnx/with_forms/all_defaults.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=${test_tmp}/with_forms_all_defaults.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.test_tmp, 'with_forms_all_defaults.onnx'))
+assert(model.ops.filter((o) => o === 'Mul').length === 1, `expected one product, got ${model.ops}`)
+assert(JSON.stringify(model.inputDims) === JSON.stringify([[2, 2]]), `the default dynamic_axes bakes the example shape in, got ${JSON.stringify(model.inputDims)}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "with_forms_only_target"
+desc = "`out` and `target` are given and `dynamic_axes` between them is skipped: the named argument reaches the third parameter of the declaration and the second keeps its default."
+kind = "behavior"
+case = "../../../cases/modules/onnx/with_forms/only_target.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=${test_tmp}/with_forms_only_target.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.test_tmp, 'with_forms_only_target.onnx'))
+assert(model.ops.filter((o) => o === 'Mul').length === 1, `expected one product, got ${model.ops}`)
+assert(JSON.stringify(model.inputDims) === JSON.stringify([[2, 2]]), `dynamic_axes was skipped, so it is still the default, got ${JSON.stringify(model.inputDims)}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "with_forms_dynamic_axes"
+desc = "`out` and `dynamic_axes` are given: the request reaches the operator, its first axis becomes symbolic, and `target` keeps its default."
+kind = "behavior"
+case = "../../../cases/modules/onnx/with_forms/with_dynamic_axes.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=${test_tmp}/with_forms_dynamic_axes.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.test_tmp, 'with_forms_dynamic_axes.onnx'))
+assert(model.ops.filter((o) => o === 'Mul').length === 1, `expected one product, got ${model.ops}`)
+const dims = model.inputDims[0]
+assert(typeof dims[0] === 'string' && dims[1] === 2, `axis 0 must be symbolic and axis 1 the example's extent, got ${JSON.stringify(model.inputDims)}`)
+}
+"""
+timeout_ms = 10000

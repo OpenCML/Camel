@@ -1,7 +1,5 @@
-module main
-
 func parse(text: string): int! {
-    throw error('BadInput', 'not a number: ' + text)    // mark:throw
+    return error('BadInput', 'not a number: ' + text)    // mark:error
 }
 
 func main(): int! sync {

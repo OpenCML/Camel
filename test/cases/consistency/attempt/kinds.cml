@@ -3,7 +3,6 @@
  * is an error value whose kind is the name of the fault's diagnostic, whose message is the
  * diagnostic's message and whose location is the place the diagnostic points at.
  */
-module kinds
 
 func div(a: int, b: int): int { return a / b }
 func rem(a: int, b: int): int { return a % b }
@@ -26,14 +25,14 @@ func show_f(r: float!): string {
 }
 
 func main(): int sync {
-    println(show(attempt(div, 7, 2)))
-    println(show(attempt(div, 7, 0)))
-    println(show(attempt(rem, 7, 0)))
-    println(show_f(attempt(fdiv, 1.0, 0.0)))
-    println(show(attempt(at, [1, 2, 3], 2)))
-    println(show(attempt(at, [1, 2, 3], 3)))
-    println(show(attempt(number, '42')))
-    println(show(attempt(number, 'forty-two')))
+    println(show(attempt(div)(7, 2)))
+    println(show(attempt(div)(7, 0)))
+    println(show(attempt(rem)(7, 0)))
+    println(show_f(attempt(fdiv)(1.0, 0.0)))
+    println(show(attempt(at)([1, 2, 3], 2)))
+    println(show(attempt(at)([1, 2, 3], 3)))
+    println(show(attempt(number)('42')))
+    println(show(attempt(number)('forty-two')))
     println('end')
     return 0
 }

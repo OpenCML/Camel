@@ -1,5 +1,4 @@
 /** Strict float32 doubling, including subnormal, signed zero and overflow inputs. */
-module algebra_boundary32
 
 func positive(x: f32): f32 { let t = x * f32(3.0); return t + t }
 func fractional(x: f32): f32 { let t = x * f32(0.1); return t + t }

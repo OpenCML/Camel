@@ -87,7 +87,7 @@ args = ["${case}", "std::cpp"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
-expect_diagnostic_line = 16
+expect_diagnostic_line = 15
 expect_diagnostic_column = 19
 expect_output_contains = ["Translation pass 'std::cpp' refused the graph: function 'main' uses the operator 'tensor:ones' on a value of type 'int[]', which has no translation in std::cpp yet"]
 expect_output_not_contains = ["internal error", "node#", "non-bridgeable", ":?:?:", "#include"]
@@ -110,7 +110,7 @@ const d = diags[0]
 assert(d.data.name === 'RuntimeDiag::TranslationRefused' && d.data.stage === 'pass:std::cpp', `unexpected diagnostic ${d.data.name} at stage ${d.data.stage}`)
 assert(d.code === '0x0400000B', `code ${d.code}`)
 assert(d.message.includes("function 'main' uses the operator 'tensor:ones' on a value of type 'int[]'"), `unexpected message: ${d.message}`)
-assert(d.range.start.line === 15 && d.range.start.character === 18 && d.range.end.line === 15, `unexpected range ${JSON.stringify(d.range)}`)
+assert(d.range.start.line === 14 && d.range.start.character === 18 && d.range.end.line === 14, `unexpected range ${JSON.stringify(d.range)}`)
 }
 """
 timeout_ms = 8000
@@ -141,15 +141,15 @@ timeout_ms = 10000
 
 [[tests]]
 name = "links_runtime_warning"
-desc = "An operator std::cpp has no standalone translation for (`hash:sha256_str`) is called through the Camel runtime: the pass warns once, at the first such call, and says the generated program is built with libcamel. The translation itself succeeds (exit 0), so the warning is what is pinned."
+desc = "An operator std::cpp has no standalone translation for (`str:to_upper`) is called through the Camel runtime: the pass warns once, at the first such call, and says the generated program is built with libcamel. The translation itself succeeds (exit 0), so the warning is what is pinned."
 kind = "behavior"
-case = "../../../cases/trans/cpp/hash_bridge.cml"
+case = "../../../cases/trans/cpp/runtime_bridge.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 0
 expect_diagnostic_name = "RuntimeDiag::TranslationLinksRuntime"
 expect_diagnostic_code = "0x04100016"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 6
 expect_diagnostic_column = 13
-expect_stderr_contains = ["std::cpp has no standalone translation of the operator 'hash:sha256_str': the program it writes calls the Camel runtime there and is built with libcamel."]
+expect_stderr_contains = ["std::cpp has no standalone translation of the operator 'str:to_upper': the program it writes calls the Camel runtime there and is built with libcamel."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000

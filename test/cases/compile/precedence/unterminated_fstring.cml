@@ -1,0 +1,8 @@
+// A formatted string no backtick closes is an error on the line it opened on.
+func main(): int sync {
+    let n = 3
+    let s = `n is ${n}
+    println(s)
+    let t = "escaped \` backtick"
+    return 0
+}

@@ -4,7 +4,6 @@
  * position (design principles 5.1). The GCT keeps each element's source position beside its
  * exact value; the conversion of the element uses it.
  */
-module literal_context_array_argument_element_text
 
 func firstf(xs: f32[]): f32 { return xs[0] }
 

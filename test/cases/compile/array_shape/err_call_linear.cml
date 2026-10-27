@@ -1,6 +1,5 @@
 // A linear form is exact, not a guess: `n` is 2 from the first argument, so the second argument
 // must have exactly `2 + 1` elements, not merely a length the name could be moved to.
-module array_shape_err_call_linear
 
 func pair(a: f32[n], b: f32[n + 1]): int {
     return len(a) + len(b)

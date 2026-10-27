@@ -1,5 +1,4 @@
 /** Uses `+` on a generic named type declared elsewhere, through a generic function. */
-module pair_gen
 
 export func twice::<T>(x: T): T {
     return x + x

@@ -1,0 +1,22 @@
+/**
+ * A type conversion applies to every element of an array, as the arithmetic around it does:
+ * `f32(xs)`, `float(xs)` and `int(xs)` give an array of the same shape whose element type is the
+ * conversion's own. No dtype string is written (design principles 5.1, 7). The scalar forms
+ * are unchanged, and a conversion of the elements of an array does not need the loop a program
+ * would write for it.
+ */
+
+import { ones } from tensor
+
+func main(): int sync {
+    let ints = [1, 2, 3]
+    let floats: f64[] = float(ints)
+    println(floats + 0.5)
+    let narrow: f32[] = f32(ints)
+    println(narrow * narrow)
+    println(int(floats * 2.5))
+    let wide: f64[2, 2] = f64(ones([2, 2]))
+    println(wide)
+    println(float(3), f32(2), int(2.9))
+    return 0
+}

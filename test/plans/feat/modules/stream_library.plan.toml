@@ -1,0 +1,18 @@
+id = "modules.stream_library"
+order = 1001
+tier = "fast"
+tags = ["feat", "modules", "stream"]
+desc = "The stream library written in Camel: the producers (unfold, empty, from_array, iterate), the transformations (map, filter, take, scan, chunks, zip) and the consumer (collect), with every example the declarations carry and the edges, then tee on a stream read from two places"
+
+[[tests]]
+name = "stream_library.values"
+desc = "Each function gives the value its example states: unfold sums to 6, empty has no element, iterate doubles, take stops before the element after the n-th (and is empty for 0, short when the stream ends first), scan gives the running totals, chunks leaves the last array short, zip stops at the shorter stream, collect of an empty stream is the empty array, and tee gives both sides the same elements. Four schedulers."
+kind = "behavior"
+case = "../../../cases/modules/stream/library.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "6\n0\n[1, 2, 3]\n[1, 2, 4, 8]\n[2, 4, 6]\n[2, 4]\n[1, 2, 3]\n[] [1]\n[1, 3, 6]\n[[1, 2], [3]]\n[[1, 2], [3, 4]] []\n[(1, a), (2, b)]\n[] 0\n[1, 2, 3] [10, 20, 30]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

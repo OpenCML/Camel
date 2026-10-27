@@ -1,26 +1,24 @@
 /** The element-family laws, applied on their own, and the deliberately wrong versions the tests must catch. */
-module typed_pass
-import { Program } from graph
 import { rewrite } from rewrite
-import { float_add_minus_zero, float_combine, float_combine_mixed, float_div_one, float_fold, float_mul_one, float_neg_neg, float_sub_zero, float32_double, int_add_zero, int_combine, int_div_one, int_fold, int_fold_add, int_mul_one, int_mul_zero, int_neg_neg, int_sub_self, int_sub_zero } from rules
+import { float_add_neg_zero, float_combine, float_combine_mixed, div_one, float_fold, mul_one, neg_neg, sub_zero, float_double, int_add_zero, int_combine, div_one, int_fold, int_fold_add, mul_one, int_mul_zero, neg_neg, int_sub_self, sub_zero } from rules
 
 /// The integer family's laws and nothing else. The family is one law per fact, so this pass covers
 /// every integer element type -- both `i32_c` and `i64_c` of the target -- and no floating one: what
 /// a pass can no longer be is *one width* of a family, because the library no longer writes a law
 /// per width (the fold; the rule on `generic-rule-instantiation`, §6).
-export func apply_i32(p: Program): Program! {
-    return rewrite(p, [int_add_zero, int_sub_zero, int_mul_one, int_mul_zero, int_div_one, int_neg_neg, int_sub_self, int_combine, int_fold, int_fold_add])
+export func apply_i32::<F>(p: F): F! {
+    return p->rewrite<[int_add_zero, sub_zero, mul_one, int_mul_zero, div_one, neg_neg, int_sub_self, int_combine, int_fold, int_fold_add]>
 }
 
 /// The floating family's laws, as `apply_i32` is the integer family's: both float widths, and no
-/// integer type. `float32_double` is still its own rule, so it is named here on its own.
-export func apply_f32(p: Program): Program! {
-    return rewrite(p, [float_mul_one, float_add_minus_zero, float_sub_zero, float_div_one, float_neg_neg, float_combine, float_combine_mixed, float_fold, float32_double])
+/// integer type. `float_double` is still its own rule, so it is named here on its own.
+export func apply_f32::<F>(p: F): F! {
+    return p->rewrite<[mul_one, float_add_neg_zero, sub_zero, div_one, neg_neg, float_combine, float_combine_mixed, float_fold, float_double]>
 }
 
 /// Only the exact doubling law, so its condition is observable: the combine rule would otherwise
 /// take the same instances first.
-export func apply_double_only(p: Program): Program! { return rewrite(p, [float32_double]) }
+export func apply_double_only::<F>(p: F): F! { return p->rewrite<[float_double]> }
 
 // ---- The wrong laws: the same shapes without the guards. A test that does not change under
 // these would not be testing the guard at all.
@@ -35,16 +33,16 @@ rule f32_combine_wrong(x: f32, const c1: f32, const c2: f32) { x * c1 + x * c2 =
 rule f32_fold_wrong(x: f32, const c1: f32, const c2: f32) { (x * c1) * c2 => x * (c1 * c2) }
 rule f32_mixed_wrong(x: f32, const c1: f32, const c2: f32) { x * c1 + x * c2 => x * (c1 + c2) }
 
-export func apply_double_wrong(p: Program): Program! { return rewrite(p, [f32_double_wrong]) }
+export func apply_double_wrong::<F>(p: F): F! { return p->rewrite<[f32_double_wrong]> }
 
 /// The five wrong laws of the boundary program at once: their patterns are disjoint, so every
 /// line changes.
-export func apply_all_boundary_wrong(p: Program): Program! {
-    return rewrite(p, [i32_mul_div_wrong, f32_add_stable_wrong, f32_mul_div_wrong, f32_zero_wrong, f32_self_wrong])
+export func apply_all_boundary_wrong::<F>(p: F): F! {
+    return p->rewrite<[i32_mul_div_wrong, f32_add_stable_wrong, f32_mul_div_wrong, f32_zero_wrong, f32_self_wrong]>
 }
 
 /// The three coefficient-law guards at once: the sum overflow, the product underflow and overflow,
 /// and the zero-sum mix.
-export func apply_all_guard_wrong(p: Program): Program! {
-    return rewrite(p, [f32_combine_wrong, f32_fold_wrong, f32_mixed_wrong])
+export func apply_all_guard_wrong::<F>(p: F): F! {
+    return p->rewrite<[f32_combine_wrong, f32_fold_wrong, f32_mixed_wrong]>
 }

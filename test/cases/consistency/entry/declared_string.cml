@@ -3,7 +3,6 @@
  * returns `x` (an effect function returns a value), so the text is printed by the call and
  * then written as the result.
  */
-module declared_string
 
 func main(): string sync {
     println('a')

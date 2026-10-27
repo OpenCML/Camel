@@ -1,13 +1,12 @@
 /**
  * An integer where the declaration says `string`: the call is refused at the declaration's type,
- * and the message prints the declaration's own parameter names (`text`, `format`); the one source
- * is `stdlib/time.cml`, not the C++ module (step 10).
+ * and the message prints the declaration's own parameter names (`text`, and `format` among the with-parameters); the one
+ source is `stdlib/time.cml`, not the C++ module.
  */
-module time_type
 
 import { strptime } from time
 
 func main(): int sync {
-    println(strptime(42, '%Y'))
+    println(strptime<'%Y'>(42))
     return 0
 }

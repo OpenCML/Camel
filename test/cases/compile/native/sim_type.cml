@@ -3,7 +3,6 @@
  * the call, and the overload the message lists is the declaration's
  * `(samples: int, seed: int) => int` — `stdlib/sim.cml`, not the C++ module.
  */
-module sim_type
 
 import { pi_hits } from sim
 

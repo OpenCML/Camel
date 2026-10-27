@@ -1,5 +1,5 @@
 /**
- * The adjoint of `cast` on a numeric array (design principles 9.9). `cast(xs, 'float32')`
+ * The adjoint of `cast` on a numeric array (design principles 9.9). `f32(xs)`
  * accepts a numeric array (`f32[..] | number[]`) and returns a tensor; an array's tangent is the
  * array of its elements' tangents, so the adjoint is the tensor's gradient cast back to the
  * element type of the array. Until the flip this program was refused by name at the cast call,
@@ -9,27 +9,26 @@
  * builds.
  *
  * Hand adjoints, written out from the forward expressions:
- *   t = cast(xs, 'float32'), loss = sum(t) with xs = [1.0, 2.0, 3.0]:
+ *   t = f32(xs), loss = sum(t) with xs = [1.0, 2.0, 3.0]:
  *       d loss / d xs = [1.0, 1.0, 1.0]
- *   t = cast(w, 'float32'), loss = sum(t * cast([2.0, 3.0, 4.0], 'float32')) with w = [3, 4, 5]:
+ *   t = f32(w), loss = sum(t * f32([2.0, 3.0, 4.0])) with w = [3, 4, 5]:
  *       d loss / d w  = [2.0, 3.0, 4.0]   (exact: the f32 the cast stores is these values)
  * Both gradients are printed with `{}`, so each is compared with its adjoint element by element.
  */
-module adjoint_cast_array
 
-import { cast, sum } from tensor
+import { sum } from tensor
 import { grad } from autodiff
 
 with <xs: float[]>
 func plain(): float {
-    let t = cast(xs, 'float32')
+    let t = f32(xs)
     return float(sum(t))
 }
 
 with <w: float[]>
 func weighted(): float {
-    let t = cast(w, 'float32')
-    let c = cast([2.0, 3.0, 4.0] as f64[], 'float32')
+    let t = f32(w)
+    let c = f32([2.0, 3.0, 4.0] as f64[])
     return float(sum(t * c))
 }
 

@@ -16,7 +16,6 @@
  * MODE=run    : native run; dumps init params, inputs, losses, updated params
  * MODE=export : WHAT=fwd exports the loss, WHAT=step exports the training step
  */
-module e13_l2d_gated_gru
 
 import { sigmoid, tanh, reshape, shape, zeros, mean, abs, save_npy } from tensor
 import { with_grad } from autodiff
@@ -100,7 +99,7 @@ func input_a(): f32[..] {
 }
 
 func do_run(m: Gru): int sync {
-    let dump = get_env('DUMP')
+    let dump = get_env('DUMP') ?? ''
     let xa = input_a()
     let xb = reshape(
         [1.0, -0.75, 0.75, 1.0, -1.0, 0.75, 0.75, -1.0, 1.0, -0.75, 0.75, 1.0],
@@ -125,13 +124,13 @@ func do_run(m: Gru): int sync {
 }
 
 func do_export(m: Gru): int sync {
-    let out = get_env('ONNX_OUT')
-    return if get_env('WHAT') == 'fwd' then sync {
-        export_model(fwd, (m, input_a()), out)
+    let out = get_env('ONNX_OUT') ?? ''
+    return if (get_env('WHAT') ?? '') == 'fwd' then sync {
+        let _ = export_model<out: out>(fwd, (m, input_a()))
         println('exported fwd')
         return 0
     } else sync {
-        export_model(step, (m, input_a()), out)
+        let _ = export_model<out: out>(step, (m, input_a()))
         println('exported step')
         return 0
     }
@@ -139,5 +138,5 @@ func do_export(m: Gru): int sync {
 
 func main(): int sync {
     let m = load()
-    return if get_env('MODE') == 'export' then do_export(m) else do_run(m)
+    return if (get_env('MODE') ?? '') == 'export' then do_export(m) else do_run(m)
 }

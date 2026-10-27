@@ -1,0 +1,9 @@
+// `sync` is a property of a block, not of a type (design principles 3.3): a function type has no
+// modifiers, and writing one is a syntax error, not a word that is accepted and ignored.
+func apply(f: sync (x: int) => int, v: int): int {
+    return f(v)
+}
+
+func main(): int sync {
+    return 0
+}

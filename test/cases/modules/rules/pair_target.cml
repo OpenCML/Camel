@@ -7,7 +7,6 @@
  * parameter has no instance at either (the rule on generic-rule-instantiation
  * assumes one type per value).
  */
-module pair_target
 
 func i64_pair(x: int, y: int): int {
     return x + y - y

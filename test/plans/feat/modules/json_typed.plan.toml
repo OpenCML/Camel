@@ -34,12 +34,34 @@ timeout_ms = 30000
 
 [[tests]]
 name = "json.decode_as_no_form"
-desc = "A shape whose type has no JSON form (a function) is rejected when the call is compiled."
+desc = "A type with no JSON form (a function) is rejected when the call is compiled: no candidate of `decode_as` applies, because `has_json_form` is false for it."
 kind = "negative"
 case = "../../../cases/modules/std/json/err_decode_as_shape.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["err_decode_as_shape.cml:7:28: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "<json:decode_as>: <shape: T> (text: string | Json) => T!"]
+expect_output_contains = ["err_decode_as_shape.cml:4:47", "No candidate of 'decode_as' applies to", "when has_json_form::<T>()", "name=SemanticDiag::WhenConditionUnmet"]
 expect_output_not_contains = ["never printed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "json.decode_as_map_without_string_keys"
+desc = "A map whose keys are not strings has no JSON form (an object has string keys): decoding to one is refused where the call is written, by the same condition."
+kind = "negative"
+case = "../../../cases/modules/std/json/err_decode_as_no_form.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["err_decode_as_no_form.cml:5:39", "No candidate of 'decode_as' applies to", "name=SemanticDiag::WhenConditionUnmet"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "json.encode_no_form"
+desc = "A function has no JSON form: encoding one is refused where the call is written, by the condition of `encode`."
+kind = "negative"
+case = "../../../cases/modules/std/json/err_encode_no_form.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["err_encode_no_form.cml:6:19", "No candidate of 'encode' applies to", "name=SemanticDiag::WhenConditionUnmet"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

@@ -47,12 +47,21 @@ bool isCompactElementType(TypeCode code);
 bool isNumericScalarTypeCode(TypeCode code);
 
 /**
- * Whether two extents constrain a dimension the same way (type equality; names are not part of
- * it). A constant is the same dimension only as itself; every non-constant extent (unknown, or
- * a linear form over signature names) means "any size" for every check, which is also how the
- * tensor type's shape comparison worked before this type carried dimensions.
+ * Whether two extents constrain a dimension the same way when each stands alone: a constant is
+ * the same dimension only as itself, and a non-constant extent asks for nothing at the call
+ * (this is the relation `assignableFrom` uses to hold a constant extent to the source's). Type
+ * equality is stricter and is decided over the whole shape: ArrayType::sameShape.
  */
 bool sameExtentConstraint(const ExtentForm &a, const ExtentForm &b);
+
+/**
+ * The shape `forms` with its dimension names replaced by the numbers of a canonical order: the
+ * one representative of every shape that differs only in how its names are spelled (`[n, m]` and
+ * `[a, b]`, and `[m, n]` too, are the same shape; `[n, n]` is not `[n, m]`, and `[n]` is not
+ * `[n + 1]`). Extents are linear forms over names and their equality is decidable (design
+ * principles 5.4): two shapes are one type exactly when their canonical forms are equal.
+ */
+std::vector<ExtentForm> canonicalShape(std::span<const ExtentForm> forms);
 
 // Factory for constructing ArrayType (may use STL containers).
 class ArrayTypeFactory {
@@ -142,11 +151,25 @@ class ArrayType : public CompositeType {
     /// round.
     Type *firstDimensionElement() const;
 
+    /// The type of the elements this array gives along `axis` (design principles 5.4: a position
+    /// written on a dimension takes that dimension out of the result, for every rank and every
+    /// dimension). One dimension fewer: `T[d0, ..., dk-1, dk+1, ...]` for an axis inside the
+    /// stated extents, the element type when no dimension is left, and the same open-rank array
+    /// when the rank is open. `firstDimensionElement()` answers the axis 0 case -- `t[i]` -- and
+    /// the index operator asks this one with the axis the subscript wrote (the core's
+    /// `:op/idx_arr`, `src/builtin/modules/globals.cpp`). `axis` is a position the type has: a
+    /// caller refuses an axis of its own before it gets here.
+    Type *elementAlongAxis(size_t axis) const;
+
     /// The bracket text of the shape: `[]`, `[3, 4]`, `[?, 3]`, `[3, ..rest]`, `[..]`.
     std::string shapeText() const;
-    /// The shape for the mangled name: rank (`any` or a number) and constant extents; dimension
-    /// names and pack names do not appear, because they do not take part in equality.
+    /// The shape for the mangled name: rank (`any` or a number), constant extents and the linear
+    /// forms of the canonical shape; the spelling of dimension names and pack names does not
+    /// appear, because it does not take part in equality.
     std::string shapeMangle() const;
+    /// Whether this type has the same shape as `other`: the same rank and openness and canonical
+    /// shapes that are equal (a linear form is the same form whatever its names are called).
+    bool sameShape(const ArrayType &other) const;
 
     virtual Type *resolve(const type_vec_t &typeList) const override;
     virtual bool resolved() const override;

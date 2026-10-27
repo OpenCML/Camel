@@ -124,8 +124,9 @@ string Generator::generateModuleLoad(const AST::node_ptr_t &node) {
     if (!moduleLoad)
         return "";
 
+    // The module of a file is not written in the file, so the root load prints nothing of its own.
     string geneCode = moduleLoad->geneCode();
-    if (geneCode.empty() || geneCode == "module ") {
+    if (geneCode.empty()) {
         return generateChildren(node);
     }
     return geneCode + ";\n" + generateChildren(node);

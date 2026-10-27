@@ -1,0 +1,84 @@
+id = "opt.fault_preservation"
+order = 324
+tier = "fast"
+tags = ["feat", "opt", "rules", "inline", "faults", "negative"]
+desc = "A pass never removes a fault the program has: a rule that drops a factor, dead-code elimination of a statement on a sync chain, and inlining of a faulting callee"
+
+# Whether a node may be dropped, moved or reordered is one question, asked of every node the same
+# way: it must be pure and unable to fault (design principles 3.4, 9.7). Each case here is a
+# program whose fault must survive the pass named in the entry, on every back end.
+#
+#   rules_drop_division            the rule `x * 0 => 0` may not drop `a / b`
+#   dce_chained_division           an unread division written in a sync block stays
+#   chained_cast                   an unread checked conversion written in a sync block stays
+#   inline_faulting_callee_order   the inlined body of a faulting callee stays after the effects
+#                                  its argument waited for
+#
+# The statement of a function that is not a sync block is not on a chain, and an unused fault there
+# never runs (consistency.faults: fault.in_unused); the control entries keep that true under the
+# passes as well.
+
+[defaults]
+kind = "negative"
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 1
+expect_output_not_contains = ["not reached", "Floating point exception", "Segmentation fault", "dumped core"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules_drop_division.algebra"
+desc = "`std::opt::algebra` applies int_mul_zero to `(a / b) * 0`, which would drop the division."
+case = "../../../cases/opt/fault_preservation/rules_drop_division.cml"
+args = ["${case}", "std::opt::algebra", "${backend}"]
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_stdout_starts_with = "before\n"
+
+[[tests]]
+name = "rules_drop_division.opt"
+desc = "The same program through the whole optimizer."
+case = "../../../cases/opt/fault_preservation/rules_drop_division.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_stdout_starts_with = "before\n"
+
+[[tests]]
+name = "dce_chained_division.dce"
+desc = "`std::opt::dce` leaves `let r = 5 / z` in a sync block, so `after` is not printed."
+case = "../../../cases/opt/fault_preservation/dce_chained_division.cml"
+args = ["${case}", "std::opt::dce", "${backend}"]
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_stdout_starts_with = "before\n"
+
+[[tests]]
+name = "dce_chained_division.opt"
+desc = "The same program through the whole optimizer."
+case = "../../../cases/opt/fault_preservation/dce_chained_division.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_stdout_starts_with = "before\n"
+
+[[tests]]
+name = "chained_cast.reference"
+desc = "No pass: an unread conversion in a sync block still faults where it is written."
+case = "../../../cases/opt/fault_preservation/chained_cast.cml"
+args = ["${case}", "${backend}"]
+expect_stdout_starts_with = "before\n"
+expect_output_contains = ["conversion to 'f32[2, 3]' failed"]
+
+[[tests]]
+name = "chained_cast.dce"
+desc = "`std::opt::dce` keeps the unread conversion."
+case = "../../../cases/opt/fault_preservation/chained_cast.cml"
+args = ["${case}", "std::opt::dce", "${backend}"]
+expect_stdout_starts_with = "before\n"
+expect_output_contains = ["conversion to 'f32[2, 3]' failed"]
+
+[[tests]]
+name = "inline_faulting_callee_order.opt"
+desc = "After inlining, `7 / b` still runs after the effects `show` has, so `2` is printed before the fault."
+case = "../../../cases/opt/fault_preservation/inline_faulting_callee_order.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_stdout_starts_with = "1\n2\n"

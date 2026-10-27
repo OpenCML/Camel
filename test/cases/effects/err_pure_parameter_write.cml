@@ -3,7 +3,6 @@
  * `add<t>` carries the write in its type, so the call is refused where the two meet (design
  * principles 3.3). The refusal is the ordinary one for a call that no signature accepts.
  */
-module err_pure_parameter_write
 
 with <var total: int>
 func add(x: int): int sync {

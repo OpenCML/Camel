@@ -1,5 +1,4 @@
-module tiles_resident_scalars
-import { reshape, sum, abs, zeros, cast } from tensor
+import { reshape, sum, abs, zeros } from tensor
 import { with_grad } from autodiff
 import { Device, upload, download, run_preferred_resident } from tiles
 with <x: f32[..]>
@@ -15,7 +14,7 @@ func scale(x: f32[..], k: f32): f32[..] { return x * k }
 // its own, so the program that wants one really writes an f64 tensor and reduces that (the ruling
 // on `f32-scalar-to-the-device`: a scalar leaf takes the element type it is written with).
 func mixed(x: f32[..]): (float, f32[..], float) {
-    return (float(sum(cast(x, 'f64'))), x + 1.0, 1.0000000000000002)
+    return (float(sum(f64(x))), x + 1.0, 1.0000000000000002)
 }
 func read(x: Device<float>): float { return download(x) }
 func main(): int sync {

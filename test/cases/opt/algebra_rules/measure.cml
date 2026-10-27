@@ -7,9 +7,8 @@
  * tables are the measurement: a line that differs is a difference, and the line carries the nodes,
  * the edges and the operators of that graph on each side.
  */
-module measure
 
-import { Program, Node, Graph, graphs, nodes, inputs, with_inputs, ctrl_inputs, op, op_name, name } from graph
+import { Node, Graph, nodes, inputs, with_inputs, sync_inputs, order_inputs, op, op_name, name, graphs_of } from graph
 
 func opText(n: Node): string {
     return match op(n) {
@@ -28,7 +27,7 @@ func countOf(ops: string[], which: string): int {
 
 /// The edges of the graph: every input of every node is one edge, of one of the three kinds.
 func edgesOf(g: Graph): int {
-    return loop total = 0 for n in nodes(g) do total + len(inputs(n)) + len(with_inputs(n)) + len(ctrl_inputs(n))
+    return loop total = 0 for n in nodes(g) do total + len(inputs(n)) + len(with_inputs(n)) + len(sync_inputs(n)) + len(order_inputs(n))
 }
 
 func line(g: Graph) {
@@ -49,8 +48,8 @@ func line(g: Graph) {
 
 /// The table of `p`, in graph order, with the root graph (`__root__`) left out: it holds the entry
 /// call alone and is the same on both sides.
-export func report(p: Program): Program! sync {
-    let gs = graphs(p)->filter<(g: Graph): bool => name(g) != '__root__'>
+export func report::<F>(p: F): F! sync {
+    let gs = graphs_of(p)->filter<(g: Graph): bool => name(g) != '__root__'>
     let _ = loop n = 0 for g in gs do sync {
         line(g)
         return n + 1

@@ -3,13 +3,12 @@
  * fallible result (`from_codepoints`) are read from `stdlib/str.cml`, and the calls reach the
  * operators the C++ module runs (step 10).
  */
-module str_declaration_import
 
-import { split, find, from_codepoints } from str
+import { split, index_of, from_codepoints } from str
 
 func main(): int sync {
     println('a,b,c'->split<','>)
-    println('hello'->find<'l'> ?? -1)
+    println('hello'->index_of<'l'> ?? -1)
     println(from_codepoints([104, 105]) !! 'bad')
     return 0
 }

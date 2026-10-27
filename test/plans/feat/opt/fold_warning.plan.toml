@@ -28,7 +28,7 @@ verify_script = """
 assert(input.normalized.stdout === '7\n', 'stdout: ' + JSON.stringify(input.normalized.stdout))
 const lines = input.normalized.stderr.trim().split('\n')
 assert(lines.length === 1, 'one warning line: ' + input.normalized.stderr)
-assert(lines[0].includes('fold_constant_fault.cml:16:29: [Warn]: This constant expression faults whenever it is evaluated (DivisionByZero); it is not folded.'), lines[0])
+assert(lines[0].includes('fold_constant_fault.cml:15:29: [Warn]: This constant expression faults whenever it is evaluated (DivisionByZero); it is not folded.'), lines[0])
 assert(lines[0].endsWith('(name=RuntimeDiag::ConstantExpressionFaults, code=0x04100015)'), lines[0])
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
@@ -45,7 +45,7 @@ verify_script = """
 assert(input.normalized.stdout === '7\n', 'stdout: ' + JSON.stringify(input.normalized.stdout))
 const lines = input.normalized.stderr.trim().split('\n')
 assert(lines.length === 1, 'one warning line: ' + input.normalized.stderr)
-assert(lines[0].includes(':16:29: [Warn]:') && lines[0].includes('RuntimeDiag::ConstantExpressionFaults'), lines[0])
+assert(lines[0].includes(':15:29: [Warn]:') && lines[0].includes('RuntimeDiag::ConstantExpressionFaults'), lines[0])
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 8000
@@ -61,7 +61,7 @@ verify_script = """
 assert(input.normalized.stdout === '7\n', 'stdout: ' + JSON.stringify(input.normalized.stdout))
 const lines = input.normalized.stderr.trim().split('\n')
 assert(lines.length === 1, 'one warning line: ' + input.normalized.stderr)
-assert(lines[0].includes(':16:29: [Warn]:') && lines[0].includes('RuntimeDiag::ConstantExpressionFaults'), lines[0])
+assert(lines[0].includes(':15:29: [Warn]:') && lines[0].includes('RuntimeDiag::ConstantExpressionFaults'), lines[0])
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 8000
@@ -90,7 +90,7 @@ expect_exit = 1
 verify_script = """
 const out = input.normalized.stdout.trim().split('\n')
 assert(out.length === 2 && out[0] === 'before', 'stdout: ' + input.normalized.stdout)
-assert(out[1].includes('fold_constant_fault_reached.cml:11:15: [Error]: Attempted division by zero.') && out[1].includes('RuntimeDiag::DivisionByZero'), out[1])
+assert(out[1].includes('fold_constant_fault_reached.cml:10:15: [Error]: Attempted division by zero.') && out[1].includes('RuntimeDiag::DivisionByZero'), out[1])
 assert(input.normalized.stderr === '', 'no warning without passes: ' + input.normalized.stderr)
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
@@ -106,10 +106,10 @@ expect_exit = 1
 verify_script = """
 const out = input.normalized.stdout.trim().split('\n')
 assert(out.length === 2 && out[0] === 'before', 'stdout: ' + input.normalized.stdout)
-assert(out[1].includes('fold_constant_fault_reached.cml:11:15: [Error]: Attempted division by zero.') && out[1].includes('RuntimeDiag::DivisionByZero'), out[1])
+assert(out[1].includes('fold_constant_fault_reached.cml:10:15: [Error]: Attempted division by zero.') && out[1].includes('RuntimeDiag::DivisionByZero'), out[1])
 const lines = input.normalized.stderr.trim().split('\n')
 assert(lines.length === 1, 'one warning line: ' + input.normalized.stderr)
-assert(lines[0].includes('fold_constant_fault_reached.cml:11:15: [Warn]:') && lines[0].includes('RuntimeDiag::ConstantExpressionFaults'), lines[0])
+assert(lines[0].includes('fold_constant_fault_reached.cml:10:15: [Warn]:') && lines[0].includes('RuntimeDiag::ConstantExpressionFaults'), lines[0])
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 8000
@@ -124,10 +124,10 @@ expect_exit = 1
 verify_script = """
 const out = input.normalized.stdout.trim().split('\n')
 assert(out.length === 2 && out[0] === 'before', 'stdout: ' + input.normalized.stdout)
-assert(out[1].includes('fold_constant_fault_reached.cml:11:15: [Error]: Attempted division by zero.') && out[1].includes('RuntimeDiag::DivisionByZero'), out[1])
+assert(out[1].includes('fold_constant_fault_reached.cml:10:15: [Error]: Attempted division by zero.') && out[1].includes('RuntimeDiag::DivisionByZero'), out[1])
 const lines = input.normalized.stderr.trim().split('\n')
 assert(lines.length === 1, 'one warning line: ' + input.normalized.stderr)
-assert(lines[0].includes(':11:15: [Warn]:') && lines[0].includes('RuntimeDiag::ConstantExpressionFaults'), lines[0])
+assert(lines[0].includes(':10:15: [Warn]:') && lines[0].includes('RuntimeDiag::ConstantExpressionFaults'), lines[0])
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 8000
@@ -145,11 +145,39 @@ assert(warnings.length === 1, 'one warning: ' + input.stderr)
 const w = warnings[0]
 assert(w.severity === 'Warn' && w.data.name === 'RuntimeDiag::ConstantExpressionFaults' && w.code === '0x04100015', JSON.stringify(w))
 assert(w.data.stage === 'pass:std::opt::fold', 'stage ' + w.data.stage)
-assert(w.range.start.line === 10 && w.range.start.character === 14, JSON.stringify(w.range))
+assert(w.range.start.line === 9 && w.range.start.character === 14, JSON.stringify(w.range))
 assert(input.normalized.stdout.startsWith('before\n'), input.normalized.stdout)
 const errors = JSON.parse(input.normalized.stdout.slice('before\n'.length))
 assert(errors.length === 1 && errors[0].severity === 'Error' && errors[0].data.name === 'RuntimeDiag::DivisionByZero', JSON.stringify(errors))
-assert(errors[0].range.start.line === 10 && errors[0].range.start.character === 14, JSON.stringify(errors[0].range))
+assert(errors[0].range.start.line === 9 && errors[0].range.start.character === 14, JSON.stringify(errors[0].range))
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 8000
+
+[[tests]]
+name = "fail_is_intended.fold"
+desc = "A deliberate `fail<'Kind'>(message)` is not a constant expression that faults by accident: std::opt::fold folds the program without a ConstantExpressionFaults warning."
+kind = "behavior"
+case = "../../../cases/opt/generic/fold_fail_is_intended.cml"
+args = ["${case}", "std::opt::fold"]
+expect_exit = 0
+verify_script = """
+assert(input.normalized.stdout === '3\n', 'stdout: ' + JSON.stringify(input.normalized.stdout))
+assert(!input.normalized.stderr.includes('ConstantExpressionFaults'), 'no warning for a fail: ' + input.normalized.stderr)
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 8000
+
+[[tests]]
+name = "fail_is_intended.opt"
+desc = "A deliberate `fail<'Kind'>(message)` is not a constant expression that faults by accident: std::opt folds the program without a ConstantExpressionFaults warning."
+kind = "behavior"
+case = "../../../cases/opt/generic/fold_fail_is_intended.cml"
+args = ["${case}", "std::opt"]
+expect_exit = 0
+verify_script = """
+assert(input.normalized.stdout === '3\n', 'stdout: ' + JSON.stringify(input.normalized.stdout))
+assert(!input.normalized.stderr.includes('ConstantExpressionFaults'), 'no warning for a fail: ' + input.normalized.stderr)
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 8000

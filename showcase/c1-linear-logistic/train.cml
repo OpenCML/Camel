@@ -8,10 +8,9 @@
 // Run (data from make_data.py; compare.py drives this):
 //   camel train.cml --arg model=linear --arg data=artifacts/linear --arg steps=200 \
 //         --arg batch=32 --arg lr=0.1 --arg log_every=20 --arg threads=1 std::macro std::nvm
-module c1_linear_logistic
 
 // == imports ==
-import { abs, cast, exp, load_npy, log, mean, numel, relu, set_num_threads, shape } from tensor
+import { abs, exp, load_npy, log, mean, numel, relu, set_num_threads, shape } from tensor
 import { with_grad } from autodiff
 import { sgd } from nn
 import { now } from time
@@ -37,9 +36,9 @@ func loss(x: f32[..], y: f32[..], kind: int): float {
     let z = predict<m>(x)
     return if kind == 0 then {
         let errors = z - y
-        mean(errors * errors)
+        float(mean(errors * errors))
     } else {
-        mean(relu(z) - z * y + log(exp(-abs(z)) + 1.0))
+        float(mean(relu(z) - z * y + log(exp(-abs(z)) + 1.0)))
     }
 }
 
@@ -63,7 +62,7 @@ func evaluate(m: Model, x: f32[..], y: f32[..], kind: int): (float, float) {
         // read as the numbers they stand for once the conversion is written, at the f32 this
         // model computes in (design principles 5.1).
         let correct = (z > 0.0) === (y > 0.5)
-        let hit: f32[..] = cast(correct, "f32")
+        let hit: f32[..] = f32(correct)
         (float(mean(relu(z) - z * y + log(exp(-abs(z)) + 1.0))), float(mean(hit)))
     }
 }

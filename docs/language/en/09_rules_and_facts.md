@@ -25,9 +25,7 @@ The declared type of a parameter is checked by the matcher, so a rule needs no g
 A `rule` declaration declares a `Rule` value (like a constant declared with `let`, not like a function): it can be passed to a function, put in an array, filtered by a condition. **A rule set is an ordinary `Rule[]`**, and scheduling is ordinary Camel code ([rules language v2, section 8.5](../../design/rewrite/v2.cn.md)).
 
 ```cml
-module law
 
-import { Program } from graph
 import { rewrite } from rewrite
 
 // x - x is zero for every int: no condition, so nothing has to hold first.
@@ -37,8 +35,8 @@ rule sub_self(x: int) { x - x => 0 }
 rule fold_scales(x: int, const c1: int, const c2: int) { x * c1 + x * c2 => x * (c1 + c2) }
 
 /// A rule set is an array; a pass is an ordinary function that is handed one.
-export func simplify(p: Program): Program! {
-    return rewrite(p, [sub_self, fold_scales])
+export func simplify::<F>(p: F): F! {
+    return p->rewrite<[sub_self, fold_scales]>
 }
 ```
 
@@ -98,9 +96,7 @@ The kinds of parameter come from different places ([design principles 5.5](../..
 A `with` parameter is written like a function's ([7.4.2](07_statements.md#742-with-parameters)): it may have a default, and it may be given by name. **The binding is written where the rule is used**, the same spelling as a partial application of a function:
 
 ```cml
-module tiled
 
-import { Program } from graph
 import { rewrite } from rewrite
 
 with <tile: int>
@@ -110,8 +106,8 @@ with <scale: int = 1>
 rule mul_one_scaled(x: int) when scale > 0 { x * 1 => x }
 
 /// add_zero_tiled<1> binds tile; mul_one_scaled's parameter has a default, so its name alone is a Rule.
-export func apply(p: Program): Program! {
-    return rewrite(p, [add_zero_tiled<1>, mul_one_scaled])
+export func apply::<F>(p: F): F! {
+    return p->rewrite<[add_zero_tiled<1>, mul_one_scaled]>
 }
 ```
 
@@ -124,17 +120,15 @@ export func apply(p: Program): Program! {
 ## 9.4 A rule set is handed over explicitly
 
 - **A rewrite pass always receives its rule set explicitly**: importing a module never adds a pass to the pipeline, and rules are never collected on their own. Writing a `rule` in a module does not quietly change what any other pass does ([rules language v2, section 8.5](../../design/rewrite/v2.cn.md); the pass model of [design principles](../../design-principles.en.md), section 9).
-- The Camel spelling is the `rewrite` module of the [standard library reference](../../stdlib-reference.md): `rewrite(p, rules)` applies a set in one direction to a fixed point; `saturate(p, rules, rounds)` also uses the rules that reorder; `run<rules>` brings the round budget and the cost out explicitly (`explain` and `why_not` read it). A pass is a function ([4.7](04_execution_model.md#47-passes-and-pipelines)), so composition is function composition and pipes.
+- The Camel spelling is the `rewrite` module of the [standard library reference](../../stdlib-reference.md): `p->rewrite<rules>` applies a set in one direction to a fixed point; `p->saturate<rules, rounds: 8>` also uses the rules that reorder; `run<rules>` brings the round budget and the cost out explicitly (`explain` and `why_not` read it). A pass is a function ([4.7](04_execution_model.md#47-passes-and-pipelines)), so composition is function composition and pipes.
 - The standard optimization pass `std::opt` simplifies with the standard library's laws (`stdlib/rules.cml`). To hand it your own rules as well: in Camel write `f->std::opt<rules: [negate]>`, on the command line write `std::opt rules=[law::negate]` (a `Rule[]` is a constant expression, read by the pass-parameter rules).
 
-**Not implemented.** `std::opt` has no `rules` parameter today: writing it on the command line gives `SemanticDiag::ParamArgumentUnknown` ("'rules' is not a parameter of 'std::opt'"), and the name `std::opt` does not resolve in source either. To apply your own rules today, write a pass of your own — a pass is a function from a program to a program — and hand it to the command line. The pass takes the module's name (here the file's name), so it is invoked like this:
+**Not implemented.** `std::opt` has no `rules` parameter today: writing it on the command line gives `SemanticDiag::ParamArgumentUnknown` ("'rules' is not a parameter of 'std::opt'"), and the name `std::opt` does not resolve in source either. To apply your own rules today, write a pass of your own — a pass is a function from a function to a function (`(f: F) => F!`) — and hand it to the command line. The pass takes the module's name (here the file's name), so it is invoked like this:
 
 ```cml
 // counts.cml
-module counts
 
 import { abs } from math
-import { Program } from graph
 import { rewrite } from rewrite
 
 /// What this program may rely on: its values are counts, so a count is never negative and a
@@ -150,8 +144,8 @@ fact nonnegative(v: int): bool match v {
 rule abs_of_count(x: int) when nonnegative(x) { abs(x) => x }
 
 /// The rule set is handed to the pass here, and nowhere else.
-export func simplify(p: Program): Program! {
-    return rewrite(p, [abs_of_count])
+export func simplify::<F>(p: F): F! {
+    return p->rewrite<[abs_of_count]>
 }
 
 func distance(a: int, b: int): int {
@@ -200,7 +194,6 @@ In theory these are ⊔/⊓/∇/Δ of abstract interpretation.
 `join`, `meet`, `widen` and `narrow` take a **function**, so what is written here is a name that exists in a library (such as `max`) or a lambda. **`or`/`and` are not standard library functions**, and no new ones are added: the boolean "or" is `|` (evaluated on both sides, an ordinary overloadable logical operator, [design principles 4.2](../../design-principles.en.md)), so the merge of a boolean fact is written `join (lhs: bool, rhs: bool) => lhs | rhs`. `||` is the reserved operator that turns into a branch; it is not a function value that can be passed, and cannot be written here.
 
 ```cml
-module bounds
 
 import { max, min } from math
 
@@ -245,10 +238,9 @@ error[SemanticDiag::FactCaseDefaultMissing]: The fact 'sign' has no 'case _', so
 **Parameters.** A fact may have parameters, passed as arguments when it is queried. They are **the parts** of the value (nodes): `fact mul_by_one(a: Node, b: Node): bool match (a, b) { ... }` is queried by a rule's condition as `mul_by_one(x, node_of(c))`. With no parameter, the single-value form is `range(v)`. Type parameters are declared after the name (`fact range::<T>(v: T): Interval`), as they are on a rule — see [9.3](#93-type-parameters-and-with-parameters).
 
 ```cml
-module parts
 
 import { max } from math
-import { Node, Program } from graph
+import { Node } from graph
 import { rewrite } from rewrite
 
 fact sign(v: int): int match v {
@@ -264,18 +256,16 @@ fact mul_by_one(a: Node, b: Node): bool match (a, b) {
 
 rule mul_one_by_parts(x: int, const c: int) when mul_by_one(x, node_of(c)) { x * c => x }
 
-export func apply(p: Program): Program! {
-    return rewrite(p, [mul_one_by_parts])
+export func apply::<F>(p: F): F! {
+    return p->rewrite<[mul_one_by_parts]>
 }
 ```
 
 **`with` arguments.** A fact may have `with` parameters: adjustments such as a widening threshold, a precision, a truncation depth or a tolerance. They are declared like a function's or a rule's; a query writes the arguments as a call does, and a default may be left out.
 
 ```cml
-module capped_fact
 
 import { max } from math
-import { Program } from graph
 import { rewrite } from rewrite
 
 with <cap: int = 5>
@@ -290,8 +280,8 @@ rule at_default(x: int) when capped(x) == 5 { x + 0 => x }
 /// The argument is written out here: this is a different fact, `capped<3>`.
 rule at_three(x: int) when capped<3>(x) == 3 { x * 1 => x }
 
-export func apply(p: Program): Program! {
-    return rewrite(p, [at_default, at_three])
+export func apply::<F>(p: F): F! {
+    return p->rewrite<[at_default, at_three]>
 }
 ```
 
@@ -321,20 +311,19 @@ error[SemanticDiag::FactArgumentNotConstant]: The argument 'cap' of a fact is no
 
 ## 9.7 Checking, explaining, and "which rule fired"
 
-- `check(rules, samples, seed)` samples a rule: it makes random instances, computes both sides and compares them, and prints a table of findings. It only samples: a counter-example says the rule is wrong, while no error only says that no counter-example was drawn this time. Every standard library rule passes `check` before it goes in.
+- `rules->check<samples, seed>` samples a rule: it makes random instances, computes both sides and compares them, and prints a table of findings. It only samples: a counter-example says the rule is wrong, while no error only says that no counter-example was drawn this time. Every standard library rule passes `check` before it goes in.
 
 ```cml
-module checked
 
-import { check } from rewrite
+import { check, check_text } from rewrite
 
 rule sub_self(x: int) { x - x => 0 }
 
 rule fold_scales(x: int, const c1: int, const c2: int) { x * c1 + x * c2 => x * (c1 + c2) }
 
 func main(): int sync {
-    println(check([sub_self], 100, 1))
-    println(check([fold_scales], 100, 1))
+    println(check_text([sub_self]->check<100, 1>))
+    println(check_text([fold_scales]->check<100, 1>))
     return 0
 }
 ```
@@ -358,17 +347,15 @@ thing that changes):
 
 ```cml
 // fired.cml
-module fired
 
 import { abs } from math
-import { Program } from graph
 import { rewrite } from rewrite
 
 // abs(x) => x, with no condition, so the dump is about the rule firing and nothing else.
 rule drop_abs(x: int) { abs(x) => x }
 
-export func simplify(p: Program): Program! {
-    return rewrite(p, [drop_abs])
+export func simplify::<F>(p: F): F! {
+    return p->rewrite<[drop_abs]>
 }
 
 func distance(a: int, b: int): int {

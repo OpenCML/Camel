@@ -1,14 +1,12 @@
 // The module declares the pass the pipeline names, but does not export it, so `run` cannot be
 // named; `other` can. The module compiles: what is wrong is the declaration, not the
 // module.
-module declares_not_exported
 
-import { Program } from graph
 
-func run(p: Program): Program! {
+func run::<F>(p: F): F! {
     return p
 }
 
-export func other(p: Program): Program! {
+export func other::<F>(p: F): F! {
     return p
 }

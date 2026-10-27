@@ -1,13 +1,12 @@
-/// `T?`, `T!` and error values: `??`, `!!`, `?->`, `match` on them, `throw`, `parse_int`, and
+/// `T?`, `T!` and error values: `??`, `!!`, `->`, `match` on them, `parse_int`, and
 /// `attempt`, which makes a fault inside a call an error value (design principles 3.9).
-module tagged
 
 func find(xs: int[], v: int): int? {
     return if len(xs) == 0 then null else if xs[0] == v then 0 else null
 }
 
 func checked(x: int): int! {
-    if x < 0 then sync { throw error('Negative', 'the argument is negative') } else sync { return x * 2 }
+    if x < 0 then sync { return error('Negative', 'the argument is negative') } else sync { return x * 2 }
 }
 
 func risky(x: int): int {
@@ -20,8 +19,8 @@ func main(): int sync {
     println(a, b, a ?? -1, b ?? -1)
     println(checked(4), checked(-1), checked(4) !! 0, checked(-1) !! 0)
     println(parse_int('42'), parse_int('4x2'), parse_int('7') !! 0)
-    println(attempt(risky, 5), attempt(risky, 0), attempt(risky, 0) !! -1)
-    let e = attempt(risky, 0)
+    println(attempt(risky)(5), attempt(risky)(0), attempt(risky)(0) !! -1)
+    let e = attempt(risky)(0)
     let k = match e {
         case error err => err.kind
         case _ => 'fine'

@@ -1,7 +1,6 @@
 /**
  * Exercises filesystem primitives for directory creation, text IO, metadata queries, and partial reads.
  */
-module main
 
 import { exists, is_file, is_dir, mkdir, mkdirs, read_text, write_text, file_size, read_chunk } from fs
 import { decode } from bytes
@@ -13,32 +12,32 @@ func main(): int sync {
     // The runner gives every test its own scratch directory (CAMEL_TEST_TMPDIR): this test
     // writes under it, so it neither reads nor leaves anything under a fixed path. A direct run
     // (a benchmark, which has no private working directory) keeps the older fixed path.
-    let root = get_env('CAMEL_TEST_TMPDIR')
+    let root = get_env('CAMEL_TEST_TMPDIR') ?? ''
     let dir = if root == '' then 'test/tmp' else root + '/fs'
     let path = dir + '/fs_test_tmp.txt'
     let content = "hello from fs module"
 
     println("\n[1] exists(dir) before mkdirs =", exists(dir))
     println("[2] mkdirs(dir)")
-    let ok = mkdirs(dir)
-    println("  mkdirs ok =", ok)
+    let made = dir->mkdirs
+    println("  mkdirs ok =", match made { case error e => e.kind  case _ => 'ok' })
     println("[3] exists(dir) after mkdirs =", exists(dir))
     println("[4] is_dir(dir) =", is_dir(dir))
 
-    println("\n[5] write_text(path, content)")
-    write_text(path, content)
+    println("\n[5] content->write_text<path>")
+    let _ = content->write_text<path>
 
     println("\n[6] exists(path) =", exists(path))
     println("[7] is_file(path) =", is_file(path))
     println("[8] read_text(path)")
-    let read = read_text(path)
+    let read = (path->read_text !! '')
     println("  content =", read)
 
-    println("\n[9] file_size(path)")
-    println("  size =", file_size(path))
+    println("\n[9] (path->file_size !! 0)")
+    println("  size =", (path->file_size !! 0))
 
     println("[10] read_chunk(path, 0, 5)")
-    println("  chunk =", decode(read_chunk(path, 0, 5)) !! '')
+    println("  chunk =", path->read_chunk<0, 5> -> decode !! '')
 
     println("\n=== FS tests completed ===")
     return 0

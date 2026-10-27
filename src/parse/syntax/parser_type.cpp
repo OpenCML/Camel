@@ -20,16 +20,10 @@
 
 namespace camel::parse::syntax {
 
-/// Whether a type can start at the `n`-th token from the current one. A modifier starts one
-/// only as the head of a function type (`sync (x: int) => int`).
+/// Whether a type can start at the `n`-th token from the current one. A modifier does not: `sync`
+/// is a property of a block, and a function type has none (design principles 3.3).
 bool ParserImpl::typeStartsAt(uint32_t n) const {
-    TK kind = peek(n);
-    while (isModifier(kind)) {
-        kind = peek(++n);
-        if (kind != TK::LParen && kind != TK::Lt && !isModifier(kind)) {
-            return false;
-        }
-    }
+    const TK kind = peek(n);
     switch (kind) {
     case TK::Identifier:
     case TK::LParen:
@@ -192,7 +186,52 @@ void ParserImpl::parseSpecType() {
     close(m, NK::SpecType);
 }
 
+/// matchTypeType : 'match' 'type' typeExpr '{' typeArm* '}'
+/// A type function's body that chooses by the shape or the identity of a type (design principles
+/// 5.6): the cases are those of the `match type` of values, and each gives a type.
+void ParserImpl::parseMatchTypeType() {
+    const size_t m = mark();
+    bump(); // match
+    if (!expect(TK::KwType)) {
+        return close(m, NK::MatchTypeType);
+    }
+    {
+        TypeHeadScope typeHead(*this);
+        parseType();
+    }
+    if (panic_ || !expect(TK::LBrace)) {
+        return close(m, NK::MatchTypeType);
+    }
+    {
+        Scope scope(*this, true);
+        while (cur_ == TK::KwCase && !panic_) {
+            parseTypeArm();
+        }
+        if (!panic_ && cur_ != TK::RBrace) {
+            unexpected({e(TK::KwCase), e(TK::RBrace)});
+        }
+    }
+    eat(TK::RBrace);
+    close(m, NK::MatchTypeType);
+}
+
+/// typeArm : 'case' typeCasePattern ('|' typeCasePattern)* '=>' typeExpr
+void ParserImpl::parseTypeArm() {
+    const size_t m = mark();
+    bump(); // case
+    parseTypeCasePattern();
+    while (cur_ == TK::Pipe && !panic_) {
+        bump();
+        parseTypeCasePattern();
+    }
+    if (!panic_ && expect(TK::FatArrow)) {
+        parseType();
+    }
+    close(m, NK::TypeArm);
+}
+
 /// primaryType : structType | enumType | identRef | '(' typeExpr ')' | tupleType | funcType
+///             | matchTypeType
 ///             | 'typeof' dataExpr
 /// tupleType   : '(' typeList? ','? ')'
 /// A `(` opens a function type when its head is that of a parameter list (`(name:`, `(var`, or
@@ -209,13 +248,17 @@ void ParserImpl::parsePrimaryType() {
     switch (cur_) {
     case TK::Identifier:
         return parseIdentRef(NK::RefType);
+    case TK::KwMatch:
+        return parseMatchTypeType();
     case TK::LBrace:
         return parseStructType();
     case TK::KwEnum:
         return parseEnumType();
     case TK::Lt:
-    case TK::KwSync:
         return parseFuncType();
+    case TK::KwSync:
+        // A function type has no modifiers: `sync` belongs to a block (design principles 3.3).
+        return unexpected({SyntaxError::TypeExpression});
     case TK::KwTypeof: {
         // The operand stops before an assignment: `let v: typeof a = b` declares `v`.
         const size_t m = mark();
@@ -232,6 +275,8 @@ void ParserImpl::parsePrimaryType() {
         if (!typeHead &&
             (t1 == TK::KwVar || (t1 == TK::Identifier && peek(2) == TK::Colon) ||
              (t1 == TK::RParen && peek(2) == TK::FatArrow) ||
+             (t1 == TK::DotDot && peek(2) == TK::Identifier && peek(3) == TK::RParen &&
+              peek(4) == TK::FatArrow) ||
              (t1 == TK::Comma && peek(2) == TK::RParen && peek(3) == TK::FatArrow))) {
             return parseFuncType();
         }
@@ -301,20 +346,17 @@ void ParserImpl::parseStructType() {
     close(m, NK::StructType);
 }
 
-/// funcType : modifiers? angledParams? parentParams '=>' typeExpr resourceClause?
+/// funcType : angledParams? parentParams '=>' typeExpr resourceClause?
 void ParserImpl::parseFuncType() {
     const size_t m = mark();
-    if (isModifier(cur_)) {
-        parseModifiers();
-    }
     if (cur_ == TK::Lt || cur_ == TK::LAngle) {
-        parseAngledParams();
+        parseAngledParams(true);
     }
     if (cur_ != TK::LParen) {
         unexpected({e(TK::LParen)});
         return close(m, NK::FuncType);
     }
-    parseParentParams();
+    parseParentParams(true);
     if (!panic_ && expect(TK::FatArrow)) {
         parseType();
     }

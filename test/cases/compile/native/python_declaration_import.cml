@@ -1,20 +1,28 @@
 /**
- * The declarations of `python`, read from `stdlib/python.cml`: `py_exec`, `py_eval`, `py_run`,
- * `py_attr`, `py_import` and `py_dispose` have fixed signatures and are declared; `py_call`,
- * `py_print`, `py_println`, `py_wrap` and `py_unwrap` stay computed in C++.
+ * The declarations of `python`, read from `stdlib/python.cml`: `exec`, `eval`, `run_file`,
+ * `import_module`, `attr`, `call`, `to_string`, `to_py` and `from_py` are declared.
  * The calls are type-checked and never run: this case stays compile-only.
  */
-module python_declaration_import
 
-import { py_exec, py_eval, py_run, py_attr, py_import, py_dispose } from python
+import { exec, eval, run_file, import_module, attr, call, to_string, to_py, from_py, PyObject } from python
+
+func must(r: PyObject!): PyObject {
+    return match r {
+        case error e => fail<'InvalidArgument'>(e.message)
+        case v => v
+    }
+}
 
 func fixed_signatures(): void sync {
-    py_exec("x = 1")
-    py_eval("1 + 2")
-    py_run("script.py")
-    let math = py_import("math")
-    let sqrt = py_attr(math, "sqrt")
-    py_dispose(sqrt)
+    let _ = exec("x = 1")
+    let _ = eval("1 + 2")
+    let _ = run_file("script.py")
+    let math = must(import_module("math"))
+    let sqrt = must(math->attr<"sqrt">)
+    let argument = must(to_py(16))
+    let result = must([argument]->call<sqrt>)
+    let _ = to_string(result)
+    let _ = from_py::<float>(result)
 }
 
 func main(): int {

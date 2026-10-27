@@ -4,7 +4,6 @@
  * one carried value per element at the loop's entry and rebuilt at both ends (the outline,
  * item 3); the model has one Loop and the tuple's two values as outputs.
  */
-module export_loop_tuple_argument
 import { reshape, sum, tanh } from tensor
 import { export_model } from onnx
 import { get_env } from env
@@ -16,7 +15,7 @@ func walk(s: (float[..], int)): (float[..], int) {
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
     println(walk((x, 0)).1)
-    export_model((x: float[..]): (float[..], int) => walk((x, 0)), (x), get_env('ONNX_OUT'))
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((x: float[..]): (float[..], int) => walk((x, 0)), (x))
     println('exported')
     return 0
 }

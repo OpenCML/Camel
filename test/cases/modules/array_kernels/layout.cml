@@ -1,0 +1,18 @@
+/**
+ * The layout atoms of `array` (stdlib/array.cml): the extents, the element count, one extent by
+ * axis, and the elements as little-endian bytes.
+ */
+
+import { shape, numel, dim, to_bytes } from array
+import { reshape } from tensor
+import { to_array } from bytes
+
+func main(): int sync {
+    let m = reshape(f32([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]), [2, 3])
+    println(shape(m), numel(m), m->dim<0>, m->dim<-1>)
+    println(shape([7, 8, 9]), numel([7, 8, 9]))
+    println(to_array(to_bytes(f32([1.0, 2.0]))))
+    println(to_array(to_bytes(i32([1, 258]))))
+    println(to_array(to_bytes([true, false])))
+    return 0
+}

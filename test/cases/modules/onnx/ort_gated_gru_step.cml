@@ -4,7 +4,6 @@
  * from X, and writes the loss to OUT/loss.npy and the updated weights to OUT/params.
  * Driven by ort_gated_gru_step.py.
  */
-module ort_gated_gru_step
 
 import { sigmoid, tanh, reshape, shape, zeros, mean, abs, load_npy, save_npy } from tensor
 import { with_grad } from autodiff
@@ -61,9 +60,9 @@ func loaded(dir: string): Gru {
 }
 
 func main(): int sync {
-    let r = step(loaded(get_env('PARAMS')), load_npy::<f32>(get_env('X')))
-    save_npy(reshape([r.0], [1]), get_env('OUT') + '/loss.npy')
-    save_params(r.1, get_env('OUT') + '/params')
+    let r = step(loaded(get_env('PARAMS') ?? ''), load_npy::<f32>(get_env('X') ?? ''))
+    save_npy(reshape([r.0], [1]), (get_env('OUT') ?? '') + '/loss.npy')
+    save_params(r.1, (get_env('OUT') ?? '') + '/params')
     println('ran')
     return 0
 }

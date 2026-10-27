@@ -4,7 +4,6 @@
  * the content). Every call reaches the operator the C++ module runs; `stdlib/fs.cml` is the one
  * source of the signatures.
  */
-module fs_declaration_import
 
 import {
     exists,
@@ -13,8 +12,7 @@ import {
     mkdirs,
     write_text,
     write_bytes,
-    replace,
-    try_read_text,
+    read_text,
     file_size,
     read_chunk,
     read_bytes,
@@ -33,22 +31,22 @@ func verdict(r: void!): string {
 }
 
 func main(): int sync {
-    let root = get_env('CAMEL_TEST_TMPDIR')
+    let root = get_env('CAMEL_TEST_TMPDIR') ?? ''
     let dir = if root == '' then 'test/tmp/fs_declaration' else root + '/fs_declaration'
     let path = dir + '/notes.txt'
     let binary = dir + '/notes.bin'
     let content = 'hello from the declaration'
-    println(mkdirs(dir))
+    println(verdict(dir->mkdirs))
     println(exists(path))
-    write_text(path, content)
-    write_bytes(binary, encode(content))
-    replace(binary, encode(content))
+    let _ = content->write_text<path>
+    let _ = (encode(content))->write_bytes<binary>
+    let _ = (encode(content))->write_bytes<binary, true>
     println(is_file(path))
     println(is_dir(dir))
-    println(file_size(path))
-    println(try_read_text(path) !! 'bad')
-    println(decode(read_chunk(path, 0, 5)) !! '')
-    println(decode(read_bytes(path)) !! '')
+    println(path->file_size !! 0)
+    println(path->read_text !! 'bad')
+    println(path->read_chunk<0, 5> -> decode !! '')
+    println(path->read_bytes -> decode !! '')
     println(verdict(remove(path)))
     println(verdict(remove(path)))
     println(verdict(remove(binary)))

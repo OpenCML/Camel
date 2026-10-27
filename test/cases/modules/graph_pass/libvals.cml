@@ -1,4 +1,3 @@
-module libvals
 export func nine(): int {
     return 9
 }

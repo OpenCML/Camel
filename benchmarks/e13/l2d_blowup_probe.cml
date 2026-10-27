@@ -11,7 +11,6 @@
  *
  * MODE=export STEPS=4|6 ONNX_OUT=...
  */
-module e13_l2d_blowup_probe
 
 import { sigmoid, tanh, reshape, shape, zeros, mean, abs } from tensor
 import { get_env } from env
@@ -76,8 +75,8 @@ func load(): Gru {
 
 func main(): int sync {
     let m = load()
-    let x = if get_env('STEPS') == '6' then zeros([2, 6, 2]) else zeros([2, 4, 2])
-    export_model(fwd, (m, x), get_env('ONNX_OUT'))
-    println('exported fwd steps=' + get_env('STEPS'))
+    let x = if (get_env('STEPS') ?? '') == '6' then zeros([2, 6, 2]) else zeros([2, 4, 2])
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(fwd, (m, x))
+    println('exported fwd steps=' + (get_env('STEPS') ?? ''))
     return 0
 }

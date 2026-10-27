@@ -2,7 +2,6 @@
  * Two equal expressions are not merged when they were granted different numeric permissions
  * (std::opt::cse, docs/design/op-semantics 6.4); equal expressions with equal permissions are.
  */
-module cse
 
 func twice(a: float, b: float): float {
     let p = a * b

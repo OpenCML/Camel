@@ -1,7 +1,6 @@
 // Functions as values: returning a closure, composing functions, a table of operations,
 // `with` parameters, and a counter that keeps its own state.
 // Run: camel examples/functions/closures.cml
-module closures
 
 type IntFn = (x: int) => int
 
@@ -27,7 +26,7 @@ func scale(x: int): int {
 // Each call makes a new counter with its own `count`.
 func make_counter(): () => int {
     var count = 0
-    return sync (): int => sync {
+    return (): int => sync {
         count = count + 1
         return count
     }

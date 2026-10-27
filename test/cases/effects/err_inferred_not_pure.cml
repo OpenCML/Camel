@@ -4,7 +4,6 @@
  * asks for `pure` does not take it (design principles 3.3, effects plan 5). The refusal is at the
  * call, where the position and the value meet, and it names the signature that would have matched.
  */
-module err_inferred_not_pure
 
 func apply(f: (x: int) => int pure, x: int): int {
     return f(x)

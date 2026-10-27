@@ -152,8 +152,9 @@ version lives as long as a live `Program` holds it, a `Program` as long as somet
   `GCGraph::updateRefs` its static values, `Function::updateRefs` the `Program` it was made in
   (slot `program`) and its graph. A frame keeps the graph it runs (`FramePool` tracer).
 - **Two collections.** While a program runs, a major collection of run-time values marks through
-  the heap and `GCGraphManager::sweepMarked()` (installed with `setGraphSweeper`, called after
-  `markPhase`) frees the unmarked `Program`s and graph versions; the graph space also asks for a
+  the heap and `GCGraphManager::sweepMarked()` (installed with `registerGraphSweeper`, one per
+  context, called after `markPhase`) frees the unmarked `Program`s and graph versions; the graph
+  space also asks for a
   major collection when it holds a megabyte (`--graph-gc-mb`, default 64) and as much again
   as it held after the last sweep (`requestMajorCollection`). Between passes (nothing runs)
   `collect()` has the heap marked the same way, without sweeping or moving anything
@@ -367,8 +368,8 @@ declares flags such as `containsCamelReferences`, `finalizable`, `movable`, and 
 descriptor without a trace callback is treated as unable to hold Camel object references.
 
 The Python module now stores `PyObject` values as `ForeignResourceObject` wrappers instead of a
-process-global holder vector. `python:py_dispose` exposes deterministic cleanup, and normal Python
-access checks for the disposed state before borrowing the `py::object`.
+process-global holder vector. A wrapper is released when the collector finds it unreachable, and
+normal Python access checks for the disposed state before borrowing the `py::object`.
 
 Loaded `.cmo` DLL handles are still retained for the process lifetime. This is intentional: native
 resource control blocks may hold descriptor callbacks compiled into the module DLL, and unloading the

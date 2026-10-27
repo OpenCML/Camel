@@ -1,5 +1,3 @@
-module match_subject
-
 import { Json, decode } from json
 
 // A decoded value as the subject of a `match` on literals: as an `any` it was compared bit for
@@ -16,5 +14,5 @@ func check(v: Json): int sync {
 }
 
 func main(): int sync {
-    return decode('"ab"') ?-> check !! 1
+    return decode('"ab"') -> check !! 1
 }

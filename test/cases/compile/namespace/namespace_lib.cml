@@ -1,7 +1,6 @@
 /**
  * Helper module for namespace import/export tests.
  */
-module namespace_lib
 
 export func root(): int sync {
     return 4

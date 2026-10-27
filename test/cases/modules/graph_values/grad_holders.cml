@@ -1,0 +1,61 @@
+/**
+ * `grad` and `with_grad` define new functions; `loss` itself, and `user`, which calls it, behave
+ * and look the same afterwards (design principles 9.1). Run both with the derivative built at run
+ * time and with `std::macro` expanding it ahead of time: the output is the same.
+ */
+import { grad, with_grad } from autodiff
+import { Graph, Node, constant, graph_of, inputs, nodes, op, op_name } from graph
+
+func target(x: int): int {
+    return (x + 1) * 3
+}
+
+func opText(n: Node): string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+func isOne(n: Node): bool {
+    return match constant::<int>(n) {
+        case null => false
+        case v => v == 1
+    }
+}
+
+/// The `x + 1` of `target`: an int addition whose second operand is the constant 1.
+func isAddOne(n: Node): bool {
+    let ins = inputs(n)
+    return opText(n) == ':op/add_l' && len(ins) == 2 && isOne(ins[1])
+}
+
+/// How many `+ 1` nodes the graph of a function has.
+func addOnes(g: Graph): int {
+    return len(nodes(g)->filter<isAddOne>)
+}
+
+/// The number of nodes of a function's graph.
+func size(g: Graph): int {
+    return len(nodes(g))
+}
+
+with <w: float>
+func loss(x: float): float {
+    return w * x * x + w
+}
+
+func user(x: float): float {
+    return loss<2.0>(x) + 1.0
+}
+
+func main(): int sync {
+    let before = size(graph_of(user))
+    println(`before: ${loss<2.0>(3.0)} ${user(3.0)}`)
+    let g = grad(loss)
+    let vg = with_grad(loss)
+    let (l, d) = vg<2.0>(3.0)
+    println(`derived: ${g<2.0>(3.0)} ${l} ${d}`)
+    println(`after: ${loss<2.0>(3.0)} ${user(3.0)} ${size(graph_of(user)) == before}`)
+    return 0
+}

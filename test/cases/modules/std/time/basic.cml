@@ -1,7 +1,6 @@
 /**
  * Exercises basic wall-clock and formatting helpers so time values can be captured and rendered reliably.
  */
-module main
 
 // time 模块基础测试
 import { now, strftime } from time
@@ -13,8 +12,8 @@ func main(): int sync {
     let t = now()
     println("  now =", t)
 
-    println("\n[2] strftime(now(), '%Y-%m-%d')")
-    let fmt = strftime(t, "%Y-%m-%d")
+    println("\n[2] now()->strftime<'%Y-%m-%d'>")
+    let fmt = t->strftime<"%Y-%m-%d">
     println("  fmt =", fmt)
 
     println("\n=== Time tests completed ===")

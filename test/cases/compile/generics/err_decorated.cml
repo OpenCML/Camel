@@ -1,5 +1,3 @@
-module err_decorated
-
 func deco(f: (x: int) => int): (x: int) => int {
     return f
 }

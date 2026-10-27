@@ -26,10 +26,11 @@ Every expression has a definite type at compile time; the graph contains only co
 | Map, set | `Map<K, V>`, `Set<T>` | See 3.6 |
 | Enum | `Shape`, `Option<int>` | See 3.5 |
 | No value | `void` | Return type of a function that returns no value; its only value prints as `null` |
+| Bottom | `never` | The type with no value: `fail<'Kind'>(message)` and `exit(code)` have it, and it fits everywhere (it is assignable to any type, joins a branch and is inferred), but no expression gives a value of it |
 | Module types | A type name introduced by a module (e.g. `Json`); a numeric array is not a module type of its own (the transitional `Tensor` name is deleted, and writing it is an unknown name) | Introduced by a module; the name and the arguments in angle brackets are interpreted by the type itself, and the representation is the module's |
 There is no type `any`: after compilation every value has a definite type (design principles 5.10). Writing `any` in any type position is, like any other unknown type name, the compile-time error `SemanticDiag::UnresolvedTypeReference`; a parameter that takes several types uses a type parameter (see [7.5](07_statements.md#75-generic-functions)), and values of different types side by side go in a tuple or a struct.
 
-Reading JSON: for a known shape use `json::decode_as(text, shape)`, whose result is a `T!`; for an unknown shape use `json::decode(text)`, which gives a `Json!`: an error value `JsonParseError` when the text is not JSON, and `JsonTooDeep` when the document nests deeper than the limit (neither is a fault, design principles 11.2; the limit is 10000), otherwise a `Json`, whose type is definite and whose content is known only at run time; take parts out with `get`, `as_int`, `as_array` and the like, each of which gives a value of a definite type (null when there is none) and also takes a `Json?`, `Json!` or `Json!?` so that calls chain, as in `j->get<'server'>->get<'port'>->as_int ?? 8080`; an accessor of a `Json!` gives the two-layer result (`Json!?` and the like) with the error of the document passed on unchanged, taken apart with `??` and `!!`; `as_float` takes an integer too, and `get<index>` out of range gives `null` (the accessor design settled in 11.2).
+Reading JSON: for a known shape use `json::decode_as::<T>(text)`, whose result is a `T!`; for an unknown shape use `json::decode(text)`, which gives a `Json!`: an error value `JsonParseError` when the text is not JSON, and `JsonTooDeep` when the document nests deeper than the limit (neither is a fault, design principles 11.2; the limit is 10000), otherwise a `Json`, whose type is definite and whose content is known only at run time; take parts out with `get`, `as_int`, `as_array` and the like, each of which gives a value of a definite type (null when there is none) and also takes a `Json?`, `Json!` or `Json!?` so that calls chain, as in `j->get<'server'>->get<'port'>->as_int ?? 8080`; an accessor of a `Json!` gives the two-layer result (`Json!?` and the like) with the error of the document passed on unchanged, taken apart with `??` and `!!`; `as_float` takes an integer too, and `get<index>` out of range gives `null` (the accessor design settled in 11.2).
 
 The `T` and `U...` in the signatures of the standard library (as in `println: (x: T, ...rest: U...) => T`) are a notation of the reference only: these operators check their arguments with type rules, and the graph holds concrete types only.
 
@@ -109,18 +110,17 @@ func main(): int sync {
   | Form | Result |
   |---|---|
   | `len(xs)` | Length |
-  | `head(xs)`, `tail(xs)` | The first element (of an empty array: the fault `RuntimeDiag::IndexOutOfRange`, as for `xs[0]`); the array without its first element |
   | `last(xs)` | The last element (of an empty array: the fault `RuntimeDiag::IndexOutOfRange`). A negative subscript does not count from the end, so use this for the last element, not `xs[-1]` |
   | `a..b` | The interval `[a, a+1, ..., b-1]`; empty when `a >= b`. With a step write `range(a, b, step)` |
-  | `xs->slice<a, b>` | A new array of subscripts `a` to `b-1`. `a` and `b` are positions from 0 to the length; a bound outside the array (a negative one included) is the fault `RuntimeDiag::SliceOutOfRange`, as an index out of range is a fault. With both bounds inside the array and `b < a` the result is empty. To take "at most n" use `take` and `drop` of the `array` module, which cut by definition |
+  | `xs[a:b]` | A new array of subscripts `a` to `b-1`. `a` and `b` are positions from 0 to the length; a bound outside the array (a negative one included) is the fault `RuntimeDiag::SliceOutOfRange`, as an index out of range is a fault. With both bounds inside the array and `b < a` the result is empty. To take "at most n" use `take` and `drop` of the `array` module, which cut by definition |
   | `concat(xs, ys)` | Concatenation into a new array |
   | `xs->contains<v>` | Whether an element equals `v`, by the `==` of the element type (arrays, tuples and structs compare by content, see [6.7.3](06_expressions.md)) |
   | `zip(xs, ys)` | An array of `(x, y)` tuples; three or more arrays give tuples of that many elements (`zip(xs, ys, zs)`); the lengths must be equal |
   | `strs->join<sep>` | Joins a `string[]` into one string |
   | `map`, `filter`, `reduce`, `foreach` | See [6.10](06_expressions.md#610-higher-order-operators) |
-  | `xs->append<v>`, `xs->extend<ys>` | A **new array** with `v` (or the elements of `ys`) at the end; `xs` is unchanged. To append to a variable write `xs = xs->append<v>` (see 3.7) |
+  | `xs->append<v>` | A **new array** with `v` at the end; `xs` is unchanged. To append to a variable write `xs = xs->append<v>` (see 3.7); to join two arrays use `concat(xs, ys)` |
 
-- More array functions are in the `array` module, which has to be imported (`import { reverse, sum } from array`): `reverse`, `take`, `drop`, `enumerate`, `flatten`, `unique`, `index_of`, `find`, `any`, `all`, `count`, `sum`, `min`, `max`, `flat_map`, `sort_by`, `zip_with`; see the [standard library reference](../../stdlib-reference.md).
+- More array functions are in the `array` module, which has to be imported (`import { reverse, sum } from array`): `reverse`, `take`, `drop`, `enumerate`, `flatten`, `unique`, `index_of`, `find`, `find_index`, `any`, `all`, `count`, `chunks`, `sum`, `mean`, `min`, `max`, `argmax`, `argmin`, `flat_map`, `sort_by`, `zip_with`; see the [standard library reference](../../stdlib-reference.md).
 
 ### 3.3.2 Tuples
 
@@ -186,13 +186,13 @@ A string is immutable text and is **always valid UTF-8**; length and subscripts 
 | `strs->join<sep>` | Joins an array of strings |
 | `s[i]` | The `i`-th code point; the result is a string containing just that one character; an out-of-range subscript is a fault |
 
-The remaining string functions are in the `str` module ([standard library reference](../../stdlib-reference.md)): `split`, `trim`, `to_upper`, `to_lower`, `replace`, `find`, `substr` (index and length in code points), `starts_with`, `ends_with`, `repeat`, `codepoints`, `from_codepoints`.
+The remaining string functions are in the `str` module ([standard library reference](../../stdlib-reference.md)): `split`, `trim`, `to_upper`, `to_lower`, `replace`, `index_of` (positions in code points; a cut is the core's `s[a:b]`), `starts_with`, `ends_with`, `repeat`, `codepoints`, `from_codepoints`.
 
 ```cml
 import { split, trim, to_upper } from str
 
 func main(): int sync {
-    println('a, b ,c'->split<','>->map<(w: string): string => trim(w)>)
+    println('a, b ,c'->split<','>->map<(w) => trim(w)>)
     println('héllo'->to_upper, len('héllo'), 'héllo'[1], 'hello'[1])
     return 0
 }
@@ -200,7 +200,7 @@ func main(): int sync {
 
 ```text
 [a, b, c]
-HéLLO 5 é e
+HÉLLO 5 é e
 ```
 
 The result of `s[i]` is a one-character string, not a number; use `str::codepoints` for the numbers. In a string literal the escape `\xHH` can only build valid UTF-8 (`'\xE4\xB8\xAD'` is `'中'`; `'\xE4'` alone is a compile-time error); `\u{4E2D}` writes a code point directly.
@@ -222,7 +222,7 @@ func positive(x: int): int? {
 }
 
 func safe_div(a: int, b: int): int! {
-    return if b == 0 then { throw error('DivByZero', 'the divisor is zero') } else a / b
+    return if b == 0 then { return error('DivByZero', 'the divisor is zero') } else a / b
 }
 
 func main(): int sync {
@@ -241,15 +241,15 @@ error DivByZero: the divisor is zero
 
 Rules:
 
-- `T?`, `T!` and `T` are different types. Values of these two kinds can be stored, passed, returned and printed, but **cannot be used as a `T`**: operators such as arithmetic and comparison, and functions that accept a `T`, do not accept them, and their members cannot be accessed. They can only be unwrapped with `??`, `!!`, `?->` ([6.6](06_expressions.md#66-operators-for-null-and-errors)) or with the fixed patterns of `match` ([6.8.2](06_expressions.md#682-match)).
+- `T?`, `T!` and `T` are different types. Values of these two kinds can be stored, passed, returned and printed, but **cannot be used as a `T`**: operators such as arithmetic and comparison, and functions that accept a `T`, do not accept them, and their members cannot be accessed. They can only be unwrapped with `??`, `!!`, `->` ([6.6](06_expressions.md#66-operators-for-null-and-errors)) or with the fixed patterns of `match` ([6.8.2](06_expressions.md#682-match)).
 - **A `T?` can be compared with `null`**: `x == null` and `x != null` give a `bool`. Where such a comparison is the condition of an `if`, `x` is a `T` in the arm that excludes null ([6.8.1](06_expressions.md#681-if)). Two `T?` values are not compared with each other; a value that is never null (an `int`, a `T!`) may be compared with `null`, with a fixed result and a warning ([6.7.3](06_expressions.md#673-comparison)).
 - **A `T!` that is evaluated and that nothing uses is a warning** (`SemanticDiag::UnusedFallibleValue`): the error it may hold would be lost without a trace. See [7.1](07_statements.md#71-expression-statements).
 - **A value that enters a `T?` or `T!` position is put into the form by itself**, wherever the target type is known; `null` likewise. The positions are:
-  - an argument of a call: with a parameter `x: int?`, write `f(5)` or `f(null)`. Among overloads an exact match wins: `f(5)` takes `f(x: int)` when both it and `f(x: int?)` exist; when nothing matches exactly, a literal enters the parameter type, and several candidates in that pass are an ambiguity (`SemanticDiag::AmbiguousCall`): write the literal's type (e.g. `2 as f32`) or add a cast;
+  - an argument of a call: with a parameter `x: int?`, write `f(5)` or `f(null)`. Among overloads an exact match wins: `f(5)` takes `f(x: int)` when both it and `f(x: int?)` exist; when nothing matches exactly, a literal enters the parameter type, and several candidates in that pass are an ambiguity (`SemanticDiag::AmbiguousCall`): write the literal's type (e.g. `f32(2)`) or add a cast;
   - a declaration with a type, `let x: T? = v`;
   - the elements of an array: `let xs: (int?)[] = [1, null, 3]`; without a written type, an array literal with a `null` among its elements is an array of `T?` (`[1, null, 3]` is an `(int?)[]`);
   - the two arms of a branch: when one arm is a `T` and the other is `null` or a `T?`, the branch is a `T?` (`if c then 1 else null` is an `int?`); likewise `T` and `T!`. An arm that has no value at all (`void`: a call of a function that returns nothing, an empty block) counts as `null`: the branch is a `T?` and that arm gives `null`;
-  - `return v` in a function whose return type is declared as `T?`/`T!` (`throw e` gives an error).
+  - `return v` in a function whose return type is declared as `T?`/`T!` (`return e` hands out an error value).
 
   `v as T?` can still be written. Several levels are entered at once: `let x: int?! = 5`. On the graph each level is a conversion node (`CAST`); the compiler adds the node a program would write with `as`, and the graph is the same.
 - **Never the other way.** A `T?` or `T!` used as a `T` must be opened; an `int?` does not become a `float?` either, and numbers are still not converted implicitly. The arguments of built-in operators (`append`, `println`, ...) are not such a position: their parameter types are computed from the arguments by C++ type rules, so there is no target type to enter; write `as` there.
@@ -257,11 +257,13 @@ Rules:
 - The two tags can be combined: `T?!`, `T!?`. The marks are written from the innermost outwards: `T?!` is fallible(nullable(T)) and `T!?` is nullable(fallible(T)); a `match` opens the outer form only. The same one cannot be repeated. Positions such as array elements need parentheses: `(int?)[]`.
 - With generics: after `T` is declared at the head, a `T?` parameter binds `T` from a nullable argument ([7.5](07_statements.md#75-generic-functions)).
 - In `let x: int! = v` there must be a space between `!` and `=`.
-- Built-in fallible functions: `parse_int(s)`, `parse_float(s)`, `try_read_text(path)`, `remove(path)` and `remove_dir(path)` of the `fs` module, `decode` and `decode_as` of the `json` module. `error(kind, message)` constructs an error value and records the location of the call.
+- Built-in fallible functions: `parse_int(s)`, `parse_float(s)`, `read_text(path)`, `remove(path)` and `remove_dir(path)` of the `fs` module, `decode` and `decode_as` of the `json` module. `error(kind, message)` constructs an error value and records the location of the call.
 
 **Errors and faults are two different things.** Only an operation declared to return `T!` produces an error value. Division by zero, an out-of-range subscript and too deep a recursion are faults: the program terminates with a location, and `!!` cannot catch it (see [4.6](04_execution_model.md#46-faults-exit-and-resource-limits)).
 
-**Behaviour of the current implementation, not yet decided**: `?->` is defined for `T!` only; a `match` on these two forms has exactly two cases; they can be printed but, apart from a `T?` with `null`, not compared with `==`.
+To raise a fault from a function body, write `fail<'Kind'>('message')`: it is an expression of type `never` (it has no value), the kind is the name in angle brackets, and `attempt` isolates it into an error value.
+
+**Behaviour of the current implementation, not yet decided**: a `match` on these two forms has exactly two cases; they can be printed but, apart from a `T?` with `null`, not compared with `==`.
 
 ## 3.5 Enums
 
@@ -347,7 +349,7 @@ func main(): int sync {
 | `get_or<k, d>(m)` | `V` | `d` when not found |
 | `put<k, v>(m)` | `Map<K, V>` | Replaces if the key already exists |
 | `remove<k>(m)`, `remove<x>(s)` | Same type | Contents unchanged when absent |
-| `has<k>(m)`, `has<x>(s)`, `contains<x>(s)` | `bool` | |
+| `has<k>(m)`, `contains<x>(s)` | `bool` | |
 | `len(m)`, `len(s)` | `int` | |
 | `keys(m)`, `values(m)`, `items(m)` | `K[]`, `V[]`, `(K, V)[]` | In key order |
 | `merge(m1, m2)` | `Map<K, V>` | For equal keys the one from `m2` is taken |
@@ -384,7 +386,7 @@ func main(): int sync {
 - The order is sorted by key (integers by value, `false` before `true`, strings by byte, tuples element by element); `keys`, `values`, `items` and printing all follow this order.
 - When an array known only at run time contains duplicate keys, later entries overwrite earlier ones.
 - When the value type is itself nullable (`Map<string, int?>`), the type of `m[k]` is just `int?`: a missing key and a `null` value cannot be told apart; use `has` where needed.
-- The coexistence of the three call forms; the print format; `json::decode_as` using the type of a value to specify the target type of decoding.
+- The coexistence of the three call forms; the print format; `json::decode_as` using a type argument to specify the target type of decoding.
 
 For the implementation and trade-offs see [technical document 31](../../technical/31_map_and_set.md).
 

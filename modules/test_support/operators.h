@@ -15,5 +15,11 @@ namespace ctx = camel::core::context;
 // the threads this process has.
 slot_t __test_support_rendezvous__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 slot_t __test_support_thread_count__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+// A native operator with a generic declaration and `with` parameters that have defaults: it gives
+// back its three `with` values as one number, so a test reads which defaults a call was given.
+slot_t __test_support_with_probe__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+// The same for an array argument, so the operator is a set of two declarations.
+slot_t __test_support_with_probe_array__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
+slot_t __test_support_arity_two__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
 
 std::unordered_map<std::string, operator_t> getTestSupportOpsMap();

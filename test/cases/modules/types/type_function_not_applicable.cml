@@ -1,0 +1,11 @@
+/// A type function that does not accept the type it is given is refused where the instance is made.
+import { is_integer, ElementOf } from types
+
+func element_is_integer::<T>(): bool {
+    return is_integer::<ElementOf<T>>()
+}
+
+func main(): int sync {
+    println(element_is_integer::<int>())
+    return 0
+}

@@ -45,6 +45,9 @@ class HandleType final : public type::OtherType {
     /// stands for -- a rule's or a fact's parameter (`v: T`) -- states this type (design principles
     /// 5.9).
     static HandleType *ofValueType(type::Type *valueType);
+    /// `Txn<F>`: the transaction on a function of type `F` (any type, a type variable of a
+    /// generic declaration included); `F` null is the bare `Txn`.
+    static HandleType *ofFunctionType(type::Type *functionType);
     static bool is(const type::Type *type, HandleKind kind);
 
     HandleKind kind() const { return kind_; }
@@ -59,7 +62,13 @@ class HandleType final : public type::OtherType {
     /// A node's argument is the type of the value it stands for, so the algebra reads it (design
     /// principles 5.9): `Node<T>` against `Node<int>` binds `T` to `int`. The other handle kinds
     /// take no argument.
-    bool typeArguments() const override { return kind_ == HandleKind::Node; }
+    /// A transaction is a state that edits change: one resource per transaction.
+    bool isResourceHandle() const override { return kind_ == HandleKind::Txn; }
+    std::string resourceHandleName() const override { return "graph::Txn"; }
+
+    bool typeArguments() const override {
+        return kind_ == HandleKind::Node || kind_ == HandleKind::Txn;
+    }
 
     std::string toString() const override;
     std::string mangle() const override;
@@ -73,6 +82,8 @@ class HandleType final : public type::OtherType {
         std::span<const type::TypeArgument> arguments, std::string &error) const override;
 
   private:
+    static HandleType *internWithArgument(HandleType *bare, type::Type *argument);
+
     HandleType(type::TypeCode code, HandleKind kind, type::Type *valueType)
         : OtherType(
               code, valueType == nullptr ? 0 : 1,

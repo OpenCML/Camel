@@ -1,0 +1,15 @@
+/**
+ * `argsort` over every key type: `bf16` and `f16` keys are ordered as the f32 they widen to, a
+ * NaN comes after every number, and -0 is below +0, so that the order of two zeros does not
+ * depend on where they stand (design principles 7.7).
+ */
+
+import { argsort } from array
+import math
+import tensor
+
+func main(): int sync {
+    println(argsort(bf16([3.0, 1.0, 2.0])), argsort(f16([2.0, math::nan, 1.0])))
+    println(argsort([0.0, -0.0, -1.0]), argsort(f32([-0.0, 0.0, -0.0])))
+    return 0
+}

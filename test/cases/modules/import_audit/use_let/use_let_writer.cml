@@ -3,10 +3,9 @@
  * rule (design principles 3.1: 被依赖才求值). The importing program `main.cml` names `wrote`,
  * which is the dependency that evaluates it.
  */
-module use_let_writer
 
 import { get_env } from env
 import { write_text } from fs
 
-let path = get_env('CAMEL_TEST_TMPDIR') + '/h222_use_let_flag.txt'
-export let wrote = write_text(path, 'evaluated because the program depended on it')
+let path = (get_env('CAMEL_TEST_TMPDIR') ?? '') + '/h222_use_let_flag.txt'
+export let wrote = 'evaluated because the program depended on it'->write_text<path>

@@ -1,0 +1,26 @@
+/**
+ * `->` hands the value to the call and the signature decides which reading it has (design
+ * principles 3.9): a value that carries no tag goes to the call as it is, and a value that
+ * failed is passed on instead -- the call is not made with it. An error value written in a
+ * fallible position is the failed arm of that form.
+ */
+
+func double(n: int): int { return n * 2 }
+
+func failed(s: string): int! {
+    return error('BadInput', 'not a number')
+}
+
+func show(r: int!): string {
+    return match r {
+        case error e => e.kind
+        case v => format<v>('{}')
+    }
+}
+
+func main(): int sync {
+    println(21 -> double)
+    println(show(failed('x') -> double))
+    println('end')
+    return 0
+}

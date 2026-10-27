@@ -3,7 +3,6 @@
  * constant (design principles 4.4): a default is evaluated where the declaration is, before any
  * call gives the parameter a value.
  */
-module with_default_not_constant
 
 with <a: int = 1, b: int = a + 1>
 func f(x: int): int {

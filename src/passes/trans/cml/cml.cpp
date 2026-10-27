@@ -1005,6 +1005,18 @@ class CmlPrinter {
         return node->kind == camel::runtime::GCNodeKind::Data && node->dataIndex < 0;
     }
 
+    /// The value of a node that is a constant int, when it is one: a subscript's axis is written
+    /// as a subscript on that dimension, which is a number the printer needs.
+    std::optional<int64_t> constantIntOf(gc_node_ref_t ref) const {
+        const camel::runtime::GCNode *node = graph_->node(ref);
+        if (node == nullptr || node->kind != camel::runtime::GCNodeKind::Data ||
+            node->dataIndex >= 0 || node->dataType() == nullptr ||
+            node->dataType()->code() != TypeCode::Int64) {
+            return std::nullopt;
+        }
+        return fromSlot<int64_t>(graph_->staticArea()->get<slot_t>(-node->dataIndex));
+    }
+
     // ---- printing ------------------------------------------------------------------------
 
     void emit(std::string line) {
@@ -1771,9 +1783,6 @@ class CmlPrinter {
         const Body body          = buildBody(0, tail, outerIndent, false);
 
         std::string text;
-        if (type->hasModifier(Modifier::Sync)) {
-            text += "sync ";
-        }
         text += "(";
         for (size_t i = 0; i < type->normTypesCount(); ++i) {
             std::string name(type->argNameAt(i));
@@ -1992,13 +2001,27 @@ class CmlPrinter {
             fail(ref, std::format("the operator '{}'", uri));
         }
         if (uri == ":op/idx_arr" || uri == ":op/idx_str" || uri == ":op/idx") {
-            if (inputs.size() != 2) {
+            if (inputs.size() != 2 && inputs.size() != 3) {
                 fail(ref, "an index without a value and an index");
             }
             Expr base  = expression(inputs[0]);
             Expr index = expression(inputs[1]);
+            // The position's own axis is the third word, and the dimensions before it are kept
+            // whole (design principles 5.4): the subscript writes them as `:` and the index on the
+            // axis it names, so `m[:, 0]` is the position 0 on axis 1 of `m`. A node that writes
+            // no axis is the first dimension's, which is the plain `t[i]`.
+            std::string axes;
+            if (inputs.size() == 3) {
+                const std::optional<int64_t> axis = constantIntOf(inputs[2]);
+                if (!axis || *axis < 0) {
+                    fail(ref, "an index on a dimension that is not a constant");
+                }
+                for (int64_t k = 0; k < *axis; ++k) {
+                    axes += ":, ";
+                }
+            }
             return {
-                std::format("{}[{}]", parenthesize(base, 90), index.text),
+                std::format("{}[{}{}]", parenthesize(base, 90), axes, index.text),
                 90};
         }
         if (uri == ":struct/range") {

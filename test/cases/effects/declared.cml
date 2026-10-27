@@ -1,7 +1,6 @@
 // What a call touches, written on the declaration (design effects plan 3.1): a resource of the
 // module, a group of them, a handle type and `uses` on a parameter (a cell or a handle) and on a
 // group. The bodies touch nothing: the clause is the whole truth a call site reads.
-module declared
 
 resource db
 resource console = [db, stdout]

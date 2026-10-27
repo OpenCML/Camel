@@ -74,7 +74,7 @@ argument of the function on the right, so a run of `->` reads "work this out, th
 <!-- camel-snippet: fragment: one chained call; `xs` comes from the context, it is not a program -->
 
 ```cml
-let ys = xs->map<(x: int): int => x * x>->filter<(x: int): bool => x % 2 == 0>
+let ys = xs->map<(x) => x * x>->filter<(x) => x % 2 == 0>
 ```
 
 ## A lambda: a function with no name
@@ -91,8 +91,8 @@ func main(): int sync {
     let twice = (x: int): int => x * 2
     println(twice(21))
 
-    println([1, 2, 3]->map<(x: int): int => x + 10>)
-    println([1, 2, 3, 4]->filter<(x: int): bool => x % 2 == 0>)
+    println([1, 2, 3]->map<(x) => x + 10>)
+    println([1, 2, 3, 4]->filter<(x) => x % 2 == 0>)
     return 0
 }
 ```

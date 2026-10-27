@@ -7,7 +7,6 @@
  * the spelling of the type
  * used to refuse this case.
  */
-module export_loop_carried_array
 import { reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env
@@ -19,7 +18,7 @@ func walk(x: float[..], xs: int[], k: int): float[..] {
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
     println(len([0]))
-    export_model((x: float[..]): float[..] => walk(x, [0], 0), (x), get_env('ONNX_OUT'))
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((x: float[..]): float[..] => walk(x, [0], 0), (x))
     println('exported')
     return 0
 }

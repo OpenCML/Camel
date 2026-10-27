@@ -2,132 +2,31 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Array functions and higher-order functions, written in Camel on top of the built-in
- * operators (map, filter, reduce, range, zip, slice, len) and a few native primitives of this
- * module (the sorts, argsort, flatten, unique). Every function returns a new value; none changes
- * its argument.
+ * Functions on arrays, written in Camel on the built-in operators (`map`, `filter`, `reduce`,
+ * `zip`, `len`, the subscript) and on two native atoms: `argsort`, and the flat view of an array
+ * of any rank. Every function returns a new value; none changes its argument. The functions of
+ * one dimension take `T[]`; the reductions take `T[..]` and reduce every element, in row-major
+ * order.
  *
- * - The array a function works on is its ordinary argument; a function or a value that
- *   configures it is a with-argument, as for the built-in `map<f>(xs)` and `slice<a, b>(xs)`,
- *   so calls chain: `xs->filter<p>->sort_by<key>->take<3>`.
- * - A result that may not exist is `T?` (`find`, `index_of`, `min`, `max`). Nothing here
- *   returns an error value, and a wrong argument is a fault of the operator that meets it.
- * - A function passed to any of these must be pure. The implementation may stop early
- *   (`find`, `index_of`, `any`, `all`) or, when a fast path is added under `#impl`, apply it to
- *   several elements at once; the result is the same either way, and no call observes another.
- *   A function with side effects belongs in `foreach` or `reduce`, which run in order.
- * - The functions written here are generic: there is one instance per set of element types in
- *   the whole program, whichever module calls it (one root graph, design principles 10.1).
- *   `group_by` is not here: it needs the map type.
+ * - The array is the ordinary argument; what configures the function (a count, a value, a
+ *   function) is in angle brackets, so calls chain: `xs->filter<keep>->sort_by<key>->take<3>`.
+ * - A result that may not exist (`find`, `find_index`, `index_of`) is `T?`; nothing here returns
+ *   an error value. The `sum` of no element is 0; `mean`, `min`, `max`, `argmax` and `argmin`
+ *   of no element are faults, as design principles 7.7 say.
+ * - A function passed to these runs element by element in order and stops as soon as the answer
+ *   is known (`find`, `any`, `all`), or is mapped, with no order among the calls (`sort_by`,
+ *   `flat_map`, `zip_with`). None of them asks for a `pure` function.
+ * - Elements are not converted: the numbers added, compared or searched for are of the
+ *   element type of the array.
  */
-module array
 
 import math
-import { is_bool, is_numeric, is_ordered, is_string } from types
-
-// The native primitives are declared here, as body-less declarations of this module: each stands
-// for the operator its `#op` tag names (`array:argsort_i`, `array:sort_d`, ...), implemented in
-// C++ and answered on this module's protocol. They are pure and return a new array.
-//
-// One declaration per element type, and each declaration names the operator of its own element
-// type. The executor a declaration names takes exactly the element type its signature names
-// (builtin/operators/array.cpp), so the element type is known where the executor is chosen and no
-// run-time switch on the element type is left anywhere in the module. This is the shape the
-// reductions' kernels got (: one operator, per-type executors; design principles 10.4), and
-// the shape `abs`, `min` and `max` in `stdlib/math.cml` already had: the element type is named by
-// the signature, which is what the operator path resolves a call by, so `sort(xs)` is written as
-// it always was and no kernel's name is ever written.
-//
-// The sorts order the four numeric element types the C++ sorts hold an order on. An element type
-// no declaration names (bf16, f16, bool, string) has no sort at all: the call is refused where it
-// is written, listing the declarations, rather than at run time by the executor.
-// `argsort` takes the keys it can order, which is those four and `bool` and `string`.
-
-// ---- sorting ----
-
-/// The positions of the keys in ascending order of key; equal keys keep their order (a stable
-/// sort). Keys are numbers, strings (ordered by byte) or bools; NaN keys come last. The
-/// primitive behind `sort_by`.
-/// @pure
-/// @example argsort([30, 10, 20])    // [1, 2, 0]
-#op('array:argsort_i')
-export func argsort(keys: i32[]): int[]
-#op('array:argsort_l')
-export func argsort(keys: int[]): int[]
-#op('array:argsort_f')
-export func argsort(keys: f32[]): int[]
-#op('array:argsort_d')
-export func argsort(keys: float[]): int[]
-#op('array:argsort_b')
-export func argsort(keys: bool[]): int[]
-#op('array:argsort_s')
-export func argsort(keys: string[]): int[]
-
-/// A sorted copy of xs (quicksort).
-/// @pure
-/// @example sort([3, 1, 2])    // [1, 2, 3]
-#op('array:sort_i')
-export func sort(xs: i32[]): i32[]
-#op('array:sort_l')
-export func sort(xs: int[]): int[]
-#op('array:sort_f')
-export func sort(xs: f32[]): f32[]
-#op('array:sort_d')
-export func sort(xs: float[]): float[]
-
-/// A sorted copy of xs, by insertion sort.
-/// @pure
-/// @example insert_sort([3, 1, 2])    // [1, 2, 3]
-#op('array:insert_sort_i')
-export func insert_sort(xs: i32[]): i32[]
-#op('array:insert_sort_l')
-export func insert_sort(xs: int[]): int[]
-#op('array:insert_sort_f')
-export func insert_sort(xs: f32[]): f32[]
-#op('array:insert_sort_d')
-export func insert_sort(xs: float[]): float[]
-
-/// A sorted copy of xs, by quicksort.
-/// @pure
-/// @example quick_sort([3, 1, 2])    // [1, 2, 3]
-#op('array:quick_sort_i')
-export func quick_sort(xs: i32[]): i32[]
-#op('array:quick_sort_l')
-export func quick_sort(xs: int[]): int[]
-#op('array:quick_sort_f')
-export func quick_sort(xs: f32[]): f32[]
-#op('array:quick_sort_d')
-export func quick_sort(xs: float[]): float[]
-
-/// A sorted copy of xs, by merge sort.
-/// @pure
-/// @example merge_sort([3, 1, 2])    // [1, 2, 3]
-#op('array:merge_sort_i')
-export func merge_sort(xs: i32[]): i32[]
-#op('array:merge_sort_l')
-export func merge_sort(xs: int[]): int[]
-#op('array:merge_sort_f')
-export func merge_sort(xs: f32[]): f32[]
-#op('array:merge_sort_d')
-export func merge_sort(xs: float[]): float[]
-
-/// The sorted array made of the elements of two sorted arrays of numbers. The two must hold the
-/// same element type: `T` is one of the four the sorts order, not one per argument.
-/// @pure
-/// @example merge_sorted_arrays([1, 4], [2, 3])    // [1, 2, 3, 4]
-#op('array:merge_sorted_arrays_i')
-export func merge_sorted_arrays(left: i32[], right: i32[]): i32[]
-#op('array:merge_sorted_arrays_l')
-export func merge_sorted_arrays(left: int[], right: int[]): int[]
-#op('array:merge_sorted_arrays_f')
-export func merge_sorted_arrays(left: f32[], right: f32[]): f32[]
-#op('array:merge_sorted_arrays_d')
-export func merge_sorted_arrays(left: float[], right: float[]): float[]
+import { is_array, is_float, is_integer, is_numeric, is_ordered, is_plain, is_same } from types
 
 // ---- rearranging ----
 
 /// The elements in reverse order.
-/// @example reverse([1, 2, 3])    // [3, 2, 1]
+/// @example [1, 2, 3]->reverse    // [3, 2, 1]
 export func reverse::<T>(xs: T[]): T[] {
     return xs[::-1]
 }
@@ -146,350 +45,383 @@ export func drop::<T>(xs: T[]): T[] {
     return xs[math::clamp(n, 0, len(xs)):]
 }
 
+/// Consecutive pieces of n elements; the last is shorter when n does not divide the length.
+/// @fails fault `InvalidArgument` when n is not positive
+/// @example [1, 2, 3, 4, 5]->chunks<2>    // [[1, 2], [3, 4], [5]]
+with <n: int>
+export func chunks::<T>(xs: T[]): T[][] {
+    return if n < 1 then fail<'InvalidArgument'>('a chunk holds at least one element') else [xs->drop<i>->take<n> for i in range(0, len(xs), n)]
+}
+
 /// Each element with its index.
-/// @example enumerate(['a', 'b'])    // [(0, 'a'), (1, 'b')]
+/// @example ['a', 'b']->enumerate    // [(0, 'a'), (1, 'b')]
 export func enumerate::<T>(xs: T[]): (int, T)[] {
     return zip(0..len(xs), xs)
 }
 
-/// The elements of the inner arrays, in order. The primitive behind `flat_map`.
-/// @pure
-/// @example flatten([[1, 2], [3]])    // [1, 2, 3]
-export func flatten::<T>(xss: T[][]): T[]
+/// The elements of the inner arrays, in order.
+/// @example [[1, 2], [3]]->flatten    // [1, 2, 3]
+export func flatten::<T>(xss: T[][]): T[] {
+    let none: T[] = []
+    return loop flat = none for xs in xss do concat(flat, xs)
+}
 
-/// The first occurrence of every value, in order; values are compared as `==` compares them
-/// (a NaN equals nothing, so every NaN is kept).
-/// @pure
-/// @example unique([3, 1, 3, 2, 1])    // [3, 1, 2]
-export func unique::<T>(xs: T[]): T[]
+/// The elements of an array of any rank, in row-major order, as an array of one dimension.
+/// @example ([[1, 2], [3, 4]] as int[2, 2])->flatten    // [1, 2, 3, 4]
+export func flatten::<T>(xs: T[..]): T[] when !is_array::<T>() {
+    return elements(xs)
+}
+
+/// The first occurrence of every value, in order. Values are compared as `==` compares them, so
+/// a NaN equals nothing and every NaN is kept. The time is quadratic in the number of distinct
+/// values; to drop repeats of numbers or strings in a long array, `sort` it and compare
+/// neighbours.
+/// @example [3, 1, 3, 2, 1]->unique    // [3, 1, 2]
+export func unique::<T>(xs: T[]): T[] {
+    let none: T[] = []
+    return loop kept = none for x in xs do if kept->contains<x> then kept else kept->append<x>
+}
 
 // ---- searching ----
 
-/// The index of the first element equal to x, or null.
-/// @example [3, 9, 2]->index_of<9> ?? -1    // 1
-with <x: T>
-export func index_of::<T>(xs: T[]): int? {
-    let i = loop i = 0 while i < len(xs) && xs[i] != x do i + 1
+/// The index of the first element for which pred is true, or null. pred is not called on the
+/// elements after it.
+/// @example [3, 9, 2]->find_index<(x) => x > 4> ?? -1    // 1
+with <pred: (x: T) => bool>
+export func find_index::<T>(xs: T[]): int? {
+    let i = loop i = 0 while i < len(xs) && !pred(xs[i]) do i + 1
     return if i < len(xs) then i else null
 }
 
 /// The first element for which pred is true, or null.
-/// @example [3, 9, 2]->find<(x: int) => x > 4> ?? -1    // 9
+/// @example [3, 9, 2]->find<(x) => x > 4> ?? -1    // 9
 with <pred: (x: T) => bool>
 export func find::<T>(xs: T[]): T? {
-    let i = loop i = 0 while i < len(xs) && !pred(xs[i]) do i + 1
-    return if i < len(xs) then xs[i] else null
+    let i = xs->find_index<pred>
+    return if i != null then xs[i] else null
+}
+
+/// The index of the first element equal to x, or null. Equality is `==`, so a NaN is never found.
+/// @example [3, 9, 2]->index_of<9> ?? -1    // 1
+with <x: T>
+export func index_of::<T>(xs: T[]): int? {
+    return xs->find_index<(y) => y == x>
 }
 
 /// True when pred is true for at least one element; false for an empty array.
-/// @example [3, 9, 2]->any<(x: int) => x > 4>    // true
+/// @example [3, 9, 2]->any<(x) => x > 4>    // true
 with <pred: (x: T) => bool>
 export func any::<T>(xs: T[]): bool {
-    return loop hit = false for x in xs while !hit do pred(x)
+    return xs->find_index<pred> != null
 }
 
 /// True when pred is true for every element; true for an empty array.
-/// @example [3, 9, 2]->all<(x: int) => x > 4>    // false
+/// @example [3, 9, 2]->all<(x) => x > 4>    // false
 with <pred: (x: T) => bool>
 export func all::<T>(xs: T[]): bool {
-    return loop ok = true for x in xs while ok do pred(x)
+    return xs->find_index<(x) => !pred(x)> == null
 }
 
 /// The number of elements for which pred is true.
-/// @example [3, 9, 2]->count<(x: int) => x > 2>    // 2
+/// @example [3, 9, 2]->count<(x) => x > 2>    // 2
 with <pred: (x: T) => bool>
 export func count::<T>(xs: T[]): int {
     return loop n = 0 for x in xs do if pred(x) then n + 1 else n
 }
 
-// ---- aggregating ----
+// ---- reducing ----
 
-// A reduction of floating-point elements follows a rule of the language, not a choice of this
-// module: it returns the element type and accumulates in f64, rounding once at the end (design
-// principles 7.3: "浮点数组的归约在 f64 中累加、舍入一次，返回元素类型（与张量归约一致）"),
-// and the rule is the same for an f32 array. Writing the f64 accumulator and the single conversion
-// back into the element type is what makes it a definition rather than a precision the compiler
-// chose: the additions the source asks for are f64 additions, so nothing here is an f32
-// accumulation that the compiler raised, and `change_precision` (7.2, which governs what the
-// compiler changes) is neither needed nor consumed by this module. The addition order is
-// unchanged too: ascending from +0, as it was.
-#impl(sum_kernel)
-/// The sum of the elements, 0 for an empty array.
+// The elements a reduction reduces; a reduction over no element is a fault.
+func some_elements::<T>(xs: T[..]): T[] {
+    let es = flatten(xs)
+    return if len(es) == 0 then fail<'InvalidArgument'>('a reduction over no elements') else es
+}
+
+// The sum of the elements in f64, from +0 in order, never rounded into the element type.
+func sum64::<T>(es: T[]): float {
+    return es->reduce<(acc: float, x: T) => acc + float(x), 0.0>
+}
+
+/// The sum of the elements.
 ///
-/// A floating-point element type accumulates in f64 and rounds once into the element type at the
-/// end: the additions are f64 additions and the result is one conversion of their sum, not a
-/// rounding after every addition (an f32 accumulator rounds at every step and answers
-/// differently). This is the same rule the tensor axis `sum` follows (modules/tensor/kernels/
-/// reduce.cpp: a double accumulator, one rounding when the element is stored), so the two paths
-/// agree bit for bit on the same elements. An integer element type accumulates in itself and
-/// wraps around on overflow, as `+` does on it; a complex element type accumulates in itself as
-/// well, the f64 rule being stated for the floating-point element types.
-/// @example sum([1, 2, 3])    // 6
-export func sum::<T>(xs: T[]): T when is_numeric::<T>() {
+/// A float element type is added in f64 and rounded once into the element type: the rule of
+/// every float reduction, not a rounding after each addition. An integer or complex element
+/// type is added in itself and wraps around on overflow, as `+` does.
+/// The sum of no element is 0, the identity of addition.
+/// @example [1, 2, 3]->sum    // 6
+/// @example [0.5, 0.25]->sum    // 0.75
+#impl(sum_kernel)
+export func sum::<T>(xs: T[..]): T when is_numeric::<T>() {
+    let es = flatten(xs)
     return match type T {
-        // The accumulator of the integer arms is T itself; a complex value accumulates in
-        // itself too, and its zero is the complex zero (a c64/c128 accumulator does not take 0).
-        case int | i32 => xs->reduce<(a, b) => a + b, 0>
-        case c64 => xs->reduce<(a, b) => a + b, c64(0)>
-        case c128 => xs->reduce<(a, b) => a + b, c128(0)>
-        // A floating-point T accumulates in f64 (`sumF64`, from +0 in order) and converts once
-        // into the element type, and that conversion is the only rounding of the whole reduction.
-        // bf16 and f16 are floating-point element types of the same kind (design principles 7.3),
-        // and their arms are written the same way.
-        case float => float(sumF64(xs))
-        case f32 => f32(sumF64(xs))
-        case bf16 => bf16(sumF64(xs))
-        case f16 => f16(sumF64(xs))
+        case float | f32 | bf16 | f16 => T(sum64(es))
+        case _ => es->reduce<(acc, x) => acc + x, T(0)>
     }
 }
 
-/// The f64 sum of the elements, from +0 in ascending order: the accumulator of `sum` for every
-/// floating-point element type (design principles 7.3)).
-/// `float(x)` reads each element into the f64 accumulator, so no addition is done at a narrower
-/// width; the caller converts the result into the element type, once.
-func sumF64::<T>(xs: T[]): float {
-    return xs->reduce<(acc: float, x: T): float => acc + float(x), 0.0 as float>
+/// The arithmetic mean: the sum and the division both in f64, rounded once into the element
+/// type, `T(sum(float(x)) / float(numel(x)))`.
+/// @fails fault `InvalidArgument` when the array has no element
+/// @example [1.0, 2.0, 3.0, 4.0]->mean    // 2.5
+export func mean::<T>(xs: T[..]): T when is_float::<T>() {
+    let es = some_elements(xs)
+    return T(sum64(es) / float(len(es)))
 }
+
+/// The smallest element. Numbers are compared as `math::min` compares them: a NaN anywhere gives
+/// NaN, and -0 is below +0. Strings compare by their bytes, and false is below true.
+/// @fails fault `InvalidArgument` when the array has no element
+/// @example [3, 9, 2]->min    // 2
 #impl(min_kernel)
-/// The smallest number (IEEE 754 minimum: a NaN anywhere makes the result NaN, and -0 is below
-/// +0), or null for an empty array.
-///
-/// No accumulator and no accumulation width take part in this fold: it carries an element of T
-/// and combines it with `math::min`, which is IEEE 754 minimum — exactly associative and
-/// commutative (design principles 7.7) — so the order does not change the bits and there is
-/// nothing to round.
-/// @example min([3, 9, 2]) ?? 0    // 2
-export func min::<T>(xs: T[]): T? when is_ordered::<T>() {
-    return if len(xs) == 0 then null else xs->reduce<math::min, xs[0]>
+export func min::<T>(xs: T[..]): T when is_ordered::<T>() {
+    let es = some_elements(xs)
+    return es->reduce<math::min, es[0]>
 }
+
+/// The largest element. Numbers are compared as `math::max` compares them: a NaN anywhere gives
+/// NaN, and +0 is above -0.
+/// @fails fault `InvalidArgument` when the array has no element
+/// @example [3, 9, 2]->max    // 9
 #impl(max_kernel)
-/// The largest number (IEEE 754 maximum: a NaN anywhere makes the result NaN, and +0 is above
-/// -0), or null for an empty array.
-///
-/// As `min`: the fold carries an element of T, and `math::max` is IEEE 754 maximum, exactly
-/// associative and commutative (design principles 7.7), so no accumulator type enters.
-/// @example max([3, 9, 2]) ?? 0    // 9
-export func max::<T>(xs: T[]): T? when is_ordered::<T>() {
-    return if len(xs) == 0 then null else xs->reduce<math::max, xs[0]>
+export func max::<T>(xs: T[..]): T when is_ordered::<T>() {
+    let es = some_elements(xs)
+    return es->reduce<math::max, es[0]>
+}
+
+/// The row-major position of the largest element: the first NaN if there is one, +0 above -0,
+/// the earlier position on a tie.
+/// @fails fault `InvalidArgument` when the array has no element
+/// @example [3, 9, 2, 9]->argmax    // 1
+export func argmax::<T>(xs: T[..]): int when is_ordered::<T>() {
+    let es = some_elements(xs)
+    return loop best = 0 for i in 1..len(es) do if precedes(es[best], es[i]) then i else best
+}
+
+/// The row-major position of the smallest element: the first NaN if there is one, -0 below +0,
+/// the earlier position on a tie.
+/// @fails fault `InvalidArgument` when the array has no element
+/// @example [3, 1, 2, 1]->argmin    // 1
+export func argmin::<T>(xs: T[..]): int when is_ordered::<T>() {
+    let es = some_elements(xs)
+    let nan_at = es->find_index<(x) => x != x>
+    return if nan_at != null then nan_at else loop best = 0 for i in 1..len(es) do if precedes(es[i], es[best]) then i else best
+}
+
+// a is strictly before b in the order of `argsort`.
+func precedes::<T>(a: T, b: T): bool {
+    return argsort([b, a])[0] == 1
+}
+
+// ---- reducing along an axis ----
+
+// The same names with an axis in angle brackets (`x->sum<0>`): the reduction of one axis, an
+// array of the rank below (the same rank with keepdims, the axis kept with extent 1). A negative
+// axis counts from the last. Which of the two forms a call means is decided by its angle
+// brackets. Each is a Camel function over a native kernel, for the result shape follows the
+// axis and the kernels sweep one axis of a contiguous block.
+
+/// The sum along an axis (0 along an axis of extent 0), with the rule of the whole sum: a float element type is added in f64
+/// from +0 in ascending order and rounded once, an integer one wraps around.
+/// @fails fault `InvalidArgument` when the axis is outside the rank
+/// @example ([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->sum<0>    // [4.0, 6.0]
+with <axis: int, keepdims: bool = false>
+export func sum::<T>(xs: T[..]): T[..] when is_integer::<T>() || is_float::<T>() {
+    return sum_axis(xs, axis, keepdims)
+}
+
+/// The mean along an axis: the sum and the division both in f64, rounded once into the element
+/// type.
+/// @fails fault `InvalidArgument` when the axis is outside the rank or its extent is 0
+/// @example ([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->mean<1>    // [1.5, 3.5]
+with <axis: int, keepdims: bool = false>
+export func mean::<T>(xs: T[..]): T[..] when is_float::<T>() {
+    return mean_axis(xs, axis, keepdims)
+}
+
+/// The smallest element along an axis, compared as `min` of the whole array compares.
+/// @fails fault `InvalidArgument` when the axis is outside the rank or its extent is 0
+/// @example ([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->min<1>    // [1.0, 3.0]
+with <axis: int, keepdims: bool = false>
+export func min::<T>(xs: T[..]): T[..] when is_integer::<T>() || is_float::<T>() {
+    return min_axis(xs, axis, keepdims)
+}
+
+/// The largest element along an axis, compared as `max` of the whole array compares.
+/// @fails fault `InvalidArgument` when the axis is outside the rank or its extent is 0
+/// @example ([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->max<0>    // [3.0, 4.0]
+with <axis: int, keepdims: bool = false>
+export func max::<T>(xs: T[..]): T[..] when is_integer::<T>() || is_float::<T>() {
+    return max_axis(xs, axis, keepdims)
+}
+
+/// The position along an axis of the first largest element, ordered as `argmax` of the whole
+/// array orders.
+/// @fails fault `InvalidArgument` when the axis is outside the rank or its extent is 0
+/// @example ([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->argmax<1>    // [1, 1]
+with <axis: int, keepdims: bool = false>
+export func argmax::<T>(xs: T[..]): int[..] when is_integer::<T>() || is_float::<T>() {
+    return argmax_axis(xs, axis, keepdims)
+}
+
+/// The position along an axis of the first smallest element, ordered as `argmin` of the whole
+/// array orders.
+/// @fails fault `InvalidArgument` when the axis is outside the rank or its extent is 0
+/// @example ([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->argmin<0>    // [0, 0]
+with <axis: int, keepdims: bool = false>
+export func argmin::<T>(xs: T[..]): int[..] when is_integer::<T>() || is_float::<T>() {
+    return argmin_axis(xs, axis, keepdims)
+}
+
+// ---- shape ----
+
+/// The extents of an array, in order.
+/// @example shape([[1.0, 2.0], [3.0, 4.0]] as f32[2, 2])    // [2, 2]
+export func shape::<T>(xs: T[..]): int[]
+
+/// The number of elements of an array: the product of its extents.
+/// @example numel([[1.0, 2.0], [3.0, 4.0]] as f32[2, 2])    // 4
+export func numel::<T>(xs: T[..]): int
+
+/// The extent of one axis; a negative axis counts from the last one.
+/// @fails fault `InvalidArgument` when the axis is outside the rank
+/// @example ([[1.0, 2.0, 3.0]] as f32[1, 3])->dim<1>    // 3
+with <axis: int>
+export func dim::<T>(xs: T[..]): int
+
+// ---- binary form ----
+
+/// The elements of an array as little-endian bytes, in row-major order: the payload `from_bytes`
+/// reads back. The elements are the array's own bytes, so every pure-data element type has them:
+/// one byte an element for a `bool` array, four for an `f32` one and eight for an `f64` or `c64`
+/// one.
+/// @example ([1.0, 2.0] as f32[])->to_bytes    // [0, 0, 128, 63, 0, 0, 0, 64]
+export func to_bytes::<T>(xs: T[..]): Bytes when is_plain::<T>()
+
+// ---- sorting ----
+
+/// The positions of the keys in ascending order of key; equal keys keep their order. Numbers
+/// are ordered as `min` and `max` order them, with -0 below +0 and every NaN after the numbers;
+/// strings are ordered by their bytes and false is below true. This is the atom the sorts are
+/// written on.
+/// @example [30, 10, 20]->argsort    // [1, 2, 0]
+#op('array:argsort_i')
+export func argsort(keys: i32[]): int[]
+#op('array:argsort_l')
+export func argsort(keys: int[]): int[]
+#op('array:argsort_f')
+export func argsort(keys: f32[]): int[]
+#op('array:argsort_d')
+export func argsort(keys: float[]): int[]
+#op('array:argsort_bf')
+export func argsort(keys: bf16[]): int[]
+#op('array:argsort_f6')
+export func argsort(keys: f16[]): int[]
+#op('array:argsort_b')
+export func argsort(keys: bool[]): int[]
+#op('array:argsort_s')
+export func argsort(keys: string[]): int[]
+
+/// The elements in ascending order, in the order `argsort` gives.
+/// @example [3, 1, 2]->sort    // [1, 2, 3]
+/// @example ['pear', 'fig']->sort    // ['fig', 'pear']
+#impl(sort_kernel)
+export func sort::<T>(xs: T[]): T[] when is_ordered::<T>() {
+    return xs[argsort(xs)]
+}
+
+/// The elements in ascending order of key(x); elements with equal keys keep their order, so
+/// sorting by one key and then by another works. key is called once for every element. Keys
+/// are ordered as `argsort` orders them; for a descending order of numbers use the negated key.
+/// @example ['pear', 'fig', 'apple']->sort_by<(w) => len(w)>    // ['fig', 'pear', 'apple']
+with <key: (x: T) => K>
+export func sort_by::<T, K>(xs: T[]): T[] when is_ordered::<K>() {
+    return xs[argsort(xs->map<key>)]
 }
 
 // ---- transforming ----
 
 /// f applied to every element, the resulting arrays joined in order.
-/// @example [1, 2]->flat_map<(x: int) => [x, x * 10]>    // [1, 10, 2, 20]
+/// @example [1, 2]->flat_map<(x) => [x, x * 10]>    // [1, 10, 2, 20]
 with <f: (x: T) => U[]>
 export func flat_map::<T, U>(xs: T[]): U[] {
     return flatten(xs->map<f>)
 }
 
-/// The elements in ascending order of key(x); elements with equal keys keep their order (the
-/// sort is stable, so sorting by one key and then by another works). A key is a number, a string
-/// (ordered by byte) or a bool; NaN keys come last. For a descending order of numbers use the
-/// negated key.
-/// @example ['pear', 'fig', 'apple']->sort_by<(w: string) => len(w)>    // ['fig', 'pear', 'apple']
-with <key: (x: T) => K>
-export func sort_by::<T, K>(xs: T[]): T[] {
-    return xs[argsort(xs->map<key>)]
-}
-
 /// f(xs[i], ys[i]) for every i.
 /// @fails fault `InvalidArgument` (of zip) when the two arrays differ in length
-/// @example zip_with<(a: int, b: int) => a + b>([1, 2], [10, 20])    // [11, 22]
+/// @example zip_with<(a, b) => a + b>([1, 2], [10, 20])    // [11, 22]
 with <f: (a: T, b: U) => V>
 export func zip_with::<T, U, V>(xs: T[], ys: U[]): V[] {
     return zip(xs, ys)->map<((a, b)) => f(a, b)>
 }
 
-// ---- the kernels of the reductions ----
+// ---- native atoms and kernels ----
 
-// A reduction's kernel is the body-less declaration below: the function above is the semantics and
-// what a call of the name takes when no kernel applies, and the declaration is what a call may take
-// instead (design principles 10.4, "常用而热的定义带原生内核"). The declaration's own `when` is what
-// says which element type has an executor: `Builder::declaredRuleApplies` binds the declaration's
-// type parameter from the instance's element type and evaluates the condition, an element type it
-// refuses has no executor and keeps the body, which is the semantics (: one operator, per-type
-// executors).
+// The flat view: the elements of an array of any rank in row-major order, as an array of one
+// dimension (a layout kernel; for a contiguous array it shares the data block).
+#op('array:elements')
+func elements::<T>(xs: T[..]): T[]
+
+// The kernels of the reductions along an axis: one operator each, sweeping one axis of a
+// contiguous block; the result shape follows the axis and keepdims.
+#op('array:sum_axis')
+func sum_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..]
+#op('array:mean_axis')
+func mean_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..]
+#op('array:min_axis')
+func min_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..]
+#op('array:max_axis')
+func max_axis::<T>(xs: T[..], axis: int, keepdims: bool): T[..]
+#op('array:argmax_axis')
+func argmax_axis::<T>(xs: T[..], axis: int, keepdims: bool): int[..]
+#op('array:argmin_axis')
+func argmin_axis::<T>(xs: T[..], axis: int, keepdims: bool): int[..]
+
+// The Camel function above is the meaning of its name; a kernel is the same function run by a
+// native executor, adopted for the element types that have one (design principles 10.4) and
+// checked against the body element type by element type
+// (test/cases/modules/stdlib/array_reduction_kernels.cml). An element type with no kernel runs
+// the body. A kernel sweeps every element and, on an empty array, answers as the body does (0 for `sum`, a fault for `min` and `max`). There is
+// one executor per element type, so one declaration per element type; its `when` names the type,
+// and a call is written `sum(xs)`, never with a kernel's name.
 //
-// One declaration per element type, and each declaration names the operator of its own element type
-// (`#op('array:sum_i')` for `i32`, `#op('array:sum_d')` for `float`, and so on). That is the shape
-// the executors ask for: the executor a declaration names takes exactly the element type its
-// condition admits (builtin/operators/array_reduce.cpp), so the element type is known where the
-// executor is chosen and no run-time switch on the element type is left anywhere. The conditions are
-// exact element types (`is_elem_i32` and its siblings below), so no two of them hold for one type;
-// two same-named declarations whose conditions overlap are refused where the second is written, as
-// `SemanticDiag::WhenDeclarationOverlap` naming the type both hold for and both declarations — the
-// compiler asks both conditions about every registered type (`signaturesCanAgree`), and two
-// declarations whose conditions are mutually exclusive both stand.
-//
-// A call is written `sum(xs)`, `min(xs)`, `max(xs)`, never a kernel's name: the kernel is chosen at
-// instantiation (`Builder::adoptImplKernel`), which is the only `when`-aware selection there is.
-//
-// Nothing here states how to compare or how to add. That is written once, in modules/math/minmax.h,
-// which these kernels and the tensor kernels both call (the tensor header forwards to it rather than
-// holding a second copy). The executors differ in the type they accumulate or carry, not in the
-// comparison. The kernel and the body are pinned against each other by
-// test/cases/modules/stdlib/array_reduction_kernels.cml, element type by element type, including the
-// two reduced-precision ones and the sign of a zero.
-//
-// These declarations stand at the end of the module: one of them above the fault line would move it,
-// and the line `zip`'s fault is on is how the fault is located (stdlib.fault.zip_with,
-// attempt.library's golden output).
+// How to add and how to compare is written once, in modules/math/minmax.h, which these kernels
+// and the tensor kernels both call.
 
-// ---- the element types of the reductions, one predicate each ----
-
-// The reductions are declared for a family of element types (`is_numeric` for `sum`, `is_ordered`
-// for `min` and `max`), and the executors are one per element type. A declaration's `when` therefore
-// has to name one element type, not a family: these predicates are what it names, and each holds for
-// exactly one type, so the declarations are mutually exclusive by construction. `is_integer` and
-// `is_float` (types.cml) are the families themselves; a declaration conditioned on one of those
-// covers several executors at once, which is what the run-time switch used to answer.
-
-/// The element type `i32` alone, for the kernel declaration of `sum`/`min`/`max` over an `i32[]`.
-func is_elem_i32::<T>(): bool {
-    return match type T {
-        case i32 => true
-        case _ => false
-    }
-}
-
-/// The element type `int` alone, for the kernel declaration over an `int[]`.
-func is_elem_int::<T>(): bool {
-    return match type T {
-        case int => true
-        case _ => false
-    }
-}
-
-/// The element type `f32` alone, for the kernel declaration over an `f32[]`.
-func is_elem_f32::<T>(): bool {
-    return match type T {
-        case f32 => true
-        case _ => false
-    }
-}
-
-/// The element type `float` (f64) alone, for the kernel declaration over a `float[]`.
-func is_elem_f64::<T>(): bool {
-    return match type T {
-        case float => true
-        case _ => false
-    }
-}
-
-/// The element type `bf16` alone, for the kernel declaration over a `bf16[]`.
-func is_elem_bf16::<T>(): bool {
-    return match type T {
-        case bf16 => true
-        case _ => false
-    }
-}
-
-/// The element type `f16` alone, for the kernel declaration over an `f16[]`.
-func is_elem_f16::<T>(): bool {
-    return match type T {
-        case f16 => true
-        case _ => false
-    }
-}
-
-// ---- the kernels of `sum`, one per element type ----
-
-// An integer element type accumulates in itself and wraps on overflow, as `+` does on it; a
-// floating-point element type accumulates in f64 and is rounded once into the element type at the
-// end. A complex element type is numeric and `sum` accepts it, but no declaration below names one,
-// so `sum` over a complex array has no executor and runs its body — the complex arm of the body is
-// the only place that says what summing complex numbers means.
-
-/// The kernel of `sum` for an `i32[]`: the accumulator is `i32`, wrapping on overflow.
+// sum: an f64 accumulator rounded once for f32 and float, the element type itself for i32 and int.
 #op('array:sum_i')
-func sum_kernel::<T>(xs: T[]): T when is_elem_i32::<T>()
-
-/// The kernel of `sum` for an `int[]`: the accumulator is `int`, wrapping on overflow.
+func sum_kernel::<T>(xs: T[..]): T when is_same::<T, i32>()
 #op('array:sum_l')
-func sum_kernel::<T>(xs: T[]): T when is_elem_int::<T>()
-
-/// The kernel of `sum` for an `f32[]`: an f64 accumulator, rounded once into `f32`.
+func sum_kernel::<T>(xs: T[..]): T when is_same::<T, int>()
 #op('array:sum_f')
-func sum_kernel::<T>(xs: T[]): T when is_elem_f32::<T>()
-
-/// The kernel of `sum` for a `float[]`: an f64 accumulator, rounded once into `float`.
+func sum_kernel::<T>(xs: T[..]): T when is_same::<T, f32>()
 #op('array:sum_d')
-func sum_kernel::<T>(xs: T[]): T when is_elem_f64::<T>()
+func sum_kernel::<T>(xs: T[..]): T when is_same::<T, float>()
 
-/// The kernel of `sum` for a `bf16[]`: an f64 accumulator, rounded once into `bf16`.
-#op('array:sum_bf')
-func sum_kernel::<T>(xs: T[]): T when is_elem_bf16::<T>()
-
-/// The kernel of `sum` for an `f16[]`: an f64 accumulator, rounded once into `f16`.
-#op('array:sum_f6')
-func sum_kernel::<T>(xs: T[]): T when is_elem_f16::<T>()
-
-// ---- the kernels of `min` and `max`, one per element type ----
-
-// The fold carries an element of T and combines it with `math::min`/`math::max` (IEEE 754 minimum
-// and maximum), so the result is one of the elements and nothing rounds; an empty array answers
-// null. The two reduced-precision element types carry the winning element's own 16-bit pattern.
-
-/// The kernel of `min` for an `i32[]`.
 #op('array:min_i')
-func min_kernel::<T>(xs: T[]): T? when is_elem_i32::<T>()
-
-/// The kernel of `min` for an `int[]`.
+func min_kernel::<T>(xs: T[..]): T when is_same::<T, i32>()
 #op('array:min_l')
-func min_kernel::<T>(xs: T[]): T? when is_elem_int::<T>()
-
-/// The kernel of `min` for an `f32[]`.
+func min_kernel::<T>(xs: T[..]): T when is_same::<T, int>()
 #op('array:min_f')
-func min_kernel::<T>(xs: T[]): T? when is_elem_f32::<T>()
-
-/// The kernel of `min` for a `float[]`.
+func min_kernel::<T>(xs: T[..]): T when is_same::<T, f32>()
 #op('array:min_d')
-func min_kernel::<T>(xs: T[]): T? when is_elem_f64::<T>()
+func min_kernel::<T>(xs: T[..]): T when is_same::<T, float>()
 
-/// The kernel of `min` for a `bf16[]`.
-#op('array:min_bf')
-func min_kernel::<T>(xs: T[]): T? when is_elem_bf16::<T>()
-
-/// The kernel of `min` for an `f16[]`.
-#op('array:min_f6')
-func min_kernel::<T>(xs: T[]): T? when is_elem_f16::<T>()
-
-/// The kernel of `min` for a `bool[]`: `false` is below `true`.
-#op('array:min_b')
-func min_kernel::<T>(xs: T[]): T? when is_bool::<T>()
-
-/// The kernel of `min` for a `string[]`: the comparison is on the bytes of the two values.
-#op('array:min_s')
-func min_kernel::<T>(xs: T[]): T? when is_string::<T>()
-
-/// The kernel of `max` for an `i32[]`.
 #op('array:max_i')
-func max_kernel::<T>(xs: T[]): T? when is_elem_i32::<T>()
-
-/// The kernel of `max` for an `int[]`.
+func max_kernel::<T>(xs: T[..]): T when is_same::<T, i32>()
 #op('array:max_l')
-func max_kernel::<T>(xs: T[]): T? when is_elem_int::<T>()
-
-/// The kernel of `max` for an `f32[]`.
+func max_kernel::<T>(xs: T[..]): T when is_same::<T, int>()
 #op('array:max_f')
-func max_kernel::<T>(xs: T[]): T? when is_elem_f32::<T>()
-
-/// The kernel of `max` for a `float[]`.
+func max_kernel::<T>(xs: T[..]): T when is_same::<T, f32>()
 #op('array:max_d')
-func max_kernel::<T>(xs: T[]): T? when is_elem_f64::<T>()
+func max_kernel::<T>(xs: T[..]): T when is_same::<T, float>()
 
-/// The kernel of `max` for a `bf16[]`.
-#op('array:max_bf')
-func max_kernel::<T>(xs: T[]): T? when is_elem_bf16::<T>()
-
-/// The kernel of `max` for an `f16[]`.
-#op('array:max_f6')
-func max_kernel::<T>(xs: T[]): T? when is_elem_f16::<T>()
-
-/// The kernel of `max` for a `bool[]`: `false` is below `true`.
-#op('array:max_b')
-func max_kernel::<T>(xs: T[]): T? when is_bool::<T>()
-
-/// The kernel of `max` for a `string[]`: the comparison is on the bytes of the two values.
-#op('array:max_s')
-func max_kernel::<T>(xs: T[]): T? when is_string::<T>()
+// sort: `xs = xs->sort` runs the in-place form of the kernel when nothing else refers to xs.
+#op('array:sort_i')
+func sort_kernel::<T>(xs: T[]): T[] when is_same::<T, i32>()
+#op('array:sort_l')
+func sort_kernel::<T>(xs: T[]): T[] when is_same::<T, int>()
+#op('array:sort_f')
+func sort_kernel::<T>(xs: T[]): T[] when is_same::<T, f32>()
+#op('array:sort_d')
+func sort_kernel::<T>(xs: T[]): T[] when is_same::<T, float>()

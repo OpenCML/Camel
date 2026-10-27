@@ -1,28 +1,15 @@
 /// The module random in a compiled program: seeded, it draws the numbers the interpreter draws
-/// (both use camel/utils/random.h on one std::mt19937_64), and its faults are reported alike;
-/// statistics.mean and stdev over what it drew.
-module draws
-
-import { seed, rand, randn, randint, choice, sample, shuffle } from random
-import { mean, stdev } from statistics
-
-func pick(xs: int[]): int {
-    return choice(xs)
-}
+/// (both run Philox4x32-10 from camel/utils/philox.h). The keyed draws that sit on arrays
+/// (`shuffle`, `sample`, `permutation`) are not translated yet.
+import { seed, next_key, rand, key, split, uniform } from random
 
 func main(): int sync {
     seed(7)
-    println(rand(), randn(), randint(1, 6), randint(6, 1), randint(-3, -3))
-    let xs = [10, 20, 30, 40, 50, 60]
-    println(choice(xs), sample(xs, 3), sample(xs, 0), shuffle(xs))
-    println(xs)
-    let walk = [randn(), randn(), randn(), randn()]
-    let none: int[] = []
-    println(mean(xs), stdev(xs), mean(walk), stdev(walk), mean(none), stdev([1]))
+    println(rand(), rand(), next_key())
+    let (a, b) = split(key(7))
+    println(a, b, uniform::<float>(a), uniform::<f32>(b))
     // the same seed gives the same draws again
     seed(7)
     println(rand())
-    println(attempt(pick, [1]) !! 0, attempt(pick, none) !! -1)
-    println(sample(xs, 7))
     return 0
 }

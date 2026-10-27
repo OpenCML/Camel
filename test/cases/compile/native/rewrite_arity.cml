@@ -1,17 +1,16 @@
 /**
- * The declaration of `rewrite:rewrite` takes two ordinary arguments at least: one is refused at
- * the call, and the overloads the message lists are the declaration's
- * `(p: Program, rules: Rule[]) => Program!` and
- * `(p: Program, rules: Rule[], strict: bool) => Program!` — `stdlib/rewrite.cml`, not
- * the C++ module.
+ * The declaration of `rewrite:rewrite` takes its rule set in angle brackets: a call without them
+ * is refused at the call, and the candidate the message lists is the declaration's
+ * `(f: F): F!` with `rules: Rule[]` — `stdlib/rewrite.cml`, not the C++ module.
  */
-module rewrite_arity
 
 import { rewrite } from rewrite
-import { Program, current } from graph
+
+func target(): int {
+    return 0
+}
 
 func main(): int sync {
-    let p: Program = current()
-    let q = rewrite(p)
+    let q = target->rewrite
     return 0
 }

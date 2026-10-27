@@ -2,7 +2,6 @@
  * A module that offers an enum type and its operator (design principles 5.7): the declaration
  * keeps the module it belongs to, as a struct declaration does.
  */
-module enum_models
 
 export type Color = enum { Red, Green, Blue }
 

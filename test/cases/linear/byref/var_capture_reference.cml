@@ -15,7 +15,6 @@
  *   8        a nested function writes a variable of the enclosing function
  *   21       a captured var parameter: the write reaches the caller's variable
  */
-module var_capture_reference
 
 func pick(k: int): int sync {
     var c = 0

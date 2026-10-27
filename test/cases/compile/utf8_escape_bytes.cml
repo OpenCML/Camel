@@ -1,4 +1,3 @@
-module utf8_escape_bytes
 func main(): int sync {
     println('\xE4\xB8\xAD', len('\xE4\xB8\xAD'))
     return 0

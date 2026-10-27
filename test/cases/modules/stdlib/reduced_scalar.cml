@@ -48,10 +48,9 @@
  * type's own range (`let x: f16 = 65520.0` is an error, not an infinity: the rounding that
  * overflows is the store rounding of a computed value, which the arithmetic lines pin).
  */
-module stdlib_reduced_scalar
 
 import { sum } from array
-import { new, cast, to_bytes } from tensor
+import { new, to_bytes } from tensor
 import { to_array } from bytes
 
 /// The little-endian bytes of one element of a one-element tensor of `T`. The helper is written
@@ -69,9 +68,9 @@ func bitsOfF16(value: f16): int[] {
 
 /// One rounding of an f32 tensor into bf16 or f16: the same elements the literal and the written
 /// conversion give, so the three spellings must agree element for element.
-func narrowed(x: f32[..]): bf16[..] { return cast(x, 'bf16') }
+func narrowed(x: f32[..]): bf16[..] { return bf16(x) }
 
-func halved(x: f32[..]): f16[..] { return cast(x, 'f16') }
+func halved(x: f32[..]): f16[..] { return f16(x) }
 
 /// The text of a bf16 read back as a bf16, which must be the value itself (design principles 7.7:
 /// the text is the shortest that reads back as the same element of its own type). `string(x)` and
@@ -106,8 +105,8 @@ func main(): int sync {
     // rounding is one, and it is the store rounding of the element type, not the f32 one.
     let tenth: f32[] = [0.1]
     let widenedTenth = tenth->map<(x: f32) => bf16(x)>
-    println(to_array(to_bytes(cast(new(tenth), 'bf16'))))
-    println(to_array(to_bytes(cast(new(tenth), 'f16'))))
+    println(to_array(to_bytes(bf16(new(tenth)))))
+    println(to_array(to_bytes(f16(new(tenth)))))
     println(widenedTenth[0], bitsOfBf16(widenedTenth[0])[0], bitsOfBf16(widenedTenth[0])[1], string(widenedTenth[0]))
     println(bitsOfBf16(0.1)[0], bitsOfBf16(0.1)[1])
     println(bitsOfF16(0.1)[0], bitsOfF16(0.1)[1])
@@ -145,7 +144,7 @@ func main(): int sync {
     println(a == b, a != b, a < b, a <= b, a > b, a >= b)
 
     // ---- a narrowing to i32 truncates toward zero; a widening is exact ----
-    println(i32(a), f32(a), a as f32)
+    println(i32(a), f32(a), f32(a))
 
     // ---- a reduction over a bf16 array accumulates in f64 and rounds once ----
     let cancelling: bf16[] = [16777216.0, 1.0, -16777216.0]

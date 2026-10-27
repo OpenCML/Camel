@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The clock and its text forms. `now` reads the system clock, `strftime` writes a timestamp as
- * text in UTC, and `strptime` turns text into a timestamp using the process's time zone.
+ * The clock and its text forms. `now` reads the system clock; `strftime` writes a timestamp as
+ * text and `strptime` turns text into a timestamp, both in UTC and both pure.
  *
  * The signatures are written once, in the declaration module `stdlib/time.cml` (design principles
  * 6.4). What is left here is what only C++ knows: the kernels in
@@ -33,12 +33,11 @@ bool TimeModule::load() {
         {
             // The clock.
             {"now", false},
-            // strptime reads the time zone of the process. strftime formats in UTC and could
-            // be declared pure; it is kept with the rest of the module until that is decided.
-            {"strftime", false},
-            {"strptime", false},
+            // Turning a moment into text and back is in UTC and reads nothing: both are pure.
+            {"strftime", true},
+            {"strptime", true},
         });
-    // What each touches (docs/design/op-semantics 8): the clock; the time zone of the process.
+    // What each touches (docs/design/op-semantics 8): the clock.
     {
         using camel::core::sem::AccessMode;
         using camel::core::sem::externalAmbient;
@@ -46,8 +45,6 @@ bool TimeModule::load() {
             "time",
             {
                 {"now", externalAmbient("clock", AccessMode::Read)},
-                {"strftime", externalAmbient("env", AccessMode::Read)},
-                {"strptime", externalAmbient("env", AccessMode::Read)},
             });
     }
     loaded_ = true;

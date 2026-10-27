@@ -3,15 +3,14 @@
  * `get_cwd` takes nothing, and both answer the declared `string`. Every call reaches the C++
  * operator, and an unset variable is the declared empty string.
  */
-module env_declaration_import
 
 import { get_env, get_cwd } from env
 
 func main(): int sync {
-    let value: string = get_env('H163_ENV_VALUE')
-    let cwd: string = get_cwd()
+    let value: string = get_env('H163_ENV_VALUE') ?? ''
+    let cwd: string = get_cwd() !! ''
     println(value)
-    println(get_env('H163_ENV_MISSING'))
+    println(get_env('H163_ENV_MISSING') ?? '')
     println(cwd != '')
     return 0
 }

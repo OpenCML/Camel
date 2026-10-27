@@ -1,5 +1,3 @@
-module err_tf_count
-
 type Pair<T> = (T, T)
 
 func f(p: Pair<int, string>): int {

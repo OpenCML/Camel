@@ -7,7 +7,6 @@
  * Differentiating a value that is not the first `with` parameter needs a lambda that makes it
  * the first `with` parameter (an adversarial example, a target, a second weight).
  */
-module grad_first_with_parameter
 
 import { grad, with_grad } from autodiff
 import { reshape, sum } from tensor

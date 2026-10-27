@@ -4,7 +4,6 @@
  * not per match; the float signed-zero law is float's own, so it is a second law, not a case of
  * the integer one.
  */
-module generic_target
 
 func i64_zero(x: int): int {
     return x + 0

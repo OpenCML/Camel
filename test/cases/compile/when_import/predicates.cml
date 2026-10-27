@@ -3,7 +3,6 @@
  * type, one that folds a field name over `fields T`, and an ordinary function that is not a
  * predicate at all.
  */
-module when_import_predicates
 
 export func is_compound::<T>(): bool {
     return match type T {

@@ -2,7 +2,6 @@
  * A generic function without a return annotation gets one per instance from the selected
  * branch. The three instances below have three different result types.
  */
-module return_inference
 
 func classified::<T>(t: T) {
     return match type T {

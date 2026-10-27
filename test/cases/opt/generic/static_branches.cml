@@ -4,7 +4,6 @@
  * is a constant, and a call through a function value that follows an effect (the call must still
  * run after it once it becomes a direct call).
  */
-module static_branches
 
 func countdown(n: int): int sync {
     return if n == 0 then 0 else sync {

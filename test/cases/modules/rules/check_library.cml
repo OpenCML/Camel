@@ -21,26 +21,21 @@
  * generic, so the report is 85 lines: 70 instances with a verdict and the 15 rules that are not
  * generic.
  *
- * The rules below that are not generic -- the tensor laws, `float_double`, `float32_double` -- are
+ * The rules below that are not generic -- the tensor laws, `float_double`, `float_double` -- are
  * checked as they were. That this list is the library's list is asserted by
  * `rules.every_exported_rule_enters_the_check` (`check_every_rule.cml` and its verify script), not by
  * this hand-written one, which is what drifted.
  */
-module check_library
-import { check } from rewrite
+import { check, check_text } from rewrite
 import {
-        int_add_self, int_add_zero, int_combine, int_combine_one, int_distribute, int_div_one, int_fold, int_fold_add, int_mul_one, int_mul_zero, int_neg_neg, int_sub_self, int_sub_zero,
-        float_add_minus_zero, float_add_self, float_combine, float_combine_mixed, float_combine_one, float_combine_one_mixed, float_div_one, float_double, float_fold, float_mul_one, float_neg_neg, float_sub_zero,
-        float32_double,
-        tensor_add_minus_zero, tensor_add_self, tensor_combine, tensor_combine_mixed, tensor_combine_one, tensor_combine_one_mixed, tensor_div_one, tensor_double, tensor_fold, tensor_mul_one, tensor_neg_neg, tensor_sub_zero, tensor_distribute
+        add_self, int_add_zero, int_combine, int_combine_one, int_distribute, div_one, int_fold, int_fold_add, mul_one, int_mul_zero, neg_neg, int_sub_self, sub_zero,
+        float_add_neg_zero, float_combine, float_combine_mixed, float_combine_one, float_combine_one_mixed, float_double, float_fold, array_add_neg_zero, array_add_self, array_combine, array_combine_mixed, array_combine_one, array_combine_one_mixed, array_div_one, array_double, array_fold, array_mul_one, array_neg_neg, array_sub_zero, array_distribute
 } from rules
 
 func main(): int sync {
-    print(check([
-        int_add_self, int_add_zero, int_combine, int_combine_one, int_distribute, int_div_one, int_fold, int_fold_add, int_mul_one, int_mul_zero, int_neg_neg, int_sub_self, int_sub_zero,
-        float_add_minus_zero, float_add_self, float_combine, float_combine_mixed, float_combine_one, float_combine_one_mixed, float_div_one, float_double, float_fold, float_mul_one, float_neg_neg, float_sub_zero,
-        float32_double,
-        tensor_add_minus_zero, tensor_add_self, tensor_combine, tensor_combine_mixed, tensor_combine_one, tensor_combine_one_mixed, tensor_div_one, tensor_double, tensor_fold, tensor_mul_one, tensor_neg_neg, tensor_sub_zero, tensor_distribute
-    ], 200, 7))
+    print(check_text([
+        add_self, int_add_zero, int_combine, int_combine_one, int_distribute, div_one, int_fold, int_fold_add, mul_one, int_mul_zero, neg_neg, int_sub_self, sub_zero,
+        float_add_neg_zero, float_combine, float_combine_mixed, float_combine_one, float_combine_one_mixed, float_double, float_fold, array_add_neg_zero, array_add_self, array_combine, array_combine_mixed, array_combine_one, array_combine_one_mixed, array_div_one, array_double, array_fold, array_mul_one, array_neg_neg, array_sub_zero, array_distribute
+    ]->check<200, 7>))
     return 0
 }

@@ -1,4 +1,3 @@
-module tiles_empty_mean
 import { mean, zeros } from tensor
 import { source } from tiles
 func average(x: f32[..]): float { return float(mean(x)) }

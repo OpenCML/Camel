@@ -1,9 +1,6 @@
 >// Function definitions, calls, with-parameters, decorators and function literals.
 #^^ comment.line.double-slash.camel punctuation.definition.comment.camel
 #  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
->module functions
-#^^^^^^ keyword.control.import.module.camel
-#       ^^^^^^^^^ entity.name.namespace.module.camel
 >
 >func fib(n: int): int {
 #^^^^ meta.function.definition.camel storage.type.function.camel
@@ -304,21 +301,19 @@
 #                           ^ meta.block.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.end.camel
 #                            ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
 #                                ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
->    let bound = arr->slice<0, len(arr) - 1>
+>    let bound = arr[0:len(arr) - 1]
 #    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
 #        ^^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
 #              ^ meta.block.camel keyword.operator.assignment.camel
-#                   ^^ meta.block.camel keyword.operator.pipe.camel
-#                     ^^^^^ meta.block.camel entity.name.function.call.camel
-#                          ^ meta.block.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.begin.camel
-#                           ^ meta.block.camel meta.angle-arguments.camel constant.numeric.integer.decimal.camel
-#                            ^ meta.block.camel meta.angle-arguments.camel punctuation.separator.comma.camel
-#                              ^^^ meta.block.camel meta.angle-arguments.camel entity.name.function.call.camel
-#                                 ^ meta.block.camel meta.angle-arguments.camel meta.parens.camel punctuation.section.parens.begin.camel
-#                                     ^ meta.block.camel meta.angle-arguments.camel meta.parens.camel punctuation.section.parens.end.camel
-#                                       ^ meta.block.camel meta.angle-arguments.camel keyword.operator.arithmetic.camel
-#                                         ^ meta.block.camel meta.angle-arguments.camel constant.numeric.integer.decimal.camel
-#                                          ^ meta.block.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.end.camel
+#                   ^ meta.block.camel meta.brackets.camel punctuation.section.brackets.begin.camel
+#                    ^ meta.block.camel meta.brackets.camel constant.numeric.integer.decimal.camel
+#                     ^ meta.block.camel meta.brackets.camel punctuation.separator.colon.camel
+#                      ^^^ meta.block.camel meta.brackets.camel entity.name.function.call.camel
+#                         ^ meta.block.camel meta.brackets.camel meta.parens.camel punctuation.section.parens.begin.camel
+#                             ^ meta.block.camel meta.brackets.camel meta.parens.camel punctuation.section.parens.end.camel
+#                               ^ meta.block.camel meta.brackets.camel keyword.operator.arithmetic.camel
+#                                 ^ meta.block.camel meta.brackets.camel constant.numeric.integer.decimal.camel
+#                                  ^ meta.block.camel meta.brackets.camel punctuation.section.brackets.end.camel
 >    let named = make(x: 1, y: p.x)
 #    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
 #        ^^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel

@@ -20,10 +20,9 @@
  * and `adamw` follows the trajectory of `adam` on a parameter tree independently decayed before
  * every step (`tree_map`), which is what "decoupled" means.
  */
-module optim_agreement
 
 import math
-import { abs, cast, full, range, reshape, sum, tanh } from tensor
+import { abs, full, range, reshape, sum, tanh } from tensor
 import { adam as native_adam, adam_state, sgd as native_sgd } from nn
 import { adam, adamw, constant, cosine_decay, init, linear_decay, sgd, update } from optim
 import { with_grad } from autodiff
@@ -84,15 +83,15 @@ func loss(x: f32[?]): float {
 // The starting parameters and the gradient of step `n` of the all-tensor tree.
 func tensors_at(): Tensors {
     return {
-        w: cast(range(6), 'float32') * 0.0007 - 0.002,
-        b: cast(range(2), 'float32') * 0.03 + 0.001
+        w: f32(range(6)) * 0.0007 - 0.002,
+        b: f32(range(2)) * 0.03 + 0.001
     }
 }
 
 func tensors_gradient_at(step: int): Tensors {
     return {
-        w: cast(range(6), 'float32') * f32(0.0007 * float(step)) - 0.002,
-        b: cast(range(2), 'float32') * f32(0.03 * float(step)) + 0.001
+        w: f32(range(6)) * f32(0.0007 * float(step)) - 0.002,
+        b: f32(range(2)) * f32(0.03 * float(step)) + 0.001
     }
 }
 
@@ -129,7 +128,7 @@ func mismatches(drifts: float[]): int {
 func main(steps: int): int sync {
     let model = model_at()
     let tensors = tensors_at()
-    let x = reshape(cast(range(6), 'float32'), [6]) * 0.125 - 0.5
+    let x = reshape(f32(range(6)), [6]) * 0.125 - 0.5
     let loss_with_grad = with_grad(loss)
     var failures = 0
 

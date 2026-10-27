@@ -9,14 +9,13 @@
  * The module it imports is `../lazy_let/lazy_let_writer.cml`; a copy named for this case keeps the
  * two programs independent.
  */
-module use_let_main
 
 import { get_env } from env
 import { exists } from fs
 import { wrote } from use_let_writer
 
 func main(): int sync {
-    let path = get_env('CAMEL_TEST_TMPDIR') + '/h222_use_let_flag.txt'
+    let path = (get_env('CAMEL_TEST_TMPDIR') ?? '') + '/h222_use_let_flag.txt'
     wrote
     println("after use, flag exists =", exists(path))
     return 0

@@ -1,0 +1,66 @@
+/**
+ * The adjoints of the two index forms on a dimension other than the first (design principles 5.4,
+ * 9.9). A position on axis 1 gathers a column, so its adjoint is the zero array of `m` with that
+ * column's gradient added back along axis 1 (`:tangent/scatter_add_arr`, which the rule's call
+ * carries the axis in); a take along axis 1 gathers the columns the indices name, so its adjoint
+ * scatters each column's gradient back into the column it came from and adds them where an index
+ * repeats (`:tangent/scatter_take_arr`, with the same axis). Both gradients are read by their sum
+ * -- nonzero exactly where the forward read touched the value -- and by the sum of their product
+ * with the gradient written out by hand. Each index form's result is taken with a parameter that
+ * states its type -- `f32[2]` for the column, `f32[2, 2]` for the take -- so the types are pinned
+ * as well as the values.
+ *
+ *   m = [[1, 2], [3, 4]]
+ *   sum(m[:, 0]) = 1 + 3 = 4.0;        d/dm = [[1, 0], [1, 0]]; sum = 2.0; dot = 1 + 1 = 2.0
+ *   sum(m[:, [1, 1]]) = 2 + 2 + 4 + 4 = 12.0;  d/dm = [[0, 2], [0, 2]]; sum = 4.0; dot = 4 + 4 = 8.0
+ *
+ * Red when: the scatter puts the gradient on the wrong axis (the sums and both products change), a
+ * repeated index overwrites instead of adding (the second product is 4.0, not 8.0), the rule
+ * refuses the three-word call at all (exit 1), or a result's type is not the one its parameter
+ * states (the call needs an explicit conversion).
+ */
+import { reshape, sum } from tensor
+import { grad } from autodiff
+
+func row(a: f32[2]): float {
+    return float(sum(a))
+}
+
+func table(a: f32[2, 2]): float {
+    return float(sum(a))
+}
+
+/// The position 0 on axis 1 of a rank-2 value: the column, an `f32[2]`.
+func firstColumn(m: f32[2, 2]): float {
+    return row(m[:, 0])
+}
+
+/// The positions the integer array names on axis 1, a repeated index among them: an `f32[2, 2]`.
+func columnTake(m: f32[2, 2], idx: int[2]): float {
+    return table(m[:, idx])
+}
+
+with <x: f32[..]>
+func columnSum(): float {
+    return firstColumn(reshape(x, [2, 2]))
+}
+
+with <x: f32[..]>
+func repeatedSum(): float {
+    return columnTake(reshape(x, [2, 2]), [1, 1])
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [2, 2])
+    let g = grad(columnSum)<x>()
+    let h = grad(repeatedSum)<x>()
+    'column value={:.1f} grad_sum={:.1f} grad_dot={:.1f}'->format<
+        columnSum<x>(),
+        sum(g),
+        sum(g * reshape([1.0, 0.0, 1.0, 0.0] as f32[], [2, 2]))>->println
+    'take value={:.1f} grad_sum={:.1f} grad_dot={:.1f}'->format<
+        repeatedSum<x>(),
+        sum(h),
+        sum(h * reshape([0.0, 2.0, 0.0, 2.0] as f32[], [2, 2]))>->println
+    return 0
+}

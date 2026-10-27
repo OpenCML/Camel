@@ -1,36 +1,40 @@
-# 模块 `graph`：把程序当作值
+# 模块 `graph`：把函数当作值
 
-`graph` 是一个 C++ 写的模块（`modules/graph`），让 Camel 程序读取并改写另一个程序的图：读取图、在事务里编辑、提交成新的 `Program`；用 Camel 写的遍是一个 `(Program) => Program!` 函数，按 `<模块>::<函数>` 写进流水线。设计依据见 `docs/design/graph-store/README.cn.md` 第 4、5 节；本文说明实现里每一块放在哪里、行为是什么、有哪些限制。逐个算子的签名与例子见 [`docs/stdlib-reference.md`](../stdlib-reference.md) 的 `graph` 一节（由 `stdlib/signatures/graph.cml` 生成）。
+`graph` 是一个 C++ 写的模块（`modules/graph`），让 Camel 程序读取并改写一个函数的图：读取图、在事务里编辑、提交成改过的函数；用 Camel 写的遍是一个 `(f: F) => F!` 函数，按 `<模块>::<函数>` 写进流水线。设计依据见 `docs/design/graph-store/README.cn.md` 第 4、5 节和设计原则 9.1（遍是函数到函数的变换）；本文说明实现里每一块放在哪里、行为是什么、有哪些限制。逐个算子的签名与例子见 [`docs/stdlib-reference.md`](../stdlib-reference.md) 的 `graph` 一节（由 `stdlib/graph.cml` 生成）。
+
+没有 `Program` 类型：`Program` 是运行时的快照，Camel 程序不会写出它的名字。被读取、被改写的单位是**函数**：一个函数值带着它自己的图和从它可达的所有图。
 
 ## 类型
 
+这些类型在 `stdlib/graph.cml` 里都写成没有右边的 `export type`，实现由 C++ 模块按（模块名，类型名）注册（`registerNativeType`，`include/camel/core/type/native.h`）；声明了而 C++ 没有提供，是 `SemanticDiag::NativeTypeNotProvided`。
+
 | 类型 | 是什么 | 实现 |
 | --- | --- | --- |
-| `Program` | 不可变的程序快照 | 运行时的 `Program` 对象本身，按身份比较 |
-| `Graph`、`Node`、`Op`、`TypeRef`、`Region`、`Tag`、`Txn` | 命名某个 `Program` 里的东西 | 一个被追踪的 `Handle` 对象（`modules/graph/handle.h`）：种类、所属的 `Program`、`GraphId`、序号、`Type*`；`Txn` 是外部资源对象 |
+| `Graph`、`Node<T>`、`Op`、`TypeRef`、`Region`、`Tag` | 命名某个函数的图里的东西 | 一个被追踪的 `Handle` 对象（`modules/graph/handle.h`）：种类、所属的 `Program`、`GraphId`、序号、`Type*` |
+| `Txn<F>` | 在函数 `f: F` 上开的事务 | 句柄资源类型：外部资源对象持有一个草稿会话；`commit(t)` 给出同类型的 `F!`。因为是资源，改写它的算子写 `uses t` |
 | `Value` | 值；目前与 `Node` 同一个类型 | `Node` 的另一个名字 |
 | `NodeKind` | `Data, Port, Cast, Copy, Fill, Accs, Brch, Join, Call, Func, Oper, Sync, Gate, Loop` | Camel 的 `enum`（`nodekind.cpp`）；`nodeKindTag` 对 `GCNodeKind` 做穷尽的 `switch`，图模型新增一种节点时这里编译不过，直到它被放进枚举或明确排除（`Bind`、`Dref`、`Dead` 不是程序里看得见的节点） |
 | `RegionKind` | `Root, Arm, LoopCond, LoopBody, Inline, Block, Dead` | Camel 的 `enum`（`regionkind.cpp`），与 `GCRegionKind` 一一对应；新增一种区域时 `regionKindTag` 编译不过 |
 
-句柄用 `==` / `!=` 比较（模块通过 `__eq__` / `__neq__` 算子组为自己的类型定义，设计原则 4.3）。两个句柄相等，当且仅当种类、`Program`（或草稿）、图与序号都相同。`id(h)` 给出图的 `GraphId`、节点的 `NodeId` 或算子的 `OperId`，在同一个 `Program` 里稳定，Map 的键用它。
+句柄用 `==` / `!=` 比较（模块通过 `__eq__` / `__neq__` 算子组为自己的类型定义，设计原则 4.3）。两个句柄相等，当且仅当种类、来源（快照或草稿）、图与序号都相同。`id(h)` 给出图的 `GraphId`、节点的 `NodeId` 或算子的 `OperId`，在同一个函数的图里稳定，Map 的键用它。
 
-一个句柄持有它读出时的 `Program`，所以经过它读到的永远是那个快照；`Handle::updateRefs` 追踪这个 `Program`，和函数值追踪它的 `Program` 一样。指向草稿的句柄是唯一的例外：它持有草稿而不持有 `Program`，只在改写期间的 `when` 条件里出现（见“读取”）。
+一个句柄持有它读出时的快照，所以经过它读到的永远是那个版本；`Handle::updateRefs` 追踪这个快照，和函数值追踪它所在的快照一样。指向草稿的句柄是唯一的例外：它持有草稿而不持有快照，只在改写期间的 `when` 条件里出现（见“读取”）。
 
 ## 读取
 
-读取算子都是纯的，直接读冻结的图（`GCGraph`）：`graphs`、`root`、`name`、`nodes`（`NodeId` 序，跳过 `Dead`）、`inputs` / `with_inputs` / `ctrl_inputs`、`users` / `value_users`（经图缓存的使用者索引）、`kind`、`op` / `op_name`、`is_pure`、`is_anchor`、`is_constant`、`constant(n, 样本)`、`type_of` / `type_name`、`callee`、`tags`、`origin`、`show`。可能没有的结果是 `T?`，用 `match` 取出。`constant` 的第二个实参是类型的样本，值不被读取：原生算子的类型实参用这种形式（见 `json::decode_as`），`::<T>` 只属于 Camel 的泛型函数。
+读取算子都是纯的，直接读冻结的图（`GCGraph`）：`graph_of(f)`（函数自己的图）、`graphs_of(f)`（从它可达的全部图）、`name`、`nodes`（`NodeId` 序，跳过 `Dead`）、`inputs` / `with_inputs` / `sync_inputs` / `order_inputs`（普通输入、with 输入、同步边与顺序边的前驱）、`users` / `value_users`（经图缓存的使用者索引）、`kind`、`op` / `op_name`、`is_pure`、`is_anchor`、`is_constant`、`constant::<T>(n)`、`type_of` / `type_name`、`callee`、`tags`、`origin`、`show`、`shape_text`。可能没有的结果是 `T?`，用 `match` 取出。`constant::<T>(n)` 的类型实参是答案的类型：值的类型只出现在结果里，调用处用显式类型实参固定它（设计原则 4.4），`n` 不是 `T` 类型的常量时得到 `null`。
 
 区域：`region_of(n)` 给出节点所在的最内层区域，每个节点都有一个；区域 0 是函数体，只有体、没有区域表的图（`regionCount() == 0`）也返回区域 0，不会返回 `null`。`region_kind(r)` 给出 `RegionKind`，体的种类是 `Root`；`region_parent(r)` 给出父区域（体没有父区域，返回 `null`）。区域列在 R2b 落地后由分支臂与内联共同写入；区域规则（2）（3）（节点只读自己区域或祖先区域的节点、JOIN 的 with 输入可读本 BRCH 的 Arm 区域的结果、加边的默认区域取最深的输入区域）由分支臂校验执行（`src/runtime/branch_arms.cpp` 的 `verifyBranchArmRegions`），`EdgeChecker` 只检查等价写入在同一区域。
 
 事实（`docs/technical/40_graph_facts.md`）经上下文的事实库读取：`effects(g)`（`external`、`writes_variables`、`may_fault`、`may_not_terminate`）、`shape(n)`、`permissions(n)`。第一次问时计算，之后只要它读过的图没有变就不重算。
 
-句柄也可以指向**正在改写的草稿**（`Handle::createInDraft`）：`when` 条件收到的 `Node` 就是匹配在当前草稿里的节点，不是冻结程序里的版本。读算子对两种来源给同样的答案（`NodeView`：冻结的 `GCNode` 或草稿的 `DraftNodeHeader`），包括 `inputs` / `with_inputs` / `ctrl_inputs`、`users` / `value_users`、`kind`、`op` / `op_name`、`is_pure`、`is_anchor`、`is_written_slot`、`is_constant` / `constant`、`type_of` / `type_name`、`tags`、`origin`、`show`。两处限制：`callee` 在草稿上返回 `null`（草稿不属于任何一个 `Program` 版本，没有函数值可读；今天也没有规则模式匹配 `CALL`）；`is_written_slot` 在草稿上每次现算（冻结的图按版本缓存，草稿按 `mutations()` 缓存是以后的事）。草稿句柄不持有 `Program`：草稿属于尚未提交的会话，它的静态值与编译进规则的常量由引擎在条件调用期间注册的根集重定位（`rewrite.engineRoots`）。
+句柄也可以指向**正在改写的草稿**（`Handle::createInDraft`）：`when` 条件收到的 `Node` 就是匹配在当前草稿里的节点，不是冻结程序里的版本。读算子对两种来源给同样的答案（`NodeView`：冻结的 `GCNode` 或草稿的 `DraftNodeHeader`），包括 `inputs` / `with_inputs` / `sync_inputs` / `order_inputs`、`users` / `value_users`、`kind`、`op` / `op_name`、`is_pure`、`is_anchor`、`is_written_slot`、`is_constant` / `constant`、`type_of` / `type_name`、`tags`、`origin`、`show`。两处限制：`callee` 在草稿上返回 `null`（草稿不属于任何一个快照版本，没有函数值可读；今天也没有规则模式匹配 `CALL`）；`is_written_slot` 在草稿上每次现算（冻结的图按版本缓存，草稿按 `mutations()` 缓存是以后的事）。草稿句柄不持有快照：草稿属于尚未提交的会话，它的静态值与编译进规则的常量由引擎在条件调用期间注册的根集重定位（`rewrite.engineRoots`）。
 
 ## 事务
 
-`open(p)` 在 `p` 上开一个 `RuntimeGraphDraftSession`，由一个外部资源对象持有；会话在提交或放弃时释放，没有人提交就由收集器在安全点释放。编辑有三个，其中两个整节点，都带语义而不暴露原始邻接改写：
+`open(f)` 在函数 `f` 上开一个 `Txn<F>`：一个 `RuntimeGraphDraftSession` 由一个外部资源对象持有，会话在提交或放弃时释放，没有人提交就由收集器在安全点释放。事务只含 `f` 的图及其可达的子图。编辑有三个，其中两个整节点，都带语义而不暴露原始邻接改写：
 
-- `replace(t, old, new)`：把同一张图里的 `new` 放到 `old` 的位置并删除 `old`，用的是优化器的 `replaceNode`，所以 `old` 排过的顺序（控制前驱和它的值所来自的有序节点）保持不变。`old` 是图的锚（出口、输出、返回、分支臂首尾）、`new` 由 `old` 算出、或事务已结束，是故障。
+- `replace(t, old, new)`：把同一张图里的 `new` 放到 `old` 的位置并删除 `old`，用的是优化器的 `replaceNode`，所以 `old` 排过的顺序（同步边、顺序边和它的值所来自的有序节点）保持不变。`old` 是图的锚（出口、输出、返回、分支臂首尾）、`new` 由 `old` 算出、或事务已结束，是故障。
 - `erase(t, n)`：删除没有人读取其值的节点。
 
 第三个不是一个节点，而是一个值。
@@ -39,22 +43,20 @@
 
 `add_constant(t, g, 值)` 创建事务自己产生的值：把值放进图的静态槽并返回持有它的 `Node`（数值、布尔或字符串；字符串复制进 `permSpace`）。草稿的静态槽是裸引用，NodeVM 的安全点可能在 Camel 代码运行时移动对象，所以 `RuntimeGraphDraftSession::traceStaticSlots` 在每个事务被追踪时把草稿静态槽里的指针重定位；字符串还要独立于追踪活下来，因为旧世代的资源包装对象不一定在每个安全点被追踪。常量折叠（`fold_constants::fold`）就是这样把 `a + b` 的结果做成新值再 `replace`。
 
-`commit(t)` 用 `commitChecked()`：校验草稿（`docs/technical/17_graph_rewrite_api_contracts.md` 4.2 的边不变量），编码新 `Program`，它与旧的共享没有改的图。错误值的 `kind`：`GraphConflict`（事务读过或写过的图，在上下文的程序里已有别的版本）、`GraphInvalid`（编辑破坏了不变量，消息带图、节点与边）、`TxnUsed`（事务已结束）。`abort(t)` 丢弃事务。
-
-## 函数到函数
-
-`open_function(f)` 开一个只含函数值 `f` 的图及其可达子图的事务，`to_function(t, 样本)` 把它提交成**自己的** `Program`（运行中的程序不变）并返回样本类型的函数值。错误值除 `commit` 的以外有 `SignatureMismatch`（图的签名与样本不符）与 `ClosureNotEmpty`（函数捕获了值，新建的函数值没有闭包）。`program_of(f)` 与 `graph_of(f)` 读函数值。改写后的函数值在每个后端上都与原函数算同样的结果。
+`commit(t)` 用 `commitChecked()`：校验草稿（`docs/technical/17_graph_rewrite_api_contracts.md` 4.2 的边不变量），编码新快照，它与旧的共享没有改的图；结果是一个**同类型 `F` 的新函数值**：克隆原来的函数值再 `rebind` 到提交出来的快照，运行中的程序和别人手里的原函数都不变（设计原则 9.1）。错误值的 `kind`：`GraphConflict`（事务读过或写过的图，在上下文的程序里已有别的版本）、`GraphInvalid`（编辑破坏了不变量，消息带图、节点与边）、`TxnUsed`（事务已结束）。`abort(t)` 丢弃事务。改写后的函数值在每个后端上都与原函数算同样的结果。
 
 ## 用 Camel 写遍
 
-一个模块导出 `(p: Program) => Program!` 的函数，就是一个遍，流水线里写 `camel prog.cml mymod::fn std::nvm`。实现在 `src/execute/camel_pass.cpp`：
+一个模块导出 `(f: F) => F!` 的函数（`F` 是只受 `is_function::<F>()` 限定的类型变量），就是一个遍，流水线里写 `camel prog.cml mymod::fn std::nvm`：流水线把程序的入口函数交给它，拿回的函数就是下一站要处理的程序。实现在 `src/execute/camel_pass.cpp`：
 
 1. 遍的名字解析不到时，把模块当**程序**编译（`Module::compileAsProgram`，`DefinitionStore::libraryFunction`）：程序以这个函数为入口，模块级的 `let` 在遍运行前算好（设计原则 10.1）；
-2. 它只接受唯一、非泛型、签名为 `(p: Program, ...with 参数) => Program!` 的函数；
+2. 它只接受唯一、签名为 `(f: F, ...with 参数) => F!` 的泛型函数（`hasGenericPassSignature`）：流水线按被处理程序的入口函数的类型实例化 `F`；
 3. 模块可以导入 C++ 模块，也可以导入 Camel 写的库（例如 `array`）：`compileAsProgram` 把传递导入闭包里的 Camel 模块声明进这个程序自己的 builder 并一起构建。导出表是**程序的一份**（`ProgramExports`，`Builder::exports()`），不在模块对象上：同一个模块对象可能同时是两个程序的一部分（被运行的遍读同一个库），第一次构建留下的导出名不会被清掉，也不会挡住第二次声明；两次声明各写各的表，各拿到本程序建出的图，第二次声明也不会改写第一次程序里的图。
-4. 函数的 `with` 参数就是遍参数（设计原则 4.4、9.3）：流水线写 `mymod::p label='x' n=21 scale=2.5 flag=true`，布尔、整数、浮点与字符串按类型转换后绑定；源码里没有默认值，所以每个都是必填，缺一个就是 `InvalidPassParameter`，消息列出声明；
-5. `NodeVMSchedPass::callGraph` 在 NodeVM 上以被处理的程序为实参、以遍参数为 with 实参运行它；返回的 `Program` 与输入不同就 `installRuntimeProgram`；
-6. 返回错误值是诊断 `GraphPassFailed`；模块编译不过、函数不是遍，是 `InvalidPassParameter`，消息只说哪条遍规格、哪个库编译不过；模块自己的第一条诊断作为**从属位置**附上（文件、行、列与原行），文本格式里就是该位置下的源码片段。诊断没有位置时（例如导入的库编译不过），原因才留在消息里。模块不存在或没有这个函数，遍保持未知。模块自己解析不过（还在编辑的文件）也走这里：`compileAsProgram` 把 `compile()` 抛出的诊断留在模块的诊断表里并返回失败，调用方把它作为遍规格的问题报告，异常不会穿出流水线。诊断表停在错误上限（`--timeit` 的上下文上限是第一条错误）时得到的是上限异常而不是 `Diagnostic`：`DefinitionStore::libraryFunction` 把它同样当作"这个库没编过"，否则它会在遍解析之前穿出去，用户看到的是裸的解析诊断而不是 `InvalidPassParameter`。
+4. 函数的 `with` 参数就是遍参数（设计原则 4.4、9.3）：流水线写 `mymod::p label='x' n=21 scale=2.5 flag=true`，布尔、整数、浮点与字符串按类型转换后绑定；有默认值的可以不写，没有默认值的缺一个就是 `InvalidPassParameter`，消息列出声明；
+5. `NodeVMSchedPass::callGraph` 在 NodeVM 上以被处理程序的入口函数为实参、以遍参数为 with 实参运行它；返回的函数与输入不是同一个快照就 `installRuntimeProgram`（返回函数的 `program()` 是新的程序）；
+6. 返回错误值就是遍的失败（设计原则 9.1：遍是 `(f: F) => F!`）：遍驱动在这一条遍上停下流水线，按"没有被处理的错误值到达出口"报出（3.9：标准错误、退出码非零），不再为它另发诊断；模块编译不过、函数不是遍，是 `InvalidPassParameter`，消息只说哪条遍规格、哪个库编译不过；模块自己的第一条诊断作为**从属位置**附上（文件、行、列与原行），文本格式里就是该位置下的源码片段。诊断没有位置时（例如导入的库编译不过），原因才留在消息里。模块不存在或没有这个函数，遍保持未知。模块自己解析不过（还在编辑的文件）也走这里：`compileAsProgram` 把 `compile()` 抛出的诊断留在模块的诊断表里并返回失败，调用方把它作为遍规格的问题报告，异常不会穿出流水线。诊断表停在错误上限（`--timeit` 的上下文上限是第一条错误）时得到的是上限异常而不是 `Diagnostic`：`DefinitionStore::libraryFunction` 把它同样当作"这个库没编过"，否则它会在遍解析之前穿出去，用户看到的是裸的解析诊断而不是 `InvalidPassParameter`。
+
+一个遍声明和一个函数值上的算子长得不同：遍的形状是 `(f: F): F!` 且条件是 `when is_function::<F>()`，而且模块里没有同名的 C++ 算子；`graph_of::<F>(f: F): Graph when is_function::<F>()` 的结果不是 `F!`，是读函数值的算子，`rewrite` 一类的引擎有同名的 C++ 算子，`f->rewrite<rules>` 调用它，都不是流水线里的遍（`Builder::isPassDeclaration`、`src/execute/pass_declarations.cpp`）。同名既有算子又有遍的模块（`onnx` 的 `export_model`）以多于一条声明区分：带 `#op` 的是算子，遍形状的那条是遍。
 
 ## 标准库里的 Camel 遍
 
@@ -63,6 +65,8 @@
 每轮一次事务。`cse` 与 `dce` 里同一轮每个待改的节点都被换成"输入完全相同且更早的那个节点"，而这样的两个节点不可能互为祖先——若 `b` 是 `a` 的传递使用者，`b` 的某个输入必在 `a` 的使用者闭包里，于是 `b` 的输入列不可能与 `a` 的相同——所以一轮一次 `commit` 就够，不需要 C++ 的 `reaches` 守卫（`replace` 自带的成环检查是第二道防线）。`fold` 没有这条保证，折出来的值是事务新造的节点而不是更早的节点，所以它只在真有可求值的节点时才 `open`，并且一轮里一个都没折成（必然出故障的常量表达式就是这种）时 `abort` 掉、原样返回：不然事务会造出一个与原来一模一样的图，递归就停不下来。
 
 `fold` 求值的范围比它能替换的范围大：函数返回的那个常量表达式是图的 return、output 与 exit 锚点，而 `replace` 拒绝替换锚点（下一节的第三条）。C++ 的折叠在这里给 return 节点留了口子——没有控制输入时 `isFoldable` 放行，`replaceFoldResult` 再把三个锚点搬到折出来的值上——事务没有搬锚点的操作，于是 `opt::fold` 只求值、只为在必然出故障时报出警告，然后原样留下。两者对"必然出故障"的表达式都是这样：都求值、都报同一条 `ConstantExpressionFaults`、都原样留下，程序有没有这个遍都一样（设计原则 3.9）。
+
+`opt::saturate` 是第四个：把规则库的 `algebra` 与 `distribution` 两路定律双向用在每个值的写法上，最多 `rounds` 轮，什么也不抽取（`f->saturate<concat(algebra, distribution), rounds: rounds, strict: strict>`，`rewrite` 模块的引擎）；C++ 的 `std::opt::saturate` 就是调用它，规则只在 `stdlib/rules.cml` 里写一次。
 
 ### `opt::cse` 与 `opt::fold` 对着 C++ 遍少了什么
 

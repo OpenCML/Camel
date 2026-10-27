@@ -1,10 +1,9 @@
 /**
  * Exercises the random module surface with seeded generation so deterministic behavior can be observed directly.
  */
-module main
 
 // random 模块基础测试
-import { seed, rand, randn, randint, choice, shuffle } from random
+import { seed, rand, randn, randint, choice, shuffle, next_key } from random
 
 func main(): int sync {
     println("=== Random Module Basic Tests ===")
@@ -19,16 +18,16 @@ func main(): int sync {
     let n = randn()
     println("  randn() =", n)
 
-    println("\n[3] randint(0, 10)")
-    let i = randint(0, 10)
-    println("  randint(0, 10) =", i)
+    println("\n[3] next_key()->randint<0, 11>")
+    let i = next_key()->randint<0, 11>
+    println("  randint<0, 11> =", i)
 
-    println("\n[4] choice([1, 2, 3])")
-    let c = choice([1, 2, 3])
+    println("\n[4] [1, 2, 3]->choice<next_key()>")
+    let c = [1, 2, 3]->choice<next_key()>
     println("  choice =", c)
 
-    println("\n[5] shuffle([1, 2, 3, 4, 5])")
-    let s = shuffle([1, 2, 3, 4, 5])
+    println("\n[5] [1, 2, 3, 4, 5]->shuffle<next_key()>")
+    let s = [1, 2, 3, 4, 5]->shuffle<next_key()>
     println("  shuffle =", s)
 
     println("\n=== Random tests completed ===")

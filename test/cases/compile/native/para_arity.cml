@@ -2,7 +2,6 @@
  * The declaration of `test_support:rendezvous` takes two ordinary arguments: a single one is
  * refused at the call, and the overload the message lists is the declaration's (step 10).
  */
-module para_arity
 
 import { rendezvous } from test_support
 

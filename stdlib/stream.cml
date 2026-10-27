@@ -2,31 +2,29 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Streams, written in Camel. A stream's value is its step function together with its state (design
- * principles 5.4, and the reading of 2026-10-26): `T..` is an ordinary function value of the
- * signature `() => (T, T..)?`, one call is one pull, and a pull answers the next element together
- * with the rest of the stream -- `null` when the stream is over. So the producers here are
- * ordinary functions that return such a closure, and the consumer is `for x in s`, which the
- * compiler expands on the graph into the `while` it already has (language reference 7.3.2). No
- * part of this module needs a new node kind, and none of it runs anything by itself: pulling is
- * what runs, one element at a time.
+ * Streams, written in Camel. A stream is a value: `T..` is a step function together with its
+ * state, an ordinary function value of the signature `() => (T, T..)?`. One call is one pull; a
+ * pull answers the next element together with the rest of the stream, or `null` when the stream
+ * is over. The consumer is `for x in s`, which the compiler expands on the graph into the `while`
+ * it already has (language reference 7.3.2), so nothing here needs a node kind of its own and
+ * nothing runs until something pulls.
  *
- * - `unfold(state, step)` is the smallest producer: a state and a step that answers the next
- *   element with the state after it, or `null` when the stream is over. A `yield` generator
- *   compiles to the same kind of value, and one written `#op` source can hand one out too.
- * - `tee(s, n)` is the one way to read one stream from two places: it reads `s` once and gives two
- *   streams, each of which is read once, and both see the same elements.
- * - A stream is a value and is pure, so pulling the same stream value twice answers the same
- *   element; the rest a pull hands out is what threads the stream, and the consumer passes it on.
- *   One stream value has one consumer per execution path (design principles 5.4).
+ * - A stream is consumed once: on every execution path a stream value has one consumer, and a
+ *   second use is a compile-time error (design principles 5.4). A function that takes a stream
+ *   takes it as an argument; a lambda cannot capture one. So every transformation below keeps the
+ *   upstream stream as the state of `unfold` (an argument of its step), never in a closure.
+ * - The transformations are pure and lazy: an element is computed when something pulls it, and
+ *   not before. Sharing is written, with `tee`.
+ * - A generator (`yield`) produces the same kind of value; `unfold` is the producer for a state
+ *   and a step that need no generator.
+ * - What depends on the order of arrival or on time (merging streams, windows by time) is not
+ *   here: those declare their non-determinism and belong to the libraries that own a clock.
  */
-module stream
 
 // ---- producing ----
 
 /// The stream of what `step` answers from `state` on: one element with the state after it, or
-/// `null` when there is nothing more. The first round of `for x in s` over it is `step(state)`,
-/// and every later round is a pull of the rest, so the states are threaded rather than repeated.
+/// `null` when there is nothing more. The states are threaded, not repeated.
 /// @example loop acc = 0 for x in unfold(3, (n: int) => if n > 0 then (n, n - 1) else null) do acc + x    // 6
 export func unfold::<S, T>(state: S, step: (state: S) => (T, S)?): T.. {
     return () => match step(state) {
@@ -35,7 +33,135 @@ export func unfold::<S, T>(state: S, step: (state: S) => (T, S)?): T.. {
     }
 }
 
-// ---- splitting ----
+/// The stream with no element.
+/// @example loop n = 0 for x in empty::<int>() do n + 1    // 0
+export func empty::<T>(): T.. {
+    return unfold(0, (n: int): (T, int)? => null)
+}
+
+/// The elements of xs, in order.
+/// @example loop acc = 0 for x in from_array([1, 2, 3]) do acc + x    // 6
+export func from_array::<T>(xs: T[]): T.. {
+    return unfold(0, (i: int): (T, int)? => if i < len(xs) then (xs[i], i + 1) else null)
+}
+
+/// x, f(x), f(f(x)), ... without end.
+/// @example 1->iterate<(x: int) => x * 2>->take<4>->collect    // [1, 2, 4, 8]
+with <f: (x: T) => T>
+export func iterate::<T>(x: T): T.. {
+    return unfold(x, (s: T): (T, T)? => (s, f(s)))
+}
+
+// ---- transforming ----
+
+// The stream of what `step` answers from the stream `s` it is given, with the rest of that stream
+// after it. A stream cannot be the state of `unfold` itself -- the step function `unfold` returns
+// would hold it in its closure, and a closure cannot capture a stream (design principles 5.4) --
+// but a tuple can hold one, so the state is the stream together with a position that is not read.
+func advance::<T, U>(s: T.., step: (rest: T..) => (U, T..)?): U.. {
+    return unfold((s, 0), (st: (T.., int)): (U, (T.., int))? => match step(st.0) {
+        case null => null
+        case next => (next.0, (next.1, 0))
+    })
+}
+
+/// f of every element.
+/// @example from_array([1, 2, 3])->map<(x: int) => x * 2>->collect    // [2, 4, 6]
+with <f: (x: T) => U>
+export func map::<T, U>(s: T..): U.. {
+    return advance(s, (rest: T..): (U, T..)? => match rest() {
+        case null => null
+        case next => (f(next.0), next.1)
+    })
+}
+
+// The first pair of the stream whose element satisfies pred, with the rest after it.
+func next_where::<T>(s: T.., pred: (x: T) => bool): (T, T..)? {
+    return match s() {
+        case null => null
+        case next => if pred(next.0) then next else next_where(next.1, pred)
+    }
+}
+
+/// The elements for which pred is true, in order.
+/// @example from_array([1, 2, 3, 4])->filter<(x: int) => x % 2 == 0>->collect    // [2, 4]
+with <pred: (x: T) => bool>
+export func filter::<T>(s: T..): T.. {
+    return advance(s, (rest: T..): (T, T..)? => next_where(rest, pred))
+}
+
+/// The first n elements; fewer when the stream ends first, none when n is not positive. The
+/// element after the n-th is never pulled.
+/// @example 1->iterate<(x: int) => x + 1>->take<3>->collect    // [1, 2, 3]
+with <n: int>
+export func take::<T>(s: T..): T.. {
+    return unfold((s, n), (st: (T.., int)): (T, (T.., int))? => if st.1 <= 0 then null else match st.0() {
+        case null => null
+        case next => (next.0, (next.1, st.1 - 1))
+    })
+}
+
+/// The running results of folding the elements with f from init: one per element, the first
+/// being f(init, first element).
+/// @example from_array([1, 2, 3])->scan<(acc: int, x: int) => acc + x, 0>->collect    // [1, 3, 6]
+with <f: (acc: A, x: T) => A, init: A>
+export func scan::<T, A>(s: T..): A.. {
+    return unfold((s, init), (st: (T.., A)): (A, (T.., A))? => match st.0() {
+        case null => null
+        case next => {
+            let total = f(st.1, next.0)
+            (total, (next.1, total))
+        }
+    })
+}
+
+// The array with no element of type T: an empty literal states no element type, so it is bound to one.
+func no_elements::<T>(): T[] {
+    let none: T[] = []
+    return none
+}
+
+// Up to k elements from the front of the stream, with the rest after them.
+func pull_chunk::<T>(s: T.., k: int, got: T[]): (T[], T..) {
+    return if len(got) == k then (got, s) else match s() {
+        case null => (got, empty::<T>())
+        case next => pull_chunk(next.1, k, got->append<next.0>)
+    }
+}
+
+/// The elements in arrays of k, in order; the last array is shorter when the stream does not end
+/// on a multiple of k.
+/// @example from_array([1, 2, 3])->chunks<2>->collect    // [[1, 2], [3]]
+with <k: int>
+export func chunks::<T>(s: T..): T[].. {
+    return advance(s, (rest: T..): (T[], T..)? => {
+        let got = pull_chunk(rest, k, no_elements::<T>())
+        if len(got.0) == 0 then null else got
+    })
+}
+
+/// The elements of two streams in pairs, until the shorter ends.
+/// @example zip(from_array([1, 2]), from_array(['a', 'b', 'c']))->collect    // [(1, 'a'), (2, 'b')]
+export func zip::<T, U>(a: T.., b: U..): (T, U).. {
+    return unfold((a, b), (st: (T.., U..)): ((T, U), (T.., U..))? => match st.0() {
+        case null => null
+        case x => match st.1() {
+            case null => null
+            case y => ((x.0, y.0), (x.1, y.1))
+        }
+    })
+}
+
+// ---- consuming ----
+
+/// All the elements, as an array. The stream must end: a stream without end never returns.
+/// @example from_array([1, 2, 3])->collect    // [1, 2, 3]
+export func collect::<T>(s: T..): T[] {
+    let none: T[] = []
+    return loop out = none for x in s do out->append<x>
+}
+
+// ---- sharing ----
 
 /// The widest hint a `tee` takes. The buffer a `tee` keeps is unbounded in meaning (design
 /// principles 5.4): a side that runs ahead of the other buffers the elements the other has not
@@ -50,9 +176,10 @@ let tee_hint_cap = 64
 /// buffer is expected to have -- and is clamped to the implementation's cap.
 /// The result is a tuple, and taking it apart is what consumes the two streams; the streams
 /// themselves are values like any other, so a `tee` of one of them is another `tee`.
-/// @example let (left, right) = tee(unfold(3, (n: int) => if n > 0 then (n, n - 1) else null), 2)
-/// @example-fragment the two streams are live values a page shows; a program reads them where it consumes them
-export func tee::<T>(s: T.., n: int = 8): (T.., T..) sync {
+/// @example-fragment a pair of streams is bound by a destructuring `let`, a statement
+/// @example let (left, right) = unfold(3, (n: int) => if n > 0 then (n, n - 1) else null)->tee<2>
+with <n: int = 8>
+export func tee::<T>(s: T..): (T.., T..) sync {
     // What the executor is told to expect.
     let hint = if n > tee_hint_cap then tee_hint_cap else n
     // The source as far as it has been pulled, one element per position already pulled, how far

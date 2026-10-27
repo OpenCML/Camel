@@ -1,5 +1,3 @@
-module rest_inline
-
 func sum(..ts): int {
     return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }

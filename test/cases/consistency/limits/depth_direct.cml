@@ -4,7 +4,6 @@
  * L - 1 recursive calls are open at the bottom. (The arms of the branch are tail calls and
  * take no frame.)
  */
-module depth_direct
 
 import { get_env } from env
 
@@ -13,7 +12,7 @@ func depth(n: int): int {
 }
 
 func main(): int sync {
-    let n = int(get_env('N'))
+    let n = int(get_env('N') ?? '')
     println('start')
     println(depth(n))
     println('done')

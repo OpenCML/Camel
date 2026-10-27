@@ -2,7 +2,6 @@
  * The tagged forms with head type parameters: `T?` binds `T` from the payload of the
  * argument, and each set of types is one subgraph of concrete types.
  */
-module generic
 
 func or_else::<T>(x: T?, d: T): T {
     return x ?? d

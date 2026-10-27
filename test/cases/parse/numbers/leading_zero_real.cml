@@ -1,0 +1,9 @@
+/**
+ * A real token has no leading zero before another digit either: `077.5` is refused as `077` is,
+ * and the diagnostic covers the whole written run.
+ */
+
+func main(): int sync {
+    let a: float = 077.5
+    return 0
+}

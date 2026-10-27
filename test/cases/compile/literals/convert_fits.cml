@@ -9,7 +9,7 @@ func narrow(x: int): i32 { return i32(x) }
 func main(): int sync {
     println(int(2.5), int(2.9), i32(2.5), f32(1.5), i32(7), float(3), int('42'), float('1.5'))
     let big = 5000000000
-    let r = attempt(narrow, big)
+    let r = attempt(narrow)(big)
     println(match r {
         case error e => e.kind
         case v => 'fits'

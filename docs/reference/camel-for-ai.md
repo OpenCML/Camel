@@ -87,7 +87,7 @@ Every value has one concrete type, and numeric types never convert implicitly: `
 asks for (`let x: f32 = 1`); a variable never does. Convert explicitly with `float(n)`, `int(x)`,
 `string(v)`.
 
-`T?` and `T!` are types of their own and not `T`: open them (`??`, `!!`, `?->`, `match`) before
+`T?` and `T!` are types of their own and not `T`: open them (`??`, `!!`, `->`, `match`) before
 arithmetic, comparison or a function that takes a `T` will accept them. Generics are declared after
 the name, `func first::<T>(xs: T[]): T?`, and `when <condition>` is a compile-time predicate over the
 type parameters, which is how one generic function gets one body per type. A `match` over an `enum`
@@ -386,12 +386,12 @@ These two come from the sources the compiler itself reads, so they cannot drift 
 <!-- camel-for-ai region: lexical (generated from docs/language/02_lexical.md §2.4 and include/camel/parse/syntax/token_kinds.def; node scripts/camel-for-ai.mjs --write) -->
 | Group | Words |
 |---|---|
-| Declaration | `let` `var` `func` `type` `with` `module` `import` `export` `from` `namespace` `using` |
-| Control | `if` `then` `else` `match` `case` `return` `throw` `yield` `sync` `loop` `while` `do` `for` `in` `static` |
+| Declaration | `let` `var` `func` `type` `with` `import` `export` `from` `namespace` `using` |
+| Control | `if` `then` `else` `match` `case` `return` `yield` `sync` `loop` `while` `do` `for` `in` `static` |
 | Type and conversion | `as` `const` `constas` `enum` `typeof` |
 | Literal | `null` `true` `false` |
 
-**Operators and separators** (54): `;` `,` `:` `::` `.` `..` `...` `(` `)` `[` `]` `{` `}` `<` `<` `>` `<=` `<=>` `>=` `==` `!=` `===` `!==` `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `|=` `+` `-` `*` `/` `%` `^` `@` `#` `&` `|` `&&` `||` `!` `!!` `~` `?` `??` `->` `?->` `=>` `_`
+**Operators and separators** (53): `;` `,` `:` `::` `.` `..` `...` `(` `)` `[` `]` `{` `}` `<` `<` `>` `<=` `<=>` `>=` `==` `!=` `===` `!==` `=` `+=` `-=` `*=` `/=` `%=` `^=` `@=` `&=` `|=` `+` `-` `*` `/` `%` `^` `@` `#` `&` `|` `&&` `||` `!` `!!` `~` `?` `??` `->` `=>` `_`
 <!-- camel-for-ai end: lexical -->
 
 ### Precedence (generated)
@@ -412,7 +412,7 @@ These two come from the sources the compiler itself reads, so they cannot drift 
 12  powerExpr           ^                                  right, one
 13  nullableExpr        ?? !!                              right (a whole expression on the right)
 14  unaryExpr           as                                 one
-15  linkExpr            -> ?->                             repeat, left
+15  linkExpr            ->                                 repeat, left
 16  negExpr             - ! ~                              prefix
 17  negPower            - ! ~ ^                            prefix, right
 18  compExpr            ..                                 repeat, left
@@ -436,10 +436,10 @@ additiveExpr       : multiplicativeExpr (('+' | '-') multiplicativeExpr)*
 multiplicativeExpr : powerExpr (('*' | '/' | '@' | '%') powerExpr)*
 powerExpr          : nullableExpr ('^' powerExpr)?
 nullableExpr       : unaryExpr (('??' | '!!') dataExpr)?
-unaryExpr          : linkExpr ('as' typeExpr)?
-linkExpr           : negExpr (('->' | '?->') compExpr)*
-negExpr            : ('-' | '!' | '~') negPower | compExpr
-negPower           : ('-' | '!' | '~') negPower | compExpr ('^' negPower)?
+unaryExpr          : negExpr ('as' typeExpr)?
+linkExpr           : compExpr ('->' compExpr)*
+negExpr            : ('-' | '!' | '~') negPower | linkExpr
+negPower           : ('-' | '!' | '~') negPower | linkExpr ('^' negPower)?
 compExpr           : annoExpr ('..' annoExpr)*
 annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | memberAccess)*
 ```

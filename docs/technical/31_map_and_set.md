@@ -389,7 +389,7 @@ The conversion runs when the program runs (a `CAST` node), also for a literal; s
 | `items(m)` | `(K, V)[]` | |
 | `merge(m1, m2)` | `Map<K, V>` | entries of both; `m2` wins on a common key |
 | `m1 == m2`, `m1 != m2` | `bool` | same keys and equal values |
-| `contains<x>(s)`, `has<x>(s)` | `bool` | |
+| `contains<x>(s)` | `bool` | |
 | `add<x>(s)` | `Set<T>` | |
 | `remove<x>(s)` | `Set<T>` | |
 | `len(s)` | `int` | |
@@ -404,7 +404,7 @@ arguments must have exactly the key and value type.
 **Calling form (ruled: design principles 11.4).** One form only, the convention of the whole
 standard library: the collection that flows through is the ordinary argument and what
 configures the operation is a `with` argument, `put<k, v>(m)` or, chained,
-`m->put<k, v>->remove<k2>` (as `contains<v>(xs)`, `slice<a, b>(xs)`, `map<f>(xs)`); an
+`m->put<k, v>->remove<k2>` (as `contains<v>(xs)`, `filter<f>(xs)`, `map<f>(xs)`); an
 operation on two collections of equal standing takes both as ordinary arguments
 (`merge(m1, m2)`, `union(s1, s2)`, as `concat(a, b)`).
 
@@ -472,18 +472,16 @@ is not).
 
 Strings are not quoted, as in an array or a struct.
 
-## 7. JSON (`DESIGN-QUESTION(json-typed-decode)`)
+## 7. JSON
 
-`json::decode` gives a `Json` (design principles 11.2; it gave an `any` when this was written). The typed entry is `json::decode_as`:
+`json::decode` gives a `Json` (design principles 11.2; it gave an `any` when this was written). The typed entry is `json::decode_as::<T>`, with the type written at the call or determined by the position the result goes to:
 
 ```camel
-let r = json::decode_as<[] as Map<string, int>>('{"b": 2, "a": 1}')    // Map<string, int>!
+let r = json::decode_as::<Map<string, int>>('{"b": 2, "a": 1}')    // Map<string, int>!
 let m = r !! ([] as Map<string, int>)
-let xs = json::decode_as(text, [0])                                    // int[]!
+let xs: int[]! = text->json::decode_as                              // int[]!
 ```
 
-A call cannot be handed a type (whether type arguments may be written at a call is undecided,
-principles section 15), so the type is that of a **shape** argument whose value is not read.
 The result is a `T!`: text that is not JSON is an error value of kind `JsonParseError`, a
 document nested deeper than the fixed limit (10000 levels) one of kind
 `JsonTooDeep` whose message names the limit and the position of the bracket that goes too deep,
@@ -504,20 +502,9 @@ layers (`Json!?`, `int!?`, ...) that `??` and `!!` take apart (design principles
 | `{ f: A, g: B }` | an object with exactly those members |
 | `T?` | `null`, or a `T` |
 
-A shape whose type has no JSON form (a function, a map with another key type) is
+A type with no JSON form (a function, a map with another key type) is
 rejected when the call is compiled. `json::encode` writes a `Map<string, T>` as an object
 and a `Set<T>` as an array, in key order.
-
-Alternatives, for the author:
-
-1. *Type arguments at the call*, `json::decode<Map<string, int>>(text)`, once the language
-   decides whether they may be written. The cleanest form; the operator then needs a way to
-   read its result type, which operators do not have today.
-2. *`as` with a run-time check*, `json::parse(text) as Map<string, int>!`, over a
-   self-describing `Json` value type. It needs a conversion that the *source* type defines
-   (`Type::castSlotFrom` is asked of the target, and the targets here are core types that
-   know nothing of JSON): a hook in the core and in the rule that admits a `CAST`.
-3. *The shape argument* (implemented): needs nothing new.
 
 ## 8. The subsystems
 
@@ -626,8 +613,7 @@ Each is implemented as recommended here; the tag is in the code.
 - *Ruled (design principles 11.4; was `map-call-form`):* one calling form, `put<k, v>(m)` /
   `m->put<k, v>`; `put(m, k, v)` is refused with a hint (section 6.2).
 - **`map-persistence`.** Done: a persistent B+ tree behind the same operators (sections 5 and 9).
-- **`json-typed-decode`.** `json::decode_as<shape>(text): T!` (section 7, with the two
-  alternatives).
+- **`json-typed-decode`.** Done: `json::decode_as::<T>(text): T!` (section 7).
 - **Not tagged, the same kind of question:** should `let m: Map<string, int> = [...]`
   convert, as `let x: int? = 5` does? (Implemented: no; `as` is required.) Should a
   user-declared function named `keys` or `put` hide the operator of that name, as it does for

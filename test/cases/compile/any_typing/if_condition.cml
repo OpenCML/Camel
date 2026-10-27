@@ -1,5 +1,3 @@
-module if_condition
-
 import { Json, decode } from json
 
 // A decoded value as the condition of an `if`: it used to be an `any` whose slot was read as a
@@ -10,5 +8,5 @@ func check(a: Json): int sync {
 }
 
 func main(): int sync {
-    return decode('true') ?-> check !! 1
+    return decode('true') -> check !! 1
 }

@@ -1,7 +1,6 @@
 /**
  * The right-hand side of `??` has the payload type: TaggedOperandMismatch.
  */
-module err_right_type
 
 func main(): int sync {
     println('never printed')

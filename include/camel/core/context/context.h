@@ -42,6 +42,11 @@ namespace camel::compile {
 class SemanticRecorder;
 }
 
+namespace camel::core::type {
+class FuncTypeResolver;
+class FunctionType;
+} // namespace camel::core::type
+
 // Forward declarations for execute (avoid circular include with executor.h)
 class Executor;
 class ExecutorManager;
@@ -57,6 +62,11 @@ using module_ptr_t  = std::shared_ptr<module::Module>;
 /// The worker threads a run may use when nothing gave a number: the machine's core count, at least
 /// 1. Reading it creates nothing.
 size_t hardwareThreadCount();
+
+/// How many `Context` objects are alive in this process right now. Read-only: it counts what the
+/// constructor and the destructor do and changes nothing else, so a reading that builds a context
+/// in a scope can tell whether that context was destroyed when the scope ended.
+size_t liveContextCount() noexcept;
 
 struct EntryConfig {
     std::string entryDir;                 // root path of the context, used for loading modules
@@ -193,6 +203,34 @@ class Context : public std::enable_shared_from_this<Context> {
     /// path was found in.
     module_ptr_t loadModuleFrom(const std::string &moduleName, const std::string &path, bool isCmo);
 
+  public:
+    /// The prelude's declaration file (`prelude.cml` of a module root) is the one source
+    /// of the built-in signatures, so it is read with every program: a file that does not parse
+    /// fails the compile with its own diagnostics, located in that file. Read once. A tree without
+    /// the file (a tool run without a standard library) has nothing to read.
+    /// Answers the path of the file when it has errors (they are in the context's module list),
+    /// and the empty string otherwise.
+    std::string checkPreludeDeclarations();
+    /// The module of the prelude's declaration file once it was read, else null: a dependency of
+    /// every program.
+    module_ptr_t preludeModule() const { return preludeModule_; }
+    /// A declaration of the prelude names the built-in rule `rule` and writes its signature. The
+    /// claims are applied once the whole file is read: a rule that exactly one declaration names
+    /// gets that declaration's signature for the parameters of its calls (an overload set, or a
+    /// family covered by several declarations, gets none of them).
+    void claimBuiltinSignature(
+        const std::shared_ptr<camel::core::type::FuncTypeResolver> &rule,
+        camel::core::type::FunctionType *signature);
+
+  private:
+    bool preludeChecked_ = false;
+    std::string preludeProblem_;
+    module_ptr_t preludeModule_;
+    std::vector<std::pair<
+        std::shared_ptr<camel::core::type::FuncTypeResolver>,
+        std::vector<camel::core::type::FunctionType *>>>
+        builtinClaims_;
+
     Context(const EntryConfig &entryConf, const error::DiagsConfig &diagConf);
 
   public:
@@ -201,6 +239,23 @@ class Context : public std::enable_shared_from_this<Context> {
     static context_ptr_t create(
         const EntryConfig &entryConf       = EntryConfig(),
         const error::DiagsConfig &diagConf = error::DiagsConfig());
+
+    /**
+     * A handle to this context that does not keep it alive.
+     *
+     * The context owns the modules, the executor manager and the builders it made, and those
+     * objects refer back to it (a module registers its executors and compiles its programs on the
+     * context it belongs to, and a pass compiles on the context whose graph it is rewriting). The
+     * reference they hold must not be an owning one: a context whose own members hold it is kept
+     * alive by itself, never reaches its destructor, and a context that is not the last one of the
+     * process is then never destroyed -- neither the allocator registration it gives back nor the
+     * deferred releases it drains ever happen, and a run that builds a context per iteration keeps
+     * every one of them. A caller that holds an owning `context_ptr_t` passes `handle()` to what
+     * the context will own, and the object that receives it must not outlive the context (design
+     * principles 10.5: how the registration of an object root set is held is implementation, not
+     * semantics).
+     */
+    context_ptr_t handle() const;
 
     bool requireEntry() const { return entryConfig_.requireEntry; }
     /// The command that does not execute the program (an inspection or a translation pass)
@@ -433,11 +488,6 @@ class Context : public std::enable_shared_from_this<Context> {
     /** Called by loadCmoModule to retain a loaded .cmo handle and prevent unloading. */
     void addLoadedDll(const std::string &path, void *handle) { loadedDllHandles_[path] = handle; }
 
-    /// Import a module as `importer` does (design principles 10.2: its own directory, then the
-    /// module roots, then the standard library). `importer` is the module whose `import` this is;
-    /// null means the entry program, whose own directory is the entry file's directory, or a
-    /// program-level import (a pass library named on the command line, a definition) that stands
-    /// where the program does.
     module_ptr_t importModule(
         const std::string &rawModuleName, const module::Module *importer = nullptr);
     /// Whether a file for the module is found on the search paths, whether or not it can be

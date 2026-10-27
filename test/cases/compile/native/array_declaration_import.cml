@@ -1,23 +1,17 @@
 /**
- * The declarations of `array` are what an importer sees: `argsort` has its six declared key
- * element types and gives `int[]`; each sort name and `merge_sorted_arrays` has one declaration
- * per element type, each naming its own operator and taking that element type; and `flatten` and
- * `unique` are generic declarations of `stdlib/array.cml`. Every call reaches the built-in
- * operator (step 10).
+ * The declarations of `array` are what an importer sees: `argsort` has its eight declared key
+ * element types and gives `int[]`; `sort` is a generic Camel function over `argsort` whose kernel
+ * has one declaration per element type, each naming its own operator and taking that element type;
+ * and `flatten` and `unique` are generic Camel functions of `stdlib/array.cml`.
  */
-module array_declaration_import
 
-import { sort, insert_sort, quick_sort, merge_sort, argsort, merge_sorted_arrays, flatten, unique } from array
+import { sort, argsort, flatten, unique } from array
 
 func main(): int sync {
     println(argsort([30, 10, 20]))
     println(argsort([2.5, 1.5, 3.5]))
     println(argsort(['pear', 'fig', 'apple']))
     println(sort([3, 1, 2]))
-    println(insert_sort([3, 1, 2]))
-    println(quick_sort([3, 1, 2]))
-    println(merge_sort([3, 1, 2]))
-    println(merge_sorted_arrays([1, 3], [2, 4]))
     println(flatten([[1, 2], [3]]))
     println(unique([3, 1, 3, 2, 1]))
     return 0

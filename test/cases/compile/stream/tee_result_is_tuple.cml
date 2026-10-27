@@ -4,7 +4,6 @@
  * holds. So the streams a `tee` gives travel where a stream cannot -- a tuple, an item of one --
  * and each is still read once: both sides of this `tee` see all three elements.
  */
-module stream_tee_result_is_tuple
 
 import stream
 
@@ -19,7 +18,7 @@ func step(n: int): () => (int, int..)? {
 /// The tuple itself: the two streams are the items of one value, which this signature takes and
 /// gives as one value.
 func sides(s: int.., n: int): (int.., int..) {
-    return stream::tee(s, n)
+    return stream::tee<n>(s)
 }
 
 func total(s: int..): int {

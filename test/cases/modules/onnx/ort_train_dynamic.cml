@@ -4,7 +4,6 @@
  * with dynamic axis 0 when DYN=1, specialized to B otherwise — runs it natively
  * on the same input, and dumps the updated parameters to DUMP.
  */
-module ort_train_dynamic
 
 import { relu, sum, reshape, shape, load_npy } from tensor
 import { with_grad } from autodiff
@@ -33,13 +32,17 @@ func main(): int sync {
         w2: reshape([1.0, -1.0, 0.5] as f32[], [3, 1]),
         b2: reshape([0.2] as f32[], [1])
     }
-    let x = load_npy::<f32>(get_env('X'))
+    let x = load_npy::<f32>(get_env('X') ?? '')
     let vg = step(m, x)
     'CAMEL loss={}'->format<vg.0>->println
-    save_params(vg.1, get_env('DUMP'))
-    let out = get_env('ONNX_OUT')
-    if out != '' then
-        if get_env('DYN') == '1' then export_model(step, (m, x), out, [0])
-        else export_model(step, (m, x), out)
+    save_params(vg.1, get_env('DUMP') ?? '')
+    let out = get_env('ONNX_OUT') ?? ''
+    if out != '' then {
+        if (get_env('DYN') ?? '') == '1' then {
+            let _ = export_model<out: out, dynamic_axes: [0]>(step, (m, x))
+        } else {
+            let _ = export_model<out: out>(step, (m, x))
+        }
+    }
     return 0
 }

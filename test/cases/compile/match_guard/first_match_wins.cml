@@ -8,7 +8,6 @@
  * expected where `when` stood), so every program here failed with a syntax error. Each answer
  * below is what the rule fixes for that value.
  */
-module match_guard
 
 type Shape = enum {
     Circle(float),

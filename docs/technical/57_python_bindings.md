@@ -117,7 +117,7 @@ memory:        8 results of a 4 MiB pass-through hold 4.0 MiB, 8 results of a 4 
 | 模块声明了但没 `export` | `DiagnosticError` | `FunctionNotExported` | 空 | 空（`:0:0`） | 运行时给的那句（`libraryFunction` 的 `problem`） |
 | 模块找不到 | `DiagnosticError` | `LibraryUnavailable` | 空 | 空（`:0:0`） | 运行时给的那句 |
 | `.cml` 路径不存在 | `FileNotFoundError` | — | — | — | `no Camel module at <path>` |
-| `throw error('RangeError', '...')` | `FaultError` | `RangeError`（错误值的 `kind`） | 空 | `python_rules.cml:36:15` | `the factor must not be negative` |
+| `return error('RangeError', '...')` | `FaultError` | `RangeError`（错误值的 `kind`） | 空 | `python_rules.cml:36:15` | `the factor must not be negative` |
 | 运行期故障（`RuntimeFault`） | `FaultError` | 故障的诊断名 | `0x04......` | 有位置时给出 | 故障的诊断消息 |
 
 逐字的运行输出（测试脚本的原文）：
@@ -137,8 +137,8 @@ absent name:   camel.DiagnosticError name=NoSuchExport: 'python_rules' exports n
   `<file>:<line>:<column>: error[<name>] (<code>): <message>`。
 - **`e.code` 为空的那些不是 `Diagnostic`**。它们由绑定自己产生（查找失败、参数转换失败），没有
   诊断目录里的码；空的 `code` 是诚实的，不是丢字段。
-- **`FaultError` 的位置来自错误值本身**：`T!` 的 `location` 字段是 `"file:line:column"`（`throw` 的
-  位置）；如果错误值的 `location` 是一个算子的名字而不是位置，`e.line`/`e.column` 就是 `0`，
+- **`FaultError` 的位置来自错误值本身**：`T!` 的 `location` 字段是 `"file:line:column"`（`error(...)`
+  构造处的调用位置）；如果错误值的 `location` 是一个算子的名字而不是位置，`e.line`/`e.column` 就是 `0`，
   这时 `str(e)` 里写的是那个名字，不编造位置。
 - **诊断文本原样保留**在 `e.camel_text` 里，就是命令行 `camel` 会打印的那段（含源码上下文），
   便于 Python 侧直接转述。

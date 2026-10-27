@@ -1090,14 +1090,25 @@ bool specializeDirectFuncInDraft(
         }
     }
 
-    GCFuncRef newBody{.ref = draft.payloadGraphIndexOf(specializedGraph->id())};
+    // The call keeps the mask of the captured variables it writes: only its declared `with`
+    // arguments can be bound away here, so the captures keep their places after them, and the
+    // value it hands on is the same tuple of their new versions, typed for this callee.
+    const uint32_t writtenCaptures = draft.funcWriteMaskOf(funcNodeId);
+    GCFuncRef newBody{
+        .ref = draft.payloadGraphIndexOf(specializedGraph->id()), .reserved = writtenCaptures};
     std::array<std::byte, sizeof(GCFuncRef)> newPayload{};
     std::memcpy(newPayload.data(), &newBody, sizeof(newBody));
     init.payload    = std::span<const std::byte>(newPayload.data(), newPayload.size());
     init.normInputs = normInputs;
     init.withInputs = withInputs;
-    if (const auto *type = specializedGraph->funcType(); type && type->hasExitType()) {
-        init.dataType = type->exitType();
+    const auto *type = specializedGraph->funcType();
+    if (type != nullptr) {
+        camel::core::type::Type *value =
+            writtenCaptures != 0 ? callValueTypeOf(*specializedGraph, writtenCaptures)
+                                 : (type->hasExitType() ? type->exitType() : nullptr);
+        if (value != nullptr) {
+            init.dataType = value;
+        }
     }
     draft.rewriteNode(funcNodeId, init);
 
@@ -1210,8 +1221,7 @@ GCGraph *liftClosureGraph(RuntimeGraphDraftSession &session, GCGraph *base, size
         camel::core::type::FunctionType::create(
             withTypes,
             normTypes,
-            type->exitType(),
-            type->modifiers()));
+            type->exitType()));
     draft->setClosureType(nullptr);
     GCGraph *lifted = encodeSpecializedGraph(session, *draft, base, "lift", nonce);
     session.rememberSpecialization(std::move(key), lifted);
@@ -1303,11 +1313,7 @@ bool splicedBodyNeedsOrder(const GraphDraft &draft, gc_node_ref_t id) {
         nodeOwnsRegions(header->kind)) {
         return false;
     }
-    const camel::core::OperId oper =
-        header->kind == GCNodeKind::Oper
-            ? reinterpret_cast<const GCOperBody *>(draft.payloadOf(id).data())->oper
-            : camel::core::kNoOper;
-    return !nodeIsFreelySchedulable(header->kind, oper);
+    return !nodeIsFreelySchedulable(draft, id);
 }
 
 /// The innermost control region a region lies in (or is): an arm of a branch, a part of a loop.
@@ -1513,6 +1519,17 @@ DraftInlineResult inlineCallableInDraft(
             funcNodeId);
         return result;
     }
+    if (draft.funcWriteMaskOf(funcNodeId) != 0) {
+        // The call hands on the tuple of the callee's result and the new versions of the captured
+        // variables it writes, and its ACCS nodes read its parts; the body spliced in its place
+        // has the result alone, so the call is left as it is.
+        CAMEL_LOG_INFO_S(
+            "DraftInline",
+            "Inline splice node {} rejected: the call writes captured variables, and its value is "
+            "their tuple.",
+            funcNodeId);
+        return result;
+    }
 
     GCGraph *const calleeGraph = draft.calleeGraphOf(funcNodeId);
     if (!calleeGraph) {
@@ -1582,6 +1599,13 @@ DraftInlineResult inlineCallableInDraft(
             callFollowers.push_back(syncUser);
         }
     }
+
+    // The order edges the call stood in: a read written before it is ordered before the body's
+    // writes, and the reads written after it after them, as they were before the call (5.7).
+    const std::vector<gc_node_ref_t> callOrderInputs(
+        draft.orderInputsOf(funcNodeId).begin(), draft.orderInputsOf(funcNodeId).end());
+    const std::vector<gc_node_ref_t> callOrderUsers(
+        draft.orderUsersOf(funcNodeId).begin(), draft.orderUsersOf(funcNodeId).end());
 
     // The body goes in a region of its own, inside the region of the call: where the code
     // came from stays recorded after the call is gone. The body of an arm of a branch is the
@@ -1867,7 +1891,19 @@ DraftInlineResult inlineCallableInDraft(
     // the call was written after and before the one written after it. The chain above carries the
     // same order for a body whose statements it reaches; this edge is what orders a body that
     // carries no chain of its own, and it is what survives when the chain's edges change kind.
-    addSpliceOrderEdges(draft, slotsBefore, callBlockRegion, ctrlPreds, callFollowers);
+    std::vector<gc_node_ref_t> orderPreds = ctrlPreds;
+    for (gc_node_ref_t pred : callOrderInputs) {
+        if (std::ranges::find(orderPreds, pred) == orderPreds.end()) {
+            orderPreds.push_back(pred);
+        }
+    }
+    std::vector<gc_node_ref_t> orderFollowers = callFollowers;
+    for (gc_node_ref_t user : callOrderUsers) {
+        if (std::ranges::find(orderFollowers, user) == orderFollowers.end()) {
+            orderFollowers.push_back(user);
+        }
+    }
+    addSpliceOrderEdges(draft, slotsBefore, callBlockRegion, orderPreds, orderFollowers);
 
     draft.eraseNode(funcNodeId);
     CAMEL_LOG_INFO_S("DraftInline", "Inline splice finished for draft node {}.", funcNodeId);

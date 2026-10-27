@@ -23,6 +23,10 @@
 #include "minmax.h"
 #include "parallel.h"
 
+#include "camel/core/array_convert.h"
+#include "camel/core/error/runtime.h"
+#include "camel/utils/int_div.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -256,20 +260,7 @@ TypeCode binaryResultType(BinaryOp op, const Operand &lhs, const Operand &rhs) {
 template <typename To> void convertBuffer(const Operand &src, To *dst) {
     const uint64_t count = numelOf(src.shape);
     dispatchDType(src.dtype, [&]<typename From>() {
-        const From *in = static_cast<const From *>(src.data);
-        for (uint64_t i = 0; i < count; ++i) {
-            if constexpr (std::is_same_v<To, bool_t>) {
-                dst[i] = in[i] != From{} ? 1 : 0;
-            } else if constexpr (
-                camel::core::rtdata::is_reduced_float_v<To> &&
-                camel::core::rtdata::is_reduced_float_v<From>) {
-                // bf16 to f16 (or back) goes through f32, the compute precision: the stored value
-                // widens exactly, then rounds once into the other type (dtype.h).
-                dst[i] = To(in[i].toFloat());
-            } else {
-                dst[i] = static_cast<To>(in[i]);
-            }
-        }
+        camel::core::convertElements<To, From>(static_cast<const From *>(src.data), dst, count);
     });
 }
 
@@ -298,7 +289,13 @@ template <typename T> T applyBinary(BinaryOp op, T a, T b) {
     case BinaryOp::Mul:
         return static_cast<T>(a * b);
     case BinaryOp::Div:
-        return static_cast<T>(a / b);
+        if constexpr (std::is_same_v<T, int32_t> || std::is_same_v<T, int64_t>) {
+            // The quotient of the language: truncated towards zero, the smallest value over -1
+            // wrapping (int_div.h). A zero divisor was refused before the loop (binary).
+            return camel::utils::quotient<T>(a, b);
+        } else {
+            return static_cast<T>(a / b);
+        }
     case BinaryOp::Pow:
         if constexpr (camel::core::rtdata::is_reduced_float_v<T>) {
             // The power functions are computed in f32 and rounded once into the element type,
@@ -320,6 +317,8 @@ template <typename T> T applyBinary(BinaryOp op, T a, T b) {
             // The language's `%` is the truncated remainder (camel::utils::remainder, int_div.h):
             // on a floating element type that is fmod, the same definition, not a floor.
             return static_cast<T>(std::fmod(a, b));
+        } else if constexpr (std::is_same_v<T, int32_t> || std::is_same_v<T, int64_t>) {
+            return camel::utils::remainder<T>(a, b);
         } else {
             return static_cast<T>(a % b);
         }
@@ -601,7 +600,7 @@ bool unaryProducesFloat(UnaryOp op) {
     return op != UnaryOp::Neg && op != UnaryOp::Abs && op != UnaryOp::Relu;
 }
 
-bool binaryProducesFloat(BinaryOp op) { return op == BinaryOp::Div || op == BinaryOp::Pow; }
+bool binaryProducesFloat(BinaryOp op) { return op == BinaryOp::Pow; }
 
 Shape broadcastShapes(std::span<const int64_t> lhs, std::span<const int64_t> rhs) {
     const std::span<const int64_t> shapes[] = {lhs, rhs};
@@ -663,6 +662,26 @@ Array *binary(BinaryOp op, Operand lhs, Operand rhs, mm::IAllocator &allocator) 
     const BroadcastPlan plan                = makePlan(shapes);
     const TypedBuffer a                     = asDType(lhs, outType);
     const TypedBuffer b                     = asDType(rhs, outType);
+    if (op == BinaryOp::Div || op == BinaryOp::Mod) {
+        // An integer quotient or remainder by zero is a fault, as the scalar one is (the float
+        // quotient by zero is an infinity). Every element of the divisor meets some element of the
+        // dividend unless the result is empty.
+        dispatchDType(outType, [&]<typename T>() {
+            if constexpr (std::is_same_v<T, int32_t> || std::is_same_v<T, int64_t>) {
+                if (numelOf(plan.outShape) == 0) {
+                    return;
+                }
+                const T *divisor     = static_cast<const T *>(b.data);
+                const uint64_t count = numelOf(rhs.shape);
+                for (uint64_t i = 0; i < count; ++i) {
+                    if (divisor[i] == 0) {
+                        camel::core::error::throwRuntimeFault(
+                            camel::core::error::RuntimeDiag::DivisionByZero);
+                    }
+                }
+            }
+        });
+    }
     Array *out = createTensor(outType, plan.outShape, allocator);
     dispatchDType(outType, [&]<typename T>() {
         binaryTyped<T>(
@@ -740,17 +759,8 @@ Array *cast(const Array *input, TypeCode dtype, mm::IAllocator &allocator) {
     if (!isSupportedTensorScalar(dtype)) {
         throw std::invalid_argument("Unsupported array element type");
     }
-    Array *out = createTensor(dtype, input->shapeSpan(), allocator);
-    if (dtype == input->dtype()) {
-        if (input->byteSize() > 0) {
-            std::memcpy(out->rawData(), input->rawData(), input->byteSize());
-        }
-        return out;
-    }
-    dispatchDType(dtype, [&]<typename T>() {
-        convertBuffer<T>(Operand::of(input), out->dataAs<T>());
-    });
-    return out;
+    // The conversion of a type name applied to an array is the core's (camel/core/array_convert.h).
+    return camel::core::convertArrayElements(input, dtype, allocator);
 }
 
 Array *

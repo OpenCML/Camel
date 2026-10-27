@@ -2,12 +2,11 @@
  * A row index that is only known at run time is a located IndexOutOfRange (design principles 3.9,
  * 5.4): no wrap-around for a negative index.
  */
-module take_runtime_oob
 
-import { reshape, range, cast, take } from tensor
+import { reshape, range, take } from tensor
 
 func pick(t: i64[..], i: int): i64[..] {
-    return take(t, cast([i], 'int64'))
+    return take(t, int([i]))
 }
 
 func main(): int sync {

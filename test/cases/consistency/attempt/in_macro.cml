@@ -1,15 +1,14 @@
 /**
  * A macro function whose body uses `attempt`. Without std::macro in the pipeline it is an
  * ordinary function (design principles 8). With std::macro, a call whose arguments are all
- * constants is evaluated ahead of time; the macro evaluator does not run the operators the
- * schedulers run themselves (`map`, `filter`, ..., and `attempt`), so the evaluation fails, and
- * a failed evaluation is a run-time fault of std::macro (8). The same is true of a macro that uses
- * `map`; it is a limit of the evaluator, not of `attempt`.
+ * constants is evaluated ahead of time; the macro evaluator cannot evaluate this one (it cannot
+ * call a non-macro function at compile time), so the evaluation fails, and a failed evaluation
+ * is a run-time fault of std::macro (8). A call of `attempt(f)` is a call of a value, not of a
+ * name the evaluator knows, and the boundary it holds is the evaluator's limit here.
  */
-module in_macro
 
 #macro func table(n: int): int {
-    return attempt((d: int): int => 100 / d, n) !! -1
+    return attempt((d: int): int => 100 / d)(n) !! -1
 }
 
 func main(): int sync {

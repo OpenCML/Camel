@@ -3,13 +3,12 @@
  * principles 3.8): a declared type, a parameter, the other arm of a branch, the left side
  * of `??` / `!!`, a declared return type, `as`.
  */
-module empty_array
 
 func count(xs: int[]): int { return len(xs) }
 func none(): string[] { return [] }
 func evens(n: int): int[] { return if n <= 0 then [] else 0..n->filter<(i: int): bool => i % 2 == 0> }
 func tail_or_empty(xs: int[]): int[] sync {
-    return if len(xs) == 0 then sync { println('empty'); [] } else tail(xs)
+    return if len(xs) == 0 then sync { println('empty'); [] } else xs[1:]
 }
 func risky(n: int): int[] { return [10 / n] }
 func find(xs: int[], i: int): int[]? { return if i < len(xs) then [xs[i]] else null }
@@ -20,7 +19,7 @@ func main(): int sync {
     println(xs, count([]), count(concat(xs, [1])), none(), len(none()))
     println(evens(0), evens(5))
     println(tail_or_empty([]), tail_or_empty([1, 2]))
-    println(attempt(risky, 0) !! [], attempt(risky, 5) !! [])
+    println(attempt(risky)(0) !! [], attempt(risky)(5) !! [])
     println(find([1], 3) ?? [], find([1], 0) ?? [])
     let m = [] as Map<string, int>
     println(len(m), size_of(xs))

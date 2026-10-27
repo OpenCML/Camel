@@ -1,0 +1,509 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * Signatures of the built-in functions: they need no import.
+ *
+ * The operators behind the language's own operators (`+`, `==`, `[]`, `??`, assignment, ...) are
+ * registered under reserved names (`__add__`, ...) and are not listed here.
+ *
+ * For reference only: these declarations are not compiled. They are checked against the
+ * operators the module registers, and docs/stdlib-reference.md is generated from them
+ * (scripts/stdlib-reference.mjs).
+ *
+ * The parameter names written here are the names a call binds to by name (`len(x: xs)`), and they
+ * are the ones the reference page prints: `--verify-ops` compares them with the names of the
+ * registered rules, position by position, in both the `with` list and the ordinary one. Until a
+ * built-in's signature has one source -- the declaration, with C++ registering the implementation
+ * (2026-10-24: "a built-in's signature has one source", to be done
+ * before the public repository is reorganised) -- the two spellings have to stay equal, and a
+ * difference is a test failure rather than a silent drift. The names here are the ones to keep:
+ * the reference page is generated from them, and a position a call names is the position this file
+ * names (stdlib-conventions.cn.md, section 4).
+ */
+
+import { is_complex, is_numeric, is_real, is_string } from types
+
+/// The value an error carries: its kind, its message and the position it was made at. `error(...)`
+/// makes one, and a `T!` that failed holds one. The module provides the type.
+export type Error
+
+// ---- memory ----
+//
+// Data blocks (design principles 10.5): the process-wide counters, read between two operations.
+
+/// The data-block counters: blocks allocated so far, freed so far, live now, and the bytes the
+/// live blocks hold. The call is not pure: it reports process state, so the optimizer must not
+/// fold, merge or drop it.
+/// @example std::mem::blocks().live    // 0 when no block is alive
+#op(':op/mem_blocks')
+export func std::mem::blocks(): { allocs: int, frees: int, live: int, bytes: int }
+
+// ---- conversions ----
+//
+// Numeric types are never converted implicitly; these functions do it. There is one conversion
+// per target type, named by the type: `int`, `i32`, `float`, `f32`, `bf16`, `f16`, `c64`, `c128`
+// (and `i64`, `f64`, the spellings of `int` and `float`). Each is one generic declaration over the
+// source type. Applied to an array, a conversion converts every element (one rule with arithmetic:
+// `f32(xs)` is one node, and `T(xs)` does it for the type a generic function is given); that entry
+// is declared below, with the core's conversions: it needs no import. Converting a float to an integer drops the fraction.
+
+/// x as a 64-bit integer.
+/// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one integer (blanks and a trailing part included); fault `ConversionOutOfRange` when x is a string that is an integer beyond the range, or a float that is NaN, infinite or beyond the range; use parse_int to handle text in the program
+/// @example int(2.9)    // 2
+#op(':op/*tol')
+export func int::<S>(x: S): int when is_real::<S>() || is_string::<S>()
+
+/// The same as int.
+/// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one integer; fault `ConversionOutOfRange` when x is a string that is an integer beyond the range, or an int or a float beyond the range of i32, or NaN
+/// @example i64('42')    // 42
+#op(':op/*tol')
+export func i64::<S>(x: S): int when is_real::<S>() || is_string::<S>()
+
+/// x as a 32-bit integer.
+/// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one integer; fault `ConversionOutOfRange` when x is a string that is an integer beyond the range, or an int or a float beyond the range of i32, or NaN
+/// @example i32(7)    // 7
+#op(':op/*toi')
+export func i32::<S>(x: S): i32 when is_real::<S>() || is_string::<S>()
+
+/// x as a 64-bit float.
+/// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of float (overflow or underflow); use parse_float to handle that in the program
+/// @example float(3)    // 3
+#op(':op/*tod')
+export func float::<S>(x: S): float when is_real::<S>() || is_string::<S>()
+
+/// The same as float.
+/// @fails fault `InvalidNumberText` when x is a string that is not a number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of float (overflow or underflow)
+/// @example f64('2.5')    // 2.5
+#op(':op/*tod')
+export func f64::<S>(x: S): float when is_real::<S>() || is_string::<S>()
+
+/// x as a 32-bit float.
+/// @fails fault `InvalidNumberText` when x is a string that is not a number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of f32 (overflow or underflow)
+/// @example f32(0.5)    // 0.5
+#op(':op/*tof')
+export func f32::<S>(x: S): f32 when is_real::<S>() || is_string::<S>()
+
+/// x as a bf16: the nearest bf16 of x, rounding to nearest with ties to even, once. A bf16 is a
+/// floating-point type of the language (design principles 7.3), not only a tensor element type,
+/// and writing the conversion asks for that precision, so no numeric permission is involved.
+/// @fails fault `InvalidNumberText` when x is a string that is not a number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of bf16 (overflow or underflow)
+/// @example bf16(0.5)    // 0.5
+#op(':op/*tobf')
+export func bf16::<S>(x: S): bf16 when is_real::<S>() || is_string::<S>()
+
+/// x as an f16: the nearest f16 of x, rounding to nearest with ties to even, once. The same
+/// conversion as bf16, at the other reduced precision (design principles 7.3).
+/// @fails fault `InvalidNumberText` when x is a string that is not a number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of f16 (overflow or underflow)
+/// @example f16(0.5)    // 0.5
+#op(':op/*tof6')
+export func f16::<S>(x: S): f16 when is_real::<S>() || is_string::<S>()
+
+/// The conversion `i32` applied to every element of a numeric array: the result has the input's extents and element type `i32`. A scalar converts by the declaration above.
+/// @pure
+/// @example i32([1.0, 2.0])
+#op(':op/atoi')
+export func i32::<T>(x: T[]): i32[..] when is_numeric::<T>()
+
+/// The conversion `i64` applied to every element of a numeric array: the result has the input's extents and element type `int64`. A scalar converts by the declaration above.
+/// @pure
+/// @example i64([1.0, 2.0])
+#op(':op/atol')
+export func i64::<T>(x: T[]): int[..] when is_numeric::<T>()
+
+/// The conversion `int` applied to every element of a numeric array: the result has the input's extents and element type `int64`. A scalar converts by the declaration above.
+/// @pure
+/// @example int([1.0, 2.0])
+#op(':op/atol')
+export func int::<T>(x: T[]): int[..] when is_numeric::<T>()
+
+/// The conversion `f32` applied to every element of a numeric array: the result has the input's extents and element type `f32`. A scalar converts by the declaration above.
+/// @pure
+/// @example f32([1.0, 2.0])
+#op(':op/atof')
+export func f32::<T>(x: T[]): f32[..] when is_numeric::<T>()
+
+/// The conversion `f64` applied to every element of a numeric array: the result has the input's extents and element type `f64`. A scalar converts by the declaration above.
+/// @pure
+/// @example f64([1.0, 2.0])
+#op(':op/atod')
+export func f64::<T>(x: T[]): float[..] when is_numeric::<T>()
+
+/// The conversion `float` applied to every element of a numeric array: the result has the input's extents and element type `f64`. A scalar converts by the declaration above.
+/// @pure
+/// @example float([1.0, 2.0])
+#op(':op/atod')
+export func float::<T>(x: T[]): float[..] when is_numeric::<T>()
+
+/// The conversion `bf16` applied to every element of a numeric array: the result has the input's extents and element type `bf16`. A scalar converts by the declaration above. A conversion into `bf16` or `f16` rounds (to nearest, ties to even); writing it asks for that precision, so it needs no numeric permission (`change_precision` governs a computation the compiler moves to lower precision, design principles 7.2-7.3).
+/// @pure
+/// @example bf16([1.0, 2.0])
+#op(':op/atobf')
+export func bf16::<T>(x: T[]): bf16[..] when is_numeric::<T>()
+
+/// The conversion `f16` applied to every element of a numeric array: the result has the input's extents and element type `f16`. A scalar converts by the declaration above. A conversion into `bf16` or `f16` rounds (to nearest, ties to even); writing it asks for that precision, so it needs no numeric permission (`change_precision` governs a computation the compiler moves to lower precision, design principles 7.2-7.3).
+/// @pure
+/// @example f16([1.0, 2.0])
+#op(':op/atof6')
+export func f16::<T>(x: T[]): f16[..] when is_numeric::<T>()
+
+/// x as a 64-bit complex number: the real part is x and the imaginary part is zero. A c128
+/// keeps both parts as they are.
+/// @example c64(2)    // 2+0i
+#op(':op/*toc')
+export func c64::<S>(x: S): c64 when is_real::<S>() || is_complex::<S>()
+
+/// x as a 128-bit complex number: the real part is x and the imaginary part is zero.
+/// @example c128(2)    // 2+0i
+#op(':op/*toz')
+export func c128::<S>(x: S): c128 when is_real::<S>() || is_complex::<S>()
+
+/// x as text, as println writes it. A float is written as the shortest text that reads back as
+/// the same number: string(2.5) is '2.5', string(2.0) is '2.0'.
+/// @example string(42)    // '42'
+#op(':op/*tos')
+export func string::<T>(x: T): string
+
+/// The integer a text spells, or an error value.
+/// @fails error `ParseError` when the text is not, as a whole, one integer (blanks are not skipped)
+/// @example parse_int('42') !! 0    // 42
+#op(':op/parse_int')
+export func parse_int(text: string): int!
+
+/// The number a text spells, or an error value.
+/// @fails error `ParseError` when the text is not a number
+/// @example parse_float('2.5') !! 0.0    // 2.5
+#op(':op/parse_float')
+export func parse_float(text: string): float!
+
+/// An Error value of the given kind with the given message; the compiler adds the source
+/// position of the call. `return error(...)` hands it out of a function declared `T!`.
+/// @example return error('RangeError', 'too large')
+#op(':op/error_new')
+export func error(kind: string, message: string): Error
+
+// ---- input and output ----
+
+/// Writes the arguments, separated by spaces, without a line end, and gives back the first one
+/// (so that the write can be part of the data flow). The other arguments may each have a type
+/// of their own. With a format, print<fmt>(...), writes the format with the arguments put in,
+/// also without a line end.
+/// @example print('a', 1)    // a 1
+#op(':io/print')
+export func print::<T>(x: T, ..rest): T
+
+/// Writes the arguments, separated by spaces, and a line end, and gives back the first one (so
+/// that the write can be part of the data flow). The other arguments may each have a type of
+/// their own. With a format, println<fmt>(...), writes the format with the arguments put in and
+/// one line end.
+/// @example println('a', 1)    // a 1
+#op(':io/println')
+export func println::<T>(x: T, ..rest): T
+
+/// Writes the arguments, separated by spaces, and a line end, to standard error, and gives back
+/// the first one (so that the write can be part of the data flow). The other arguments may each
+/// have a type of their own. With a format, eprintln<fmt>(...), writes the format with the
+/// arguments put in and one line end.
+/// @example eprintln('a', 1)    // a 1
+#op(':io/eprintln')
+export func eprintln::<T>(x: T, ..rest): T
+
+// ---- strings ----
+
+/// The text fmt with each `{}` placeholder replaced by the next argument; placeholders take
+/// format specifications such as `{:.2f}` and `{:>8}`.
+///
+/// A specification whose argument is a numeric array acts on each element on its own, while the
+/// brackets and the `, ` between the elements are the array's own form: `'{:.4f}'->format<xs>`
+/// with `xs = [0.7692267, 0.780836, 0.77707076]` is `[0.7692, 0.7808, 0.7771]`, and an array of
+/// rank 2 keeps one bracket level per dimension (`[[0.7692, 0.7808], [0.7771, 2.0000]]`). Each
+/// element is written by the specification and by its own type, so `{:.2f}` rounds an `f32`
+/// element and an `f64` element each at two places. An array without a specification prints as
+/// it does everywhere else: every element in the shortest text that reads back as the same
+/// number, which is `'{}'->format<xs>` giving `[0.7692267, 0.780836, 0.77707076]`.
+/// @fails fault `FormatFailed` when the placeholders and the arguments do not fit
+/// @example '{} is {:.2f}'->format<'x', 2.5>    // 'x is 2.50'
+#op(':str/format')
+with <..args>
+export func format(fmt: string): string
+
+/// The strings of xs joined with sep between them.
+/// @example ['a', 'b']->join<', '>    // 'a, b'
+#op(':str/join')
+with <sep: string>
+export func join(xs: string[]): string
+
+/// The number of code points of a string, of bytes of a `Bytes`, or the length of the first
+/// dimension of an array of any rank.
+/// @example len('h€')    // 2
+#op(':struct/len_*')
+export func len(x: string): int
+#op(':struct/len_*')
+export func len::<T>(x: T[..]): int
+#op(':struct/len_*')
+export func len(x: Bytes): int
+
+// ---- arrays ----
+
+/// The integers of a step: `start`, `start + step`, ... up to, not including, `end`; with no step
+/// the step is 1, `range(a, b)` is the same sequence as the interval `a..b` and becomes it on the
+/// graph (design principles 4.2). `step` must move: a step of 0 is a fault, and a constant call
+/// with a step of 0 is refused where it is written. The result is empty when the step does not
+/// carry `start` towards `end`. A `for` over an interval is fused by the compiler and builds no
+/// array; this call builds one.
+/// @fails fault `InvalidArgument` when the step is 0
+/// @example range(0, 10, 3)     // [0, 3, 6, 9]
+/// @example range(10, 0, -3)    // [10, 7, 4, 1]
+/// @example-fragment the interval is written `a..b`; the stepped form is `range(a, b, step)`
+#op(':struct/range')
+export func range(start: int, end: int, step: int = 1): int[]
+
+/// The last element. An empty array has none: check len first. Negative indices are not
+/// counted from the end (a negative index is a fault), so this is how the last element is
+/// written.
+/// @fails fault `IndexOutOfRange` when the array is empty
+/// @example last([1, 2, 3])    // 3
+#op(':struct/last_arr')
+export func last::<T>(xs: T[]): T
+
+/// The part of x from start up to, not including, end along one axis, taking every step-th
+/// position (a step of 1 by default, any non-zero value allowed). x is an array of any rank, a
+/// string (by code point) or a `Bytes`; this is the same node the subscript `x[a:b:s]` builds, so
+/// a pipeline can write it: `xs->slice<0, 1, 3>`. A bound outside the value (a negative one
+/// included) is a fault, as an index out of range is; a start after the end gives the empty
+/// value. The last element is `last(x)` and the length of an axis `dim(x, axis)`.
+/// @fails fault `IndexOutOfRange` when a bound lies outside the axis; fault `InvalidArgument` when the step is 0
+/// @example [1, 2, 3, 4]->slice<0, 1, 3>    // [2, 3]
+#op(':op/slice_sub')
+with <axis: int, start: int, end: int, step: int = 1>
+export func slice::<T>(x: T[]): T[]
+
+/// The same slice of a string, by code point: a string has the one axis 0, and the result is a
+/// string. `'中文字'[1:3]` and `'中文字'->slice<0, 1, 3>` are both `'文字'`.
+/// @example 'hello'->slice<0, 1, 4>    // 'ell'
+#op(':op/slice_str')
+with <axis: int, start: int, end: int, step: int = 1>
+export func slice(x: string): string
+
+/// The same slice of a `Bytes`, by byte: it has the one axis 0, and the result is a `Bytes`.
+/// `b[1:3]` and `b->slice<0, 1, 3>` are the same bytes.
+/// @example encode('hello')->slice<0, 1, 4>    // the bytes of 'ell'
+#op(':op/slice_bytes')
+with <axis: int, start: int, end: int, step: int = 1>
+export func slice(x: Bytes): Bytes
+
+/// The elements of xs followed by those of ys, as a new array.
+/// @example concat([1], [2, 3])    // [1, 2, 3]
+#op(':struct/concat_arr')
+export func concat::<T>(xs: T[], ys: T[]): T[]
+
+/// Whether an element of xs equals value, by the `==` of the element type (by content for
+/// arrays, tuples and structs).
+/// @example [1, 2, 3]->contains<2>    // true
+#op(':struct/contains_arr')
+with <value: T>
+export func contains::<T>(xs: T[]): bool
+
+/// Whether sub occurs in the string s (bytes are compared). The empty string occurs in every
+/// string.
+/// @example 'hello'->contains<'ell'>    // true
+#op(':struct/contains_str')
+with <sub: string>
+export func contains(s: string): bool
+
+/// Two arrays combined element by element into pairs. They must have the same length.
+/// Three or more arrays (`zip(xs, ys, zs)`) give tuples of that many elements.
+/// @fails fault `InvalidArgument` when the lengths differ
+/// @example zip([1, 2], ['a', 'b'])    // [(1, 'a'), (2, 'b')]
+#op(':struct/zip')
+export func zip::<T, U>(xs: T[], ys: U[]): (T, U)[]
+
+/// A new array: the elements of xs, then value. xs is unchanged; to add to a variable, bind it
+/// to the result: `acc = acc->append<4>` (as a statement, that form grows the array in place
+/// when nothing else refers to it, which cannot be observed).
+/// @example [1, 2, 3]->append<4>    // [1, 2, 3, 4]
+#op(':struct/append_arr')
+with <value: T>
+export func append::<T>(xs: T[]): T[]
+
+// ---- higher-order functions ----
+//
+// `map` and `filter` apply f to the elements with no order among the calls: the parallel
+// scheduler may run them at the same time, and the result is by position. `foreach` and
+// `reduce` call f element by element in order. `T[]` is an array of that element type (rank 1); the rank-n meaning is P5
+// work. They are declared with effects because what a
+// call does is what f does.
+
+/// f applied to every element; the calls have no order among them.
+/// @example [1, 2, 3]->map<(x) => x * 2>    // [2, 4, 6]
+#op(':mark/map_arr')
+with <f: (item: T) => U>
+export func map::<T, U>(xs: T[]): U[]
+
+/// The elements for which f is true, in order; the calls of f have no order among them.
+/// @example [1, 2, 3, 4]->filter<(x) => x % 2 == 0>    // [2, 4]
+#op(':mark/filter_arr')
+with <f: (item: T) => bool>
+export func filter::<T>(xs: T[]): T[]
+
+/// The elements combined from left to right: f(...f(f(initial, xs[0]), xs[1])..., xs[n-1]).
+/// @example [1, 2, 3]->reduce<(acc: int, x: int) => acc + x, 0>    // 6
+#op(':mark/reduce_arr')
+with <f: (acc: U, item: T) => U, initial: U>
+export func reduce::<U, T>(xs: T[]): U
+
+/// Calls f for every element, in order.
+/// @example [1, 2, 3]->foreach<(x) => println(x)>
+#op(':mark/foreach_arr')
+with <f: (item: T) => void>
+export func foreach::<T>(xs: T[]): void
+
+// ---- fault isolation ----
+//
+// A fault (a division by zero, an index out of range, a recursion that is too deep, ...) ends
+// the program with a located diagnostic. `attempt` isolates it at the boundary of one call
+// (design principles 3.9; docs/technical/33_fault_isolation.md). It is a function transform:
+// `attempt(f)` is the function whose parameters are f's and whose calls are calls of f made
+// inside the boundary. The name is provisional.
+
+/// Raises a fault of the kind the program writes, with the message it gives. The call gives no
+/// value at all: its type is the bottom type `never` (design principles 3.9), so it may stand
+/// where any type is expected, and a branch arm that raises the fault leaves the branch's type
+/// to the other arm. The fault is raised where the call is written, and `attempt` isolates it
+/// into an error value whose kind is the name in the angle brackets.
+/// @fails fault `<Kind>` with the message, which `attempt` isolates
+/// @example fail<'BadLimit'>('the limit must be positive')
+#op(':op/fail')
+with <Kind: string>
+export func fail(message: string): never
+
+/// The function f with the faults of its calls turned into error values: `attempt(f)` takes the
+/// parameters of f and gives the result of f plus `!`. A fault raised inside a call becomes an
+/// error value whose kind is the name of the fault (`DivisionByZero`, ...), with the fault's
+/// message and position; otherwise the call gives the result of f. When f itself returns `U!`,
+/// so does `attempt(f)`. What the call did before the fault is not undone; exit() and the
+/// failures of the compiler itself are not isolated. `attempt(f)` itself calls nothing: the
+/// faults are those of a call of the value.
+/// @fails fault `DivisionByZero` and every other fault of a call of f: the call gives an error value whose kind is the fault's name, with the fault's message and position; an error value f itself returns is handed on unchanged
+/// @example attempt((x: int) => 10 / x)(2) !! -1    // 5
+/// @example attempt((x: int) => 10 / x)(0) !! -1    // -1: the division fault becomes an error value
+#op(':mark/attempt')
+export func attempt::<F>(f: F): F!
+
+// ---- Map<K, V> and Set<T> ---------------------------------------------------------------------
+// Built-in collection types (docs/technical/31_map_and_set.md). Every operator returns a new
+// value. One calling form: the collection is the ordinary argument, the rest are
+// with-arguments, put<k, v>(m) or m->put<k, v>; put(m, k, v) is refused with a hint.
+
+/// The number of entries of a map or of elements of a set. The collection is `x`, the name the
+/// string and array declarations above give their one parameter: the position means the value
+/// whose length is asked for, whatever its type.
+/// @example len([('a', 1), ('b', 2)] as Map<string, int>)    // 2
+#op(':coll/len')
+export func len::<K, V>(x: Map<K, V>): int
+#op(':coll/len')
+export func len::<T>(x: Set<T>): int
+
+/// The value stored under key, or null when the map has no such key. `m[key]` is the same lookup.
+/// @example ([('a', 1)] as Map<string, int>)->get<'z'> ?? 0    // 0 when the map has no 'z'
+#op(':coll/map_get')
+with <key: K>
+export func get::<K, V>(m: Map<K, V>): V?
+
+/// The value stored under key, or fallback when the map has no such key.
+/// @example ([('a', 1)] as Map<string, int>)->get_or<'z', -1>    // -1 when the map has no 'z'
+#op(':coll/map_get_or')
+with <key: K, fallback: V>
+export func get_or::<K, V>(m: Map<K, V>): V
+
+/// A map with value stored under key; an existing entry of that key is replaced. m is unchanged.
+/// @example ([('a', 1), ('b', 2)] as Map<string, int>)->put<'c', 3>    // {a: 1, b: 2, c: 3}
+#op(':coll/map_put')
+with <key: K, value: V>
+export func put::<K, V>(m: Map<K, V>): Map<K, V>
+
+/// A map without the entry of key, or a set without the element; a key or element that is not there changes nothing. The argument is unchanged.
+/// @example ([('a', 1), ('b', 2)] as Map<string, int>)->remove<'a'>    // {b: 2}
+#op(':coll/remove')
+with <key: K>
+export func remove::<K, V>(c: Map<K, V>): Map<K, V>
+#op(':coll/remove')
+export func remove::<K>(c: Set<K>): Set<K>
+
+/// Whether a map has an entry of key. (A set is asked with `contains`.)
+/// @example ([('a', 1)] as Map<string, int>)->has<'a'>    // true
+#op(':coll/has')
+with <key: K>
+export func has::<K, V>(c: Map<K, V>): bool
+
+/// The keys of a map, in ascending order.
+/// @example keys([('b', 2), ('a', 1)] as Map<string, int>)    // [a, b]
+#op(':coll/keys')
+export func keys::<K, V>(m: Map<K, V>): K[]
+
+/// The values of a map, in the ascending order of their keys.
+/// @example values([('b', 2), ('a', 1)] as Map<string, int>)    // [1, 2]
+#op(':coll/map_values')
+export func values::<K, V>(m: Map<K, V>): V[]
+
+/// The entries of a map as (key, value) tuples, in ascending order of the keys.
+/// @example items([('b', 2), ('a', 1)] as Map<string, int>)    // [(a, 1), (b, 2)]
+#op(':coll/map_items')
+export func items::<K, V>(m: Map<K, V>): (K, V)[]
+
+/// The elements of a set as an array, in ascending order. The collection is `m`, the name the
+/// map declaration above gives its one parameter: the position means the collection whose items
+/// are listed.
+/// @example items([3, 1, 2] as Set<int>)    // [1, 2, 3]
+#op(':coll/set_items')
+export func items::<T>(m: Set<T>): T[]
+
+/// A map with the entries of both maps; for a key in both, the entry of other is taken. Neither argument is changed.
+/// @example merge([('a', 1), ('b', 2)] as Map<string, int>, [('b', 20), ('c', 30)] as Map<string, int>)    // {a: 1, b: 20, c: 30}
+#op(':coll/merge')
+export func merge::<K, V>(m: Map<K, V>, other: Map<K, V>): Map<K, V>
+
+/// Whether value is an element of the set.
+/// @example ([1, 2, 3] as Set<int>)->contains<9>    // false
+#op(':coll/set_contains')
+with <value: T>
+export func contains::<T>(s: Set<T>): bool
+
+/// A set with value added; s is unchanged.
+/// @example ([1, 2, 3] as Set<int>)->add<9>    // {1, 2, 3, 9}
+#op(':coll/set_add')
+with <value: T>
+export func add::<T>(s: Set<T>): Set<T>
+
+/// The set of the elements that are in either set.
+/// @example union([1, 2, 3] as Set<int>, [3, 4] as Set<int>)    // {1, 2, 3, 4}
+#op(':coll/set_union')
+export func union::<T>(s: Set<T>, other: Set<T>): Set<T>
+
+/// The set of the elements that are in both sets.
+/// @example intersect([1, 2, 3] as Set<int>, [3, 4] as Set<int>)    // {3}
+#op(':coll/set_intersect')
+export func intersect::<T>(s: Set<T>, other: Set<T>): Set<T>
+
+/// The set of the elements of s that are not in other.
+/// @example difference([1, 2, 3] as Set<int>, [3, 4] as Set<int>)    // {1, 2}
+#op(':coll/set_difference')
+export func difference::<T>(s: Set<T>, other: Set<T>): Set<T>
+
+/// Whether every element of s is an element of other.
+/// @example is_subset([1, 2] as Set<int>, [1, 2, 3] as Set<int>)    // true
+#op(':coll/set_is_subset')
+export func is_subset::<T>(s: Set<T>, other: Set<T>): bool
+
+// ---- streams ----
+
+/// Records one `tee` (design principles 5.4) for the report of a profile session: the hint it
+/// took, the widest hint the implementation honours, the elements it has pulled from its source so
+/// far, and the most elements it has buffered at once -- with the stream it reads, whose value
+/// tells one tee from another and whose type the operator takes, and whose elements it does not.
+/// A program does not write this: `tee` calls it once per element it pulls, and `std::profile`
+/// prints what it recorded (`STREAM_TEE`).
+/// @example tee_note(8, 64, 2, 2, s)    // the tee written `s->tee<8>` reports itself this way
+/// @example-fragment the last operand is the stream a tee reads, and no example program has one
+#op(':stream/tee_note')
+export func tee_note::<T>(hint: int, cap: int, elements: int, peak: int, s: T..): void

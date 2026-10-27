@@ -14,7 +14,6 @@
  * reverse pass reads the body: if a call site reached the kernel's rule the first would be 0.5,
  * and if the tag changed the meaning the first and the third would differ.
  */
-module impl_grad_body
 
 import { grad } from autodiff
 

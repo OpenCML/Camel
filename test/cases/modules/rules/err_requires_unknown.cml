@@ -1,11 +1,9 @@
 /// A requirement that names no permission: reported at the argument, where it is written.
-module err_requires_unknown
-import { Program } from graph
 import { rewrite } from rewrite
 
 #requires(reassociate2)
 rule r(x: int) { x + 0 => x }
 
-export func apply(p: Program): Program! {
-    return rewrite(p, [r])
+export func apply::<F>(p: F): F! {
+    return p->rewrite<[r]>
 }

@@ -1,0 +1,20 @@
+id = "compile.generic_join"
+order = 940
+tier = "fast"
+tags = ["feat", "compile", "generic", "struct"]
+desc = "Generic inference joins a named struct and an unnamed one with its fields to the named one, as the other joins do (design principles 5.2)"
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "generic_join.named_anonymous"
+desc = "`map`, `filter` and `foreach` over an array of unnamed structs with a callback that writes the named type (and the other way round), next to the array literal, argument and `==` positions that already joined."
+kind = "behavior"
+case = "../../../cases/compile/generic_join/named_anonymous.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "7\n2 4\n5\n1 9\n8\n2\n"

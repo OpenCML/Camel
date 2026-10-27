@@ -220,7 +220,7 @@ def make_arms(rng: random.Random, j: int):
 def make_arms_program(rng: random.Random, k: int):
     """A program of its own for the third shape: each function is called twice, the second time
     with a larger run-time integer (another arm may be taken) and a run-time or a literal `x`."""
-    functions, body, expected = [], [f"    let k = int(get_env('{ENV_NAME}'))"], []
+    functions, body, expected = [], [f"    let k = int(get_env('{ENV_NAME}') ?? '')"], []
     v = 0
     for j in range(ARMS_FUNCTIONS):
         text, sim = make_arms(rng, j)
@@ -234,7 +234,7 @@ def make_arms_program(rng: random.Random, k: int):
             body.append(f"    println('arms{j} +{dk}: {{}} {{}}'->format<x{v}, v{v}>)")
             r, c, printed = sim(ENV_VALUE + dk, x, start)
             expected += printed + [f"arms{j} +{dk}: {r} {c}"]
-    source = f"module var_pipelines_arms_{k}\n\nimport {{ get_env }} from env\n\n" + "\n".join(functions) + "func main(): int sync {\n" + "\n".join(body) + "\n    return 0\n}\n"
+    source = f"import {{ get_env }} from env\n\n" + "\n".join(functions) + "func main(): int sync {\n" + "\n".join(body) + "\n    return 0\n}\n"
     return source, expected
 
 
@@ -265,7 +265,7 @@ def make_program(rng: random.Random, k: int):
             body.append(f"    println('line{j} from {start}: {{}} {{}}'->format<x{v}, v{v}>)")
             r, c = sim(start)
             expected.append(f"line{j} from {start}: {r} {c}")
-    source = f"module var_pipelines_{k}\n\n" + "\n".join(functions) + "func main(): int sync {\n" + "\n".join(body) + "\n    return 0\n}\n"
+    source = "\n".join(functions) + "func main(): int sync {\n" + "\n".join(body) + "\n    return 0\n}\n"
     return source, expected
 
 

@@ -6,7 +6,6 @@
  * The innermost functions call a named function, so that every scheduler reaches a safepoint
  * while the arrays built in the element function are still in use.
  */
-module gc_nested_foreach
 
 type Row = int[]
 
@@ -16,7 +15,7 @@ func add(a: int, b: int): int {
 
 func collect(n: int, k: int): Row[] sync {
     var out: Row[] = []
-    0..n->foreach<sync (i: int) => sync {
+    0..n->foreach<(i: int) => sync {
         out = out->append<0..n->map<(j: int): int => add(i + j, k)>>
         return null
     }>
@@ -25,7 +24,7 @@ func collect(n: int, k: int): Row[] sync {
 
 func ends_of(n: int, i: int, k: int): int sync {
     var row: int[] = []
-    0..n->foreach<sync (j: int) => sync {
+    0..n->foreach<(j: int) => sync {
         row = row->append<add(i + j, k)>
         return null
     }>
@@ -33,7 +32,7 @@ func ends_of(n: int, i: int, k: int): int sync {
 }
 
 func lasts(n: int, k: int): int[] sync {
-    return 0..n->map<sync (i: int): int => ends_of(n, i, k)>
+    return 0..n->map<(i: int): int => sync { ends_of(n, i, k) }>
 }
 
 func probe(t: Row[], n: int): int {

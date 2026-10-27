@@ -5,7 +5,6 @@
  * once per round, so the whole path from the standard library to the four back ends runs without
  * a `yield` anywhere in the program.
  */
-module stream_unfold
 
 import stream
 

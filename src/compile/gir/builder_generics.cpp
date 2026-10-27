@@ -29,7 +29,9 @@
 #include "camel/core/type/collection.h"
 #include "camel/core/type/composite/stream.h"
 #include "camel/core/type/other.h"
+#include "camel/core/type/typecall.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cctype>
 #define DEBUG_LEVEL -1
@@ -312,6 +314,14 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
         tmpl->outerBindings  = typeBindings_;
         tmpl->ownerGraph     = currGraph_;
         tmpl->module         = module_;
+        // The tags written before the declaration belong to it, as they do for a function that is
+        // not generic (a generic pass names the tags it reads).
+        if (!isOperator) {
+            const TagFacts tags = tagFactsOf(child, camel::core::tag::Func);
+            if (tags.declaration != camel::core::attr::kNoAttrs) {
+                camel::core::tag::attachToDeclaration(*module_, Reference(name), tags.declaration);
+            }
+        }
         tmpl->nodeScope      = nodeScope_;
         tmpl->graphScope     = graphScope_;
         tmpl->decoratedScope = decoratedScope_;
@@ -1132,14 +1142,41 @@ generic_template_ptr_t Builder::chooseGenericOverload(
     const std::vector<generic_template_ptr_t> &candidates, const std::vector<Argument> &withInputs,
     const std::vector<Argument> &normInputs, const type_vec_t &withTypes, const type_vec_t &normTypes,
     const GCT::node_ptr_t &call) {
+    // A candidate named by its signature -- which the siblings of one name share -- and by the
+    // condition it wrote, which is what tells two arms of that name apart (design principles 4.4:
+    // the call site lists the candidates with the conditions each of them holds under).
+    const auto describeCandidate = [](const generic_template_ptr_t &tmpl) {
+        std::string text = tmpl->name + ": " + tmpl->funcType->toString();
+        if (const auto *when = GCT::Tree::of(tmpl->func)->whenOf(tmpl->func)) {
+            text += " — when " + when->text;
+        }
+        return text;
+    };
+    // The candidates whose parameters take the arguments and whose own `when` is false for the
+    // types those arguments bind: kept for the report a call that reaches no candidate at all
+    // gets, because a condition that does not hold is not a mismatch of types (design
+    // principles 4.4).
+    std::vector<std::string> unmetConditions;
     // Design principles 4.4 and 5.1: a call takes the one overload whose parameters accept its
     // arguments, with the argument types first exactly as they are, and then with the literals
     // entering the parameter types. Two that fit are an ambiguity, not a matter of the order
     // they are declared in.
     const auto binds = [&](const generic_template_ptr_t &tmpl) {
         FunctionType *signature = tmpl->funcType;
-        if (signature->hasRest() || signature->withTypesCount() != withTypes.size()) {
+        if (signature->hasRest() || withTypes.size() > signature->withTypesCount()) {
             return false;
+        }
+        // A `with` parameter the call leaves out needs a default of this declaration.
+        const auto registered = defaults_.find(tmpl.get());
+        for (size_t i = 0; i < signature->withTypesCount(); ++i) {
+            const bool written = i < withInputs.size() && !withInputs[i].left;
+            if (written) {
+                continue;
+            }
+            if (registered == defaults_.end() || i >= registered->second.with.size() ||
+                !registered->second.with[i].has_value()) {
+                return false;
+            }
         }
         const size_t params = signature->normTypesCount() - signature->constasCount();
         if (params != normTypes.size()) {
@@ -1185,6 +1222,27 @@ generic_template_ptr_t Builder::chooseGenericOverload(
             }
             return false;
         }
+        // The declaration's `when`, now that the arguments have bound its type variables: a
+        // false condition makes this declaration inapplicable, not erroneous, so it is not a fit
+        // and the call goes on to the other candidates (design principles 4.4).
+        if (const auto *when = GCT::Tree::of(tmpl->func)->whenOf(tmpl->func)) {
+            std::unordered_map<std::string, data_ptr_t> withValues;
+            for (size_t i = 0; i < signature->withTypesCount() && i < withInputs.size(); ++i) {
+                data_ptr_t value = constantOfNode(withInputs[i].node);
+                if (value != nullptr) {
+                    withValues.emplace(std::string(signature->argNameAt(i)), value);
+                }
+            }
+            const WhenResult verdict =
+                evaluateWhenCondition(when->condition, signature, bindings, withValues, tmpl);
+            if (verdict.fails()) {
+                unmetConditions.push_back(describeCandidate(tmpl));
+                return false;
+            }
+            if (!verdict.holds()) {
+                reportWhenProblem(verdict, tmpl->name, when->condition);
+            }
+        }
         return true;
     };
     // A name with one generic function keeps it, and its own report when the arguments do not
@@ -1210,12 +1268,38 @@ generic_template_ptr_t Builder::chooseGenericOverload(
         listed.push_back(candidate->name + ": " + candidate->funcType->toString());
     }
     if (fits.size() > 1) {
+        // Two (or more) candidates the arguments fit and whose conditions hold: no declaration
+        // order chooses between them, so the call is ambiguous and the report names each
+        // candidate with the condition it wrote (design principles 4.4: "带 `when` 的候选都适用
+        // 时，调用处报歧义，列出两条候选与各自成立的条件"). Sorted, so that two files holding one
+        // program with the declarations in the two orders report one and the same diagnostic.
         std::vector<std::string> also;
+        also.reserve(fits.size());
         for (const auto &candidate : fits) {
-            also.push_back(candidate->name + ": " + candidate->funcType->toString());
+            also.push_back(describeCandidate(candidate));
         }
+        std::sort(also.begin(), also.end());
+        also.erase(std::unique(also.begin(), also.end()), also.end());
         rejectAmbiguousCall(candidates.front()->name, argTypes, also, call);
     }
+    if (!unmetConditions.empty()) {
+        // Every candidate the arguments fit was made inapplicable by its own `when`: the call
+        // reports the conditions it could not meet rather than the overloads it did not match
+        // (design principles 4.4; questions-2026-10-23 `sorts-per-element-type` 1: "条件不满足与
+        // 类型不匹配分开报"). Sorted, for the reason the ambiguity above is sorted.
+        std::sort(unmetConditions.begin(), unmetConditions.end());
+        unmetConditions.erase(
+            std::unique(unmetConditions.begin(), unmetConditions.end()), unmetConditions.end());
+        yieldToPipe(call);
+        diags_->of(SemanticDiag::WhenConditionUnmet)
+            .atOrigin(call->origin())
+            .commit(
+                candidates.front()->name,
+                argTypes,
+                strutil::join(unmetConditions, "; ", [](const std::string &s) { return s; }));
+        throw BuildAbortException();
+    }
+    yieldToPipe(call);
     diags_->of(SemanticDiag::NoMatchingFunction)
         .atOrigin(call->origin())
         .commit(argTypes, strutil::join(listed, "; ", [](const std::string &s) { return s; }));
@@ -1626,6 +1710,7 @@ compile_graph_ptr_t Builder::instantiateForCall(
         const WhenResult verdict =
             evaluateWhenCondition(when->condition, signature, bindings, withValues, tmpl);
         if (verdict.fails()) {
+            yieldToPipe(call);
             std::vector<Type *> all(withTypes);
             all.insert(all.end(), normTypes.begin(), normTypes.end());
             diags_->of(SemanticDiag::WhenConditionUnmet)
@@ -1714,7 +1799,7 @@ void Builder::settleGenericOperatorArguments(
         for (const Argument &input : normInputs) {
             statics.push_back(isWaiting(input) ? StaticArg{} : staticArgOf(input.node));
         }
-        return ops->resolve(withTypes, normTypes, statics, Modifier::None).has_value();
+        return ops->resolve(withTypes, normTypes, statics).has_value();
     };
     // A name with several functions: the one the operator accepts, when it is exactly one
     // (`xs->map<abs>`, `xs->reduce<max, 0>`). The operator is asked about each candidate's
@@ -1763,11 +1848,11 @@ void Builder::settleGenericOperatorArguments(
                 // A signature computed from the argument types: asked for the candidate
                 // types, one and two parameters.
                 for (Type *first : candidates) {
-                    if (auto one = resolver->resolve({}, {first}, Modifier::None)) {
+                    if (auto one = resolver->resolve({}, {first})) {
                         add(uri, *one);
                     }
                     for (Type *second : candidates) {
-                        if (auto two = resolver->resolve({}, {first, second}, Modifier::None)) {
+                        if (auto two = resolver->resolve({}, {first, second})) {
                             add(uri, *two);
                         }
                     }
@@ -1940,9 +2025,25 @@ void Builder::rejectInvalidCollectionKey(Type *type, const GCT::node_ptr_t &at) 
 }
 
 compile_graph_ptr_t Builder::instantiateGeneric(
-    const generic_template_ptr_t &tmpl, const type_bindings_t &bindings, const ExtentValues &extents,
-    const ConstasValues &constas, const GCT::node_ptr_t &call) {
+    const generic_template_ptr_t &tmpl, const type_bindings_t &callBindings,
+    const ExtentValues &extents, const ConstasValues &constas, const GCT::node_ptr_t &call) {
     ExpectedValueScope instanceScope(expectedValueType_, nullptr);
+    // The key of an instance is the template's own type parameters and what they are bound to,
+    // whatever else the caller passed: a call from the body gives just those, a predicate
+    // evaluated for a `when` gives the template's outer bindings first (they are the template's
+    // own, kept in `tmpl->outerBindings` and put in front of these when the body is built). Two
+    // routes to one instance are one instance, and one diagnostic.
+    const std::vector<std::string> ownNames = typeParameterNames(tmpl);
+    type_bindings_t bindings;
+    for (const auto &binding : callBindings) {
+        const bool own = std::find(ownNames.begin(), ownNames.end(), binding.first) !=
+                             ownNames.end() &&
+                         findTypeBinding(tmpl->outerBindings, binding.first) == nullptr;
+        const bool seen = findTypeBinding(bindings, binding.first) != nullptr;
+        if (own && !seen) {
+            bindings.push_back(binding);
+        }
+    }
     // All routes (inferred calls, function values and::<T>) enforce the same type rules.
     Type *concrete = substituteExtentValues(substituteTypeVars(tmpl->funcType, bindings), extents);
     if (TupleType *repeated = findRepeatedMark(concrete)) {
@@ -2224,7 +2325,7 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         // is where the instance's types are known (rule impl-kernel-site). An instance
         // whose type has no executor keeps the body and runs it: the body is the semantics, so
         // the result is the same, and `std::profile` tells the two paths apart.
-        adoptImplKernel(tmpl, graph, funcType);
+        adoptImplKernel(tmpl, graph, funcType, bindings);
         // The instance takes the declaration's parameter defaults as they are: they are
         // constants, the same for every instance, and a call of the instance fills them.
         if (const auto found = defaults_.find(tmpl.get()); found != defaults_.end()) {
@@ -2319,7 +2420,18 @@ Type *Builder::resolveTypeNode(Type *type, const GCT::node_ptr_t &at) {
             .commit(type->toString());
         throw BuildAbortException();
     }
-    return boundType(type);
+    Type *bound = boundType(type);
+    if (containsTypeCall(bound) && !containsTypeVar(bound)) {
+        // The variables are bound and the type function does not accept what they were bound to.
+        std::string what = bound->toString();
+        std::string why  = "it is not defined for its argument";
+        describeUnevaluatedTypeCall(bound, what, why);
+        diags_->of(SemanticDiag::TypeFunctionNotApplicable)
+            .atOrigin(at != nullptr ? at->origin() : 0)
+            .commit(what, why);
+        throw BuildAbortException();
+    }
+    return bound;
 }
 
 Type *Builder::visitTypeNode(const GCT::node_ptr_t &gct) {
@@ -2327,6 +2439,20 @@ Type *Builder::visitTypeNode(const GCT::node_ptr_t &gct) {
     Type *type = resolveTypeNode(gct->dataType(), gct);
     LEAVE("TYPE");
     return type;
+}
+
+} // namespace camel::compile::gir
+
+namespace camel::compile::gir {
+
+std::vector<std::string> genericSignaturesOf(const camel::core::module::Entity &entity) {
+    std::vector<std::string> signatures;
+    for (const generic_template_ptr_t &tmpl : genericTemplatesOfEntity(entity)) {
+        if (tmpl != nullptr && tmpl->funcType != nullptr) {
+            signatures.push_back(tmpl->funcType->toString());
+        }
+    }
+    return signatures;
 }
 
 } // namespace camel::compile::gir

@@ -2,52 +2,70 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * A Json is a JSON value whose shape is known only when the program runs: `decode` reads a
- * text, or gives an error value when the text is not JSON, and the accessors below look into
- * it, each giving a value of a definite type. `encode` writes the JSON text of a value, and
- * `decode_as` decodes to the type of a shape; both are computed signatures that a declaration
- * cannot express, so they are not declared here (see `stdlib/signatures/json.cml`).
+ * A Json is a JSON value whose shape is known only when the program runs: `decode` reads a text,
+ * or gives an error value when the text is not JSON, and the accessors look into it, each giving
+ * a value of a definite type. To read a part whose shape is known, `decode_as::<T>` decodes
+ * straight to the type T, and `encode` writes the JSON text of a value; both are applicable to the
+ * types that have a JSON form (`has_json_form`) and to no other. Everything here is pure.
+ *
+ * The data an accessor works on is its ordinary argument; the key or the index is its
+ * with-argument, so calls chain: `decode(text)->get<key: 'port'>->as_int`. An accessor has one
+ * declaration for each tagged form of its argument -- `Json`, `Json?`, `Json!` and `Json!?` --
+ * written from the most specific to the widest, which give the result `R?`, `R?`, `R!?` and
+ * `R!?`: an absent part is the null, and the error of a text that failed to decode is passed on
+ * unchanged, so one `!!` or `??` at the end of a chain settles it.
  */
 
-// The declarations of the operators of the C++ module `modules/json` (design principles 6.4).
-// This file is the one source of their signatures; the C++ side keeps
-// the kernels, the executor and the operator traits. A declaration names `json:<function>` by
-// convention, so no `#op` tag is needed.
-//
-// An accessor gives a different type for each tagged form of its argument — `Json`, `Json?`,
-// `Json!` and `Json!?` — so its four forms are four declarations of the same operator, written
-// from the most specific to the widest (`Json` first), so that a call takes the narrowest one
-// that accepts it.
+import { is_string, ElementOf, PayloadOf, KeyOf, ValueOf } from types
 
-module json
+/// A JSON value whose shape is known only when the program runs; the module provides the type.
+export type Json
+
+// Whether a value of type `T` has a JSON form: the scalars, `string`, a `Json` and `T?` of a type
+// that has one are JSON values; an array or a set is a JSON array of the forms of its elements, a
+// tuple one of the forms of its members, a struct and a map with string keys a JSON object of
+// the forms of their members; nothing else is (a function, a tensor, a `T!`). A type is asked
+// where the call is compiled, so a type without a form is refused there.
+func has_json_form::<T>(): bool {
+    return match type T {
+        case Json | bool | int | i32 | float | f32 | string => true
+        case nullable => has_json_form::<PayloadOf<T>>()
+        case array | set => has_json_form::<ElementOf<T>>()
+        case map => is_string::<KeyOf<T>>() && has_json_form::<ValueOf<T>>()
+        case struct | tuple => every_member_json::<T>()
+        case _ => false
+    }
+}
+
+// Every member of a struct or tuple has a JSON form. The walk is static, like every walk over a
+// known shape: the answer is a constant of the instantiation.
+func every_member_json::<T>(): bool {
+    return static loop every = true for n, F in fields T do every && has_json_form::<F>()
+}
 
 /// The value a JSON text describes, as a `Json`: a value of a definite type whose content is
-/// known only when the program runs; an error value when the text is not JSON or nests deeper
-/// than the limit (design principles 11.2). Look into a Json with get, as_int, as_array and the
-/// other operators below, each of which gives a value of a definite type and takes a `Json?`, a
-/// `Json!` or a `Json!?` as well, so that calls chain (a `Json!` gives the two-layer result and
-/// its error is passed on unchanged); read a part whose shape is known with decode_as. Prints as
-/// its JSON text. In the examples below, `j` is a Json decoded so.
+/// known only when the program runs. Look into it with `get`, `as_int`, `as_array` and the other
+/// accessors below.
 /// @pure
 /// @fails error value `JsonParseError` when the text is not JSON (the message gives the position in the text and its beginning); error value `JsonTooDeep` when the document nests deeper than the limit (10000 levels; the message gives the line and column of the bracket that goes too deep)
-/// @example decode('{"port": 80}') ?-> ((j: Json): int => j->get<'port'>->as_int ?? 0) !! -1    // 80
+/// @example (decode('{"port": 80}')->get<key: 'port'>->as_int ?? 0) !! -1    // 80
 export func decode(text: string): Json!
 
 /// The kind of a Json: 'null', 'bool', 'int', 'float', 'string', 'array' or 'object'.
 /// @pure
-/// @example kind(j)    // 'array', for j of '[1]'
+/// @example decode('[1]') -> kind !! ''    // 'array'
 export func kind(j: Json): string
 
 /// Whether a Json is the JSON null.
-/// @pure
-/// @example is_null(j)    // true, for j of 'null'
-export func is_null(j: Json): bool
+/// @example decode('null') -> is_null !! false    // true
+export func is_null(j: Json): bool {
+    return kind(j) == 'null'
+}
 
 /// The member key of an object; null when j is not an object, has no such member, or is null
-/// itself (so that calls chain: j->get<'a'>->get<'b'>). A `Json!` gives a `Json!?`: the null is
-/// the nullable layer, and the error of a document that had failed is passed on unchanged.
+/// itself (so that calls chain: `j->get<key: 'a'>->get<key: 'b'>`).
 /// @pure
-/// @example j->get<'a'>    // 1, a Json?, for j of '{"a": 1}'
+/// @example (decode('{"a": 1}')->get<key: 'a'>->as_int ?? 0) !! -1    // 1
 with <key: string>
 export func get(j: Json): Json?
 with <key: string>
@@ -57,14 +75,11 @@ export func get(j: Json!): Json!?
 with <key: string>
 export func get(j: Json!?): Json!?
 
-/// The element index of an array; null when j is not an array, the index is out of range, or j
-/// is null itself. The with-parameter is `key`, the name the member-key declarations above use:
-/// the position means which member of the Json to take, and the argument's type says whether it
-/// is written as a string or as an integer, so `get<key: 'a'>` and `get<key: 0>` name the same
-/// position of every declaration of `get`. A `Json!` gives a `Json!?`, as the member-key form
-/// does.
+/// The element key of an array; null when j is not an array, the index is out of range, or j is
+/// null itself. The with-parameter is called `key` as in the member form above: which member of
+/// the Json to take is written as a string or as an integer, and the argument's type says which.
 /// @pure
-/// @example j->get<1>->as_int ?? 0    // 6, for j of '[5, 6]'
+/// @example (decode('[5, 6]')->get<key: 1>->as_int ?? 0) !! -1    // 6
 with <key: int>
 export func get(j: Json): Json?
 with <key: int>
@@ -74,56 +89,71 @@ export func get(j: Json!): Json!?
 with <key: int>
 export func get(j: Json!?): Json!?
 
-/// The bool a Json holds; null for any other kind (and a `Json!` gives a `bool!?`, the error of
-/// the document passed on unchanged).
+/// The bool a Json holds; null for any other kind.
 /// @pure
-/// @example j->as_bool ?? false    // true, for j of 'true'
+/// @example (decode('true')->as_bool ?? false) !! false    // true
 export func as_bool(j: Json): bool?
 export func as_bool(j: Json?): bool?
 export func as_bool(j: Json!): bool!?
 export func as_bool(j: Json!?): bool!?
 
-/// The integer a Json holds; null for any other kind (a number with a fraction is not an int),
-/// and a `Json!` gives an `int!?` with the error of the document passed on unchanged.
+/// The integer a Json holds; null for any other kind (a number with a fraction is not an int).
 /// @pure
-/// @example j->as_int ?? 0    // 42, for j of '42'
+/// @example (decode('42')->as_int ?? 0) !! 0    // 42
 export func as_int(j: Json): int?
 export func as_int(j: Json?): int?
 export func as_int(j: Json!): int!?
 export func as_int(j: Json!?): int!?
 
-/// The number a Json holds, an integer included; null for any other kind, and a `Json!` gives a
-/// `float!?` with the error of the document passed on unchanged.
+/// The number a Json holds, an integer included; null for any other kind.
 /// @pure
-/// @example j->as_float ?? 0.0    // 2.0, for j of '2'
+/// @example (decode('2')->as_float ?? 0.0) !! 0.0    // 2.0
 export func as_float(j: Json): float?
 export func as_float(j: Json?): float?
 export func as_float(j: Json!): float!?
 export func as_float(j: Json!?): float!?
 
-/// The string a Json holds; null for any other kind, and a `Json!` gives a `string!?` with the
-/// error of the document passed on unchanged.
+/// The string a Json holds; null for any other kind.
 /// @pure
-/// @example j->as_string ?? ''    // 'hi', for j of '"hi"'
+/// @example (decode('"hi"')->as_string ?? '') !! ''    // 'hi'
 export func as_string(j: Json): string?
 export func as_string(j: Json?): string?
 export func as_string(j: Json!): string!?
 export func as_string(j: Json!?): string!?
 
-/// The elements of a JSON array; null for any other kind, and a `Json!` gives a `Json[]!?` with
-/// the error of the document passed on unchanged.
+/// The elements of a JSON array; null for any other kind.
 /// @pure
-/// @example len(j->as_array ?? [])    // 2, for j of '[1, "a"]'
+/// @example len((decode('[1, "a"]')->as_array ?? []) !! [])    // 2
 export func as_array(j: Json): Json[]?
 export func as_array(j: Json?): Json[]?
 export func as_array(j: Json!): Json[]!?
 export func as_array(j: Json!?): Json[]!?
 
-/// The members of a JSON object, by name; null for any other kind, and a `Json!` gives a
-/// `Map<string, Json>!?` with the error of the document passed on unchanged.
+/// The members of a JSON object, by name; null for any other kind.
 /// @pure
-/// @example keys(j->as_object ?? ([] as Map<string, Json>))    // ['a', 'b'], for j of '{"b": 1, "a": 2}'
+/// @example len((decode('{"b": 1, "a": 2}')->as_object ?? ([] as Map<string, Json>)) !! ([] as Map<string, Json>))    // 2
 export func as_object(j: Json): Map<string, Json>?
 export func as_object(j: Json?): Map<string, Json>?
 export func as_object(j: Json!): Map<string, Json>!?
 export func as_object(j: Json!?): Map<string, Json>!?
+
+/// The JSON text of a value, on one line, or indented by `indent` spaces per level when an indent
+/// is given. The type of the value must have a JSON form: numbers, bool, string, null, a Json, and
+/// arrays, tuples, structs, sets and maps with string keys of those; a function or a tensor is
+/// refused when the call is compiled. A map is written with its keys in order, a struct with its
+/// fields in the order of its type, so the same value gives the same text.
+/// @pure
+/// @fails fault `InvalidArgument` when indent is negative
+/// @example [1, 2]->encode    // '[1,2]'
+/// @example [1, 2]->encode<indent: 2>    // '[\n  1,\n  2\n]'
+with <indent: int? = null>
+export func encode::<T>(value: T): string when has_json_form::<T>()
+
+/// The value a JSON text (or a Json decoded before) describes, decoded to the type T. A part of
+/// T typed `Json` takes whatever is there. T is given where the call is written or taken from
+/// where the result goes (`let cfg: Config! = text->decode_as`).
+/// @pure
+/// @fails error value `JsonTypeError` when the text is JSON of another type (the message gives the path of the mismatch); error value `JsonParseError` when the text is not JSON; error value `JsonTooDeep` when the document nests deeper than the limit
+/// @example decode_as::<Map<string, int>>('{"a": 1}')    // {a: 1}
+export func decode_as::<T>(source: string): T! when has_json_form::<T>()
+export func decode_as::<T>(source: Json): T! when has_json_form::<T>()

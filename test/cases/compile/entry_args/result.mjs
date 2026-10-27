@@ -85,7 +85,7 @@ for (const pass of [null, 'std::fvm', 'std::nvm', 'std::jit', 'std::tf']) {
 {
     const out = path.join(tmp, 'void.txt')
     const program = path.join(tmp, 'void_main.cml')
-    fs.writeFileSync(program, "module void_main\n\nfunc main(n: int): void sync {\n    println(n)\n}\n")
+    fs.writeFileSync(program, "func main(n: int): void sync {\n    println(n)\n}\n")
     const proc = spawnSync(CAMEL, ['--output-format', 'json', program, '--arg', 'n=3', '-o', out], { env, encoding: 'utf8' })
     let name = '(none)'
     let line = -1
@@ -99,7 +99,7 @@ for (const pass of [null, 'std::fvm', 'std::nvm', 'std::jit', 'std::tf']) {
         name = `unparsed: ${proc.stdout}`
     }
     check(
-        proc.status === 1 && name === 'RuntimeDiag::EntryResultNotWritten' && line === 2 && !fs.existsSync(out),
+        proc.status === 1 && name === 'RuntimeDiag::EntryResultNotWritten' && line === 0 && !fs.existsSync(out),
         'void result: EntryResultNotWritten at main, no file',
         `void result: exit ${proc.status}, ${name} line ${line}`,
     )
@@ -142,7 +142,7 @@ for (const pass of [null, 'std::fvm', 'std::nvm', 'std::jit', 'std::tf']) {
 {
     // No -o and no result: nothing is printed and nothing is refused.
     const program = path.join(tmp, 'void_main2.cml')
-    fs.writeFileSync(program, "module void_main2\n\nfunc main(n: int): void sync {\n    println(n)\n}\n")
+    fs.writeFileSync(program, "func main(n: int): void sync {\n    println(n)\n}\n")
     const proc = spawnSync(CAMEL, [program, '--arg', 'n=3'], { env, encoding: 'utf8' })
     check(
         proc.status === 0 && normalizeNewlines(proc.stdout) === '3\n',

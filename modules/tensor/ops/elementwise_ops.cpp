@@ -3,7 +3,7 @@
 
 /*
  * Elementwise operators: broadcasting arithmetic and comparison (tensor with
- * tensor or scalar), unary maps, `where`, and `cast`.
+ * tensor or scalar), unary maps, `where`, and the element-wise type conversions.
  *
  * Operators are generated from small tables so that one kernel wrapper and
  * one inference function serve each family. Binary operators require at
@@ -108,7 +108,7 @@ TypeCode computedElementType(TypeCode element, TypeCode scalar) {
 /// extents are known or open, and the report names the conversion to write
 /// (refuseMixedElementTypes). An integer or a bool is an element type like any other: a number
 /// becoming one is a conversion the program writes, so a mask is written `where(mask, x, 0.0)` or
-/// `cast(mask, "f32")`.
+/// `f32(mask)`.
 ///
 /// The two operands the rule reads are named by index: an operator's operands are not always its
 /// first two, and `where` reads its condition first and the two values it chooses between after
@@ -263,51 +263,6 @@ slot_t whereKernel(ArgsView &, ArgsView &norm, context::Context &) {
 std::optional<Type *> whereInfer(const InferContext &ctx) {
     const TensorFacts c = ctx.facts(0), a = ctx.facts(1), b = ctx.facts(2);
     return tensorOf(operandType(ctx, 1, 2), broadcast(c.shape, broadcast(a.shape, b.shape)));
-}
-
-/// Element type named by a cast target string. The names follow the language: `float` is f64
-/// (it is another spelling of `f64`), `f32` is float32, `int` is i64. A cast is the explicit
-/// conversion the language offers; it converts the values, and the result type is the one
-/// named, never a storage type the name was quietly replaced with.
-TypeCode dtypeFromName(const std::string &name) {
-    if (name == "float32" || name == "f32") {
-        return TypeCode::Float32;
-    }
-    if (name == "float64" || name == "float" || name == "double" || name == "f64") {
-        return TypeCode::Float64;
-    }
-    if (name == "int32" || name == "i32") {
-        return TypeCode::Int32;
-    }
-    if (name == "int64" || name == "int" || name == "long" || name == "i64") {
-        return TypeCode::Int64;
-    }
-    if (name == "bool") {
-        return TypeCode::Bool;
-    }
-    if (name == "bfloat16" || name == "bf16") {
-        return TypeCode::BFloat16;
-    }
-    if (name == "float16" || name == "half" || name == "f16") {
-        return TypeCode::Float16;
-    }
-    throw std::invalid_argument("cast: unknown dtype '" + name + "'");
-}
-
-slot_t castKernel(ArgsView &, ArgsView &norm, context::Context &) {
-    return runKernel("cast", [&] {
-        Array *input = tensorArg(norm, 0, true);
-        const TypeCode target = dtypeFromName(stringArg(norm, 1));
-        return wrap(norm.resultType(), k::cast(input, target, resultAllocator()));
-    });
-}
-
-std::optional<Type *> castInfer(const InferContext &ctx) {
-    std::optional<TypeCode> dtype;
-    if (auto name = ctx.constString(1)) {
-        dtype = dtypeFromName(*name);
-    }
-    return tensorOf(dtype, ctx.facts(0).shape);
 }
 
 // ---------------------------------------------------------------- VJP rules
@@ -516,24 +471,6 @@ void whereVjp(VjpBuilder &b, const VjpCall &call) {
     }
 }
 
-// cast(t, dtype): the gradient returns to t's dtype. `cast` also accepts a numeric array, and a
-// numeric array is a tensor here (a tensor is a numeric array: `isTensorType` is
-// `isNumericArrayType`), so its gradient is that array's, taken back to the width its own type
-// states by `tensor:cast_like` rather than refused -- the array's gradient used to be dropped
-// silently because `castVjp` answered the *output's* width and the accumulator refused a gradient
-// of another element type than the value's. A container `cast` converts but cannot carry a
-// gradient back into is refused by name while it depends on a differentiated parameter
-// (`hasTensorAdjoint`).
-void castVjp(VjpBuilder &b, const VjpCall &call) {
-    requireVjpInputs(call, 2, 2);
-    if (auto dy = b.gradientOf(call.output); dy) {
-        if (!hasTensorAdjoint(b, call, call.inputs[0], "its input")) {
-            return;
-        }
-        b.accumulateGradient(call.inputs[0], tensorCastTo(b, call.inputs[0], *dy));
-    }
-}
-
 } // namespace
 
 std::vector<OpDef> elementwiseOps() {
@@ -585,15 +522,6 @@ std::vector<OpDef> elementwiseOps() {
         .kernel    = &whereKernel,
         .traits    = elementwiseTraits(),
     });
-    defs.push_back(OpDef{
-        .name      = "cast",
-        .exports   = {"cast"},
-        .params    = {{"t", ParamKind::TensorLike}, {"dtype", ParamKind::String}},
-        .resultDoc = "float[..]",
-        .infer     = castInfer,
-        .kernel    = &castKernel,
-        .traits    = elementwiseTraits(),
-    });
     setVjp(defs, "add", &addVjp);
     setVjp(defs, "subtract", &subtractVjp);
     setVjp(defs, "multiply", &multiplyVjp);
@@ -613,7 +541,6 @@ std::vector<OpDef> elementwiseOps() {
     setVjp(defs, "gelu", &geluVjp);
     setVjp(defs, "erf", &erfVjp);
     setVjp(defs, "where", &whereVjp);
-    setVjp(defs, "cast", &castVjp);
     // Comparisons are locally constant.
     for (std::string_view name : {"lt", "le", "gt", "ge", "strict_eq", "strict_neq"}) {
         setVjp(defs, name, &camel::core::noGradient);

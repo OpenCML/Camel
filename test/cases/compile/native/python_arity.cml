@@ -1,13 +1,12 @@
 /**
- * The declaration of `python:py_exec` takes one ordinary argument, a `string`: a second one is
+ * The declaration of `python:exec` takes one ordinary argument, a `string`: a second one is
  * refused at the call, and the overload the message lists is the declaration from
  * `stdlib/python.cml`.
  */
-module python_arity
 
-import { py_exec } from python
+import { exec } from python
 
 func main(): int sync {
-    py_exec("x = 1", "y = 2")
+    exec("x = 1", "y = 2")
     return 0
 }

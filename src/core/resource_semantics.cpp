@@ -15,6 +15,7 @@
 #include "camel/core/type/base.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/enum.h"
+#include "camel/core/type/other.h"
 
 namespace camel::core::sem {
 
@@ -222,6 +223,10 @@ std::optional<std::string> checkResources(const ResourceSpec &spec) {
     return std::nullopt;
 }
 
+AccessMode uniteAccess(AccessMode left, AccessMode right) {
+    return left == right ? left : AccessMode::ReadModifyWrite;
+}
+
 std::string toString(const ResourceAccess &access) {
     std::string out =
         std::format("{} {}", accessModeName(access.mode), resourceClassName(access.resource.cls));
@@ -302,9 +307,6 @@ ResourceSignature signatureOf(const ResourceSpec &spec, size_t withCount) {
     sig.result  = spec.result;
     sig.allocates = spec.allocates;
     sig.external  = spec.externalEffect;
-    const auto uniteMode = [](AccessMode a, AccessMode b) {
-        return writes(a) || writes(b) ? AccessMode::ReadModifyWrite : AccessMode::Read;
-    };
     for (const ResourceAccess &access : spec.accesses) {
         switch (access.binding.kind) {
         case ResourceBinding::Kind::Norm:
@@ -335,7 +337,7 @@ ResourceSignature signatureOf(const ResourceSpec &spec, size_t withCount) {
                 if (found->name.empty()) {
                     found->name = access.resource.name;
                 }
-                found->mode = uniteMode(found->mode, access.mode);
+                found->mode = uniteAccess(found->mode, access.mode);
             }
             break;
         }
@@ -348,7 +350,7 @@ ResourceSignature signatureOf(const ResourceSpec &spec, size_t withCount) {
                     ResourceSignature::AmbientUse{
                         .name = access.resource.name, .mode = access.mode});
             } else {
-                found->mode = uniteMode(found->mode, access.mode);
+                found->mode = uniteAccess(found->mode, access.mode);
             }
             break;
         }
@@ -427,6 +429,14 @@ bool covers(const ResourceSignature &target, const ResourceSignature &source) {
     return true;
 }
 
+std::string resourceDisplayName(std::string_view key) {
+    const size_t colon = key.find(':');
+    if (colon == std::string_view::npos || (colon + 1 < key.size() && key[colon + 1] == ':')) {
+        return std::string(key);
+    }
+    return std::string(key.substr(0, colon)) + "::" + std::string(key.substr(colon + 1));
+}
+
 std::span<const std::string_view> standardResourceNames() {
     // Design principles 3.3: the state the language gives every program, with the names a
     // declaration uses for it. `rng`, `tensor:generator` and the other module resources are
@@ -453,12 +463,18 @@ bool isHandleType(const type::Type *type) {
         const auto *enumType = static_cast<const type::EnumType *>(type);
         return enumType->decl() != nullptr && enumType->decl()->handle();
     }
+    if (type->isOtherType()) {
+        return static_cast<const type::OtherType *>(type)->isResourceHandle();
+    }
     return false;
 }
 
 std::string handleResourceName(const type::Type *type) {
     if (!isHandleType(type)) {
         return {};
+    }
+    if (type->isOtherType()) {
+        return static_cast<const type::OtherType *>(type)->resourceHandleName();
     }
     std::string name;
     std::string module;
@@ -491,7 +507,7 @@ std::string toString(const ResourceSignature &signature) {
         add(std::format("#{}", use.index));
     }
     for (const auto &use : signature.ambient) {
-        add(use.name);
+        add(resourceDisplayName(use.name));
     }
     for (ResourceClass cls : signature.anyOf) {
         add(std::format("any {}", resourceClassName(cls)));

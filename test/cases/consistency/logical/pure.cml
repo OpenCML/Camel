@@ -2,7 +2,6 @@
  * `&&` and `||` outside a sync block: the value is the same, and an effect on the right
  * side follows the rule of every arm (it runs when the arm is entered and its value used).
  */
-module pure
 
 func inside(x: int, lo: int, hi: int): bool {
     return x >= lo && x <= hi

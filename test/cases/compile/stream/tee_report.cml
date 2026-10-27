@@ -5,7 +5,6 @@
  * told to expect and not what it needed; a width wider than the implementation honours is clamped
  * to its cap; and a `tee` called with no width takes the default.
  */
-module stream_tee_report
 
 import stream
 
@@ -24,11 +23,11 @@ func total(s: int..): int {
 func main(): int sync {
     // A hint of 2, and one side reads all 20 elements before the other reads any: the buffer holds
     // 20, which is what the report shows as the peak.
-    let (wide, lazy) = stream::tee(count(20), 2)
+    let (wide, lazy) = stream::tee<2>(count(20))
     println(total(wide))
     println(total(lazy))
     // A hint wider than the implementation honours: clamped to the cap, and not a fault.
-    let (capped, other) = stream::tee(count(3), 1000000)
+    let (capped, other) = stream::tee<1000000>(count(3))
     println(total(capped))
     println(total(other))
     // And with no width at all, the default.

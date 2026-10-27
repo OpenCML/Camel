@@ -3,7 +3,6 @@
  * call, and the overload the message lists is the declaration's `() => bool` — `stdlib/tiles.cml`,
  * not the C++ module (step 10).
  */
-module tiles_arity
 
 import { available } from tiles
 

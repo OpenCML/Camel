@@ -1,4 +1,3 @@
-module cyc_a
 import { odd } from cyc_b
 
 export func even(n: int): bool {
