@@ -796,7 +796,7 @@ tells one tee from another and whose type the operator takes, and whose elements
 A program does not write this: `tee` calls it once per element it pulls, and `std::profile`
 prints what it recorded (`STREAM_TEE`).
 
-- Example (a fragment, not compiled): `tee_note(8, 64, 2, 2, s)` gives `the tee written `tee(s, 8)` reports itself this way`
+- Example (a fragment, not compiled): `tee_note(8, 64, 2, 2, s)` gives `the tee written `s->tee<8>` reports itself this way`
 - Why it is not compiled: the last operand is the stream a tee reads, and no example program has one
 
 <a id="str"></a>
@@ -2804,23 +2804,23 @@ f(xs[i], ys[i]) for every i.
 
 ## `stream`: producing and consuming streams
 
-Streams, written in Camel. A stream's value is its step function together with its state (design
-principles 5.4, and the reading of 2026-10-26): `T..` is an ordinary function value of the
-signature `() => (T, T..)?`, one call is one pull, and a pull answers the next element together
-with the rest of the stream -- `null` when the stream is over. So the producers here are
-ordinary functions that return such a closure, and the consumer is `for x in s`, which the
-compiler expands on the graph into the `while` it already has (language reference 7.3.2). No
-part of this module needs a new node kind, and none of it runs anything by itself: pulling is
-what runs, one element at a time.
+Streams, written in Camel. A stream is a value: `T..` is a step function together with its
+state, an ordinary function value of the signature `() => (T, T..)?`. One call is one pull; a
+pull answers the next element together with the rest of the stream, or `null` when the stream
+is over. The consumer is `for x in s`, which the compiler expands on the graph into the `while`
+it already has (language reference 7.3.2), so nothing here needs a node kind of its own and
+nothing runs until something pulls.
 
-- `unfold(state, step)` is the smallest producer: a state and a step that answers the next
-  element with the state after it, or `null` when the stream is over. A `yield` generator
-  compiles to the same kind of value, and one written `#op` source can hand one out too.
-- `tee(s, n)` is the one way to read one stream from two places: it reads `s` once and gives two
-  streams, each of which is read once, and both see the same elements.
-- A stream is a value and is pure, so pulling the same stream value twice answers the same
-  element; the rest a pull hands out is what threads the stream, and the consumer passes it on.
-  One stream value has one consumer per execution path (design principles 5.4).
+- A stream is consumed once: on every execution path a stream value has one consumer, and a
+  second use is a compile-time error (design principles 5.4). A function that takes a stream
+  takes it as an argument; a lambda cannot capture one. So every transformation below keeps the
+  upstream stream as the state of `unfold` (an argument of its step), never in a closure.
+- The transformations are pure and lazy: an element is computed when something pulls it, and
+  not before. Sharing is written, with `tee`.
+- A generator (`yield`) produces the same kind of value; `unfold` is the producer for a state
+  and a step that need no generator.
+- What depends on the order of arrival or on time (merging streams, windows by time) is not
+  here: those declare their non-determinism and belong to the libraries that own a clock.
 
 ### Producing
 
@@ -2831,18 +2831,134 @@ unfold: (state: S, step: (state: S) => (T, S)?) => T..
 ```
 
 The stream of what `step` answers from `state` on: one element with the state after it, or
-`null` when there is nothing more. The first round of `for x in s` over it is `step(state)`,
-and every later round is a pull of the rest, so the states are threaded rather than repeated.
+`null` when there is nothing more. The states are threaded, not repeated.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `loop acc = 0 for x in unfold(3, (n: int) => if n > 0 then (n, n - 1) else null) do acc + x` gives `6`
 
-### Splitting
+#### `empty`
+
+```camel
+empty: () => T..
+```
+
+The stream with no element.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `loop n = 0 for x in empty::<int>() do n + 1` gives `0`
+
+#### `from_array`
+
+```camel
+from_array: (xs: T[]) => T..
+```
+
+The elements of xs, in order.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `loop acc = 0 for x in from_array([1, 2, 3]) do acc + x` gives `6`
+
+#### `iterate`
+
+```camel
+iterate: <f: (x: T) => T> (x: T) => T..
+```
+
+x, f(x), f(f(x)), ... without end.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `1->iterate<(x: int) => x * 2>->take<4>->collect` gives `[1, 2, 4, 8]`
+
+### Transforming
+
+#### `map`
+
+```camel
+map: <f: (x: T) => U> (s: T..) => U..
+```
+
+f of every element.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `from_array([1, 2, 3])->map<(x: int) => x * 2>->collect` gives `[2, 4, 6]`
+
+#### `filter`
+
+```camel
+filter: <pred: (x: T) => bool> (s: T..) => T..
+```
+
+The elements for which pred is true, in order.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `from_array([1, 2, 3, 4])->filter<(x: int) => x % 2 == 0>->collect` gives `[2, 4]`
+
+#### `take`
+
+```camel
+take: <n: int> (s: T..) => T..
+```
+
+The first n elements; fewer when the stream ends first, none when n is not positive. The
+element after the n-th is never pulled.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `1->iterate<(x: int) => x + 1>->take<3>->collect` gives `[1, 2, 3]`
+
+#### `scan`
+
+```camel
+scan: <f: (acc: A, x: T) => A, init: A> (s: T..) => A..
+```
+
+The running results of folding the elements with f from init: one per element, the first
+being f(init, first element).
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `from_array([1, 2, 3])->scan<(acc: int, x: int) => acc + x, 0>->collect` gives `[1, 3, 6]`
+
+#### `chunks`
+
+```camel
+chunks: <k: int> (s: T..) => T[]..
+```
+
+The elements in arrays of k, in order; the last array is shorter when the stream does not end
+on a multiple of k.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `from_array([1, 2, 3])->chunks<2>->collect` gives `[[1, 2], [3]]`
+
+#### `zip`
+
+```camel
+zip: (a: T.., b: U..) => (T, U)..
+```
+
+The elements of two streams in pairs, until the shorter ends.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `zip(from_array([1, 2]), from_array(['a', 'b', 'c']))->collect` gives `[(1, 'a'), (2, 'b')]`
+
+### Consuming
+
+#### `collect`
+
+```camel
+collect: (s: T..) => T[]
+```
+
+All the elements, as an array. The stream must end: a stream without end never returns.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `from_array([1, 2, 3])->collect` gives `[1, 2, 3]`
+
+### Sharing
 
 #### `tee`
 
 ```camel
-tee: (s: T.., n: int = 8) => (T.., T..)
+tee: <n: int = 8> (s: T..) => (T.., T..)
 ```
 
 Two streams over the elements of `s` (design principles 5.4), each read once, both seeing the
@@ -2853,8 +2969,8 @@ The result is a tuple, and taking it apart is what consumes the two streams; the
 themselves are values like any other, so a `tee` of one of them is another `tee`.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example (a fragment, not compiled): `let (left, right) = tee(unfold(3, (n: int) => if n > 0 then (n, n - 1) else null), 2)`
-- Why it is not compiled: the two streams are live values a page shows; a program reads them where it consumes them
+- Example (a fragment, not compiled): `let (left, right) = unfold(3, (n: int) => if n > 0 then (n, n - 1) else null)->tee<2>`
+- Why it is not compiled: a pair of streams is bound by a destructuring `let`, a statement
 
 <a id="math"></a>
 

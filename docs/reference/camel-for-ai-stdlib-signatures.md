@@ -277,11 +277,21 @@ flat_map: <f: (x: T) => U[]> (xs: T[]) => U[]
 zip_with: <f: (a: T, b: U) => V> (xs: T[], ys: U[]) => V[]
 ```
 
-**`stream`** — import { ... } from stream — 2 name(s)
+**`stream`** — import { ... } from stream — 12 name(s)
 
 ```text
 unfold: (state: S, step: (state: S) => (T, S)?) => T..
-tee: (s: T.., n: int = 8) => (T.., T..)
+empty: () => T..
+from_array: (xs: T[]) => T..
+iterate: <f: (x: T) => T> (x: T) => T..
+map: <f: (x: T) => U> (s: T..) => U..
+filter: <pred: (x: T) => bool> (s: T..) => T..
+take: <n: int> (s: T..) => T..
+scan: <f: (acc: A, x: T) => A, init: A> (s: T..) => A..
+chunks: <k: int> (s: T..) => T[]..
+zip: (a: T.., b: U..) => (T, U)..
+collect: (s: T..) => T[]
+tee: <n: int = 8> (s: T..) => (T.., T..)
 ```
 
 **`math`** — import { ... } from math — 48 name(s)
