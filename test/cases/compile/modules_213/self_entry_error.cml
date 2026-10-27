@@ -1,4 +1,4 @@
-// A module importing itself is not loaded a second time: an error of it is reported once.
+// A module's import never resolves to itself: this module's own import is not found, and the build stops there.
 
 import self_entry_error
 

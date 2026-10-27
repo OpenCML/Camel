@@ -1,3 +1,8 @@
+// A file that imports a module of its own name: the lookup passes this file over and goes on
+// through the search order, and nothing else is named `self_import`, so the import is not found.
+// (The compiler used to crash here; then a module importing itself was accepted with no effect, as
+// a cycle at its shortest.)
+
 import self_import
 
 func main(): int sync {

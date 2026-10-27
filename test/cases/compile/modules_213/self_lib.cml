@@ -1,4 +1,4 @@
-// A module that imports itself (design principles 10.1): no effect.
+// A module whose import names its own file: the lookup passes that file over, and nothing else has the name.
 
 import self_lib
 

@@ -768,9 +768,12 @@ void_ptr_t Builder::visitImport(const AST::node_ptr_t &ast) {
         throw BuildAbortException();
     }
 
-    // A module importing itself: allowed, and it has no effect (design principles 10.1). Its
-    // names are its own already (with or without its own name in front, 10.2); the import
-    // binds nothing, and records no import a cycle could be made of.
+    // An import never resolves to the module that writes it (design principles 10.1): the lookup
+    // passes over the module's own file, so `math.cml`'s `import math` is the standard library's
+    // module and a name no other module of the search order has is not found at all. This branch
+    // therefore does not stand for a rule but for a lookup that handed back this module anyway: the
+    // import binds nothing rather than binding the names this module already has, and records no
+    // import a cycle could be made of.
     if (mod == module_) {
         LEAVE("ImportDecl");
         return nullptr;
