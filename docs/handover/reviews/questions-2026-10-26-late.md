@@ -260,3 +260,9 @@
 3. **开秩梯度**：已裁，见本文件 `open-rank-parameter-and-concrete-gradient` 一节：优化器用汇合关系配对，不用相等。
    - 模型进 `with <m: Mlp>` 位置后，`m` 的类型是声明类型 `Mlp`：带类型的绑定位置给出声明的类型，与 `let x: T = …` 同一条规则。
 4. **`30_diagnostics_reporting.md` 的测量记录**：保留原样，只在那一段末尾加一句"`ConstructNotSupported` 已于 `0364b7ab7` 退场"。记录就是当时量到的数，不为一个退场的码重做整份调查。
+
+## 主线补充：`std::cpp` 的翻译覆盖
+
+`statistics`、`random` 接入时（决策者这边，即将合入）测出，`std::cpp` 翻译不了 `:op/fail`、`array:argsort` 和 `tensor` 的核函数。结果 `permutation`、`shuffle`、`sample` 和 `statistics` 在 C++ 导出时被拒，cppexec 的一致性列表只能裁到标量核心。
+- **排进你们的主线**：`fail` 翻成带位置的故障，`argsort` 照核函数翻，`tensor` 核函数按已有的数组运算翻。补齐后把 cppexec 列表恢复。
+- 与写捕获变量的调用（上文已记）同属"标准库里有的，C++ 导出都要能翻"。
