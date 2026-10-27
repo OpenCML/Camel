@@ -23,6 +23,9 @@
 #include "minmax.h"
 #include "parallel.h"
 
+#include "camel/core/error/runtime.h"
+#include "camel/utils/int_div.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -298,7 +301,13 @@ template <typename T> T applyBinary(BinaryOp op, T a, T b) {
     case BinaryOp::Mul:
         return static_cast<T>(a * b);
     case BinaryOp::Div:
-        return static_cast<T>(a / b);
+        if constexpr (std::is_same_v<T, int32_t> || std::is_same_v<T, int64_t>) {
+            // The quotient of the language: truncated towards zero, the smallest value over -1
+            // wrapping (int_div.h). A zero divisor was refused before the loop (binary).
+            return camel::utils::quotient<T>(a, b);
+        } else {
+            return static_cast<T>(a / b);
+        }
     case BinaryOp::Pow:
         if constexpr (camel::core::rtdata::is_reduced_float_v<T>) {
             // The power functions are computed in f32 and rounded once into the element type,
@@ -320,6 +329,8 @@ template <typename T> T applyBinary(BinaryOp op, T a, T b) {
             // The language's `%` is the truncated remainder (camel::utils::remainder, int_div.h):
             // on a floating element type that is fmod, the same definition, not a floor.
             return static_cast<T>(std::fmod(a, b));
+        } else if constexpr (std::is_same_v<T, int32_t> || std::is_same_v<T, int64_t>) {
+            return camel::utils::remainder<T>(a, b);
         } else {
             return static_cast<T>(a % b);
         }
@@ -601,7 +612,7 @@ bool unaryProducesFloat(UnaryOp op) {
     return op != UnaryOp::Neg && op != UnaryOp::Abs && op != UnaryOp::Relu;
 }
 
-bool binaryProducesFloat(BinaryOp op) { return op == BinaryOp::Div || op == BinaryOp::Pow; }
+bool binaryProducesFloat(BinaryOp op) { return op == BinaryOp::Pow; }
 
 Shape broadcastShapes(std::span<const int64_t> lhs, std::span<const int64_t> rhs) {
     const std::span<const int64_t> shapes[] = {lhs, rhs};
@@ -663,6 +674,26 @@ Array *binary(BinaryOp op, Operand lhs, Operand rhs, mm::IAllocator &allocator) 
     const BroadcastPlan plan                = makePlan(shapes);
     const TypedBuffer a                     = asDType(lhs, outType);
     const TypedBuffer b                     = asDType(rhs, outType);
+    if (op == BinaryOp::Div || op == BinaryOp::Mod) {
+        // An integer quotient or remainder by zero is a fault, as the scalar one is (the float
+        // quotient by zero is an infinity). Every element of the divisor meets some element of the
+        // dividend unless the result is empty.
+        dispatchDType(outType, [&]<typename T>() {
+            if constexpr (std::is_same_v<T, int32_t> || std::is_same_v<T, int64_t>) {
+                if (numelOf(plan.outShape) == 0) {
+                    return;
+                }
+                const T *divisor     = static_cast<const T *>(b.data);
+                const uint64_t count = numelOf(rhs.shape);
+                for (uint64_t i = 0; i < count; ++i) {
+                    if (divisor[i] == 0) {
+                        camel::core::error::throwRuntimeFault(
+                            camel::core::error::RuntimeDiag::DivisionByZero);
+                    }
+                }
+            }
+        });
+    }
     Array *out = createTensor(outType, plan.outShape, allocator);
     dispatchDType(outType, [&]<typename T>() {
         binaryTyped<T>(

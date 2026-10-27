@@ -345,44 +345,34 @@ shr: <count: int> (x: T) => T when is_same::<T, i32>()
 shr: <count: int> (x: T) => T when is_same::<T, int>()
 ```
 
-**`statistics`** — import { ... } from statistics — 5 name(s)
+**`statistics`** — import { ... } from statistics — 4 name(s)
 
 ```text
-mean: (xs: i32[]) => float
-mean: (xs: int[]) => float
-mean: (xs: f32[]) => float
-mean: (xs: float[]) => float
-stdev: (xs: i32[]) => float
-stdev: (xs: int[]) => float
-stdev: (xs: f32[]) => float
-stdev: (xs: float[]) => float
-variance: (xs: i32[]) => float
-variance: (xs: int[]) => float
-variance: (xs: f32[]) => float
-variance: (xs: float[]) => float
-median: (xs: i32[]) => float?
-median: (xs: int[]) => float?
-median: (xs: f32[]) => float?
-median: (xs: float[]) => float?
-quantile: <q: float> (xs: i32[]) => float?
-quantile: <q: float> (xs: int[]) => float?
-quantile: <q: float> (xs: f32[]) => float?
-quantile: <q: float> (xs: float[]) => float?
+variance: (xs: T[]) => T when is_float::<T>()
+stdev: (xs: T[]) => T when is_float::<T>()
+median: (xs: T[]) => T when is_float::<T>()
+quantile: <q: float> (xs: T[]) => T when is_float::<T>()
 ```
 
-**`random`** — import { ... } from random — 10 name(s)
+**`random`** — import { ... } from random — 16 name(s)
 
 ```text
-seed: (value: int) => void
+key: (seed: int) => Key
+fold: (k: Key, i: int) => Key
+split: (k: Key) => (Key, Key)
+uniform: (k: Key) => T when is_float::<T>()
+uniform_array: <shape: int[]> (k: Key) => T[..] when is_float::<T>()
+normal: (k: Key) => T when is_float::<T>()
+normal_array: <shape: int[]> (k: Key) => T[..] when is_float::<T>()
+randint: <low: int, high: int> (k: Key) => int
+permutation: (k: Key, n: int) => int[]
+shuffle: <k: Key> (xs: T[]) => T[]
+choice: <k: Key> (xs: T[]) => T
+sample: <k: Key, n: int> (xs: T[]) => T[]
+seed: (value: int) => void uses rng
+next_key: () => Key uses rng
 rand: () => float
 randn: () => float
-randint: (low: int, high: int) => int
-choice: (xs: T[]) => T
-sample: (xs: T[], n: int) => T[]
-shuffle: (xs: T[]) => T[]
-key: (seed: int) => { hi: int, lo: int }
-split: (key: { hi: int, lo: int }) => ({ hi: int, lo: int }, { hi: int, lo: int })
-permutation: (key: { hi: int, lo: int }, n: int) => int[]
 ```
 
 **`time`** — import { ... } from time — 3 name(s)

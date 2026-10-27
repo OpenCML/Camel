@@ -1,4 +1,3 @@
-# Keyed random (key, split, permutation) in std::cpp must print what std::fvm prints.
-test/cases/modules/random/keyed_random.cml
-test/cases/modules/random/random_independence.cml
-test/cases/modules/random/permutation_negative.cml
+# Keyed random (key, split, fold, the draws, the global stream) in std::cpp must print what std::fvm prints.
+# permutation and the whole-array draws sit on array:argsort and a tensor kernel, which std::cpp does not translate.
+test/cases/modules/random/keyed_scalars.cml

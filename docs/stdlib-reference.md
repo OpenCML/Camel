@@ -56,7 +56,7 @@ Not in this reference: the profiler (`perf`).
 | [array](#array) | `import { ... } from array` | Camel |
 | [stream](#stream) | `import { ... } from stream` | Camel |
 | [math](#math) | `import { ... } from math` | C++ |
-| [statistics](#statistics) | `import { ... } from statistics` | C++ |
+| [statistics](#statistics) | `import { ... } from statistics` | Camel |
 | [random](#random) | `import { ... } from random` | C++ |
 | [time](#time) | `import { ... } from time` | C++ |
 | [fs](#fs) | `import { ... } from fs` | C++ |
@@ -3409,111 +3409,241 @@ x shifted right by count bits, keeping the sign (an arithmetic shift): `-8->shr<
 
 <a id="statistics"></a>
 
-## `statistics`
+## `statistics`: variance, standard deviation, median and quantile
 
-Every function takes an array of numbers of one type (i32, int, f32 or float) and computes
-in float.
+Descriptive statistics of an array of floats, written in Camel on `array` (whose `mean` is the
+first of them).
 
-#### `mean`
-
-```camel
-mean: (xs: i32[]) => float
-mean: (xs: int[]) => float
-mean: (xs: f32[]) => float
-mean: (xs: float[]) => float
-```
-
-The arithmetic mean; 0 for an empty array.
-
-- Pure.
-- Example: `mean([1, 2, 3, 4])` gives `2.5`
-
-#### `stdev`
-
-```camel
-stdev: (xs: i32[]) => float
-stdev: (xs: int[]) => float
-stdev: (xs: f32[]) => float
-stdev: (xs: float[]) => float
-```
-
-The sample standard deviation (divisor n - 1); 0 for fewer than two elements.
-
-- Pure.
-- Example: `stdev([2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0])` gives `2.13809`
+Every function takes a float element type (`float`, `f32`, `bf16` or `f16`) and answers it.
+The elements are widened to f64, the statistic is computed there, and the result is rounded
+once into the element type: the rule of every float reduction. An array of integers is
+converted first (`xs->map<(x) => float(x)>`). A statistic that does not exist for the array
+(the standard deviation of one value) is a fault, as every reduction over too few elements is
+(design principles 7.7).
 
 #### `variance`
 
 ```camel
-variance: (xs: i32[]) => float
-variance: (xs: int[]) => float
-variance: (xs: f32[]) => float
-variance: (xs: float[]) => float
+variance: (xs: T[]) => T when is_float::<T>()
 ```
 
-The sample variance (divisor n - 1), the square of stdev; 0 for fewer than two elements.
+The sample variance (divisor n - 1).
 
-- Pure.
-- Example: `variance([1, 2, 3, 4])` gives `1.66667`
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Failure: fault `InvalidArgument` when the array has fewer than two elements.
+- Example: `[1.0, 2.0, 3.0, 4.0]->variance` gives `1.66667`
+
+#### `stdev`
+
+```camel
+stdev: (xs: T[]) => T when is_float::<T>()
+```
+
+The sample standard deviation (divisor n - 1).
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Failure: fault `InvalidArgument` when the array has fewer than two elements.
+- Example: `[2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]->stdev` gives `2.13809`
 
 #### `median`
 
 ```camel
-median: (xs: i32[]) => float?
-median: (xs: int[]) => float?
-median: (xs: f32[]) => float?
-median: (xs: float[]) => float?
+median: (xs: T[]) => T when is_float::<T>()
 ```
 
-The middle value of the sorted elements, the mean of the two middle ones for an even
-count; null for an empty array, NaN when an element is NaN.
+The middle value of the sorted elements, the mean of the two middle ones for an even count;
+NaN when an element is NaN.
 
-- Pure.
-- Example: `median([3, 1, 2]) ?? 0.0` gives `2`
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Failure: fault `InvalidArgument` when the array has no element.
+- Example: `[3.0, 1.0, 2.0]->median` gives `2`
 
 #### `quantile`
 
 ```camel
-quantile: <q: float> (xs: i32[]) => float?
-quantile: <q: float> (xs: int[]) => float?
-quantile: <q: float> (xs: f32[]) => float?
-quantile: <q: float> (xs: float[]) => float?
+quantile: <q: float> (xs: T[]) => T when is_float::<T>()
 ```
 
 The q-quantile, q from 0 to 1, by linear interpolation between the two nearest ranks
-(position q * (n - 1) of the sorted elements); null for an empty array, NaN when an
-element is NaN.
+(position q * (n - 1) of the sorted elements); NaN when an element is NaN.
 
-- Pure.
-- Failure: fault `InvalidArgument` when q is not between 0 and 1.
-- Example: `[1.0, 2.0, 3.0, 4.0, 5.0]->quantile<0.25> ?? 0.0` gives `2`
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Failure: fault `InvalidArgument` when q is not between 0 and 1, or the array has no element.
+- Example: `[1.0, 2.0, 3.0, 4.0, 5.0]->quantile<0.25>` gives `2`
 
 <a id="random"></a>
 
 ## `random`
 
-One generator for the whole process, and keyed functions that read none. The functions that
-draw from the generator are declared with effects and are never folded or merged by a pass;
-the keyed ones are pure, and the same key gives the same bits everywhere.
+Random numbers by key. A `Key` is a value; a function that draws takes a key and answers a
+number, and the same key gives the same bits on every device and every scheduler. Nothing is
+read or changed, so these functions are pure and an optimizer may share, move or batch them.
+To get several independent streams from one key, derive keys: `split(k)` gives two,
+`fold(k, i)` gives the i-th. A key is used for one draw, or to derive other keys, not both.
 
-After a seed the numbers are the same on every platform. The generator is the 64-bit Mersenne
-Twister (std::mt19937_64, seeded with the value as an unsigned 64-bit integer), and the draws
-are made by the project's own code (include/camel/utils/random.h), not by the C++ library's
-distributions, which differ between libraries: a float in [0, 1) is the generator's 64 bits
-times 2^-64; an integer in a range uses Lemire's method; a normal value uses Marsaglia's polar
-method (the second value of each pair is dropped); `shuffle` and `sample` take the generator's
-output modulo the number of places left.
+The generator is Philox4x32-10 (design principles 13.5). The integer functions are
+identical on every device. The normal distribution uses `log`, `sqrt`, `cos` and so holds
+to the error bound of `math`, not to the bit.
+
+Calls chain on what flows: the key is the data of a draw (`k->uniform::<f32>`), and what shapes
+the draw is configuration (`k->randint<1, 7>`, `xs->shuffle<k>`).
+
+For a program that wants a random number without passing keys there is one global stream, the
+resource `rng`: `seed(v)` starts it, `next_key()` takes the next key from it, and everything
+else is the keyed function applied to that key: `next_key()->randint<1, 7>`. Without `seed`
+the stream starts from seed 0, so a run is the same every time.
+
+### Keys
+
+#### `key`
+
+```camel
+key: (seed: int) => Key
+```
+
+The key of a seed.
+
+- Example: `key(42)` gives `{ hi: 0, lo: 42 }`
+
+#### `fold`
+
+```camel
+fold: (k: Key, i: int) => Key
+```
+
+The i-th key derived from k, i from 0. The same k and i always give the same key, and k is
+not changed.
+
+- Failure: fault `InvalidArgument` when i is negative.
+- Example: `key(42)->fold(3)`
+
+#### `split`
+
+```camel
+split: (k: Key) => (Key, Key)
+```
+
+Two independent keys derived from k: the same pair every time, and k is not changed.
+
+- Example: `let (a, b) = split(key(42))`
+
+### Draws
+
+#### `uniform`
+
+```camel
+uniform: (k: Key) => T when is_float::<T>()
+```
+
+A number drawn uniformly from 0 (included) to 1 (excluded).
+
+- Example: `key(42)->uniform::<f32>`
+
+#### `uniform_array`
+
+```camel
+uniform_array: <shape: int[]> (k: Key) => T[..] when is_float::<T>()
+```
+
+An array of the given shape; element i (row-major) is the scalar `uniform` of `fold(k, i)`.
+
+- Example: `key(42)->uniform_array::<f32><shape: [3, 4]>`
+
+#### `normal`
+
+```camel
+normal: (k: Key) => T when is_float::<T>()
+```
+
+A number drawn from the normal distribution with mean 0 and deviation 1 (Box-Muller).
+
+- Example: `key(42)->normal::<f32>`
+
+#### `normal_array`
+
+```camel
+normal_array: <shape: int[]> (k: Key) => T[..] when is_float::<T>()
+```
+
+An array of the given shape; element i (row-major) is the scalar `normal` of `fold(k, i)`.
+
+- Example: `key(42)->normal_array::<f32><shape: [3, 4]>`
+
+#### `randint`
+
+```camel
+randint: <low: int, high: int> (k: Key) => int
+```
+
+An integer drawn uniformly from low (included) to high (excluded).
+
+- Failure: fault `InvalidArgument` when high is not above low, or the range is wider than 2^62.
+- Example: `key(42)->randint<1, 7>`
+
+#### `permutation`
+
+```camel
+permutation: (k: Key, n: int) => int[]
+```
+
+A uniformly random permutation of 0 up to, not including, n: the positions ordered by one
+uniform draw each (the key folded with the position), ties keeping position order. Empty when n is not positive.
+
+- Example: `key(42)->permutation(4)`
+
+#### `shuffle`
+
+```camel
+shuffle: <k: Key> (xs: T[]) => T[]
+```
+
+The elements of xs in a random order, as a new array; xs is not changed.
+
+- Example: `[1, 2, 3]->shuffle<key(42)>`
+
+#### `choice`
+
+```camel
+choice: <k: Key> (xs: T[]) => T
+```
+
+One element of xs, drawn uniformly.
+
+- Failure: fault `InvalidArgument` when xs is empty.
+- Example: `['a', 'b', 'c']->choice<key(42)>`
+
+#### `sample`
+
+```camel
+sample: <k: Key, n: int> (xs: T[]) => T[]
+```
+
+n elements of xs drawn without replacement, as a new array.
+
+- Failure: fault `IndexOutOfRange` when n is negative or above the number of elements.
+- Example: `[1, 2, 3, 4]->sample<key(42), 2>`
+
+### The global stream
 
 #### `seed`
 
 ```camel
-seed: (value: int) => void
+seed: (value: int) => void uses rng
 ```
 
-Sets the state of the generator: the same seed gives the same sequence.
+Starts the global stream: the same seed gives the same sequence of keys.
 
-- With effects: sets the generator.
 - Example: `seed(42)`
+
+#### `next_key`
+
+```camel
+next_key: () => Key uses rng
+```
+
+The next key of the global stream, and the stream moves on: two calls give two keys.
+
+- Example: `next_key()`
 
 #### `rand`
 
@@ -3521,10 +3651,9 @@ Sets the state of the generator: the same seed gives the same sequence.
 rand: () => float
 ```
 
-A float drawn uniformly from 0 (included) to 1 (excluded).
+A number drawn uniformly from 0 (included) to 1 (excluded) from the global stream.
 
-- With effects: advances the generator.
-- Example: `rand()` gives `0.374540`
+- Example: `rand()`
 
 #### `randn`
 
@@ -3532,96 +3661,9 @@ A float drawn uniformly from 0 (included) to 1 (excluded).
 randn: () => float
 ```
 
-A float drawn from the normal distribution with mean 0 and deviation 1.
+A number drawn from the normal distribution with mean 0 and deviation 1, from the global stream.
 
-- With effects: advances the generator.
-- Example: `randn()` gives `-0.138264`
-
-#### `randint`
-
-```camel
-randint: (low: int, high: int) => int
-```
-
-An integer drawn uniformly from low to high, both included; the two are swapped when low is
-above high.
-
-- With effects: advances the generator.
-- Example: `randint(1, 6)` gives `4`
-
-#### `choice`
-
-```camel
-choice: (xs: T[]) => T
-```
-
-One element of xs, drawn uniformly.
-
-- With effects: advances the generator.
-- Failure: fault `InvalidArgument` when xs is empty.
-- Example: `choice(['a', 'b', 'c'])` gives `'b'`
-
-#### `sample`
-
-```camel
-sample: (xs: T[], n: int) => T[]
-```
-
-n elements of xs drawn without replacement, as a new array.
-
-- With effects: advances the generator.
-- Failure: fault `InvalidArgument` when n is negative or above the number of elements.
-- Example: `sample([1, 2, 3, 4], 2)` gives `[3, 1]`
-
-#### `shuffle`
-
-```camel
-shuffle: (xs: T[]) => T[]
-```
-
-The elements of xs in a random order, as a new array; xs is not changed.
-
-- With effects: advances the generator.
-- Example: `shuffle([1, 2, 3])` gives `[2, 3, 1]`
-
-#### `key`
-
-```camel
-key: (seed: int) => { hi: int, lo: int }
-```
-
-A 128-bit key derived from a seed, as the struct `{ hi: int, lo: int }` (the high and the low
-half, as signed int64 bits). Pure: it reads no generator and the same seed gives the same key
-on every scheduler, in translated C++, and on every platform.
-
-- Pure.
-- Example: `key(42)` gives `{ hi: 1350887118657991639, lo: -7139630017956984517 }`
-
-#### `split`
-
-```camel
-split: (key: { hi: int, lo: int }) => ({ hi: int, lo: int }, { hi: int, lo: int })
-```
-
-Two independent keys derived from key: split(key) gives the same pair every time, and does
-not change key.
-
-- Pure.
-- Example: `let (a, b) = split(key(42))`
-
-#### `permutation`
-
-```camel
-permutation: (key: { hi: int, lo: int }, n: int) => int[]
-```
-
-A uniformly random permutation of [0, n) by a Fisher-Yates shuffle driven by key's Philox
-stream. Pure: the same key and n give the same permutation everywhere, it reads no generator
-and does not change key; n = 0 gives [] and n = 1 gives [0].
-
-- Pure.
-- Failure: fault `InvalidArgument` when n is negative.
-- Example: `permutation(key(42), 4)` gives `[1, 0, 2, 3]`
+- Example: `randn()`
 
 <a id="time"></a>
 

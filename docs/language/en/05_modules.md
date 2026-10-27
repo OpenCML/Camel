@@ -52,7 +52,7 @@ Names that can be used without an import (global built-ins): `print`, `println`,
 | `str` | Strings: by byte, splitting, trimming, case conversion, replacing, searching, taking substrings; by code point, counting, reading, encoding and decoding |
 | `array` | Arrays: `sort`, `argsort`, `reverse`, `take`, `drop`, `chunks`, `unique`, `find`, `find_index`, `sum`, `mean`, `min`, `max`, `argmax`, `argmin`, `sort_by`, `flat_map` and others (mostly generic functions written in Camel; the native parts are `argsort`, the shape and layout atoms, and the kernels of the sort, the sum and the extremes) |
 | `math` | The constants `pi`, `e`, `inf`, `nan` (values); elementary functions, rounding, `min`/`max`/`clamp`, `gcd`/`lcm`, base conversion, bit operations such as `bit_and` |
-| `random` | The type `Key`; `seed`, `rand`, `randint`, `randn`, `choice`, `sample`, `shuffle`, and the pure keyed `key`, `split`, `permutation` |
+| `random` | The type `Key`; the pure keyed draws `key`, `fold`, `split`, `uniform`, `normal`, `uniform_array`, `normal_array`, `randint`, `permutation`, `shuffle`, `choice`, `sample` (the key is data or configuration: `k->randint<1, 7>`, `xs->shuffle<k>`); the global stream `seed`, `next_key` (the resource `rng`) and the conveniences `rand`, `randn` |
 | `time` | `now`, `strftime`, `strptime` |
 | `fs` | `exists`, `is_file`, `is_dir`, `mkdir`, `mkdirs`, `remove`, `remove_dir`, `list_dir`, `read_text`, `write_text`, `append_text`, `file_size`, `read_chunk`, `read_bytes`, `write_bytes`, `append_bytes` |
 | `json` | the type `Json`; `encode`, `decode`, `decode_as`; `kind`, `is_null`, `get`, `as_bool`, `as_int`, `as_float`, `as_string`, `as_array`, `as_object` |
@@ -60,7 +60,7 @@ Names that can be used without an import (global built-ins): `print`, `println`,
 | `re` | `test` |
 | `hash` | `sha256` |
 | `this` | `zen` |
-| `statistics` | `mean`, `stdev`, `variance`, `median`, `quantile` |
+| `statistics` | `stdev`, `variance`, `median`, `quantile` (`mean` is in `array`); the elements are a float type and the answer is that type; too few elements is an `InvalidArgument` fault |
 | `para` | `unordered_foreach`, `unordered_reduce` |
 | `tensor`, `nn`, `autodiff`, `onnx` | Tensors, network layers and optimisers, gradients, ONNX export; the row gather `take`, `one_hot`, and `softmax_cross_entropy` overloaded on the target's type (one-hot rows or integer class labels) |
 | `python` | Embedded Python (must be enabled at build time) |

@@ -7,7 +7,7 @@
  * elements of a map, and folds the results with reduce and filter.
  */
 
-import { seed, shuffle } from random
+import { seed, shuffle, next_key } from random
 import { sort } from array
 
 /// Merges two sorted arrays in one pass: the smaller front element goes out first, then what is
@@ -37,7 +37,7 @@ func checksum(arr: int[]): int {
 
 func main(): int sync {
     seed(7)
-    let data = 0..96->shuffle
+    let data = 0..96->shuffle<next_key()>
     let sums = 0..12->map<(k: int): int => {
         let part = data[k * 8:96]
         return checksum(mergesort(part))

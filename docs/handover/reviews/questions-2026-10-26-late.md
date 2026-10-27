@@ -246,3 +246,40 @@
 - **`optim.cpp` 的 `gradientOf` 改用核心的汇合函数**（与 `joinTypes`、`unify` 同一个），不在模块里另写比较。
 - 诊断里类型实参印成空的 `<>` 是另一个缺陷，顺手修：印出实例的类型实参。
 - 由你们做，`perf/training_steps` 的 4 条修好后转绿。
+
+## four-pending-author-decisions（develop 上 `c634ba8a6` 的汇总页）
+
+先说为什么你们查不到：决策者的裁定写在 **origin/fsh-dev** 的这个文件里，develop 要等下一次合 fsh-dev 才会有。查待裁事项时，请读 `origin/fsh-dev:docs/handover/reviews/questions-2026-10-26-late.md`。
+1. **progen 三问**：已裁，见本文件 `progen-frontend-residuals` 一节。
+   - (a)(b) 是前端缺陷，决策者这边已修（`fe63cac4e`：回调里命名与匿名结构体汇合；`94bdb2071`：期望类型不进循环的序列），已在 fsh-dev 上。
+   - (c) 归你们（遍与链），先在 C1 上复测。
+   - `model.py:350` 的 `func_src` 里 `body` 未定义，是生成器自己坏了：最后改 `func_src` 的提交负责修，若是 `82b539938` 那一支就是你们的。修好再重测 223 格。
+2. **运行时按名加载**：前提已经不成立。"导入从不解析到自己"是决策者撤回的裁定，你们照它做的 `19cfe42c9` 请回退（见上文"请回退"一节），原则 10.1 恢复为负责人的原规则"模块导入自己是允许的，没有效果"。
+   - 运行时按名加载与导入是两回事：它按算子的 protocol 找**登记了这个算子组的原生模块**，从不解析到 Camel 源文件，所以入口文件叫什么都与它无关。照这一条写进 `executor.cpp:80-93` 的注释即可，不用新规则。
+   - 那三条用例的 `args` 统一成 `${case}`，同意。
+3. **开秩梯度**：已裁，见本文件 `open-rank-parameter-and-concrete-gradient` 一节：优化器用汇合关系配对，不用相等。
+   - 模型进 `with <m: Mlp>` 位置后，`m` 的类型是声明类型 `Mlp`：带类型的绑定位置给出声明的类型，与 `let x: T = …` 同一条规则。
+4. **`30_diagnostics_reporting.md` 的测量记录**：保留原样，只在那一段末尾加一句"`ConstructNotSupported` 已于 `0364b7ab7` 退场"。记录就是当时量到的数，不为一个退场的码重做整份调查。
+
+## 主线补充：`std::cpp` 的翻译覆盖
+
+`statistics`、`random` 接入时（决策者这边，即将合入）测出，`std::cpp` 翻译不了 `:op/fail`、`array:argsort` 和 `tensor` 的核函数。结果 `permutation`、`shuffle`、`sample` 和 `statistics` 在 C++ 导出时被拒，cppexec 的一致性列表只能裁到标量核心。
+- **排进你们的主线**：`fail` 翻成带位置的故障，`argsort` 照核函数翻，`tensor` 核函数按已有的数组运算翻。补齐后把 cppexec 列表恢复。
+- 与写捕获变量的调用（上文已记）同属"标准库里有的，C++ 导出都要能翻"。
+
+## 给协调者：已答的页不再修改，力量回到主线
+
+`four-pending-author-decisions.md` 已在本文件答复（见"four-pending-author-decisions"一节），fsh-dev 上已删除；之后对它的三次修订（`2b8889a3c`、`d0c58bfd3`、`a114629aa`）不必再做。按交接说明 5.00 的价值判据，账本、计数这类修订不单独立项。
+你们手上该推进的，按优先级排：
+1. **H242 同步边的整批集成与 P4 张量翻转**：仍是最优先。其中包括上文的四条模型级裁定、`progen` (c) 的效应顺序，以及 H242 落地后的附一（赋值目标不算逃逸）。
+2. **语法层收口**：交接说明 5.00 里的 1–7 项，`module` 已删完；格式化器对超宽 `when`/`uses` 另起一行，对不带右边的 `export type X` 也要能格式化。
+3. **本文件里排给你们的几项**：
+   - 回退 `19cfe42c9`；
+   - 优化器用汇合配对参数与梯度（`perf/training_steps`）；
+   - `std::cpp` 的翻译覆盖（`fail`、`argsort`、`tensor` 核函数、写捕获变量的调用）；
+   - JIT 编译写捕获变量的调用；
+   - `Context::handle()` 的返工；
+   - 导出器两条拒绝补上位置。
+4. **H49 GPU G1–G3**，以及文档清理第 1 步。
+
+H233（`graph`、`rewrite`、`rules`、`opt` 改成以函数为中心，`Program` 从接口删除）由决策者这边做完了，在第一条车道上，正在合入 fsh-dev，你们不用再排。

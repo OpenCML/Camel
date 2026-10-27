@@ -206,10 +206,10 @@ expect_diagnostic_line = 568
 
 [[tests]]
 name = "stdlib.fault.quantile_range"
-desc = "quantile outside 0..1."
+desc = "quantile outside 0..1: located in the library."
 case = "../../../cases/modules/stdlib/fault_quantile_range.cml"
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 5
+expect_diagnostic_line = 48
 
 [[tests]]
 name = "stdlib.fault.quantile_range.opt"
@@ -218,7 +218,55 @@ case = "../../../cases/modules/stdlib/fault_quantile_range.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 5
+expect_diagnostic_line = 48
+
+[[tests]]
+name = "stdlib.fault.variance_short"
+desc = "The variance of one element: a fault, located in the library."
+case = "../../../cases/modules/stdlib/fault_variance_short.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 60
+
+[[tests]]
+name = "stdlib.fault.variance_short.opt"
+desc = "The same through std::opt."
+case = "../../../cases/modules/stdlib/fault_variance_short.cml"
+backends = false
+args = ["${case}", "std::opt", "std::fvm"]
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 60
+
+[[tests]]
+name = "stdlib.fault.stdev_short"
+desc = "The standard deviation of one element: the variance underneath faults."
+case = "../../../cases/modules/stdlib/fault_stdev_short.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 60
+
+[[tests]]
+name = "stdlib.fault.stdev_short.opt"
+desc = "The same through std::opt."
+case = "../../../cases/modules/stdlib/fault_stdev_short.cml"
+backends = false
+args = ["${case}", "std::opt", "std::fvm"]
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 60
+
+[[tests]]
+name = "stdlib.fault.median_empty"
+desc = "The median of no element: the quantile underneath faults."
+case = "../../../cases/modules/stdlib/fault_median_empty.cml"
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 49
+
+[[tests]]
+name = "stdlib.fault.median_empty.opt"
+desc = "The same through std::opt."
+case = "../../../cases/modules/stdlib/fault_median_empty.cml"
+backends = false
+args = ["${case}", "std::opt", "std::fvm"]
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 49
 
 [[tests]]
 name = "stdlib.fault.zip_with"
