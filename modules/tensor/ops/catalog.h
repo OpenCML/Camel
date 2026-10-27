@@ -33,10 +33,6 @@ void attachSemantics(std::vector<OpDef> &defs);
 /// Publishes the tangent space of tensors in the core derivative registry.
 void registerTensorTangentSpace();
 
-/// Publishes `take`'s rule for the core's `:op/idx_take`: the operator a numeric array's
-/// `t[idx]` with an int array reaches when the indices' element type is statically known.
-void registerSubscriptTakeRule();
-
 /// Publishes the core's own slice node (`:op/slice_sub`, the one node `t[a:b:s]` and
 /// `slice(t, axis, a, b, s)` both build) and its index declaration in the core's operator table:
 /// the node reads a tensor's shape, so the declaration is this module's (indexing.cpp).

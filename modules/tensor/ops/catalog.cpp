@@ -89,9 +89,9 @@ void registerTensorOps() {
         OpRegistry::instance().add("tensor", std::move(defs));
         declareResourcesAndDefinitions();
         registerTensorTangentSpace();
-        // The subscript a numeric array's `t[idx]` reaches is the core's operator, so its rule
-        // is published here, where this module's own operators are registered.
-        registerSubscriptTakeRule();
+        // The core's `:op/idx_take` is differentiated by the core's own rule, registered with the
+        // builtins when the context is built: this module publishes no rule for that URI, so one
+        // rule answers it whatever the load order (design principles 5.4).
         // `t[a:b:s]` and `slice(t, axis, a, b, s)` are one node of the core's, and the read it
         // declares is a tensor's: this module publishes that declaration (indexing.cpp).
         registerCoreSliceIndexing();
