@@ -610,7 +610,7 @@ N09 -> N0A [label="0|0", type="NORM"];
 | 循环区域模型 | `include/camel/runtime/loop.h#LoopView` | 4–40（收集槽 20–28、语义 30–34） |
 | 规则项读取器的拒绝 | `src/runtime/rules.cpp#SideReader::term` | 107–148（`with`/控制 133–135、默认分支 146–147） |
 | 规则编译错误的措辞 | `src/runtime/rules.cpp#SideReader::fail` | 67–71 |
-| 融合规则的先例与「不能写什么」 | `stdlib/rules.cml#tensor_sigmoid_chain` | 690–737 |
+| 融合规则的先例与「不能写什么」 | `stdlib/rules.cml#array_sigmoid_chain` | 373–374 |
 | 驻留推断 | `modules/tiles/src/residency.cpp#residencyReport` | 81–180（`TILES_RESIDENCY` 在 177） |
 | 驻留报告的接口 | `modules/tiles/include/tiles/internal/residency.h#residencyReport` | 23–25 |
 | 「只读不插节点」 | `modules/tiles/src/region_pass.cpp#RegionPass` | 43–49 |
