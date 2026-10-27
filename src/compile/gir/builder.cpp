@@ -283,15 +283,58 @@ void Builder::rejectRedeclaredFunction(
     }
     // A second generic declaration whose parameters are the same types is the same family of
     // signatures, one with other names for the type variables, so the second is a
-    // redeclaration too: the two write the same call (`generic_same_signature`).
+    // redeclaration too: the two write the same call (`generic_same_signature`). Two that write
+    // `when` conditions are told apart by them, exactly as two ordinary declarations of one
+    // signature are (design principles 4.4: "同一检查适用于所有带 `when` 的同名重载（有函数体的
+    // 普通函数也一样），不是 `#impl` 声明的特例"): the same separation the loop below asks about
+    // ordinary functions, asked here about two generic ones.
     if (auto group = templateScope_->get(name, false); group.has_value() &&
         !genericGroupOf(group.value())->empty()) {
+        const auto *ownWhen = GCT::Tree::of(gct)->whenOf(gct);
         for (const auto &other : *genericGroupOf(group.value())) {
-            if (other != nullptr && sameGenericSignature(other->funcType, funcType)) {
-                redeclaredFuncTypes_.insert(funcType);
-                diags_->of(SemanticDiag::Redeclaration).atOrigin(gct->origin()).commit(name);
-                throw BuildAbortException();
+            if (other == nullptr || !sameGenericSignature(other->funcType, funcType)) {
+                continue;
             }
+            if (ownWhen != nullptr) {
+                if (const auto *otherWhen = GCT::Tree::of(other->func)->whenOf(other->func)) {
+                    SpeculativeInstantiation quiet(*this);
+                    std::string overlappingType;
+                    const ConditionSeparation separation = separateWhenConditions(
+                        ownWhen->condition,
+                        otherWhen->condition,
+                        [&](const camel::core::type::type_bindings_t &bindings) {
+                            return evaluateWhenCondition(
+                                ownWhen->condition, funcType, bindings, {}, nullptr, unit_);
+                        },
+                        [&](const camel::core::type::type_bindings_t &bindings) {
+                            return evaluateWhenCondition(
+                                otherWhen->condition,
+                                other->funcType,
+                                bindings,
+                                {},
+                                other,
+                                unit_);
+                        },
+                        overlappingType);
+                    if (separation == ConditionSeparation::Disjoint) {
+                        continue; // one family of types each
+                    }
+                    if (separation == ConditionSeparation::Overlapping) {
+                        redeclaredFuncTypes_.insert(funcType);
+                        diags_->of(SemanticDiag::WhenDeclarationOverlap)
+                            .atOrigin(gct->origin())
+                            .commit(
+                                name,
+                                overlappingType,
+                                other->funcType->toString() + " — when " + otherWhen->text,
+                                funcType->toString() + " — when " + ownWhen->text);
+                        throw BuildAbortException();
+                    }
+                }
+            }
+            redeclaredFuncTypes_.insert(funcType);
+            diags_->of(SemanticDiag::Redeclaration).atOrigin(gct->origin()).commit(name);
+            throw BuildAbortException();
         }
     }
     auto graphs = graphScope_->get(name, false);

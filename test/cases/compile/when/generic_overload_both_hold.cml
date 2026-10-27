@@ -1,0 +1,38 @@
+/**
+ * Two generic functions of one name whose conditions both hold for one call: `T` is `i32` and
+ * `U` is `int`, so both declarations apply and the call has no answer (design principles 4.4:
+ * "带 `when` 的候选都适用时，调用处报歧义，列出两条候选与各自成立的条件").
+ *
+ * The declaration-time separation check asks one registered type at a time, so a condition on
+ * `T` and a condition on `U` are never both true of the same single type and the pair is
+ * accepted; the call is where the overlap shows, and the call site is the authority.
+ */
+
+func is_second_int::<U>(): bool {
+    return match type U {
+        case int => true
+        case _ => false
+    }
+}
+
+func is_first_i32::<T>(): bool {
+    return match type T {
+        case i32 => true
+        case _ => false
+    }
+}
+
+func dual::<T, U>(a: T, b: U): string when is_second_int::<U>() {
+    return 'second'
+}
+
+func dual::<T, U>(a: T, b: U): string when is_first_i32::<T>() {
+    return 'first'
+}
+
+func main(): int sync {
+    let x: i32 = 19
+    let y: int = 23
+    println(dual(x, y))
+    return 0
+}

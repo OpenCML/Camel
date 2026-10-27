@@ -1,0 +1,34 @@
+/**
+ * Two generic functions of one name whose conditions are both false for the call's type: `T` is
+ * `string`, and neither `is_int::<T>()` nor `is_float::<T>()` holds. Neither declaration is the
+ * call's overload, and the report is about the conditions that were not met, not about a
+ * mismatch of types (design principles 4.4; questions-2026-10-23 `sorts-per-element-type` 1:
+ * "条件不满足与类型不匹配分开报").
+ */
+
+func is_int::<T>(): bool {
+    return match type T {
+        case int => true
+        case _ => false
+    }
+}
+
+func is_float::<T>(): bool {
+    return match type T {
+        case float => true
+        case _ => false
+    }
+}
+
+func pick::<T>(x: T): string when is_int::<T>() {
+    return 'int'
+}
+
+func pick::<T>(x: T): string when is_float::<T>() {
+    return 'float'
+}
+
+func main(): int sync {
+    println(pick('word'))
+    return 0
+}
