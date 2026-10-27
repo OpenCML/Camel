@@ -96,7 +96,6 @@ enum class SemanticDiag : uint32_t {
     // Design principles log 2.11: 0xC0 and up.
     LogicalOperandNotBool = 0x0000C0,
     // Modules and namespaces (design principles 10.1, 10.2): 0xD0 and up.
-    ExportedVariable          = 0x0000D0,
     ModuleValueCycle          = 0x0000D1,
     CaptureAfterRecursiveCall = 0x0000D2,
     AmbiguousName             = 0x0000D3,

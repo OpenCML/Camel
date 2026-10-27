@@ -752,6 +752,12 @@ class Builder {
     // variable is named by it in diagnostics).
     std::unordered_map<node_handle_t, node_handle_t> captureOriginOf_;
     std::unordered_map<node_handle_t, std::string> originNames_;
+    // The cell of each `var` at the top level of a module, and the resource it is (the module and
+    // the name, `counter::cnt`): a body that reads or writes the cell through a capture touches
+    // that resource (builder_resources.cpp).
+    std::unordered_map<node_handle_t, std::string> moduleVariableResources_;
+    std::optional<std::string>
+    moduleVariableOf(const runtime::GraphDraft &draft, draft_node_ref_t port) const;
     // The value the port of a machine's region stands for: a round takes the sequence it iterates
     // and the states it starts from out of its ports, so the port is that value inside the round,
     // exactly as a capture port is what it captured (design principles 3.7, rule C1). The machine

@@ -566,6 +566,30 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
         } catch (const BuildAbortException &) {
         }
     }
+    // A `var` at the top level is a resource of the module, named by the variable (design
+    // principles 3.5): `uses cnt` names it like any other, and a function that reads or writes it
+    // is measured as touching it. It is declared with the resources, before any clause is read.
+    for (const auto &stmt : *stmtNodes) {
+        if (stmt->type() != AST::LoadType::Stmt ||
+            stmt->loadAs<AST::StmtLoad>()->stmtType() != AST::StmtType::Data) {
+            continue;
+        }
+        const auto &declared = stmt->loadAs<AST::DataDeclLoad>();
+        if (!declared->isVar()) {
+            continue;
+        }
+        for (const Reference &ref : declared->refs()) {
+            if (module_->resource(ref) != nullptr) {
+                continue; // a second declaration of the name is reported where it is built
+            }
+            camel::core::module::Module::ResourceDecl resource;
+            resource.variable = true;
+            module_->declareResource(ref, std::move(resource));
+            if (exportedRefs_.contains(ref.toString())) {
+                module_->setResourceExported(ref);
+            }
+        }
+    }
     try {
         checkResourceGroups();
     } catch (const BuildAbortException &) {
@@ -1307,7 +1331,9 @@ bool Builder::resolveAmbientResource(
                     // in is half of its identity, and that is what the operator's own declaration
                     // and this clause are compared as (see resourceIdentities).
                     out.push_back(
-                        in.get() == module_.get() ? written : in->name() + "::" + written);
+                        in.get() == module_.get() && !decl->variable
+                            ? written
+                            : in->name() + "::" + written);
                     return true;
                 }
                 for (const Reference &member : decl->members) {

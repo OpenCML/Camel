@@ -1258,22 +1258,6 @@ void Builder::exportDeclarations(const GCT::node_ptr_t &gct, bool decorated) {
         }
         if (auto value = unit_->values.find(name); value != unit_->values.end()) {
             TopLevelDeclaration &declaration = *value->second;
-            if (declaration.isVar) {
-                // Design principles 10.1: a `var` of the top level is written by the module's
-                // own functions only, which are exported instead.
-                camel::source::origin_id_t origin = gct->origin();
-                for (const auto &child : *declaration.gct) {
-                    if (child->type() == GCT::NodeKind::NREF && child->name() == name) {
-                        origin = child->origin();
-                    }
-                }
-                if (declaration.gct->type() == GCT::NodeKind::NREF) {
-                    origin = declaration.gct->origin();
-                }
-                diags_->of(SemanticDiag::ExportedVariable).atOrigin(origin).commit(name);
-                failed = true;
-                continue;
-            }
             // A value of the top level is a node of the root graph, which every module of the
             // program builds into: the importing module captures that very node, made when
             // a module first uses it (exportedValueNode).

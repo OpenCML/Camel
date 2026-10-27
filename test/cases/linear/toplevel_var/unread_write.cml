@@ -1,0 +1,20 @@
+/**
+ * An effect like any other: the write is a statement of a function that is not a sync block and
+ * nothing reads what it wrote, so it does not run (design principles 3.5).
+ *   5
+ *   0
+ */
+module unread_write
+
+var cnt: int = 0
+
+func quiet(): int {
+    cnt = cnt + 1
+    return 5
+}
+
+func main(): int sync {
+    println(quiet())
+    println(cnt)
+    return 0
+}

@@ -1,0 +1,18 @@
+/** A function that writes a top-level `var` says so in its type, and a `pure` parameter refuses it. */
+module err_pure_parameter
+
+var cnt: int = 0
+
+func bump(): int sync {
+    cnt += 1
+    return cnt
+}
+
+func run(f: () => int pure): int {
+    return f()
+}
+
+func main(): int sync {
+    println(run(bump))
+    return 0
+}
