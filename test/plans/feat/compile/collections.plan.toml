@@ -690,21 +690,14 @@ timeout_ms = 8000
 
 [[tests]]
 name = "fault_untyped_array"
-desc = "An array without an element type that is not empty, converted to a set: a fault with its position, the same on the four back ends, after what was printed before it."
-kind = "negative"
+desc = "An empty literal appended to takes its element type from the appended value (the join of what the arguments give), so it converts to a set like any array of that type: no fault, the same on the four back ends."
+kind = "behavior"
 case = "../../../cases/compile/collections/fault_untyped_array.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 6
-expect_diagnostic_column = 13
-expect_stdout_starts_with = "before\n"
-expect_output_contains = ["converts only when it is empty, and this one has 1 element(s)"]
-expect_output_not_contains = ["never printed", "Segmentation fault", "dumped core"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 20000
+expect_exit = 0
+expect_stdout_contains = ["before", "{1}", "after"]
 
 [[tests]]
 name = "refuse_cpp"

@@ -259,14 +259,20 @@ std::optional<FunctionType *> DeclaredFuncTypeResolver::resolve(
     // variable that no parameter stands a type at is another question, answered where it is
     // bound: a callback that gives nothing is a value of `void`, not an element type nobody
     // stated.
+    // A variable another argument states is fixed by that one (the join of the arguments that give
+    // it: the `void` of an empty literal constrains nothing); it is refused only when nothing
+    // else gives it a type.
+    std::vector<std::string> unstated;
     for (size_t i = 0; i < with.size(); ++i) {
-        if (!unstatedBindingOf(funcType_->withTypeAt(i), valueTypeOf(with[i])).empty()) {
-            return std::nullopt;
+        if (const auto name = unstatedBindingOf(funcType_->withTypeAt(i), valueTypeOf(with[i]));
+            !name.empty()) {
+            unstated.push_back(name);
         }
     }
     for (size_t i = 0; i < norm.size(); ++i) {
-        if (!unstatedBindingOf(funcType_->normTypeAt(i), valueTypeOf(norm[i])).empty()) {
-            return std::nullopt;
+        if (const auto name = unstatedBindingOf(funcType_->normTypeAt(i), valueTypeOf(norm[i]));
+            !name.empty()) {
+            unstated.push_back(name);
         }
     }
     type_bindings_t bindings;
@@ -285,14 +291,29 @@ std::optional<FunctionType *> DeclaredFuncTypeResolver::resolve(
             return std::nullopt;
         }
     }
+    for (const std::string &name : unstated) {
+        const Type *bound = findTypeBinding(bindings, name);
+        if (bound == nullptr || bound->code() == TypeCode::Void) {
+            return std::nullopt;
+        }
+    }
     auto *concrete = static_cast<FunctionType *>(substituteTypeVars(funcType_, bindings));
+    // An empty array literal (the element `void`) takes its element type from the position it
+    // stands in: it fits an array parameter of any element type.
+    const auto fits = [](Type *parameter, Type *argument) {
+        if (parameter->assignableFrom(argument)) {
+            return true;
+        }
+        return parameter->code() == TypeCode::Array && argument->code() == TypeCode::Array &&
+               static_cast<ArrayType *>(argument)->elemType()->code() == TypeCode::Void;
+    };
     for (size_t i = 0; i < with.size(); ++i) {
-        if (!concrete->withTypeAt(i)->assignableFrom(valueTypeOf(with[i]))) {
+        if (!fits(concrete->withTypeAt(i), valueTypeOf(with[i]))) {
             return std::nullopt;
         }
     }
     for (size_t i = 0; i < norm.size(); ++i) {
-        if (!concrete->normTypeAt(i)->assignableFrom(valueTypeOf(norm[i]))) {
+        if (!fits(concrete->normTypeAt(i), valueTypeOf(norm[i]))) {
             return std::nullopt;
         }
     }

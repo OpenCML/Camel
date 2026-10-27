@@ -9575,17 +9575,20 @@ Invalid argument of '{0}': {1}.
 The operator was given an argument it cannot take; the message names the argument and why. The value comes from the program, so what to change is where it was made.
 ```
 
-**Example** (`test/cases/compile/collections/fault_untyped_array.cml`, run as `camel test/cases/compile/collections/fault_untyped_array.cml ${backend}`)
+**Example** (`test/cases/compile/stream/range_step_runtime.cml`, run as `camel test/cases/compile/stream/range_step_runtime.cml`)
 
 ```camel
-// An array without an element type (`[]`) converts only while it is empty: this one was
-// appended to, so the conversion is a fault with its position, on every back end.
+// The step of a stepped range is not always a constant: when it is not, the step is the run's and
+// a step of 0 is the fault the array form raises there (RuntimeDiag::InvalidArgument), because the
+// refusal of a constant step cannot see it (design principles 4.2). A step that is not 0 is the
+// sequence it names.
+
+func counted(k: int): int[] { return range(0, 10, k) }
 
 func main(): int sync {
-    println("before")
-    let s = ([]->append<1>) as Set<int>
-    println(s)
-    println("never printed")
+    println(counted(3))
+    println(counted(-3))
+    println(counted(0))
     return 0
 }
 ```

@@ -2288,64 +2288,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     bytesSliceResolver(),
                 },
             }),
-        OperatorGroup::create(
-            "concat",
-            {
-                {
-                    ":struct/concat_arr",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {false, false}}},
-                        "<> (xs: T[], ys: T[]) => T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            if (norm[1]->code() != TypeCode::Array)
-                                return nullopt;
-                            const auto &arrType      = tt::as_ptr<ArrayType>(norm[0]);
-                            const auto &otherArrType = tt::as_ptr<ArrayType>(norm[1]);
-                            // The same relation as `append` and `contains` hold their values
-                            // to (design principles 5.2): an unnamed struct element enters the
-                            // named element type of the other array, which is the result's.
-                            Type *left  = arrType->elemType();
-                            Type *right = otherArrType->elemType();
-                            if (left->equals(right))
-                                return ArrayType::create(left);
-                            // Elements are copied slot by slot, so only a value that is read as
-                            // the type without moving anything qualifies (assignableFrom).
-                            if (left == Type::Void() || right == Type::Void())
-                                return nullopt;
-                            if (left->assignableFrom(right))
-                                return ArrayType::create(left);
-                            if (right->assignableFrom(left))
-                                return ArrayType::create(right);
-                            return nullopt;
-                        }),
-                },
-            }),
-        OperatorGroup::create(
-            "append",
-            {
-                {
-                    ":struct/append_arr",
-                    DynamicFuncTypeResolver::create(
-                        {{1, {false}}, {1, {false}}},
-                        "<value: T> (xs: T[]) => T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
-                            const auto &eleType = arrType->elemType();
-                            // A value of the element type, or an unnamed struct value whose
-                            // fields are its fields in the same order (design principles 5.2):
-                            // the append writes the slot as it is, and the layout agrees.
-                            if (eleType != Type::Void() && !eleType->assignableFrom(with[0]))
-                                return nullopt;
-                            return arrType;
-                        }),
-                },
-            }),
+        // The rules of `concat` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("concat", {}),
+        // The rules of `append` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("append", {}),
         // A private copy of an array: one of the states of a loop whose body only appends to it
         // (Builder::markLoopStateInPlace, which decides per state), so the literal the program
         // wrote stays a constant and the loop appends to its own array. Not a name a program can
@@ -2392,48 +2338,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
             }),
-        OperatorGroup::create(
-            "contains",
-            {
-                {
-                    ":struct/contains_arr",
-                    DynamicFuncTypeResolver::create(
-                        {{1, {false}}, {1, {false}}},
-                        "<value: T> (xs: T[]) => bool",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
-                            Type *elem          = arrType->elemType();
-                            // The value is a value of the element type (design principles 5.2):
-                            // an unnamed struct value whose fields are the element type's
-                            // fields, in the same order, is read as that type without moving
-                            // anything. A value of another named type is not (an `as` says it);
-                            // nor is one whose fields are written in another order, which the
-                            // call would have to copy and this signature cannot ask for.
-                            if (!elem->assignableFrom(with[0]))
-                                return nullopt;
-                            return Type::Bool();
-                        }),
-                },
-                {
-                    ":struct/contains_str",
-                    // The names its declaration writes (`with <sub: string>`, `contains(s)`): the
-                    // collection form works on an element, this one on a substring, so the two
-                    // positions hold different things and are named accordingly. `contains` is a
-                    // group whose rules therefore disagree about what position 0 is called, and a
-                    // named argument is refused rather than bound to a position that means
-                    // another thing in this rule (docs/stdlib-reference.md, "Named arguments").
-                    [] {
-                        FunctionTypeFactory factory;
-                        factory.addWithArg("sub", Type::String(), false);
-                        factory.addNormArg("s", Type::String(), false);
-                        factory.setExitType(Type::Bool());
-                        return StaticFuncTypeResolver::create(factory.build());
-                    }(),
-                },
-            }),
+        // The rules of `contains` are the declarations of stdlib/prelude.cml.
+        OperatorGroup::create("contains", {}),
         // ======= Marked Operators =======
         OperatorGroup::create(
             "map",
