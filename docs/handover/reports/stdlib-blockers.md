@@ -78,27 +78,56 @@ Module check: not clean, 38 failures, 24 of them root.
 
 ## graph (46 exports)
 
-- **J** every declaration but one: `Graph`, `Node`, `Op`, `TypeRef`, `Region`, `Tag`, `Txn<F>`, `NodeKind`, `RegionKind`, `Effects` are named in the signatures but nothing declares them (the draft's header says the handles are named by the module; the installed `signatures/graph.cml` the README deletes is the only place the old ones were). 45 failures are `UnresolvedTypeReference`.
-- **G** `add_constant`: `when ... uses t`.
-- No kernel could be checked past J (`NativeDeclarationNotLoaded` is not reached). Examples: all fail.
+Integrated (the graph batch of the lane). `stdlib/graph.cml` is the draft plus the opaque types written as
+`export type` (`Graph`, `Node<T>`, `Region`, `TypeRef`, `Op`, `Tag`, `Txn<F>`, `NodeKind`, `RegionKind`,
+`Effects`, `Value = Node`), which the C++ module registers by (module, name); `stdlib/signatures/graph.cml` is
+deleted. Module check clean; every declared operator has its kernel (`graphs_of`, `graph_of`, `sync_inputs`,
+`order_inputs`, `shape_text`, `constant` with the answer type from the call, `open` and `commit` over a function
+value). `ctrl_inputs` is gone as the notes say, so the edge counts of the algebra tables stop counting the control
+edge (the goldens moved by one edge per print). Causes closed: J (the mechanism), K (`Txn<F>`), G for
+`add_constant` (`uses t` on a handle resource).
 
 ## opt (3 exports)
 
-- **K** 7 helpers: `Txn<F>` with `F` a type variable (`InvalidTypeArgument`). Needs a decision: either the module type admits a type variable, or the helpers take `Txn` without the argument.
-- **L** `cse`, `dead_values`, `fold`: `graphs_of` (graph is J).
-- **N** `constant::<T>(a)` inside `same_value`: the call is `NoMatchingFunction` (one argument, the function wants the with-argument); `same_value` and `same_constant` are used before they are declared in a form the module does not export (`Unresolved reference: 'same_value'`, `'same_constant'`).
-- Examples: all three fail (cascade of the above).
+Integrated. `stdlib/opt.cml` is the draft with four changes the compiler asked for, each one a draft bug (N):
+the lambdas of the helpers write their parameter types (`filter<(m) => ...>` is `LambdaParameterWithoutType`; an
+untyped lambda parameter is not inferred from the call it stands in); the two recursive passes use
+`match ... case error e => error(e.kind, e.message)` where the draft wrote `-> pass` (binding `F` to `F!`
+makes `F!!`, `TaggedTypeNesting`: the open question Q3 of the notes); and `opt::saturate` is added, because
+`std::opt::saturate` needs a Camel entry now that `rules::saturate_only` is gone (`f->saturate<concat(algebra,
+distribution), rounds, strict>`). `K` and `L` are closed.
 
 ## rewrite (19 exports)
 
-- **J** `Rule`, `Proof` not declared (11 failures; `Node`, `Op` come from `graph`, which is J).
-- **F** `rewrite:check_text`.
-- Examples: all fail (`rewrite` itself is not exported once the declarations are removed).
+Integrated. `stdlib/rewrite.cml` is the draft with `export type Rule` and `export type Proof`, a `detail: string`
+column in `CheckRow` (the rest of the rendered line: how often the engine fired, the worst error ratio, the
+counterexample values; the draft has no place for them and `check_text` needs them), and `#op` on `rewrite`,
+`saturate`, `extract` and on the second `check` (`rewrite:check_over`, the form with `over`). The engines take
+the function and give the function (`F!`), the rule set and the choices are the angled values; `explain`,
+`explain_all` and `why_not` read a `Run<F>`. The eight readers of a check report (`check_verdict` and the
+others) are gone: a row is `report.rows[i].verdict`. `coverage_table` is an exported value.
 
 ## rules (51 exports)
 
-- **L** two root failures: `softmax` (L331) and `sigmoid` (L363) are not found: they come from `nn`, which is not integrated. The other 88 failures are the error repeated at the rule-set level (`array_log_softmax_of_softmax` unresolved), one per rule, because a rule that fails removes the table.
-- Examples: all three fail (same).
+Integrated, with the deviations below. The merged laws are one rule each (`add_self`, `mul_one`, `div_one`,
+`sub_zero`, `neg_neg`); the report has one row per instance, so the numbers of rows moved with the merge. The
+37 exported rules enter the check; none is refuted at the seeds the cases use.
+- **L** `array_log_softmax_of_softmax` and `array_sigmoid_chain`: the draft's forms call `softmax`,
+  `log_softmax` and `sigmoid` of `nn` (`x->softmax<axis>`, generic in the element type), and `nn` is not
+  integrated. The lane has the old f32 forms over `tensor`; `accuracy_laws` and `fusion_laws` hold them. They
+  become the draft's when `nn` is.
+- **N** `is_real::<T>()` as the condition of a rule: the check asks the condition of each candidate type at
+  the type level, and a user generic function in that position is not evaluated there, so every registered type
+  (`var i32`, `c64`, ...) gets an instance. The condition is written out
+  (`is_integer::<T>() || is_float::<T>()`).
+- **N** `array_div_one` for integers: the quotient of two integer arrays is a float array, so `x / 1 => x` is
+  refuted at `int`. The rule is for floats (`check` found it).
+- **N** the lambdas of the scheduling combinators (`(x) => x.fixpoint`) need their parameter types, as in `opt`.
+- The draft's `float_log1p`/`float_expm1` condition follows fsh-dev's `hasScalarKernel` (the `bf16`/`f16`
+  instances do not exist).
+- `array_log_softmax_of_softmax` is refuted at some seeds (large magnitudes make the rewritten side worse than
+  the original): the cases run it at a seed where it is sampled; the stream follows the rule's name, so the
+  rename moved the failing seeds.
 
 ## stream (12 exports)
 
@@ -115,14 +144,26 @@ Module check: not clean, 38 failures, 24 of them root.
 
 ## python (7 exports)
 
-- **J** `PyObject` is not declared (6 failures).
-- **F** `python:exec`, `python:run_file`.
-- **E** the example `import_module('math') !-> attr<'pi'> !-> to_string !! ''` does not parse (`!->` is not in the lexer yet).
-- Examples: all three fail.
+Rerun on the lane after the merge (the draft copied over `stdlib/python.cml`, `camel check`):
+- **J** `PyObject` is still undeclared in the draft: 5 `UnresolvedTypeReference`. The mechanism exists now; the
+  draft needs the line `export type PyObject` (with that line added the type errors are gone).
+- **F** all seven declared operators have no kernel under the declared name: `python:exec`, `python:eval`,
+  `python:run_file`, `python:import_module`, `python:attr`, `python:call`, `python:to_string`
+  (`NativeDeclarationNotLoaded`). The module registers `py_exec`, `py_eval`, `py_run`, `py_import`,
+  `py_attr`, `py_call`, `py_call_kw`, `py_print`, `py_println`, `py_wrap`, `py_unwrap`, `py_dispose`: five
+  are renames (`exec`, `eval`, `attr`, `call` and `import_module` of `py_import`), `run_file` is `py_run`,
+  and `to_string` has no kernel at all. (The earlier run counted two; the other five were found by name in
+  a scratch tree that kept the old module's table.)
+- **E** the example `import_module('math') !-> attr<'pi'> !-> to_string !! ''` does not parse (`!->` is not in the lexer).
 
 ## ckpt
 
 No `ckpt.cml` in `docs/handover/stdlib/`: only `ckpt.notes.md` and `ckpt.signatures.cml`. Nothing to check; the draft of the module is missing (N, task for the draft author).
+
+
+Update. graph, opt, rewrite and rules are integrated in the lane (their cells show only what remains: the
+deviations listed in their sections), `export type` closes J and K, and python is rerun above. The table below
+is the matrix as it stood before the integration for the modules that are not integrated yet.
 
 ## Causes x modules
 
@@ -136,15 +177,15 @@ Cell is the number of root failures (declarations that fail for that cause); `.`
 | C2/O overloads that differ by `when` | . | . | 1 | . | . | . | 3 | . | . | . | . | . | . | . | . | . |
 | D `case array` / guarded arm (in progress) | 1 | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . |
 | E `->` propagation (in progress) | . | . | . | . | . | . | . | . | . | . | . | . | . | . | 1 (example) | . |
-| F missing native kernel | 14 | . | 55 | 6 | 1 | 5 | . | . | . | 1 | . | 1 | . | 1 | 2 | . |
-| G `when ... pure` / `when ... uses` | . | . | . | . | 1 | 7 | . | 1 | . | . | . | . | . | . | . | . |
+| F missing native kernel | 14 | . | 55 | 6 | 1 | 5 | . | . | . | . | . | 1 | . | 1 | 7 | . |
+| G `when ... pure` / `when ... uses` | . | . | . | . | 1 | 7 | . | . | . | . | . | . | . | . | . | . |
 | H dimension pack / unbound dimension name | . | . | . | . | . | 4 | . | . | . | . | . | . | . | . | . | . |
 | I `with` default `T = float literal` | . | . | . | . | . | 2 | . | . | . | . | . | . | . | . | . | . |
-| J opaque handle types undeclared | . | . | . | . | . | . | . | 45 | . | 11 | . | . | . | . | 6 | . |
-| K type variable in a module type | . | . | . | . | . | . | . | . | 7 | . | . | . | . | . | . | . |
-| L neighbour module not yet new | . | . | . | . | 3 | 4 | 1 | . | 3 | . | 2 | . | . | . | . | . |
+| J opaque handle types undeclared | . | . | . | . | . | . | . | . | . | . | . | . | . | . | 1 (the draft lacks the line) | . |
+| K type variable in a module type | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . | . |
+| L neighbour module not yet new | . | . | . | . | 3 | 4 | 1 | . | . | . | 2 (nn) | . | . | . | . | . |
 | M `uses rng` unknown resource | . | . | . | 2 | . | . | . | . | . | . | . | . | . | . | . | . |
-| N draft bug | . | . | 2 | . | . | . | . | . | 3 | . | . | 2 | . | . | . | 1 (module missing) |
+| N draft bug | . | . | 2 | . | . | . | . | . | 2 | . | 3 | 2 | . | . | . | 1 (module missing) |
 
 Readings.
 - The four in-progress features cover every failure in `statistics` and `optim`, and the elementwise conversion alone is 36 declarations. They do not unblock `math`, `graph`, `rewrite`, `rules`, `opt`, `python`: those wait for kernels (F), handle types (J) or the integration order (L).
