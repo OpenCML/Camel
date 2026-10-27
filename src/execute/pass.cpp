@@ -439,7 +439,7 @@ PassMaker dcePass() {
 /// mode (the integer neutral elements only) that graph.plan.toml compares a Camel pass against.
 const camel::runtime::Program *runRulesAlgebra(
     const camel::core::context::context_ptr_t &ctx, const camel::runtime::Program *program,
-    bool safeFp, std::ostream &os);
+    bool safeFp, std::ostream &os, GraphIRPass *caller);
 
 class RulesAlgebraPass final : public GraphIRPass {
   public:
@@ -447,7 +447,7 @@ class RulesAlgebraPass final : public GraphIRPass {
         : GraphIRPass(ctx), safeFp_(safeFp) {}
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override {
-        return runRulesAlgebra(context_, program, safeFp_, os);
+        return runRulesAlgebra(context_, program, safeFp_, os, this);
     }
 
   private:
@@ -1596,7 +1596,7 @@ bool programContentChanged(
 
 PassRunResult applyRegisteredPass(
     const camel::runtime::Program *program, const std::string &spec, const context_ptr_t &ctx,
-    std::ostream &os) {
+    std::ostream &os, GraphIRPass *caller) {
     ResolvedPass resolved = resolvePassWithModule(spec, ctx);
     if (!resolved.factory) {
         // No pipeline source here (a pass run by name from a tool): the first line is the call.
@@ -1607,6 +1607,9 @@ PassRunResult applyRegisteredPass(
     const std::unordered_map<uint32_t, uint64_t> beforeRevisions = graphRevisionsOf(program);
     auto pass            = resolved.factory(ctx);
     const camel::runtime::Program *produced = pass->apply(program, os);
+    if (pass->hasErrorValue() && caller != nullptr) {
+        caller->failWithErrorValue(pass->errorValue());
+    }
     if (produced == nullptr) {
         return {nullptr, true};
     }
@@ -1630,12 +1633,13 @@ namespace {
 
 const camel::runtime::Program *runRulesAlgebra(
     const camel::core::context::context_ptr_t &ctx, const camel::runtime::Program *program,
-    bool safeFp, std::ostream &os) {
+    bool safeFp, std::ostream &os, GraphIRPass *caller) {
     const PassRunResult result = applyRegisteredPass(
         program,
         safeFp ? "rules::simplify_strict" : "rules::simplify",
         ctx,
-        os);
+        os,
+        caller);
     return result.program;
 }
 

@@ -201,7 +201,10 @@ struct PassRunResult {
 /// importing the module that contributes a `<module>::<pass>` name. This is the same resolution
 /// and stage handling the pipeline uses, without the pipeline's own bookkeeping: a rewrite pass
 /// that itself names another pass uses it. Returns {nullptr, true} when the pass failed (the
-/// diagnostics say why).
+/// diagnostics say why). A pass that ends with an error value (design principles 9.1) hands it to
+/// `caller`, the pass that named it, which then ends with the same value: the error is reported
+/// once, by the driver, and is not lost with the inner pass.
 PassRunResult applyRegisteredPass(
     const camel::runtime::Program *program, const std::string &spec,
-    const camel::core::context::context_ptr_t &ctx, std::ostream &os);
+    const camel::core::context::context_ptr_t &ctx, std::ostream &os,
+    GraphIRPass *caller = nullptr);

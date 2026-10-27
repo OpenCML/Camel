@@ -977,7 +977,8 @@ OrderReductionPass::apply(const camel::runtime::Program *program, std::ostream &
 
 const camel::runtime::Program *simplifyGraph(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    const OptimizeRewriteConfig &baseConfig, std::ostream &os, size_t maxRounds) {
+    const OptimizeRewriteConfig &baseConfig, std::ostream &os, size_t maxRounds,
+    GraphIRPass *caller) {
     // One growth budget for all rounds: each round unrolls a recursion with constant arguments
     // one level further, so a budget per round would only be reached after maxRounds of them.
     size_t growthSpent           = 0;
@@ -1027,7 +1028,7 @@ const camel::runtime::Program *simplifyGraph(
         // measurements assume.
         const std::string algebraPass =
             config.safeFloatingPoint ? "std::opt::algebra safe_fp=true" : "std::opt::algebra";
-        const PassRunResult algebra = applyRegisteredPass(program, algebraPass, context, os);
+        const PassRunResult algebra = applyRegisteredPass(program, algebraPass, context, os, caller);
         if (algebra.program == nullptr) {
             return nullptr;
         }
