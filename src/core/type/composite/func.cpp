@@ -66,7 +66,7 @@ Parts partsOf(
 // The factory reaches FunctionType's protected Parts through friendship; the helper above is
 // instantiated with it here.
 FunctionType *FunctionTypeFactory::build() {
-    return FunctionType::intern(partsOf<FunctionType::Parts>(
+    auto parts = (partsOf<FunctionType::Parts>(
         withTypes_,
         normTypes_,
         exitType_,
@@ -76,10 +76,12 @@ FunctionType *FunctionTypeFactory::build() {
         constasIndices_,
         withConstIndices_,
         resources_));
+    parts.hasWithRest = hasWithRest_;
+    return FunctionType::intern(parts);
 }
 
 OpenFunctionType *FunctionTypeFactory::buildOpen() {
-    return FunctionType::allocate<OpenFunctionType>(partsOf<FunctionType::Parts>(
+    auto parts = (partsOf<FunctionType::Parts>(
         withTypes_,
         normTypes_,
         exitType_,
@@ -89,6 +91,8 @@ OpenFunctionType *FunctionTypeFactory::buildOpen() {
         constasIndices_,
         withConstIndices_,
         resources_));
+    parts.hasWithRest = hasWithRest_;
+    return FunctionType::allocate<OpenFunctionType>(parts);
 }
 
 // ---- Construction ----
@@ -102,7 +106,7 @@ FunctionType::FunctionType(const Parts &parts, bool open)
     : CompositeType(TypeCode::Function), exitType_(parts.exitType),
       withCount_(static_cast<uint16_t>(parts.withCount)),
       normCount_(static_cast<uint16_t>(parts.params.size() - parts.withCount)),
-      hasNames_(parts.hasNames), hasRest_(parts.hasRest),
+      hasNames_(parts.hasNames), hasRest_(parts.hasRest), hasWithRest_(parts.hasWithRest),
       constasIndices_(parts.constasIndices), withConstIndices_(parts.withConstIndices),
       resources_(parts.resources), open_(open) {
     for (size_t i = 0; i < parts.params.size(); ++i) {
@@ -152,6 +156,7 @@ FunctionType *FunctionType::intern(const Parts &parts) {
     key.push_back(typeKeyWord(parts.exitType));
     key.push_back(parts.hasNames ? 1 : 0);
     key.push_back(parts.hasRest ? 1 : 0);
+    key.push_back(parts.hasWithRest ? 1 : 0);
     key.push_back(parts.constasIndices.size());
     key.insert(key.end(), parts.constasIndices.begin(), parts.constasIndices.end());
     // A `with` parameter whose argument is part of what the declaration means is part of what the
@@ -231,6 +236,7 @@ FunctionType::Parts FunctionType::parts() const {
     parts.exitType  = exitType_;
     parts.hasNames  = hasNames_;
     parts.hasRest   = hasRest_;
+    parts.hasWithRest = hasWithRest_;
     parts.constasIndices = constasIndices_;
     parts.withConstIndices = withConstIndices_;
     parts.resources = resources_;
@@ -366,7 +372,7 @@ Type *FunctionType::unify(Type *other) const {
     }
     const auto *rhs = static_cast<const FunctionType *>(other);
     if (withCount_ != rhs->withCount_ || normCount_ != rhs->normCount_ ||
-        hasRest_ != rhs->hasRest_ || constasIndices_ != rhs->constasIndices_ ||
+        hasRest_ != rhs->hasRest_ || hasWithRest_ != rhs->hasWithRest_ || constasIndices_ != rhs->constasIndices_ ||
         withConstIndices_ != rhs->withConstIndices_ || !exitType_ || !rhs->exitType_ ||
         !(resources_ == rhs->resources_)) {
         return nullptr;
@@ -404,16 +410,27 @@ bool FunctionType::assignableFrom(Type *other) const {
 
     const FunctionType &otherFunc = static_cast<const FunctionType &>(*other);
 
-    if (withCount_ != otherFunc.withCount_ || normCount_ != otherFunc.normCount_ ||
-        hasRest_ != otherFunc.hasRest_ || constasIndices_ != otherFunc.constasIndices_ ||
-        withConstIndices_ != otherFunc.withConstIndices_)
+    // A pack (`(..A) => R`, `<..A> (...) => R`) written for one list of parameters takes a function
+    // with any parameters there: it says nothing about them.
+    const bool anyWith = hasWithRest_ && !otherFunc.hasWithRest_;
+    const bool anyNorm = hasRest_ && !otherFunc.hasRest_;
+    if ((!anyWith && (withCount_ != otherFunc.withCount_ ||
+                      withConstIndices_ != otherFunc.withConstIndices_)) ||
+        (!anyNorm && (normCount_ != otherFunc.normCount_ || hasRest_ != otherFunc.hasRest_ ||
+                      constasIndices_ != otherFunc.constasIndices_)) ||
+        (!anyWith && hasWithRest_ != otherFunc.hasWithRest_))
         return false;
 
     // Parameters are contravariant: this type's parameter must be acceptable where the other
     // one's is expected.
     for (size_t i = 0; i < paramCount(); i++) {
-        if (varMarks()[i] != otherFunc.varMarks()[i] ||
-            !otherFunc.types()[i]->assignableFrom(types()[i]))
+        const bool inWith = i < withCount_;
+        if ((inWith && anyWith) || (!inWith && anyNorm)) {
+            continue;
+        }
+        const size_t j = inWith ? i : otherFunc.withCount_ + (i - withCount_);
+        if (varMarks()[i] != otherFunc.varMarks()[j] ||
+            !otherFunc.types()[j]->assignableFrom(types()[i]))
             return false;
     }
 

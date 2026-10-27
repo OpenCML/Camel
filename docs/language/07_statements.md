@@ -155,7 +155,7 @@ func clamp(x: int): int {
 
 func main(): int sync {
     println(clamp<0, 10>(42))
-    println([-5, 3, 99]->map<(x: int): int => x->clamp<0, 10>>)
+    println([-5, 3, 99]->map<(x) => x->clamp<0, 10>>)
     return 0
 }
 ```
@@ -371,7 +371,8 @@ func main(): int sync {
 - **调用在编译期展开。** 带剩余参数的函数没有运行时的参数个数，因此不为它建实例图，也不生成调用结点；每个直接调用都把函数体展开在调用者的图里，固定形参绑定到实参结点，`ts` 绑定到剩下的结点。`ts` 可以是 0 个元素。
 - **`ts` 是编译期元组，不是值。** 它只有三种用法：`indices ts` 取位置表、`ts.[j]` 取一个元素、`..ts` 把元素展开成实参。三种用法都不为 `ts` 建 `FILL`，也不为元素建 `ACCS`。把 `ts` 本身放到需要运行期值的位置（打印、返回、赋给变量、作为普通实参）报 `SemanticDiag::StaticTupleEscapes`，不会悄悄物化成一个运行期元组；需要运行期元组时写元组字面量 `(a, b)`。
 - **剩余实参**写作 `..e`，且必须是调用实参表的最后一项。`e` 必须是编译期元组：元组字面量、元组推导式，或外层剩余函数的 `..ts`。运行时的元组值没有固定个数，是 `SemanticDiag::RestArgumentNotTuple`；`..e` 后面还有实参是 `SemanticDiag::RestArgumentNotLast`。
-- 剩余形参必须在最后（`SemanticDiag::RestParameterNotLast`），不能写类型（`SemanticDiag::RestParameterTypeNotSupported`），只能出现在函数声明里（lambda、函数类型和规则里写 `..` 是语法错误）。固定形参少给实参是 `SemanticDiag::RestArgumentsMismatch`。
+- 剩余形参必须在最后（`SemanticDiag::RestParameterNotLast`），不能写类型（`SemanticDiag::RestParameterTypeNotSupported`），只能出现在函数声明和函数类型里（lambda 和规则里写 `..` 是语法错误）。
+- **同一个写法也用在 `with` 参数和函数类型上。** `with <..args>` 表示 `with` 实参在固定的几个之后还可以再给任意多个、任意类型；`(..A) => R` 是形参表不限的函数类型，任何结果类型合适的函数都能放进去。`with <..args>` 只在没有函数体的声明里写（它声明一个由 C++ 实现的算子，`format`、`print` 就是这样在标准库的 `prelude.cml` 里声明自己的形状）；带函数体的函数写它是 `SemanticDiag::WithPackNeedsNativeDeclaration`。固定形参少给实参是 `SemanticDiag::RestArgumentsMismatch`。
 - 带剩余参数的函数**不是值**：不能赋给变量、作为实参或导出后当函数值用（`SemanticDiag::RestFunctionNeedsExpansion`），只能直接调用。调用可以跨模块：函数体仍然在声明它的模块里解析（和泛型实例一样），展开在调用者的图里；函数体里用到声明模块的顶层**值**时，那个值在调用者的图里没有结点，会报 `SemanticDiag::RestFunctionNeedsExpansion`，函数和它自己的实参不受影响。
 - `with` 实参命名泛型函数或一组重载时（`tree_map<twice>`、`tree_map<bump>`），调用在被调函数里按每处调用的实参类型解析它；这要求被调函数带剩余参数（实例在调用点展开），普通的泛型函数仍按参数类型选定一个函数值。
 

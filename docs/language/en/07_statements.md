@@ -155,7 +155,7 @@ func clamp(x: int): int {
 
 func main(): int sync {
     println(clamp<0, 10>(42))
-    println([-5, 3, 99]->map<(x: int): int => x->clamp<0, 10>>)
+    println([-5, 3, 99]->map<(x) => x->clamp<0, 10>>)
     return 0
 }
 ```
@@ -371,7 +371,8 @@ func main(): int sync {
 - **The call is expanded at compile time.** A function with a rest parameter has no runtime arity, so no instance graph is built for it and no call node is made: every direct call expands its body into the caller's graph, with the fixed parameters bound to the argument nodes and `ts` bound to the remaining nodes. `ts` may have 0 elements.
 - **`ts` is a compile-time tuple, not a value.** It has three uses only: `indices ts` reads its positions, `ts.[j]` reads one element, and `..ts` spreads the elements as arguments. None of the three builds a `FILL` for `ts` or an `ACCS` for an element. Putting `ts` itself where a runtime value is needed (printing it, returning it, assigning it, passing it as an ordinary argument) reports `SemanticDiag::StaticTupleEscapes`; it is not silently materialized into a runtime tuple. Write a tuple literal `(a, b)` when a runtime tuple is wanted.
 - **A rest argument** is written `..e` and must be the last argument of the call. `e` must be a compile-time tuple: a tuple literal, a tuple comprehension, or the `..ts` of an enclosing rest function. A runtime tuple value has no fixed arity and is `SemanticDiag::RestArgumentNotTuple`; an argument after `..e` is `SemanticDiag::RestArgumentNotLast`.
-- A rest parameter must be last (`SemanticDiag::RestParameterNotLast`), cannot write a type (`SemanticDiag::RestParameterTypeNotSupported`), and can appear only in a function declaration (writing `..` in a lambda, a function type or a rule is a syntax error). Too few arguments for the fixed parameters is `SemanticDiag::RestArgumentsMismatch`.
+- A rest parameter must be last (`SemanticDiag::RestParameterNotLast`), cannot write a type (`SemanticDiag::RestParameterTypeNotSupported`), and can appear only in a function declaration and a function type (writing `..` in a lambda or a rule is a syntax error).
+- **The same spelling serves the `with` parameters and function types.** `with <..args>` says that the `with` arguments may go on, after the fixed ones, for any number and of any types; `(..A) => R` is a function type with any parameter list, which any function with a fitting result can be put into. `with <..args>` is written only in a declaration without a body (it declares an operator implemented in C++: this is how `format` and `print` declare their shape in the standard library's `prelude.cml`); writing it on a function with a body is `SemanticDiag::WithPackNeedsNativeDeclaration`. Too few arguments for the fixed parameters is `SemanticDiag::RestArgumentsMismatch`.
 - A function with a rest parameter is **not a value**: it cannot be assigned, passed as an argument, or exported and used as a function value (`SemanticDiag::RestFunctionNeedsExpansion`); it can only be called directly. A call may be in another module: the body's names are still resolved in the module that declares it (as for a generic instance), while the expansion happens in the caller's graph. A body that names a top-level **value** of its own module has no node for it in the caller's graph and reports `SemanticDiag::RestFunctionNeedsExpansion`; functions and the call's own arguments are unaffected.
 - A `with`-argument that names a generic function or a set of overloads (`tree_map<twice>`, `tree_map<bump>`) is resolved inside the callee for each call's argument types; this needs a callee with a rest parameter (the instance is expanded at the call). An ordinary generic function still takes one function value, chosen by the parameter types.
 

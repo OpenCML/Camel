@@ -956,7 +956,7 @@ void ParserImpl::parseWhenClause() {
 /// The part of funcDecl after its annotations; `m` marks where the declaration began.
 void ParserImpl::parseFuncDeclRest(size_t m) {
     if (eat(TK::KwWith)) {
-        parseAngledParams();
+        parseAngledParams(true);
     }
     eat(TK::KwExport);
     // `with <...> rule ...` (`rule tile_matmul(...)`, design principles 5.5): a rule writes the
@@ -1400,7 +1400,7 @@ void ParserImpl::parseParentParams(bool allowRest, bool allowConstas) {
 
 /// angledParams : '<' pairedParams? ','? '>'
 /// The `<` of a parameter list need not touch anything (`with <T: type>`).
-void ParserImpl::parseAngledParams() {
+void ParserImpl::parseAngledParams(bool allowRest) {
     if (cur_ != TK::Lt && cur_ != TK::LAngle) {
         unexpected({e(TK::Lt)});
         return;
@@ -1411,7 +1411,7 @@ void ParserImpl::parseAngledParams() {
     {
         Scope scope(*this, false, open);
         if (cur_ != TK::Gt && cur_ != TK::Comma) {
-            parsePairedParams(TK::Gt, false, false);
+            parsePairedParams(TK::Gt, allowRest, false);
         }
         eat(TK::Comma);
         if (!panic_ && cur_ != TK::Gt) {

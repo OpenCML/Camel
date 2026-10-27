@@ -193,6 +193,10 @@ FunctionTypeFactory rebuildFunctionType(
         return result;
     };
     for (size_t i = 0; i < func->withTypesCount(); ++i) {
+        if (func->hasWithRest() && i + 1 == func->withTypesCount()) {
+            factory.addWithRest(paramNameOf(func, i, "__w", i));
+            continue;
+        }
         factory.addWithArg(
             paramNameOf(func, i, "__w", i),
             replaced(func->withTypeAt(i)),

@@ -385,8 +385,9 @@ enum class SemanticDiag : uint32_t {
     RangeStepZero = 0x0001E6,
     /// A subscript slice with a constant step of 0 takes no element: `t[a:b:0]` (design principles 5.4;
     /// the step of a slice follows the same rule the step of a range does).
-    SliceStepZero               = 0x0001E9,
-    ReducedPrecisionUnsupported = 0x0001D7,
+    SliceStepZero                  = 0x0001E9,
+    WithPackNeedsNativeDeclaration = 0x000191,
+    ReducedPrecisionUnsupported    = 0x0001D7,
     // #impl(f) (design principles 10.4): the Camel body of the function is its semantics and the
     // body-less declaration f of the same module is the operator that runs it. The graph builder
     // resolves the tag when it declares the module, so no pass reads it and it names no reader.
