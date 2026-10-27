@@ -83,6 +83,21 @@ node_handle_t loopStateValueOf(node_handle_t node) {
     return node;
 }
 
+/// The results of the arms a loop body ends in: the value itself, or, behind a JOIN (an `if` or a
+/// `match`), the result of each arm, looking through the JOINs of an `else if` chain.
+std::vector<node_handle_t> loopArmResultsOf(node_handle_t node) {
+    node = loopStateValueOf(node);
+    if (node == nullptr || !nodeIsKind(node, runtime::GCNodeKind::Join)) {
+        return {node};
+    }
+    std::vector<node_handle_t> arms;
+    for (runtime::gc_node_ref_t input : withInputsOf(node)) {
+        const std::vector<node_handle_t> inner = loopArmResultsOf(nodeDraftOf(node)->ref(input));
+        arms.insert(arms.end(), inner.begin(), inner.end());
+    }
+    return arms;
+}
+
 /// Gives `node` a new value type, moving it to a slot of that type. Used when the element type
 /// of an empty-array loop state is learned from the body's append after the graph was built.
 void retypeValueNode(DraftGraphBuilder *graph, node_handle_t node, Type *type) {
@@ -4333,46 +4348,56 @@ void Builder::markLoopStateInPlace(
     if (returned == nullptr) {
         return;
     }
-    // The next value of each state, in state order. One state hands the append call back
-    // directly. Two or more return a tuple, a FILL whose With inputs are the computed
-    // components and whose payload says which component each one fills; a component written as
-    // a constant there (`(xs->append<7>, 0)`) has no value node and no rewrite of its own.
+    // The next value of each state, in state order, for each arm the body can end in: a body that
+    // ends in an `if` or `match` has one result per arm, behind the JOIN that forwards the one
+    // that ran, and only one arm runs, so a state each arm uses once is held once. One state
+    // hands the append call back directly. Two or more return a tuple, a FILL whose With inputs
+    // are the computed components and whose payload says which component each one fills; a
+    // component written as a constant there (`(xs->append<7>, 0)`) has no value node and no
+    // rewrite of its own.
+    const std::vector<node_handle_t> arms = loopArmResultsOf(returned);
     if (stateCount == 1) {
         markLoopStateInPlaceOne(
             body,
             loop,
             initial,
             0,
-            returned,
+            arms,
             !privateInitial.empty() && privateInitial[0]);
         return;
     }
-    if (!nodeIsKind(returned, runtime::GCNodeKind::Fill)) {
-        return;
-    }
-    const Type *returnType = valueTypeOf(nodeTypeOf(returned));
-    if (returnType == nullptr || returnType->code() != TypeCode::Tuple) {
-        return;
-    }
-    const auto withIns = withInputsOf(returned);
-    const auto payload = nodeDraftOf(returned)->payloadOf(nodeIdOf(returned));
-    if (payload.size() < sizeof(runtime::GCFillBody)) {
-        return;
-    }
-    const auto *fill = reinterpret_cast<const runtime::GCFillBody *>(payload.data());
-    if (fill->fillKind != runtime::GCFillKind::Tuple) {
-        return;
-    }
-    const auto slots = fill->slots();
-    if (slots.size() != withIns.size()) {
-        return;
-    }
-    std::vector<node_handle_t> next(stateCount, nullptr);
-    for (size_t i = 0; i < slots.size(); ++i) {
-        if (static_cast<size_t>(slots[i]) >= stateCount) {
+    std::vector<std::vector<node_handle_t>> nexts(stateCount);
+    for (node_handle_t arm : arms) {
+        if (arm == nullptr || !nodeIsKind(arm, runtime::GCNodeKind::Fill)) {
             return;
         }
-        next[slots[i]] = nodeDraftOf(returned)->ref(withIns[i]);
+        const Type *returnType = valueTypeOf(nodeTypeOf(arm));
+        if (returnType == nullptr || returnType->code() != TypeCode::Tuple) {
+            return;
+        }
+        const auto withIns = withInputsOf(arm);
+        const auto payload = nodeDraftOf(arm)->payloadOf(nodeIdOf(arm));
+        if (payload.size() < sizeof(runtime::GCFillBody)) {
+            return;
+        }
+        const auto *fill = reinterpret_cast<const runtime::GCFillBody *>(payload.data());
+        if (fill->fillKind != runtime::GCFillKind::Tuple) {
+            return;
+        }
+        const auto slots = fill->slots();
+        if (slots.size() != withIns.size()) {
+            return;
+        }
+        std::vector<node_handle_t> next(stateCount, nullptr);
+        for (size_t i = 0; i < slots.size(); ++i) {
+            if (static_cast<size_t>(slots[i]) >= stateCount) {
+                return;
+            }
+            next[slots[i]] = nodeDraftOf(arm)->ref(withIns[i]);
+        }
+        for (size_t j = 0; j < stateCount; ++j) {
+            nexts[j].push_back(next[j]);
+        }
     }
     for (size_t j = 0; j < stateCount; ++j) {
         markLoopStateInPlaceOne(
@@ -4380,15 +4405,15 @@ void Builder::markLoopStateInPlace(
             loop,
             initial,
             j,
-            next[j],
+            nexts[j],
             !privateInitial.empty() && j < privateInitial.size() && privateInitial[j]);
     }
 }
 
 void Builder::markLoopStateInPlaceOne(
     const arm_ptr_t &body, const GCT::node_ptr_t &loop, std::vector<node_handle_t> &initial,
-    size_t index, node_handle_t next, bool initialIsPrivate) {
-    if (next == nullptr || !nodeIsKind(next, runtime::GCNodeKind::Oper)) {
+    size_t index, const std::vector<node_handle_t> &nexts, bool initialIsPrivate) {
+    if (nexts.empty()) {
         return;
     }
     // The first value has to be a literal: a name, a call or a projection can name an array
@@ -4403,42 +4428,60 @@ void Builder::markLoopStateInPlaceOne(
     if (stateType == nullptr || stateType->code() != TypeCode::Array) {
         return;
     }
-    const oper_idx_ptr_t op = nodeGraphOf(next)->operTarget(next);
-    if (op == nullptr || op->uri() != ":struct/append_arr") {
-        return;
-    }
-    // The array the call appends to is this state's parameter, and the body uses that
-    // parameter nowhere else: once the round returns, the value it was bound to is gone (the
-    // driver binds the round's own state), so nothing can see it as it was.
-    const auto normIns = normInputsOf(next);
-    if (normIns.size() != 1) {
-        return;
-    }
-    node_handle_t port  = nodeDraftOf(next)->ref(normIns.front());
     const size_t portAt = index + (camel::core::loopHasIterable(loop->loopKind()) ? 1 : 0);
-    if (port == nullptr || portAt >= body->ports.size() || body->ports[portAt] != port) {
+    if (portAt >= body->ports.size()) {
         return;
     }
-    if (normUsersOf(port).size() + withUsersOf(port).size() != 1) {
+    node_handle_t port = body->ports[portAt];
+    if (port == nullptr) {
         return;
     }
-    // The appended value is the call's only With input; the owned form takes the same.
-    const auto withIns = withInputsOf(next);
-    if (withIns.size() != 1) {
-        return;
-    }
-    Type *valueType = nodeTypeOf(nodeDraftOf(next)->ref(withIns.front()));
-    if (valueType == nullptr) {
-        return;
-    }
+    // Each next value is the call `state->append<v>` on this state's parameter, or the parameter
+    // itself (an arm that leaves the state as it was). The body uses the parameter nowhere else:
+    // once the round returns, the value it was bound to is gone (the driver binds the round's own
+    // state), so nothing can see it as it was. The arms are exclusive, so one use in each is one
+    // holder.
     const oper_group_ptr_t group =
         context_->importModule("")->nativeOperatorGroup(camel::core::oper::AppendOwned);
     if (group == nullptr) {
         return;
     }
     const std::vector<StaticArg> statics(1);
-    const auto owned = group->resolve({valueType}, {nodeTypeOf(port)}, statics);
-    if (!owned.has_value()) {
+    std::vector<std::pair<node_handle_t, oper_idx_ptr_t>> appends;
+    for (node_handle_t next : nexts) {
+        if (next == nullptr) {
+            return;
+        }
+        if (next == port) {
+            continue;
+        }
+        if (!nodeIsKind(next, runtime::GCNodeKind::Oper)) {
+            return;
+        }
+        const oper_idx_ptr_t op = nodeGraphOf(next)->operTarget(next);
+        if (op == nullptr || op->uri() != ":struct/append_arr") {
+            return;
+        }
+        const auto normIns = normInputsOf(next);
+        if (normIns.size() != 1 || nodeDraftOf(next)->ref(normIns.front()) != port) {
+            return;
+        }
+        // The appended value is the call's only With input; the owned form takes the same.
+        const auto withIns = withInputsOf(next);
+        if (withIns.size() != 1) {
+            return;
+        }
+        Type *valueType = nodeTypeOf(nodeDraftOf(next)->ref(withIns.front()));
+        if (valueType == nullptr) {
+            return;
+        }
+        const auto owned = group->resolve({valueType}, {nodeTypeOf(port)}, statics);
+        if (!owned.has_value()) {
+            return;
+        }
+        appends.emplace_back(next, *owned);
+    }
+    if (appends.empty() || normUsersOf(port).size() + withUsersOf(port).size() != nexts.size()) {
         return;
     }
     // The loop starts from a private copy of its first value. A literal is a constant of the
@@ -4460,7 +4503,9 @@ void Builder::markLoopStateInPlaceOne(
     registerNodeOrigin(context_, copy, loop->loopInitial(initialAt), "gir.loop.copy");
     linkNodes(LinkType::Norm, initial[index], copy);
     initial[index] = copy;
-    nodeGraphOf(next)->retargetOperNode(next, *owned);
+    for (const auto &[next, owned] : appends) {
+        nodeGraphOf(next)->retargetOperNode(next, owned);
+    }
 }
 
 void Builder::setBodyResult(const compile_graph_ptr_t &graph, node_handle_t result) {
