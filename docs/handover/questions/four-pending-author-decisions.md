@@ -27,7 +27,19 @@
 RUN_EXIT=1
 ```
 
-也就是 **82 wrong 与 223 wrong 两个数今天都测不出来**：批还没开始跑就死在生成器里。谁修 `func_src` 要先定（不属本页四问，但它挡着第 1 条的读数）。另外该计划是 `tier = "milestone"`（`test/plans/feat/opt/progen.plan.toml:3`），所以快闸门从不读它。
+也就是 **82 wrong 与 223 wrong 两个数在那天都测不出来**：批还没开始跑就死在生成器里。**该 `NameError` 已由 `6621efcc4`（`handover/progen-generator-fix`）修好，并随 `2c9100ff3` 进 develop**；但**修好不等于已绿**，修好后重跑同一条计划（2026-10-27，`2c9100ff3`，`-Plan test/plans/feat/opt/progen.plan.toml -Tier fast -Jobs 8 -NoBuild`，`-Path` 换成本页所在的工作树）仍是：
+
+```
+[FAIL] progen_check      91.12 s cpu of 150.00 s budget, 51.06 s wall
+[INFO] stdout does not contain '0 wrong'
+[stdout] progen check: 25 programs x 41 pipelines = 1025 cells (0 located refusals), 0 seed(s) left out as known failures
+[stdout] 223 wrong
+[PASS] progen_fixed                                            9.98 s
+[SUMMARY] total: 2, pass: 1, fail: 1
+RUN_EXIT=1
+```
+
+即 **223 wrong 是今天（`2c9100ff3`）的真读数**：1025 格、0 个种子按已知失败排除；按页上车道读数给的分法，223 = 种子 1／14／19 各 41 格 `FRONTEND`（123）加种子 5／6 各 41 格与种子 16 的 18 格 `MISMATCH`（100）。**这才是本节要呈报给作者的东西，不是"已修好所以已绿"**。另外该计划是 `tier = "milestone"`（`test/plans/feat/opt/progen.plan.toml:3`），所以快闸门从不读它。
 
 ## 2. 入口文件与标准库模块同名时的**运行时按名加载**
 
@@ -61,7 +73,7 @@ RUN_EXIT=0
 
 **页上的读数**（主机 `88zjwei`，树 `h-shape` `11ac48f38`；未重跑）：`perf/training_steps` 4 条红 —— `[SUMMARY] total: 6, pass: 2, fail: 4`、`RUN_EXIT=1`，即 `mlp_step.nvm`、`mlp_step.fvm`、`transformer_step.nvm`、`transformer_step.profile`（`:10-11`）；候选 **(A)**（把 `modules/nn/optim.cpp` 的严格相等谓词换成语言自己的 `assignableFrom`，或比较前不去 `widened()`）试改并**重建**后仍 `fail 4`、诊断整行不变，已回退（`git diff optim.cpp` 为空）（`:62-65`、`:78-79`）。这 4 条用例今天仍红（`:86`）。
 
-**没有裁定可依**：含 `f32[..]` 的 **20 个 handover 文件（61 行）**逐条看过，唯一相关且**方向相反**的是设计原则 5.4（"形状未知的数组进入声明了形状的位置：不放行，用 `as` 显式转换"），本条是"声明开秩、实参具体秩"，5.4 不覆盖（`:37-46`）。
+**没有裁定可依**：含 `f32[..]` 的 **20 个 handover 文件（61 行）**逐条看过，唯一相关且**方向相反**的是设计原则 5.4（"形状未知的数组进入声明了形状的位置：不放行，用 `as` 显式转换"），本条是"声明开秩、实参具体秩"，5.4 不覆盖（`:38-48`）。
 
 **口径**（2026-10-27，`2c9100ff3`，自测）：模式按**字面量** `f32[..]` 量 —— `git grep -n -F 'f32[..]' -- docs/handover` ⇒ **20 个文件／61 行**，放宽到 `-- docs` ⇒ **35 个文件／158 行**。这 20／35 **不含引用它的页面**：把本页算进去是 21／62 与 36／159。写成 `'f32[\.\.]'` 时方括号是字符类（`f32` 后跟一个 `\` 或 `.`），量到的是别的数；本页原写的 `41 个文件` 与这条口径不符。
 
