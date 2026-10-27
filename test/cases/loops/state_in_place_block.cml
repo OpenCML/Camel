@@ -1,0 +1,35 @@
+// The in-place append of a loop state does not depend on how the body is written (design
+// principles 10.5): a body that is a block, binds names with `let` and hands the next state back
+// with `return` appends to the state's own array exactly as the body that is one expression does.
+// `std::mem::blocks()` between the operations shows one block for the 200 rounds of each.
+func grown(n: int): int[] {
+    return loop xs = [0] while len(xs) < n do xs->append<7>
+}
+
+func grownByReturn(n: int): int[] {
+    return loop xs = [0] while len(xs) < n do {
+        let v = 7
+        return xs->append<v>
+    }
+}
+
+func grownWithCounter(n: int): (int[], int) {
+    return loop xs = [0], rounds = 0 while len(xs) < n do {
+        let next = rounds + 1
+        let v    = next * 0 + 7
+        return (xs->append<v>, next)
+    }
+}
+
+func main(): int sync {
+    let before = std::mem::blocks()
+    let a      = grown(200)
+    let mid    = std::mem::blocks()
+    let b      = grownByReturn(200)
+    let after  = std::mem::blocks()
+    let (c, r) = grownWithCounter(200)
+    let last   = std::mem::blocks()
+    println(len(a), len(b), len(c), r)
+    println(mid.allocs - before.allocs, after.allocs - mid.allocs, last.allocs - after.allocs)
+    return 0
+}
