@@ -2422,3 +2422,17 @@ Type *Builder::visitTypeNode(const GCT::node_ptr_t &gct) {
 }
 
 } // namespace camel::compile::gir
+
+namespace camel::compile::gir {
+
+std::vector<std::string> genericSignaturesOf(const camel::core::module::Entity &entity) {
+    std::vector<std::string> signatures;
+    for (const generic_template_ptr_t &tmpl : genericTemplatesOfEntity(entity)) {
+        if (tmpl != nullptr && tmpl->funcType != nullptr) {
+            signatures.push_back(tmpl->funcType->toString());
+        }
+    }
+    return signatures;
+}
+
+} // namespace camel::compile::gir
