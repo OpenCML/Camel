@@ -2085,6 +2085,21 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             argumentNames != nullptr && i - 1 < argumentNames->size() ? (*argumentNames)[i - 1]
                                                                       : std::nullopt;
         normInputs.push_back({inputNode, argumentExpr, name});
+        const bool takesVariable = isAssignment ||
+                                   (argumentSignature != nullptr &&
+                                    slot < argumentSignature->normTypesCount() &&
+                                    argumentSignature->normIsVarAt(slot));
+        if (synced_ && !takesVariable && inputNode != nullptr && isVariable(inputNode)) {
+            // An argument written after this one that does more than name a value may write the
+            // variable: this one is read first.
+            for (size_t later = i + 1; later < gct->size(); ++later) {
+                const auto kind = gct->at(later)->type();
+                if (kind != GCT::NodeKind::DATA && kind != GCT::NodeKind::DREF) {
+                    normInputs.back().early = readVariable(inputNode);
+                    break;
+                }
+            }
+        }
         if (isAssignment && i == 1) {
             Type *place = valueTypeOf(nodeTypeOf(inputNode));
             if (place != nullptr && place->code() == TypeCode::Function) {
@@ -3850,7 +3865,8 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
     // The node to link and, at a `var` position, the variable the callee writes (if any).
     const auto passArgument = [&](const Argument &arg, bool isVar) {
         if (!isVar) {
-            return Passed{valueOf(arg.node), node_handle_t{}, LinkType::Norm};
+            return Passed{
+                arg.early != nullptr ? arg.early : valueOf(arg.node), node_handle_t{}, LinkType::Norm};
         }
         requireMutableArgument(arg, calleeLabel);
         const bool named = isVariable(arg.node);
@@ -3884,7 +3900,10 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
             }
             return Passed{variable, variable, LinkType::Norm};
         }
-        return Passed{valueOf(arg.node), named ? arg.node : node_handle_t{}, LinkType::Norm};
+        return Passed{
+            arg.early != nullptr ? arg.early : valueOf(arg.node),
+            named ? arg.node : node_handle_t{},
+            LinkType::Norm};
     };
 
     // All arguments are read before the call is recorded as a writer: a variable passed both
@@ -3977,6 +3996,22 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
     for (const Passed &arg : passed) {
         if (arg.written != nullptr) {
             recordWrite(arg.written, targetNode);
+        }
+    }
+    if (synced_ && !targetGraph && targetOperator == nullptr) {
+        lastIndirectCall_ = targetNode;
+        // A call through a function value may write any variable the value captured, and which
+        // ones is not known here: every read written before it is ordered before it, as a read is
+        // before the write it precedes (the reads of a variable nothing else touches are folded
+        // away, with these edges).
+        for (const auto &[variable, uses] : pendingUses_) {
+            for (const VariableUse &use : uses) {
+                if (use.isRead && sameGraph(use.node, currGraph_) && linkCheek(use.node, targetNode) &&
+                    nodeTakesAnOrder(use.node) && nodeTakesAnOrder(targetNode) &&
+                    !hasDirectDataDependency(use.node, targetNode)) {
+                    linkNodes(LinkType::Order, use.node, targetNode);
+                }
+            }
         }
     }
     for (const CapturedUse &use : captured) {

@@ -725,6 +725,11 @@ class Builder {
         /// with a defaulted parameter between them): it has no node, and the declaration the
         /// call turns out to mean gives it its default (completeWithFor).
         bool left = false;
+        /// The value of a variable argument, read where the argument is written: an argument
+        /// after it may write the variable (`f(c, g(c))`), and the read is a use of the variable
+        /// that comes before that write (design principles 3.3). Unused when the parameter takes
+        /// the variable itself, and the read nobody uses is dropped with the graph's other dead reads.
+        node_handle_t early = nullptr;
     };
 
     using node_modifier_map_t = std::unordered_map<draft_node_ref_t, draft_node_ref_t>;
@@ -756,6 +761,9 @@ class Builder {
     // the name, `counter::cnt`): a body that reads or writes the cell through a capture touches
     // that resource (builder_resources.cpp).
     std::unordered_map<node_handle_t, std::string> moduleVariableResources_;
+    // The last call through a function value written in a sync block: it may write any variable the
+    // value captured, so a read written after it is ordered after it (readVariableThrough).
+    node_handle_t lastIndirectCall_ = nullptr;
     std::optional<std::string>
     moduleVariableOf(const runtime::GraphDraft &draft, draft_node_ref_t port) const;
     // The value the port of a machine's region stands for: a round takes the sequence it iterates
