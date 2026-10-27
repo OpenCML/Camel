@@ -61,10 +61,12 @@ RUN_EXIT=0
 
 **页上的读数**（主机 `88zjwei`，树 `h-shape` `11ac48f38`；未重跑）：`perf/training_steps` 4 条红 —— `[SUMMARY] total: 6, pass: 2, fail: 4`、`RUN_EXIT=1`，即 `mlp_step.nvm`、`mlp_step.fvm`、`transformer_step.nvm`、`transformer_step.profile`（`:10-11`）；候选 **(A)**（把 `modules/nn/optim.cpp` 的严格相等谓词换成语言自己的 `assignableFrom`，或比较前不去 `widened()`）试改并**重建**后仍 `fail 4`、诊断整行不变，已回退（`git diff optim.cpp` 为空）（`:62-65`、`:78-79`）。这 4 条用例今天仍红（`:86`）。
 
-**没有裁定可依**：含 `f32[..]` 的 41 个 handover 文件逐条看过，唯一相关且**方向相反**的是设计原则 5.4（"形状未知的数组进入声明了形状的位置：不放行，用 `as` 显式转换"），本条是"声明开秩、实参具体秩"，5.4 不覆盖（`:37-46`）。
+**没有裁定可依**：含 `f32[..]` 的 **20 个 handover 文件（61 行）**逐条看过，唯一相关且**方向相反**的是设计原则 5.4（"形状未知的数组进入声明了形状的位置：不放行，用 `as` 显式转换"），本条是"声明开秩、实参具体秩"，5.4 不覆盖（`:37-46`）。
 
-## 4. `docs/technical/30_diagnostics_reporting.md:272-273` 的测量记录
+**口径**（2026-10-27，`2c9100ff3`，自测）：模式按**字面量** `f32[..]` 量 —— `git grep -n -F 'f32[..]' -- docs/handover` ⇒ **20 个文件／61 行**，放宽到 `-- docs` ⇒ **35 个文件／158 行**。这 20／35 **不含引用它的页面**：把本页算进去是 21／62 与 36／159。写成 `'f32[\.\.]'` 时方括号是字符类（`f32` 后跟一个 `\` 或 `.`），量到的是别的数；本页原写的 `41 个文件` 与这条口径不符。
+
+## 4. `docs/technical/30_diagnostics_reporting.md:314` 的测量记录
 
 **裁决点**：频次表里 **`ConstructNotSupported 27`** 那个码已从注册表退场（本车道 `0364b7ab7`，`refactor!`），而这段测量按作者提交信息**故意留用** ⇒ 按新 revision **重做整份调查并改 pin**，还是**只加一句"该码已退场"**？
 
-**出处与读数**：`:272-273` 在 "Committed programs" 那一条里 —— 2662 个 `.cml` 各自 `camel <file> --error-format json --max-errors 50`，2568 诊断 / 237 个码 / 39 次因自身原因失败（`:305-307`）；整段属于 "the survey of 2026-10-24 on `769b358a9`"（`:296`）。裁定原文是 `681f8e54a` 提交信息里的一行：**"The measurement at 30_diagnostics_reporting.md:272 is a record of what was measured and is untouched."** 那次提交正是清理 `wait` 残留的一批，它在这同一行上留着 `ConstructNotSupported 27`，只改了同文件 `:138` 的机制描述。该文件**不是生成物**：没有任何脚本写它（`scripts/diagnostics-renumber.mjs:59` 只是注释里引用它），所以既不会随 `--write` 更新，也没有"重录"这条路。重做的代价：换 revision（10-27 的树已不是 `769b358a9`）、第一表 2662 个文件各一次编译、第二表 3000 个变异体（`:275-284`）。
+**出处与读数**：`:314` 在 "Committed programs" 那一条里 —— 2662 个 `.cml` 各自 `camel <file> --error-format json --max-errors 50`，2568 诊断 / 237 个码 / 39 次因自身原因失败（`:305-307`）；整段属于 "the survey of 2026-10-24 on `769b358a9`"（`:296`）。裁定原文是 `681f8e54a` 提交信息里的一行：**"The measurement at 30_diagnostics_reporting.md:272 is a record of what was measured and is untouched."**（同一行在 `681f8e54a` 上是 `:273`，提交信息写的 `:272` 差 1。）那次提交正是清理 `wait` 残留的一批，它在这同一行上留着 `ConstructNotSupported 27`，只改了同文件 `:138` 的机制描述。该文件**不是生成物**：没有任何脚本写它（`scripts/diagnostics-renumber.mjs:59` 只是注释里引用它），所以既不会随 `--write` 更新，也没有"重录"这条路。重做的代价：换 revision（10-27 的树已不是 `769b358a9`）、第一表 2662 个文件各一次编译、第二表 3000 个变异体（`:275-284`）。
