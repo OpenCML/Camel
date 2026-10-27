@@ -256,18 +256,44 @@ gc_node_ref_t ungated(const GraphDraft &draft, gc_node_ref_t node) {
 }
 
 /// What `node` and the gates it passes through wait for, the gated value's own ordering included.
+/// A wait is read in either kind: a node of a `sync` block waits through the sync edge of the
+/// block's chain as well as through the control edge beside it
+/// (docs/design/effects/edges.cn.md 1, 4.6).
 std::vector<gc_node_ref_t> orderingOf(const GraphDraft &draft, gc_node_ref_t node) {
     std::vector<gc_node_ref_t> ctrl;
     while (true) {
-        for (gc_node_ref_t before : draft.ctrlInputsOf(node)) {
-            if (std::find(ctrl.begin(), ctrl.end(), before) == ctrl.end()) {
-                ctrl.push_back(before);
+        for (auto waits : {draft.ctrlInputsOf(node), draft.syncInputsOf(node)}) {
+            for (gc_node_ref_t before : waits) {
+                if (std::find(ctrl.begin(), ctrl.end(), before) == ctrl.end()) {
+                    ctrl.push_back(before);
+                }
             }
         }
         if (kindOf(draft, node) != GCNodeKind::Gate || draft.normInputsOf(node).empty()) {
             return ctrl;
         }
         node = draft.normInputsOf(node).back();
+    }
+}
+
+/// A node that stands for another takes the chain place of the one it replaces as well: a
+/// statement of a `sync` block is written after the statement before it through the sync edge, and
+/// a clone or a direct call that keeps only the control edge beside it leaves the block's chain
+/// broken (docs/design/effects/edges.cn.md 1, 4.6; docs/handover/README.cn.md 5.21 item 4).
+void takeSyncPlace(GraphDraft &draft, gc_node_ref_t from, gc_node_ref_t to) {
+    const auto inputs = copyOf(draft.syncInputsOf(from));
+    if (inputs.empty() || from == to) {
+        return;
+    }
+    if (const auto *header = draft.header(to); header != nullptr) {
+        draft.setNodeRuntimeFlags(
+            to,
+            static_cast<uint8_t>(header->runtimeFlags |
+                                 camel::runtime::kGCNodeFlagSyncStatement));
+    }
+    draft.setSyncInputs(to, inputs);
+    for (gc_node_ref_t user : copyOf(draft.syncUsersOf(from))) {
+        draft.replaceInput(rt::DraftEdgeKind::Sync, user, from, to);
     }
 }
 
@@ -1516,6 +1542,7 @@ void ForwardRewrite::expandKernelBodies() {
         draft_.setWithInputs(direct, withInputs);
         draft_.setNormInputs(direct, normInputs);
         draft_.setCtrlInputs(direct, copyOf(draft_.ctrlInputsOf(id)));
+        takeSyncPlace(draft_, id, direct);
         draft_.replaceAllValueUses(id, direct);
         for (gc_node_ref_t user : copyOf(draft_.ctrlUsersOf(id))) {
             draft_.replaceInput(rt::DraftEdgeKind::Ctrl, user, id, direct);
@@ -2442,6 +2469,7 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
         }
     }
     draft_.setCtrlInputs(direct, ctrl);
+    takeSyncPlace(draft_, call, direct);
     draft_.replaceAllValueUses(call, direct);
     for (gc_node_ref_t user : copyOf(draft_.ctrlUsersOf(call))) {
         draft_.replaceInput(rt::DraftEdgeKind::Ctrl, user, call, direct);
@@ -2514,6 +2542,7 @@ void ForwardRewrite::rewriteClosureCall(
         }
     }
     draft_.setCtrlInputs(direct, ctrl);
+    takeSyncPlace(draft_, call, direct);
     draft_.replaceAllValueUses(call, direct);
     for (gc_node_ref_t user : copyOf(draft_.ctrlUsersOf(call))) {
         draft_.replaceInput(rt::DraftEdgeKind::Ctrl, user, call, direct);
