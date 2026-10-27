@@ -2860,14 +2860,28 @@ themselves are values like any other, so a `tee` of one of them is another `tee`
 
 ## `math`: numbers and bits
 
-Numeric types are not converted implicitly. A function over floats takes `f32` or `float`
-and returns the type it was given; a function of several numbers takes numbers of one type.
-Outside its domain a float function gives the IEEE result (NaN or an infinity), not a fault.
-A constant is a value, written without parentheses: `pi`.
+Scalar mathematics. One definition covers every type that has the operation: a function of
+floats is written once for `f32`, `float`, `bf16` and `f16` and answers the type it was given;
+a function of several numbers takes numbers of one type. Numeric types are not converted
+implicitly: `sqrt(4)` is refused, write `sqrt(4.0)` or `sqrt(float(n))`.
+
+- Outside its domain a float function gives the IEEE result (NaN or an infinity), not a fault.
+  Special values (zeros, infinities, NaN) are exact.
+- The transcendental functions are computed in f64 and rounded once into the type asked for.
+  They promise an error of at most 2 ulp (of the type's own precision, for `float`), not the
+  same bits on every device (design principles 7.1). `sqrt`, the rounding functions, `min` and
+  `max` are exact: the result is the correctly rounded or the selected operand.
+- `min` and `max` are the IEEE 754-2019 `minimum` and `maximum`: a NaN on either side gives
+  NaN, and -0 is below +0 (design principles 7.7).
+- Over an array the elementwise functions are the `tensor` module's for now (`exp(xs)`); the
+  scalar ones here apply to a number, and `xs->map<exp>` is the same function on every element.
+  The conversions `f32(xs)`, `float(xs)` are elementwise (core). `sum`, `mean`, `min`, `max` of a
+  whole array belong to `array`.
+- Only what a program cannot compute from the language is native: the f64 kernels of the
+  elementary functions, the sign-exact selection of `min` and `max`, the parts of a complex
+  number, and the bit operations of an integer width.
 
 ### Constants
-
-Values the module exports (design principles 10.1), written without parentheses.
 
 #### `pi`
 
@@ -2918,289 +2932,201 @@ A NaN. It equals nothing, itself included: test with is_nan.
 #### `sqrt`
 
 ```camel
-sqrt: (x: i32) => f32
-sqrt: (x: int) => float
-sqrt: (x: f32) => f32
-sqrt: (x: float) => float
+sqrt: (x: T) => T when is_float::<T>()
 ```
 
-The square root. An integer argument is converted: i32 gives f32, int gives float.
+The square root; NaN for a negative x, and the square root of -0 is -0.
 
-- Pure.
 - Example: `sqrt(9.0)` gives `3`
-
-#### `abs`
-
-```camel
-abs: (x: i32) => i32
-abs: (x: int) => int
-abs: (x: f32) => f32
-abs: (x: float) => float
-abs: (x: c64) => f32
-abs: (x: c128) => float
-abs: (x: bf16) => bf16
-abs: (x: f16) => f16
-```
-
-The absolute value. The smallest integer has no positive counterpart: its absolute value is
-not defined. A bf16 or f16 value is the sign cleared, computed on the f32 it widens to
-exactly, so -0 becomes +0 and no value of either type rounds (design principles 7.3).
-
-- Pure.
-- Example: `abs(-3)` gives `3`
-
-#### `re`
-
-```camel
-re: (x: c64) => f32
-re: (x: c128) => float
-```
-
-The real part of a complex number.
-
-- Pure.
-- Example: `re(3+4i)` gives `3.0`
-
-#### `im`
-
-```camel
-im: (x: c64) => f32
-im: (x: c128) => float
-```
-
-The imaginary part of a complex number.
-
-- Pure.
-- Example: `im(3+4i)` gives `4.0`
-
-#### `conj`
-
-```camel
-conj: (x: c64) => c64
-conj: (x: c128) => c128
-```
-
-The conjugate of a complex number: the imaginary part is negated.
-
-- Pure.
-- Example: `conj(3+4i)` gives `3-4i`
 
 #### `exp`
 
 ```camel
-exp: (x: f32) => f32
-exp: (x: float) => float
-exp: (x: c64) => c64
-exp: (x: c128) => c128
+exp: (x: T) => T when is_float::<T>()
 ```
 
 e raised to the power x.
 
-- Pure.
 - Example: `exp(0.0)` gives `1`
+
+#### `exp`
+
+```camel
+exp: (z: T) => T when is_complex::<T>()
+```
+
+e raised to the power of a complex number.
+
+- Example: `exp(0.0+0.0i)` gives `1+0i`
 
 #### `expm1`
 
 ```camel
-expm1: (x: f32) => f32
-expm1: (x: float) => float
+expm1: (x: T) => T when is_float::<T>()
 ```
 
 exp(x) - 1, accurate for x near 0.
 
-- Pure.
 - Example: `expm1(0.0)` gives `0`
 
 #### `log`
 
 ```camel
-log: (x: f32) => f32
-log: (x: float) => float
+log: (x: T) => T when is_float::<T>()
 ```
 
 The natural logarithm. log(0.0) is -inf, the logarithm of a negative number is NaN.
 
-- Pure.
 - Example: `log(1.0)` gives `0`
 
 #### `log2`
 
 ```camel
-log2: (x: f32) => f32
-log2: (x: float) => float
+log2: (x: T) => T when is_float::<T>()
 ```
 
 The logarithm to base 2.
 
-- Pure.
 - Example: `log2(8.0)` gives `3`
 
 #### `log10`
 
 ```camel
-log10: (x: f32) => f32
-log10: (x: float) => float
+log10: (x: T) => T when is_float::<T>()
 ```
 
 The logarithm to base 10.
 
-- Pure.
 - Example: `log10(1000.0)` gives `3`
 
 #### `log1p`
 
 ```camel
-log1p: (x: f32) => f32
-log1p: (x: float) => float
+log1p: (x: T) => T when is_float::<T>()
 ```
 
 log(1 + x), accurate for x near 0.
 
-- Pure.
 - Example: `log1p(0.0)` gives `0`
 
 #### `pow`
 
 ```camel
-pow: (x: f32, y: f32) => f32
-pow: (x: float, y: float) => float
+pow: (x: T, y: T) => T when is_float::<T>()
 ```
 
 x raised to the power y. pow(0.0, 0.0) is 1; a negative x with a fractional y gives NaN.
 
-- Pure.
 - Example: `pow(2.0, 10.0)` gives `1024`
 
 #### `hypot`
 
 ```camel
-hypot: (x: f32, y: f32) => f32
-hypot: (x: float, y: float) => float
+hypot: (x: T, y: T) => T when is_float::<T>()
 ```
 
 The square root of x*x + y*y, without overflow in the squares.
 
-- Pure.
 - Example: `hypot(3.0, 4.0)` gives `5`
 
 #### `sin`
 
 ```camel
-sin: (x: f32) => f32
-sin: (x: float) => float
+sin: (x: T) => T when is_float::<T>()
 ```
 
 The sine of x, x in radians.
 
-- Pure.
 - Example: `sin(0.0)` gives `0`
 
 #### `cos`
 
 ```camel
-cos: (x: f32) => f32
-cos: (x: float) => float
+cos: (x: T) => T when is_float::<T>()
 ```
 
 The cosine of x, x in radians.
 
-- Pure.
 - Example: `cos(0.0)` gives `1`
 
 #### `tan`
 
 ```camel
-tan: (x: f32) => f32
-tan: (x: float) => float
+tan: (x: T) => T when is_float::<T>()
 ```
 
 The tangent of x, x in radians.
 
-- Pure.
 - Example: `tan(0.0)` gives `0`
 
 #### `asin`
 
 ```camel
-asin: (x: f32) => f32
-asin: (x: float) => float
+asin: (x: T) => T when is_float::<T>()
 ```
 
 The arc sine, in radians; NaN outside -1 to 1.
 
-- Pure.
 - Example: `asin(1.0)` gives `1.5708`
 
 #### `acos`
 
 ```camel
-acos: (x: f32) => f32
-acos: (x: float) => float
+acos: (x: T) => T when is_float::<T>()
 ```
 
 The arc cosine, in radians; NaN outside -1 to 1.
 
-- Pure.
 - Example: `acos(1.0)` gives `0`
 
 #### `atan`
 
 ```camel
-atan: (x: f32) => f32
-atan: (x: float) => float
+atan: (x: T) => T when is_float::<T>()
 ```
 
 The arc tangent, in radians.
 
-- Pure.
 - Example: `atan(1.0)` gives `0.785398`
 
 #### `atan2`
 
 ```camel
-atan2: (y: f32, x: f32) => f32
-atan2: (y: float, x: float) => float
+atan2: (y: T, x: T) => T when is_float::<T>()
 ```
 
 The angle of the point (x, y) in radians, between -pi and pi. Note the order: y first.
 
-- Pure.
 - Example: `atan2(1.0, 1.0)` gives `0.785398`
 
 #### `sinh`
 
 ```camel
-sinh: (x: f32) => f32
-sinh: (x: float) => float
+sinh: (x: T) => T when is_float::<T>()
 ```
 
 The hyperbolic sine.
 
-- Pure.
 - Example: `sinh(0.0)` gives `0`
 
 #### `cosh`
 
 ```camel
-cosh: (x: f32) => f32
-cosh: (x: float) => float
+cosh: (x: T) => T when is_float::<T>()
 ```
 
 The hyperbolic cosine.
 
-- Pure.
 - Example: `cosh(0.0)` gives `1`
 
 #### `tanh`
 
 ```camel
-tanh: (x: f32) => f32
-tanh: (x: float) => float
+tanh: (x: T) => T when is_float::<T>()
 ```
 
 The hyperbolic tangent.
 
-- Pure.
 - Example: `tanh(0.0)` gives `0`
 
 ### Rounding
@@ -3208,49 +3134,41 @@ The hyperbolic tangent.
 #### `floor`
 
 ```camel
-floor: (x: f32) => f32
-floor: (x: float) => float
+floor: (x: T) => T when is_float::<T>()
 ```
 
 The largest whole number not above x, as a float.
 
-- Pure.
 - Example: `floor(-2.5)` gives `-3`
 
 #### `ceil`
 
 ```camel
-ceil: (x: f32) => f32
-ceil: (x: float) => float
+ceil: (x: T) => T when is_float::<T>()
 ```
 
 The smallest whole number not below x, as a float.
 
-- Pure.
 - Example: `ceil(2.1)` gives `3`
 
 #### `round`
 
 ```camel
-round: (x: f32) => f32
-round: (x: float) => float
+round: (x: T) => T when is_float::<T>()
 ```
 
 The nearest whole number, halves away from zero, as a float.
 
-- Pure.
 - Example: `round(2.5)` gives `3`
 
 #### `trunc`
 
 ```camel
-trunc: (x: f32) => f32
-trunc: (x: float) => float
+trunc: (x: T) => T when is_float::<T>()
 ```
 
 x without its fraction (rounded toward zero), as a float.
 
-- Pure.
 - Example: `trunc(-2.7)` gives `-2`
 
 ### Comparing
@@ -3258,250 +3176,236 @@ x without its fraction (rounded toward zero), as a float.
 #### `min`
 
 ```camel
-min: (a: i32, b: i32) => i32
-min: (a: int, b: int) => int
-min: (a: f32, b: f32) => f32
-min: (a: float, b: float) => float
-min: (a: string, b: string) => string
-min: (a: bool, b: bool) => bool
-min: (a: bf16, b: bf16) => bf16
-min: (a: f16, b: f16) => f16
+min: (a: T, b: T) => T when is_ordered::<T>()
 ```
 
 The smaller of two values of one ordered type. For numbers this is the IEEE 754 minimum: a
-NaN on either side gives NaN, and -0 is below +0. Strings compare by their bytes (a proper
-prefix first), and false is below true. A bf16 or f16 comparison is made on the f32 each
-operand widens to exactly, and the result is that operand itself: neither type rounds here
-(design principles 7.3).
+NaN on either side gives NaN, and -0 is below +0. Strings compare by code point (a proper
+prefix first), and false is below true.
 
-- Pure.
 - Example: `min(3, 5)` gives `3`
 - Example: `min('b', 'a')` gives `'a'`
 
 #### `max`
 
 ```camel
-max: (a: i32, b: i32) => i32
-max: (a: int, b: int) => int
-max: (a: f32, b: f32) => f32
-max: (a: float, b: float) => float
-max: (a: string, b: string) => string
-max: (a: bool, b: bool) => bool
-max: (a: bf16, b: bf16) => bf16
-max: (a: f16, b: f16) => f16
+max: (a: T, b: T) => T when is_ordered::<T>()
 ```
 
 The larger of two values of one ordered type. For numbers this is the IEEE 754 maximum: a
-NaN on either side gives NaN, and -0 is below +0. Strings compare by their bytes (a proper
-prefix first), and false is below true. A bf16 or f16 comparison is made on the f32 each
-operand widens to exactly, and the result is that operand itself: neither type rounds here
-(design principles 7.3).
+NaN on either side gives NaN, and -0 is below +0. Strings compare by code point (a proper
+prefix first), and false is below true.
 
-- Pure.
 - Example: `max(3, 5)` gives `5`
 - Example: `max('a', 'b')` gives `'b'`
 
 #### `clamp`
 
 ```camel
-clamp: (x: i32, lo: i32, hi: i32) => i32
-clamp: (x: int, lo: int, hi: int) => int
-clamp: (x: f32, lo: f32, hi: f32) => f32
-clamp: (x: float, lo: float, hi: float) => float
+clamp: (x: T, lo: T, hi: T) => T when is_real::<T>()
 ```
 
 x held between lo and hi: lo when x is below, hi when above. A NaN x stays NaN.
 
-- Pure.
 - Failure: fault `InvalidArgument` when lo is above hi, or a bound is NaN.
 - Example: `clamp(15, 0, 10)` gives `10`
+
+#### `abs`
+
+```camel
+abs: (x: T) => T when is_real::<T>()
+```
+
+The absolute value of an integer or a float. The sign of a zero is cleared, a NaN stays a NaN,
+and the smallest integer is its own absolute value (negation wraps, as it does in `-x`).
+
+- Example: `abs(-3)` gives `3`
+
+#### `abs`
+
+```camel
+abs: (z: T) => f32 when is_same::<T, c64>()
+```
+
+The modulus of a single-precision complex number.
+
+- Example: `abs(c64(3.0)+4.0i)` gives `5`
+
+#### `abs`
+
+```camel
+abs: (z: T) => float when is_same::<T, c128>()
+```
+
+The modulus of a double-precision complex number.
+
+- Example: `abs(3.0+4.0i)` gives `5`
 
 #### `sign`
 
 ```camel
-sign: (x: i32) => i32
-sign: (x: int) => int
-sign: (x: f32) => f32
-sign: (x: float) => float
+sign: (x: T) => T when is_real::<T>()
 ```
 
--1, 0 or 1 by the sign of x, in the type of x. The sign of a NaN is NaN.
+-1, 0 or 1 by the sign of x, in the type of x. A zero and a NaN are returned as they are.
 
-- Pure.
 - Example: `sign(-2.5)` gives `-1`
 
 #### `is_nan`
 
 ```camel
-is_nan: (x: f32) => bool
-is_nan: (x: float) => bool
+is_nan: (x: T) => bool when is_float::<T>()
 ```
 
 Whether x is a NaN.
 
-- Pure.
 - Example: `is_nan(inf - inf)` gives `true`
 
 #### `is_inf`
 
 ```camel
-is_inf: (x: f32) => bool
-is_inf: (x: float) => bool
+is_inf: (x: T) => bool when is_float::<T>()
 ```
 
 Whether x is positive or negative infinity.
 
-- Pure.
 - Example: `is_inf(1.0)` gives `false`
+
+#### `is_finite`
+
+```camel
+is_finite: (x: T) => bool when is_float::<T>()
+```
+
+Whether x is neither a NaN nor an infinity.
+
+- Example: `is_finite(1.0)` gives `true`
+
+### Complex numbers
+
+The parts of a complex number are native: the result type is not the argument's.
+
+#### `re`
+
+```camel
+re: (z: c64) => f32
+re: (z: c128) => float
+```
+
+The real part of a complex number.
+
+- Example: `re(3.0+4.0i)` gives `3.0`
+
+#### `im`
+
+```camel
+im: (z: c64) => f32
+im: (z: c128) => float
+```
+
+The imaginary part of a complex number.
+
+- Example: `im(3.0+4.0i)` gives `4.0`
+
+#### `conj`
+
+```camel
+conj: (z: T) => T when is_same::<T, c64>()
+conj: (z: T) => T when is_same::<T, c128>()
+```
+
+The conjugate of a complex number: the imaginary part is negated, a zero's sign included.
+
+- Example: `conj(3.0+4.0i)` gives `3-4i`
 
 ### Integers
 
 #### `gcd`
 
 ```camel
-gcd: (a: i32, b: i32) => i32
-gcd: (a: int, b: int) => int
+gcd: (a: T, b: T) => T when is_integer::<T>()
 ```
 
-The greatest common divisor, never negative; gcd(0, 0) is 0.
+The greatest common divisor, never negative; gcd(0, 0) is 0. The smallest integer, which has
+no positive counterpart, is not accepted.
 
-- Pure.
-- Failure: fault `InvalidArgument` when the result does not fit the type (the smallest integer with itself or with 0).
+- Failure: fault `InvalidArgument` when an argument is the smallest integer of its type.
 - Example: `gcd(12, 18)` gives `6`
 
 #### `lcm`
 
 ```camel
-lcm: (a: i32, b: i32) => i32
-lcm: (a: int, b: int) => int
+lcm: (a: T, b: T) => T when is_integer::<T>()
 ```
 
 The least common multiple, never negative; 0 when either argument is 0.
 
-- Pure.
-- Failure: fault `InvalidArgument` when the result does not fit the type.
+- Failure: fault `InvalidArgument` when an argument is the smallest integer, or the result does not fit the type.
 - Example: `lcm(4, 6)` gives `12`
-
-#### `bin`
-
-```camel
-bin: (x: i32) => string
-bin: (x: int) => string
-```
-
-The digits of x in base 2 with the prefix 0b; a negative number is shown as its 64-bit
-two's complement.
-
-- Pure.
-- Example: `bin(5)` gives `'0b101'`
-
-#### `oct`
-
-```camel
-oct: (x: i32) => string
-oct: (x: int) => string
-```
-
-The digits of x in base 8 with the prefix 0o.
-
-- Pure.
-- Example: `oct(8)` gives `'0o10'`
-
-#### `hex`
-
-```camel
-hex: (x: i32) => string
-hex: (x: int) => string
-```
-
-The digits of x in base 16, in upper case, with the prefix 0x.
-
-- Pure.
-- Example: `hex(255)` gives `'0xFF'`
 
 ### Bits
 
-Bit operations are functions, not operators. Integers are two's complement: `int` has 64
-bits, `i32` has 32.
-
-#### `shl`
-
-```camel
-shl: (x: i32, count: i32) => i32
-shl: (x: i32, count: int) => i32
-shl: (x: int, count: i32) => int
-shl: (x: int, count: int) => int
-```
-
-x shifted left by count bits: bits shifted out are lost and zeros come in, so the sign may
-change. The count may be of either integer type.
-
-- Pure.
-- Failure: fault `InvalidArgument` when count is negative or not below the width of x (64 for int, 32 for i32).
-- Example: `shl(1, 4)` gives `16`
-
-#### `shr`
-
-```camel
-shr: (x: i32, count: i32) => i32
-shr: (x: i32, count: int) => i32
-shr: (x: int, count: i32) => int
-shr: (x: int, count: int) => int
-```
-
-x shifted right by count bits, keeping the sign (an arithmetic shift): shr(-8, 1) is -4.
-
-- Pure.
-- Failure: fault `InvalidArgument` when count is negative or not below the width of x.
-- Example: `shr(256, 4)` gives `16`
+Bit operations are functions, not operators (`&` and `|` are logical). Integers are two's
+complement: `int` has 64 bits, `i32` has 32. One declaration per width, because the operator
+that runs differs; the name and the signature are one generic.
 
 #### `bit_and`
 
 ```camel
-bit_and: (a: i32, b: i32) => i32
-bit_and: (a: int, b: int) => int
+bit_and: (a: T, b: T) => T when is_same::<T, i32>()
+bit_and: (a: T, b: T) => T when is_same::<T, int>()
 ```
 
 The bits set in both a and b.
 
-- Pure.
 - Example: `bit_and(12, 10)` gives `8`
 
 #### `bit_or`
 
 ```camel
-bit_or: (a: i32, b: i32) => i32
-bit_or: (a: int, b: int) => int
+bit_or: (a: T, b: T) => T when is_same::<T, i32>()
+bit_or: (a: T, b: T) => T when is_same::<T, int>()
 ```
 
 The bits set in a or in b.
 
-- Pure.
 - Example: `bit_or(12, 10)` gives `14`
 
 #### `bit_xor`
 
 ```camel
-bit_xor: (a: i32, b: i32) => i32
-bit_xor: (a: int, b: int) => int
+bit_xor: (a: T, b: T) => T when is_same::<T, i32>()
+bit_xor: (a: T, b: T) => T when is_same::<T, int>()
 ```
 
 The bits set in exactly one of a and b.
 
-- Pure.
 - Example: `bit_xor(12, 10)` gives `6`
 
-#### `bit_not`
+#### `shl`
 
 ```camel
-bit_not: (x: i32) => i32
-bit_not: (x: int) => int
+shl: <count: int> (x: T) => T when is_same::<T, i32>()
+shl: <count: int> (x: T) => T when is_same::<T, int>()
 ```
 
-Every bit of x inverted; the same as the operator ~.
+x shifted left by count bits: bits shifted out are lost and zeros come in, so the sign may
+change.
 
-- Pure.
-- Example: `bit_not(0)` gives `-1`
+- Failure: fault `InvalidArgument` when count is negative or not below the width of x (64 for int, 32 for i32).
+- Example: `1->shl<4>` gives `16`
+
+#### `shr`
+
+```camel
+shr: <count: int> (x: T) => T when is_same::<T, i32>()
+shr: <count: int> (x: T) => T when is_same::<T, int>()
+```
+
+x shifted right by count bits, keeping the sign (an arithmetic shift): `-8->shr<1>` is -4.
+
+- Failure: fault `InvalidArgument` when count is negative or not below the width of x.
+- Example: `256->shr<4>` gives `16`
 
 <a id="statistics"></a>
 
