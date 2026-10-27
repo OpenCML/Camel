@@ -3077,3 +3077,29 @@ expect_stdout_contains = ["ort grad matmul batched: 0 failing", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
+
+[[tests]]
+name = "export_index_axis"
+desc = "The index forms on a dimension other than the first export as one ONNX Gather each (design principles 5.4): `x[:, 0]` is a Gather along axis 1 with a scalar index, which drops that dimension, and `x[:, idx]` the same Gather with the indices as an i64 tensor, which keeps the axis at the indices' length."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_index_axis.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT_A=${test_tmp}/export_index_axis_a.onnx", "ONNX_OUT_B=${test_tmp}/export_index_axis_b.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const first = readOnnxModel(path.join(input.test_tmp, 'export_index_axis_a.onnx'))
+const take = readOnnxModel(path.join(input.test_tmp, 'export_index_axis_b.onnx'))
+assert(first.ops.filter((op) => op === 'Gather').length === 1, `expected one Gather for the position, got ${first.ops}`)
+assert(take.ops.filter((op) => op === 'Gather').length === 1, `expected one Gather for the take, got ${take.ops}`)
+assert(first.inputs.join() === 'input' && first.outputs.join() === 'output', `unexpected graph io ${first.inputs} -> ${first.outputs}`)
+assert(take.inputs.join() === 'input' && take.outputs.join() === 'output', `unexpected graph io ${take.inputs} -> ${take.outputs}`)
+}
+"""
+timeout_ms = 10000

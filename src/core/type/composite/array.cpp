@@ -349,22 +349,32 @@ ArrayType *ArrayType::withElementType(Type *elemType) const {
 }
 
 Type *ArrayType::firstDimensionElement() const {
-    // One dimension fewer: the extents after the first, which is what `t[i]` takes for every
-    // rank (design principles 5.4), for every array: the rule lives here, in one place.
-    const std::span<const ExtentForm> extents(extents_);
-    const std::span<const ExtentForm> rest = extents.empty() ? extents : extents.subspan(1);
+    // The axis 0 case of the one rule below: what `t[i]` takes for every rank (design principles
+    // 5.4), for every array: the rule lives here, in one place.
+    return elementAlongAxis(0);
+}
+
+Type *ArrayType::elementAlongAxis(size_t axis) const {
+    // One dimension fewer: every extent but the one the axis names, which is what a position
+    // written on that dimension leaves of the value, for every rank and every dimension.
+    std::vector<ExtentForm> rest(extents_.begin(), extents_.end());
+    if (axis < rest.size()) {
+        rest.erase(rest.begin() + static_cast<std::ptrdiff_t>(axis));
+    }
+    const std::span<const ExtentForm> kept(rest);
     if (anyRank_) {
         // Open rank: a dimension dropped from "at least n" leaves an open rank with the rest of
-        // the prefix, which is the type `iterInfer` gave the same value.
-        return openRank(elemType_, rest);
+        // the prefix, which is the type `iterInfer` gave the same value. An axis inside the open
+        // part leaves the prefix as it is.
+        return openRank(elemType_, kept);
     }
-    if (rest.empty()) {
+    if (kept.empty()) {
         // Rank 1: the first dimension's elements are the elements themselves — a scalar is not a
         // rank-0 array, it is the element type. A
         // nested array's `T[][]` is one dimension of `T[]`.
         return elemType_;
     }
-    return create(elemType_, rest, packName());
+    return create(elemType_, kept, packName());
 }
 
 Type *ArrayType::resolve(const type_vec_t &typeList) const {
