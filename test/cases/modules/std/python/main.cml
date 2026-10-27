@@ -2,21 +2,18 @@
  * Broader Python integration case covering calls, imports, attributes, code execution, scripts, and keyword arguments.
  */
 
-import {
-    exec,
-    eval,
-    run_file,
-    attr,
-    call,
-    import_module,
-    to_string,
-    py_wrap,
-    PyObject
-} from python
+import { exec, eval, run_file, attr, call, import_module, to_string, to_py, PyObject } from python
 
 // A Python call is an error value; these programs expect every call to succeed.
 func must(r: PyObject!): PyObject {
-    return r !! py_wrap('python failed')
+    return match r {
+        case error e => fail<'InvalidArgument'>(e.message)
+        case v => v
+    }
+}
+
+func wrap::<T>(x: T): PyObject {
+    return must(to_py(x))
 }
 
 // A name of `builtins`, or of the program's `__main__`.
@@ -31,20 +28,20 @@ func main_name(name: string): PyObject sync {
 func main(): int sync {
     println("=== Python Integration Tests ===")
 
-    println("\n[1] [py_wrap(1)]->call<print>")
+    println("\n[1] [wrap(1)]->call<print>")
     let print_fn = builtin("print")
-    let _ = [py_wrap(1)]->call<print_fn>
+    let _ = [wrap(1)]->call<print_fn>
 
-    println("\n[2] [py_wrap('hello')]->call<builtins.print>")
+    println("\n[2] [wrap('hello')]->call<builtins.print>")
     let print_by_chain = must(import_module("builtins")->attr<"print">)
-    let _ = [py_wrap("hello")]->call<print_by_chain>
+    let _ = [wrap("hello")]->call<print_by_chain>
 
     println("\n[3] call via attr(builtins, 'print')")
-    let _ = [py_wrap("from attr")]->call<print_fn>
+    let _ = [wrap("from attr")]->call<print_fn>
 
-    println("\n[4] [py_wrap([1, 2, 3])]->call<len>")
+    println("\n[4] [wrap([1, 2, 3])]->call<len>")
     let len_fn = builtin("len")
-    let len_result = must([py_wrap([1, 2, 3])]->call<len_fn>)
+    let len_result = must([wrap([1, 2, 3])]->call<len_fn>)
     let str_fn = builtin("str")
     let _ = [must([len_result]->call<str_fn>)]->call<print_fn>
 
@@ -65,15 +62,15 @@ func main(): int sync {
     println("\n[8] attr(math, 'sqrt') -> math.sqrt(16)")
     let math_mod = must(import_module("math"))
     let sqrt_fn = must(math_mod->attr<"sqrt">)
-    let sqrt_result = must([py_wrap(16)]->call<sqrt_fn>)
+    let sqrt_result = must([wrap(16)]->call<sqrt_fn>)
     let _ = [sqrt_result]->call<print_fn>
 
     println("\n[9] call with positional and keyword arguments")
     let _ = exec("def _greet(name, greeting='Hello'): print(f'{greeting}, {name}!')")
     let greet = main_name("_greet")
-    let hi: PyObject = py_wrap("Hi")
+    let hi: PyObject = wrap("Hi")
     let kwargs = [("greeting", hi)] as Map<string, PyObject>
-    let _ = [py_wrap("World")]->call<greet, kwargs>
+    let _ = [wrap("World")]->call<greet, kwargs>
 
     println("\n[10] to_string")
     println(to_string(sqrt_result) !! "failed")

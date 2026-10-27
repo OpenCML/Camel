@@ -228,8 +228,8 @@ std::unordered_map<std::string, operator_t> getPythonOpsMap() {
         {"attr", __python_attr__},
         {"call", __python_call__},
         {"to_string", __python_to_string__},
-        {"py_wrap", __python_wrap__},
-        {"py_unwrap", __python_upwrap__},
+        {"to_py", __python_to_py__},
+        {"from_py", __python_from_py__},
     };
 }
 
@@ -407,15 +407,13 @@ slot_t __python_to_string__(ArgsView &with, ArgsView &norm, camel::core::context
     }
 }
 
-slot_t __python_wrap__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
+// to_py::<T>(x): the Python object that stands for a Camel value, in the Python form of its type.
+slot_t __python_to_py__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
     // The interpreter is created at the operator's first use, not by `import python`.
     ensurePythonInterpreter(ctx);
     py::gil_scoped_acquire gil;
-    if (norm.size() < 1) {
-        throwRuntimeFault(RuntimeDiag::RuntimeError, "python.wrap: one argument required");
-    }
     py::object o = camelToPy(norm, 0, ctx);
-    return wrapPyObject(o);
+    return pythonOk(norm, o);
 }
 
 // The Python type of an object, for a message.
@@ -613,28 +611,19 @@ static bool pyToCamel(
     }
 }
 
-slot_t __python_upwrap__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
+// from_py::<T>(obj): the value of type T that a Python object holds; T is the payload of the
+// result type, and an object that is not of that kind is a `PythonTypeError` with the path.
+slot_t __python_from_py__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
     // The interpreter is created at the operator's first use, not by `import python`.
     ensurePythonInterpreter(ctx);
     py::gil_scoped_acquire gil;
     PythonObjectHolder *h = unwrapPyObject(norm.slot(0), ctx);
-    Type *argType         = norm.type(0);
-    if (!argType->isOtherType() || argType->code() != getPyObjectType()->code()) {
-        throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "python.unwrap: argument must be PyObject<T> with type param");
-    }
-    auto *o = static_cast<OtherType *>(argType);
-    if (o->paramCount() == 0 || !o->params()[0]) {
-        throwRuntimeFault(
-            RuntimeDiag::RuntimeError,
-            "python.unwrap: PyObject must have one type parameter");
-    }
-    Type *targetType = o->params()[0];
-    slot_t converted = NullSlot;
+    const auto *resultType = static_cast<const TupleType *>(norm.resultType());
+    Type *targetType       = resultType->payloadType();
+    slot_t converted       = NullSlot;
     std::string problem;
     if (!pyToCamel(h->obj, targetType, ctx, "value", converted, problem)) {
-        return makeError("PythonTypeError", problem, "<python::py_unwrap>");
+        return makeError("PythonTypeError", problem, "<python::from_py>");
     }
-    return makeOk(converted, static_cast<const TupleType *>(norm.resultType()));
+    return makeOk(converted, resultType);
 }

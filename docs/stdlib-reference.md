@@ -5490,17 +5490,6 @@ memory.
 - Failure: error value `DeviceUnavailable` when this build or this machine has no CUDA device.
 - Example: `device() !! 'no device'`
 
-#### `compile`
-
-```camel
-compile: (f: F) => F! uses driver when is_function::<F>()
-```
-
-Outlines the regions the device can run, compiles them and executes the program; the card is
-chosen at run time with `--devices`, never by a pass parameter.
-
-- Failure: error value `GpuScopeUnsupported` when a `#gpu` scope holds an operator the device cannot run (the error names the operator and the scope).
-
 <a id="pyplot"></a>
 
 ## `pyplot`: draw an array
@@ -5546,10 +5535,19 @@ plot. matplotlib is used when it is importable, and an SVG file is written other
 Camel calling Python: run code in an embedded interpreter, import modules, read attributes and
 call what they hold. A `PyObject` is a handle into the interpreter, not a value of the program;
 it is released when nothing refers to it any more, so there is nothing to dispose of by hand.
-Values cross the boundary with `py_wrap` (a Camel value becomes a Python object of the matching
-kind) and `py_unwrap` (a Python object becomes a value of the type it was wrapped from, or an
-error value `PythonTypeError` that gives the path of the mismatch); both are in
-`stdlib/signatures/python.cml`. A numeric array is converted by copy.
+Values cross the boundary by copy: `to_py` makes the Python object of a Camel value, in the
+Python form of its type, and `from_py` reads a Python object as a value of the type the call
+names.
+
+The Python form of a type:
+  - `bool`, the integer types, the float types and `string` are the Python scalars of the same
+    name, by value; `Bytes` is `bytes`;
+  - a tuple is a `tuple`, a struct a `dict` of its fields by name, an array a `list`, and a map
+    with string keys a `dict`, each of them by its parts;
+  - `PyObject` itself passes through as it is.
+What converts is a table, never whatever Python would accept: `bool` takes a bool only (not `5`),
+the integers take an int that fits and not a bool or a float, the floats take a float or an int
+and refuse a number the type cannot hold, `string` takes a str and not bytes.
 
 Python code can do anything, including write files and print, and the interpreter holds state
 between calls. So no function here names a resource of its own: each is a use of everything, in
@@ -5560,34 +5558,6 @@ its traceback, never a fault of Camel's.
 
 The interpreter is started the first time a function here runs.
 The other direction, Python calling Camel, is the package `camel` (`pip install camel-lang`).
-
-#### `py_wrap`
-
-```camel
-py_wrap: (x: T) => PyObject<T>
-```
-
-Wraps the value `x` in a new Python object, keeping its Camel type as the type argument of
-`PyObject<T>`.
-
-- With effects: creates an interpreter object.
-- Example: `py_wrap(2.0)` gives `a PyObject<float>`
-
-#### `py_unwrap`
-
-```camel
-py_unwrap: (obj: PyObject<T>) => T!
-```
-
-Unwraps a Python object into a value of type `T`. An object that did not come from `py_wrap`
-has no type argument and is refused when the call is compiled. The object must be of the kind
-`T` names: a `bool` takes a bool only (not `5`), an `int` an int that fits (not a bool or a
-float), a `float` a float or an int, a `string` a str (not bytes), `Bytes` bytes, an array a
-list, a tuple a tuple or list of its length, a struct a dict with its fields.
-
-- With effects: reads an interpreter object.
-- Failure: error `PythonTypeError` when the object is not of the kind `T` names; the message gives the path and what was found.
-- Example: `py_unwrap(py_wrap(2.0)) !! 0.0` gives `2.0`
 
 #### `exec`
 
@@ -5660,7 +5630,7 @@ the callable was bound with. `call<fn>` is a function from an array of arguments
 it can be bound once and applied again.
 
 - Failure: error value `PythonError` when the call raises.
-- Example (a fragment, not compiled): `[py_wrap(2.0)]->call<sqrt>`
+- Example (a fragment, not compiled): `[2.0->to_py !! eval('0')]->call<sqrt>`
 - Why it is not compiled: the callable is a Python object from `attr`, which the page does not show
 
 #### `to_string`
@@ -5673,6 +5643,29 @@ The `str()` of a Python object, as text.
 
 - Failure: error value `PythonError` when `__str__` raises.
 - Example: `eval('[1, 2]')->to_string !! ''` gives `'[1, 2]'`
+
+#### `to_py`
+
+```camel
+to_py: (x: T) => PyObject!
+```
+
+The Python object that stands for a Camel value, in the Python form of its type.
+
+- Failure: error value `PythonError` when the interpreter cannot make the object.
+- Example: `2.0->to_py->to_string !! ''` gives `'2.0'`
+
+#### `from_py`
+
+```camel
+from_py: (obj: PyObject) => T!
+```
+
+The Camel value of type T that a Python object holds. T is written at the call
+(`from_py::<int>(obj)`) or taken from the type of the position the call stands in.
+
+- Failure: error value `PythonTypeError` when the object does not have the type T (the message gives the path of the mismatch and what was found there); error value `PythonError` when reading it raises.
+- Example: `eval('1 + 2')->from_py::<int> !! 0` gives `3`
 
 <a id="nn"></a>
 

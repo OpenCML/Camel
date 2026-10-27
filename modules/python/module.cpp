@@ -50,58 +50,8 @@ void checkActiveVenvVersion() {
 
 } // namespace
 
-namespace {
-
-// The operators whose signature C++ computes stay here (design principles 6.4):
-// `py_wrap`/`py_unwrap` move a type through the module type `PyObject<T>`, which a declaration
-// cannot write. The other seven are declared in stdlib/python.cml.
-const std::vector<oper_group_ptr_t> &getOperatorGroups() {
-    static const std::vector<oper_group_ptr_t> groups = {
-        OperatorGroup::create(
-            "py_wrap",
-            {
-                {
-                    "python:py_wrap",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "(x: T) => PyObject<T>",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> std::optional<Type *> {
-                            return getPyObjectType()->cloneWithParams(
-                                std::span<Type *const>(norm.data(), 1));
-                        }),
-                },
-            }),
-        OperatorGroup::create(
-            "py_unwrap",
-            {
-                {
-                    "python:py_unwrap",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {1, {false}}},
-                        "(obj: PyObject<T>) => T!",
-                        [](const type_vec_t &with, const type_vec_t &norm)
-                            -> std::optional<Type *> {
-                            Type *t = norm[0];
-                            if (!t->isOtherType() || t->code() != PyObjectType::typeCode())
-                                return std::nullopt;
-                            auto *o = static_cast<OtherType *>(t);
-                            if (o->paramCount() == 0)
-                                return std::nullopt;
-                            return TupleType::fallible(o->params()[0]);
-                        }),
-                },
-            }),
-    };
-    return groups;
-}
-
-} // namespace
-
 PythonModule::PythonModule(context_ptr_t ctx) : BuiltinModule("python", ctx) {
     camel::core::type::registerNativeType("python", "PyObject", getPyObjectType());
-    for (const auto &group : getOperatorGroups())
-        exportEntity(group->name(), group);
 }
 
 module_ptr_t PythonModule::create(context_ptr_t ctx) { return std::make_shared<PythonModule>(ctx); }
@@ -156,8 +106,8 @@ bool PythonModule::load() {
     // src/compile/gir/builder_modules.cpp#declareNativeOperator). All nine are effectful: each one
     // observes or advances the interpreter, which no argument names. `exec`, `eval`, `run_file`
     // and `call` execute arbitrary Python; `attr` and `to_string` may run a descriptor, a property
-    // or `__str__`; `import_module` runs a module body and writes `sys.modules`; `py_wrap` creates
-    // an object whose identity and reference count are interpreter state and `py_unwrap` reads an
+    // or `__str__`; `import_module` runs a module body and writes `sys.modules`; `to_py` creates
+    // an object whose identity and reference count are interpreter state and `from_py` reads an
     // object that Python code can have changed. None is state-only: their state is the
     // interpreter, not a variable of the program.
     camel::core::OperatorTable::instance().declare(
@@ -169,8 +119,8 @@ bool PythonModule::load() {
          {"attr", false},
          {"call", false},
          {"to_string", false},
-         {"py_wrap", false},
-         {"py_unwrap", false}});
+         {"to_py", false},
+         {"from_py", false}});
     loaded_ = true;
     return true;
 }

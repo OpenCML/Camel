@@ -592,7 +592,7 @@ rule_needs: (r: Rule) => int
 rule_consts: (r: Rule) => int
 ```
 
-**`tiles`** — import { ... } from tiles — 10 name(s)
+**`tiles`** — import { ... } from tiles — 9 name(s)
 
 ```text
 upload: (value: f32[..]) => Device<f32[..]> uses driver
@@ -604,7 +604,6 @@ benchmark: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses dri
 regions: <fn: (a: f32, b: f32) => f32> () => string uses driver
 available: () => bool uses driver
 device: () => string! uses driver
-compile: (f: F) => F! uses driver when is_function::<F>()
 ```
 
 **`pyplot`** — import { ... } from pyplot — 1 name(s)
@@ -623,8 +622,6 @@ plot: (data: float[], filename: string) => void
 **`python`** — import { ... } from python — 9 name(s)
 
 ```text
-py_wrap: (x: T) => PyObject<T>
-py_unwrap: (obj: PyObject<T>) => T!
 exec: (code: string) => void!
 eval: (expression: string) => PyObject!
 run_file: (path: string) => void!
@@ -632,6 +629,8 @@ import_module: (name: string) => PyObject!
 attr: <name: string> (obj: PyObject) => PyObject!
 call: <fn: PyObject, kwargs: Map<string, PyObject>? = null> (args: PyObject[]) => PyObject!
 to_string: (obj: PyObject) => string!
+to_py: (x: T) => PyObject!
+from_py: (obj: PyObject) => T!
 ```
 
 **`nn`** — import { ... } from nn — 19 name(s)
