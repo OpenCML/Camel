@@ -965,8 +965,10 @@ data_ptr_t Builder::compositeWithHolesInType(
     // that check is reported here, at the element, and not left to the place the literal stands
     // in: the argument position, the declaration position and the receiver of `->` then report
     // the same diagnostic, pointing at the computed element, instead of the call ending in "no
-    // matching function" because the literal keeps its own type.
-    const auto rejectHole = [&](const char *kind, size_t index, Type *have, Type *wanted) {
+    // matching function" because the literal keeps its own type. An array element, a tuple
+    // element and a struct field are the same position here: a composite literal enters a
+    // position element by element whatever it is made of.
+    const auto rejectHole = [&](const std::string &kind, size_t index, Type *have, Type *wanted) {
         const GCT::Tree::LiteralElement *element = literalElementAt(written, index);
         const bool writtenHere =
             element != nullptr && element->origin != camel::source::kInvalidOriginId;
@@ -979,7 +981,10 @@ data_ptr_t Builder::compositeWithHolesInType(
     // has no element type either — nothing in it took the element type this position gives the
     // elements it wrote — so it does not fit the position at all and stays a name without a
     // matching function, as `pick([n])` does. Once it wrote one, the elements it wrote take this
-    // element type, and a computed element of another type is the mismatch reported at it.
+    // element type, and a computed element of another type is the mismatch reported at it. A
+    // nested literal is such an element (its own computed elements are placeholders of the
+    // enclosing literal's type, not values of a type of their own), so it is built from what its
+    // names stand for and keeps the reading it had.
     const auto wroteAnElement = [](const std::vector<Type *> &holeTypes) {
         for (Type *holeType : holeTypes) {
             if (holeType == nullptr) {
@@ -1072,8 +1077,19 @@ data_ptr_t Builder::compositeWithHolesInType(
             }
             Type *fieldType = structType->typeAt(*fieldIndex);
             if (Type *hole = holeTypeNamed(value); hole != nullptr) {
-                if (fieldType == nullptr || !fieldType->assignableFrom(hole)) {
+                if (fieldType == nullptr) {
                     return nullptr;
+                }
+                if (!fieldType->assignableFrom(hole)) {
+                    // A struct field is a position with an expected type like an array element or
+                    // a tuple element (design principles 5.1): the field the literal computed is
+                    // checked against the type the position gives that field, not converted, and
+                    // the mismatch is reported at the field with the same diagnostic -- the field
+                    // it is about named in the message. A literal whose fields are all computed
+                    // is judged the same way.
+                    rejectHole(
+                        "field '" + name + "' of '" + structType->toString() + "'", index, hole,
+                        fieldType);
                 }
                 factory.add(name, value);
             } else {
