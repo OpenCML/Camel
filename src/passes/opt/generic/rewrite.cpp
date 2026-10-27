@@ -200,14 +200,21 @@ void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement)
     const auto syncUsers = copy(draft.syncUsersOf(id));
     // The wait the removed node carried for its successor, when the chain does not hand one on.
     // A branch is not one of them: what waits on a BRCH is in one of its arms, and the successor
-    // standing where the removed node stood keeps its own arm (src/runtime/branch_arms.cpp).
+    // standing where the removed node stood keeps its own arm (src/runtime/branch_arms.cpp). The
+    // wait is read in either kind: a node of a `sync` block waits through the sync edge as well as
+    // through the control edge beside it, and the successor has to keep that wait whichever kind
+    // named it (docs/design/effects/edges.cn.md 1, 4.6).
     std::vector<gc_node_ref_t> inheritedWait;
-    for (gc_node_ref_t pred : draft.ctrlInputsOf(id)) {
-        const camel::runtime::DraftNodeHeader *header = draft.header(pred);
-        if (header != nullptr && header->kind == GCNodeKind::Brch) {
-            continue;
+    for (auto waits : {draft.ctrlInputsOf(id), draft.syncInputsOf(id)}) {
+        for (gc_node_ref_t pred : waits) {
+            const camel::runtime::DraftNodeHeader *header = draft.header(pred);
+            if (header != nullptr && header->kind == GCNodeKind::Brch) {
+                continue;
+            }
+            if (std::ranges::find(inheritedWait, pred) == inheritedWait.end()) {
+                inheritedWait.push_back(pred);
+            }
         }
-        inheritedWait.push_back(pred);
     }
 
     if (replacement != kInvalidNodeRef) {
