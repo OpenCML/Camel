@@ -7,7 +7,6 @@
  * The step is a loop of `steps` rounds, so the step numbers are exercised too.
  */
 
-module fusion_group_none
 
 import { sum, zeros } from tensor
 import { with_grad } from autodiff

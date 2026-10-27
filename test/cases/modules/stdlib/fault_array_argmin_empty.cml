@@ -1,4 +1,4 @@
-module fault_array_argmin_empty
+
 
 import { argmin } from array
 

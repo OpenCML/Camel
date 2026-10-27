@@ -3,7 +3,6 @@
  * `std::gir` prints a graph small enough to read whole: `slice(x, 0, 1, 4)` is the same node
  * `x[1:4]` builds. See slice_one_node.cml.
  */
-module slice_node_function
 
 import { reshape } from tensor
 

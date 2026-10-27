@@ -1,4 +1,3 @@
-module ring_c
 import { f } from ring_a
 
 export func h(n: int): int {

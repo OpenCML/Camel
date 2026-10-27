@@ -2,7 +2,6 @@
  * A `main` that does more than compute cannot be translated as a whole: the export is refused
  * at the effect (line 10).
  */
-module effect
 
 import { tanh } from tensor
 

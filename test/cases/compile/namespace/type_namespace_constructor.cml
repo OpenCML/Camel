@@ -2,7 +2,6 @@
  * Checks that a user-defined namespace function can be called through a
  * type-qualified reference.
  */
-module type_namespace_constructor
 
 type Foo = {
     x: int

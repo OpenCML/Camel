@@ -3,7 +3,6 @@
  * name and the other takes its default, which is the declaration's static constant, not a value
  * the call evaluates (design principles 4.4).
  */
-module with_default_named_and_default
 
 with <rounds: int = 8, label: string = 'x'>
 func show(x: int): string {

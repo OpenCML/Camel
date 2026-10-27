@@ -9,7 +9,6 @@
  * SemanticDiag::PrecisionChangeNotPermitted. `change_precision` governs a computation the
  * compiler moves to lower precision (a f32 matrix product done in BF16), not this.
  */
-module tensor_dtype_bf16_cast_no_permission
 
 import { new, to_bytes } from tensor
 import { to_array } from bytes

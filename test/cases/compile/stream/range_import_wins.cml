@@ -4,7 +4,6 @@
 // module > imported by name > using > built-in"; the rule on the name
 // lookup order). A readout of the graph says which entity answered: the call is tensor's OPER, not
 // the built-in's.
-module h426_range_import_wins
 
 import tensor
 import { range } from tensor

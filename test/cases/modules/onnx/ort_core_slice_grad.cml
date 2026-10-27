@@ -9,7 +9,6 @@
  *
  * The gradient Camel prints is checked against ONNX Runtime by ort_core_slice_grad.py.
  */
-module ort_core_slice_grad
 import { Tensor, reshape, sum } from tensor
 import { with_grad } from autodiff
 import { export_model } from onnx

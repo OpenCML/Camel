@@ -2,7 +2,6 @@
  * A generic function over an intended anonymous struct: the type has no declaring module, so
  * `x + x` has only the operators visible in this module (design principles 5.7).
  */
-module anon_gen
 
 export func twice::<T>(x: T): T {
     return x + x

@@ -3,7 +3,6 @@
 /// is the entry program, whose name `main` has one component, so no name can be formed. It is not
 /// `../lib` (a syntax error) and it is not the filesystem path `/lib`: the import fails with
 /// ModuleNotFound and no directory is searched.
-module main_dotdot
 
 import ..lib
 

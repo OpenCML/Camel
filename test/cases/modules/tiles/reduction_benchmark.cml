@@ -1,4 +1,3 @@
-module tiles_reduction_benchmark
 import { exp, sum, random, seed } from tensor
 import { benchmark } from tiles
 func rows(x: f32[..], b: f32[..]): f32[..] {

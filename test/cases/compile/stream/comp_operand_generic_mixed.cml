@@ -3,7 +3,6 @@
 // nothing in the position does either. The refusal names the operand that is generic - the right
 // one here (design principles 5.5: the refusal names the operand whose instance no
 // position fixes).
-module h428_comp_operand_generic_mixed
 
 func ident::<T>(x: T): T {
     return x

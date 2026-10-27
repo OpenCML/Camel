@@ -1,7 +1,6 @@
 /**
  * Ensures the parser reports the missing then keyword in conditional expressions at the right source location.
  */
-module syntax_missing_then
 
 func main(): int sync {
     let x = 1

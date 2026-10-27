@@ -1,4 +1,3 @@
-module tiles_reduction_fusion
 import { reshape, sum, mean, transpose, save_npy } from tensor
 import { get_env } from env
 import { inspect, run_preferred_resident, download } from tiles

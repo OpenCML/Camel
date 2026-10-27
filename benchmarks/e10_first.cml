@@ -3,7 +3,6 @@
  * e10_second.cml, but only the first derivative is materialized.
  * The differentiated quantity (input scale t) is the with-parameter.
  */
-module e10_first
 
 import { grad } from autodiff
 import { relu, mean, reshape } from tensor

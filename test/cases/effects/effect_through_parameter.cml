@@ -7,7 +7,6 @@
  * does not run it and is reported as `EffectNotExecuted`, exactly as calling the value directly
  * is; in a sync block it runs and the write lands.
  */
-module effect_through_parameter
 
 with <var total: int>
 func add(x: int): int sync {

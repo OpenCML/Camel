@@ -4,7 +4,6 @@
  * declared parameter type and the call is refused at the argument.
  * Expected: a compile-time error at the argument.
  */
-module var_argument_with_parameter_non_numeric
 import { sum } from tensor
 
 with <var acc: f64[]>

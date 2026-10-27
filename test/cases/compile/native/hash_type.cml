@@ -3,7 +3,6 @@
  * against both declarations, whose parameter name (`s`) comes from `stdlib/hash.cml`, not the C++
  * module.
  */
-module hash_type
 
 import { sha256 } from hash
 

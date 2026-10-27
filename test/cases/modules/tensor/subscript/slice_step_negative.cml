@@ -5,7 +5,6 @@
  * `b[3:0:-1]` is the elements at 3, 2 and 1 -- position 0 is not taken, because the end is where
  * the walk stops; an end left out stands for the position before the first.
  */
-module subscript_slice_step_negative
 import { reshape, shape, sum } from tensor
 
 func main(): int sync {

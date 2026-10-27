@@ -18,7 +18,6 @@
  * nothing and a reorder is ONNX identities between the initializer's fields), name its outputs
  * after the declaration's fields with the counter an int64, and match NumPy on ONNX Runtime.
  */
-module ort_struct_casts
 
 import { reshape, sum, tanh } from tensor
 import { export_model } from onnx

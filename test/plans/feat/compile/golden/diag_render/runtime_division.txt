@@ -1,6 +1,6 @@
 error[RuntimeDiag::DivisionByZero]: Attempted division by zero.
-  --> <ROOT>/test/cases/compile/diag_render/runtime_division.cml:3:42
+  --> <ROOT>/test/cases/compile/diag_render/runtime_division.cml:1:42
    |
- 3 | func div(a: int, b: int): int { return a / b }
+ 1 | func div(a: int, b: int): int { return a / b }
    |                                          ^
 help: Ensure the denominator is not zero before performing division.

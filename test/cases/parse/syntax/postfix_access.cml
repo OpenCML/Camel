@@ -3,7 +3,6 @@
  * `rows[1].name`; `<` and `>` around them still read as comparisons when they are not a
  * binding. Also a struct literal bound with a type annotation.
  */
-module postfix_access
 
 type S = { a: int, b: float }
 type Row = { name: string, size: int }

@@ -3,7 +3,6 @@
  * read is an ordinary syntax error (line 10, column 14) at the backtick. It was a
  * `ConstructNotSupported` while the grammar's `literal` took a formatted string in a pattern.
  */
-module no_formatted_string_pattern
 
 func f(s: string): int {
     return match s {

@@ -12,7 +12,7 @@
  *   (2, 3, 3)  a tuple literal
  *   3 4 4      the fields of a struct literal
  */
-module argument_order
+
 
 var cnt: int = 100
 var lit: int = 1

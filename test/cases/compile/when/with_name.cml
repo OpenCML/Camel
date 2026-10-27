@@ -2,7 +2,6 @@
  * A `when` that reads a `with` parameter is not answered by a runtime value: the condition is
  * reported as not constant, never assumed true (design principles 4.4).
  */
-module when_with_name
 
 with <on: bool>
 func add(x: int): int when on {

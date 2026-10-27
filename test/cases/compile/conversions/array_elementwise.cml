@@ -5,7 +5,6 @@
  * are unchanged, and a conversion of the elements of an array does not need the loop a program
  * would write for it.
  */
-module conversions_array_elementwise
 
 import { ones } from tensor
 

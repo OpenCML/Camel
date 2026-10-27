@@ -2,7 +2,6 @@
  * A name in a literal that is neither a value nor a function is reported at the literal (it
  * was reported at the start of the enclosing function).
  */
-module literal_unknown_name
 
 func inc(x: int): int { return x + 1 }
 

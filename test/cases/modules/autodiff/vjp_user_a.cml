@@ -2,7 +2,6 @@
  * A module that imports the tagged function of `vjp_lib` (imported by two modules, so the second
  * import is served by the module cache).
  */
-module vjp_user_a
 
 import { scale } from vjp_lib
 

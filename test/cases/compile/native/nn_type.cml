@@ -3,7 +3,6 @@
  * refused at the call, against the declaration in `stdlib/nn.cml`, while the first parameter's
  * type variable still accepts the `string` argument (step 10).
  */
-module nn_type
 
 import { save_params } from nn
 

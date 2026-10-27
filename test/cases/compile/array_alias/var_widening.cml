@@ -1,6 +1,5 @@
 // `var` widening keeps the rank (plan Q5): a rank-2 tensor binding widens to rank 2 with its
 // extents forgotten, so it still fills a rank-2 parameter after a second assignment.
-module array_alias_var_widening
 
 import { ones } from tensor
 

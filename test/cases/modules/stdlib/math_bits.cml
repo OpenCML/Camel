@@ -3,7 +3,6 @@
  * complement; shr is arithmetic (it keeps the sign); a shift count outside 0..width-1 is a
  * fault (see the fault cases).
  */
-module math_bits
 
 import { bit_and, bit_or, bit_xor, shl, shr } from math
 

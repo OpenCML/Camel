@@ -17,7 +17,6 @@
  * `treeLoss` differentiates a struct parameter tree (`{p: {a, b}, c}`), four rounds of
  * `a' = a + d·sum(t)` over d = 1, 2: the gradient is `{p: {a: 4, b: 4}, c: 4}`.
  */
-module loop_grad_struct_state
 
 import { grad } from autodiff
 

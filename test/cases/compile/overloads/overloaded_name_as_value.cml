@@ -2,7 +2,6 @@
  * A name with several overloads has no single function value: returning it is rejected at the
  * `return`.
  */
-module overloaded_name_as_value
 
 func f(x: int): string {
     return 'int'

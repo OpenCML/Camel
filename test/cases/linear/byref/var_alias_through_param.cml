@@ -6,7 +6,6 @@
  * and `big` keeps the value it was read as (docs/design-principles.cn.md 3.5, 6.11;
  * docs/technical/18_sync_control_semantics.md).
  */
-module var_alias_through_param
 
 func make_array(): int[] {
     return [

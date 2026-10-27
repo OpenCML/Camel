@@ -2,7 +2,6 @@
  * `slice` inside the array, at its edges and with an empty range; `take` and `drop` cut to the
  * array by definition and never fault.
  */
-module slice_take_drop
 
 import { take, drop } from array
 

@@ -3,7 +3,6 @@
 // module alone does not put that name in this module's own namespace. `rendezvous_point` is
 // therefore no resource of this module, no standard resource and no imported name
 // (UnknownResource).
-module names_a_resource_without_importing_it
 
 import test_support
 

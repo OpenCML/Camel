@@ -3,7 +3,6 @@
  * `<name>__rhs` what it becomes; the parameters named `c...` are `const`. test::rules reads the
  * pairs, saturates the three functions below with them and prints the operators left.
  */
-module rules_int
 
 func add_comm__lhs(a: int, b: int): int { return a + b }
 func add_comm__rhs(a: int, b: int): int { return b + a }

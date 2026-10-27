@@ -4,7 +4,6 @@
  * error (UnusedPureResult). It used to be refused because `sort` changed its argument in place
  * and `xs` is not declared `var` (3.5).
  */
-module param_sorted
 
 import { sort } from array
 

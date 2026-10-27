@@ -1,7 +1,6 @@
 /**
  * Verifies JIT codegen for the full set of integer comparison operators and their branch-dependent packing logic.
  */
-module jit_comparison_matrix
 
 func score(a: int, b: int): int {
     let lt = if a < b then 1 else 0

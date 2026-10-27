@@ -76,9 +76,8 @@ def entry_values(modules: int, shape: str, fan: int, funcs: int) -> List[int]:
 
 
 def module_source(index: int, shape: str, fan: int, funcs: int) -> str:
-    name = module_name(index)
     deps = imports_of(index, shape, fan)
-    lines = [f"module {name}", ""]
+    lines = []
     for dep in deps:
         lines.append(f"import {{ {imported_function(dep, shape)} }} from {module_name(dep)}")
     if deps:
@@ -104,10 +103,11 @@ def module_source(index: int, shape: str, fan: int, funcs: int) -> str:
 
 
 def main_source(modules: int) -> str:
-    lines = ["module main", ""]
+    lines = []
     for index in range(modules):
         lines.append(f"import {{ entry_{index:04d} }} from {module_name(index)}")
-    lines.append("")
+    if lines:
+        lines.append("")
     lines.append("func main(): int sync {")
     lines.append("    var total = 0")
     for index in range(modules):

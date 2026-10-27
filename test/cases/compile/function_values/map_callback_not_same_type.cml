@@ -6,7 +6,6 @@
  * still its own: `int` is not `string`, and a callback of two parameters is not one of the
  * element type. Both calls below are refused, each at its own line.
  */
-module map_callback_not_same_type
 
 func inc(x: int): int { return x + 1 }
 

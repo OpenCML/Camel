@@ -3,7 +3,6 @@
  * known yet, so the condition is refused as not answerable (WhenTypeQueryNotConcrete), not taken
  * for false. The variable here reaches the inner predicate through the outer one.
  */
-module when_nested_open_type
 
 func inner::<U>(): bool {
     return match type U {

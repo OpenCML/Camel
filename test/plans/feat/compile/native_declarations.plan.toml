@@ -106,7 +106,7 @@ kind = "negative"
 case = "../../../cases/compile/native/str_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "str_arity.cml:10:21", "(string, string)", "<str:to_upper>: (s: string) => string"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "str_arity.cml:9:21", "(string, string)", "<str:to_upper>: (s: string) => string"]
 
 [[tests]]
 name = "native.str_wrong_type"
@@ -115,7 +115,7 @@ kind = "negative"
 case = "../../../cases/compile/native/str_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "str_type.cml:11:21", "argument types: <> (int)", "<str:to_upper>: (s: string) => string"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "str_type.cml:10:21", "argument types: <> (int)", "<str:to_upper>: (s: string) => string"]
 
 #  ---- The declarations of `io`: the terminal's signatures (steps 4 and 10) ----
 
@@ -126,7 +126,7 @@ kind = "negative"
 case = "../../../cases/compile/native/io_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "io_arity.cml:10:22", "(int, int)", "<io:get_chars>: (max: int) => string"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "io_arity.cml:9:22", "(int, int)", "<io:get_chars>: (max: int) => string"]
 
 [[tests]]
 name = "native.io_wrong_type"
@@ -135,7 +135,7 @@ kind = "negative"
 case = "../../../cases/compile/native/io_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "io_type.cml:11:22", "argument types: <> (string)", "<io:get_chars>: (max: int) => string"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "io_type.cml:10:22", "argument types: <> (string)", "<io:get_chars>: (max: int) => string"]
 
 #  ---- The declarations of `json`: the accessors as one rule per tagged form ----
 
@@ -155,7 +155,7 @@ kind = "negative"
 case = "../../../cases/compile/native/json_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "json_arity.cml:10:19", "argument types: <> (string, int)", "<json:decode>: (text: string) => Json!"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "json_arity.cml:9:19", "argument types: <> (string, int)", "<json:decode>: (text: string) => Json!"]
 
 [[tests]]
 name = "native.json_wrong_type"
@@ -164,7 +164,7 @@ kind = "negative"
 case = "../../../cases/compile/native/json_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "json_type.cml:11:17", "argument types: <> (int)", "<json:kind>: (j: Json) => string"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "json_type.cml:10:17", "argument types: <> (int)", "<json:kind>: (j: Json) => string"]
 #  ---- The declarations of `math`: per-type overloads and computed signatures ----
 
 [[tests]]
@@ -183,7 +183,7 @@ kind = "negative"
 case = "../../../cases/compile/native/math_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "math_arity.cml:10:16", "int, int", "abs: (x: T) => T"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "math_arity.cml:9:16", "int, int", "abs: (x: T) => T"]
 
 [[tests]]
 name = "native.math_wrong_type"
@@ -192,7 +192,7 @@ kind = "negative"
 case = "../../../cases/compile/native/math_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::WhenConditionUnmet", "math_type.cml:11:16", "(string)", "is_real::<T>()"]
+expect_output_contains = ["SemanticDiag::WhenConditionUnmet", "math_type.cml:10:16", "(string)", "is_real::<T>()"]
 
 [[tests]]
 name = "native.math_on_the_graph"
@@ -219,7 +219,7 @@ kind = "negative"
 case = "../../../cases/compile/native/math_sqrt_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::GenericArgumentsMismatch", "math_sqrt_arity.cml:10:17", "(float, int)", "takes 1 argument(s) and 2 were given"]
+expect_output_contains = ["SemanticDiag::GenericArgumentsMismatch", "math_sqrt_arity.cml:9:17", "(float, int)", "takes 1 argument(s) and 2 were given"]
 
 [[tests]]
 name = "native.math_sqrt_wrong_type"
@@ -228,7 +228,7 @@ kind = "negative"
 case = "../../../cases/compile/native/math_sqrt_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::WhenConditionUnmet", "math_sqrt_type.cml:11:17", "(string)", "is_float::<T>()"]
+expect_output_contains = ["SemanticDiag::WhenConditionUnmet", "math_sqrt_type.cml:10:17", "(string)", "is_float::<T>()"]
 
 #  ---- The declarations of `random`: the generator and the keyed functions ----
 
@@ -248,7 +248,7 @@ kind = "negative"
 case = "../../../cases/compile/native/random_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "random_arity.cml:10:20", "(int)", "<rand:randint>: (low: int, high: int) => int"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "random_arity.cml:9:20", "(int)", "<rand:randint>: (low: int, high: int) => int"]
 
 [[tests]]
 name = "native.random_wrong_type"
@@ -257,7 +257,7 @@ kind = "negative"
 case = "../../../cases/compile/native/random_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "random_type.cml:11:24", "argument types: <> (int, int)", "<rand:permutation>: (key: { hi: int, lo: int }, n: int) => int[]"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "random_type.cml:10:24", "argument types: <> (int, int)", "<rand:permutation>: (key: { hi: int, lo: int }, n: int) => int[]"]
 
 [[tests]]
 name = "native.random_choice_wrong_arity"
@@ -266,7 +266,7 @@ kind = "negative"
 case = "../../../cases/compile/native/random_choice_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "random_choice_arity.cml:10:19", "argument types: <> (string[], int)", "<rand:choice>: (xs: T[]) => T"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "random_choice_arity.cml:9:19", "argument types: <> (string[], int)", "<rand:choice>: (xs: T[]) => T"]
 
 [[tests]]
 name = "native.random_choice_wrong_type"
@@ -275,7 +275,7 @@ kind = "negative"
 case = "../../../cases/compile/native/random_choice_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "random_choice_type.cml:11:19", "argument types: <> (int)", "<rand:choice>: (xs: T[]) => T"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "random_choice_type.cml:10:19", "argument types: <> (int)", "<rand:choice>: (xs: T[]) => T"]
 
 [[tests]]
 name = "native.random_sample_count_type"
@@ -284,7 +284,7 @@ kind = "negative"
 case = "../../../cases/compile/native/random_sample_count_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "random_sample_count_type.cml:11:27", "argument types: <> (int[], float)", "<rand:sample>: (xs: T[], n: int) => T[]"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "random_sample_count_type.cml:10:27", "argument types: <> (int[], float)", "<rand:sample>: (xs: T[], n: int) => T[]"]
 
 #  ---- The declarations of `array`: the native primitives, the sorts and `argsort` ----
 
@@ -304,7 +304,7 @@ kind = "negative"
 case = "../../../cases/compile/native/array_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "array_arity.cml:11:20", "(int[], int)", "<array:argsort_i>: (keys: i32[]) => int[]"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "array_arity.cml:10:20", "(int[], int)", "<array:argsort_i>: (keys: i32[]) => int[]"]
 
 [[tests]]
 name = "native.array_wrong_type"
@@ -313,7 +313,7 @@ kind = "negative"
 case = "../../../cases/compile/native/array_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "array_type.cml:12:20", "argument types: <> (int)", "<array:argsort_i>: (keys: i32[]) => int[]"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "array_type.cml:11:20", "argument types: <> (int)", "<array:argsort_i>: (keys: i32[]) => int[]"]
 
 [[tests]]
 name = "native.array_sort_wrong_arity"
@@ -322,7 +322,7 @@ kind = "negative"
 case = "../../../cases/compile/native/array_sort_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::GenericArgumentsMismatch", "array_sort_arity.cml:9:17", "(int[], int)", "takes 1 argument(s) and 2 were given"]
+expect_output_contains = ["SemanticDiag::GenericArgumentsMismatch", "array_sort_arity.cml:8:17", "(int[], int)", "takes 1 argument(s) and 2 were given"]
 
 [[tests]]
 name = "native.array_sort_wrong_type"
@@ -331,7 +331,7 @@ kind = "negative"
 case = "../../../cases/compile/native/array_sort_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::GenericArgumentsMismatch", "array_sort_type.cml:10:17", "(int)", "xs: T[]"]
+expect_output_contains = ["SemanticDiag::GenericArgumentsMismatch", "array_sort_type.cml:9:17", "(int)", "xs: T[]"]
 
 #  ---- The declarations of `statistics`: four element types per name ----
 
@@ -351,7 +351,7 @@ kind = "negative"
 case = "../../../cases/compile/native/statistics_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "statistics_arity.cml:11:17", "(int[], int)", "<statistics:mean>: (xs: i32[]) => float"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "statistics_arity.cml:10:17", "(int[], int)", "<statistics:mean>: (xs: i32[]) => float"]
 
 [[tests]]
 name = "native.statistics_wrong_type"
@@ -360,7 +360,7 @@ kind = "negative"
 case = "../../../cases/compile/native/statistics_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "statistics_type.cml:12:17", "argument types: <> (int)", "<statistics:mean>: (xs: i32[]) => float"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "statistics_type.cml:11:17", "argument types: <> (int)", "<statistics:mean>: (xs: i32[]) => float"]
 
 #  ---- A declaration the module does not export is private ----
 
@@ -395,7 +395,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::NativeDeclarationForeignOperator"
 expect_diagnostic_code = "0x03000181"
-expect_output_contains = ["bytes_tag.cml:11", "'to_array'", "bytes:to_array"]
+expect_output_contains = ["bytes_tag.cml:10", "'to_array'", "bytes:to_array"]
 
 [[tests]]
 name = "native.declaration_qualified"
@@ -443,7 +443,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::NativeDeclarationOverlap"
 expect_diagnostic_code = "0x03000180"
-expect_output_contains = ["overlap.cml:14", "Two declarations of 'pick'", "(xs: T[], i: int) => T", "(xs: U[], i: int) => U"]
+expect_output_contains = ["overlap.cml:13", "Two declarations of 'pick'", "(xs: T[], i: int) => T", "(xs: U[], i: int) => U"]
 
 
 # ---- Two same-named declarations whose conditions exclude each other are overloads ----
@@ -463,7 +463,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::WhenDeclarationOverlap"
 expect_diagnostic_code = "0x030001E0"
-expect_output_contains = ["when_arms_overlap.cml:33", "Two declarations of 'arms_kernel' both apply to the type 'i32'", "(a: T, b: T) => T — when is_small_int::<T>()", "(a: T, b: T) => T — when is_number::<T>()"]
+expect_output_contains = ["when_arms_overlap.cml:32", "Two declarations of 'arms_kernel' both apply to the type 'i32'", "(a: T, b: T) => T — when is_small_int::<T>()", "(a: T, b: T) => T — when is_number::<T>()"]
 
 [[tests]]
 name = "native.when_declaration_overlap.shape"
@@ -474,7 +474,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::WhenDeclarationOverlap"
 expect_diagnostic_code = "0x030001E0"
-expect_output_contains = ["when_shape_overlap.cml:33", "Two declarations of 'arms_kernel' both apply to the type '(x: int) => int'", "(a: T, b: T) => T — when always::<T>()", "(a: T, b: T) => T — when is_callable::<T>()"]
+expect_output_contains = ["when_shape_overlap.cml:32", "Two declarations of 'arms_kernel' both apply to the type '(x: int) => int'", "(a: T, b: T) => T — when always::<T>()", "(a: T, b: T) => T — when is_callable::<T>()"]
 
 
 # ---- A call reaches the rule its own `when` admits, not the one written first ----
@@ -561,7 +561,7 @@ kind = "negative"
 case = "../../../cases/compile/native/when_both_hold_i32_first.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_line = 46
+expect_diagnostic_line = 45
 expect_diagnostic_column = 31
 expect_output_contains = ["The call to 'dual_kernel' with (i32, int) fits more than one overload. More than one function takes these arguments; make the choice explicit: annotate the literal with its type (for example '2 as f32') or convert an argument with 'as'. The overloads that take them: (a: T, b: U) => T — when is_first_i32::<T>(); (a: T, b: U) => T — when is_second_int::<U>()", "(name=SemanticDiag::AmbiguousCall, code=0x030000F4)"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -575,7 +575,7 @@ kind = "negative"
 case = "../../../cases/compile/native/when_both_hold_int_first.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_line = 37
+expect_diagnostic_line = 36
 expect_diagnostic_column = 31
 expect_output_contains = ["The call to 'dual_kernel' with (i32, int) fits more than one overload. More than one function takes these arguments; make the choice explicit: annotate the literal with its type (for example '2 as f32') or convert an argument with 'as'. The overloads that take them: (a: T, b: U) => T — when is_first_i32::<T>(); (a: T, b: U) => T — when is_second_int::<U>()", "(name=SemanticDiag::AmbiguousCall, code=0x030000F4)"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -635,7 +635,7 @@ kind = "negative"
 case = "../../../cases/compile/native/re_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "re_arity.cml:10:27", "argument types: <string> (string, string)", "has_match: <pattern: string> (text: string) => bool"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "re_arity.cml:9:27", "argument types: <string> (string, string)", "has_match: <pattern: string> (text: string) => bool"]
 
 [[tests]]
 name = "native.re_wrong_type"
@@ -644,7 +644,7 @@ kind = "negative"
 case = "../../../cases/compile/native/re_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "re_type.cml:11:29", "argument types: <string> (int)", "has_match: <pattern: string> (text: string) => bool"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "re_type.cml:10:29", "argument types: <string> (int)", "has_match: <pattern: string> (text: string) => bool"]
 
 #  ---- The declarations of `time`: the clock and its text forms ----
 
@@ -664,7 +664,7 @@ kind = "negative"
 case = "../../../cases/compile/native/time_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "time_arity.cml:10:27", "argument types: <string> (float, float)", "<time:strftime>: <format: string> (timestamp: float) => string"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "time_arity.cml:9:27", "argument types: <string> (float, float)", "<time:strftime>: <format: string> (timestamp: float) => string"]
 
 [[tests]]
 name = "native.time_wrong_type"
@@ -673,7 +673,7 @@ kind = "negative"
 case = "../../../cases/compile/native/time_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "time_type.cml:11:27", "argument types: <string> (int)", "<time:strptime>: <format: string> (text: string) => float!"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "time_type.cml:10:27", "argument types: <string> (int)", "<time:strptime>: <format: string> (text: string) => float!"]
 
 #  ---- Retired names are unknown names, not aliases (design principles 1) ----
 #
@@ -730,7 +730,7 @@ kind = "negative"
 case = "../../../cases/compile/native/fs_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "fs_arity.cml:10:19", "(string, string)", "<fs:exists>: (path: string) => bool"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "fs_arity.cml:9:19", "(string, string)", "<fs:exists>: (path: string) => bool"]
 
 [[tests]]
 name = "native.fs_wrong_type"
@@ -739,7 +739,7 @@ kind = "negative"
 case = "../../../cases/compile/native/fs_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "fs_type.cml:11:19", "argument types: <> (int)", "<fs:exists>: (path: string) => bool"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "fs_type.cml:10:19", "argument types: <> (int)", "<fs:exists>: (path: string) => bool"]
 
 #  ---- The declarations of `para` ----
 #
@@ -765,7 +765,7 @@ kind = "negative"
 case = "../../../cases/compile/native/para_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_arity.cml:10:23", "(int)", "<test_support:rendezvous>: (parties: int, timeout: float) => int"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_arity.cml:9:23", "(int)", "<test_support:rendezvous>: (parties: int, timeout: float) => int"]
 
 [[tests]]
 name = "native.para_wrong_type"
@@ -774,7 +774,7 @@ kind = "negative"
 case = "../../../cases/compile/native/para_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_type.cml:11:23", "argument types: <> (string, float)", "<test_support:rendezvous>: (parties: int, timeout: float) => int"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_type.cml:10:23", "argument types: <> (string, float)", "<test_support:rendezvous>: (parties: int, timeout: float) => int"]
 
 [[tests]]
 name = "native.para_unordered_wrong_arity"
@@ -783,7 +783,7 @@ kind = "negative"
 case = "../../../cases/compile/native/para_unordered_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_unordered_arity.cml:10:5", "argument types: <(item: int) => int pure> (int[], int)", "<:mark/unordered_foreach_arr>: <f: (item: T) => void> (xs: T[]) => void"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_unordered_arity.cml:9:5", "argument types: <(item: int) => int pure> (int[], int)", "<:mark/unordered_foreach_arr>: <f: (item: T) => void> (xs: T[]) => void"]
 
 [[tests]]
 name = "native.para_unordered_wrong_type"
@@ -792,7 +792,7 @@ kind = "negative"
 case = "../../../cases/compile/native/para_unordered_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_unordered_type.cml:11:5", "argument types: <(item: int) => int pure> (int)", "<:mark/unordered_foreach_arr>: <f: (item: T) => void> (xs: T[]) => void"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_unordered_type.cml:10:5", "argument types: <(item: int) => int pure> (int)", "<:mark/unordered_foreach_arr>: <f: (item: T) => void> (xs: T[]) => void"]
 
 [[tests]]
 name = "native.para_unordered_pure_result"
@@ -802,7 +802,7 @@ case = "../../../cases/compile/native/para_unordered_pure_result.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UnusedPureResult"
-expect_diagnostic_line = 13
+expect_diagnostic_line = 12
 expect_diagnostic_column = 38
 
 [[tests]]
@@ -812,7 +812,7 @@ kind = "negative"
 case = "../../../cases/compile/native/para_unordered_reduce_callback_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_unordered_reduce_callback_arity.cml:13:103", "argument types: <(acc: int, item: int, extra: int) => int pure, int> (int[])", "<:mark/unordered_reduce_arr>: <f: (acc: T, item: T) => T, initial: T> (xs: T[]) => T"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_unordered_reduce_callback_arity.cml:12:103", "argument types: <(acc: int, item: int, extra: int) => int pure, int> (int[])", "<:mark/unordered_reduce_arr>: <f: (acc: T, item: T) => T, initial: T> (xs: T[]) => T"]
 
 #  ---- The declaration of `this` ----
 
@@ -832,7 +832,7 @@ kind = "negative"
 case = "../../../cases/compile/native/this_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "this_arity.cml:10:16", "argument types: <> (int, int)", "<this:zen>: () => string"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "this_arity.cml:9:16", "argument types: <> (int, int)", "<this:zen>: () => string"]
 
 [[tests]]
 name = "native.this_wrong_type"
@@ -841,7 +841,7 @@ kind = "negative"
 case = "../../../cases/compile/native/this_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "this_type.cml:13:16", "argument types: <> (int)", "<this:zen>: () => string"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "this_type.cml:12:16", "argument types: <> (int)", "<this:zen>: () => string"]
 
 #  ---- The declarations of `tiles` ----
 #
@@ -867,7 +867,7 @@ kind = "negative"
 case = "../../../cases/compile/native/tiles_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tiles_arity.cml:11:22", "argument types: <> (int, int)", "<tiles:available>: () => bool"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tiles_arity.cml:10:22", "argument types: <> (int, int)", "<tiles:available>: () => bool"]
 
 [[tests]]
 name = "native.tiles_result_type"
@@ -878,7 +878,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
 expect_diagnostic_code = "0x03000110"
-expect_diagnostic_line = 12
+expect_diagnostic_line = 11
 expect_diagnostic_column = 5
 expect_output_contains = ["This value has type 'bool', which is not the declared type 'int'"]
 #  ---- The declarations of `tensor` ----
@@ -909,7 +909,7 @@ kind = "negative"
 case = "../../../cases/compile/native/tensor_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_arity.cml:12:18", "argument types: <> (f32[?, ?], int)", "<tensor:numel>: (t: T[..]) => int"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_arity.cml:11:18", "argument types: <> (f32[?, ?], int)", "<tensor:numel>: (t: T[..]) => int"]
 
 [[tests]]
 name = "native.tensor_wrong_type"
@@ -918,7 +918,7 @@ kind = "negative"
 case = "../../../cases/compile/native/tensor_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_type.cml:11:21", "argument types: <> (string)", "<tensor:to_bytes>: (t: T[..]) => Bytes"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_type.cml:10:21", "argument types: <> (string)", "<tensor:to_bytes>: (t: T[..]) => Bytes"]
 #  ---- The declaration of `show` ----
 #
 # `show` is the last zero-syntax name of the inventory: its result is fixed `void`, and its
@@ -944,7 +944,7 @@ kind = "negative"
 case = "../../../cases/compile/native/tensor_show_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_show_arity.cml:12:5", "argument types: <> (f32[?, ?], int)", "<tensor:show>: (t: A[..]) => void"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_show_arity.cml:11:5", "argument types: <> (f32[?, ?], int)", "<tensor:show>: (t: A[..]) => void"]
 
 [[tests]]
 name = "native.tensor_show_wrong_type"
@@ -953,7 +953,7 @@ kind = "negative"
 case = "../../../cases/compile/native/tensor_show_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_show_type.cml:11:5", "argument types: <> (string)", "<tensor:show>: (t: A[..]) => void"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_show_type.cml:10:5", "argument types: <> (string)", "<tensor:show>: (t: A[..]) => void"]
 
 [[tests]]
 name = "native.tensor_show_empty_array"
@@ -962,7 +962,7 @@ kind = "negative"
 case = "../../../cases/compile/native/tensor_show_empty_array.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::FunctionTypeArgumentNotInferred", "code=0x030001F6", "tensor_show_empty_array.cml:14:5", "Cannot infer the type argument 'A' of 'show': the empty literal '[]' states no element type"]
+expect_output_contains = ["SemanticDiag::FunctionTypeArgumentNotInferred", "code=0x030001F6", "tensor_show_empty_array.cml:13:5", "Cannot infer the type argument 'A' of 'show': the empty literal '[]' states no element type"]
 
 [[tests]]
 name = "native.tensor_show_empty_array_typed"
@@ -995,7 +995,7 @@ kind = "negative"
 case = "../../../cases/compile/native/pyplot_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "pyplot_arity.cml:12:5", "argument types: <> (float[], string, int)", "<pyplot:plot>: (data: float[], filename: string) => void"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "pyplot_arity.cml:11:5", "argument types: <> (float[], string, int)", "<pyplot:plot>: (data: float[], filename: string) => void"]
 
 [[tests]]
 name = "native.pyplot_wrong_type"
@@ -1004,7 +1004,7 @@ kind = "negative"
 case = "../../../cases/compile/native/pyplot_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "pyplot_type.cml:11:5", "argument types: <> (string)", "<pyplot:plot>: (data: float[]) => void"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "pyplot_type.cml:10:5", "argument types: <> (string)", "<pyplot:plot>: (data: float[]) => void"]
 #  ---- The declarations of `python` ----
 #
 # Six of the eleven operators have fixed signatures and are declared in stdlib/python.cml; the
@@ -1028,7 +1028,7 @@ kind = "negative"
 case = "../../../cases/compile/native/python_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "python_arity.cml:11:5", "argument types: <> (string, string)", "<python:py_exec>: (code: string) => PyObject"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "python_arity.cml:10:5", "argument types: <> (string, string)", "<python:py_exec>: (code: string) => PyObject"]
 
 [[tests]]
 name = "native.python_wrong_type"
@@ -1037,7 +1037,7 @@ kind = "negative"
 case = "../../../cases/compile/native/python_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "python_type.cml:11:5", "argument types: <> (int)", "<python:py_import>: (module_name: string) => PyObject"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "python_type.cml:10:5", "argument types: <> (int)", "<python:py_import>: (module_name: string) => PyObject"]
 
 #  ---- The declarations of `nn` and `autodiff` ----
 #
@@ -1068,7 +1068,7 @@ kind = "negative"
 case = "../../../cases/compile/native/nn_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "nn_arity.cml:11:5", "argument types: <> (string)", "<nn:save_params>: (params: P, dir: string) => void"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "nn_arity.cml:10:5", "argument types: <> (string)", "<nn:save_params>: (params: P, dir: string) => void"]
 
 [[tests]]
 name = "native.nn_wrong_type"
@@ -1077,7 +1077,7 @@ kind = "negative"
 case = "../../../cases/compile/native/nn_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "nn_type.cml:11:5", "argument types: <> (string, int)", "<nn:save_params>: (params: P, dir: string) => void"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "nn_type.cml:10:5", "argument types: <> (string, int)", "<nn:save_params>: (params: P, dir: string) => void"]
 
 [[tests]]
 name = "native.autodiff_declaration_import"
@@ -1095,7 +1095,7 @@ kind = "negative"
 case = "../../../cases/compile/native/autodiff_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "autodiff_arity.cml:11:26", "argument types: <> (float, float)", "<autodiff:stop_gradient>: (x: T) => T"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "autodiff_arity.cml:10:26", "argument types: <> (float, float)", "<autodiff:stop_gradient>: (x: T) => T"]
 
 [[tests]]
 name = "native.autodiff_result_type"
@@ -1106,7 +1106,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
 expect_diagnostic_code = "0x03000110"
-expect_diagnostic_line = 12
+expect_diagnostic_line = 11
 expect_diagnostic_column = 5
 expect_output_contains = ["This value has type 'float', which is not the declared type 'int'"]
 
@@ -1141,7 +1141,7 @@ kind = "negative"
 case = "../../../cases/compile/native/sim_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "sim_arity.cml:11:20", "argument types: <> (int)", "<sim:pi_hits>: (samples: int, seed: int) => int"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "sim_arity.cml:10:20", "argument types: <> (int)", "<sim:pi_hits>: (samples: int, seed: int) => int"]
 
 [[tests]]
 name = "native.sim_wrong_type"
@@ -1150,7 +1150,7 @@ kind = "negative"
 case = "../../../cases/compile/native/sim_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "sim_type.cml:11:20", "argument types: <> (float, int)", "<sim:pi_hits>: (samples: int, seed: int) => int"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "sim_type.cml:10:20", "argument types: <> (float, int)", "<sim:pi_hits>: (samples: int, seed: int) => int"]
 
 [[tests]]
 name = "native.onnx_declaration_import"
@@ -1167,7 +1167,7 @@ kind = "negative"
 case = "../../../cases/compile/native/onnx_arity.cml"
 args = ["check", "${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "onnx_arity.cml:11:32", "argument types: <> (int)", "<onnx:supported_operators>: () => string[]"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "onnx_arity.cml:10:32", "argument types: <> (int)", "<onnx:supported_operators>: () => string[]"]
 
 [[tests]]
 name = "native.onnx_result_type"
@@ -1178,7 +1178,7 @@ args = ["check", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
 expect_diagnostic_code = "0x03000110"
-expect_diagnostic_line = 12
+expect_diagnostic_line = 11
 expect_diagnostic_column = 5
 expect_output_contains = ["This value has type 'string[]', which is not the declared type 'int'"]
 # the callable operators of `rewrite` are declarations now (`stdlib/rewrite.cml`):
@@ -1200,7 +1200,7 @@ kind = "negative"
 case = "../../../cases/compile/native/rewrite_arity.cml"
 args = ["check", "${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "rewrite_arity.cml:15:20", "argument types: <> (Program)", "<rewrite:rewrite>: (p: Program, rules: Rule[]) => Program!", "<rewrite:rewrite>: (p: Program, rules: Rule[], strict: bool) => Program!"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "rewrite_arity.cml:14:20", "argument types: <> (Program)", "<rewrite:rewrite>: (p: Program, rules: Rule[]) => Program!", "<rewrite:rewrite>: (p: Program, rules: Rule[], strict: bool) => Program!"]
 
 [[tests]]
 name = "native.rewrite_wrong_type"
@@ -1209,7 +1209,7 @@ kind = "negative"
 case = "../../../cases/compile/native/rewrite_type.cml"
 args = ["check", "${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "rewrite_type.cml:14:20", "argument types: <> (Program, int)", "<rewrite:extract>: (p: Program, cost: string) => Program!"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "rewrite_type.cml:13:20", "argument types: <> (Program, int)", "<rewrite:extract>: (p: Program, cost: string) => Program!"]
 
 [[tests]]
 name = "native.rule_reader_declaration_import"
@@ -1227,7 +1227,7 @@ kind = "negative"
 case = "../../../cases/compile/native/rule_reader_arity.cml"
 args = ["check", "${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "rule_reader_arity.cml:11:23", "argument types: <> ()", "<rewrite:needs>: (r: Rule) => int"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "rule_reader_arity.cml:10:23", "argument types: <> ()", "<rewrite:needs>: (r: Rule) => int"]
 
 [[tests]]
 name = "native.rule_reader_wrong_type"
@@ -1236,7 +1236,7 @@ kind = "negative"
 case = "../../../cases/compile/native/rule_reader_type.cml"
 args = ["check", "${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "rule_reader_type.cml:11:24", "argument types: <> (int)", "<rewrite:consts>: (r: Rule) => int"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "rule_reader_type.cml:10:24", "argument types: <> (int)", "<rewrite:consts>: (r: Rule) => int"]
 
 # `env`, `process` and `hash` are declaration modules now (`stdlib/env.cml`,
 # `stdlib/process.cml`, `stdlib/hash.cml`). `env` and `process` keep their resources and their
@@ -1262,7 +1262,7 @@ kind = "negative"
 case = "../../../cases/compile/native/env_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "env_arity.cml:10:20", "argument types: <> (string, string)", "<env:get_env>: (name: string) => string"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "env_arity.cml:9:20", "argument types: <> (string, string)", "<env:get_env>: (name: string) => string"]
 
 [[tests]]
 name = "native.env_wrong_type"
@@ -1271,7 +1271,7 @@ kind = "negative"
 case = "../../../cases/compile/native/env_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "env_type.cml:11:20", "argument types: <> (int)", "<env:get_env>: (name: string) => string"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "env_type.cml:10:20", "argument types: <> (int)", "<env:get_env>: (name: string) => string"]
 
 [[tests]]
 name = "native.process_declaration_import"
@@ -1289,7 +1289,7 @@ kind = "negative"
 case = "../../../cases/compile/native/process_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "process_arity.cml:10:5", "argument types: <> ()", "<process:sleep>: (seconds: float) => void"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "process_arity.cml:9:5", "argument types: <> ()", "<process:sleep>: (seconds: float) => void"]
 
 [[tests]]
 name = "native.process_wrong_type"
@@ -1298,7 +1298,7 @@ kind = "negative"
 case = "../../../cases/compile/native/process_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "process_type.cml:11:5", "argument types: <> (string)", "<process:sleep>: (seconds: float) => void"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "process_type.cml:10:5", "argument types: <> (string)", "<process:sleep>: (seconds: float) => void"]
 
 [[tests]]
 name = "native.hash_declaration_import"
@@ -1316,7 +1316,7 @@ kind = "negative"
 case = "../../../cases/compile/native/hash_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "hash_arity.cml:10:19", "argument types: <> (string, string)", "hash::sha256: (data: Bytes) => string", "hash::sha256: (text: string) => string"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "hash_arity.cml:9:19", "argument types: <> (string, string)", "hash::sha256: (data: Bytes) => string", "hash::sha256: (text: string) => string"]
 
 [[tests]]
 name = "native.hash_wrong_type"
@@ -1325,7 +1325,7 @@ kind = "negative"
 case = "../../../cases/compile/native/hash_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "hash_type.cml:11:19", "argument types: <> (int)", "hash::sha256: (data: Bytes) => string", "hash::sha256: (text: string) => string"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "hash_type.cml:10:19", "argument types: <> (int)", "hash::sha256: (data: Bytes) => string", "hash::sha256: (text: string) => string"]
 
 #  ---- The declarations of `graph`: `constant` per sample type ----
 #
@@ -1349,7 +1349,7 @@ kind = "negative"
 case = "../../../cases/compile/native/graph_constant_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "graph_constant_arity.cml:11:21", "argument types: <> (Node, int, int)", "<graph:constant>: (n: Node, sample: i32) => i32?"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "graph_constant_arity.cml:10:21", "argument types: <> (Node, int, int)", "<graph:constant>: (n: Node, sample: i32) => i32?"]
 
 [[tests]]
 name = "native.graph_constant_wrong_type"
@@ -1358,7 +1358,7 @@ kind = "negative"
 case = "../../../cases/compile/native/graph_constant_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "graph_constant_type.cml:11:21", "argument types: <> (int, int)", "<graph:constant>: (n: Node, sample: i32) => i32?"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "graph_constant_type.cml:10:21", "argument types: <> (int, int)", "<graph:constant>: (n: Node, sample: i32) => i32?"]
 
 # ---- The declarations of `graph` itself: the handles, their operators and `type_of` ----
 #
@@ -1385,7 +1385,7 @@ kind = "negative"
 case = "../../../cases/compile/native/graph_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "graph_arity.cml:10:17", "argument types: <> ()", "<graph:root>: (p: Program) => Graph"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "graph_arity.cml:9:17", "argument types: <> ()", "<graph:root>: (p: Program) => Graph"]
 
 [[tests]]
 name = "native.graph_wrong_type"
@@ -1394,7 +1394,7 @@ kind = "negative"
 case = "../../../cases/compile/native/graph_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "graph_type.cml:11:17", "argument types: <> (int)", "<graph:root>: (p: Program) => Graph"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "graph_type.cml:10:17", "argument types: <> (int)", "<graph:root>: (p: Program) => Graph"]
 
 # ---- The declaration itself is checked: its URI and its result type ----
 
@@ -1407,7 +1407,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::InvalidOperatorURI"
 expect_diagnostic_code = "0x03000019"
-expect_diagnostic_line = 4
+expect_diagnostic_line = 3
 expect_diagnostic_column = 1
 expect_output_contains = ["Invalid operator URI format: 'stdadd'. Expected 'protocol:path'."]
 
@@ -1420,7 +1420,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::NativeDeclarationIncomplete"
 expect_diagnostic_code = "0x0300017B"
-expect_diagnostic_line = 4
+expect_diagnostic_line = 3
 expect_diagnostic_column = 1
 expect_output_contains = ["The body-less declaration 'foo' is incomplete: it has no result type."]
 
@@ -1433,6 +1433,6 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::FieldNotFound"
 expect_diagnostic_code = "0x04000033"
-expect_diagnostic_line = 15
+expect_diagnostic_line = 14
 expect_diagnostic_column = 12
 expect_output_contains = ["The struct has no field 'y'. A struct is indexed by the name of one of its fields."]

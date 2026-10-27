@@ -4,7 +4,6 @@
  * a mistake in it, the mistake is what the writer has to see: the report must not turn the two
  * legal reads into a second consumer, which would name the wrong line and hide the real error.
  */
-module stream_arm_error_keeps_its_diagnosis
 
 func count(n: int): int.. {
     return step(n)

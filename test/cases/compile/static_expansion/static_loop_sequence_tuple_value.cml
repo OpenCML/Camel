@@ -5,7 +5,6 @@
  * reading that `x` is a type was wrong, and the type of `x` (one position's type) is asked for
  * with `typeof(x)` where it is needed.
  */
-module static_loop_sequence_tuple_value
 
 func f(..ts): int {
     return static loop acc = 0 for x in ts do acc + x

@@ -1,4 +1,3 @@
-module tiles_slice_bounds
 import { zeros } from tensor
 import { source } from tiles
 

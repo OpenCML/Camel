@@ -1,4 +1,4 @@
-module fault_array_chunks_zero
+
 
 import { chunks } from array
 

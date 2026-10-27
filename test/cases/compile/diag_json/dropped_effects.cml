@@ -5,7 +5,6 @@
  * the warning; nothing in a sync block does, nor does a pure expression.
  * Output: `kept 1` and `0 5`.
  */
-module dropped_effects
 
 func noisy(x: int): int sync {
     println('noisy')

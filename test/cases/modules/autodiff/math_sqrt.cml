@@ -1,6 +1,5 @@
 // Scalar sqrt pullbacks, including a non-trainable integer input and a tensor coefficient.
 // The differentiated value is the first `with` parameter; everything else is data.
-module math_sqrt
 import { sqrt } from math
 import { grad, with_grad } from autodiff
 import { reshape, sum } from tensor

@@ -6,7 +6,6 @@
  * wins, -0 is below +0); `argmax` and `argmin` take the first NaN, put +0 above -0 and keep the
  * earlier position on a tie.
  */
-module array_kernels_axis
 
 import { sum, mean, min, max, argmax, argmin } from array
 import math

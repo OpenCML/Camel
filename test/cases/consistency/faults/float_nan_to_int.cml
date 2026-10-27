@@ -1,7 +1,6 @@
 /**
  * int(nan): NaN is not a number an integer can hold.
  */
-module float_nan_to_int
 
 func conv(x: float): int { return int(x) }
 func mul(a: float, b: float): float { return a * b }

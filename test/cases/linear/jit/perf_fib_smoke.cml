@@ -1,7 +1,6 @@
 /**
  * Lightweight performance smoke case that proves the perf helper returns sane average and margin values under JIT.
  */
-module jit_perf_fib_smoke
 
 import { perfms } from perf
 

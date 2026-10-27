@@ -4,7 +4,6 @@
  * 2026-10-25 asks for an expression built only from compile-time constants, and a parameter is
  * not one. The refusal names the expression that was written.
  */
-module static_loop_sequence_runtime_array
 
 func sum(xs: int[]): int {
     return static loop acc = 0 for x in xs do acc + x

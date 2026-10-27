@@ -1,7 +1,6 @@
 // `pure` says a call touches nothing. The body of `say` writes the standard output, so the
 // signature promises something the body does not keep: the declaration is refused where it is
 // written, and the resource the clause leaves out is named (design effects plan, step 5).
-module err_pure_body
 
 /// The clause promises the empty set; the body writes `stdout`.
 func say(): int pure sync {

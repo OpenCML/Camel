@@ -2,7 +2,6 @@
  * Array parameters of `main` are read from .npy files and checked against the declared
  * element type and shape.
  */
-module tensors
 
 import { tanh } from tensor
 

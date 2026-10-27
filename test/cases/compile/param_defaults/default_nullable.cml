@@ -3,7 +3,6 @@
  * 5.1): a `T?` parameter may take it as its default. The default is evaluated where the
  * declaration is -- once -- and every call that leaves the parameter out reads that one value.
  */
-module param_default_nullable
 
 // The default of a nullable parameter: the null of `int?`.
 func pick(p: int? = null, fallback: int = 7): int {

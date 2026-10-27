@@ -1,5 +1,4 @@
 // Named with/normal parameters, captured values in zero-argument functions, and aggregate FILLs.
-module port_fill_metadata
 with <offset: int>
 func assemble(items: int[]): int[] {
     let count = len(items)

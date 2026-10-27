@@ -1,4 +1,3 @@
-module fstring_bad_spec
 func main(): int sync {
     println(`value: ${'text':d}`)
     return 0

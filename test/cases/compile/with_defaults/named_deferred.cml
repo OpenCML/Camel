@@ -4,7 +4,6 @@
  * was written at (design principles 4.4, 5.9). `pick`'s `v` is the second `with` parameter and is
  * written first; `T` comes from the ordinary argument.
  */
-module with_default_named_deferred
 
 with <tag: int, v: T>
 func pick::<T>(x: T): string {

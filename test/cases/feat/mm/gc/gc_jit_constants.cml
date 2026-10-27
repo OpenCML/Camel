@@ -6,7 +6,6 @@
  * that address goes stale as soon as the constant moves, so such a graph must stay in the
  * interpreter; `count`, which has no object constant, is still compiled.
  */
-module gc_jit_constants
 
 func tag(n: int): string {
     return if n <= 0 then 'leaf' else tag(n - 1)

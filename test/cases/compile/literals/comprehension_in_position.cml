@@ -6,7 +6,6 @@
  * own, and the declared type reaches it as it reaches the same comprehension returned from a
  * function with that declared type (design principles 4.2, 5.1).
  */
-module comprehension_in_position
 
 func doubles(n: int): f32[] {
     // The declared return type: the position that always worked.

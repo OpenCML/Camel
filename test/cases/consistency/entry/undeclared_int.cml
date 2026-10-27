@@ -1,7 +1,6 @@
 /**
  * A `main` that declares no return type: the number its body ends with is not the exit code.
  */
-module undeclared_int
 
 func main() sync {
     println('a')

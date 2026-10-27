@@ -1,7 +1,6 @@
 /**
  * The one integer division that overflows: the smallest int divided by -1, and its modulo.
  */
-module int_min_div
 
 func div(a: int, b: int): int { return a / b }
 func rem(a: int, b: int): int { return a % b }

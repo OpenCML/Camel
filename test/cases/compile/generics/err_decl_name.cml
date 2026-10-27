@@ -4,7 +4,6 @@
  * does not load. It does not for an instantiation -- `never_called` is called nowhere, and
  * its body still reports.
  */
-module err_decl_name
 
 func never_called::<T>(x: T): T {
     return x + no_such_name

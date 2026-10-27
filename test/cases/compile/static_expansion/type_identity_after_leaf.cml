@@ -2,7 +2,6 @@
  * An identity pattern after `#leaf` can never be selected: `#leaf` already selected every type
  * that is not a structure or an ordinary tuple.
  */
-module type_identity_after_leaf
 
 func after_leaf::<T>(t: T): int {
     return match type T {

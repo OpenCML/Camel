@@ -3,7 +3,6 @@
  * and the overload the message lists is the declaration's — the one source is
  * `stdlib/tensor.cml`, not the C++ module.
  */
-module tensor_arity
 
 import { new, numel } from tensor
 

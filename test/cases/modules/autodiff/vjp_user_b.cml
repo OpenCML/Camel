@@ -2,7 +2,6 @@
  * The second module that imports `vjp_lib`: its import is served by the module cache, and the
  * declaration tag of `scale` must still name the rule graph there.
  */
-module vjp_user_b
 
 import { scale } from vjp_lib
 

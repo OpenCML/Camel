@@ -4,7 +4,6 @@
  * one DATA node for it and both call sites read that node. This is the "folded once" property
  * `with` defaults have (design principles 4.4, 6.5).
  */
-module fold_call_once
 
 type Point = { x: int, y: int }
 

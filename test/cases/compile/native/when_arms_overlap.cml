@@ -11,7 +11,6 @@
  * conditions hold for and both declarations, each by its signature and its condition: the type it
  * names is the one that satisfies both, not the first type the compiler asks about.
  */
-module when_arms_overlap
 
 func is_small_int::<T>(): bool {
     return match type T {

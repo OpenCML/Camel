@@ -1,7 +1,6 @@
 /**
  * Mutual recursion in tail position, 200000 rounds.
  */
-module tail_mutual
 
 func even(n: int): bool {
     return if n == 0 then true else odd(n - 1)

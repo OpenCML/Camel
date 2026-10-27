@@ -29,7 +29,7 @@ const STDLIB = path.join(SCRATCH, 'stdlib')
 
 fs.mkdirSync(STDLIB, { recursive: true })
 const declaration = path.join(STDLIB, 'std.cml')
-fs.writeFileSync(declaration, 'module std\n')
+fs.writeFileSync(declaration, '// no pass declarations\n')
 const program = path.join(SCRATCH, 'program.cml')
 fs.writeFileSync(program, 'func main(): int sync {\n    return 0\n}\n')
 

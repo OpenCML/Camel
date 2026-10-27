@@ -1,4 +1,3 @@
-module binary_aggregate_roundtrip
 import { from_bytes, to_bytes } from tensor
 import { from_array } from bytes
 

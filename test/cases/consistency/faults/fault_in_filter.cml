@@ -1,7 +1,6 @@
 /**
  * One element function of a filter faults (element 5 of 8).
  */
-module fault_in_filter
 
 func keep(x: int): bool { return 60 % (x - 5) == 0 }
 

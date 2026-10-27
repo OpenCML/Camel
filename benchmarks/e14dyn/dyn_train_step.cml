@@ -14,7 +14,6 @@
  *      DYN ('1' = export with dynamic axis 0), DUMP (dir for updated params),
  *      LOSS ('mean' | 'summean', default 'summean').
  */
-module dyn_train_step
 
 import { relu, mean, sum, reshape, shape, load_npy } from tensor
 import { with_grad } from autodiff

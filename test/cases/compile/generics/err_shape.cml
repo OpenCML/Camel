@@ -1,5 +1,3 @@
-module err_shape
-
 func first::<T>(xs: T[]): T {
     return xs[0]
 }

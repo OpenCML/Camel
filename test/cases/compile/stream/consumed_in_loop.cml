@@ -5,7 +5,6 @@
  * loop's own state, which the round takes from its port and hands back as the next state; the
  * diagnostic names that spelling and `for x in s`, and this program is refused.
  */
-module stream_consumed_in_loop
 
 func count(n: int): int.. {
     return step(n)

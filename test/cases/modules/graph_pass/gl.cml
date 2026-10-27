@@ -2,7 +2,6 @@
 // module-level literal (`two`), a module-level value computed by a call (`twelve`), and a pass
 // that prints both. Before this printed `0 0`: the pass function graph was encoded alone, so
 // the module's root graph never ran and the capture ports kept the frame default.
-module gl
 import { Program } from graph
 
 let two = 2

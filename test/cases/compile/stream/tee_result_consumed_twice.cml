@@ -3,7 +3,6 @@
  * streams, one for each reader, and each of them is still read once. Reading one side twice is
  * two consumers of that side, so it is refused exactly as reading any other stream twice is.
  */
-module stream_tee_result_consumed_twice
 
 import stream
 

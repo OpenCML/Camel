@@ -3,7 +3,6 @@
  * uses an open-rank array (`f64[..]`): struct fields, tuple elements, and array elements are
  * checked covariantly (they are immutable).
  */
-module struct_covariance
 
 import { reshape, sum } from tensor
 

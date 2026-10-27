@@ -6,7 +6,6 @@
  * for the signature it cannot settle where the call is written, not bound to a guessed position:
  * ParamArgumentCallee, at the argument.
  */
-module param_stdlib_no_place_for_name
 
 import python
 

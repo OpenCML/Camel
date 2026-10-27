@@ -11,7 +11,6 @@
  * because the plan runner closes a test's standard input, and `int(get_env(...))` is a runtime
  * value of the same kind as `read_int()`.
  */
-module grow_named_dimension
 
 import { get_env } from env
 import { sum } from array

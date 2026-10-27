@@ -5,7 +5,6 @@
  * `(p: Program, rules: Rule[], strict: bool) => Program!` — `stdlib/rewrite.cml`, not
  * the C++ module.
  */
-module rewrite_arity
 
 import { rewrite } from rewrite
 import { Program, current } from graph

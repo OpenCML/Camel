@@ -3,7 +3,6 @@
  * `log(exp(a) / sum(exp(b)))` normalizes one tensor with another's sum. The values are printed
  * before and after the pass, so a rule that fired here would change the text.
  */
-module accuracy_guard_target
 
 import { reshape, exp, log, sum } from tensor
 

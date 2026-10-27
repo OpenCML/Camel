@@ -1,6 +1,5 @@
 // test/cases/para/core/asian_option_mc.cml at a size that runs in seconds: 16 map elements, each
 // one call of the module operator sim::asian_call_price.
-module asian_mc
 
 import { asian_call_price } from sim
 

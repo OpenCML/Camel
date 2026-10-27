@@ -2,7 +2,6 @@
  * IEEE comparisons: NaN equals nothing, itself included, and is unordered; the two zeros are
  * equal.
  */
-module float_compare
 
 func mul(a: float, b: float): float { return a * b }
 func sub(a: float, b: float): float { return a - b }

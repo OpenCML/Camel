@@ -3,7 +3,6 @@
  * the value of the right side of `??` is not wanted while the left side has one, so the `fail`
  * written there is not run at all and the program goes on.
  */
-module fail_unwanted
 
 func main(): int sync {
     let v: int? = 7

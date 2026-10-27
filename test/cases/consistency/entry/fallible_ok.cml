@@ -2,7 +2,6 @@
  * `main` declared `int!` that returns a value which has not failed: the value is the exit
  * code, as under `int`.
  */
-module fallible_ok
 
 func main(): int! sync {
     println('before')

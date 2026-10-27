@@ -22,7 +22,6 @@
 // pure, and the declaration carries that (a declaration carries types, not effects), so a call
 // may be folded, merged or run concurrently and its result may not be dropped.
 
-module onnx
 
 /// Lists the operator URIs the ONNX backend can lower at its default opset, in the order the
 /// lowering table reports them. A capability report only: it reads the table compiled into the

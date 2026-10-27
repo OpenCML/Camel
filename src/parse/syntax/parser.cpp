@@ -272,7 +272,7 @@ void ParserImpl::recover(bool inBlock, bool topLevel) {
             // A declaration keyword starts a declaration wherever it stands.
             if (pos_ != start &&
                 (cur_ == TK::KwFunc || cur_ == TK::KwLet || cur_ == TK::KwVar ||
-                 cur_ == TK::KwImport || cur_ == TK::KwModule || cur_ == TK::KwNamespace)) {
+                 cur_ == TK::KwImport || cur_ == TK::KwNamespace)) {
                 break;
             }
         }
@@ -296,7 +296,6 @@ void ParserImpl::recover(bool inBlock, bool topLevel) {
 
 bool ParserImpl::startsDecl(TK kind) const {
     switch (kind) {
-    case TK::KwModule:
     case TK::KwImport:
     case TK::KwExport:
     case TK::KwNamespace:
@@ -377,15 +376,13 @@ uint32_t ParserImpl::afterModifiers() const {
     return n;
 }
 
-/// decl : moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceDecl
+/// decl : importDecl | exportDecl | namespaceDecl | usingNamespaceDecl
 ///      | tagDecl | resourceDecl | dataDecl | funcDecl | typeDecl | ruleDecl | factDecl
 /// Decided on the first token; after `export` on the next one (`export let`, `export type`, ...).
 /// The word `tag` is not reserved: a declaration starts with it only when a tag name follows
 /// (`atTagDecl`), so a value called `tag` still reads as a value.
 void ParserImpl::parseDecl() {
     switch (cur_) {
-    case TK::KwModule:
-        return parseModuleDecl();
     case TK::KwImport:
         return parseImportDecl();
     case TK::KwNamespace:
@@ -589,24 +586,6 @@ void ParserImpl::parseModuleName() {
     close(m, NK::ModuleName);
 }
 
-/// moduleDecl : frontMatter? 'module' identDef
-void ParserImpl::parseModuleDecl() {
-    const size_t m = mark();
-    parseFrontMatter();
-    parseModuleDeclRest(m);
-}
-
-/// The part of moduleDecl after the tags that may precede it; `m` marks where it began. A tag
-/// written before `module` (`#gpu module m`, design principles 13.4) is the fact of the module
-/// and reaches each of its top-level functions.
-void ParserImpl::parseModuleDeclRest(size_t m) {
-    if (!expect(TK::KwModule)) {
-        return close(m, NK::ModuleDecl);
-    }
-    expectName(NK::IdentDef);
-    close(m, NK::ModuleDecl);
-}
-
 /// importDecl : 'import' (moduleName ('as' identDef)? | (importItem | bracedImports) 'from'
 /// moduleName) A name followed by `from` is the one name imported (design principles 10.2: `import
 /// a from m` is `import { a } from m`), otherwise the start of the module name; `import m as x`
@@ -710,7 +689,7 @@ void ParserImpl::parseNamespaceDecl() {
             const uint32_t before = pos_;
             if (cur_ == TK::Semi) {
                 error(SyntaxError::Kind::ExtraSemicolon, {}, pos_);
-            } else if (startsDecl(cur_) && cur_ != TK::KwModule) {
+            } else if (startsDecl(cur_)) {
                 parseDecl();
                 if (!panic_) {
                     eat(TK::Semi);
@@ -751,12 +730,11 @@ void ParserImpl::parseFuncAnno() {
 
 /// A statement that starts with annotations or tag uses: a function declaration, a type
 /// declaration, a rule declaration (`#requires(...) rule f(...)`), a fact declaration
-/// (`#requires(...) fact f(...)`), a module declaration
-/// (`#gpu module m`, design principles 13.4), or an annotated/tagged block
+/// (`#requires(...) fact f(...)`), or an annotated/tagged block
 /// (blockStmt's second form; an `@name(args)` annotation, the removed spelling of the numeric
 /// permission annotation; `#tag { ... }` on
 /// a block, 6.2). They are read first; a block follows when the next token is '{' or `sync {`, a
-/// type declaration when it is 'type', a module declaration when it is `module`, a rule when the
+/// type declaration when it is 'type', a rule when the
 /// tags are followed by `rule`, a fact when they are followed by `fact`, anything else continues
 /// the function declaration. After a tag use
 /// '{' is always a block, never a struct literal.
@@ -775,9 +753,6 @@ void ParserImpl::parseAnnotatedStmt() {
     if (cur_ == TK::LBrace || (cur_ == TK::KwSync && peek(1) == TK::LBrace)) {
         parseStmtBlock();
         return close(m, NK::BlockStmt);
-    }
-    if (cur_ == TK::KwModule) {
-        return parseModuleDeclRest(m);
     }
     if (cur_ == TK::KwType) {
         return parseTypeDeclRest(m);

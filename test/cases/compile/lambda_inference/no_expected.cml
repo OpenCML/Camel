@@ -3,7 +3,6 @@
  * error at that parameter (SemanticDiag::LambdaParameterWithoutType), never a silent `any`
  * (design principles 5.9, 5.10). This one is bound by a `let` with no annotation.
  */
-module lambda_inference_no_expected
 
 func main(): int sync {
     let g = (x) => x + 1

@@ -1,7 +1,6 @@
 /**
  * Parallel file hashing workload used to verify chunked IO plus compute stages can fan out and reduce deterministically.
  */
-module file_chunk_hash
 
 import { now } from time
 import { exists, file_size, read_chunk } from fs

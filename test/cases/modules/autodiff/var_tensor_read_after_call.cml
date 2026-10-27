@@ -2,7 +2,6 @@
  * Refused: the variable is read after a call of the differentiated function that receives it
  * and may write it (`push` stores a value that depends on the parameter).
  */
-module var_tensor_read_after_call
 import { reshape, sum } from tensor
 import { with_grad } from autodiff
 

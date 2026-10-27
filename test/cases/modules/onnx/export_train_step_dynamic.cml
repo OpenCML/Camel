@@ -6,7 +6,6 @@
  * (The canonical mean(y*y) form cannot: its VJP emits tensor:numel, which has
  * no ONNX lowering — see export_train_step_dynamic_mean.)
  */
-module export_train_step_dynamic
 
 import { relu, sum, reshape, shape } from tensor
 import { with_grad } from autodiff

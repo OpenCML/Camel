@@ -4,7 +4,6 @@
  * numeric types to widen one into the other (design principles 5.1). Both shapes are known here,
  * and the refusal does not look at them: it is the element types that disagree.
  */
-module mixed_width_known_shapes
 
 import { reshape, sum } from tensor
 

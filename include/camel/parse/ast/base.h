@@ -122,24 +122,12 @@ class Node : public AbstractTreeNode<load_ptr_t, Node> {
     }
 };
 
+/// The load of the root node: the module a file *is*. Nothing in the file names it — the file's
+/// own name is the module's name (design principles 10.2) — so it prints as the one word
+/// `Module`.
 class ModuleLoad : public Load {
   public:
     ModuleLoad() : Load(LoadType::Module) {}
-    const std::string toString() const override { return "Module: " + ref_.toString(); }
-
-    void setRef(const Reference &ref) { ref_ = ref; }
-    const Reference &getRef() const {
-        if (ref_.empty()) {
-            throw std::runtime_error("ModuleLoad: Reference is not set");
-        }
-        return ref_;
-    }
-    /// Returns the declared module name, or empty string if no module decl.
-    std::string getModuleNameOrEmpty() const { return ref_.empty() ? "" : ref_.toString(); }
-    const std::string geneCode() const override;
-
-  private:
-    Reference ref_;
 };
 
 class ImportLoad : public Load {

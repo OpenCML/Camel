@@ -1,7 +1,6 @@
 /**
  * Verifies simple mutual-call control transfer on JIT, especially around base-case selection and returned tail values.
  */
-module jit_mutual_tail_check
 
 func keep(x: int): int {
     return x

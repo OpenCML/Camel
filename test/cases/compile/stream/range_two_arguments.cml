@@ -1,7 +1,6 @@
 // The two-parameter `range(a, b)` is deleted: the interval `a..b` is the one spelling (design
 // principles 4.2). The built-in group has one signature, three parameters, so the
 // call is refused where it stands as any other call the overload set has no match for.
-module h426_range_two_arguments
 
 func main(): int sync {
     let xs = range(0, 3)

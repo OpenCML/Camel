@@ -10,7 +10,6 @@
  *
  * Output: `taken`, `15.0`, `other arm`, `15.0`.
  */
-module tiles_gpu_scope_arm_effect
 
 import { reshape, sum } from tensor
 

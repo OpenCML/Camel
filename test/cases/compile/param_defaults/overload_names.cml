@@ -3,7 +3,6 @@
  * parameter of `f` is `b` in one declaration and `c` in the other, so the call's `b` names no one
  * parameter of `f` (design principles 4.4).
  */
-module param_overload_names
 
 func f(a: int, b: int): int {
     return a * 10 + b

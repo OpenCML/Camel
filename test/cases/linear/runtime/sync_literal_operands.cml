@@ -6,7 +6,6 @@
  * after `println('four')` on every scheduler, and the order of the loads in
  * `let m = { w: weight('w'), ... }` depended on the pass pipeline.
  */
-module sync_literal_operands
 
 func loud(s: string): string sync {
     println(s)

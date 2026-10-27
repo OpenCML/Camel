@@ -4,7 +4,6 @@
  * unrolled where it stands, so nothing of it can be built, and the compiler says which sequence
  * it could not work out rather than reporting the message of a missing tuple.
  */
-module static_loop_sequence_unknown
 
 func sumTo(n: int): int {
     return static loop acc = 0 for i in 0..n do acc + i

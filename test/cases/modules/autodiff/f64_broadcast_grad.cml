@@ -40,7 +40,6 @@
  * distance and the printed x gradient move), or the reduction's axis is wrong (the x gradient
  * becomes the column sum, or the p0 gradient the row broadcast of p0).
  */
-module f64_broadcast_grad
 
 import { abs, reshape, sum } from tensor
 import { with_grad } from autodiff

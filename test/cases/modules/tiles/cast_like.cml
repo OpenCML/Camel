@@ -6,7 +6,6 @@
  * cast, while its contract list still shows that both operators were seen. The printed value is
  * the f32 gradient of `sum(x)`.
  */
-module tiles_cast_like
 import { reshape, sum, abs } from tensor
 import { grad } from autodiff
 import { inspect } from tiles

@@ -13,7 +13,6 @@
  * `i32` instances print their kernels' answers (42 and -4); the `int` instances must print their
  * bodies' (42 and 42), and a compiler that bound the kernel by name alone prints -4 twice.
  */
-module impl_kernel_arms
 
 /// The element type the kernels below implement: `i32` alone. A body-less declaration's
 /// condition says which instances of the function that rule is the executor of (design

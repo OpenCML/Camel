@@ -8,7 +8,6 @@
  * The predicates are written here as any user predicate is; the standard ones with these names
  * live in the standard module `types`.
  */
-module when_applied
 
 func is_integer::<T>(): bool {
     return match type T {

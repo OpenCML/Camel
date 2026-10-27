@@ -3,7 +3,6 @@
  * chain gives it, so `chained` instantiates `first` and `pair` for its own type parameter
  * (design principles 5.5). Every declaration says `::<...>` at its head.
  */
-module chain
 
 func id::<T>(x: T): T {
     return x

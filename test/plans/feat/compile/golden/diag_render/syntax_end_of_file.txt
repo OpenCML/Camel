@@ -1,17 +1,17 @@
 error[SyntaxDiag::MissingClosingDelimiter]: Expected '}' before the end of the file, to close the '{'.
-  --> <ROOT>/test/cases/compile/diag_render/syntax_end_of_file.cml:4:13
+  --> <ROOT>/test/cases/compile/diag_render/syntax_end_of_file.cml:2:13
    |
- 4 |     return 0
+ 2 |     return 0
    |             ^
 note: the '{' that is not closed is opened
-  --> <ROOT>/test/cases/compile/diag_render/syntax_end_of_file.cml:3:23
+  --> <ROOT>/test/cases/compile/diag_render/syntax_end_of_file.cml:1:23
    |
- 3 | func main(): int sync {
+ 1 | func main(): int sync {
    |                       -
 help: Every '{' needs its '}'. The note shows the '{' that is still open here.
 help: insert the '}' that is missing
    |
- 4 |     return 0}
+ 2 |     return 0}
    |             +
 
 camel: 1 error

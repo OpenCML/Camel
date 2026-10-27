@@ -5,7 +5,6 @@
  * 1 is a run of the block and a step of -1 is not, so one of the two is a view and the other a
  * copy; the value and the shape below are the same either way, which is what the readings pin.
  */
-module subscript_slice_multidim_rank3
 import { abs, reshape, shape, sum } from tensor
 
 func main(): int sync {

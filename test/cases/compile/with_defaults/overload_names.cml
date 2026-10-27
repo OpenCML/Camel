@@ -4,7 +4,6 @@
  * `rounds` in one declaration and `iters` in the other, so `rounds` names no one parameter of
  * `show` (design principles 4.4).
  */
-module with_overload_names
 
 with <rounds: int = 8>
 func show(x: int): string {

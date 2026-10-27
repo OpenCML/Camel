@@ -12,7 +12,6 @@
 ///
 /// Red when: a report operator reads the wrapper (a refusal, or the wrapper's own
 /// `context_arguments` exclusion), or a segment's plan is not the plan of that segment.
-module tiles_gpu_scope_report
 
 import { reshape, sum } from tensor
 import { inspect, regions, source } from tiles

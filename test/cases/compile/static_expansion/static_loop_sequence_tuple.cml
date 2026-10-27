@@ -6,7 +6,6 @@
  * a `static loop` over a tuple from an ordinary `loop`, whose element type is one type for every
  * round; `indices ts` walks the same positions and gives an ordinary `int` (6.8.4).
  */
-module static_loop_sequence_tuple
 
 func tag::<T>(): int {
     return match type T {

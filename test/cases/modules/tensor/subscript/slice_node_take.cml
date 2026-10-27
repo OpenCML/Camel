@@ -4,7 +4,6 @@
  * the module's `tensor:idx_take`, which answers another rank or an open rank). See
  * slice_one_node.cml.
  */
-module slice_node_take
 
 import { reshape } from tensor
 

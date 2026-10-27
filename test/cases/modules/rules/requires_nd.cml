@@ -2,7 +2,6 @@
  * `nondeterministic` is a permission like the others (design principles 7.2): a rule may
  * require it, and a function may grant it; the rule is applied only where it is granted.
  */
-module requires_nd
 import { Program } from graph
 import { rewrite } from rewrite
 

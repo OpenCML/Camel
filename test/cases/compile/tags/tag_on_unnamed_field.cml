@@ -1,5 +1,4 @@
 /// A tag on a field of a struct type written inline, which is not a declaration.
-module tag_on_unnamed_field
 
 tag width(w: int) on field
 

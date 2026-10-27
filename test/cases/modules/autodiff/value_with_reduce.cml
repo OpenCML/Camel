@@ -4,7 +4,6 @@
  * the call, naming the operator and the parameter, rather than returning 0.0 for a derivative of
  * 2.0 (the constant array sums to 3, so f(w) = (3 + w) * 2).
  */
-module value_with_reduce
 
 import { grad } from autodiff
 

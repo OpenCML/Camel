@@ -3,7 +3,6 @@
  * type, and the message prints the declaration's own parameter name (`p`) — the one source is
  * `stdlib/graph.cml`, not the C++ module (step 10).
  */
-module graph_type
 
 import { root } from graph
 

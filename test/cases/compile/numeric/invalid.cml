@@ -3,7 +3,6 @@
  * names in parentheses is reported at the annotation, and the message names the tag form that
  * replaced it (design principles 7.2: numeric permissions are tags).
  */
-module invalid
 
 @kernelish(reassociate)
 func b(x: float): float { return x * 2.0 }

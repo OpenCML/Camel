@@ -8,7 +8,6 @@
  * The plan checks the control edges on the graph dump (order_direct_user.graph): `before ->
  * modify` is present, and so is `modify ->` the read written after it.
  */
-module order_direct_user
 
 func before(x: int): int {
     return x

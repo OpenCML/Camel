@@ -8,7 +8,6 @@
  * here, which is what the call was asked for. Every argument the call is written with is read
  * together, `with` arguments and ordinary ones alike.
  */
-module never_with_argument
 
 func stop(m: string): never {
     return fail<'Stopped'>(m)

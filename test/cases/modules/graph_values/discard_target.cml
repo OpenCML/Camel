@@ -3,7 +3,6 @@
  * rewrite that would drop the `+ 1` and returns the program it was given, so the run computes 18
  * and the running program, as `current()` names it, still has the `+ 1` (design principles 9.1).
  */
-module discard_target
 import { Graph, Node, Program, constant, current, graphs, inputs, name, nodes, op, op_name } from graph
 import { ends_with } from str
 

@@ -4,7 +4,7 @@
  *   1 2 3     three calls
  *   3         the variable after them
  */
-module counter
+
 
 var cnt: int = 0
 

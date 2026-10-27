@@ -16,7 +16,6 @@
  * faulting. A constant container starts no gradient flow: it is converted by the forward rule and
  * the call that converts it is never visited.
  */
-module refuse_container_reshape
 
 import { reshape, sum } from tensor
 import { grad } from autodiff

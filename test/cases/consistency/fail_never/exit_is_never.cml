@@ -3,7 +3,6 @@
  * function whose declared result type is an int may end with it, and the code it is given is the
  * code the program leaves with.
  */
-module exit_is_never
 
 // `exit` is declared by the `process` module (stdlib/process.cml), like `sleep`: the standard
 // library's declarations are read from signature files, so a program names the module it takes

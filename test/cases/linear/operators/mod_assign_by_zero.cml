@@ -1,7 +1,6 @@
 /**
  * `%=` by zero is the fault `%` by zero is: DivisionByZero at the operator, on every back end.
  */
-module mod_assign_by_zero
 
 func main(): int sync {
     var a = 17

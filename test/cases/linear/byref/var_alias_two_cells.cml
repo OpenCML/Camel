@@ -3,7 +3,6 @@
  * three names can read it. The write to `a[0]` copies, and the other two keep what they were
  * read as (docs/design-principles.cn.md 3.5, 6.11).
  */
-module var_alias_two_cells
 
 func make_array(): int[] {
     return [

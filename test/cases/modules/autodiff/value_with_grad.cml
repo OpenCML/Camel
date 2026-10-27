@@ -9,7 +9,6 @@
  * - slice: the bound is configuration (an int, no tangent). f is the first element of a constant
  *   prefix, so the bound's gradient is exactly 0 and the value is still 50.
  */
-module value_with_grad
 
 import { grad } from autodiff
 

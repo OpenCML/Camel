@@ -2,7 +2,6 @@
  * The declaration of `time:strftime` takes one ordinary argument: a second one is refused at the
  * call, and the overload the message lists is the declaration's.
  */
-module time_arity
 
 import { strftime } from time
 

@@ -1,4 +1,3 @@
-module tiles_branch_effect
 import { reshape } from tensor
 import { source } from tiles
 func forbidden(x: f32[..]): f32[..] sync { println('effect must not run'); return x }

@@ -4,7 +4,6 @@
 // (`ident(ident(x))` with `x: int` is `ident::<int>`).
 // `let h: (x: int) => int = (x) =>
 // ident(ident(x))` passes, so this must too.
-module h428_comp_expected_type
 
 func ident::<T>(x: T): T {
     return x

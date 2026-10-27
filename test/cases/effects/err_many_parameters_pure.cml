@@ -2,7 +2,6 @@
 // dropped from the measurement and a `pure` that cannot hold passed. `consume` writes the handle it
 // is given and `wide` passes it its 300th parameter: past the 255th parameter the use cannot be
 // placed, so it is read as touching any handle and the clause is refused.
-module err_many_parameters_pure
 
 #resource type Stream = { id: int }
 

@@ -2,7 +2,6 @@
  * A generic operator declared beside a generic type: the module that declares `Pair` offers the
  * `+` of any `Pair<T>` with it (design principles 5.7, 4.3).
  */
-module pair_models
 
 export type Pair<T> = { a: T, b: T }
 

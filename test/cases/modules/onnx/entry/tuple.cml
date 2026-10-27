@@ -1,7 +1,6 @@
 /**
  * A tuple result becomes one model output per element (`output_0`, `output_1`).
  */
-module tuple
 
 import { tanh } from tensor
 

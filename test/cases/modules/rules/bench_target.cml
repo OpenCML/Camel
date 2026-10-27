@@ -4,7 +4,6 @@
  * kept: the rewrites, the rounds, the nodes visited and the wall time (the seconds are not
  * pinned by the plan).
  */
-module bench_target
 
 func f0(x: int): int { return x + 0 }
 func f1(x: int): int { return x + 0 }

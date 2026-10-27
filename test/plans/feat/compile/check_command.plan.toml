@@ -45,8 +45,8 @@ case = "../../../cases/compile/check/syntax_error.cml"
 args = ["check", "--syntax-only", "-O", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
-expect_diagnostic_line = 5
-expect_output_contains = ["(my_module)"]
+expect_diagnostic_line = 3
+expect_output_contains = ["(syntax_error)"]
 expect_output_not_contains = ["(main)"]
 
 [[tests]]
@@ -93,12 +93,12 @@ expect_output_not_contains = ["not printed by check", "Error"]
 
 [[tests]]
 name = "check.run_syntax_error_module_name"
-desc = "Running a file that does not parse: the syntax diagnostic reads `(my_module)`, not `(main)`."
+desc = "Running a file that does not parse: the syntax diagnostic reads `(syntax_error)`, not `(main)`."
 case = "../../../cases/compile/check/syntax_error.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
-expect_output_contains = ["(my_module)"]
+expect_output_contains = ["(syntax_error)"]
 expect_output_not_contains = ["(main)"]
 
 [[tests]]
@@ -122,5 +122,5 @@ verify_script = """
 const errors = JSON.parse(input.stdout)
 assert(errors.length === 2, 'exactly two JSON diagnostics')
 assert(errors.every(d => d.data.name === 'LexicalDiag::IllegalCharacter'), 'lexical diagnostic names')
-assert(errors.every(d => d.range.start.line === 1), 'source positions retained')
+assert(errors.every(d => d.range.start.line === 0), 'source positions retained')
 """

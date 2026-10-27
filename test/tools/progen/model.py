@@ -177,6 +177,10 @@ def ex(n: N, ind: int, top: bool = False) -> str:
         s = ex(x, ind, True)
         return s if x.k in ATOMS else "(" + s + ")"
 
+    def bound(x):                      # a bound of `..`: no unary operator may lead it
+        s = post(x)
+        return "(" + s + ")" if s[0] in "-!~" else s
+
     def wrap(s):
         return s if top else "(" + s + ")"
 
@@ -343,7 +347,7 @@ def func_src(n: N, ind: int) -> list:
     # the model knows about the function; it is no longer a spelling.
     mods = "#macro " if n.a.get("macro") else ""
     head = f"{pad}{mods}func {n.a['name']}({params_src(n.a['params'])}): {type_src(n.a['ret'])} "
-    lines = [head + block(n.c[0], ind)]
+    lines = [head + block(body, ind)]
     if n.a.get("with"):
         # Context parameters: `with <k: int>` on the line before the function.
         lines.insert(0, f"{pad}with <{params_src(n.a['with'])}>")
@@ -386,7 +390,7 @@ def module_names(prog: N):
 def emit(prog: N) -> str:
     """The source of the entry module."""
     split = prog.a.get("split")
-    out = [f"module {prog.a['module']}", ""]
+    out = []
     if prog.a.get("env"):
         out += ["import { get_env } from env", ""]
     if split is None:
@@ -417,9 +421,9 @@ def emit_modules(prog: N) -> dict:
     if split is None:
         return {}
     vals, funcs = module_names(prog)
-    out_vals = [f"module {vals}", ""] + type_decls_src(prog, True) + globals_src(prog, True)
+    out_vals = type_decls_src(prog, True) + globals_src(prog, True)
     names = list(prog.a.get("types", {})) + [g.a["name"] for g in prog_globals(prog)]
-    out_funcs = [f"module {funcs}", ""]
+    out_funcs = []
     if names:
         out_funcs += ["import { " + ", ".join(names) + " } from " + vals, ""]
     for f in prog.c[0]:

@@ -3,7 +3,6 @@
  * The caller's imports are not looked at (design principles 5.7) and the declaring module of
  * `Box` has no operator either, so the instance has no candidate.
  */
-module two_gen
 
 export func twice::<T>(x: T): T {
     return x + x

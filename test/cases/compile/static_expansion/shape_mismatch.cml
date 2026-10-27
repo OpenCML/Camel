@@ -1,5 +1,4 @@
 /** The generator walks `B`, but the comprehension fills `A`: the two shapes differ. */
-module shape_mismatch
 
 type A = {a: int}
 type B = {b: int, c: int}

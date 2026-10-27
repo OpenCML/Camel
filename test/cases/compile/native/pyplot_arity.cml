@@ -4,7 +4,6 @@
  * `stdlib/pyplot.cml`, not the C++ module's
  * `(data: T[], filename?: string)`.
  */
-module pyplot_arity
 
 import { plot } from pyplot
 

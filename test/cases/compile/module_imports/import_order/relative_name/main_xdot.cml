@@ -1,6 +1,5 @@
 /// a trailing dot is not a name and not a relative prefix either: the parser stops the
 /// module name at `x` and the dot is an unexpected token (a module name never ends in a dot).
-module main_xdot
 
 import x.
 

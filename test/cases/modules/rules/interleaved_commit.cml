@@ -3,7 +3,6 @@
  * condition: the transaction commits (which replaces the program) and the rewrite of the program
  * the transaction started from runs after it.
  */
-module interleaved_commit
 
 import { Program, current, root, open, commit, add_constant } from graph
 import { rewrite } from rewrite

@@ -2,7 +2,6 @@
  * A case reads how a value was built out of its parts, and the parts are the variables its pattern
  * names (`case x + y` binds the two operands, rewrite design 7.5). The first case here names none.
  */
-module fact_case_binds_nothing
 import { max } from math
 
 fact one(v: int): int match v {

@@ -2,7 +2,6 @@
  * The onnx module is imported, so onnx::export exists, but the program has no export_model
  * call: the pass refuses at the entry function (line 9).
  */
-module no_request
 
 import { export_model } from onnx
 

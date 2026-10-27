@@ -8,7 +8,6 @@
 // Run (data from make_data.py; compare.py drives this):
 //   camel train.cml --arg model=linear --arg data=artifacts/linear --arg steps=200 \
 //         --arg batch=32 --arg lr=0.1 --arg log_every=20 --arg threads=1 std::macro std::nvm
-module c1_linear_logistic
 
 // == imports ==
 import { abs, exp, load_npy, log, mean, numel, relu, set_num_threads, shape } from tensor

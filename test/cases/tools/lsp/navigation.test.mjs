@@ -34,7 +34,7 @@ await withServer(async (ls) => {
     checkEq(pushed.version, 1, 'the published diagnostics carry the document version')
     checkEq(pushed.diagnostics.length, 1, 'one warning in the fixture', pushed.diagnostics)
     checkEq(pushed.diagnostics[0].severity, 2, 'it is a warning')
-    checkEq(fmtRange(pushed.diagnostics[0].range), '22:4-22:17', 'at the unwaited assignment')
+    checkEq(fmtRange(pushed.diagnostics[0].range), '20:4-20:17', 'at the unwaited assignment')
 
     // ---- hover ----
     const hover = async (needle, nth, delta) => {
@@ -85,7 +85,7 @@ await withServer(async (ls) => {
     check(h.includes('type Pair = (int, string)'), 'a type alias shows its definition', h)
     h = await hover('a: int, b: int): int', 1, 3)
     check(h.includes('type int'), 'a built-in type name', h)
-    h = await hover('module main')
+    h = await hover('func main', 1, 0)
     checkEq(h, null, 'a keyword has no hover')
     // On the range of a diagnostic: the explanation of its code.
     h = await hover('counter += by', 1, 9)
@@ -98,21 +98,21 @@ await withServer(async (ls) => {
     let d = await def('norm2(p)')
     checkEq(d.length, 1, 'one definition for an imported function')
     checkEq(d[0].uri, shapesUri, 'in the other file')
-    checkEq(fmtRange(d[0].range), '6:12-6:17', 'at the name of the function')
+    checkEq(fmtRange(d[0].range), '4:12-4:17', 'at the name of the function')
     d = await def('p)', 1)
-    checkEq([d[0].uri, fmtRange(d[0].range)], [uri, '27:8-27:9'], 'a local: its let')
+    checkEq([d[0].uri, fmtRange(d[0].range)], [uri, '25:8-25:9'], 'a local: its let')
     d = await def('return a + b', 1, 7)
-    checkEq(fmtRange(d[0].range), '13:9-13:10', 'a parameter: the parameter of its function')
+    checkEq(fmtRange(d[0].range), '11:9-11:10', 'a parameter: the parameter of its function')
     d = await def('return a + b', 2, 7)
-    checkEq(fmtRange(d[0].range), '17:9-17:10', 'the same name in the other overload')
+    checkEq(fmtRange(d[0].range), '15:9-15:10', 'the same name in the other overload')
     d = await def('add(1.5')
-    checkEq(d.map((l) => fmtRange(l.range)), ['17:5-17:8'], 'a call: the overload chosen')
+    checkEq(d.map((l) => fmtRange(l.range)), ['15:5-15:8'], 'a call: the overload chosen')
     d = await def('Pair = (1')
-    checkEq(fmtRange(d[0].range), '5:5-5:9', 'a type alias')
+    checkEq(fmtRange(d[0].range), '3:5-3:9', 'a type alias')
     d = await def('): T', 1, 3)
-    checkEq(fmtRange(d[0].range), '8:16-8:17', 'a type variable: its head declaration')
+    checkEq(fmtRange(d[0].range), '6:16-6:17', 'a type variable: its head declaration')
     d = await def('v * 2')
-    checkEq(fmtRange(d[0].range), '38:18-38:19', 'a parameter of a function literal')
+    checkEq(fmtRange(d[0].range), '36:18-36:19', 'a parameter of a function literal')
     d = await def('println')
     checkEq(d, [], 'a built-in function has no definition in source')
     d = await def('{ norm2', 1, 2)
@@ -124,23 +124,23 @@ await withServer(async (ls) => {
             ...at(needle, nth, delta),
             context: { includeDeclaration },
         })).map((l) => `${l.uri === uri ? '' : path.basename(l.uri) + ' '}${fmtRange(l.range)}`)
-    checkEq(await refs('let p', 1, 4), ['27:8-27:9', '28:18-28:19', '29:18-29:19'],
+    checkEq(await refs('let p', 1, 4), ['25:8-25:9', '26:18-26:19', '27:18-27:19'],
         'references of a local, with its declaration')
-    checkEq(await refs('let p', 1, 4, false), ['28:18-28:19', '29:18-29:19'],
+    checkEq(await refs('let p', 1, 4, false), ['26:18-26:19', '27:18-27:19'],
         'and without')
     checkEq(await refs('norm2(p)'),
-        ['2:9-2:14', '28:12-28:17', 'shapes.cml 6:12-6:17'],
+        ['0:9-0:14', '26:12-26:17', 'shapes.cml 4:12-4:17'],
         'references of an imported function: the import, the call, the declaration')
-    checkEq(await refs('counter += by'), ['21:14-21:21', '22:4-22:11', '23:11-23:18'],
+    checkEq(await refs('counter += by'), ['19:14-19:21', '20:4-20:11', '21:11-21:18'],
         'a var parameter: the assignment is a reference')
-    checkEq(await refs('add(1, 2)'), ['13:5-13:8', '34:14-34:17'],
+    checkEq(await refs('add(1, 2)'), ['11:5-11:8', '32:14-32:17'],
         'references of one overload do not include calls of the other')
-    checkEq(await refs('identity(n)'), ['8:5-8:13', '32:12-32:20', '33:12-33:20'],
+    checkEq(await refs('identity(n)'), ['6:5-6:13', '30:12-30:20', '31:12-31:20'],
         'a generic function')
-    checkEq(await refs('q.x', 1, 2), ['31:15-31:16'], 'a field: its uses on values of that type')
+    checkEq(await refs('q.x', 1, 2), ['29:15-29:16'], 'a field: its uses on values of that type')
 
     const hl = await ls.request('textDocument/documentHighlight', at('total += q.x'))
-    checkEq(hl.map((x) => `${fmtRange(x.range)}/${x.kind}`), ['30:8-30:13/3', '31:4-31:9/2'],
+    checkEq(hl.map((x) => `${fmtRange(x.range)}/${x.kind}`), ['28:8-28:13/3', '29:4-29:9/2'],
         'highlights: the declaration as a write, the use as a read')
 
     // ---- symbols ----
@@ -152,7 +152,7 @@ await withServer(async (ls) => {
     check(mainSymbol.children.some((c) => c.name === 'total' && c.kind === 13),
         'locals are children of their function', mainSymbol.children)
     checkEq(symbols[1].detail, '(x: T): T', 'a function carries its signature')
-    checkEq(fmtRange(symbols[1].selectionRange), '8:5-8:13', 'selection range is the name')
+    checkEq(fmtRange(symbols[1].selectionRange), '6:5-6:13', 'selection range is the name')
 
     // ---- incremental synchronisation ----
     // Rename the local `n` by two range edits in one notification, then ask about the result.

@@ -5,7 +5,6 @@
  * the type of any other position it stands in (`let e: f32[] = []`). Both calls run and print the
  * empty array, which is what the value is.
  */
-module tensor_show_empty_array_typed
 
 import { show } from tensor
 

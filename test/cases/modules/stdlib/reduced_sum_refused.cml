@@ -25,7 +25,6 @@
  *                         and what IEEE rounding does rather than a saturation.
  *   []                    the sum of no elements is +0 in the element type.
  */
-module stdlib_reduced_sum_refused
 
 import { sum } from array
 import { new, reshape, sum as tensor_sum, to_bytes } from tensor

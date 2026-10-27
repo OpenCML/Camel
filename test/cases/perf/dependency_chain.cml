@@ -10,7 +10,6 @@
  *   camel dependency_chain.cml --arg rounds=50 std::profile std::nvm
  */
 
-module perf_dependency_chain
 
 import { relu, sum, zeros } from tensor
 import { now } from time

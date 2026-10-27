@@ -1,12 +1,12 @@
 error[SyntaxDiag::ExtraSemicolon]: Unexpected ';': there is no statement between it and the ';' before it.
-  --> <ROOT>/test/cases/compile/diag_render/syntax_extra_semicolon.cml:4:15
+  --> <ROOT>/test/cases/compile/diag_render/syntax_extra_semicolon.cml:2:15
    |
- 4 |     let x = 1;;
+ 2 |     let x = 1;;
    |               ^
 help: Statements are separated by a line break or by one ';'. Remove the extra ';'.
 help: remove the extra ';'
    |
- 4 |     let x = 1;;
+ 2 |     let x = 1;;
    |               -
 
 camel: 1 error

@@ -5,7 +5,6 @@
  * declaration is a compile error where the value is written, whether it stands in a rule set or
  * anywhere else a `Rule` is wanted.
  */
-module err_rule_with_unbound
 import { Program } from graph
 import { rewrite } from rewrite
 

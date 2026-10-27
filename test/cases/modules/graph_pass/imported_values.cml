@@ -2,7 +2,6 @@
 // value used directly (`pi`) and the values computed from it and from an imported function
 // (`half`, `root`). The computed ones are nodes of the library's root graph, so they are
 // computed by running the program the pass runs as (task).
-module imported_values
 import { Program } from graph
 import { pi, sqrt } from math
 

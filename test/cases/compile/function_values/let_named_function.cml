@@ -3,7 +3,6 @@
  * captured by a lambda. The capture used to be rejected ("Function of type 'void' cannot be
  * called", progen finding F33).
  */
-module let_named_function
 
 func inc(a: int): int {
     return a + 1

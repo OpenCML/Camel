@@ -1,4 +1,3 @@
-module shape_as_static_mismatch
 import { ones, sum, load_npy } from tensor
 func main(): int sync {
     println('ran')

@@ -2,7 +2,6 @@
 // 10.2): `test_support::rendezvous_point` is one resource, whether a clause writes it bare in the
 // module that declares it or through the module here. A module that writes the module prefix needs
 // nothing else of that module's names.
-module uses_exported_resource
 
 import test_support
 

@@ -6,7 +6,6 @@
  * Actual: (empty line)
  * Reduced by test/tools/progen from seed 89 (generator version 1, all features).
  */
-module inline_wrong_arm_runs
 
 func f1(a2: int): bool {
     return (('a' + 'pq') != ('yz' + '')) && false;

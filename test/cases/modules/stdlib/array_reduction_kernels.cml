@@ -35,7 +35,6 @@
  * for: `bodySum` and friends are the function values of instances, and a call through one runs the
  * Camel body rather than the kernel (impl_agreement.cml).
  */
-module array_reduction_kernels
 
 import { sum, min, max } from array
 import { is_nan, nan } from math

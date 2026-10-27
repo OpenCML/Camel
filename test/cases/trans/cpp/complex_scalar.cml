@@ -2,7 +2,6 @@
 /// division, which faults on the complex zero), `^` with an integer and a complex exponent,
 /// comparisons, conversions, the math module's complex functions, printing without and with a
 /// format, string(z), arrays of complex numbers and a function that takes and gives one.
-module complex_scalar
 
 import { abs, conj, exp, im, nan, re } from math
 

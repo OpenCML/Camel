@@ -2,7 +2,6 @@
 // This directory's rules.cml is found first, and it has no `simplify`: the pipeline must say
 // that this module provides no such pass, not that the pass is not found anywhere (
 // probe C).
-module main
 
 func main(): int sync {
     println(42)

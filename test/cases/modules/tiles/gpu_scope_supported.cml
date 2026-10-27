@@ -1,4 +1,3 @@
-module tiles_gpu_scope_supported
 import { reshape, sum } from tensor
 
 // Every operator in this `#gpu` scope has a device implementation, so `tiles::compile` accepts

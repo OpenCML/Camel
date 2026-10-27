@@ -2,8 +2,6 @@
 // line belongs to the declaration that follows it, wherever the blank lines fall. The cases
 // below are read by `camel inspect --ast` in `rulings.doc_comment_attribution_is_syntax`.
 
-module doc_comment_blank_line
-
 // An ordinary comment is not documentation, and it ends the documentation of what follows.
 let separated = 1
 

@@ -14,7 +14,6 @@
  * at a time can see. Its twin `when_both_hold_int_first.cml` holds the same program with the two
  * declarations written in the other order and must report the same diagnostic.
  */
-module when_both_hold_i32_first
 
 /// Holds for `i32` alone: the first arm's own element type.
 func is_first_i32::<T>(): bool {

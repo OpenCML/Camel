@@ -4,7 +4,6 @@
  * `"""..."""` are the multi-line form, the only one that may contain an unescaped quote of its
  * own kind.
  */
-module parse_constructs_literals
 
 func main(): int sync {
     let single = 'it\'s a string'

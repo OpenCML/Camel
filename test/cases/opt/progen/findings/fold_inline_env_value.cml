@@ -8,7 +8,6 @@
  * Actual: L11 false 0
  * Reduced by test/tools/progen (an early batch, before the seed stream was versioned).
  */
-module fold_inline_env_value
 
 import { get_env } from env
 

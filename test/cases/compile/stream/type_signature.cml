@@ -19,7 +19,6 @@
  * produces one). This program states the types only, and the forms the compiler prints for them
  * are locked by `std::jgir` in the plan.
  */
-module stream_type_signature
 
 func count(s: int..): int {
     return 0

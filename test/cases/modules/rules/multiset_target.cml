@@ -5,7 +5,6 @@
  * regrouped, and a product whose other factor runs a call. One function per shape, so a test can
  * count what each law read.
  */
-module multiset_target
 
 /// `(a + b) + 0` and `a + (b + 0)`: the same sum, the second one written so no binary pattern in
 /// the written order finds the `0`.

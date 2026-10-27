@@ -4,7 +4,6 @@
  * module, a lambda in place. The other arguments belong to the call that is taken: `bump()` runs
  * once when the value is there and not at all when it is null.
  */
-module pipe_propagation_call_forms
 import { abs } from math
 import { split } from str
 func bump(): int sync {

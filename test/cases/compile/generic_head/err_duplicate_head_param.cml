@@ -1,7 +1,6 @@
 /**
  * A declaration declares each type parameter once, at its head (design principles 5.5).
  */
-module err_duplicate_head_param
 
 func same::<T, T>(a: T, b: T): T {
     return a

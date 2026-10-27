@@ -1,5 +1,3 @@
-module lib_values
-
 namespace Config {
     export let limit = 10
     let hidden = 5

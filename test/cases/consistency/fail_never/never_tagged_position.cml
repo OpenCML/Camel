@@ -6,7 +6,6 @@
  * program is what stands there. The call whose argument is `never` is typed `never` anyway and
  * the warning names the argument; the fault the argument raises happens as it did.
  */
-module never_tagged_position
 
 func double(x: int): int { return x + x }
 

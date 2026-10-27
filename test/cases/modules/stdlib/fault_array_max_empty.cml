@@ -1,4 +1,4 @@
-module fault_array_max_empty
+
 
 import { max } from array
 

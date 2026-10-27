@@ -3,7 +3,6 @@
  * (`LiteralNotRepresentable`) that says why: the value would be truncated. A variable is not
  * converted by this rule, and a literal is not cut to fit.
  */
-module literal_context_truncated
 
 func main(): int sync {
     let x: int = 1.9

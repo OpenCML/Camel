@@ -5,7 +5,6 @@
  * the call). The test reads the number of task graphs run from the scheduler's statistics: 0.
  * The heavy side is concurrent_alloc (a merge sort whose halves call module operators).
  */
-module scalar_recursion_inline
 
 func fib(n: int): int {
     return if n <= 1 then n else fib(n - 1) + fib(n - 2)

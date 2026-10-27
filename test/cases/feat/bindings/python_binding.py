@@ -434,8 +434,8 @@ def main():
         check(diagnostic.code.startswith("0x03"), f"a semantic code, not {diagnostic.code}")
         check(diagnostic.file.endswith("python_broken.cml"), f"the file is {diagnostic.file!r}")
         check(
-            diagnostic.line == 9 and diagnostic.column == 12,
-            f"missing_name is at 9:12, and the report says {diagnostic.line}:{diagnostic.column}",
+            diagnostic.line == 8 and diagnostic.column == 12,
+            f"missing_name is at 8:12, and the report says {diagnostic.line}:{diagnostic.column}",
         )
         check(
             f"python_broken.cml:{diagnostic.line}:{diagnostic.column}" in str(diagnostic),

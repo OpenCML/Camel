@@ -7,7 +7,6 @@
  *   plain call: value 3.0
  *   with_grad: value 3.0 grad 3.0
  */
-module var_array_append
 import { reshape, sum } from tensor
 import { with_grad } from autodiff
 

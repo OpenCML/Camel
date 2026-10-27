@@ -3,7 +3,6 @@
  * the message prints the declaration's own parameter name (`key`) — the one source is
  * `stdlib/random.cml`, not the C++ module (step 10).
  */
-module random_type
 
 import { permutation } from random
 

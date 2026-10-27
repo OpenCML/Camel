@@ -12,7 +12,6 @@
  * The loss curve is collected from the Camel path and the last loss of both paths is printed: the
  * same number means the two trained models are the same model.
  */
-module optim_training
 
 import { abs, range, relu, reshape, sum } from tensor
 import { with_grad } from autodiff

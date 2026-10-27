@@ -3,7 +3,6 @@
  * instances of one function, recursion, a type function, a function argument), run on every
  * backend and through the optimizing pipelines.
  */
-module pipelines
 
 type Pair<T> = (T, T)
 

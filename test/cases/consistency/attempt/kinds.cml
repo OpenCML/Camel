@@ -3,7 +3,6 @@
  * is an error value whose kind is the name of the fault's diagnostic, whose message is the
  * diagnostic's message and whose location is the place the diagnostic points at.
  */
-module kinds
 
 func div(a: int, b: int): int { return a / b }
 func rem(a: int, b: int): int { return a % b }

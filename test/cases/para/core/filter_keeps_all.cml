@@ -3,7 +3,6 @@
  * the verdicts of neighbouring elements must not overwrite each other. Forty filters over 3000
  * elements, most of them kept; the count and the sum of what was kept are both checked.
  */
-module filter_keeps_all
 
 func kept(n: int, k: int): int[] {
     return 0..n->filter<(i: int): bool => (i + k) % 3 != 0>

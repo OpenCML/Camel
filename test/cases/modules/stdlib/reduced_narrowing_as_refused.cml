@@ -6,7 +6,6 @@
  * (design principles 7.2-7.3, which is where the written conversion is grounded). Widening the
  * other way, `b as f32`, is refused for the same reason; the conversion is `f32(b)`.
  */
-module stdlib_reduced_narrowing_as_refused
 
 func main(): int sync {
     let x: f32 = 0.1

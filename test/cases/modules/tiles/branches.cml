@@ -1,4 +1,3 @@
-module tiles_branches
 import { reshape, sum, abs } from tensor
 import { run_preferred_resident, download } from tiles
 func forbidden(x: f32[..]): f32[..] sync { println('unselected effect'); return x }

@@ -3,7 +3,6 @@
  * constant needs a type: the case writes it, or the head declares the value the fact is about with
  * one (rewrite design 7.5). This fact has no head parameters and its case writes no type.
  */
-module fact_const_case_without_type
 import { max } from math
 
 fact one: int match v {

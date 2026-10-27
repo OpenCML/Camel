@@ -1,4 +1,3 @@
-module tree_operations
 import { tree_map, tree_unzip, tree_reduce } from tree
 import { tree_leaves } from ckpt
 import { tree_paths } from tree

@@ -6,7 +6,6 @@
  * `f32[]`). A function body whose last expression is a branch is a position too, and so is the
  * value of a `return`.
  */
-module literal_context_arm_value
 
 func fromIf(c: bool): float {
     if c then 1 else 2

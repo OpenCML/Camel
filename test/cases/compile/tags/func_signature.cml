@@ -1,6 +1,5 @@
 /// A parameter declared as a concrete function type (design principles 6.2): the signature is
 /// fixed by the declaration, and the tag is pasted with a function that has it.
-module tags_func_signature
 
 tag rule(f: (x: int) => int) on field
 

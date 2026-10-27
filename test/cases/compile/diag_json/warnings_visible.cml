@@ -4,7 +4,6 @@
  *   line 17: IgnoredSideEffect         a call with a var argument, outside a sync block
  *   line 18: IgnoredSideEffect         a branch whose arm writes the captured `c`
  */
-module warnings_visible
 
 // Line numbers below are asserted by the plan.
 func inc(var x: int): int sync {

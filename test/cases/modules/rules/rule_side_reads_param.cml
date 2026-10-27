@@ -7,7 +7,6 @@
  * under `add_shift<7>`. The value printed is the value the side read, which the program as
  * written -- 3 -- does not have.
  */
-module rule_side_reads_param
 
 import { Program } from graph
 import { rewrite } from rewrite

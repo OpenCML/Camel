@@ -6,7 +6,6 @@
  * reached through the graph reference the declaration tag writes on `scale`, which is what the
  * module cache has to keep.
  */
-module vjp_lib
 
 import { vjp } from autodiff
 

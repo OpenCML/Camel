@@ -1,7 +1,6 @@
 /**
  * Axis reductions with keepdims, full reductions, and softmax/log_softmax along an axis.
  */
-module reductions
 
 import {
     reshape, sum, mean, max, argmax, softmax, log_softmax, exp, shape

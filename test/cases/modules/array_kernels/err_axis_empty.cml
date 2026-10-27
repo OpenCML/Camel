@@ -1,5 +1,3 @@
-module array_kernels_err_axis_empty
-
 import { max } from array
 import { reshape } from tensor
 

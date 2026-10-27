@@ -4,7 +4,6 @@
  * C++ operator of the same URI (bucket 1). The sample's value is not read, so
  * the first node of the root graph is a node of no constant type and every answer is null.
  */
-module graph_constant_import
 
 import { current, root, nodes, constant } from graph
 

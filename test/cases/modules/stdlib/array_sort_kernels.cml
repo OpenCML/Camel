@@ -12,7 +12,6 @@
  * Builder::inPlaceRebindingOf), per element type as well because the form is chosen by name
  * (OperatorTable::inPlaceForm).
  */
-module array_sort_kernels
 
 import { sort, argsort } from array
 import { nan } from math

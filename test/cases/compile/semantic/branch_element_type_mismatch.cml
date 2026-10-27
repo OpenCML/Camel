@@ -4,7 +4,6 @@
  * and a number of one element type does not become a number of another by itself. The report names
  * the element type each arm gives and the conversion that would make the two one.
  */
-module semantic_branch_element_type_mismatch
 
 func pick(flag: bool, whole: int[], real: f32[]): int[] {
     return if flag then whole else real

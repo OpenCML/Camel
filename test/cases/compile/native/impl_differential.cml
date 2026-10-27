@@ -7,7 +7,6 @@
  * The tolerance is zero: the two paths must agree bit for bit for these integer values, and
  * `diff` prints the observed difference (0 for every pair).
  */
-module impl_differential
 
 #op(':op/add_l')
 func add_kernel(a: int, b: int): int

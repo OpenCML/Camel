@@ -1,5 +1,4 @@
 /** `when` after the body: the position the parser no longer reads. */
-module when_after_body
 
 rule guarded(x: int) { x + 0 => x } when true
 

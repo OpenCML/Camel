@@ -5,7 +5,6 @@
  * condition of `describe` resolves `is_numeric` where that declaration is written, and the
  * imported predicate's template is instantiated with `T` and folded over identity cases.
  */
-module when_types_module
 
 import { is_numeric } from types
 
