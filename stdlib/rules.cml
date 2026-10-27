@@ -593,6 +593,16 @@ export rule tensor_log_softmax_of_softmax(x: f32[..], const axis: int) {
     log(softmax(x, axis)) => log_softmax(x, axis)
 }
 
+/// The floating widths whose scalar `log`, `exp`, `log1p` and `expm1` are operators of the graph
+/// (`f32` and `float`): a rule is written over operators, and the other widths (`bf16`, `f16`) run
+/// the Camel body of the function, which is no operator, so those instances do not exist.
+func hasScalarKernel::<T>(): bool {
+    return match type T {
+        case float | f32 => true
+        case _ => false
+    }
+}
+
 /// The design's own scalar example, `log(1 + x) => log1p(x)`, once for the floating family: the
 /// pattern and the replacement are the same fact at every floating width, and the `log1p` the
 /// instance calls is the one for its type.
@@ -601,7 +611,7 @@ export rule tensor_log_softmax_of_softmax(x: f32[..], const axis: int) {
 /// relative error is 100%; `log1p` computes log(1 + x) without forming 1 + x, and its error does
 /// not grow as x -> 0.
 #requires(refine_accuracy)
-export rule float_log1p::<T>(x: T) when is_float::<T>() {
+export rule float_log1p::<T>(x: T) when hasScalarKernel::<T>() {
     math_log(1.0 + x) => log1p(x)
 }
 
@@ -611,7 +621,7 @@ export rule float_log1p::<T>(x: T) when is_float::<T>() {
 /// For |x| below the spacing of 1 the naive `exp(x)` rounds to exactly 1 and the subtraction gives
 /// 0; `expm1` evaluates exp(x) - 1 directly, without that cancellation.
 #requires(refine_accuracy)
-export rule float_expm1::<T>(x: T) when is_float::<T>() {
+export rule float_expm1::<T>(x: T) when hasScalarKernel::<T>() {
     math_exp(x) - 1.0 => expm1(x)
 }
 

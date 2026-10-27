@@ -1068,7 +1068,20 @@ void Builder::resolveImplDeclarations(const GCT::node_ptr_t &root) {
                 adopted.name  = tag->kernel;
                 adopted.uri   = group->resolvers().front().first;
                 adopted.group = group;
-                implTemplateKernels_[genericTemplate.one().get()] = std::move(adopted);
+                // The template this very declaration made: a name with several generic
+                // declarations (`abs` for the reals and for each complex width) has a group, and
+                // the kernel belongs to the one that wrote the tag.
+                generic_template_ptr_t own = genericTemplate.one();
+                if (GenericGroup *templates = genericGroupOf(genericTemplate);
+                    templates != nullptr) {
+                    for (const generic_template_ptr_t &candidate : *templates) {
+                        if (candidate != nullptr && candidate->func == child) {
+                            own = candidate;
+                            break;
+                        }
+                    }
+                }
+                implTemplateKernels_[own.get()] = std::move(adopted);
                 continue;
             }
             if (funcType->hasConstas()) {

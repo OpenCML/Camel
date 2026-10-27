@@ -65,3 +65,44 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::NativeValueNotLoaded"
 expect_diagnostic_line = 3
+
+# ---- the functions of math stand on kernels per hot type ----
+
+[[tests]]
+name = "math_kernels.kernel_calls"
+desc = "A call of a `math` function at `f32`, `float` or an integer width is one operator of that type, and at `bf16`/`f16` (except `abs`, which has them) it runs the body over the f64 kernel: `exp` at float, f32, bf16 and f16 is `math:exp_d` (once, with the body's call twice more), `math:exp_f` (once); the complex `exp` and `abs` are `math:exp_c`/`exp_z` and `math:abs_c`/`abs_z`; `abs`, `min`, `max`, `sign` and `sqrt` are the operators of their type."
+kind = "behavior"
+case = "../../../cases/modules/math_calls/kernel_calls.cml"
+args = ["${case}", "std::profile top=0 json=\"${test_tmp}/profile.json\"", "std::nvm"]
+expect_exit = 0
+verify_script = """
+async ({ input, assert }) => {
+    const fs = await import('node:fs')
+    const report = JSON.parse(fs.readFileSync(input.test_tmp + '/profile.json', 'utf8'))
+    const calls = Object.fromEntries(report.operator_rows.map(row => [row.uri, row.calls]))
+    const expected = {
+        'math:exp_d': 3, 'math:exp_f': 1, 'math:exp_c': 1, 'math:exp_z': 1,
+        'math:sqrt': 1, 'math:sqrt_d': 1, 'math:log_d': 1,
+        'math:abs_i': 1, 'math:abs_l': 1, 'math:abs_d': 1, 'math:abs_f6': 1, 'math:abs_c': 1, 'math:abs_z': 1,
+        'math:min_l': 1, 'math:max_f': 1, 'math:sign_d': 1,
+    }
+    const shown = JSON.stringify(Object.fromEntries(Object.entries(calls).filter(([uri]) => uri.startsWith('math:'))))
+    for (const [uri, count] of Object.entries(expected)) {
+        assert(calls[uri] === count, `${uri} ran ${calls[uri]} times, not ${count}: ${shown}`)
+    }
+    const rows = Object.keys(calls).filter((uri) => uri.startsWith('math:')).sort()
+    assert(JSON.stringify(rows) === JSON.stringify(Object.keys(expected).sort()), `the math rows are ${shown}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "math_kernels.kernel_calls_values"
+desc = "The values of that program: the same under the kernel and under the body."
+kind = "behavior"
+case = "../../../cases/modules/math_calls/kernel_calls.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "4.0 4.0 1.0 1.0 1.0 1.0\n3 3 2.5 2.5 3 2.5 -1.0\n1+0i 1+0i 5.0 5.0 0.0\n"
