@@ -701,6 +701,44 @@ item 5
 
 If the element function of `foreach` is to produce side effects, its body must be a sync block (`=> sync { ... }`); for the reason see [4.3.2](04_execution_model.md#432-a-functions-behaviour-is-decided-by-the-function-itself). A function with `var` parameters cannot be handed to these operators.
 
+### 6.10.1 Fault isolation `attempt`
+
+Errors and faults are two different things: only an operation declared to return `T!` produces an error value; division by zero, an out-of-range subscript and too deep a recursion are faults: the program terminates with a location, and `!!` cannot catch one. `attempt` is a **function transform**: `attempt(f)` gives a function whose parameters are those of `f` and whose result type is the result of `f` plus `!`, and calling it is `attempt(f)(a, b)`. There is no `try`/`catch`: the boundary must be one function call and not a stretch of written text — the computation on the graph is evaluated on demand, moved by passes and run in parallel, and only the boundary of a subgraph is stable. A fault in that call (including everything it calls, directly or indirectly) becomes an error value at the boundary, to be handled with `!!`, by carrying it on with `->`, or with `match ... case error e`. Wrap any expression in a closure: `attempt(() => expr)()`. The value is a function value like any other: it can be passed on and written in angle brackets, `rows->map<attempt(parse_row)>`.
+
+```cml
+func risky(d: int): int { return 100 / d }
+
+func main(): int sync {
+    println(attempt(risky)(4) !! -1)
+    println(attempt(risky)(0) !! -1)
+    println(attempt(() => [1, 0, 4]->map<risky>)() !! [-1])
+    let r = attempt(risky)(0)
+    println(match r {
+        case error e => e.kind + ' at ' + e.location
+        case v => 'no fault'
+    })
+    return 0
+}
+```
+
+```text
+25
+-1
+[-1]
+DivisionByZero at main.cml:1:38
+```
+
+- Type: `f: (A...) => T` gives `(A...) => T!`; when `f` itself returns `U!` the result is `U!` (the error value it returns comes out unchanged). A function with `with` parameters or a `var` parameter cannot be handed in directly — the marked call passes no `with` argument and gives the parameters values — so use a closure.
+- **Three boundary rules**:
+  - **the result is finished inside the boundary**: the result of `f`, the fields of a struct and the elements of an array included, is evaluated completely inside it, and the faults in them count;
+  - **a stream is isolated pull by pull**: when `f` returns a stream, every pull happens inside the boundary, the element type becomes `T!..`, and a pull that faults hands out an error;
+  - **effects are not rolled back**: the effects that happened before the fault stay (lines printed, `var`s written, files written), and there are no transactions on the graph.
+- The `kind` of the error value is the name of the fault (such as `DivisionByZero`, `IndexOutOfRange` or `MaxRecursionDepthExceeded`), `message` is the message of the fault, and `location` is the `file:line:column` where it happened.
+- The boundary is that one call: the arguments are evaluated outside it.
+- `exit(n)` is not a fault and is not isolated; running out of memory and the errors of the compiler itself are not isolated either.
+- Under the parallel scheduler, when one element of a `map` faults, the elements already started run to the end and those not yet started do not start; `attempt` gives the error value after all that were started have finished.
+- On the graph the value holds a small graph of its own whose body is one `OPER` node (`:mark/isolate`), whose first input is the captured `f` and whose other inputs are the arguments. It is a marked call of a subgraph, so its structure does not change with what the subgraph contains. For the implementation and the questions still to be ruled see the [technical note](../../technical/33_fault_isolation.md).
+
 ## 6.11 Assignment
 
 - `x = e`, `x += e` and so on are expressions; their value is described below. The target is a `var` variable or a `var` parameter itself, or a **path** that starts at one: fields, indices, any combination ([3.7](03_data_model.md#37-let-var-and-references)). `p.x = e`, `xs[0] = e` and `m[i].f = e` all rebind the whole of `p`, `xs`, `m`: `xs[i].f = e` is `xs = set(xs, i, set(xs[i], f, e))`, where `set` is a pure operator that returns the value with one place changed. A path assignment may therefore appear in any expression position; when the root of the target is not a variable (`f().x = e`, `{ x: 1 }.x = e`) the diagnostic is `AssignmentTargetNotVariable`, and an index out of range is the fault `IndexOutOfRange`.
