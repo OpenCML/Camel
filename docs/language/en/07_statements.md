@@ -217,7 +217,7 @@ int 1 string a
 |---|---|
 | `sync` | The function's body is a sync block ([4.3.3](04_execution_model.md#433-sync-on-a-function-body-function-modifier)) |
 
-There are no other modifiers. A function implemented in C++ is a body-less `export func` declaration (design principles 6.4); a helper used only inside its module is a plain `func` without `export`, since `func` is module-private already.
+There are no other modifiers. A function implemented in C++ is a body-less `export func` declaration (design principles 6.4); a value C++ supplies is the same rule, written without a right side: `export let inf: float` is the value the C++ module registers under the name `inf`, and a type that differs from the registered one is `SemanticDiag::NativeValueMismatch` (no value of the name at all is `SemanticDiag::NativeValueNotLoaded`); a helper used only inside its module is a plain `func` without `export`, since `func` is module-private already.
 
 `#macro` is not a modifier but a standard tag written before a function declaration ([4.5](04_execution_model.md#45-macro-functions)).
 

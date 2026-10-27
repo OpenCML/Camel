@@ -178,7 +178,9 @@ class Context : public std::enable_shared_from_this<Context> {
     /// `CAMEL_PACKAGES`), then the standard library. An empty `importerDir` means the entry
     /// program, whose own directory is `entryDir`.
     std::pair<std::string, bool>
-    resolveModulePath(const std::string &moduleName, const std::string &importerDir);
+    resolveModulePath(
+        const std::string &moduleName, const std::string &importerDir,
+        const std::string &exceptFile = {});
     /// The directory of the importing module: the directory of the file it was loaded from, or
     /// the entry file's directory for the entry program and for a program-level import (a pass
     /// library, a definition).

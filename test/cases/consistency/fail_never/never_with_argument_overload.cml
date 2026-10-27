@@ -1,0 +1,26 @@
+/**
+ * A `with` argument of type `never` is not resolved at all (design principles 3.9; the author's
+ * ruling of 2026-10-26 on `never-argument-scope`): the call never runs, so which overload it
+ * would have taken is not a question. A `never` value fits every parameter, so it must not be
+ * allowed to make two overloads fit at once: the warning is the one such a call gets and no
+ * ambiguity is reported. The result is `never`, and an `int[]` position takes it.
+ */
+module never_with_argument_overload
+
+with <n: int>
+func pick(x: int): int {
+    return x + n
+}
+
+with <s: string>
+func pick(x: int): string {
+    return s
+}
+
+func stop(m: string): never {
+    return fail<'Stopped'>(m)
+}
+
+func main(): int[] sync {
+    return pick<stop('no value to pick')>(3)
+}

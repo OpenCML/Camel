@@ -793,12 +793,10 @@ pi_hits: (samples: int, seed: int) => int
 asian_call_price: (paths: int, steps: int, seed: int) => float
 ```
 
-**`onnx`** — import { ... } from onnx — 4 name(s)
+**`onnx`** — import { ... } from onnx — 2 name(s)
 
 ```text
-export_model: <out: string> (fn: (x: f32[..]) => void, example: f32[..]) => void!
-export_model: <out: string, dynamic_axes: int[]> (fn: (x: f32[..]) => void, example: f32[..]) => void!
-export_model: <out: string, dynamic_axes: int[], target: string> (fn: (x: f32[..]) => void, example: f32[..]) => void!
 supported_operators: () => string[]
+export_model: <out: string, dynamic_axes: void[] = [], target: string = 'onnxruntime-cpu'> (fn: F, example: E) => void!
 ```
 <!-- camel-for-ai end: stdlib-signatures -->

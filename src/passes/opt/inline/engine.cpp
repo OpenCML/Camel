@@ -130,10 +130,12 @@ size_t inlinedNodeCount(const GCGraph *graph) {
     return count;
 }
 
-/// True when running `graph` may have an effect or touch state: it holds an operator that is not
-/// registered as pure, a call of a function value (callee unknown here), or reaches such a graph.
-/// A cycle of graphs is pure when none of its members has an effect of its own.
-bool mayHaveEffects(
+/// True when running `graph` has a node that is not freely schedulable (camel/runtime/graph.h): an
+/// effect, an operator that may fault, a conversion that can fail, a call of a function value
+/// (callee unknown here), or a graph it reaches that has one. A body like that runs after the
+/// effects its arguments waited for, and must keep doing so once it is spliced in. A cycle of graphs
+/// is free when none of its members has such a node of its own.
+bool bodyNeedsOrder(
     const camel::runtime::Program &program, const GCGraph *graph,
     std::unordered_set<const GCGraph *> &seen) {
     if (!graph || !seen.insert(graph).second) {
@@ -144,38 +146,41 @@ bool mayHaveEffects(
         if (!node) {
             continue;
         }
-        if (node->kind == GCNodeKind::Call) {
+        switch (node->kind) {
+        case GCNodeKind::Call:
             return true;
-        }
-        if (node->kind == GCNodeKind::Oper) {
-            const auto *body = graph->nodeBodyAs<camel::runtime::GCOperBody>(it.ref());
-            if (!body || !camel::core::OperatorTable::instance().mayBeRecomputed(body->oper)) {
+        case GCNodeKind::Oper:
+        case GCNodeKind::Cast:
+            if (!camel::runtime::nodeIsFreelySchedulable(*graph, it.ref())) {
                 return true;
             }
-        }
-        if (node->kind == GCNodeKind::Func) {
-            if (mayHaveEffects(program, program.calleeOf(*graph, it.ref()), seen)) {
+            break;
+        case GCNodeKind::Func:
+            if (bodyNeedsOrder(program, program.calleeOf(*graph, it.ref()), seen)) {
                 return true;
             }
-        }
-        if (node->kind == GCNodeKind::Loop) {
-            if (mayHaveEffects(program, program.loopCondOf(*graph, it.ref()), seen) ||
-                mayHaveEffects(program, program.loopBodyOf(*graph, it.ref()), seen)) {
+            break;
+        case GCNodeKind::Loop:
+            if (bodyNeedsOrder(program, program.loopCondOf(*graph, it.ref()), seen) ||
+                bodyNeedsOrder(program, program.loopBodyOf(*graph, it.ref()), seen)) {
                 return true;
             }
+            break;
+        default:
+            break;
         }
     }
     for (GCGraph *sub : program.subGraphs(*graph)) {
-        if (mayHaveEffects(program, sub, seen)) {
+        if (bodyNeedsOrder(program, sub, seen)) {
             return true;
         }
     }
     return false;
 }
 
-bool mayHaveEffects(const camel::runtime::Program &program, const GCGraph *graph) {
+bool bodyNeedsOrder(const camel::runtime::Program &program, const GCGraph *graph) {
     std::unordered_set<const GCGraph *> seen;
-    return mayHaveEffects(program, graph, seen);
+    return bodyNeedsOrder(program, graph, seen);
 }
 
 /// True when values of `type` may hold a function: inlining a callee returning one exposes the
@@ -1093,9 +1098,9 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
     // callee ignores: the callee's writes would otherwise be free to run before
     // that read, and the read would see them). Made explicit on the call before it
     // is spliced; the inliner hands a call's control predecessors to the body.
-    // Only a body that has an effect or touches state cares when it runs; a pure
-    // callee (most of a tensor program) gets no extra edge.
-    const bool calleeOrdered = mayHaveEffects(session.work(), draft.calleeGraphOf(funcNodeId));
+    // Only a body that has an effect, touches state or may fault cares when it runs; a callee
+    // that is freely schedulable throughout (most of a tensor program) gets no extra edge.
+    const bool calleeOrdered = bodyNeedsOrder(session.work(), draft.calleeGraphOf(funcNodeId));
     for (gc_node_ref_t source : argSources) {
         if (!calleeOrdered) {
             break;

@@ -10,21 +10,21 @@ timeout_ms = 20000
 
 [[tests]]
 name = "math_kernels.values"
-desc = "`sqrt_d`: exact squares, sqrt(-0) is -0, +inf is +inf, a negative number is NaN. `shl_i/l` and `shr_i/l`: the unsigned shift into the sign bit, the arithmetic shift keeping the sign, count 0 and the largest count."
+desc = "`inf` and `nan` are declared with no right side (`export let inf: float`) and are the values the C++ module registers. `sqrt_d`: exact squares, sqrt(-0) is -0, +inf is +inf, a negative number is NaN. `shl_i/l` and `shr_i/l`: the unsigned shift into the sign bit, the arithmetic shift keeping the sign, count 0 and the largest count."
 kind = "behavior"
 case = "../../../cases/modules/math_kernels/math.cml"
-args = ["test/cases/modules/math_kernels/math.cml", "${backend}"]
+args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_exact = "3.0 1.5 0.0 -0.0\ninf nan\n16 -2147483648 -4 16 -4\n-9223372036854775808 1 -1\n"
+expect_stdout_exact = "3.0 1.5 0.0 -0.0\ninf nan false true\n16 -2147483648 -4 16 -4\n-9223372036854775808 1 -1\n"
 
 [[tests]]
 name = "math_kernels.shl_i32_width"
 desc = "A shift count outside 0..width-1 is a fault of kind InvalidArgument."
 kind = "negative"
 case = "../../../cases/modules/math_kernels/err_shl_i32/math.cml"
-args = ["test/cases/modules/math_kernels/err_shl_i32/math.cml"]
+args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["Invalid argument of 'math.shl': the shift count 32 is not in 0..31 for a 32-bit integer"]
 
@@ -33,7 +33,7 @@ name = "math_kernels.shl_int_width"
 desc = "A shift count outside 0..width-1 is a fault of kind InvalidArgument."
 kind = "negative"
 case = "../../../cases/modules/math_kernels/err_shl_int/math.cml"
-args = ["test/cases/modules/math_kernels/err_shl_int/math.cml"]
+args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["Invalid argument of 'math.shl': the shift count 64 is not in 0..63 for a 64-bit integer"]
 
@@ -42,6 +42,26 @@ name = "math_kernels.shr_negative"
 desc = "A shift count outside 0..width-1 is a fault of kind InvalidArgument."
 kind = "negative"
 case = "../../../cases/modules/math_kernels/err_shr_negative/math.cml"
-args = ["test/cases/modules/math_kernels/err_shr_negative/math.cml"]
+args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["Invalid argument of 'math.shr': the shift count -1 is not in 0..63 for a 64-bit integer"]
+
+[[tests]]
+name = "math_kernels.value_type_mismatch"
+desc = "A value declared without a right side whose type is not the one the module registers is NativeValueMismatch, as a body-less function with another signature than its operator's is an error."
+kind = "negative"
+case = "../../../cases/modules/math_kernels/err_value_type/math.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NativeValueMismatch"
+expect_diagnostic_line = 3
+
+[[tests]]
+name = "math_kernels.value_missing"
+desc = "A value declared without a right side that no loaded module registers is NativeValueNotLoaded."
+kind = "negative"
+case = "../../../cases/modules/math_kernels/err_value_missing/math.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NativeValueNotLoaded"
+expect_diagnostic_line = 3

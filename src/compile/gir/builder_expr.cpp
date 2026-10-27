@@ -297,6 +297,40 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
     return node;
 }
 
+node_handle_t Builder::nativeValueNode(const GCT::node_ptr_t &gct, Type *declared) {
+    // A value declared without a right side is the one the C++ module of the declaration registers
+    // under its name, of the type the declaration writes, or an error of the same kind as a
+    // body-less function whose operator is missing or has another signature.
+    const std::string &ident = gct->name();
+    auto entity              = module_->getNativeEntity(Reference(ident));
+    if (!entity.has_value()) {
+        // The declaration may be written in a file that is not the C++ module itself (a file named
+        // as the module): the module of that name further along the search order supplies it.
+        try {
+            if (const auto supplier = context_->importModule(module_->name(), module_.get());
+                supplier != nullptr && supplier != module_) {
+                entity = supplier->getNativeEntity(Reference(ident));
+            }
+        } catch (const std::exception &) {
+        }
+    }
+    if (!entity.has_value() || !entity->isValue()) {
+        diags_->of(SemanticDiag::NativeValueNotLoaded).atOrigin(gct->origin()).commit(ident);
+        throw BuildAbortException();
+    }
+    const data_ptr_t &data = entity->value();
+    if (!declared->equals(data->type())) {
+        diags_->of(SemanticDiag::NativeValueMismatch)
+            .atOrigin(gct->origin())
+            .commit(ident, declared->toString(), data->type()->toString());
+        throw BuildAbortException();
+    }
+    node_handle_t node = currGraph_->addStaticDataNode(data);
+    rememberConstant(node, data);
+    registerNodeOrigin(context_, node, gct, "gir.data.native");
+    return node;
+}
+
 node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     ENTER("NREF");
     const string &ident = gct->name();
@@ -309,7 +343,11 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     const node_scope_ptr_t declScope = nodeScope_;
     node_handle_t node{};
     try {
-        node = functionValueOf(valueNodeOf(visit(gct->at(0))), gct);
+        if (Type *declared = GCT::Tree::of(gct)->nativeValueTypeOf(gct)) {
+            node = nativeValueNode(gct, declared);
+        } else {
+            node = functionValueOf(valueNodeOf(visit(gct->at(0))), gct);
+        }
     } catch (const BuildAbortException &) {
         // The initializer is in error, so the name is not declared. Uses of it are
         // consequences of that error, not errors of their own (see poisonedNames_).
@@ -323,10 +361,13 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     // `let g = f<w>` where `f<w>` is not one function: the name would be bound to `f` and the
     // arguments lost.
     try {
-        rejectUnappliedBinding(node, gct->at(0));
-        if (genericDrefs_.contains(node)) {
-            // `let g = id`: no context to take the types from.
-            (void)genericValueFor(node, nullptr, gct->at(0));
+        // A native value has nothing written to the right of the name.
+        if (gct->size() > 0) {
+            rejectUnappliedBinding(node, gct->at(0));
+            if (genericDrefs_.contains(node)) {
+                // `let g = id`: no context to take the types from.
+                (void)genericValueFor(node, nullptr, gct->at(0));
+            }
         }
     } catch (const BuildAbortException &) {
         if (!declScope->has(ident, false)) {
@@ -339,7 +380,7 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     // it without one has no element type; say so here, where the type can be written. (A
     // name the compiler made for an element of a literal starts with a digit.)
     if (Type *type = node != nullptr ? valueTypeOf(nodeTypeOf(node)) : nullptr;
-        type != nullptr && isUntypedArrayType(type) && !ident.empty() &&
+        type != nullptr && gct->size() > 0 && isUntypedArrayType(type) && !ident.empty() &&
         !std::isdigit(static_cast<unsigned char>(ident.front())) && ident.front() != '$') {
         diags_->of(SemanticDiag::EmptyArrayWithoutType)
             .atOrigin(gct->at(0)->origin())
@@ -429,6 +470,16 @@ void Builder::recordWrite(node_handle_t variable, node_handle_t exit, bool throu
     // users; they stay pending for the next write.
     auto &uses = pendingUsesOf(variable);
     if (synced_) {
+        // The chain orders the calls that used the variable before this write. A read is not on
+        // the chain, so the write is ordered after it by an order edge: the read has to see the
+        // value as it was before the write changes it (docs/design/effects/edges.cn.md 5.5).
+        for (const VariableUse &use : uses) {
+            if (use.isRead && sameGraph(use.node, currGraph_) && linkCheek(use.node, exit) &&
+                nodeTakesAnOrder(use.node) && nodeTakesAnOrder(exit) &&
+                !hasDirectDataDependency(use.node, exit)) {
+                linkNodes(LinkType::Order, use.node, exit);
+            }
+        }
         uses.clear();
     }
     // A store is one of the cell's known users (collapseNonEscapingVariableReads): a user the builder
@@ -1215,10 +1266,13 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     }
     ASSERT(valueNode != nullptr, "Cast node value is null.");
     Type *sourceType = nodeTypeOf(valueNode);
-    if (valueTypeOf(sourceType)->code() == TypeCode::Never && asTagged(targetType) == nullptr) {
+    if (valueTypeOf(sourceType)->code() == TypeCode::Never) {
         // A value of `never` never exists (design principles 3.9): the position takes the node as
         // it stands, because there is nothing to convert -- and nothing that could fail to be
-        // what the position asks for. A tagged position still enters its tag below.
+        // what the position asks for. A tagged position is no exception (the author's ruling of
+        // 2026-10-26 on `never-argument-scope`): `never` is the bottom type and enters any
+        // expected position without a conversion, tag or no tag, so a CAST is not built for it
+        // here either.
         LEAVE("CAST");
         return valueNode;
     }
@@ -1292,6 +1346,15 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     node_handle_t castNode = currGraph_->addCastNode(targetType);
     linkNodes(LinkType::Norm, valueNode, castNode);
     registerNodeOrigin(context_, castNode, gct, "gir.cast");
+    // A conversion that can fail is a statement of a `sync` block like a call: it runs where it
+    // is written, in the chain, with or without a reader of its value (design principles 3.4).
+    if (synced_ && camel::runtime::castMayFault(targetType, sourceType)) {
+        if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, castNode)) {
+            linkNodes(LinkType::Ctrl, lastSyncedNode_, castNode);
+        }
+        lastSyncedNode_ = castNode;
+        chainedNodes_.insert(castNode);
+    }
     LEAVE("CAST");
     return castNode;
 }
@@ -1379,14 +1442,21 @@ node_handle_t Builder::readVariableThrough(
         variableReadSource_[value] = VariableRead{version, variable};
         knownCellUsers_.insert(value);
     }
-    // In a sync block a read happens where it is written, like a call.
+    // A read is not a statement of a sync block: it does not join the chain. What orders it is the
+    // version it takes as its data port and the writes recorded after it (design principles 3.5,
+    // docs/design/effects/edges.cn.md 5.5), so the statement written before it keeps its own place
+    // on the chain when the read is folded into its version. The exception is a `var` parameter:
+    // it may be the caller's variable passed twice, a name the callee cannot tell from another, so
+    // only the place the read is written in orders it against the writes of the other name.
     if (synced_) {
-        if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, value)) {
-            linkNodes(LinkType::Ctrl, lastSyncedNode_, value);
-        }
-        lastSyncedNode_ = value;
         syncedReads_.push_back(value);
-        chainedNodes_.insert(value);
+        if (nodeKindOf(variable) == camel::runtime::GCNodeKind::Port) {
+            if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, value)) {
+                linkNodes(LinkType::Ctrl, lastSyncedNode_, value);
+            }
+            lastSyncedNode_ = value;
+            chainedNodes_.insert(value);
+        }
     }
     return value;
 }

@@ -59,7 +59,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 212
+**Semantic — errors** (`SemanticDiag`) — 214
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -218,6 +218,8 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `WhenPredicateAmbiguous` | The 'when' condition of '{0}' calls '{1}', and that name is ambiguous: it is imported from {2}. |
 | `NativeDeclarationIncomplete` | The body-less declaration '{0}' is incomplete: it has no result type. |
 | `NativeDeclarationNotLoaded` | The declaration '{0}' names the operator '{1}', which no loaded module implements. |
+| `NativeValueNotLoaded` | The declaration '{0}' has no right side, and no loaded module registers a value of that name. |
+| `NativeValueMismatch` | The declaration '{0}' says '{1}', but the module registers a value of type '{2}'. |
 | `NativeDeclarationOverlap` | Two declarations of '{0}' can take the same call: '{1}' and '{2}'. |
 | `WhenDeclarationOverlap` | Two declarations of '{0}' both apply to the type '{1}': '{2}' and '{3}'. |
 | `NativeDeclarationForeignOperator` | The declaration '{0}' names the operator '{1}', which another module declares. |
@@ -274,7 +276,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `FactConstCaseTypeRequired` | The 'const' case '{0}' of the fact '{1}' writes no type. |
 | `FactCaseBindsNoVariable` | This case of the fact '{0}' names no variable. |
 
-**Semantic — warnings** (`SemanticDiag`) — 12
+**Semantic — warnings** (`SemanticDiag`) — 15
 
 | `IgnoredSideEffect` | {0} is not in a sync block, and {1}. |
 | `EffectNotExecuted` | {0} has side effects but is never executed: {1}. |
@@ -288,6 +290,9 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `TagHasNoReader` | The tag '{0}' is written, but none of the passes it names ({1}) is in the pipeline. |
 | `DimensionNameUsedOnce` | The dimension name '{0}' is written once in this signature, so it relates nothing. |
 | `TypeVariableUnused` | The type parameter '{0}' is declared at the head but never written in the signature. |
+| `NeverArgumentCall` | This call never runs: {0} has type 'never', and an argument is evaluated before the call it is written in. |
+| `FailNotExecuted` | This 'fail' is not executed: {0}. |
+| `StatementAfterFail` | This statement cannot run: the 'fail' written before it never returns. |
 
 **Run time and passes — errors** (`RuntimeDiag`) — 36
 

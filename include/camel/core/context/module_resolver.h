@@ -70,7 +70,12 @@ class ModuleResolver {
     /// The file `moduleName` resolves to: the first directory of `searchRoots(importerDir)` that
     /// holds one. A hit is what the name stands for: the caller decides what a file it cannot load
     /// means, but not by looking somewhere else for the name.
-    ModuleFile resolve(const std::string &moduleName, const std::string &importerDir);
+    /// An import never resolves to the importing module itself (design principles 10.2): the file
+    /// `exceptFile` (the importer's own) is passed over, and the lookup goes on to the next
+    /// location of the search order.
+    ModuleFile resolve(
+        const std::string &moduleName, const std::string &importerDir,
+        const std::string &exceptFile = {});
 
     /// Every directory the lookup tried and why it holds no such module, in the order they were
     /// tried: the reason a `ModuleNotFound` gives. A directory that holds the file contributes

@@ -217,7 +217,7 @@ int 1 string a
 |---|---|
 | `sync` | 函数体是同步块（[4.3.3](04_execution_model.md#433-函数体的-sync函数修饰符)） |
 
-没有别的修饰符。C++ 实现的函数写成无函数体的 `export func` 声明（[6.4](../design-principles.cn.md)），只在模块内使用的辅助函数写成不导出的 `func`：`func` 本身就是模块私有。
+没有别的修饰符。C++ 实现的函数写成无函数体的 `export func` 声明（[6.4](../design-principles.cn.md)），C++ 提供的值是同一条规则，写成不带右边的 `export let inf: float`：它是 C++ 模块以 `inf` 为名登记的那个值，类型与登记的不一致是 `SemanticDiag::NativeValueMismatch`，没有这个名字的值是 `SemanticDiag::NativeValueNotLoaded`；只在模块内使用的辅助函数写成不导出的 `func`：`func` 本身就是模块私有。
 
 `#macro` 不是修饰符，是写在函数声明前的标准标签（[4.5](04_execution_model.md#45-macro-函数)）。
 

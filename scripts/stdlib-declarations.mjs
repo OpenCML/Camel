@@ -149,8 +149,8 @@ const UNDERIVABLE_OPERATORS = new Set([
 // would be the declaration migration, not coverage. Their purity is
 // checked by `registry.purity_declared_tensor_stack` over `registry_tensor.cml`.
 //
-// Empty since `onnx` was declared (`supported_operators` in stdlib/onnx.cml, `export_model` in
-// stdlib/signatures/onnx.cml): every module that registers operators is now in the probe and in
+// Empty since `onnx` was declared (both of its names, `supported_operators` and `export_model`,
+// in stdlib/onnx.cml): every module that registers operators is now in the probe and in
 // MODULES. The list stays, with its checks, so an exclusion has to be justified the same way.
 const UNCHECKED_MODULES = []
 

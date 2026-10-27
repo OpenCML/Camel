@@ -1,0 +1,7 @@
+import { pi } from math
+
+export let tau: float
+
+func main(): int sync {
+    return 0
+}

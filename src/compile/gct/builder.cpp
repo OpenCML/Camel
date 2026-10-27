@@ -979,6 +979,33 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
     // program: in a sync block the initializer keeps its place in the block's order.
     node_ptr_t res = makeExec(false, true);
 
+    if (dataNodes->size() == 0) {
+        // `export let inf: float`: no right side. The value is the one the C++ module of the
+        // declaration registers under the name (design principles 6.4); the declaration is its
+        // type, and the graph builder reads the module.
+        if (refs.size() != 1 || typeNodes->size() != 1 || isVar) {
+            diags_->of(SemanticDiag::TupleUnpackingCountMismatch)
+                .at(ast->load()->tokenRange())
+                .commit();
+            throw BuildAbortException();
+        }
+        if (!validateIdent(refs[0].ident())) {
+            diags_->of(SemanticDiag::ReservedIdentifier).at(dataDeclLoad->tokenRange()).commit();
+            throw BuildAbortException();
+        }
+        Type *declaredType  = visitType(typeNodes->atAs<AST::TypeLoad>(0));
+        node_ptr_t nRefNode = tree_->makeNRef(refs[0].toString());
+        tree_->markNativeValue(nRefNode, declaredType);
+        setOriginFromOrigin(
+            context_,
+            nRefNode,
+            findBindingOrigin(context_, ast, 0),
+            camel::source::OriginKind::GctNode,
+            "gct.nref");
+        LEAVE("DataDecl");
+        return nRefNode;
+    }
+
     // The declaration binds one name, several names, or the elements of a tuple (the
     // parenthesized carrier). A struct or an array carrier is not in the language: the
     // parser refuses it, so no declaration reaches here with one.

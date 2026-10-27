@@ -152,6 +152,26 @@ Value LowerContext::emitScalar(
 
 // ---------------------------------------------------------------- lowerings
 
+const LoweringTarget &loweringTarget(std::string_view target) {
+    static const LoweringTarget nothingSpecial;
+    // onnxruntime-cpu at its defaults: MatmulTransposeFusion (level 2, i.e. the EXTENDED and ALL
+    // levels a plain InferenceSession asks for) turns a MatMul beside a Transpose into
+    // com.microsoft.FusedMatMul, and the CPU provider's kernel for that operator is registered
+    // for float alone (measured on onnxruntime 1.23.2: the session fails to load an f64 model).
+    static const LoweringTarget onnxruntimeCpu{
+        .transposedProductNeedsGemmOrEinsumForDouble = true};
+    if (target == "onnxruntime-cpu") {
+        return onnxruntimeCpu;
+    }
+    return nothingSpecial;
+}
+
+bool transposedProductNeedsGemmOrEinsum(
+    std::string_view target, std::optional<TypeCode> dtype) {
+    return dtype == TypeCode::Float64 &&
+           loweringTarget(target).transposedProductNeedsGemmOrEinsumForDouble;
+}
+
 namespace {
 
 Attribute ints(std::string name, std::vector<int64_t> values) {

@@ -23,11 +23,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 #
 #   86560 ms of CPU / 91858 ms wall  (2026-10-24, the first window in which every cell ran)
 #   82180 ms of CPU / 51220 ms wall  (2026-10-24, the run that turned this entry green)
+#   83670 ms of CPU / 42820 ms wall  (2026-10-27, the measurement in force: every cell reaches
+#                                     the compiler again, 223 of them by failing)
 #
-# The budget is 150000 ms: 1.73x the higher reading -- the headroom those referees took. The
-# entry's cost grew by the 82 cells made compile, and until then its content failure
-# short-circuited the runner's 4x margin, which read 300000 / 86560 = 3.47x when the cells began
-# to run and is what the budget states instead.
+# The budget is 150000 ms and is not re-derived from the newest reading: it keeps the margin the
+# slower 2026-10-24 reading set (150000 / 86560 = 1.73x), the headroom those referees took, which
+# is what the budget states instead of the runner's 4x margin (300000 / 86560 = 3.47x, the reading
+# before the cells began to run). The 2026-10-27 measurement leaves that budget at
+# 150000 / 83670 = 1.79x.
 cpu_budget_ms = 150000
 timeout_ms = 300000
 

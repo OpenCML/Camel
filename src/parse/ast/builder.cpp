@@ -2380,7 +2380,14 @@ Value Builder::visitDataDecl(cst::DataDecl context, bool topLevel) {
         *dataDeclNode << typeListNode;
     }
 
-    *dataDeclNode << any2node(visitDataList(context->get<cst::DataList>()));
+    if (context->get<cst::DataList>()) {
+        *dataDeclNode << any2node(visitDataList(context->get<cst::DataList>()));
+    } else {
+        // `export let inf: float`: no right side, the value the C++ module supplies.
+        node_ptr_t none = createNodeAs<RepeatedLoad>("Data");
+        setNodeTokenRangeByContext(none, context);
+        *dataDeclNode << none;
+    }
     std::vector<camel::source::SemanticPart> parts;
     if (context->tok(TK::KwLet)) {
         parts.push_back(semanticPart(

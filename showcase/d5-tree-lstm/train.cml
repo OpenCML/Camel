@@ -67,7 +67,7 @@ func forward(t: Tree): (f32[..], f32[..]) {
 with <p: Params>
 func loss(t: Tree, target: f32[..]): float {
     let (hidden, state) = forward<p>(t)
-    return softmax_cross_entropy(hidden @ p.wout + p.bout, target)
+    return float(softmax_cross_entropy(hidden @ p.wout + p.bout, target))
 }
 
 // == data ==

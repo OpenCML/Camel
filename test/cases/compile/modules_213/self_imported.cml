@@ -1,7 +1,0 @@
-// The imported module imports itself: no effect there either.
-import { three } from self_lib
-
-func main(): int sync {
-    println(three())
-    return 0
-}

@@ -6290,49 +6290,6 @@ to an example argument, and `supported_operators` lists the operator URIs the ba
 lower. The module is the ONNX exporter, not a runtime: loading it and asking what it can lower
 needs neither the ONNX runtime nor a GPU; only a run of `export_model` writes a file.
 
-#### `export_model`
-
-```camel
-export_model: <out: string> (fn: (x: f32[..]) => void, example: f32[..]) => void!
-```
-
-Writes the ONNX model of `fn` applied to arguments like `example` to the file `out`, at the
-backend's default opset. `example` is one argument of a one-parameter `fn`, or a tuple with
-one example per parameter; the function's graph is translated after the generic passes, and a
-node the backend cannot lower is refused. The path is a `with` argument because it is a
-runtime value: a literal, a name composed from the environment, or a parameter of the pass.
-
-- With effects: writes a file and reads the function's graph.
-- Failure: error value `ExportUnsupported` when the graph cannot be translated (a call that remains, an operator without an ONNX lowering, a dtype or shape the exporter cannot name), or when the target runtime rejects a node; error value `IOError` when the model cannot be written.
-- Example: `export_model<out: "/tmp/model.onnx">(fn, example)`
-
-#### `export_model`
-
-```camel
-export_model: <out: string, dynamic_axes: int[]> (fn: (x: f32[..]) => void, example: f32[..]) => void!
-```
-
-The same, with `dynamic_axes`: those axes of the tensor inputs are left unknown in the model,
-which is what lets one model run at several shapes (`[0]` is the batch axis).
-
-- With effects: writes a file and reads the function's graph.
-- Failure: error value `ExportUnsupported` when the graph cannot be translated or the target runtime rejects a node, and when an axis is out of range; error value `IOError` when the model cannot be written.
-- Example: `export_model<out: "/tmp/model.onnx", dynamic_axes: [0]>(fn, example)`
-
-#### `export_model`
-
-```camel
-export_model: <out: string, dynamic_axes: int[], target: string> (fn: (x: f32[..]) => void, example: f32[..]) => void!
-```
-
-The same, with `target`: the runtime whose capability data decides whether a node this
-backend lowers is one that runtime has (`'onnxruntime-cpu'`; `'none'` switches the check off,
-and a name that is none of them is refused).
-
-- With effects: writes a file and reads the function's graph.
-- Failure: error value `ExportUnsupported` when the graph cannot be translated, when an axis is out of range, or when `target` names a runtime that has no kernel for a node; error value `IOError` when the model cannot be written.
-- Example: `export_model<out: "/tmp/model.onnx", dynamic_axes: [0], target: "onnxruntime-cpu">(fn, example)`
-
 #### `supported_operators`
 
 ```camel
@@ -6345,3 +6302,25 @@ module and never touches the file system or the ONNX runtime.
 
 - Pure.
 - Example: `let uris = supported_operators()`
+
+#### `export_model`
+
+```camel
+export_model: <out: string, dynamic_axes: void[] = [], target: string = 'onnxruntime-cpu'> (fn: F, example: E) => void!
+```
+
+Writes the ONNX model of `fn` applied to arguments like `example` to the file `out`, at the
+backend's default opset. `example` is one argument of a one-parameter `fn`, or a tuple with
+one example per parameter; the function's graph is translated after the generic passes, and a
+node the backend cannot lower is refused. `out`, `dynamic_axes` and `target` are `with`
+parameters because they are runtime values: `dynamic_axes` names the axes of the tensor inputs
+that are left unknown in the model (which is what lets one model run at several shapes), and
+`target` names the runtime whose capability data decides whether a node this backend lowers is
+one that runtime has (`'none'` switches the check off).
+
+- With effects: writes a file and reads the function's graph.
+- Failure: error value `ExportUnsupported` when `fn` is not a function, when the graph cannot be translated (a call that remains, an operator without an ONNX lowering, a dtype or shape the exporter cannot name), or when the target runtime rejects a node; error value `IOError` when the model cannot be written.
+- Example (a fragment, not compiled): `export_model<out: "/tmp/model.onnx">(fn, example)`
+- Example (a fragment, not compiled): `export_model<out: "/tmp/model.onnx", dynamic_axes: [0]>(fn, example)`
+- Example (a fragment, not compiled): `export_model<out: "/tmp/model.onnx", target: "onnxruntime-cpu">(fn, example)`
+- Why it is not compiled: the call needs a function value and an example of the arguments that function takes, which the description introduces (the exporter reads the function's graph, so no value a fragment can write stands for it)

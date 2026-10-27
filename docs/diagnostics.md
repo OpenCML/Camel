@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-288 diagnostics: 271 errors, 17 warnings. 15 carry a machine-applicable edit, 273 say why they carry none.
+293 diagnostics: 273 errors, 20 warnings. 15 carry a machine-applicable edit, 278 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -255,7 +255,9 @@ prints one entry.
 | `0x030001F8` | [SemanticDiag::FactCaseBindsNoVariable](#factcasebindsnovariable) | Error | no |
 | `0x030001F9` | [SemanticDiag::FactJoinRequired](#factjoinrequired) | Error | no |
 | `0x030001FA` | [SemanticDiag::StreamCaptured](#streamcaptured) | Error | no |
-| `0x030001FB` | [SemanticDiag::NativeTypeNotProvided](#nativetypenotprovided) | Error | no |
+| `0x030001FB` | [SemanticDiag::NativeValueNotLoaded](#nativevaluenotloaded) | Error | no |
+| `0x030001FC` | [SemanticDiag::NativeValueMismatch](#nativevaluemismatch) | Error | no |
+| `0x030001FD` | [SemanticDiag::NativeTypeNotProvided](#nativetypenotprovided) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -268,6 +270,9 @@ prints one entry.
 | `0x03100160` | [SemanticDiag::TagHasNoReader](#taghasnoreader) | Warn | no |
 | `0x03100161` | [SemanticDiag::DimensionNameUsedOnce](#dimensionnameusedonce) | Warn | no |
 | `0x031001A5` | [SemanticDiag::TypeVariableUnused](#typevariableunused) | Warn | no |
+| `0x031001C0` | [SemanticDiag::NeverArgumentCall](#neverargumentcall) | Warn | no |
+| `0x031001C1` | [SemanticDiag::FailNotExecuted](#failnotexecuted) | Warn | no |
+| `0x031001C2` | [SemanticDiag::StatementAfterFail](#statementafterfail) | Warn | no |
 | `0x04000000` | [RuntimeDiag::RuntimeError](#runtimeerror) | Error | no |
 | `0x04000001` | [RuntimeDiag::DivisionByZero](#divisionbyzero) | Error | no |
 | `0x04000002` | [RuntimeDiag::IndexOutOfRange](#indexoutofrange) | Error | no |
@@ -1688,14 +1693,22 @@ Cannot insert data of type '{1}' into a(n) {0} with element type '{2}'.
 Ensure the data type matches the {0}'s element type, or convert the data to the appropriate type before inserting.
 ```
 
-**Example** (`test/cases/compile/surface/array_element_type.cml`, run as `camel -E short test/cases/compile/surface/array_element_type.cml`)
+**Example** (`test/cases/compile/literals/context_composite_holes_positions_mismatch.cml`, run as `camel -E short test/cases/compile/literals/context_composite_holes_positions_mismatch.cml`)
 
 ```camel
-func main(): int sync {
-    println([1, 2,
-        'x', 4])
-    return 0
+module literal_context_composite_holes_positions_mismatch
+
+func first(xs: f32[]): f32 { return xs[0] }
+
+// the argument position
+func argumentPosition(n: float): f32 { return first([1.0, float(n)]) }
+// the declaration position
+func declarationPosition(n: float): f32 {
+    let xs: f32[] = [1.0, float(n)]
+    return xs[0]
 }
+// the receiver of `->`
+func receiverPosition(n: float): f32 { return [1.0, float(n)]->first }
 ```
 
 ### CallingIncompleteFunction
@@ -8623,9 +8636,73 @@ func main(): int sync {
 }
 ```
 
+### NativeValueNotLoaded
+
+`0x030001FB` · Error · `SemanticDiag::NativeValueNotLoaded`
+
+**Fix**
+
+None: context: the native module that supplies it was not loaded, or the name is not the one it registers; the repair is not in this text
+
+**Message**
+
+```text
+The declaration '{0}' has no right side, and no loaded module registers a value of that name.
+```
+
+**Help**
+
+```text
+A value declared without a right side (`export let inf: float`) is supplied by the C++ module of the declaration, registered under the same name; import the module and check the name. A value written in Camel has its right side.
+```
+
+**Example** (`test/cases/modules/math_kernels/err_value_missing/math.cml`, run as `camel test/cases/modules/math_kernels/err_value_missing/math.cml`)
+
+```camel
+import { pi } from math
+
+export let tau: float
+
+func main(): int sync {
+    return 0
+}
+```
+
+### NativeValueMismatch
+
+`0x030001FC` · Error · `SemanticDiag::NativeValueMismatch`
+
+**Fix**
+
+None: choice: the type is the writer's to settle against the module
+
+**Message**
+
+```text
+The declaration '{0}' says '{1}', but the module registers a value of type '{2}'.
+```
+
+**Help**
+
+```text
+A value declared without a right side is the one the C++ module registers: write the type it registers, as a body-less function writes the signature of its operator.
+```
+
+**Example** (`test/cases/modules/math_kernels/err_value_type/math.cml`, run as `camel test/cases/modules/math_kernels/err_value_type/math.cml`)
+
+```camel
+import { pi } from math
+
+export let inf: int
+
+func main(): int sync {
+    return 0
+}
+```
+
 ### NativeTypeNotProvided
 
-`0x030001FB` · Error · `SemanticDiag::NativeTypeNotProvided`
+`0x030001FD` · Error · `SemanticDiag::NativeTypeNotProvided`
 
 **Fix**
 
@@ -9108,6 +9185,111 @@ func show::<T>(x: int): string {
 
 func main(): int sync {
     println(show(1))
+    return 0
+}
+```
+
+### NeverArgumentCall
+
+`0x031001C0` · Warn · `SemanticDiag::NeverArgumentCall`
+
+**Fix**
+
+None: choice: the call cannot run while that argument never gives a value, and whether the call is meant at all is the writer's decision
+
+**Message**
+
+```text
+This call never runs: {0} has type 'never', and an argument is evaluated before the call it is written in.
+```
+
+**Help**
+
+```text
+A value of type 'never' is never handed out: what gives it -- a fault, 'fail', or 'exit' -- ends the program before the call. The call is typed 'never' for that reason and no overload is chosen for it. If the call is meant to run, the argument it is written with is what to look at.
+```
+
+**Example** (`test/cases/consistency/fail_never/never_argument.cml`, run as `camel check -O short test/cases/consistency/fail_never/never_argument.cml`)
+
+```camel
+module never_argument
+
+func double(x: int): int { return x + x }
+
+func stop(m: string): never {
+    return fail<'Stopped'>(m)
+}
+
+func main(): int[] sync {
+    return double(stop('no value to double'))
+}
+```
+
+### FailNotExecuted
+
+`0x031001C1` · Warn · `SemanticDiag::FailNotExecuted`
+
+**Fix**
+
+None: context: the 'fail' belongs on a sync chain or on the path the data takes, and where belongs to the design
+
+**Message**
+
+```text
+This 'fail' is not executed: {0}.
+```
+
+**Help**
+
+```text
+A 'fail' raises its fault where its value is wanted, and it is no effect of its own: nothing else runs it. Put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or write it where the data passes, so that the value it gives is the one that is needed.
+```
+
+**Example** (`test/cases/consistency/fail_never/fail_not_executed.cml`, run as `camel test/cases/consistency/fail_never/fail_not_executed.cml std::nvm`)
+
+```camel
+module fail_not_executed
+
+func f(x: int): int {
+    fail<'NoPremise'>('f was called with an x it cannot take')
+    return x + 1
+}
+
+func main(): int sync {
+    println(f(1))
+    return 0
+}
+```
+
+### StatementAfterFail
+
+`0x031001C2` · Warn · `SemanticDiag::StatementAfterFail`
+
+**Fix**
+
+None: choice: whether the statements after the 'fail' are meant at all is the writer's decision
+
+**Message**
+
+```text
+This statement cannot run: the 'fail' written before it never returns.
+```
+
+**Help**
+
+```text
+A 'fail' raises its fault and gives no value, so the statements written after it in the same block are never reached. Move them before the 'fail', or delete them.
+```
+
+**Example** (`test/cases/consistency/fail_never/statement_after_fail.cml`, run as `camel test/cases/consistency/fail_never/statement_after_fail.cml std::nvm`)
+
+```camel
+module statement_after_fail
+
+func main(): int sync {
+    println('before')
+    fail<'NoPremise'>('the premise of this program does not hold')
+    println('after')
     return 0
 }
 ```

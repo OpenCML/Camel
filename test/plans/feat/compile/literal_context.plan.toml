@@ -923,3 +923,50 @@ expect_diagnostic_column = 35
 expect_output_contains = ["'{ n: float, t: (float, float) }'", "declared return type 'MA'", "'{ n: int, v: float[] }'", "declared return type 'MB'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+# The expected type of a position reaches the elements of a literal with a computed element by
+# one path, in all three positions alike (design principles 5.1): the elements the literal wrote
+# take the position's element type, and the computed element is checked against that type rather
+# than converted. `f32(n)` already is the element type of `f32[]`, so all three pass; `float(n)`
+# is a `float` and is not one, so all three report the element type mismatch at the computed
+# element -- none of them reports "no matching function".
+
+[[tests]]
+name = "context.composite_holes_positions"
+desc = "The expected type of a position reaches a literal with a computed element in the argument position, the declaration position and the receiver of `->` alike: `[1.0000000596046447753906251, f32(n)]` in an `f32[]` is an `f32[]` in each of the three, and the element written just above the f32 midpoint prints 1.00000012 -- the computed element `f32(n)` is checked against the element type, not converted."
+kind = "behavior"
+case = "../../../cases/compile/literals/context_composite_holes_positions.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_not_contains = ["Error", "Warn"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = ["1.00000012", "1.00000012", "1.00000012"].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "context.composite_holes_positions_mismatch"
+desc = "The other side of the same rule, in the three positions alike: `[1.0, float(n)]` does not stand in an `f32[]` -- `float(n)` is a `float` -- and the argument position, the declaration position and the receiver of `->` each report `ElementTypeMismatch` at the computed element. Before this the three reported three different things, a call with no matching function among them."
+kind = "negative"
+case = "../../../cases/compile/literals/context_composite_holes_positions_mismatch.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ElementTypeMismatch"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const diags = input.diagnostics.filter((d) => d.name === 'SemanticDiag::ElementTypeMismatch')
+assert(diags.length === 3, `expected one element type mismatch per position, got ${JSON.stringify(input.diagnostics)}`)
+const lines = diags.map((d) => d.line).join(',')
+assert(lines === '14,17,21', `expected the computed elements at lines 14, 17 and 21, got ${lines}`)
+assert(input.diagnostics.every((d) => d.name === 'SemanticDiag::ElementTypeMismatch'), `unexpected diagnostic among the three: ${JSON.stringify(input.diagnostics)}`)
+}
+"""
+timeout_ms = 8000

@@ -1,0 +1,18 @@
+/**
+ * A `fail` written on a line of its own is not an effect (design principles 3.9; the author's
+ * ruling of 2026-10-26): it raises its fault where its value is wanted, and in a function body
+ * that is not `sync` nothing wants it, so it does not run and the statements written after it do
+ * run -- the warning says where to put it instead. Nothing here is unreachable, so the statement
+ * after it keeps its own meaning and the program prints what it prints.
+ */
+module fail_not_executed
+
+func f(x: int): int {
+    fail<'NoPremise'>('f was called with an x it cannot take')
+    return x + 1
+}
+
+func main(): int sync {
+    println(f(1))
+    return 0
+}

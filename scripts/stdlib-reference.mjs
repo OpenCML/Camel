@@ -39,15 +39,12 @@
 // and --verify-ops refuses a signature file whose entry still has one.
 //
 // A value a module exports (`math::pi`; design principles 10.1) needs neither @pure nor a URI
-// (it is not an operator). A declaration module cannot write it — a `let` needs an initializer —
-// so the value's entry is recorded in a comment, and the C++ module remains the one source of
-// the value itself:
+// (it is not an operator). A declaration module writes it with no right side, and the C++ module
+// is the one source of the value itself:
 //
 //   /// What it is.
 //   /// @example <code>    // <result>
-//   // value name: T
-//
-// (A signature file that is not compiled may write the value itself as `export let name: T = ...`.)
+//   export let name: T
 //
 // A library module written in Camel (stdlib/<module>.cml) is its own signature file: its
 // `export func` declarations and their `///` comments are read the same way.
@@ -371,12 +368,11 @@ const MODULES = [
         name: 'onnx',
         title: '`onnx`: export a program as an ONNX model',
         kind: 'cpp',
-        // `supported_operators` is declared in stdlib/onnx.cml; `export_model` takes a function
-        // of any parameter list and an example that must be its parameter tree, so its reference
-        // entry is in the signature file named by `computed:`.
+        // Both operators are declared in stdlib/onnx.cml: `supported_operators`, and
+        // `export_model` with the `with` parameters and the defaults a call reads its arguments
+        // by (the module keeps the kernel, the executor and the purity).
         source: 'onnx.cml',
         declaration: true,
-        computed: 'signatures/onnx.cml',
     },
 ]
 
@@ -625,42 +621,9 @@ function readDeclarations(file, module, options = {}) {
             pendingUri = null
             continue
         }
-        // A C++ module's value has no declaration to write: the declaration file records its
-        // reference entry in a comment, and the C++ module stays the one source of the value
-        // It carries the same doc comment as an
-        // operator, above the `// value` line.
-        const docValue = module.kind === 'cpp' && trimmed.match(/^\/\/ value (\w+)\s*:\s*(.+)$/)
-        if (docValue) {
-            const entry = {
-                module: module.name,
-                name: docValue[1],
-                section,
-                line: i + 1,
-                file: relative,
-                value: true,
-                with: [],
-                norm: [],
-                result: docValue[2],
-                doc: [],
-                purity: 'value',
-                effect: '',
-                fails: [],
-                examples: [],
-                fragments: [],
-                uri: null,
-            }
-            for (const text of doc) {
-                if (text.startsWith('@example-fragment')) entry.fragments.push(text.slice('@example-fragment'.length).trim())
-                else if (text.startsWith('@example')) entry.examples.push(text.slice('@example'.length).trim())
-                else if (!text.startsWith('@')) entry.doc.push(text)
-            }
-            entries.push(entry)
-            doc = []
-            withText = ''
-            pendingUri = null
-            continue
-        }
-        const valueMatch = module.kind === 'cpp' && trimmed.match(/^export let (\w+)\s*:\s*([^=]+?)\s*=/)
+        // A C++ module's value is declared with no right side (`export let inf: float`), as a function
+        // with no body stands for its operator; it carries the same doc comment as an operator.
+        const valueMatch = module.kind === 'cpp' && trimmed.match(/^export let (\w+)\s*:\s*([^=]+?)\s*(?:=|$)/)
         if (valueMatch) {
             const entry = {
                 module: module.name,

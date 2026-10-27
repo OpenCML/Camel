@@ -1,0 +1,25 @@
+/**
+ * Generic declarations of one name with the same parameters and different `when` conditions are
+ * overloads, not a redeclaration (design principles 4.4): where a condition does not hold the
+ * overload does not apply and the choice goes on to the others.
+ */
+module when_overloads_generic
+
+import { is_float, is_complex, is_integer } from types
+
+func kind::<T>(x: T): string when is_float::<T>() {
+    return 'float'
+}
+
+func kind::<T>(x: T): string when is_complex::<T>() {
+    return 'complex'
+}
+
+func kind::<T>(x: T): string when is_integer::<T>() {
+    return 'integer'
+}
+
+func main(): int sync {
+    println(kind(1.5), kind(f32(2.0)), kind(1.0 + 2.0i), kind(3), kind(i32(4)))
+    return 0
+}

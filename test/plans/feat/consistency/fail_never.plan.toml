@@ -110,3 +110,260 @@ expect_exit = 0
 expect_stdout_contains = ["42", "BadInput", "end"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
+
+# The author's ruling of 2026-10-26 on the bottom type `never` and on `fail` (design principles
+# 3.9): an argument of type `never` makes the call itself `never` (the call never runs, so no
+# overload is chosen for it and the warning names the argument); a `fail` on a line of its own is
+# no effect, so in a body that is not `sync` it does not run and the statements after it do; and
+# where it does run, the statements written after it in the same block are never reached. Each of
+# the three warnings is locked with the code the catalogue gives it, and each test asserts the
+# whole set of diagnostics, so a warning that should not be there is red too.
+
+[[tests]]
+name = "never.argument"
+desc = "A call with an argument of type never never runs: it is typed never and no overload is chosen for it, so its result stands where the declared type is, and the warning names the argument."
+kind = "behavior"
+case = "../../../cases/consistency/fail_never/never_argument.cml"
+args = ["check", "-O", "short", "${case}"]
+expect_exit = 0
+verify_script = """
+assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
+assert(input.diagnostics[0].name === 'SemanticDiag::NeverArgumentCall', input.diagnostics[0].name)
+assert(input.diagnostics[0].code === '0x031001C0', input.diagnostics[0].code)
+assert(input.diagnostics[0].line === 17, input.diagnostics[0].line)
+assert(input.diagnostics[0].column === 23, input.diagnostics[0].column)
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "never.argument_overload"
+desc = "A never argument is not allowed to make two overloads fit: the call never runs, so no overload is chosen, no ambiguity is reported, and the report is the warning such a call gets."
+kind = "behavior"
+case = "../../../cases/consistency/fail_never/never_argument_overload.cml"
+args = ["check", "-O", "short", "${case}"]
+expect_exit = 0
+expect_output_not_contains = ["AmbiguousCall"]
+verify_script = """
+assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
+assert(input.diagnostics[0].name === 'SemanticDiag::NeverArgumentCall', input.diagnostics[0].name)
+assert(input.diagnostics[0].code === '0x031001C0', input.diagnostics[0].code)
+assert(input.diagnostics[0].line === 18, input.diagnostics[0].line)
+assert(input.diagnostics[0].column === 21, input.diagnostics[0].column)
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "fail.not_executed"
+desc = "A fail on a line of its own in a body that is not sync is no effect: nothing needs it, so it does not run and the statements after it do; the warning says to put it in a sync block or on the path the data takes, and it is the only diagnostic."
+kind = "behavior"
+case = "../../../cases/consistency/fail_never/fail_not_executed.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_starts_with = "2\n"
+verify_script = """
+assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
+assert(input.diagnostics[0].name === 'SemanticDiag::FailNotExecuted', input.diagnostics[0].name)
+assert(input.diagnostics[0].code === '0x031001C1', input.diagnostics[0].code)
+assert(input.diagnostics[0].line === 11, input.diagnostics[0].line)
+assert(input.diagnostics[0].column === 9, input.diagnostics[0].column)
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "fail.statement_after"
+desc = "A fail in a sync block runs where it stands: the fault is raised, and the statements written after it in the same block are never reached -- each of them is warned, and what was printed before the fail stays."
+kind = "negative"
+case = "../../../cases/consistency/fail_never/statement_after_fail.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_stdout_starts_with = "before\n"
+verify_script = """
+// The name is built from two pieces, the way fail.located's assertion is: the kind a program
+// writes is the program's own word, so the literal `RuntimeDiag::<Kind>` is not a code the
+// registry declares and must not read as a citation of one.
+const faults = input.diagnostics.filter((d) => d.name === 'RuntimeDiag::' + 'NoPremise')
+const unreachable = input.diagnostics.filter((d) => d.name === 'SemanticDiag::StatementAfterFail')
+assert(faults.length === 1 && faults[0].line === 11, JSON.stringify(input.diagnostics))
+assert(unreachable.length === 2, JSON.stringify(input.diagnostics))
+assert(unreachable[0].line === 12 && unreachable[1].line === 13, JSON.stringify(unreachable))
+assert(unreachable[0].code === '0x031001C2', unreachable[0].code)
+assert(input.diagnostics.length === 3, JSON.stringify(input.diagnostics))
+// The fault is raised at the `fail`, so the statement written after it never prints: the program
+// stops there. The line is checked whole, because the case's own name is in every diagnostic the
+// run writes and would match a plain search for it.
+const printed = input.normalized.stdout.split('\\n').map((line) => line.trim())
+assert(!printed.includes('after'), JSON.stringify(printed))
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+# ---- A `never` argument in a `with` position, and `never` in a tagged position ----
+# The author's ruling of 2026-10-26 on `never-argument-scope`: a `with` argument is evaluated
+# before the call it is written in like an ordinary one, so a `never` `with` argument stops the
+# call -- the same warning, no overload chosen, the call typed `never` -- and `never` enters a
+# tagged position without a conversion, so no CAST is built for it. Every assertion here is on the
+# whole set of diagnostics, so a warning that should not be there is red too.
+
+[[tests]]
+name = "never.with_argument"
+desc = "A call with a `with` argument of type `never` never runs: it is typed `never`, no overload is chosen for it, its result stands where the declared type is, and the one warning names the `with` argument by its place among the `with` arguments."
+kind = "behavior"
+case = "../../../cases/consistency/fail_never/never_with_argument.cml"
+args = ["check", "-O", "short", "${case}"]
+expect_exit = 0
+expect_output_contains = ["the `with` argument 1 has type 'never'"]
+verify_script = """
+assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
+assert(input.diagnostics[0].name === 'SemanticDiag::NeverArgumentCall', input.diagnostics[0].name)
+assert(input.diagnostics[0].code === '0x031001C0', input.diagnostics[0].code)
+assert(input.diagnostics[0].line === 24, input.diagnostics[0].line)
+assert(input.diagnostics[0].column === 23, input.diagnostics[0].column)
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "never.with_argument_run"
+desc = "The program the stopped call stands in prints what it wrote before the call and ends: the fault the `with` argument raises is the one that ends it, at the argument's own call, and the call's result is never made."
+kind = "behavior"
+case = "../../../cases/consistency/fail_never/never_with_argument.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_stdout_starts_with = "before\n"
+verify_script = """
+// The name is built from two pieces, the way fail.located's assertion is: the kind a program
+// writes is the program's own word, so the literal `RuntimeDiag::<Kind>` is not a code the
+// registry declares and must not read as a citation of one.
+assert(input.diagnostics.length === 2, JSON.stringify(input.diagnostics))
+assert(input.diagnostics[0].name === 'RuntimeDiag::' + 'Stopped', input.diagnostics[0].name)
+assert(input.diagnostics[0].code === '0x040001AC', input.diagnostics[0].code)
+assert(input.diagnostics[0].line === 14 && input.diagnostics[0].column === 16, JSON.stringify(input.diagnostics[0]))
+assert(input.diagnostics[1].name === 'SemanticDiag::NeverArgumentCall', input.diagnostics[1].name)
+assert(input.diagnostics[1].line === 24 && input.diagnostics[1].column === 23, JSON.stringify(input.diagnostics[1]))
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "never.with_argument_named"
+desc = "The same reading for a `with` argument given by name: the one warning names the argument by the name the program gave it, the wording an ordinary argument of type `never` gets."
+kind = "behavior"
+case = "../../../cases/consistency/fail_never/never_with_argument_named.cml"
+args = ["check", "-O", "short", "${case}"]
+expect_exit = 0
+expect_output_contains = ["the argument 'rounds' has type 'never'"]
+verify_script = """
+assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
+assert(input.diagnostics[0].name === 'SemanticDiag::NeverArgumentCall', input.diagnostics[0].name)
+assert(input.diagnostics[0].code === '0x031001C0', input.diagnostics[0].code)
+assert(input.diagnostics[0].line === 19, input.diagnostics[0].line)
+assert(input.diagnostics[0].column === 31, input.diagnostics[0].column)
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "never.with_argument_overload"
+desc = "A `never` `with` argument is not allowed to make two overloads fit either: the call never runs, so no overload is chosen, no ambiguity is reported, and the report is the warning such a call gets."
+kind = "behavior"
+case = "../../../cases/consistency/fail_never/never_with_argument_overload.cml"
+args = ["check", "-O", "short", "${case}"]
+expect_exit = 0
+expect_output_not_contains = ["AmbiguousCall"]
+expect_output_contains = ["the `with` argument 1 has type 'never'"]
+verify_script = """
+assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
+assert(input.diagnostics[0].name === 'SemanticDiag::NeverArgumentCall', input.diagnostics[0].name)
+assert(input.diagnostics[0].code === '0x031001C0', input.diagnostics[0].code)
+assert(input.diagnostics[0].line === 25, input.diagnostics[0].line)
+assert(input.diagnostics[0].column === 21, input.diagnostics[0].column)
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "never.with_argument_graph"
+desc = "`std::gir` of the same program: the call is not built at all (no FUNC node of `repeat`), what the expression gives is the argument's own node (the FUNC node of `stop`), and the tagged positions and the declaration build no CAST."
+kind = "behavior"
+case = "../../../cases/consistency/fail_never/never_with_argument_run.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+// The dump is read with the layout taken out of it: a long line is broken wherever the report
+// width falls, and what is asserted here is which nodes the graph has, not how they are printed.
+const flat = out.split(' ').join('')
+    .split(String.fromCharCode(10)).join('')
+    .split(String.fromCharCode(9)).join('')
+    .split(String.fromCharCode(13)).join('')
+assert(flat.includes('label="stop",type="FUNC"'), `the argument's own call is not in the dump:\n${out}`)
+assert(!flat.includes('label="repeat",type="FUNC"'), `the stopped call is built:\n${out}`)
+assert(!flat.includes('type="CAST"'), `a CAST is built:\n${out}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "never.tagged_position"
+desc = "`never` enters a tagged position without a conversion: the declared `int!` and `string!` take the node as it stands, the two calls whose argument is `never` are typed `never`, and the only diagnostics are the two warnings, each naming its argument."
+kind = "behavior"
+case = "../../../cases/consistency/fail_never/never_tagged_position.cml"
+args = ["check", "-O", "short", "${case}"]
+expect_exit = 0
+verify_script = """
+assert(input.diagnostics.length === 2, JSON.stringify(input.diagnostics))
+for (const d of input.diagnostics) {
+    assert(d.name === 'SemanticDiag::NeverArgumentCall', JSON.stringify(d))
+    assert(d.code === '0x031001C0', JSON.stringify(d))
+}
+assert(input.diagnostics[0].line === 18 && input.diagnostics[0].column === 35, JSON.stringify(input.diagnostics[0]))
+assert(input.diagnostics[1].line === 19 && input.diagnostics[1].column === 41, JSON.stringify(input.diagnostics[1]))
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "never.tagged_position_run"
+desc = "The fault the argument raises happens as it did: the program ends at the argument's own call with the kind the program wrote, and the two warnings are the only other diagnostics."
+kind = "behavior"
+case = "../../../cases/consistency/fail_never/never_tagged_position.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+verify_script = """
+// The name is built from two pieces here too: the kind the program writes is its own word.
+assert(input.diagnostics.length === 3, JSON.stringify(input.diagnostics))
+assert(input.diagnostics[0].name === 'RuntimeDiag::' + 'Stopped', JSON.stringify(input.diagnostics[0]))
+assert(input.diagnostics[0].line === 14 && input.diagnostics[0].column === 16, JSON.stringify(input.diagnostics[0]))
+for (const d of input.diagnostics.slice(1)) {
+    assert(d.name === 'SemanticDiag::NeverArgumentCall', JSON.stringify(d))
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "never.tagged_position_graph"
+desc = "`std::gir` of the two tagged positions: no CAST node anywhere in the graph -- `never` is the bottom type and enters any expected position, tag or no tag -- and neither call is built, so the argument's own node is what stands there."
+kind = "behavior"
+case = "../../../cases/consistency/fail_never/never_tagged_position.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const flat = out.split(' ').join('')
+    .split(String.fromCharCode(10)).join('')
+    .split(String.fromCharCode(9)).join('')
+    .split(String.fromCharCode(13)).join('')
+assert(!flat.includes('type="CAST"'), `a CAST is built for the tagged position:\n${out}`)
+assert(flat.includes('label="stop",type="FUNC"'), `the argument's own call is not in the dump:\n${out}`)
+assert(!flat.includes('label="double",type="FUNC"'), `the stopped call is built:\n${out}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000

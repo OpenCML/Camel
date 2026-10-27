@@ -1,0 +1,18 @@
+/**
+ * An argument of type `never` (design principles 3.9; the author's ruling of 2026-10-26): an
+ * argument is evaluated before the call it is written in, and one that never gives a value never
+ * reaches the call at all, so the call itself is typed `never` and no overload is chosen for it.
+ * The warning names the argument. Its result stands where the declared type is, because a value
+ * that never comes fits any position: an `int[]` here, which is what the call was asked for.
+ */
+module never_argument
+
+func double(x: int): int { return x + x }
+
+func stop(m: string): never {
+    return fail<'Stopped'>(m)
+}
+
+func main(): int[] sync {
+    return double(stop('no value to double'))
+}
