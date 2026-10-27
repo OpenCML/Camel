@@ -379,3 +379,12 @@ H233（`graph`、`rewrite`、`rules`、`opt` 改成以函数为中心，`Program
   - 优化器用汇合配对参数与梯度（`perf/training_steps`）；
   - `std::cpp` 翻译张量核函数。
 - H242 同步边的整批仍是你们的最优先，与 P4 改的代码区域不重叠。
+
+## 恢复原生归并（负责人 2026-10-27）
+
+负责人说明当初用 C++ 写归并的原因：归并排序这类负载是用来验证并行加速的，归并本身若由 Camel 逐元素执行，调度与解释的开销会掩盖多线程的加速。草稿删掉 `merge_sorted_arrays` 是决策者的推荐，当时没有等到负责人明确同意，撤回。
+- **恢复成标准库里的一个原生算子** `merge_sorted(xs, ys)`：两个普通参数，对等。
+  - 执行永远走 C++ 内核：两个输入都有序时一趟线性归并；
+  - 声明带一个 Camel 函数体 `sort(concat(xs, ys))` 作为它的语义定义（`#impl` 的约定：内核与函数体结果逐位一致，包括 NaN 与 ±0 的次序）；这个函数体只作为规格，不在运行时执行。
+- 并行用例（`merge_sort`、`merge_sort_small`、`concurrent_alloc`）和 `benchmarks/parallel/cases/merge_sort.cml` 改回调用它，删掉各自手写的 Camel 归并；`perf/para` 的基线不再需要因此重录。
+- 由决策者这边做，下次开工的第一批里。
