@@ -9,7 +9,8 @@
  *
  * One family, one spelling: `is_<property>::<T>()` asks one type, and `is_same::<T, U>()` asks two.
  * The identity predicates (`is_integer`, `is_float`, `is_complex`, `is_string`, `is_bool`,
- * `is_function`) carry the `match type` cases; the others ask them (`is_numeric`, `is_ordered`,
+ * `is_function`, and the shapes `is_array`, `is_nullable`, `is_fallible`, `is_map`, `is_set`) carry the
+ * `match type` cases; the others ask them (`is_numeric`, `is_ordered`,
  * `is_plain`), so a type is named in one place and a new integer width is added to `is_integer`
  * alone. A single type (`i32`, `f32`, `int`) is asked with `is_same`.
  *
@@ -94,6 +95,59 @@ export func is_ordered::<T>(): bool {
 export func is_function::<T>(): bool {
     return match type T {
         case func => true
+        case _ => false
+    }
+}
+
+/// True when `T` is an array type, of any rank.
+/// @example is_array::<int[]>()    // true
+/// @example is_array::<f32[..]>()    // true
+/// @example is_array::<int>()    // false
+export func is_array::<T>(): bool {
+    return match type T {
+        case array => true
+        case _ => false
+    }
+}
+
+/// True when `T` is `U?` for some `U`.
+/// @example is_nullable::<int?>()    // true
+/// @example is_nullable::<int!>()    // false
+/// @example is_nullable::<int>()    // false
+export func is_nullable::<T>(): bool {
+    return match type T {
+        case nullable => true
+        case _ => false
+    }
+}
+
+/// True when `T` is `U!` for some `U`.
+/// @example is_fallible::<int!>()    // true
+/// @example is_fallible::<int?>()    // false
+/// @example is_fallible::<int>()    // false
+export func is_fallible::<T>(): bool {
+    return match type T {
+        case fallible => true
+        case _ => false
+    }
+}
+
+/// True when `T` is a map, `Map<K, V>`.
+/// @example is_map::<Map<string, int>>()    // true
+/// @example is_map::<Set<int>>()    // false
+export func is_map::<T>(): bool {
+    return match type T {
+        case map => true
+        case _ => false
+    }
+}
+
+/// True when `T` is a set, `Set<E>`.
+/// @example is_set::<Set<int>>()    // true
+/// @example is_set::<Map<string, int>>()    // false
+export func is_set::<T>(): bool {
+    return match type T {
+        case set => true
         case _ => false
     }
 }

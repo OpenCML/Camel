@@ -2166,7 +2166,8 @@ no run-time inspection of a type: a predicate is settled when the call is compil
 
 One family, one spelling: `is_<property>::<T>()` asks one type, and `is_same::<T, U>()` asks two.
 The identity predicates (`is_integer`, `is_float`, `is_complex`, `is_string`, `is_bool`,
-`is_function`) carry the `match type` cases; the others ask them (`is_numeric`, `is_ordered`,
+`is_function`, and the shapes `is_array`, `is_nullable`, `is_fallible`, `is_map`, `is_set`) carry the
+`match type` cases; the others ask them (`is_numeric`, `is_ordered`,
 `is_plain`), so a type is named in one place and a new integer width is added to `is_integer`
 alone. A single type (`i32`, `f32`, `int`) is asked with `is_same`.
 
@@ -2278,6 +2279,69 @@ True when `T` is a function type, whatever its parameters and result.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `is_function::<(x: int) => int>()` gives `true`
+
+#### `is_array`
+
+```camel
+is_array: () => bool
+```
+
+True when `T` is an array type, of any rank.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_array::<int[]>()` gives `true`
+- Example: `is_array::<f32[..]>()` gives `true`
+- Example: `is_array::<int>()` gives `false`
+
+#### `is_nullable`
+
+```camel
+is_nullable: () => bool
+```
+
+True when `T` is `U?` for some `U`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_nullable::<int?>()` gives `true`
+- Example: `is_nullable::<int!>()` gives `false`
+- Example: `is_nullable::<int>()` gives `false`
+
+#### `is_fallible`
+
+```camel
+is_fallible: () => bool
+```
+
+True when `T` is `U!` for some `U`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_fallible::<int!>()` gives `true`
+- Example: `is_fallible::<int?>()` gives `false`
+- Example: `is_fallible::<int>()` gives `false`
+
+#### `is_map`
+
+```camel
+is_map: () => bool
+```
+
+True when `T` is a map, `Map<K, V>`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_map::<Map<string, int>>()` gives `true`
+- Example: `is_map::<Set<int>>()` gives `false`
+
+#### `is_set`
+
+```camel
+is_set: () => bool
+```
+
+True when `T` is a set, `Set<E>`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_set::<Set<int>>()` gives `true`
+- Example: `is_set::<Map<string, int>>()` gives `false`
 
 #### `is_string`
 
@@ -2422,7 +2486,7 @@ The elements of the inner arrays, in order.
 #### `flatten`
 
 ```camel
-flatten: (xs: T[..]) => T[] when !is_array_type::<T>()
+flatten: (xs: T[..]) => T[] when !is_array::<T>()
 ```
 
 The elements of an array of any rank, in row-major order, as an array of one dimension.

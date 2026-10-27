@@ -214,7 +214,7 @@ seed: (seed: int) => void
 seed: (seed: i32) => void
 ```
 
-**`types`** — import { ... } from types — 11 name(s)
+**`types`** — import { ... } from types — 16 name(s)
 
 ```text
 is_same: () => bool
@@ -225,6 +225,11 @@ is_numeric: () => bool
 is_real: () => bool
 is_ordered: () => bool
 is_function: () => bool
+is_array: () => bool
+is_nullable: () => bool
+is_fallible: () => bool
+is_map: () => bool
+is_set: () => bool
 is_string: () => bool
 is_bool: () => bool
 is_plain: () => bool
@@ -239,7 +244,7 @@ drop: <n: int> (xs: T[]) => T[]
 chunks: <n: int> (xs: T[]) => T[][]
 enumerate: (xs: T[]) => (int, T)[]
 flatten: (xss: T[][]) => T[]
-flatten: (xs: T[..]) => T[] when !is_array_type::<T>()
+flatten: (xs: T[..]) => T[] when !is_array::<T>()
 unique: (xs: T[]) => T[]
 find_index: <pred: (x: T) => bool> (xs: T[]) => int?
 find: <pred: (x: T) => bool> (xs: T[]) => T?

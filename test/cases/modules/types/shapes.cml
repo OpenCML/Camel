@@ -1,0 +1,37 @@
+/// The shapes a `match type` case names beside struct, tuple and func: an array, a `T?`, a `T!`,
+/// a map and a set, and the predicates of `types` that ask them.
+import { is_array, is_nullable, is_fallible, is_map, is_set } from types
+
+func shape_of::<T>(): string {
+    return match type T {
+        case array => 'array'
+        case nullable => 'nullable'
+        case fallible => 'fallible'
+        case map => 'map'
+        case set => 'set'
+        case struct => 'struct'
+        case tuple => 'tuple'
+        case func => 'func'
+        case _ => 'leaf'
+    }
+}
+
+// A shape word and `#leaf` together: the leaf case still takes every type no shape took.
+func only_maps::<T>(): string {
+    return match type T {
+        case map | set => 'collection'
+        case struct | tuple => 'composite'
+        case #leaf => 'other'
+    }
+}
+
+func main(): int sync {
+    println(shape_of::<int[]>(), shape_of::<f32[..]>(), shape_of::<int?>(), shape_of::<string!>())
+    println(shape_of::<Map<string, int>>(), shape_of::<Set<int>>(), shape_of::<{ a: int }>())
+    println(shape_of::<(int, int)>(), shape_of::<(x: int) => int>(), shape_of::<float>())
+    println(only_maps::<Map<string, int>>(), only_maps::<Set<int>>(), only_maps::<int?>(), only_maps::<(int, int)>())
+    println(is_array::<int[]>(), is_array::<int?>(), is_nullable::<int?>(), is_nullable::<int!>())
+    println(is_fallible::<int!>(), is_fallible::<int>(), is_map::<Map<int, int>>(), is_map::<Set<int>>())
+    println(is_set::<Set<int>>(), is_set::<int[]>())
+    return 0
+}

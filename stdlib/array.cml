@@ -21,16 +21,7 @@
  */
 
 import math
-import { is_float, is_integer, is_numeric, is_ordered, is_plain, is_same } from types
-
-// True when `T` is an array type: `flatten` of an array of arrays is the concatenation, not the
-// view of a rank, so the two overloads of the name are told apart by it.
-func is_array_type::<T>(): bool {
-    return match type T {
-        case array => true
-        case _ => false
-    }
-}
+import { is_array, is_float, is_integer, is_numeric, is_ordered, is_plain, is_same } from types
 
 // ---- rearranging ----
 
@@ -77,7 +68,7 @@ export func flatten::<T>(xss: T[][]): T[] {
 
 /// The elements of an array of any rank, in row-major order, as an array of one dimension.
 /// @example ([[1, 2], [3, 4]] as int[2, 2])->flatten    // [1, 2, 3, 4]
-export func flatten::<T>(xs: T[..]): T[] when !is_array_type::<T>() {
+export func flatten::<T>(xs: T[..]): T[] when !is_array::<T>() {
     return elements(xs)
 }
 

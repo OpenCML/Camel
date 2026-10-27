@@ -12,7 +12,9 @@
 #include "camel/compile/gct.h"
 #include "camel/compile/gir/draft_graph_builder.h"
 #include "camel/compile/gir/types.h"
+#include "camel/core/type/collection.h"
 #include "camel/core/type/composite/func.h"
+#include "camel/core/type/composite/tuple.h"
 #include "camel/runtime/draft.h"
 #include "camel/utils/assert.h"
 
@@ -26,6 +28,37 @@ using compile_graph_ptr_t = std::shared_ptr<DraftGraphBuilder>;
 
 /// The name a call writes for its callee: the `DREF` under a generic application (`TAPP`) or a
 /// `with` application (`WITH`). Empty when the callee is an expression (a function value).
+/// The shapes of a `match type` case that a type has besides struct and tuple: the shape bits of
+/// `GCT::typeCaseBit` for an array, a function, a `T?`, a `T!`, a map and a set (an ordinary tuple
+/// and a struct are told apart by the callers, which also walk their fields). A type that has one
+/// is still a leaf for `#leaf`.
+inline uint16_t extraTypeShapes(const camel::core::type::Type *type) {
+    using camel::core::type::TypeCode;
+    using Kind = GCT::TypeCaseKind;
+    if (type == nullptr) {
+        return 0;
+    }
+    switch (type->code()) {
+    case TypeCode::Array:
+        return GCT::typeCaseBit(Kind::Array);
+    case TypeCode::Function:
+        return GCT::typeCaseBit(Kind::Func);
+    case TypeCode::Tuple: {
+        const auto *tuple = static_cast<const camel::core::type::TupleType *>(type);
+        if (tuple->isNullable()) {
+            return GCT::typeCaseBit(Kind::Nullable);
+        }
+        return tuple->isFallible() ? GCT::typeCaseBit(Kind::Fallible) : 0;
+    }
+    default:
+        break;
+    }
+    if (const auto *collection = camel::core::type::asCollectionType(type)) {
+        return GCT::typeCaseBit(collection->isMap() ? Kind::Map : Kind::Set);
+    }
+    return 0;
+}
+
 inline std::string writtenCalleeName(const GCT::node_ptr_t &callee) {
     GCT::node_ptr_t node = callee;
     while (node != nullptr) {

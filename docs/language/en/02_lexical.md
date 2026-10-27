@@ -82,6 +82,10 @@ The other way round, `func` and `type` among the position names are reserved wor
 | Type and pattern positions | `struct` | in a `match type` case pattern: names the shape of a struct |
 | Type and pattern positions | `tuple` | in a `match type` case pattern: names the shape of a tuple |
 | Type and pattern positions | `array` | in a `match type` case pattern: names the shape of an array |
+| Type and pattern positions | `nullable` | in a `match type` case pattern: names the shape of a `T?` |
+| Type and pattern positions | `fallible` | in a `match type` case pattern: names the shape of a `T!` |
+| Type and pattern positions | `map` | in a `match type` case pattern: names the shape of a map |
+| Type and pattern positions | `set` | in a `match type` case pattern: names the shape of a set |
 | Type and pattern positions | `leaf` | in a `match type` case pattern: the `leaf` after a `#` (`case #leaf =>`) |
 | Type and pattern positions | `error` | in a `case` pattern of a `match`: the error taken out of a failed `T!`, written as the two words `error e` |
 | Type and pattern positions | `fields` | in the head of a `static for` or a `static loop`: the `fields` after `in` (a type follows, and it walks names, types and tags) |

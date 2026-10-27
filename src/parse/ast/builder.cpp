@@ -3153,7 +3153,7 @@ TypeCaseKind Builder::typeCaseKindOf(cst::TypeCasePattern pattern) {
     // A word that names no shape is told, where it is written, instead of being read as `_`.
     diags_->of(SemanticDiag::StaticMatchPatternCannotMatch)
         .at(rangeOf(pattern->firstToken(), pattern->lastToken()))
-        .commit(text, "it is not a shape word (struct, tuple, array, func, #leaf, _)");
+        .commit(text, "it is not a shape word (struct, tuple, array, func, nullable, fallible, map, set, #leaf, _)");
     return TypeCaseKind::Wildcard;
 }
 
