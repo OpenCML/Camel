@@ -87,8 +87,11 @@ always produces the `Rule` value; a program that only wants the two sides can st
 `name__lhs` and `name__rhs` in the same module, but they are an implementation detail of the
 declaration, not the rule's public surface.
 
-The context of a rule (`rule fuse<f, g>(...)`) is read by the grammar and refused by the compiler
-(`ConstructNotSupported`) until generics land.
+The context of a rule is declared after its name the way a function declares its type parameters,
+`rule keep::<T>(x: T, y: T)` (design principles 5.5); the compiler makes one instance of the rule
+per type tuple where it is applied (`test/cases/modules/rules/generic_target.cml`). Names written
+directly after the rule's name, the older head `rule fuse<f, g>`, have no reading: the head is an
+ordinary syntax error that names the `(` it needs (`test/cases/parse/rules/no_context.cml`).
 
 A rule may state the numeric permissions it needs with `#requires(...)` before the declaration
 (design principles 7.2): a rule that rewrites `x * c1 + x * c2` into `x * (c1 + c2)` is only

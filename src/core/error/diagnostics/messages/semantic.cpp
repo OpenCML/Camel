@@ -221,14 +221,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::ConstructNotSupported,
-            {
-                "ConstructNotSupported",
-                "'{0}' is not supported: {1}.",
-                "The grammar accepts this construct, but the compiler does not implement it. Remove it; nothing in the language replaces it yet.",
-            },
-        },
-        {
             SemanticDiag::InvalidTypeArgument,
             {
                 "InvalidTypeArgument",
