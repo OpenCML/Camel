@@ -419,11 +419,22 @@ expect_exit = 0
 expect_stdout_contains = ["PASS"]
 timeout_ms = 120000
 
+[[tests]]
+name = "native.prelude_declaration_file_is_checked"
+desc = "The prelude's declaration file is the one source of the built-in signatures, so it is read with every program: a broken `signatures/globals.cml` in a scratch standard library (named by CAMEL_STD_LIB) fails `camel check` of a plain program with a diagnostic located in that file, and the real one checks clean."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/compile/native/prelude_declarations.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS"]
+timeout_ms = 120000
+
 #  ---- The `.cml` and the `.cmo` are one module ----
 
 [[tests]]
 name = "native.one_module"
-desc = "The declaration module of a C++ module is that module, not a second one: the C++ module's types (`Json`) and constants (`pi`) are written in the `.cml` without an import, a type the `.cml` exports is read by an importer beside the C++ ones, and every C++ name still answers through the one module."
+desc = "The declaration module of a C++ module is that module, not a second one: the C++ module's type (`Json`) is declared in the `.cml` without a right side and its constants (`pi`) are written there without an import, a type the `.cml` exports is read by an importer beside the C++ ones, and every C++ name still answers through the one module."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/compile/native/one_module.mjs"

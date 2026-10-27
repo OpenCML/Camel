@@ -198,6 +198,23 @@ class Context : public std::enable_shared_from_this<Context> {
     /// path was found in.
     module_ptr_t loadModuleFrom(const std::string &moduleName, const std::string &path, bool isCmo);
 
+  public:
+    /// The prelude's declaration file (`signatures/globals.cml` of a module root) is the one source
+    /// of the built-in signatures, so it is read with every program: a file that does not parse
+    /// fails the compile with its own diagnostics, located in that file. Read once. A tree without
+    /// the file (a tool run without a standard library) has nothing to read.
+    /// Answers the path of the file when it has errors (they are in the context's module list),
+    /// and the empty string otherwise.
+    std::string checkPreludeDeclarations();
+    /// The module of the prelude's declaration file once it was read, else null: a dependency of
+    /// every program.
+    module_ptr_t preludeModule() const { return preludeModule_; }
+
+  private:
+    bool preludeChecked_ = false;
+    std::string preludeProblem_;
+    module_ptr_t preludeModule_;
+
     Context(const EntryConfig &entryConf, const error::DiagsConfig &diagConf);
 
   public:

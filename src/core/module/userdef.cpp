@@ -109,6 +109,14 @@ bool UserDefinedModule::compile(CompileStage till) {
         CAMEL_LOG_INFO_S("Module", "Start compiling module '{}' from file '{}'.", name_, path_);
     }
 
+    if (stage_ == CompileStage::None && context_->mainModule().get() == this) {
+        // The built-in signatures are read with every program (the prelude's declaration file).
+        if (const std::string broken = context_->checkPreludeDeclarations(); !broken.empty()) {
+            diagnostics_->of(SemanticDiag::ImportedModuleHasErrors).commit("prelude", broken);
+            return false;
+        }
+    }
+
     if (stage_ < CompileStage::AST) {
         if (!parser_->ast()) {
             camel::utils::phase::Scope phaseScope("parse", name_);
