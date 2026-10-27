@@ -3,7 +3,6 @@
  * `fields T` and asks `is_plain::<F>()` about each field, so a struct of plain fields is plain
  * and the declaration guarded by it applies (design principles 5.5, 5.13).
  */
-module when_plain_struct
 
 import { is_plain } from types
 

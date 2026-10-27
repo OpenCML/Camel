@@ -4,7 +4,6 @@
 // where the inner `for` reads it and runs no round (docs/technical/39_loops.md 2a; the language
 // reference's "a rank-0 array has no first dimension and is not a sequence",
 // docs/language/en/06_expressions.md).
-module open_rank_round_iterate_round
 import tensor
 
 

@@ -14,7 +14,6 @@
 // `with` input, and a derivative rule can emit only ordinary inputs -- so no half rule is
 // written here. The first derivative is the real one; the second refuses by name at the
 // operator instead of printing a zero.
-module second_order_array_append_init_blocked
 
 import { grad } from autodiff
 

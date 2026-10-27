@@ -5,7 +5,6 @@
  * the captured values as arguments; gradients flow into captures that depend on the parameter.
  * The printed gradients were checked against central finite differences (float64).
  */
-module grad_closure
 import { reshape, sum, tanh } from tensor
 import { grad } from autodiff
 

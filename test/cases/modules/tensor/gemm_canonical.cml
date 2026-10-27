@@ -6,7 +6,6 @@
  * blocked GEMM (256), and the shapes leave edge tiles. In default mode tensor::fuse may put the
  * product on a library GEMM (7.3); gemm_canonical.library pins the licence bound for that path.
  */
-module gemm_canonical
 
 import { random, seed, sum, abs, relu, linear } from tensor
 

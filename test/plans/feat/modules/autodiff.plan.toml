@@ -1697,7 +1697,7 @@ case = "../../../cases/modules/autodiff/loop_grad_refuse_no_element_tangent.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 15
+expect_diagnostic_line = 14
 expect_output_contains = ["a 'loop' iterates over an array of type 'string[]'", "element type 'string' has none", "could not be scattered back"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -1743,7 +1743,7 @@ case = "../../../cases/modules/autodiff/loop_grad_refuse_slice_iterable.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 24
+expect_diagnostic_line = 23
 expect_output_contains = ["a 'loop' iterates over an array of type '", "whose rounds are its slices", "a round of that array is itself an array", "cannot scatter the gradient of a slice back into it yet"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -2003,9 +2003,9 @@ verify_script = """
 const text = input.normalized.output
 const errors = text.split('\n').filter((line) => line.includes('[Error]'))
 assert(errors.length === 1, 'expected one diagnostic (a run-time refusal stops the run at the first): ' + text)
-assert(errors[0].includes('grad_function_value_branch.cml:11:13'), 'the diagnostic is not located at the first call in source order (11:13): ' + text)
+assert(errors[0].includes('grad_function_value_branch.cml:10:13'), 'the diagnostic is not located at the first call in source order (11:13): ' + text)
 assert(!/[(]at [^)]*grad_function_value_branch[.]cml:11:13[)]/.test(text), 'the position is written into the message: ' + text)
-assert(text.includes('[the function value is chosen here at 10:13]'), 'missing the related position of the branch that chooses the function: ' + text)
+assert(text.includes('[the function value is chosen here at 9:13]'), 'missing the related position of the branch that chooses the function: ' + text)
 assert(text.includes('which function it calls is not evident where it is called'), 'missing: which function it calls is not evident where it is called in: ' + text)
 assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
 }
@@ -2025,14 +2025,14 @@ verify_script = """
 const text = input.normalized.output
 const errors = text.split('\n').filter((line) => line.includes('[Error]'))
 assert(errors.length === 1, 'expected one diagnostic: ' + text)
-assert(errors[0].includes('grad_function_value_branch.cml:11:13'), 'the diagnostic is not located at the first call in source order (11:13): ' + text)
+assert(errors[0].includes('grad_function_value_branch.cml:10:13'), 'the diagnostic is not located at the first call in source order (11:13): ' + text)
 assert(!/[(]at [^)]*grad_function_value_branch[.]cml:11:13[)]/.test(text), 'the position is written into the message: ' + text)
-assert(text.split('[the function value is chosen here at 10:13]').length === 3, 'each refused call must carry the branch that chooses the function as its related position: ' + text)
-const alsoRefused = text.match(/\[[^\]]*the function is chosen by a branch[^\]]*at 12:13\]/g) || []
+assert(text.split('[the function value is chosen here at 9:13]').length === 3, 'each refused call must carry the branch that chooses the function as its related position: ' + text)
+const alsoRefused = text.match(/\[[^\]]*the function is chosen by a branch[^\]]*at 11:13\]/g) || []
 assert(alsoRefused.length === 1, 'the second refused call is not named with its own position and its own reason: ' + text)
 assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
-assert(/the macro call is at [^ ]*[.]cml:17:13/.test(text), 'macro call not named: ' + text)
+assert(/the macro call is at [^ ]*[.]cml:16:13/.test(text), 'macro call not named: ' + text)
 }
 """
 timeout_ms = 12000
@@ -2050,9 +2050,9 @@ verify_script = """
 const text = input.normalized.output
 const errors = text.split('\n').filter((line) => line.includes('[Error]'))
 assert(errors.length === 1, 'expected one diagnostic: ' + text)
-assert(errors[0].includes('grad_function_value_static_branch.cml:11:22'), 'the diagnostic is not located at the call (11:22): ' + text)
+assert(errors[0].includes('grad_function_value_static_branch.cml:10:22'), 'the diagnostic is not located at the call (11:22): ' + text)
 assert(!/[(]at [^)]*grad_function_value_static_branch[.]cml:11:22[)]/.test(text), 'the position is written into the message: ' + text)
-assert(text.includes('[the function value is chosen here at 10:13]'), 'missing the related position of the branch that chooses the function: ' + text)
+assert(text.includes('[the function value is chosen here at 9:13]'), 'missing the related position of the branch that chooses the function: ' + text)
 assert(text.includes('which function it calls is not evident where it is called'), 'missing: which function it calls is not evident where it is called in: ' + text)
 assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
 }
@@ -2072,12 +2072,12 @@ verify_script = """
 const text = input.normalized.output
 const errors = text.split('\n').filter((line) => line.includes('[Error]'))
 assert(errors.length === 1, 'expected one diagnostic (the program has one refused call): ' + text)
-assert(errors[0].includes('grad_function_value_static_branch.cml:11:22'), 'the diagnostic is not located at the call (11:22): ' + text)
+assert(errors[0].includes('grad_function_value_static_branch.cml:10:22'), 'the diagnostic is not located at the call (11:22): ' + text)
 assert(!/[(]at [^)]*grad_function_value_static_branch[.]cml:11:22[)]/.test(text), 'the position is written into the message: ' + text)
-assert(text.includes('[the function value is chosen here at 10:13]'), 'missing the related position of the branch that chooses the function: ' + text)
+assert(text.includes('[the function value is chosen here at 9:13]'), 'missing the related position of the branch that chooses the function: ' + text)
 assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
-assert(/the macro call is at [^ ]*[.]cml:15:13/.test(text), 'macro call not named: ' + text)
+assert(/the macro call is at [^ ]*[.]cml:14:13/.test(text), 'macro call not named: ' + text)
 }
 """
 timeout_ms = 12000
@@ -2095,9 +2095,9 @@ verify_script = """
 const text = input.normalized.output
 const errors = text.split('\n').filter((line) => line.includes('[Error]'))
 assert(errors.length === 1, 'expected one diagnostic (a run-time refusal stops the run at the first): ' + text)
-assert(errors[0].includes('grad_function_value_parameter.cml:11:13'), 'the diagnostic is not located at the first call in source order (11:13): ' + text)
+assert(errors[0].includes('grad_function_value_parameter.cml:10:13'), 'the diagnostic is not located at the first call in source order (11:13): ' + text)
 assert(!/[(]at [^)]*grad_function_value_parameter[.]cml:11:13[)]/.test(text), 'the position is written into the message: ' + text)
-assert(text.includes('[the function value is chosen here at 10:11]'), 'missing the related position of the parameter the function value came in through: ' + text)
+assert(text.includes('[the function value is chosen here at 9:11]'), 'missing the related position of the parameter the function value came in through: ' + text)
 assert(text.includes('the function is a parameter, or a captured value, of the function being differentiated'), 'missing: the function is a parameter, or a captured value, of the function being differentiated in: ' + text)
 }
 """
@@ -2116,15 +2116,15 @@ verify_script = """
 const text = input.normalized.output
 const errors = text.split('\n').filter((line) => line.includes('[Error]'))
 assert(errors.length === 1, 'expected one diagnostic: ' + text)
-assert(errors[0].includes('grad_function_value_parameter.cml:11:13'), 'the diagnostic is not located at the first call in source order (11:13): ' + text)
+assert(errors[0].includes('grad_function_value_parameter.cml:10:13'), 'the diagnostic is not located at the first call in source order (11:13): ' + text)
 assert(!/[(]at [^)]*grad_function_value_parameter[.]cml:(11:13|12:22)[)]/.test(text), 'the position is written into the message: ' + text)
 assert(text.includes('the function is a parameter, or a captured value, of the function being differentiated'), 'missing: the function is a parameter, or a captured value, of the function being differentiated in: ' + text)
-assert(text.split('[the function value is chosen here at 10:11]').length === 3, 'each refused call must carry the parameter the value came in through as its related position: ' + text)
-const alsoRefused = text.match(/\[[^\]]*the function is a parameter[^\]]*at 12:22\]/g) || []
+assert(text.split('[the function value is chosen here at 9:11]').length === 3, 'each refused call must carry the parameter the value came in through as its related position: ' + text)
+const alsoRefused = text.match(/\[[^\]]*the function is a parameter[^\]]*at 11:22\]/g) || []
 assert(alsoRefused.length === 1, 'the second refused call is not named with its own position and its own reason: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
-assert(/the macro call is at [^ ]*[.]cml:17:13/.test(text), 'macro call not named: ' + text)
-assert(text.includes('[the function value is chosen here at 10:11]'), 'missing the related position of the parameter the function value came in through: ' + text)
+assert(/the macro call is at [^ ]*[.]cml:16:13/.test(text), 'macro call not named: ' + text)
+assert(text.includes('[the function value is chosen here at 9:11]'), 'missing the related position of the parameter the function value came in through: ' + text)
 }
 """
 timeout_ms = 12000
@@ -2142,9 +2142,9 @@ verify_script = """
 const text = input.normalized.output
 const errors = text.split('\n').filter((line) => line.includes('[Error]'))
 assert(errors.length === 1, 'expected one diagnostic: ' + text)
-assert(errors[0].includes('grad_function_value_container.cml:11:22'), 'the diagnostic is not located at the call (11:22): ' + text)
+assert(errors[0].includes('grad_function_value_container.cml:10:22'), 'the diagnostic is not located at the call (11:22): ' + text)
 assert(!/[(]at [^)]*grad_function_value_container[.]cml:11:22[)]/.test(text), 'the position is written into the message: ' + text)
-assert(text.includes('[the function value is chosen here at 10:13]'), 'missing the related position of the read that selects the function: ' + text)
+assert(text.includes('[the function value is chosen here at 9:13]'), 'missing the related position of the read that selects the function: ' + text)
 assert(text.includes('the function is read from a tuple, a struct or an array'), 'missing: the function is read from a tuple, a struct or an array in: ' + text)
 }
 """
@@ -2163,12 +2163,12 @@ verify_script = """
 const text = input.normalized.output
 const errors = text.split('\n').filter((line) => line.includes('[Error]'))
 assert(errors.length === 1, 'expected one diagnostic (the program has one refused call): ' + text)
-assert(errors[0].includes('grad_function_value_container.cml:11:22'), 'the diagnostic is not located at the call (11:22): ' + text)
+assert(errors[0].includes('grad_function_value_container.cml:10:22'), 'the diagnostic is not located at the call (11:22): ' + text)
 assert(!/[(]at [^)]*grad_function_value_container[.]cml:11:22[)]/.test(text), 'the position is written into the message: ' + text)
-assert(text.includes('[the function value is chosen here at 10:13]'), 'missing the related position of the read that selects the function: ' + text)
+assert(text.includes('[the function value is chosen here at 9:13]'), 'missing the related position of the read that selects the function: ' + text)
 assert(text.includes('the function is read from a tuple, a struct or an array'), 'missing: the function is read from a tuple, a struct or an array in: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
-assert(/the macro call is at [^ ]*[.]cml:15:13/.test(text), 'macro call not named: ' + text)
+assert(/the macro call is at [^ ]*[.]cml:14:13/.test(text), 'macro call not named: ' + text)
 }
 """
 timeout_ms = 12000
@@ -2250,12 +2250,12 @@ verify_script = """
 const text = input.normalized.output
 const errors = text.split('\n').filter((line) => line.includes('[Error]'))
 assert(errors.length === 1, 'expected one diagnostic: ' + text)
-assert(errors[0].includes('grad_function_value_recursion.cml:7:52'), 'the diagnostic is not located at the call (7:52): ' + text)
+assert(errors[0].includes('grad_function_value_recursion.cml:6:52'), 'the diagnostic is not located at the call (7:52): ' + text)
 assert(!/[(]at [^)]*grad_function_value_recursion[.]cml:7:52[)]/.test(text), 'the position is written into the message: ' + text)
 assert(text.includes('the function is a parameter of'), 'missing: the function is a parameter of in: ' + text)
 assert(text.includes('iterate'), 'missing: iterate in: ' + text)
 assert(text.includes('a recursive function that passes it on to itself'), 'missing: a recursive function that passes it on to itself in: ' + text)
-assert(text.includes('[the function value is chosen here at 6:14]'), 'missing the related position of the parameter the function value came in through: ' + text)
+assert(text.includes('[the function value is chosen here at 5:14]'), 'missing the related position of the parameter the function value came in through: ' + text)
 }
 """
 timeout_ms = 12000
@@ -2273,14 +2273,14 @@ verify_script = """
 const text = input.normalized.output
 const errors = text.split('\n').filter((line) => line.includes('[Error]'))
 assert(errors.length === 1, 'expected one diagnostic (the program has one refused call): ' + text)
-assert(errors[0].includes('grad_function_value_recursion.cml:7:52'), 'the diagnostic is not located at the call (7:52): ' + text)
+assert(errors[0].includes('grad_function_value_recursion.cml:6:52'), 'the diagnostic is not located at the call (7:52): ' + text)
 assert(!/[(]at [^)]*grad_function_value_recursion[.]cml:7:52[)]/.test(text), 'the position is written into the message: ' + text)
 assert(text.includes('the function is a parameter of'), 'missing: the function is a parameter of in: ' + text)
 assert(text.includes('iterate'), 'missing: iterate in: ' + text)
 assert(text.includes('a recursive function that passes it on to itself'), 'missing: a recursive function that passes it on to itself in: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
-assert(/the macro call is at [^ ]*[.]cml:17:13/.test(text), 'macro call not named: ' + text)
-assert(text.includes('[the function value is chosen here at 6:14]'), 'missing the related position of the parameter the function value came in through: ' + text)
+assert(/the macro call is at [^ ]*[.]cml:16:13/.test(text), 'macro call not named: ' + text)
+assert(text.includes('[the function value is chosen here at 5:14]'), 'missing the related position of the parameter the function value came in through: ' + text)
 }
 """
 timeout_ms = 12000
@@ -2298,9 +2298,9 @@ verify_script = """
 const text = input.normalized.output
 const errors = text.split('\n').filter((line) => line.includes('[Error]'))
 assert(errors.length === 1, 'expected one diagnostic: ' + text)
-assert(errors[0].includes('grad_function_value_passed.cml:15:12'), 'the diagnostic is not located at the call (15:12): ' + text)
+assert(errors[0].includes('grad_function_value_passed.cml:14:12'), 'the diagnostic is not located at the call (15:12): ' + text)
 assert(!/[(]at [^)]*grad_function_value_passed[.]cml:15:12[)]/.test(text), 'the position is written into the message: ' + text)
-assert(text.includes('[the function value is chosen here at 14:13]'), 'missing the related position of the branch that chooses the function: ' + text)
+assert(text.includes('[the function value is chosen here at 13:13]'), 'missing the related position of the branch that chooses the function: ' + text)
 assert(text.includes('cannot differentiate through this call of'), 'missing: cannot differentiate through this call of in: ' + text)
 assert(text.includes('call0'), 'missing: call0 in: ' + text)
 assert(text.includes('a function value that depends on a differentiated parameter'), 'missing: a function value that depends on a differentiated parameter in: ' + text)
@@ -2322,15 +2322,15 @@ verify_script = """
 const text = input.normalized.output
 const errors = text.split('\n').filter((line) => line.includes('[Error]'))
 assert(errors.length === 1, 'expected one diagnostic (the program has one refused call): ' + text)
-assert(errors[0].includes('grad_function_value_passed.cml:15:12'), 'the diagnostic is not located at the call (15:12): ' + text)
+assert(errors[0].includes('grad_function_value_passed.cml:14:12'), 'the diagnostic is not located at the call (15:12): ' + text)
 assert(!/[(]at [^)]*grad_function_value_passed[.]cml:15:12[)]/.test(text), 'the position is written into the message: ' + text)
-assert(text.includes('[the function value is chosen here at 14:13]'), 'missing the related position of the branch that chooses the function: ' + text)
+assert(text.includes('[the function value is chosen here at 13:13]'), 'missing the related position of the branch that chooses the function: ' + text)
 assert(text.includes('cannot differentiate through this call of'), 'missing: cannot differentiate through this call of in: ' + text)
 assert(text.includes('call0'), 'missing: call0 in: ' + text)
 assert(text.includes('a function value that depends on a differentiated parameter'), 'missing: a function value that depends on a differentiated parameter in: ' + text)
 assert(text.includes('the function is chosen by a branch at run time'), 'missing: the function is chosen by a branch at run time in: ' + text)
 assert(text.includes('could not be evaluated by std::macro'), 'not a macro error: ' + text)
-assert(/the macro call is at [^ ]*[.]cml:19:13/.test(text), 'macro call not named: ' + text)
+assert(/the macro call is at [^ ]*[.]cml:18:13/.test(text), 'macro call not named: ' + text)
 }
 """
 timeout_ms = 12000
@@ -2601,7 +2601,7 @@ kind = "negative"
 case = "../../../cases/modules/autodiff/grad_refuse_no_with.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 1
-expect_diagnostic_line = 10
+expect_diagnostic_line = 9
 expect_output_contains = ["SemanticDiag::NotDifferentiable", "it has no `with` parameter"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -2613,7 +2613,7 @@ kind = "negative"
 case = "../../../cases/modules/autodiff/grad_refuse_var.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 1
-expect_diagnostic_line = 12
+expect_diagnostic_line = 11
 expect_output_contains = ["SemanticDiag::NotDifferentiable", "first `with` parameter is a `var`", "design principles 3.5"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -2638,7 +2638,7 @@ kind = "negative"
 case = "../../../cases/modules/autodiff/grad_refuse_string.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 1
-expect_diagnostic_line = 11
+expect_diagnostic_line = 10
 expect_output_contains = ["SemanticDiag::NotDifferentiable", "has type string, which has no gradient"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -2650,7 +2650,7 @@ kind = "negative"
 case = "../../../cases/modules/autodiff/grad_refuse_function.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 1
-expect_diagnostic_line = 11
+expect_diagnostic_line = 10
 expect_output_contains = ["SemanticDiag::NotDifferentiable", "which has no gradient"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -2662,7 +2662,7 @@ kind = "negative"
 case = "../../../cases/modules/autodiff/grad_refuse_struct.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 1
-expect_diagnostic_line = 13
+expect_diagnostic_line = 12
 expect_output_contains = ["SemanticDiag::NotDifferentiable", "has type Plain, whose field `s` has type string, which has no gradient"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -2674,7 +2674,7 @@ kind = "negative"
 case = "../../../cases/modules/autodiff/grad_refuse_tuple.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 1
-expect_diagnostic_line = 20
+expect_diagnostic_line = 19
 expect_output_contains = ["SemanticDiag::NotDifferentiable", "whose element 1 has type string, which has no gradient"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -2712,7 +2712,7 @@ kind = "negative"
 case = "../../../cases/modules/autodiff/grad_refuse_return.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 1
-expect_diagnostic_line = 11
+expect_diagnostic_line = 10
 expect_output_contains = ["SemanticDiag::NotDifferentiable", "it returns int, not a float"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -2750,7 +2750,7 @@ kind = "negative"
 case = "../../../cases/modules/autodiff/with_grad_old_name.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 1
-expect_diagnostic_line = 7
+expect_diagnostic_line = 6
 expect_output_contains = ["SemanticDiag::UnresolvedReference", "value_and_grad"]
 expect_output_not_contains = ["retired", "use `with_grad`"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -2807,7 +2807,7 @@ case = "../../../cases/modules/autodiff/err_vjp_annotation.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::InvalidAnnotation"
-expect_diagnostic_line = 10
+expect_diagnostic_line = 9
 expect_diagnostic_column = 1
 expect_output_contains = ["#vjp(rule)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -2853,7 +2853,7 @@ case = "../../../cases/modules/autodiff/discrete_zero_refuse.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 16
+expect_diagnostic_line = 15
 expect_diagnostic_column = 17
 expect_output_contains = ["is put into a Map or a Set 'Map<int, float>'", "Gradients do not flow through it"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -3054,7 +3054,7 @@ case = "../../../cases/modules/autodiff/refuse_container_reshape.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 26
+expect_diagnostic_line = 25
 expect_output_contains = ["cannot differentiate operator 'tensor:reshape'", "no operator carries a tensor's gradient back into one", "type 'float[][]'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -3067,7 +3067,7 @@ case = "../../../cases/modules/autodiff/refuse_container_new.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 21
+expect_diagnostic_line = 20
 expect_output_contains = ["cannot differentiate operator 'tensor:new'", "no operator carries a tensor's gradient back into one", "type 'float[][]'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -3080,7 +3080,7 @@ case = "../../../cases/modules/autodiff/refuse_container_concat.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 27
+expect_diagnostic_line = 26
 expect_output_contains = ["cannot differentiate operator 'tensor:concat'", "no operator carries a tensor's gradient back into one", "type 'float[][]'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -3126,7 +3126,7 @@ case = "../../../cases/modules/autodiff/refuse_gradient_element_type_rule.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::GradientElementTypeMismatch"
-expect_diagnostic_line = 31
+expect_diagnostic_line = 30
 expect_output_contains = ["of type 'float[]'", "element type 'f32'", "the derivative rule produced it"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

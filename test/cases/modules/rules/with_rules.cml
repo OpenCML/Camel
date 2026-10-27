@@ -7,7 +7,6 @@
  * function of them and reads them by name, `name<value>` binds them and gives the `Rule`, and a
  * rule whose parameters all have a default is a `Rule` by its name alone.
  */
-module with_rules
 import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
 import { rewrite } from rewrite
 

@@ -43,8 +43,6 @@ std::string to_string(LoadType type) {
 
 const string Load::geneCode() const { return ""; }
 
-const string ModuleLoad::geneCode() const { return "module " + ref_.toString(); }
-
 const string ImportLoad::geneCode() const {
     if (path_.empty()) {
         return "import";

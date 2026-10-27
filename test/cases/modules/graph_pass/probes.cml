@@ -1,4 +1,3 @@
-module probes
 import { Program, Node, Graph, graphs, name, nodes, inputs, op, op_name, constant, type_of, type_name, open, replace, erase, commit, abort } from graph
 
 func opText(n: Node): string {

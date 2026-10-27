@@ -76,7 +76,7 @@ await withServer(async (ls) => {
     await exercise(uri, far, 'empty document')
 
     // ---- half-written text ----
-    const halves = ['func', 'func main(', 'module main\n\nfunc main() sync {\n    let x = ',
+    const halves = ['func', 'func main(', 'func main() sync {\n    let x = ',
         'import { } from', '}}}}', '((((((((', "let s = 'unterminated", '/* open comment',
         'let a = 1 +\n', 'type T = {', 'match x {', '@', 'x.', 'a::', 'func f(x: ']
     for (const [i, text] of halves.entries()) {
@@ -98,9 +98,7 @@ await withServer(async (ls) => {
     // is reported once, where it is, and nothing else is; the outline still has every
     // declaration, and navigation works in the functions around the errors.
     {
-        const broken = `module main
-
-func first(a: int): int {
+        const broken = `func first(a: int): int {
     let x = (a + 1
     return x
 }
@@ -123,7 +121,7 @@ func main(): int sync {
         uri = ls.open('recovery.cml', broken)
         pushed = await ls.diagnosticsFor(uri)
         const lines = pushed.diagnostics.map((d) => d.range.start.line)
-        checkEq(JSON.stringify(lines), JSON.stringify([4, 8]),
+        checkEq(JSON.stringify(lines), JSON.stringify([2, 6]),
             'two independent syntax errors are each reported once', pushed.diagnostics)
         check(/'\)'/.test(pushed.diagnostics[0].message) && /'then'/.test(pushed.diagnostics[1].message),
             'each says what is missing', pushed.diagnostics.map((d) => d.message))
@@ -149,9 +147,7 @@ func main(): int sync {
     // ---- positions in UTF-16 ----
     // Line 3 has Chinese text (3 bytes, 1 unit each) and emoji (4 bytes, 2 units each) before
     // the names that are asked about.
-    const src = marked(`module main
-
-func main() sync {
+    const src = marked(`func main() sync {
     let zh = '中文😀'; let /*w*/wide = '😀😀'; let after = /*u*/wide
     println(/*a*/after, undefined_name)
     return 0
@@ -160,9 +156,9 @@ func main() sync {
     uri = ls.open('unicode.cml', src.text)
     pushed = await ls.diagnosticsFor(uri)
     checkEq(pushed.diagnostics.length, 1, 'one error in the unicode document', pushed.diagnostics)
-    const line4 = src.text.split('\n')[4]
+    const line4 = src.text.split('\n')[2]
     const start = line4.indexOf('undefined_name')
-    checkEq(fmtRange(pushed.diagnostics[0].range), `4:${start}-4:${start + 'undefined_name'.length}`,
+    checkEq(fmtRange(pushed.diagnostics[0].range), `2:${start}-2:${start + 'undefined_name'.length}`,
         'the range of a diagnostic on a plain line')
     const span = (pos, length) => fmtRange({ start: pos, end: { line: pos.line, character: pos.character + length } })
     const h = await ls.request('textDocument/hover', { textDocument: { uri }, position: src.at('u') })
@@ -176,9 +172,7 @@ func main() sync {
     })
     checkEq(d.length, 2, 'references of a name declared after wide characters', d)
     // A diagnostic after wide characters on its own line.
-    const src2 = marked(`module main
-
-func main() sync {
+    const src2 = marked(`func main() sync {
     let s = '日本語😀'; println(/*e*/missing)
     return 0
 }
@@ -188,18 +182,18 @@ func main() sync {
     checkEq(fmtRange(pushed.diagnostics[0].range), span(src2.at('e'), 7),
         'the range of a diagnostic after Chinese text and an emoji')
     // A position inside a surrogate pair, and an incremental edit that replaces the pair.
-    const emojiAt = src2.text.split('\n')[3].indexOf('😀')
-    await exercise(uri, [{ line: 3, character: emojiAt + 1 }], 'inside a surrogate pair')
+    const emojiAt = src2.text.split('\n')[1].indexOf('😀')
+    await exercise(uri, [{ line: 1, character: emojiAt + 1 }], 'inside a surrogate pair')
     ls.notify('textDocument/didChange', {
         textDocument: { uri, version: 3 },
         contentChanges: [{
-            range: { start: { line: 3, character: emojiAt }, end: { line: 3, character: emojiAt + 2 } },
+            range: { start: { line: 1, character: emojiAt }, end: { line: 1, character: emojiAt + 2 } },
             text: '语',
         }],
     })
     pushed = await ls.diagnosticsFor(uri, 3)
     checkEq(fmtRange(pushed.diagnostics[0].range),
-        span({ line: 3, character: src2.at('e').character - 1 }, 7),
+        span({ line: 1, character: src2.at('e').character - 1 }, 7),
         'replacing an emoji by a range edit moves what follows by one unit')
     await exercise(uri, far, 'unicode document')
 
@@ -219,11 +213,11 @@ func main() sync {
     // A lone surrogate is a legal JSON escape that is not text: the frame is refused or the
     // document diagnosed, and either way the server goes on.
     uri = ls.open('surrogate.cml',
-        'module main\n\nfunc main() sync {\n    let s = "' + String.fromCharCode(0xd83d) + '"\n    return nope\n}\n')
-    await exercise(uri, [{ line: 3, character: 14 }], 'lone surrogate')
+        'func main() sync {\n    let s = "' + String.fromCharCode(0xd83d) + '"\n    return nope\n}\n')
+    await exercise(uri, [{ line: 1, character: 14 }], 'lone surrogate')
 
     // ---- a very large document ----
-    let big = 'module main\n\n'
+    let big = ''
     for (let i = 0; i < 4000; i++) {
         big += `func f${i}(x: int): int {\n    let y = x + ${i}\n    return y * 2\n}\n\n`
     }
@@ -238,7 +232,7 @@ func main() sync {
     d = await ls.request('textDocument/definition', {
         textDocument: { uri }, position: { line: bigLines - 3, character: 22 },
     }, 100000)
-    checkEq(d.length === 1 && d[0].range.start.line, 2 + 3999 * 5, 'definition across the large document')
+    checkEq(d.length === 1 && d[0].range.start.line, 3999 * 5, 'definition across the large document')
     const symbols = await ls.request('textDocument/documentSymbol', { textDocument: { uri } }, 100000)
     checkEq(symbols.length, 4001, 'its outline')
     // A burst of edits is compiled once: only the last version is published.
@@ -263,7 +257,7 @@ func main() sync {
     ls.notify('textDocument/didClose', { textDocument: { uri } })
 
     // ---- the server is still well ----
-    uri = ls.open('ok.cml', "module main\n\nfunc main() sync {\n    println('ok')\n    return 0\n}\n")
+    uri = ls.open('ok.cml', "func main() sync {\n    println('ok')\n    return 0\n}\n")
     pushed = await ls.diagnosticsFor(uri)
     checkEq(pushed.diagnostics, [], 'after all of this a correct document has no diagnostics')
 })

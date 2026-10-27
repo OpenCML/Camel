@@ -2,7 +2,6 @@
 /// then the nearest tagged region, then the function body; an untagged graph is the host.
 /// `tiles::compile` prints the answer for every graph as `TILES_PLACEMENT`; the pass does not
 /// switch an executor on it yet, and these graphs need not run for the answer to be printed.
-module tiles_placement_query
 import tensor
 
 

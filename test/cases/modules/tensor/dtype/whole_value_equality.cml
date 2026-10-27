@@ -7,7 +7,6 @@
  * array of the same shape as its operands; that one is read as the numbers it stands for once the
  * conversion is written (design principles 5.1).
  */
-module whole_value_equality
 
 import { reshape } from tensor
 

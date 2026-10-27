@@ -5,7 +5,6 @@
  * element type of their array (`stdlib/random.cml`).
  * Every call reaches the C++ operator.
  */
-module random_declaration_import
 
 import { Key, seed, rand, randn, randint, choice, sample, shuffle, key, split, permutation } from random
 

@@ -1,7 +1,6 @@
 // A recursive function that touches nothing keeps its `pure`: the fixed point starts from the
 // empty set and nothing is ever added. Two functions that only call each other, and a recursion that
 // writes no clause stay accepted.
-module ok_recursive_pure
 
 func fact(n: int): int pure {
     return if n <= 1 then 1 else n * fact(n - 1)

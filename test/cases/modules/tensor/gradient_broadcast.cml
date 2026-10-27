@@ -1,4 +1,3 @@
-module gradient_broadcast
 import { zeros, sum, abs } from tensor
 import { grad } from autodiff
 type Pair = { a: f32[..], b: f32[..] }

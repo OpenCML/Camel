@@ -6,7 +6,6 @@
  * column, not a node attribute; `#strict` is a tag of the code and reaches the nodes as an
  * attribute, which is where the readers of a node's effective permissions look for it.
  */
-module permissions
 
 func plain(x: float): float {
     return x * 1.0

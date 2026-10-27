@@ -4,7 +4,6 @@
  * written with, so a scalar converts as `f32(x)` does and an array elementwise (design
  * principles 5.1).
  */
-module conversions_type_variable
 
 import { ones } from tensor
 

@@ -2,7 +2,6 @@
 // is negative (design principles 4.2; the rule on
 // the rule). It is the array form of `a..b` with a step: `a..b` stays the one
 // spelling of unit step, and the stepped sequence is this call.
-module h426_range_step
 
 func main(): int sync {
     // A positive step: a, a + step, ... below b, and the last element is the last one below b.

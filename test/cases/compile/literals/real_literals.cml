@@ -12,7 +12,6 @@
  * sum of the two doubles (which lands on 0.30000000000000004). Hence `0.1 + 0.2 == 0.3` is
  * true and `0.1 + 0.2 == 0.30000000000000004` is false; they were the other way round before.
  */
-module real_literals
 
 func main(): int sync {
     println('{:.17g}'->format<0.7747>)

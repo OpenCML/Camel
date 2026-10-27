@@ -3,7 +3,6 @@
  * `case error e` reads the error out of a `T!`, and over an `int` there is no mark to take
  * apart. A `match` over the value reads it with a literal pattern or `_` instead.
  */
-module err_bind_plain
 
 func f(n: int): int {
     return match n {

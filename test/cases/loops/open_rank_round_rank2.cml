@@ -3,7 +3,6 @@
 // principles 5.4); at run time each round is the row, and `sum(v)` reads that row's sum. The row
 // sums are the proof that the round is read as an array of the row's elements and not as the
 // scalar the rank-1 case of open_rank_round_rank1.cml holds.
-module open_rank_round_rank2
 
 import { sum } from tensor
 

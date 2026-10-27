@@ -13,7 +13,6 @@
  * extraction and after it, and how many string constants nothing reads; with the boundary
  * implemented the extraction deletes the added constant and the graph keeps its original size.
  */
-module extract_boundary
 import {
     Program, Node, Graph, graphs, nodes, name, users, is_constant, type_of, type_name, constant
 } from graph

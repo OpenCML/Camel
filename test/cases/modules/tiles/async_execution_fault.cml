@@ -1,5 +1,4 @@
 // No download observes this value: the public run_preferred_resident call itself must report its fault.
-module tiles_async_execution_fault
 import { upload, run_preferred_resident } from tiles
 func divide(a: float, b: float): float { return a / b }
 func main(): int sync {

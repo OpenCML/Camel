@@ -5,7 +5,6 @@
  * `string` member is refused, and the diagnostic names that member, by position, so the
  * message says which member stands in the way.
  */
-module grad_refuse_tuple
 import { reshape, sum } from tensor
 import { grad } from autodiff
 

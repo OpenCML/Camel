@@ -3,7 +3,6 @@
 /// that produces it, a call's parameters follow their arguments' blocks (the same block, no
 /// copy), and a loop's state stays where it was made. `step_host` is the same program without
 /// the tags, so the numbers are the host path's.
-module tiles_resident_loop
 
 import { reshape, sum } from tensor
 

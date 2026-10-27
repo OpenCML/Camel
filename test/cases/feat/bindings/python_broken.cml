@@ -3,7 +3,6 @@
  * Nothing here is ever run; the file exists so that a Python caller has a compile failure with a
  * position to turn into an exception.
  */
-module python_broken
 
 export func doubled(x: int): int {
     return missing_name(x) * 2

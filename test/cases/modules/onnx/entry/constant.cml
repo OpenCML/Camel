@@ -1,7 +1,6 @@
 /**
  * A `main` without parameters computes from constants: the model has no inputs.
  */
-module constant
 
 import { tanh, reshape } from tensor
 

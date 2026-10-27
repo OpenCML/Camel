@@ -2,7 +2,6 @@
  * The module that declares the type; it deliberately offers no operator, so the operator has
  * to come from somewhere else (or not at all).
  */
-module two_models
 
 export type Box = { v: int }
 

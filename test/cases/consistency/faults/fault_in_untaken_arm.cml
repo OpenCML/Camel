@@ -2,7 +2,6 @@
  * A faulting expression in the arm that is not taken never runs, also when both arms are
  * written with constants.
  */
-module fault_in_untaken_arm
 
 func safe(a: int, b: int): int {
     return if b == 0 then 0 else a / b

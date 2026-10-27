@@ -1,5 +1,3 @@
-module failed_evaluation
-
 // A macro call whose arguments are constants is evaluated by std::macro. Here the evaluation
 // fails (division by zero, after an effect). That is a run-time fault at the call (line 19),
 // with the reason; the program does not run. Without std::macro the call is an ordinary call

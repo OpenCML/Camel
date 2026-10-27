@@ -378,7 +378,6 @@ RUN_EXIT=0
 <!-- camel-snippet: fragment: 仓库外探针（跑在 /tmp，逐字记录当时的判定输出；它演示的是"今天"的判定面，不是页面示例） -->
 ```camel
 // /tmp/h247_probe.cml
-module h247_probe
 import { check } from rewrite
 import { is_integer } from types
 
@@ -397,7 +396,6 @@ func main(): int sync {
 <!-- camel-snippet: fragment: 仓库外探针（跑在 /tmp，逐字记录当时的判定输出；它演示的是"今天"的判定面，不是页面示例） -->
 ```camel
 // /tmp/h247_probe2.cml（许可面）
-module h247_probe2
 import { check } from rewrite
 import { Tensor } from tensor
 

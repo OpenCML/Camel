@@ -4,7 +4,6 @@
  * anywhere. It is one rule with an `if` written without an `else` (design principles 3.7).
  * The first function is the program the ruling was written from, verbatim.
  */
-module arm_cell_void
 
 func visit(i: int): void {
     var x: int = i

@@ -1,4 +1,3 @@
-module tiles_region_execution
 import { sum, reshape } from tensor
 import { regions } from tiles
 func chain(x: f32[2, 3]): f32[2,3] {

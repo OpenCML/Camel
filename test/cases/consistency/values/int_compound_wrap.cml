@@ -3,7 +3,6 @@
  * ends of int and i32, and the one quotient that does not fit, the smallest value divided by
  * -1, with `/=` and `%=` (no hardware trap).
  */
-module int_compound_wrap
 
 func main(): int sync {
     let half = 4611686018427387904

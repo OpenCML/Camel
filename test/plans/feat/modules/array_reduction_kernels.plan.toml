@@ -124,5 +124,5 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::WhenDeclarationOverlap"
 expect_diagnostic_code = "0x030001E0"
-expect_output_contains = ["array_sum_kernel_overlap.cml:22", "Two declarations of 'sum_kernel' both apply to the type 'int'", "(xs: T[]) => T — when is_integer::<T>()", "(xs: T[]) => T — when is_numeric::<T>()"]
+expect_output_contains = ["array_sum_kernel_overlap.cml:21", "Two declarations of 'sum_kernel' both apply to the type 'int'", "(xs: T[]) => T — when is_integer::<T>()", "(xs: T[]) => T — when is_numeric::<T>()"]
 timeout_ms = 20000

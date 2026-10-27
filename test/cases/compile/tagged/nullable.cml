@@ -2,7 +2,6 @@
  * `T?` (design principles 3.8): a value that may be null. It is opened by `a ?? b` and by
  * `match` with `case null`; the right-hand side of `??` is evaluated only when it is taken.
  */
-module nullable
 
 func positive(x: int): int? {
     if x > 0 then { return x } else { return null }

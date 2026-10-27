@@ -2,7 +2,6 @@
  * Shape diagnostic of `layer_norm`: statically known shapes conflict, so compilation fails at the
  * call with both shapes in the reason.
  */
-module shape_diag_layer_norm
 
 import { zeros, ones, layer_norm } from tensor
 

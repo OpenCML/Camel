@@ -1,7 +1,6 @@
 /**
  * A call that none of the overloads takes is rejected at the call, with the overloads listed.
  */
-module no_match
 
 func f(x: int): string {
     return 'int'

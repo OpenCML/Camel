@@ -1,7 +1,6 @@
 /**
  * Tail-recursive accumulator used to check JIT stability on deep recursion and large integer propagation.
  */
-module jit_tail_accumulate
 
 func sum(n: int, a: int, d: int, acc: int): int {
     return if n == 0 then acc else sum(n - 1, a + d, d, acc + a)

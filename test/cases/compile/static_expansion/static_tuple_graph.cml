@@ -3,7 +3,6 @@
  * reads only its type and `ts.[j]` reads the argument node directly. The graph of `main` is the
  * hand-written sum of the three arguments: no FILL for `ts` and no ACCS for its elements.
  */
-module static_tuple_graph
 
 func sum(..ts): int {
     return static loop acc = 0 for j in indices ts do acc + ts.[j]

@@ -1,5 +1,4 @@
 /** Coefficient arithmetic wraps at the operand width, including compile-time combination. */
-module algebra_integer
 
 func coefficients(n: int): int { return n * 3 + n * 5 }
 func chain(n: int): int { return (n * 3) * 2 }

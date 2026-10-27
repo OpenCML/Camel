@@ -37,13 +37,13 @@ const all = (line, value) => {
   assert(nodes.length > 0, `no OPER node at line ${line}`)
   for (const l of nodes) assert(numeric(l) === value, `line ${line}: numeric="${numeric(l)}", expected "${value}": ${l}`)
 }
-all(10, '')                          // plain: called from annotated code, keeps none
-all(15, 'reassociate, contract')     // fused
-all(20, 'reassociate')               // the lambda in nested
-all(21, 'reassociate')               // the condition and the arms of the if in nested
-all(24, 'reassociate, contract')     // the block of nested: its grant and the function's
-all(32, 'finite_math')               // the annotated block of blocky
-all(29, '')                          // blocky outside its block
+all(9, '')                          // plain: called from annotated code, keeps none
+all(14, 'reassociate, contract')     // fused
+all(19, 'reassociate')               // the lambda in nested
+all(20, 'reassociate')               // the condition and the arms of the if in nested
+all(23, 'reassociate, contract')     // the block of nested: its grant and the function's
+all(31, 'finite_math')               // the annotated block of blocky
+all(28, '')                          // blocky outside its block
 }
 """
 
@@ -58,9 +58,9 @@ verify_script = """
 ({ input, assert }) => {
 const opers = input.normalized.stdout.split('\n').filter((l) => l.includes('type="OPER"'))
 const at = (line) => opers.filter((l) => l.includes(`span="${line}:`))
-assert(at(10).length > 0 && at(10).every((l) => !l.includes('numeric=')), 'inlined plain must have no permissions')
-assert(at(20).length > 0 && at(20).every((l) => l.includes('numeric="reassociate"')), 'the inlined lambda keeps reassociate')
-assert(at(24).every((l) => l.includes('numeric="reassociate, contract"')), 'the block keeps its permissions')
+assert(at(9).length > 0 && at(9).every((l) => !l.includes('numeric=')), 'inlined plain must have no permissions')
+assert(at(19).length > 0 && at(19).every((l) => l.includes('numeric="reassociate"')), 'the inlined lambda keeps reassociate')
+assert(at(23).every((l) => l.includes('numeric="reassociate, contract"')), 'the block keeps its permissions')
 }
 """
 
@@ -147,7 +147,7 @@ kind = "negative"
 case = "../../../cases/compile/numeric/invalid.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["The annotation '@kernelish' is not accepted", "invalid.cml:8:1", "The annotation '@numeric' is not accepted", "invalid.cml:11:1", "#[reassociate]"]
+expect_output_contains = ["The annotation '@kernelish' is not accepted", "invalid.cml:7:1", "The annotation '@numeric' is not accepted", "invalid.cml:10:1", "#[reassociate]"]
 
 [[tests]]
 name = "library_gemm"

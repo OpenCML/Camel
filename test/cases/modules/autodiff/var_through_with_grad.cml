@@ -6,7 +6,6 @@
  *   with_grad: value 2 cnt 2
  *   with_grad: value 3 cnt 3
  */
-module var_through_with_grad
 import { reshape, sum } from tensor
 import { with_grad } from autodiff
 

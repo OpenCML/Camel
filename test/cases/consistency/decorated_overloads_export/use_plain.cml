@@ -1,5 +1,3 @@
-module use_plain
-
 import lib_plain
 
 func main(): int sync {

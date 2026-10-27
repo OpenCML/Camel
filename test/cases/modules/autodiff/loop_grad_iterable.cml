@@ -6,7 +6,6 @@
  * 1 + 2 + 3 = 6 at w = 2 and the value is 12. This used to be refused as an array with no
  * per-round scatter.
  */
-module loop_grad_iterable
 
 import { grad } from autodiff
 

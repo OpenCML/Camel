@@ -2,7 +2,6 @@
  * Expressions the front end writes twice: test::writings finds that the two writings of
  * `a + 1` are one value, and what follows from merging two parameters.
  */
-module congruence
 
 func f(a: int, b: int): int {
     let p = a + 1

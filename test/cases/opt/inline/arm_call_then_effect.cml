@@ -10,7 +10,6 @@
  * `timed` itself keeps its tail call (the recursion in its arm is the last
  * thing that arm does): 50000 levels must not hit the recursion limit.
  */
-module arm_call_then_effect
 
 import { now } from time
 

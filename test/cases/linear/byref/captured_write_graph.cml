@@ -8,7 +8,6 @@
  *   reads()    look() is recursive and only reads `limit`:   no edge between its two calls
  *   arms()     an arm writes the local `c`, then c is read:  JOIN -> the read of c
  */
-module captured_write_graph
 
 var a = 0
 var b = 0

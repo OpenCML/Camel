@@ -1,6 +1,5 @@
 // `map` over 20000 elements, each a tail-recursive loop of some tens of calls (the Collatz
 // sequence of the element): elements of a few microseconds, between map_light and map_heavy.
-module map_medium
 
 func collatz_steps(n: int, steps: int): int {
     return if n == 1 then steps

@@ -84,10 +84,9 @@ def main() -> int:
         body += [f"    let m{k} = merge_sorted_arrays({lit(ref, is_float)}, {lit(other, is_float)})", f"    println('#', m{k})"]
         expected.append(sorted(ref + other))
     names = ", ".join(COPYING + ["merge_sorted_arrays"])
-    small = f"module array_reference\nimport {{ {names} }} from array\n\nfunc main(): int sync {{\n" + "\n".join(body) + "\n    return 0\n}\n"
+    small = f"import {{ {names} }} from array\n\nfunc main(): int sync {{\n" + "\n".join(body) + "\n    return 0\n}\n"
     n = 200000
-    large = f"""module array_large
-import {{ sort, merge_sort }} from array
+    large = f"""import {{ sort, merge_sort }} from array
 
 func main(): int sync {{
     let up = 0..{n}

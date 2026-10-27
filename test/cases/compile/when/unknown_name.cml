@@ -3,7 +3,6 @@
  * where ordinary parameters do not exist yet (design principles 4.4). It is reported, not
  * treated as false.
  */
-module when_unknown_name
 
 func bad(x: int): int when x {
     return x

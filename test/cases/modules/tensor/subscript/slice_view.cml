@@ -3,7 +3,6 @@
  * along the first axis, a view sharing the block of a tensor of rank 1. An end equal to the
  * extent is in range, an end before the start is the empty slice.
  */
-module subscript_slice_tensor
 import { reshape, shape, sum } from tensor
 
 func main(): int sync {

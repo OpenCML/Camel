@@ -1,5 +1,3 @@
-module err_generic_arg
-
 func id::<T>(x: T): T {
     return x
 }

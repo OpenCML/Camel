@@ -1,6 +1,5 @@
 // The same through a closure: the function value is built at run time (a FILL of the lambda's
 // graph and the captured `b`), and tiles.inspect still gets the lambda's graph with its LOOP.
-module tiles_loop_inspect_closure
 import { reshape } from tensor
 import { inspect } from tiles
 

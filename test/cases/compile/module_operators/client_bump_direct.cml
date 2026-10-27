@@ -3,7 +3,6 @@
  * function: the plain `+` is the declaring module's exported one, so the rebinding works here
  * too (design principles 4.2, 5.7).
  */
-module client_bump_direct
 
 import { Box, mk } from models
 

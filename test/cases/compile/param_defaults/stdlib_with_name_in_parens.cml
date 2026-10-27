@@ -9,7 +9,6 @@
  * The call still reaches the rules: `json.get` declares eight of them, so the callee is a set of
  * declarations and the name is looked up in them rather than refused for an unsettled signature.
  */
-module param_stdlib_with_name_in_parens
 
 import { Json, decode, get } from json
 

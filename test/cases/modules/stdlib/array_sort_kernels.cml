@@ -22,7 +22,6 @@
  * (OperatorTable::inPlaceForm) and the executor takes one element type: a shared in-place form
  * would have to read the element type at run time, which is the switch this change deletes.
  */
-module array_sort_kernels
 
 import { sort, insert_sort, quick_sort, merge_sort, merge_sorted_arrays, argsort } from array
 

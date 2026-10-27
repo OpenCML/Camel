@@ -3,7 +3,6 @@
  * principles 5.1, 6.5): `first_field` computes the first field name with `static for`, and its
  * call is the key of a static access, where only a constant is allowed.
  */
-module fold_call_key
 
 type Point = { x: int, y: (int, int) }
 type Size = { w: float, h: float }

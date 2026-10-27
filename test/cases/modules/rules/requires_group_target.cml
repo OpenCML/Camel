@@ -3,7 +3,6 @@
  * `#strict`, so it grants nothing at all (design principles 7.4) and the rule is applied to one
  * body and not the other.
  */
-module requires_group_target
 
 #strict
 func scaled(x: float): float {

@@ -1,7 +1,6 @@
 // `f32[..]` is a real element type: the literal it is built from is f32, and the tensor keeps
 // working everywhere — as a parameter type, in arithmetic, reduction and the byte view. The
 // expected bytes below are what f32 has always stored for these values.
-module tensor_dtype_f32_works
 
 import { new, reshape, zeros, ones, multiply, sum, to_bytes } from tensor
 import { to_array } from bytes

@@ -13,7 +13,6 @@
  * MODE=export : WHAT=step exports the training step (the dissected case),
  *               WHAT=fwd exports the loss
  */
-module e13_l2x2_tensor_arms
 
 import { relu, mean, reshape, zeros, save_npy } from tensor
 import { with_grad } from autodiff

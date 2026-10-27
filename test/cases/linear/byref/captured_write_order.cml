@@ -21,7 +21,6 @@
  *   2508    fib_then_read         25 calls of fib(6) = 8
  *   21      nested_then_read      a nested function writes a local variable of its parent
  */
-module captured_write_order
 
 var cnt = 0
 var levels = 0

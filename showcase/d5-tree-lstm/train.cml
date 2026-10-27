@@ -9,7 +9,6 @@
 // Run:
 //   camel train.cml --arg data=artifacts/small --arg steps=300 --arg lr=0.01 \
 //         --arg log_every=50 --arg threads=1 std::macro std::nvm
-module d5_tree_lstm
 
 // == imports ==
 import { argmax, load_npy, numel, reshape, set_num_threads, shape, sigmoid, sum, tanh, zeros } from tensor

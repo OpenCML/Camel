@@ -9,7 +9,6 @@
  * stream is over"; a `while` head reads once per round it accepts and nothing for the round it
  * refuses, which is the reading the language author asked for (2026-10-26).
  */
-module stream_pull_order
 
 func lines(n: int): int.. {
     return step(n)

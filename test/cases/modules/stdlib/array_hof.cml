@@ -3,7 +3,6 @@
  * them is applied with map: there is no order among its calls and the result is by position,
  * the same on every back end (including the parallel one).
  */
-module array_hof
 
 import { find, any, all, count, flat_map, sort_by, zip_with } from array
 import { to_lower } from str

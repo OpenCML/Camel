@@ -2,7 +2,6 @@
  * A `bool?` is not a `bool` in an operand position of `||`: the operand is a `bool` whatever the
  * surrounding position wants (design principles 4.2), so the value has to be opened with `??`.
  */
-module err_optional_operand
 
 func main(): int sync {
     let o: bool? = true

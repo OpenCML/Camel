@@ -1,4 +1,3 @@
-module fstring_bad_expr
 func main(): int sync {
     println(`value: ${1 +}`)
     return 0

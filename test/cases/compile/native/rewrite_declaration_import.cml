@@ -5,7 +5,6 @@
  * (slice S0, is what moved `check` from `string` to the table).
  * Checked, not run: the engines need a compiled program, and the rules plans run them.
  */
-module rewrite_declaration_import
 
 import { rewrite, saturate, extract, check, check_text } from rewrite
 import { Program, current } from graph

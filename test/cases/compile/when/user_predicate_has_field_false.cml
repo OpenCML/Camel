@@ -2,7 +2,6 @@
  * The same folded predicate where the field is absent: no candidate applies, and the call site
  * names the condition with the argument that made it false.
  */
-module when_user_predicate_has_field_false
 
 type Point = { w: int, h: int }
 

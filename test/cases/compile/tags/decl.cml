@@ -1,5 +1,4 @@
 /// The declarations of a tag and the `#` forms (design principles 6.2).
-module tags_decl
 
 export tag kernel on nodes
 export tag fast on func, nodes

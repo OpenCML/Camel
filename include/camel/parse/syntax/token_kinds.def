@@ -34,7 +34,6 @@ CAMEL_KEYWORD(KwWith, "with", Declaration)
 CAMEL_KEYWORD(KwConst, "const", Type)
 CAMEL_KEYWORD(KwConstas, "constas", Type)
 CAMEL_KEYWORD(KwReturn, "return", Control)
-CAMEL_KEYWORD(KwModule, "module", Declaration)
 CAMEL_KEYWORD(KwImport, "import", Declaration)
 CAMEL_KEYWORD(KwExport, "export", Declaration)
 

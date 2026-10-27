@@ -1,4 +1,3 @@
-module named_dims_with_param
 import { ones, sum } from tensor
 // A `with` parameter binds a name like a normal one, and the normal parameters write it.
 with <w: f32[n]>

@@ -6,7 +6,6 @@
  * receiver of `->` -- and each of the three reports the element type mismatch at the computed
  * element, not a call without a matching function.
  */
-module literal_context_composite_holes_positions_mismatch
 
 func first(xs: f32[]): f32 { return xs[0] }
 

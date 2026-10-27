@@ -4,7 +4,6 @@
  * same shape is now an error value handed out where the declared type is not a `T!`
  * (err_error_outside_fallible.cml).
  */
-module throw_is_a_name
 
 func check(x: int): int {
     return if x > 0 then x else {

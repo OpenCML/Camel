@@ -5,7 +5,6 @@
  * dimension is read against the stream and the array is refused by name
  * (SemanticDiag::StreamInContainer) - never built, never silently read as `int..` of `[3]`.
  */
-module stream_type_in_container
 
 func main(): int sync {
     let s: int..[3] = [1, 2, 3]

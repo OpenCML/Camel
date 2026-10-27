@@ -1,4 +1,3 @@
-module tiles_consistency
 import { random, seed, sum, max, abs, exp, reshape } from tensor
 import { run_preferred_resident, download } from tiles
 

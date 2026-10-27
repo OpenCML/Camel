@@ -2,7 +2,6 @@
  * `#impl(helper)` names a function of this module that has a body: it is already the semantics,
  * so there is no body-less declaration to be its kernel (ImplKernelNotBodyless).
  */
-module impl_kernel_has_body
 
 func helper(a: int, b: int): int {
     return a + b

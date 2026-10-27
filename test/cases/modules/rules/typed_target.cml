@@ -1,5 +1,4 @@
 /** The typed element laws: one function per law, at the values the counts and the answers use. */
-module typed_target
 
 // ---- i32: wrapping arithmetic, every law exact ----
 

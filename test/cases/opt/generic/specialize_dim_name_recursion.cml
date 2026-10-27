@@ -18,7 +18,6 @@
  * `n` counts levels, so it must be at most the number of halvings the array survives: three levels
  * over eight elements read 1.0 + 2.0 + 3.0 and then stop at the two-element array's first element.
  */
-module specialize_dim_name_recursion
 
 func walk(n: int, xs: f32[n]): f32 {
     let h = len(xs) / 2

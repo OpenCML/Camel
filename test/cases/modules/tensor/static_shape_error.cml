@@ -2,7 +2,6 @@
  * Both operand shapes are known statically, so the incompatible broadcast is
  * rejected at compile time with the conflict as the reason.
  */
-module static_shape_error
 
 import { zeros, matmul } from tensor
 

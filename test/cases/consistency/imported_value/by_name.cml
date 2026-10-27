@@ -4,7 +4,6 @@
  * (once for the import by name, once for the module's default names) and so had "2
  * functions of that name" and no value.
  */
-module by_name
 
 import { twice, area } from lib
 

@@ -9,7 +9,6 @@
  *
  * The model has both kinds of trainable leaf: two tensors and a float.
  */
-module adam_update_bits
 
 import { range } from tensor
 import { adam, adam_state } from nn

@@ -1,7 +1,6 @@
 /**
  * Substitution cannot write the same mark twice either: `T?` with `T = int?`.
  */
-module err_generic_nesting
 
 func some::<T>(x: T): T? {
     return x

@@ -3,7 +3,6 @@
  * imports the tensor module, which registers its own passes, and prints one line. Importing it
  * adds no pass to the pipeline: the module's passes run only where the command line writes them.
  */
-module plain
 import tensor
 
 

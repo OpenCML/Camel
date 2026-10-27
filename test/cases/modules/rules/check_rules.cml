@@ -3,7 +3,6 @@
  * instances of the two sides must agree. `good` holds; `wrong` and `rounding` are rules that do
  * not.
  */
-module check_rules
 import { check } from rewrite
 
 rule add_zero(x: int) { x + 0 => x }

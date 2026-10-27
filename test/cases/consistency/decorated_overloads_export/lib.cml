@@ -3,7 +3,6 @@
  * and as a plain function of the same name, exported. The name stands for both, so the module
  * that imports it receives both.
  */
-module lib
 
 export func twice(f: (x: int) => int): (x: int) => int {
     return (x: int): int => {

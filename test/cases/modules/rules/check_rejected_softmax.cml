@@ -12,7 +12,6 @@
  * full mechanism and the two options for a
  * rejected candidate are written down with the rule.
  */
-module check_rejected_softmax
 
 import { check } from rewrite
 import { exp, softmax, sum } from tensor

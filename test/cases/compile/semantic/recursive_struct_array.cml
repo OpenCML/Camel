@@ -8,7 +8,6 @@
  * reference, so it is not pure data and its array is not a data block). The collector traces
  * the array's elements with the element type `Node`, so a live tree keeps its whole subtree.
  */
-module recursive_struct_array
 
 type Node = { value: int, children: Node[] }
 

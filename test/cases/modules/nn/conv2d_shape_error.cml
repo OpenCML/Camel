@@ -4,7 +4,6 @@
  * rank, so their shapes are not known statically (static_shape_error covers the
  * compile-time check).
  */
-module conv2d_shape_error
 
 import { reshape, sum } from tensor
 

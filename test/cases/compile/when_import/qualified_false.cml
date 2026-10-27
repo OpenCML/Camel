@@ -2,7 +2,6 @@
  * The imported predicate where it does not hold: the call site lists the condition the
  * candidate wrote, through the module prefix, and no candidate applies.
  */
-module when_import_qualified_false
 
 import predicates
 

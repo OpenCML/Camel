@@ -3,7 +3,6 @@
  * name is a value of its own type and does not convert (design principles 5.1): `scale<n>`
  * with `n` an int and `with <k: f32>` stays a refused partial application.
  */
-module partial_application_context_argument_name
 
 with <k: f32>
 func scale(x: f32): f32 { return x * k }

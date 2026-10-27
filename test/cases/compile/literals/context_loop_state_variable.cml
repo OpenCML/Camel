@@ -4,7 +4,6 @@
  * first value is a name keeps that name's type — the loop's value is the state's type — so a
  * `float` value where an `f32` is declared is refused at the declaration, as `let n: f32 = f` is.
  */
-module literal_context_loop_state_variable
 
 func floatValue(): float {
     2.5

@@ -7,7 +7,6 @@
  * 1.00000012 rather than its float64 1.00000006: it became f32 where it was written, converted
  * once from the value written (design principles 5.1, 5.2).
  */
-module literal_context_composite_holes
 
 type MA = { n: int, t: (f32, f32) }
 type MB = { n: int, v: f32[2] }

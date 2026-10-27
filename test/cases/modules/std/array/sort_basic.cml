@@ -2,7 +2,6 @@
  * Exercises the sorting functions of the `array` module: a new array (the argument is unchanged)
  * and deterministic merge behavior for sorted inputs.
  */
-module main
 
 import { sort, merge_sorted_arrays } from array
 

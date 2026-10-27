@@ -2,7 +2,6 @@
  * map, filter, reduce and foreach with pure element functions: results are in element order on
  * every back end; foreach and reduce run in element order.
  */
-module higher_order
 
 func main(): int sync {
     let xs = 0..40

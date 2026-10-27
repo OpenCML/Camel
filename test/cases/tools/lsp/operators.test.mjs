@@ -3,9 +3,7 @@
 
 import { withServer, check, checkEq, fmtRange, marked } from '../../../tools/lsp/client.mjs'
 
-const MAIN = `module main
-
-type Vec = { x: float, y: float }
+const MAIN = `type Vec = { x: float, y: float }
 
 /// Adds two vectors.
 func operator +(a: Vec, b: Vec): Vec {
@@ -55,9 +53,9 @@ await withServer(async (ls) => {
         ls.request('textDocument/definition', at(needle, nth, delta))
     let d = await def('v + v', 1, 2)
     checkEq(d.length, 1, 'one definition for the operator', d)
-    checkEq(fmtRange(d[0].range), '5:5-5:13', 'at the declaration of `operator +`')
+    checkEq(fmtRange(d[0].range), '3:5-3:13', 'at the declaration of `operator +`')
     d = await def('-w', 1, 0)
-    checkEq(d.map((l) => fmtRange(l.range)), ['9:5-9:13'], 'the unary overload')
+    checkEq(d.map((l) => fmtRange(l.range)), ['7:5-7:13'], 'the unary overload')
     d = await def('1 + 2', 1, 2)
     checkEq(d, [], 'a built-in operator has no definition in source')
 

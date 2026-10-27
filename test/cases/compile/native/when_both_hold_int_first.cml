@@ -6,7 +6,6 @@
  * cannot decide it. This file must
  * therefore report exactly the diagnostic its twin reports.
  */
-module when_both_hold_int_first
 
 /// Holds for `int` alone: the second arm's own element type.
 func is_second_int::<U>(): bool {

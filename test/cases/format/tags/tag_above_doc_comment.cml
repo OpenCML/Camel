@@ -1,5 +1,3 @@
-module format_tag_above_doc
-
 #op(':op/add_l')
 func add_kernel(a: int, b: int): int
 

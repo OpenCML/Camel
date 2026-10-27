@@ -5,7 +5,6 @@
  * is not of the type the position gives that field is reported at the field itself, naming the
  * field and the type the field states.
  */
-module literal_context_composite_holes_mismatch
 
 type MA = { n: int, t: (f32, f32) }
 type MB = { n: int, v: f32[2] }

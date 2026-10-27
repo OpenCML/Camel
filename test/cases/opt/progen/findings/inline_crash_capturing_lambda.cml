@@ -6,7 +6,6 @@
  * Actual: CRASH
  * Reduced by test/tools/progen from seed 1192 (generator version 1, all features).
  */
-module inline_crash_capturing_lambda
 
 func f1(a2: (a0: string) => float, a3: float, a4: bool): string {
     return ([false]->map<(p7: bool): int => 1>)->reduce<(p5: string, p6: int): string => '', match a4 {

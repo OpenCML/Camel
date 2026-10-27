@@ -3,7 +3,6 @@
  * strided/padded conv2d and its three gradients, max/avg pooling and their
  * gradients, and inference batch_norm.
  */
-module spatial_ops
 
 import { load_npy, sum, abs } from tensor
 import {

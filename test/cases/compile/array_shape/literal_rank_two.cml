@@ -1,7 +1,6 @@
 // A position that states a rank of its own (`f32[2, 2]`) takes the nested literal as one array of
 // that shape (design principles 5.1, 5.4): the extent reads two rows of two, and the array holds
 // four elements, not two rows.
-module array_shape_literal_rank_two
 
 import { shape, numel, dim } from tensor
 

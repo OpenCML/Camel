@@ -2,7 +2,6 @@
  * Camel implementation of the `mlp` benchmark model (benchmarks/README.md):
  * x[64,784] -> Linear(784,256) -> ReLU -> Linear(256,128) -> ReLU -> Linear(128,10).
  */
-module mlp_big
 
 import { relu, mean } from tensor
 import { grad, with_grad } from autodiff

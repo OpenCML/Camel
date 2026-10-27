@@ -37,7 +37,7 @@ const source = path.join(dir, 'probe.cml')
 // tiles; it asks for no device operation, exactly like the case of the startup tests.
 fs.writeFileSync(
     source,
-    'module probe_cuda_build\nimport { available } from tiles\nfunc main(): int sync {\n    println(available())\n    return 0\n}\n',
+    'import { available } from tiles\nfunc main(): int sync {\n    println(available())\n    return 0\n}\n',
 )
 const proc = spawnSync(camel, ['--devices', '0', source, 'std::nvm'], {
     cwd: ROOT,

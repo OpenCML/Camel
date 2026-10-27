@@ -1,4 +1,3 @@
-module tiles_resident_fallback
 import { reshape, sum } from tensor
 import { upload, download, run_preferred_resident } from tiles
 

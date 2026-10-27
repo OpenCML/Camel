@@ -1,5 +1,4 @@
 /// `#requires` with no argument requires nothing, which is never what was meant.
-module err_requires_empty
 
 #requires()
 rule r(x: int) { x + 0 => x }

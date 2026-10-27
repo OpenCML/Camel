@@ -22,7 +22,6 @@
  * single rounding visible. The three readings are the distances from the one-rounding answer, so a
  * per-step accumulator, or a sum rounded before the division, makes the line non-zero (-4, -1, -4).
  */
-module tiles_value_gradient
 import { reshape, sum, mean, abs, zeros } from tensor
 import { with_grad } from autodiff
 import { inspect, benchmark, run_preferred_resident, download } from tiles

@@ -2,7 +2,6 @@
  * E10 follow-up: differentiating a named function whose body CALLS grad —
  * the statically-resolvable form of second-order differentiation.
  */
-module e10_wrap
 
 import { grad } from autodiff
 import { relu, mean, reshape } from tensor

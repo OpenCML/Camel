@@ -1,4 +1,3 @@
-module chainlib
 import { triple } from innerlib
 
 export func six(): int {

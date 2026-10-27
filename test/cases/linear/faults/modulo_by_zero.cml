@@ -2,7 +2,6 @@
  * Integer modulo by zero is the same fault as division by zero: DivisionByZero at the
  * operator (line 8, column 28), on every back end.
  */
-module modulo_by_zero
 
 func f(a: int, b: int): int {
     return if a < 2 then a % b else f(a - 1, b) + a % b

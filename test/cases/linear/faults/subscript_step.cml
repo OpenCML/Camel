@@ -4,7 +4,6 @@
  * 5.4). A negative step runs backwards; an omitted start is the last element and an omitted end
  * the position before the first.
  */
-module subscript_step
 
 func every(xs: int[], a: int, b: int, s: int): int[] {
     return xs[a:b:s]

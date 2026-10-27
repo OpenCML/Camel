@@ -1,5 +1,4 @@
 /** Refused: the first `with` parameter is a string, which has no tangent (9.9). */
-module grad_refuse_string
 import { grad } from autodiff
 
 with <s: string>

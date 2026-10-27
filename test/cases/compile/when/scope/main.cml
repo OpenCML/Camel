@@ -5,7 +5,6 @@
  * (design principles 4.4: a condition reads the names of the declaration's own scope, whoever
  * calls it).
  */
-module when_scope_main
 
 namespace ns {
     func plain_int::<T>(): bool {

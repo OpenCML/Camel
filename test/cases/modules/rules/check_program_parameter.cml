@@ -8,7 +8,6 @@
  * program the call was given has: `sum_swap` has no instance at `Vec` unless the program names it,
  * which is what the two reports below differ in.
  */
-module check_program_parameter
 import tensor
 import { check } from rewrite
 import { current, Program } from graph

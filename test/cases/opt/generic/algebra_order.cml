@@ -10,7 +10,6 @@
  *
  *   camel algebra_order.cml std::opt::inline std::opt::algebra std::jgir
  */
-module algebra_order
 
 func scaled(x: float): float {
     let t = x * 0.1

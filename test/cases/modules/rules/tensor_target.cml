@@ -3,7 +3,6 @@
  * answers use. `Vec` has a known extent, so the rules (written for `f32[..]`) are exercised
  * through the type check: a less informed pattern type reads a more informed node type.
  */
-module tensor_target
 
 import { reshape } from tensor
 

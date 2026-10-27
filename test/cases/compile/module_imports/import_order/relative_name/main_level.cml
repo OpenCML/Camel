@@ -1,6 +1,5 @@
 /// the entry program of the relative-name case that can be formed: `level.helper` imports
 /// `..lib`, which is the module name `lib` (two dots drop the two components of `level.helper`).
-module main_level
 
 import level.helper
 

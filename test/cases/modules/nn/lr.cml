@@ -1,7 +1,6 @@
 /**
  * Linear-regression training loop used to exercise tensor algebra, gradient updates, and mutable-weight iteration.
  */
-module linear_regression
 
 import { concat, ones, random, shape, sum, transpose, zeros } from tensor
 

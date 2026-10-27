@@ -1,7 +1,6 @@
 /// A parameter declared as a concrete function type fixes the signature, and the reader checks the
 /// argument against it where the tag is pasted (design principles 6.2): the function named here
 /// takes a float, so it is not the function this tag asks for.
-module err_func_signature
 
 tag rule(f: (x: int) => int) on field
 

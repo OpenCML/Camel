@@ -1,7 +1,6 @@
 /**
  * Verifies inline registry cleanup keeps distinct branch-arm helper bodies from collapsing onto the same rewritten subgraph.
  */
-module inline_registry_sweep_unique_arm
 
 func choose(flag: int, x: int): int {
     func plus1(v: int): int {

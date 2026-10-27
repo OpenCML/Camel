@@ -1,5 +1,3 @@
-module conf_c
-
 export func f(x: int): int {
     return x + 100
 }

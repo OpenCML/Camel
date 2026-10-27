@@ -28,7 +28,6 @@
 //     names: the reference page lists operators by their Camel name, and `inspect --ops` does not
 //     list these.
 
-module graph
 
 // ---- the program ----
 

@@ -3,7 +3,6 @@
  * `a || b` is `if a then true else b`. The right side is an arm, evaluated only when the left
  * side does not decide. `&` and `|` are the operators that evaluate both sides.
  */
-module short_circuit
 
 func noisy(tag: string, v: bool): bool sync {
     println(tag)

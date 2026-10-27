@@ -3,7 +3,6 @@
  * alias is the same type as `int`), so there is no declaring module to search and `+` stays the
  * builtin one (design principles 5.7).
  */
-module alias_models
 
 export type Count = int
 

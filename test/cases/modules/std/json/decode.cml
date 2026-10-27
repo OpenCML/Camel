@@ -4,7 +4,6 @@
  * type the call names (`decode(text) as T` read the untyped result unchecked and is a
  * compile-time error now: design principles 5.10).
  */
-module main
 
 import { encode, decode_as } from json
 

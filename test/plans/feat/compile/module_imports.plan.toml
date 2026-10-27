@@ -303,7 +303,7 @@ kind = "negative"
 case = "../../../cases/compile/module_imports/include_path/prog/missing_root.cml"
 args = ["-E", "short", "-I", "../roots/missing", "${case}"]
 expect_exit = 1
-expect_output_contains = ["missing_root.cml:6:1", "Module 'nowhere_module' not found", "name=SemanticDiag::ModuleNotFound", "include_path/roots/missing", "path does not exist"]
+expect_output_contains = ["missing_root.cml:5:1", "Module 'nowhere_module' not found", "name=SemanticDiag::ModuleNotFound", "include_path/roots/missing", "path does not exist"]
 
 [[tests]]
 name = "imports.include_root_library_import"
@@ -366,7 +366,7 @@ kind = "negative"
 case = "../../../cases/compile/module_imports/import_order/entry/main_deep.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["deep/helper.cml:6:1", "Module 'lib' not found", "name=SemanticDiag::ModuleNotFound", "entry/deep", "path does not exist"]
+expect_output_contains = ["deep/helper.cml:5:1", "Module 'lib' not found", "name=SemanticDiag::ModuleNotFound", "entry/deep", "path does not exist"]
 
 [[tests]]
 name = "imports.order_library_via_include_root"
@@ -453,7 +453,7 @@ kind = "negative"
 case = "../../../cases/compile/module_imports/import_order/relative_name/main_dotdot.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["main_dotdot.cml:8:1", "Module '..lib' not found", "name=SemanticDiag::ModuleNotFound", "drops 2 name component(s)", "no directory was searched"]
+expect_output_contains = ["main_dotdot.cml:7:1", "Module '..lib' not found", "name=SemanticDiag::ModuleNotFound", "drops 2 name component(s)", "no directory was searched"]
 expect_output_not_contains = ["/: no file", "/lib: no file", "//lib"]
 
 [[tests]]
@@ -520,7 +520,7 @@ kind = "negative"
 case = "../../../cases/compile/module_imports/import_order/relative_name/main_short.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["short.cml:5:1", "Module '..lib' not found", "importing module's name 'short' has 1", "name=SemanticDiag::ModuleNotFound", "name=SemanticDiag::ImportedModuleHasErrors"]
+expect_output_contains = ["short.cml:4:1", "Module '..lib' not found", "importing module's name 'short' has 1", "name=SemanticDiag::ModuleNotFound", "name=SemanticDiag::ImportedModuleHasErrors"]
 expect_output_not_contains = ["/: no file", "/lib: no file"]
 
 [[tests]]

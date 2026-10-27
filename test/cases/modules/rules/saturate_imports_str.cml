@@ -2,7 +2,6 @@
  * A program that imports str: the pipeline's saturation goes over str's graphs too, `cut`
  * among them, whose loop condition does not read every state.
  */
-module saturate_imports_str
 import { ends_with } from str
 
 func main(): int sync {

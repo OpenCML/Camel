@@ -4,7 +4,6 @@
  * `Point`, as `append` and `contains` are, and `==` between an unnamed struct and a `Point` compares
  * the fields (design principles 5.2).
  */
-module struct_join_concat_and_equality
 
 type Point = { x: int, y: int }
 

@@ -1,7 +1,6 @@
 /**
  * The value main returns is the exit code.
  */
-module main_returns_code
 
 func main(): int sync {
     println('done')

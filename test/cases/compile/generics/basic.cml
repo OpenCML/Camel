@@ -3,7 +3,6 @@
  * writes them as plain names in its signature. Every call with a new set of types builds one
  * subgraph in which the variables are replaced by those types.
  */
-module basic
 
 func first::<T>(xs: T[]): T {
     return xs[0]

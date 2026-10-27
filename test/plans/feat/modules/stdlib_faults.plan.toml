@@ -26,7 +26,7 @@ name = "stdlib.fault.index"
 desc = "A string indexed at its length."
 case = "../../../cases/modules/stdlib/fault_index.cml"
 expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 6
 
 [[tests]]
 name = "stdlib.fault.index.opt"
@@ -35,14 +35,14 @@ case = "../../../cases/modules/stdlib/fault_index.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 6
 
 [[tests]]
 name = "stdlib.fault.index_negative"
 desc = "A string indexed with a negative number."
 case = "../../../cases/modules/stdlib/fault_index_negative.cml"
 expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 6
 
 [[tests]]
 name = "stdlib.fault.index_negative.opt"
@@ -51,14 +51,14 @@ case = "../../../cases/modules/stdlib/fault_index_negative.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 6
 
 [[tests]]
 name = "stdlib.fault.index_empty"
 desc = "An empty string indexed at 0."
 case = "../../../cases/modules/stdlib/fault_index_empty.cml"
 expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 6
 
 [[tests]]
 name = "stdlib.fault.index_empty.opt"
@@ -67,14 +67,14 @@ case = "../../../cases/modules/stdlib/fault_index_empty.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 6
 
 [[tests]]
 name = "stdlib.fault.repeat_huge"
 desc = "repeat whose result would be longer than a string can be: refused before anything is allocated."
 case = "../../../cases/modules/stdlib/fault_repeat_huge.cml"
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 5
 
 [[tests]]
 name = "stdlib.fault.repeat_huge.opt"
@@ -83,21 +83,21 @@ case = "../../../cases/modules/stdlib/fault_repeat_huge.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 5
 
 [[tests]]
 name = "stdlib.fault.index_char"
 desc = "A string index past the last character (counted in code points, not bytes)."
 case = "../../../cases/modules/stdlib/fault_string_index.cml"
 expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
-expect_diagnostic_line = 5
+expect_diagnostic_line = 3
 
 [[tests]]
 name = "stdlib.fault.shl_width"
 desc = "shl by the width of the integer."
 case = "../../../cases/modules/stdlib/fault_shl_width.cml"
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 5
 
 [[tests]]
 name = "stdlib.fault.shl_width.opt"
@@ -106,14 +106,14 @@ case = "../../../cases/modules/stdlib/fault_shl_width.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 5
 
 [[tests]]
 name = "stdlib.fault.shr_negative"
 desc = "shr by a negative count."
 case = "../../../cases/modules/stdlib/fault_shr_negative.cml"
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 5
 
 [[tests]]
 name = "stdlib.fault.shr_negative.opt"
@@ -122,14 +122,14 @@ case = "../../../cases/modules/stdlib/fault_shr_negative.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 5
 
 [[tests]]
 name = "stdlib.fault.shl_i32"
 desc = "shl of an i32 by 32."
 case = "../../../cases/modules/stdlib/fault_shl_i32.cml"
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 5
 
 [[tests]]
 name = "stdlib.fault.shl_i32.opt"
@@ -138,14 +138,14 @@ case = "../../../cases/modules/stdlib/fault_shl_i32.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 5
 
 [[tests]]
 name = "stdlib.fault.clamp_bounds"
 desc = "clamp whose lower bound is above the upper one."
 case = "../../../cases/modules/stdlib/fault_clamp_bounds.cml"
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 5
 
 [[tests]]
 name = "stdlib.fault.clamp_bounds.opt"
@@ -154,14 +154,14 @@ case = "../../../cases/modules/stdlib/fault_clamp_bounds.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 5
 
 [[tests]]
 name = "stdlib.fault.clamp_nan"
 desc = "clamp with a NaN bound."
 case = "../../../cases/modules/stdlib/fault_clamp_nan.cml"
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 5
 
 [[tests]]
 name = "stdlib.fault.clamp_nan.opt"
@@ -170,14 +170,14 @@ case = "../../../cases/modules/stdlib/fault_clamp_nan.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 5
 
 [[tests]]
 name = "stdlib.fault.gcd_overflow"
 desc = "gcd whose result is the magnitude of the smallest integer."
 case = "../../../cases/modules/stdlib/fault_gcd_overflow.cml"
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 5
 
 [[tests]]
 name = "stdlib.fault.gcd_overflow.opt"
@@ -186,14 +186,14 @@ case = "../../../cases/modules/stdlib/fault_gcd_overflow.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 5
 
 [[tests]]
 name = "stdlib.fault.lcm_overflow"
 desc = "lcm that does not fit the integer type."
 case = "../../../cases/modules/stdlib/fault_lcm_overflow.cml"
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 5
 
 [[tests]]
 name = "stdlib.fault.lcm_overflow.opt"
@@ -202,14 +202,14 @@ case = "../../../cases/modules/stdlib/fault_lcm_overflow.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 5
 
 [[tests]]
 name = "stdlib.fault.quantile_range"
 desc = "quantile outside 0..1."
 case = "../../../cases/modules/stdlib/fault_quantile_range.cml"
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 5
 
 [[tests]]
 name = "stdlib.fault.quantile_range.opt"
@@ -218,14 +218,14 @@ case = "../../../cases/modules/stdlib/fault_quantile_range.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 5
 
 [[tests]]
 name = "stdlib.fault.zip_with"
 desc = "zip_with on arrays of different lengths: the fault of zip, located in the library. The line is \"return zip(xs, ys)->map<...>\" in stdlib/array.cml. It moved once: the reduction kernels took the place of the blank lines above three doc comments without moving it (each `#impl` tag stood for a blank line), and the sorting family's declarations grew from five generic ones to one per element type and algorithm, which stands above it and moved it from 254 to 300."
 case = "../../../cases/modules/stdlib/fault_zip_with.cml"
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 304
+expect_diagnostic_line = 303
 
 [[tests]]
 name = "stdlib.fault.zip_with.opt"
@@ -234,4 +234,4 @@ case = "../../../cases/modules/stdlib/fault_zip_with.cml"
 backends = false
 args = ["${case}", "std::opt", "std::fvm"]
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 304
+expect_diagnostic_line = 303

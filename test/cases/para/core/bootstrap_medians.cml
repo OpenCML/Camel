@@ -1,7 +1,6 @@
 /**
  * Parallel bootstrap workload used to stress repeated sampling plus concurrent sort-heavy reductions.
  */
-module bootstrap_medians
 
 import { now } from time
 import { seed, shuffle, sample } from random

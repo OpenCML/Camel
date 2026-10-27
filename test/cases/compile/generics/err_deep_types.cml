@@ -6,7 +6,6 @@
  * function that may be built inside one another. The scalar types are leaves, so no arm's type
  * argument contains an open instance's type argument.
  */
-module err_deep_types
 
 func churn::<T>(x: T, k: int): int {
     let anF32: f32 = 1.0

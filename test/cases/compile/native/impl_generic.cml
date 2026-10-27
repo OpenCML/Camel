@@ -13,7 +13,6 @@
  * counts the two paths apart: one `:op/add_l`, no `:op/sub_l` at all, and the `i32` body's own
  * operators.
  */
-module impl_generic
 
 #op(':op/idx_arr')
 func idx_kernel::<T>(xs: T[], i: int): T

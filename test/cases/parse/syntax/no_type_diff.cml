@@ -4,7 +4,6 @@
  * so before the parser sees a type at all. The type operators left the language in the item-5
  * clearance, and the token went with them because nothing produced it.
  */
-module no_type_diff
 
 func f(x: int): int {
     let a: A \ B = x

@@ -2,7 +2,6 @@
 // `loop`'s does: `for n in fields T`, `for n, F in fields T`, `for n, F, tags in fields T` and
 // `for j in indices ts`. One name is the field's name, two add its type, three add its tags as a
 // compile-time struct, and `indices` binds the position in a tuple. Each head is run here once.
-module static_for_head_names
 
 tag width(w: int) on field
 

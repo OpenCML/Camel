@@ -2,7 +2,6 @@
  * The integer-label form of softmax_cross_entropy faults on a label outside the class dimension
  * (design principles 3.9); a negative label is not the last class.
  */
-module softmax_labels_oob
 
 import { reshape } from tensor
 import { softmax_cross_entropy } from nn

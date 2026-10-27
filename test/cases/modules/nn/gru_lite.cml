@@ -3,7 +3,6 @@
  * with_grad of the sequence loss gives a GruLite-shaped gradient, one sgd step lowers the
  * loss, and a recursive train loop repeats the step.
  */
-module gru_lite
 
 import { grad, with_grad } from autodiff
 import { full, ones, shape, sigmoid, sum, tanh, zeros } from tensor

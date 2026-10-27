@@ -3,7 +3,6 @@
  * refused at the call, and the overload the message lists is the declaration's —
  * `stdlib/autodiff.cml`, not the C++ module (step 10).
  */
-module autodiff_arity
 
 import { stop_gradient } from autodiff
 

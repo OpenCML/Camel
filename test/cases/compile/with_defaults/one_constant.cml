@@ -4,7 +4,6 @@
  * for the default, which both calls read (design principles 4.4). `std::gir` prints the graph
  * instead of running it.
  */
-module with_default_one_constant
 
 with <rounds: int = 4242>
 func bump(x: int): int {

@@ -5,7 +5,6 @@
  * file and a directory that is not empty (no recursive delete). Each error value's location is
  * the operator.
  */
-module fs_remove
 
 import { exists, mkdirs, write_text, remove, remove_dir } from fs
 import { get_env } from env

@@ -4,7 +4,6 @@
  * computation of `main`: one model input per parameter, shaped by its declared type (the
  * negative extent is a dynamic axis), the result is the output.
  */
-module forward
 
 import { tanh } from tensor
 

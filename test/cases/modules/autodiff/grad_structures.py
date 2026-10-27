@@ -156,7 +156,6 @@ def main() -> int:
                 python.append(p)
                 kinds.append(kd)
             source = (
-                f"module grad_structures_{k}\n"
                 "import { mean, reshape, save_npy, sigmoid, sum, tanh } from tensor\n"
                 "import { grad } from autodiff\n\n" + "\n".join(camel) + "\nfunc main(): int sync {\n"
                 "    let xs: f32[] = [0.3, -0.2, 0.7]\n" + "    let x = reshape(xs, [3])\n"

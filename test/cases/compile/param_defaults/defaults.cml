@@ -5,7 +5,6 @@
  * after the positional ones. The declaration's order is the one order: a name selects its
  * parameter, wherever it was written.
  */
-module param_defaults
 
 // The default is used when the call leaves the parameter out, and is overridden by a value.
 func add(x: int, y: int = 2): int {

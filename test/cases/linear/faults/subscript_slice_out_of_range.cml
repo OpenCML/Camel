@@ -3,7 +3,6 @@
  * bounds and the length (design principles 3.9); a bound equal to the length is the end of the
  * array and is in range.
  */
-module subscript_slice_out_of_range
 
 func part(xs: int[], a: int, b: int): int[] {
     return xs[a:b]

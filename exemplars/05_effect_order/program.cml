@@ -4,7 +4,6 @@
  * their order whatever the pass pipeline does, so the output is the same under
  * NodeVM, FastVM and after std::opt has inlined the callback.
  */
-module effect_order
 
 func visit(items: int[], i: int, cb: (x: int) => int): int {
     return if i >= len(items) then 0 else sync {

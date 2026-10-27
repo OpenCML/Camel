@@ -10,7 +10,6 @@
 // exactly nothing to either derivative, so the real 324 must survive both orders. Without the
 // scatter's rule the build refuses with "no derivative rule for operator
 // ':tangent/scatter_add_arr'" (exit 1).
-module second_order_array_scatter
 
 import { grad } from autodiff
 

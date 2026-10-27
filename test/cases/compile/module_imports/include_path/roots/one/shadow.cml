@@ -1,6 +1,5 @@
 /// the same module name as `prog/shadow.cml`, with another value. A program in `prog`
 /// must take its own file; a program in a directory without one must take this root.
-module shadow
 
 export func value(): int {
     return 2

@@ -2,7 +2,6 @@
  * Recursive generic functions. A recursive call with the same types is a call of the
  * instance being built; one instance exists per set of types, however often it is called.
  */
-module recursive
 
 func count::<T>(xs: T[], i: int): int {
     return if i >= len(xs) then 0 else 1 + count(xs, i + 1)

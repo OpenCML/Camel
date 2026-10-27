@@ -9,7 +9,6 @@
  * both with the default `null`, so leaving either out is `null`; `axes` takes an array constant
  * (`axes=[0,1]`) and `target` takes the word as written.
  */
-module test
 
 with <
     flag: bool,

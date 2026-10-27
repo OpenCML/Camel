@@ -2,7 +2,6 @@
  * Imports every standard library module that needs no external runtime, so that
  * `camel inspect --ops` lists their operators (see stdlib_registry.plan.toml).
  */
-module registry_all
 
 import bytes
 // `hash` and `env` are declaration modules (`stdlib/hash.cml`, `stdlib/env.cml`): `hash` is pure,

@@ -3,7 +3,6 @@
  * pullback sends back the product of the other rounds, so three rounds give the product rule
  * (3 · w²) rather than the round count.
  */
-module loop_grad_product
 
 import { grad, with_grad } from autodiff
 

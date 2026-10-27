@@ -10,7 +10,6 @@
  * fails both ways. `sq = sum(g * g)` is 4 + 9 = 13.0, and `sum`, 5.0, is the adjoint's own
  * total.
  */
-module slice_open_end
 
 import { reshape, sum } from tensor
 import { grad } from autodiff

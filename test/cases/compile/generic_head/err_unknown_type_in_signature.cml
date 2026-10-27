@@ -2,7 +2,6 @@
  * A plain name in a parameter type that denotes nothing is an unknown type, not a type
  * variable: a type parameter must be declared at the head (design principles 5.5).
  */
-module err_unknown_type_in_signature
 
 func identity(x: T): T {
     return x

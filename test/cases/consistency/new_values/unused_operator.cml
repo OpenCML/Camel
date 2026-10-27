@@ -1,7 +1,6 @@
 /**
  * Any operator declared pure written as a statement is the same error: here `+`.
  */
-module unused_operator
 
 func main(): int sync {
     let a = 1

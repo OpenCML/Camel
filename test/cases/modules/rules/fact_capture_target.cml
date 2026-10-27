@@ -2,7 +2,6 @@
  * The program `fact_capture` reads its fact over: `sum` has two additions, so the fact of it
  * is read for three nodes.
  */
-module fact_capture_target
 
 func sum(a: int, b: int): int {
     return (a + b) + 1

@@ -1,5 +1,4 @@
 /** Refused: the first `with` parameter is a function, which has no tangent (9.9). */
-module grad_refuse_function
 import { grad } from autodiff
 
 with <f: (x: float) => float>

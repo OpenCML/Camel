@@ -2,7 +2,6 @@
 // The search is written out because it is the subject of the example: `index_of` and `find`
 // of the `array` module look a value up in an array in any order.
 // Run: camel examples/algorithms/binary_search.cml
-module binary_search
 
 import { sort, index_of } from array
 

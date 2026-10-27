@@ -185,9 +185,6 @@ class ParserImpl {
     void parseStmtBlock();
     void parseBlockExpr();
     void parseModuleName();
-    void parseModuleDecl();
-    /// moduleDecl after the tags that may precede it; `m` marks where it began.
-    void parseModuleDeclRest(size_t m);
     void parseImportDecl();
     void parseBracedImports();
     void parseImportItem();

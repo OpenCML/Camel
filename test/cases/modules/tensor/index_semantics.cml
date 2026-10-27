@@ -7,7 +7,6 @@
  * The declaration evaluator (tensor::test_index_eval) runs on this program too: it needs the
  * tensor and nn modules loaded.
  */
-module index_semantics
 
 import { ones, reshape, transpose, permute, sum, max, matmul, relu } from tensor
 import { max_pool2d } from nn

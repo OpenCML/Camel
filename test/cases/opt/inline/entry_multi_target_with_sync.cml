@@ -1,7 +1,6 @@
 /**
  * Verifies the inliner preserves dataflow when the callee entry fans out to multiple local values before returning.
  */
-module inline_entry_multi_target_with_sync
 
 func combine(a: int, b: int): int {
     let x = a + 1

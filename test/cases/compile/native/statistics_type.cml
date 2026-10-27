@@ -4,7 +4,6 @@
  * name (`xs`) — the one source is `stdlib/statistics.cml`, not the C++ module (
  * step 10).
  */
-module statistics_type
 
 import { mean } from statistics
 

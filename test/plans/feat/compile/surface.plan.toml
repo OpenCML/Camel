@@ -102,7 +102,7 @@ kind = "negative"
 case = "../../../cases/compile/surface/import_missing.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["import_missing.cml:3:1: [Error]: Module 'nosuch_module_anywhere' not found", "name=SemanticDiag::ModuleNotFound"]
+expect_output_contains = ["import_missing.cml:1:1: [Error]: Module 'nosuch_module_anywhere' not found", "name=SemanticDiag::ModuleNotFound"]
 
 [[tests]]
 name = "surface.self_import"
@@ -188,7 +188,7 @@ case = "../../../cases/compile/semantic/type_contains_itself.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ModuleTypeCycle"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_output_contains = ["part of a cycle of types", "A -> A", "an array, a map, a set or an enum"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -202,7 +202,7 @@ args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TypeAliasRecursionUnrepresented"
 expect_diagnostic_code = "0x030001F2"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 8
 expect_diagnostic_column = 1
 expect_output_contains = ["mentions itself through a collection", "'Node'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -217,7 +217,7 @@ args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TypeAliasRecursionUnrepresented"
 expect_diagnostic_code = "0x030001F2"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 8
 expect_diagnostic_column = 1
 expect_output_contains = ["mentions itself through a collection", "'Row'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -232,7 +232,7 @@ args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::EnumWrittenWhereATypeIsExpected"
 expect_diagnostic_code = "0x030001F3"
-expect_diagnostic_line = 10
+expect_diagnostic_line = 9
 expect_diagnostic_column = 14
 expect_output_contains = ["An enum is declared in a type declaration", "the variants are written there and nowhere else"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

@@ -1,7 +1,6 @@
 /// an ordinary dotted name with a directory component that does not exist. The diagnostic
 /// lists the directories actually tried, starting with the importing module's own directory
 /// (design principles 10.2), not the filesystem root.
-module main_pkgdot
 
 import pkg.lib
 

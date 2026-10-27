@@ -3,7 +3,6 @@
  * is not a constant of the graph either. Both reasons are reported, the branch one first: it is
  * the structure the program has to change.
  */
-module request_in_arm_and_target
 
 import { zeros } from tensor
 import { export_model } from onnx

@@ -5,7 +5,6 @@
  * initializer of a let and after return: in an array, tuple or struct literal it was an
  * unresolved reference, and as the value of a branch or match arm the branch had type void.
  */
-module value_positions
 
 func inc(x: int): int { return x + 1 }
 func dec(x: int): int { return x - 1 }

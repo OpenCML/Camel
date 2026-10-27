@@ -7,7 +7,6 @@
  * principles 9.9). This is the contrast that keeps the new zero rules honest: they cover a
  * discrete value's definitional zero, not every value the pass cannot differentiate.
  */
-module discrete_zero_refuse
 
 import { grad } from autodiff
 

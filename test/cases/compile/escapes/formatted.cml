@@ -4,7 +4,6 @@
  * The same probes as plain.cml, written in backticks. No line interpolates anything, so the
  * pattern text is the whole string and every backslash pair reaches the one escape table.
  */
-module escapes_formatted
 
 func main(): int sync {
     println('101', len(`\101`))

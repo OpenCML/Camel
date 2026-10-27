@@ -3,7 +3,6 @@
 /// is the behaviour this case pins, and it is temporary — the host side of the preference path
 /// is scheduled for deletion, and a device that cannot run the operator will then report it
 /// everywhere, not only inside `#gpu`.
-module gpu_nofallback_host
 
 import { reshape, sum } from tensor
 

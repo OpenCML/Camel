@@ -3,7 +3,6 @@
  * type, and the message prints the declaration's own parameter name (`path`) — the one source
  * is `stdlib/fs.cml`, not the C++ module.
  */
-module fs_type
 
 import { exists } from fs
 

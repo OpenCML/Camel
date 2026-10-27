@@ -6,7 +6,6 @@
  * The program sorts by a recursive merge sort whose two halves run concurrently, inside the
  * elements of a map, and folds the results with reduce and filter.
  */
-module concurrent_alloc
 
 import { seed, shuffle } from random
 import { merge_sort, merge_sorted_arrays } from array

@@ -1,7 +1,6 @@
 /**
  * Verifies JIT execution of lambda predicates over structs and arrays, including captured bounds checks.
  */
-module jit_lambda_points
 
 type Point = { x: int, y: int }
 

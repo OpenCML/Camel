@@ -3,7 +3,6 @@
  * says the rule may only be applied where the program grants the assumption. `kept` grants it,
  * `scaled` does not, so the engine applies the rule to one body and not the other.
  */
-module requires_target
 
 func scaled(x: float): float {
     return x * 1.0

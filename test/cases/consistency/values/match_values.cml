@@ -1,7 +1,6 @@
 /**
  * match on ints and strings, with a default.
  */
-module match_values
 
 func name(n: int): string {
     return match n {

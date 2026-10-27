@@ -4,7 +4,6 @@
  * principles 3.9). A program may bind them, and a construct written with one
  * is an ordinary syntax error rather than a dedicated diagnostic.
  */
-module not_keywords_are_names
 
 func try(x: int): int {
     return x + 1

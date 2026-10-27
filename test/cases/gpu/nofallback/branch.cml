@@ -3,7 +3,6 @@
 /// and the segment is written inside the arm, so the arm that is not taken is not computed.
 /// `choose_host` is the same program without the tag: the device path must return what the host
 /// returns, bit for bit.
-module gpu_nofallback_branch
 
 import { reshape, sum } from tensor
 import { regions } from tiles

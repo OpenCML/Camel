@@ -2,7 +2,6 @@
  * The same over an int, with cases of several patterns and block arms, in a `match` written as
  * a statement of a sync body: its value is not used, and it is refused all the same.
  */
-module no_case_matches_int
 
 func describe(k: int): string sync {
     var text = 'none'

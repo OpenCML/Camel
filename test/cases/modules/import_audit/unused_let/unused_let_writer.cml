@@ -2,7 +2,6 @@
  * A module-level `let` whose initial value writes a file, behind an import nothing uses
  * (design principles 3.1: importing executes no code). The flag must never appear..
  */
-module unused_let_writer
 
 import { get_env } from env
 import { write_text } from fs

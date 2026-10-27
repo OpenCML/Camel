@@ -4,7 +4,6 @@
  * deep (line 19, column 38: the first call of `tree`), as the bytecode VM reports it, not a
  * stack overflow. A tail recursion of a million calls is no recursion in depth.
  */
-module recursion_depth_hot
 
 func spin(n: int, acc: int): int {
     return if n <= 0 then acc else spin(n - 1, acc + n)

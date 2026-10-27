@@ -11,7 +11,6 @@
  * kernel's operator ran four times and the body's two operators ran eight times in this run,
  * so the equality is not the equality of two runs of the same path.
  */
-module impl_agreement
 
 #op(':op/add_l')
 func add_kernel(a: int, b: int): int

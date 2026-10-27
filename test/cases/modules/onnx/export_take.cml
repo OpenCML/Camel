@@ -2,7 +2,6 @@
  * `take` with a constant index array exports as one ONNX Gather on axis 0, with the indices as an
  * i64 initializer (the same mapping nn embedding uses).
  */
-module export_take
 
 import { reshape, take } from tensor
 import { export_model } from onnx

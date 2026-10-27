@@ -2,7 +2,6 @@
  * The neighbour: a complex literal where a text is declared is the same type mismatch, naming
  * `c128` and `string`.
  */
-module literal_context_declared_string_complex
 
 func main(): int sync {
     let x: string = 1+2i

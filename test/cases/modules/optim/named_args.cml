@@ -12,7 +12,6 @@
  * writes its four names in another order, which a binding that read the written order would place
  * wrongly.
  */
-module optim_named_args
 
 import { constant, adam, init, sgd, update } from optim
 

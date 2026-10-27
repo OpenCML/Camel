@@ -1,5 +1,4 @@
 /** Refused: the first `with` parameter is a `var`; gradients do not flow through variables (3.5, 9.9). */
-module grad_refuse_var
 import { grad } from autodiff
 
 with <var v: float>

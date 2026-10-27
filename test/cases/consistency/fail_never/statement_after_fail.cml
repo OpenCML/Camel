@@ -4,7 +4,6 @@
  * writer put after it in the same block are never reached -- each of them is told, because the
  * warning belongs to `fail`. What was printed before it stays, and nothing after it is printed.
  */
-module statement_after_fail
 
 func main(): int sync {
     println('before')

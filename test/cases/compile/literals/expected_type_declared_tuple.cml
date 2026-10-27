@@ -6,7 +6,6 @@
  * the same 1.00000012. A tuple literal in a declaration position rounded through the double it
  * was lowered to and printed 1.0 before this.
  */
-module expected_type_declared_tuple
 
 type P = { a: f32, b: f32 }
 

@@ -166,8 +166,6 @@ struct SyntaxIndex {
     /// The expression of every `${...}` of a formatted string, as byte ranges. A completion
     /// inside one is a completion in Camel source, not in a string.
     std::vector<Range> fstringExpressions;
-    std::string moduleName; // `module m`
-    Range moduleNameRange;
     bool complete = false; // built from a tree without syntax errors
 
     /// The innermost scope that contains `offset`.

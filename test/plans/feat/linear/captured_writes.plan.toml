@@ -315,7 +315,7 @@ for (const x of looks) for (const y of looks)
 // arms(): the JOIN of the branch in the graph that holds the variable (:var/new) precedes the
 // read of c written after the branch.
 const section = text.slice(text.indexOf('label="arms"'))
-const join = section.match(/(N[0-9A-F]+) \[label="JOIN", type="JOIN"[^\n]*span="58:/)
+const join = section.match(/(N[0-9A-F]+) \[label="JOIN", type="JOIN"[^\n]*span="57:/)
 assert(join, 'no JOIN for the branch of arms()')
 const reads = [...section.matchAll(/(N[0-9A-F]+) \[label=":var\/get", type="OPER"/g)].map(m => m[1])
 assert(reads.some(r => edge(join[1], r, 'CTRL')), 'missing JOIN -> read of c after the branch')
@@ -639,8 +639,8 @@ const diags = JSON.parse(input.stderr)
 const at = d => (d.range.start.line + 1) + ':' + (d.range.start.character + 1)
 const ignored = diags.filter(d => d.data.name === 'SemanticDiag::IgnoredSideEffect').map(d => at(d) + ' ' + d.message)
 const want = [
-    "40:20 The call of 'write_a: () => int' is not in a sync block, and it writes the captured variable 'a'.",
-    "59:13 The branch is not in a sync block, and an arm writes the captured variable 'c'.",
+    "39:20 The call of 'write_a: () => int' is not in a sync block, and it writes the captured variable 'a'.",
+    "58:13 The branch is not in a sync block, and an arm writes the captured variable 'c'.",
 ]
 assert(JSON.stringify(ignored) === JSON.stringify(want), 'IgnoredSideEffect: ' + ignored.join(' | '))
 assert(!diags.some(d => d.message.includes("'look'") || d.message.includes("'limit'")), 'the read-only recursive function is not reported')

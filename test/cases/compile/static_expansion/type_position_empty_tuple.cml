@@ -4,7 +4,6 @@
  * `type EmptyTuple = ()` is needed, and the empty tuple type prints and hashes exactly as the
  * one an alias would name.
  */
-module type_position_empty_tuple
 
 /** The subject of `match type` is the empty tuple type; `case tuple` selects it. */
 func describeEmpty(): string {

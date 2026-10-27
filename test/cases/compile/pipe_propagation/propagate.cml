@@ -4,7 +4,6 @@
  * with the value. The result is a `U?` (`U!`), so a pipeline writes only the normal path and
  * handles the failure once at its end with `??` or `!!`.
  */
-module pipe_propagation_propagate
 
 func inc(x: int): int { return x + 1 }
 

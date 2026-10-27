@@ -4,7 +4,6 @@
  * print after the call of helper: the gradient of sum does not read the sum, and nothing else
  * depended on that print).
  */
-module grad_effects_kept
 import { reshape, sum, tanh } from tensor
 import { grad, with_grad } from autodiff
 

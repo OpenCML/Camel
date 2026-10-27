@@ -1,4 +1,3 @@
-module binary_bool_error
 import { from_bytes, to_bytes } from tensor
 import { from_array, to_array } from bytes
 func main(): int sync {

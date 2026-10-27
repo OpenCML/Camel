@@ -1,7 +1,6 @@
 // A tail-recursive loop whose body calls an operator of a module (math::sqrt) through a small
 // helper: 1e6 iterations. The granularity rule calls these graphs heavy (a module operator), but
 // every step depends on the one before: nothing here can run concurrently.
-module serial_math
 
 import { sqrt } from math
 

@@ -1,7 +1,6 @@
 /**
  * String comparison and concatenation.
  */
-module strings
 
 func cat(a: string, b: string): string { return a + b }
 func lt(a: string, b: string): bool { return a < b }

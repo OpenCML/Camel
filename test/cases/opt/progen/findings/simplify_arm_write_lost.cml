@@ -6,7 +6,6 @@
  * Actual: (empty line)
  * Reduced by test/tools/progen from seed 92 (generator version 1, all features).
  */
-module simplify_arm_write_lost
 
 func main(): int sync {
     var v51 = '';

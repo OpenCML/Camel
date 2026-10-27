@@ -11,7 +11,6 @@
 ///
 /// Red when: the scope's body is not one segment, the empty scope is planned as something, or the
 /// loop's segment is hoisted out of the loop.
-module tiles_gpu_scope_inspect
 
 import { reshape, sum } from tensor
 import { inspect } from tiles

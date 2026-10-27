@@ -5,7 +5,6 @@
  * cost is proportional to the number of live objects, and the growth setting decides how often
  * that is paid.
  */
-module gc_live_table
 
 type Row = int[]
 
