@@ -3,7 +3,8 @@
  */
 module main
 
-import { mean, stdev } from statistics
+import { mean } from array
+import { stdev } from statistics
 
 func main(): int sync {
     println("=== Statistics Module Basic Tests ===")

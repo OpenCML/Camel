@@ -23,7 +23,7 @@ const modules = new Set(ops.map((o) => o.module))
 // `para` is listed through the two operators its declaration carries: they are built-in element
 // calls (`:mark/...`), and `inspect --ops` names the module that declares them, not the one whose
 // executor runs them.
-for (const m of ['<builtin>', 'array', 'fs', 'io', 'json', 'math', 'process', 'para', 'test_support', 'random', 're', 'sim', 'statistics', 'str', 'env', 'this', 'time']) {
+for (const m of ['<builtin>', 'array', 'fs', 'io', 'json', 'math', 'process', 'para', 'test_support', 'random', 're', 'sim', 'str', 'env', 'this', 'time']) {
   assert(modules.has(m), `module ${m} is not listed`)
 }
 const stale = ops.filter((o) => o.uri.startsWith('algo:')).map((o) => o.uri)
@@ -40,7 +40,7 @@ const notPure = ['time:now', 'rand:rand', 'rand:seed', 'rand:shuffle', 'rand:cho
 for (const uri of notPure) {
   assert(purity[uri] === 'effectful', `${uri} is declared ${purity[uri]}, expected effectful`)
 }
-const pure = ['str:to_upper', 'str:codepoints', 'time:strftime', 'time:strptime', 'math:sin_d', 'math:shl_l', 'statistics:median',
+const pure = ['str:to_upper', 'str:codepoints', 'time:strftime', 'time:strptime', 'math:sin_d', 'math:shl_l',
   're:find', 'json:encode', 'json:decode', 'this:zen', ':op/add_l', ':op/idx_str', ':str/format',
   // They return a new array and leave their argument unchanged (design principles 11.3), one
   // operator per element type: the name carries the element type it takes.

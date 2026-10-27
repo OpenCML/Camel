@@ -7209,16 +7209,14 @@ The call of '{0}' cannot take a value of the reduced-precision element type '{1}
 bf16 and f16 are floating types of the language: a literal has one, bf16(x) and f16(x) are written conversions, and the scalar arithmetic and comparison compute in f32 and round once into the element type (design principles 7.3). This call asks for an operation one of them has no overload for - an operation the same type refuses on f32, such as %, or a function that takes a fixed set of types. Write the operation on a type that has it, or read the value as f32 (or f64) first, which is exact: f32(x).
 ```
 
-**Example** (`test/cases/modules/stdlib/reduced_sort_refused.cml`, run as `camel test/cases/modules/stdlib/reduced_sort_refused.cml`)
+**Example** (`test/cases/modules/stdlib/reduced_arithmetic_refused.cml`, run as `camel test/cases/modules/stdlib/reduced_arithmetic_refused.cml`)
 
 ```camel
-module stdlib_reduced_sort_refused
-
-import { sort } from array
+module stdlib_reduced_arithmetic_refused
 
 func main(): int sync {
-    let xs: f16[] = []
-    println(sort(xs))
+    let xs: bf16[] = []
+    println(xs[0] % xs[0])
     return 0
 }
 ```
@@ -8612,8 +8610,8 @@ A value declared without a right side (`export let inf: float`) is supplied by t
 **Example** (`test/cases/modules/math_kernels/err_value_missing/math.cml`, run as `camel test/cases/modules/math_kernels/err_value_missing/math.cml`)
 
 ```camel
-import { pi } from math
 
+import { timeit } from perf
 export let tau: float
 
 func main(): int sync {
@@ -8644,8 +8642,8 @@ A value declared without a right side is the one the C++ module registers: write
 **Example** (`test/cases/modules/math_kernels/err_value_type/math.cml`, run as `camel test/cases/modules/math_kernels/err_value_type/math.cml`)
 
 ```camel
-import { pi } from math
 
+import { timeit } from perf
 export let inf: int
 
 func main(): int sync {

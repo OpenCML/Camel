@@ -345,29 +345,13 @@ shr: <count: int> (x: T) => T when is_same::<T, i32>()
 shr: <count: int> (x: T) => T when is_same::<T, int>()
 ```
 
-**`statistics`** — import { ... } from statistics — 5 name(s)
+**`statistics`** — import { ... } from statistics — 4 name(s)
 
 ```text
-mean: (xs: i32[]) => float
-mean: (xs: int[]) => float
-mean: (xs: f32[]) => float
-mean: (xs: float[]) => float
-stdev: (xs: i32[]) => float
-stdev: (xs: int[]) => float
-stdev: (xs: f32[]) => float
-stdev: (xs: float[]) => float
-variance: (xs: i32[]) => float
-variance: (xs: int[]) => float
-variance: (xs: f32[]) => float
-variance: (xs: float[]) => float
-median: (xs: i32[]) => float?
-median: (xs: int[]) => float?
-median: (xs: f32[]) => float?
-median: (xs: float[]) => float?
-quantile: <q: float> (xs: i32[]) => float?
-quantile: <q: float> (xs: int[]) => float?
-quantile: <q: float> (xs: f32[]) => float?
-quantile: <q: float> (xs: float[]) => float?
+variance: (xs: T[]) => T when is_float::<T>()
+stdev: (xs: T[]) => T when is_float::<T>()
+median: (xs: T[]) => T when is_float::<T>()
+quantile: <q: float> (xs: T[]) => T when is_float::<T>()
 ```
 
 **`random`** — import { ... } from random — 10 name(s)

@@ -333,35 +333,6 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::GenericArgumentsMismatch", "array_sort_type.cml:10:17", "(int)", "xs: T[]"]
 
-#  ---- The declarations of `statistics`: four element types per name ----
-
-[[tests]]
-name = "native.statistics_declaration_import"
-desc = "`statistics`'s declarations are the module's signature: each name's four numeric element types, `float`/`float?` results, and `quantile`'s with-parameter repeated on every one of its four declarations; every call reaches the C++ operator."
-kind = "behavior"
-case = "../../../cases/compile/native/statistics_declaration_import.cml"
-args = ["${case}"]
-expect_exit = 0
-expect_stdout_exact = "2.5000\n2.5000\n2.1381\n1.6667\n2.0\n2.5\n2.0\n2.0\n"
-
-[[tests]]
-name = "native.statistics_wrong_arity"
-desc = "`statistics:mean` is declared with one ordinary argument: a second one is refused at the call, and the overloads the message lists are the declarations', parameter name included."
-kind = "negative"
-case = "../../../cases/compile/native/statistics_arity.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "statistics_arity.cml:11:17", "(int[], int)", "<statistics:mean>: (xs: i32[]) => float"]
-
-[[tests]]
-name = "native.statistics_wrong_type"
-desc = "An `int` where the declarations of `statistics:mean` take an array of numbers: refused at the declarations' type, and the signatures in the message have their own parameter name (`xs`) — `stdlib/statistics.cml`, not the C++, is the source."
-kind = "negative"
-case = "../../../cases/compile/native/statistics_type.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "statistics_type.cml:12:17", "argument types: <> (int)", "<statistics:mean>: (xs: i32[]) => float"]
-
 #  ---- A declaration the module does not export is private ----
 
 [[tests]]

@@ -60,7 +60,7 @@ func main(): int sync {
 | `re` | `test` |
 | `hash` | `sha256` |
 | `this` | `zen` |
-| `statistics` | `mean`、`stdev`、`variance`、`median`、`quantile` |
+| `statistics` | `stdev`、`variance`、`median`、`quantile`（`mean` 在 `array`）；元素是浮点类型，答元素类型；元素不足是 `InvalidArgument` 故障 |
 | `para` | `unordered_foreach`、`unordered_reduce` |
 | `tensor`、`nn`、`autodiff`、`onnx` | 张量、网络层与优化器、求梯度、ONNX 导出；取行 `take`、`one_hot`，按目标类型重载的 `softmax_cross_entropy`（独热分布或整数类标） |
 | `python` | 嵌入 Python（需要构建时启用） |

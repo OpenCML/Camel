@@ -812,7 +812,7 @@ The modules that come with Camel are `str` (strings), `array` (arrays), `math`, 
 import { split, trim, to_upper, replace, index_of } from str
 import { sort_by, take, sum, reverse, unique } from array
 import { abs, hypot, bit_and, pi } from math
-import { mean } from statistics
+import { mean } from array
 
 func main(): int sync {
     // Strings: the value goes in on the left, what configures the call goes in angle brackets.

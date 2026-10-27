@@ -56,7 +56,7 @@ Not in this reference: the profiler (`perf`).
 | [array](#array) | `import { ... } from array` | Camel |
 | [stream](#stream) | `import { ... } from stream` | Camel |
 | [math](#math) | `import { ... } from math` | C++ |
-| [statistics](#statistics) | `import { ... } from statistics` | C++ |
+| [statistics](#statistics) | `import { ... } from statistics` | Camel |
 | [random](#random) | `import { ... } from random` | C++ |
 | [time](#time) | `import { ... } from time` | C++ |
 | [fs](#fs) | `import { ... } from fs` | C++ |
@@ -3409,84 +3409,67 @@ x shifted right by count bits, keeping the sign (an arithmetic shift): `-8->shr<
 
 <a id="statistics"></a>
 
-## `statistics`
+## `statistics`: variance, standard deviation, median and quantile
 
-Every function takes an array of numbers of one type (i32, int, f32 or float) and computes
-in float.
+Descriptive statistics of an array of floats, written in Camel on `array` (whose `mean` is the
+first of them).
 
-#### `mean`
-
-```camel
-mean: (xs: i32[]) => float
-mean: (xs: int[]) => float
-mean: (xs: f32[]) => float
-mean: (xs: float[]) => float
-```
-
-The arithmetic mean; 0 for an empty array.
-
-- Pure.
-- Example: `mean([1, 2, 3, 4])` gives `2.5`
-
-#### `stdev`
-
-```camel
-stdev: (xs: i32[]) => float
-stdev: (xs: int[]) => float
-stdev: (xs: f32[]) => float
-stdev: (xs: float[]) => float
-```
-
-The sample standard deviation (divisor n - 1); 0 for fewer than two elements.
-
-- Pure.
-- Example: `stdev([2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0])` gives `2.13809`
+Every function takes a float element type (`float`, `f32`, `bf16` or `f16`) and answers it.
+The elements are widened to f64, the statistic is computed there, and the result is rounded
+once into the element type: the rule of every float reduction. An array of integers is
+converted first (`xs->map<(x) => float(x)>`). A statistic that does not exist for the array
+(the standard deviation of one value) is a fault, as every reduction over too few elements is
+(design principles 7.7).
 
 #### `variance`
 
 ```camel
-variance: (xs: i32[]) => float
-variance: (xs: int[]) => float
-variance: (xs: f32[]) => float
-variance: (xs: float[]) => float
+variance: (xs: T[]) => T when is_float::<T>()
 ```
 
-The sample variance (divisor n - 1), the square of stdev; 0 for fewer than two elements.
+The sample variance (divisor n - 1).
 
-- Pure.
-- Example: `variance([1, 2, 3, 4])` gives `1.66667`
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Failure: fault `InvalidArgument` when the array has fewer than two elements.
+- Example: `[1.0, 2.0, 3.0, 4.0]->variance` gives `1.66667`
+
+#### `stdev`
+
+```camel
+stdev: (xs: T[]) => T when is_float::<T>()
+```
+
+The sample standard deviation (divisor n - 1).
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Failure: fault `InvalidArgument` when the array has fewer than two elements.
+- Example: `[2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]->stdev` gives `2.13809`
 
 #### `median`
 
 ```camel
-median: (xs: i32[]) => float?
-median: (xs: int[]) => float?
-median: (xs: f32[]) => float?
-median: (xs: float[]) => float?
+median: (xs: T[]) => T when is_float::<T>()
 ```
 
-The middle value of the sorted elements, the mean of the two middle ones for an even
-count; null for an empty array, NaN when an element is NaN.
+The middle value of the sorted elements, the mean of the two middle ones for an even count;
+NaN when an element is NaN.
 
-- Pure.
-- Example: `median([3, 1, 2]) ?? 0.0` gives `2`
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Failure: fault `InvalidArgument` when the array has no element.
+- Example: `[3.0, 1.0, 2.0]->median` gives `2`
 
 #### `quantile`
 
 ```camel
-quantile: <q: float> (xs: i32[]) => float?
-quantile: <q: float> (xs: int[]) => float?
-quantile: <q: float> (xs: f32[]) => float?
-quantile: <q: float> (xs: float[]) => float?
+quantile: <q: float> (xs: T[]) => T when is_float::<T>()
 ```
 
 The q-quantile, q from 0 to 1, by linear interpolation between the two nearest ranks
-(position q * (n - 1) of the sorted elements); null for an empty array, NaN when an
-element is NaN.
+(position q * (n - 1) of the sorted elements); NaN when an element is NaN.
 
-- Pure.
-- Failure: fault `InvalidArgument` when q is not between 0 and 1.
-- Example: `[1.0, 2.0, 3.0, 4.0, 5.0]->quantile<0.25> ?? 0.0` gives `2`
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Failure: fault `InvalidArgument` when q is not between 0 and 1, or the array has no element.
+- Example: `[1.0, 2.0, 3.0, 4.0, 5.0]->quantile<0.25>` gives `2`
 
 <a id="random"></a>
 

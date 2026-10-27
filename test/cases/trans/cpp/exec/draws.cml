@@ -4,7 +4,8 @@
 module draws
 
 import { seed, rand, randn, randint, choice, sample, shuffle } from random
-import { mean, stdev } from statistics
+import { mean } from array
+import { stdev } from statistics
 
 func pick(xs: int[]): int {
     return choice(xs)
@@ -18,7 +19,8 @@ func main(): int sync {
     println(xs)
     let walk = [randn(), randn(), randn(), randn()]
     let none: int[] = []
-    println(mean(xs), stdev(xs), mean(walk), stdev(walk), mean(none), stdev([1]))
+    let wide = xs->map<(x: int): float => float(x)>
+    println(mean(wide), stdev(wide), mean(walk), stdev(walk))
     // the same seed gives the same draws again
     seed(7)
     println(rand())

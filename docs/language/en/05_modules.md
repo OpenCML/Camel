@@ -60,7 +60,7 @@ Names that can be used without an import (global built-ins): `print`, `println`,
 | `re` | `test` |
 | `hash` | `sha256` |
 | `this` | `zen` |
-| `statistics` | `mean`, `stdev`, `variance`, `median`, `quantile` |
+| `statistics` | `stdev`, `variance`, `median`, `quantile` (`mean` is in `array`); the elements are a float type and the answer is that type; too few elements is an `InvalidArgument` fault |
 | `para` | `unordered_foreach`, `unordered_reduce` |
 | `tensor`, `nn`, `autodiff`, `onnx` | Tensors, network layers and optimisers, gradients, ONNX export; the row gather `take`, `one_hot`, and `softmax_cross_entropy` overloaded on the target's type (one-hot rows or integer class labels) |
 | `python` | Embedded Python (must be enabled at build time) |

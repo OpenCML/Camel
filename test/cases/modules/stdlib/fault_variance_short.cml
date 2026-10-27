@@ -1,0 +1,10 @@
+module fault_variance_short
+
+import { variance } from statistics
+
+func main(): int sync {
+    println('before')
+    println(variance([5.0]))
+    println('not reached')
+    return 0
+}

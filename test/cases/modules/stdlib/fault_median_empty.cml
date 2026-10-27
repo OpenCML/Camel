@@ -1,0 +1,11 @@
+module fault_median_empty
+
+import { median } from statistics
+
+func main(): int sync {
+    println('before')
+    let none: float[] = []
+    println(median(none))
+    println('not reached')
+    return 0
+}

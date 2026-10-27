@@ -482,8 +482,6 @@ Rules buildRules() {
     // ---- Modules with a standalone translation ----
     r["time:now"]         = runtimeFunction("now", false);
     r["env:get_env"]      = runtimeFunction("getEnv", false);
-    r["statistics:mean"]  = runtimeFunction("statisticsMean");
-    r["statistics:stdev"] = runtimeFunction("statisticsStdev");
     // random draws as modules/random does, through camel/utils/random.h (standalone/random.h).
     r["rand:seed"]    = runtimeFunction("randomSeed", false);
     r["rand:rand"]    = runtimeFunction("randomUnit", false);
