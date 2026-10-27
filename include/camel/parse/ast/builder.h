@@ -228,6 +228,7 @@ class Builder {
     Value visitSpecType(syntax::cst::SpecType context);
     Value visitRefType(syntax::cst::RefType context);
     Value visitTypeOfType(syntax::cst::TypeOfType context);
+    Value visitTypeCallType(syntax::cst::TypeCallType context);
     Value visitStructType(syntax::cst::StructType context);
     Value visitEnumType(syntax::cst::EnumType context);
     Value visitEnumPattern(syntax::cst::Pattern context, syntax::cst::IdentRef ref);

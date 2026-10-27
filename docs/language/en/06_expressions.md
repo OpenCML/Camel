@@ -423,6 +423,8 @@ match type type {
 - The selected branch becomes straight-line code at that position; the graph has no branch node. Its value is the value of the `match type`, and an empty branch has type `void`.
 - A generic function may omit its return type: each instance gets it from the selected branch (return-type inference). A recursive call that comes back to the **same type instance** while that instance's return type is still unknown reports `SemanticDiag::GenericInstantiationCycle`; recursion with strictly smaller type arguments finishes the child instance first as usual.
 
+**Type functions.** A type is also computed from a type with a call written where a type is (design principles 21): `element_of::<T>()` is the element type of an array or a set, `payload_of::<T>()` the `U` of `U?` or `U!`, `key_of::<T>()` and `value_of::<T>()` the key and value types of a map. The arguments sit between `::<` and `>` and the argument list is empty, and a call is a type like any other: `is_integer::<element_of::<T>()>()` is a type argument, and `func first::<T>(xs: T): element_of::<T>()` is a result type. While `T` is a type variable the call waits; when the instance binds `T` it is replaced by the type it computes, and a type the function does not accept (`element_of::<int>()`) is `SemanticDiag::TypeFunctionNotApplicable`, at the call when it is written with concrete arguments and at the call that makes the instance otherwise. A name that is not one of the four is the same diagnostic.
+
 ```cml
 func duplicate::<T>(t: T) {
     return match type T {

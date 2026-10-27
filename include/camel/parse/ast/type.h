@@ -83,9 +83,14 @@ class TypeExprLoad : public TypeLoad {
 
 class SpecTypeLoad : public TypeLoad {
   public:
-    SpecTypeLoad() : TypeLoad(TypeType::Spec) {}
-    const std::string toString() const override { return "SpecType"; }
+    explicit SpecTypeLoad(bool call = false) : TypeLoad(TypeType::Spec), call_(call) {}
+    const std::string toString() const override { return call_ ? "TypeCall" : "SpecType"; }
     const std::string geneCode() const override;
+    /// `f::<A, B>()`, a type function applied, rather than `Name<A, B>`, a type applied.
+    bool call() const { return call_; }
+
+  private:
+    bool call_;
 };
 
 /// How a dimension group ends (design principles 5.4): no pack, `..`, or `..name`.
