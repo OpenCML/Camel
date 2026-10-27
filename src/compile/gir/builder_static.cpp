@@ -287,6 +287,11 @@ void Builder::walkStaticBodyNames(
         if (!found && staticValueNamed(node->name()).has_value()) {
             found = true;
         }
+        // A type variable the instance binds is read as the conversion of its type (`T(x)`,
+        // resolveDRefNode): a case that is not selected must see it as the selected one does.
+        if (!found && camel::core::type::findTypeBinding(typeBindings_, node->name()) != nullptr) {
+            found = true;
+        }
         // The declaration-site check of a generic template is the one caller that reads a body
         // no instance has built, so a name a declaration of the module gives later in the source
         // is not a misspelling there: the module is one scope and the top level is built by

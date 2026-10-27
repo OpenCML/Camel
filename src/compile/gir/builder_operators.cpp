@@ -1203,8 +1203,40 @@ node_handle_t Builder::inPlaceRebindingOf(const GCT::node_ptr_t &gct) {
     }
     // `op` is an operator of a module (nothing of the program is named so), and one of its
     // overloads declares an in-place form: anything else is an ordinary call.
-    const oper_group_ptr_t group = importedOperatorGroupNamed(opName->name());
-    auto &table                  = camel::core::OperatorTable::instance();
+    oper_group_ptr_t group = importedOperatorGroupNamed(opName->name());
+    if (group == nullptr) {
+        // A generic function whose `#impl` kernel has an in-place form (`sort`): the rule of the
+        // kernel that is the executor for this array is the operator the rewrite is about
+        // (adoptImplKernel asks the same question of an instance).
+        std::vector<generic_template_ptr_t> templates;
+        if (const auto scoped = templateScope_->get(opName->name()); scoped.has_value()) {
+            if (GenericGroup *templated = genericGroupOf(scoped.value()); templated != nullptr) {
+                templates.assign(templated->begin(), templated->end());
+            }
+        } else if (const auto imported = importedEntity(opName->name()); imported.has_value()) {
+            templates = genericTemplatesOfEntity(imported.value());
+        }
+        for (const generic_template_ptr_t &tmpl : templates) {
+            const auto declared = implTemplateKernels_.find(tmpl.get());
+            if (declared == implTemplateKernels_.end()) {
+                continue;
+            }
+            for (const auto &[ruleUri, resolver] : declared->second.group->resolvers()) {
+                if (resolver->resolve({}, {arrayType}).has_value() &&
+                    declaredRuleApplies(resolver, declared->second.name, {}, {arrayType})) {
+                    group = OperatorGroup::create(
+                        declared->second.group->name(),
+                        std::vector<std::pair<std::string, camel::core::type::resolver_ptr_t>>{
+                            {ruleUri, resolver}});
+                    break;
+                }
+            }
+            if (group != nullptr) {
+                break;
+            }
+        }
+    }
+    auto &table = camel::core::OperatorTable::instance();
     if (group == nullptr || std::ranges::none_of(group->resolvers(), [&](const auto &overload) {
             return table.inPlaceForm(overload.first).has_value();
         })) {
@@ -2790,6 +2822,15 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     kernelStatics);
                 resolved.has_value()) {
                 targetOperator = *resolved;
+                if (inPlaceCalls_.contains(gct)) {
+                    // Written by inPlaceRebindingOf, which checked that this kernel has an
+                    // in-place form: the call works on the array var/take hands it.
+                    const auto form =
+                        camel::core::OperatorTable::instance().inPlaceForm(targetOperator->uri());
+                    ASSERT(form.has_value(), "An in-place rebinding lost its in-place form.");
+                    targetOperator = std::make_shared<OperatorIndex>(
+                        targetOperator->name(), targetOperator->funcType(), *form);
+                }
                 targetNode     = currGraph_->addOperNode(targetOperator, 0);
                 stampPermissions(targetNode);
                 registerNodeOrigin(context_, targetNode, gct->at(0), "gir.link.oper");
