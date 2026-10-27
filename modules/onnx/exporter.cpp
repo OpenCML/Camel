@@ -4601,7 +4601,7 @@ Model exportBound(
     GCGraph *graph = fn->graph();
     checkArity(graph, examples.size());
 
-    Emitter emitter(options.opset, capabilitiesFor(options));
+    Emitter emitter(options.opset, capabilitiesFor(options), options.target);
     emitter.graph().name                        = options.graphName;
     const BoundInputs bound                     = bindInputs(emitter, options, examples);
     const std::vector<Value> &inputs            = bound.values;
@@ -4955,7 +4955,7 @@ Model translateEntryGraph(
     core::context::Context &ctx, const camel::runtime::Program *program,
     const ExportOptions &options) {
     GCGraph *root = program->root();
-    Emitter emitter(options.opset, capabilitiesFor(options));
+    Emitter emitter(options.opset, capabilitiesFor(options), options.target);
     emitter.graph().name = options.graphName;
 
     // One model input per parameter the entry graph still has, `with` ones first: the order

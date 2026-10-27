@@ -89,9 +89,14 @@ class CapabilityTable;
 class Emitter {
   public:
     /// `capabilities` (optional) is the target runtime's: every node is checked against it.
-    explicit Emitter(int64_t opset, const CapabilityTable *capabilities = nullptr);
+    /// `target` is its name in the lowering's target table (lowering.h), which a lowering reads
+    /// to choose the form one target needs; empty means no target was declared.
+    explicit Emitter(
+        int64_t opset, const CapabilityTable *capabilities = nullptr, std::string target = {});
 
     int64_t opset() const { return opset_; }
+    /// Name of the export target ("onnxruntime-cpu"), or empty when none was declared.
+    const std::string &target() const { return target_; }
 
     /// The main graph (inputs, outputs, initializers, top-level nodes).
     Graph &graph() { return scopes_.front().graph; }
@@ -182,6 +187,7 @@ class Emitter {
 
     const CapabilityTable *capabilities_;
     std::unordered_map<std::string, ElemType> elemTypes_;
+    std::string target_;
     int64_t opset_;
     int speculation_ = 0;
     std::deque<Scope> scopes_;

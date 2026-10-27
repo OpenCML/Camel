@@ -223,6 +223,49 @@ std::string swapLast(Emitter &e, const std::string &x, size_t rank) {
     return e.node("Transpose", {x}, {Attribute::makeInts("perm", std::move(perm))});
 }
 
+/// `x` with `count` leading unit axes added. An Einsum operand's ellipsis has one rank per
+/// operand: onnxruntime broadcasts its *dims* but rejects two ellipses that differ in rank
+/// ("Ellipsis represents incompatible dimensions"), so an operand with fewer leading axes than
+/// the other takes unit ones -- which is exactly how the broadcast MatMul these products
+/// replace read it (numpy's right-aligned batch rule).
+std::string withLeadingUnitAxes(Emitter &e, const std::string &x, size_t count) {
+    std::string lifted = x;
+    for (size_t i = 0; i < count; ++i) {
+        const int64_t leading[] = {0};
+        lifted                  = e.node("Unsqueeze", {lifted, e.int64s(leading)});
+    }
+    return lifted;
+}
+
+/// A product with one operand's last two axes swapped -- `transposeLast2(a) @ b` when
+/// `transposeFirst`, else `a @ transposeLast2(b)` -- in the form the export target runs at its
+/// defaults. A rank-2 pair is one Gemm with transA/transB; anything batched is one Einsum whose
+/// equation carries the leading axes as an ellipsis, both operands lifted to the same rank so
+/// the two ellipses agree. `avoidFusion` is the target table's answer (lowering.h): when it is
+/// false the plain MatMul beside a Transpose is kept, which is what every model written before
+/// this rule carries.
+std::string transposedProduct(
+    Emitter &e, const std::string &a, size_t aRank, const std::string &b, size_t bRank,
+    bool transposeFirst, bool avoidFusion) {
+    if (!avoidFusion) {
+        return transposeFirst ? e.node("MatMul", {swapLast(e, a, aRank), b})
+                              : e.node("MatMul", {a, swapLast(e, b, bRank)});
+    }
+    const size_t rank = aRank > bRank ? aRank : bRank;
+    if (rank == 2) {
+        return e.node(
+            "Gemm", {a, b}, {Attribute::makeInt(transposeFirst ? "transA" : "transB", 1)});
+    }
+    // The two equations the gradients of a matmul need: contracting the first operand's last axis
+    // with the second's last axis (`dy @ rhs^T`), or its second-to-last with the second's
+    // second-to-last (`lhs^T @ dy`).
+    const char *equation = transposeFirst ? "...ji,...jk->...ik" : "...ik,...jk->...ij";
+    return e.node(
+        "Einsum",
+        {withLeadingUnitAxes(e, a, rank - aRank), withLeadingUnitAxes(e, b, rank - bRank)},
+        {Attribute::makeString("equation", equation)});
+}
+
 // matmul_grad_lhs(dy, lhs, rhs) = sum_to(dy @ rhs^T, lhs);
 // matmul_grad_rhs(dy, lhs, rhs) = sum_to(lhs^T @ dy, rhs).
 // A vector operand is what matmul takes it for: a 1-D lhs is a row (1, n), a 1-D rhs a column
@@ -257,12 +300,16 @@ template <bool Lhs> Value lowerMatmulGrad(const LowerContext &ctx) {
     }
     std::string product;
     tensor::StaticShape productShape = dyShape;
+    // A transposed product on doubles has to avoid the pair the target fuses (ruling 2026-10-26):
+    // one answer for both sites, read from the lowering's target table.
+    const bool avoidFusion = transposedProductNeedsGemmOrEinsum(ctx.target(), dtype);
     if (Lhs) {
         std::string rhs = ctx.input(2, dtype);
         if (rhsVector) {
             rhs = e.node("Unsqueeze", {rhs, axisOf(1)});
         }
-        product             = e.node("MatMul", {dy, swapLast(e, rhs, rhsShape.size())});
+        product = transposedProduct(
+            e, dy, dyShape.size(), rhs, rhsShape.size(), false, avoidFusion);
         productShape.back() = lhsShape.back();
         if (lhsVector) {
             product = e.node("Squeeze", {product, axisOf(productShape.size() - 2)});
@@ -273,7 +320,8 @@ template <bool Lhs> Value lowerMatmulGrad(const LowerContext &ctx) {
         if (lhsVector) {
             lhs = e.node("Unsqueeze", {lhs, axisOf(0)});
         }
-        product = e.node("MatMul", {swapLast(e, lhs, lhsShape.size()), dy});
+        product = transposedProduct(
+            e, lhs, lhsShape.size(), dy, dyShape.size(), true, avoidFusion);
         productShape[productShape.size() - 2] = rhsShape[rhsShape.size() - 2];
         if (rhsVector) {
             product = e.node("Squeeze", {product, axisOf(productShape.size() - 1)});

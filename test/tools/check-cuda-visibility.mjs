@@ -82,8 +82,12 @@ const CUDA_AWARE_MODULES = [
  * 33 -> 34: `ort_slice_grad_stride` joined, the ONNX Runtime probe of a slice whose step is not 1
  * in the same plan. CPU-only in the same way, so it names no device and the runner's default
  * hides the machine's cards from it.
+ * 34 -> 35 on 2026-10-27: `ort_grad_matmul_batched` joined, the ONNX Runtime probe of a batched
+ * matmul's gradient in the same plan (`test/cases/modules/onnx/ort_grad_matmul_batched.py`). It is
+ * CPU-only too -- `providers=["CPUExecutionProvider"]` on a model it exports and compares -- so it
+ * names no device either, and the runner's default hides the machine's cards from it.
  */
-export const EXPECTED_EXAMINED = 34
+export const EXPECTED_EXAMINED = 35
 export const EXPECTED_DEVICE_LAYER = 17
 
 function walkPlanFiles(dir, out = []) {
