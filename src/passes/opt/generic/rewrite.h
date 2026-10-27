@@ -9,7 +9,9 @@
 
 #include "camel/core/context/context.h"
 #include "camel/runtime/draft.h"
+#include "camel/runtime/graph.h"
 
+#include <algorithm>
 #include <functional>
 #include <string>
 #include <string_view>
@@ -21,6 +23,47 @@ namespace camel::passes::generic {
 
 using camel::runtime::gc_node_ref_t;
 using camel::runtime::GraphDraft;
+
+/// Hand a wait a removed node carried through a `sync` block's chain to a consumer, in the kind it
+/// had: a wait is copied kind for kind (docs/handover/README.cn.md 5.21 item 4), so a consumer that
+/// is itself a statement of the block follows the predecessor through the sync edge rather than
+/// through the control edge that names the same pair beside it. Written only where the chain can
+/// take it -- both ends are statements of the block, the consumer is not written after anything yet
+/// and the predecessor has no other follower, because a chain never forks
+/// (docs/design/effects/edges.cn.md 4.6). Returns whether the wait was written; a caller that gets
+/// `false` hands it on the way it did before.
+inline bool handOverSyncWait(GraphDraft &draft, gc_node_ref_t pred, gc_node_ref_t user) {
+    if (!draft.alive(pred) || !draft.alive(user) || pred == user) {
+        return false;
+    }
+    const auto *userHeader = draft.header(user);
+    if (userHeader == nullptr ||
+        (userHeader->runtimeFlags & camel::runtime::kGCNodeFlagSyncStatement) == 0) {
+        return false;
+    }
+    if (!draft.syncInputsOf(user).empty() || !draft.syncUsersOf(pred).empty() ||
+        draft.nodeRegion(pred) != draft.nodeRegion(user)) {
+        return false;
+    }
+    const auto mark = [&](gc_node_ref_t node) {
+        const auto *header = draft.header(node);
+        if (header != nullptr) {
+            draft.setNodeRuntimeFlags(
+                node,
+                static_cast<uint8_t>(header->runtimeFlags |
+                                     camel::runtime::kGCNodeFlagSyncStatement));
+        }
+    };
+    mark(pred);
+    mark(user);
+    const gc_node_ref_t only[1] = {pred};
+    draft.setSyncInputs(user, only);
+    const auto ctrl = draft.ctrlInputsOf(user);
+    if (std::ranges::find(ctrl, pred) == ctrl.end()) {
+        draft.appendInput(camel::runtime::DraftEdgeKind::Ctrl, user, pred);
+    }
+    return true;
+}
 
 /// The integer neutral elements (x + 0, 0 + x, x - 0, x * 1, 1 * x), the implementation of
 /// `std::opt::algebra neutral_only=true`. The algebraic laws themselves are the rules library's
