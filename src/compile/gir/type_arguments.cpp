@@ -133,6 +133,11 @@ node_handle_t Builder::visitTypeApplication(const GCT::node_ptr_t &gct) {
         }
         types.push_back(resolveTypeNode(gct->at(i)->dataType(), gct->at(i)));
     }
+    // The `with` arguments written after these types and the names they carry (visitWithNode); the
+    // outer application's are not this one's.
+    const size_t withWritten = std::exchange(typeApplicationWithWritten_, 0);
+    const std::vector<std::optional<std::string>> withNames =
+        std::exchange(typeApplicationWithNames_, {});
     if (const auto found = genericDrefs_.find(target); found != genericDrefs_.end()) {
         // The explicit types go to one function, so they choose among the overloads of the
         // name when it has several: the ones whose type parameters are exactly the names given
@@ -145,6 +150,38 @@ node_handle_t Builder::visitTypeApplication(const GCT::node_ptr_t &gct) {
                 const std::vector<std::string> names = typeParameterNames(candidate);
                 if (names.size() != types.size()) {
                     continue;
+                }
+                // The `with` parameters tell overloads of one name apart as the ordinary ones do:
+                // the arguments written fit when they are not more than the parameters, not fewer
+                // than the ones without a default, and every name written is a parameter's.
+                {
+                    const FunctionType *signature = candidate->funcType;
+                    const size_t declared         = signature->withTypesCount();
+                    size_t required               = declared;
+                    if (const auto defaults = defaults_.find(candidate.get());
+                        defaults != defaults_.end()) {
+                        required = 0;
+                        for (const auto &value : defaults->second.with) {
+                            required += value.has_value() ? 0 : 1;
+                        }
+                    }
+                    if (withWritten > declared || withWritten < required) {
+                        continue;
+                    }
+                    bool namesFit = true;
+                    for (const auto &written : withNames) {
+                        if (!written.has_value()) {
+                            continue;
+                        }
+                        bool found = false;
+                        for (size_t i = 0; signature->hasArgNames() && i < declared; ++i) {
+                            found = found || signature->argNameAt(i) == *written;
+                        }
+                        namesFit = namesFit && found;
+                    }
+                    if (!namesFit) {
+                        continue;
+                    }
                 }
                 if (given.empty()) {
                     fits.push_back(candidate); // positional: the count is what can be checked

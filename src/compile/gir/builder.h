@@ -761,6 +761,12 @@ class Builder {
     // the name, `counter::cnt`): a body that reads or writes the cell through a capture touches
     // that resource (builder_resources.cpp).
     std::unordered_map<node_handle_t, std::string> moduleVariableResources_;
+    // The `with` arguments written after the explicit type arguments being applied
+    // (`f::<int><n: 2>`): their count and names choose among generic overloads that differ in their
+    // `with` parameters, exactly as they choose among the others (visitTypeApplication). A type
+    // application that is not the callee of a binding writes none.
+    size_t typeApplicationWithWritten_ = 0;
+    std::vector<std::optional<std::string>> typeApplicationWithNames_;
     // The last call through a function value written in a sync block: it may write any variable the
     // value captured, so a read written after it is ordered after it (readVariableThrough).
     node_handle_t lastIndirectCall_ = nullptr;

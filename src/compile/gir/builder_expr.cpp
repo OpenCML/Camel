@@ -1653,8 +1653,21 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     // The callee of a binding is a name: `name<value>` binds the parameters of `name`
     // (visitDRefNode), it does not make the rule value that early.
     const bool outerRuleBindingCallee = std::exchange(ruleBindingCallee_, true);
-    any targetNodeRes                 = visit(gct->at(0));
-    ruleBindingCallee_                = outerRuleBindingCallee;
+    // The explicit type arguments of a generic callee are applied knowing which `with` arguments
+    // follow them.
+    const size_t outerWithWritten = typeApplicationWithWritten_;
+    const auto outerWithNames     = typeApplicationWithNames_;
+    if (gct->at(0)->type() == GCT::NodeKind::TAPP) {
+        typeApplicationWithWritten_ = gct->size() - 1;
+        typeApplicationWithNames_.clear();
+        if (const auto *written = GCT::Tree::of(gct)->argumentNamesOf(gct)) {
+            typeApplicationWithNames_ = *written;
+        }
+    }
+    any targetNodeRes = visit(gct->at(0));
+    typeApplicationWithWritten_ = outerWithWritten;
+    typeApplicationWithNames_   = outerWithNames;
+    ruleBindingCallee_          = outerRuleBindingCallee;
     genericCalleeAllowed_             = false;
     // As in visitLinkNode: a lambda written in place gives its graph.
     node_handle_t targetNode = valueNodeOf(targetNodeRes);

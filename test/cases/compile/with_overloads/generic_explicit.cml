@@ -1,0 +1,32 @@
+/**
+ * Generic functions of one name that differ in their `with` parameters are one overload set, and
+ * explicit type arguments choose among them the way the arguments do: by the count of `with`
+ * arguments written, and by the names they carry.
+ */
+func pick::<T>(x: T): T {
+    return x
+}
+
+with <n: int>
+func pick::<T>(x: T): T[] {
+    return [x for i in 0..n]
+}
+
+with <label: string>
+func tag::<T>(x: T): string {
+    return label
+}
+
+with <times: int>
+func tag::<T>(x: T): int {
+    return times
+}
+
+func main(): int sync {
+    println(pick::<int>(1))
+    println(pick::<int><n: 2>(1))
+    println(pick::<int><3>(1))
+    println(tag::<int><label: 'a'>(5))
+    println(tag::<int><times: 7>(5))
+    return 0
+}
