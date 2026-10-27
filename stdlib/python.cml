@@ -22,6 +22,9 @@
 
 module python
 
+/// A Python object seen from Camel; the module provides the type.
+export type PyObject
+
 /// Runs Python statements `code` in the interpreter and returns its `None`. Definitions and
 /// assignments stay visible to later calls, as in a Python session.
 /// @effect runs arbitrary Python code

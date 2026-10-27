@@ -149,6 +149,7 @@ export func collect::<T>(s: T..): T[] {
 /// executor's buffer (a leading side may be blocked, or the buffer grown): it changes no
 /// result. Each of the two may be passed to `tee` again.
 /// @fails fault `InvalidArgument` when n is below 1 (refused where it is written when n is constant)
+/// @example-fragment a pair of streams is bound by a destructuring `let`, a statement
 /// @example let (a, b) = from_array([1, 2, 3])->tee
 #op('stream:tee')
 with <n: int = 8>

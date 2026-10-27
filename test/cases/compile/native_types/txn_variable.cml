@@ -1,0 +1,13 @@
+/**
+ * The argument of a type a C++ module provides is any type expression, a type variable of a
+ * generic declaration included: `Txn<F>` is the transaction on whatever function `F` is.
+ */
+import { Txn } from graph
+
+func same::<F>(t: Txn<F>): Txn<F> {
+    return t
+}
+
+func main(): int sync {
+    return 0
+}

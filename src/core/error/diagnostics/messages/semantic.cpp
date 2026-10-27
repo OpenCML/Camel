@@ -237,6 +237,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::NativeTypeNotProvided,
+            {
+                "NativeTypeNotProvided",
+                "The type '{0}' is declared without a right side, so a C++ module has to provide it, and the module '{1}' registered no type of that name.",
+                "A type written without '=' (`export type Graph`, `export type Txn<F>`) is the one a C++ module provides, as a function without a body is: its identity is the module and the name. Give the type its definition after '=', or check that the module registers it under this name.",
+            },
+        },
+        {
             SemanticDiag::ArgumentNeedsConversion,
             {
                 "ArgumentNeedsConversion",

@@ -17,6 +17,9 @@
  * unchanged, so one `!!` or `??` at the end of a chain settles it.
  */
 
+/// A JSON value whose shape is known only when the program runs; the module provides the type.
+export type Json
+
 /// The value a JSON text describes, as a `Json`: a value of a definite type whose content is
 /// known only when the program runs. Look into it with `get`, `as_int`, `as_array` and the other
 /// accessors below.

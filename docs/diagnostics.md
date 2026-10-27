@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-292 diagnostics: 272 errors, 20 warnings. 15 carry a machine-applicable edit, 277 say why they carry none.
+293 diagnostics: 273 errors, 20 warnings. 15 carry a machine-applicable edit, 278 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -257,6 +257,7 @@ prints one entry.
 | `0x030001FA` | [SemanticDiag::StreamCaptured](#streamcaptured) | Error | no |
 | `0x030001FB` | [SemanticDiag::NativeValueNotLoaded](#nativevaluenotloaded) | Error | no |
 | `0x030001FC` | [SemanticDiag::NativeValueMismatch](#nativevaluemismatch) | Error | no |
+| `0x030001FD` | [SemanticDiag::NativeTypeNotProvided](#nativetypenotprovided) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -8693,6 +8694,38 @@ A value declared without a right side is the one the C++ module registers: write
 import { pi } from math
 
 export let inf: int
+
+func main(): int sync {
+    return 0
+}
+```
+
+### NativeTypeNotProvided
+
+`0x030001FD` · Error · `SemanticDiag::NativeTypeNotProvided`
+
+**Fix**
+
+None: choice: whether the type is written out or provided by the module is a decision only the writer can make
+
+**Message**
+
+```text
+The type '{0}' is declared without a right side, so a C++ module has to provide it, and the module '{1}' registered no type of that name.
+```
+
+**Help**
+
+```text
+A type written without '=' (`export type Graph`, `export type Txn<F>`) is the one a C++ module provides, as a function without a body is: its identity is the module and the name. Give the type its definition after '=', or check that the module registers it under this name.
+```
+
+**Example** (`test/cases/compile/native_types/not_provided.cml`, run as `camel test/cases/compile/native_types/not_provided.cml`)
+
+```camel
+module not_provided
+
+export type Nope
 
 func main(): int sync {
     return 0
