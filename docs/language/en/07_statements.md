@@ -678,6 +678,15 @@ id
 - It can be `export`ed, and is used in another module as `module::Pair<int>`.
 - The angle brackets of a module type are interpreted by the type itself, and the arguments can be types or `const data`; the angle brackets of `f32[2, 3]`, another spelling of a numeric array, are interpreted by the array type itself (a shape argument is written without `const`: `f32[2, 3]` is `SemanticDiag::InvalidTypeArgument`).
 
+**A type a C++ module provides is declared without a right side**, as a function it provides is declared without a body (design principles 6.4, 10.4):
+
+```text
+export type Graph
+export type Txn<F>
+```
+
+The type is the one the module registered under that name; its identity is the module and the name, so a type of the same name in another module is another type, and a name the module did not register is `SemanticDiag::NativeTypeNotProvided`. The parameters list the arguments the type takes, and an argument is any type expression, a type variable of a generic declaration included: `func same::<F>(t: Txn<F>): Txn<F>`. A type is never named by a string: `type X = 'text'` is a syntax error.
+
 A type expression has no type operations: `A & B`, `A \ B`, `A + B` and `A ^ B` are ordinary syntax errors (`&`, `\`, `+`, `-`, `^` mean nothing in a type position; they are the operators of an expression, so `x as T + U` is `(x as T) + U`). `keyof` and `of` are not keywords: the ones in `keyof T` and `name of T` are ordinary names, and writing them is a syntax error. `typeof e` is a whole type, the type of the value of `e`, expanded by the compiler where the type is used. It cannot be nested inside a larger type (`typeof(1)[]` is `SemanticDiag::TypeOfNotWholeType`), and an operand with no value (`void`) is `SemanticDiag::TypeOfNotAValue`.
 
 ## 7.8 Blocks

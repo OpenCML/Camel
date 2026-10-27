@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-287 diagnostics: 270 errors, 17 warnings. 15 carry a machine-applicable edit, 272 say why they carry none.
+288 diagnostics: 271 errors, 17 warnings. 15 carry a machine-applicable edit, 273 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -255,6 +255,7 @@ prints one entry.
 | `0x030001F8` | [SemanticDiag::FactCaseBindsNoVariable](#factcasebindsnovariable) | Error | no |
 | `0x030001F9` | [SemanticDiag::FactJoinRequired](#factjoinrequired) | Error | no |
 | `0x030001FA` | [SemanticDiag::StreamCaptured](#streamcaptured) | Error | no |
+| `0x030001FB` | [SemanticDiag::NativeTypeNotProvided](#nativetypenotprovided) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -8618,6 +8619,38 @@ func read(): () => int {
 func main(): int sync {
     let take = read()
     println(take())
+    return 0
+}
+```
+
+### NativeTypeNotProvided
+
+`0x030001FB` · Error · `SemanticDiag::NativeTypeNotProvided`
+
+**Fix**
+
+None: choice: whether the type is written out or provided by the module is a decision only the writer can make
+
+**Message**
+
+```text
+The type '{0}' is declared without a right side, so a C++ module has to provide it, and the module '{1}' registered no type of that name.
+```
+
+**Help**
+
+```text
+A type written without '=' (`export type Graph`, `export type Txn<F>`) is the one a C++ module provides, as a function without a body is: its identity is the module and the name. Give the type its definition after '=', or check that the module registers it under this name.
+```
+
+**Example** (`test/cases/compile/native_types/not_provided.cml`, run as `camel test/cases/compile/native_types/not_provided.cml`)
+
+```camel
+module not_provided
+
+export type Nope
+
+func main(): int sync {
     return 0
 }
 ```

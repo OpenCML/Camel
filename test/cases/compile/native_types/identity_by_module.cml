@@ -1,0 +1,8 @@
+module identity_by_module
+
+// `Graph` is the type the module `graph` provides under that name; this module is not it.
+export type Graph
+
+func main(): int sync {
+    return 0
+}

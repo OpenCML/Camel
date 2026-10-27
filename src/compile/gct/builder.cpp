@@ -13,6 +13,7 @@
 #include "camel/core/tags.h"
 #include "camel/core/type/bytes.h"
 #include "camel/core/type/collection.h"
+#include "camel/core/type/native.h"
 #include "camel/core/type/composite/stream.h"
 #include "camel/core/type/enum.h"
 #include "camel/core/type/other.h"
@@ -1636,7 +1637,6 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
     ASSERT(ast->type() == AST::LoadType::Stmt, "Expected StmtLoad type for TypeDecl");
     const auto &typeNode = ast->optAtAs<AST::TypeLoad>(0);
     Type *type;
-    ASSERT(typeNode, "TypeDecl must have a type");
     const auto &typeLoad = ast->loadAs<AST::TypeDeclLoad>();
     // A declaration in error declares nothing; uses of the name follow from that error.
     struct PoisonOnFailure {
@@ -1671,7 +1671,18 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
             : self(b), outer(std::exchange(b.fieldTagOwner_, owner)) {}
         ~FieldTagOwner() { self.fieldTagOwner_ = outer; }
     } fieldTagOwner(*this, declNode);
-    if (typeNode->loadAs<AST::TypeLoad>()->typeType() == AST::TypeType::Enum) {
+    if (!typeNode) {
+        // `export type Graph`, `export type Txn<F>`: the type is provided by the C++ module of
+        // the same name, under this name (design principles 10.4), like a function without a
+        // body. Its identity is the module and the name.
+        type = camel::core::type::findNativeType(module_->name(), typeLoad->ref().toString());
+        if (type == nullptr) {
+            diags_->of(SemanticDiag::NativeTypeNotProvided)
+                .at(ast->load()->tokenRange())
+                .commit(typeLoad->ref().toString(), module_->name());
+            throw BuildAbortException();
+        }
+    } else if (typeNode->loadAs<AST::TypeLoad>()->typeType() == AST::TypeType::Enum) {
         // The name is in scope before the variants are read, so that a variant field can hold
         // the enum itself (`type Tree = enum { Node(Tree, Tree) }`).
         type = declareEnumType(typeNode, typeLoad.get());
@@ -5955,21 +5966,6 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
             }
             diag.commit(keyType->toString(), coll->toString(), problem);
             throw BuildAbortException();
-        }
-    }
-    if (base->isOtherType() && !static_cast<OtherType *>(base)->typeArguments()) {
-        // What the arguments of a module type mean is defined by the type, which sees
-        // concrete types only. A type whose arguments are plain types (Map, Set) takes
-        // variables like an array or a tuple does.
-        for (const TypeArgument &argument : arguments) {
-            if (argument.type != nullptr && containsTypeVar(argument.type)) {
-                diags_->of(SemanticDiag::InvalidTypeArgument)
-                    .at(ast->load()->tokenRange())
-                    .commit(
-                        base->toString(),
-                        "a type variable cannot be an argument of a module type");
-                throw BuildAbortException();
-            }
         }
     }
     std::string error;

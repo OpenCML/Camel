@@ -1,0 +1,7 @@
+module string_form
+
+type Handle = 'handle'
+
+func main(): int sync {
+    return 0
+}

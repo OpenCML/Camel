@@ -15,6 +15,7 @@
  * declarations.
  */
 
+#include "camel/core/type/native.h"
 #include "module.h"
 #include "camel/core/context/context.h"
 #include "camel/core/operator.h"
@@ -81,7 +82,7 @@ JsonModule::JsonModule(context_ptr_t ctx) : BuiltinModule("json", ctx) {
     // static type is definite; a program looks into it through the operators below (design
     // principles 11.2: `decode` gives a self-describing `Json`, not an `any`). Text that is
     // not JSON gives an error value: `decode` returns a `Json!` (design principles 11.2).
-    exportType(Reference("Json"), JsonType::get());
+    camel::core::type::registerNativeType("json", "Json", JsonType::get());
 
     // encode takes a value of every type that has a JSON form, a Json among them (a type
     // rule, not a parameter of type `any`), and an indent that may be absent or null. A function

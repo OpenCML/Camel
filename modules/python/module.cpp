@@ -1,6 +1,7 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
+#include "camel/core/type/native.h"
 #include "module.h"
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
@@ -196,7 +197,7 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
 } // namespace
 
 PythonModule::PythonModule(context_ptr_t ctx) : BuiltinModule("python", ctx) {
-    exportType(Reference("PyObject"), getPyObjectType());
+    camel::core::type::registerNativeType("python", "PyObject", getPyObjectType());
     for (const auto &group : getOperatorGroups())
         exportEntity(group->name(), group);
 }

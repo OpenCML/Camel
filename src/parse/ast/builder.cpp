@@ -2416,8 +2416,7 @@ Value Builder::visitDataDecl(cst::DataDecl context, bool topLevel) {
 
 /*
 typeDecl
-    : TYPE identRef ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
-      (typeExpr | STRING)
+    : TYPE identRef ('<' identDef (',' identDef)* ','? ('>' | '>='))? ('=' typeExpr)?
     ;
 */
 /*
@@ -2478,15 +2477,9 @@ Value Builder::visitResourceClause(cst::ResourceClause context) {
 
 Value Builder::visitTypeDecl(cst::TypeDecl context) {
     ENTER("TypeDecl");
-    string uri;
     Reference ref = qualifyRef(value_cast<Reference>(visitIdentRef(context->get<cst::IdentRef>())));
-    if (context->tok(TK::String)) {
-        uri = context->tok(TK::String)->text();
-        // Remove quotes from the string
-        uri = uri.substr(1, uri.size() - 2);
-    }
 
-    node_ptr_t typeDeclNode = createNodeAs<TypeDeclLoad>(ref, uri);
+    node_ptr_t typeDeclNode = createNodeAs<TypeDeclLoad>(ref);
     setNodeTokenRangeByContext(typeDeclNode, context);
     unwrapNodeAs<TypeDeclLoad>(typeDeclNode)->setDoc(docOf(context));
     if (!context->all<cst::IdentDef>().empty()) {

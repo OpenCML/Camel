@@ -35,6 +35,15 @@ module rewrite
 
 import { Node, Program } from graph
 
+/// A rewrite rule, a value the engine applies to a program.
+export type Rule
+
+/// What an engine run proved about a rule it applied.
+export type Proof
+
+/// The result of checking a set of rules.
+export type CheckReport
+
 /// Applies `rules` to `p` until no rule changes the program, and gives the rewritten program.
 /// @effect runs the rules' functions
 /// @fails error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow
