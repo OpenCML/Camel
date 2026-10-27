@@ -2974,6 +2974,13 @@ class Builder {
     /// brings (the built-in module or an imported one) that nothing of the program shadows (the
     /// lookup order of visitDRefNode); nullptr otherwise.
     oper_group_ptr_t importedOperatorGroupNamed(const std::string &name);
+    /// The conversion of a type name applied to an array (`f32(xs)`, `T(xs)`) converts every
+    /// element: it is a tensor operator, so the call that meets an array brings the conversions
+    /// of the `tensor` module along (once per module), as an `import tensor` would, and the
+    /// callee is read again. A program that converts no array loads nothing.
+    node_handle_t withArrayConversions(
+        node_handle_t callee, const camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call);
+    std::unordered_set<const camel::core::module::Module *> arrayConversionsImported_;
     /// UnusedPureResult at the statement `stmt` when it is a call of an operator declared
     /// pure (`xs->append<5>` on its own line): the operation returns a new value and changes
     /// nothing, so the statement does nothing. `node` is what the statement built.
