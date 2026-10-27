@@ -710,7 +710,8 @@ function readDeclarations(file, module, options = {}) {
             // compiled, and describes operators the C++ resolver gives a computed type, where the
             // same condition is the type's (`grad::<F>(f: F): Gradient<F> when is_function::<F>()`).
             if (!relative.startsWith('stdlib/signatures/') && !declarationBody(after, lines, i) &&
-                /\bwhen\s+is_function::<\w+>\(\)\s*$/.test(after)) {
+                /\bwhen\s+is_function::<\w+>\(\)\s*$/.test(after) &&
+                splitParams(args.inner).length === 1) {
                 doc = []
                 withText = ''
                 pendingUri = null

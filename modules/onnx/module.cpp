@@ -76,17 +76,6 @@ TupleType *fallibleVoid() {
 slot_t exportKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     auto *fn   = norm.get<::Function *>(0);
     auto *path = with.get<::String *>(0);
-    if (fn == nullptr || norm.type(0) == nullptr ||
-        norm.type(0)->code() != TypeCode::Function || fn->graph() == nullptr) {
-        // The declaration takes `fn` as a type variable (a declaration cannot write "a function
-        // of any parameter list and result"), so this is the check the signature cannot make: a
-        // value that is not a function is an error value here, not a call the compiler refuses.
-        return makeError(
-            "ExportUnsupported",
-            "onnx.export_model expects a function as its first argument, not " +
-                (norm.type(0) ? norm.type(0)->toString() : std::string("no value")),
-            kExportOperator);
-    }
     camel::onnx::ExportOptions options;
     if (with.size() > 1) {
         options.dynamicAxes = camel::tensor::parseIntArray(with.get<::Array *>(1), with.type(1));

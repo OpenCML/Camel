@@ -14,14 +14,17 @@
 //
 // `export_model`'s `with` parameters are declared once, with their defaults: a call gives them by
 // name, leaves out the ones with a default, and the value it left out is this declaration's
-// constant (design principles 4.4). `fn` and `example` are ordinary parameters, and the module's
-// kernel is where the two facts a declaration cannot write are settled: `fn` is a function, and
+// constant (design principles 4.4). `fn` and `example` are ordinary parameters; `fn` is a function
+// (`when is_function::<F>()`, which a pass of one argument also writes, and the count of arguments
+// tells the two apart), and the module's kernel settles the fact a declaration cannot write:
 // `example` is the argument of a one-parameter `fn` or one example per parameter.
 //
 // `supported_operators` only reads the lowering table compiled into the module: it is registered
 // pure, and the declaration carries that (a declaration carries types, not effects), so a call
 // may be folded, merged or run concurrently and its result may not be dropped.
 
+
+import { is_function } from types
 
 /// Lists the operator URIs the ONNX backend can lower at its default opset, in the order the
 /// lowering table reports them. A capability report only: it reads the table compiled into the
@@ -46,7 +49,7 @@ export func supported_operators(): string[]
 /// @example-fragment the call needs a function value and an example of the arguments that function takes, which the description introduces (the exporter reads the function's graph, so no value a fragment can write stands for it)
 #op('onnx:export_model')
 with <out: string, dynamic_axes: int[] = [], target: string = 'onnxruntime-cpu'>
-export func export_model::<F, E>(fn: F, example: E): void!
+export func export_model::<F, E>(fn: F, example: E): void! when is_function::<F>()
 
 // -----------------------------------------------------------------------------
 // Passes: functions the pipeline applies to the program

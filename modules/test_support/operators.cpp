@@ -51,6 +51,7 @@ std::unordered_map<std::string, operator_t> getTestSupportOpsMap() {
         {"thread_count", __test_support_thread_count__},
         {"with_probe", __test_support_with_probe__},
         {"with_probe_array", __test_support_with_probe_array__},
+        {"arity_two", __test_support_arity_two__},
     };
 }
 
@@ -153,4 +154,9 @@ slot_t __test_support_with_probe_array__(ArgsView &with, ArgsView &norm, Context
     return toSlot(
         with.get<Int64>(0) * 10000 + with.get<Int64>(1) * 100 + with.get<Int64>(2) +
         static_cast<Int64>(norm.get<Array *>(0)->size()));
+}
+
+// `tag * 10 + length of the axes`: the two-argument declaration of the same name.
+slot_t __test_support_arity_two__(ArgsView &with, ArgsView &, Context &) {
+    return toSlot(with.get<Int64>(0) * 10 + static_cast<Int64>(with.get<Array *>(1)->size()));
 }

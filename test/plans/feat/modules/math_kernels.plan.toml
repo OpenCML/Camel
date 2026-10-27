@@ -2,7 +2,7 @@ id = "modules.math_kernels"
 order = 936
 tier = "fast"
 tags = ["feat", "modules", "stdlib", "math"]
-desc = "The kernels the module of the draft needs beyond the ones `math` has: the f64 square root and the shifts that give their count in angle brackets (docs/handover/stdlib/math.cml)"
+desc = "The kernels under the functions of `math`: the f64 square root and the shifts that give their count in angle brackets, called as any program calls them, and the values of the module that its C++ side registers"
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -10,9 +10,9 @@ timeout_ms = 20000
 
 [[tests]]
 name = "math_kernels.values"
-desc = "`inf` and `nan` are declared with no right side (`export let inf: float`) and are the values the C++ module registers. `sqrt_d`: exact squares, sqrt(-0) is -0, +inf is +inf, a negative number is NaN. `shl_i/l` and `shr_i/l`: the unsigned shift into the sign bit, the arithmetic shift keeping the sign, count 0 and the largest count."
+desc = "`inf` and `nan` are the values the C++ module registers (stdlib/math.cml declares them with no right side). `sqrt`: exact squares, sqrt(-0) is -0, +inf is +inf, a negative number is NaN. `shl_i/l` and `shr_i/l`: the unsigned shift into the sign bit, the arithmetic shift keeping the sign, count 0 and the largest count."
 kind = "behavior"
-case = "../../../cases/modules/math_kernels/math.cml"
+case = "../../../cases/modules/math_calls/kernel_values.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
@@ -23,7 +23,7 @@ expect_stdout_exact = "3.0 1.5 0.0 -0.0\ninf nan false true\n16 -2147483648 -4 1
 name = "math_kernels.shl_i32_width"
 desc = "A shift count outside 0..width-1 is a fault of kind InvalidArgument."
 kind = "negative"
-case = "../../../cases/modules/math_kernels/err_shl_i32/math.cml"
+case = "../../../cases/modules/math_calls/err_shl_i32.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["Invalid argument of 'math.shl': the shift count 32 is not in 0..31 for a 32-bit integer"]
@@ -32,7 +32,7 @@ expect_output_contains = ["Invalid argument of 'math.shl': the shift count 32 is
 name = "math_kernels.shl_int_width"
 desc = "A shift count outside 0..width-1 is a fault of kind InvalidArgument."
 kind = "negative"
-case = "../../../cases/modules/math_kernels/err_shl_int/math.cml"
+case = "../../../cases/modules/math_calls/err_shl_int.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["Invalid argument of 'math.shl': the shift count 64 is not in 0..63 for a 64-bit integer"]
@@ -41,7 +41,7 @@ expect_output_contains = ["Invalid argument of 'math.shl': the shift count 64 is
 name = "math_kernels.shr_negative"
 desc = "A shift count outside 0..width-1 is a fault of kind InvalidArgument."
 kind = "negative"
-case = "../../../cases/modules/math_kernels/err_shr_negative/math.cml"
+case = "../../../cases/modules/math_calls/err_shr_negative.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["Invalid argument of 'math.shr': the shift count -1 is not in 0..63 for a 64-bit integer"]
