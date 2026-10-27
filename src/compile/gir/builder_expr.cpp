@@ -305,13 +305,14 @@ node_handle_t Builder::nativeValueNode(const GCT::node_ptr_t &gct, Type *declare
     auto entity              = module_->getNativeEntity(Reference(ident));
     if (!entity.has_value()) {
         // The declaration may be written in a file that is not the C++ module itself (a file named
-        // as the module): the module of that name further along the search order supplies it.
-        try {
-            if (const auto supplier = context_->importModule(module_->name(), module_.get());
-                supplier != nullptr && supplier != module_) {
+        // as the module): the C++ module of that name supplies it.
+        for (const auto &supplier : context_->importedModules()) {
+            if (supplier != module_ && supplier->name() == module_->name()) {
                 entity = supplier->getNativeEntity(Reference(ident));
+                if (entity.has_value()) {
+                    break;
+                }
             }
-        } catch (const std::exception &) {
         }
     }
     if (!entity.has_value() || !entity->isValue()) {

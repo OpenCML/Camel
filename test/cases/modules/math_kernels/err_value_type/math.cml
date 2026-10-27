@@ -1,5 +1,5 @@
-import { pi } from math
 
+import { timeit } from perf
 export let inf: int
 
 func main(): int sync {

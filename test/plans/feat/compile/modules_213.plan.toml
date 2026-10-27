@@ -2,7 +2,7 @@ id = "compile.modules_213"
 order = 337
 tier = "fast"
 tags = ["feat", "compile", "modules"]
-desc = "Modules by the rule (design principles 10.1): a module that imports its own name, types forming a cycle across modules, values exported by a C++ module."
+desc = "Modules by the rule (design principles 10.1): a module importing itself, types forming a cycle across modules, values exported by a C++ module."
 
 [defaults]
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "Internal"]
@@ -11,12 +11,36 @@ timeout_ms = 8000
 
 [[tests]]
 name = "modules_213.self_entry"
-desc = "A module that imports its own name finds no module: an import never resolves to the importing module itself (design principles 10.2), so with no other location holding the name it is ModuleNotFound, in both forms."
-kind = "negative"
+desc = "The entry module imports itself by its file name, in both forms: allowed, no effect; its names (qualified with its own name or not) stay its own."
+kind = "behavior"
 case = "../../../cases/compile/modules_213/self_entry.cml"
 args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout = "8 10\n"
+expect_output_not_contains = ["[Warn]", "[Error]"]
+
+[[tests]]
+name = "modules_213.self_entry_error"
+desc = "A module that imports itself is not loaded a second time: an error of it is reported once, as one of it (it was reported again for the copy, followed by ImportedModuleHasErrors)."
+kind = "negative"
+case = "../../../cases/compile/modules_213/self_entry_error.cml"
+args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["name=SemanticDiag::ModuleNotFound", "Module 'self_entry' not found"]
+expect_output_not_contains = ["ImportedModuleHasErrors", "imported by"]
+verify_script = """
+const errors = input.stdout.concat(input.stderr).split('\n').filter((l) => l.includes('[Error]'))
+assert(errors.length === 1, 'one error: ' + input.stdout + input.stderr)
+assert(errors[0].includes("Unresolved reference: 'nothing_named_so'"), errors[0])
+"""
+
+[[tests]]
+name = "modules_213.self_imported"
+desc = "An imported module that imports itself: no effect there either."
+kind = "behavior"
+case = "../../../cases/compile/modules_213/self_imported.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout = "3\n"
 
 [[tests]]
 name = "modules_213.type_cycle"
