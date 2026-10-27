@@ -1,0 +1,21 @@
+/**
+ * `never` enters a tagged position without a conversion (design principles 3.9; the author's
+ * ruling of 2026-10-26 on `never-argument-scope`): `never` is the bottom type and enters any
+ * expected position without a conversion, tag or no tag. The position takes the node as it
+ * stands, so no CAST is built for it: a tag is not a conversion, and the node that ends the
+ * program is what stands there. The call whose argument is `never` is typed `never` anyway and
+ * the warning names the argument; the fault the argument raises happens as it did.
+ */
+module never_tagged_position
+
+func double(x: int): int { return x + x }
+
+func stop(m: string): never {
+    return fail<'Stopped'>(m)
+}
+
+func main(): int sync {
+    let as_int: int! = double(stop('no value to double'))
+    let as_string: string! = double(stop('no value to double'))
+    return 0
+}

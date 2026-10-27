@@ -16,6 +16,7 @@
  * `__fact`) have no callable Camel name, so they stay exported from here.
  */
 
+#include "camel/core/type/native.h"
 #include "checkreport.h"
 #include "proof.h"
 #include "rule.h"
@@ -3982,9 +3983,9 @@ class RewriteExecutor final : public Executor {
 class RewriteModule final : public BuiltinModule {
   public:
     explicit RewriteModule(context_ptr_t ctx) : BuiltinModule("rewrite", std::move(ctx)) {
-        exportType(Reference("Rule"), RuleType::get());
-        exportType(Reference("Proof"), ProofType::get());
-        exportType(Reference("CheckReport"), CheckReportType::get());
+        camel::core::type::registerNativeType("rewrite", "Rule", RuleType::get());
+        camel::core::type::registerNativeType("rewrite", "Proof", ProofType::get());
+        camel::core::type::registerNativeType("rewrite", "CheckReport", CheckReportType::get());
         exportEntity(
             "__rule",
             OperatorGroup::create(

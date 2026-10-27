@@ -9,7 +9,7 @@ func count(xs: int[]): int { return len(xs) }
 func none(): string[] { return [] }
 func evens(n: int): int[] { return if n <= 0 then [] else 0..n->filter<(i: int): bool => i % 2 == 0> }
 func tail_or_empty(xs: int[]): int[] sync {
-    return if len(xs) == 0 then sync { println('empty'); [] } else tail(xs)
+    return if len(xs) == 0 then sync { println('empty'); [] } else xs[1:]
 }
 func risky(n: int): int[] { return [10 / n] }
 func find(xs: int[], i: int): int[]? { return if i < len(xs) then [xs[i]] else null }

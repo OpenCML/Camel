@@ -347,7 +347,6 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/inv_l", __builtin__inv__},
 
         // IO (built-in input/print/println/eprintln)
-        {"io/input", __op_input__},
         {"io/print", __op_print__},
         {"io/println", __op_println__},
         {"io/eprintln", __op_eprintln__},
@@ -365,7 +364,6 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         // function-call service. Schedulers that run a shape of call faster by the operator's
         // declaration (OperatorSemantics::elementCalls) do; the macro evaluator runs these.
         {"mark/map_arr", __map_arr__},
-        {"mark/apply_arr", __map_arr__},
         {"mark/filter_arr", __filter_arr__},
         {"mark/reduce_arr", __reduce_arr__},
         {"mark/unordered_reduce_arr", __reduce_arr__},
@@ -374,20 +372,16 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
 
         {"struct/zip", __zip__},
 
-        {"struct/head_arr", __head_arr__},
         {"struct/last_arr", __last_arr__},
 
-        {"struct/tail_arr", __tail_arr__},
 
         {"struct/range", __range__},
 
-        {"struct/slice_arr", __slice_arr__},
 
         {"struct/concat_arr", __concat_arr__},
 
         {"struct/append_arr", __append_arr__},
 
-        {"struct/extend_arr", __extend_arr__},
 
         {"struct/contains_arr", __contains_arr__},
         {"struct/contains_str", __contains_str__},
@@ -468,7 +462,6 @@ void registerBuiltinOperatorTraits() {
         "struct/iter_str",
         "struct/len_arr",
         "struct/zip",
-        "struct/head_arr",
         "struct/last_arr",
         "op/idx_take",
         "op/slice_sub",
@@ -478,12 +471,9 @@ void registerBuiltinOperatorTraits() {
         "op/add_bytes",
         "op/eq_bytes",
         "op/ne_bytes",
-        "struct/tail_arr",
         "struct/range",
-        "struct/slice_arr",
         "struct/concat_arr",
         "struct/append_arr",
-        "struct/extend_arr",
         "struct/contains_arr",
         "struct/contains_str",
         "tangent/add_arr",
@@ -526,6 +516,36 @@ void registerBuiltinOperatorTraits() {
         "op/and",
         "op/or",
         "op/not",
+        // Multiplication and negation wrap like addition does; equality tests a value of a type
+        // that has one and string ordering reads two strings.
+        "op/mul_i",
+        "op/neg_i",
+        "op/mul_l",
+        "op/neg_l",
+        "op/mul_f",
+        "op/neg_f",
+        "op/mul_d",
+        "op/neg_d",
+        "op/eq_i",
+        "op/ne_i",
+        "op/eq_l",
+        "op/ne_l",
+        "op/eq_f",
+        "op/ne_f",
+        "op/eq_d",
+        "op/ne_d",
+        "op/eq_b",
+        "op/ne_b",
+        "op/eq_s",
+        "op/ne_s",
+        "op/eq_c",
+        "op/ne_c",
+        "op/eq_z",
+        "op/ne_z",
+        "op/lt_s",
+        "op/le_s",
+        "op/gt_s",
+        "op/ge_s",
         // The same declarations for the two reduced-precision floating types (design principles
         // 7.3): their arithmetic and ordering cannot fail, and `bf16(x) / y` keeps the fault of
         // division by zero that f32 has.
@@ -566,7 +586,6 @@ void registerBuiltinOperatorTraits() {
     // that function. exit and sleep are the process module's and are built in as well.
     for (const char *uri :
          {":mark/map_arr",
-          ":mark/apply_arr",
           ":mark/filter_arr",
           ":mark/reduce_arr",
           ":mark/foreach_arr",

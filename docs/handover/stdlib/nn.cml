@@ -99,7 +99,7 @@ export func log_softmax::<T>(x: T[..]): T[..] when is_float::<T>() {
 /// @example-fragment the arrays come from the caller
 /// @example x->linear<weight, bias>
 with <weight: T[i, o], bias: T[o]? = null>
-export func linear::<T>(x: T[..s, i]): T[..s, o] when is_float::<T>() {
+export func linear::<T>(x: T[..s, i]): T[..s, ?] when is_float::<T>() {
     let y = matmul(x, weight)
     return if bias != null then y + bias else y
 }
@@ -125,7 +125,7 @@ export func layer_norm::<T>(x: T[..s, d]): T[..s, d] when is_float::<T>() {
 /// @example-fragment the arrays come from the caller
 /// @example input->conv2d<kernel, bias, padding: 1>    // [N, O, H, W] for a 3 by 3 kernel
 with <kernel: f32[o, c, ?, ?], bias: f32[o], stride: int = 1, padding: int = 0>
-export func conv2d(input: f32[n, c, ?, ?]): f32[n, o, ?, ?] pure
+export func conv2d(input: f32[n, c, ?, ?]): f32[n, ?, ?, ?] pure
 
 /// Max pooling over a square window of `kernel` on `input` `[N, C, H, W]`. The stride is the
 /// window unless given. A window that lies entirely in the padding contributes -inf, the identity
@@ -196,7 +196,7 @@ func channel_shape(shape: int[]): int[] {
 func channel_mean::<T>(x: T[n, c, ..s]): T[c] {
     let rank = len(shape(x))
     let spatial = loop acc = x as T[..] for i in 0..(rank - 2) do acc->mean<rank - 1 - i>
-    return spatial->mean<0> as T[c]
+    return spatial->mean<0> as T[?]
 }
 
 // ---- embedding and loss ----
@@ -239,24 +239,24 @@ export func softmax_cross_entropy(logits: f32[batch, classes], labels: int[batch
 // definition is the meaning, the kernel the speed, and a differential test holds them equal. A
 // kernel has exactly the signature of its definition, `with` parameters included.
 with <gamma: T[c], beta: T[c], running_mean: T[c], running_var: T[c], momentum: T = 0.1, eps: T = 1e-5>
-func batch_norm_train_kernel::<T>(input: T[n, c, ..s]): (T[n, c, ..s], T[c], T[c]) when is_same::<T, f32>() pure
+func batch_norm_train_kernel::<T>(input: T[n, c, ..s]): (T[n, c, ..s], T[c], T[c]) pure when is_same::<T, f32>()
 func softmax_cross_entropy_kernel(logits: f32[batch, classes], target: f32[batch, classes]): float pure
 func softmax_cross_entropy_labels_kernel(logits: f32[batch, classes], labels: int[batch]): float pure
 
 // The activations and layers: the C++ operators `modules/tensor` had under these names, moved to
 // `modules/nn`. Each runs for the element types its executor serves.
 #op('nn:relu')
-func relu_kernel::<T>(x: T[..]): T[..] when is_float::<T>() pure
+func relu_kernel::<T>(x: T[..]): T[..] pure when is_float::<T>()
 #op('nn:sigmoid')
-func sigmoid_kernel::<T>(x: T[..]): T[..] when is_float::<T>() pure
+func sigmoid_kernel::<T>(x: T[..]): T[..] pure when is_float::<T>()
 #op('nn:gelu')
-func gelu_kernel::<T>(x: T[..]): T[..] when is_float::<T>() pure
+func gelu_kernel::<T>(x: T[..]): T[..] pure when is_float::<T>()
 #op('nn:softmax')
 with <axis: int = -1>
-func softmax_kernel::<T>(x: T[..]): T[..] when is_float::<T>() pure
+func softmax_kernel::<T>(x: T[..]): T[..] pure when is_float::<T>()
 #op('nn:log_softmax')
 with <axis: int = -1>
-func log_softmax_kernel::<T>(x: T[..]): T[..] when is_float::<T>() pure
+func log_softmax_kernel::<T>(x: T[..]): T[..] pure when is_float::<T>()
 #op('nn:layer_norm')
 with <gamma: T[d], beta: T[d], eps: T = 1e-5>
-func layer_norm_kernel::<T>(x: T[..s, d]): T[..s, d] when is_float::<T>() pure
+func layer_norm_kernel::<T>(x: T[..s, d]): T[..s, d] pure when is_float::<T>()

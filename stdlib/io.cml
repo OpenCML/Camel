@@ -4,8 +4,8 @@
 /**
  * The terminal as a keyboard: what has been typed and not yet read, the keys themselves, and raw
  * mode. Reading is a use of the resource `stdin`, so reads and the changes of mode keep their
- * written order. Writing to the terminal and reading a whole line are the prelude's
- * (`print`, `println`, `eprintln`, `input`).
+ * written order. `input` reads a whole line after writing its prompt; writing to the terminal is
+ * the prelude's (`print`, `println`, `eprintln`).
  */
 
 /// Switches the terminal to raw mode (keys arrive one by one, unechoed) or back. Turning raw mode
@@ -15,6 +15,12 @@
 /// @example-fragment changes the terminal when it runs, and the example only has the `void!` result to show
 /// @example set_terminal_raw_mode(true)
 export func set_terminal_raw_mode(enabled: bool): void!
+
+/// Writes prompt to standard output and reads one line from standard input, without its line end.
+/// @effect writes standard output, reads standard input
+/// @example-fragment waits for a line the example program is not given
+/// @example input('name: ')
+export func input(prompt: string): string
 
 /// Whether a key press is waiting to be read.
 /// @effect reads the terminal

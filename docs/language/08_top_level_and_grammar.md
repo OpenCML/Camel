@@ -71,7 +71,7 @@ pattern    : 字面量 | '_' | null | error 名字 | 名字
 ## 8.4 类型
 
 ```
-typeDecl  : 'type' 名字 ('<' 参数, ... '>')? '=' (类型 | enumBody)
+typeDecl  : 'type' 名字 ('<' 参数, ... '>')? ('=' (类型 | enumBody))?
 typeExpr  : arrayType ('?' | '!')*
 arrayType : specType ('[' ']')*
 specType  : primaryType ('<' (类型 | const 数据), ... '>')?
@@ -133,8 +133,7 @@ dataDecl           : ('let' | 'var') carrier (':' typeList)? '=' dataList
                      | 'let' '_' (':' typeList)? '=' dataList
 carrier            : identList | parentIdents
 typeDecl           : frontMatter? 'type' identRef
-                     ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
-                     (typeExpr | STRING)
+                     ('<' identDef (',' identDef)* ','? ('>' | '>='))? ('=' typeExpr)?
 resourceDecl       : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered')?
 retStmt            : ('return' | 'yield') dataList
 modifiers          : 'sync'+

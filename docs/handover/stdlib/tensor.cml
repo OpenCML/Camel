@@ -84,7 +84,7 @@ export func stack::<T>(parts: T[..][]): T[..] when is_numeric::<T>() {
 /// @example-fragment writes the file system when it runs, and the example only has the `void!` result to show
 /// @example [1.0, 2.0] as f32[2]->save_npy<'x.npy'>
 with <path: string>
-export func save_npy::<T>(t: T[..]): void! when is_numeric::<T>() uses fs
+export func save_npy::<T>(t: T[..]): void! uses fs when is_numeric::<T>()
 
 // ---- passes ----
 

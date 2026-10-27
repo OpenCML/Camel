@@ -14,8 +14,8 @@ import { merge_sort, merge_sorted_arrays } from array
 func mergesort(arr: int[]): int[] {
     return if len(arr) <= 4 then merge_sort(arr) else {
         let mid = len(arr) / 2
-        let lhs = arr->slice<0, mid>->mergesort
-        let rhs = arr->slice<mid, len(arr)>->mergesort
+        let lhs = arr[0:mid]->mergesort
+        let rhs = arr[mid:len(arr)]->mergesort
         return merge_sorted_arrays(lhs, rhs)
     }
 }
@@ -28,7 +28,7 @@ func main(): int sync {
     seed(7)
     let data = 0..96->shuffle
     let sums = 0..12->map<(k: int): int => {
-        let part = data->slice<k * 8, 96>
+        let part = data[k * 8:96]
         return checksum(mergesort(part))
     }>
     sums->println

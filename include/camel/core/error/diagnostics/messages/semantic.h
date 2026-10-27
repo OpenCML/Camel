@@ -51,6 +51,7 @@ enum class SemanticDiag : uint32_t {
     AssignmentTargetNotVariable = 0x00001E,
     ConstructNotSupported       = 0x00001F,
     InvalidTypeArgument         = 0x000020,
+    NativeTypeNotProvided       = 0x0001FD,
     ArgumentNeedsConversion     = 0x000021,
     ReturnNeedsConversion       = 0x000022,
     // 0x000023: empty. The number is not reused.
@@ -485,6 +486,21 @@ enum class SemanticDiag : uint32_t {
     /// A type parameter is declared at the head of a declaration and written nowhere in its
     /// signature, so no argument could ever give it a type.
     TypeVariableUnused = 0x1001A5,
+    // `never` as an argument and `fail` as a statement (design principles 3.9; the author's ruling of
+    // 2026-10-26). An argument of type `never` never gives a value, and an argument is evaluated
+    // before the call it is written in, so such a call never runs: its own type is `never` and no
+    // overload is chosen for it. A `fail` written as a statement of its own is no effect, so it runs
+    // only where its value is wanted, and a statement after it is never reached.
+    // 0x1C0 and up: the band is new, and the one above it (0x1A5) is the type variables.
+    /// A call with an argument of type `never`: the argument is evaluated before the call and never
+    /// gives a value, so the call never runs, no overload is chosen for it, and its type is `never`.
+    NeverArgumentCall = 0x1001C0,
+    /// A `fail` written as a statement whose value nothing takes: a `fail` is no effect of its own, so
+    /// outside a sync block nothing runs it.
+    FailNotExecuted = 0x1001C1,
+    /// A statement written after a `fail` in the same block: the `fail` never returns, so the statement
+    /// is never reached.
+    StatementAfterFail = 0x1001C2,
 };
 
 constexpr DiagType diagTypeOf(SemanticDiag) { return DiagType::SemanticDiag; }

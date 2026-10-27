@@ -922,5 +922,20 @@ class GraphDraft {
 /// 8.7, `explain`: a `Node` of the program finds the rewrite it was made by).
 std::vector<gc_node_ref_t> draftRuntimeNodeRefs(const GraphDraft &draft);
 
+/// `nodeIsFreelySchedulable` (camel/runtime/graph.h) asked of a node of a draft. `byShape` lets
+/// the shapes of the types decide for an elementwise operator (it cannot fail when every shape is
+/// fixed); only a question about one decision of one pass may ask it, never the question of
+/// whether a node takes an order edge, which must not change as types are refined.
+bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byShape = false);
+
+/// Whether a node carries the program's order instead of being a value a pass may compute for
+/// itself: a call runs a graph, a branch, join, sync or loop runs (or orders) what it holds, a gate
+/// waits -- for its control inputs, or for the sync edge the chain of a `sync` block is written as
+/// (docs/design/effects/edges.cn.md 5.3) -- and every other node that is not freely schedulable (an
+/// operator with an effect, one that may fault, one that must run where the program writes it, a
+/// conversion that can fail). The rewrite engine and the generic passes refuse to reorder, drop or
+/// recompute such a node.
+bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node, bool byShape = false);
+
 } // namespace camel::runtime
 

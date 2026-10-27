@@ -193,8 +193,10 @@ const model = readOnnxModel(path.join(input.test_tmp, 'export_train_step.onnx'))
 assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `unexpected inputs ${model.inputs}`)
 assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `unexpected outputs ${model.outputs}`)
 const count = (op) => model.ops.filter((o) => o === op).length
-// forward: 2 MatMul; backward: dW2, dH, dW1 (the input needs no gradient)
-assert(count('MatMul') === 5, `expected 5 MatMul, got ${model.ops}`)
+// forward: 2 MatMul; backward: dW2, dH, dW1 (the input needs no gradient). On doubles each
+// transposed product is a Gemm instead of a MatMul beside a Transpose (rule of 2026-10-26).
+assert(count('MatMul') === 2, `expected 2 MatMul, got ${model.ops}`)
+assert(count('Gemm') === 3, `expected 3 Gemm for the three transposed products, got ${model.ops}`)
 assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops}`)
 assert(model.initializers.length <= 8, `weights must be inputs, not initializers: ${model.initializers}`)
 }
@@ -234,7 +236,7 @@ timeout_ms = 6000
 
 [[tests]]
 name = "export_train_step_frozen"
-desc = "M2: stop_gradient freezes a parameter through export — the graph carries no gradient product for it (4 MatMul vs 5 in export_train_step) yet the frozen weight stays a graph input with an (identity-updated) output."
+desc = "M2: stop_gradient freezes a parameter through export — the graph carries no gradient product for it (2 Gemm vs 3 in export_train_step) yet the frozen weight stays a graph input with an (identity-updated) output."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step_frozen.cml"
 args = ["${case}"]
@@ -252,8 +254,9 @@ const model = readOnnxModel(path.join(input.test_tmp, 'export_train_step_frozen.
 assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `unexpected inputs ${model.inputs}`)
 assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `unexpected outputs ${model.outputs}`)
 const count = (op) => model.ops.filter((o) => o === op).length
-// frozen w1: the dW1 MatMul of export_train_step (5) is gone
-assert(count('MatMul') === 4, `expected 4 MatMul, got ${model.ops}`)
+// frozen w1: the dW1 product of export_train_step (3 Gemm) is gone
+assert(count('MatMul') === 2, `expected 2 MatMul, got ${model.ops}`)
+assert(count('Gemm') === 2, `expected 2 Gemm, got ${model.ops}`)
 assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops}`)
 }
 """
@@ -322,7 +325,7 @@ assert(count('ConvTranspose') === 1, `expected 1 ConvTranspose, got ${model.ops}
 assert(count('BatchNormalization') === 0, `no BatchNormalization may survive, got ${model.ops}`)
 assert(count('ReduceMean') >= 8, `batch statistics must be ReduceMean decompositions, got ${model.ops}`)
 assert(count('Reciprocal') === 2 && count('Sqrt') === 2, `one reciprocal-sqrt per BN, got ${model.ops}`)
-const standard = new Set(['Add', 'Cast', 'Conv', 'ConvTranspose', 'Div', 'Expand', 'Flatten', 'Greater', 'Identity', 'MatMul', 'Mul', 'Reciprocal', 'ReduceMean', 'ReduceSum', 'Relu', 'Reshape', 'Sqrt', 'Sub', 'Transpose', 'Unsqueeze'])
+const standard = new Set(['Add', 'Cast', 'Conv', 'ConvTranspose', 'Div', 'Expand', 'Flatten', 'Gemm', 'Greater', 'Identity', 'MatMul', 'Mul', 'Reciprocal', 'ReduceMean', 'ReduceSum', 'Relu', 'Reshape', 'Sqrt', 'Sub', 'Transpose', 'Unsqueeze'])
 assert(model.ops.every((o) => standard.has(o)), `non-standard op in ${model.ops}`)
 const params = ['conv1_w','conv1_b','bn1_g','bn1_b','conv2_w','conv2_b','bn2_g','bn2_b','fc_w','fc_b','bn1_rm','bn1_rv','bn2_rm','bn2_rv']
 assert(!model.initializers.some((i) => params.includes(i)), `weights and statistics must be inputs, not initializers: ${model.initializers}`)
@@ -411,7 +414,9 @@ assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `weights must be graph inpu
 assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `loss and updated weights must be outputs: ${model.outputs}`)
 const count = (op) => model.ops.filter((o) => o === op).length
 assert(count('If') === 2, `expected an If per branched value (loss, pullback result), got ${model.ops}`)
-assert(count('MatMul') === 5, `expected 5 MatMul, got ${model.ops}`)
+// the forward's 2 MatMul plus the backward's 3 transposed products as Gemm (rule of 2026-10-26)
+assert(count('MatMul') === 2, `expected 2 MatMul, got ${model.ops}`)
+assert(count('Gemm') === 3, `expected 3 Gemm, got ${model.ops}`)
 assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops}`)
 assert(!model.initializers.some((n) => /^(w1|b1|w2|b2)$/.test(n)), `weights must be inputs, not initializers: ${model.initializers}`)
 }
@@ -988,8 +993,10 @@ const model = readOnnxModel(path.join(input.test_tmp, 'export_train_step.fuse.on
 assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `unexpected inputs ${model.inputs}`)
 assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `unexpected outputs ${model.outputs}`)
 const count = (op) => model.ops.filter((o) => o === op).length
-// the model of the unfused program: 2 forward MatMul, 3 backward; nothing fused survives
-assert(count('MatMul') === 5, `expected 5 MatMul, got ${model.ops}`)
+// the model of the unfused program: 2 forward MatMul, the backward's 3 transposed products
+// as Gemm (rule of 2026-10-26); nothing fused survives
+assert(count('MatMul') === 2, `expected 2 MatMul, got ${model.ops}`)
+assert(count('Gemm') === 3, `expected 3 Gemm, got ${model.ops}`)
 assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops}`)
 assert(model.initializers.length <= 8, `weights must be inputs, not initializers: ${model.initializers}`)
 }
@@ -1016,8 +1023,10 @@ const model = readOnnxModel(path.join(input.test_tmp, 'export_train_step.fuse_si
 assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `unexpected inputs ${model.inputs}`)
 assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `unexpected outputs ${model.outputs}`)
 const count = (op) => model.ops.filter((o) => o === op).length
-// the model of the unfused program: 2 forward MatMul, 3 backward; nothing fused survives
-assert(count('MatMul') === 5, `expected 5 MatMul, got ${model.ops}`)
+// the model of the unfused program: 2 forward MatMul, the backward's 3 transposed products
+// as Gemm (rule of 2026-10-26); nothing fused survives
+assert(count('MatMul') === 2, `expected 2 MatMul, got ${model.ops}`)
+assert(count('Gemm') === 3, `expected 3 Gemm, got ${model.ops}`)
 assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops}`)
 assert(model.initializers.length <= 8, `weights must be inputs, not initializers: ${model.initializers}`)
 }
@@ -1044,8 +1053,10 @@ const model = readOnnxModel(path.join(input.test_tmp, 'export_train_step.fuse_fv
 assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `unexpected inputs ${model.inputs}`)
 assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `unexpected outputs ${model.outputs}`)
 const count = (op) => model.ops.filter((o) => o === op).length
-// the model of the unfused program: 2 forward MatMul, 3 backward; nothing fused survives
-assert(count('MatMul') === 5, `expected 5 MatMul, got ${model.ops}`)
+// the model of the unfused program: 2 forward MatMul, the backward's 3 transposed products
+// as Gemm (rule of 2026-10-26); nothing fused survives
+assert(count('MatMul') === 2, `expected 2 MatMul, got ${model.ops}`)
+assert(count('Gemm') === 3, `expected 3 Gemm, got ${model.ops}`)
 assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops}`)
 assert(model.initializers.length <= 8, `weights must be inputs, not initializers: ${model.initializers}`)
 }
@@ -1496,7 +1507,9 @@ assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `weights must be graph inpu
 assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `loss and updated weights must be outputs: ${model.outputs}`)
 const count = (op) => model.ops.filter((o) => o === op).length
 assert(count('If') === 2, `expected an If per branched value (loss, pullback result), got ${model.ops}`)
-assert(count('MatMul') === 5, `expected 5 MatMul, got ${model.ops}`)
+// the forward's 2 MatMul plus the backward's 3 transposed products as Gemm (rule of 2026-10-26)
+assert(count('MatMul') === 2, `expected 2 MatMul, got ${model.ops}`)
+assert(count('Gemm') === 3, `expected 3 Gemm, got ${model.ops}`)
 assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops}`)
 assert(!model.initializers.some((n) => /^(w1|b1|w2|b2)$/.test(n)), `weights must be inputs, not initializers: ${model.initializers}`)
 }
@@ -1524,7 +1537,9 @@ assert(model.inputs.join() === 'w1,b1,w2,b2,input1', `weights must be graph inpu
 assert(model.outputs.join() === 'output_0,output_1_w1,output_1_b1,output_1_w2,output_1_b2', `loss and updated weights must be outputs: ${model.outputs}`)
 const count = (op) => model.ops.filter((o) => o === op).length
 assert(count('If') === 2, `expected an If per branched value (loss, pullback result), got ${model.ops}`)
-assert(count('MatMul') === 5, `expected 5 MatMul, got ${model.ops}`)
+// the forward's 2 MatMul plus the backward's 3 transposed products as Gemm (rule of 2026-10-26)
+assert(count('MatMul') === 2, `expected 2 MatMul, got ${model.ops}`)
+assert(count('Gemm') === 3, `expected 3 Gemm, got ${model.ops}`)
 assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops}`)
 assert(!model.initializers.some((n) => /^(w1|b1|w2|b2)$/.test(n)), `weights must be inputs, not initializers: ${model.initializers}`)
 }
@@ -3023,3 +3038,42 @@ assert(model.inputs.join() === 'input' && model.outputs.join() === 'output', `un
 }
 """
 timeout_ms = 10000
+
+[[tests]]
+name = "export_grad_matmul_batched"
+desc = "The f64 gradient of batched matrix products: every transposed product of the backward pass (`dy @ b^T`, `a^T @ dy`, and the batched-by-vector pair's) is an Einsum instead of a MatMul beside a Transpose, which is what onnxruntime-cpu's level-2 MatmulTransposeFusion rewrites into com.microsoft.FusedMatMul, an operator the CPU provider has a kernel for on float alone (rule of 2026-10-26). The two forward products keep their MatMul, and no Transpose is left in the graph."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_grad_matmul_batched.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=${test_tmp}/export_grad_matmul_batched.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.test_tmp, 'export_grad_matmul_batched.onnx'))
+const count = (op) => model.ops.filter((o) => o === op).length
+assert(count('Einsum') === 4, `the four transposed products are Einsum nodes, got ${model.ops}`)
+assert(count('Transpose') === 0, `a Transpose is left beside a MatMul for the target to fuse, got ${model.ops}`)
+assert(count('MatMul') === 2, `the two forward products keep their MatMul, got ${model.ops}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
+name = "ort_grad_matmul_batched"
+desc = "The f64 batched-matmul gradient model opens and runs on ONNX Runtime at the target's default settings (a plain InferenceSession, graph optimisation ALL, where MatmulTransposeFusion lives) and its loss and three gradients match NumPy's analytic ones; before the lowering wrote Einsum it failed to load with 'Failed to find kernel for com.microsoft.FusedMatMul'."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/onnx/ort_grad_matmul_batched.py"
+args = ["${case}"]
+skip_unless = ["${python}", "-c", "import numpy, onnx, onnxruntime"]
+expect_exit = 0
+expect_stdout_contains = ["ort grad matmul batched: 0 failing", "PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000

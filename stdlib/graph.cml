@@ -30,6 +30,21 @@
 
 module graph
 
+/// The types of the module are provided by it; a handle names a thing inside one Program and
+/// compares with `==` and `!=`.
+export type Program
+export type Graph
+export type Node<T>
+export type Region
+export type TypeRef
+export type Op
+export type Tag
+export type Txn<F>
+export type NodeKind
+export type RegionKind
+export type Effects
+export type Value = Node
+
 // ---- the program ----
 
 /// The Program the running program was compiled to: an immutable snapshot, whose graphs a pass reads.

@@ -1145,8 +1145,11 @@ void ParserImpl::parseDataDecl(bool exported) {
 }
 
 /// typeDecl : frontMatter? 'type' identRef
-///            ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
-///            (typeExpr | STRING)
+///            ('<' identDef (',' identDef)* ','? ('>' | '>='))?
+///            ('=' typeExpr)?
+///
+/// A declaration without the right side names a type a C++ module provides (design principles
+/// 10.4): `export type Graph`, `export type Txn<F>`. `>=` closes the parameters and is the `=`.
 void ParserImpl::parseTypeDecl() {
     const size_t m = mark();
     parseFrontMatter();
@@ -1159,6 +1162,7 @@ void ParserImpl::parseTypeDeclRest(size_t m) {
         return close(m, NK::TypeDecl);
     }
     parseIdentRef(NK::IdentRef);
+    bool rightSide = false;
     if (cur_ == TK::LAngle || cur_ == TK::Lt) {
         bump();
         Scope scope(*this, false);
@@ -1168,23 +1172,21 @@ void ParserImpl::parseTypeDeclRest(size_t m) {
             parseIdentDef();
         }
         eat(TK::Comma);
-        if (!eat(TK::GtEq)) {
-            if (cur_ == TK::Gt) {
-                bump();
-                expect(TK::Assign);
-            } else {
-                unexpected({e(TK::Comma), e(TK::Gt)});
-            }
+        if (eat(TK::GtEq)) {
+            rightSide = true;
+        } else if (cur_ == TK::Gt) {
+            bump();
+            rightSide = eat(TK::Assign);
+        } else {
+            unexpected({e(TK::Comma), e(TK::Gt)});
         }
-    } else if (!eat(TK::Assign)) {
-        unexpected({e(TK::Assign), e(TK::Lt)});
+    } else {
+        rightSide = eat(TK::Assign);
     }
     if (panic_) {
         return close(m, NK::TypeDecl);
     }
-    if (cur_ == TK::String) {
-        bump();
-    } else {
+    if (rightSide) {
         parseType();
     }
     close(m, NK::TypeDecl);

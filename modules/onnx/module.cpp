@@ -56,13 +56,25 @@ TupleType *fallibleVoid() {
     return type;
 }
 
-// export_model<out: string[, dynamic_axes: int[, target: string]]>(fn, example) => void!
+// export_model<out: string, dynamic_axes: void[] = [], target: string = 'onnxruntime-cpu'>
+//                                                                     (fn, example)
+//                                                                     => void!
 // `out` is the file the model is written to, and it is a `with` argument because it is a
 // runtime value (a path the program reads from the environment, a name it composes); the
 // axis list and the target are `with` arguments for the same reason. `fn` and `example` stay
-// positional: they are what the export is about. The call shapes the module accepts are three
-// rules of one group, one per number of `with` arguments, which is what makes a named `with`
-// argument placeable (design principles 6.4).
+// positional: they are what the export is about.
+// The names and the defaults of the `with` parameters are the declaration's
+// (`stdlib/onnx.cml`), which is the one source of the operator's signature (design principles
+// 6.4): a call names them, skips one that has a default, and the value it left out arrives here
+// as that default -- an empty axis list, the target the model is checked against. Neither
+// default needs a case of its own: no axis left dynamic and the default target are what the
+// export does with no argument at all.
+// The declaration types the axis list as `void[]`: an axis list is an `int[]`, but the empty
+// literal `[]` states no element type (its element is `void`), so a declaration writing `int[]`
+// would refuse the empty list -- a call that names no axis, which the module accepted before the
+// declaration did. The element check is the kernel's, then, and it is one: `void[]` admits any
+// array, and `parseIntArray` refuses one whose elements are not integers (an error value, since
+// the call is well-formed).
 // `example` is the argument of a one-parameter `fn`, or a tuple with one example per parameter.
 // A refusal to translate the function and a file that cannot be written are error values
 // (`ExportUnsupported`, `IOError`): exporting is a tool, and the caller decides how to report
@@ -70,9 +82,32 @@ TupleType *fallibleVoid() {
 slot_t exportKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     auto *fn   = norm.get<::Function *>(0);
     auto *path = with.get<::String *>(0);
+    if (fn == nullptr || norm.type(0) == nullptr ||
+        norm.type(0)->code() != TypeCode::Function || fn->graph() == nullptr) {
+        // The declaration takes `fn` as a type variable (a declaration cannot write "a function
+        // of any parameter list and result"), so this is the check the signature cannot make: a
+        // value that is not a function is an error value here, not a call the compiler refuses.
+        return makeError(
+            "ExportUnsupported",
+            "onnx.export_model expects a function as its first argument, not " +
+                (norm.type(0) ? norm.type(0)->toString() : std::string("no value")),
+            kExportOperator);
+    }
     camel::onnx::ExportOptions options;
     if (with.size() > 1) {
-        options.dynamicAxes = camel::tensor::parseIntArray(with.get<::Array *>(1), with.type(1));
+        Type *axes = with.type(1);
+        if (axes == nullptr || axes->code() != TypeCode::Array) {
+            return makeError(
+                "ExportUnsupported",
+                "the 'dynamic_axes' argument of onnx.export_model is an array of axes, not " +
+                    (axes ? axes->toString() : std::string("no value")),
+                kExportOperator);
+        }
+        try {
+            options.dynamicAxes = camel::tensor::parseIntArray(with.get<::Array *>(1), axes);
+        } catch (const std::invalid_argument &e) {
+            return makeError("ExportUnsupported", e.what(), kExportOperator);
+        }
     }
     if (with.size() > 2) {
         options.target = with.get<::String *>(2)->toString();
@@ -123,44 +158,6 @@ slot_t supportedOperatorsKernel(ArgsView &, ArgsView &, Context &) {
     return camel::core::rtdata::toSlot(result);
 }
 
-bool isIntArray(Type *type) {
-    if (!type || type->code() != TypeCode::Array) {
-        return false;
-    }
-    Type *elem = static_cast<ArrayType *>(type)->elemType();
-    // `[]` has element type void.
-    return elem && (elem->code() == TypeCode::Int32 || elem->code() == TypeCode::Int64 ||
-                    elem->code() == TypeCode::Void);
-}
-
-/// One rule of the `onnx:export_model` group: `<out[, dynamic_axes[, target]]>(fn, example)`.
-/// The rules differ only in how many `with` arguments the call gives, and each fixes that count:
-/// a rule whose count is unconstrained places no name, and one such rule refuses every call that
-/// gives an argument by name (design principles 6.4, builder_calls.cpp#withNamesOf).
-std::optional<Type *> resolveExportModel(
-    const type_vec_t &with, const type_vec_t &norm) {
-    if (with.size() < 1 || with.size() > 3 || norm.size() != 2) {
-        return std::nullopt;
-    }
-    if (with[0]->code() != TypeCode::String) {
-        return std::nullopt;
-    }
-    if (with.size() >= 2 && !isIntArray(with[1])) {
-        return std::nullopt;
-    }
-    if (with.size() == 3 && with[2]->code() != TypeCode::String) {
-        return std::nullopt;
-    }
-    if (norm[0]->code() != TypeCode::Function) {
-        return std::nullopt;
-    }
-    if (!(camel::tensor::isTensorType(norm[1]) || norm[1]->code() == TypeCode::Tuple ||
-          norm[1]->code() == TypeCode::Struct)) {
-        return std::nullopt;
-    }
-    return fallibleVoid();
-}
-
 class OnnxExecutor : public Executor {
   public:
     explicit OnnxExecutor(context_ptr_t ctx)
@@ -172,28 +169,12 @@ class OnnxExecutor : public Executor {
 } // namespace
 
 OnnxModule::OnnxModule(context_ptr_t ctx) : BuiltinModule("onnx", ctx) {
+    // No operator group: `export_model`'s signature is the declaration in `stdlib/onnx.cml`
+    // (`with <out: string, dynamic_axes: int[]? = null, target: string? = null>` and two ordinary
+    // parameters), and the module keeps the kernel, the executor and the purity. When the
+    // declaration is compiled it replaces the group of this name, so a group here would be one
+    // signature in two places (design principles 6.4).
     camel::onnx::passes::registerOnnxPasses();
-    exportEntity(
-        "export_model",
-        OperatorGroup::create(
-            "export_model",
-            {{"onnx:export_model",
-              DynamicFuncTypeResolver::create(
-                  {{1, {false}}, {2, {false, false}}},
-                  "<out: string> (fn: (...) => R, example: Tensor | tuple | struct) => void!",
-                  resolveExportModel)},
-             {"onnx:export_model",
-              DynamicFuncTypeResolver::create(
-                  {{2, {false, false}}, {2, {false, false}}},
-                  "<out: string, dynamic_axes: int[]> "
-                  "(fn: (...) => R, example: Tensor | tuple | struct) => void!",
-                  resolveExportModel)},
-             {"onnx:export_model",
-              DynamicFuncTypeResolver::create(
-                  {{3, {false, false, false}}, {2, {false, false}}},
-                  "<out: string, dynamic_axes: int[], target: string> "
-                  "(fn: (...) => R, example: Tensor | tuple | struct) => void!",
-                  resolveExportModel)}}));
 }
 
 module_ptr_t OnnxModule::create(context_ptr_t ctx) { return std::make_shared<OnnxModule>(ctx); }

@@ -175,14 +175,7 @@ class EdgeChecker {
     /// and the passes that write order edges cannot drift: only a node the model lets a pass
     /// arrange freely -- pure *and* unable to fault (design principles 3.4) -- refuses one.
     bool isFreelySchedulable(gc_node_ref_t ref) const {
-        const GCNode *node = graph_.node(ref);
-        if (node == nullptr) {
-            return false;
-        }
-        const GCOperBody *body =
-            node->kind == GCNodeKind::Oper ? graph_.nodeBodyAs<GCOperBody>(ref) : nullptr;
-        return nodeIsFreelySchedulable(
-            node->kind, body != nullptr ? body->oper : camel::core::kNoOper);
+        return nodeIsFreelySchedulable(graph_, ref);
     }
     /// The equivalences between nodes (the Tabled state): a graph validated as another state has
     /// none; in this one each names two nodes that compute a value of the same type, in the same

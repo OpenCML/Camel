@@ -2141,6 +2141,32 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             normInputs.push_back({location, gct, std::nullopt});
         }
     }
+    // The with-form of the core slice (design principles 5.4): `xs->slice<axis, start, end>` and
+    // `<axis, start, end, step>` are the slice node the subscript and the function form build,
+    // whose words after the value are the axis, the two bounds, the step and the mask saying both
+    // bounds were written. The with-arguments become those ordinary words, so there is one node
+    // and one rule for every consumer of it (its derivative, its checks, its lowering).
+    if (nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
+        const auto &sliceTarget = nodeGraphOf(targetNode)->drefTarget(targetNode);
+        if (std::holds_alternative<oper_group_ptr_t>(sliceTarget) &&
+            std::get<oper_group_ptr_t>(sliceTarget)->name() == "slice" && normInputs.size() == 1 &&
+            (withInputs.size() == 3 || withInputs.size() == 4)) {
+            const auto staticWord = [&](int64_t value) {
+                node_handle_t word = currGraph_->addStaticDataNode(tt::as_shared<Data>(
+                    std::make_shared<PrimaryData<int64_t>>(value)));
+                registerNodeOrigin(context_, word, gct, "gir.data");
+                return Argument{word, gct, std::nullopt};
+            };
+            for (const Argument &word : withInputs) {
+                normInputs.push_back({word.node, word.expr, std::nullopt});
+            }
+            if (withInputs.size() == 3) {
+                normInputs.push_back(staticWord(1));
+            }
+            normInputs.push_back(staticWord(3));
+            withInputs.clear();
+        }
+    }
     // The one place the ordinary argument types are built: from the bound nodes, in the
     // declaration's order. A binding that fills a default puts the declaration's own static
     // node there, so the type is the parameter's, and nothing here reads the written order.
@@ -2623,6 +2649,53 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         if (std::holds_alternative<oper_group_ptr_t>(drefTarget)) {
             const auto &ops = std::get<oper_group_ptr_t>(drefTarget);
             addDeclaringModuleOverloads(targetNode, ops->name(), withInputTypes, normInputTypes);
+        }
+    }
+
+    // A call with an argument of type `never` never runs (design principles 3.9; the author's
+    // ruling of 2026-10-26 on `never-argument-scope`): an argument is evaluated before the call
+    // it is written in, and this one never gives a value, so the call itself is typed `never` and
+    // no overload is chosen for it. The reading stands before the resolution -- a set of
+    // overloads that fits is not the question for a call that never runs, and a call that never
+    // runs says nothing about a signature either. A `with` argument is evaluated before the call
+    // like an ordinary one, so this is one reading over every argument the call is written with:
+    // the two lists are walked here, `with` arguments first, and not in two places. The call is
+    // not built: what the expression gives is the argument's own node, which is the value that
+    // ends the program. One warning per call, naming the argument that causes it.
+    for (const bool inWith : {true, false}) {
+        const std::vector<Argument> &inputs = inWith ? withInputs : normInputs;
+        const type_vec_t &types            = inWith ? withInputTypes : normInputTypes;
+        for (size_t i = 0; i < inputs.size() && i < types.size(); ++i) {
+            if (types[i] == nullptr || inputs[i].node == nullptr ||
+                valueTypeOf(types[i])->code() != TypeCode::Never) {
+                continue;
+            }
+            // Which argument the program wrote: the name it gave the argument, or its position
+            // among the arguments as written. An ordinary argument's position is looked up in the
+            // call itself, because the binding put the arguments in the declaration's order; a
+            // `with` argument is written in the callee's angle brackets, which the call node does
+            // not carry, so it is named by its place among the `with` arguments.
+            std::string written;
+            if (inputs[i].name.has_value()) {
+                written = std::format("the argument '{}'", *inputs[i].name);
+            } else if (inWith) {
+                written = std::format("the `with` argument {}", i + 1);
+            } else {
+                size_t position = i + 1;
+                for (size_t j = 1; j < gct->size(); ++j) {
+                    if (inputs[i].expr != nullptr && gct->at(j) == inputs[i].expr) {
+                        position = j;
+                        break;
+                    }
+                }
+                written = std::format("argument {}", position);
+            }
+            diags_->of(SemanticDiag::NeverArgumentCall)
+                .atOrigin(inputs[i].expr != nullptr ? inputs[i].expr->origin() : gct->origin())
+                .commit(written);
+            node_handle_t given = inputs[i].node;
+            LEAVE("LINK");
+            return given;
         }
     }
 

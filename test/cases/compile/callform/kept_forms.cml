@@ -19,7 +19,7 @@ func main(): int sync {
     println(m1, v1 ?? 0, d1, h1, r1, s1, c1)
     // after an arrow
     println(m->put<'c', 3>, m->get<'z'> ?? 0, m->get_or<'a', 9>, m->has<'z'>, m->remove<'z'>)
-    println(s->add<1>, s->contains<7>, s->has<3>, s->remove<3>, s->remove<8>)
+    println(s->add<1>, s->contains<7>, s->contains<3>, s->remove<3>, s->remove<8>)
     println(m->put<'c', 3>->put<'d', 4>->remove<'a'>->has<'d'>)
     // two operands of equal standing: both ordinary
     println(merge(m, [('b', 20), ('d', 4)] as Map<string, int>))

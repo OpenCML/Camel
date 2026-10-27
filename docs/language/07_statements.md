@@ -681,6 +681,15 @@ id
 - 可以 `export`，在别的模块里以 `模块::Pair<int>` 使用。
 - 模块类型的尖括号由该类型自己解释，实参可以是类型或 `const 数据`；数值数组的另一种拼写 `f32[2, 3]` 的尖括号由数组类型自己解释（形状实参不写 `const`：`f32[2, 3]` 报 `SemanticDiag::InvalidTypeArgument`）。
 
+**C++ 模块提供的类型，声明时不写右边**，与 C++ 提供的函数不写函数体是同一条规则（设计原则 6.4、10.4）：
+
+```text
+export type Graph
+export type Txn<F>
+```
+
+类型是模块按这个名字登记的那一个；它的身份是模块加名字，所以别的模块里同名的类型是另一个类型，模块没有登记的名字是 `SemanticDiag::NativeTypeNotProvided`。尖括号里列出这个类型接受的实参，实参是任何类型表达式，泛型声明里的类型变量也可以：`func same::<F>(t: Txn<F>): Txn<F>`。类型不用字符串来命名：`type X = 'text'` 是语法错误。
+
 类型表达式里没有类型运算：`A & B`、`A \ B`、`A + B`、`A ^ B` 这样的写法是普通的语法错误（`&`、`\`、`+`、`-`、`^` 在类型位置没有含义；它们是表达式里的运算符，所以 `x as T + U` 是 `(x as T) + U`）。`keyof` 与 `of` 不是关键字：`keyof T`、`名字 of T` 里的它们是普通的名字，写出来是语法错误。`typeof e` 是一个完整的类型，取表达式 `e` 的值的类型，在使用这个类型的位置由编译器展开；`typeof` 不能嵌在更大的类型里（`typeof(1)[]` 报 `SemanticDiag::TypeOfNotWholeType`），操作数没有值（`void`）时报 `SemanticDiag::TypeOfNotAValue`。
 
 ## 7.8 块

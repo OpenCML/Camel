@@ -1,0 +1,46 @@
+id = "compile.native_types"
+order = 928
+tier = "fast"
+tags = ["feat", "compile", "types", "modules"]
+desc = "Types a C++ module provides (design principles 10.4): `export type Graph` and `export type Txn<F>` are declared without a right side, like a function without a body, and their identity is the module and the name; the argument of such a type is any type expression, a type variable included."
+
+[defaults]
+kind = "behavior"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "native_types.argument_is_a_type_variable"
+desc = "`Txn<F>` in a generic declaration compiles: a type variable is an argument of a module type like any other type."
+case = "../../../cases/compile/native_types/txn_variable.cml"
+args = ["${case}"]
+expect_exit = 0
+
+[[tests]]
+name = "native_types.not_provided"
+desc = "A type written without a right side that the module did not register is refused, and the report names the type and the module."
+kind = "negative"
+case = "../../../cases/compile/native_types/not_provided.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NativeTypeNotProvided"
+expect_output_contains = ["'Nope'", "'not_provided'"]
+
+[[tests]]
+name = "native_types.identity_is_module_and_name"
+desc = "Another module that writes `export type Graph` has no such type: the identity is the module and the name, not the name."
+kind = "negative"
+case = "../../../cases/compile/native_types/identity_by_module.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NativeTypeNotProvided"
+expect_output_contains = ["'Graph'", "'identity_by_module'"]
+
+[[tests]]
+name = "native_types.string_form_is_gone"
+desc = "`type X = 'text'` is a syntax error: a type is written out or provided without a right side, never named by a string."
+kind = "negative"
+case = "../../../cases/compile/native_types/string_form.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"

@@ -7,6 +7,7 @@
  * one through a transaction. Every read is pure: a Program is an immutable snapshot.
  */
 
+#include "camel/core/type/native.h"
 #include "facts.h"
 #include "handle.h"
 #include "nodekind.h"
@@ -104,13 +105,13 @@ class GraphModule final : public BuiltinModule {
   public:
     explicit GraphModule(context_ptr_t ctx) : BuiltinModule("graph", std::move(ctx)) {
         for (HandleKind kind : kHandleKinds) {
-            exportType(Reference(camel::graphmod::handleKindName(kind)), HandleType::get(kind));
+            camel::core::type::registerNativeType("graph", camel::graphmod::handleKindName(kind), HandleType::get(kind));
         }
-        exportType(Reference("NodeKind"), nodeKindType());
-        exportType(Reference("RegionKind"), regionKindType());
+        camel::core::type::registerNativeType("graph", "NodeKind", nodeKindType());
+        camel::core::type::registerNativeType("graph", "RegionKind", regionKindType());
         // The type of the value `effects` gives: a structural type has no name of its own, and
         // the declaration of `effects` names its result.
-        exportType(Reference("Effects"), effectsType());
+        camel::core::type::registerNativeType("graph", "Effects", effectsType());
         // The signatures C++ computes (standard library conventions 2): the four operators of a
         // function value take the type of an argument, so a declaration cannot express them.
         // Everything else is declared in stdlib/graph.cml, including the per-sample-type
@@ -132,7 +133,6 @@ class GraphModule final : public BuiltinModule {
         exportEntity("__neq__", OperatorGroup::create("__neq__", ne));
         exportDefaultImportRef("__eq__");
         exportDefaultImportRef("__neq__");
-        exportType(Reference("Value"), HandleType::get(HandleKind::Node));
     }
 
     bool load() override {

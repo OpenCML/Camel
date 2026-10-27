@@ -59,7 +59,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 213
+**Semantic — errors** (`SemanticDiag`) — 214
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -89,6 +89,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `AssignmentTargetNotVariable` | The target of an assignment must be a variable, or a path from one. |
 | `ConstructNotSupported` | '{0}' is not supported: {1}. |
 | `InvalidTypeArgument` | The arguments of the type '{0}<...>' are not accepted: {1}. |
+| `NativeTypeNotProvided` | The type '{0}' is declared without a right side, so a C++ module has to provide it, and the module '{1}' registered no type of that name. |
 | `ArgumentNeedsConversion` | The call to '{0}' needs an explicit conversion: {1}. |
 | `ReturnNeedsConversion` | The returned value needs an explicit conversion to the function's declared return type '{0}': {1}. |
 | `ImportNameConflict` | The name '{0}' is imported from the modules '{1}' and '{2}' with {3}. |
@@ -275,7 +276,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `FactConstCaseTypeRequired` | The 'const' case '{0}' of the fact '{1}' writes no type. |
 | `FactCaseBindsNoVariable` | This case of the fact '{0}' names no variable. |
 
-**Semantic — warnings** (`SemanticDiag`) — 12
+**Semantic — warnings** (`SemanticDiag`) — 15
 
 | `IgnoredSideEffect` | {0} is not in a sync block, and {1}. |
 | `EffectNotExecuted` | {0} has side effects but is never executed: {1}. |
@@ -289,6 +290,9 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `TagHasNoReader` | The tag '{0}' is written, but none of the passes it names ({1}) is in the pipeline. |
 | `DimensionNameUsedOnce` | The dimension name '{0}' is written once in this signature, so it relates nothing. |
 | `TypeVariableUnused` | The type parameter '{0}' is declared at the head but never written in the signature. |
+| `NeverArgumentCall` | This call never runs: {0} has type 'never', and an argument is evaluated before the call it is written in. |
+| `FailNotExecuted` | This 'fail' is not executed: {0}. |
+| `StatementAfterFail` | This statement cannot run: the 'fail' written before it never returns. |
 
 **Run time and passes — errors** (`RuntimeDiag`) — 36
 

@@ -1,0 +1,21 @@
+/**
+ * The other side of the rule, in the three positions alike (design principles 5.1): the position
+ * gives the literal's written elements its element type, and a computed element is checked
+ * against that type rather than converted. `float(n)` is a `float`, not an `f32`, so
+ * `[1.0, float(n)]` does not stand in an `f32[]` -- as an argument, in a declaration and as the
+ * receiver of `->` -- and each of the three reports the element type mismatch at the computed
+ * element, not a call without a matching function.
+ */
+module literal_context_composite_holes_positions_mismatch
+
+func first(xs: f32[]): f32 { return xs[0] }
+
+// the argument position
+func argumentPosition(n: float): f32 { return first([1.0, float(n)]) }
+// the declaration position
+func declarationPosition(n: float): f32 {
+    let xs: f32[] = [1.0, float(n)]
+    return xs[0]
+}
+// the receiver of `->`
+func receiverPosition(n: float): f32 { return [1.0, float(n)]->first }

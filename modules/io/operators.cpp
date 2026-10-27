@@ -4,7 +4,7 @@
 /*
  * The terminal, which is what `io` is for until `Stream` exists: what it has
  * waiting to be read, the keys themselves, and raw mode. The standard streams and
- * `print`/`println`/`input`/`eprintln` are the prelude's operators, not this module's.
+ * `print`/`println`/`eprintln` are the prelude's operators, not this module's.
  */
 
 #include "operators.h"
@@ -18,6 +18,7 @@
 #include "camel/utils/utf8.h"
 
 #include <format>
+#include <iostream>
 #include <string>
 #include <unordered_map>
 
@@ -141,6 +142,7 @@ std::unordered_map<std::string, operator_t> getIOOpsMap() {
         {"has_input", __io_has_input__},
         {"get_chars", __io_get_chars__},
         {"clear_input_buffer", __io_clear_input_buffer__},
+        {"input", __io_input__},
     };
 }
 
@@ -156,6 +158,14 @@ slot_t __io_set_terminal_raw_mode__(ArgsView &with, ArgsView &norm, Context &ctx
             "<io::set_terminal_raw_mode>");
     }
     return makeOk(NullSlot, resultType);
+}
+
+// Writes the prompt and reads one line of standard input, without its line end.
+slot_t __io_input__(ArgsView &with, ArgsView &norm, Context &) {
+    std::cout << norm.get<String *>(0)->view() << std::flush;
+    std::string line;
+    std::getline(std::cin, line);
+    return toSlot(camel::core::rtdata::checkedString(line, mm::autoSpace(), "input"));
 }
 
 slot_t __io_has_input__(ArgsView &with, ArgsView &norm, Context &) {

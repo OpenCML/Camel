@@ -10,16 +10,16 @@ import { nan, is_nan } from math
 func main(): int sync {
     let xs = [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]
     println(mean(xs), variance(xs), stdev(xs) * stdev(xs))
-    println(variance([1, 2, 3, 4]), variance([5.0]), variance(tail([5.0])), variance([3, 3, 3]))
+    println(variance([1, 2, 3, 4]), variance([5.0]), variance([5.0][1:]), variance([3, 3, 3]))
 
     println(median([3, 1, 2]) ?? -1.0, median([4.0, 1.0, 2.0, 3.0]) ?? -1.0, median([7]) ?? -1.0)
-    println(median(tail([1.0])) ?? -1.0, median(xs) ?? -1.0)
+    println(median([1.0][1:]) ?? -1.0, median(xs) ?? -1.0)
     println(median([9223372036854775807, 9223372036854775807]) ?? -1.0)
     println(median([1.0e308, 1.0e308, -1.0e308]) ?? -1.0, median([-1.0e308, 1.0e308]) ?? -1.0)
 
     let ys = [1.0, 2.0, 3.0, 4.0, 5.0]
     println(ys->quantile<0.0> ?? -1.0, ys->quantile<0.25> ?? -1.0, ys->quantile<0.5> ?? -1.0, ys->quantile<1.0> ?? -1.0)
-    println([10, 20]->quantile<0.1> ?? -1.0, [10]->quantile<0.9> ?? -1.0, tail([10])->quantile<0.5> ?? -1.0)
+    println([10, 20]->quantile<0.1> ?? -1.0, [10]->quantile<0.9> ?? -1.0, [10][1:]->quantile<0.5> ?? -1.0)
     // the order of the elements does not matter
     println([5.0, 1.0, 4.0, 2.0, 3.0]->quantile<0.75> ?? -1.0)
 

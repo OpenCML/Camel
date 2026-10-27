@@ -33,18 +33,18 @@ assert(undeclared.length === 0, `operators without a purity declaration: ${undec
 const purity = Object.fromEntries(ops.map((o) => [o.uri, o.purity]))
 const notPure = ['time:now', 'rand:rand', 'rand:seed', 'rand:shuffle', 'rand:choice', 'env:get_env', 'env:get_cwd',
   'fs:read_bytes', 'fs:list_dir', 'fs:exists', 'fs:file_size', 'fs:write_bytes', 'fs:append_bytes', 'process:user_name', 'process:cpu_count', 'process:sleep', 'process:exit',
-  'io:set_terminal_raw_mode', 'io:has_input', 'io:get_chars', 'io:clear_input_buffer',
-  ':io/print', ':io/println', ':io/eprintln', ':io/input', ':op/assn', ':op/assn_owned',
+  'io:set_terminal_raw_mode', 'io:input', 'io:has_input', 'io:get_chars', 'io:clear_input_buffer',
+  ':io/print', ':io/println', ':io/eprintln', ':op/assn', ':op/assn_owned',
   'test_support:rendezvous', 'test_support:thread_count',
   ':mark/map_arr', ':mark/foreach_arr']
 for (const uri of notPure) {
   assert(purity[uri] === 'effectful', `${uri} is declared ${purity[uri]}, expected effectful`)
 }
 const pure = ['str:to_upper', 'str:codepoints', 'time:strftime', 'time:strptime', 'math:sin_d', 'math:shl', 'statistics:median',
-  're:find', 'json:encode', 'json:decode', 'this:zen', ':op/add_l', ':op/idx_str', ':struct/slice_arr', ':str/format',
+  're:find', 'json:encode', 'json:decode', 'this:zen', ':op/add_l', ':op/idx_str', ':str/format',
   // They return a new array and leave their argument unchanged (design principles 11.3), one
   // operator per element type: the name carries the element type it takes.
-  ':struct/append_arr', ':struct/extend_arr', 'array:sort_i', 'array:sort_l', 'array:sort_f', 'array:sort_d',
+  ':struct/append_arr', 'array:sort_i', 'array:sort_l', 'array:sort_f', 'array:sort_d',
   'array:quick_sort_i', 'array:quick_sort_l', 'array:quick_sort_f', 'array:quick_sort_d',
   'array:insert_sort_i', 'array:insert_sort_l', 'array:insert_sort_f', 'array:insert_sort_d',
   'array:merge_sort_i', 'array:merge_sort_l', 'array:merge_sort_f', 'array:merge_sort_d',

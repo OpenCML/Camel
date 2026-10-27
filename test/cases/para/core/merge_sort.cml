@@ -16,8 +16,8 @@ func mergesort(arr: int[]): int[] sync {
     let start = now()
     let res = if len(arr) <= 1000000 then sort(arr) else {
         let mid = len(arr) / 2
-        let lhs = arr->slice<0, mid>->mergesort
-        let rhs = arr->slice<mid, len(arr)>->mergesort
+        let lhs = arr[0:mid]->mergesort
+        let rhs = arr[mid:len(arr)]->mergesort
         return merge(lhs, rhs)
     }
     let duration = now() - start
@@ -36,7 +36,7 @@ func main(): int sync {
     let arr = 0..n->shuffle
 
     'First {} values (unsorted):'->format<m>->println
-    arr->slice<0, m>->println
+    arr[0:m]->println
 
     'Start sorting {} numbers...'->format<n>->println
     let start = now()
@@ -44,7 +44,7 @@ func main(): int sync {
     let duration = now() - start
 
     'Sorted (first {} shown):'->format<m>->println
-    sorted->slice<0, m>->println
+    sorted[0:m]->println
 
     'Mergesort completed in {:.2f} seconds'->format<duration>->println
     return 0

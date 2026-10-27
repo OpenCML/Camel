@@ -389,7 +389,7 @@ The conversion runs when the program runs (a `CAST` node), also for a literal; s
 | `items(m)` | `(K, V)[]` | |
 | `merge(m1, m2)` | `Map<K, V>` | entries of both; `m2` wins on a common key |
 | `m1 == m2`, `m1 != m2` | `bool` | same keys and equal values |
-| `contains<x>(s)`, `has<x>(s)` | `bool` | |
+| `contains<x>(s)` | `bool` | |
 | `add<x>(s)` | `Set<T>` | |
 | `remove<x>(s)` | `Set<T>` | |
 | `len(s)` | `int` | |
@@ -404,7 +404,7 @@ arguments must have exactly the key and value type.
 **Calling form (ruled: design principles 11.4).** One form only, the convention of the whole
 standard library: the collection that flows through is the ordinary argument and what
 configures the operation is a `with` argument, `put<k, v>(m)` or, chained,
-`m->put<k, v>->remove<k2>` (as `contains<v>(xs)`, `slice<a, b>(xs)`, `map<f>(xs)`); an
+`m->put<k, v>->remove<k2>` (as `contains<v>(xs)`, `filter<f>(xs)`, `map<f>(xs)`); an
 operation on two collections of equal standing takes both as ordinary arguments
 (`merge(m1, m2)`, `union(s1, s2)`, as `concat(a, b)`).
 

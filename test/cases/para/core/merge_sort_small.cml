@@ -19,8 +19,8 @@ func sort_leaf(arr: int[]): (int[], int) sync {
 func mergesort(arr: int[]): (int[], int) {
     return if len(arr) <= 8 then sort_leaf(arr) else {
         let mid = len(arr) / 2
-        let (lhs, lmet) = arr->slice<0, mid>->mergesort
-        let (rhs, rmet) = arr->slice<mid, len(arr)>->mergesort
+        let (lhs, lmet) = arr[0:mid]->mergesort
+        let (rhs, rmet) = arr[mid:len(arr)]->mergesort
         return (merge_sorted_arrays(lhs, rhs), lmet + rmet)
     }
 }

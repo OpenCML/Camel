@@ -228,8 +228,8 @@ std::array<Value, 3> optimizerStateParts(const Value &state) {
     return {state.fields[0], state.fields[1], state.fields[2]};
 }
 
-Emitter::Emitter(int64_t opset, const CapabilityTable *capabilities)
-    : capabilities_(capabilities), opset_(opset) {
+Emitter::Emitter(int64_t opset, const CapabilityTable *capabilities, std::string target)
+    : capabilities_(capabilities), target_(std::move(target)), opset_(opset) {
     scopes_.emplace_back();
 }
 

@@ -71,7 +71,7 @@ Subscripts, arguments and `with` arguments must directly follow the expression b
 ## 8.4 Types
 
 ```
-typeDecl  : 'type' name ('<' parameters, ... '>')? '=' (type | enumBody)
+typeDecl  : 'type' name ('<' parameters, ... '>')? ('=' (type | enumBody))?
 typeExpr  : arrayType ('?' | '!')*
 arrayType : specType ('[' ']')*
 specType  : primaryType ('<' (type | const data), ... '>')?
@@ -133,8 +133,7 @@ dataDecl           : ('let' | 'var') carrier (':' typeList)? '=' dataList
                      | 'let' '_' (':' typeList)? '=' dataList
 carrier            : identList | parentIdents
 typeDecl           : frontMatter? 'type' identRef
-                     ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
-                     (typeExpr | STRING)
+                     ('<' identDef (',' identDef)* ','? ('>' | '>='))? ('=' typeExpr)?
 resourceDecl       : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered')?
 retStmt            : ('return' | 'yield') dataList
 modifiers          : 'sync'+

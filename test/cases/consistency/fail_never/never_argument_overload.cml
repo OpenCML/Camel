@@ -1,0 +1,19 @@
+/**
+ * A call whose argument is `never` is not resolved at all (design principles 3.9; the author's
+ * ruling of 2026-10-26): the call never runs, so which overload it would have taken is not a
+ * question, and a `never` value -- which fits every parameter -- is not allowed to make two
+ * overloads fit at once. The warning is the one such a call gets, and no ambiguity is reported:
+ * the result is `never`, and an `int[]` position takes it.
+ */
+module never_argument_overload
+
+func pick(x: int): int { return x }
+func pick(x: string): string { return x }
+
+func stop(m: string): never {
+    return fail<'Stopped'>(m)
+}
+
+func main(): int[] sync {
+    return pick(stop('no value to pick'))
+}

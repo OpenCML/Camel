@@ -9,8 +9,8 @@ import { sort, merge_sorted_arrays } from array
 func mergesort(arr: int[]): int[] {
     return if len(arr) <= 1000000 then sort(arr) else {
         let mid = len(arr) / 2
-        let lhs = arr->slice<0, mid>->mergesort
-        let rhs = arr->slice<mid, len(arr)>->mergesort
+        let lhs = arr[0:mid]->mergesort
+        let rhs = arr[mid:len(arr)]->mergesort
         return merge_sorted_arrays(lhs, rhs)
     }
 }
@@ -19,7 +19,7 @@ func main(): int sync {
     seed(1)
     let arr = 0..8000000->shuffle
     let res = mergesort(arr)
-    res->slice<0, 16>->println
-    res->slice<len(res) - 4, len(res)>->println
+    res[0:16]->println
+    res[len(res) - 4:len(res)]->println
     return 0
 }

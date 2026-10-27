@@ -1,0 +1,7 @@
+module not_provided
+
+export type Nope
+
+func main(): int sync {
+    return 0
+}
