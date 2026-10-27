@@ -657,6 +657,12 @@ bool Builder::isPassDeclaration(const GCT::node_ptr_t &gct) {
         text.compare(text.size() - 3, 3, ">()") != 0) {
         return false;
     }
+    // A pass takes the function it is applied to and nothing else. The same condition on a
+    // declaration with more ordinary parameters is an operator that wants a function.
+    if (const auto *declared = tt::as_ptr<FunctionType>(gct->at(0)->dataType());
+        declared != nullptr && declared->normTypesCount() != 1) {
+        return false;
+    }
     const std::string parameter =
         text.substr(prefix.size(), text.size() - prefix.size() - 3);
     return !parameter.empty() && std::all_of(

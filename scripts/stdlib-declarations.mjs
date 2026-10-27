@@ -154,6 +154,35 @@ const UNDERIVABLE_OPERATORS = new Set([
 // MODULES. The list stays, with its checks, so an exclusion has to be justified the same way.
 const UNCHECKED_MODULES = []
 
+// The number of ordinary parameters a declaration line writes: the commas at the top level of its
+// first parenthesised list, plus one. A pass takes one (the function it is applied to); a
+// declaration with the same condition and more is an operator that wants a function.
+function ordinaryParameterCount(line) {
+    const open = line.indexOf('(')
+    if (open < 0) {
+        return -1
+    }
+    let depth = 0
+    let count = 0
+    let seen = false
+    for (let i = open + 1; i < line.length; i++) {
+        const c = line[i]
+        if ('([<{'.includes(c)) {
+            depth++
+        } else if (')]>}'.includes(c)) {
+            if (depth === 0) {
+                break
+            }
+            depth--
+        } else if (c === ',' && depth === 0) {
+            count++
+        } else if (!/\s/.test(c)) {
+            seen = true
+        }
+    }
+    return seen ? count + 1 : 0
+}
+
 function read(file) {
     return fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n')
 }
@@ -548,7 +577,8 @@ function readDeclarations(file, moduleName, allowPass = true) {
             // compiled declaration can declare a pass; a file under stdlib/signatures/ is
             // reference text, and there the same condition is the type's
             // (`grad::<F>(f: F): Gradient<F> when is_function::<F>()`).
-            if (allowPass && /\bwhen\s+is_function::<\w+>\(\)\s*$/.test(trimmed)) {
+            if (allowPass && /\bwhen\s+is_function::<\w+>\(\)\s*$/.test(trimmed) &&
+                ordinaryParameterCount(trimmed) === 1) {
                 pendingUri = null
                 continue
             }

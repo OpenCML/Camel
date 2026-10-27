@@ -1,0 +1,17 @@
+/**
+ * A native operator that writes `when is_function::<F>()` (test_support's `arity_probe`, as the
+ * `export_model` of onnx): the condition is a pass's too, and a pass takes one ordinary parameter.
+ * This operator takes two, so it is an operator, exported, and a call of it finds the parameters of
+ * its declaration by name.
+ */
+import { arity_probe } from test_support
+
+func identity(x: int): int {
+    return x
+}
+
+func main(): int sync {
+    println(arity_probe<7>(identity, 0), arity_probe<tag: 7>(identity, 0))
+    println(arity_probe<7, [1, 2]>(identity, 0), arity_probe<tag: 7, extra: [1]>(identity, 0))
+    return 0
+}
