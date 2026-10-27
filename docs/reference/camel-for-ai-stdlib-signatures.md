@@ -194,15 +194,14 @@ tree_reduce: <f: (acc: R, leaf: A) => R> (t: T, init: R) => R
 tree_unzip: (r: R, s: S) => ?
 ```
 
-**`tensor`** — import { ... } from tensor — 68 name(s)
+**`tensor`** — import { ... } from tensor — 67 name(s)
 
 ```text
 new: (values: float[..] | number[]) => float[..]
-empty: (shape: int[]) => f32[..]
-zeros: (shape: int[]) => f32[..]
-ones: (shape: int[]) => f32[..]
+zeros: (shape: int[]) => T[..] when is_numeric::<T>()
+ones: (shape: int[]) => T[..] when is_numeric::<T>()
 full: (shape: int[], value: number) => float[..]
-eye: (n: int) => f32[..]
+eye: (n: int) => T[..] when is_numeric::<T>()
 range: (start: int, stop?: int, step?: int) => int64[..]
 random: (shape: int[], low: number, high: number) => f32[..]
 randn: (shape: int[], mean?: number, std?: number) => f32[..]
