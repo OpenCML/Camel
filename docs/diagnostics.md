@@ -257,6 +257,7 @@ prints one entry.
 | `0x030001FB` | [SemanticDiag::NativeValueNotLoaded](#nativevaluenotloaded) | Error | no |
 | `0x030001FC` | [SemanticDiag::NativeValueMismatch](#nativevaluemismatch) | Error | no |
 | `0x030001FD` | [SemanticDiag::NativeTypeNotProvided](#nativetypenotprovided) | Error | no |
+| `0x030001FE` | [SemanticDiag::TypeFunctionNotApplicable](#typefunctionnotapplicable) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -6768,10 +6769,8 @@ Name one function, or give the arguments positionally.
 **Example** (`test/cases/compile/param_defaults/stdlib_no_place_for_name.cml`, run as `camel test/cases/compile/param_defaults/stdlib_no_place_for_name.cml`)
 
 ```camel
-import python
-
 func main(): int sync {
-    println(python::py_call(fn: 'printf'))
+    println(fn: 'printf')
     return 0
 }
 ```
@@ -7456,7 +7455,7 @@ None: choice: a stream has one consumer on each path, so which place reads it an
 **Help**
 
 ```text
-A stream is read one element at a time and is done when it ends, so on each execution path its value has one consumer (design principles 5.4). The second consumer is here and the first is here. To read one stream from two places, write `tee(s, n)`: it gives two streams, each read once, and both see the same elements.
+A stream is read one element at a time and is done when it ends, so on each execution path its value has one consumer (design principles 5.4). The second consumer is here and the first is here. To read one stream from two places, write `s->tee<n>`: it gives two streams, each read once, and both see the same elements.
 ```
 
 **Example** (`test/cases/compile/stream/consumed_twice.cml`, run as `camel test/cases/compile/stream/consumed_twice.cml`)
@@ -7846,7 +7845,7 @@ The `tee` width '{0}' is below 1.
 **Help**
 
 ```text
-`tee(s, n)` reads `s` once and gives two streams over the same elements, each read once (design principles 5.4). A side that runs ahead of the other buffers the elements the other has not read yet, and `n` says how wide that buffer is expected to be: it is a hint, so the executor grows the buffer rather than make a side wait, and a hint wider than the implementation's cap is clamped to it. What no buffer can be is narrower than the one element being handed over, so write `n` as 1 or more, or leave it out for the default of 8.
+`s->tee<n>` reads `s` once and gives two streams over the same elements, each read once (design principles 5.4). A side that runs ahead of the other buffers the elements the other has not read yet, and `n` says how wide that buffer is expected to be: it is a hint, so the executor grows the buffer rather than make a side wait, and a hint wider than the implementation's cap is clamped to it. What no buffer can be is narrower than the one element being handed over, so write `n` as 1 or more, or leave it out for the default of 8.
 ```
 
 **Example** (`test/cases/compile/stream/tee_hint_not_positive.cml`, run as `camel test/cases/compile/stream/tee_hint_not_positive.cml`)
@@ -7867,7 +7866,7 @@ func total(s: int..): int {
 }
 
 func main(): int sync {
-    let (left, right) = stream::tee(count(3), 0)
+    let (left, right) = stream::tee<0>(count(3))
     return total(left) + total(right)
 }
 ```
@@ -8360,6 +8359,42 @@ A type written without '=' (`export type Graph`, `export type Txn<F>`) is the on
 export type Nope
 
 func main(): int sync {
+    return 0
+}
+```
+
+### TypeFunctionNotApplicable
+
+`0x030001FE` · Error · `SemanticDiag::TypeFunctionNotApplicable`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+The type function call '{0}' is not applicable: {1}.
+```
+
+**Help**
+
+```text
+A type function computes a type from types at compile time (design principles 21): `element_of::<T>()` is the element of an array or a set, `payload_of::<T>()` the `U` of `U?` or `U!`, and `key_of::<T>()` and `value_of::<T>()` the key and value types of a map. It is written where a type is, with its arguments between `::<` and `>` and an empty argument list, and it accepts only the types it is defined for.
+```
+
+**Example** (`test/cases/modules/types/type_function_not_applicable.cml`, run as `camel test/cases/modules/types/type_function_not_applicable.cml`)
+
+```camel
+/// A type function that does not accept the type it is given is refused where the instance is made.
+import { is_integer } from types
+
+func element_is_integer::<T>(): bool {
+    return is_integer::<element_of::<T>()>()
+}
+
+func main(): int sync {
+    println(element_is_integer::<int>())
     return 0
 }
 ```

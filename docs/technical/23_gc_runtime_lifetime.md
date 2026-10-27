@@ -368,8 +368,8 @@ declares flags such as `containsCamelReferences`, `finalizable`, `movable`, and 
 descriptor without a trace callback is treated as unable to hold Camel object references.
 
 The Python module now stores `PyObject` values as `ForeignResourceObject` wrappers instead of a
-process-global holder vector. `python:py_dispose` exposes deterministic cleanup, and normal Python
-access checks for the disposed state before borrowing the `py::object`.
+process-global holder vector. A wrapper is released when the collector finds it unreachable, and
+normal Python access checks for the disposed state before borrowing the `py::object`.
 
 Loaded `.cmo` DLL handles are still retained for the process lifetime. This is intentional: native
 resource control blocks may hold descriptor callbacks compiled into the module DLL, and unloading the

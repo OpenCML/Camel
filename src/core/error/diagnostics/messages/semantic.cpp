@@ -1585,7 +1585,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "StreamConsumedTwice",
                 "'{0}' is consumed twice: a stream is read once on each execution path.",
-                "A stream is read one element at a time and is done when it ends, so on each execution path its value has one consumer (design principles 5.4). The second consumer is here and the first is here. To read one stream from two places, write `tee(s, n)`: it gives two streams, each read once, and both see the same elements.",
+                "A stream is read one element at a time and is done when it ends, so on each execution path its value has one consumer (design principles 5.4). The second consumer is here and the first is here. To read one stream from two places, write `s->tee<n>`: it gives two streams, each read once, and both see the same elements.",
             },
         },
         {
@@ -1601,7 +1601,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "TeeHintNotPositive",
                 "The `tee` width '{0}' is below 1.",
-                "`tee(s, n)` reads `s` once and gives two streams over the same elements, each read once (design principles 5.4). A side that runs ahead of the other buffers the elements the other has not read yet, and `n` says how wide that buffer is expected to be: it is a hint, so the executor grows the buffer rather than make a side wait, and a hint wider than the implementation's cap is clamped to it. What no buffer can be is narrower than the one element being handed over, so write `n` as 1 or more, or leave it out for the default of 8.",
+                "`s->tee<n>` reads `s` once and gives two streams over the same elements, each read once (design principles 5.4). A side that runs ahead of the other buffers the elements the other has not read yet, and `n` says how wide that buffer is expected to be: it is a hint, so the executor grows the buffer rather than make a side wait, and a hint wider than the implementation's cap is clamped to it. What no buffer can be is narrower than the one element being handed over, so write `n` as 1 or more, or leave it out for the default of 8.",
             },
         },
         {
@@ -1714,6 +1714,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "FactCaseBindsNoVariable",
                 "This case of the fact '{0}' names no variable.",
                 "The cases read how a value was built, and the parts they read are the variables their patterns name: `case x + y` binds the two operands, and the fact function is computed from them (rewrite design 7.5). A pattern that names no variable leaves the case with nothing to read, so the fact says nothing about the values it matches; bind a part with a name, or write `case _`, which is the last case and says what the fact is for a value no other case matched.",
+            },
+        },
+        {
+            SemanticDiag::TypeFunctionNotApplicable,
+            {
+                "TypeFunctionNotApplicable",
+                "The type function call '{0}' is not applicable: {1}.",
+                "A type function computes a type from types at compile time (design principles 21): `element_of::<T>()` is the element of an array or a set, `payload_of::<T>()` the `U` of `U?` or `U!`, and `key_of::<T>()` and `value_of::<T>()` the key and value types of a map. It is written where a type is, with its arguments between `::<` and `>` and an empty argument list, and it accepts only the types it is defined for.",
             },
         },
         {

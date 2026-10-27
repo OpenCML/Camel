@@ -294,7 +294,7 @@
 
 ### 效应追踪（`std::profile effect_trace="..."`）
 
-在流水线里给出 `std::profile effect_trace="<file>"` 后，进程为每个被执行的有效应算子追加一行 JSON，按调用顺序排列（有效应算子指任何没有在算子特性注册表里登记为纯的或仅状态的算子：`println`、文件 I/O、`py_*`、赋值 `:op/assn*`，包括写成语句的 `acc = acc->append<v>` 所用的 `:op/assn_append`……）。`report=false` 使 `std::profile` 的文本报告不进入程序的输出：
+在流水线里给出 `std::profile effect_trace="<file>"` 后，进程为每个被执行的有效应算子追加一行 JSON，按调用顺序排列（有效应算子指任何没有在算子特性注册表里登记为纯的或仅状态的算子：`println`、文件 I/O、`python` 的算子、赋值 `:op/assn*`，包括写成语句的 `acc = acc->append<v>` 所用的 `:op/assn_append`……）。`report=false` 使 `std::profile` 的文本报告不进入程序的输出：
 
     camel m.cml 'std::profile effect_trace="trace.jsonl" report=false' std::nvm
 

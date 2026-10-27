@@ -46,8 +46,8 @@ export func std::mem::blocks(): { allocs: int, frees: int, live: int, bytes: int
 // (and `i64`, `f64`, the spellings of `int` and `float`). Each is one generic declaration over the
 // source type. Applied to an array, a conversion converts every element (one rule with arithmetic:
 // `f32(xs)` is one node, and `T(xs)` does it for the type a generic function is given); that entry
-// comes with the module `tensor` (stdlib/signatures/tensor.cml), read together with these once it
-// is imported. Converting a float to an integer drops the fraction.
+// is written in stdlib/signatures/tensor.cml, and needs no import: the first conversion of an array
+// in a module brings it along. Converting a float to an integer drops the fraction.
 
 /// x as a 64-bit integer.
 /// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one integer (blanks and a trailing part included); fault `ConversionOutOfRange` when x is a string that is an integer beyond the range, or a float that is NaN, infinite or beyond the range; use parse_int to handle text in the program
@@ -456,7 +456,7 @@ export func is_subset::<T>(s: Set<T>, other: Set<T>): bool
 /// tells one tee from another and whose type the operator takes, and whose elements it does not.
 /// A program does not write this: `tee` calls it once per element it pulls, and `std::profile`
 /// prints what it recorded (`STREAM_TEE`).
-/// @example tee_note(8, 64, 2, 2, s)    // the tee written `tee(s, 8)` reports itself this way
+/// @example tee_note(8, 64, 2, 2, s)    // the tee written `s->tee<8>` reports itself this way
 /// @example-fragment the last operand is the stream a tee reads, and no example program has one
 #op(':stream/tee_note')
 export func tee_note::<T>(hint: int, cap: int, elements: int, peak: int, s: T..): void

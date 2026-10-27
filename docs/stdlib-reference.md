@@ -34,8 +34,8 @@ How to read an entry:
   form runs (`len`'s one parameter is `x` for a string, an array, a map and a set, so one name
   reaches all four). The name is written in the list that holds the parameter: an ordinary one
   in the parentheses (`len(x: xs)`), a `with` one in the angle brackets (`j->get<key: 'port'>`).
-  A form that gives a position no name, or leaves its count to the arguments (a rest list --
-  `py_call`'s two forms differ in arity as well), is one no named argument reaches: the call
+  A form that gives a position no name, or leaves its count to the arguments (a rest list,
+  as `println` takes), is one no named argument reaches: the call
   reports that the signature is not known where the call is written. `contains` refuses a named
   argument for a reason of its own: its position 0 means an element in two forms and the
   substring in the third, so the name would mean another thing in one of them.
@@ -143,8 +143,8 @@ per target type, named by the type: `int`, `i32`, `float`, `f32`, `bf16`, `f16`,
 (and `i64`, `f64`, the spellings of `int` and `float`). Each is one generic declaration over the
 source type. Applied to an array, a conversion converts every element (one rule with arithmetic:
 `f32(xs)` is one node, and `T(xs)` does it for the type a generic function is given); that entry
-comes with the module `tensor` (stdlib/signatures/tensor.cml), read together with these once it
-is imported. Converting a float to an integer drops the fraction.
+is written in stdlib/signatures/tensor.cml, and needs no import: the first conversion of an array
+in a module brings it along. Converting a float to an integer drops the fraction.
 
 #### `int`
 
@@ -796,7 +796,7 @@ tells one tee from another and whose type the operator takes, and whose elements
 A program does not write this: `tee` calls it once per element it pulls, and `std::profile`
 prints what it recorded (`STREAM_TEE`).
 
-- Example (a fragment, not compiled): `tee_note(8, 64, 2, 2, s)` gives `the tee written `tee(s, 8)` reports itself this way`
+- Example (a fragment, not compiled): `tee_note(8, 64, 2, 2, s)` gives `the tee written `s->tee<8>` reports itself this way`
 - Why it is not compiled: the last operand is the stream a tee reads, and no example program has one
 
 <a id="str"></a>
@@ -1908,7 +1908,7 @@ A tensor of ones shaped and typed like t.
 i32: (t: float[..] | number[]) => i32[..]
 ```
 
-The conversion `i32` applied to every element of an array: the result has the input's extents and element type `i32`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
+The conversion `i32` applied to every element of an array: the result has the input's extents and element type `i32`. A scalar converts as it always did; this entry is read together with the scalar conversions, with no import: the first conversion of an array in a module brings it along.
 
 - Pure.
 - Example: `i32(new([1.0, 2.0]))`
@@ -1919,7 +1919,7 @@ The conversion `i32` applied to every element of an array: the result has the in
 i64: (t: float[..] | number[]) => int64[..]
 ```
 
-The conversion `i64` applied to every element of an array: the result has the input's extents and element type `int64`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
+The conversion `i64` applied to every element of an array: the result has the input's extents and element type `int64`. A scalar converts as it always did; this entry is read together with the scalar conversions, with no import: the first conversion of an array in a module brings it along.
 
 - Pure.
 - Example: `i64(new([1.0, 2.0]))`
@@ -1930,7 +1930,7 @@ The conversion `i64` applied to every element of an array: the result has the in
 int: (t: float[..] | number[]) => int64[..]
 ```
 
-The conversion `int` applied to every element of an array: the result has the input's extents and element type `int64`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
+The conversion `int` applied to every element of an array: the result has the input's extents and element type `int64`. A scalar converts as it always did; this entry is read together with the scalar conversions, with no import: the first conversion of an array in a module brings it along.
 
 - Pure.
 - Example: `int(new([1.0, 2.0]))`
@@ -1941,7 +1941,7 @@ The conversion `int` applied to every element of an array: the result has the in
 f32: (t: float[..] | number[]) => f32[..]
 ```
 
-The conversion `f32` applied to every element of an array: the result has the input's extents and element type `f32`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
+The conversion `f32` applied to every element of an array: the result has the input's extents and element type `f32`. A scalar converts as it always did; this entry is read together with the scalar conversions, with no import: the first conversion of an array in a module brings it along.
 
 - Pure.
 - Example: `f32(new([1.0, 2.0]))`
@@ -1952,7 +1952,7 @@ The conversion `f32` applied to every element of an array: the result has the in
 f64: (t: float[..] | number[]) => f64[..]
 ```
 
-The conversion `f64` applied to every element of an array: the result has the input's extents and element type `f64`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
+The conversion `f64` applied to every element of an array: the result has the input's extents and element type `f64`. A scalar converts as it always did; this entry is read together with the scalar conversions, with no import: the first conversion of an array in a module brings it along.
 
 - Pure.
 - Example: `f64(new([1.0, 2.0]))`
@@ -1963,7 +1963,7 @@ The conversion `f64` applied to every element of an array: the result has the in
 float: (t: float[..] | number[]) => f64[..]
 ```
 
-The conversion `float` applied to every element of an array: the result has the input's extents and element type `f64`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
+The conversion `float` applied to every element of an array: the result has the input's extents and element type `f64`. A scalar converts as it always did; this entry is read together with the scalar conversions, with no import: the first conversion of an array in a module brings it along.
 
 - Pure.
 - Example: `float(new([1.0, 2.0]))`
@@ -1974,7 +1974,7 @@ The conversion `float` applied to every element of an array: the result has the 
 bf16: (t: float[..] | number[]) => bf16[..]
 ```
 
-The conversion `bf16` applied to every element of an array: the result has the input's extents and element type `bf16`. A conversion into `bf16` or `f16` rounds (to nearest, ties to even); writing it asks for that precision, so it needs no numeric permission (`change_precision` governs a computation the compiler moves to lower precision, design principles 7.2-7.3). Reading a `bf16` or `f16` tensor into a wider type is exact. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
+The conversion `bf16` applied to every element of an array: the result has the input's extents and element type `bf16`. A conversion into `bf16` or `f16` rounds (to nearest, ties to even); writing it asks for that precision, so it needs no numeric permission (`change_precision` governs a computation the compiler moves to lower precision, design principles 7.2-7.3). Reading a `bf16` or `f16` tensor into a wider type is exact. A scalar converts as it always did; this entry is read together with the scalar conversions, with no import: the first conversion of an array in a module brings it along.
 
 - Pure.
 - Example: `bf16(new([1.0, 2.0]))`
@@ -1985,7 +1985,7 @@ The conversion `bf16` applied to every element of an array: the result has the i
 f16: (t: float[..] | number[]) => f16[..]
 ```
 
-The conversion `f16` applied to every element of an array: the result has the input's extents and element type `f16`. A scalar converts as it always did; this entry is read together with the scalar conversions once `tensor` is imported.
+The conversion `f16` applied to every element of an array: the result has the input's extents and element type `f16`. A scalar converts as it always did; this entry is read together with the scalar conversions, with no import: the first conversion of an array in a module brings it along.
 
 - Pure.
 - Example: `f16(new([1.0, 2.0]))`
@@ -2166,9 +2166,17 @@ no run-time inspection of a type: a predicate is settled when the call is compil
 
 One family, one spelling: `is_<property>::<T>()` asks one type, and `is_same::<T, U>()` asks two.
 The identity predicates (`is_integer`, `is_float`, `is_complex`, `is_string`, `is_bool`,
-`is_function`) carry the `match type` cases; the others ask them (`is_numeric`, `is_ordered`,
+`is_function`, and the shapes `is_array`, `is_nullable`, `is_fallible`, `is_map`, `is_set`) carry the
+`match type` cases; the others ask them (`is_numeric`, `is_ordered`,
 `is_plain`), so a type is named in one place and a new integer width is added to `is_integer`
 alone. A single type (`i32`, `f32`, `int`) is asked with `is_same`.
+
+Types are also computed from types, in the one language (design principles 21): the type
+functions `element_of::<T>()` (the element of an array or a set), `payload_of::<T>()` (the `U` of
+`U?` or `U!`), `key_of::<T>()` and `value_of::<T>()` (the key and value types of a map) are
+written where a type argument is, and are evaluated when the instance that binds `T` is made:
+`is_integer::<element_of::<T>()>()` asks the element type of `T`. They are part of the language
+(the compiler evaluates them), listed here with the predicates they are used with.
 
 `match type` compares a type's identity as well as its shape (design principles 5.5): the
 cases below name the types the language spells (`int`, `i32`, `float`, `f32`, `bf16`, `f16`,
@@ -2278,6 +2286,69 @@ True when `T` is a function type, whatever its parameters and result.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `is_function::<(x: int) => int>()` gives `true`
+
+#### `is_array`
+
+```camel
+is_array: () => bool
+```
+
+True when `T` is an array type, of any rank.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_array::<int[]>()` gives `true`
+- Example: `is_array::<f32[..]>()` gives `true`
+- Example: `is_array::<int>()` gives `false`
+
+#### `is_nullable`
+
+```camel
+is_nullable: () => bool
+```
+
+True when `T` is `U?` for some `U`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_nullable::<int?>()` gives `true`
+- Example: `is_nullable::<int!>()` gives `false`
+- Example: `is_nullable::<int>()` gives `false`
+
+#### `is_fallible`
+
+```camel
+is_fallible: () => bool
+```
+
+True when `T` is `U!` for some `U`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_fallible::<int!>()` gives `true`
+- Example: `is_fallible::<int?>()` gives `false`
+- Example: `is_fallible::<int>()` gives `false`
+
+#### `is_map`
+
+```camel
+is_map: () => bool
+```
+
+True when `T` is a map, `Map<K, V>`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_map::<Map<string, int>>()` gives `true`
+- Example: `is_map::<Set<int>>()` gives `false`
+
+#### `is_set`
+
+```camel
+is_set: () => bool
+```
+
+True when `T` is a set, `Set<E>`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_set::<Set<int>>()` gives `true`
+- Example: `is_set::<Map<string, int>>()` gives `false`
 
 #### `is_string`
 
@@ -2422,7 +2493,7 @@ The elements of the inner arrays, in order.
 #### `flatten`
 
 ```camel
-flatten: (xs: T[..]) => T[] when !is_array_type::<T>()
+flatten: (xs: T[..]) => T[] when !is_array::<T>()
 ```
 
 The elements of an array of any rank, in row-major order, as an array of one dimension.
@@ -2804,23 +2875,23 @@ f(xs[i], ys[i]) for every i.
 
 ## `stream`: producing and consuming streams
 
-Streams, written in Camel. A stream's value is its step function together with its state (design
-principles 5.4, and the reading of 2026-10-26): `T..` is an ordinary function value of the
-signature `() => (T, T..)?`, one call is one pull, and a pull answers the next element together
-with the rest of the stream -- `null` when the stream is over. So the producers here are
-ordinary functions that return such a closure, and the consumer is `for x in s`, which the
-compiler expands on the graph into the `while` it already has (language reference 7.3.2). No
-part of this module needs a new node kind, and none of it runs anything by itself: pulling is
-what runs, one element at a time.
+Streams, written in Camel. A stream is a value: `T..` is a step function together with its
+state, an ordinary function value of the signature `() => (T, T..)?`. One call is one pull; a
+pull answers the next element together with the rest of the stream, or `null` when the stream
+is over. The consumer is `for x in s`, which the compiler expands on the graph into the `while`
+it already has (language reference 7.3.2), so nothing here needs a node kind of its own and
+nothing runs until something pulls.
 
-- `unfold(state, step)` is the smallest producer: a state and a step that answers the next
-  element with the state after it, or `null` when the stream is over. A `yield` generator
-  compiles to the same kind of value, and one written `#op` source can hand one out too.
-- `tee(s, n)` is the one way to read one stream from two places: it reads `s` once and gives two
-  streams, each of which is read once, and both see the same elements.
-- A stream is a value and is pure, so pulling the same stream value twice answers the same
-  element; the rest a pull hands out is what threads the stream, and the consumer passes it on.
-  One stream value has one consumer per execution path (design principles 5.4).
+- A stream is consumed once: on every execution path a stream value has one consumer, and a
+  second use is a compile-time error (design principles 5.4). A function that takes a stream
+  takes it as an argument; a lambda cannot capture one. So every transformation below keeps the
+  upstream stream as the state of `unfold` (an argument of its step), never in a closure.
+- The transformations are pure and lazy: an element is computed when something pulls it, and
+  not before. Sharing is written, with `tee`.
+- A generator (`yield`) produces the same kind of value; `unfold` is the producer for a state
+  and a step that need no generator.
+- What depends on the order of arrival or on time (merging streams, windows by time) is not
+  here: those declare their non-determinism and belong to the libraries that own a clock.
 
 ### Producing
 
@@ -2831,18 +2902,134 @@ unfold: (state: S, step: (state: S) => (T, S)?) => T..
 ```
 
 The stream of what `step` answers from `state` on: one element with the state after it, or
-`null` when there is nothing more. The first round of `for x in s` over it is `step(state)`,
-and every later round is a pull of the rest, so the states are threaded rather than repeated.
+`null` when there is nothing more. The states are threaded, not repeated.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `loop acc = 0 for x in unfold(3, (n: int) => if n > 0 then (n, n - 1) else null) do acc + x` gives `6`
 
-### Splitting
+#### `empty`
+
+```camel
+empty: () => T..
+```
+
+The stream with no element.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `loop n = 0 for x in empty::<int>() do n + 1` gives `0`
+
+#### `from_array`
+
+```camel
+from_array: (xs: T[]) => T..
+```
+
+The elements of xs, in order.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `loop acc = 0 for x in from_array([1, 2, 3]) do acc + x` gives `6`
+
+#### `iterate`
+
+```camel
+iterate: <f: (x: T) => T> (x: T) => T..
+```
+
+x, f(x), f(f(x)), ... without end.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `1->iterate<(x: int) => x * 2>->take<4>->collect` gives `[1, 2, 4, 8]`
+
+### Transforming
+
+#### `map`
+
+```camel
+map: <f: (x: T) => U> (s: T..) => U..
+```
+
+f of every element.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `from_array([1, 2, 3])->map<(x: int) => x * 2>->collect` gives `[2, 4, 6]`
+
+#### `filter`
+
+```camel
+filter: <pred: (x: T) => bool> (s: T..) => T..
+```
+
+The elements for which pred is true, in order.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `from_array([1, 2, 3, 4])->filter<(x: int) => x % 2 == 0>->collect` gives `[2, 4]`
+
+#### `take`
+
+```camel
+take: <n: int> (s: T..) => T..
+```
+
+The first n elements; fewer when the stream ends first, none when n is not positive. The
+element after the n-th is never pulled.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `1->iterate<(x: int) => x + 1>->take<3>->collect` gives `[1, 2, 3]`
+
+#### `scan`
+
+```camel
+scan: <f: (acc: A, x: T) => A, init: A> (s: T..) => A..
+```
+
+The running results of folding the elements with f from init: one per element, the first
+being f(init, first element).
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `from_array([1, 2, 3])->scan<(acc: int, x: int) => acc + x, 0>->collect` gives `[1, 3, 6]`
+
+#### `chunks`
+
+```camel
+chunks: <k: int> (s: T..) => T[]..
+```
+
+The elements in arrays of k, in order; the last array is shorter when the stream does not end
+on a multiple of k.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `from_array([1, 2, 3])->chunks<2>->collect` gives `[[1, 2], [3]]`
+
+#### `zip`
+
+```camel
+zip: (a: T.., b: U..) => (T, U)..
+```
+
+The elements of two streams in pairs, until the shorter ends.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `zip(from_array([1, 2]), from_array(['a', 'b', 'c']))->collect` gives `[(1, 'a'), (2, 'b')]`
+
+### Consuming
+
+#### `collect`
+
+```camel
+collect: (s: T..) => T[]
+```
+
+All the elements, as an array. The stream must end: a stream without end never returns.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `from_array([1, 2, 3])->collect` gives `[1, 2, 3]`
+
+### Sharing
 
 #### `tee`
 
 ```camel
-tee: (s: T.., n: int = 8) => (T.., T..)
+tee: <n: int = 8> (s: T..) => (T.., T..)
 ```
 
 Two streams over the elements of `s` (design principles 5.4), each read once, both seeing the
@@ -2853,8 +3040,8 @@ The result is a tuple, and taking it apart is what consumes the two streams; the
 themselves are values like any other, so a `tee` of one of them is another `tee`.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example (a fragment, not compiled): `let (left, right) = tee(unfold(3, (n: int) => if n > 0 then (n, n - 1) else null), 2)`
-- Why it is not compiled: the two streams are live values a page shows; a program reads them where it consumes them
+- Example (a fragment, not compiled): `let (left, right) = unfold(3, (n: int) => if n > 0 then (n, n - 1) else null)->tee<2>`
+- Why it is not compiled: a pair of streams is bound by a destructuring `let`, a statement
 
 <a id="math"></a>
 
@@ -3417,7 +3604,7 @@ first of them).
 Every function takes a float element type (`float`, `f32`, `bf16` or `f16`) and answers it.
 The elements are widened to f64, the statistic is computed there, and the result is rounded
 once into the element type: the rule of every float reduction. An array of integers is
-converted first (`xs->map<(x) => float(x)>`). A statistic that does not exist for the array
+converted first, `float(xs)`. A statistic that does not exist for the array
 (the standard deviation of one value) is a fault, as every reduction over too few elements is
 (design principles 7.7).
 
@@ -3539,15 +3726,15 @@ A number drawn uniformly from 0 (included) to 1 (excluded).
 
 - Example: `key(42)->uniform::<f32>`
 
-#### `uniform_array`
+#### `uniform`
 
 ```camel
-uniform_array: <shape: int[]> (k: Key) => T[..] when is_float::<T>()
+uniform: <shape: int[]> (k: Key) => T[..] when is_float::<T>()
 ```
 
 An array of the given shape; element i (row-major) is the scalar `uniform` of `fold(k, i)`.
 
-- Example: `key(42)->uniform_array::<f32><shape: [3, 4]>`
+- Example: `key(42)->uniform::<f32><shape: [3, 4]>`
 
 #### `normal`
 
@@ -3559,15 +3746,15 @@ A number drawn from the normal distribution with mean 0 and deviation 1 (Box-Mul
 
 - Example: `key(42)->normal::<f32>`
 
-#### `normal_array`
+#### `normal`
 
 ```camel
-normal_array: <shape: int[]> (k: Key) => T[..] when is_float::<T>()
+normal: <shape: int[]> (k: Key) => T[..] when is_float::<T>()
 ```
 
 An array of the given shape; element i (row-major) is the scalar `normal` of `fold(k, i)`.
 
-- Example: `key(42)->normal_array::<f32><shape: [3, 4]>`
+- Example: `key(42)->normal::<f32><shape: [3, 4]>`
 
 #### `randint`
 
@@ -4115,9 +4302,8 @@ The current working directory, the directory relative paths start at.
 A Json is a JSON value whose shape is known only when the program runs: `decode` reads a text,
 or gives an error value when the text is not JSON, and the accessors look into it, each giving
 a value of a definite type. To read a part whose shape is known, `decode_as::<T>` decodes
-straight to the type T, and `encode` writes the JSON text of a value; both have a result type
-that a declaration cannot express, so they are not declared here (see
-`stdlib/signatures/json.cml`). Everything here is pure.
+straight to the type T, and `encode` writes the JSON text of a value; both are applicable to the
+types that have a JSON form (`has_json_form`) and to no other. Everything here is pure.
 
 The data an accessor works on is its ordinary argument; the key or the index is its
 with-argument, so calls chain: `decode(text)->get<key: 'port'>->as_int`. An accessor has one
@@ -4125,37 +4311,6 @@ declaration for each tagged form of its argument -- `Json`, `Json?`, `Json!` and
 written from the most specific to the widest, which give the result `R?`, `R?`, `R!?` and
 `R!?`: an absent part is the null, and the error of a text that failed to decode is passed on
 unchanged, so one `!!` or `??` at the end of a chain settles it.
-
-#### `encode`
-
-```camel
-encode: (value: T) => string
-encode: <indent: int?> (value: T) => string
-```
-
-The JSON text of a value, on one line. The type of the value must have a JSON form: numbers,
-bool, string, null, a Json, and arrays, tuples, structs, sets and maps with string keys of
-those; a function or a tensor is refused when the call is compiled. A map is written with its
-keys in order, a struct with its fields in the order of its type, so the same value gives the
-same text.
-
-- Pure.
-- Example: `[1, 2]->encode` gives `'[1,2]'`
-
-#### `decode_as`
-
-```camel
-decode_as: (source: string) => T!
-decode_as: (source: Json) => T!
-```
-
-The value a JSON text (or a Json decoded before) describes, decoded to the type T. A part of
-T typed `Json` takes whatever is there. T is given where the call is written or taken from
-where the result goes (`let cfg: Config! = text->decode_as`).
-
-- Pure.
-- Failure: error value `JsonTypeError` when the text is JSON of another type (the message gives the path of the mismatch); error value `JsonParseError` when the text is not JSON; error value `JsonTooDeep` when the document nests deeper than the limit.
-- Example: `decode_as::<Map<string, int>>('{"a": 1}')` gives `{a: 1}`
 
 #### `decode`
 
@@ -4306,6 +4461,38 @@ The members of a JSON object, by name; null for any other kind.
 
 - Pure.
 - Example: `len((decode('{"b": 1, "a": 2}')->as_object ?? ([] as Map<string, Json>)) !! ([] as Map<string, Json>))` gives `2`
+
+#### `encode`
+
+```camel
+encode: <indent: int? = null> (value: T) => string when has_json_form::<T>()
+```
+
+The JSON text of a value, on one line, or indented by `indent` spaces per level when an indent
+is given. The type of the value must have a JSON form: numbers, bool, string, null, a Json, and
+arrays, tuples, structs, sets and maps with string keys of those; a function or a tensor is
+refused when the call is compiled. A map is written with its keys in order, a struct with its
+fields in the order of its type, so the same value gives the same text.
+
+- Pure.
+- Failure: fault `InvalidArgument` when indent is negative.
+- Example: `[1, 2]->encode` gives `'[1,2]'`
+- Example: `[1, 2]->encode<indent: 2>` gives `'[\n  1,\n  2\n]'`
+
+#### `decode_as`
+
+```camel
+decode_as: (source: string) => T! when has_json_form::<T>()
+decode_as: (source: Json) => T! when has_json_form::<T>()
+```
+
+The value a JSON text (or a Json decoded before) describes, decoded to the type T. A part of
+T typed `Json` takes whatever is there. T is given where the call is written or taken from
+where the result goes (`let cfg: Config! = text->decode_as`).
+
+- Pure.
+- Failure: error value `JsonTypeError` when the text is JSON of another type (the message gives the path of the mismatch); error value `JsonParseError` when the text is not JSON; error value `JsonTooDeep` when the document nests deeper than the limit.
+- Example: `decode_as::<Map<string, int>>('{"a": 1}')` gives `{a: 1}`
 
 <a id="hash"></a>
 
@@ -5374,17 +5561,6 @@ memory.
 - Failure: error value `DeviceUnavailable` when this build or this machine has no CUDA device.
 - Example: `device() !! 'no device'`
 
-#### `compile`
-
-```camel
-compile: (f: F) => F! uses driver when is_function::<F>()
-```
-
-Outlines the regions the device can run, compiles them and executes the program; the card is
-chosen at run time with `--devices`, never by a pass parameter.
-
-- Failure: error value `GpuScopeUnsupported` when a `#gpu` scope holds an operator the device cannot run (the error names the operator and the scope).
-
 <a id="pyplot"></a>
 
 ## `pyplot`: draw an array
@@ -5427,173 +5603,140 @@ plot. matplotlib is used when it is importable, and an SVG file is written other
 
 ## `python`: the embedded interpreter
 
-The Python bridge: run code in the embedded interpreter, import modules, read attributes and
-dispose of the handles the calls return. Every operator observes or advances the interpreter,
-which no argument names, so every one has effects and is never folded, merged or dropped by a
-pass. A result of type `PyObject` is a handle into the interpreter, not a value of the program.
+Camel calling Python: run code in an embedded interpreter, import modules, read attributes and
+call what they hold. A `PyObject` is a handle into the interpreter, not a value of the program;
+it is released when nothing refers to it any more, so there is nothing to dispose of by hand.
+Values cross the boundary by copy: `to_py` makes the Python object of a Camel value, in the
+Python form of its type, and `from_py` reads a Python object as a value of the type the call
+names.
 
-The declarations of the operators of the C++ module `modules/python` (design principles 6.4).
-This file is the one source of the six fixed signatures; the C++
-side keeps the kernels, the executor, the operator traits and the purity.
+The Python form of a type:
+  - `bool`, the integer types, the float types and `string` are the Python scalars of the same
+    name, by value; `Bytes` is `bytes`;
+  - a tuple is a `tuple`, a struct a `dict` of its fields by name, an array a `list`, and a map
+    with string keys a `dict`, each of them by its parts;
+  - `PyObject` itself passes through as it is.
+What converts is a table, never whatever Python would accept: `bool` takes a bool only (not `5`),
+the integers take an int that fits and not a bool or a float, the floats take a float or an int
+and refuse a number the type cannot hold, `string` takes a str and not bytes.
 
-Five operators stay in C++ and are recorded as computed signatures in
-`stdlib/signatures/python.cml`:
-  - `py_call` (two URIs, `python:py_call` and `python:py_call_kw`) and `py_print`/`py_println`
-    are variadic: a declaration cannot say "any number of `PyObject` arguments";
-  - `py_wrap` and `py_unwrap` move a type through the module type `PyObject<T>`, and a type
-    variable cannot be an argument of a module type in a declaration
-    (`SemanticDiag::InvalidTypeArgument`).
+Python code can do anything, including write files and print, and the interpreter holds state
+between calls. So no function here names a resource of its own: each is a use of everything, in
+the written order, never folded, merged or dropped, and it runs when its result is needed or it
+is in a `sync` block. Whatever Python itself refuses -- an exception, a missing module, a missing
+attribute -- is an error value of kind `PythonError` whose message is the exception, its text and
+its traceback, never a fault of Camel's.
 
-#### `py_call`
+The interpreter is started the first time a function here runs.
+The other direction, Python calling Camel, is the package `camel` (`pip install camel-lang`).
 
-```camel
-py_call: (fn: string | PyObject, ...args: PyObject[]) => PyObject!
-```
-
-Calls the Python callable `fn` -- a `PyObject`, or a dotted name such as `"math.sqrt"` -- with
-the `PyObject` arguments `args`, and returns its result. Any number of arguments is accepted.
-
-- With effects: runs arbitrary Python code.
-- Failure: error `PythonError` when the call raises; the message starts with the exception class.
-- Example: `py_call("math.sqrt", py_wrap(2.0))`
-
-#### `py_call`
+#### `exec`
 
 ```camel
-py_call: (fn: string | PyObject, args?: (...PyObject) | PyObject[], kwargs?: Struct<...PyObject>) => PyObject!
+exec: (code: string) => void!
 ```
 
-Calls `fn` with a tuple (or an array) of positional arguments and a struct of keyword
-arguments. Both collections are optional; every element is a `PyObject`.
+Runs Python statements in the interpreter. Definitions and assignments stay visible to later
+calls, as in a Python session.
 
-- Failure: error `PythonError` when the call raises; the message starts with the exception class.
-- Example: `py_call(fn, (py_wrap(2.0),), {x: py_wrap(1)})`
+- Failure: error value `PythonError` when the code raises.
+- Example (a fragment, not compiled): `exec('x = 1')`
+- Why it is not compiled: runs Python code when it runs, and the example only has the `void!` result to show
 
-#### `py_print`
+#### `eval`
 
 ```camel
-py_print: (...objs: PyObject[]) => PyObject?
+eval: (expression: string) => PyObject!
 ```
 
-Writes the printed form of every `PyObject` argument to Python's standard output, with no
-separator and no newline, and returns the last argument (or `void` when there is none).
+Evaluates a Python expression and gives its value.
 
-- With effects: writes the interpreter's standard output.
-- Example: `py_print(py_wrap(1), py_wrap(2))`
+- Failure: error value `PythonError` when the expression raises.
+- Example: `eval('1 + 2 * 3')->to_string !! ''` gives `'7'`
 
-#### `py_println`
+#### `run_file`
 
 ```camel
-py_println: (...objs: PyObject[]) => PyObject?
+run_file: (path: string) => void!
 ```
 
-Writes the printed form of every `PyObject` argument and a newline, as `py_print` does, and
-returns the last argument (or `void` when there is none).
+Runs the Python script at the path.
 
-- With effects: writes the interpreter's standard output.
-- Example: `py_eval("1 + 1") -> (o: PyObject): PyObject? => py_println(o)`
+- Failure: error value `PythonError` when the file cannot be read or the script raises.
+- Example (a fragment, not compiled): `'scripts/hello.py'->run_file`
+- Why it is not compiled: runs Python code when it runs, and the example only has the `void!` result to show
 
-#### `py_wrap`
+#### `import_module`
 
 ```camel
-py_wrap: (x: T) => PyObject<T>
+import_module: (name: string) => PyObject!
 ```
 
-Wraps the value `x` in a new Python object, keeping its Camel type as the type argument of
-`PyObject<T>`.
+Imports a Python module (`'math'`, `'numpy'`, `'matplotlib.pyplot'`) and gives it. Importing runs
+the body of the module and records it in `sys.modules`.
 
-- With effects: creates an interpreter object.
-- Example: `py_wrap(2.0)` gives `a PyObject<float>`
+- Failure: error value `PythonError` when the import raises.
+- Example: `import_module('math')->attr<'pi'>->to_string !! ''` gives `'3.141592653589793'`
 
-#### `py_unwrap`
+#### `attr`
 
 ```camel
-py_unwrap: (obj: PyObject<T>) => T!
+attr: <name: string> (obj: PyObject) => PyObject!
 ```
 
-Unwraps a Python object into a value of type `T`. An object that did not come from `py_wrap`
-has no type argument and is refused when the call is compiled. The object must be of the kind
-`T` names: a `bool` takes a bool only (not `5`), an `int` an int that fits (not a bool or a
-float), a `float` a float or an int, a `string` a str (not bytes), `Bytes` bytes, an array a
-list, a tuple a tuple or list of its length, a struct a dict with its fields.
+The attribute of a Python object; a dotted name walks the chain. Asking may run a property or
+a descriptor, so it can raise.
 
-- With effects: reads an interpreter object.
-- Failure: error `PythonTypeError` when the object is not of the kind `T` names; the message gives the path and what was found.
-- Example: `py_unwrap(py_wrap(2.0)) !! 0.0` gives `2.0`
+- Failure: error value `PythonError` when the attribute does not exist or its getter raises.
+- Example: `import_module('math')->attr<'pi'>`
 
-#### `py_exec`
+#### `call`
 
 ```camel
-py_exec: (code: string) => PyObject!
+call: <fn: PyObject, kwargs: Map<string, PyObject>? = null> (args: PyObject[]) => PyObject!
 ```
 
-Runs Python statements `code` in the interpreter and returns its `None`. Definitions and
-assignments stay visible to later calls, as in a Python session.
+Calls a Python callable with the arguments the array holds, in order, and the keyword arguments
+the callable was bound with. `call<fn>` is a function from an array of arguments to a result, so
+it can be bound once and applied again.
 
-- With effects: runs arbitrary Python code.
-- Failure: error `PythonError` when the code raises; the message starts with the exception class.
-- Example: `py_exec("x = 1")`
+- Failure: error value `PythonError` when the call raises.
+- Example (a fragment, not compiled): `[2.0->to_py !! eval('0')]->call<sqrt>`
+- Why it is not compiled: the callable is a Python object from `attr`, which the page does not show
 
-#### `py_eval`
+#### `to_string`
 
 ```camel
-py_eval: (expr: string) => PyObject!
+to_string: (obj: PyObject) => string!
 ```
 
-Evaluates the Python expression `expr` and returns its value as a `PyObject`.
+The `str()` of a Python object, as text.
 
-- With effects: runs arbitrary Python code.
-- Failure: error `PythonError` when the expression raises; the message starts with the exception class.
-- Example: `py_eval("1 + 2 * 3")` gives `7`
+- Failure: error value `PythonError` when `__str__` raises.
+- Example: `eval('[1, 2]')->to_string !! ''` gives `'[1, 2]'`
 
-#### `py_run`
+#### `to_py`
 
 ```camel
-py_run: (file_path: string) => PyObject!
+to_py: (x: T) => PyObject! when has_python_form::<T>()
 ```
 
-Runs the Python script at `file_path` and returns its `None`.
+The Python object that stands for a Camel value, in the Python form of its type.
 
-- With effects: runs arbitrary Python code.
-- Failure: error `PythonError` when the file cannot be read or the script raises; the message starts with the exception class.
-- Example: `py_run("scripts/hello.py")`
+- Failure: error value `PythonError` when the interpreter cannot make the object.
+- Example: `2.0->to_py->to_string !! ''` gives `'2.0'`
 
-#### `py_attr`
+#### `from_py`
 
 ```camel
-py_attr: (obj: PyObject, attr: string) => PyObject!
+from_py: (obj: PyObject) => T! when has_python_form::<T>()
 ```
 
-The attribute `attr` of the Python object `obj`; a dotted `attr` walks the chain. Asking may
-run a property or a descriptor, so the read is an effect.
+The Camel value of type T that a Python object holds. T is written at the call
+(`from_py::<int>(obj)`) or taken from the type of the position the call stands in.
 
-- With effects: reads interpreter state and may run Python code.
-- Failure: error `PythonError` when the attribute does not exist; the message starts with the exception class.
-- Example: `py_import("math") -> (m: PyObject): PyObject! => py_attr(m, "sqrt")`
-
-#### `py_import`
-
-```camel
-py_import: (module_name: string) => PyObject!
-```
-
-Imports the Python module `module_name` and returns it. Importing runs the module body and
-records the module in `sys.modules`.
-
-- With effects: imports a module and runs its body.
-- Failure: error `PythonError` when the import raises; the message starts with the exception class.
-- Example: `py_import("math")`
-
-#### `py_dispose`
-
-```camel
-py_dispose: (obj: PyObject) => void
-```
-
-Drops this program's reference to the Python object `obj`.
-
-- With effects: advances the interpreter's reference counts.
-- Example: `py_import("math") -> py_dispose`
+- Failure: error value `PythonTypeError` when the object does not have the type T (the message gives the path of the mismatch and what was found there); error value `PythonError` when reading it raises.
+- Example: `eval('1 + 2')->from_py::<int> !! 0` gives `3`
 
 <a id="nn"></a>
 

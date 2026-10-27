@@ -186,7 +186,46 @@ void ParserImpl::parseSpecType() {
     close(m, NK::SpecType);
 }
 
+/// Whether the name at the current token is followed by `::<`, the type arguments of a type
+/// function applied in a type position (`element_of::<T>()`). A path of names (`a::b`) is one name.
+bool ParserImpl::typeCallAhead() const {
+    uint32_t i = 0;
+    while (peek(i + 1) == TK::ColonColon && peek(i + 2) == TK::Identifier) {
+        i += 2;
+    }
+    return peek(i + 1) == TK::ColonColon && (peek(i + 2) == TK::Lt || peek(i + 2) == TK::LAngle);
+}
+
+/// A type call (an alternative of primaryType): a type computed from types, written with the call
+/// syntax of the value level (design principles 21) -- the function, its type arguments between
+/// `::<` and `>`, and an empty argument list.
+void ParserImpl::parseTypeCall() {
+    const size_t m = mark();
+    parseIdentRef(NK::RefType);
+    if (!panic_) {
+        bump(); // ::
+        const uint32_t open = pos_;
+        bump(); // <
+        {
+            Scope scope(*this, false, open);
+            do {
+                parseType();
+            } while (!panic_ && cur_ == TK::Comma && peek(1) != TK::Gt && eat(TK::Comma));
+            eat(TK::Comma);
+            expect(TK::Gt);
+        }
+        if (!panic_) {
+            expect(TK::LParen);
+        }
+        if (!panic_) {
+            expect(TK::RParen);
+        }
+    }
+    close(m, NK::TypeCallType);
+}
+
 /// primaryType : structType | enumType | identRef | '(' typeExpr ')' | tupleType | funcType
+///             | identRef '::' '<' typeExpr (',' typeExpr)* ','? '>' '(' ')'
 ///             | 'typeof' dataExpr
 /// tupleType   : '(' typeList? ','? ')'
 /// A `(` opens a function type when its head is that of a parameter list (`(name:`, `(var`, or
@@ -202,6 +241,9 @@ void ParserImpl::parsePrimaryType() {
     typeHead_           = false;
     switch (cur_) {
     case TK::Identifier:
+        if (typeCallAhead()) {
+            return parseTypeCall();
+        }
         return parseIdentRef(NK::RefType);
     case TK::LBrace:
         return parseStructType();

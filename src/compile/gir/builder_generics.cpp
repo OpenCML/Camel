@@ -29,6 +29,7 @@
 #include "camel/core/type/collection.h"
 #include "camel/core/type/composite/stream.h"
 #include "camel/core/type/other.h"
+#include "camel/core/type/typecall.h"
 
 #include <algorithm>
 #include <atomic>
@@ -2324,7 +2325,7 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         // is where the instance's types are known (rule impl-kernel-site). An instance
         // whose type has no executor keeps the body and runs it: the body is the semantics, so
         // the result is the same, and `std::profile` tells the two paths apart.
-        adoptImplKernel(tmpl, graph, funcType);
+        adoptImplKernel(tmpl, graph, funcType, bindings);
         // The instance takes the declaration's parameter defaults as they are: they are
         // constants, the same for every instance, and a call of the instance fills them.
         if (const auto found = defaults_.find(tmpl.get()); found != defaults_.end()) {
@@ -2419,7 +2420,15 @@ Type *Builder::resolveTypeNode(Type *type, const GCT::node_ptr_t &at) {
             .commit(type->toString());
         throw BuildAbortException();
     }
-    return boundType(type);
+    Type *bound = boundType(type);
+    if (containsTypeCall(bound) && !containsTypeVar(bound)) {
+        // The variables are bound and the type function does not accept what they were bound to.
+        diags_->of(SemanticDiag::TypeFunctionNotApplicable)
+            .atOrigin(at != nullptr ? at->origin() : 0)
+            .commit(bound->toString(), "its argument is not a type it accepts");
+        throw BuildAbortException();
+    }
+    return bound;
 }
 
 Type *Builder::visitTypeNode(const GCT::node_ptr_t &gct) {

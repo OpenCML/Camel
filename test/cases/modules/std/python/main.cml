@@ -2,66 +2,78 @@
  * Broader Python integration case covering calls, imports, attributes, code execution, scripts, and keyword arguments.
  */
 
-import {
-    py_call,
-    py_exec,
-    py_eval,
-    py_run,
-    py_attr,
-    py_import,
-    py_wrap,
-    py_unwrap,
-    PyObject
-} from python
+import { exec, eval, run_file, attr, call, import_module, to_string, to_py, PyObject } from python
 
 // A Python call is an error value; these programs expect every call to succeed.
 func must(r: PyObject!): PyObject {
-    return r !! py_wrap('python failed')
+    return match r {
+        case error e => fail<'InvalidArgument'>(e.message)
+        case v => v
+    }
+}
+
+func wrap::<T>(x: T): PyObject {
+    return must(to_py(x))
+}
+
+// A name of `builtins`, or of the program's `__main__`.
+func builtin(name: string): PyObject sync {
+    return must(import_module("builtins")->attr<name>)
+}
+
+func main_name(name: string): PyObject sync {
+    return must(import_module("__main__")->attr<name>)
 }
 
 func main(): int sync {
     println("=== Python Integration Tests ===")
 
-    println("\n[1] py_call('print', py_wrap(1))")
-    let _ = py_call("print", py_wrap(1))
+    println("\n[1] [wrap(1)]->call<print>")
+    let print_fn = builtin("print")
+    let _ = [wrap(1)]->call<print_fn>
 
-    println("\n[2] py_call('builtins.print', py_wrap('hello'))")
-    let _ = py_call("builtins.print", py_wrap("hello"))
+    println("\n[2] [wrap('hello')]->call<builtins.print>")
+    let print_by_chain = must(import_module("builtins")->attr<"print">)
+    let _ = [wrap("hello")]->call<print_by_chain>
 
-    println("\n[3] py_call via py_attr(builtins, 'print')")
-    let builtins = must(py_import("builtins"))
-    let print_fn = must(py_attr(builtins, "print"))
-    let _ = py_call(print_fn, py_wrap("from py_attr"))
+    println("\n[3] call via attr(builtins, 'print')")
+    let _ = [wrap("from attr")]->call<print_fn>
 
-    println("\n[4] py_call('len', py_wrap([1, 2, 3]))")
-    let len_result = must(py_call("len", py_wrap([1, 2, 3])))
-    let _ = py_call("print", must(py_call("str", len_result)))
+    println("\n[4] [wrap([1, 2, 3])]->call<len>")
+    let len_fn = builtin("len")
+    let len_result = must([wrap([1, 2, 3])]->call<len_fn>)
+    let str_fn = builtin("str")
+    let _ = [must([len_result]->call<str_fn>)]->call<print_fn>
 
-    println("\n[5] py_eval('1 + 2 * 3')")
-    let sum_result = must(py_eval("1 + 2 * 3"))
-    let _ = py_call("print", sum_result)
+    println("\n[5] eval('1 + 2 * 3')")
+    let sum_result = must(eval("1 + 2 * 3"))
+    let _ = [sum_result]->call<print_fn>
 
-    println("\n[5b] py_eval(\"'hello' + ' world'\")")
-    let str_result = must(py_eval("'hello' + ' world'"))
-    let _ = py_call("print", str_result)
+    println("\n[5b] eval(\"'hello' + ' world'\")")
+    let str_result = must(eval("'hello' + ' world'"))
+    let _ = [str_result]->call<print_fn>
 
-    println("\n[6] py_exec")
-    let _ = py_exec("print('Exec: Hello from exec!')")
+    println("\n[6] exec")
+    let _ = exec("print('Exec: Hello from exec!')")
 
-    println("\n[7] py_run('test/cases/modules/std/python/hello.py')")
-    let _ = py_run("test/cases/modules/std/python/hello.py")
+    println("\n[7] run_file('test/cases/modules/std/python/hello.py')")
+    let _ = run_file("test/cases/modules/std/python/hello.py")
 
-    println("\n[8] py_attr(math, 'sqrt') -> math.sqrt(16)")
-    let math_mod = must(py_import("math"))
-    let sqrt_fn = must(py_attr(math_mod, "sqrt"))
-    let sqrt_result = must(py_call(sqrt_fn, py_wrap(16)))
-    let _ = py_call("print", sqrt_result)
+    println("\n[8] attr(math, 'sqrt') -> math.sqrt(16)")
+    let math_mod = must(import_module("math"))
+    let sqrt_fn = must(math_mod->attr<"sqrt">)
+    let sqrt_result = must([wrap(16)]->call<sqrt_fn>)
+    let _ = [sqrt_result]->call<print_fn>
 
-    println("\n[9] py_call with *args and **kwargs")
-    let _ = py_exec("def _greet(name, greeting='Hello'): print(f'{greeting}, {name}!')")
-    let args_tuple = (py_wrap("World"),)
-    let kwargs_struct = { greeting: py_wrap("Hi") }
-    let _ = py_call("_greet", args_tuple, kwargs_struct)
+    println("\n[9] call with positional and keyword arguments")
+    let _ = exec("def _greet(name, greeting='Hello'): print(f'{greeting}, {name}!')")
+    let greet = main_name("_greet")
+    let hi: PyObject = wrap("Hi")
+    let kwargs = [("greeting", hi)] as Map<string, PyObject>
+    let _ = [wrap("World")]->call<greet, kwargs>
+
+    println("\n[10] to_string")
+    println(to_string(sqrt_result) !! "failed")
 
     println("\n=== All tests completed ===")
     return 0

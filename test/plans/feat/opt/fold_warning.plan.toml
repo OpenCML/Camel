@@ -153,3 +153,31 @@ assert(errors[0].range.start.line === 9 && errors[0].range.start.character === 1
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 8000
+
+[[tests]]
+name = "fail_is_intended.fold"
+desc = "A deliberate `fail<'Kind'>(message)` is not a constant expression that faults by accident: std::opt::fold folds the program without a ConstantExpressionFaults warning."
+kind = "behavior"
+case = "../../../cases/opt/generic/fold_fail_is_intended.cml"
+args = ["${case}", "std::opt::fold"]
+expect_exit = 0
+verify_script = """
+assert(input.normalized.stdout === '3\n', 'stdout: ' + JSON.stringify(input.normalized.stdout))
+assert(!input.normalized.stderr.includes('ConstantExpressionFaults'), 'no warning for a fail: ' + input.normalized.stderr)
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 8000
+
+[[tests]]
+name = "fail_is_intended.opt"
+desc = "A deliberate `fail<'Kind'>(message)` is not a constant expression that faults by accident: std::opt folds the program without a ConstantExpressionFaults warning."
+kind = "behavior"
+case = "../../../cases/opt/generic/fold_fail_is_intended.cml"
+args = ["${case}", "std::opt"]
+expect_exit = 0
+verify_script = """
+assert(input.normalized.stdout === '3\n', 'stdout: ' + JSON.stringify(input.normalized.stdout))
+assert(!input.normalized.stderr.includes('ConstantExpressionFaults'), 'no warning for a fail: ' + input.normalized.stderr)
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 8000

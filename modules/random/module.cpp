@@ -41,14 +41,8 @@ bool RandomModule::load() {
             {"seed", false},
             {"next_key", false},
             {"philox", true},
-            {"uniform_array_d", true},
-            {"uniform_array_f", true},
-            {"uniform_array_h", true},
-            {"uniform_array_b", true},
-            {"normal_array_d", true},
-            {"normal_array_f", true},
-            {"normal_array_h", true},
-            {"normal_array_b", true},
+            {"uniform_array", true},
+            {"normal_array", true},
         });
     // What each touches (docs/design/op-semantics 8): the global stream, the resource `rng`.
     {

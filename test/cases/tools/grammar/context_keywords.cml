@@ -53,6 +53,10 @@ type Kind<T> = match type T {
     case struct => 'struct'
     case tuple => 'tuple'
     case array => 'array'
+    case nullable => 'nullable'
+    case fallible => 'fallible'
+    case map => 'map'
+    case set => 'set'
     case #leaf => 'leaf'
 }
 

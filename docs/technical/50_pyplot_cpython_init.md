@@ -80,7 +80,7 @@ Release 构建，主机 `88zjwei`。墙钟用 `process.hrtime.bigint()` 包住�
 | `import pyplot` | 18.33 | **10.07** | **−8.26** | 不再创建解释器 |
 | `import pyplot` + 一次 `plot` | 18.41 | 19.34 | +0.92 | 初始化没有消失，只是换到调用处；同一程序的总时间不变 |
 | `import python` | 17.94 | **10.40** | **−7.54** | 同上 |
-| `import python` + 一次 `py_exec` | 17.69 | 18.02 | +0.33 | 同上 |
+| `import python` + 一次 `exec` | 17.69 | 18.02 | +0.33 | 同上 |
 | 全注册表（`registry_all` + `std::nvm`） | 39.29 | **30.54** | **−8.75** | 两个模块都导入、只付一次初始化的那条路径 |
 | `inspect --ops registry_all` | 42.67 | **34.34** | **−8.33** | 这一项的主测量 |
 
@@ -94,7 +94,7 @@ Release 构建，主机 `88zjwei`。墙钟用 `process.hrtime.bigint()` 包住�
 | `import pyplot` | 20.37 / 9.25 | 10.86 / 1.17 | 9.25 → 1.17 | 0 |
 | 一次 `plot` | 17.59 / 8.64 | 17.02 / 0.91 | 8.64 → 0.91 | 0 |
 | `import python` | 18.95 / 9.43 | 7.64 / 1.03 | 0 | 9.43 → 1.03 |
-| 一次 `py_exec` | 17.19 / 8.98 | 16.08 / 0.96 | 0 | 8.98 → 0.96 |
+| 一次 `exec` | 17.19 / 8.98 | 16.08 / 0.96 | 0 | 8.98 → 0.96 |
 | `registry_all` | 36.13 / 17.36 | 26.81 / 9.11 | 8.61 → 0.91 | 0.44 → 0.34 |
 | `inspect --ops` | 39.60 / 17.48 | 28.00 / 8.52 | 8.85 → 0.93 | 0.47 → 0.33 |
 
@@ -139,10 +139,10 @@ Release 构建，主机 `88zjwei`。墙钟用 `process.hrtime.bigint()` 包住�
   `Python path configuration`，pybind11 抛异常）。此时**只导入** `pyplot` / `python` 的程序必须 exit 0
   且什么都不打印；把初始化放回 `load()` 会让它们 exit 1——正是最先量到的可观察量。
 - 同一环境 `inspect --ops` 必须 exit 0 并列出 `pyplot:plot`（此前 exit 1、不列算子）。
-- 同一环境一次 `plot` / 一次 `py_exec` 必须 exit 1，诊断是 `RuntimeDiag::RuntimeError`、位置指向调用、
+- 同一环境一次 `plot` / 一次 `exec` 必须 exit 1，诊断是 `RuntimeDiag::RuntimeError`、位置指向调用、
   消息写明 first use，并带上 CPython 自己的原因：失败是搬了家，没有消失。
 - 健康环境下两种顺序（`python`→`pyplot`、`pyplot`→`python`）都能跑；`plot` 两次夹一次 Python 调用也是
-  一个解释器；`pyplot` 先的程序随后 `py_import("_ssl")` 成功（libpython 由第一个初始化者 promote，
+  一个解释器；`pyplot` 先的程序随后 `import_module("_ssl")` 成功（libpython 由第一个初始化者 promote，
   改动前这条是 exit 1）。`_ssl` 两条在 python-first 也导不进来的环境里跳过并打印原因。
 - **不用墙钟做守卫**：一个"导入后立即调用"的程序，初始化在导入还是首次调用，墙钟差不到 1 ms 的量级，
   任何 ceiling 都分不出来。上面这个环境判断是行为判断，不是计时；§4 的数字是记录，不是闸门。

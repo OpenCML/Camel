@@ -428,6 +428,9 @@ class Builder {
         std::string name;
         std::string uri;
         oper_group_ptr_t group;
+        // The type arguments of the instance, when the kernel's variable is stated by them alone
+        // (`T[..]` only in the result): a direct call resolves the kernel with them.
+        camel::core::type::type_vec_t types;
     };
     // The semantic bodies of the `#impl` functions of every module, by their graphs (design
     // principles 10.4): a direct call of the function is a call of the kernel instead; the
@@ -772,6 +775,16 @@ class Builder {
     // the name, `counter::cnt`): a body that reads or writes the cell through a capture touches
     // that resource (builder_resources.cpp).
     std::unordered_map<node_handle_t, std::string> moduleVariableResources_;
+    // The `with` arguments written after the explicit type arguments being applied
+    // (`f::<int><n: 2>`): their count and names choose among generic overloads that differ in their
+    // `with` parameters, exactly as they choose among the others (visitTypeApplication). A type
+    // application that is not the callee of a binding writes none.
+    size_t typeApplicationWithWritten_ = 0;
+    camel::core::type::Type *writtenArgumentType(const GCT::node_ptr_t &argument);
+    std::vector<std::optional<std::string>> typeApplicationWithNames_;
+    // The types of those arguments that are known before the call is chosen (a literal's own type,
+    // the type of a name read); nullptr for one that takes its type from the parameter it enters.
+    std::vector<camel::core::type::Type *> typeApplicationWithTypes_;
     // The last call through a function value written in a sync block: it may write any variable the
     // value captured, so a read written after it is ordered after it (readVariableThrough).
     node_handle_t lastIndirectCall_ = nullptr;
@@ -1682,8 +1695,11 @@ class Builder {
     /// instantiation, because that is when the instance's types are known (rule
     /// impl-kernel-site). An instance no rule accepts has no executor: it runs the body,
     /// which is the semantics, and gives the same result.
+    /// `bindings` are the instance's type arguments: a kernel whose type variable only the result
+    /// mentions (`T[..]`) is bound by them.
     void adoptImplKernel(
-        const generic_template_ptr_t &tmpl, const compile_graph_ptr_t &graph, FunctionType *funcType);
+        const generic_template_ptr_t &tmpl, const compile_graph_ptr_t &graph, FunctionType *funcType,
+        const camel::core::type::type_bindings_t &bindings = {});
     /// Whether the rule `rule` of a body-less declaration applies to an instance of these types:
     /// the condition the declaration wrote, answered for the instance's types (design principles
     /// 4.4), with the declaration's own type parameters bound by them. True when the rule has no
@@ -1692,7 +1708,8 @@ class Builder {
     bool declaredRuleApplies(
         const camel::core::type::resolver_ptr_t &rule, const std::string &name,
         const camel::core::type::type_vec_t &withTypes,
-        const camel::core::type::type_vec_t &normTypes);
+        const camel::core::type::type_vec_t &normTypes,
+        const camel::core::type::type_vec_t &explicitTypes = {});
     /// What a body-less declaration's `when` says about a call whose arguments have these types
     /// (design principles 4.4). `declaredRuleApplies` answers the same question about an `#impl`
     /// instance, where only "this rule is the executor" and "it is not" exist; selecting among a
@@ -2969,6 +2986,13 @@ class Builder {
     /// brings (the built-in module or an imported one) that nothing of the program shadows (the
     /// lookup order of visitDRefNode); nullptr otherwise.
     oper_group_ptr_t importedOperatorGroupNamed(const std::string &name);
+    /// The conversion of a type name applied to an array (`f32(xs)`, `T(xs)`) converts every
+    /// element: it is a tensor operator, so the call that meets an array brings the conversions
+    /// of the `tensor` module along (once per module), as an `import tensor` would, and the
+    /// callee is read again. A program that converts no array loads nothing.
+    node_handle_t withArrayConversions(
+        node_handle_t callee, const camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call);
+    std::unordered_set<const camel::core::module::Module *> arrayConversionsImported_;
     /// UnusedPureResult at the statement `stmt` when it is a call of an operator declared
     /// pure (`xs->append<5>` on its own line): the operation returns a new value and changes
     /// nothing, so the statement does nothing. `node` is what the statement built.

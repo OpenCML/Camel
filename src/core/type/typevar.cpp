@@ -15,6 +15,7 @@
 #include "camel/core/type/intern.h"
 #include "camel/core/type/other.h"
 #include "camel/core/type/storage.h"
+#include "camel/core/type/typecall.h"
 #include "camel/core/type/text.h"
 #include "camel/utils/assert.h"
 
@@ -539,9 +540,21 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
             params.push_back(substituteTypeVars(param, bindings));
             changed |= params.back() != param;
         }
-        return changed
-                   ? applied->cloneWithParams(std::span<Type *const>(params.data(), params.size()))
-                   : type;
+        if (!changed) {
+            return type;
+        }
+        const std::span<Type *const> arguments(params.data(), params.size());
+        if (type->code() == TypeCallType::typeCode() &&
+            std::none_of(params.begin(), params.end(), containsTypeVar)) {
+            // A type function whose arguments are all concrete is the type it computes (one it
+            // does not accept stays a call, and is reported where the type is used).
+            std::string error;
+            if (Type *computed = TypeCallType::evaluate(
+                    static_cast<TypeCallType *>(type)->name(), arguments, error)) {
+                return computed;
+            }
+        }
+        return applied->cloneWithParams(arguments);
     }
     // Primitive types, and module types whose arguments are not plain types: what those
     // arguments mean is the type's own business, so variables are not accepted among them in

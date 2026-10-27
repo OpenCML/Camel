@@ -376,7 +376,7 @@ timeout_ms = 120000
 
 [[tests]]
 name = "native.one_module"
-desc = "The declaration module of a C++ module is that module, not a second one: the C++ module's type (`Json`) is declared in the `.cml` without a right side and its constants (`pi`) are written there without an import, a type the `.cml` exports is read by an importer beside the C++ ones, and every C++ name still answers through the one module."
+desc = "The declaration module of a C++ module is that module, not a second one: the C++ module's type (`Json`) is declared in the `.cml` without a right side and its constants (`pi`) are written there without an import, and a type the `.cml` exports is read by an importer beside the C++ ones."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/compile/native/one_module.mjs"
@@ -960,14 +960,12 @@ expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "pyplot_type.cml:10:5", "argument types: <> (string)", "<pyplot:plot>: (data: float[]) => void"]
 #  ---- The declarations of `python` ----
 #
-# Six of the eleven operators have fixed signatures and are declared in stdlib/python.cml; the
-# two variadic pairs (`py_call` with two URIs, `py_print`/`py_println`) and `py_wrap`/`py_unwrap`
-# stay computed in C++ and are recorded in stdlib/signatures/python.cml. The calls are
+# The nine operators of `python` are declared in stdlib/python.cml. The calls are
 # compile-only: they type-check against the declarations and are never run.
 
 [[tests]]
 name = "native.python_declaration_import"
-desc = "`python`'s six fixed operators are declared: `py_exec`, `py_eval`, `py_run`, `py_attr`, `py_import` and `py_dispose` type-check against `stdlib/python.cml`, and the case never runs them."
+desc = "`python`'s nine operators are declared: `exec`, `eval`, `run_file`, `import_module`, `attr`, `call`, `to_string`, `to_py` and `from_py` type-check against `stdlib/python.cml`, and the case never runs them."
 kind = "behavior"
 case = "../../../cases/compile/native/python_declaration_import.cml"
 args = ["${case}"]
@@ -976,21 +974,21 @@ expect_stdout_exact = ""
 
 [[tests]]
 name = "native.python_wrong_arity"
-desc = "`python:py_exec` is declared with one ordinary argument: a second is refused at the call, and the overload the message lists is the declaration's `(code: string) => PyObject`."
+desc = "`python:exec` is declared with one ordinary argument: a second is refused at the call, and the overload the message lists is the declaration's `(code: string) => void!`."
 kind = "negative"
 case = "../../../cases/compile/native/python_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "python_arity.cml:10:5", "argument types: <> (string, string)", "<python:py_exec>: (code: string) => PyObject"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "python_arity.cml:10:5", "argument types: <> (string, string)", "<python:exec>: (code: string) => void!"]
 
 [[tests]]
 name = "native.python_wrong_type"
-desc = "`python:py_import` is declared with a `string`: an `int` is refused at the call, and the message lists the declaration's `(module_name: string) => PyObject`."
+desc = "`python:import_module` is declared with a `string`: an `int` is refused at the call, and the message lists the declaration's `(name: string) => PyObject!`."
 kind = "negative"
 case = "../../../cases/compile/native/python_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "python_type.cml:10:5", "argument types: <> (int)", "<python:py_import>: (module_name: string) => PyObject"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "python_type.cml:10:5", "argument types: <> (int)", "<python:import_module>: (name: string) => PyObject!"]
 
 #  ---- The declarations of `nn` and `autodiff` ----
 #

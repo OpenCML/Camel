@@ -892,8 +892,13 @@ node_handle_t Builder::overloadValueFor(
             // cannot be the one the value means, so it is not a second candidate and the
             // writing order of two declarations never decides (the same question
             // resolveGroupedCall answers for a call).
-            if (ruleVerdictForCall(resolver, ops->name(), withTypes, normTypes) !=
-                RuleVerdict::Applies) {
+            if (ruleVerdictForCall(
+                    resolver,
+                    ops->name(),
+                    withTypes,
+                    normTypes,
+                    nullptr,
+                    explicitTypes) != RuleVerdict::Applies) {
                 continue;
             }
             if (chosen) {
@@ -1153,6 +1158,38 @@ node_handle_t Builder::compoundAssignmentByRebinding(
     *assign << make(tree_->makeDRef("__assn__")) << tree_->clone(operands[0].expr)
             << make(tree_->makeDRef(held));
     return visitLinkNode(assign);
+}
+
+node_handle_t Builder::withArrayConversions(
+    node_handle_t callee, const type_vec_t &normTypes, const GCT::node_ptr_t &call) {
+    if (!nodeIsKind(callee, runtime::GCNodeKind::Dref) || normTypes.empty() || module_ == nullptr) {
+        return callee;
+    }
+    const auto &named = nodeGraphOf(callee)->drefTarget(callee);
+    if (!std::holds_alternative<oper_group_ptr_t>(named)) {
+        return callee;
+    }
+    const std::string name = std::get<oper_group_ptr_t>(named)->name();
+    static const std::unordered_set<std::string> kConversions = {
+        "i32", "i64", "int", "f32", "f64", "float", "bf16", "f16"};
+    Type *first = normTypes[0] != nullptr ? valueTypeOf(normTypes[0]) : nullptr;
+    if (!kConversions.contains(name) || first == nullptr || first->code() != TypeCode::Array ||
+        !arrayConversionsImported_.insert(module_.get()).second) {
+        return callee;
+    }
+    const module_ptr_t tensor = context_->importModule("tensor", module_.get());
+    if (tensor == nullptr) {
+        return callee;
+    }
+    module_->importDefaultRefsFromMod(tensor);
+    exports_->forgetMergedImports(*module_);
+    if (const oper_group_ptr_t group = importedOperatorGroupNamed(name); group != nullptr) {
+        node_handle_t again{currGraph_->addDrefNode(
+            std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{group})};
+        registerNodeOrigin(context_, again, call->at(0), "gir.dref.array_conversion");
+        return again;
+    }
+    return callee;
 }
 
 oper_group_ptr_t Builder::importedOperatorGroupNamed(const std::string &name) {
@@ -2777,6 +2814,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         }
     }
 
+    targetNode = withArrayConversions(targetNode, normInputTypes, gct);
+
     // An operator with overloads of the program: one of them, or the built-in group below.
     // `a != b` by an overload of `==` is the negation of that call (`negateResult`).
     compile_graph_ptr_t operatorOverload = nullptr;
@@ -2860,7 +2899,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 kernelStatics.push_back(staticArgOf(input.node));
             }
             if (const auto resolved = kernel->group->resolveForCall(
-                    {},
+                    kernel->types,
                     expectedResult,
                     withInputTypes,
                     normInputTypes,
@@ -3861,7 +3900,7 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
     // A function value has no name of its own; its type stands for it in diagnostics.
     const std::string calleeLabel = targetName.empty() ? targetFuncType->toString() : targetName;
 
-    // `tee(s, n)` reads one stream from two places: the two streams it gives share one buffer,
+    // `s->tee<n>` reads one stream from two places: the two streams it gives share one buffer,
     // which holds the elements one side has read and the other has not (design principles 5.4).
     // `n` says how wide that buffer is expected to be -- a hint the executor may exceed by growing
     // the buffer -- but no buffer holds fewer than one element, the one being handed over, so a
@@ -3876,7 +3915,7 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
         return generic == std::string::npos ? name : name.substr(0, generic);
     };
     if (targetGraph != nullptr && baseGraphName(targetGraph->name()) == "stream::tee" &&
-        normInputs.size() == 2 && targetFuncType->normTypesCount() == 2 &&
+        normInputs.size() == 1 && withInputs.size() == 1 && targetFuncType->normTypesCount() == 1 &&
         targetFuncType->normTypeAt(0) != nullptr &&
         targetFuncType->normTypeAt(0)->code() == TypeCode::Stream) {
         const auto widthBelowOne = [](const data_ptr_t &data) {
@@ -3886,15 +3925,15 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
             const auto integer = std::dynamic_pointer_cast<IntData>(data);
             return integer != nullptr && integer->data() < 1;
         };
-        if (widthBelowOne(constantOfNode(normInputs[1].node))) {
+        if (widthBelowOne(constantOfNode(withInputs[0].node))) {
             // The caret is under the width, the argument that says why the call can never be right.
-            const GCT::node_ptr_t &widthExpr = normInputs[1].expr;
+            const GCT::node_ptr_t &widthExpr = withInputs[0].expr;
             const auto where                 = widthExpr != nullptr && widthExpr->origin() != 0
                                                    ? widthExpr->origin()
                                                    : gct->origin();
             diags_->of(SemanticDiag::TeeHintNotPositive)
                 .atOrigin(where)
-                .commit(sourceTextOf(normInputs[1].expr));
+                .commit(sourceTextOf(withInputs[0].expr));
             throw BuildAbortException();
         }
     }
@@ -4005,7 +4044,14 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
             continue;
         }
         if (auto modifierNode = modifierOf(arg.node); modifierNode.has_value()) {
-            if (sameGraph(*modifierNode, currGraph_) &&
+            // In a sync block the statement before this call is linked to it below, and when it
+            // already comes after the modifier the modifier's edge says nothing more: the edge
+            // would be a transitive one, which the contract of the control edges leaves out.
+            const bool chainedAfterModifier =
+                synced_ && lastSyncedNode_ != nullptr && sameGraph(lastSyncedNode_, currGraph_) &&
+                runtime::hasControlDependency(
+                    *nodeDraftOf(lastSyncedNode_), nodeIdOf(*modifierNode), nodeIdOf(lastSyncedNode_));
+            if (sameGraph(*modifierNode, currGraph_) && !chainedAfterModifier &&
                 shouldAddSyncCtrlLink(*modifierNode, targetNode)) {
                 linkNodes(LinkType::Ctrl, *modifierNode, targetNode);
             }

@@ -7,7 +7,7 @@
 # cannot start at all (it prints its path configuration and pybind11 throws). A program that only
 # imports `pyplot` or `python` must therefore exit 0 and print nothing: putting the initialisation
 # back into `load` makes that program exit 1, which is how measured the cost and the error
-# code at import. The same environment then pins the other half: the first `plot` or `py_exec`
+# code at import. The same environment then pins the other half: the first `plot` or `exec`
 # exits 1 with a `RuntimeError` at that call's source position, so the failure moved rather than
 # disappeared. With a healthy environment the case pins both orders (`python` then `pyplot`, and
 # the reverse) and that one interpreter, created by whichever got there first, serves both.
@@ -23,7 +23,7 @@ tags = ["feat", "modules", "python", "pyplot", "import", "interpreter"]
 
 [[tests]]
 name = "interpreter.first_use"
-desc = "Importing `pyplot` or `python` creates no CPython (exit 0 under a PYTHONHOME that no interpreter can start with), `inspect --ops` lists `pyplot:plot` without one, the first `plot`/`py_exec` fails there with a RuntimeError at the call, and with a healthy environment both orders work on one interpreter, including `_ssl` after a `pyplot`-first program."
+desc = "Importing `pyplot` or `python` creates no CPython (exit 0 under a PYTHONHOME that no interpreter can start with), `inspect --ops` lists `pyplot:plot` without one, the first `plot`/`exec` fails there with a RuntimeError at the call, and with a healthy environment both orders work on one interpreter, including `_ssl` after a `pyplot`-first program."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/modules/stdlib/interpreter_first_use.mjs"

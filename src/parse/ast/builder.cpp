@@ -3153,7 +3153,7 @@ TypeCaseKind Builder::typeCaseKindOf(cst::TypeCasePattern pattern) {
     // A word that names no shape is told, where it is written, instead of being read as `_`.
     diags_->of(SemanticDiag::StaticMatchPatternCannotMatch)
         .at(rangeOf(pattern->firstToken(), pattern->lastToken()))
-        .commit(text, "it is not a shape word (struct, tuple, array, func, #leaf, _)");
+        .commit(text, "it is not a shape word (struct, tuple, array, func, nullable, fallible, map, set, #leaf, _)");
     return TypeCaseKind::Wildcard;
 }
 
@@ -5102,6 +5102,24 @@ Value Builder::visitRefType(cst::RefType context) {
     return res;
 }
 
+/*
+typeCallType : refType '::' '<' type (',' type)* '>' '(' ')'
+The callee is the first type of the node and the arguments follow it, so the node is the
+specialization of a name with a flag that says it is a call.
+*/
+Value Builder::visitTypeCallType(cst::TypeCallType context) {
+    const auto types = context->types();
+    node_ptr_t res   = createNodeAs<SpecTypeLoad>(true);
+    setNodeTokenRangeByContext(res, context);
+    node_ptr_t repeatNode = createNodeAs<RepeatedLoad>("TypeOrData");
+    setNodeTokenRangeByContext(repeatNode, context);
+    for (size_t i = 1; i < types.size(); ++i) {
+        *repeatNode << any2node(visitType(types[i]));
+    }
+    *res << any2node(visitType(types[0])) << repeatNode;
+    return res;
+}
+
 Value Builder::visitTypeOfType(cst::TypeOfType context) {
     node_ptr_t res = createNodeAs<TypeExprLoad>(TypeOp::TypeOf);
     setNodeTokenRangeByContext(res, context);
@@ -5369,6 +5387,8 @@ Value Builder::visitType(syn::Node context) {
         return visitFuncType(cst::FuncType(context));
     case NK::TypeOfType:
         return visitTypeOfType(cst::TypeOfType(context));
+    case NK::TypeCallType:
+        return visitTypeCallType(cst::TypeCallType(context));
     case NK::EnumType:
         return visitEnumType(cst::EnumType(context));
     default:

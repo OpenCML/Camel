@@ -13,9 +13,6 @@ class PyObjectType : public type_ns::OtherType {
   public:
     explicit PyObjectType(type_ns::TypeCode code) : type_ns::OtherType(code) {}
 
-  protected:
-    PyObjectType(type_ns::TypeCode code, size_t paramCount, type_ns::Type **params);
-
   public:
     static type_ns::TypeCode typeCode();
     static PyObjectType *create();

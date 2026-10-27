@@ -214,7 +214,7 @@ seed: (seed: int) => void
 seed: (seed: i32) => void
 ```
 
-**`types`** — import { ... } from types — 11 name(s)
+**`types`** — import { ... } from types — 16 name(s)
 
 ```text
 is_same: () => bool
@@ -225,6 +225,11 @@ is_numeric: () => bool
 is_real: () => bool
 is_ordered: () => bool
 is_function: () => bool
+is_array: () => bool
+is_nullable: () => bool
+is_fallible: () => bool
+is_map: () => bool
+is_set: () => bool
 is_string: () => bool
 is_bool: () => bool
 is_plain: () => bool
@@ -239,7 +244,7 @@ drop: <n: int> (xs: T[]) => T[]
 chunks: <n: int> (xs: T[]) => T[][]
 enumerate: (xs: T[]) => (int, T)[]
 flatten: (xss: T[][]) => T[]
-flatten: (xs: T[..]) => T[] when !is_array_type::<T>()
+flatten: (xs: T[..]) => T[] when !is_array::<T>()
 unique: (xs: T[]) => T[]
 find_index: <pred: (x: T) => bool> (xs: T[]) => int?
 find: <pred: (x: T) => bool> (xs: T[]) => T?
@@ -277,11 +282,21 @@ flat_map: <f: (x: T) => U[]> (xs: T[]) => U[]
 zip_with: <f: (a: T, b: U) => V> (xs: T[], ys: U[]) => V[]
 ```
 
-**`stream`** — import { ... } from stream — 2 name(s)
+**`stream`** — import { ... } from stream — 12 name(s)
 
 ```text
 unfold: (state: S, step: (state: S) => (T, S)?) => T..
-tee: (s: T.., n: int = 8) => (T.., T..)
+empty: () => T..
+from_array: (xs: T[]) => T..
+iterate: <f: (x: T) => T> (x: T) => T..
+map: <f: (x: T) => U> (s: T..) => U..
+filter: <pred: (x: T) => bool> (s: T..) => T..
+take: <n: int> (s: T..) => T..
+scan: <f: (acc: A, x: T) => A, init: A> (s: T..) => A..
+chunks: <k: int> (s: T..) => T[]..
+zip: (a: T.., b: U..) => (T, U)..
+collect: (s: T..) => T[]
+tee: <n: int = 8> (s: T..) => (T.., T..)
 ```
 
 **`math`** — import { ... } from math — 48 name(s)
@@ -361,9 +376,9 @@ key: (seed: int) => Key
 fold: (k: Key, i: int) => Key
 split: (k: Key) => (Key, Key)
 uniform: (k: Key) => T when is_float::<T>()
-uniform_array: <shape: int[]> (k: Key) => T[..] when is_float::<T>()
+uniform: <shape: int[]> (k: Key) => T[..] when is_float::<T>()
 normal: (k: Key) => T when is_float::<T>()
-normal_array: <shape: int[]> (k: Key) => T[..] when is_float::<T>()
+normal: <shape: int[]> (k: Key) => T[..] when is_float::<T>()
 randint: <low: int, high: int> (k: Key) => int
 permutation: (k: Key, n: int) => int[]
 shuffle: <k: Key> (xs: T[]) => T[]
@@ -434,10 +449,6 @@ get_cwd: () => string!
 **`json`** — import { ... } from json — 13 name(s)
 
 ```text
-encode: (value: T) => string
-encode: <indent: int?> (value: T) => string
-decode_as: (source: string) => T!
-decode_as: (source: Json) => T!
 decode: (text: string) => Json!
 kind: (j: Json) => string
 is_null: (j: Json) => bool
@@ -473,6 +484,9 @@ as_object: (j: Json) => Map<string, Json>?
 as_object: (j: Json?) => Map<string, Json>?
 as_object: (j: Json!) => Map<string, Json>!?
 as_object: (j: Json!?) => Map<string, Json>!?
+encode: <indent: int? = null> (value: T) => string when has_json_form::<T>()
+decode_as: (source: string) => T! when has_json_form::<T>()
+decode_as: (source: Json) => T! when has_json_form::<T>()
 ```
 
 **`hash`** — import { ... } from hash — 2 name(s)
@@ -582,7 +596,7 @@ rule_needs: (r: Rule) => int
 rule_consts: (r: Rule) => int
 ```
 
-**`tiles`** — import { ... } from tiles — 10 name(s)
+**`tiles`** — import { ... } from tiles — 9 name(s)
 
 ```text
 upload: (value: f32[..]) => Device<f32[..]> uses driver
@@ -594,7 +608,6 @@ benchmark: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses dri
 regions: <fn: (a: f32, b: f32) => f32> () => string uses driver
 available: () => bool uses driver
 device: () => string! uses driver
-compile: (f: F) => F! uses driver when is_function::<F>()
 ```
 
 **`pyplot`** — import { ... } from pyplot — 1 name(s)
@@ -610,21 +623,18 @@ plot: (data: f32[], filename: string) => void
 plot: (data: float[], filename: string) => void
 ```
 
-**`python`** — import { ... } from python — 12 name(s)
+**`python`** — import { ... } from python — 9 name(s)
 
 ```text
-py_call: (fn: string | PyObject, ...args: PyObject[]) => PyObject!
-py_call: (fn: string | PyObject, args?: (...PyObject) | PyObject[], kwargs?: Struct<...PyObject>) => PyObject!
-py_print: (...objs: PyObject[]) => PyObject?
-py_println: (...objs: PyObject[]) => PyObject?
-py_wrap: (x: T) => PyObject<T>
-py_unwrap: (obj: PyObject<T>) => T!
-py_exec: (code: string) => PyObject!
-py_eval: (expr: string) => PyObject!
-py_run: (file_path: string) => PyObject!
-py_attr: (obj: PyObject, attr: string) => PyObject!
-py_import: (module_name: string) => PyObject!
-py_dispose: (obj: PyObject) => void
+exec: (code: string) => void!
+eval: (expression: string) => PyObject!
+run_file: (path: string) => void!
+import_module: (name: string) => PyObject!
+attr: <name: string> (obj: PyObject) => PyObject!
+call: <fn: PyObject, kwargs: Map<string, PyObject>? = null> (args: PyObject[]) => PyObject!
+to_string: (obj: PyObject) => string!
+to_py: (x: T) => PyObject! when has_python_form::<T>()
+from_py: (obj: PyObject) => T! when has_python_form::<T>()
 ```
 
 **`nn`** — import { ... } from nn — 19 name(s)
