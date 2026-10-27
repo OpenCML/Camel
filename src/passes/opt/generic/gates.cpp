@@ -68,6 +68,12 @@ bool bypassValueGate(GraphDraft &draft, gc_node_ref_t id, size_t &edgeBudget) {
             // explicit CTRL inputs. Keep that completion (and any fault in the producer).
             appendControlDependency(draft, value, user.id);
         }
+        // A wait the gate carried through the chain of its `sync` block is handed on in that kind:
+        // the consumer that is a statement of the block follows the same predecessor through the
+        // sync edge (docs/handover/README.cn.md 5.21 item 4).
+        for (gc_node_ref_t predecessor : draft.syncInputsOf(id)) {
+            handOverSyncWait(draft, predecessor, user.id);
+        }
         for (auto predecessor : predecessors) {
             appendControlDependency(draft, predecessor, user.id);
         }

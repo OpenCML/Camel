@@ -198,6 +198,9 @@ void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement)
     // the chain over the removed node, with the control edge naming the same pair beside the sync
     // edge; this only has to know which users are already this node's successors in the chain.
     const auto syncUsers = copy(draft.syncUsersOf(id));
+    // The waits the removed node carried through a chain, which its consumers keep in that kind
+    // (`handOverSyncWait`).
+    const auto chainWait = copy(draft.syncInputsOf(id));
     // The wait the removed node carried for its successor, when the chain does not hand one on.
     // A branch is not one of them: what waits on a BRCH is in one of its arms, and the successor
     // standing where the removed node stood keeps its own arm (src/runtime/branch_arms.cpp). The
@@ -234,6 +237,13 @@ void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement)
             continue;
         }
         for (gc_node_ref_t pred : preds) {
+            // A wait that came through the chain is handed on in that kind: the consumer that is a
+            // statement of the block follows the same predecessor through a sync edge
+            // (docs/handover/README.cn.md 5.21 item 4).
+            if (std::ranges::find(chainWait, pred) != chainWait.end() &&
+                handOverSyncWait(draft, pred, user)) {
+                continue;
+            }
             camel::runtime::appendControlDependency(draft, pred, user);
         }
     }
