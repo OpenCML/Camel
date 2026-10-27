@@ -1,0 +1,10 @@
+/// The slice of a one-dimensional array in every form the subscript writes: both bounds, one
+/// bound, none, a step, a negative step, an empty range, and the function form with its axis.
+func main(): int sync {
+    let xs = [10, 20, 30, 40, 50, 60]
+    println(xs[1:4], xs[:2], xs[4:], xs[:], xs[::2], xs[1::2], xs[::-1], xs[4:1:-1], xs[2:2])
+    println(xs[6:], xs[0:0], [1.5, 2.5, 3.5][1:], ['a', 'b', 'c'][:2])
+    let n = 3
+    println(xs[n:], xs[:n], xs[n - 1:n + 2])
+    return 0
+}

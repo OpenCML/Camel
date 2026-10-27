@@ -425,6 +425,30 @@ Rules buildRules() {
         },
         false,
     };
+    // The slice of a one-dimensional array, whichever spelling wrote it (design principles 5.4):
+    // the six words are the value, the axis, the two bounds, the step and the mask of the bounds
+    // written, and a call that leaves the last two out stands for step 1 and "both written". A
+    // value with several dimensions or an open rank is not a flat run here: the bridge runs it.
+    r[":op/slice_sub"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            const ArrayType *value = asArrayType(c.normType(0));
+            if (value == nullptr || value->anyRank() || value->rank() != 1 ||
+                c.normCount() < 4 || c.normCount() > 6) {
+                return std::nullopt;
+            }
+            return std::format(
+                "rt::sliceSub({}, {}, {}, {}, {}, {}, {}, {})",
+                c.operand(0),
+                c.operand(1),
+                c.operand(2),
+                c.operand(3),
+                c.normCount() > 4 ? c.operand(4) : std::string("int64_t{1}"),
+                c.normCount() > 5 ? c.operand(5) : std::string("int64_t{3}"),
+                c.site(RuntimeDiag::SliceOutOfRange, marks(4)),
+                c.site(RuntimeDiag::InvalidArgument, marks(2)));
+        },
+        false,
+    };
     r[":struct/len_arr"]      = runtimeFunction("length");
     r[":struct/concat_arr"]   = runtimeFunction("concat");
     r[":struct/append_arr"]   = withArgument("append");
