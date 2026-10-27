@@ -864,18 +864,24 @@ size_t cseDraft(GraphDraft &draft) {
  * For a GATE with no users at all, check that erasing it loses no ordering: every node it
  * waits on is a pure value, or has another user through which it still reaches the exit.
  * Gates with control users do not need this check: replaceNode transfers their dependencies
- * to those users, including an effect whose only current successor is the gate.
+ * to those users, including an effect whose only current successor is the gate. A wait is read in
+ * either kind: a statement of a `sync` block is waited on through the sync edge, and one of those
+ * would be reached by nothing once the gate goes unless it has a user of its own.
  */
 bool gateInputsSurvive(const GraphDraft &draft, gc_node_ref_t gate) {
-    for (auto inputs :
-         {draft.normInputsOf(gate), draft.withInputsOf(gate), draft.ctrlInputsOf(gate)}) {
+    for (auto inputs : {draft.normInputsOf(gate),
+                        draft.withInputsOf(gate),
+                        draft.ctrlInputsOf(gate),
+                        draft.syncInputsOf(gate)}) {
         for (gc_node_ref_t in : inputs) {
             if (isValueOnly(draft, in)) {
                 continue;
             }
             size_t users = 0;
-            for (auto group :
-                 {draft.normUsersOf(in), draft.withUsersOf(in), draft.ctrlUsersOf(in)}) {
+            for (auto group : {draft.normUsersOf(in),
+                               draft.withUsersOf(in),
+                               draft.ctrlUsersOf(in),
+                               draft.syncUsersOf(in)}) {
                 for (gc_node_ref_t user : group) {
                     users += user != gate ? 1 : 0;
                 }
