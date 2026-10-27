@@ -267,16 +267,40 @@ slot_t rebuild(Type *type, const NativeNode &node) {
     return toSlot(BytesObject::from(node.payload, mm::autoSpace()));
 }
 
-slot_t saveKernel(ArgsView &, ArgsView &norm, Context &) {
-    const std::string directory(norm.get<::String *>(0)->view());
+// The kind of a failed file operation, the same three as `fs` (design principles 3.9): the path is
+// not there, the file system refused, or anything else. The location of an error value from a C++
+// kernel is the operator, since the kernel does not know the call site.
+std::string kindOf(const std::error_code &error) {
+    if (error == std::errc::no_such_file_or_directory)
+        return "NotFound";
+    if (error == std::errc::permission_denied || error == std::errc::operation_not_permitted ||
+        error == std::errc::read_only_file_system)
+        return "PermissionDenied";
+    return "IOError";
+}
+
+TupleType *fallibleVoid() {
+    static TupleType *type = TupleType::fallible(Type::Void());
+    return type;
+}
+
+// The `dataset_manifest_sha256` `with` argument: null when the caller gave none.
+std::string dataHashOf(ArgsView &with, size_t index) {
+    if (with.size() <= index || with.slot(index) == NullSlot)
+        return "";
+    return std::string(with.get<::Tuple *>(index)->get<::String *>(0)->view());
+}
+
+slot_t saveKernel(ArgsView &with, ArgsView &norm, Context &) {
+    const std::string directory(with.get<::String *>(0)->view());
     const std::filesystem::path directoryPath = camel::utils::pathFromUtf8(directory);
-    const std::string dataHash =
-        norm.size() == 3 ? std::string(norm.get<::String *>(2)->view()) : "";
+    const std::string dataHash                = dataHashOf(with, 1);
+    const std::string location                = "<ckpt::save_tree>";
     try {
         if (directory.empty() || directory.find('\0') != std::string::npos)
             throw std::invalid_argument("invalid checkpoint directory");
         CheckpointFiles files;
-        const auto root = snapshot(norm.type(1), norm.slot(1), "", files);
+        const auto root = snapshot(norm.type(0), norm.slot(0), "", files);
         Json manifest{
             {"schema", 1},
             {"camel_version", CAMEL_CHECKPOINT_VERSION},
@@ -284,20 +308,19 @@ slot_t saveKernel(ArgsView &, ArgsView &norm, Context &) {
             {"tree", root.spec}};
         files.emplace_back("manifest.json", manifest.dump(2) + "\n");
         publishCheckpoint(directoryPath, files);
-        return NullSlot;
+        return makeOk(NullSlot, fallibleVoid());
+    } catch (const std::filesystem::filesystem_error &error) {
+        return makeError(kindOf(error.code()), directory + ": " + error.what(), location);
+    } catch (const std::system_error &error) {
+        return makeError(kindOf(error.code()), directory + ": " + error.what(), location);
     } catch (const std::exception &error) {
-        core::error::throwRuntimeFault(
-            core::error::RuntimeDiag::FileSystemError,
-            "ckpt.save_tree",
-            directory,
-            error.what());
+        return makeError("IOError", directory + ": " + error.what(), location);
     }
 }
-slot_t loadKernel(ArgsView &, ArgsView &norm, Context &) {
+slot_t loadKernel(ArgsView &with, ArgsView &norm, Context &) {
     const std::string directory(norm.get<::String *>(0)->view());
     const std::filesystem::path directoryPath = camel::utils::pathFromUtf8(directory);
-    const std::string dataHash =
-        norm.size() == 2 ? std::string(norm.get<::String *>(1)->view()) : "";
+    const std::string dataHash                = dataHashOf(with, 0);
     try {
         if (directory.empty() || directory.find('\0') != std::string::npos)
             throw std::invalid_argument("invalid checkpoint directory");
@@ -310,6 +333,12 @@ slot_t loadKernel(ArgsView &, ArgsView &norm, Context &) {
         // so (the next save restores it before replacing it).
         bool recovered           = false;
         const auto readDirectory = checkpointReadDirectory(directoryPath, recovered);
+        std::error_code probe;
+        if (!std::filesystem::exists(readDirectory, probe))
+            return makeError(
+                "NotFound",
+                directory + ": there is no checkpoint at this path",
+                "<ckpt::load_tree>");
         if (recovered)
             std::cerr << "warning: ckpt.load_tree: '" << directory
                       << "' is missing; reading the previous checkpoint an interrupted "
@@ -331,92 +360,8 @@ slot_t loadKernel(ArgsView &, ArgsView &norm, Context &) {
         return makeError("CheckpointError", directory + ": " + error.what(), "<ckpt::load_tree>");
     }
 }
-// A leaf type no checkpoint can hold is a compile-time error that names the path (design
-// principles 13.5); a type variable is decided when the function is instantiated.
-bool supportedLeaf(Type *leaf) { return containsTypeVar(leaf) || kind(leaf) != "unsupported"; }
-std::optional<std::string> unsupportedLeaf(Type *tree) {
-    if (const auto bad = core::type::tree::firstRejectedLeaf(tree, supportedLeaf))
-        return "tree leaf '" + displayPath(bad->first) + "' has type " + bad->second->toString() +
-               ", which a checkpoint cannot hold (tensor, Bytes, string, bool, i32, int, f32, f64)";
-    return std::nullopt;
-}
-class SaveResolver final : public FuncTypeResolver {
-  public:
-    std::optional<FunctionType *> resolve(
-        const type_vec_t &with, const type_vec_t &norm) const override {
-        if (!fits(with, norm) || unsupportedLeaf(norm[1]))
-            return std::nullopt;
-        param_vec_t args;
-        for (auto t : norm)
-            args.emplace_back(t, false);
-        return FunctionType::create({}, args, Type::Void());
-    }
-    std::optional<std::string> explainRejection(
-        const type_vec_t &with, const type_vec_t &norm, static_args_t) const override {
-        return fits(with, norm) ? unsupportedLeaf(norm[1]) : std::nullopt;
-    }
-    std::string signature() const override {
-        return "(dir: string, tree: T, dataset_manifest_sha256?: string) => void";
-    }
-
-  private:
-    static bool fits(const type_vec_t &with, const type_vec_t &norm) {
-        return with.empty() && (norm.size() == 2 || norm.size() == 3) &&
-               norm[0]->code() == TypeCode::String &&
-               (norm.size() == 2 || norm[2]->code() == TypeCode::String);
-    }
-};
-class LoadResolver final : public FuncTypeResolver {
-  public:
-    std::optional<FunctionType *>
-    resolve(const type_vec_t &, const type_vec_t &) const override {
-        return std::nullopt;
-    }
-    std::optional<FunctionType *> resolveForCall(
-        const type_vec_t &types, Type *expected, const type_vec_t &with, const type_vec_t &norm,
-        static_args_t) const override {
-        Type *target = targetOf(types, expected);
-        if (!fits(with, norm) || !target || containsTypeVar(target) || unsupportedLeaf(target))
-            return std::nullopt;
-        param_vec_t args;
-        for (auto t : norm)
-            args.emplace_back(t, false);
-        return FunctionType::create({}, args, TupleType::fallible(target));
-    }
-    std::optional<std::string> explainCallRejection(
-        const type_vec_t &types, Type *expected, const type_vec_t &with, const type_vec_t &norm,
-        static_args_t) const override {
-        Type *target = targetOf(types, expected);
-        return fits(with, norm) && target && !containsTypeVar(target) ? unsupportedLeaf(target)
-                                                                      : std::nullopt;
-    }
-    std::string signature() const override {
-        return "::<T>(dir: string, dataset_manifest_sha256?: string) => T!";
-    }
-
-  private:
-    static bool fits(const type_vec_t &with, const type_vec_t &norm) {
-        return with.empty() && !norm.empty() && norm.size() <= 2 &&
-               std::all_of(norm.begin(), norm.end(), [](Type *t) {
-                   return t->code() == TypeCode::String;
-               });
-    }
-    static Type *targetOf(const type_vec_t &types, Type *expected) {
-        Type *target = types.size() == 1 ? types[0] : types.empty() ? expected : nullptr;
-        if (types.empty())
-            if (const auto fallible = asFallible(target))
-                target = fallible->payloadType();
-        return target;
-    }
-};
 } // namespace
 
-std::vector<oper_group_ptr_t> checkpointOperatorGroups() {
-    return {
-        OperatorGroup::create("load_tree", {{"ckpt:load_tree", std::make_shared<LoadResolver>()}}),
-        OperatorGroup::create("save_tree", {{"ckpt:save_tree", std::make_shared<SaveResolver>()}}),
-    };
-}
 std::unordered_map<std::string, operator_t> checkpointKernels() {
     return {{"save_tree", saveKernel}, {"load_tree", loadKernel}};
 }

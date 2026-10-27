@@ -41,8 +41,8 @@ class CkptModule final : public BuiltinModule {
     explicit CkptModule(context_ptr_t ctx) : BuiltinModule("ckpt", std::move(ctx)) {
         // Tensors are leaves of a checkpoint: their types must be registered.
         camel::tensor::ops::registerTensorOps();
-        for (const auto &group : camel::ckptlib::checkpointOperatorGroups())
-            exportEntity(group->name(), group);
+        // No group for `save_tree` and `load_tree`: their signatures are the declarations in
+        // `stdlib/ckpt.cml` (design principles 6.4).
         exportEntity(
             "tree_leaves",
             OperatorGroup::create(

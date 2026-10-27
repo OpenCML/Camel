@@ -52,24 +52,24 @@ func show(s: State): int sync {
 func main(mode: int, dir: string): int sync {
     return if mode == 0 then sync {
         let s = advance(initial(), 3)
-        save_tree(dir, s, 'dataset-v1')
-        return show(load_tree::<State>(dir, 'dataset-v1') !! initial())
+        let _ = s->save_tree<dir, 'dataset-v1'>
+        return show(dir->load_tree::<State><'dataset-v1'> !! initial())
     } else if mode == 1 then sync {
-        let restored: State! = load_tree(dir)
+        let restored: State! = dir->load_tree::<State>
         return show(restored !! initial())
     } else if mode == 2 then sync {
-        let s = load_tree::<State>(dir) !! initial()
+        let s = dir->load_tree::<State> !! initial()
         return show(advance(s, 7))
     } else if mode == 3 then show(advance(initial(), 10))
     else if mode == 4 then sync {
         // A failed load must remain an error at the program boundary.
-        let restored = load_tree::<State>(dir)
+        let restored = dir->load_tree::<State>
         return match restored {
             case error e => sync { println(e); return 19 }
             case s => show(s)
         }
     } else if mode == 5 then sync {
-        let s = load_tree::<{ params: { w: int[..] } }>(dir)
+        let s = dir->load_tree::<{ params: { w: int[..] } }>
         let _ = println(s)
         return 0
     } else if mode == 6 then sync {
@@ -78,13 +78,13 @@ func main(mode: int, dir: string): int sync {
         return 0
     } else if mode == 7 then sync {
         // Replace an existing checkpoint as a whole and read the new content back.
-        save_tree(dir, advance(initial(), 5), 'dataset-v1')
-        return show(load_tree::<State>(dir) !! initial())
+        let _ = (advance(initial(), 5))->save_tree<dir, 'dataset-v1'>
+        return show(dir->load_tree::<State> !! initial())
     } else if mode == 8 then show(advance(initial(), 5))
     else if mode == 9 then sync {
         // A different tree replaces every leaf, not only the ones with the same names.
-        save_tree(dir, { a: 1 })
-        let value = load_tree::<{ a: int }>(dir) !! { a: 0 }
+        let _ = ({ a: 1 })->save_tree<dir>
+        let value = dir->load_tree::<{ a: int }> !! { a: 0 }
         println(value.a, exists(dir + '/gain.txt'), exists(dir + '/manifest.json'))
         return 0
     } else 2

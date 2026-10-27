@@ -133,8 +133,8 @@ func main(
     // reading it back checks that identity and the SHA-256 of every leaf.  `save_tree`
     // replaces a directory as a whole, so the next run writes over the previous one.
     let dir = data + '/checkpoint'
-    save_tree(dir, trained, dataset_id)
-    let restored = load_tree::<Mlp>(dir, dataset_id) !! model
+    let _ = trained->save_tree<dir, dataset_id>
+    let restored = dir->load_tree::<Mlp><dataset_id> !! model
     let after_restore = evaluate(restored, val_x, val_labels)
     let drift = tree_reduce<(total: float, leaf: float): float => total + leaf>(
         tree_map<(a: f32[..], b: f32[..]): float => float(sum(abs(a - b)))>(trained, restored), 0.0)

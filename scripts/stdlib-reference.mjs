@@ -85,7 +85,7 @@ const PROBE = path.join(REPO_ROOT, 'test', 'cases', 'modules', 'stdlib', 'regist
 // The modules of the reference, in the order of the document. `source` is the file read:
 // a signature file for a C++ module, the library itself for a module written in Camel.
 const MODULES = [
-    { name: 'globals', title: 'Built-in functions', registered: '<builtin>', kind: 'cpp' },
+    { name: 'globals', title: 'Built-in functions', registered: '<builtin>', kind: 'cpp', source: 'prelude.cml', declaration: true },
     {
         name: 'str',
         title: '`str`: strings',
@@ -102,7 +102,7 @@ const MODULES = [
         source: 'bytes.cml',
         declaration: true,
     },
-    { name: 'ckpt', title: '`ckpt`: parameter trees and checkpoints', kind: 'cpp' },
+    { name: 'ckpt', title: '`ckpt`: parameter trees and checkpoints', kind: 'cpp', source: 'ckpt.cml', declaration: true, computed: 'signatures/ckpt.cml' },
     {
         name: 'tree',
         title: '`tree`: parameter trees written in Camel',
@@ -222,7 +222,6 @@ const MODULES = [
         // 
         source: 'json.cml',
         declaration: true,
-        computed: 'signatures/json.cml',
     },
     {
         name: 'hash',
@@ -315,7 +314,6 @@ const MODULES = [
         // signature file named by `computed:`.
         source: 'python.cml',
         declaration: true,
-        computed: 'signatures/python.cml',
     },
     {
         name: 'nn',
@@ -1644,7 +1642,7 @@ function verifyOps() {
         // The module that declares its signatures one by one and publishes them under a type
         // namespace publishes every declared name there: `Tensor.shape` is not a second
         // signature, so it costs nothing to require it.
-        if (module.declaration && aliases.length > 0) {
+        if (module.declaration && module.registered !== '<builtin>' && aliases.length > 0) {
             for (const name of declaredNames) {
                 if (!aliases.some((alias) => alias.name.split('::').pop() === name)) {
                     problems.push(

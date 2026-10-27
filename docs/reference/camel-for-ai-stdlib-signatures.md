@@ -125,8 +125,8 @@ to_array: (content: Bytes) => int[]
 
 ```text
 tree_leaves: (tree: T) => L
-save_tree: (dir: string, tree: T, dataset_manifest_sha256?: string) => void
-load_tree: (dir: string, dataset_manifest_sha256?: string) => T!
+save_tree: <dir: string, dataset_manifest_sha256: string? = null> (tree: T) => void! uses fs when has_ckpt_form::<T>()
+load_tree: <dataset_manifest_sha256: string? = null> (dir: string) => T! uses fs, stderr when has_ckpt_form::<T>()
 ```
 
 **`tree`** — import { ... } from tree — 4 name(s)
