@@ -14,6 +14,7 @@ digraph GraphIR {
             N00 -> N01 [label="0|0", type="NORM"];
             N02 -> N03 [label="0|0", type="NORM"];
             N01 -> N03 [label="0|0", type="CTRL"];
+            N01 -> N03 [label="SYNC", type="SYNC"];
         }
         subgraph cluster_F03 {
             label="zero_add";
@@ -28,6 +29,7 @@ digraph GraphIR {
             N04 -> N05 [label="0|0", type="NORM"];
             N06 -> N07 [label="0|0", type="NORM"];
             N05 -> N07 [label="0|0", type="CTRL"];
+            N05 -> N07 [label="SYNC", type="SYNC"];
         }
         subgraph cluster_F04 {
             label="sub_zero";
@@ -42,6 +44,7 @@ digraph GraphIR {
             N08 -> N09 [label="0|0", type="NORM"];
             N0A -> N0B [label="0|0", type="NORM"];
             N09 -> N0B [label="0|0", type="CTRL"];
+            N09 -> N0B [label="SYNC", type="SYNC"];
         }
         subgraph cluster_F05 {
             label="mul_one";
@@ -56,6 +59,7 @@ digraph GraphIR {
             N0C -> N0D [label="0|0", type="NORM"];
             N0E -> N0F [label="0|0", type="NORM"];
             N0D -> N0F [label="0|0", type="CTRL"];
+            N0D -> N0F [label="SYNC", type="SYNC"];
         }
         subgraph cluster_F06 {
             label="one_mul";
@@ -70,6 +74,7 @@ digraph GraphIR {
             N10 -> N11 [label="0|0", type="NORM"];
             N12 -> N13 [label="0|0", type="NORM"];
             N11 -> N13 [label="0|0", type="CTRL"];
+            N11 -> N13 [label="SYNC", type="SYNC"];
         }
         subgraph cluster_F07 {
             label="add_zero32";
@@ -84,6 +89,7 @@ digraph GraphIR {
             N14 -> N15 [label="0|0", type="NORM"];
             N16 -> N17 [label="0|0", type="NORM"];
             N15 -> N17 [label="0|0", type="CTRL"];
+            N15 -> N17 [label="SYNC", type="SYNC"];
         }
         subgraph cluster_F08 {
             label="zero_add32";
@@ -98,6 +104,7 @@ digraph GraphIR {
             N18 -> N19 [label="0|0", type="NORM"];
             N1A -> N1B [label="0|0", type="NORM"];
             N19 -> N1B [label="0|0", type="CTRL"];
+            N19 -> N1B [label="SYNC", type="SYNC"];
         }
         subgraph cluster_F09 {
             label="sub_zero32";
@@ -112,6 +119,7 @@ digraph GraphIR {
             N1C -> N1D [label="0|0", type="NORM"];
             N1E -> N1F [label="0|0", type="NORM"];
             N1D -> N1F [label="0|0", type="CTRL"];
+            N1D -> N1F [label="SYNC", type="SYNC"];
         }
         subgraph cluster_F0A {
             label="mul_one32";
@@ -126,6 +134,7 @@ digraph GraphIR {
             N20 -> N21 [label="0|0", type="NORM"];
             N22 -> N23 [label="0|0", type="NORM"];
             N21 -> N23 [label="0|0", type="CTRL"];
+            N21 -> N23 [label="SYNC", type="SYNC"];
         }
         subgraph cluster_F0B {
             label="one_mul32";
@@ -140,6 +149,7 @@ digraph GraphIR {
             N24 -> N25 [label="0|0", type="NORM"];
             N26 -> N27 [label="0|0", type="NORM"];
             N25 -> N27 [label="0|0", type="CTRL"];
+            N25 -> N27 [label="SYNC", type="SYNC"];
         }
         O01 [label="EXIT", type="EXIT"];
         N28 [label="3", type="DATA", origin=<ORIGIN>, span="78:21-78:22", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml", value_type="int"];
@@ -179,33 +189,43 @@ digraph GraphIR {
         N29 -> N2A [label="0|0", type="NORM"];
         N2B -> N2C [label="0|0", type="NORM"];
         N2A -> N2C [label="0|0", type="CTRL"];
+        N2A -> N2C [label="SYNC", type="SYNC"];
         N2C -> N2D [label="0|0", type="NORM"];
         N2E -> N2F [label="0|0", type="NORM"];
         N2D -> N2F [label="0|0", type="CTRL"];
+        N2D -> N2F [label="SYNC", type="SYNC"];
         N2F -> N30 [label="0|0", type="NORM"];
         N31 -> N32 [label="0|0", type="NORM"];
         N30 -> N32 [label="0|0", type="CTRL"];
+        N30 -> N32 [label="SYNC", type="SYNC"];
         N32 -> N33 [label="0|0", type="NORM"];
         N34 -> N35 [label="0|0", type="NORM"];
         N33 -> N35 [label="0|0", type="CTRL"];
+        N33 -> N35 [label="SYNC", type="SYNC"];
         N35 -> N36 [label="0|0", type="NORM"];
         N38 -> N37 [label="0|0", type="NORM"];
         N36 -> N37 [label="0|0", type="CTRL"];
+        N36 -> N37 [label="SYNC", type="SYNC"];
         N37 -> N39 [label="0|0", type="NORM"];
         N3B -> N3A [label="0|0", type="NORM"];
         N39 -> N3A [label="0|0", type="CTRL"];
+        N39 -> N3A [label="SYNC", type="SYNC"];
         N3A -> N3C [label="0|0", type="NORM"];
         N3E -> N3D [label="0|0", type="NORM"];
         N3C -> N3D [label="0|0", type="CTRL"];
+        N3C -> N3D [label="SYNC", type="SYNC"];
         N3D -> N3F [label="0|0", type="NORM"];
         N41 -> N40 [label="0|0", type="NORM"];
         N3F -> N40 [label="0|0", type="CTRL"];
+        N3F -> N40 [label="SYNC", type="SYNC"];
         N40 -> N42 [label="0|0", type="NORM"];
         N44 -> N43 [label="0|0", type="NORM"];
         N42 -> N43 [label="0|0", type="CTRL"];
+        N42 -> N43 [label="SYNC", type="SYNC"];
         N43 -> N45 [label="0|0", type="NORM"];
         N46 -> N47 [label="0|0", type="NORM"];
         N45 -> N47 [label="0|0", type="CTRL"];
+        N45 -> N47 [label="SYNC", type="SYNC"];
     }
     O00 [label="EXIT", type="EXIT"];
     N48 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="77:0-89:1", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml", value_type="() => int uses stdout"];

@@ -1472,7 +1472,12 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
             valueNeedsSyncEdge(res, lastSyncedNode_)) {
             node_handle_t gate = currGraph_->addGateNode(nodeTypeOf(res));
             linkNodes(LinkType::Norm, res, gate);
-            linkNodes(LinkType::Ctrl, lastSyncedNode_, gate);
+            // The chain's tail reaches the block's value by a sync edge -- the block's value node
+            // not being one this block alone owns (docs/design/effects/edges.cn.md 5.3) -- with the
+            // control edge the kind names the same pair with beside it. The tail may be the node the
+            // GATE reads, and the wait is then the only edge that reaches the GATE at all, so this
+            // pair is written as it stands rather than dropped as "already ordered".
+            writeSyncStatement(lastSyncedNode_, gate);
             res = gate;
         }
         synced_         = old;

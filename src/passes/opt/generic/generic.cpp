@@ -819,17 +819,42 @@ size_t cseDraft(GraphDraft &draft) {
         }
         return false;
     };
+    // A gate forwards the value it reads: it orders that value after what it waits for and changes
+    // nothing else (gates.cpp, `bypassValueGate`). Two expressions whose inputs differ only in the
+    // gates they pass through compute one value, so the key names what an input forwards. The gate
+    // keeps its place and its wait either way -- docs/design/effects/edges.cn.md 5.3 keeps a GATE
+    // whose wait is a sync edge -- so this merges the computation and leaves the order it carried.
+    const auto forwarded = [&](gc_node_ref_t in) {
+        for (size_t step = 0; step < 32; ++step) {
+            const auto *inHeader = draft.header(in);
+            if (!inHeader || inHeader->kind != GCNodeKind::Gate || draft.normInputsOf(in).size() != 1) {
+                break;
+            }
+            in = draft.normInputsOf(in).front();
+        }
+        return in;
+    };
     for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
         if (!isPureOper(draft, id) || isWrittenInPlace(draft, id) || readsVariable(id)) {
             continue;
         }
         const auto norm = draft.normInputsOf(id);
         const auto with = draft.withInputsOf(id);
+        std::vector<gc_node_ref_t> normKey;
+        std::vector<gc_node_ref_t> withKey;
+        normKey.reserve(norm.size());
+        withKey.reserve(with.size());
+        for (gc_node_ref_t in : norm) {
+            normKey.push_back(forwarded(in));
+        }
+        for (gc_node_ref_t in : with) {
+            withKey.push_back(forwarded(in));
+        }
         Key key{
             std::string(operUriOf(draft, id)),
             draft.header(id)->dataType,
-            std::vector<gc_node_ref_t>(norm.begin(), norm.end()),
-            std::vector<gc_node_ref_t>(with.begin(), with.end()),
+            std::move(normKey),
+            std::move(withKey),
             regions[id],
             camel::core::tag::permissionsOf(draft, id)};
         std::vector<gc_node_ref_t> &candidates = seen[std::move(key)];
