@@ -1929,15 +1929,29 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     withArgsOfCall_                = gct->at(0)->type() == GCT::NodeKind::WITH;
     // The callee of a call is a name: a rule's binding function called here is called, not made
     // the `Rule` its name gives (visitDRefNode).
+    // A lambda written after `->` that leaves a parameter's type out (`v -> (x) => x + 1`) takes the
+    // type from the receiver: the position of its parameter is that value (design principles 5.1,
+    // 5.9). A lambda called with parentheses, `((x) => x + 1)(2)`, is not in such a position. It is built after the arguments, which are typed without it.
+    const bool lambdaCalleeAfterArguments =
+        gct->at(0)->type() == GCT::NodeKind::FUNC && !gct->at(0)->decoratedBlock() &&
+        gct->at(0)->name().empty() && GCT::Tree::of(gct)->isPipe(gct) &&
+        [&] {
+            const auto *unwritten = GCT::Tree::of(gct->at(0))->unwrittenParamsOf(gct->at(0));
+            return unwritten != nullptr && !unwritten->empty();
+        }();
     const bool outerRuleBindingCallee = std::exchange(ruleBindingCallee_, true);
-    any targetNodeRes                 = visit(gct->at(0));
+    any targetNodeRes;
+    if (!lambdaCalleeAfterArguments) {
+        targetNodeRes = visit(gct->at(0));
+    }
     ruleBindingCallee_                = outerRuleBindingCallee;
     withArgsOfCall_                = outerWithArgsOfCall;
     genericCalleeAllowed_          = false;
     // The callee may be a lambda written in place (`((x: int): int => x + 1)(3)`,
     // `v -> (x: int): int => x * 2`): visiting it gives its graph, and what is called is the
     // function value of that graph. (The graph was cast to a node: `bad any_cast`, bare.)
-    node_handle_t targetNode = valueNodeOf(targetNodeRes);
+    node_handle_t targetNode =
+        lambdaCalleeAfterArguments ? nullptr : valueNodeOf(targetNodeRes);
 
     compile_graph_ptr_t targetGraph = nullptr;
     oper_idx_ptr_t targetOperator   = nullptr;
@@ -1976,8 +1990,12 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         return nodeTypeOf(inputNode);
     };
 
-    FunctionType *argumentSignature = signatureForArgumentContext(
-        targetNode, gct->at(0)->type() == GCT::NodeKind::WITH ? gct->at(0)->size() - 1 : 0);
+    FunctionType *argumentSignature =
+        lambdaCalleeAfterArguments
+            ? nullptr
+            : signatureForArgumentContext(
+                  targetNode,
+                  gct->at(0)->type() == GCT::NodeKind::WITH ? gct->at(0)->size() - 1 : 0);
     // The type of the position the call stands in, aligned with the callee's result type, solves
     // the type variables that result mentions (design principles 5.1, 5.5; the rule of
     // 2026-10-23 on `expected-type-through-literals-and-calls`). Every variable the result
@@ -2138,6 +2156,18 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 assignedType = place;
             }
         }
+    }
+    if (lambdaCalleeAfterArguments) {
+        // A lambda that writes no parameter type takes the value of a tagged receiver out: it is
+        // never the overload that takes the tagged value as it is.
+        yieldToPipe(gct);
+        FunctionTypeFactory parameters;
+        for (const Argument &input : normInputs) {
+            parameters.addNormArg("", valueTypeOf(nodeTypeOf(input.node)), false);
+        }
+        ExpectedValueScope calleeScope(expectedValueType_, parameters.buildOpen());
+        any lambdaRes = visit(gct->at(0));
+        targetNode    = valueNodeOf(lambdaRes);
     }
     // An ordinary argument may be written by name, and an ordinary parameter may have a
     // default (design principles 4.4): the same binding as the `with` arguments,

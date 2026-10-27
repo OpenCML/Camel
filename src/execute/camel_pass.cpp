@@ -315,9 +315,11 @@ class CamelPass final : public GraphIRPass {
 /// A Camel pass says which tags it reads with `#reads(...)` on its function: that is what
 /// makes a tag's facts read, exactly as a C++ module's `read_by` does (design principles
 /// 6.2). The module is the one the pass was compiled from (already in the context).
-void declareReads(const context_ptr_t &ctx, const std::string &module, const std::string &function) {
+void declareReads(
+    const camel::core::module::module_ptr_t &owner, const std::string &module,
+    const std::string &function) {
     try {
-        if (const auto owner = ctx->importModule(module)) {
+        if (owner) {
             const auto facts =
                 camel::core::tag::ofDeclaration(*owner, Reference(function));
             const auto value = camel::core::attr::valueOf(facts, camel::core::attr::key("reads"));
@@ -399,7 +401,13 @@ void registerCamelPass(
                                    const context_ptr_t &ctx, const PassArgs &args) {
                     return std::make_unique<CamelPass>(ctx, module, function, genericParams, args);
                 };
-                declareReads(ctx, module, function);
+                // The tags written on the declaration are read from the module once its functions are
+                // built: a generic one is not built by the lookup above.
+                try {
+                    lookup.module->compile(camel::core::module::CompileStage::Done);
+                } catch (...) {
+                }
+                declareReads(lookup.module, module, function);
                 registerModulePass(module + "::" + function, std::move(generic));
                 return;
             }

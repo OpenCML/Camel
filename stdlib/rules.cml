@@ -490,22 +490,22 @@ func plus::<F>(r: Run<F>, next: Run<F>): Run<F> {
 
 // One application of `rules` on the result of `r`, at most `rounds` rounds, its cost added.
 func stage::<F>(r: Run<F>, rules: Rule[], rounds: int, strict: bool): Run<F>! {
-    return r.result->run<rules, rounds: rounds, strict: strict> -> (next: Run<F>) => plus(r, next)
+    return r.result->run<rules, rounds: rounds, strict: strict> -> (next) => plus(r, next)
 }
 
 // Whether the last application reached a fixpoint. An error stops the loop that asks.
 func settled::<F>(r: Run<F>!): bool {
-    return (r -> (x: Run<F>) => x.fixpoint) !! false
+    return (r -> (x) => x.fixpoint) !! false
 }
 
 // Whether `r` has not rewritten anything yet.
 func untouched::<F>(r: Run<F>!): bool {
-    return (r -> (x: Run<F>) => x.rewrites == 0) !! false
+    return (r -> (x) => x.rewrites == 0) !! false
 }
 
 // Whether `done` holds for the function `r` holds; an error stops the loop.
 func finished::<F>(r: Run<F>!, done: (q: F) => bool): bool {
-    return (r -> (x: Run<F>) => done(x.result)) !! true
+    return (r -> (x) => done(x.result)) !! true
 }
 
 /// `seq`: the stages once each, in the written order, each to a fixpoint; a stage that fails fails
@@ -516,7 +516,7 @@ func finished::<F>(r: Run<F>!, done: (q: F) => bool): bool {
 with <stages: Rule[][], rounds: int = 16, strict: bool = false>
 export func seq::<F>(f: F): Run<F>! when is_function::<F>() {
     return loop r = start(f) as Run<F>! for s in stages do
-        r -> (x: Run<F>) => stage(x, s, rounds, strict)
+        r -> (x) => stage(x, s, rounds, strict)
 }
 
 /// `first`: the stages tried in the written order, and the first one that rewrites something is
@@ -528,7 +528,7 @@ export func seq::<F>(f: F): Run<F>! when is_function::<F>() {
 with <stages: Rule[][], rounds: int = 16, strict: bool = false>
 export func first::<F>(f: F): Run<F>! when is_function::<F>() {
     return loop r = start(f) as Run<F>! for s in stages while untouched(r) do
-        r -> (x: Run<F>) => stage(x, s, rounds, strict)
+        r -> (x) => stage(x, s, rounds, strict)
 }
 
 /// `repeat`: one round of the rule set at a time, until a round applies nothing or `rounds`
@@ -540,7 +540,7 @@ export func first::<F>(f: F): Run<F>! when is_function::<F>() {
 with <rules: Rule[], rounds: int = 16, strict: bool = false>
 export func repeat::<F>(f: F): Run<F>! when is_function::<F>() {
     return loop r = start(f) as Run<F>! for i in 0..rounds while !settled(r) do
-        r -> (x: Run<F>) => stage(x, rules, 1, strict)
+        r -> (x) => stage(x, rules, 1, strict)
 }
 
 /// `until`: a round at a time, while `done` is false for the function; stops at a fixpoint, at
@@ -552,7 +552,7 @@ export func repeat::<F>(f: F): Run<F>! when is_function::<F>() {
 with <rules: Rule[], done: (q: F) => bool, rounds: int = 16, strict: bool = false>
 export func until::<F>(f: F): Run<F>! when is_function::<F>() {
     return loop r = start(f) as Run<F>! for i in 0..rounds while !finished(r, done) do
-        r -> (x: Run<F>) => stage(x, rules, 1, strict)
+        r -> (x) => stage(x, rules, 1, strict)
 }
 
 /// `alternate`: one round of `left`, then one round of `right`, until a full pair applies nothing
@@ -563,13 +563,13 @@ export func until::<F>(f: F): Run<F>! when is_function::<F>() {
 with <left: Rule[], right: Rule[], rounds: int = 16, strict: bool = false>
 export func alternate::<F>(f: F): Run<F>! when is_function::<F>() {
     return loop r = start(f) as Run<F>! for i in 0..rounds while !settled(r) do
-        r -> (x: Run<F>) => pair(x, left, right, strict)
+        r -> (x) => pair(x, left, right, strict)
 }
 
 // One round of `left` and one round of `right`, in that order; `fixpoint` says whether the pair
 // changed nothing, which ends `alternate`.
 func pair::<F>(r: Run<F>, left: Rule[], right: Rule[], strict: bool): Run<F>! {
-    return stage(r, left, 1, strict) -> (a: Run<F>) => stage(a, right, 1, strict) -> (b: Run<F>) => {
+    return stage(r, left, 1, strict) -> (a) => stage(a, right, 1, strict) -> (b) => {
         let out: Run<F> = {
             result: b.result,
             rewrites: b.rewrites,

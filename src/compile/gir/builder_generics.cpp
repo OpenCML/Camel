@@ -313,6 +313,14 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
         tmpl->outerBindings  = typeBindings_;
         tmpl->ownerGraph     = currGraph_;
         tmpl->module         = module_;
+        // The tags written before the declaration belong to it, as they do for a function that is
+        // not generic (a generic pass names the tags it reads).
+        if (!isOperator) {
+            const TagFacts tags = tagFactsOf(child, camel::core::tag::Func);
+            if (tags.declaration != camel::core::attr::kNoAttrs) {
+                camel::core::tag::attachToDeclaration(*module_, Reference(name), tags.declaration);
+            }
+        }
         tmpl->nodeScope      = nodeScope_;
         tmpl->graphScope     = graphScope_;
         tmpl->decoratedScope = decoratedScope_;
