@@ -46,6 +46,21 @@ bool sameOrEnteringStruct(Type *a, Type *b) {
            (a->assignableFrom(b) || b->assignableFrom(a));
 }
 
+// An element stands at a callback's parameter: the same type, or an unnamed struct and a named one
+// with its fields, which is the relation the other joins use (design principles 5.2). The
+// callback's parameter takes the element's resources when its own clause is unwritten.
+bool elementEntersParameter(Type *parameter, Type *element) {
+    if (sameTypeWithUnwrittenResources(parameter, element)) {
+        return true;
+    }
+    if (parameter->code() != TypeCode::Struct || element->code() != TypeCode::Struct ||
+        static_cast<const StructType *>(parameter)->named() ==
+            static_cast<const StructType *>(element)->named()) {
+        return false;
+    }
+    return parameter->assignableFrom(element);
+}
+
 /// Whether a value of type `type` exists at run time, so that an operator taking a value of
 /// every type (`string(x)`) may take it: not `void`, not a type the compiler uses on its own
 /// (a type variable, a union, a reference). This is what a parameter typed `any` used to accept.
@@ -2739,7 +2754,7 @@ std::make_shared<StaticCheckedResolver>(
                                 // An element stands at the callback's result, and the callback's
                                 // parameter stands at the element type: each takes the other
                                 // side's resources when its own clause is unwritten.
-                                if (!sameTypeWithUnwrittenResources(
+                                if (!elementEntersParameter(
                                         funcType->normTypeAt(0), elemType))
                                     return nullopt;
                                 ASSERT(funcType->hasExitType(), "Function must have exit type");
@@ -2770,7 +2785,7 @@ std::make_shared<StaticCheckedResolver>(
                                 return nullopt;
                             // An element stands at the predicate's parameter, which takes the
                             // element's resources when its own clause is unwritten.
-                            if (!sameTypeWithUnwrittenResources(
+                            if (!elementEntersParameter(
                                     funcType->normTypeAt(0), arrType->elemType()))
                                 return nullopt;
                             if (!funcType->hasExitType() ||
@@ -2837,7 +2852,7 @@ std::make_shared<StaticCheckedResolver>(
                                 return nullopt;
                             // An element stands at the callback's parameter, which takes the
                             // element's resources when its own clause is unwritten.
-                            if (!sameTypeWithUnwrittenResources(
+                            if (!elementEntersParameter(
                                     funcType->normTypeAt(0), arrType->elemType()))
                                 return nullopt;
                             return Type::Void();
