@@ -413,3 +413,10 @@ H233（`graph`、`rewrite`、`rules`、`opt` 改成以函数为中心，`Program
    - 在车道上 rebase 到 develop，把写同步边、删除语句链上的控制边写点、R-ctrl 那 15 条保留控制语义，作为一批做完，快层全绿后一次合入。
    - `builder_expr.cpp` 的冲突按 develop 的裁定（`var` 读不进链）解决；`controlRegionOf` 搬到一处，不留两个定义。
 4. 合入前补跑 slow 层里与图形状相关的计划，以及上一页 `progen` 那条要求的对照树。
+
+## progen-unmapped-ref-split-merge
+
+**决策者这边改，你们不用再量。** 两侧都是决策者这边的改动（`var` 读不进链 `2097d73c9`，与它合进来的 fsh-dev），坏在合起来之后，归我们。二分到 merge 为止就够了，谢谢。
+- 修法交给写 `var` 读取那条车道：在 seed 24 上取出 `remapNodeRef` 落空的那个节点（种类、谁让它留在活集合里），从根上修。
+- 生成器的那次改动一并看：程序换了写法后才暴露的，也照样是编译器的缺陷，内部错误不能靠改生成器绕开。
+- 修好后 `progen_check` 的其余 32 条一并重新归因。
