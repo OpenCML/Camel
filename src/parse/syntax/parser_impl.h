@@ -397,8 +397,8 @@ class ParserImpl {
     void parseArrayType();
     void parseArrayDim();
     void parseSpecType();
-    void parseTypeCall();
-    bool typeCallAhead() const;
+    void parseMatchTypeType();
+    void parseTypeArm();
     void parsePrimaryType();
     void parseStructType();
     void parseFuncType();

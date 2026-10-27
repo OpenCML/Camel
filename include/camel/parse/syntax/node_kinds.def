@@ -79,6 +79,7 @@ CAMEL_NODE(EnumStructPattern, Other)   // '{' (IDENTIFIER (':' fieldPattern)? ('
 CAMEL_NODE(MatchCase, Other)           // 'case' pattern ('|' pattern)* whenClause? '=>' blockExpr
 CAMEL_NODE(TypeCasePattern, Other)     // 'struct' | 'tuple' | '#' 'leaf' | '_'
 CAMEL_NODE(TypeCase, Other)            // 'case' typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
+CAMEL_NODE(TypeArm, Other)             // 'case' typeCasePattern ('|' typeCasePattern)* '=>' typeExpr
 CAMEL_NODE(MemberAccess, Other)        // '.' (IDENTIFIER | INTEGER | REAL), after a call, a binding or an index
 CAMEL_NODE(TypeList, Other)            // typeExpr (',' typeExpr)*
 CAMEL_NODE(IdentDef, Other)            // IDENTIFIER
@@ -132,7 +133,7 @@ CAMEL_NODE(ParenType, Type)            // '(' typeExpr ')'
 CAMEL_NODE(TupleType, Type)            // '(' typeList? ','? ')'
 CAMEL_NODE(FuncType, Type)             // modifiers? angledParams? parentParams '=>' typeExpr resourceClause?
 CAMEL_NODE(TypeOfType, Type)           // 'typeof' dataExpr
-CAMEL_NODE(TypeCallType, Type)         // refType '::' '<' type (',' type)* '>' '(' ')': a type function applied
+CAMEL_NODE(MatchTypeType, Type)        // 'match' 'type' typeExpr '{' typeArm* '}'
 CAMEL_NODE(EnumType, Type)             // 'enum' '{' (enumVariant (',' enumVariant)*)? ','? '}'
 CAMEL_NODE(EnumVariant, Other)         // identDef ('(' typeList? ','? ')' | '{' (enumField (',' enumField)*)? ','? '}')?
 CAMEL_NODE(EnumField, Other)           // identDef ':' typeExpr

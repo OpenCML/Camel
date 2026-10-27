@@ -1,0 +1,16 @@
+/// A `match type` in a type function that no case selects for the type it is given is refused where
+/// the instance is made.
+import { is_integer, ElementOf } from types
+
+type OnlyArrays<T> = match type T {
+    case array => ElementOf<T>
+}
+
+func element_is_integer::<T>(): bool {
+    return is_integer::<OnlyArrays<T>>()
+}
+
+func main(): int sync {
+    println(element_is_integer::<int>())
+    return 0
+}

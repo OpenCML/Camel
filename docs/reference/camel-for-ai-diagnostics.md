@@ -273,7 +273,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `FactJoinRequired` | The fact '{0}' writes no 'join'. |
 | `FactConstCaseTypeRequired` | The 'const' case '{0}' of the fact '{1}' writes no type. |
 | `FactCaseBindsNoVariable` | This case of the fact '{0}' names no variable. |
-| `TypeFunctionNotApplicable` | The type function call '{0}' is not applicable: {1}. |
+| `TypeFunctionNotApplicable` | The type function '{0}' is not applicable: {1}. |
 
 **Semantic — warnings** (`SemanticDiag`) — 15
 

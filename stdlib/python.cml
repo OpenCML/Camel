@@ -30,6 +30,8 @@
  * The other direction, Python calling Camel, is the package `camel` (`pip install camel-lang`).
  */
 
+import { ElementOf } from types
+
 /// A Python object seen from Camel; the module provides the type.
 export type PyObject
 
@@ -41,7 +43,7 @@ export type PyObject
 func has_python_form::<T>(): bool {
     return match type T {
         case PyObject | Bytes | bool | int | i32 | float | f32 | string => true
-        case array => has_python_form::<element_of::<T>()>()
+        case array => has_python_form::<ElementOf<T>>()
         case struct | tuple => every_member_python::<T>()
         case _ => false
     }

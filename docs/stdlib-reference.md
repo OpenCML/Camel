@@ -2170,12 +2170,13 @@ The identity predicates (`is_integer`, `is_float`, `is_complex`, `is_string`, `i
 `is_plain`), so a type is named in one place and a new integer width is added to `is_integer`
 alone. A single type (`i32`, `f32`, `int`) is asked with `is_same`.
 
-Types are also computed from types, in the one language (design principles 21): the type
-functions `element_of::<T>()` (the element of an array or a set), `payload_of::<T>()` (the `U` of
-`U?` or `U!`), `key_of::<T>()` and `value_of::<T>()` (the key and value types of a map) are
-written where a type argument is, and are evaluated when the instance that binds `T` is made:
-`is_integer::<element_of::<T>()>()` asks the element type of `T`. They are part of the language
-(the compiler evaluates them), listed here with the predicates they are used with.
+Types are also computed from types, in the one language (design principles 5.6, 21): a type
+function is declared with `type`, takes its arguments in the angle brackets of a type position
+and has a type expression for its body, a `match type` among them. `ElementOf<T>` (the element
+of an array or a set), `PayloadOf<T>` (the `U` of `U?` or `U!`), `KeyOf<T>` and `ValueOf<T>` (the
+key and value types of a map) take a type apart where `match type` cannot, and are declared
+below without a body: the compiler provides them. They are evaluated when the instance that
+binds `T` is made, so `is_integer::<ElementOf<T>>()` asks the element type of `T`.
 
 `match type` compares a type's identity as well as its shape (design principles 5.5): the
 cases below name the types the language spells (`int`, `i32`, `float`, `f32`, `bf16`, `f16`,
