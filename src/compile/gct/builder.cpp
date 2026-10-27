@@ -2451,41 +2451,161 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
 
     node_ptr_t opNode = nullptr;
 
-    // A dimension of a subscript that slices is not an element index (design principles 5.4):
-    // `t[a:b]` calls the slice operator, `t[i]` the index operator. The dimensions are counted
-    // because the slice operator names one axis and keeps the other dimensions as they are, so a
-    // subscript that writes bounds on one dimension and `:` for every other one is that one slice,
-    // whichever dimension it slices; a subscript that selects on more than one dimension has no
-    // single node to be.
-    AST::node_ptr_t sliceDimension = nullptr;
-    AST::node_ptr_t writtenSlice   = nullptr;
-    size_t dimension               = 0;
-    size_t sliceDimensionIndex     = 0;
-    size_t writtenSlices           = 0;
-    size_t indexDimensions         = 0;
+    // A subscript writes each dimension of the value it reads: a position `i`, a range `a:b`
+    // (either end left out, a step after a second colon) or an integer array `idx` (design
+    // principles 5.4). A dimension written `:` names nothing and is kept whole. Every written
+    // dimension is one node of the core's own -- the index along that dimension for a position or
+    // an integer array, which drops the dimension, and the slice along it for a range, which keeps
+    // it -- so they are collected here in the order the subscript wrote them and built from the
+    // last one back.
+    struct SubscriptDimension {
+        size_t axis          = 0;       // the dimension of the value the subscript writes on
+        AST::node_ptr_t item = nullptr; // the dimension as written
+        bool namesRange      = false;   // its load names a bound: a range, not a position
+    };
+    std::vector<SubscriptDimension> writtenDimensions;
     if (binaryExpr->op() == AST::BinaryDataOp::Index) {
+        size_t dimension = 0;
         for (const auto &item : *ast->atAs<AST::RepeatedLoad>(1)) {
             const size_t at = dimension++;
-            if (item->type() == AST::LoadType::Data &&
-                item->loadAs<AST::DataLoad>()->dataType() == AST::DataType::Slice) {
-                sliceDimension = item;
-                bool namesRange = false;
-                for (size_t part = 0; part < 3; ++part) {
-                    namesRange = namesRange || item->at(part)->type() != AST::LoadType::Null;
-                }
-                if (namesRange) {
-                    writtenSlice        = item;
-                    sliceDimensionIndex = at;
-                    ++writtenSlices;
-                }
-            } else {
-                ++indexDimensions;
+            if (item->type() != AST::LoadType::Data ||
+                item->loadAs<AST::DataLoad>()->dataType() != AST::DataType::Slice) {
+                writtenDimensions.push_back({at, item, false});
+                continue;
+            }
+            bool namesRange = false;
+            for (size_t part = 0; part < 3; ++part) {
+                namesRange = namesRange || item->at(part)->type() != AST::LoadType::Null;
+            }
+            if (namesRange) {
+                writtenDimensions.push_back({at, item, true});
             }
         }
     }
-    // The dimension the slice runs along: the one the subscript wrote bounds on, and the first
-    // dimension when it wrote none (`t[:]`, `t[:, :]`: every dimension taken whole).
-    const size_t sliceAxis = writtenSlice != nullptr ? sliceDimensionIndex : 0;
+
+    // A subscript is one node per written dimension, from the last dimension written back to the
+    // first (design principles 5.4). Going backwards is what keeps the axis of every dimension the
+    // one the subscript gave it: a node takes or slices one dimension and leaves the number of
+    // every dimension before it as it was, so `t[a:b, c]` slices on axis 0 and then takes the
+    // position on axis 1 of that slice, and the reading of the sliced dimension is the same one
+    // `t[a:b]` has. The dimensions the subscript does not write are kept whole and stay where they
+    // are; the axis of a written dimension is the position it has in the subscript, counted from
+    // the first dimension, so `t[i]` -- the first dimension's position -- is the node a two-word
+    // call is.
+    if (binaryExpr->op() == AST::BinaryDataOp::Index) {
+        const auto intConstant = [this](int64_t value) {
+            return tree_->makeData(makeDataFromLiteral<int64_t>(value));
+        };
+        // The operator of one dimension's node: the subscript's own operator, which is what a
+        // diagnostic about any of the dimensions it wrote points at.
+        const auto makeOperator = [&](const char *group) {
+            node_ptr_t node = tree_->makeDRef(group);
+            setOriginFromOrigin(
+                context_,
+                node,
+                findSemanticOrigin(
+                    astSemantic(context_, ast), camel::source::SemanticRole::Operator),
+                camel::source::OriginKind::GctNode,
+                "gct.binary.operator");
+            return node;
+        };
+        // A dimension written as a position or an integer array: the index node along that
+        // dimension, which is the value with the dimension dropped. The axis is the node's third
+        // word and is written only when it is not the first dimension, so `t[i]` is the two-word
+        // call the module declarations of `__idx__` carry and the adjoints' call sites write.
+        const auto buildIndex = [&](const SubscriptDimension &dim, const node_ptr_t &base) {
+            node_ptr_t indexNode = visitData(dim.item);
+            node_ptr_t opNode    = makeOperator("__idx__");
+            node_ptr_t node      = tree_->makeLink(2);
+            *node << opNode << base << indexNode;
+            if (dim.axis != 0) {
+                *node << intConstant(static_cast<int64_t>(dim.axis));
+            }
+            setOriginFromAst(
+                context_, node, ast, camel::source::OriginKind::GctNode, "gct.binary.link");
+            registerGctSemantic(
+                context_,
+                node,
+                ast,
+                {
+                    semanticPart(
+                        camel::source::SemanticRole::Operator, nodeOrigin(opNode), -1, "operator"),
+                    semanticPart(
+                        camel::source::SemanticRole::Argument, nodeOrigin(base), 0, "lhs"),
+                    semanticPart(
+                        camel::source::SemanticRole::IndexExpr,
+                        nodeOrigin(indexNode),
+                        0,
+                        "index"),
+                },
+                {nodeOrigin(opNode), nodeOrigin(base), nodeOrigin(indexNode)});
+            return node;
+        };
+        // A dimension written as a range: the slice node along it, which is the value with that
+        // dimension taking the positions the range names. The call is the slice node itself: the
+        // value, the axis, the two bounds, the step, and a two-bit mask (bit 0 end, bit 1 start)
+        // saying which of the start and the end the program wrote -- `t[a:]` and `t[:b]` differ,
+        // and a negative step needs to know whether the start was given. A part that was not
+        // written is passed as the value it stands for, 0 for the start and 1 for the step; the
+        // end is read only when written.
+        const auto buildSlice = [&](const SubscriptDimension &dim, const node_ptr_t &base) {
+            const AST::node_ptr_t &boundsOf = dim.item;
+            node_ptr_t bound[3] = {nullptr, nullptr, nullptr};
+            bool written[3]     = {false, false, false};
+            for (size_t i = 0; i < 3; ++i) {
+                written[i] =
+                    boundsOf != nullptr && boundsOf->at(i)->type() != AST::LoadType::Null;
+                if (written[i]) {
+                    bound[i] = visitData(boundsOf->at(i));
+                }
+            }
+            bound[0]                  = written[0] ? bound[0] : intConstant(0);
+            bound[1]                  = written[1] ? bound[1] : intConstant(0);
+            bound[2]                  = written[2] ? bound[2] : intConstant(1);
+            node_ptr_t endWrittenNode = intConstant((written[1] ? 1 : 0) | (written[0] ? 2 : 0));
+            node_ptr_t opNode         = makeOperator("__slice__");
+            node_ptr_t node           = tree_->makeLink(2);
+            *node << opNode << base << intConstant(static_cast<int64_t>(dim.axis));
+            std::vector<camel::source::SemanticPart> parts = {
+                semanticPart(
+                    camel::source::SemanticRole::Operator, nodeOrigin(opNode), -1, "operator"),
+                semanticPart(camel::source::SemanticRole::Argument, nodeOrigin(base), 0, "lhs"),
+            };
+            std::vector<camel::source::origin_id_t> inputs = {
+                nodeOrigin(opNode),
+                nodeOrigin(base)};
+            for (size_t i = 0; i < 3; ++i) {
+                *node << bound[i];
+                if (written[i]) {
+                    inputs.push_back(nodeOrigin(bound[i]));
+                    parts.push_back(semanticPart(
+                        camel::source::SemanticRole::IndexExpr,
+                        nodeOrigin(bound[i]),
+                        static_cast<int32_t>(i),
+                        i == 0 ? "start" : (i == 1 ? "end" : "step")));
+                }
+            }
+            *node << endWrittenNode;
+            setOriginFromAst(
+                context_, node, ast, camel::source::OriginKind::GctNode, "gct.binary.link");
+            registerGctSemantic(
+                context_, node, ast, std::move(parts), std::move(inputs));
+            return node;
+        };
+        if (writtenDimensions.empty()) {
+            // A subscript that writes no bound anywhere (`t[:]`, `t[:, :]`) keeps every dimension,
+            // which is the whole slice of the first axis: the same value, and the one node an
+            // all-`:` subscript builds.
+            writtenDimensions.push_back({0, nullptr, true});
+        }
+        node_ptr_t value = visitData(lhsASTNode);
+        for (size_t i = writtenDimensions.size(); i-- > 0;) {
+            const SubscriptDimension &dim = writtenDimensions[i];
+            value = dim.namesRange ? buildSlice(dim, value) : buildIndex(dim, value);
+        }
+        LEAVE("BinaryExpr");
+        return value;
+    }
 
     // Determine the binary operator and create the corresponding node
     switch (binaryExpr->op()) {
@@ -2505,11 +2625,10 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
     case AST::BinaryDataOp::StrictNeq: {
         opNode = tree_->makeDRef("__strict_neq__");
     } break;
-    case AST::BinaryDataOp::Index: {
-        // `t[a:b]` is the slice operator, `t[i]` the index operator; the table gives `[]` the
-        // index operator, so the slice is named here (design principles 5.4).
-        opNode = tree_->makeDRef(sliceDimension != nullptr ? "__slice__" : "__idx__");
-    } break;
+    case AST::BinaryDataOp::Index:
+        // A subscript is built above, one node per dimension it writes (design principles 5.4).
+        ASSERT(false, "A subscript reached the ordinary binary operands");
+        return nullptr;
     default: {
         // Every other operator is a call of the group the table of operator_names.cpp gives
         // its symbol: plain, compound assignment and `=` alike.
@@ -2540,77 +2659,9 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
         nodeOrigin(opNode),
         nodeOrigin(lhsNode)};
 
-    // Handle the right-hand side (RHS) or indices for specific operators
-    if (binaryExpr->op() == AST::BinaryDataOp::Index) {
-        auto indices = ast->atAs<AST::RepeatedLoad>(1);
-        if (sliceDimension != nullptr) {
-            if (writtenSlices > 1 || indexDimensions > 0) {
-                // `t[a:b, c]`, `t[a:b, c:d]`: the subscript selects on more than one dimension.
-                // The slice operator names one axis and keeps the other dimensions as they are,
-                // and the index operator drops the dimension it names, so the two together are
-                // not one node. Refused here rather than read as a slice of the wrong axis.
-                diags_->of(SemanticDiag::ConstructNotSupported)
-                    .at(indices->load()->tokenRange())
-                    .commit(
-                        "a subscript that names a range or a position on more than one dimension",
-                        "the slice operator takes one axis, and the index operator takes the "
-                        "first dimension");
-                throw BuildAbortException();
-            }
-            // `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]`: the slice of the axis a subscript
-            // writes (design principles 5.4). The call is the slice node itself: the value, the
-            // axis (the dimension the bounds are written on, so `t[:, a:b]` is the same node with
-            // the axis 1), the two bounds, the step, and a two-bit mask (bit 0 end, bit 1 start)
-            // saying which of the start and the end the program wrote: `t[a:]` and `t[:b]` differ,
-            // and a negative step needs to know whether the start was given. A part that was not
-            // written is passed as the value it stands for, 0 for the start and 1 for the step;
-            // the end is read only when written.
-            const AST::node_ptr_t boundsOf = writtenSlice != nullptr ? writtenSlice : sliceDimension;
-            node_ptr_t bound[3] = {nullptr, nullptr, nullptr};
-            bool written[3]     = {false, false, false};
-            for (size_t i = 0; i < 3; ++i) {
-                const auto &part = boundsOf->at(i);
-                written[i]       = part->type() != AST::LoadType::Null;
-                if (written[i]) {
-                    bound[i] = visitData(part);
-                }
-            }
-            const auto intConstant = [this](int64_t value) {
-                return tree_->makeData(makeDataFromLiteral<int64_t>(value));
-            };
-            bound[0]                  = written[0] ? bound[0] : intConstant(0);
-            bound[1]                  = written[1] ? bound[1] : intConstant(0);
-            bound[2]                  = written[2] ? bound[2] : intConstant(1);
-            node_ptr_t endWrittenNode = intConstant((written[1] ? 1 : 0) | (written[0] ? 2 : 0));
-            // The axis: the dimension the subscript wrote the bounds on (the function form writes
-            // the axis itself, and an all-`:` subscript takes the first dimension whole).
-            *res << intConstant(static_cast<int64_t>(sliceAxis));
-            for (size_t i = 0; i < 3; ++i) {
-                *res << bound[i];
-                if (written[i]) {
-                    mergedInputs.push_back(nodeOrigin(bound[i]));
-                    parts.push_back(semanticPart(
-                        camel::source::SemanticRole::IndexExpr,
-                        nodeOrigin(bound[i]),
-                        static_cast<int32_t>(i),
-                        i == 0 ? "start" : (i == 1 ? "end" : "step")));
-                }
-            }
-            *res << endWrittenNode;
-        } else {
-            int32_t indexSlot = 0;
-            for (const auto &index : *indices) {
-                node_ptr_t indexNode = visitData(index);
-                *res << indexNode;
-                mergedInputs.push_back(nodeOrigin(indexNode));
-                parts.push_back(semanticPart(
-                    camel::source::SemanticRole::IndexExpr,
-                    nodeOrigin(indexNode),
-                    indexSlot++,
-                    "index"));
-            }
-        }
-    } else {
+    // The right-hand side of an ordinary binary operator. A subscript never reaches here: it is
+    // built above, one node per dimension it writes (design principles 5.4).
+    {
         const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);
         node_ptr_t rhsNode     = visitData(rhsASTNode);
         *res << rhsNode;

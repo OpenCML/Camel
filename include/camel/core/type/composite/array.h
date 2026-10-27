@@ -151,6 +151,16 @@ class ArrayType : public CompositeType {
     /// round.
     Type *firstDimensionElement() const;
 
+    /// The type of the elements this array gives along `axis` (design principles 5.4: a position
+    /// written on a dimension takes that dimension out of the result, for every rank and every
+    /// dimension). One dimension fewer: `T[d0, ..., dk-1, dk+1, ...]` for an axis inside the
+    /// stated extents, the element type when no dimension is left, and the same open-rank array
+    /// when the rank is open. `firstDimensionElement()` answers the axis 0 case -- `t[i]` -- and
+    /// the index operator asks this one with the axis the subscript wrote (the core's
+    /// `:op/idx_arr`, `src/builtin/modules/globals.cpp`). `axis` is a position the type has: a
+    /// caller refuses an axis of its own before it gets here.
+    Type *elementAlongAxis(size_t axis) const;
+
     /// The bracket text of the shape: `[]`, `[3, 4]`, `[?, 3]`, `[3, ..rest]`, `[..]`.
     std::string shapeText() const;
     /// The shape for the mangled name: rank (`any` or a number), constant extents and the linear
