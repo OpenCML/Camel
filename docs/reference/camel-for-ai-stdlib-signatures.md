@@ -797,6 +797,6 @@ asian_call_price: (paths: int, steps: int, seed: int) => float
 
 ```text
 supported_operators: () => string[]
-export_model: <out: string, dynamic_axes: void[] = [], target: string = 'onnxruntime-cpu'> (fn: F, example: E) => void!
+export_model: <out: string, dynamic_axes: int[] = [], target: string = 'onnxruntime-cpu'> (fn: F, example: E) => void!
 ```
 <!-- camel-for-ai end: stdlib-signatures -->

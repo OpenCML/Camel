@@ -46,7 +46,7 @@ export func supported_operators(): string[]
 /// @example export_model<out: "/tmp/model.onnx", target: "onnxruntime-cpu">(fn, example)
 /// @example-fragment the call needs a function value and an example of the arguments that function takes, which the description introduces (the exporter reads the function's graph, so no value a fragment can write stands for it)
 #op('onnx:export_model')
-with <out: string, dynamic_axes: void[] = [], target: string = 'onnxruntime-cpu'>
+with <out: string, dynamic_axes: int[] = [], target: string = 'onnxruntime-cpu'>
 export func export_model::<F, E>(fn: F, example: E): void!
 
 // -----------------------------------------------------------------------------

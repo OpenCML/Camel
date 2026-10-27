@@ -6306,7 +6306,7 @@ module and never touches the file system or the ONNX runtime.
 #### `export_model`
 
 ```camel
-export_model: <out: string, dynamic_axes: void[] = [], target: string = 'onnxruntime-cpu'> (fn: F, example: E) => void!
+export_model: <out: string, dynamic_axes: int[] = [], target: string = 'onnxruntime-cpu'> (fn: F, example: E) => void!
 ```
 
 Writes the ONNX model of `fn` applied to arguments like `example` to the file `out`, at the
