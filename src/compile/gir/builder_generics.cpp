@@ -2331,7 +2331,7 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         // is where the instance's types are known (rule impl-kernel-site). An instance
         // whose type has no executor keeps the body and runs it: the body is the semantics, so
         // the result is the same, and `std::profile` tells the two paths apart.
-        adoptImplKernel(tmpl, graph, funcType);
+        adoptImplKernel(tmpl, graph, funcType, bindings);
         // The instance takes the declaration's parameter defaults as they are: they are
         // constants, the same for every instance, and a call of the instance fills them.
         if (const auto found = defaults_.find(tmpl.get()); found != defaults_.end()) {

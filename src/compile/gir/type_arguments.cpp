@@ -4,6 +4,7 @@
 // Explicit types are consumed while building concrete graphs, never passed as values.
 
 #include "builder.h"
+#include "builder_helpers.h"
 #include "builder_support.h"
 #include "camel/core/data/primary.h"
 #include "camel/utils/str.h"
@@ -308,6 +309,21 @@ node_handle_t Builder::visitTypeApplication(const GCT::node_ptr_t &gct) {
             throw BuildAbortException();
         }
         currGraph_->addDependencyGraph(graph);
+        // An instance of an `#impl` function that has an executor, called directly, is a call of
+        // its kernel (design principles 10.4); the type arguments the call wrote are the kernel's
+        // own when its variable is stated by them alone. Anywhere but the callee position the
+        // instance is the function value, which is the body.
+        if (outerAllowed && !insideImplBody()) {
+            if (std::optional<ImplKernel> kernel = implKernelOfGraph(graph); kernel.has_value()) {
+                node_handle_t drefNode{currGraph_->addDrefNode(
+                    std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{kernel->group})};
+                registerNodeOrigin(context_, drefNode, gct, "gir.dref.impl");
+                if (!kernel->types.empty()) {
+                    explicitOperatorTypes_[drefNode] = kernel->types;
+                }
+                return drefNode;
+            }
+        }
         node_handle_t value = createFuncDataNode(graph, true, false);
         // The instance is made here, so a call of `f::<int>(...)` reaches the value, not the
         // declaration: the declaration's parameter defaults travel with the value.

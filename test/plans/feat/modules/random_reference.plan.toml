@@ -88,3 +88,23 @@ assert(sc[0] === arr[0] && sc[1] === arr[1] && sc[2] === arr[5], 'the scalar dra
 }
 """
 timeout_ms = 20000
+
+[[tests]]
+name = "reference.kernel_call"
+desc = "A direct call of the whole-array draws is one kernel operator in the graph of main (rand:uniform_array, rand:normal_array), not the body's per-element philox calls: the kernel's type variable is stated by the call's type argument alone."
+kind = "behavior"
+case = "../../../cases/modules/random/kernel_call.cml"
+args = ["${case}", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const doc = JSON.parse(input.normalized.stdout)
+const main = doc.graphs.find((g) => g.name === 'main')
+const labels = main.nodes.map((n) => n.label)
+assert(labels.filter((l) => l === 'rand:uniform_array').length === 2, 'two uniform kernels: ' + labels.join(' '))
+assert(labels.filter((l) => l === 'rand:normal_array').length === 1, 'one normal kernel: ' + labels.join(' '))
+assert(!labels.includes('rand:philox'), 'the body ran: ' + labels.join(' '))
+}
+"""
+timeout_ms = 20000

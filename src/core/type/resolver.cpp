@@ -324,9 +324,24 @@ std::optional<FunctionType *> DeclaredFuncTypeResolver::resolveForCall(
     // and an argument that states none of them -- the empty literal `[]` -- is refused here like
     // any other mismatch. Its answer is the instance, so a call that says `::<f32>` is not asked
     // again what it already said.
-    return resolve(
-        type_vec_t(concrete->withTypesSpan().begin(), concrete->withTypesSpan().end()),
-        type_vec_t(concrete->normTypesSpan().begin(), concrete->normTypesSpan().end()));
+    const type_vec_t withTypes(concrete->withTypesSpan().begin(), concrete->withTypesSpan().end());
+    const type_vec_t normTypes(concrete->normTypesSpan().begin(), concrete->normTypesSpan().end());
+    if (const auto instance = resolve(withTypes, normTypes); instance.has_value()) {
+        return instance;
+    }
+    // A variable only the result mentions (`T[..]`) is stated by the call alone: no parameter
+    // binds it, so the instance the types write is the rule's answer.
+    std::vector<std::string> inParameters;
+    for (Type *param : funcType_->withTypesSpan()) {
+        collectBindableTypeVars(param, inParameters);
+    }
+    for (Type *param : funcType_->normTypesSpan()) {
+        collectBindableTypeVars(param, inParameters);
+    }
+    if (inParameters.size() == bindable_.size()) {
+        return std::nullopt;
+    }
+    return concrete;
 }
 
 std::optional<FunctionType *> StaticFuncTypeResolver::resolve(

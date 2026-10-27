@@ -22,6 +22,7 @@
  */
 
 import { argsort } from array
+import { reshape } from tensor
 import { cos, log, sqrt } from math
 import { is_float } from types
 
@@ -91,44 +92,22 @@ export func uniform::<T>(k: Key): T when is_float::<T>() {
     return uniform_at::<T>(k, 0)
 }
 
-// The kernels of the whole-array draws, one per element width: the bits of element i are those of
-// the scalar draw from `fold(k, i)`, in whatever order or partition they are made (CPU and
-// Tiles alike). A kernel answers one element type, so each width has its own operator.
-#op('rand:uniform_array_d')
+// The kernels of the whole-array draws: the bits of element i are those of the scalar draw from
+// `fold(k, i)`, in whatever order or partition they are made (CPU and Tiles alike).
+#op('rand:uniform_array')
 with <shape: int[]>
-func uniform_array_d(k: Key): float[..]
-#op('rand:uniform_array_f')
+func uniform_array_kernel::<T>(k: Key): T[..] when is_float::<T>()
+#op('rand:normal_array')
 with <shape: int[]>
-func uniform_array_f(k: Key): f32[..]
-#op('rand:uniform_array_h')
-with <shape: int[]>
-func uniform_array_h(k: Key): f16[..]
-#op('rand:uniform_array_b')
-with <shape: int[]>
-func uniform_array_b(k: Key): bf16[..]
-#op('rand:normal_array_d')
-with <shape: int[]>
-func normal_array_d(k: Key): float[..]
-#op('rand:normal_array_f')
-with <shape: int[]>
-func normal_array_f(k: Key): f32[..]
-#op('rand:normal_array_h')
-with <shape: int[]>
-func normal_array_h(k: Key): f16[..]
-#op('rand:normal_array_b')
-with <shape: int[]>
-func normal_array_b(k: Key): bf16[..]
+func normal_array_kernel::<T>(k: Key): T[..] when is_float::<T>()
 
 /// An array of the given shape; element i (row-major) is the scalar `uniform` of `fold(k, i)`.
 /// @example key(42)->uniform::<f32><shape: [3, 4]>
+#impl(uniform_array_kernel)
 with <shape: int[]>
 export func uniform::<T>(k: Key): T[..] when is_float::<T>() {
-    return match type T {
-        case float => k->uniform_array_d<shape>
-        case f32 => k->uniform_array_f<shape>
-        case f16 => k->uniform_array_h<shape>
-        case bf16 => k->uniform_array_b<shape>
-    }
+    let n = shape->reduce<(a: int, b: int): int => a * b, 1>
+    return reshape([uniform::<T>(fold(k, i)) for i in 0..n], shape)
 }
 
 /// A number drawn from the normal distribution with mean 0 and deviation 1 (Box-Muller).
@@ -155,14 +134,11 @@ func below(k: Key, span: int): int {
 
 /// An array of the given shape; element i (row-major) is the scalar `normal` of `fold(k, i)`.
 /// @example key(42)->normal::<f32><shape: [3, 4]>
+#impl(normal_array_kernel)
 with <shape: int[]>
 export func normal::<T>(k: Key): T[..] when is_float::<T>() {
-    return match type T {
-        case float => k->normal_array_d<shape>
-        case f32 => k->normal_array_f<shape>
-        case f16 => k->normal_array_h<shape>
-        case bf16 => k->normal_array_b<shape>
-    }
+    let n = shape->reduce<(a: int, b: int): int => a * b, 1>
+    return reshape([normal::<T>(fold(k, i)) for i in 0..n], shape)
 }
 
 /// An integer drawn uniformly from low (included) to high (excluded).

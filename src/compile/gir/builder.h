@@ -425,6 +425,9 @@ class Builder {
         std::string name;
         std::string uri;
         oper_group_ptr_t group;
+        // The type arguments of the instance, when the kernel's variable is stated by them alone
+        // (`T[..]` only in the result): a direct call resolves the kernel with them.
+        camel::core::type::type_vec_t types;
     };
     // The semantic bodies of the `#impl` functions of every module, by their graphs (design
     // principles 10.4): a direct call of the function is a call of the kernel instead; the
@@ -1677,8 +1680,11 @@ class Builder {
     /// instantiation, because that is when the instance's types are known (rule
     /// impl-kernel-site). An instance no rule accepts has no executor: it runs the body,
     /// which is the semantics, and gives the same result.
+    /// `bindings` are the instance's type arguments: a kernel whose type variable only the result
+    /// mentions (`T[..]`) is bound by them.
     void adoptImplKernel(
-        const generic_template_ptr_t &tmpl, const compile_graph_ptr_t &graph, FunctionType *funcType);
+        const generic_template_ptr_t &tmpl, const compile_graph_ptr_t &graph, FunctionType *funcType,
+        const camel::core::type::type_bindings_t &bindings = {});
     /// Whether the rule `rule` of a body-less declaration applies to an instance of these types:
     /// the condition the declaration wrote, answered for the instance's types (design principles
     /// 4.4), with the declaration's own type parameters bound by them. True when the rule has no
@@ -1687,7 +1693,8 @@ class Builder {
     bool declaredRuleApplies(
         const camel::core::type::resolver_ptr_t &rule, const std::string &name,
         const camel::core::type::type_vec_t &withTypes,
-        const camel::core::type::type_vec_t &normTypes);
+        const camel::core::type::type_vec_t &normTypes,
+        const camel::core::type::type_bindings_t &given = {});
     /// What a body-less declaration's `when` says about a call whose arguments have these types
     /// (design principles 4.4). `declaredRuleApplies` answers the same question about an `#impl`
     /// instance, where only "this rule is the executor" and "it is not" exist; selecting among a
@@ -1700,10 +1707,16 @@ class Builder {
         ConditionUnmet, // the signature takes the arguments, the condition does not
         NotThisRule,    // the declaration's own type parameters do not bind to these arguments
     };
+    /// The variables of `rule` a call's explicit type arguments state, by name (position in the
+    /// rule's own variables): what a condition on a variable only the result mentions is asked with.
+    static camel::core::type::type_bindings_t statedBindings(
+        const camel::core::type::resolver_ptr_t &rule,
+        const camel::core::type::type_vec_t &explicitTypes);
     RuleVerdict ruleVerdictForCall(
         const camel::core::type::resolver_ptr_t &rule, const std::string &name,
         const camel::core::type::type_vec_t &withTypes,
-        const camel::core::type::type_vec_t &normTypes, std::string *conditionText = nullptr);
+        const camel::core::type::type_vec_t &normTypes, std::string *conditionText = nullptr,
+        const camel::core::type::type_bindings_t &given = {});
     /// The rule of the operator group `ops` a call means: a rule whose signature takes the
     /// arguments and whose own `when` holds for them (design principles 4.4). A rule that takes
     /// the arguments while its condition is false is not a candidate; it is recorded in `unmet`

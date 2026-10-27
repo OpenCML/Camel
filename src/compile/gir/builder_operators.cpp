@@ -892,8 +892,13 @@ node_handle_t Builder::overloadValueFor(
             // cannot be the one the value means, so it is not a second candidate and the
             // writing order of two declarations never decides (the same question
             // resolveGroupedCall answers for a call).
-            if (ruleVerdictForCall(resolver, ops->name(), withTypes, normTypes) !=
-                RuleVerdict::Applies) {
+            if (ruleVerdictForCall(
+                    resolver,
+                    ops->name(),
+                    withTypes,
+                    normTypes,
+                    nullptr,
+                    statedBindings(resolver, explicitTypes)) != RuleVerdict::Applies) {
                 continue;
             }
             if (chosen) {
@@ -949,7 +954,13 @@ std::optional<oper_idx_ptr_t> Builder::resolveGroupedCall(
         // unmet, only when no rule at all takes it.
         std::string condition;
         const RuleVerdict verdict =
-            ruleVerdictForCall(resolver, ops->name(), ruleWith, normTypes, &condition);
+            ruleVerdictForCall(
+                resolver,
+                ops->name(),
+                ruleWith,
+                normTypes,
+                &condition,
+                statedBindings(resolver, explicitTypes));
         if (verdict == RuleVerdict::ConditionUnmet) {
             unmet.emplace_back(resolver->signature(), std::move(condition));
             continue;
@@ -2830,7 +2841,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 kernelStatics.push_back(staticArgOf(input.node));
             }
             if (const auto resolved = kernel->group->resolveForCall(
-                    {},
+                    kernel->types,
                     expectedResult,
                     withInputTypes,
                     normInputTypes,
