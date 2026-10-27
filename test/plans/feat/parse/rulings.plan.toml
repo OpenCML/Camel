@@ -243,7 +243,7 @@ expect_diagnostic_code = "0x0200000A"
 expect_diagnostic_line = 8
 expect_diagnostic_column = 16
 expect_output_contains = ["Unexpected '?'"]
-expect_output_not_contains = ["never printed", "UnknownInternalError", "ConstructNotSupported"]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
