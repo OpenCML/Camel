@@ -4302,9 +4302,8 @@ The current working directory, the directory relative paths start at.
 A Json is a JSON value whose shape is known only when the program runs: `decode` reads a text,
 or gives an error value when the text is not JSON, and the accessors look into it, each giving
 a value of a definite type. To read a part whose shape is known, `decode_as::<T>` decodes
-straight to the type T, and `encode` writes the JSON text of a value; both have a result type
-that a declaration cannot express, so they are not declared here (see
-`stdlib/signatures/json.cml`). Everything here is pure.
+straight to the type T, and `encode` writes the JSON text of a value; both are applicable to the
+types that have a JSON form (`has_json_form`) and to no other. Everything here is pure.
 
 The data an accessor works on is its ordinary argument; the key or the index is its
 with-argument, so calls chain: `decode(text)->get<key: 'port'>->as_int`. An accessor has one
@@ -4312,37 +4311,6 @@ declaration for each tagged form of its argument -- `Json`, `Json?`, `Json!` and
 written from the most specific to the widest, which give the result `R?`, `R?`, `R!?` and
 `R!?`: an absent part is the null, and the error of a text that failed to decode is passed on
 unchanged, so one `!!` or `??` at the end of a chain settles it.
-
-#### `encode`
-
-```camel
-encode: (value: T) => string
-encode: <indent: int?> (value: T) => string
-```
-
-The JSON text of a value, on one line. The type of the value must have a JSON form: numbers,
-bool, string, null, a Json, and arrays, tuples, structs, sets and maps with string keys of
-those; a function or a tensor is refused when the call is compiled. A map is written with its
-keys in order, a struct with its fields in the order of its type, so the same value gives the
-same text.
-
-- Pure.
-- Example: `[1, 2]->encode` gives `'[1,2]'`
-
-#### `decode_as`
-
-```camel
-decode_as: (source: string) => T!
-decode_as: (source: Json) => T!
-```
-
-The value a JSON text (or a Json decoded before) describes, decoded to the type T. A part of
-T typed `Json` takes whatever is there. T is given where the call is written or taken from
-where the result goes (`let cfg: Config! = text->decode_as`).
-
-- Pure.
-- Failure: error value `JsonTypeError` when the text is JSON of another type (the message gives the path of the mismatch); error value `JsonParseError` when the text is not JSON; error value `JsonTooDeep` when the document nests deeper than the limit.
-- Example: `decode_as::<Map<string, int>>('{"a": 1}')` gives `{a: 1}`
 
 #### `decode`
 
@@ -4493,6 +4461,38 @@ The members of a JSON object, by name; null for any other kind.
 
 - Pure.
 - Example: `len((decode('{"b": 1, "a": 2}')->as_object ?? ([] as Map<string, Json>)) !! ([] as Map<string, Json>))` gives `2`
+
+#### `encode`
+
+```camel
+encode: <indent: int? = null> (value: T) => string when has_json_form::<T>()
+```
+
+The JSON text of a value, on one line, or indented by `indent` spaces per level when an indent
+is given. The type of the value must have a JSON form: numbers, bool, string, null, a Json, and
+arrays, tuples, structs, sets and maps with string keys of those; a function or a tensor is
+refused when the call is compiled. A map is written with its keys in order, a struct with its
+fields in the order of its type, so the same value gives the same text.
+
+- Pure.
+- Failure: fault `InvalidArgument` when indent is negative.
+- Example: `[1, 2]->encode` gives `'[1,2]'`
+- Example: `[1, 2]->encode<indent: 2>` gives `'[\n  1,\n  2\n]'`
+
+#### `decode_as`
+
+```camel
+decode_as: (source: string) => T! when has_json_form::<T>()
+decode_as: (source: Json) => T! when has_json_form::<T>()
+```
+
+The value a JSON text (or a Json decoded before) describes, decoded to the type T. A part of
+T typed `Json` takes whatever is there. T is given where the call is written or taken from
+where the result goes (`let cfg: Config! = text->decode_as`).
+
+- Pure.
+- Failure: error value `JsonTypeError` when the text is JSON of another type (the message gives the path of the mismatch); error value `JsonParseError` when the text is not JSON; error value `JsonTooDeep` when the document nests deeper than the limit.
+- Example: `decode_as::<Map<string, int>>('{"a": 1}')` gives `{a: 1}`
 
 <a id="hash"></a>
 
@@ -5718,7 +5718,7 @@ The `str()` of a Python object, as text.
 #### `to_py`
 
 ```camel
-to_py: (x: T) => PyObject!
+to_py: (x: T) => PyObject! when has_python_form::<T>()
 ```
 
 The Python object that stands for a Camel value, in the Python form of its type.
@@ -5729,7 +5729,7 @@ The Python object that stands for a Camel value, in the Python form of its type.
 #### `from_py`
 
 ```camel
-from_py: (obj: PyObject) => T!
+from_py: (obj: PyObject) => T! when has_python_form::<T>()
 ```
 
 The Camel value of type T that a Python object holds. T is written at the call

@@ -1,0 +1,7 @@
+/// A type without a JSON form cannot be decoded to: the call is refused where it is written.
+import { decode_as } from json
+
+func main(): int sync {
+    let r = decode_as::<Map<int, int>>('{}')
+    return 0
+}

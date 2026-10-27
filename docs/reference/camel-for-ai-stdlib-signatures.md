@@ -449,10 +449,6 @@ get_cwd: () => string!
 **`json`** — import { ... } from json — 13 name(s)
 
 ```text
-encode: (value: T) => string
-encode: <indent: int?> (value: T) => string
-decode_as: (source: string) => T!
-decode_as: (source: Json) => T!
 decode: (text: string) => Json!
 kind: (j: Json) => string
 is_null: (j: Json) => bool
@@ -488,6 +484,9 @@ as_object: (j: Json) => Map<string, Json>?
 as_object: (j: Json?) => Map<string, Json>?
 as_object: (j: Json!) => Map<string, Json>!?
 as_object: (j: Json!?) => Map<string, Json>!?
+encode: <indent: int? = null> (value: T) => string when has_json_form::<T>()
+decode_as: (source: string) => T! when has_json_form::<T>()
+decode_as: (source: Json) => T! when has_json_form::<T>()
 ```
 
 **`hash`** — import { ... } from hash — 2 name(s)
@@ -634,8 +633,8 @@ import_module: (name: string) => PyObject!
 attr: <name: string> (obj: PyObject) => PyObject!
 call: <fn: PyObject, kwargs: Map<string, PyObject>? = null> (args: PyObject[]) => PyObject!
 to_string: (obj: PyObject) => string!
-to_py: (x: T) => PyObject!
-from_py: (obj: PyObject) => T!
+to_py: (x: T) => PyObject! when has_python_form::<T>()
+from_py: (obj: PyObject) => T! when has_python_form::<T>()
 ```
 
 **`nn`** — import { ... } from nn — 19 name(s)
