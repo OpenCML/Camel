@@ -1,4 +1,5 @@
 import { flatten } from array
+import { is_function } from types
 import { Node, Graph, nodes, inputs, with_inputs, op, op_name, constant, type_of, type_name, is_anchor, is_written_slot, open, replace, commit, graphs_of } from graph
 
 func opText(n: Node): string {
@@ -79,12 +80,9 @@ func replaceHits::<F>(p: F, hits: Node[]): F! sync {
     return commit(t)
 }
 
-func settle::<F>(p: F): F! sync {
+func settle::<F>(p: F): F! when is_function::<F>() sync {
     let hits = allNodes(p)->filter<isHit>
-    return if len(hits) == 0 then p else match replaceHits(p, hits) {
-        case error e => error(e.kind, e.message)
-        case q => settle(q)
-    }
+    return if len(hits) == 0 then p else replaceHits(p, hits) -> settle
 }
 
 /// x + 0, 0 + x, x - 0, x * 1 and 1 * x of the integers, replaced by x.

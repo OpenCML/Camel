@@ -343,9 +343,10 @@ for (const module of registeredModules) {
         problems.push(`the module '${module}' contributes a pass and no declaration of it was read`)
     }
 }
-// A function transform a module implements as an operator of its own (an engine of `rewrite`,
-// called as `f->rewrite<rules>`) is declared in the same shape as a pass and has a kernel table
-// entry of the same name in the module's C++, but no pass registration: it is no pass.
+// A pass is told by its type, whatever implements it. A function transform a module implements
+// as an operator of its own (an engine of `rewrite`, called as `f->rewrite<rules>`) has a kernel
+// table entry of the same name in the module's C++ instead of a pass registration: that entry is
+// its implementation.
 const operatorNames = (module) => {
     const names = new Set()
     for (const file of files(path.join(REPO_ROOT, 'modules', module))) {

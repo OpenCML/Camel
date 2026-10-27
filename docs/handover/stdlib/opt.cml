@@ -133,10 +133,7 @@ func merge_hits::<F>(f: F): F! sync {
 /// Equal values written twice are one node, until none is left.
 /// @example ((x: int): int => x * 2 + x * 2)->cse
 export func cse::<F>(f: F): F! when is_function::<F>() {
-    return if graphs_of(f)->any<graph_has_hit> then match merge_hits(f) {
-        case error e => error(e.kind, e.message)
-        case merged => cse(merged)
-    } else f
+    return if graphs_of(f)->any<graph_has_hit> then merge_hits(f) -> cse else f
 }
 
 // ---- dead values ----
@@ -162,12 +159,9 @@ func erase_hits::<F>(f: F, hits: Node[]): F! sync {
     return commit(t)
 }
 
-func dead_values::<F>(f: F): F! sync {
+func dead_values::<F>(f: F): F! when is_function::<F>() sync {
     let hits = all_nodes(graphs_of(f))->filter<dead_value>
-    return if len(hits) == 0 then f else match erase_hits(f, hits) {
-        case error e => error(e.kind, e.message)
-        case erased => dead_values(erased)
-    }
+    return if len(hits) == 0 then f else erase_hits(f, hits) -> dead_values
 }
 
 /// Values nobody reads are erased, until none is left: the value half of `std::opt::dce`.
@@ -251,13 +245,10 @@ func abandoned::<F>(t: Txn<F>, f: F): F! sync {
 // `eval` all refused (a constant expression that can only fault is left as written and warned
 // about) is such a round, and recursing on the function it started from would not stop, so it is
 // abandoned.
-func fold_rounds::<F>(f: F): F! sync {
+func fold_rounds::<F>(f: F): F! when is_function::<F>() sync {
     let t = open(f)
     let changed = fold_round(t, all_nodes(graphs_of(f))->filter<evaluated>)
-    return if changed then match committed(t) {
-        case error e => error(e.kind, e.message)
-        case folded => fold_rounds(folded)
-    } else abandoned(t, f)
+    return if changed then committed(t) -> fold_rounds else abandoned(t, f)
 }
 
 /// A pure operation whose operands are all constants is the value they compute, until none is

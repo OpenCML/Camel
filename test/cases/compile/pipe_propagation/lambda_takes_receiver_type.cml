@@ -1,0 +1,23 @@
+/**
+ * A lambda written in place after `->` leaves its parameter's type out: the parameter is the
+ * receiver, so its type is the receiver's, or the value taken out of a `T?` or a `T!`
+ * (design principles 5.1, 5.9).
+ */
+type R = { n: int }
+
+func mk(n: int): R! {
+    return { n: n }
+}
+
+func nul(n: int): int? {
+    return if n > 0 then n else null
+}
+
+func main(): int sync {
+    let a = 5 -> (y) => y + 1
+    let q = (mk(3) -> (x) => x.n) !! 0
+    let s = (nul(4) -> (v) => v * 2) ?? 0
+    let none = (nul(0) -> (v) => v * 2) ?? -1
+    println(a, q, s, none)
+    return 0
+}

@@ -1,0 +1,20 @@
+/**
+ * A condition may call any pure compile-time function of the program (design principles 5.5), and
+ * such a function may itself ask the library's predicates by name: `is_real` below is ordinary
+ * Camel over `is_integer` and `is_float`, which the module imports. The function it conditions is
+ * applicable at the types the predicate says, and nowhere else.
+ */
+import { is_integer, is_float } from types
+
+func is_real::<T>(): bool {
+    return is_integer::<T>() || is_float::<T>()
+}
+
+func twice::<T>(x: T): T when is_real::<T>() {
+    return x + x
+}
+
+func main(): int sync {
+    println(twice(21), twice(1.25))
+    return 0
+}
