@@ -40,8 +40,7 @@ export func std::mem::blocks(): { allocs: int, frees: int, live: int, bytes: int
 // (and `i64`, `f64`, the spellings of `int` and `float`). Each is one generic declaration over the
 // source type. Applied to an array, a conversion converts every element (one rule with arithmetic:
 // `f32(xs)` is one node, and `T(xs)` does it for the type a generic function is given); that entry
-// is written in stdlib/signatures/tensor.cml, and needs no import: the first conversion of an array
-// in a module brings it along. Converting a float to an integer drops the fraction.
+// is declared below, with the core's conversions: it needs no import. Converting a float to an integer drops the fraction.
 
 /// x as a 64-bit integer.
 /// @fails fault `InvalidNumberText` when x is a string that is not, as a whole, one integer (blanks and a trailing part included); fault `ConversionOutOfRange` when x is a string that is an integer beyond the range, or a float that is NaN, infinite or beyond the range; use parse_int to handle text in the program
@@ -93,6 +92,54 @@ export func bf16::<S>(x: S): bf16 when is_real::<S>() || is_string::<S>()
 /// @example f16(0.5)    // 0.5
 #op(':op/*tof6')
 export func f16::<S>(x: S): f16 when is_real::<S>() || is_string::<S>()
+
+/// The conversion `i32` applied to every element of a numeric array: the result has the input's extents and element type `i32`. A scalar converts by the declaration above.
+/// @pure
+/// @example i32([1.0, 2.0])
+#op(':op/atoi')
+export func i32(x: number[]): i32[..]
+
+/// The conversion `i64` applied to every element of a numeric array: the result has the input's extents and element type `int64`. A scalar converts by the declaration above.
+/// @pure
+/// @example i64([1.0, 2.0])
+#op(':op/atol')
+export func i64(x: number[]): int64[..]
+
+/// The conversion `int` applied to every element of a numeric array: the result has the input's extents and element type `int64`. A scalar converts by the declaration above.
+/// @pure
+/// @example int([1.0, 2.0])
+#op(':op/atol')
+export func int(x: number[]): int64[..]
+
+/// The conversion `f32` applied to every element of a numeric array: the result has the input's extents and element type `f32`. A scalar converts by the declaration above.
+/// @pure
+/// @example f32([1.0, 2.0])
+#op(':op/atof')
+export func f32(x: number[]): f32[..]
+
+/// The conversion `f64` applied to every element of a numeric array: the result has the input's extents and element type `f64`. A scalar converts by the declaration above.
+/// @pure
+/// @example f64([1.0, 2.0])
+#op(':op/atod')
+export func f64(x: number[]): f64[..]
+
+/// The conversion `float` applied to every element of a numeric array: the result has the input's extents and element type `f64`. A scalar converts by the declaration above.
+/// @pure
+/// @example float([1.0, 2.0])
+#op(':op/atod')
+export func float(x: number[]): f64[..]
+
+/// The conversion `bf16` applied to every element of a numeric array: the result has the input's extents and element type `bf16`. A scalar converts by the declaration above. A conversion into `bf16` or `f16` rounds (to nearest, ties to even); writing it asks for that precision, so it needs no numeric permission (`change_precision` governs a computation the compiler moves to lower precision, design principles 7.2-7.3).
+/// @pure
+/// @example bf16([1.0, 2.0])
+#op(':op/atobf')
+export func bf16(x: number[]): bf16[..]
+
+/// The conversion `f16` applied to every element of a numeric array: the result has the input's extents and element type `f16`. A scalar converts by the declaration above. A conversion into `bf16` or `f16` rounds (to nearest, ties to even); writing it asks for that precision, so it needs no numeric permission (`change_precision` governs a computation the compiler moves to lower precision, design principles 7.2-7.3).
+/// @pure
+/// @example f16([1.0, 2.0])
+#op(':op/atof6')
+export func f16(x: number[]): f16[..]
 
 /// x as a 64-bit complex number: the real part is x and the imaginary part is zero. A c128
 /// keeps both parts as they are.

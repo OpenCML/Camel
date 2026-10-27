@@ -11,6 +11,7 @@ using namespace camel::core::error;
 using namespace camel::core::context;
 using namespace camel::core::rtdata;
 
+#include "../operators/array_convert.h"
 #include "../operators/cast.h"
 #include "../operators/collection.h"
 #include "../operators/enum.h"
@@ -34,6 +35,13 @@ using namespace camel::core::rtdata;
 const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
     static const std::unordered_map<std::string, operator_t> map = {
         // Type conversions
+        // A type name applied to a numeric array: the elementwise conversion
+        {"op/atoi", __atoi__},
+        {"op/atol", __atol__},
+        {"op/atof", __atof__},
+        {"op/atod", __atod__},
+        {"op/atobf", __atobf__},
+        {"op/atof6", __atof6__},
         {"op/itoi", __itoi__},
         {"op/ltoi", __ltoi__},
         {"op/ftoi", __ftoi__},
@@ -568,6 +576,11 @@ void registerBuiltinOperatorTraits() {
         "op/gt_f6",
         "op/ge_f6",
     };
+    // The conversions of an array apply to each element on its own.
+    const auto isArrayConversion = [](std::string_view key) {
+        return key == "op/atoi" || key == "op/atol" || key == "op/atof" || key == "op/atod" ||
+               key == "op/atobf" || key == "op/atof6";
+    };
     auto &registry = camel::core::OperatorTable::instance();
     for (const auto &[name, op] : getOpsImplMap()) {
         const std::string_view key(name);
@@ -579,7 +592,7 @@ void registerBuiltinOperatorTraits() {
         // declared to have effects, but only a declaration says that somebody looked.
         registry.set(
             ":" + name,
-            {.pure = pure, .elementwise = false, .mayFault = !kNeverFaults.contains(key)});
+            {.pure = pure, .elementwise = isArrayConversion(key), .mayFault = !kNeverFaults.contains(key)});
     }
     // The higher-order operators and function composition run a function the program passes
     // in: what they do is what that function does, and the passes that look at them look at

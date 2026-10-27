@@ -1160,38 +1160,6 @@ node_handle_t Builder::compoundAssignmentByRebinding(
     return visitLinkNode(assign);
 }
 
-node_handle_t Builder::withArrayConversions(
-    node_handle_t callee, const type_vec_t &normTypes, const GCT::node_ptr_t &call) {
-    if (!nodeIsKind(callee, runtime::GCNodeKind::Dref) || normTypes.empty() || module_ == nullptr) {
-        return callee;
-    }
-    const auto &named = nodeGraphOf(callee)->drefTarget(callee);
-    if (!std::holds_alternative<oper_group_ptr_t>(named)) {
-        return callee;
-    }
-    const std::string name = std::get<oper_group_ptr_t>(named)->name();
-    static const std::unordered_set<std::string> kConversions = {
-        "i32", "i64", "int", "f32", "f64", "float", "bf16", "f16"};
-    Type *first = normTypes[0] != nullptr ? valueTypeOf(normTypes[0]) : nullptr;
-    if (!kConversions.contains(name) || first == nullptr || first->code() != TypeCode::Array ||
-        !arrayConversionsImported_.insert(module_.get()).second) {
-        return callee;
-    }
-    const module_ptr_t tensor = context_->importModule("tensor", module_.get());
-    if (tensor == nullptr) {
-        return callee;
-    }
-    module_->importDefaultRefsFromMod(tensor);
-    exports_->forgetMergedImports(*module_);
-    if (const oper_group_ptr_t group = importedOperatorGroupNamed(name); group != nullptr) {
-        node_handle_t again{currGraph_->addDrefNode(
-            std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{group})};
-        registerNodeOrigin(context_, again, call->at(0), "gir.dref.array_conversion");
-        return again;
-    }
-    return callee;
-}
-
 oper_group_ptr_t Builder::importedOperatorGroupNamed(const std::string &name) {
     if (nodeAt(name).has_value() || templateScope_->get(name).has_value() ||
         decoratedGraphAt(name).has_value()) {
@@ -2813,8 +2781,6 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             return given;
         }
     }
-
-    targetNode = withArrayConversions(targetNode, normInputTypes, gct);
 
     // An operator with overloads of the program: one of them, or the built-in group below.
     // `a != b` by an overload of `==` is the negation of that call (`negateResult`).
