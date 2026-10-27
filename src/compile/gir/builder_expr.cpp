@@ -1266,10 +1266,13 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     }
     ASSERT(valueNode != nullptr, "Cast node value is null.");
     Type *sourceType = nodeTypeOf(valueNode);
-    if (valueTypeOf(sourceType)->code() == TypeCode::Never && asTagged(targetType) == nullptr) {
+    if (valueTypeOf(sourceType)->code() == TypeCode::Never) {
         // A value of `never` never exists (design principles 3.9): the position takes the node as
         // it stands, because there is nothing to convert -- and nothing that could fail to be
-        // what the position asks for. A tagged position still enters its tag below.
+        // what the position asks for. A tagged position is no exception (the author's ruling of
+        // 2026-10-26 on `never-argument-scope`): `never` is the bottom type and enters any
+        // expected position without a conversion, tag or no tag, so a CAST is not built for it
+        // here either.
         LEAVE("CAST");
         return valueNode;
     }
