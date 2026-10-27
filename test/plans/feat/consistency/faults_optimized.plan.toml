@@ -441,11 +441,11 @@ expect_output_contains = ["Index 10 is out of range for an array of length 3."]
 
 [[tests]]
 name = "fault.head_empty"
-desc = "`head` of an empty array is the fault of `xs[0]` (it returned a zero value)."
+desc = "The first element of an empty array, `xs[0]`, is a fault (a zero value was once returned)."
 case = "../../../cases/consistency/faults/head_empty.cml"
 expect_diagnostic_name = "RuntimeDiag::IndexOutOfRange"
 expect_diagnostic_line = 8
-expect_diagnostic_column = 13
+expect_diagnostic_column = 14
 expect_stdout_starts_with = "7\n"
 
 [[tests]]
