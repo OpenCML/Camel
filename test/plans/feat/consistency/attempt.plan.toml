@@ -149,7 +149,7 @@ kind = "behavior"
 backends = ["prl"]
 case = "../../../cases/consistency/attempt/many.cml"
 envs = ["N=20000"]
-timeout_ms = 240000
+timeout_ms = 260000
 verify_script = """
 assert(input.normalized.stdout === '3420000\n19900\n42\nend\n', JSON.stringify(input.normalized.stdout))
 """

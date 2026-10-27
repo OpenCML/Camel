@@ -747,6 +747,8 @@ void Builder::exportNativeOperators(const GCT::node_ptr_t &exportList) {
             for (auto &[ruleUri, rule] : group.rules) {
                 entity->operGroup()->addRule(ruleUri, std::move(rule));
             }
+            // The name is the built-in group's own: the module exports nothing under it.
+            unit_->passDeclarations.insert(group.name);
             group.rules.clear();
             continue;
         }
