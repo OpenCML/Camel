@@ -186,46 +186,52 @@ void ParserImpl::parseSpecType() {
     close(m, NK::SpecType);
 }
 
-/// Whether the name at the current token is followed by `::<`, the type arguments of a type
-/// function applied in a type position (`element_of::<T>()`). A path of names (`a::b`) is one name.
-bool ParserImpl::typeCallAhead() const {
-    uint32_t i = 0;
-    while (peek(i + 1) == TK::ColonColon && peek(i + 2) == TK::Identifier) {
-        i += 2;
+/// matchTypeType : 'match' 'type' typeExpr '{' typeArm* '}'
+/// A type function's body that chooses by the shape or the identity of a type (design principles
+/// 5.6): the cases are those of the `match type` of values, and each gives a type.
+void ParserImpl::parseMatchTypeType() {
+    const size_t m = mark();
+    bump(); // match
+    if (!expect(TK::KwType)) {
+        return close(m, NK::MatchTypeType);
     }
-    return peek(i + 1) == TK::ColonColon && (peek(i + 2) == TK::Lt || peek(i + 2) == TK::LAngle);
+    {
+        TypeHeadScope typeHead(*this);
+        parseType();
+    }
+    if (panic_ || !expect(TK::LBrace)) {
+        return close(m, NK::MatchTypeType);
+    }
+    {
+        Scope scope(*this, true);
+        while (cur_ == TK::KwCase && !panic_) {
+            parseTypeArm();
+        }
+        if (!panic_ && cur_ != TK::RBrace) {
+            unexpected({e(TK::KwCase), e(TK::RBrace)});
+        }
+    }
+    eat(TK::RBrace);
+    close(m, NK::MatchTypeType);
 }
 
-/// A type call (an alternative of primaryType): a type computed from types, written with the call
-/// syntax of the value level (design principles 21) -- the function, its type arguments between
-/// `::<` and `>`, and an empty argument list.
-void ParserImpl::parseTypeCall() {
+/// typeArm : 'case' typeCasePattern ('|' typeCasePattern)* '=>' typeExpr
+void ParserImpl::parseTypeArm() {
     const size_t m = mark();
-    parseIdentRef(NK::RefType);
-    if (!panic_) {
-        bump(); // ::
-        const uint32_t open = pos_;
-        bump(); // <
-        {
-            Scope scope(*this, false, open);
-            do {
-                parseType();
-            } while (!panic_ && cur_ == TK::Comma && peek(1) != TK::Gt && eat(TK::Comma));
-            eat(TK::Comma);
-            expect(TK::Gt);
-        }
-        if (!panic_) {
-            expect(TK::LParen);
-        }
-        if (!panic_) {
-            expect(TK::RParen);
-        }
+    bump(); // case
+    parseTypeCasePattern();
+    while (cur_ == TK::Pipe && !panic_) {
+        bump();
+        parseTypeCasePattern();
     }
-    close(m, NK::TypeCallType);
+    if (!panic_ && expect(TK::FatArrow)) {
+        parseType();
+    }
+    close(m, NK::TypeArm);
 }
 
 /// primaryType : structType | enumType | identRef | '(' typeExpr ')' | tupleType | funcType
-///             | identRef '::' '<' typeExpr (',' typeExpr)* ','? '>' '(' ')'
+///             | matchTypeType
 ///             | 'typeof' dataExpr
 /// tupleType   : '(' typeList? ','? ')'
 /// A `(` opens a function type when its head is that of a parameter list (`(name:`, `(var`, or
@@ -241,10 +247,9 @@ void ParserImpl::parsePrimaryType() {
     typeHead_           = false;
     switch (cur_) {
     case TK::Identifier:
-        if (typeCallAhead()) {
-            return parseTypeCall();
-        }
         return parseIdentRef(NK::RefType);
+    case TK::KwMatch:
+        return parseMatchTypeType();
     case TK::LBrace:
         return parseStructType();
     case TK::KwEnum:

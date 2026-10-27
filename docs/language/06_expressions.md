@@ -423,7 +423,7 @@ match type 类型 {
 - 选中的分支直接成为当前位置的直线代码，运行时没有分支节点。分支的值就是整个 `match type` 的值；空分支的值为 `void`。
 - 泛型函数的返回类型可以省略，由每个实例选中的分支推出（返回类型推断）。如果递归调用回到**同一个类型实例**、而该实例的返回类型还没有推出，报 `SemanticDiag::GenericInstantiationCycle`；递归到严格更小的类型参数则照常先完成子实例。
 
-**类型函数。** 类型也可以由类型算出，写成放在类型位置的调用（设计原则 21）：`element_of::<T>()` 是数组或集合的元素类型，`payload_of::<T>()` 是 `U?` 或 `U!` 里的 `U`，`key_of::<T>()` 与 `value_of::<T>()` 是映射的键类型与值类型。参数写在 `::<` 与 `>` 之间，参数表为空；调用本身就是一个类型，和别的类型一样用：`is_integer::<element_of::<T>()>()` 里它是类型实参，`func first::<T>(xs: T): element_of::<T>()` 里它是结果类型。`T` 还是类型变量时调用等着；实例绑定 `T` 之后，调用被它算出的类型取代。函数不接受的类型（`element_of::<int>()`）是 `SemanticDiag::TypeFunctionNotApplicable`：参数是具体类型的调用在写出处报，否则在造出实例的调用处报。不是这四个之一的名字同样报这条。
+**类型函数。** 类型也可以由类型算出（设计原则 5.6）：类型函数用 `type` 声明，`type F<T> = 体`，在类型位置写成 `F<...>` 调用；函数体是类型表达式，各 case 给出类型的 `match type` 也是：`type ElemOrSelf<T> = match type T { case array => ElementOf<T>  case _ => T }`。`types` 声明了四个 `match type` 取不出的部分：`ElementOf<T>` 是数组或集合的元素类型，`PayloadOf<T>` 是 `U?` 或 `U!` 里的 `U`，`KeyOf<T>` 与 `ValueOf<T>` 是映射的键类型与值类型。调用本身就是一个类型，和别的类型一样用：`is_integer::<ElementOf<T>>()` 里它是类型实参，`func first::<T>(xs: T): ElementOf<T>` 里它是结果类型。`T` 还是类型变量时调用等着；实例绑定 `T` 之后，调用被它算出的类型取代。函数不接受的类型（`ElementOf<int>`，或没有 case 选中的 `match type`）是 `SemanticDiag::TypeFunctionNotApplicable`：参数是具体类型时在类型写出处报，否则在造出实例的调用处报。
 
 ```cml
 func duplicate::<T>(t: T) {

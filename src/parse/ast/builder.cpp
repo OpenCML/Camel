@@ -3157,15 +3157,18 @@ TypeCaseKind Builder::typeCaseKindOf(cst::TypeCasePattern pattern) {
     return TypeCaseKind::Wildcard;
 }
 
-/*
-typeCase
-    : CASE typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
-    ;
-*/
-Value Builder::visitTypeCase(cst::TypeCase context) {
-    ENTER("TypeCase");
+template <class List> static std::vector<cst::TypeCasePattern> patternsOf(const List &list) {
+    std::vector<cst::TypeCasePattern> out;
+    for (const auto pattern : list) {
+        out.push_back(pattern);
+    }
+    return out;
+}
+
+std::vector<TypeCasePattern>
+Builder::typeCasePatternsOf(const std::vector<cst::TypeCasePattern> &written) {
     std::vector<TypeCasePattern> patterns;
-    for (const auto pattern : context->all<cst::TypeCasePattern>()) {
+    for (const auto pattern : written) {
         TypeCasePattern entry;
         // A pattern with a type child is an identity pattern (`case int`, `case T`); the
         // shape words carry no type.
@@ -3177,7 +3180,18 @@ Value Builder::visitTypeCase(cst::TypeCase context) {
         }
         patterns.push_back(std::move(entry));
     }
-    node_ptr_t caseNode = createNodeAs<TypeCaseLoad>(std::move(patterns));
+    return patterns;
+}
+
+/*
+typeCase
+    : CASE typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
+    ;
+*/
+Value Builder::visitTypeCase(cst::TypeCase context) {
+    ENTER("TypeCase");
+    node_ptr_t caseNode = createNodeAs<TypeCaseLoad>(
+        typeCasePatternsOf(patternsOf(context->all<cst::TypeCasePattern>())));
     setNodeTokenRangeByContext(caseNode, context);
     node_ptr_t bodyNode = any2node(visitBlockExpr(context->lastChild().node()));
     *caseNode << bodyNode;
@@ -5103,21 +5117,29 @@ Value Builder::visitRefType(cst::RefType context) {
 }
 
 /*
-typeCallType : refType '::' '<' type (',' type)* '>' '(' ')'
-The callee is the first type of the node and the arguments follow it, so the node is the
-specialization of a name with a flag that says it is a call.
+matchTypeType : 'match' 'type' typeExpr '{' typeArm* '}'
+typeArm       : 'case' typeCasePattern ('|' typeCasePattern)* '=>' typeExpr
+The cases are the cases of `match type` over values, and each holds the type it gives.
 */
-Value Builder::visitTypeCallType(cst::TypeCallType context) {
-    const auto types = context->types();
-    node_ptr_t res   = createNodeAs<SpecTypeLoad>(true);
+Value Builder::visitMatchTypeType(cst::MatchTypeType context) {
+    node_ptr_t res = createNodeAs<MatchTypeTypeLoad>();
     setNodeTokenRangeByContext(res, context);
-    node_ptr_t repeatNode = createNodeAs<RepeatedLoad>("TypeOrData");
-    setNodeTokenRangeByContext(repeatNode, context);
-    for (size_t i = 1; i < types.size(); ++i) {
-        *repeatNode << any2node(visitType(types[i]));
+    *res << any2node(visitType(context->type()));
+    node_ptr_t arms = createNodeAs<RepeatedLoad>("TypeCase");
+    setNodeTokenRangeByContext(arms, context);
+    for (const auto arm : context->all<cst::TypeArm>()) {
+        *arms << any2node(visitTypeArm(arm));
     }
-    *res << any2node(visitType(types[0])) << repeatNode;
+    *res << arms;
     return res;
+}
+
+Value Builder::visitTypeArm(cst::TypeArm context) {
+    node_ptr_t arm = createNodeAs<TypeCaseLoad>(
+        typeCasePatternsOf(patternsOf(context->all<cst::TypeCasePattern>())));
+    setNodeTokenRangeByContext(arm, context);
+    *arm << any2node(visitType(context->type()));
+    return arm;
 }
 
 Value Builder::visitTypeOfType(cst::TypeOfType context) {
@@ -5387,8 +5409,8 @@ Value Builder::visitType(syn::Node context) {
         return visitFuncType(cst::FuncType(context));
     case NK::TypeOfType:
         return visitTypeOfType(cst::TypeOfType(context));
-    case NK::TypeCallType:
-        return visitTypeCallType(cst::TypeCallType(context));
+    case NK::MatchTypeType:
+        return visitMatchTypeType(cst::MatchTypeType(context));
     case NK::EnumType:
         return visitEnumType(cst::EnumType(context));
     default:

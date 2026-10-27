@@ -532,6 +532,26 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
     default:
         break;
     }
+    if (type->code() == MatchTypeType::typeCode()) {
+        // A `match type` in a type position: with a concrete subject it is the result of the
+        // first case that selects the subject, by shape or by identity, and nothing else of it is
+        // looked at; with a type variable still in the subject it waits.
+        auto *match   = static_cast<MatchTypeType *>(type);
+        Type *subject = substituteTypeVars(match->subject(), bindings);
+        if (!containsTypeVar(subject)) {
+            const uint16_t shapes = typeShapeBits(subject);
+            for (size_t arm = 0; arm < match->armCount(); ++arm) {
+                bool selected = (match->armShapes(arm) & shapes) != 0;
+                for (Type *identity : match->armIdentities(arm)) {
+                    Type *pattern = substituteTypeVars(identity, bindings);
+                    selected |= !containsTypeVar(pattern) && typeEquals(subject, pattern);
+                }
+                if (selected) {
+                    return substituteTypeVars(match->armResult(arm), bindings);
+                }
+            }
+        }
+    }
     if (OtherType *applied = asTypeApplication(type)) {
         bool changed = false;
         std::vector<Type *> params;

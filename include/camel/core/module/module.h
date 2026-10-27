@@ -519,10 +519,6 @@ class ProgramExports {
     std::vector<Module::ImportedOperatorOverloads>
     exportedOperatorOverloads(Module &module, const std::string &group);
 
-    /// Forgets the merged imports of `importer`: its bindings changed after a name was read (an
-    /// import made while the module is being built), and the next read merges them again.
-    void forgetMergedImports(const Module &importer) { imported_.erase(&importer); }
-
   private:
     struct ModuleExports {
         entity_ns_ptr_t entities = std::make_shared<Namespace<std::string, entity>>();

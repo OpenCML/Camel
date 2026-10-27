@@ -3496,6 +3496,13 @@ Value Evaluator::applyOper(
             unsupported(act, std::format("'{}': {}", uri, e.what()));
         }
     }
+    // A type name applied to an array is the core's conversion, not a tensor definition: the
+    // type its node was resolved to is the answer (extents of the input, element type of the name).
+    if (def == nullptr && uri.starts_with(":op/ato") && resultType != nullptr) {
+        if (type::Type *answer = camel::core::type::valueTypeOf(resultType); tensor::isTensorType(answer)) {
+            facts = tensor::tensorFactsOf(answer);
+        }
+    }
     // The operator's index semantics declaration for this call: lowerings read the rules of
     // the operator from it (the legal range of a slice bound, the check that faults) instead
     // of restating them.

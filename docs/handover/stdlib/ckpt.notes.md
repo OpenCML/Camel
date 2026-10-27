@@ -1,6 +1,6 @@
 # ckpt 重写说明
 
-稿件：`ckpt.signatures.cml`（换进 `stdlib/signatures/ckpt.cml`）。`ckpt` 是参数树的检查点，与 `optim`、`nn` 同属训练设施；它的签名全是计算出来的（树的类型与"叶子类型谓词"写不进声明），所以只有签名文件。未编译。
+稿件：`ckpt.cml`（换进 `stdlib/ckpt.cml`，删掉 `stdlib/signatures/ckpt.cml`）。`ckpt` 是参数树的检查点，与 `optim`、`nn` 同属训练设施。2026-10-27 起，类型函数（`ElementOf`）与形状词让"能存进检查点的叶子"写成 Camel 的谓词 `has_ckpt_form`，两个函数成了普通声明，不再需要签名文件。
 
 ## 改了什么
 
@@ -24,6 +24,10 @@
 ## 调用点
 
 `test/cases/modules/nn/{checkpoint_fixture_load,checkpoint_interrupted,checkpoint_roundtrip,checkpoint_tensor,checkpoint_unsupported_leaf,checkpoint_unsupported_load}.cml`、`docs/design/training/*.md`、`docs/technical/{09,41}_*.md`。`save_params`（`nn`）的 10 处也走这里（见 `nn.notes.md`）。
+
+## 接入时要知道的
+
+- 不合的树今天在 C++ 里报错并指出叶子的路径；改成 `when has_ckpt_form::<T>()` 后报的是条件不成立（`WhenConditionUnmet` 指名 `has_ckpt_form`）。条件不成立时的说明要能指出是哪个成员不满足，这是 `when` 诊断的通用改进，不为 `ckpt` 单独做。
 
 ## 开放问题
 

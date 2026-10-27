@@ -11,6 +11,7 @@
 #include "builtin/operators/enum.h"
 #include "builtin/operators/mem.h"
 #include "builtin/operators/ops.h"
+#include "builtin/operators/array_convert.h"
 #include "builtin/operators/set_value.h"
 #include "builtin/operators/tagged.h"
 #include "camel/core/context/context.h"
@@ -765,6 +766,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     ":op/f6toi",
                     StaticFuncTypeResolver::create({}, {{Type::Float16(), false}}, Type::Int32()),
                 },
+                {
+                    ":op/atoi",
+                    arrayConversionResolver(TypeCode::Int32),
+                },
             }),
         OperatorGroup::create(
             "i64",
@@ -797,6 +802,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     ":op/f6tol",
                     StaticFuncTypeResolver::create({}, {{Type::Float16(), false}}, Type::Int64()),
                 },
+                {
+                    ":op/atol",
+                    arrayConversionResolver(TypeCode::Int64),
+                },
             }),
         OperatorGroup::create(
             "int",
@@ -828,6 +837,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 {
                     ":op/f6tol",
                     StaticFuncTypeResolver::create({}, {{Type::Float16(), false}}, Type::Int64()),
+                },
+                {
+                    ":op/atol",
+                    arrayConversionResolver(TypeCode::Int64),
                 },
             }),
         OperatorGroup::create(
@@ -864,6 +877,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     ":op/f6tof",
                     StaticFuncTypeResolver::create({}, {{Type::Float16(), false}}, Type::Float32()),
                 },
+                {
+                    ":op/atof",
+                    arrayConversionResolver(TypeCode::Float32),
+                },
             }),
         OperatorGroup::create(
             "f64",
@@ -899,6 +916,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     ":op/f6tod",
                     StaticFuncTypeResolver::create({}, {{Type::Float16(), false}}, Type::Float64()),
                 },
+                {
+                    ":op/atod",
+                    arrayConversionResolver(TypeCode::Float64),
+                },
             }),
         OperatorGroup::create(
             "float",
@@ -933,6 +954,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 {
                     ":op/f6tod",
                     StaticFuncTypeResolver::create({}, {{Type::Float16(), false}}, Type::Float64()),
+                },
+                {
+                    ":op/atod",
+                    arrayConversionResolver(TypeCode::Float64),
                 },
             }),
         // bf16 and f16 are floating types a program writes and converts like f32 (design
@@ -976,6 +1001,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     ":op/stobf",
                     StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::BFloat16()),
                 },
+                {
+                    ":op/atobf",
+                    arrayConversionResolver(TypeCode::BFloat16),
+                },
             }),
         OperatorGroup::create(
             "f16",
@@ -1003,6 +1032,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 {
                     ":op/stof6",
                     StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::Float16()),
+                },
+                {
+                    ":op/atof6",
+                    arrayConversionResolver(TypeCode::Float16),
                 },
             }),
         OperatorGroup::create(

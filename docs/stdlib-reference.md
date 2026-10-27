@@ -143,8 +143,7 @@ per target type, named by the type: `int`, `i32`, `float`, `f32`, `bf16`, `f16`,
 (and `i64`, `f64`, the spellings of `int` and `float`). Each is one generic declaration over the
 source type. Applied to an array, a conversion converts every element (one rule with arithmetic:
 `f32(xs)` is one node, and `T(xs)` does it for the type a generic function is given); that entry
-is written in stdlib/signatures/tensor.cml, and needs no import: the first conversion of an array
-in a module brings it along. Converting a float to an integer drops the fraction.
+is declared below, with the core's conversions: it needs no import. Converting a float to an integer drops the fraction.
 
 #### `int`
 
@@ -236,6 +235,94 @@ conversion as bf16, at the other reduced precision (design principles 7.3).
 
 - Failure: fault `InvalidNumberText` when x is a string that is not a number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of f16 (overflow or underflow).
 - Example: `f16(0.5)` gives `0.5`
+
+#### `i32`
+
+```camel
+i32: (x: number[]) => i32[..]
+```
+
+The conversion `i32` applied to every element of a numeric array: the result has the input's extents and element type `i32`. A scalar converts by the declaration above.
+
+- Pure.
+- Example: `i32([1.0, 2.0])`
+
+#### `i64`
+
+```camel
+i64: (x: number[]) => int64[..]
+```
+
+The conversion `i64` applied to every element of a numeric array: the result has the input's extents and element type `int64`. A scalar converts by the declaration above.
+
+- Pure.
+- Example: `i64([1.0, 2.0])`
+
+#### `int`
+
+```camel
+int: (x: number[]) => int64[..]
+```
+
+The conversion `int` applied to every element of a numeric array: the result has the input's extents and element type `int64`. A scalar converts by the declaration above.
+
+- Pure.
+- Example: `int([1.0, 2.0])`
+
+#### `f32`
+
+```camel
+f32: (x: number[]) => f32[..]
+```
+
+The conversion `f32` applied to every element of a numeric array: the result has the input's extents and element type `f32`. A scalar converts by the declaration above.
+
+- Pure.
+- Example: `f32([1.0, 2.0])`
+
+#### `f64`
+
+```camel
+f64: (x: number[]) => f64[..]
+```
+
+The conversion `f64` applied to every element of a numeric array: the result has the input's extents and element type `f64`. A scalar converts by the declaration above.
+
+- Pure.
+- Example: `f64([1.0, 2.0])`
+
+#### `float`
+
+```camel
+float: (x: number[]) => f64[..]
+```
+
+The conversion `float` applied to every element of a numeric array: the result has the input's extents and element type `f64`. A scalar converts by the declaration above.
+
+- Pure.
+- Example: `float([1.0, 2.0])`
+
+#### `bf16`
+
+```camel
+bf16: (x: number[]) => bf16[..]
+```
+
+The conversion `bf16` applied to every element of a numeric array: the result has the input's extents and element type `bf16`. A scalar converts by the declaration above. A conversion into `bf16` or `f16` rounds (to nearest, ties to even); writing it asks for that precision, so it needs no numeric permission (`change_precision` governs a computation the compiler moves to lower precision, design principles 7.2-7.3).
+
+- Pure.
+- Example: `bf16([1.0, 2.0])`
+
+#### `f16`
+
+```camel
+f16: (x: number[]) => f16[..]
+```
+
+The conversion `f16` applied to every element of a numeric array: the result has the input's extents and element type `f16`. A scalar converts by the declaration above. A conversion into `bf16` or `f16` rounds (to nearest, ties to even); writing it asks for that precision, so it needs no numeric permission (`change_precision` governs a computation the compiler moves to lower precision, design principles 7.2-7.3).
+
+- Pure.
+- Example: `f16([1.0, 2.0])`
 
 #### `c64`
 
@@ -1902,94 +1989,6 @@ A tensor of ones shaped and typed like t.
 
 ### Conversion and display
 
-#### `i32`
-
-```camel
-i32: (t: float[..] | number[]) => i32[..]
-```
-
-The conversion `i32` applied to every element of an array: the result has the input's extents and element type `i32`. A scalar converts as it always did; this entry is read together with the scalar conversions, with no import: the first conversion of an array in a module brings it along.
-
-- Pure.
-- Example: `i32(new([1.0, 2.0]))`
-
-#### `i64`
-
-```camel
-i64: (t: float[..] | number[]) => int64[..]
-```
-
-The conversion `i64` applied to every element of an array: the result has the input's extents and element type `int64`. A scalar converts as it always did; this entry is read together with the scalar conversions, with no import: the first conversion of an array in a module brings it along.
-
-- Pure.
-- Example: `i64(new([1.0, 2.0]))`
-
-#### `int`
-
-```camel
-int: (t: float[..] | number[]) => int64[..]
-```
-
-The conversion `int` applied to every element of an array: the result has the input's extents and element type `int64`. A scalar converts as it always did; this entry is read together with the scalar conversions, with no import: the first conversion of an array in a module brings it along.
-
-- Pure.
-- Example: `int(new([1.0, 2.0]))`
-
-#### `f32`
-
-```camel
-f32: (t: float[..] | number[]) => f32[..]
-```
-
-The conversion `f32` applied to every element of an array: the result has the input's extents and element type `f32`. A scalar converts as it always did; this entry is read together with the scalar conversions, with no import: the first conversion of an array in a module brings it along.
-
-- Pure.
-- Example: `f32(new([1.0, 2.0]))`
-
-#### `f64`
-
-```camel
-f64: (t: float[..] | number[]) => f64[..]
-```
-
-The conversion `f64` applied to every element of an array: the result has the input's extents and element type `f64`. A scalar converts as it always did; this entry is read together with the scalar conversions, with no import: the first conversion of an array in a module brings it along.
-
-- Pure.
-- Example: `f64(new([1.0, 2.0]))`
-
-#### `float`
-
-```camel
-float: (t: float[..] | number[]) => f64[..]
-```
-
-The conversion `float` applied to every element of an array: the result has the input's extents and element type `f64`. A scalar converts as it always did; this entry is read together with the scalar conversions, with no import: the first conversion of an array in a module brings it along.
-
-- Pure.
-- Example: `float(new([1.0, 2.0]))`
-
-#### `bf16`
-
-```camel
-bf16: (t: float[..] | number[]) => bf16[..]
-```
-
-The conversion `bf16` applied to every element of an array: the result has the input's extents and element type `bf16`. A conversion into `bf16` or `f16` rounds (to nearest, ties to even); writing it asks for that precision, so it needs no numeric permission (`change_precision` governs a computation the compiler moves to lower precision, design principles 7.2-7.3). Reading a `bf16` or `f16` tensor into a wider type is exact. A scalar converts as it always did; this entry is read together with the scalar conversions, with no import: the first conversion of an array in a module brings it along.
-
-- Pure.
-- Example: `bf16(new([1.0, 2.0]))`
-
-#### `f16`
-
-```camel
-f16: (t: float[..] | number[]) => f16[..]
-```
-
-The conversion `f16` applied to every element of an array: the result has the input's extents and element type `f16`. A scalar converts as it always did; this entry is read together with the scalar conversions, with no import: the first conversion of an array in a module brings it along.
-
-- Pure.
-- Example: `f16(new([1.0, 2.0]))`
-
 #### `load_npy`
 
 ```camel
@@ -2171,12 +2170,13 @@ The identity predicates (`is_integer`, `is_float`, `is_complex`, `is_string`, `i
 `is_plain`), so a type is named in one place and a new integer width is added to `is_integer`
 alone. A single type (`i32`, `f32`, `int`) is asked with `is_same`.
 
-Types are also computed from types, in the one language (design principles 21): the type
-functions `element_of::<T>()` (the element of an array or a set), `payload_of::<T>()` (the `U` of
-`U?` or `U!`), `key_of::<T>()` and `value_of::<T>()` (the key and value types of a map) are
-written where a type argument is, and are evaluated when the instance that binds `T` is made:
-`is_integer::<element_of::<T>()>()` asks the element type of `T`. They are part of the language
-(the compiler evaluates them), listed here with the predicates they are used with.
+Types are also computed from types, in the one language (design principles 5.6, 21): a type
+function is declared with `type`, takes its arguments in the angle brackets of a type position
+and has a type expression for its body, a `match type` among them. `ElementOf<T>` (the element
+of an array or a set), `PayloadOf<T>` (the `U` of `U?` or `U!`), `KeyOf<T>` and `ValueOf<T>` (the
+key and value types of a map) take a type apart where `match type` cannot, and are declared
+below without a body: the compiler provides them. They are evaluated when the instance that
+binds `T` is made, so `is_integer::<ElementOf<T>>()` asks the element type of `T`.
 
 `match type` compares a type's identity as well as its shape (design principles 5.5): the
 cases below name the types the language spells (`int`, `i32`, `float`, `f32`, `bf16`, `f16`,

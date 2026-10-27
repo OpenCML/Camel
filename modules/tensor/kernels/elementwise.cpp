@@ -23,6 +23,7 @@
 #include "minmax.h"
 #include "parallel.h"
 
+#include "camel/core/array_convert.h"
 #include "camel/core/error/runtime.h"
 #include "camel/utils/int_div.h"
 
@@ -259,20 +260,7 @@ TypeCode binaryResultType(BinaryOp op, const Operand &lhs, const Operand &rhs) {
 template <typename To> void convertBuffer(const Operand &src, To *dst) {
     const uint64_t count = numelOf(src.shape);
     dispatchDType(src.dtype, [&]<typename From>() {
-        const From *in = static_cast<const From *>(src.data);
-        for (uint64_t i = 0; i < count; ++i) {
-            if constexpr (std::is_same_v<To, bool_t>) {
-                dst[i] = in[i] != From{} ? 1 : 0;
-            } else if constexpr (
-                camel::core::rtdata::is_reduced_float_v<To> &&
-                camel::core::rtdata::is_reduced_float_v<From>) {
-                // bf16 to f16 (or back) goes through f32, the compute precision: the stored value
-                // widens exactly, then rounds once into the other type (dtype.h).
-                dst[i] = To(in[i].toFloat());
-            } else {
-                dst[i] = static_cast<To>(in[i]);
-            }
-        }
+        camel::core::convertElements<To, From>(static_cast<const From *>(src.data), dst, count);
     });
 }
 
@@ -771,17 +759,8 @@ Array *cast(const Array *input, TypeCode dtype, mm::IAllocator &allocator) {
     if (!isSupportedTensorScalar(dtype)) {
         throw std::invalid_argument("Unsupported array element type");
     }
-    Array *out = createTensor(dtype, input->shapeSpan(), allocator);
-    if (dtype == input->dtype()) {
-        if (input->byteSize() > 0) {
-            std::memcpy(out->rawData(), input->rawData(), input->byteSize());
-        }
-        return out;
-    }
-    dispatchDType(dtype, [&]<typename T>() {
-        convertBuffer<T>(Operand::of(input), out->dataAs<T>());
-    });
-    return out;
+    // The conversion of a type name applied to an array is the core's (camel/core/array_convert.h).
+    return camel::core::convertArrayElements(input, dtype, allocator);
 }
 
 Array *

@@ -2,18 +2,35 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Computed signatures of the `ckpt` module (C++ operators, modules/ckpt): checkpoints of a
- * parameter tree. Both are generic over the tree, and the leaf types a checkpoint can hold
- * (an array, `Bytes`, `string`, `bool`, `i32`, `int`, `f32`, `float`) are a predicate on the type
- * variable, which a declaration cannot state; a tree with any other leaf is a compile-time error
- * that names the path of the leaf.
+ * Checkpoints of a parameter tree. A tree is a struct or a tuple whose members are trees or
+ * leaves; a checkpoint holds the leaves an array of numbers, `Bytes`, `string`, `bool`, `i32`,
+ * `int`, `f32` and `float` can be written as (`has_ckpt_form`), and a tree with any other leaf is
+ * refused where the call is written.
  *
- * The tree is the data, the directory is where it goes: `tree->save_tree<dir>` and
- * `dir->load_tree::<T>`. `tree_leaves` is not here: it is the tree library's.
- *
- * For reference only: these declarations are not compiled. They are checked against the operators
- * the module registers, and docs/stdlib-reference.md is generated from them.
+ * The tree is the data, the directory is where it goes: `tree->save_tree<dir: 'out/ckpt'>` and
+ * `'out/ckpt'->load_tree::<T>`. A failure of the file system is an error value; a directory that
+ * holds something other than a tree of the type asked for is an error value too. Walking a tree is
+ * the tree library's (`stdlib/tree.cml`), not this module's.
  */
+
+import { is_numeric, ElementOf } from types
+
+// Whether a value of type `T` can be held by a checkpoint: the leaf types the files are written
+// in, and a struct or a tuple of such. Asked where the call is compiled, so a tree with any other
+// leaf is refused there.
+func has_ckpt_form::<T>(): bool {
+    return match type T {
+        case Bytes | string | bool | i32 | int | f32 | float => true
+        case array => is_numeric::<ElementOf<T>>()
+        case struct | tuple => every_member_ckpt::<T>()
+        case _ => false
+    }
+}
+
+// Every member of a struct or tuple can be held by a checkpoint.
+func every_member_ckpt::<T>(): bool {
+    return static loop every = true for n, F in fields T do every && has_ckpt_form::<F>()
+}
 
 /// Saves a tree to a directory, one file per leaf named by its path (`blocks.0.w.npy` for an
 /// array), with a manifest that records the types, sizes and SHA-256 sums and, when
@@ -28,8 +45,9 @@
 /// @fails error value `PermissionDenied` when the file system refuses a write; error value `IOError` when the directory cannot be written or published, or a symbolic link is in the way
 /// @example-fragment the tree comes from the surrounding program
 /// @example { w: 1.0, step: 10 }->save_tree<dir: 'out/ckpt'>
+#op('ckpt:save_tree')
 with <dir: string, dataset_manifest_sha256: string? = null>
-export func save_tree::<T>(tree: T): void! uses fs
+export func save_tree::<T>(tree: T): void! uses fs when has_ckpt_form::<T>()
 
 /// Reads a tree of the type T back from a directory `save_tree` wrote, checking the structure, the
 /// types, the sizes and the SHA-256 sums first: nothing is partly loaded. A
@@ -39,5 +57,6 @@ export func save_tree::<T>(tree: T): void! uses fs
 /// `.<name>.ckpt-previous` sibling is read instead, with a warning on standard error.
 /// @fails error value `NotFound` when there is no checkpoint at the path; error value `CheckpointError` when the directory does not hold a tree of the type T, or a file is missing or does not match its recorded sum
 /// @example 'out/ckpt'->load_tree::<{ w: float, step: int }> !! { w: 0.0, step: 0 }
+#op('ckpt:load_tree')
 with <dataset_manifest_sha256: string? = null>
-export func load_tree::<T>(dir: string): T! uses fs
+export func load_tree::<T>(dir: string): T! uses fs when has_ckpt_form::<T>()

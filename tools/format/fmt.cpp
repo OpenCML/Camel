@@ -1326,6 +1326,33 @@ any Formatter::visitTypeCase(cst::TypeCase context) {
 }
 
 /*
+matchTypeType
+    : 'match' 'type' typeExpr '{' typeArm* '}'
+    ;
+*/
+any Formatter::visitMatchTypeType(cst::MatchTypeType context) {
+    return "match type " + formatTypeInTypePosition(context->type()) + " {" +
+           formatList(
+               vec(context->all<cst::TypeArm>()),
+               context,
+               " ",
+               "",
+               PaddingNL | Multiline | PushScope) +
+           "}";
+}
+
+/*
+typeArm
+    : CASE typeCasePattern ('|' typeCasePattern)* '=>' typeExpr
+    ;
+*/
+any Formatter::visitTypeArm(cst::TypeArm context) {
+    return "case " +
+           formatList(vec(context->all<cst::TypeCasePattern>()), context, " | ", " |") + " => " +
+           any_cast<string>(visit(context->type()));
+}
+
+/*
 typeCasePattern
     : 'struct' | 'tuple' | '#' 'leaf' | '_'
     ;
@@ -2171,6 +2198,8 @@ any Formatter::dispatch(syn::Node context) {
         CAMEL_FORMAT(ArrayType)
         CAMEL_FORMAT(ArrayDim)
         CAMEL_FORMAT(SpecType)
+        CAMEL_FORMAT(MatchTypeType)
+        CAMEL_FORMAT(TypeArm)
         CAMEL_FORMAT(ConstData)
         CAMEL_FORMAT(StructType)
         CAMEL_FORMAT(EnumType)
@@ -2196,14 +2225,6 @@ any Formatter::dispatch(syn::Node context) {
         return "(" + any_cast<string>(visit(context.type())) + ")";
     case NK::TypeOfType:
         return "typeof " + any_cast<string>(visit(context.expr()));
-    case NK::TypeCallType: {
-        // `f::<A, B>()`: the name, then the type arguments as a specialization writes its own.
-        const auto call             = cst::TypeCallType(context);
-        vector<syn::Node> arguments = vec(call->types());
-        string result               = any_cast<string>(visitType(arguments[0]));
-        arguments.erase(arguments.begin());
-        return result + "::<" + formatList(arguments, call, ", ", ",", PushScope) + ">()";
-    }
     case NK::ShapeComp: {
         // `T { static for n, F in fields U => e }`: the shape is written as a type, and the
         // generator prints as it does on its own; the braces are tokens, so the generator is
