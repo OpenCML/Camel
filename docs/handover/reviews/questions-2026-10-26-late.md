@@ -371,3 +371,11 @@ H233（`graph`、`rewrite`、`rules`、`opt` 改成以函数为中心，`Program
    - **`merge_sort` 的 100M `timeit` 超过 180 s 存活上限**：原因是原生 `merge` 按草稿删掉了，归并改用 Camel 写（决策者这边的改动）。批次点上按新程序在静默机上重测；若 nvm 下仍超过存活上限，把这两条的规模降到存活上限以内，并在 `desc` 里写明原因。jit、prl 的读数照常记录。
    - **`reduce_layout.count`（"the reduction moved"）**：多半是 `array` 换入后归约核函数变了，决策者这边查。
 5. **新基线快层那 12 条**：`declaration_evaluator`（`tensor:divide` 的声明）和 `registry.*` 由决策者这边在下次开工时先查，`docs.*` 里 `cli.md:234` 的"遍名后接 `(`"那条也一并改。`peek_loop` 的上限第一条车道已经按实测调过（在 fsh-dev 上）。
+
+## 归属调整（负责人 2026-10-27）：张量翻转与 `tensor`/`nn`/`optim` 由决策者这边接
+
+交接说明 5.00 里的 P4 张量翻转（`Tensor` 并进原生多维数组），以及 `tensor`、`nn`、`optim` 三个模块的接入，从现在起由决策者这边做，你们这条线不再排它。
+- 你们手上与它相邻的项照旧做，开工前在这里登记，避免撞车：
+  - 优化器用汇合配对参数与梯度（`perf/training_steps`）；
+  - `std::cpp` 翻译张量核函数。
+- H242 同步边的整批仍是你们的最优先，与 P4 改的代码区域不重叠。
