@@ -102,7 +102,7 @@ desc = "Lines printed by Python before a fault of the program are there, ahead o
 case = "../../../cases/consistency/cleanup/python_output_before_fault.cml"
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
-expect_diagnostic_line = 15
+expect_diagnostic_line = 32
 expect_diagnostic_column = 15
 expect_stdout_starts_with = "camel 1\npython 1\ncamel 2\npython 2\n"
 

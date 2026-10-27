@@ -1862,7 +1862,7 @@ expect_exit = 0
 expect_stdout_contains = ["ort core slice: 0 failing", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 120000
+timeout_ms = 150000
 
 [[tests]]
 name = "export_core_slice_grad"

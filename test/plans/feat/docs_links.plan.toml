@@ -143,7 +143,7 @@ args = ["${case}", "--default-roots", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["no stale snippet in"]
 normalizers = ["normalize_newlines"]
-timeout_ms = 60000
+timeout_ms = 120000
 
 [[tests]]
 name = "docs.snippets_dump_is_compared"

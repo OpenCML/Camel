@@ -19,7 +19,7 @@ Source: `docs/stdlib-reference.md`, generated from the declarations in `stdlib/*
 `node scripts/stdlib-reference.mjs --write`.
 
 <!-- camel-for-ai region: stdlib-signatures (generated from docs/stdlib-reference.md; node scripts/camel-for-ai.mjs --write) -->
-**`Built-in functions`** — no import — 55 name(s)
+**`Built-in functions`** — no import — 63 name(s)
 
 ```text
 std::mem::blocks: () => { allocs: int, frees: int, live: int, bytes: int }
@@ -31,6 +31,14 @@ f64: (x: S) => float when is_real::<S>() || is_string::<S>()
 f32: (x: S) => f32 when is_real::<S>() || is_string::<S>()
 bf16: (x: S) => bf16 when is_real::<S>() || is_string::<S>()
 f16: (x: S) => f16 when is_real::<S>() || is_string::<S>()
+i32: (x: T[]) => i32[..] when is_numeric::<T>()
+i64: (x: T[]) => int[..] when is_numeric::<T>()
+int: (x: T[]) => int[..] when is_numeric::<T>()
+f32: (x: T[]) => f32[..] when is_numeric::<T>()
+f64: (x: T[]) => float[..] when is_numeric::<T>()
+float: (x: T[]) => float[..] when is_numeric::<T>()
+bf16: (x: T[]) => bf16[..] when is_numeric::<T>()
+f16: (x: T[]) => f16[..] when is_numeric::<T>()
 c64: (x: S) => c64 when is_real::<S>() || is_complex::<S>()
 c128: (x: S) => c128 when is_real::<S>() || is_complex::<S>()
 string: (x: T) => string
@@ -130,7 +138,7 @@ tree_reduce: <f: (acc: R, leaf: A) => R> (t: T, init: R) => R
 tree_unzip: (r: R, s: S) => ?
 ```
 
-**`tensor`** — import { ... } from tensor — 76 name(s)
+**`tensor`** — import { ... } from tensor — 68 name(s)
 
 ```text
 new: (values: float[..] | number[]) => float[..]
@@ -190,14 +198,6 @@ matmul: (lhs: float[..], rhs: float[..]) => float[..]
 linear: (x: f32[..], weight: f32[..], bias?: f32[..]) => f32[..]
 zeros_like: (t: float[..]) => float[..]
 ones_like: (t: float[..]) => float[..]
-i32: (t: float[..] | number[]) => i32[..]
-i64: (t: float[..] | number[]) => int64[..]
-int: (t: float[..] | number[]) => int64[..]
-f32: (t: float[..] | number[]) => f32[..]
-f64: (t: float[..] | number[]) => f64[..]
-float: (t: float[..] | number[]) => f64[..]
-bf16: (t: float[..] | number[]) => bf16[..]
-f16: (t: float[..] | number[]) => f16[..]
 load_npy: (path: string) => T[..]
 show: (t: A[..]) => void
 from_bytes: (bytes: Bytes, shape: int[]) => T[..] when is_plain::<T>()
