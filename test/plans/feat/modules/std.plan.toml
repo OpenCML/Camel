@@ -194,6 +194,17 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
 [[tests]]
+name = "python.no_python_form"
+desc = "A value without a Python form (a map) is refused where `to_py` is called: the condition `has_python_form` of the declaration is false for it."
+kind = "negative"
+case = "../../../cases/modules/std/python/err_no_python_form.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["err_no_python_form.cml:6:18", "No candidate of 'to_py' applies to", "when has_python_form::<T>()", "name=SemanticDiag::WhenConditionUnmet"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 10000
+
+[[tests]]
 name = "random.basic"
 desc = "Exercises seeded random generation APIs so deterministic behavior can be observed."
 kind = "behavior"
