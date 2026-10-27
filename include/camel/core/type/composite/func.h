@@ -91,6 +91,17 @@ class FunctionTypeFactory {
         argNames_.push_back(ident);
     }
 
+    /// The `with` parameters end in a pack (`with <..args>`): it stands for the `with` arguments
+    /// a call gives beyond the fixed ones, of any types, and is added after every other `with`
+    /// parameter as a `void` parameter no call passes a value for. Only a declaration without a
+    /// body (the rule of a native operator, which takes its arguments as they come) and a
+    /// function type write one.
+    void addWithRest(const std::string &ident) {
+        hasWithRest_ = true;
+        withTypes_.emplace_back(Type::Void(), false);
+        argNames_.push_back(ident);
+    }
+
     /// A `constas n: T` parameter: it records a compile-time value that is part of the
     /// declaration's identity, not a runtime argument (design principles 5.4). Its type stays in
     /// the signature so that the call site is checked against it, and the recorded index tells it
@@ -119,6 +130,7 @@ class FunctionTypeFactory {
     Type *exitType_ = nullptr;
     bool hasNames_  = true;
     bool hasRest_   = false;
+    bool hasWithRest_ = false;
     std::vector<std::string> argNames_;
     sem::ResourceSignature resources_;
     /// The parameters written with `constas`, as indices over all parameters (`with` first).
@@ -187,6 +199,9 @@ class FunctionType : public CompositeType {
     /// signature is `void`; the tuple of the arguments it receives is made at the call.
     bool hasRest() const { return hasRest_; }
 
+    /// Whether the last `with` parameter is a pack (`with <..args>`); its type here is `void`.
+    bool hasWithRest() const { return hasWithRest_; }
+
     /// Whether the signature has a `constas n: T` parameter, which ones they are (indices over
     /// all parameters, `with` parameters first), and whether a given parameter is one.
     bool hasConstas() const { return !constasIndices_.empty(); }
@@ -248,6 +263,7 @@ class FunctionType : public CompositeType {
         Type *exitType   = nullptr;
         bool hasNames    = false;
         bool hasRest     = false;
+        bool hasWithRest = false;
         std::vector<uint16_t> constasIndices;
         /// The `with` parameters whose argument must be a compile-time value (see addWithArg).
         std::vector<uint16_t> withConstIndices;
@@ -294,6 +310,7 @@ class FunctionType : public CompositeType {
     uint16_t normCount_ = 0;
     bool hasNames_      = false;
     bool hasRest_       = false;
+    bool hasWithRest_   = false;
     /// The parameters written with `constas`, as indices over all parameters (`with` first):
     /// a compile-time value at the call, not a runtime parameter (design principles 5.4).
     std::vector<uint16_t> constasIndices_;

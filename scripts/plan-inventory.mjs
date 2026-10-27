@@ -294,11 +294,17 @@ const INDEX_FILES = new Set(['test/plan-selection.json'])
 // benchmark pipeline, which is a harness of its own outside the plans.
 const NAMING_ROOTS = ['test/', 'scripts/', 'src/', 'include/', 'stdlib/', 'modules/', 'tools/', 'examples/', 'exemplars/']
 
+// What the runner writes while it runs (a million files after a few weeks of runs) is not part of
+// the tree the ledger judges: the walk would read it all, and the check would grow with the
+// history of the checkout instead of with the repository.
+const RUN_OUTPUT_DIRS = new Set(['test/results', 'test/tmp', 'node_modules'])
+
 function walkTreeFiles(dir) {
     const out = []
     const walk = (abs, prefix) => {
         for (const name of fs.readdirSync(abs).sort()) {
             const child = `${abs}/${name}`
+            if (RUN_OUTPUT_DIRS.has(`${prefix}/${name}`) || name === 'node_modules') continue
             if (fs.statSync(child).isDirectory()) walk(child, `${prefix}/${name}`)
             else out.push(`${prefix}/${name}`)
         }

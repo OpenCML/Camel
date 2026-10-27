@@ -1,0 +1,9 @@
+// A pack among the `with` parameters needs a declaration without a body.
+with <..args>
+func bad(x: int): int {
+    return x
+}
+
+func main(): int sync {
+    return 0
+}

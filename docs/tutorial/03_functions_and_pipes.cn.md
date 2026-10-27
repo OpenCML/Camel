@@ -72,7 +72,7 @@ camel docs/tutorial/examples/03_functions.cml
 <!-- camel-snippet: fragment: 一行链式调用，xs 来自上下文，不是一份完整的程序 -->
 
 ```cml
-let ys = xs->map<(x: int): int => x * x>->filter<(x: int): bool => x % 2 == 0>
+let ys = xs->map<(x) => x * x>->filter<(x) => x % 2 == 0>
 ```
 
 ## lambda：没有名字的函数
@@ -89,8 +89,8 @@ func main(): int sync {
     let twice = (x: int): int => x * 2
     println(twice(21))
 
-    println([1, 2, 3]->map<(x: int): int => x + 10>)
-    println([1, 2, 3, 4]->filter<(x: int): bool => x % 2 == 0>)
+    println([1, 2, 3]->map<(x) => x + 10>)
+    println([1, 2, 3, 4]->filter<(x) => x % 2 == 0>)
     return 0
 }
 ```

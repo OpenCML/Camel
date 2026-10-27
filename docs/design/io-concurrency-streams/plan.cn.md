@@ -12,7 +12,7 @@
 2. **`f..g` 与 `?..` 今天都是硬错误，而且是同一个诊断**：`Builder::visitCompExpr` 对 `..` 报「function composition is not implemented」，对 `?..` 报「the operator is not implemented」，两处都是 `SemanticDiag::ConstructNotSupported`。诊断**不看操作数类型**：实测 `let xs = 1..5` 拿到的仍是「function composition is not implemented」——即「两边是数时是区间」这条读法今天连诊断都没有对应物。今天等价的区间写法是库函数 `range(start, end)`。
 3. **`yield` 不是关键字**：实测 `let yield = 1; println(yield)` 编译并打印 `1`。`include/camel/parse/syntax/token_kinds.def` 的词法表里没有 `yield`；`src/parse/ast/stmt.cpp` 里出现的 `"yield"` 只是 `ExitStmt` 的打印名，与生成器无关。
 4. **流类型不存在，而且是核心类型层面的缺口**：`TypeCode` 枚举（`include/camel/core/type/base.h#TypeCode`）没有流；`include/camel/core/type/composite/array.h#ArrayType` 的开秩形状 `[..]` 是**最接近**的邻居，但它是数组（有长度、可下标、可追加），不是按需产生的序列。写 `T..` 今天在**类型位置**是语法错误（实测 `let s: int.. = [1, 2, 3]` → `SyntaxDiag::UnexpectedToken`「Unexpected '..'; expected '='.」）；`as int..` 同样（「expected '}'.」）。
-5. **`map`/`filter`/`reduce`/`foreach` 今天只作用于数组**，是 `:mark/*_arr` 一类**带 `with` 参数的算子**（`src/builtin/modules/globals.cpp#map_arr` 等，`stdlib/signatures/globals.cml#map` 的声明是 `with <f: (item: T) => U> (collect: T[]) => U[]`）。流的对应物（`scan`/`batch`/`zip` 流版/`take` 流版）**一个都没有**：实测在 `stdlib/` 与 `src/builtin/modules/` 里 `scan`、`batch`、`unfold`、`tee`、`window` 的声明数都是 0。`fold` 今天只有两个**遍**叫这个名字（`stdlib/std.cml#fold`、`stdlib/opt.cml#fold`），不是流折叠；数组的折叠叫 `reduce`。
+5. **`map`/`filter`/`reduce`/`foreach` 今天只作用于数组**，是 `:mark/*_arr` 一类**带 `with` 参数的算子**（`src/builtin/modules/globals.cpp#map_arr` 等，`stdlib/prelude.cml#map` 的声明是 `with <f: (item: T) => U> (collect: T[]) => U[]`）。流的对应物（`scan`/`batch`/`zip` 流版/`take` 流版）**一个都没有**：实测在 `stdlib/` 与 `src/builtin/modules/` 里 `scan`、`batch`、`unfold`、`tee`、`window` 的声明数都是 0。`fold` 今天只有两个**遍**叫这个名字（`stdlib/std.cml#fold`、`stdlib/opt.cml#fold`），不是流折叠；数组的折叠叫 `reduce`。
 6. **驻留今天只是一个「推断 + 打印」，不插节点、不驱动执行**：`modules/tiles/src/residency.cpp#residencyReport` 按 `docs/design/gpu/plan.cn.md` 3.2 从图推出「每个值的块在哪、哪些值跨边界、调用搬不搬」，由 `modules/tiles/src/region_pass.cpp#RegionPass` 印成 `TILES_RESIDENCY`，注释明写 *"It reads the graph; it inserts no node yet."*。所以任务书第 4 条要的「涉及流的图可以驻留执行」今天**没有任何可复用的执行器**；可复用的是这套**推断的形状**（owner 表 + 跨边界计数 + 循环状态留在原地）。
 7. **规则引擎今天表达不了 `map` 融合，有两道各自独立的门**：（a）**项读取器**只接受算子、常量、参数，并且**明确拒绝带上下文（`with`）参数的算子**（`src/runtime/rules.cpp#SideReader::term`：「has an operator with a context argument or an order dependency」），而 `map` 的 `f` 正是 `with` 参数——实测 `std::gir` 里两个 map 节点各有一条 `type="WITH"` 的入边（`Function(graph=dbl, tupleSlots=0) -> N0A`）；（b）**规则的形参表写不出函数类型**：`rule h248_map_comp(xs: int[], f: (int) => int, g: (int) => int)` 在 `)` 处报 `SyntaxDiag::MissingComma`。另外规则体里必须写 `map<inc>(xs)` 而不是 `map(xs, inc)`（实测 `SemanticDiag::NoMatchingFunction` 给了这句话），所以融合规则的**左式拼写**已经定死为尖括号形式（泛型规则写法也在同一层）。
 8. **`for x in s` 今天只认数组、字符串、映射、张量**：`src/compile/gir/builder_control.cpp#LoopSequenceNotIterable` 的消息把四类逐一列出，**没有流**。扩展点是现成的：`src/builtin/modules/globals.cpp#__iter__` 是一个「每种可遍历类型一个重载」的算子组，张量模块与映射已经各加了一个。
@@ -78,18 +78,18 @@ pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 `
 
 | 名字 | 今天在哪 | 形态 |
 |---|---|---|
-| `map` | `stdlib/signatures/globals.cml#map`；`src/builtin/modules/globals.cpp#map_arr`（`:mark/map_arr`） | `with <f: (item: T) => U> (collect: T[]) => U[]`；**只接受 `TypeCode::Array`**（resolver 里 `norm[0]->code() != TypeCode::Array` 直接 `return nullopt`） |
-| `filter` | `stdlib/signatures/globals.cml#filter`；`globals.cpp` 的 `:mark/filter_arr` | 同上，退出类型必须是 `bool` |
-| `reduce` | `stdlib/signatures/globals.cml#reduce`（`:mark/reduce_arr`） | 数组的左折叠；**不是流折叠** |
-| `foreach` | `stdlib/signatures/globals.cml#foreach` | 数组的按序副作用 |
+| `map` | `stdlib/prelude.cml#map`；`src/builtin/modules/globals.cpp#map_arr`（`:mark/map_arr`） | `with <f: (item: T) => U> (collect: T[]) => U[]`；**只接受 `TypeCode::Array`**（resolver 里 `norm[0]->code() != TypeCode::Array` 直接 `return nullopt`） |
+| `filter` | `stdlib/prelude.cml#filter`；`globals.cpp` 的 `:mark/filter_arr` | 同上，退出类型必须是 `bool` |
+| `reduce` | `stdlib/prelude.cml#reduce`（`:mark/reduce_arr`） | 数组的左折叠；**不是流折叠** |
+| `foreach` | `stdlib/prelude.cml#foreach` | 数组的按序副作用 |
 | `fold` | `stdlib/std.cml#fold`、`stdlib/opt.cml#fold` | **两个遍**，与折叠无关 |
-| `zip` | `stdlib/signatures/globals.cml#zip`（`:struct/zip`） | 数组的元组化；要求各参数都是数组 |
+| `zip` | `stdlib/prelude.cml#zip`（`:struct/zip`） | 数组的元组化；要求各参数都是数组 |
 | `take` | `stdlib/array.cml#take`（数组）；`stdlib/signatures/tensor.cml#take`（张量按下标取行） | **没有流版** |
 | `sum`/`max` | `stdlib/array.cml#sum`、`stdlib/array.cml#max` | 数组归约 |
-| `range` | `stdlib/signatures/globals.cml#range` | `range(start, end): int[]`——今天「区间」的等价写法 |
+| `range` | `stdlib/prelude.cml#range` | `range(start, end): int[]`——今天「区间」的等价写法 |
 | `scan`/`batch`/`unfold`/`tee`/`window` | **无**（实测 0 处声明） | 全部是新东西 |
 
-数组高阶算子有一个可复用的**形状**：`src/builtin/executors/builtin_semantics.cpp` 的 `OperatorSemantics::elementCalls`（`ElementShape::Fold`、`independent`）是「调度器有更快跑法」的那一项，流版的按需/逐元素执行应当在这个形状上加一套，而不是新造机制。`map`/`filter` 今日的语义**本来就声明成「元素之间没有顺序、按位置给结果」**（`stdlib/signatures/globals.cml` 的 `// ---- higher-order functions ----` 段：*"`map` and `filter` apply f to the elements with no order among the calls"*）——这与流要的「每条边上元素保持先后」**不是同一条**，是缺口 1.6-c。
+数组高阶算子有一个可复用的**形状**：`src/builtin/executors/builtin_semantics.cpp` 的 `OperatorSemantics::elementCalls`（`ElementShape::Fold`、`independent`）是「调度器有更快跑法」的那一项，流版的按需/逐元素执行应当在这个形状上加一套，而不是新造机制。`map`/`filter` 今日的语义**本来就声明成「元素之间没有顺序、按位置给结果」**（`stdlib/prelude.cml` 的 `// ---- higher-order functions ----` 段：*"`map` and `filter` apply f to the elements with no order among the calls"*）——这与流要的「每条边上元素保持先后」**不是同一条**，是缺口 1.6-c。
 
 ### 1.7 驻留执行今天能表达什么
 
@@ -264,7 +264,7 @@ G5/G7/G8 + GPU/JAX ── G11 ── G12
 #### 片 C：流上的纯算子
 
 - `map`/`filter`/`scan`/`fold`/`batch`/`zip` 对流的重载。**`map`/`filter`/`scan`/`fold`/`batch`/`zip` 是纯的**（任务书第 2 条）：它们不产生效应，不在同步/顺序边上，图上与 `:mark/map_arr` 同类，走 `src/builtin/executors/builtin_semantics.cpp#OperatorSemantics` 的 `elementCalls` 形状。
-- **必须同时解决的语义分叉**：数组版 `map`/`filter` 今天声明为「元素之间无顺序、按位置给结果」（`stdlib/signatures/globals.cml` 的段注释）；流版要的是「每条边上元素保持先后」。这是**两条不同的声明**，不能靠同一个 `elementCalls` 混过去。
+- **必须同时解决的语义分叉**：数组版 `map`/`filter` 今天声明为「元素之间无顺序、按位置给结果」（`stdlib/prelude.cml` 的段注释）；流版要的是「每条边上元素保持先后」。这是**两条不同的声明**，不能靠同一个 `elementCalls` 混过去。
 - 红前：今天写不出任何流程序，所以「红前用例」是 B 的 t1 —— C 的验收必须在 B 之后才有意义。
 - 验收：`map`/`filter` 链在没有消费者时**不执行**（用一个会打印的 `f` 验证：只建链不拉取，stdout 为空）。
 
@@ -604,13 +604,13 @@ N09 -> N0A [label="0|0", type="NORM"];
 | 维度包落图 | `src/compile/gct/builder.cpp#DimPack` | 5095–5120、5775–5805 |
 | `map` / `filter` 的类型解析 | `src/builtin/modules/globals.cpp#map_arr` | 2266–2348 |
 | 高阶算子的语义形状 | `src/builtin/executors/builtin_semantics.cpp#ElementCalls` | 190、222 |
-| 数组版签名 | `stdlib/signatures/globals.cml#map` | 385（`zip`）、411–429（`map`/`filter`/`reduce`）、324（`range`） |
+| 数组版签名 | `stdlib/prelude.cml#map` | 385（`zip`）、411–429（`map`/`filter`/`reduce`）、324（`range`） |
 | `__iter__` 扩展点 | `src/builtin/modules/globals.cpp#__iter__` | 1956–1977 |
 | `for` 的不可遍历诊断 | `src/compile/gir/builder_control.cpp#LoopSequenceNotIterable` | 2155–2188 |
 | 循环区域模型 | `include/camel/runtime/loop.h#LoopView` | 4–40（收集槽 20–28、语义 30–34） |
 | 规则项读取器的拒绝 | `src/runtime/rules.cpp#SideReader::term` | 107–148（`with`/控制 133–135、默认分支 146–147） |
 | 规则编译错误的措辞 | `src/runtime/rules.cpp#SideReader::fail` | 67–71 |
-| 融合规则的先例与「不能写什么」 | `stdlib/rules.cml#tensor_sigmoid_chain` | 690–737 |
+| 融合规则的先例与「不能写什么」 | `stdlib/rules.cml#array_sigmoid_chain` | 373–374 |
 | 驻留推断 | `modules/tiles/src/residency.cpp#residencyReport` | 81–180（`TILES_RESIDENCY` 在 177） |
 | 驻留报告的接口 | `modules/tiles/include/tiles/internal/residency.h#residencyReport` | 23–25 |
 | 「只读不插节点」 | `modules/tiles/src/region_pass.cpp#RegionPass` | 43–49 |

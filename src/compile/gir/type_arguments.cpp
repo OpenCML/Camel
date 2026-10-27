@@ -96,6 +96,14 @@ FunctionType *Builder::signatureForArgumentContext(node_handle_t target, size_t 
             if (fixed == nullptr && resolver) {
                 fixed = resolver->declaredSignature();
             }
+            if (fixed == nullptr && resolver) {
+                fixed = resolver->graftedSignature();
+                // A rest parameter takes arguments of any types and is expanded at the call: it's
+                // not a position an argument is held to a type at.
+                if (fixed != nullptr && (fixed->hasRest() || fixed->hasWithRest())) {
+                    fixed = nullptr;
+                }
+            }
             if (fixed == nullptr || fixed->withTypesCount() < withWritten) {
                 continue;
             }

@@ -222,6 +222,7 @@ const MODULES = [
         // 
         source: 'json.cml',
         declaration: true,
+        computed: 'signatures/json.cml',
     },
     {
         name: 'hash',
@@ -309,8 +310,12 @@ const MODULES = [
         name: 'python',
         title: '`python`: the embedded interpreter',
         kind: 'cpp',
+        // Seven fixed signatures are declared in stdlib/python.cml; `py_wrap`/`py_unwrap` move a
+        // type through the module type `PyObject<T>`, so their reference entries live in the
+        // signature file named by `computed:`.
         source: 'python.cml',
         declaration: true,
+        computed: 'signatures/python.cml',
     },
     {
         name: 'nn',
@@ -703,7 +708,8 @@ function readDeclarations(file, module, options = {}) {
             // engine the module implements (`rewrite`, called as `f->rewrite<rules>`).
             const passShaped = (() => {
                 const one = /^\s*\w+\s*:\s*(\w+)\s*$/.exec(args.inner)
-                const answer = /^\s*:\s*(\w+)!\s*(?:uses\s+\w+\s*)?when\b/.exec(after)
+                // A pass may name the resources it uses (`uses driver`) before its condition.
+                const answer = /^\s*:\s*(\w+)!\s*(?:uses\s+[\w:, ]+?\s+)?when\b/.exec(after)
                 return one !== null && answer !== null && one[1] === answer[1]
             })()
             if (!relative.startsWith('stdlib/signatures/') && !declarationBody(after, lines, i) &&

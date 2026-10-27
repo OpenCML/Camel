@@ -13,7 +13,7 @@ in the tests with `DESIGN-QUESTION(<label>)`, so that a rule can be applied in o
 The name `attempt` is settled (design principles 3.9). In the C++ sources it is written in exactly one place,
 `camel::execute::kFaultIsolationName` (`include/camel/execute/fault_isolation.h`); everything
 else refers to the operator by its URI `:mark/isolate`, which does not contain the name.
-Outside C++ the name is in the signature entry (`stdlib/signatures/globals.cml`), the
+Outside C++ the name is in the signature entry (`stdlib/prelude.cml`), the
 generated `docs/stdlib-reference.md`, this note, and the test programs.
 
 ## 1. Surface form and graph mapping

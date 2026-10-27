@@ -101,7 +101,7 @@ expect_output_contains = ["name=SemanticDiag::ComprehensionSourceRefused", "has 
 
 [[tests]]
 name = "comprehension.err_condition_type"
-desc = "A condition that is not a bool is refused by filter."
+desc = "A condition that is not a bool is refused: the element function the filter is given returns int where the declaration of filter wants bool."
 kind = "negative"
 case = "../../../cases/consistency/comprehension/err_condition_type.cml"
 args = ["-E", "short", "${case}"]
@@ -109,7 +109,7 @@ backends = ["nvm"]
 backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "live DREF"]
-expect_output_contains = ["name=SemanticDiag::NoMatchingFunction", "<(x: int) => int pure> (int[])"]
+expect_output_contains = ["name=SemanticDiag::GenericFunctionAsValue", "it returns 'int', and the function expected here is '(item: int) => bool'"]
 
 [[tests]]
 name = "comprehension.err_element_type"

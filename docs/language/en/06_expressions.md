@@ -109,8 +109,8 @@ func main(): int sync {
 ```cml
 func main(): int sync {
     let total = 1..6
-        ->map<(x: int): int => x * x>
-        ->filter<(x: int): bool => x % 2 == 1>
+        ->map<(x) => x * x>
+        ->filter<(x) => x % 2 == 1>
         ->reduce<(acc: int, x: int): int => acc + x, 0>
     println(`total = ${total}`)
     return 0
@@ -612,7 +612,7 @@ A function type is written `(x: T) => R`, and the parameters must be named: `(x:
 
 **Where a parameter type comes from.** A lambda parameter whose type is not written takes it, and an omitted return type too, from the function type of the position the lambda stands in. There are three such positions:
 
-- An argument: a call of a function whose parameter is of function type, and a `with` argument in the same way.
+- An argument: a call of a function whose parameter is of function type, and a `with` argument in the same way. The built-in functions are the same: their signatures are written in the standard library's `stdlib/prelude.cml`, so the `x` of `xs->filter<(x) => x > 0>` and of `xs->foreach<(x) => println(x)>` is the element type of `xs`. A lambda written right after `->` takes the type of the value on its left (`x->(v) => v + 1`).
 
   <!-- camel-snippet: fragment: a call shown inside the block it would be written in -->
 
@@ -699,10 +699,10 @@ func main(): int sync {
 ```cml
 func main(): int sync {
     let xs = 1..6
-    println(xs->map<(x: int): int => x * x>)
-    println(xs->filter<(x: int): bool => x % 2 == 0>)
+    println(xs->map<(x) => x * x>)
+    println(xs->filter<(x) => x % 2 == 0>)
     println(xs->reduce<(acc: int, x: int): int => acc + x, 0>)
-    xs->filter<(x: int): bool => x > 3>->foreach<(x: int) => sync { println('item', x) }>
+    xs->filter<(x) => x > 3>->foreach<(x) => sync { println('item', x) }>
     return 0
 }
 ```

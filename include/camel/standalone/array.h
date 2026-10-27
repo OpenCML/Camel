@@ -148,6 +148,17 @@ template <typename T> T at(const Array<T> &xs, int64_t index, const Site &site) 
     return xs[static_cast<std::size_t>(index)];
 }
 
+/// A type name applied to an array (:op/atoi, :op/atol, :op/atof, :op/atod): every element converted
+/// by the C++ conversion, which is what the runtime's does (core/array_convert.h).
+template <typename To, typename From> Array<To> convertArray(const Array<From> &xs) {
+    Array<To> out;
+    out.reserve(xs.size());
+    for (const From &x : xs) {
+        out.push(static_cast<To>(x));
+    }
+    return out;
+}
+
 /// `xs->append<x>` (:struct/append_arr): a new array, `xs` followed by `x`.
 template <typename T> Array<T> append(Array<T> xs, std::type_identity_t<T> item) {
     xs.push(std::move(item));

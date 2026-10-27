@@ -45,6 +45,15 @@ hints - loops that run on the host element by element
 compilation - self time by phase
  parse fusion_group_none <time>
  compile fusion_group_none <time>
+ parse prelude <time>
+ gct prelude <time>
+ resolve types <time>
+ parse types <time>
+ gct types <time>
+ (counting) <time>
+ declare types <time>
+ (counting) <time>
+ declare prelude <time>
  gct fusion_group_none <time>
  resolve tensor <time>
  cmo_load tensor <time>
@@ -53,10 +62,6 @@ compilation - self time by phase
  parse tensor <time>
  gct tensor <time>
  resolve types <time>
- parse types <time>
- gct types <time>
- (counting) <time>
- declare types <time>
  (counting) <time>
  declare tensor <time>
  parse autodiff <time>

@@ -42,6 +42,11 @@ namespace camel::compile {
 class SemanticRecorder;
 }
 
+namespace camel::core::type {
+class FuncTypeResolver;
+class FunctionType;
+} // namespace camel::core::type
+
 // Forward declarations for execute (avoid circular include with executor.h)
 class Executor;
 class ExecutorManager;
@@ -199,7 +204,7 @@ class Context : public std::enable_shared_from_this<Context> {
     module_ptr_t loadModuleFrom(const std::string &moduleName, const std::string &path, bool isCmo);
 
   public:
-    /// The prelude's declaration file (`signatures/globals.cml` of a module root) is the one source
+    /// The prelude's declaration file (`prelude.cml` of a module root) is the one source
     /// of the built-in signatures, so it is read with every program: a file that does not parse
     /// fails the compile with its own diagnostics, located in that file. Read once. A tree without
     /// the file (a tool run without a standard library) has nothing to read.
@@ -209,11 +214,22 @@ class Context : public std::enable_shared_from_this<Context> {
     /// The module of the prelude's declaration file once it was read, else null: a dependency of
     /// every program.
     module_ptr_t preludeModule() const { return preludeModule_; }
+    /// A declaration of the prelude names the built-in rule `rule` and writes its signature. The
+    /// claims are applied once the whole file is read: a rule that exactly one declaration names
+    /// gets that declaration's signature for the parameters of its calls (an overload set, or a
+    /// family covered by several declarations, gets none of them).
+    void claimBuiltinSignature(
+        const std::shared_ptr<camel::core::type::FuncTypeResolver> &rule,
+        camel::core::type::FunctionType *signature);
 
   private:
     bool preludeChecked_ = false;
     std::string preludeProblem_;
     module_ptr_t preludeModule_;
+    std::vector<std::pair<
+        std::shared_ptr<camel::core::type::FuncTypeResolver>,
+        std::vector<camel::core::type::FunctionType *>>>
+        builtinClaims_;
 
     Context(const EntryConfig &entryConf, const error::DiagsConfig &diagConf);
 
