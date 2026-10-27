@@ -1,0 +1,46 @@
+id = "modules.tensor_int_division"
+order = 367
+tier = "fast"
+tags = ["feat", "modules", "tensor", "integer"]
+desc = "Integer arrays divide as integers do: the quotient of two int arrays is an int array, truncated towards zero and wrapping at the smallest value over -1, a zero divisor is a division-by-zero fault (quotient and remainder alike), and float arrays keep their quotient"
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "int_division.values"
+desc = "int / int is int element by element, with a scalar on either side; -9 / 2 is -4; the smallest int over -1 is the smallest int; the float quotient and the remainder are unchanged. Four back ends."
+kind = "behavior"
+case = "../../../cases/modules/tensor/int_division.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[3, 2, -4]\n[3, 4, -4]\n[10, 6, 10]\n[-9223372036854775808]\n[0.5, 0.5]\n3.5\n[1, 2, -1]\n"
+
+[[tests]]
+name = "int_division.by_zero"
+desc = "An integer array quotient with a zero divisor is a located DivisionByZero after the output before it."
+kind = "negative"
+case = "../../../cases/modules/tensor/int_division_by_zero.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_line = 8
+expect_stdout_starts_with = "before\n"
+
+[[tests]]
+name = "int_division.remainder_by_zero"
+desc = "An integer array remainder with a zero divisor is the same fault (it used to stop the process with SIGFPE)."
+kind = "negative"
+case = "../../../cases/modules/tensor/int_remainder_by_zero.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_line = 8
+expect_stdout_starts_with = "before\n"
