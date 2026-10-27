@@ -708,7 +708,8 @@ function readDeclarations(file, module, options = {}) {
             // engine the module implements (`rewrite`, called as `f->rewrite<rules>`).
             const passShaped = (() => {
                 const one = /^\s*\w+\s*:\s*(\w+)\s*$/.exec(args.inner)
-                const answer = /^\s*:\s*(\w+)!\s*when\b/.exec(after)
+                // A pass may name the resources it uses (`uses driver`) before its condition.
+                const answer = /^\s*:\s*(\w+)!\s*(?:uses\s+[\w:, ]+?\s+)?when\b/.exec(after)
                 return one !== null && answer !== null && one[1] === answer[1]
             })()
             if (!relative.startsWith('stdlib/signatures/') && !declarationBody(after, lines, i) &&

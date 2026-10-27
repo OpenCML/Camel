@@ -5489,17 +5489,6 @@ memory.
 - Failure: error value `DeviceUnavailable` when this build or this machine has no CUDA device.
 - Example: `device() !! 'no device'`
 
-#### `compile`
-
-```camel
-compile: (f: F) => F! uses driver when is_function::<F>()
-```
-
-Outlines the regions the device can run, compiles them and executes the program; the card is
-chosen at run time with `--devices`, never by a pass parameter.
-
-- Failure: error value `GpuScopeUnsupported` when a `#gpu` scope holds an operator the device cannot run (the error names the operator and the scope).
-
 <a id="pyplot"></a>
 
 ## `pyplot`: draw an array
