@@ -297,7 +297,7 @@ Value lowerWhere(const LowerContext &ctx) {
 
 Value lowerCast(const LowerContext &ctx) {
     if (!ctx.result().dtype) {
-        throw ExportError("'tensor:to_*': the target dtype must be an export-time constant");
+        throw ExportError("the target dtype of an array conversion must be an export-time constant");
     }
     return ctx.emit(
         "Cast",
@@ -1320,8 +1320,8 @@ LoweringRegistry::LoweringRegistry() {
     add("tensor:gelu", lowerGelu);
     add("tensor:erf", sameTypeOp("Erf", 1));
     add("tensor:where", lowerWhere);
-    for (const char *uri : {"tensor:to_i32", "tensor:to_i64", "tensor:to_f32", "tensor:to_f64",
-                            "tensor:to_bf16", "tensor:to_f16"}) {
+    // A type name applied to an array is the core's conversion (src/builtin/operators/array_convert.h).
+    for (const char *uri : {":op/atoi", ":op/atol", ":op/atof", ":op/atod", ":op/atobf", ":op/atof6"}) {
         add(uri, lowerCast);
     }
 
