@@ -231,7 +231,7 @@ one value. The `when` clause is the pass's applicability: `is_function::<F>()` i
 checks, and a declaration whose condition is something else is refused rather than applied on an
 assumption. A pass takes the function it is applied to and nothing else: one ordinary parameter. A
 body-less declaration with the same condition and more ordinary parameters is an operator that wants
-a function (`onnx::export_model(f, example)`), and is not a pass.
+a function (`onnx::export_model`, called with the function and an example), and is not a pass.
 
 The call is checked when the pipeline is resolved, before any pass runs, and the refusal is the
 language's own for a call, located at the call and in the semantic stage (`typecheck`):
