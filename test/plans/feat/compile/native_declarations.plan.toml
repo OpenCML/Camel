@@ -1153,7 +1153,7 @@ kind = "negative"
 case = "../../../cases/compile/native/rewrite_arity.cml"
 args = ["check", "${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction","code=0x0300000F","rewrite_arity.cml:15:13","argument types: <> (() => int pure)","<rewrite:rewrite>: <rules: Rule[], strict: bool> (f: F) => F!"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction","code=0x0300000F","rewrite_arity.cml:14:13","argument types: <> (() => int pure)","<rewrite:rewrite>: <rules: Rule[], strict: bool> (f: F) => F!"]
 
 [[tests]]
 name = "native.rewrite_wrong_type"
@@ -1162,7 +1162,7 @@ kind = "negative"
 case = "../../../cases/compile/native/rewrite_type.cml"
 args = ["check", "${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction","code=0x0300000F","rewrite_type.cml:16:13","argument types: <int> (() => int pure)","<rewrite:extract>: <cost: (o: Op, inputs: float[]) => float> (f: F) => F!"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction","code=0x0300000F","rewrite_type.cml:15:13","argument types: <int> (() => int pure)","<rewrite:extract>: <cost: (o: Op, inputs: float[]) => float> (f: F) => F!"]
 
 [[tests]]
 name = "native.rule_reader_declaration_import"
@@ -1302,7 +1302,7 @@ kind = "negative"
 case = "../../../cases/compile/native/graph_constant_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction","code=0x0300000F","graph_constant_arity.cml:12:28","argument types: <> (Node, int)","<graph:constant>: (n: Node) => T?"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction","code=0x0300000F","graph_constant_arity.cml:11:28","argument types: <> (Node, int)","<graph:constant>: (n: Node) => T?"]
 
 [[tests]]
 name = "native.graph_constant_wrong_type"
@@ -1311,7 +1311,7 @@ kind = "negative"
 case = "../../../cases/compile/native/graph_constant_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction","code=0x0300000F","graph_constant_type.cml:10:28","argument types: <> (int)","<graph:constant>: (n: Node) => T?"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction","code=0x0300000F","graph_constant_type.cml:9:28","argument types: <> (int)","<graph:constant>: (n: Node) => T?"]
 
 # ---- The declarations of `graph` itself: the handles, their operators and `type_of` ----
 #
@@ -1338,7 +1338,7 @@ kind = "negative"
 case = "../../../cases/compile/native/graph_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction","code=0x0300000F","graph_arity.cml:10:21","argument types: <> ()","<graph:graph_of>: (f: F) => Graph"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction","code=0x0300000F","graph_arity.cml:9:21","argument types: <> ()","<graph:graph_of>: (f: F) => Graph"]
 
 [[tests]]
 name = "native.graph_wrong_type"
@@ -1347,7 +1347,7 @@ kind = "negative"
 case = "../../../cases/compile/native/graph_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::WhenConditionUnmet","code=0x030001AC","graph_type.cml:11:21","every candidate's 'when' condition is false","(f: F) => Graph"]
+expect_output_contains = ["SemanticDiag::WhenConditionUnmet","code=0x030001AC","graph_type.cml:10:21","every candidate's 'when' condition is false","(f: F) => Graph"]
 
 # ---- The declaration itself is checked: its URI and its result type ----
 
