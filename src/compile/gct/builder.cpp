@@ -3008,11 +3008,25 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
                 // `A = int`: the name as a constant, then the type (design principles 5.9).
                 const auto &named = argument->loadAs<AST::NamedTypeLoad>();
                 *res << tree_->makeData(std::make_shared<StringData>(named->getRef().toString()));
-                *res << tree_->makeType(visitType(argument->at(0)));
+                node_ptr_t namedType = tree_->makeType(visitType(argument->at(0)));
+                setOriginFromAst(
+                    context_,
+                    namedType,
+                    argument->at(0),
+                    camel::source::OriginKind::GctNode,
+                    "gct.type_application.argument");
+                *res << namedType;
                 continue;
             }
-            Type *type = visitType(argument);
-            *res << tree_->makeType(type);
+            Type *type          = visitType(argument);
+            node_ptr_t typeNode = tree_->makeType(type);
+            setOriginFromAst(
+                context_,
+                typeNode,
+                argument,
+                camel::source::OriginKind::GctNode,
+                "gct.type_application.argument");
+            *res << typeNode;
         }
         setOriginFromAst(
             context_,
@@ -6161,9 +6175,12 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
         });
         if (concrete && containsTypeCall(applied)) {
             // The arguments are concrete and the type function does not accept them.
+            std::string what = applied->toString();
+            std::string why  = "it is not defined for the type it is given";
+            describeUnevaluatedTypeCall(applied, what, why);
             diags_->of(SemanticDiag::TypeFunctionNotApplicable)
                 .at(ast->load()->tokenRange())
-                .commit(typeFunc->name() + "<...>", "it is not defined for the type it is given");
+                .commit(what, why);
             throw BuildAbortException();
         }
         LEAVE("SpecType");

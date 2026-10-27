@@ -2423,9 +2423,12 @@ Type *Builder::resolveTypeNode(Type *type, const GCT::node_ptr_t &at) {
     Type *bound = boundType(type);
     if (containsTypeCall(bound) && !containsTypeVar(bound)) {
         // The variables are bound and the type function does not accept what they were bound to.
+        std::string what = bound->toString();
+        std::string why  = "it is not defined for its argument";
+        describeUnevaluatedTypeCall(bound, what, why);
         diags_->of(SemanticDiag::TypeFunctionNotApplicable)
             .atOrigin(at != nullptr ? at->origin() : 0)
-            .commit(bound->toString(), "its argument is not a type it accepts");
+            .commit(what, why);
         throw BuildAbortException();
     }
     return bound;

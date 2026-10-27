@@ -9,6 +9,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/intern.h"
 #include "camel/core/type/text.h"
+#include "camel/core/type/typevar.h"
 #include "camel/utils/assert.h"
 
 #include <algorithm>
@@ -257,6 +258,63 @@ OtherType *MatchTypeType::cloneWithParams(std::span<Type *const> params) const {
         arms.push_back(std::move(arm));
     }
     return create(params[0], arms);
+}
+
+bool describeUnevaluatedTypeCall(Type *type, std::string &what, std::string &why) {
+    if (type == nullptr) {
+        return false;
+    }
+    const auto concrete = [](Type *t) { return !containsTypeVar(t); };
+    if (type->code() == TypeCallType::typeCode()) {
+        const auto *call = static_cast<TypeCallType *>(type);
+        // An argument that is itself a computation which failed is the cause.
+        for (Type *argument : call->paramsSpan()) {
+            if (describeUnevaluatedTypeCall(argument, what, why)) {
+                return true;
+            }
+        }
+        if (std::all_of(call->paramsSpan().begin(), call->paramsSpan().end(), concrete)) {
+            std::string error;
+            if (TypeCallType::evaluate(call->name(), call->paramsSpan(), error) == nullptr) {
+                what = call->toString();
+                why  = error;
+                return true;
+            }
+        }
+        return false;
+    }
+    if (type->code() == MatchTypeType::typeCode()) {
+        const auto *match = static_cast<MatchTypeType *>(type);
+        if (describeUnevaluatedTypeCall(match->subject(), what, why)) {
+            return true;
+        }
+        if (concrete(match->subject())) {
+            what = "match type " + match->subject()->toString();
+            why  = "no case selects " + match->subject()->toString();
+            return true;
+        }
+        return false;
+    }
+    if (type->isOtherType()) {
+        for (Type *param : static_cast<OtherType *>(type)->paramsSpan()) {
+            if (describeUnevaluatedTypeCall(param, what, why)) {
+                return true;
+            }
+        }
+    }
+    switch (type->code()) {
+    case TypeCode::Array:
+        return describeUnevaluatedTypeCall(static_cast<ArrayType *>(type)->elemType(), what, why);
+    case TypeCode::Tuple:
+        for (Type *member : static_cast<TupleType *>(type)->types()) {
+            if (describeUnevaluatedTypeCall(member, what, why)) {
+                return true;
+            }
+        }
+        return false;
+    default:
+        return false;
+    }
 }
 
 bool containsTypeCall(Type *type) {
