@@ -4005,7 +4005,14 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
             continue;
         }
         if (auto modifierNode = modifierOf(arg.node); modifierNode.has_value()) {
-            if (sameGraph(*modifierNode, currGraph_) &&
+            // In a sync block the statement before this call is linked to it below, and when it
+            // already comes after the modifier the modifier's edge says nothing more: the edge
+            // would be a transitive one, which the contract of the control edges leaves out.
+            const bool chainedAfterModifier =
+                synced_ && lastSyncedNode_ != nullptr && sameGraph(lastSyncedNode_, currGraph_) &&
+                runtime::hasControlDependency(
+                    *nodeDraftOf(lastSyncedNode_), nodeIdOf(*modifierNode), nodeIdOf(lastSyncedNode_));
+            if (sameGraph(*modifierNode, currGraph_) && !chainedAfterModifier &&
                 shouldAddSyncCtrlLink(*modifierNode, targetNode)) {
                 linkNodes(LinkType::Ctrl, *modifierNode, targetNode);
             }
