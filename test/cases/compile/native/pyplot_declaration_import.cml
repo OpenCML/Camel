@@ -4,7 +4,6 @@
  * name), eight declarations of the one operator. The calls are type-checked and
  * never run: `plot` writes an image file, so this case stays compile-only.
  */
-module pyplot_declaration_import
 
 import { plot } from pyplot
 

@@ -3,7 +3,6 @@
  * commit replaces the program the outer rewrite is reading, and the condition of the rule is a
  * plain `true`, so the interleaving is written in the right side rather than in a condition.
  */
-module commit_during_rewrite
 
 import { Graph, Node, open, commit, add_constant, id, graph_of } from graph
 import { rewrite } from rewrite

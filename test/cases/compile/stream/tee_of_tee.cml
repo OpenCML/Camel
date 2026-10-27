@@ -3,7 +3,6 @@
  * other, so each may be split again, and every stream in the tree is read once. All three readers
  * see the same three elements, and the source is still pulled once per element.
  */
-module stream_tee_of_tee
 
 import stream
 

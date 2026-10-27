@@ -4,7 +4,6 @@
  * representation for it: the name is not in scope while an alias is read. The array form of a
  * struct field is the one that is built: recursive_struct_array.cml.
  */
-module type_alias_recursion_array
 
 type Row = Row[]
 

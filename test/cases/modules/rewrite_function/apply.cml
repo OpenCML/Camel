@@ -1,4 +1,3 @@
-module apply
 
 import { Rule, rewrite, run, saturate, extract, check, check_text } from rewrite
 import { Node, Op } from graph

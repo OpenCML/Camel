@@ -30,6 +30,7 @@
 #include "camel/core/type/composite/stream.h"
 #include "camel/core/type/other.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cctype>
 #define DEBUG_LEVEL -1
@@ -1132,12 +1133,26 @@ generic_template_ptr_t Builder::chooseGenericOverload(
     const std::vector<generic_template_ptr_t> &candidates, const std::vector<Argument> &withInputs,
     const std::vector<Argument> &normInputs, const type_vec_t &withTypes, const type_vec_t &normTypes,
     const GCT::node_ptr_t &call) {
+    // A candidate named by its signature -- which the siblings of one name share -- and by the
+    // condition it wrote, which is what tells two arms of that name apart (design principles 4.4:
+    // the call site lists the candidates with the conditions each of them holds under).
+    const auto describeCandidate = [](const generic_template_ptr_t &tmpl) {
+        std::string text = tmpl->name + ": " + tmpl->funcType->toString();
+        if (const auto *when = GCT::Tree::of(tmpl->func)->whenOf(tmpl->func)) {
+            text += " — when " + when->text;
+        }
+        return text;
+    };
+    // The candidates whose parameters take the arguments and whose own `when` is false for the
+    // types those arguments bind: kept for the report a call that reaches no candidate at all
+    // gets, because a condition that does not hold is not a mismatch of types (design
+    // principles 4.4).
+    std::vector<std::string> unmetConditions;
     // Design principles 4.4 and 5.1: a call takes the one overload whose parameters accept its
     // arguments, with the argument types first exactly as they are, and then with the literals
     // entering the parameter types. Two that fit are an ambiguity, not a matter of the order
     // they are declared in.
-    const auto binds = [&](const generic_template_ptr_t &tmpl,
-                           type_bindings_t *bound = nullptr) {
+    const auto binds = [&](const generic_template_ptr_t &tmpl) {
         FunctionType *signature = tmpl->funcType;
         if (signature->hasRest() || withTypes.size() > signature->withTypesCount()) {
             return false;
@@ -1198,8 +1213,26 @@ generic_template_ptr_t Builder::chooseGenericOverload(
             }
             return false;
         }
-        if (bound != nullptr) {
-            *bound = bindings;
+        // The declaration's `when`, now that the arguments have bound its type variables: a
+        // false condition makes this declaration inapplicable, not erroneous, so it is not a fit
+        // and the call goes on to the other candidates (design principles 4.4).
+        if (const auto *when = GCT::Tree::of(tmpl->func)->whenOf(tmpl->func)) {
+            std::unordered_map<std::string, data_ptr_t> withValues;
+            for (size_t i = 0; i < signature->withTypesCount() && i < withInputs.size(); ++i) {
+                data_ptr_t value = constantOfNode(withInputs[i].node);
+                if (value != nullptr) {
+                    withValues.emplace(std::string(signature->argNameAt(i)), value);
+                }
+            }
+            const WhenResult verdict =
+                evaluateWhenCondition(when->condition, signature, bindings, withValues, tmpl);
+            if (verdict.fails()) {
+                unmetConditions.push_back(describeCandidate(tmpl));
+                return false;
+            }
+            if (!verdict.holds()) {
+                reportWhenProblem(verdict, tmpl->name, when->condition);
+            }
         }
         return true;
     };
@@ -1209,86 +1242,13 @@ generic_template_ptr_t Builder::chooseGenericOverload(
         return candidates.front();
     }
     std::vector<generic_template_ptr_t> fits;
-    std::unordered_map<const void *, type_bindings_t> fitBindings;
     for (const auto &candidate : candidates) {
-        type_bindings_t bound;
-        if (binds(candidate, &bound)) {
+        if (binds(candidate)) {
             fits.push_back(candidate);
-            fitBindings[candidate.get()] = std::move(bound);
         }
     }
     if (fits.size() == 1) {
         return fits.front();
-    }
-    // Overloads that differ only in their `when` (design principles 4.4): the condition of each
-    // is asked about these arguments, and the ones where it does not hold do not apply. One left
-    // is the call; several are an ambiguity at the call, listing each condition; none is a call
-    // whose conditions are all unmet.
-    if (fits.size() > 1) {
-        const auto conditionOf = [](const generic_template_ptr_t &tmpl) {
-            return GCT::Tree::of(tmpl->func)->whenOf(tmpl->func);
-        };
-        // An overload that writes no condition applies wherever it fits.
-        if (std::any_of(fits.begin(), fits.end(), [&](const auto &t) {
-                return conditionOf(t) != nullptr;
-            })) {
-            std::vector<generic_template_ptr_t> holding;
-            std::vector<std::string> unmet;
-            for (const auto &candidate : fits) {
-                const auto *when = conditionOf(candidate);
-                if (when == nullptr) {
-                    holding.push_back(candidate);
-                    continue;
-                }
-                std::unordered_map<std::string, data_ptr_t> withValues;
-                const size_t withCount = candidate->funcType->withTypesCount();
-                for (size_t i = 0; i < withCount && i < withInputs.size(); ++i) {
-                    data_ptr_t value = constantOfNode(withInputs[i].node);
-                    if (value != nullptr) {
-                        withValues.emplace(std::string(candidate->funcType->argNameAt(i)), value);
-                    }
-                }
-                const WhenResult verdict = evaluateWhenCondition(
-                    when->condition,
-                    candidate->funcType,
-                    fitBindings[candidate.get()],
-                    withValues,
-                    candidate);
-                if (verdict.fails()) {
-                    unmet.push_back(candidate->name + " — when " + when->text);
-                    continue;
-                }
-                if (!verdict.holds()) {
-                    reportWhenProblem(verdict, candidate->name, when->condition);
-                }
-                holding.push_back(candidate);
-            }
-            if (holding.size() == 1) {
-                return holding.front();
-            }
-            std::string argTypes;
-            for (const auto &type : normTypes) {
-                argTypes += (argTypes.empty() ? "" : ", ") + type->toString();
-            }
-            if (holding.size() > 1) {
-                std::vector<std::string> also;
-                for (const auto &candidate : holding) {
-                    const auto *when = conditionOf(candidate);
-                    also.push_back(
-                        candidate->name + ": " + candidate->funcType->toString() +
-                        (when != nullptr ? " — when " + when->text : std::string()));
-                }
-                rejectAmbiguousCall(holding.front()->name, argTypes, also, call);
-            }
-            yieldToPipe(call);
-            diags_->of(SemanticDiag::WhenConditionUnmet)
-                .atOrigin(call->origin())
-                .commit(
-                    fits.front()->name,
-                    argTypes,
-                    strutil::join(unmet, "; ", [](const std::string &s) { return s; }));
-            throw BuildAbortException();
-        }
     }
     std::string argTypes;
     for (const auto &type : normTypes) {
@@ -1299,11 +1259,36 @@ generic_template_ptr_t Builder::chooseGenericOverload(
         listed.push_back(candidate->name + ": " + candidate->funcType->toString());
     }
     if (fits.size() > 1) {
+        // Two (or more) candidates the arguments fit and whose conditions hold: no declaration
+        // order chooses between them, so the call is ambiguous and the report names each
+        // candidate with the condition it wrote (design principles 4.4: "带 `when` 的候选都适用
+        // 时，调用处报歧义，列出两条候选与各自成立的条件"). Sorted, so that two files holding one
+        // program with the declarations in the two orders report one and the same diagnostic.
         std::vector<std::string> also;
+        also.reserve(fits.size());
         for (const auto &candidate : fits) {
-            also.push_back(candidate->name + ": " + candidate->funcType->toString());
+            also.push_back(describeCandidate(candidate));
         }
+        std::sort(also.begin(), also.end());
+        also.erase(std::unique(also.begin(), also.end()), also.end());
         rejectAmbiguousCall(candidates.front()->name, argTypes, also, call);
+    }
+    if (!unmetConditions.empty()) {
+        // Every candidate the arguments fit was made inapplicable by its own `when`: the call
+        // reports the conditions it could not meet rather than the overloads it did not match
+        // (design principles 4.4; questions-2026-10-23 `sorts-per-element-type` 1: "条件不满足与
+        // 类型不匹配分开报"). Sorted, for the reason the ambiguity above is sorted.
+        std::sort(unmetConditions.begin(), unmetConditions.end());
+        unmetConditions.erase(
+            std::unique(unmetConditions.begin(), unmetConditions.end()), unmetConditions.end());
+        yieldToPipe(call);
+        diags_->of(SemanticDiag::WhenConditionUnmet)
+            .atOrigin(call->origin())
+            .commit(
+                candidates.front()->name,
+                argTypes,
+                strutil::join(unmetConditions, "; ", [](const std::string &s) { return s; }));
+        throw BuildAbortException();
     }
     yieldToPipe(call);
     diags_->of(SemanticDiag::NoMatchingFunction)
@@ -2434,6 +2419,20 @@ Type *Builder::visitTypeNode(const GCT::node_ptr_t &gct) {
     Type *type = resolveTypeNode(gct->dataType(), gct);
     LEAVE("TYPE");
     return type;
+}
+
+} // namespace camel::compile::gir
+
+namespace camel::compile::gir {
+
+std::vector<std::string> genericSignaturesOf(const camel::core::module::Entity &entity) {
+    std::vector<std::string> signatures;
+    for (const generic_template_ptr_t &tmpl : genericTemplatesOfEntity(entity)) {
+        if (tmpl != nullptr && tmpl->funcType != nullptr) {
+            signatures.push_back(tmpl->funcType->toString());
+        }
+    }
+    return signatures;
 }
 
 } // namespace camel::compile::gir

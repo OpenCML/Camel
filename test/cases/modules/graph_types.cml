@@ -1,4 +1,3 @@
-module graph_types
 import { id, Node, nodes, graph_of } from graph
 import { NodeKind, Value } from graph
 func main(): int sync {

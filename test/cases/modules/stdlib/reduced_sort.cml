@@ -3,7 +3,7 @@
  * floats, `string` and `bool` have no kernel and run the body `xs[argsort(xs)]`, so the
  * reduced-precision floats are ordered as the f32 they widen to, exactly, with -0 below +0.
  */
-module stdlib_reduced_sort
+
 
 import { sort } from array
 

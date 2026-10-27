@@ -15,7 +15,6 @@
  * `kept` must keep its product and its value `14`, and the pass must reach the end: a query with
  * no answer is an outcome of a condition (the rule does not apply), not a death of the pass.
  */
-module fact_no_value
 
 import { Node, Graph, nodes, op, op_name, name, graphs_of } from graph
 import { max } from math

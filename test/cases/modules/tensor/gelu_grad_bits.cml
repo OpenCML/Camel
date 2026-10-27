@@ -24,7 +24,6 @@
  * that is not a whole number of vectors (1155 elements: a tail the unit has to finish scalar), and
  * one element.
  */
-module gelu_grad_bits
 
 import { gelu, random, seed, sum, to_bytes } from tensor
 import { grad } from autodiff

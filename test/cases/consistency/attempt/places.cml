@@ -4,7 +4,6 @@
  * element function of map / filter / reduce, and in round 501 of a tail-recursive loop. Every
  * one becomes the error value of the `attempt` that encloses it, and the program goes on.
  */
-module places
 
 func leaf(d: int): int { return 100 / d }
 func mid(d: int): int { return leaf(d) + 1 }

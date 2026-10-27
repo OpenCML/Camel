@@ -4,7 +4,6 @@
  * would collapse the pair. `apply` is the same program under the law without its guards, which the
  * last test of the plan runs: both lines then collapse.
  */
-module bare_boundary
 
 import { rewrite } from rewrite
 

@@ -7,6 +7,7 @@
  */
 
 import { process } from process
+import { is_function } from types
 
 /// The one meeting point of the process: calls on it are ordered with one another and with nothing
 /// else. A module that runs at the meeting point imports it and writes it by name.
@@ -39,3 +40,12 @@ export func with_probe::<T>(x: T): int
 #op('test_support:with_probe_array')
 with <base: int, step: int = 10, mode: int = 0>
 export func with_probe(xs: int[]): int
+
+/// An operator that wants a function and an example and writes `when is_function::<F>()`, the
+/// condition a pass writes: the count of ordinary parameters (a pass takes one) tells the two
+/// apart, so this is an operator, exported and callable with its `with` arguments by name, as
+/// `onnx::export_model` is. It gives `tag * 10 + len(extra)`.
+/// @example arity_probe<7, [1]>((x: int): int => x, 0)    // 71
+#op('test_support:arity_two')
+with <tag: int, extra: int[] = []>
+export func arity_probe::<F, E>(f: F, example: E): int when is_function::<F>()

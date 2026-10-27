@@ -1,11 +1,10 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-module util
-
 import { now } from time
 import { sqrt } from math
-import { mean, stdev } from statistics
+import { mean } from array
+import { stdev } from statistics
 
 with <var result: float[], repeat: int>
 export func timeit(fn: () => void): void {

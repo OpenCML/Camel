@@ -11,7 +11,6 @@
  * w.npy (, b.npy); CAMEL_BENCH_{THREADS,WARMUP,REPS} as in camel_bench.
  * Prints CAMEL_BENCH latency_ms lines like camel_bench.timed_steps.
  */
-module micro
 
 import { load_npy, set_num_threads, mean } from tensor
 import { with_grad } from autodiff

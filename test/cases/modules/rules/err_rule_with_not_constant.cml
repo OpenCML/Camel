@@ -4,7 +4,6 @@
  * the program runs would need one instance for every value it could take, so it is refused where
  * the binding is written (design principles 5.4, 5.5; rewrite design 2 (second version) 1).
  */
-module err_rule_with_not_constant
 
 import { rewrite } from rewrite
 

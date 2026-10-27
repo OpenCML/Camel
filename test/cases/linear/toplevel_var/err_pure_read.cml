@@ -1,5 +1,5 @@
 /** `pure` promises that a call touches no resource, and a top-level `var` is one. */
-module err_pure_read
+
 
 var cnt: int = 0
 

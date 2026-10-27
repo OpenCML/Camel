@@ -1,7 +1,6 @@
 // The module declares the pass the pipeline names, but does not export it, so `run` cannot be
 // named; `other` can. The module compiles: what is wrong is the declaration, not the
 // module.
-module declares_not_exported
 
 
 func run::<F>(p: F): F! {

@@ -4,7 +4,6 @@
  * only that the callback had at least two, so this is the boundary narrowed by declaration
  * 
  */
-module para_unordered_reduce_callback_arity
 
 import { unordered_reduce } from para
 

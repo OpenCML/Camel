@@ -2,7 +2,6 @@
  * The same instance is called while its return type is still unknown: inference cannot
  * terminate on a type it has not got yet, so this is a diagnostic, not a half type.
  */
-module return_inference_cycle
 
 func bad::<T>(t: T) {
     return bad(t)

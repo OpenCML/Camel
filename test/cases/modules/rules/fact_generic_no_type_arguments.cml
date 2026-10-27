@@ -5,7 +5,6 @@
  * `literal_of(n)` fixes none of the fact's type arguments and the call is reported where it is
  * written, with the type arguments to write.
  */
-module fact_generic_no_type_arguments
 import { Node, Graph, nodes, name, graphs_of } from graph
 import { max } from math
 

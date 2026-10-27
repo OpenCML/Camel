@@ -1,5 +1,3 @@
-module main
-
 // The position an error value records is the whole call expression (design principles 3.9):
 // `'Zero'->error('zero')` is `error('Zero', 'zero')` written as a pipeline (4.4), so the
 // recorded position is the start of the pipeline, not of the callee.

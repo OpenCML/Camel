@@ -5,7 +5,6 @@
  * key: flags (of any width) unite, an integer takes the inner value. The program computes
  * the same with or without them.
  */
-module grants
 import { mark, flags, level, plain as pass } from test_attrs
 
 /// No attributes: called from decorated code, it keeps none.

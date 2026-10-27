@@ -4,7 +4,6 @@
  * `(f: F): F!` with `cost: (o: Op, inputs: float[]) => float` — `stdlib/rewrite.cml`, not the C++
  * module.
  */
-module rewrite_type
 
 import { extract } from rewrite
 

@@ -4,7 +4,6 @@
  * the branch (line 18) and says that the request is under a condition that is not known at
  * compile time (it used to say that the example argument is "a value computed at run time").
  */
-module request_in_arm
 
 import { reshape } from tensor
 import { export_model } from onnx

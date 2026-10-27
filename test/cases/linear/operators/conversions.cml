@@ -4,7 +4,6 @@
  * it; `string(true)` used to crash (progen finding F26).
  * `string` of a float is left out: its format is an open question (progen J3).
  */
-module conversions
 
 func main(): int sync {
     println(int(3), int(i32(4)), int(2.9), int(-2.9), int(f32(2.5)), int('42'), int('-7'))

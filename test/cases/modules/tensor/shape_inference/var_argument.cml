@@ -1,4 +1,3 @@
-module shape_inference_var_argument
 import { sum, ones } from tensor
 // A variable has the widened type of its first value; no conversion applies to a variable.
 func step(var s: f32[3], x: f32[3]): float sync {

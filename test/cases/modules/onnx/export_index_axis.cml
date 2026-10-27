@@ -6,7 +6,6 @@
  * a rank-2 value and its graph io is the value it was exported from; the shape a rank-2 reshape
  * puts in front of each is a Reshape, which the checker allows for.
  */
-module export_index_axis
 import { reshape } from tensor
 import { export_model } from onnx
 import { get_env } from env

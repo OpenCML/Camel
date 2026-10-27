@@ -1,7 +1,6 @@
 /**
  * `sort` is declared with one array argument: a second one is refused at the call.
  */
-module array_sort_arity
 
 import { sort } from array
 

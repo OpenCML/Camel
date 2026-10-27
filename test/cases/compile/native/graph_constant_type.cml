@@ -2,7 +2,6 @@
  * `graph:constant` is declared with a node: a number is refused at the call, and the message
  * names the declaration's parameter (`n`): `stdlib/graph.cml`, not the C++, is the source.
  */
-module graph_constant_type
 
 import { constant } from graph
 

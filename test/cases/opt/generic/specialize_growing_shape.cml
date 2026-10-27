@@ -1,5 +1,3 @@
-module specialize_growing_shape
-
 import { new, concat, sum, shape } from tensor
 
 // Every level of the recursion passes a tensor one row longer than the one it received, so the

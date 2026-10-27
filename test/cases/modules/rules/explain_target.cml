@@ -2,7 +2,6 @@
  * The program the attribution passes rewrite: one function with one `x + 0`, so every proof the
  * passes print is about one site (rewrite design 8.7).
  */
-module explain_target
 
 func f(x: int): int {
     return x + 0

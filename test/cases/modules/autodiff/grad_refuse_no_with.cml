@@ -1,5 +1,4 @@
 /** Refused: the function has no `with` parameter, and grad differentiates the first `with` parameter (9.9). */
-module grad_refuse_no_with
 import { grad } from autodiff
 
 func ordinary(x: float): float {

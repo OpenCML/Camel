@@ -2,7 +2,6 @@
  * `return` in arms of an `if` / `match` whose value is used: none of these is
  * reported by ExitInUnusedBranch.
  */
-module used_arm_exit
 
 // The branch is the last expression of the function body: its value is the result.
 func safe_div(a: int, b: int): int! {

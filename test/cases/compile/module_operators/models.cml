@@ -2,7 +2,6 @@
  * A module that offers its type and the operators of that type together: `Box`, `+` and `==`
  * are declared here (design principles 5.7).
  */
-module models
 
 export type Box = { v: int }
 

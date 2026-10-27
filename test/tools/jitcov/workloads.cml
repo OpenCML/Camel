@@ -14,7 +14,6 @@
  *
  * Each prints one number, the same on every back end.
  */
-module jitcov_workloads
 
 import { get_env } from env
 

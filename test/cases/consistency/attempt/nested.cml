@@ -4,7 +4,6 @@
  * left, in the same callee, belongs to the outer boundary. A callee that isolates a fault and
  * then faults again gives the second fault to its own boundary.
  */
-module nested
 
 func risky(d: int): int { return 100 / d }
 

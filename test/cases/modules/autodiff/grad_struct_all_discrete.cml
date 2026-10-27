@@ -10,7 +10,6 @@
  * `let g: Plain = gradient` pins the other half: the gradient is the model's own type, not a
  * struct of some other shape, and the value printed for each field is that field's zero.
  */
-module grad_struct_all_discrete
 
 import { with_grad } from autodiff
 

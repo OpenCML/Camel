@@ -6,7 +6,6 @@
  * A `with` parameter takes a default by the one rule the ordinary parameters follow, so its `T?`
  * takes `null` the same way.
  */
-module nullable_positions
 
 // The return under a declared `int?`: `null` is the constant of that type, not a computed value.
 func maybe(b: bool): int? {

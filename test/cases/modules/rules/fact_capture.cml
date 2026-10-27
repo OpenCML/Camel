@@ -4,7 +4,6 @@
  * value's fact is that value times a thousand, so a reader of the fact reads the capture and
  * nothing else can be mistaken for it.
  */
-module fact_capture
 
 import { Node, Graph, nodes, name, graphs_of } from graph
 import { max } from math

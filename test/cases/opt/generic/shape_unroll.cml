@@ -4,7 +4,6 @@
  * std::opt specializes to the shape the argument's type fixes: `shape(x)[1]` folds to a constant
  * and the recursion is unrolled into straight-line instances. The value must not change.
  */
-module shape_unroll
 
 import { ones, zeros, shape, reshape } from tensor
 

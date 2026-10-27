@@ -3,7 +3,6 @@
 // element it holds, not a rank-0 array  — so
 // the loop's sequence here is a scalar and the refusal is at compile time. The shape reaches
 // `reshape` through a variable; the constant `[]` it holds is a legal target.
-module tensor_rank0
 
 import { zeros, reshape } from tensor
 

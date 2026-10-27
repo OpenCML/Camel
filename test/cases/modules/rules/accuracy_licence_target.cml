@@ -5,7 +5,6 @@
  * grants the permission and is `#strict`, where no permission applies, so it keeps its form too.
  * The report counts the operator each function calls before and after the pass.
  */
-module accuracy_licence_target
 
 import { log } from math
 

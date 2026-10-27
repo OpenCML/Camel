@@ -1,9 +1,6 @@
 >// Function definitions, calls, with-parameters, decorators and function literals.
 #^^ comment.line.double-slash.camel punctuation.definition.comment.camel
 #  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
->module functions
-#^^^^^^ keyword.control.import.module.camel
-#       ^^^^^^^^^ entity.name.namespace.module.camel
 >
 >func fib(n: int): int {
 #^^^^ meta.function.definition.camel storage.type.function.camel

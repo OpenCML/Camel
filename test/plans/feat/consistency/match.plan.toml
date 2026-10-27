@@ -24,7 +24,7 @@ timeout_ms = 20000
 name = "match.no_default_string"
 desc = "A match over a string without `case _`: an error at the match that names the type; nothing runs."
 case = "../../../cases/consistency/match/no_case_matches_string.cml"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_diagnostic_column = 12
 expect_diagnostic_code = "0x030000B0"
 expect_output_contains = ["This 'match' on a value of type 'string' has no 'case _'"]
@@ -33,14 +33,14 @@ expect_output_contains = ["This 'match' on a value of type 'string' has no 'case
 name = "match.no_default_int"
 desc = "The same over an int, in a match written as a statement of a sync body with block arms and a case of two patterns."
 case = "../../../cases/consistency/match/no_case_matches_int.cml"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 8
 expect_diagnostic_column = 5
 
 [[tests]]
 name = "match.one_bool_case"
 desc = "A match over a bool that lists only true is not complete."
 case = "../../../cases/consistency/match/one_bool_case.cml"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 6
 expect_diagnostic_column = 12
 
 [[tests]]

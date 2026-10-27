@@ -62,7 +62,6 @@ std::string CamelParser::readAndRegister(std::istream &is) {
 bool CamelParser::lex(std::istream &is) {
     tree_ = std::make_unique<syntax::Tree>(syntax::Lexer::tokenize(readAndRegister(is)));
     syntax::reportLexicalErrors(tree_->tokens(), *diagnostics_);
-    nameModuleFromTokens();
     return !diagnostics_->hasErrors();
 }
 
@@ -97,57 +96,7 @@ bool CamelParser::buildAST() {
     return ast_ != nullptr;
 }
 
-bool CamelParser::parse(std::istream &is) {
-    if (!buildCST(is) || !buildAST()) {
-        // A file that does not parse is still named by the module it declares: its
-        // diagnostics read `(my_module)file.cml`, as the semantic ones do, not `(main)`.
-        nameModuleFromTokens();
-        return false;
-    }
-    // Use declared module name from source (e.g. "module mnist_json") for diagnostics
-    std::string declaredName = getDeclaredModuleName();
-    if (!declaredName.empty() && diagnostics_) {
-        diagnostics_->setModuleName(declaredName);
-    }
-    return true;
-}
-
-std::string CamelParser::getDeclaredModuleName() const {
-    if (!ast_) {
-        return "";
-    }
-    auto load    = ast_->load();
-    auto modLoad = std::dynamic_pointer_cast<AST::ModuleLoad>(load);
-    if (!modLoad) {
-        return "";
-    }
-    return modLoad->getModuleNameOrEmpty();
-}
-
-std::string CamelParser::declaredModuleNameInTokens() const {
-    if (!tree_) {
-        return "";
-    }
-    const syntax::TokenBuffer &buffer = tree_->tokens();
-    bool afterModule                  = false;
-    for (const syntax::Token &token : buffer.tokens()) {
-        if (syntax::isTrivia(token.kind)) {
-            continue;
-        }
-        if (afterModule && token.kind == syntax::TokenKind::Identifier) {
-            return std::string(buffer.text(token));
-        }
-        afterModule = token.kind == syntax::TokenKind::KwModule;
-    }
-    return "";
-}
-
-void CamelParser::nameModuleFromTokens() {
-    const std::string declaredName = declaredModuleNameInTokens();
-    if (!declaredName.empty() && diagnostics_) {
-        diagnostics_->setModuleName(declaredName);
-    }
-}
+bool CamelParser::parse(std::istream &is) { return buildCST(is) && buildAST(); }
 
 void CamelParser::dumpTokens(std::ostream &os) {
     if (tree_) {

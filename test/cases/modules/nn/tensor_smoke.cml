@@ -1,7 +1,6 @@
 /**
  * Minimal tensor smoke case covering shape propagation, matrix ops, reshape, transpose, and concatenation.
  */
-module tensor_smoke
 
 import { add, concat, eye, matmul, ones, reshape, shape, sum, transpose } from tensor
 

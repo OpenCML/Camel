@@ -4,7 +4,6 @@
  * signature is not one, and the seam between a function value and a stream is exactly one
  * signature wide.
  */
-module stream_step_value_signature
 
 func main(): int sync {
     let s: int.. = (x: int) => x

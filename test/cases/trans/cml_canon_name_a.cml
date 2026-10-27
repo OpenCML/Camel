@@ -2,7 +2,6 @@
  * names (module, functions, `let`s). Both functions have the same parameter name, so the front
  * end interns their signatures into one type object; the other file does not, and the canonical
  * type table must still be the same. */
-module cml_canon_name_a
 
 func bump(x: int): int {
     let step = x + 1

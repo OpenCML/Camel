@@ -2,7 +2,6 @@
  * Helper module: functions that use the top level of this module, directly or through
  * functions that are not exported, and a generic function that does.
  */
-module values_lib
 
 let base = 10
 let scale = base * 3

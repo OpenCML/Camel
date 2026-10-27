@@ -3,7 +3,6 @@
  * as ambiguous, exactly as a numeric literal is. It used to take the first overload in
  * declaration order.
  */
-module ambiguous_composite
 
 func pick(xs: f32[]): f32 {
     return xs[0]

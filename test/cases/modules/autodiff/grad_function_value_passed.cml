@@ -1,4 +1,3 @@
-module grad_function_value_passed
 import { grad } from autodiff
 
 // Refused: a function value that depends on the differentiated parameter (both closures capture

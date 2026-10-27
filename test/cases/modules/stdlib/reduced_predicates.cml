@@ -9,7 +9,6 @@
  * the declaration itself must become applicable. If either type were not in `is_float`, the
  * predicates would print false and the guarded calls would fail to compile.
  */
-module stdlib_reduced_predicates
 
 import { is_float, is_numeric, is_ordered } from types
 

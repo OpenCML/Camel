@@ -2,7 +2,6 @@
  * Helper module: exports generic functions. Their instances are built by the modules that
  * call them; the names their bodies use are resolved here.
  */
-module export_lib
 
 import { sqrt } from math
 

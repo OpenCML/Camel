@@ -3,7 +3,6 @@
  * the rest are with-arguments, written before the parentheses or after an arrow; operations
  * on two operands of equal standing take both as ordinary arguments.
  */
-module kept_forms
 
 func main(): int sync {
     let m = [('a', 1), ('b', 2)] as Map<string, int>

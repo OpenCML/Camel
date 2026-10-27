@@ -1,5 +1,3 @@
-module main
-
 import json
 
 // json::decode_as: decoding to a given type. The type is the one the call names

@@ -3,7 +3,6 @@
  * (design principles 7.1: IEEE 754-2019 maximum/minimum, relu(x) = maximum(x, +0), matmul is
  * a fused multiply-add chain in ascending k, softmax agrees with its definition).
  */
-module numeric_contract
 
 import { reshape, relu, maximum, minimum, max, min, sum, softmax, exp, ones, full, concat, abs } from tensor
 

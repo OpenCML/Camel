@@ -1,7 +1,6 @@
 /**
  * Exercises JSON encoding for primitives, tuples, arrays, and pretty-printed structured values.
  */
-module main
 
 import { encode } from json
 

@@ -1,4 +1,3 @@
-module tiles_row_bits
 import { load_npy, save_npy, sum } from tensor
 import { inspect, run_preferred_resident, download } from tiles
 import { get_env } from env

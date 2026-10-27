@@ -15,7 +15,6 @@
  * whose `bf16` and `f16` instances are checked with 200 values each: the reason for one is no
  * reason at all for the others, and neither answer is allowed to stand in for the other.
  */
-module check_type_cannot_be_made
 
 import { check, check_text } from rewrite
 import { is_string } from types

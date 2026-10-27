@@ -1,7 +1,6 @@
 /**
  * Verifies match expressions, struct updates, and method-style pipelines compose correctly in one semantic path.
  */
-module semantic_mapping
 
 type Point = {
     x: int,

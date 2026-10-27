@@ -1,4 +1,3 @@
-module take_oob
 import { reshape, range, take } from tensor
 func main(): int sync {
     let t = reshape(0..12, [4, 3])

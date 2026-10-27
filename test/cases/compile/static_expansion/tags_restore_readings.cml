@@ -5,7 +5,6 @@
  * too. Each round's `tags` is a compile-time value, so `tags.width.w` is both a value and the key
  * of an array, which only a compile-time value may be.
  */
-module tags_restore_readings
 
 tag flag(w: bool) on field
 tag width(w: int) on field

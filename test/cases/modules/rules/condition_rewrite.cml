@@ -2,7 +2,6 @@
  * A rule whose condition runs a rewrite of its own: the nested rewrite commits a new program
  * while the outer rewrite is still working on the old one.
  */
-module condition_rewrite
 
 import { rewrite } from rewrite
 

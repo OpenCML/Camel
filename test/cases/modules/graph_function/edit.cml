@@ -1,4 +1,3 @@
-module edit
 
 import { graph_of, nodes, inputs, op, op_name, open, replace, commit, abort, Node } from graph
 

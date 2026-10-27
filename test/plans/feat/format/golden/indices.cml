@@ -1,5 +1,3 @@
-module indices_format
-
 func sum(t: (int, int)): int {
     return static loop acc = 0 for j in indices t do acc + t.[j]
 }

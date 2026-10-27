@@ -1,4 +1,3 @@
-module identity
 import { nodes, name, graphs_of } from graph
 
 export func keep::<F>(p: F): F! {

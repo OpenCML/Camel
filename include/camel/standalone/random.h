@@ -2,11 +2,10 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The module random (rand:*) in the programs std::cpp writes. It draws exactly as
- * modules/random/operators.cpp does: one std::mt19937_64 for the whole program, seeded with
- * the engine's default until random.seed(n) is called, and the distributions of
- * camel/utils/random.h, so that a program seeded the same way prints the same numbers whether
- * the interpreter runs it or it is compiled.
+ * The module random (rand:*) in the programs std::cpp writes. The one keyed primitive is
+ * Philox4x32-10 (camel/utils/philox.h, the code the interpreter runs), and the global stream is
+ * the key `seed` set and a count of the keys taken from it, as modules/random/operators.cpp
+ * keeps it, so a program seeded the same way prints the same numbers compiled or interpreted.
  */
 
 #pragma once
@@ -24,125 +23,48 @@
 namespace camel::standalone {
 
 namespace detail {
-/// The engine every random operator draws from (`g_rng` of the random module).
-inline camel::utils::random::Engine &randomEngine() {
-    static camel::utils::random::Engine engine;
-    return engine;
+/// The global stream: the key and the number of keys taken from it.
+struct RandomStream {
+    camel::utils::philox::Key key{0, 0};
+    uint64_t taken = 0;
+};
+inline RandomStream &randomStream() {
+    static RandomStream stream;
+    return stream;
+}
+
+/// The block of a key and a 64-bit counter (the Camel `philox` of stdlib/random.cml).
+inline camel::utils::philox::Block randomBlock(const camel::utils::philox::Key &key, uint64_t counter) {
+    return camel::utils::philox::detail::block(key.lo, key.hi, counter);
 }
 } // namespace detail
 
-/// `random.seed(n)` (rand:seed).
+/// `seed(n)` (rand:seed): the stream starts at the key of the seed.
 inline void randomSeed(int64_t seed) {
-    detail::randomEngine().seed(static_cast<camel::utils::random::Engine::result_type>(seed));
+    auto &stream = detail::randomStream();
+    stream.key   = camel::utils::philox::Key{0, static_cast<uint64_t>(seed)};
+    stream.taken = 0;
 }
 
-/// `random.rand()` (rand:rand): uniform in [0, 1).
-inline double randomUnit() { return camel::utils::random::unitDouble(detail::randomEngine()); }
-
-/// `random.randn()` (rand:randn): standard normal, from a fresh source per call as the module
-/// draws it (the second value of a polar pair is not kept).
-inline double randomNormal() {
-    return camel::utils::random::NormalSource<double>{}(detail::randomEngine());
+/// `next_key()` (rand:next_key): the stream's key folded with the number of keys taken so far.
+template <typename Key> Key randomNextKey() {
+    auto &stream          = detail::randomStream();
+    const uint64_t index  = stream.taken++;
+    const auto block      = detail::randomBlock(stream.key, static_cast<uint64_t>(-3) - index);
+    return Key{
+        static_cast<int64_t>((static_cast<uint64_t>(block.word[0]) << 32) | block.word[1]),
+        static_cast<int64_t>((static_cast<uint64_t>(block.word[2]) << 32) | block.word[3])};
 }
 
-/// `random.randint(low, high)` (rand:randint): uniform in [low, high], the bounds swapped when
-/// given the other way round.
-inline int64_t randomBetween(int64_t low, int64_t high) {
-    if (low > high) {
-        std::swap(low, high);
-    }
-    return camel::utils::random::between(detail::randomEngine(), low, high);
-}
-
-/// `random.choice(xs)` (rand:choice): one element; of the empty array InvalidArgument at `site`
-/// (values: "random.choice", what is wrong).
-template <typename T> T randomChoice(const Array<T> &xs, const Site &site) {
-    if (xs.empty()) [[unlikely]] {
-        fault(site, {"random.choice", "the array is empty, so there is nothing to choose"});
-    }
-    return xs[static_cast<std::size_t>(camel::utils::random::below(detail::randomEngine(), xs.size()))];
-}
-
-/// `random.sample(xs, n)` (rand:sample): n elements by reservoir sampling, in the module's
-/// order of draws; a size outside [0, length] is InvalidArgument at `site`.
-template <typename T> Array<T> randomSample(const Array<T> &xs, int64_t n, const Site &site) {
-    if (n < 0 || static_cast<std::size_t>(n) > xs.size()) [[unlikely]] {
-        fault(
-            site,
-            {"random.sample",
-             "the sample size is " + std::to_string(n) + " and the array has " +
-                 std::to_string(xs.size()) +
-                 " elements; the size must be between 0 and the number of elements"});
-    }
-    const auto count = static_cast<std::size_t>(n);
-    if (count == 0) {
-        return Array<T>();
-    }
-    std::vector<T> picked(xs.begin(), xs.begin() + count);
-    auto &engine = detail::randomEngine();
-    for (std::size_t i = count; i < xs.size(); ++i) {
-        const std::size_t j = engine() % (i + 1);
-        if (j < count) {
-            picked[j] = xs[i];
-        }
-    }
-    Array<T> out;
-    out.reserve(count);
-    for (auto &item : picked) {
-        out.push(std::move(item));
-    }
-    return out;
-}
-
-/// `random.shuffle(xs)` (rand:shuffle): a new array, xs in the order of the module's
-/// Fisher-Yates shuffle (an index drawn as `engine() % (i + 1)`).
-template <typename T> Array<T> randomShuffle(const Array<T> &xs) {
-    std::vector<T> items(xs.begin(), xs.end());
-    auto &engine = detail::randomEngine();
-    for (std::size_t i = items.size() > 1 ? items.size() - 1 : 0; i > 0; --i) {
-        const std::size_t j = engine() % (i + 1);
-        std::swap(items[i], items[j]);
-    }
-    Array<T> out;
-    out.reserve(items.size());
-    for (auto &item : items) {
-        out.push(std::move(item));
-    }
-    return out;
-}
-
-/// `random.key(seed)` (rand:key): the program's Key struct, whose `hi` and `lo` fields are the
-/// halves of the Philox key (camel/utils/philox.h, the code the random module runs).
-template <typename Key> Key randomKey(int64_t seed) {
-    const auto key = camel::utils::philox::key(static_cast<uint64_t>(seed));
-    return Key{static_cast<int64_t>(key.hi), static_cast<int64_t>(key.lo)};
-}
-
-/// `random.split(key)` (rand:split): the two child keys.
-template <typename Tuple, typename Key> Tuple randomSplitKey(const Key &key) {
-    const auto [left, right] = camel::utils::philox::split(
-        camel::utils::philox::Key{static_cast<uint64_t>(key.hi), static_cast<uint64_t>(key.lo)});
-    return Tuple{
-        Key{static_cast<int64_t>(left.hi), static_cast<int64_t>(left.lo)},
-        Key{static_cast<int64_t>(right.hi), static_cast<int64_t>(right.lo)}};
-}
-
-/// `random.permutation(key, n)` (rand:permutation): a length below zero is InvalidArgument at
-/// `site` (values: "random.permutation", what is wrong).
-template <typename ArrayT, typename Key>
-ArrayT randomPermutationKey(const Key &key, int64_t n, const Site &site) {
-    if (n < 0) [[unlikely]] {
-        fault(
-            site,
-            {"random.permutation",
-             "the permutation length is " + std::to_string(n) + "; it must be non-negative"});
-    }
-    const std::vector<int64_t> order = camel::utils::philox::permutation(
-        camel::utils::philox::Key{static_cast<uint64_t>(key.hi), static_cast<uint64_t>(key.lo)}, n);
+/// `philox(key, counter)` (rand:philox): the four 32-bit words of the block.
+template <typename ArrayT, typename Key> ArrayT randomPhilox(const Key &key, int64_t counter) {
+    const auto block = detail::randomBlock(
+        camel::utils::philox::Key{static_cast<uint64_t>(key.hi), static_cast<uint64_t>(key.lo)},
+        static_cast<uint64_t>(counter));
     ArrayT out;
-    out.reserve(order.size());
-    for (const int64_t value : order) {
-        out.push(value);
+    out.reserve(4);
+    for (const uint32_t word : block.word) {
+        out.push(static_cast<int64_t>(word));
     }
     return out;
 }

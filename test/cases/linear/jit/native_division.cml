@@ -3,7 +3,6 @@
  * dividend, divisor and quotient in every register (idiv needs rax and rdx for itself), a
  * divisor of -1, and float divisions. None of them faults.
  */
-module native_division
 
 func q(a: int, b: int, c: int, d: int, n: int): int {
     return if n <= 0 then a / b + c / d + (a + c) / (b + d) + a / d - d / b + (a * b) / (c + 1)

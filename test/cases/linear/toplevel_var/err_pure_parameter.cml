@@ -1,5 +1,5 @@
 /** A function that writes a top-level `var` says so in its type, and a `pure` parameter refuses it. */
-module err_pure_parameter
+
 
 var cnt: int = 0
 

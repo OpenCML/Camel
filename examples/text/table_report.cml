@@ -1,7 +1,6 @@
 // Formats an aligned table: the first column is as wide as its longest entry (`max` of
 // `array`, `repeat` of `str`), the headings are made with `to_upper`, the total with `sum`.
 // Run: camel examples/text/table_report.cml
-module table_report
 
 import { repeat, to_upper } from str
 import { max, sum } from array

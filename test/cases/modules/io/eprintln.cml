@@ -4,7 +4,6 @@
  * writes them separated by spaces and a line end, and gives back its first one — and it writes
  * the standard error stream, where diagnostics go, not standard output.
  */
-module main
 
 func main(): int sync {
     let first = eprintln('to stderr', 1)

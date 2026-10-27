@@ -3,7 +3,6 @@
  * it was: after `let a = v`, writing through `v` does not change `a`
  * (docs/design-principles.cn.md 3.5, 10.5).
  */
-module element_assigned_copy
 
 func main(): int sync {
     var v = [1, 2, 3]

@@ -1,7 +1,6 @@
 /**
  * Verifies unordered_reduce preserves order-independent reduction semantics on integer data.
  */
-module unordered_reduce_sum
 
 import { unordered_reduce } from para
 

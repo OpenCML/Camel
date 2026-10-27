@@ -7,7 +7,6 @@
  * `mul_by_sign` fires where `sign(y) == 2`, so `left(3)` -- the product `3 * 2` -- is rewritten to
  * `3 + 100` and the program prints 103 instead of 106.
  */
-module fact_legal_forms
 
 import { max } from math
 import { rewrite } from rewrite

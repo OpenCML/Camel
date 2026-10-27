@@ -2,7 +2,7 @@
  * A rule that drops one factor (`x * 0 => 0`) must not drop a division that faults: the program
  * ran `a / b`, and a division by zero is part of what it does (design principles 3.4, 9.7).
  */
-module rules_drop_division
+
 
 func scaled(a: int, b: int): int {
     return (a / b) * 0

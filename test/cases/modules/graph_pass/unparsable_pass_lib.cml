@@ -2,7 +2,6 @@
 // other half of `unparsable_pass.cml`'s case: a program's diagnostics report the
 // modules the program is made of, so a pass library that fails on the command line appears only
 // as the `InvalidPassParameter` of pass resolution, never as this file's bare `SyntaxDiag`.
-module unparsable_pass_lib
 
 
 export func run::<F>(p: F): F! sync {

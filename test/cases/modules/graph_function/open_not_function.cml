@@ -1,4 +1,3 @@
-module open_not_function
 
 import { open, abort } from graph
 func main(): int sync {

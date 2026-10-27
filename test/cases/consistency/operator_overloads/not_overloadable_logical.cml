@@ -1,7 +1,6 @@
 /**
  * Refused declaration of an operator overload (design principles 4.3).
  */
-module not_overloadable_logical
 
 type M = { v: int }
 

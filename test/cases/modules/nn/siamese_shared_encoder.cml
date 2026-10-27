@@ -3,7 +3,6 @@
  * both branches read the same encoder, so its gradient accumulates contributions from each;
  * one sgd step lowers the loss and a recursive train loop repeats the step.
  */
-module siamese_shared_encoder
 
 import { grad, with_grad } from autodiff
 import { full, sum, tanh, zeros } from tensor

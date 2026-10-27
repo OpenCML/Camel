@@ -1,4 +1,3 @@
-module same_module_pass
 
 import { rewrite } from rewrite
 

@@ -3,7 +3,6 @@
  * (`user->rewrite<rules>`): the result drops the `+ 1`; the function it was given and the running
  * `target` stay as they were (design principles 9.1).
  */
-module rewrite_rule
 import { Graph, Node, constant, graph_of, inputs, name, nodes, op, op_name, graphs_of } from graph
 import { Rule, rewrite } from rewrite
 import { ends_with } from str

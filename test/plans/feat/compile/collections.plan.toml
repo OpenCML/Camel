@@ -525,7 +525,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::CollectionKeyNotAllowed"
 expect_diagnostic_code = "0x030000A0"
-expect_diagnostic_line = 6
+expect_diagnostic_line = 4
 expect_diagnostic_column = 27
 expect_output_contains = ["The type 'float' cannot be a key of 'Map'", "NaN is not equal to itself"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -541,7 +541,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::CollectionKeyNotAllowed"
 expect_diagnostic_code = "0x030000A0"
-expect_diagnostic_line = 6
+expect_diagnostic_line = 4
 expect_diagnostic_column = 27
 expect_output_contains = ["The type 'int[]' cannot be a key of 'Set'", "can be changed in place"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -557,7 +557,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::CollectionKeyNotAllowed"
 expect_diagnostic_code = "0x030000A0"
-expect_diagnostic_line = 6
+expect_diagnostic_line = 4
 expect_diagnostic_column = 34
 expect_output_contains = ["The type '(int, float)' cannot be a key of 'Map'", "its element of type 'float' cannot be a key"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -573,7 +573,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::CollectionKeyNotAllowed"
 expect_diagnostic_code = "0x030000A0"
-expect_diagnostic_line = 11
+expect_diagnostic_line = 9
 expect_diagnostic_column = 19
 expect_output_contains = ["The type 'float' cannot be a key of 'Set<float>'"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -589,7 +589,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DuplicateCollectionKey"
 expect_diagnostic_code = "0x030000A1"
-expect_diagnostic_line = 6
+expect_diagnostic_line = 4
 expect_diagnostic_column = 13
 expect_output_contains = ["The key '\"a\"' is written twice in this literal converted to 'Map<string, int>'."]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -605,7 +605,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DynamicCastForbidden"
 expect_diagnostic_code = "0x03000017"
-expect_diagnostic_line = 6
+expect_diagnostic_line = 4
 expect_diagnostic_column = 13
 expect_output_contains = ["'(string, int)[]' to 'Map<string, float>'"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -619,7 +619,7 @@ kind = "negative"
 case = "../../../cases/compile/collections/err_subscript_key.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["err_subscript_key.cml:7:14: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "(Map<string, int>, int)", "<:coll/map_idx>: (m: Map<K, V>, key: K) => V?"]
+expect_output_contains = ["err_subscript_key.cml:5:14: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "(Map<string, int>, int)", "<:coll/map_idx>: (m: Map<K, V>, key: K) => V?"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -631,7 +631,7 @@ kind = "negative"
 case = "../../../cases/compile/collections/err_subscript_not_opened.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["err_subscript_not_opened.cml:7:22: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "(int?, int)"]
+expect_output_contains = ["err_subscript_not_opened.cml:5:22: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "(int?, int)"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -643,7 +643,7 @@ kind = "negative"
 case = "../../../cases/compile/collections/err_set_subscript.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["err_set_subscript.cml:7:14: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "(Set<int>, int)"]
+expect_output_contains = ["err_set_subscript.cml:5:14: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "(Set<int>, int)"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -657,7 +657,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::InvalidTypeArgument"
 expect_diagnostic_code = "0x03000020"
-expect_diagnostic_line = 5
+expect_diagnostic_line = 3
 expect_diagnostic_column = 14
 expect_output_contains = ["it is written Map<K, V>, with a key type and a value type"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
@@ -671,7 +671,7 @@ kind = "negative"
 case = "../../../cases/compile/collections/err_put_value.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["err_put_value.cml:7:13: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "<string, float> (Map<string, int>)", "<:coll/map_put>: <key: K, value: V> (m: Map<K, V>) => Map<K, V>"]
+expect_output_contains = ["err_put_value.cml:5:13: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "<string, float> (Map<string, int>)", "<:coll/map_put>: <key: K, value: V> (m: Map<K, V>) => Map<K, V>"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -683,7 +683,7 @@ kind = "negative"
 case = "../../../cases/compile/collections/err_mixed_sets.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["err_mixed_sets.cml:8:18: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "(Set<int>, Set<string>)"]
+expect_output_contains = ["err_mixed_sets.cml:6:18: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "(Set<int>, Set<string>)"]
 expect_output_not_contains = ["never printed", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -698,7 +698,7 @@ backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 6
 expect_diagnostic_column = 13
 expect_stdout_starts_with = "before\n"
 expect_output_contains = ["converts only when it is empty, and this one has 1 element(s)"]
@@ -714,7 +714,7 @@ case = "../../../cases/compile/collections/refuse_export.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
-expect_diagnostic_line = 7
+expect_diagnostic_line = 5
 expect_output_contains = ["Translation pass 'std::cpp' refused the graph"]
 expect_output_not_contains = ["Segmentation fault", "dumped core", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -728,7 +728,7 @@ case = "../../../cases/compile/collections/refuse_onnx.cml"
 args = ["${case}", 'onnx::export out="${test_tmp}/refuse_onnx_never_written.onnx"']
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 8
 expect_output_contains = ["Translation pass 'onnx::export_model' refused the graph"]
 expect_output_not_contains = ["wrote", "Segmentation fault", "dumped core", "UnknownInternalError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -742,7 +742,7 @@ case = "../../../cases/compile/collections/refuse_grad.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_diagnostic_line = 12
+expect_diagnostic_line = 10
 expect_diagnostic_column = 13
 expect_stdout_starts_with = "2.0\n"
 expect_output_contains = ["is put into a Map or a Set 'Map<int, float>'", "Gradients do not flow through it"]
@@ -758,7 +758,7 @@ case = "../../../cases/compile/collections/refuse_grad.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MacroEvaluationFailed"
-expect_diagnostic_line = 12
+expect_diagnostic_line = 10
 expect_diagnostic_column = 13
 expect_output_contains = ["is put into a Map or a Set 'Map<int, float>'"]
 expect_output_not_contains = ["Segmentation fault", "dumped core"]
@@ -1102,7 +1102,7 @@ kind = "negative"
 case = "../../../cases/compile/callform/err_put_ordinary.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["err_put_ordinary.cml:5:16: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "'put' takes ''c', 3' in angle brackets, not in the parentheses: write put<'c', 3>(m) or m->put<'c', 3>"]
+expect_output_contains = ["err_put_ordinary.cml:3:16: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "'put' takes ''c', 3' in angle brackets, not in the parentheses: write put<'c', 3>(m) or m->put<'c', 3>"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 
 [[tests]]
@@ -1112,7 +1112,7 @@ kind = "negative"
 case = "../../../cases/compile/callform/err_has_ordinary.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["err_has_ordinary.cml:5:16: [Error]: No matching function found", "'has' takes '2' in angle brackets, not in the parentheses: write has<2>(s) or s->has<2>"]
+expect_output_contains = ["err_has_ordinary.cml:3:16: [Error]: No matching function found", "'has' takes '2' in angle brackets, not in the parentheses: write has<2>(s) or s->has<2>"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 
 [[tests]]
@@ -1122,7 +1122,7 @@ kind = "negative"
 case = "../../../cases/compile/callform/err_get_or_ordinary.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["err_get_or_ordinary.cml:4:18: [Error]: No matching function found", "write get_or<key, 0 - 1>(m) or m->get_or<key, 0 - 1>"]
+expect_output_contains = ["err_get_or_ordinary.cml:2:18: [Error]: No matching function found", "write get_or<key, 0 - 1>(m) or m->get_or<key, 0 - 1>"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 
 [[tests]]
@@ -1143,7 +1143,7 @@ kind = "negative"
 case = "../../../cases/compile/callform/err_split_ordinary.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["err_split_ordinary.cml:6:18: [Error]: No matching function found", "write split<','>('a,b') or 'a,b'->split<','>"]
+expect_output_contains = ["err_split_ordinary.cml:4:18: [Error]: No matching function found", "write split<','>('a,b') or 'a,b'->split<','>"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 
 [[tests]]
@@ -1153,7 +1153,7 @@ kind = "negative"
 case = "../../../cases/compile/callform/err_take_ordinary.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["err_take_ordinary.cml:7:17: [Error]: The generic function 'take' cannot be called", "(name=SemanticDiag::GenericArgumentsMismatch", "it takes 'n' in angle brackets, not in the parentheses: write take<n>(xs) or xs->take<n>"]
+expect_output_contains = ["err_take_ordinary.cml:5:17: [Error]: The generic function 'take' cannot be called", "(name=SemanticDiag::GenericArgumentsMismatch", "it takes 'n' in angle brackets, not in the parentheses: write take<n>(xs) or xs->take<n>"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 
 [[tests]]
@@ -1163,7 +1163,7 @@ kind = "negative"
 case = "../../../cases/compile/callform/err_unrelated.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["err_unrelated.cml:5:16: [Error]: No matching function found", "(Map<string, int>, int, string). Check"]
+expect_output_contains = ["err_unrelated.cml:3:16: [Error]: No matching function found", "(Map<string, int>, int, string). Check"]
 expect_output_not_contains = ["in angle brackets"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 
@@ -1193,9 +1193,9 @@ case = "../../../cases/compile/collections/err_key_enum_field.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::CollectionKeyNotAllowed"
-expect_diagnostic_line = 10
+expect_diagnostic_line = 8
 expect_diagnostic_column = 36
-expect_output_contains = ["The type 'Boxed' cannot be a key of 'Map': its field 0 of variant 'Weight' of type 'float' cannot be a key", "[field 0 of variant 'Weight' is declared here at 7:35]", "tuples of those, and an enum every field of which is one of those"]
+expect_output_contains = ["The type 'Boxed' cannot be a key of 'Map': its field 0 of variant 'Weight' of type 'float' cannot be a key", "[field 0 of variant 'Weight' is declared here at 5:35]", "tuples of those, and an enum every field of which is one of those"]
 expect_output_not_contains = ["never printed"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 
@@ -1207,9 +1207,9 @@ case = "../../../cases/compile/collections/err_key_enum_element.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::CollectionKeyNotAllowed"
-expect_diagnostic_line = 11
+expect_diagnostic_line = 9
 expect_diagnostic_column = 27
-expect_output_contains = ["The type 'Rec' cannot be a key of 'Set': its field 0 of variant 'Point' of type 'Pair' cannot be a key: a struct is not a key type", "[field 0 of variant 'Point' is declared here at 8:30]"]
+expect_output_contains = ["The type 'Rec' cannot be a key of 'Set': its field 0 of variant 'Point' of type 'Pair' cannot be a key: a struct is not a key type", "[field 0 of variant 'Point' is declared here at 6:30]"]
 expect_output_not_contains = ["never printed"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 
@@ -1221,9 +1221,9 @@ case = "../../../cases/compile/collections/err_key_enum_by_substitution.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::CollectionKeyNotAllowed"
-expect_diagnostic_line = 14
+expect_diagnostic_line = 12
 expect_diagnostic_column = 19
-expect_output_contains = ["The type 'Boxed' cannot be a key of 'Set<Boxed>'", "[field 0 of variant 'Weight' is declared here at 7:35]"]
+expect_output_contains = ["The type 'Boxed' cannot be a key of 'Set<Boxed>'", "[field 0 of variant 'Weight' is declared here at 5:35]"]
 expect_output_not_contains = ["never printed"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 

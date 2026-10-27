@@ -1,5 +1,3 @@
-module format_tag_below_doc
-
 /// The sum, documented above its tag rather than below it.
 ///
 /// The comment, the tag and the declaration stand in the order a reader writes them, which is the

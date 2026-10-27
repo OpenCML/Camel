@@ -3,7 +3,6 @@
  * needs one refuses the call by name (FoldCallArgumentNotConstant), not as an anonymous
  * expression. `half(n)` folds only where `n` is a constant; here `n` is known at run time.
  */
-module fold_call_argument
 
 func half(n: int): int {
     return n / 2

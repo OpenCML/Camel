@@ -3,7 +3,6 @@
  * already run once with a nonzero divisor): the located DivisionByZero of the interpreters at
  * the division (line 9, column 28), not a hardware exception.
  */
-module divide_by_zero_hot
 
 func f(a: int, b: int): int {
     return if a < 2 then a / b else f(a - 1, b) + a / b

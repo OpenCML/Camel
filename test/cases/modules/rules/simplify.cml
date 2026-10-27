@@ -2,7 +2,6 @@
  * A pass written with rules: the rule declarations are the library, `apply` the pass. Used as
  * `camel target.cml simplify::apply std::nvm`.
  */
-module simplify
 import { rewrite, saturate, extract } from rewrite
 import { nodes as sizeCost } from rules
 

@@ -3,7 +3,6 @@
  * that also has an error (line 19). Both are in the diagnostics on stdout, in source order;
  * nothing is printed twice on stderr.
  */
-module warning_with_error
 
 func count(a: int): int sync {
     var total = 0

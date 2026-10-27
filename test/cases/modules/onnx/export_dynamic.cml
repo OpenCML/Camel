@@ -4,7 +4,6 @@
  * zeros(shape) becomes ConstantOfShape; the static extent (3) still folds.
  * Also prints the backend's capability list size.
  */
-module export_dynamic
 
 import { reshape, zeros, shape } from tensor
 import { export_model, supported_operators } from onnx

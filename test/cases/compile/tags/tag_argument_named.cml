@@ -1,5 +1,4 @@
 /// A tag argument is positional; naming one is refused.
-module tag_argument_named
 
 tag width(w: int) on func
 

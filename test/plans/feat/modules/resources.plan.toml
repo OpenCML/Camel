@@ -250,7 +250,7 @@ const expect = {
   'fs:read_bytes': 'read ambient fs; external',
   'fs:write_bytes': 'rmw ambient fs; external',
   'rand:seed': 'write ambient rng; external',
-  'rand:rand': 'rmw ambient rng; external',
+  'rand:next_key': 'rmw ambient rng; external',
 }
 for (const [uri, text] of Object.entries(expect)) {
   const op = byUri.get(uri)
@@ -302,7 +302,7 @@ const expect = {
   'fs:read_bytes': 'read ambient fs; external',
   'fs:write_bytes': 'rmw ambient fs; external',
   'rand:seed': 'write ambient rng; external',
-  'rand:rand': 'rmw ambient rng; external',
+  'rand:next_key': 'rmw ambient rng; external',
   'time:now': 'read ambient clock; external',
   'env:get_env': 'read ambient env; external',
   'process:sleep': 'read ambient clock; external',

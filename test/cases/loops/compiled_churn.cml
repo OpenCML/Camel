@@ -2,7 +2,6 @@
 // interruptible at the safepoint FastVM has (LEND), so the collector runs while compiled code
 // holds the state in its frame, and a reference kept anywhere but the frame would be moved out
 // from under it.
-module compiled_churn
 
 import { get_env } from env
 

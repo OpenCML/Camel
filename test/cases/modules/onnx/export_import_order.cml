@@ -3,7 +3,6 @@
  * second copy of the tensor module: operator inference has to see the same
  * registry, so shapes stay known through layer_norm and matmul.
  */
-module export_import_order
 
 import { export_model } from onnx
 import { random, ones, zeros, layer_norm, reshape, shape } from tensor

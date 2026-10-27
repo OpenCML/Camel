@@ -1,7 +1,6 @@
 /**
  * Verifies inlining does not corrupt control-flow arm selection when a call result feeds a branch join.
  */
-module inline_branch_arm_behavior
 
 func pick(flag: int, lhs: int, rhs: int): int {
     return if flag != 0 then lhs + 3 else rhs + 4

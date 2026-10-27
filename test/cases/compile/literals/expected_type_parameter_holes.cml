@@ -6,7 +6,6 @@
  * not 1.0 from the double the element was lowered to. Every element of a literal with a computed
  * sibling used to be dropped, in a parameter position and in a return position alike.
  */
-module expected_type_parameter_holes
 
 type P = { n: int, t: (f32, f32) }
 

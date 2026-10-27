@@ -1,5 +1,3 @@
-module dce_subject
-
 // The corpus of the dead-value comparison. A value the compiler builds because it is a
 // call's argument, and that inlining takes the only user of away: the product and then the
 // constant it reads are dead one after the other, so a sweep that removes one round of them and

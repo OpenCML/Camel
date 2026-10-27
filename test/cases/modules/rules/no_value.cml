@@ -15,7 +15,6 @@
  * product of `plain` with the other rule, whose guard is on the value and asks no query -- the
  * pass's other work, which a pass that quietly stopped rewriting anything would fail to show.
  */
-module no_value
 
 import { Node, Graph, nodes, op, op_name, name, graphs_of } from graph
 import { max } from math

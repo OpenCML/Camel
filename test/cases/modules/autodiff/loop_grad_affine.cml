@@ -3,7 +3,6 @@
  * reverse pass chains each round's gradient through the state it produced, so the gradient is the
  * geometric series 1 + 0.5 + 0.25 and not a plain sum of per-round contributions.
  */
-module loop_grad_affine
 
 import { grad, with_grad } from autodiff
 

@@ -4,7 +4,6 @@
  * by firing it on its own left side: the rule must fire (the condition holds there) and the
  * rewritten left side must agree with the original one.
  */
-module check_when
 import { check, check_text } from rewrite
 import { Node, type_name, type_of } from graph
 

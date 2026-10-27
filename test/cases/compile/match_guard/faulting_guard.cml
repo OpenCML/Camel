@@ -4,7 +4,6 @@
  * at the arm it belongs to. The match itself is well formed -- the second case is the default
  * -- so what is reported is the fault and nothing about the match.
  */
-module match_guard_faulting_guard
 
 func f(n: int): int {
     let xs = [1, 2, 3]

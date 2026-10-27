@@ -1,7 +1,6 @@
 /**
  * Checks using namespace over a module import injects exported module symbols.
  */
-module module_import_using
 
 import namespace_lib
 using namespace namespace_lib

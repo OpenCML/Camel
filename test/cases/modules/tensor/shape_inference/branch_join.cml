@@ -1,4 +1,3 @@
-module shape_inference_branch_join
 import { concat, sum, ones } from tensor
 // Arms of different extents join to an unknown extent.
 func f(x: f32[3], c: bool): f32[3] {

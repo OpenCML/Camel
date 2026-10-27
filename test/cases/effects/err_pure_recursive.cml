@@ -4,7 +4,6 @@
  * the recursive call reads the reach of the round before and the declaration ends up refused
  * (design principles 3.3).
  */
-module err_pure_recursive
 
 func countdown(n: int): int pure {
     println(n)

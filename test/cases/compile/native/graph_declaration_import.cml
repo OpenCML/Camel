@@ -3,7 +3,6 @@
  * of `graph_of`, `nodes`, `id` and `type_of` come from `stdlib/graph.cml`, and every call reaches
  * the operator the C++ module runs.
  */
-module graph_declaration_import
 
 import { name, nodes, id, type_of, type_name, graph_of } from graph
 import { Graph, Node } from graph

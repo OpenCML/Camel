@@ -51,7 +51,7 @@ case = "../../../cases/modules/autodiff/value_with_refusal.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::ValueWithNoDerivativeRule"
-expect_diagnostic_line = 14
+expect_diagnostic_line = 13
 expect_output_contains = [":coll/map_get_or", "with parameter 2 (counting from 1)", "of type 'float'", "no derivative rule is registered for it"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -64,7 +64,7 @@ case = "../../../cases/modules/autodiff/value_with_reduce.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::ValueWithNoDerivativeRule"
-expect_diagnostic_line = 14
+expect_diagnostic_line = 13
 expect_output_contains = [":mark/reduce_arr", "with parameter 2 (counting from 1)", "of type 'float'", "no derivative rule is registered for it"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -147,7 +147,6 @@ const handled = {
   ':coll/map_put': 'refused-at-construction',
   ':coll/set_add': 'refused-at-construction',
   ':coll/set_contains': 'no-channel',
-  'statistics:quantile': 'refused',
 }
 const known = new Set(Object.keys(handled))
 const missing = valueWith.filter((o) => !known.has(o.uri)).map((o) => o.uri + ' <' + o.params.map((p) => p.name + ': ' + p.type).join(', ') + '>')

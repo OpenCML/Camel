@@ -2,7 +2,6 @@
  * `kept` grants `nondeterministic`; `scaled` grants nothing, so the rule that requires the
  * permission is applied to one body and not the other.
  */
-module requires_nd_target
 
 func scaled(x: float): float {
     return x * 1.0

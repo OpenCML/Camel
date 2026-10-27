@@ -5,7 +5,6 @@
  * engine does not record that equivalence; saturating, extracting and running give the program
  * its meaning back.
  */
-module saturate_outer_operand
 import { Rule, saturate, extract } from rewrite
 import { nodes as sizeCost } from rules
 

@@ -39,7 +39,7 @@ desc = "Limit 100: depth(100) stops with MaxRecursionDepthExceeded at the recurs
 envs = ["N=100"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
-expect_diagnostic_line = 12
+expect_diagnostic_line = 11
 expect_diagnostic_column = 38
 expect_stdout_starts_with = "start\n"
 expect_output_contains = ["Maximum recursion depth (100) exceeded", "--max-recursion-depth", "CAMEL_MAX_RECURSION_DEPTH"]
@@ -60,7 +60,7 @@ case = "../../../cases/consistency/limits/depth_value.cml"
 envs = ["N=50"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
-expect_diagnostic_line = 10
+expect_diagnostic_line = 9
 expect_diagnostic_column = 38
 expect_stdout_starts_with = "start\n"
 expect_output_contains = ["Maximum recursion depth (100) exceeded"]
@@ -81,7 +81,7 @@ case = "../../../cases/consistency/limits/depth_map.cml"
 envs = ["N=130"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
-expect_diagnostic_line = 10
+expect_diagnostic_line = 9
 expect_diagnostic_column = 38
 expect_stdout_starts_with = "start\n"
 expect_output_contains = ["Maximum recursion depth (100) exceeded"]
@@ -130,7 +130,7 @@ args = ["${case}", "${backend}"]
 envs = ["N=1000"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
-expect_diagnostic_line = 12
+expect_diagnostic_line = 11
 expect_diagnostic_column = 38
 expect_output_contains = ["Maximum recursion depth (1000) exceeded"]
 
@@ -302,7 +302,7 @@ backends = ["inline_jit"]
 envs = ["N=100"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
-expect_diagnostic_line = 12
+expect_diagnostic_line = 11
 expect_diagnostic_column = 38
 
 # --- native code under a raised limit --------------------------------------------------------
@@ -340,7 +340,7 @@ envs = ["N=10000"]
 timeout_ms = 60000
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
-expect_diagnostic_line = 12
+expect_diagnostic_line = 11
 expect_diagnostic_column = 38
 verify_script = """
 const text = input.normalized.stdout + input.normalized.stderr
@@ -356,7 +356,7 @@ envs = ["N=100000"]
 timeout_ms = 60000
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
-expect_diagnostic_line = 12
+expect_diagnostic_line = 11
 expect_diagnostic_column = 38
 expect_output_contains = ["Maximum recursion depth (10000) exceeded"]
 
@@ -468,7 +468,7 @@ envs = ["N=900000"]
 timeout_ms = 120000
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
-expect_diagnostic_line = 12
+expect_diagnostic_line = 11
 expect_diagnostic_column = 38
 expect_output_contains = ["open calls: the native stack of the thread"]
 expect_output_not_contains = ["done", "Segmentation fault", "dumped core"]

@@ -1,4 +1,3 @@
-module over_function
 
 import { is_function } from types
 

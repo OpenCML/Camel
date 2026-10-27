@@ -1,4 +1,3 @@
-module tree_training
 import { reshape, zeros, sum, abs } from tensor
 import { with_grad } from autodiff
 import { tree_map, tree_reduce, tree_unzip } from tree

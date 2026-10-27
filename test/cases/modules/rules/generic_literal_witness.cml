@@ -9,7 +9,6 @@
  * nothing where it happens (the rule on
  * `generic-rule-instantiation-set-and-predicate`, §3).
  */
-module generic_literal_witness
 
 import { Graph, Node, NodeKind, kind, name, nodes, graphs_of } from graph
 import { Run, run, why_not } from rewrite

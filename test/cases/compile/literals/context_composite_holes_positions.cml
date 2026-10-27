@@ -7,7 +7,6 @@
  * the f32 midpoint prints 1.00000012, not its float64 1.00000006: it became f32 where it was
  * written, converted once from the value written.
  */
-module literal_context_composite_holes_positions
 
 func first(xs: f32[]): f32 { return xs[0] }
 

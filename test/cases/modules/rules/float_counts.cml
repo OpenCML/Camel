@@ -3,7 +3,6 @@
  * let a rule through: `combine` and `double` by default, `granted_mixed` and `granted_chain`
  * only where the node grants the permission they need.
  */
-module float_counts
 import { Node, Graph, nodes, op, op_name, name, graphs_of } from graph
 
 func opText(n: Node): string {

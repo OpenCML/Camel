@@ -1,7 +1,6 @@
 /**
  * NumPy-style broadcasting for arithmetic, comparison, and where.
  */
-module broadcast_ops
 
 import { reshape, range, where, maximum, relu, sum, shape } from tensor
 

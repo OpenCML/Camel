@@ -3,7 +3,6 @@
  * leaf of the weights is a model input (`p_fc_w`, `p_fc_b`, before the data). Exported with
  * `--arg p=<dir>`, the weights are constants of the graph and become initializers.
  */
-module weights
 
 import { tanh } from tensor
 

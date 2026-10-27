@@ -3,7 +3,6 @@
  * over a `T?` the missing value is passed on unchanged, and the call happens only where there
  * is a value to call it with.
  */
-module pass_nullable
 
 func inc(x: int): int { return x + 1 }
 

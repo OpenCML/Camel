@@ -4,7 +4,6 @@
  * parameter's type leaves this one alone and the call is refused. Expected: a compile-time
  * error at the argument.
  */
-module var_argument_non_numeric
 import { sum } from tensor
 
 func step(var t: f64[], d: float): float sync {

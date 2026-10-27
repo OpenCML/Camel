@@ -3,7 +3,6 @@
  * running it, so `user_name`/`cpu_count` never read the machine and `sleep(0.0)` never waits; only
  * literals stand in the graph, and the rename may change only the module name in the URIs.
  */
-module process_identity
 
 import { sleep, user_name, cpu_count } from process
 

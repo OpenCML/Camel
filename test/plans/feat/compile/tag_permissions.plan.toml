@@ -205,6 +205,6 @@ case = "../../../cases/compile/tags/err_numeric_annotation.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::InvalidAnnotation"
-expect_diagnostic_line = 5
+expect_diagnostic_line = 4
 expect_diagnostic_column = 1
 expect_output_contains = ["@numeric", "write '#[reassociate]'"]

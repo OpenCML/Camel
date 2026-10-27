@@ -8,7 +8,6 @@
  * Expected output: 1, 1, 11 (three lines)
  * Actual: 1, 2, 17
  */
-module inline_jit_second_call
 
 func walk(i: int, j: int, m: int, acc: int): int {
     return if j >= m then acc else walk(i, j + 1, m, acc + i * j)

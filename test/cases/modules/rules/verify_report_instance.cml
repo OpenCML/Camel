@@ -11,7 +11,6 @@
  * row keeps the law's name in one column and its own tuple in the other, without repeating the
  * other column inside itself.
  */
-module verify_report_instance
 
 import { check } from rewrite
 import { int_add_zero } from rules

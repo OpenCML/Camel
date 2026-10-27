@@ -1,10 +1,9 @@
 /**
  * Parallel block-sorting workload used to verify independent large-array jobs can be scheduled without cross-block corruption.
  */
-module block_sort_merge
 
 import { now } from time
-import { seed, shuffle } from random
+import { seed, shuffle, next_key } from random
 import { sort } from array
 
 func sort_block(arr: int[], lo: int, hi: int): int[] {
@@ -20,7 +19,7 @@ func main(): int sync {
 
     seed(s)
     'Generating {} shuffled integers...'->format<n>->println
-    let arr = 0..n->shuffle
+    let arr = 0..n->shuffle<next_key()>
 
     'Sorting {} independent blocks with {} items each...'->format<blocks, block_size>->println
     let start = now()

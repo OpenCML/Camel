@@ -13,7 +13,6 @@
  * A composite literal as a state is not this rule: it has a shape of its own, and the state keeps
  * it (cases/loops/zero_leaf_state.cml pins the zero-leaf case).
  */
-module literal_context_loop_state
 
 func fromWhile(): f32 {
     loop s = 0.0 while s < 3.0 do s + 1.0

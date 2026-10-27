@@ -2,7 +2,6 @@
  * `case a | b => body` enters the body when the scrutinee equals any of its patterns (only the
  * first used to be read). A wildcard among the alternatives makes the case the default.
  */
-module match_multi_pattern
 
 func kind(c: string): string {
     return match c {

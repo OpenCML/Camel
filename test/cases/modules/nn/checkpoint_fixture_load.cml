@@ -1,7 +1,6 @@
 /** Reads the committed checkpoint fixture: bytes written before this branch, loaded by the
  * current native `ckpt` code. The test that runs it hashes the fixture before and after.
  */
-module checkpoint_fixture_load
 import { to_bytes } from tensor
 import { to_array } from bytes
 import { load_tree } from ckpt

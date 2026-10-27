@@ -39,9 +39,7 @@ for (const name of ['json', 'math']) {
 // its own, which an importer reads from the same module.
 fs.writeFileSync(
     path.join(SCRATCH, 'json.cml'),
-    `module json
-
-/// The type the C++ module provides is declared here without a right side; the C++ module
+    `/// The type the C++ module provides is declared here without a right side; the C++ module
 /// registers it under the same name.
 export type Json
 
@@ -59,9 +57,7 @@ export type Tag = { level: int, text: string }
 // The declaration module of `math`: a value over a constant the C++ module exports.
 fs.writeFileSync(
     path.join(SCRATCH, 'math.cml'),
-    `module math
-
-/// The constant the C++ module exports is this module's own, written without an import.
+    `/// The constant the C++ module exports is this module's own, written without an import.
 export let tau: float = pi * 2.0
 `,
 )

@@ -3,7 +3,6 @@
  * `when` condition (`is_function::<F>()`) is false for it, and the message prints the declaration's
  * own parameter name (`f`): the one source is `stdlib/graph.cml`, not the C++ module.
  */
-module graph_type
 
 import { graph_of } from graph
 

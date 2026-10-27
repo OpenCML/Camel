@@ -1,7 +1,6 @@
 /**
  * Verifies independent macro-generated closures keep distinct captured static values after materialization.
  */
-module macro_closure_isolation
 
 type Adder = (y: int) => int
 

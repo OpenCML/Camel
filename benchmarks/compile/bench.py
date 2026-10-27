@@ -104,9 +104,9 @@ SCALE_FUNCTIONS = 4000
 SLOW_CASE_MS, SLOW_CASE_ROUNDS = 5000.0, 2  # a run longer than this is repeated only this often
 
 # A library module is not a list of names kept here. It is a module the run compiled because a
-# pass loaded it as its tool program, and it names itself in the standard library
-# (`stdlib/<name>.cml` says `module <name>`). The compiler marks the first fact with a `library`
-# phase; see pass_loaded_modules. The second is the module's own declaration; see
+# pass loaded it as its tool program, and it is a file of the standard library
+# (`stdlib/<name>.cml`). The compiler marks the first fact with a `library`
+# phase; see pass_loaded_modules. The second is the file; see
 # stdlib_declaration. A tuple pinned two names, then `graph` and `tensor` were added, so
 # the tuple went stale twice in one day. Neither number may disappear: the benchmark reports the
 # set and what each module costs, and the check derives the set from these two facts instead of
@@ -117,9 +117,7 @@ STDLIB = REPO / "stdlib"
 PHASE_ORDER = ["(process)", "startup", "mm_init", "context", "builtin_module", "parse", "resolve", "cmo_load",
                "import", "compile", "gct", "gir", "encode"]
 
-SMALL_ARITH = """module main
-
-func square(x: int): int {
+SMALL_ARITH = """func square(x: int): int {
     return x * x
 }
 
@@ -285,15 +283,16 @@ def self_costs(report: dict) -> Dict[str, Dict[str, float]]:
 
 
 def stdlib_declaration(name: str) -> Optional[Path]:
-    """The standard-library file that declares module `name`, if there is one.
+    """The standard-library file that is module `name`, if there is one.
 
     The file is the module and its name is the file's name: a `.cml` beside the `.cmo` of the same
     name is that module's declaration module, and it is read by its name.
 
-    This is what "library module" means here: the module is named by its own declaration, in the
-    library, not by a tuple in this file. A migration that adds a declaration module (`graph` or
-    `tensor`, for instance) changes the set with the source, and the benchmark reports the new
-    module and its cost instead of failing on a list that was true last week.
+    This is what "library module" means here: a module is a file, and its name is its file's
+    (design principles 10.2), so the library's modules are the files under `stdlib/` and no tuple
+    in this file names them. A migration that adds a declaration module (`graph` or `tensor`, for
+    instance) changes the set with the source, and the benchmark reports the new module and its
+    cost instead of failing on a list that was true last week.
     """
     path = STDLIB.joinpath(*name.split(".")).with_suffix(".cml")
     if path.is_file():
@@ -807,8 +806,8 @@ def cmd_check(_args) -> int:
                     if stdlib_declaration(module) is None:
                         problems.append(
                             f"{name}: '{module}' was compiled on demand but is not a standard-library "
-                            f"declaration module: stdlib/{module}.cml must declare `module {module}`. "
-                            f"Library modules are named by their own declaration, not by a list in "
+                            f"module: stdlib/{module}.cml is not a file of the library. "
+                            f"Library modules are the library's files, not a list in "
                             f"this file, so a module loaded from outside the library is a defect, "
                             f"not a pin to update.")
             elif library:

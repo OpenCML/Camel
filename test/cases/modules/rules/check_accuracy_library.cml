@@ -21,7 +21,6 @@
  * moved the failing seeds, and the case runs it at seed 1). Recorded in the rule §accuracy-check-sampling`: the
  * rule is not this lane's, and neither is the measure.
  */
-module check_accuracy_library
 
 import { check, check_text } from rewrite
 import {

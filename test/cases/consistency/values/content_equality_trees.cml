@@ -5,7 +5,6 @@
  * opposite orders and by removal, which gives trees of different shapes when the leaves are
  * small (CAMEL_COLL_LEAF_CAPACITY=2 CAMEL_COLL_FANOUT=4).
  */
-module content_equality_trees
 
 type Box = { name: string, table: Map<int, string>, seen: Set<int> }
 

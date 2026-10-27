@@ -1,4 +1,3 @@
-module tiles_plan
 import { reshape, exp, relu } from tensor
 import { inspect } from tiles
 func pipeline(x: f32[..]): f32[..] { return exp(relu(x + x)) }

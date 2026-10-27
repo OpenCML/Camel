@@ -3,7 +3,6 @@
  * error: a spread is not in the language. It used to crash the compiler, and afterwards it was a
  * `ConstructNotSupported` while the form was still in the grammar.
  */
-module syntax_no_spread_in_struct_literal
 
 func main(): int sync {
     let s = { x: 1 }

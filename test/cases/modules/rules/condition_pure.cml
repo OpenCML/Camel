@@ -3,7 +3,6 @@
  * the coefficient's value and nothing else happens. The rule applies and the program is
  * rewritten, which is what the check above must leave alone.
  */
-module condition_pure
 
 import { rewrite } from rewrite
 

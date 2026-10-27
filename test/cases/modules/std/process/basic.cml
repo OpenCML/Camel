@@ -1,7 +1,6 @@
 /**
  * Exercises non-interactive process helpers such as identity lookup, zero-duration sleep, and CPU discovery.
  */
-module main
 
 import { user_name, sleep, cpu_count } from process
 

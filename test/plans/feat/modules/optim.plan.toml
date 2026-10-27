@@ -294,7 +294,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "argument types: Unknown, Model.", "init: (opt: Sgd, params: P) => SgdState", "init: (opt: Adam, params: P) => AdamState<P>"]
 expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
-expect_diagnostic_line = 22
+expect_diagnostic_line = 21
 expect_diagnostic_column = 21
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
@@ -308,7 +308,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "argument types: Unknown, Model, Model, AdamState<Model>.", "update: (opt: Sgd, params: P, grads: G, state: SgdState) => (P, SgdState)", "update: (opt: Adam, params: P, grads: G, state: AdamState<P>) => (P, AdamState<P>)"]
 expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
-expect_diagnostic_line = 25
+expect_diagnostic_line = 24
 expect_diagnostic_column = 31
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000

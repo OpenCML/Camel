@@ -12,7 +12,6 @@
  *   c = reshape([1..24], [2, 3, 4]);  c[:, 1, 2:4] = [[7, 8], [19, 20]]           sum = 54.0
  *   c[:, [1, 1], 2:4] = [[[7, 8], [7, 8]], [[19, 20], [19, 20]]]                 sum = 108.0
  */
-module subscript_index_rank3_mixed
 import { reshape, shape, sum } from tensor
 
 func plane(a: f32[2, 2]): float {

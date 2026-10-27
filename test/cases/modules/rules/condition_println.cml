@@ -2,7 +2,6 @@
  * A rule whose condition prints: the effect is written in the function the condition calls, and
  * the condition is otherwise an ordinary predicate over the constant the rule matched.
  */
-module condition_println
 
 import { rewrite } from rewrite
 

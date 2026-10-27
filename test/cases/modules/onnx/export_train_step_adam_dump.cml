@@ -3,7 +3,6 @@
  * steps of the export_train_step_adam MLP, printing the loss and saving the
  * updated parameters per step.
  */
-module export_train_step_adam_dump
 
 import { relu, mean, reshape } from tensor
 import { with_grad } from autodiff

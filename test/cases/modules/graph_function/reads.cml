@@ -1,4 +1,3 @@
-module reads
 
 import { graph_of, graphs_of, name, nodes, inputs, kind } from graph
 

@@ -1,5 +1,4 @@
 /** The same law on four element types: a rule of one type must leave the others alone. */
-module typed_cross
 
 func i32_c(x: i32): i32 { return x * 3 + x * 5 }
 func i64_c(x: int): int { return x * 3 + x * 5 }

@@ -1,7 +1,6 @@
 // Removes duplicates with `unique` of `array`, which keeps the order, or by converting to a
 // Set<T>; compares two groups with union, intersection and difference.
 // Run: camel examples/data/dedup_sets.cml
-module dedup_sets
 
 import { unique } from array
 

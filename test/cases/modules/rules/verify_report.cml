@@ -25,7 +25,6 @@
  * by column through the readers, which is what a tool consumes. Both have to agree, and both are
  * the same table -- `check_text` is the rendering of the rows `check_verdict` reads a column of.
  */
-module verify_report
 
 import { check, check_text } from rewrite
 import { log, log1p } from math

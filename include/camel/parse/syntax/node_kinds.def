@@ -21,7 +21,6 @@ CAMEL_NODE(Error, Other)               // tokens skipped while recovering from a
 CAMEL_NODE(Program, Other)             // SEP? (decl SEP?)* EOF
 CAMEL_NODE(StmtList, Other)            // stmt (SEP? stmt)* SEP?
 CAMEL_NODE(ModuleName, Other)          // ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)*
-CAMEL_NODE(ModuleDecl, Other)          // 'module' identDef
 CAMEL_NODE(ImportDecl, Other)          // 'import' (moduleName | (identDef | bracedImports) 'from' moduleName)
 CAMEL_NODE(BracedImports, Other)       // '{' (importItem (',' importItem)*)? ','? '}'
 CAMEL_NODE(ImportItem, Other)          // identDef ('as' identDef)?

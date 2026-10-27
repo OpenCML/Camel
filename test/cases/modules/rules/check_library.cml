@@ -26,7 +26,6 @@
  * `rules.every_exported_rule_enters_the_check` (`check_every_rule.cml` and its verify script), not by
  * this hand-written one, which is what drifted.
  */
-module check_library
 import { check, check_text } from rewrite
 import {
         add_self, int_add_zero, int_combine, int_combine_one, int_distribute, div_one, int_fold, int_fold_add, mul_one, int_mul_zero, neg_neg, int_sub_self, sub_zero,

@@ -4,7 +4,6 @@
  * from the declaration. With no ordinary parameter this is the type case a
  * zero-argument declaration can have.
  */
-module onnx_result_type
 
 import { supported_operators } from onnx
 

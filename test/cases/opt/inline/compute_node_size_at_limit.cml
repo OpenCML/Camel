@@ -6,7 +6,6 @@
  * calls it makes and its structural nodes; a constant, a parameter, a GATE and what an inline
  * splice adds are not counted.
  */
-module compute_node_size_at_limit
 
 import { reshape } from tensor
 import { export_model } from onnx

@@ -1,6 +1,6 @@
 error[RuntimeDiag::TimeFormatFailed]: 'time.strftime' failed: the timestamp 1e+20 is outside the range of calendar time.
-  --> <ROOT>/test/cases/compile/diag_render/runtime_time_format.cml:6:29
+  --> <ROOT>/test/cases/compile/diag_render/runtime_time_format.cml:4:29
    |
- 6 |     println(1.0e20->strftime<'%Y'>)
+ 4 |     println(1.0e20->strftime<'%Y'>)
    |                             ^^^^^^
 help: Check the format string against the strftime conversion specifiers (%Y, %m, %d, %H, %M, %S, ...).

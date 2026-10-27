@@ -43,7 +43,7 @@ expect_exit = 1
 # "Output and diagnostics"): the CPU fallback runs once and the fault is not swallowed, so the
 # program's line is the first line of stdout and the diagnostic follows it.
 expect_stdout_starts_with = "cpu fault once"
-expect_output_contains = ["RuntimeDiag::DivisionByZero", "resident_fallback_fault.cml:5:16"]
+expect_output_contains = ["RuntimeDiag::DivisionByZero", "resident_fallback_fault.cml:4:16"]
 verify_script = """
 ({ input, assert }) => {
 const stdout = input.normalized.stdout
@@ -97,7 +97,7 @@ case = "../../cases/modules/tiles/region_execution.cml"
 # configuration and the program location of the first operation that cannot run there.
 args = ["--devices", "cpu", "${case}", "tiles::test_outline_gpu", "std::nvm"]
 expect_exit = 1
-expect_output_contains = ["the run selected the host only (--devices cpu)", "region_execution.cml:6:14"]
+expect_output_contains = ["the run selected the host only (--devices cpu)", "region_execution.cml:5:14"]
 timeout_ms = 10000
 
 [[tests]]

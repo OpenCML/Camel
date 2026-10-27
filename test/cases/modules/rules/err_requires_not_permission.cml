@@ -1,5 +1,4 @@
 /// A requirement that names a tag of the program: only the core's permission tags qualify.
-module err_requires_not_permission
 
 tag plain on func
 

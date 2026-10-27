@@ -5,7 +5,6 @@
  * own count records, so the write copies and `big` keeps the value it was read as
  * (docs/design-principles.cn.md 3.5, 6.11, 8.3).
  */
-module var_alias_captured
 
 func make_array(): int[] {
     return [

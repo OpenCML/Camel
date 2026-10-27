@@ -157,6 +157,12 @@ void collectDeclarations(
             if (declaration.when.empty() || !hasPassShape(funcType) || namedOperator) {
                 return;
             }
+            // A pass takes the function it is applied to and nothing else: one ordinary
+            // parameter. A body-less declaration with the same condition and more parameters is
+            // an operator that wants a function (`export_model(f, example)`), and is not a pass.
+            if (funcType->size() > 1 && funcType->at(1)->size() != 1) {
+                return;
+            }
             if (funcType->size() > 0) {
                 try {
                     declaration.params =

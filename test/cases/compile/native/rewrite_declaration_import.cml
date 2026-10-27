@@ -5,7 +5,6 @@
  * table `CheckReport` from `stdlib/rewrite.cml`.
  * Checked, not run: the engines need a compiled program, and the rules plans run them.
  */
-module rewrite_declaration_import
 
 import { rewrite, saturate, extract, check, check_text } from rewrite
 import { nodes as sizeCost } from rules

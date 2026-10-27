@@ -4,7 +4,6 @@
  * `std::opt safe_fp=true` does. The reassociating coefficient law therefore does not fire under
  * the strict policy while the exact doubling law still does. The counts show which law fired.
  */
-module strict_target
 
 import { Node, Graph, nodes, op, op_name, name, graphs_of } from graph
 

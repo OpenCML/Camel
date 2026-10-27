@@ -3,7 +3,6 @@
  * name, answers the value it did when it was registered as `algo`'s: the algorithms moved, their
  * results did not.
  */
-module array_every_operator
 
 import array
 

@@ -2,7 +2,6 @@
  * A pass written in Camel that tries a rewrite and then keeps the program it was given: it
  * returns `p`, so the pipeline must go on with `p` (design principles 9.1).
  */
-module discard_pass
 import { Rule, rewrite } from rewrite
 
 rule drop_one(x: int) { x + 1 => x }

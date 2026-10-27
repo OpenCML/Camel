@@ -12,7 +12,6 @@
  * the run reads is the same either way: `m[0:2, 0:2]` is `[[1, 2], [4, 5]]`, shape `[2, 2]`, sum
  * 12.0. The axis that stays `?` is what `si_computed_slice` pins with its diagnostic.
  */
-module slice_two_axes_constant_and_computed
 import { reshape, shape, sum } from tensor
 
 func block(a: f32[?, 2]): float {

@@ -4,7 +4,6 @@
  * `A ^ B`) are not in the language, so `a as int + 1` is `(a as int) + 1` and the values below say
  * which reading the compiler took.
  */
-module cast_ends_at_the_type
 
 func main(): int sync {
     let a = 4

@@ -1,7 +1,6 @@
 /**
  * Checks namespace-qualified exported types can be referenced through module imports.
  */
-module module_import_type_export
 
 import namespace_lib
 

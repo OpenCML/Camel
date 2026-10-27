@@ -2,7 +2,6 @@
  * The coefficient laws' value guards, each at the value the guard is about: an overflowing sum, a
  * product that underflows to zero, a product that overflows, and a mixed pair whose sum is zero.
  */
-module typed_boundary_guards
 
 func f32_combine_over(x: f32): f32 { return x * 3.0e38 + x * 3.0e38 }
 

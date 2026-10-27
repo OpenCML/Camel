@@ -25,7 +25,6 @@ The declared type of a parameter is checked by the matcher, so a rule needs no g
 A `rule` declaration declares a `Rule` value (like a constant declared with `let`, not like a function): it can be passed to a function, put in an array, filtered by a condition. **A rule set is an ordinary `Rule[]`**, and scheduling is ordinary Camel code ([rules language v2, section 8.5](../../design/rewrite/v2.cn.md)).
 
 ```cml
-module law
 
 import { rewrite } from rewrite
 
@@ -97,7 +96,6 @@ The kinds of parameter come from different places ([design principles 5.5](../..
 A `with` parameter is written like a function's ([7.4.2](07_statements.md#742-with-parameters)): it may have a default, and it may be given by name. **The binding is written where the rule is used**, the same spelling as a partial application of a function:
 
 ```cml
-module tiled
 
 import { rewrite } from rewrite
 
@@ -129,7 +127,6 @@ export func apply::<F>(p: F): F! {
 
 ```cml
 // counts.cml
-module counts
 
 import { abs } from math
 import { rewrite } from rewrite
@@ -197,7 +194,6 @@ In theory these are ⊔/⊓/∇/Δ of abstract interpretation.
 `join`, `meet`, `widen` and `narrow` take a **function**, so what is written here is a name that exists in a library (such as `max`) or a lambda. **`or`/`and` are not standard library functions**, and no new ones are added: the boolean "or" is `|` (evaluated on both sides, an ordinary overloadable logical operator, [design principles 4.2](../../design-principles.en.md)), so the merge of a boolean fact is written `join (lhs: bool, rhs: bool) => lhs | rhs`. `||` is the reserved operator that turns into a branch; it is not a function value that can be passed, and cannot be written here.
 
 ```cml
-module bounds
 
 import { max, min } from math
 
@@ -242,7 +238,6 @@ error[SemanticDiag::FactCaseDefaultMissing]: The fact 'sign' has no 'case _', so
 **Parameters.** A fact may have parameters, passed as arguments when it is queried. They are **the parts** of the value (nodes): `fact mul_by_one(a: Node, b: Node): bool match (a, b) { ... }` is queried by a rule's condition as `mul_by_one(x, node_of(c))`. With no parameter, the single-value form is `range(v)`. Type parameters are declared after the name (`fact range::<T>(v: T): Interval`), as they are on a rule — see [9.3](#93-type-parameters-and-with-parameters).
 
 ```cml
-module parts
 
 import { max } from math
 import { Node } from graph
@@ -269,7 +264,6 @@ export func apply::<F>(p: F): F! {
 **`with` arguments.** A fact may have `with` parameters: adjustments such as a widening threshold, a precision, a truncation depth or a tolerance. They are declared like a function's or a rule's; a query writes the arguments as a call does, and a default may be left out.
 
 ```cml
-module capped_fact
 
 import { max } from math
 import { rewrite } from rewrite
@@ -320,7 +314,6 @@ error[SemanticDiag::FactArgumentNotConstant]: The argument 'cap' of a fact is no
 - `rules->check<samples, seed>` samples a rule: it makes random instances, computes both sides and compares them, and prints a table of findings. It only samples: a counter-example says the rule is wrong, while no error only says that no counter-example was drawn this time. Every standard library rule passes `check` before it goes in.
 
 ```cml
-module checked
 
 import { check, check_text } from rewrite
 
@@ -354,7 +347,6 @@ thing that changes):
 
 ```cml
 // fired.cml
-module fired
 
 import { abs } from math
 import { rewrite } from rewrite

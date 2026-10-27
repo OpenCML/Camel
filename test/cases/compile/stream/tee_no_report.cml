@@ -4,7 +4,6 @@
  * this case is `stream.tee_report`, whose program does write tees and whose report carries one
  * `STREAM_TEE` line each; the same assertions are made here and no line of that kind may appear.
  */
-module stream_tee_no_report
 
 func count(n: int): int.. {
     return step(n)

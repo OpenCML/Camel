@@ -7,7 +7,6 @@
  *
  * `guarded_log` and `guarded_exp` are the forms the rules must not match: the constant is not 1.
  */
-module accuracy_scalar_target
 
 import { exp, expm1, log1p, log } from math
 

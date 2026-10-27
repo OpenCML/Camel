@@ -7,7 +7,6 @@
  * decorator (`plain`, applied as it runs; `mark`, applied as the program is built), and
  * prints the same.
  */
-module blocks
 import { plain, mark } from test_attrs
 
 /// A decorator of the program: the function, its result doubled.

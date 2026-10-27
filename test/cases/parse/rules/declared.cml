@@ -1,5 +1,4 @@
 /** The rule declarations the formatter writes on one line each (rewrite design 2). */
-module declared
 
 export rule mul_one(x: int) { x * 1 => x }
 rule add_swap(a: int, b: int) { a + b <=> b + a }

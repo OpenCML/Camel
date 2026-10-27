@@ -1,4 +1,3 @@
-module graph_read
 import { name, nodes, op, op_name, inputs, users, type_of, type_name, is_pure, callee, tags, show, constant, origin, graphs_of } from graph
 import { Graph, Node } from graph
 

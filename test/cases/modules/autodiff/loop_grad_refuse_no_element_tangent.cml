@@ -5,7 +5,6 @@
  * round's element gradient into. The diagnostic names the loop, the array, its element type and
  * where the array is written; it is not a silent zero.
  */
-module loop_grad_refuse_no_element_tangent
 
 import { grad } from autodiff
 

@@ -1,4 +1,3 @@
-module imports
 import { flat_map } from array
 
 func expanded(x: int): int[] {

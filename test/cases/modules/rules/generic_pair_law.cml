@@ -18,7 +18,6 @@
  * position. The rule moved it before the body (`rule f::<T>(x: T) when cond {... }`)
  * and `stdlib/rules.cml` is rewritten with it; this case must be rewritten in the same move.
  */
-module generic_pair_law
 
 import { Graph, Node, NodeKind, kind, name, nodes, graphs_of } from graph
 import { Run, check, explain_all, rule_name, run, why_not, check_text } from rewrite

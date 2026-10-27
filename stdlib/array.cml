@@ -59,8 +59,7 @@ export func drop::<T>(xs: T[]): T[] {
 /// @example [1, 2, 3, 4, 5]->chunks<2>    // [[1, 2], [3, 4], [5]]
 with <n: int>
 export func chunks::<T>(xs: T[]): T[][] {
-    return if n < 1 then fail<'InvalidArgument'>('a chunk holds at least one element')
-        else [xs->drop<i>->take<n> for i in range(0, len(xs), n)]
+    return if n < 1 then fail<'InvalidArgument'>('a chunk holds at least one element') else [xs->drop<i>->take<n> for i in range(0, len(xs), n)]
 }
 
 /// Each element with its index.
@@ -214,8 +213,7 @@ export func argmax::<T>(xs: T[..]): int when is_ordered::<T>() {
 export func argmin::<T>(xs: T[..]): int when is_ordered::<T>() {
     let es = some_elements(xs)
     let nan_at = es->find_index<(x) => x != x>
-    return if nan_at != null then nan_at
-        else loop best = 0 for i in 1..len(es) do if precedes(es[i], es[best]) then i else best
+    return if nan_at != null then nan_at else loop best = 0 for i in 1..len(es) do if precedes(es[i], es[best]) then i else best
 }
 
 // a is strictly before b in the order of `argsort`.

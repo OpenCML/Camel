@@ -11,7 +11,6 @@
  * the default chain and of the `#strict` chain are equal, and equal to the bytes `std::fvm`
  * prints when it runs the nodes one by one (it has no kernel for the group).
  */
-module fusion_group_mul_neg
 
 import { reshape, sum, to_bytes } from tensor
 import { with_grad } from autodiff

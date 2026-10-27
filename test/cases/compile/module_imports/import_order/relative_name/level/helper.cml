@@ -2,7 +2,6 @@
 /// name has two components and `..lib` drops two: the name is `lib`, looked for in this library's
 /// own directory first, which is `level/lib.cml` (level-lib). The entry directory's lib.cml
 /// (local-lib) is not a search root for this library (design principles 10.2).
-module helper
 
 import ..lib
 

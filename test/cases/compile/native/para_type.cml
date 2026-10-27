@@ -3,7 +3,6 @@
  * the message prints the declaration's own parameter names (`parties`, `timeout`) — the one
  * source is `stdlib/test_support.cml`, not the C++ module (step 10).
  */
-module para_type
 
 import { rendezvous } from test_support
 

@@ -4,7 +4,6 @@
 //      camel examples/ml/export_onnx.cml std::macro std::opt onnx::export
 // The first command runs the program; the second translates it without running it and
 // writes the same model.
-module export_onnx
 
 import { tanh, reshape } from tensor
 import { export_model } from onnx

@@ -2,7 +2,6 @@
  * The axis of `slice`: the call names axis 3 of a rank-2 tensor, which the value does not have, so
  * the run faults with the core's own wording, naming the axes it does have (design principles 5.4).
  */
-module shape_diag_slice
 
 import { zeros } from tensor
 

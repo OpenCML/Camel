@@ -1,5 +1,4 @@
 /** Helper module: imports mutual_a, which imports it back. */
-module mutual_b
 import mutual_a
 import { Point, origin_x } from mutual_a
 

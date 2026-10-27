@@ -2,7 +2,6 @@
  * The declaration of `graph:graph_of` takes one ordinary argument, the function: a call with none
  * is refused at the call, and the candidate the message lists is the declaration's.
  */
-module graph_arity
 
 import { graph_of } from graph
 

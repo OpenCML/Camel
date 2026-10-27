@@ -1,6 +1,5 @@
 // A pass module that imports a Camel library which itself imports another one: the pass program
 // declares and builds the whole import closure, in import order (item 1).
-module chain
 import { six } from chainlib
 
 export func show::<F>(p: F): F! sync {

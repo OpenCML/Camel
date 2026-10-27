@@ -1,5 +1,4 @@
 /// '#op' names an operator by URI: a URI without 'protocol:path' is refused.
-module operator_uri_invalid
 
 #op('stdadd')
 func add(a: int, b: int): int

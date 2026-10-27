@@ -4,7 +4,6 @@
  * what the JIT compiles: the recursive call is then machine code calling machine code. The recursive arm reads
  * parameters the other arm has read first, and passes them on in another order.
  */
-module jit_self_recursion_shapes
 
 func fib(n: int): int {
     return if n <= 1 then n else fib(n - 1) + fib(n - 2)

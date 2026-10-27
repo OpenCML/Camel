@@ -269,7 +269,6 @@ function importOnlyProgram(dir, module) {
     fs.writeFileSync(
         file,
         `// probe: import ${module} and do nothing else.\n` +
-            `module import_only_${module}\n\n` +
             `import ${module}\n\n` +
             `func main(): int {\n    return 0\n}\n`,
     )

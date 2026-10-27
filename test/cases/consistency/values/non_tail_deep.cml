@@ -2,7 +2,6 @@
  * Non-tail recursion 200 deep, inside the default limit of every back end, through a direct
  * call, through a function value and through a higher-order operator.
  */
-module non_tail_deep
 
 func depth(n: int): int {
     return if n == 0 then 0 else 1 + depth(n - 1)

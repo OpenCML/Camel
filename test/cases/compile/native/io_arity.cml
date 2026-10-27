@@ -2,7 +2,6 @@
  * The declaration of `io:get_chars` takes one ordinary argument: a second one is refused at the
  * call, and the overload the message lists is the declaration's (steps 4 and 10).
  */
-module io_arity
 
 import { get_chars } from io
 

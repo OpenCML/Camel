@@ -1,7 +1,6 @@
 /**
  * Verifies macro evaluation skips non-static inputs while leaving the macro call executable by the runtime fallback path.
  */
-module macro_runtime_boundary
 
 func seed(): int {
     return 41

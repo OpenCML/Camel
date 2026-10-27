@@ -3,7 +3,6 @@
 // (each a scalar recursion), and then does scalar work of its own through small helpers
 // (`churn`: 20000 iterations of `mix`). The driver and `inner_sum` have a `map` below them; `fib`,
 // `mix` and `churn` have nothing to run concurrently.
-module driver_inner
 
 func fib(n: int): int {
     return if n <= 1 then n else fib(n - 1) + fib(n - 2)

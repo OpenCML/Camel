@@ -1,9 +1,6 @@
 >// Literals: every form the lexer accepts (antlr/OpenCMLLex.g4).
 #^^ comment.line.double-slash.camel punctuation.definition.comment.camel
 #  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
->module literals
-#^^^^^^ keyword.control.import.module.camel
-#       ^^^^^^^^ entity.name.namespace.module.camel
 >
 >// INTEGER: DEC, OCT, HEX, BIN, each with an optional exponent
 #^^ comment.line.double-slash.camel punctuation.definition.comment.camel

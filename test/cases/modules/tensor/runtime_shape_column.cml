@@ -2,7 +2,6 @@
  * A shape conflict that only shows at run time (the extent comes from a variable) is reported at
  * the expression that fails (`c @ b`, line 11), not at the start of the enclosing statement.
  */
-module runtime_shape_column
 
 import { ones, reshape } from tensor
 

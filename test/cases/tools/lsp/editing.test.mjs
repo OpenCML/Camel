@@ -135,18 +135,14 @@ await withServer(async (ls) => {
 
     // ---- completion: the variants of an enum after `Type::` ----
     // A text that compiles first: a text being typed inherits the declaration types from it.
-    const ENUMS = `module enums
-
-export type Shape = enum {
+    const ENUMS = `export type Shape = enum {
     Circle(float),
     Rect { w: float, h: float },
     Empty,
 }
 `
     ls.writeFile('enums.cml', ENUMS)
-    const withEnums = (body) => `module main
-
-import { norm2, scale } from shapes
+    const withEnums = (body) => `import { norm2, scale } from shapes
 import { Shape } from enums
 
 type Local = enum { A(float), B { k: int }, C }
@@ -213,32 +209,32 @@ ${body}
     m = edit(MAIN.replace('import { now } from time', 'import { now } from time\nimport math')
         .replace('    return 0\n}', '    let r = math::abs(/*m*/1)\n    return 0\n}'))
     sh = await help(m, 'm')
-    check(sh !== null && sh.signatures.some((s) => s.label.includes('abs: (x: i32) => i32')),
-        'signature help on a declared member of a migrated module', sh)
+    check(sh !== null && sh.signatures.some((s) => s.label.includes('abs: (x: T) => T')),
+        'signature help on a generic member of a migrated module, one signature per declaration', sh)
 
     // ---- rename ----
     edit(MAIN)
     await ls.diagnosticsFor(uri, version)
     const pos = (needle, nth = 1, delta = 0) => ({ textDocument: { uri }, position: src.find(needle, nth, delta) })
     let prep = await ls.request('textDocument/prepareRename', pos('let sum', 1, 4))
-    checkEq([fmtRange(prep.range), prep.placeholder], ['34:8-34:11', 'sum'], 'prepareRename gives the name')
+    checkEq([fmtRange(prep.range), prep.placeholder], ['32:8-32:11', 'sum'], 'prepareRename gives the name')
     let we = await ls.request('textDocument/rename', { ...pos('let sum', 1, 4), newName: 'result' })
     checkEq(we.changes[uri].map((e) => `${fmtRange(e.range)} ${e.newText}`),
-        ['34:8-34:11 result', '39:19-39:22 result'], 'a local: its declaration and its uses')
+        ['32:8-32:11 result', '37:19-37:22 result'], 'a local: its declaration and its uses')
     // From a use, and for a parameter.
     we = await ls.request('textDocument/rename', { ...pos('counter += by'), newName: 'cell' })
-    checkEq(we.changes[uri].map((e) => fmtRange(e.range)), ['21:14-21:21', '22:4-22:11', '23:11-23:18'],
+    checkEq(we.changes[uri].map((e) => fmtRange(e.range)), ['19:14-19:21', '20:4-20:11', '21:11-21:18'],
         'a var parameter, renamed from a use')
     // Every overload of a function is renamed with it.
     we = await ls.request('textDocument/rename', { ...pos('add(1, 2)'), newName: 'plus' })
     checkEq(we.changes[uri].map((e) => fmtRange(e.range)),
-        ['13:5-13:8', '17:5-17:8', '34:14-34:17', '35:15-35:18'],
+        ['11:5-11:8', '15:5-15:8', '32:14-32:17', '33:15-33:18'],
         'overloads share their name: all are renamed, with the calls of each')
     we = await ls.request('textDocument/rename', { ...pos('): T', 1, 3), newName: 'U' })
-    checkEq(we.changes[uri].map((e) => fmtRange(e.range)), ['8:16-8:17', '8:22-8:23', '8:26-8:27'],
+    checkEq(we.changes[uri].map((e) => fmtRange(e.range)), ['6:16-6:17', '6:22-6:23', '6:26-6:27'],
         'a type parameter: its head declaration and its uses')
     we = await ls.request('textDocument/rename', { ...pos('type Pair', 1, 5), newName: 'Entry' })
-    checkEq(we.changes[uri].map((e) => fmtRange(e.range)), ['5:5-5:9', '36:14-36:18'], 'a type alias')
+    checkEq(we.changes[uri].map((e) => fmtRange(e.range)), ['3:5-3:9', '34:14-34:18'], 'a type alias')
 
     const refused = async (params, reason, what) => {
         const r = await ls.requestRaw('textDocument/rename', params)
@@ -251,13 +247,11 @@ ${body}
     await refused({ ...pos('println'), newName: 'say' }, 'not declared in a source file', 'a library function is refused')
     await refused({ ...pos('q.x', 1, 2), newName: 'xx' }, 'field', 'a field is refused')
     await refused({ ...pos('func main', 1, 5), newName: 'start' }, 'entry', 'main is refused')
-    let r = await ls.requestRaw('textDocument/prepareRename', pos('module main'))
+    let r = await ls.requestRaw('textDocument/prepareRename', pos('func main', 1, 0))
     check(r.error && r.error.message.includes('nothing here'), 'prepareRename on a keyword is refused', r)
 
     // A generic function that is never called: the compiler has not seen the uses in it.
-    m = edit(`module main
-
-func unused::<T>(x: T): T {
+    m = edit(`func unused::<T>(x: T): T {
     let /*y*/y = x
     return y
 }
@@ -269,15 +263,15 @@ func main() sync {
     await refused({ textDocument: { uri }, position: m.at('y'), newName: 'z' },
         'cannot be confirmed', 'a name used only in code the compiler did not build is refused')
     // Exported functions are now renamed across the workspace after validation.
-    m = edit('module lib\n\nexport func /*f*/twice(x: int): int {\n    return x * 2\n}\n\nfunc main() sync {\n    return twice(1)\n}\n')
+    m = edit('export func /*f*/twice(x: int): int {\n    return x * 2\n}\n\nfunc main() sync {\n    return twice(1)\n}\n')
     we = await ls.request('textDocument/rename', {
         textDocument: { uri }, position: m.at('f'), newName: 'double',
     })
     checkEq(we.changes[uri].map((e) => `${fmtRange(e.range)} ${e.newText}`),
-        ['7:11-7:16 double', '2:12-2:17 double'],
+        ['5:11-5:16 double', '0:12-0:17 double'],
         'an exported function: its declaration and call are renamed together')
     // A text with an error.
-    m = edit('module main\n\nfunc main() sync {\n    let /*a*/a = 1\n    println(nope)\n    return a\n}\n')
+    m = edit('func main() sync {\n    let /*a*/a = 1\n    println(nope)\n    return a\n}\n')
     await refused({ textDocument: { uri }, position: m.at('a'), newName: 'b' },
         'has errors', 'a rename in a file with errors is refused')
 
@@ -303,25 +297,25 @@ func main() sync {
         const t = decoded.find((x) => x.line === lineNo && x.text === text)
         return t ? `${t.type}${t.mods ? ' ' + t.mods : ''}` : 'none'
     }
-    checkEq(tok(21, 'bump'), 'function declaration', 'a function is marked')
-    checkEq(tok(21, 'counter'), 'parameter declaration+mutable', 'a var parameter is mutable')
-    checkEq(tok(21, 'by'), 'parameter declaration+readonly', 'a plain parameter is not')
-    checkEq(tok(27, 'p'), 'variable declaration+readonly', 'let: readonly')
-    checkEq(tok(30, 'total'), 'variable declaration+mutable', 'var: mutable')
-    checkEq(tok(31, 'total'), 'variable mutable', 'a use of a var')
-    checkEq(tok(31, 'x'), 'property', 'a field')
-    checkEq(tok(31, '+='), 'operator', 'an operator')
-    checkEq(tok(28, 'norm2'), 'function', 'a call of an imported function')
-    checkEq(tok(2, 'norm2'), 'function declaration', 'the import of a function')
-    checkEq(tok(5, 'Pair'), 'type declaration', 'a type alias')
-    checkEq(tok(36, 'Pair'), 'type', 'its use')
-    checkEq(tok(5, 'int'), 'type defaultLibrary', 'a built-in type')
-    checkEq(tok(8, 'T'), 'typeParameter declaration', 'a type variable')
-    checkEq(tok(40, 'println'), 'function defaultLibrary', 'a library function')
-    checkEq(tok(40, 'i'), 'variable readonly', 'a with-argument')
-    checkEq(tok(27, '3'), 'number', 'a number')
-    checkEq(tok(33, "'text'"), 'string', 'a string')
-    checkEq(tok(26, 'main'), 'function declaration', 'main')
+    checkEq(tok(19, 'bump'), 'function declaration', 'a function is marked')
+    checkEq(tok(19, 'counter'), 'parameter declaration+mutable', 'a var parameter is mutable')
+    checkEq(tok(19, 'by'), 'parameter declaration+readonly', 'a plain parameter is not')
+    checkEq(tok(25, 'p'), 'variable declaration+readonly', 'let: readonly')
+    checkEq(tok(28, 'total'), 'variable declaration+mutable', 'var: mutable')
+    checkEq(tok(29, 'total'), 'variable mutable', 'a use of a var')
+    checkEq(tok(29, 'x'), 'property', 'a field')
+    checkEq(tok(29, '+='), 'operator', 'an operator')
+    checkEq(tok(26, 'norm2'), 'function', 'a call of an imported function')
+    checkEq(tok(0, 'norm2'), 'function declaration', 'the import of a function')
+    checkEq(tok(3, 'Pair'), 'type declaration', 'a type alias')
+    checkEq(tok(34, 'Pair'), 'type', 'its use')
+    checkEq(tok(3, 'int'), 'type defaultLibrary', 'a built-in type')
+    checkEq(tok(6, 'T'), 'typeParameter declaration', 'a type variable')
+    checkEq(tok(38, 'println'), 'function defaultLibrary', 'a library function')
+    checkEq(tok(38, 'i'), 'variable readonly', 'a with-argument')
+    checkEq(tok(25, '3'), 'number', 'a number')
+    checkEq(tok(31, "'text'"), 'string', 'a string')
+    checkEq(tok(24, 'main'), 'function declaration', 'main')
     checkEq(tok(1, 'anything'), 'none', 'nothing for what is not there')
     // A call of a function with a var parameter: the use is marked too.
     m = edit(MAIN.replace('    return 0\n}', '    bump(total, 1)\n    return 0\n}'))

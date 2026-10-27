@@ -1,5 +1,3 @@
-module fault_clamp_nan
-
 import { clamp, nan } from math
 
 func main(): int sync {

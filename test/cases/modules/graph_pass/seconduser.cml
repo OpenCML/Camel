@@ -1,6 +1,5 @@
 // The second pass of the same pipeline: it imports `sharedvals` under names of its own, and the
 // two programs (and the program being transformed) each use their own exported entities.
-module seconduser
 import { bump as plusOne, twice as doubled } from sharedvals
 
 export func run::<F>(p: F): F! sync {

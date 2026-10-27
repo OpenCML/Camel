@@ -10,7 +10,6 @@
  * value between bf16 3.0 and 3.015625, which ties to even gives 3.0 (0x4040, bytes [64, 64]),
  * so the rounding happens once, on the stored element.
  */
-module stdlib_reduced_reduction_bytes
 
 import { new, reshape, sum, to_bytes } from tensor
 import { to_array } from bytes

@@ -1,7 +1,6 @@
 // A module that compiles and provides one pass, `ok`, but no `run`: naming `no_pass::run` must
 // say so, and what the module does provide, instead of "pass not found" over the whole pipeline
 // 
-module no_pass
 
 
 export func ok::<F>(p: F): F! {

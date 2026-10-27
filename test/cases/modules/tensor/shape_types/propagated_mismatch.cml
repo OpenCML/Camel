@@ -1,4 +1,3 @@
-module shape_propagated_mismatch
 import { zeros, ones, reshape, sum, tanh, load_npy } from tensor
 func g(h: f32[2, 4]): f32[..] {
     return h

@@ -1,5 +1,4 @@
 /** The element-family laws, applied on their own, and the deliberately wrong versions the tests must catch. */
-module typed_pass
 import { rewrite } from rewrite
 import { float_add_neg_zero, float_combine, float_combine_mixed, div_one, float_fold, mul_one, neg_neg, sub_zero, float_double, int_add_zero, int_combine, div_one, int_fold, int_fold_add, mul_one, int_mul_zero, neg_neg, int_sub_self, sub_zero } from rules
 

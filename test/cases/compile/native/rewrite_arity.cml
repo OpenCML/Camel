@@ -3,7 +3,6 @@
  * is refused at the call, and the candidate the message lists is the declaration's
  * `(f: F): F!` with `rules: Rule[]` — `stdlib/rewrite.cml`, not the C++ module.
  */
-module rewrite_arity
 
 import { rewrite } from rewrite
 

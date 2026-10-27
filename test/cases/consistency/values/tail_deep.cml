@@ -2,7 +2,6 @@
  * Tail recursion of a hundred thousand and of a million rounds: no back end may run out of
  * stack or of frames.
  */
-module tail_deep
 
 func spin(i: int, n: int, acc: int): int {
     return if i > n then acc else spin(i + 1, n, acc + i)

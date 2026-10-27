@@ -2,7 +2,6 @@
  * Verifies a loop that runs no round: the tape is empty, so the reverse pass does not run at all
  * and the gradient of the parameter the body would have used is zero, not the seed.
  */
-module loop_grad_zero_rounds
 
 import { grad, with_grad } from autodiff
 

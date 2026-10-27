@@ -1,5 +1,4 @@
 /// A 'match type' whose subject is still a type variable at instantiation.
-module static_type_not_concrete
 
 func f::<T>(x: int): int {
     return match type T {

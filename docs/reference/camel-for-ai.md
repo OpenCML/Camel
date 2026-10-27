@@ -386,7 +386,7 @@ These two come from the sources the compiler itself reads, so they cannot drift 
 <!-- camel-for-ai region: lexical (generated from docs/language/02_lexical.md §2.4 and include/camel/parse/syntax/token_kinds.def; node scripts/camel-for-ai.mjs --write) -->
 | Group | Words |
 |---|---|
-| Declaration | `let` `var` `func` `type` `with` `module` `import` `export` `from` `namespace` `using` |
+| Declaration | `let` `var` `func` `type` `with` `import` `export` `from` `namespace` `using` |
 | Control | `if` `then` `else` `match` `case` `return` `yield` `sync` `loop` `while` `do` `for` `in` `static` |
 | Type and conversion | `as` `const` `constas` `enum` `typeof` |
 | Literal | `null` `true` `false` |

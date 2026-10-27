@@ -4,7 +4,6 @@
  * of 1 (exit 0, no diagnostic). Without passes, and with either pass alone, it prints 1.
  * Expected output: 1
  */
-module inline_dce_arm_value
 
 func main(): int sync {
     let n = if true then sync {

@@ -2,7 +2,6 @@
 // loop takes the two bounds and walks the integers between them, so the array of the interval is
 // never built. Which rounds happen, when there is none, and what the end means are what the array
 // of the interval gave.
-module h426_interval_loop
 
 func main(): int sync {
     // The rounds are a, a + 1, ..., b - 1.

@@ -4,7 +4,6 @@
  * `py_print`, `py_println`, `py_wrap` and `py_unwrap` stay computed in C++.
  * The calls are type-checked and never run: this case stays compile-only.
  */
-module python_declaration_import
 
 import { py_exec, py_eval, py_run, py_attr, py_import, py_dispose, py_wrap } from python
 

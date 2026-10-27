@@ -7,7 +7,6 @@
  * values of the matched subgraph. A condition is pure: it reads the draft and answers whether the
  * rule applies to this match.
  */
-module when_rules
 import { Node, Graph, nodes, op, op_name, name, constant, type_of, type_name, graphs_of } from graph
 import { nodes as sizeCost } from rules
 import { rewrite, saturate, extract } from rewrite

@@ -1,4 +1,3 @@
-module tiles_loop_benchmark
 import { benchmark } from tiles
 #[contract]
 func relaxed(a: float): float {

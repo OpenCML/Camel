@@ -1,7 +1,6 @@
 /**
  * Verifies builtin operators feeding branch conditions and arithmetic remain correctly ordered after JIT lowering.
  */
-module jit_operator_branch_mix
 
 func pick(xs: int[]): int {
     let n = len(xs)

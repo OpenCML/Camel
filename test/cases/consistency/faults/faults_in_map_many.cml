@@ -3,7 +3,6 @@
  * another. Which one is reported is not laid down for a scheduler that runs them concurrently;
  * the run stops with one located DivisionByZero and exit code 1.
  */
-module faults_in_map_many
 
 func bad(x: int): int {
     return if x % 2 == 0

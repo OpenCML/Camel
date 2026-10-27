@@ -1,4 +1,3 @@
-module regionprobe
 import { Graph, Node, Region, RegionKind, nodes, region_of, region_kind, region_parent, graphs_of } from graph
 
 // Every node is in a region; the body of a graph is region 0 and its kind is Root, whether or

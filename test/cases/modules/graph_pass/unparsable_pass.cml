@@ -1,6 +1,5 @@
 // A pass module that does not parse. The pass is a bad pass specification, reported with the
 // parse diagnostic — not an exception out of the pipeline (item 1).
-module unparsable_pass
 
 
 export func run::<F>(p: F): F! sync {

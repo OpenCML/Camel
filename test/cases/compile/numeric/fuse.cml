@@ -8,7 +8,6 @@
  * of one group need not agree on permissions. Safe mode (`tensor::fuse safe_fp=true`) makes
  * every matmul canonical.
  */
-module fuse
 
 import { reshape, sum } from tensor
 

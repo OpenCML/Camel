@@ -16,7 +16,6 @@
  *   L7 5
  *   L8 (a, -21)
  */
-module perm_query_types
 
 import { get_env } from env
 

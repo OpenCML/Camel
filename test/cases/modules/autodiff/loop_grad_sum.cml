@@ -3,7 +3,6 @@
  * collects what the round's pullback reads, and the reverse pass adds what each round sends back
  * to the captured value. Three rounds contribute one each, so the gradient is the round count.
  */
-module loop_grad_sum
 
 import { grad, with_grad } from autodiff
 

@@ -33,7 +33,6 @@
  * third distance is 1.0 and the printed first coordinate is 16777216.0), the gradient of `w` is
  * not the column sums of x, or the gradient of `x` loses the row of w.
  */
-module f64_matmul_grad_width
 
 import { abs, reshape, sum } from tensor
 import { with_grad } from autodiff

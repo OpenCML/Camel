@@ -8,7 +8,6 @@
  * `Program::implBodies`. The check is on the body graph by name, so an `IMPL bodies` count that
  * happens to include some other graph does not make the test pass.
  */
-module impl_cross_module
 
 import { add } from impl_cross_module_lib
 

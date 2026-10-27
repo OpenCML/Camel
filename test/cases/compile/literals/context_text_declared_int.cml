@@ -3,7 +3,6 @@
  * a number. There is no implicit text-to-number conversion (design principles 5.1); the message
  * says so and points at `int(s)` / `parse_int(s)`.
  */
-module literal_context_text_int
 
 func main(): int sync {
     let x: int = '42'

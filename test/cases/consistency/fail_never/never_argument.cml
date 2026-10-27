@@ -5,7 +5,6 @@
  * The warning names the argument. Its result stands where the declared type is, because a value
  * that never comes fits any position: an `int[]` here, which is what the call was asked for.
  */
-module never_argument
 
 func double(x: int): int { return x + x }
 

@@ -6,7 +6,6 @@
  * Before the guard was part of a case this file was a syntax error, so the report is new; the
  * point it pins is that the variant guarded is the variant reported.
  */
-module match_guard_enum_not_exhaustive
 
 type E = enum {
     A,

@@ -3,7 +3,6 @@
 /// declared type cannot hold is refused with that type's name and range (`i32`,
 /// -2147483648 to 2147483647; `f32`, at most about 3.4e38 in magnitude), and a text that fits is
 /// converted once, at that width.
-module entry_arg_widths
 
 func main(n: i32, rate: f32): int sync {
     println(n, rate)

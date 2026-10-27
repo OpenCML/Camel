@@ -2,7 +2,6 @@
  * Exercises the sorting functions of the `array` module: a new array (the argument is unchanged)
  * and the merge of two sorted inputs written as a sort of their concatenation.
  */
-module main
 
 import { sort } from array
 

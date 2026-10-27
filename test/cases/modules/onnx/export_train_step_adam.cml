@@ -6,7 +6,6 @@
  * the corrections, Mul/Div/Sqrt per leaf) — the same pure single-step pattern
  * as the SGD export (export_train_step.cml).
  */
-module export_train_step_adam
 
 import { relu, mean, reshape } from tensor
 import { with_grad } from autodiff

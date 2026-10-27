@@ -2,7 +2,6 @@
  * The program the rules with conditions are applied to. Every function has a sibling whose
  * condition is false, so the tests can see both that the rule fires and that it refuses.
  */
-module when_target
 
 /// x + 0: the fact read of the condition holds.
 func byConst(x: int): int { return x + 0 }

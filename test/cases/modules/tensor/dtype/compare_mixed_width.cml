@@ -4,7 +4,6 @@
  * arm, so the elementwise comparison is refused rather than answered at a width the program did not
  * write. The whole comparison of the same pair is the same refusal, since it reduces this one.
  */
-module compare_mixed_width
 
 import { reshape } from tensor
 

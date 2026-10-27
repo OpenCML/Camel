@@ -1,7 +1,6 @@
 /**
  * Exercises the this module zen helper as a lightweight builtin-module import and execution check.
  */
-module main
 
 import { zen } from this
 

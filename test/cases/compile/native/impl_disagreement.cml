@@ -8,7 +8,6 @@
  * semantics, so a wrong kernel is accepted by the builder and only a differential test can
  * catch it.
  */
-module impl_disagreement
 
 #op(':op/sub_l')
 func sub_kernel(a: int, b: int): int

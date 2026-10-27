@@ -1,5 +1,3 @@
-module runtime_time_format
-
 import { strftime } from time
 
 func main(): int sync {

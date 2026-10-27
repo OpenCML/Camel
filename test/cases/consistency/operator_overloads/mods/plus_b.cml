@@ -1,3 +1,2 @@
-module plus_b
 import { V } from base
 export func operator +(a: V, b: V): V { return { x: 0 } }

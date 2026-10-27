@@ -3,7 +3,6 @@
  * argument list is reported with the count when the tag is read, before any kernel is looked up
  * (language reference 7.6; design principles 10.4).
  */
-module impl_syntax_args
 
 func add(a: int, b: int): int {
     return a + b

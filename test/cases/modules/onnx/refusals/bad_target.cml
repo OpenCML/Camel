@@ -2,7 +2,6 @@
  * An unknown export target is an error about the request: reported at the export_model call
  * (line 11).
  */
-module bad_target
 
 import { reshape } from tensor
 import { export_model } from onnx

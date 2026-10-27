@@ -12,7 +12,6 @@
  * this program with the `test::derivatives` pass, which builds a second context and reads the
  * registry on both sides of it, and the program's own gradient is printed underneath.
  */
-module two_contexts_grad
 
 import { mean, reshape, sum } from tensor
 import { with_grad } from autodiff

@@ -2,7 +2,7 @@
  * A sync main whose last statement is `exit(3)`, of type `never`: no pass drops the output
  * before it, and the run ends with exit code 3.
  */
-module exit_last
+
 
 import { exit } from process
 

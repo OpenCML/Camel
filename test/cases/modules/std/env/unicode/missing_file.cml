@@ -2,7 +2,6 @@
  * The negative side of the process boundary of item 3: a diagnostic about a file whose name
  * lies outside the process code page must still carry the name in UTF-8, not as '?'.
  */
-module missing_file
 
 import { read_text } from fs
 import { get_cwd } from env

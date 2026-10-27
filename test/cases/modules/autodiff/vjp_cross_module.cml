@@ -6,7 +6,6 @@
  * use_a(x) = scale(x) * 2, use_b(x) = scale(x) + 1, both at x = 2: the rule gives 20 and 10,
  * the derivative of the body would give 16 and 4.
  */
-module vjp_cross_module
 
 import { grad } from autodiff
 import { use_a } from vjp_user_a

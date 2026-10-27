@@ -4,7 +4,6 @@
  * 14), naming the parameter and the two types. The function is specialized for the example's
  * type whatever the parameter declares, so this was exported for [2, 3] without a word.
  */
-module example_mismatch
 
 import { reshape } from tensor
 import { export_model } from onnx

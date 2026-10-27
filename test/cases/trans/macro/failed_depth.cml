@@ -1,5 +1,3 @@
-module failed_depth
-
 // Ahead-of-time evaluation is limited to 64 nested evaluator frames (a self-recursion of 64
 // levels). count(20) is folded to a constant. count(100) exceeds the limit, which is a failed
 // evaluation: a run-time fault at the call (line 17) naming the limit. Without std::macro the

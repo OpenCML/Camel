@@ -36,6 +36,6 @@ name = "nontail-export"
 env = ["MODE=nontail", "ONNX_OUT={tmp}/settle.onnx"]
 exit = 1
 diagnostic = "RuntimeDiag::UnhandledError"
-diagnostic_line = 44
+diagnostic_line = 43
 diagnostic_column = 73
 output_contains = ["several branches decide whether a function calls itself outside tail position"]

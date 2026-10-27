@@ -3,7 +3,6 @@
  * declaration's type, and the message prints the declaration's own parameter name
  * (`milliseconds`) -- the one source is `stdlib/process.cml`, not the C++ module.
  */
-module process_type
 
 import { sleep } from process
 

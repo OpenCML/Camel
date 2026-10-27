@@ -3,7 +3,6 @@
  * shape like `struct` and `tuple`: an identity case written before it still wins for its own type,
  * and `#leaf` after it takes the rest.
  */
-module match_type_array_shape
 
 type Point = { x: int, y: int }
 

@@ -14,7 +14,6 @@
  * Red when: the gradient has no element type (`sum(g)` refuses, exit 1), the gradient is the zero
  * of the wrong shape, or the slice is not the core's (`sum` would then be the module's reduction).
  */
-module core_slice_adjoint
 
 import { reshape, sum } from tensor
 import { grad } from autodiff

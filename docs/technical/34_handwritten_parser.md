@@ -255,9 +255,10 @@ into the `LOOP` node of the graph:
 | child 3, StmtBlock | the body; same scope; its value is the state of the next round |
 
 The value of the expression is the last state. With both clauses a round runs while an element
-is left and the condition holds. The GCT builder reports `ConstructNotSupported` at the loop
-for now; the formatter, the syntax index (scopes and bindings) and the editor grammar know the
-form.
+is left and the condition holds. The GCT builder turns it into the `LOOP` node
+(`src/compile/gct/builder.cpp#Builder::visitLoopExpr`), and [39](39_loops.md) describes the node
+and how each back end runs it; the formatter, the syntax index (scopes and bindings) and the
+editor grammar know the form.
 
 What the notation leaves awkward or open (for the language author):
 

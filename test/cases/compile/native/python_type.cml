@@ -3,7 +3,6 @@
  * refused at the call, and the message lists the declaration from `stdlib/python.cml`, not the
  * C++ module's dynamic signature.
  */
-module python_type
 
 import { py_import } from python
 

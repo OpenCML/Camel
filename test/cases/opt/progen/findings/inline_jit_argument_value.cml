@@ -8,7 +8,6 @@
  * Actual: L8 0 0 0
  * Reduced by test/tools/progen from seed 1892 (generator version 1, all features).
  */
-module inline_jit_argument_value
 
 import { get_env } from env
 

@@ -1,5 +1,3 @@
-module sem_independent
-
 func f(): int { return aaa }
 
 func g(): int { return 'text' }

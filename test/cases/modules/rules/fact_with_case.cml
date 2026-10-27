@@ -9,7 +9,6 @@
  * 5 and `at_cap<9>` answers 9, so `mul_default` fires and `mul_nine` fires while the other does
  * not -- the argument is part of which fact this is, and the two are cached apart.
  */
-module fact_with_case
 
 import { max } from math
 import { rewrite } from rewrite

@@ -19,7 +19,6 @@
  * `registry.overload_position_names_agree` reads back from `inspect --ops`, and what
  * `--verify-ops` compares against the declaration files item by item.
  */
-module param_stdlib_named_args
 
 import { trim } from str
 import { Json, decode, get, as_int } from json

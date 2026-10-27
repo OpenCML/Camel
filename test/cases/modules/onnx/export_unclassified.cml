@@ -7,7 +7,6 @@
  * The same case is the failure case of `camel inspect --attrs`: the key is interned by a loaded
  * module and has no row, which is what the classification check reports.
  */
-module export_unclassified
 import { reshape, sum } from tensor
 import { mark } from test_attrs
 import { export_model } from onnx

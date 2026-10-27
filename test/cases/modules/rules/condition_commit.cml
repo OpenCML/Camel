@@ -2,7 +2,6 @@
  * A rule whose condition commits a graph transaction of its own: the commit replaces the program
  * the outer rewrite is still working on.
  */
-module condition_commit
 
 import { Graph, Node, open, commit, add_constant, id, graph_of } from graph
 import { rewrite } from rewrite

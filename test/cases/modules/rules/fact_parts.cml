@@ -16,7 +16,6 @@
  * `report` prints the number of products before and after `apply`, and `main` the values, which
  * are the same before and after the rewrite.
  */
-module fact_parts
 import { Node, Graph, nodes, op, op_name, name, graphs_of } from graph
 import { max } from math
 import { rewrite } from rewrite

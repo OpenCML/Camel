@@ -1027,7 +1027,9 @@ DraftWritings::extract(const CostModel &model, camel::core::context::Context *co
         }
     };
     for (gc_node_ref_t node = 0; node < slots; ++node) {
-        if (draft_.alive(node) && (writtenInPlace(node) || carriesOrdering(draft_, node, true))) {
+        if (draft_.alive(node) &&
+            (writtenInPlace(node) ||
+             (carriesOrdering(draft_, node, true) && !isUnanchoredPure(draft_, node)))) {
             select(node);
         }
     }

@@ -7,7 +7,6 @@
  * struct reads the divide's result, the backend declines, and the three operators run one by one.
  * The group is marked in both programs; only the backend's choice differs.
  */
-module fusion_group_profile
 
 import { sum, zeros } from tensor
 import { with_grad } from autodiff

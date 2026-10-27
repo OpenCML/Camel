@@ -1,6 +1,5 @@
 // A plain name binds the first time it appears in a parameter type; later occurrences write
 // the same extent, so the two arguments of `dot` must have one length.
-module array_shape_binding
 
 func dot(x: f32[n], y: f32[n]): f32 {
     return x[0] + y[0]

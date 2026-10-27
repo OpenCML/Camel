@@ -1,4 +1,4 @@
-module fault_array_mean_empty
+
 
 import { mean } from array
 

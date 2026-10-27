@@ -7,7 +7,6 @@
  * of the function `over` names: `sum_swap` has no instance at `Vec` unless the function names it,
  * which is what the two reports below differ in.
  */
-module check_program_parameter
 import tensor
 import { check, check_text } from rewrite
 

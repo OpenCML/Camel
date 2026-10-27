@@ -20,7 +20,6 @@
  *     (`SemanticDiag::InvalidTypeArgument`).
  */
 
-module python
 
 /// A Python object seen from Camel; the module provides the type.
 export type PyObject

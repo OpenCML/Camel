@@ -7,5 +7,5 @@ exported step
 
 $ MODE=effect ONNX_OUT=<tmp>/noisy.onnx camel exemplars/07_export_integrity/program.cml
 exit 1
-(program)exemplars/07_export_integrity/program.cml:33:16: [Error]: An error value reached the exit of 'main' without being handled: ExportUnsupported: in 'noisy': impure operator 'tensor:randn' cannot be exported. A value of type T! that has failed must be opened before the program ends: give a replacement with '!!', pass it on with '?->', or take it apart with 'match ... case error e'. The position is where the error was made (the definition of 'main' when the error records none). (name=RuntimeDiag::UnhandledError, code=0x04000051)
+(program)exemplars/07_export_integrity/program.cml:32:16: [Error]: An error value reached the exit of 'main' without being handled: ExportUnsupported: in 'noisy': impure operator 'tensor:randn' cannot be exported. A value of type T! that has failed must be opened before the program ends: give a replacement with '!!', pass it on with '->', or take it apart with 'match ... case error e'. The position is where the error was made (the definition of 'main' when the error records none). (name=RuntimeDiag::UnhandledError, code=0x04000051)
 

@@ -1,7 +1,6 @@
 /**
  * Verifies decorated functions remain first-class values when passed through another call boundary.
  */
-module decorator_value_pass
 
 with <delta: int>
 func add_n(f: (x: int) => int): (x: int) => int {

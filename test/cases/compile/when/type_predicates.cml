@@ -7,7 +7,6 @@
  * either side changes the output.
  */
 
-module when_type_predicates
 
 type Point = { x: int }
 

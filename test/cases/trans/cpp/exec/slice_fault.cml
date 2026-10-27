@@ -1,0 +1,8 @@
+/// A bound that leaves the array is a fault at the slice, located as the interpreter locates it.
+func main(): int sync {
+    let xs = [10, 20, 30]
+    println(xs[1:3])
+    let n = 7
+    println(xs[1:n])
+    return 0
+}

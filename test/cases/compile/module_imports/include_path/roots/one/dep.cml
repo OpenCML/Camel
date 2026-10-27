@@ -1,6 +1,5 @@
 /// imported by a module that is not the entry, to show that an `-I` root joins the
 /// global search for a library's own imports too (after the library's own directory).
-module dep
 
 export func value(): int {
     return 7

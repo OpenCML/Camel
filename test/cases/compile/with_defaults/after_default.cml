@@ -3,7 +3,6 @@
  * 4.4): a call that leaves the first out would then have to give the second by name, and a
  * positional call could not be read.
  */
-module with_parameter_after_default
 
 with <a: int = 1, b: int>
 func f(x: int): int {

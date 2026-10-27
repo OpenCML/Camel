@@ -5,7 +5,6 @@
  * allowed to make two overloads fit at once: the warning is the one such a call gets and no
  * ambiguity is reported. The result is `never`, and an `int[]` position takes it.
  */
-module never_with_argument_overload
 
 with <n: int>
 func pick(x: int): int {

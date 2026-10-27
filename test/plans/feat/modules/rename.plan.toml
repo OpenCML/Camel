@@ -28,7 +28,7 @@ kind = "negative"
 case = "../../../cases/modules/rename/env_old.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["env_old.cml:6:", "Module 'sys' not found", "name=SemanticDiag::ModuleNotFound, code=0x03000002"]
+expect_output_contains = ["env_old.cml:5:", "Module 'sys' not found", "name=SemanticDiag::ModuleNotFound, code=0x03000002"]
 
 [[tests]]
 name = "rename.process_new_name"
@@ -44,7 +44,7 @@ kind = "negative"
 case = "../../../cases/modules/rename/process_old.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["process_old.cml:6:", "Module 'os' not found", "name=SemanticDiag::ModuleNotFound, code=0x03000002"]
+expect_output_contains = ["process_old.cml:5:", "Module 'os' not found", "name=SemanticDiag::ModuleNotFound, code=0x03000002"]
 
 [[tests]]
 name = "rename.hash_new_name"
@@ -60,4 +60,4 @@ kind = "negative"
 case = "../../../cases/modules/rename/hash_old.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["hash_old.cml:6:", "Module 'crypto' not found", "name=SemanticDiag::ModuleNotFound, code=0x03000002"]
+expect_output_contains = ["hash_old.cml:5:", "Module 'crypto' not found", "name=SemanticDiag::ModuleNotFound, code=0x03000002"]

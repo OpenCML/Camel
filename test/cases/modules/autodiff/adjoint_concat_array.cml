@@ -17,7 +17,6 @@
  * squared distance to it as a number. `trap` is 12.0 * g.w: 24.0 for the adjoint above and 0.0
  * for a gradient that left the array out of the concat, which is the defect this case is about.
  */
-module adjoint_concat_array
 
 import { concat, reshape, sum } from tensor
 import { grad } from autodiff

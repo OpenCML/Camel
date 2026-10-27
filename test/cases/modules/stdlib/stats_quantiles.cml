@@ -1,29 +1,37 @@
 /**
  * The statistics module: variance (the square of stdev: divisor n - 1), median and quantile
- * (linear interpolation; null for an empty array).
+ * (linear interpolation), over float elements; an integer array is converted first.
  */
-module stats_quantiles
 
-import { mean, stdev, variance, median, quantile } from statistics
-import { nan, is_nan } from math
+import { mean } from array
+import { stdev, variance, median, quantile } from statistics
+import { inf, nan, is_nan } from math
 
 func main(): int sync {
     let xs = [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]
     println(mean(xs), variance(xs), stdev(xs) * stdev(xs))
-    println(variance([1, 2, 3, 4]), variance([5.0]), variance([5.0][1:]), variance([3, 3, 3]))
+    println(variance([1, 2, 3, 4]->map<(x: int): float => float(x)>), variance([3.0, 3.0, 3.0]))
 
-    println(median([3, 1, 2]) ?? -1.0, median([4.0, 1.0, 2.0, 3.0]) ?? -1.0, median([7]) ?? -1.0)
-    println(median([1.0][1:]) ?? -1.0, median(xs) ?? -1.0)
-    println(median([9223372036854775807, 9223372036854775807]) ?? -1.0)
-    println(median([1.0e308, 1.0e308, -1.0e308]) ?? -1.0, median([-1.0e308, 1.0e308]) ?? -1.0)
+    println(median([3.0, 1.0, 2.0]), median([4.0, 1.0, 2.0, 3.0]), median([7]->map<(x: int): float => float(x)>))
+    println(median(xs))
+    println(median([1.0e308, 1.0e308, -1.0e308]), median([-1.0e308, 1.0e308]))
 
     let ys = [1.0, 2.0, 3.0, 4.0, 5.0]
-    println(ys->quantile<0.0> ?? -1.0, ys->quantile<0.25> ?? -1.0, ys->quantile<0.5> ?? -1.0, ys->quantile<1.0> ?? -1.0)
-    println([10, 20]->quantile<0.1> ?? -1.0, [10]->quantile<0.9> ?? -1.0, [10][1:]->quantile<0.5> ?? -1.0)
+    println(ys->quantile<0.0>, ys->quantile<0.25>, ys->quantile<0.5>, ys->quantile<1.0>)
+    println([10, 20]->map<(x: int): float => float(x)>->quantile<0.1>, [10.0]->quantile<0.9>)
     // the order of the elements does not matter
-    println([5.0, 1.0, 4.0, 2.0, 3.0]->quantile<0.75> ?? -1.0)
+    println([5.0, 1.0, 4.0, 2.0, 3.0]->quantile<0.75>)
+
+    // an infinity at the upper rank of an exact position stays the infinity
+    println([1.0, 2.0, inf]->quantile<0.5>)
 
     // a NaN among the elements: the result is NaN
-    println(is_nan(median([1.0, nan, 3.0]) ?? 0.0), is_nan([nan]->quantile<0.5> ?? 0.0), is_nan(variance([1.0, nan])))
+    println(is_nan(median([1.0, nan, 3.0])), is_nan([nan]->quantile<0.5>), is_nan(variance([1.0, nan])))
+
+    // the elements' own type: an f32 array answers an f32
+    let zs = [1, 2, 4, 8]->map<(x: int): f32 => f32(x)>
+    println(variance(zs), median(zs))
+    let one: f32 = median(zs)
+    println(one)
     return 0
 }

@@ -3,7 +3,6 @@
  * types, `%=` on the integers, `^=` on the numeric types, `&= |=` on bool. `%=`, `^=`, `&=`
  * and `|=` used to fail when run ("assignment operator not fully implemented", progen F29).
  */
-module compound_assign
 
 func main(): int sync {
     var a = 17

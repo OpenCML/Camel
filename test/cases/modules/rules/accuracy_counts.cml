@@ -3,7 +3,6 @@
  * whether the accuracy rewrite fired: `math:log_d` is the naive form, `math:log1p_d` the
  * accurate one.
  */
-module accuracy_counts
 
 import { Node, Graph, nodes, op, op_name, name, graphs_of } from graph
 

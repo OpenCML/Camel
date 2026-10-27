@@ -17,7 +17,6 @@
  * values this program prints and the model it exports are both checked against those by
  * ort_slice_grad_stride.py.
  */
-module ort_slice_grad_stride
 import { reshape, sum } from tensor
 import { with_grad } from autodiff
 import { export_model } from onnx

@@ -2,7 +2,6 @@
  * `??` over a value that cannot be null is allowed, with a warning: its null case is never
  * taken (KnownNotNull, design principles 3.8), so the result is the value itself.
  */
-module err_plain_left
 
 func main(): int sync {
     let a = 1

@@ -2,7 +2,6 @@
 // because it is the subject of the example: a program that needs sorted data calls `sort`
 // or `sort_by` of `array`, and the result is checked against both here.
 // Run: camel examples/algorithms/merge_sort.cml
-module merge_sort
 
 import { sort, sort_by, zip_with, all } from array
 

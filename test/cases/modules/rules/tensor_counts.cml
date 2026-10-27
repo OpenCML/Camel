@@ -4,7 +4,6 @@
  * function grants the permission they need, and `inexact` too, because its coefficients are the
  * f32 values the source writes: a coefficient beside a tensor takes the element type.
  */
-module tensor_counts
 
 import { Node, Graph, nodes, op, op_name, name, graphs_of } from graph
 

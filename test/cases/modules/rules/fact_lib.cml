@@ -18,7 +18,6 @@
  * `user.fact.depth`), and counts products; `apply` rewrites the target with the rule. The test
  * reads the numbers before and after `apply`.
  */
-module fact_lib
 import { Node, Graph, nodes, op, op_name, name, graphs_of } from graph
 import { max } from math
 import { rewrite } from rewrite

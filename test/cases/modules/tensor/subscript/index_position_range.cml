@@ -8,7 +8,6 @@
  *
  *   m = [[1, 2, 3], [4, 5, 6]];  m[0:2, 1] = [2, 5];  sum = 7.0
  */
-module subscript_index_position_range
 import { abs, reshape, shape, sum } from tensor
 
 func column(a: f32[2]): float {

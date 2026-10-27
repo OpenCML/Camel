@@ -32,7 +32,6 @@
  * The count of rows is pinned too, because the way to make a reduced-precision instance quiet
  * would be to stop making it: the report has one row per instance the condition admits.
  */
-module check_reduced_element_type
 
 import { check, check_text } from rewrite
 import {

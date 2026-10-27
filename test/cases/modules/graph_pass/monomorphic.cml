@@ -1,4 +1,3 @@
-module monomorphic
 import { nine, addOne } from libvals
 
 // A non-generic function of a Camel library: its body is built by the pass module's own

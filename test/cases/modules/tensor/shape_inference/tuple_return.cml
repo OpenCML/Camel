@@ -1,4 +1,3 @@
-module shape_inference_tuple_return
 import { tanh, sum, ones } from tensor
 // Elements of a returned tuple: each one that is less exact than declared is named.
 func g(x: f32[3]): (f32[..], f32[..]) {

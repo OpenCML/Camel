@@ -22,7 +22,6 @@
  *
  *   camel -t 16 --arg rounds=5 --arg reps=1 test/cases/perf/gemm_threads_curve.cml tensor::fuse std::jit
  */
-module gemm_threads_curve
 
 import { num_threads, set_num_threads, sum, zeros } from tensor
 import { now } from time

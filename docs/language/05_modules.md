@@ -52,7 +52,7 @@ func main(): int sync {
 | `str` | 字符串：按字节的切分、修剪、大小写、替换、查找、截取；按码点的计数、读取、编解码 |
 | `array` | 数组：`sort`、`argsort`、`reverse`、`take`、`drop`、`chunks`、`unique`、`find`、`find_index`、`sum`、`mean`、`min`、`max`、`argmax`、`argmin`、`sort_by`、`flat_map` 等（大部分是用 Camel 写的泛型函数，原生的只有 `argsort`、形状与布局的原子和排序、求和、最值的内核） |
 | `math` | 常量 `pi`、`e`、`inf`、`nan`（值）；初等函数、取整、`min`/`max`/`clamp`、`gcd`/`lcm`、进制转换、位运算 `bit_and` 等 |
-| `random` | 类型 `Key`；`seed`、`rand`、`randint`、`randn`、`choice`、`sample`、`shuffle`，以及纯的键式随机 `key`、`split`、`permutation` |
+| `random` | 类型 `Key`；纯的键式随机 `key`、`fold`、`split`、`uniform`、`normal`、`uniform_array`、`normal_array`、`randint`、`permutation`、`shuffle`、`choice`、`sample`（键是数据或配置：`k->randint<1, 7>`、`xs->shuffle<k>`）；全局流 `seed`、`next_key`（资源 `rng`）和便利函数 `rand`、`randn` |
 | `time` | `now`、`strftime`、`strptime` |
 | `fs` | `exists`、`is_file`、`is_dir`、`mkdir`、`mkdirs`、`remove`、`remove_dir`、`list_dir`、`read_text`、`write_text`、`append_text`、`file_size`、`read_chunk`、`read_bytes`、`write_bytes`、`append_bytes` |
 | `json` | 类型 `Json`；`encode`、`decode`、`decode_as`；`kind`、`is_null`、`get`、`as_bool`、`as_int`、`as_float`、`as_string`、`as_array`、`as_object` |
@@ -60,7 +60,7 @@ func main(): int sync {
 | `re` | `test` |
 | `hash` | `sha256` |
 | `this` | `zen` |
-| `statistics` | `mean`、`stdev`、`variance`、`median`、`quantile` |
+| `statistics` | `stdev`、`variance`、`median`、`quantile`（`mean` 在 `array`）；元素是浮点类型，答元素类型；元素不足是 `InvalidArgument` 故障 |
 | `para` | `unordered_foreach`、`unordered_reduce` |
 | `tensor`、`nn`、`autodiff`、`onnx` | 张量、网络层与优化器、求梯度、ONNX 导出；取行 `take`、`one_hot`，按目标类型重载的 `softmax_cross_entropy`（独热分布或整数类标） |
 | `python` | 嵌入 Python（需要构建时启用） |
@@ -73,7 +73,6 @@ func main(): int sync {
 
 ```cml
 // shapes.cml
-module shapes
 
 import { sqrt } from math
 
@@ -113,7 +112,6 @@ func main(): int sync {
 
 ```cml
 // counter.cml
-module counter
 var cnt = 0
 let step = 2
 export func bump(): int sync { cnt += step; return cnt }
@@ -141,7 +139,6 @@ func main(): int sync {
 
 ```cml
 // geometry.cml
-module geometry
 export let pi = 3.14159
 export let tau = pi * 2.0
 ```

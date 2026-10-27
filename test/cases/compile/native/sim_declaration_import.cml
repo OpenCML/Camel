@@ -4,7 +4,6 @@
  * both calls reach the C++ kernels with the same fixed seeds as `modules/std/sim/basic.cml`
  * 
  */
-module sim_declaration_import
 
 import { pi_hits, asian_call_price } from sim
 

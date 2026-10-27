@@ -3,7 +3,6 @@
  * decided by the type arguments of the instance, so what the condition does is only known where
  * the instance is made. The candidate here prints, which is an effect of the condition.
  */
-module condition_generic_print
 
 import { rewrite } from rewrite
 

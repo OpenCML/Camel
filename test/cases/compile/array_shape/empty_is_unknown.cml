@@ -1,7 +1,6 @@
 // `[]` and `[?]` are one type written two ways: a value of either spelling passes for the other,
 // and neither constrains the length. (Under a rule that makes the empty bracket a type of its own,
 // one of the two assignments below is refused.)
-module array_shape_empty_is_unknown
 
 func count(x: f32[?]): int {
     return len(x)

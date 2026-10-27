@@ -1,7 +1,6 @@
 /**
  * Negative case: softmax must reject an axis outside the tensor's rank.
  */
-module softmax_axis_error
 
 import {
     reshape, softmax, sum

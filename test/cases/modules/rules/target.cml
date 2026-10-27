@@ -1,5 +1,4 @@
 /** Functions with sums and products a rule pass folds. */
-module target
 
 func coefficients(x: int): int {
     return x * 3 + x * 5

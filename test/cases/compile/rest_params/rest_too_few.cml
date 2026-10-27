@@ -1,5 +1,3 @@
-module rest_too_few
-
 func first(a: int, ..ts): int {
     return a
 }

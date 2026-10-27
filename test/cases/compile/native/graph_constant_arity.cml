@@ -3,7 +3,6 @@
  * argument: a second argument is refused at the call, and the candidate the message lists is the
  * declaration's.
  */
-module graph_constant_arity
 
 import { nodes, constant, graph_of } from graph
 
