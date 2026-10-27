@@ -4,7 +4,6 @@
  * the empty set and grows it round by round, so the call to itself reads the round before and `step`
  * settles at the empty set -- its type says `pure`, not nothing.
  */
-module inferred_recursive_is_empty
 
 func step(n: int): int {
     return if n <= 0 then 0 else step(n - 1)

@@ -2,7 +2,6 @@
  * Tail recursion whose depth depends on the model input cannot be unrolled at
  * export time; it is exported as an ONNX Loop over the changing argument.
  */
-module export_dynamic_recursion
 
 import { reshape, sum } from tensor
 import { export_model } from onnx

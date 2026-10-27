@@ -1,6 +1,5 @@
 // A literal holds a known number of elements, and an extent the position states as a constant is
 // what they are the elements of: four written where four are declared.
-module array_shape_literal_length
 
 func count(x: f32[4]): int {
     return len(x)

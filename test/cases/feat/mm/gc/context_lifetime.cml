@@ -6,7 +6,6 @@
  * its own graphs.
  * Run: camel context_lifetime.cml test::context_lifetime std::nvm
  */
-module context_lifetime
 
 func label(i: int): string {
     return if i == 0 then 'contexts' else label(i - 1) + '-' + string(i)

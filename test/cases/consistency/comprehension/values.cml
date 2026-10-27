@@ -3,7 +3,6 @@
  * `x` has the element type of `xs`, the condition may be left out, and nothing is promised
  * about the order in which the elements are computed.
  */
-module values
 
 func squares_of_even(xs: int[]): int[] { return [x * x for x in xs if x % 2 == 0] }
 func lengths::<T>(ws: T[][]): int[] { return [len(w) for w in ws] }

@@ -1,7 +1,6 @@
 /**
  * Struct fields and tuple elements, nested, passed through functions.
  */
-module structs_tuples
 
 type Point = { x: int, y: int }
 

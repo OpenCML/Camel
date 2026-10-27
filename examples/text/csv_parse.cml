@@ -2,7 +2,6 @@
 // a field into a number, and a line that does not fit becomes an error value that is
 // reported with its line number; the other lines are still used.
 // Run: camel examples/text/csv_parse.cml
-module csv_parse
 
 import { split, trim } from str
 import { enumerate, drop, sum, count } from array

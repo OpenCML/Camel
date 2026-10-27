@@ -2,7 +2,6 @@
  * The old way of filling a captured variable in a foreach: the statement `out->append<i>`
  * inside the element function is the error, with the rebinding as the fix.
  */
-module unused_in_lambda
 
 func main(): int sync {
     var out: int[] = []

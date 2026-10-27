@@ -11,7 +11,6 @@
  * This is the case the new refusal must not touch: the labels' zero is what a discrete input's
  * derivative is, and it is decided by `take`'s rule, not by the accumulator guessing from a type.
  */
-module gather_discrete_index_zero
 
 import { reshape, sum } from tensor
 import { with_grad } from autodiff

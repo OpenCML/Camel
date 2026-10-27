@@ -3,7 +3,6 @@
 // this module > imported by name > using > built-in"). Before the order was fixed the name was
 // answered by the merged layer the built-in takes part in, which has no one-argument rule and
 // refused this program; the built-in is still reached when no layer above has the name.
-module h426_range_using_wins
 
 import tensor
 using namespace tensor

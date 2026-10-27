@@ -3,7 +3,6 @@
  * refused at the call, and the overload the message lists is the declaration's `() => string[]`
  *  — `stdlib/onnx.cml`, not the C++ module.
  */
-module onnx_arity
 
 import { supported_operators } from onnx
 

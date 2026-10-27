@@ -5,7 +5,6 @@
  * run -- the warning says where to put it instead. Nothing here is unreachable, so the statement
  * after it keeps its own meaning and the program prints what it prints.
  */
-module fail_not_executed
 
 func f(x: int): int {
     fail<'NoPremise'>('f was called with an x it cannot take')

@@ -2,7 +2,6 @@
 // (`::<T>`), so the function works for every element type. The functions of the `array`
 // module are written this way, and the helpers here build on them.
 // Run: camel examples/functions/generic_helpers.cml
-module generic_helpers
 
 import { take, drop, count } from array
 

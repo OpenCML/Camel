@@ -2,7 +2,6 @@
  * The declaration of `fs:exists` takes one ordinary argument: a second one is refused at the
  * call, and the overload the message lists is the declaration's.
  */
-module fs_arity
 
 import { exists } from fs
 

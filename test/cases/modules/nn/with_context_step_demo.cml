@@ -3,7 +3,6 @@
  * calls a with-context helper yields the loss plus a Linear-shaped gradient, and one sgd step
  * returns the updated Linear.
  */
-module with_context_step_demo
 
 import { with_grad } from autodiff
 import { ones, shape, sum, zeros } from tensor

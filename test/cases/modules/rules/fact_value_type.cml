@@ -4,7 +4,6 @@
  * writing a type argument, because the node's own type gives it. A node a pass read out of a graph
  * states no value type, so the query on it writes `depth::<int>(n)`; the two read the same fact.
  */
-module fact_value_type
 import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
 import { max } from math
 

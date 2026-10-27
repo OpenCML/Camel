@@ -4,7 +4,6 @@
  * rule 5). The exceptional binding gives a name to an operator of this module, it does not
  * make one module the author of another's signature.
  */
-module bytes_tag
 
 import bytes
 

@@ -1,7 +1,6 @@
 // `f64[..]` holds f64. 16777217.0 is exact in f64 and is 16777216.0 in f32, so the printed
 // values, the 8-byte elements and the round trip through `to_bytes`/`from_bytes` are the evidence
 // that no creation, arithmetic, reduction or conversion narrows the element type.
-module tensor_dtype_f64_exact
 
 import { new, multiply, sum, mean, to_bytes, from_bytes } from tensor
 import { to_array } from bytes

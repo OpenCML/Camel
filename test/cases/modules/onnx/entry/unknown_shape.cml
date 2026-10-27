@@ -2,7 +2,6 @@
  * A model input needs an element type and a shape: the parameter `x` states its element type and
  * no extent, so the export is refused and names it (line 8).
  */
-module unknown_shape
 
 import { tanh } from tensor
 

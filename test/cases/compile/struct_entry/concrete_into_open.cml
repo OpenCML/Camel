@@ -4,7 +4,7 @@
  * `{ w: f32[784, 10], b: f32[10] }` is an `Mlp { w: f32[..], b: f32[..] }` (design principles 5.2).
  * It does the same for a named struct and for an unnamed one, in a binding, a call and a return.
  */
-module struct_entry_concrete_into_open
+
 
 import { ones } from tensor
 

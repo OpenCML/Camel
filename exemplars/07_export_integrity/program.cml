@@ -6,7 +6,6 @@
  * (drawing random numbers) cannot be represented and is rejected at the effect
  * instead of being exported without it.
  */
-module export_integrity
 
 import { reshape, relu, mean, randn } from tensor
 import { with_grad } from autodiff

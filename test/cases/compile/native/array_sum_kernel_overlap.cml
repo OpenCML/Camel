@@ -12,7 +12,6 @@
  * declaration per element type, which is what its executors take: a declaration conditioned on a
  * family would cover several executors at once, which is the run-time switch the rule deletes.
  */
-module array_sum_kernel_overlap
 
 import { is_integer, is_numeric } from types
 

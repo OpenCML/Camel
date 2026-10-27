@@ -1,7 +1,6 @@
 // `?` is a size nobody named, not a name: two parameters that write `?` say nothing about each
 // other, so one call may give them different lengths. Both arguments state their extent, and the
 // call relates neither.
-module array_shape_unknown_not_inferred
 
 func total(a: f32[?], b: f32[?]): int {
     return len(a) + len(b)

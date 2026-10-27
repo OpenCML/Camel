@@ -1,5 +1,3 @@
-module ns
-
 namespace util {
     func id::<T>(x: T): T {
         return x

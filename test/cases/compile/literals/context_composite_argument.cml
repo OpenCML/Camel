@@ -7,7 +7,6 @@
  * rule. `[]` takes the element type too, as it does in a declaration. A tuple literal at a
  * tuple parameter is the same rule, element by element.
  */
-module literal_context_composite_argument
 
 type Point = { x: f32, y: f32 }
 type Box = { xs: f32[] }

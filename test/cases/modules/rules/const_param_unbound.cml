@@ -9,7 +9,6 @@
  * with a diagnostic that names the parameter and the rule, rather than reaching the engine with a
  * rule whose match binds no constant for one of its `const` parameters.
  */
-module const_param_unbound
 
 import { Program, Node, type_of, type_name } from graph
 import { rewrite } from rewrite

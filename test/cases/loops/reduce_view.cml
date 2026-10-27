@@ -7,7 +7,6 @@
 // materialises a returned view; these lines lock that for the slot-shaped shapes (`(int, int)`,
 // `P`), the shapes that are not (`Q`, `((int, int), int)`), a nested aggregate, a left fold
 // written as a loop with a tuple state, and the same accumulator after `filter`/`map`.
-module reduce_view
 
 // Slot-shaped: two 8-byte leaves, no padding. A compact element of this type is read through the
 // reused view cell that made the bug possible.

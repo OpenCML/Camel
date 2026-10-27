@@ -3,7 +3,6 @@
  * parameter, a return type, a `var` and a lambda. It used to be taken as `T[]`, so
  * that `u[1]` had the element type and `first(u[1])` found no overload.
  */
-module nested_array_type
 
 func first(r: float[]): float {
     return r[0]

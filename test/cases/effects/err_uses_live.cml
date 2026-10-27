@@ -2,7 +2,6 @@
 // to stay inside it. Here `fs` is promised and the body writes `stdout`, which the clause does not
 // name -- a caller that reads only the declaration would not expect it, so the declaration is
 // refused (design effects plan, step 5).
-module err_uses_live
 
 /// The clause names `fs`; the body writes `stdout`.
 func stamp(): int uses fs sync {

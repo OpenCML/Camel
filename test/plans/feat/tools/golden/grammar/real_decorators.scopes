@@ -4,9 +4,6 @@
 #^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.block.documentation.camel
 > */
 # ^^ comment.block.documentation.camel punctuation.definition.comment.end.camel
->module decorator_multi
-#^^^^^^ keyword.control.import.module.camel
-#       ^^^^^^^^^^^^^^^ entity.name.namespace.module.camel
 >
 >with <k: int>
 #^^^^ meta.with-parameters.camel keyword.other.with.camel

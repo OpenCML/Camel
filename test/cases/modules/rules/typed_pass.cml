@@ -1,5 +1,4 @@
 /** The element-family laws, applied on their own, and the deliberately wrong versions the tests must catch. */
-module typed_pass
 import { Program } from graph
 import { rewrite } from rewrite
 import { float_add_minus_zero, float_combine, float_combine_mixed, float_div_one, float_fold, float_mul_one, float_neg_neg, float_sub_zero, float32_double, int_add_zero, int_combine, int_div_one, int_fold, int_fold_add, int_mul_one, int_mul_zero, int_neg_neg, int_sub_self, int_sub_zero } from rules

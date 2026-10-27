@@ -3,7 +3,6 @@
  * call, and the overload the message lists is the declaration's `(r: Rule) => int` —
  * `stdlib/rewrite.cml`, not the C++ module.
  */
-module rule_reader_type
 
 import { rule_consts } from rewrite
 

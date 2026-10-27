@@ -5,7 +5,6 @@
  * (must not fuse), and a full-matrix "bias" (fused op falls back to the
  * unfused broadcast semantics).
  */
-module fuse_linear
 
 import { reshape, relu, sum } from tensor
 

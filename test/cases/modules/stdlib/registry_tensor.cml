@@ -2,7 +2,6 @@
  * Imports the tensor stack, so that `camel inspect --ops` lists its operators (see
  * stdlib_registry.plan.toml).
  */
-module registry_tensor
 
 import nn
 import tensor

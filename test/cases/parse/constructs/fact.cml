@@ -4,7 +4,6 @@
  * value was built: a constant, or a pattern whose parts the fact is computed from. `case _` is the
  * last case and says what the fact is of a value no other case matched.
  */
-module parse_constructs_fact
 import { max } from math
 import { rewrite } from rewrite
 

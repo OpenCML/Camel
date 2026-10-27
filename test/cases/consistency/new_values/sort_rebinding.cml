@@ -5,7 +5,6 @@
  * local variable, the call written `sort(xs)`, a `var` parameter, a
  * captured variable, and an array of floats.
  */
-module sort_rebinding
 
 import { sort } from array
 

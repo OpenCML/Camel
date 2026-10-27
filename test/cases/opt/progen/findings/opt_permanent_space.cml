@@ -13,7 +13,6 @@
  *   internal error: Permanent space exhausted (32 MB of types and layouts), no position, exit 1.
  * Reduced by test/tools/progen from seed 3293 (generator version 1, all features).
  */
-module opt_permanent_space
 
 func r1(a2: int, a3: float): float {
     return 1.0;

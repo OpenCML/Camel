@@ -15,7 +15,6 @@
  *       d loss / d w  = [2.0, 3.0, 4.0]   (exact: the f32 the cast stores is these values)
  * Both gradients are printed with `{}`, so each is compared with its adjoint element by element.
  */
-module adjoint_cast_array
 
 import { sum } from tensor
 import { grad } from autodiff

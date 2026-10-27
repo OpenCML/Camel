@@ -10,7 +10,6 @@
  * `slice` is called unqualified here, so the module's own `slice` is not in scope and the core's
  * function form answers (only `reshape` and `sum` come from the module).
  */
-module slice_axis_constant_bounds
 import { reshape, sum } from tensor
 
 func row(a: f32[3, 2]): float {

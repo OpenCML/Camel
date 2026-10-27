@@ -1,7 +1,6 @@
 /**
  * A fault in a map nested in a map, in one inner element only.
  */
-module fault_in_nested_map
 
 func row(i: int): int[] {
     return 0..4->map<(j: int): int => 100 / (i * 4 + j - 9)>

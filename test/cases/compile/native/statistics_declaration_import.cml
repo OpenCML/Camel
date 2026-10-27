@@ -4,7 +4,6 @@
  * with-parameter is part of every one of its four signatures. Every call reaches the C++
  * operator (step 10).
  */
-module statistics_declaration_import
 
 import { mean, stdev, variance, median, quantile } from statistics
 

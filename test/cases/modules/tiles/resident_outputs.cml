@@ -1,4 +1,3 @@
-module tiles_resident_outputs
 import { reshape, sum, abs, zeros } from tensor
 import { Device, upload, download, run_preferred_resident } from tiles
 func step(x: f32[..]): f32[..] { return x + 1.0 }

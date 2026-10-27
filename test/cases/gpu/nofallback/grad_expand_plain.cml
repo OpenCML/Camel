@@ -15,7 +15,6 @@
  * refused where the `tiles:download` reads it as data. Without the pass the same program runs and
  * prints the gradient, so the refusal is the pass's rewrite and not the operator's own answer.
  */
-module gpu_grad_expand_plain
 
 import { abs, reshape, sum } from tensor
 import { with_grad } from autodiff

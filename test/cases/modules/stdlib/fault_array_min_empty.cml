@@ -1,4 +1,4 @@
-module fault_array_min_empty
+
 
 import { min } from array
 

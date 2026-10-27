@@ -4,7 +4,6 @@
  * f32 `x` is an f32 call and needs no conversion. This is the positive control of the mixed
  * refusal: the refusal is about two element types, and neither of these has two.
  */
-module one_width_arithmetic
 
 import { reshape, sum } from tensor
 

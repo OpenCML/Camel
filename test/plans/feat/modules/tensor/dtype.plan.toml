@@ -248,13 +248,13 @@ timeout_ms = 8000
 # elementwise — computed in f32, rounded once into the element type — not a reduced-precision
 # case. Before the kernel existed the same lines were refused at the call:
 #
-#   bf16_modulo.cml:35:33: [Error]: The call of 'operator %' cannot take a value of the
+#   bf16_modulo.cml:34:33: [Error]: The call of 'operator %' cannot take a value of the
 #     reduced-precision element type 'bf16'. ...
-#   bf16_modulo.cml:41:37: [Error]: The call of 'operator %' cannot take a value of the
+#   bf16_modulo.cml:40:37: [Error]: The call of 'operator %' cannot take a value of the
 #     reduced-precision element type 'f16'. ...
-#   bf16_modulo.cml:47:49: [Error]: No matching function found for argument types: <>
+#   bf16_modulo.cml:46:49: [Error]: No matching function found for argument types: <>
 #     (float[], float[]); operator '%' is not defined for these operand types. ...
-#   bf16_modulo.cml:51:48: [Error]: ... (i32[], i32[]) ...
+#   bf16_modulo.cml:50:48: [Error]: ... (i32[], i32[]) ...
 #
 # (SemanticDiag::ReducedPrecisionUnsupported for the two reduced element types,
 # SemanticDiag::NoMatchingFunction for the other two, whose `%` did not exist at all.)
@@ -288,13 +288,13 @@ timeout_ms = 10000
 
 [[tests]]
 name = "npy_dtype_mismatch"
-desc = "An int64 `.npy` read as `load_npy::<f32>(p)` is a RuntimeDiag::RuntimeError at the call, at the position of the type argument the call writes (`npy_dtype_mismatch.cml:10:21`), naming the file's element type and the declared one (`the file holds i64 and the program declares f32`). No element type used to be declared, so a file of any element type loaded as-is and the mismatch could not be reported at all (design principles 5.1, 5.5)."
+desc = "An int64 `.npy` read as `load_npy::<f32>(p)` is a RuntimeDiag::RuntimeError at the call, at the position of the type argument the call writes (`npy_dtype_mismatch.cml:9:21`), naming the file's element type and the declared one (`the file holds i64 and the program declares f32`). No element type used to be declared, so a file of any element type loaded as-is and the mismatch could not be reported at all (design principles 5.1, 5.5)."
 kind = "negative"
 case = "../../../../cases/modules/tensor/dtype/npy_dtype_mismatch.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_output_contains = ["the file holds i64 and the program declares f32", "npy_dtype_mismatch.cml:10:21"]
+expect_output_contains = ["the file holds i64 and the program declares f32", "npy_dtype_mismatch.cml:9:21"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
@@ -327,13 +327,13 @@ timeout_ms = 10000
 
 [[tests]]
 name = "npy_generic_wrapper_mismatch"
-desc = "The element type a generic wrapper declares reaches the load: `read_as::<f32>` on the int64 `.npy` is the same fault as a direct `load_npy::<f32>`, a RuntimeDiag::RuntimeError reported at the call inside the wrapper (`npy_generic_wrapper_mismatch.cml:9:54` is the `load_npy::<T>(p)` of its body, with `T` instantiated to f32) and naming the file's element type and the declared one (`the file holds i64 and the program declares f32`). A wrapper that erased the element type would load the file instead (design principles 5.1, 5.5)."
+desc = "The element type a generic wrapper declares reaches the load: `read_as::<f32>` on the int64 `.npy` is the same fault as a direct `load_npy::<f32>`, a RuntimeDiag::RuntimeError reported at the call inside the wrapper (`npy_generic_wrapper_mismatch.cml:8:54` is the `load_npy::<T>(p)` of its body, with `T` instantiated to f32) and naming the file's element type and the declared one (`the file holds i64 and the program declares f32`). A wrapper that erased the element type would load the file instead (design principles 5.1, 5.5)."
 kind = "negative"
 case = "../../../../cases/modules/tensor/dtype/npy_generic_wrapper_mismatch.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_output_contains = ["the file holds i64 and the program declares f32", "npy_generic_wrapper_mismatch.cml:9:54"]
+expect_output_contains = ["the file holds i64 and the program declares f32", "npy_generic_wrapper_mismatch.cml:8:54"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 # A scalar operand beside a reduced-precision tensor: the literal takes the element type the

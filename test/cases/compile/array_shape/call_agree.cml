@@ -1,6 +1,5 @@
 // The control for the two refusals beside it: the same signature with a second argument of the
 // extent the first one bound runs.
-module array_shape_call_agree
 
 func pair(a: f32[n], b: f32[n + 1]): int {
     return len(a) + len(b)

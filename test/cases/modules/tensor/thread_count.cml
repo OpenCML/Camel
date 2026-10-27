@@ -4,7 +4,6 @@
  * is not the expected one, so the exit code is the assertion and the printed line says what the
  * pool reported. `expected` is the number `-t` gave; 0 means "the run gave none".
  */
-module thread_count
 
 import { num_threads } from tensor
 import { cpu_count } from process

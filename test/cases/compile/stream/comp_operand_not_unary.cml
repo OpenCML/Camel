@@ -1,6 +1,5 @@
 // The left operand of `..` is unary, because the composition is the lambda `(x) => g(f(x))`
 // (design principles 4.2): `add2` takes two parameters, so the construct has no reading.
-module h405_comp_not_unary
 
 func add2(a: int, b: int): int { return a + b }
 func inc(x: int): int { return x + 1 }

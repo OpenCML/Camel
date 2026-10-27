@@ -5,7 +5,6 @@
  * asks the array's own count where it cannot prove the old value has no other observer; what
  * the program sees is the array with that element changed.
  */
-module element_assigned
 
 func main(): int sync {
     var arr = [1, 2, 3]

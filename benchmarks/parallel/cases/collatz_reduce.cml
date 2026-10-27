@@ -2,7 +2,6 @@
 // map element is an ordered `reduce` over 5000 values whose step makes a tuple and calls a
 // tail-recursive scalar function. Fine-grained work: the parallel scheduler makes one task per
 // reduce step.
-module collatz_reduce
 
 func collatz_steps(n: int, steps: int): int {
     return if n == 1 then steps

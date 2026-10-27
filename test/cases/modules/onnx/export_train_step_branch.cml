@@ -6,7 +6,6 @@
  * operators. The parameters (a struct) and the input are graph inputs; the
  * loss and the SGD-updated parameters are graph outputs.
  */
-module export_train_step_branch
 
 import { relu, mean, reshape } from tensor
 import { with_grad } from autodiff

@@ -2,7 +2,6 @@
  * Allocation benchmark: short-lived small values of every common kind. Each step makes a small
  * array, a tuple, a struct, a string and a closure, uses them once and drops them.
  */
-module alloc_small
 
 type P = { x: int, y: int, name: string }
 

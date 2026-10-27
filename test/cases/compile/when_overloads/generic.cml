@@ -3,7 +3,7 @@
  * overloads, not a redeclaration (design principles 4.4): where a condition does not hold the
  * overload does not apply and the choice goes on to the others.
  */
-module when_overloads_generic
+
 
 import { is_float, is_complex, is_integer } from types
 

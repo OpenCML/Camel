@@ -3,7 +3,6 @@
  * and the message prints the declaration's own parameter name (`j`) — the one source is
  * `stdlib/json.cml`, not the C++ module (step 10).
  */
-module json_type
 
 import { kind } from json
 

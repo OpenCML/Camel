@@ -7,7 +7,6 @@
  * parameter (the copying form of the same computation). Their gradients agree: `w` is appended
  * twice, and both appended elements are read, so the gradient is 2.
  */
-module loop_grad_in_place
 
 import { grad, with_grad } from autodiff
 

@@ -8,7 +8,6 @@
  * bytes the last sweep left, above the CAMEL_GC_LARGE_BUDGET_MB floor) and that the high-water
  * mark does not grow with `steps`.
  */
-module gc_promoted_blocks
 
 import { drop } from array
 

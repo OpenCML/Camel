@@ -1,7 +1,6 @@
 /**
  * A fault inside a closure that captured the divisor, called through a function value.
  */
-module fault_in_closure
 
 func divider(d: int): (x: int) => int {
     return (x: int): int => x / d

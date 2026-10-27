@@ -3,7 +3,6 @@
  * read from `stdlib/this.cml`, and the call reaches the C++ operator (step 10;
  * 
  */
-module this_declaration_import
 
 import { zen } from this
 

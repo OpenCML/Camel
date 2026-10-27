@@ -4,7 +4,6 @@
  * bytes are left out, because a string's length is part of its value, so a peak in bytes would
  * state a number the tee never held.
  */
-module stream_tee_element_size
 
 import stream
 

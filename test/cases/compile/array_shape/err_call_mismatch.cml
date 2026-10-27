@@ -1,7 +1,6 @@
 // A dimension name is one value for the whole signature: the first argument's extent is what `n`
 // is, and the second argument must be that same extent. Each argument states its extent where it
 // is made, which is the form the call's binding reads.
-module array_shape_err_call_mismatch
 
 func dot(x: f32[n], y: f32[n]): f32 {
     return x[0] + y[0]

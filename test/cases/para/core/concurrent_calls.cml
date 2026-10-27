@@ -5,7 +5,6 @@
  * A scheduler that runs the two calls one after the other therefore prints 1 + 1 = 2 (after
  * two timeouts); one that runs them concurrently prints 2 + 2 = 4. Nothing is timed.
  */
-module concurrent_calls
 
 import { rendezvous } from test_support
 

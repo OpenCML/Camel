@@ -4,7 +4,6 @@
  * reached those resources too and has to name them (design principles 3.3). The contract is what
  * lets a callee change its body within the clause later without touching its callers.
  */
-module err_callee_clause_reaches
 
 resource db
 resource cache

@@ -6,7 +6,6 @@
  * SyntaxDiag::LambdaParametersNeedParentheses, at the `=>` - saying which parentheses to write.
  * It used to be `Unexpected '=>'; expected '}'.` at the `=>`.
  */
-module lambda_without_parentheses
 
 func ident(x: int): int {
     return x

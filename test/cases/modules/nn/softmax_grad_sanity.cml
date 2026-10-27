@@ -1,7 +1,6 @@
 /**
  * Operator-level sanity check for row-wise softmax VJP.
  */
-module softmax_grad_sanity
 
 import {
     reshape, softmax, softmax_grad, sum

@@ -4,7 +4,6 @@
  * function type written inside either, and in the result type. A second occurrence refers to
  * the same variable.
  */
-module parameters
 
 // `A` appears in both parameters and in the result.
 func pair::<A>(x: A, y: A): (A, A) {

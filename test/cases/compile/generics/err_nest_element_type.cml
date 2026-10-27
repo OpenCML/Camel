@@ -9,7 +9,6 @@
  * than when a count of instances being built is reached: the growing call is at the recursive
  * call of `nest`, at the level whose type argument contains the one the open instance holds.
  */
-module err_nest_element_type
 
 func nest::<T>(xs: T[n], k: int): int {
     return if k <= 0 then len(xs) else nest([xs], k - 1)

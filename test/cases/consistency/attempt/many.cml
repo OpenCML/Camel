@@ -6,7 +6,6 @@
  * must be exactly what they were after every round, or the loop does not reach its end. The
  * same count of normal calls runs in between.
  */
-module many
 
 import { get_env } from env
 

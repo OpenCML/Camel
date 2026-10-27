@@ -6,7 +6,6 @@
  * The innermost functions call a named function, so that every scheduler reaches a safepoint
  * while the arrays built in the element function are still in use.
  */
-module gc_nested_foreach
 
 type Row = int[]
 

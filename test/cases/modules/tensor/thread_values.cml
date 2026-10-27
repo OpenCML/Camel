@@ -9,7 +9,6 @@
  * output between workers and keep every accumulator's order inside one output element, so the
  * expected relation is exact equality, with no tolerance.
  */
-module thread_values
 
 import { num_threads, randn, seed, sum, to_bytes } from tensor
 import { sha256 } from hash

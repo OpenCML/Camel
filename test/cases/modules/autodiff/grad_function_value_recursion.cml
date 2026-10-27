@@ -1,4 +1,3 @@
-module grad_function_value_recursion
 import { grad } from autodiff
 
 // A recursive function that passes a function value on. The value is followed into the

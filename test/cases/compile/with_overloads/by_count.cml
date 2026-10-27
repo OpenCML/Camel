@@ -4,7 +4,6 @@
  * picks by the arguments it writes, named or not. `total(xs)` and `xs->total<0>` are two
  * overloads of the same name.
  */
-module with_overloads_by_count
 
 with <axis: int>
 func total(xs: int[]): int { return axis }

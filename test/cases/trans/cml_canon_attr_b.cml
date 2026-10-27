@@ -1,7 +1,6 @@
 /** `cml_canon_attr_a.cml` plus `#strict` on the block: the nodes of the block carry the tag
  * (`#strict` is a node attribute, plan 1.5 p21) and lose the default permissions. Nothing else
  * about the program changes. */
-module cml_canon_attr
 
 func quad(x: float): float {
     #strict {

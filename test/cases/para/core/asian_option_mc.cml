@@ -1,7 +1,6 @@
 /**
  * Parallel Monte Carlo pricing workload used to stress independent worker scheduling over a compute-heavy finance kernel.
  */
-module asian_option_mc
 
 import { now } from time
 import { asian_call_price } from sim

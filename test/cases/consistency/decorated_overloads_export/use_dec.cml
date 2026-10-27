@@ -1,5 +1,3 @@
-module use_dec
-
 import lib_dec
 
 func main(): int sync {

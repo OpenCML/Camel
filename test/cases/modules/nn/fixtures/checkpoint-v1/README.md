@@ -10,7 +10,6 @@ therefore what a pre-rewrite checkpoint looks like.
 Regenerate only when the checkpoint format is deliberately versioned. The writer used was:
 
 ```camel
-module checkpoint_fixture_write
 import { Tensor, new, zeros } from tensor
 import { save_tree } from ckpt
 

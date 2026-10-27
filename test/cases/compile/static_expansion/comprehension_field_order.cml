@@ -4,7 +4,6 @@
  * and `float` for `b`, the values are `(F, float)`, and the result is
  * `{a: (int, float), b: (float, float)}` with `a` before `b`.
  */
-module comprehension_field_order
 
 func pairEach(t: {a: int, b: float}): {a: (int, float), b: (float, float)} {
     return { static for n, F in fields {a: int, b: float} => (t.[n], 0.5) }

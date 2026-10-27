@@ -3,7 +3,6 @@
  * module, which does not import `models`: the operator is looked for in the module that
  * declares the type as well (design principles 5.7), not only among the imports written here.
  */
-module gen
 
 export func twice::<T>(x: T): T {
     return x + x

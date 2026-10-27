@@ -3,7 +3,6 @@
 /// the tag on a block is a Block region with that fact; a node written in the scope carries it
 /// too, and the inner scope wins where scopes nest. Nothing reads the fact yet: the program
 /// means what it meant without the tags.
-module tags_placement
 
 #gpu
 func on_device(x: int): int {

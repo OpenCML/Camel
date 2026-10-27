@@ -3,7 +3,6 @@
  * call, and the overloads the message lists are the declarations' (step 10;
  * 
  */
-module statistics_arity
 
 import { mean } from statistics
 

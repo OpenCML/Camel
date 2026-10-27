@@ -7,7 +7,6 @@
  * DESIGN-QUESTION(attempt-fallible-target): `attempt` of a function that returns `U!` has the
  * type `U!`, not `U!!`.
  */
-module forms
 
 func half(x: int): int { return 100 / x }
 

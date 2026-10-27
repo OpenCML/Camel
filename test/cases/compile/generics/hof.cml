@@ -3,7 +3,6 @@
  * an operator, with a function argument, by a closure that captured a value, and with `with`
  * parameters whose types bind or use type variables.
  */
-module hof
 
 func id::<T>(x: T): T {
     return x

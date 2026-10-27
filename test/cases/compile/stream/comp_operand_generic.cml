@@ -4,7 +4,6 @@
 // from. The refusal is the composition's own, and it says what the operand is and both ways to
 // settle it (design principles 5.5: a name of a generic function is an instance only
 // where a position fixes its type arguments).
-module h428_comp_operand_generic
 
 func ident::<T>(x: T): T {
     return x

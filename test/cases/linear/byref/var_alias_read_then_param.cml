@@ -4,7 +4,6 @@
  * two names. The write to `v[0]` in the callee copies, and `kept` keeps the value it was read as
  * (docs/design-principles.cn.md 3.5, 6.11).
  */
-module var_alias_read_then_param
 
 func make_array(): int[] {
     return [

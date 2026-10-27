@@ -6,7 +6,6 @@
  * an assignment is one of these arms. The write arms stand in a `sync` block, so the write is
  * ordered and no ignored-side-effect warning is part of what this case measures.
  */
-module arm_cell
 
 func from_name(var x: int, c: bool): int? {
     return if c then x else null

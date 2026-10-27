@@ -1,5 +1,3 @@
-module main
-
 func risky(d: int): int {
     let q = 100 / d                  // mark:div
     return q

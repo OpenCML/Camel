@@ -3,7 +3,6 @@
 // in `Node.children` is the empty `Node[]` whether the fields around it are literals or values
 // the program computes. The declared type is what the literal is read against, so the empty
 // array is typed where it stands, not left as the array whose element type nobody wrote.
-module contextual_empty_array_named_sibling
 
 type State = { board: int[], to_move: int }
 type Node = { state: State, children: Node[] }

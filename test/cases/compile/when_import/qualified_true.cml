@@ -3,7 +3,6 @@
  * ordinary module import binds the module's name, and `predicates::is_compound::<T>()` is a
  * call in the declaration's module, resolved there (design principles 10.2).
  */
-module when_import_qualified_true
 
 import predicates
 

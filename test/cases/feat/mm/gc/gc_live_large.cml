@@ -4,7 +4,6 @@
  * of that size are built and dropped. Checks that a heap far larger than the first elder
  * segment is collected, grown and walked correctly, and what it costs.
  */
-module gc_live_large
 
 func row(i: int, k: int): int[] {
     return [i, i + k, i + 2, i + 3, i + 4, i + 5, i + 6, i + 7, i + 8, i + 9, i + 10, i + 11]

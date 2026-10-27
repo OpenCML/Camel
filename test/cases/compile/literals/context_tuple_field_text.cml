@@ -2,7 +2,6 @@
  * A tuple literal is positional: a text written as one of its elements is the same type
  * mismatch, reported at that element, not at the whole literal (design principles 5.1).
  */
-module literal_context_tuple_field_text
 
 func main(): int sync {
     let t: (float, float) = ('1.5', 2.0)

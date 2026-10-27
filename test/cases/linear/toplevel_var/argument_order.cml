@@ -9,7 +9,7 @@
  *   10 11      a local variable passed to a var parameter
  *   1 2        a value read before a call through a function value, and a read after it
  */
-module argument_order
+
 
 var cnt: int = 100
 

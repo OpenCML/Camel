@@ -214,8 +214,9 @@ class Diagnostics {
     void clear();
 
     const std::string &moduleName() const { return moduleName_; }
-    /// Also renames the diagnostics recorded under the old name: a file is named by the
-    /// module it declares, and its syntax errors are recorded before that name is known.
+    /// Also renames the diagnostics recorded under the old name: a caller that learns the module's
+    /// name later renames what it recorded before, and a file's name is its file's (design
+    /// principles 10.2; language reference 05, 5.1).
     void setModuleName(std::string name) {
         std::lock_guard<std::mutex> lock(mtx_);
         for (Diagnostic &d : storage_) {

@@ -3,7 +3,6 @@
  * by name in any order, and `f::<T = int>` alone is a function value. The `::` separates them
  * from the value arguments in angle brackets, which are a different form.
  */
-module parse_constructs_type_arguments
 
 func pair::<B, A>(b: B, a: A): (A, B) { return (a, b) }
 func second::<T>(x: T): T { return x }

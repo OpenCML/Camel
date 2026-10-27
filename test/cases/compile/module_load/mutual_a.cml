@@ -1,5 +1,4 @@
 /** Helper module: imports mutual_b, which imports it back; functions, values and a type. */
-module mutual_a
 import mutual_b
 
 export type Point = { x: int, y: int }

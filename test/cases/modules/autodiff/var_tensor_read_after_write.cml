@@ -3,7 +3,6 @@
  * depends on a differentiated parameter. Taking the read as a constant would drop the
  * gradient through `acc` (the true gradient of p0 is 2 * x) without any sign of it.
  */
-module var_tensor_read_after_write
 import { reshape, sum } from tensor
 import { with_grad } from autodiff
 

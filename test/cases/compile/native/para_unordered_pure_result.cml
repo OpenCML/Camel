@@ -4,7 +4,6 @@
  * declaration `with <f: (item: T) => void>` says what such a function is for rather than letting
  * its result type look like part of the contract.
  */
-module para_unordered_pure_result
 
 import { abs } from math
 import { unordered_foreach } from para

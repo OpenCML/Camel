@@ -1,5 +1,3 @@
-module complex_case
-
 import { abs, conj, exp, im, nan, re } from math
 
 func negate(x: float): float { return -x }

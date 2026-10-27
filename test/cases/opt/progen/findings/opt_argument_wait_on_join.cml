@@ -11,7 +11,6 @@
  *   the last arm, and entered or skipped depending on which arm was taken).
  * Reduced by test/tools/progen from seed 7347 (generator version 2, all features).
  */
-module opt_argument_wait_on_join
 
 func f15(a16: string, a17: string, a18: (a0: int, a1: string) => string): string {
     return a18(0 % 997, if false then '' else '');

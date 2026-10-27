@@ -7,7 +7,6 @@
  * reach safepoints and allocate, so the strings move: the collector has to find the store
  * and update it.
  */
-module gc_born_old
 
 import { seed, sample, shuffle } from random
 

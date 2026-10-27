@@ -4,7 +4,7 @@
  *   1 2 2     two bumps and a read of the variable
  *   11 11     an assignment from the importing module, then a bump and a read
  */
-module exported
+
 
 import { count, bump } from counter_lib
 

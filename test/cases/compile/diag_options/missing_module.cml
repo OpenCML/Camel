@@ -2,7 +2,6 @@
  * Two imports that cannot be done and a use of a name one of them would have declared: one
  * error per import, at the import, and none for the use.
  */
-module missing_module
 
 import { thing } from no_such_module_a
 import { other } from no_such_module_b

@@ -2,7 +2,6 @@
  * Verifies function literals bound with `let` can be called directly, with and without captures,
  * and that with-arguments given at a call `f<a>(x)` do not disturb a closure's captures.
  */
-module bound_closures
 
 func main(): int sync {
     let k = 3

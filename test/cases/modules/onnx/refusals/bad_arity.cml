@@ -2,7 +2,6 @@
  * Two examples for a one-parameter function... the example tuple is one argument; a
  * two-parameter function given one example is refused at the export_model call (line 11).
  */
-module bad_arity
 
 import { reshape } from tensor
 import { export_model } from onnx

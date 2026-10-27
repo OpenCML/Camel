@@ -1,8 +1,4 @@
 Program
-|-ModuleDecl
-|  |- module
-|  \-IdentDef
-|     \- fib
 |-ImportDecl
 |  |- import
 |  |-BracedImports

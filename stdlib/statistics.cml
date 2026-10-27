@@ -23,7 +23,6 @@
 // written above a declaration belongs to that declaration only, so each overload repeats it and
 // `[...]->quantile<q>` is checked the same way for an i32, an int, an f32 and a float array.
 
-module statistics
 
 /// The arithmetic mean; 0 for an empty array.
 /// @pure

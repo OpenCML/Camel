@@ -5,7 +5,6 @@
  * never filled: its type stayed `(ref, ref)` (rejected against the declared return type), and
  * an inner array could not be inserted into the outer one.
  */
-module nested_literals
 
 func pairs(a: int, b: float): ((int, float), (float, int)) {
     return ((a, b), (b, a))

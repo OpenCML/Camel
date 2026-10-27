@@ -2,7 +2,6 @@
  * A call that leaves out a parameter with no default is reported: `b` has no default,
  * and the call gives `c` by name, so it cannot be `b` (design principles 4.4).
  */
-module param_argument_missing
 
 func f(a: int, b: int, c: int = 3): int {
     return a + b + c

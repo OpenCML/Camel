@@ -4,7 +4,6 @@
  * Each function reduces to a float through fixed, non-uniform weights so that every element of
  * the gradient matters.
  */
-module tensor_grad_check
 
 import { grad } from autodiff
 import { new, random, seed, sum, mean, max, min, exp, log, sqrt, rsqrt, sigmoid, tanh, relu, gelu, erf, abs, neg, maximum, minimum, where, softmax, log_softmax, layer_norm, matmul, linear, transpose, reshape, flatten, unsqueeze, permute, concat, pow } from tensor

@@ -1,5 +1,3 @@
-module broken_lib
-
 func helper(a: int): int { return a + missing_in_lib }
 
 export { helper }

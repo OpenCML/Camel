@@ -5,7 +5,6 @@
  * `random` and `zeros`), so the element type is written in the signatures rather than left to a type
  * in transition.
  */
-module linear_regression
 
 import {
     concat, ones, random, shape, show, sum, transpose, zeros

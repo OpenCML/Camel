@@ -4,7 +4,6 @@
  * nothing of the interval is left in the graph -- no array of the elements is made, and no SLOOP,
  * LOOP, SFOR, SACC or BRCH node stands where the loop was written.
  */
-module static_loop_sequence_graph
 
 func loopSum(t: (int, int, int)): int {
     return static loop acc = 0 for i in 0..3 do acc + t.[i]

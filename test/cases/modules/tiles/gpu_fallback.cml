@@ -1,4 +1,3 @@
-module tiles_gpu_fallback
 import { available, run_preferred_resident, download } from tiles
 
 func add(a: float, b: float): float { return a + b }

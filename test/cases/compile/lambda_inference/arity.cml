@@ -3,7 +3,6 @@
  * expected type does determine are filled in, and the diagnostic names the first parameter it
  * cannot (design principles 5.9; item 2).
  */
-module lambda_inference_arity
 
 func apply(f: (x: int, y: int) => int, x: int): int { return f(x, x) }
 

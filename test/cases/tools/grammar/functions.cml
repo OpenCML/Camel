@@ -1,5 +1,4 @@
 // Function definitions, calls, with-parameters, decorators and function literals.
-module functions
 
 func fib(n: int): int {
     return if n <= 1 then n else fib(n - 1) + fib(n - 2)

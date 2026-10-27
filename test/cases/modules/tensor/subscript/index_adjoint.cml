@@ -19,7 +19,6 @@
  * refuses the three-word call at all (exit 1), or a result's type is not the one its parameter
  * states (the call needs an explicit conversion).
  */
-module subscript_index_adjoint
 import { reshape, sum } from tensor
 import { grad } from autodiff
 

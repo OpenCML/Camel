@@ -3,7 +3,6 @@
  * them and so matches no arm (design principles 5.1), whatever the values would fit. An integer
  * becoming a number is a conversion the program writes, and the report names it.
  */
-module int_beside_f32_tensor
 
 import { reshape, multiply, sum } from tensor
 

@@ -2,7 +2,7 @@
  * A pure callee that may fault runs after the effects its argument waited for. The body does not
  * read the argument, so once it is inlined only an order edge keeps `7 / b` after `show`.
  */
-module inline_faulting_callee_order
+
 
 func show(x: int): int sync {
     println(x)

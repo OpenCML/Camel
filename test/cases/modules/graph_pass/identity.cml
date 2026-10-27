@@ -1,4 +1,3 @@
-module identity
 import { Program, graphs, nodes, name } from graph
 
 export func keep(p: Program): Program! {

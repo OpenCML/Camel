@@ -10,7 +10,6 @@
  * bound for the K-product accumulation: K^2 * eps * max|x| * max|ones|. Safe mode
  * (`tensor::fuse safe_fp=true`) makes both gradients canonical, so the same program prints 0.
  */
-module grad_library
 
 import { grad } from autodiff
 import { abs, linear, max, randn, seed, sum } from tensor

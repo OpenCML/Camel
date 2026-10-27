@@ -3,7 +3,6 @@
  * with_grad returns the loss and a LinearBias-shaped gradient whose bias entry is reduced
  * back to the bias shape, and sgd applies one update to both leaves.
  */
-module graph_autograd_multi_param_demo
 
 import { with_grad } from autodiff
 import { ones, shape, sum, zeros } from tensor

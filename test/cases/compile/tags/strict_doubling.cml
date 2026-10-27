@@ -10,7 +10,6 @@
  * equal bits for every value except a NaN payload, which 7.7 leaves unconstrained for ordinary
  * arithmetic.
  */
-module strict_doubling
 
 import { inf, nan } from math
 

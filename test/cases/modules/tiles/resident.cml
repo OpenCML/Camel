@@ -1,4 +1,3 @@
-module tiles_resident
 import { reshape, zeros, sum, abs } from tensor
 import { Device, upload, download } from tiles
 func read(x: Device<f32[..]>): f32[..] { return download(x) }

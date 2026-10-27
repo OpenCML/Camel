@@ -2,7 +2,6 @@
  * `t[idx]` on a tensor is `take` (design principles 5.4): the rows the indices name, in that
  * order, with a repeated index repeating its row.
  */
-module subscript_take_rows
 import { reshape, shape, sum } from tensor
 
 func main(): int sync {

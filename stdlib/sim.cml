@@ -22,7 +22,6 @@
 // seed argument, which is why both are registered pure and may be folded, merged or run
 // concurrently.
 
-module sim
 
 /// Draws `samples` points uniformly from the square [-1, 1]^2 with a generator seeded by `seed`
 /// and returns how many fall inside the unit circle. The estimate of pi is `4 * hits / samples`;

@@ -1,5 +1,3 @@
-module x
-
 export func name(): string {
     return "local-x"
 }

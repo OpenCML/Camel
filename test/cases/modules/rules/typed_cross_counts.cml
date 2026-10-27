@@ -1,5 +1,4 @@
 /** Counts of the four typed combines. */
-module typed_cross_counts
 import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
 
 func opText(n: Node): string {

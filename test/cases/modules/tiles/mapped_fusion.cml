@@ -1,4 +1,3 @@
-module tiles_mapped_fusion
 import { random, seed, sum, abs, transpose, reshape } from tensor
 import { inspect, benchmark, run_preferred_resident, download } from tiles
 

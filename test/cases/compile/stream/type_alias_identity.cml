@@ -6,7 +6,6 @@
  * repeated: `pick(x: int[]): int` beside `pick(x: Ints): int` is an ordinary overload set
  * (test/cases/compile/stream/type_alias.cml), and so is `pick(x: int): int`.
  */
-module stream_type_alias_identity
 
 type Ints = int..
 

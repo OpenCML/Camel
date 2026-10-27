@@ -6,7 +6,6 @@
  * inside `is_numeric`, an `is_complex` that answered false, or a `is_ordered` that still
  * listed the numeric types by hand each change this output.
  */
-module when_types_numeric_complex
 
 import { is_complex, is_float, is_integer, is_numeric, is_ordered } from types
 

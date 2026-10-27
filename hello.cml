@@ -1,5 +1,3 @@
-module main
-
 import { user_name } from process
 
 func main() sync {

@@ -6,9 +6,7 @@ import { withServer, check, checkEq, fmtRange } from '../../../tools/lsp/client.
 
 // A missing ',' between two parameters: the compiler knows the text to write, so the diagnostic
 // carries a fix, and the file is repaired by applying it.
-const MISSING_COMMA = `module main
-
-func add(a: int b: int): int { return a + b }
+const MISSING_COMMA = `func add(a: int b: int): int { return a + b }
 
 func main(): int sync {
     return add(1, 2)
@@ -18,9 +16,7 @@ func main(): int sync {
 // A name that resolves to nothing is the one thing the compiler repairs by itself, by looking for
 // the name that was meant among the names in scope: that candidate search is a code action too,
 // and it is not a fix the compiler attached (`data.fixes` is absent).
-const TYPO = `module main
-
-func main(): int sync {
+const TYPO = `func main(): int sync {
     let counter = 1
     return countr
 }
@@ -69,7 +65,7 @@ await withServer(async (ls) => {
     checkEq(report.items.length, 1, 'one diagnostic for the missing comma', report.items)
     const item = report.items[0]
     checkEq(item.code, '0x02000007', 'the catalog code')
-    checkEq(fmtRange(item.range), '2:16-2:17', 'the range of the diagnostic')
+    checkEq(fmtRange(item.range), '0:16-0:17', 'the range of the diagnostic')
     checkSame(
         item.data.fixes,
         [
@@ -77,7 +73,7 @@ await withServer(async (ls) => {
                 title: "insert ','",
                 edits: [
                     {
-                        range: { start: { line: 2, character: 15 }, end: { line: 2, character: 15 } },
+                        range: { start: { line: 0, character: 15 }, end: { line: 0, character: 15 } },
                         newText: ',',
                     },
                 ],
@@ -87,7 +83,7 @@ await withServer(async (ls) => {
     )
 
     // ---- code actions ----
-    const range = { start: { line: 2, character: 15 }, end: { line: 2, character: 16 } }
+    const range = { start: { line: 0, character: 15 }, end: { line: 0, character: 16 } }
     const actions = await ls.request('textDocument/codeAction', {
         textDocument: { uri },
         range,
@@ -104,8 +100,8 @@ await withServer(async (ls) => {
                     [uri]: [
                         {
                             range: {
-                                start: { line: 2, character: 15 },
-                                end: { line: 2, character: 15 },
+                                start: { line: 0, character: 15 },
+                                end: { line: 0, character: 15 },
                             },
                             newText: ',',
                         },

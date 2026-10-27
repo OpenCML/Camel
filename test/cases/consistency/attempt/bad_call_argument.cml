@@ -2,7 +2,6 @@
  * The value `attempt(f)` keeps the parameters of `f`: it is called like any function value, and
  * an argument of the wrong type is refused at that call.
  */
-module bad_call_argument
 
 func risky(d: int): int { return 100 / d }
 

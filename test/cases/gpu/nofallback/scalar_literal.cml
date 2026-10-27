@@ -2,7 +2,6 @@
 /// 5.1), so `x * 2.0` is the f32 product and no f64 operand stays on the graph. A `#gpu` scope
 /// that scales, shifts or divides by a constant therefore compiles: the operator becomes a
 /// segment of the device program instead of being excluded as a `scalar_tensor_operand`.
-module gpu_nofallback_scalar_literal
 
 import { reshape, sum } from tensor
 import { regions } from tiles

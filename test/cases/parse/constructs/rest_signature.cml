@@ -2,7 +2,6 @@
  * The rest parameter and the rest argument as syntax: `..ts` is the last parameter of a
  * signature, and `..(a, b)` / `..ts` is the last argument of a call.
  */
-module rest_signature
 
 func total(..ts): int {
     return static loop acc = 0 for j in indices ts do acc + ts.[j]

@@ -4,7 +4,6 @@
  * the design's `tree_map` uses to reach `column(n, ts)` -- a wrapper that forwards the field name
  * it was given and the trees it was given.
  */
-module constas_forward_rest
 
 func column(constas n: string, ..ts): (int, int) {
     return ( static for j in indices ts => ts.[j].[n] )

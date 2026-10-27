@@ -4,7 +4,6 @@
  * (what the value is printed with differs). A default whose type depends on a type parameter
  * cannot be a constant, and is refused where the template is registered.
  */
-module with_default_instances
 
 with <n: int = 3>
 func tag::<T>(x: T): string {

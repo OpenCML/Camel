@@ -4,7 +4,6 @@
  * type it asks for is `is_plain::<T>()`, which walks the fields and is false here, so the refusal
  * names the condition and the candidate it fails rather than faulting inside a kernel.
  */
-module binary_aggregate_not_plain
 import { to_bytes } from tensor
 
 type Named = { name: string, n: int }

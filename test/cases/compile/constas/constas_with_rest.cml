@@ -2,7 +2,6 @@
  * A `constas` parameter may be combined with a rest parameter: the
  * value is bound before the expansion, and the rest parameter takes the arguments left over.
  */
-module constas_with_rest
 
 func first(constas offset: int, ..ts): int {
     return offset + ts.[0]

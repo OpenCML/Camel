@@ -2,7 +2,6 @@
  * An ordinary call whose literal argument enters two parameter types: it is refused as
  * ambiguous. It used to take the first overload in declaration order.
  */
-module ambiguous_literal
 
 func scale(x: f32): f32 {
     return x * 2.0

@@ -4,7 +4,6 @@
  * (SemanticDiag::StreamInContainer). A tuple is not a container in this sense, and a signature
  * takes a stream: the restriction is linearity, not the type.
  */
-module stream_type_in_collection
 
 func drain(m: Map<string, int..>): int {
     return 0

@@ -1,4 +1,3 @@
-module return_tensor_shape
 import { ones } from tensor
 func f(x: f32[2, 3]): f32[3, 2] {
     return x * 2.0

@@ -4,7 +4,6 @@
  * The triple-quoted form is the one that takes no escaped quote, but it still shares the one
  * escape table: every probe of plain.cml is written here again.
  */
-module escapes_triple
 
 func main(): int sync {
     println('101', len('''\101'''))

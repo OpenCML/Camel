@@ -1,5 +1,3 @@
-module main
-
 // A run whose record the debugger is asked to read, made by the program itself so both the
 // library and the debugger answer about the same record. `f` and `g` are the only functions a
 // rule can match: no other function here holds `x + 0` or `x * 0`, so the proof counts the

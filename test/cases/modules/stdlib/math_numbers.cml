@@ -1,7 +1,6 @@
 /**
  * The math module: min, max, clamp, sign over the four numeric types, gcd and lcm.
  */
-module math_numbers
 
 import { min, max, clamp, sign, gcd, lcm, abs, nan, inf, is_nan } from math
 

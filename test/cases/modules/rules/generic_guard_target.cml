@@ -4,7 +4,6 @@
  * coefficient as a literal, which is what a rule's `const` parameter matches (a coefficient the
  * program computes at run time is not a constant, and no law reads it).
  */
-module generic_guard_target
 
 func scal(x: float): float {
     return x * 1.5 + x

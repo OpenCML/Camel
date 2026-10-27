@@ -1,7 +1,6 @@
 /// Tail calls do not make the stack grow (design principles 10.6): ten million steps of a
 /// self tail call (it overflowed the native stack, design principles 10.6), and a
 /// pair of functions that call each other in tail position, a million steps.
-module tail_calls
 
 func count(i: int, acc: int): int {
     return if i == 0 then acc else count(i - 1, acc + i % 7)

@@ -2,7 +2,6 @@
  * Shape diagnostic of `sum_axis`: statically known shapes conflict, so compilation fails at the
  * call with both shapes in the reason.
  */
-module shape_diag_sum_axis
 
 import { zeros, sum } from tensor
 

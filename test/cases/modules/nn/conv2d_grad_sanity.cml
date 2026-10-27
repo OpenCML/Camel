@@ -1,7 +1,6 @@
 /**
  * Operator-level sanity check for conv2d kernel and bias gradients.
  */
-module conv2d_grad_sanity
 
 import {
     reshape, sum

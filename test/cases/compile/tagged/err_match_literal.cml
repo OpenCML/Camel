@@ -1,7 +1,6 @@
 /**
  * A literal case cannot be compared with a value that is not opened: TaggedMatchCases.
  */
-module err_match_literal
 
 func main(): int sync {
     println('never printed')

@@ -1,5 +1,4 @@
 /// A body-less declaration is a whole signature, result type included.
-module incomplete
 
 func foo(x: int)
 

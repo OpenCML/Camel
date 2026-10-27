@@ -4,7 +4,6 @@
  * the report names those. A join of the cell types themselves would name `var int` and
  * `var string` instead, which is the cell type reaching the join.
  */
-module err_arm_cell_unrelated
 
 // Each arm is the value of a `sync` block, which is the cell its write returned: nothing here
 // is a `var` read out by the position, so what the join sees is the cell unless the arm merge

@@ -2,7 +2,6 @@
  * A type parameter declared at the head and written nowhere in the signature is reported: no
  * argument could ever give it a type (design principles 5.5).
  */
-module err_unused_head_param
 
 func show::<T>(x: int): string {
     return 'x'

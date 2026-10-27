@@ -4,7 +4,6 @@
  * by the name the program gave it, the same warning an ordinary argument of type `never` gets.
  * The `with` argument and the ordinary one are one reading, not two.
  */
-module never_with_argument_named
 
 func stop(m: string): never {
     return fail<'Stopped'>(m)

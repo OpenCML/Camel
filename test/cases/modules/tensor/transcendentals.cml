@@ -2,7 +2,6 @@
  * Vectorized exp/tanh/sigmoid/gelu/softmax kernels: accuracy on ordinary
  * values and IEEE-like saturation at the ends of the float range.
  */
-module transcendentals
 
 import { reshape, exp, tanh, sigmoid, gelu, softmax } from tensor
 

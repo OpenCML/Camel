@@ -1,5 +1,3 @@
-module main
-
 func parse(text: string): int! {
     return error('BadInput', 'not a number: ' + text)    // mark:error
 }

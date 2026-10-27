@@ -4,7 +4,7 @@
  * `bf16` or `f16` runs the body, which computes in f64 and rounds once. The complex `exp` and
  * `abs` have kernels of their own.
  */
-module math_kernel_calls
+
 
 import { abs, exp, log, max, min, sign, sqrt } from math
 

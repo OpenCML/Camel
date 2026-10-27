@@ -3,7 +3,6 @@
  * are different cases, `f32` is not `float`, `i32` is not `int`, and `#leaf` still selects
  * every scalar that no identity case named (design principles 5.5).
  */
-module type_identity
 
 func kind::<T>(x: T): string {
     return match type T {

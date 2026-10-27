@@ -1,0 +1,21 @@
+/**
+ * `module` is an ordinary name: a file *is* a module and its name is the file's (05, 5.1), so the
+ * word is a field of a type, a binding and a function like any other identifier. Nothing reads it
+ * as a keyword, and a file that declares nothing of its own is a module all the same.
+ */
+
+type Entry = {
+    module: int,
+    other: int
+}
+
+let module = 2
+
+func add_module(e: Entry): int {
+    return e.module + module + e.other
+}
+
+func main(): int sync {
+    println('sum {}'->format<add_module({ module: 3, other: 4 })>)
+    return 0
+}

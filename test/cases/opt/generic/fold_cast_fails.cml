@@ -3,7 +3,6 @@
  * error: it stays in the graph and fails when the program runs, after what ran before it, with
  * the conversion's own error at the conversion (line 14).
  */
-module fold_cast_fails
 
 import { reshape, sum } from tensor
 

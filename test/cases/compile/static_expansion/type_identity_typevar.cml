@@ -3,7 +3,6 @@
  * with the subject `T` after both are bound, so `same::<int, int>()` is true and
  * `same::<int, float>()` is false.
  */
-module type_identity_typevar
 
 func same::<T, U>(): bool {
     return match type T {

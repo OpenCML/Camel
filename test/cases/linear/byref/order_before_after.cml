@@ -9,7 +9,6 @@
  * Any other order prints something else: A after modify gives `A 2` and 20020, B before modify
  * gives `B 1` and 10010, and the three lines change places.
  */
-module order_before_after
 
 func before(x: int): int sync {
     println('A {}'->format<x>)

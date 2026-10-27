@@ -4,7 +4,6 @@
  * fired would collapse the pair. `apply` is the same program under the unguarded laws, which the
  * last test of the plan runs: the boundary lines then collapse.
  */
-module tensor_boundary
 
 import { reshape } from tensor
 import { Program } from graph

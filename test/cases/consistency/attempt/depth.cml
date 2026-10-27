@@ -5,7 +5,6 @@
  * inside a map element. A recursion that reaches the limit *at* the call `attempt` makes is a
  * fault of the caller, outside that boundary: the enclosing `attempt` isolates it.
  */
-module depth
 
 func depth(n: int): int { return if n == 0 then 0 else 1 + depth(n - 1) }
 

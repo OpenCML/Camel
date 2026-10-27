@@ -4,7 +4,6 @@
  * division by zero gets (compare consistency/faults/div_zero_top.cml), with the kind the program
  * chose and its own message, and what was printed before it stays on standard output.
  */
-module fail_located
 
 func limit(q: float): float {
     return if q > 0.0 then q else fail<'BadLimit'>('the limit must be positive')

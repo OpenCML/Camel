@@ -1,5 +1,4 @@
 /// A requirement that names no permission: reported at the argument, where it is written.
-module err_requires_unknown
 import { Program } from graph
 import { rewrite } from rewrite
 

@@ -2,7 +2,6 @@
  * The export request that gives `out` and `dynamic_axes`: the batch extent of the input is not
  * baked in, so the model's first dimension is symbolic while `target` stays at its default.
  */
-module with_forms_dynamic_axes
 
 import { reshape } from tensor
 import { export_model } from onnx

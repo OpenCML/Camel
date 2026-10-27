@@ -2,7 +2,6 @@
  * The program the node-value-type probe reads: `target` is an addition whose second operand is
  * itself an addition.
  */
-module fact_value_type_target
 import fact_value_type
 
 func target(a: int, b: int): int {

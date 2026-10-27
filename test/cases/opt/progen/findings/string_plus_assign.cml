@@ -4,7 +4,6 @@
  * works.
  * Expected output: ab
  */
-module string_plus_assign
 
 func main(): int sync {
     var s = 'a'

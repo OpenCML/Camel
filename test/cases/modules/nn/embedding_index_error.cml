@@ -1,7 +1,6 @@
 /**
  * Negative case: embedding must reject out-of-range indices.
  */
-module embedding_index_error
 
 import {
     reshape, sum

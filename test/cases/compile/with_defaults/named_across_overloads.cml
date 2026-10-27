@@ -4,7 +4,6 @@
  * `show<rounds: 2>(3)` and `show<rounds: 2>('a')` each reach the declaration its argument's type
  * selects (design principles 4.4).
  */
-module with_named_across_overloads
 
 with <rounds: int = 8>
 func show(x: int): string {

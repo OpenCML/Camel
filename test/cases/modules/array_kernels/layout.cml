@@ -2,7 +2,6 @@
  * The layout atoms of `array` (stdlib/array.cml): the extents, the element count, one extent by
  * axis, and the elements as little-endian bytes.
  */
-module array_kernels_layout
 
 import { shape, numel, dim, to_bytes } from array
 import { reshape } from tensor

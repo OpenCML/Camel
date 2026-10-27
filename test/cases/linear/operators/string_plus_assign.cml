@@ -2,7 +2,6 @@
  * `+=` on a string variable appends. It used to compile and leave the variable unchanged
  * (progen finding F28). Also through a `var` parameter.
  */
-module string_plus_assign
 
 func append(var t: string, x: string): string sync {
     t += x

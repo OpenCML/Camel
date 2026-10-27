@@ -16,7 +16,6 @@
  * MODE=run    : native run; dumps init params, inputs, losses, updated params
  * MODE=export : WHAT=fwd exports the loss, WHAT=step exports the training step
  */
-module e13_l2a_early_exit
 
 import { relu, mean, abs, reshape, zeros, save_npy } from tensor
 import { with_grad } from autodiff

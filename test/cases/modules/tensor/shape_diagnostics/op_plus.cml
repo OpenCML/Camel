@@ -2,7 +2,6 @@
  * Shape diagnostic of `op_plus`: statically known shapes conflict, so compilation fails at the
  * call with both shapes in the reason.
  */
-module shape_diag_op_plus
 
 import { zeros } from tensor
 

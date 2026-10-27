@@ -7,7 +7,6 @@
  * tables are the measurement: a line that differs is a difference, and the line carries the nodes,
  * the edges and the operators of that graph on each side.
  */
-module measure
 
 import { Program, Node, Graph, graphs, nodes, inputs, with_inputs, ctrl_inputs, op, op_name, name } from graph
 

@@ -2,7 +2,7 @@
  * A `var` declared and read inside a `sync` body is not a statement of the chain: the effect
  * statements around it all run, in the order they are written.
  */
-module var_between_statements
+
 
 func read_twice(): int sync {
     var a: int = 1

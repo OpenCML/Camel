@@ -4,7 +4,6 @@
  * function value captures the cell, and every call of it writes through the capture, so the
  * accumulator after three calls is what the three calls added.
  */
-module partial_application_var_parameter
 
 with <var total: int>
 func add(x: int): int sync {

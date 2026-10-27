@@ -1,9 +1,6 @@
 >// Module declarations, imports, exports, namespaces and qualified names.
 #^^ comment.line.double-slash.camel punctuation.definition.comment.camel
 #  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.line.double-slash.camel
->module geometry
-#^^^^^^ keyword.control.import.module.camel
-#       ^^^^^^^^ entity.name.namespace.module.camel
 >
 >import time
 #^^^^^^ keyword.control.import.camel

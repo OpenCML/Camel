@@ -4,7 +4,6 @@
  * `unordered_reduce` a callback from the element to itself). `rendezvous` is `test_support`'s, and
  * the call reaches its operator too (step 10).
  */
-module para_declaration_import
 
 import { rendezvous } from test_support
 import { unordered_foreach, unordered_reduce } from para

@@ -2,7 +2,6 @@
  * The recursion's false side: a field whose type is not plain makes the whole struct not plain,
  * so the same guarded declaration is inapplicable and the call site says which condition failed.
  */
-module when_plain_struct_false
 
 import { is_plain } from types
 

@@ -2,7 +2,6 @@
  * Verifies float comparisons drive branches correctly and 64-bit integer equality compares all
  * 64 bits, on every execution engine.
  */
-module float_compare_branch
 
 func pick(x: float, y: float): int {
     let lt = if x < y then 1 else 0

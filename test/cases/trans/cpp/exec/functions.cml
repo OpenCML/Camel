@@ -1,6 +1,5 @@
 /// Function values: functions passed and returned, closures that capture values and variables,
 /// calls through a value, and the operators that call them (map, filter, reduce, foreach).
-module functions
 
 func adder(k: int): (x: int) => int {
     return (x: int): int => x + k

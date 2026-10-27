@@ -6,7 +6,6 @@
  * exactly on the midpoint and round back down to 1.0. A `return` of the literal and a declared
  * array print the same 1.00000012, for an array element, a struct field and a nested array.
  */
-module literal_context_composite_rounding
 
 type Point = { x: f32 }
 

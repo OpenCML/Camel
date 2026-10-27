@@ -4,7 +4,6 @@
  * known (`LiteralNotRepresentable`, at the argument) rather than left as an `int[]` with no
  * matching function — the same refusal an ordinary argument gets.
  */
-module literal_context_arrow_receiver_out_of_range
 
 func sum32(xs: i32[]): i32 {
     return xs[0] + xs[1]

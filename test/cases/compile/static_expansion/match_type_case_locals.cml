@@ -6,7 +6,6 @@
  * collectBoundNames.) The `tuple` arm is not selected when the function is instantiated with an
  * `int`, so this pins the walk of a body no instance builds.
  */
-module match_type_case_locals
 
 func shape::<T>(t: T): int {
     return match type T {

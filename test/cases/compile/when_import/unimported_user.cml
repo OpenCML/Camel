@@ -4,7 +4,6 @@
  * entry, so the report can say the predicate is not imported here instead of calling the name
  * unknown.
  */
-module when_import_unimported_user
 
 export func describe::<T>(x: T): string when is_compound::<T>() {
     return 'compound'

@@ -1,5 +1,3 @@
-module array_literal
-
 import { Json, decode } from json
 
 // A computed element whose type is not the element type the literal elements fixed is a

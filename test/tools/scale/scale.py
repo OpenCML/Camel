@@ -86,7 +86,7 @@ def function(shape: str, i: int) -> Tuple[str, int]:
 
 def program(shape: str, n: int) -> Tuple[str, int]:
     """The program text and the number it prints."""
-    parts = [f"module scale_{shape}_{n}\n"]
+    parts = []
     total = 0
     simple = [s for s in SHAPES if s != "mixed"]
     for i in range(n):
@@ -128,7 +128,6 @@ def wide_program(n: int) -> Tuple[str, int]:
     params = ", ".join(f"p{k}: int" for k in range(WIDE_PARAMS))
     args = ", ".join("1" for _ in range(WIDE_PARAMS))
     lines = [
-        f"module scale_wide_{n}",
         f"func wide({params}): int {{",
         f"    return {level[0]}",
         "}",
@@ -151,7 +150,6 @@ def fanout_program(n: int) -> Tuple[str, int]:
             upper.append(level[-1])
         level = upper
     lines = [
-        f"module scale_fanout_{n}",
         "func wide(x: int): int {",
         f"    return {level[0]}",
         "}",

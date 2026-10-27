@@ -1,4 +1,3 @@
-module shape_inference_loaded_struct_as
 import { sum, ones, load_npy } from tensor
 type P = { w: f32[3], b: f32[3] }
 with <m: P>

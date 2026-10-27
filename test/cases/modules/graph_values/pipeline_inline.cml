@@ -3,7 +3,6 @@
  * (design principles 9.1). `twice` is called by two callers and held by a closure; after
  * inlining and optimising, every holder computes what the source says.
  */
-module pipeline_inline
 
 func twice(x: int): int {
     return x * 2 + x * 2

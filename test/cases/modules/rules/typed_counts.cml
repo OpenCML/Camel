@@ -1,5 +1,4 @@
 /** The operator counts of the typed target, by element type (design 7: the counts are the test). */
-module typed_counts
 import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
 
 func opText(n: Node): string {

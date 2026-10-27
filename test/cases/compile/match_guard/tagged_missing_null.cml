@@ -5,7 +5,6 @@
  * null side has only the guarded case, so the value a false guard refuses reaches no case, and
  * the report is the one a `T?` match that does not list `case null` gets.
  */
-module match_guard_tagged_missing_null
 
 func f(x: int?): int {
     return match x {

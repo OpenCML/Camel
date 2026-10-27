@@ -1,4 +1,3 @@
-module imports
 import { flat_map } from array
 import { Program } from graph
 

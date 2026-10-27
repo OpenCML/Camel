@@ -3,7 +3,6 @@
  * shifts (the count in angle brackets) are read from `stdlib/math.cml`, and a call at a type with a
  * kernel reaches the operator the C++ module runs. The constant `pi` is a value of the module.
  */
-module math_declaration_import
 
 import { abs, clamp, min, sqrt, shl, shr, pi } from math
 

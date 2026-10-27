@@ -3,7 +3,6 @@
  * `outer`'s compile-time value reaches `inner` as a compile-time value, so `outer<3>` makes
  * `inner<3>` and `outer<4>` makes `inner<4>` -- two instances each.
  */
-module constas_forward
 
 func inner(constas k: int, x: int): int {
     return x * 10 + k

@@ -3,7 +3,6 @@
  * single function value: a position that needs one reports the diagnostic the declaring module
  * reports of the same name, listing both functions.
  */
-module err_no_function_value
 
 import lib
 

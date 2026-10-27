@@ -6,6 +6,6 @@ name = "export"
 env = ["ONNX_OUT={tmp}/checked.onnx", "ONNX_OUT_UNCHECKED={tmp}/unchecked.onnx"]
 exit = 1
 diagnostic = "RuntimeDiag::UnhandledError"
-diagnostic_line = 20
+diagnostic_line = 19
 diagnostic_column = 12
 output_contains = ["written without the check", "(CPUExecutionProvider) has no kernel for Relu on int64 tensors at opset 17"]
