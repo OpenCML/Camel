@@ -6,22 +6,22 @@
  */
 module condition_generic_commit
 
-import { Program, Graph, Node, current, root, open, commit, add_constant, id } from graph
+import { Graph, Node, open, commit, add_constant, id, graph_of } from graph
 import { rewrite } from rewrite
 
 rule add_zero::<T>(x: T) when publish_now() { x + 0 => x }
 
 func publish_now(): bool {
-    let p = current()
+    let p = redex
     return match do_publish(p) {
         case error e => sync { println('inner error value: ', e.kind); return false }
         case q => sync { return true }
     }
 }
 
-func do_publish(p: Program): Program! sync {
+func do_publish::<F>(p: F): F! sync {
     let t = open(p)
-    let n = add_constant(t, root(p), 1)
+    let n = add_constant(t, graph_of(p), 1)
     println('added node ', id(n))
     return commit(t)
 }
@@ -31,8 +31,8 @@ func redex(x: int): int {
 }
 
 func main(): int sync {
-    let p = current()
-    return match rewrite(p, [add_zero]) {
+    let p = redex
+    return match p->rewrite<[add_zero]> {
         case error e => sync { println('outer error value: ', e.kind); return 1 }
         case q => sync { println('rewritten'); return 0 }
     }

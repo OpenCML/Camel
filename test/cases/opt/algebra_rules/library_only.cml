@@ -9,18 +9,18 @@ module library_only
 //   * the integer laws the C++ law table never had — `x * 0`, `0 * x`, `x - x`, `x / 1`, `-(-x)`
 //     (the deleted table had the neutral elements, the like-term combines and the coefficient
 //     folds, and nothing else: `e8c290554:src/passes/opt/generic/algebra.cpp`). The library carries
-//     them (`int_mul_zero`, `int_zero_mul`, `int_sub_self`, `int_div_one`, `int_neg_neg`) and
+//     them (`int_mul_zero`, `int_zero_mul`, `int_sub_self`, `div_one`, `neg_neg`) and
 //     `simplify` applies them.
 //   * the laws the deleted C++ law table did have and the reference mode does not run — the combine
 //     `x*c1 + x*c2`, the coefficient fold `(x*c1)*c2` and the doubling `x + x`. The reference mode
 //     is `neutral_only`, so it leaves all three; the library's `int_combine`, `int_fold` and
-//     `int_add_self` perform them, and `feat.opt.algebra` holds the library to the operator shapes
+//     `add_self` perform them, and `feat.opt.algebra` holds the library to the operator shapes
 //     the deleted table produced on its own corpus.
 //   * the floating-point neutrals, which the C++ law table deliberately did not infer
 //     ("Floating-point identities need separate NaN/zero rules and are deliberately not inferred
 //     from real arithmetic", `e8c290554:algebra.cpp`). The library states them as rules that hold
-//     bit for bit (`float_mul_one`, `float_add_minus_zero`, `float_sub_zero`, `float_div_one`,
-//     `float_neg_neg`) beside the ones that need a permission (`float_combine`, `float_fold`).
+//     bit for bit (`mul_one`, `float_add_neg_zero`, `sub_zero`, `div_one`,
+//     `neg_neg`) beside the ones that need a permission (`float_combine`, `float_fold`).
 
 func mul_zero(x: int): int sync {
     let a = x * 0

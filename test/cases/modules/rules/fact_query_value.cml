@@ -6,7 +6,7 @@
  * not state is queried.
  */
 module fact_query_value
-import { Program, Node, Graph, graphs, nodes, name } from graph
+import { Node, Graph, nodes, name } from graph
 import { max } from math
 
 fact depth::<T>(v: T): int match v {

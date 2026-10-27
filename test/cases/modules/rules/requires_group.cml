@@ -4,7 +4,6 @@
  * the union of what its members grant. The rule is applied where the node grants any of them.
  */
 module requires_group
-import { Program } from graph
 import { rewrite } from rewrite
 
 tag fast = [reassociate, contract]
@@ -12,6 +11,6 @@ tag fast = [reassociate, contract]
 #requires(fast)
 rule mul_one(x: float) { x * 1.0 => x }
 
-export func apply(p: Program): Program! {
-    return rewrite(p, [mul_one])
+export func apply::<F>(p: F): F! {
+    return p->rewrite<[mul_one]>
 }

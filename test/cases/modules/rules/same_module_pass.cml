@@ -1,6 +1,5 @@
 module same_module_pass
 
-import { Program } from graph
 import { rewrite } from rewrite
 
 // Deliberately not an equation: `x + 0` becomes `x + 1`, so the rewritten program prints 8
@@ -15,6 +14,6 @@ func main(): int sync {
     return 0
 }
 
-export func apply(p: Program): Program! {
-    return rewrite(p, [add_zero_bumps])
+export func apply::<F>(p: F): F! {
+    return p->rewrite<[add_zero_bumps]>
 }

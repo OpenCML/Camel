@@ -2,21 +2,18 @@ module fold_constants
 import { flat_map } from array
 import { any } from array
 import { starts_with } from str
-import {
-    Program, Graph, Node, Txn, graphs, nodes, inputs, constant,
-    add_constant, open, commit, replace, op, op_name
-} from graph
+import { Graph, Node, Txn, nodes, inputs, constant, add_constant, open, commit, replace, op, op_name, graphs_of } from graph
 
-func allNodes(p: Program): Node[] {
-    return graphs(p)->flat_map<(g: Graph): Node[] => nodes(g)>
+func allNodes::<F>(p: F): Node[] {
+    return graphs_of(p)->flat_map<(g: Graph): Node[] => nodes(g)>
 }
 
 func valueAt(n: Node): int {
-    return constant(n, 0) ?? -1
+    return constant::<int>(n) ?? -1
 }
 
 func hasInt(n: Node): bool {
-    return constant(n, 0) != null
+    return constant::<int>(n) != null
 }
 
 func isIntAdd(n: Node): bool {
@@ -28,7 +25,7 @@ func isIntAdd(n: Node): bool {
 
 /// Folds `a + b` of two int constants: makes the sum a static value of the graph (the new value
 /// a transaction may create) and replaces the add by it.
-func foldAdd(t: Txn, g: Graph, n: Node): bool sync {
+func foldAdd::<F>(t: Txn<F>, g: Graph, n: Node): bool sync {
     let ins = inputs(n)
     return if isIntAdd(n) && hasInt(ins[0]) && hasInt(ins[1]) then sync {
         let c = add_constant(t, g, valueAt(ins[0]) + valueAt(ins[1]))
@@ -43,16 +40,16 @@ func churn(rounds: int): string {
 }
 
 func isGolden(n: Node): bool {
-    return match constant(n, '') {
+    return match constant::<string>(n) {
         case null => false
         case s => s == 'h36-golden'
     }
 }
 
-export func fold(p: Program): Program! sync {
+export func fold::<F>(p: F): F! sync {
     let t = open(p)
-    graphs(p)->foreach<(g: Graph) => nodes(g)->foreach<(n: Node) => foldAdd(t, g, n)>>
-    let g0 = graphs(p)[0]
+    graphs_of(p)->foreach<(g: Graph) => nodes(g)->foreach<(n: Node) => foldAdd(t, g, n)>>
+    let g0 = graphs_of(p)[0]
     let golden = add_constant(t, g0, 'h36-golden')
     let junk = churn(200)
     let next = commit(t) !! p

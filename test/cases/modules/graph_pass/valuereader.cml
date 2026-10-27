@@ -2,12 +2,11 @@
 // from a call into it: both are nodes of the pass program's root, computed before the pass runs
 // (task item 1).
 module valuereader
-import { Program } from graph
 import { five, nine } from valuelib
 
 let sum = five + nine()
 
-export func show(p: Program): Program! sync {
+export func show::<F>(p: F): F! sync {
     println(five, sum)
     return p
 }

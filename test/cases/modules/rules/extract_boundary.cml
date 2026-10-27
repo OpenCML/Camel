@@ -14,14 +14,13 @@
  * implemented the extraction deletes the added constant and the graph keeps its original size.
  */
 module extract_boundary
-import {
-    Program, Node, Graph, graphs, nodes, name, users, is_constant, type_of, type_name, constant
-} from graph
+import { Node, Graph, nodes, name, users, is_constant, type_of, type_name, constant, graphs_of } from graph
+import { nodes as sizeCost } from rules
 import { saturate, extract } from rewrite
 
 /// Whether the node is the constant 'y': the rule applies only where it is the same expression.
 func isY(n: Node): bool {
-    return match constant(n, '') {
+    return match constant::<string>(n) {
         case null => false
         case v => v == 'y'
     }
@@ -38,8 +37,8 @@ func main(): int sync {
     return 0
 }
 
-func nodesOf(p: Program, function: string): Node[] {
-    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+func nodesOf::<F>(p: F, function: string): Node[] {
+    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
     return nodes(found[0])
 }
 
@@ -52,7 +51,7 @@ func typeText(n: Node): string {
 
 /// The string constants of `function` that nothing reads: a constant has no effect, so an
 /// extraction that follows the boundary deletes one that no kept node reads.
-func unreadConstants(p: Program, function: string): int {
+func unreadConstants::<F>(p: F, function: string): int {
     return len(
         nodesOf(p, function)->filter<(n: Node): bool =>
             is_constant(n) && typeText(n) == 'string' && len(users(n)) == 0
@@ -62,29 +61,29 @@ func unreadConstants(p: Program, function: string): int {
 
 /// Saturates, reports the graph, extracts, reports it again. The extraction is the second step so
 /// the two reports see the graph before and after it.
-export func check(p: Program): Program! sync {
-    let tabled = saturate(p, [tag_y], 4)
+export func check::<F>(p: F): F! sync {
+    let tabled = p->saturate<[tag_y], rounds: 4>
     return match tabled {
         case error e => tabled
         case q => reportTabled(q)
     }
 }
 
-func reportTabled(q: Program): Program! sync {
+func reportTabled::<F>(q: F): F! sync {
     println(
         'tabled nodes',
         len(nodesOf(q, 'tag')),
         'unread constants',
         unreadConstants(q, 'tag')
     )
-    let out = extract(q, 'nodes')
+    let out = q->extract<sizeCost>
     return match out {
         case error e => out
         case r => reportExtracted(r)
     }
 }
 
-func reportExtracted(r: Program): Program! sync {
+func reportExtracted::<F>(r: F): F! sync {
     println(
         'extracted nodes',
         len(nodesOf(r, 'tag')),

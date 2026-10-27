@@ -2,10 +2,9 @@
 // `sharedvals` (which the program being transformed imports too). Its exports are this
 // program's; another program declaring the same module keeps its own (task).
 module firstuser
-import { Program } from graph
 import { bump, twice } from sharedvals
 
-export func run(p: Program): Program! sync {
+export func run::<F>(p: F): F! sync {
     println(bump(9))
     println(twice(3))
     return p

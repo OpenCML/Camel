@@ -3,7 +3,6 @@
 // that prints both. Before this printed `0 0`: the pass function graph was encoded alone, so
 // the module's root graph never ran and the capture ports kept the frame default.
 module gl
-import { Program } from graph
 
 let two = 2
 
@@ -13,7 +12,7 @@ func ten(): int {
 
 let twelve = two + ten()
 
-export func apply(p: Program): Program! sync {
+export func apply::<F>(p: F): F! sync {
     println(two, twelve)
     return p
 }

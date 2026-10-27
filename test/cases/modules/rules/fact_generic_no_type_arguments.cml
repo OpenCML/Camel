@@ -6,7 +6,7 @@
  * written, with the type arguments to write.
  */
 module fact_generic_no_type_arguments
-import { Program, Node, Graph, graphs, nodes, name } from graph
+import { Node, Graph, nodes, name, graphs_of } from graph
 import { max } from math
 
 fact literal_of::<T>(v: T): int match v {
@@ -14,13 +14,13 @@ fact literal_of::<T>(v: T): int match v {
     case _          => 0
 } join max
 
-func nodesOf(p: Program, function: string): Node[] {
-    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+func nodesOf::<F>(p: F, function: string): Node[] {
+    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
     return nodes(found[0])
 }
 
 /// The type argument is left out: the declaration is the report.
-func literals(p: Program, function: string): int {
+func literals(p: () => int, function: string): int {
     return loop total = 0 for n in nodesOf(p, function) do total + literal_of(n)
 }
 

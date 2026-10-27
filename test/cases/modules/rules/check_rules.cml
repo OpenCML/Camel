@@ -4,7 +4,7 @@
  * not.
  */
 module check_rules
-import { check } from rewrite
+import { check, check_text } from rewrite
 
 rule add_zero(x: int) { x + 0 => x }
 rule mul_one(x: int) { x * 1 => x }
@@ -18,7 +18,7 @@ rule sign(x: float) { x * -1.0 => x }
 rule plus_zero(x: float) { x + 0.0 => x }
 
 func main(): int sync {
-    println(check([add_zero, mul_one, combine, swap, minus_zero, times_one], 100, 1))
-    println(check([wrong, sign, plus_zero], 100, 1))
+    println(check_text([add_zero, mul_one, combine, swap, minus_zero, times_one]->check<100, 1>))
+    println(check_text([wrong, sign, plus_zero]->check<100, 1>))
     return 0
 }

@@ -1,13 +1,14 @@
 /**
- * `graph:constant` is declared with two arguments per sample type: a third one is refused at the
- * call, and the overloads the message lists are the declarations' (bucket 1).
+ * `graph:constant` is declared with one argument, the node, and the type of the answer as a type
+ * argument: a second argument is refused at the call, and the candidate the message lists is the
+ * declaration's.
  */
 module graph_constant_arity
 
-import { current, root, nodes, constant } from graph
+import { nodes, constant, graph_of } from graph
 
 func main(): int sync {
-    let ns = nodes(root(current()))
-    println(constant(ns[0], 0, 1))
+    let ns = nodes(graph_of(main))
+    println(constant::<int>(ns[0], 1))
     return 0
 }

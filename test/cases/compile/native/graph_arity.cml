@@ -1,12 +1,12 @@
 /**
- * The declaration of `graph:root` takes one ordinary argument: a call with none is refused at
- * the call, and the overload the message lists is the declaration's (step 10).
+ * The declaration of `graph:graph_of` takes one ordinary argument, the function: a call with none
+ * is refused at the call, and the candidate the message lists is the declaration's.
  */
 module graph_arity
 
-import { root } from graph
+import { graph_of } from graph
 
 func main(): int sync {
-    println(root())
+    println(graph_of())
     return 0
 }

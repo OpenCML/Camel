@@ -20,8 +20,8 @@
  */
 module generic_pair_law
 
-import { Graph, Node, NodeKind, Program, graphs, kind, name, nodes } from graph
-import { Run, check, explain_all, rule_name, run, why_not } from rewrite
+import { Graph, Node, NodeKind, kind, name, nodes, graphs_of } from graph
+import { Run, check, explain_all, rule_name, run, why_not, check_text } from rewrite
 import { is_integer } from types
 
 /// The law: `(a + b) - b` is `a`, for two integer types. Written once, instantiated at every pair
@@ -29,21 +29,21 @@ import { is_integer } from types
 rule pair_sum_self::<T, U>(a: T, b: U) when is_integer::<T>() && is_integer::<U>() { (a + b) - b => a }
 
 /// The nodes of one function of the program, by the name of its graph.
-func nodesOf(p: Program, function: string): Node[] {
-    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+func nodesOf::<F>(p: F, function: string): Node[] {
+    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
     return nodes(found[0])
 }
 
 /// A value of a function that no law touched: what `why_not` answers about a type a law cannot be
 /// written for is asked at one of these.
-func valueOf(p: Program, function: string): Node {
+func valueOf::<F>(p: F, function: string): Node {
     let values = nodesOf(p, function)->filter<(n: Node): bool => kind(n) == NodeKind::Data>
     return values[0]
 }
 
 /// The two laws applied once: what the application cost, the name the rule value carries, and the
 /// proof, whose steps name the instance each rewrite came from.
-export func counted(p: Program): Program! sync {
+export func counted::<F>(p: F): F! sync {
     return match p->run<[pair_sum_self], explain: true> {
         case error e => { return e }
         case r => sync {
@@ -60,19 +60,19 @@ export func counted(p: Program): Program! sync {
 }
 
 /// What `check` says about the law: one line per instance, each named with its pair of types.
-export func checked(p: Program): Program! sync {
-    println(check([pair_sum_self], 200, 7))
+export func checked::<F>(p: F): F! sync {
+    println(check_text([pair_sum_self]->check<200, 7>))
     return p
 }
 
 /// Why the law did not fire at the string value: no tuple that could hold a `string` was ever
 /// written, and the answer is the reason the body gave -- not how many type parameters the question
 /// gave (the rule on `generic-rule-instantiation-set-and-predicate`, §3).
-export func why_no_instance(p: Program): Program! sync {
+export func why_no_instance::<F>(p: F): F! sync {
     return match p->run<[pair_sum_self], explain: true> {
         case error e => { return e }
         case r => sync {
-            return match why_not(r, pair_sum_self, valueOf(r.result, 'greet')) {
+            return match r->why_not<pair_sum_self, valueOf(r.result, 'greet')> {
                 case error e => sync { println(e); return r.result }
                 case reason => sync { println(reason); return r.result }
             }

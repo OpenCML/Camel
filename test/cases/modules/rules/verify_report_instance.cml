@@ -13,13 +13,13 @@
  */
 module verify_report_instance
 
-import { check, check_row_count, check_rule, check_instance, check_verdict } from rewrite
+import { check } from rewrite
 import { int_add_zero } from rules
 
 func main(): int sync {
-    let r = check([int_add_zero], 50, 11)
-    println("rows", check_row_count(r))
-    println("row 0 |", check_rule(r, 0), "|", check_instance(r, 0), "|", check_verdict(r, 0))
-    println("row 1 |", check_rule(r, 1), "|", check_instance(r, 1), "|", check_verdict(r, 1))
+    let r = [int_add_zero]->check<50, 11>
+    println("rows", len(r.rows))
+    println("row 0 |", r.rows[0].rule, "|", r.rows[0].instance, "|", r.rows[0].verdict)
+    println("row 1 |", r.rows[1].rule, "|", r.rows[1].instance, "|", r.rows[1].verdict)
     return 0
 }

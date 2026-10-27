@@ -27,8 +27,8 @@
  */
 module verify_translate
 
-import { check, check_text, check_row_count, check_coverage, check_coverage_table } from rewrite
-import { int_add_zero, float_add_minus_zero, tensor_mul_one } from rules
+import { check, check_text, coverage_table } from rewrite
+import { int_add_zero, float_add_neg_zero, array_mul_one } from rules
 
 /// A rule of the fragment: both sides are integer scalar terms.
 rule twice(x: int) { x + x => x * 2 }
@@ -44,31 +44,31 @@ rule squared(x: int) { x ^ 2 => x * x }
 rule scaled(x: float) { x * 1.0 => x }
 
 func main(): int sync {
-    print(check_coverage_table())
-    let mine = check([twice, plus_zero, squared, scaled], 10, 7)
-    println("rows", check_row_count(mine))
+    print(coverage_table)
+    let mine = [twice, plus_zero, squared, scaled]->check<10, 7>
+    println("rows", len(mine.rows))
     print(check_text(mine))
-    println("0", check_coverage(mine, 0))
-    println("1", check_coverage(mine, 1))
-    println("2", check_coverage(mine, 2))
-    println("3", check_coverage(mine, 3))
+    println("0", mine.rows[0].coverage)
+    println("1", mine.rows[1].coverage)
+    println("2", mine.rows[2].coverage)
+    println("3", mine.rows[3].coverage)
     // The library's own: a generic law whose declaration carries `when is_integer::<T>()`, so it has
     // one row per integer width and no premise yet, and a tensor law, whose property is over the
     // whole tensor at once.
-    let library = check([int_add_zero, tensor_mul_one], 10, 7)
-    println("rows", check_row_count(library))
+    let library = [int_add_zero, array_mul_one]->check<10, 7>
+    println("rows", len(library.rows))
     print(check_text(library))
-    println("0", check_coverage(library, 0))
-    println("1", check_coverage(library, 1))
-    println("2", check_coverage(library, 2))
+    println("0", library.rows[0].coverage)
+    println("1", library.rows[1].coverage)
+    println("2", library.rows[2].coverage)
     // The floating family: the four widths the design lists beside the integer ones. Every one of
     // them is refused by its element type -- including the two the check cannot even make a value
     // for, whose coverage column is still read off the rule's own two sides.
-    let floats = check([float_add_minus_zero], 10, 7)
-    println("rows", check_row_count(floats))
-    println("0", check_coverage(floats, 0))
-    println("1", check_coverage(floats, 1))
-    println("2", check_coverage(floats, 2))
-    println("3", check_coverage(floats, 3))
+    let floats = [float_add_neg_zero]->check<10, 7>
+    println("rows", len(floats.rows))
+    println("0", floats.rows[0].coverage)
+    println("1", floats.rows[1].coverage)
+    println("2", floats.rows[2].coverage)
+    println("3", floats.rows[3].coverage)
     return 0
 }

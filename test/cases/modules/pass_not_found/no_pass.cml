@@ -3,9 +3,8 @@
 // 
 module no_pass
 
-import { Program } from graph
 
-export func ok(p: Program): Program! {
+export func ok::<F>(p: F): F! {
     return p
 }
 

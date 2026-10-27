@@ -14,7 +14,7 @@
  * itself an addition: `target` loses its outer addition and `keep` keeps its one.
  */
 module fact_at_type_argument
-import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
+import { Node, Graph, nodes, op, op_name, name, graphs_of } from graph
 import { max } from math
 import { rewrite } from rewrite
 
@@ -33,18 +33,18 @@ func opText(n: Node): string {
     }
 }
 
-func addsOf(p: Program, function: string): int {
-    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+func addsOf::<F>(p: F, function: string): int {
+    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
     let adds = nodes(found[0])->filter<(n: Node): bool => opText(n) == ':op/add_l'>
     // A node read out of a graph states no value type, so the query writes the type argument.
     return loop total = 0 for n in adds do total + depth::<int>(n)
 }
 
-export func apply(p: Program): Program! {
-    return rewrite(p, [drop_deep])
+export func apply::<F>(p: F): F! {
+    return p->rewrite<[drop_deep]>
 }
 
-export func report(p: Program): Program! sync {
+export func report::<F>(p: F): F! sync {
     println('target', addsOf(p, 'target'), 'keep', addsOf(p, 'keep'))
     return p
 }

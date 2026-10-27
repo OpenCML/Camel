@@ -3,36 +3,36 @@
  * `camel target.cml simplify::apply std::nvm`.
  */
 module simplify
-import { Program } from graph
 import { rewrite, saturate, extract } from rewrite
+import { nodes as sizeCost } from rules
 
 rule add_zero(x: int) { x + 0 => x }
 rule mul_one(x: int) { x * 1 => x }
 rule combine(x: int, const c1: int, const c2: int) { x * c1 + x * c2 => x * (c1 + c2) }
 rule fold(x: int, const c1: int, const c2: int) { (x * c1) * c2 => x * (c1 * c2) }
 
-export func apply(p: Program): Program! {
-    return rewrite(p, [add_zero, mul_one, combine, fold])
+export func apply::<F>(p: F): F! {
+    return p->rewrite<[add_zero, mul_one, combine, fold]>
 }
 
-export func swapped(p: Program): Program! {
-    return rewrite(p, [swap])
+export func swapped::<F>(p: F): F! {
+    return p->rewrite<[swap]>
 }
 
 rule swap(a: int, b: int) { a + b <=> b + a }
 
 /// Both directions, then the cheapest writing of each value by node count.
-export func saturated(p: Program): Program! {
-    let tabled = saturate(p, [add_zero, mul_one, combine, fold, swap, swap_mul], 8)
+export func saturated::<F>(p: F): F! {
+    let tabled = p->saturate<[add_zero, mul_one, combine, fold, swap, swap_mul], rounds: 8>
     return match tabled {
         case error e => tabled
-        case q => extract(q, 'nodes')
+        case q => q->extract<sizeCost>
     }
 }
 
 /// Only the saturation: values with several writings, left for the pipeline to extract.
-export func tabled(p: Program): Program! {
-    return saturate(p, [add_zero, mul_one, combine, fold], 8)
+export func tabled::<F>(p: F): F! {
+    return p->saturate<[add_zero, mul_one, combine, fold], rounds: 8>
 }
 
 rule swap_mul(a: int, b: int) { a * b <=> b * a }

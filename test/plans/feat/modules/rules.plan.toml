@@ -105,36 +105,36 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rules.library_verdicts_are_exactly_these"
-desc = "Every rule of the standard library enters the check with the verdict the table gives it, including one row per instance of a generic law: 200 random instances of a rule's two sides agree (or the engine fires the rule on its own left side and agrees), a conditional rule reports the instances its condition selects, and a rule the check cannot make a value for says so in its own reason column. The integer and floating laws are one generic law per fact since the fold (`when is_integer::<T>()`, `when is_float::<T>()`), and `check` walks their instances over the types the operator groups registered, filtered by the condition: `int_add_zero<int>` and `int_add_zero<i32>`, `float_mul_one<float>`/`<f32>`/`<bf16>`/`<f16>`, each under its own name. The old blanket `unchecked <name>: a generic rule, whose instances are not checked here` is gone from the report, and so is the word `unchecked`: a floating instance at `bf16`/`f16` is `sampled` with `evidence samples 200` like an f32 one: the sampler draws the two reduced-precision types as it draws any other floating element type -- the drawn value is rounded once into the element type, a tensor of either is two bytes per element -- and the comparison uses the element epsilon of the type the instance is at, bf16 2^-8 and f16 2^-10 apart from f32's. The reason the check writes for a type it still cannot make a value of is unchanged and is pinned by `rules.check_names_the_type_it_cannot_make`. Every row names its proposition, which follows the permission the rule asks for: the integer laws `equality`, the `reassociate` laws `real equality + IEEE on special values`, the accuracy laws `error bound`. NO rule of the library is `refuted`, and this entry pins the two rows the licence narrowing turned: `float_combine_mixed` and its tensor twin are `sampled` at `f16`, where the points the check draws put an intermediate product above the type's range -- `x = 10000.0` with the coefficients 39 and -55, both products of the left side overflow where the right side is an infinity -- and the two laws ask for `no_infs`, whose meaning is that no value is an infinity, the intermediate results included. A point where a step leaves the element type's range is outside the domain the rule claims and is not a counterexample to it, so the row is a pass; the same point without the licence still refutes the law, and `rules.a_reassociate_rule_is_compared_in_the_higher_precision` reads the two side by side. The `reassociate` half: a rule that asks for it is compared where the real value is, both sides evaluated in the reference's precision, and not one element-type result against another (correcting the method first measured: its `1e+30` sample, `c1 = 48`, `c2 = -47`, has two element-type results 27 ulps apart, `1.0000041e+30` and `1e+30`, and one real value; the reassociate contract is what the licence allows the rule's own roundings, not what the cancellation is measured against. No rule is excused from the report either: the coverage case beside this one hands every exported rule over, and a `refuted` line anywhere in its report fails `rules.every_exported_rule_enters_the_check`. Commutation and association are not rules to check any more: they are properties of the operator's declaration, read by the matcher (rewrite design 2 (second version) 6)."
+desc = "Every rule of the standard library enters the check with the verdict the table gives it, including one row per instance of a generic law: 200 random instances of a rule's two sides agree (or the engine fires the rule on its own left side and agrees), a conditional rule reports the instances its condition selects, and a rule the check cannot make a value for says so in its own reason column. The integer and floating laws are one generic law per fact since the fold (`when is_integer::<T>()`, `when is_float::<T>()`), and `check` walks their instances over the types the operator groups registered, filtered by the condition: `int_add_zero<int>` and `int_add_zero<i32>`, `mul_one<float>`/`<f32>`/`<bf16>`/`<f16>`, each under its own name. The old blanket `unchecked <name>: a generic rule, whose instances are not checked here` is gone from the report, and so is the word `unchecked`: a floating instance at `bf16`/`f16` is `sampled` with `evidence samples 200` like an f32 one: the sampler draws the two reduced-precision types as it draws any other floating element type -- the drawn value is rounded once into the element type, a tensor of either is two bytes per element -- and the comparison uses the element epsilon of the type the instance is at, bf16 2^-8 and f16 2^-10 apart from f32's. The reason the check writes for a type it still cannot make a value of is unchanged and is pinned by `rules.check_names_the_type_it_cannot_make`. Every row names its proposition, which follows the permission the rule asks for: the integer laws `equality`, the `reassociate` laws `real equality + IEEE on special values`, the accuracy laws `error bound`. NO rule of the library is `refuted`, and this entry pins the two rows the licence narrowing turned: `float_combine_mixed` and its tensor twin are `sampled` at `f16`, where the points the check draws put an intermediate product above the type's range -- `x = 10000.0` with the coefficients 39 and -55, both products of the left side overflow where the right side is an infinity -- and the two laws ask for `no_infs`, whose meaning is that no value is an infinity, the intermediate results included. A point where a step leaves the element type's range is outside the domain the rule claims and is not a counterexample to it, so the row is a pass; the same point without the licence still refutes the law, and `rules.a_reassociate_rule_is_compared_in_the_higher_precision` reads the two side by side. The `reassociate` half: a rule that asks for it is compared where the real value is, both sides evaluated in the reference's precision, and not one element-type result against another (correcting the method first measured: its `1e+30` sample, `c1 = 48`, `c2 = -47`, has two element-type results 27 ulps apart, `1.0000041e+30` and `1e+30`, and one real value; the reassociate contract is what the licence allows the rule's own roundings, not what the cancellation is measured against. No rule is excused from the report either: the coverage case beside this one hands every exported rule over, and a `refuted` line anywhere in its report fails `rules.every_exported_rule_enters_the_check`. Commutation and association are not rules to check any more: they are properties of the operator's declaration, read by the matcher (rewrite design 2 (second version) 6)."
 kind = "behavior"
 case = "../../../cases/modules/rules/check_library.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["sampled int_add_zero<int>: proposition equality, evidence samples 200, reason the condition selects the instances, so no sampled value was compared, the condition selects the instances, fired 64 of 64", "sampled int_distribute<int>: proposition equality, evidence samples 200, reason the condition selects the instances", "sampled float_add_minus_zero<float>: proposition equality, evidence samples 200, reason the condition selects the instances", "sampled float_add_minus_zero<bf16>: proposition equality, evidence samples 200, reason the condition selects the instances", "sampled float_add_minus_zero<f16>: proposition equality, evidence samples 200, reason the condition selects the instances", "sampled float_combine<float>: proposition real equality + IEEE on special values, evidence samples 200, reason the condition selects the instances", "sampled float_fold<f32>: proposition real equality + IEEE on special values, evidence samples 200, reason the condition selects the instances", "sampled float_double: proposition equality, evidence samples 200, reason the condition selects the instances", "sampled tensor_mul_one<f32>: proposition equality, evidence samples 200, reason the condition selects the instances, so no sampled value was compared, the condition selects the instances, fired 64 of 64", "sampled tensor_combine<f32>: proposition real equality + IEEE on special values, evidence samples 200, reason the condition selects the instances", "sampled tensor_combine_mixed<f32>: proposition real equality + IEEE on special values, evidence samples 200, reason the condition selects the instances, so no sampled value was compared, the condition selects the instances, fired 32 of 64", "sampled tensor_combine_mixed<f16>: proposition real equality + IEEE on special values, evidence samples 200", "sampled float_combine_mixed<f16>: proposition real equality + IEEE on special values, evidence samples 200", "sampled tensor_distribute<int>: proposition real equality + IEEE on special values, evidence samples 200, reason the condition selects the instances"]
+expect_stdout_contains = ["sampled int_add_zero<int>: proposition equality, evidence samples 200, reason the condition selects the instances, so no sampled value was compared, the condition selects the instances, fired 64 of 64","sampled int_distribute<int>: proposition equality, evidence samples 200, reason the condition selects the instances","sampled float_add_neg_zero<float>: proposition equality, evidence samples 200, reason the condition selects the instances","sampled float_add_neg_zero<bf16>: proposition equality, evidence samples 200, reason the condition selects the instances","sampled float_add_neg_zero<f16>: proposition equality, evidence samples 200, reason the condition selects the instances","sampled float_combine<float>: proposition real equality + IEEE on special values, evidence samples 200, reason the condition selects the instances","sampled float_fold<f32>: proposition real equality + IEEE on special values, evidence samples 200, reason the condition selects the instances","sampled float_double<float>: proposition equality, evidence samples 200, reason the condition selects the instances","sampled array_mul_one<f32>: proposition equality, evidence samples 200, reason the condition selects the instances, so no sampled value was compared, the condition selects the instances, fired 64 of 64","sampled array_combine<f32>: proposition real equality + IEEE on special values, evidence samples 200, reason the condition selects the instances","sampled array_combine_mixed<f32>: proposition real equality + IEEE on special values, evidence samples 200, reason the condition selects the instances, so no sampled value was compared, the condition selects the instances, fired 29 of 64","sampled array_combine_mixed<f16>: proposition real equality + IEEE on special values, evidence samples 200","sampled float_combine_mixed<f16>: proposition real equality + IEEE on special values, evidence samples 200","sampled array_distribute<int>: proposition real equality + IEEE on special values, evidence samples 200, reason the condition selects the instances"]
 expect_output_not_contains = ["ok ", "unchecked ", "a generic rule, whose instances are not checked here", "cannot make a value of type 'bf16'", "cannot make a value of type 'f16'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
 
 [[tests]]
 name = "rules.reduced_element_type_instances_are_checked"
-desc = "The instances of a floating law at `bf16` and at `f16` are checked, not skipped: 200 values of each element type are drawn (rounded once into the element type, the way a literal and a written conversion round), the engine fires the law on its own left side and the two sides agree, so the row of `float_add_minus_zero<bf16>` and of `<f16>` reads `evidence samples 200` where it read `evidence none` and `the check cannot make a value of type 'bf16'` before, and the whole report contains that reason for neither type. `float_combine` is the second law: it asks for `reassociate`, so its two sides differ by a rounding and the comparison is the element type's own epsilon, bf16 2^-8 and f16 2^-10, where an f32 epsilon would refute a legal reassociation and compare nothing at all would accept an illegal one. The `float` and `f32` instances of the same laws and the non-generic `float32_double` are pinned in the same table: their rows are what they were. The row count is pinned because the other way to make an instance quiet is to stop making it."
+desc = "The instances of a floating law at `bf16` and at `f16` are checked, not skipped: 200 values of each element type are drawn (rounded once into the element type, the way a literal and a written conversion round), the engine fires the law on its own left side and the two sides agree, so the row of `float_add_neg_zero<bf16>` and of `<f16>` reads `evidence samples 200` where it read `evidence none` and `the check cannot make a value of type 'bf16'` before, and the whole report contains that reason for neither type. `float_combine` is the second law: it asks for `reassociate`, so its two sides differ by a rounding and the comparison is the element type's own epsilon, bf16 2^-8 and f16 2^-10, where an f32 epsilon would refute a legal reassociation and compare nothing at all would accept an illegal one. The `float` and `f32` instances of the same laws and the non-generic `float_double` are pinned in the same table: their rows are what they were. The row count is pinned because the other way to make an instance quiet is to stop making it."
 kind = "behavior"
 case = "../../../cases/modules/rules/check_reduced_element_type.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["sampled float_add_minus_zero<bf16>: proposition equality, evidence samples 200", "sampled float_add_minus_zero<f16>: proposition equality, evidence samples 200", "sampled float_add_minus_zero<float>: proposition equality, evidence samples 200", "sampled float_add_minus_zero<f32>: proposition equality, evidence samples 200", "sampled float_combine<bf16>: proposition real equality + IEEE on special values, evidence samples 200", "sampled float_combine<f16>: proposition real equality + IEEE on special values, evidence samples 200", "sampled float_combine<float>: proposition real equality + IEEE on special values, evidence samples 200", "sampled float_combine<f32>: proposition real equality + IEEE on special values, evidence samples 200", "sampled float32_double: proposition equality, evidence samples 200", "rows 17"]
+expect_stdout_contains = ["sampled float_add_neg_zero<bf16>: proposition equality, evidence samples 200","sampled float_add_neg_zero<f16>: proposition equality, evidence samples 200","sampled float_add_neg_zero<float>: proposition equality, evidence samples 200","sampled float_add_neg_zero<f32>: proposition equality, evidence samples 200","sampled float_combine<bf16>: proposition real equality + IEEE on special values, evidence samples 200","sampled float_combine<f16>: proposition real equality + IEEE on special values, evidence samples 200","sampled float_combine<float>: proposition real equality + IEEE on special values, evidence samples 200","sampled float_combine<f32>: proposition real equality + IEEE on special values, evidence samples 200","sampled float_double<float>: proposition equality, evidence samples 200","rows 20"]
 expect_output_not_contains = ["cannot make a value of type 'bf16'", "cannot make a value of type 'f16'", "refuted"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
 
 [[tests]]
 name = "rules.check_names_the_type_it_cannot_make"
-desc = "A law whose instance is at a type the sampler cannot make a value of is still `sampled` with `evidence none` and the reason naming that type -- `join::<string>` answers `the check cannot make a value of type 'string'`, where the type is the parameter's own and the reason is in the reason column, not in the verdict or the evidence. The same call carries `float_add_self`, whose `bf16` and `f16` instances are checked with 200 values each, so the two answers are read side by side: making the two reduced-precision types drawable did not turn the undrawable types into a skip, a silent f32, or a value of some other type. This is the *no* half of the reduced-precision lane; `rules.reduced_element_type_instances_are_checked` is its *yes*."
+desc = "A law whose instance is at a type the sampler cannot make a value of is still `sampled` with `evidence none` and the reason naming that type -- `join::<string>` answers `the check cannot make a value of type 'string'`, where the type is the parameter's own and the reason is in the reason column, not in the verdict or the evidence. The same call carries `add_self`, whose `bf16` and `f16` instances are checked with 200 values each, so the two answers are read side by side: making the two reduced-precision types drawable did not turn the undrawable types into a skip, a silent f32, or a value of some other type. This is the *no* half of the reduced-precision lane; `rules.reduced_element_type_instances_are_checked` is its *yes*."
 kind = "negative"
 case = "../../../cases/modules/rules/check_type_cannot_be_made.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["sampled join<string>: proposition equality, evidence none, reason the check cannot make a value of type 'string'", "sampled float_add_self<bf16>: proposition equality, evidence samples 200", "sampled float_add_self<f16>: proposition equality, evidence samples 200", "rows 5"]
+expect_stdout_contains = ["sampled join<string>: proposition equality, evidence none, reason the check cannot make a value of type 'string'","sampled add_self<bf16>: proposition equality, evidence samples 200","sampled add_self<f16>: proposition equality, evidence samples 200","rows 7"]
 expect_output_not_contains = ["refuted"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
@@ -187,7 +187,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rules.a_reassociate_rule_is_compared_in_the_higher_precision"
-desc = "A rule that asks for `reassociate` or `contract` is compared where the real value is: both sides evaluated in the reference's precision, never one element-type result against another (which corrected the method the library's `tensor_combine_mixed` was refused by). `x*48 + x*(-47) => x*1` at the sample the check draws (`x = 1e+30`) has two element-type results 27 ulps of the result apart -- `1.0000041e+30` against `1e+30`, far outside the 11 the reassociate contract allows -- and one real value, so the rule is right and the verdict is `sampled`. The rules around it pin the half of the proposition that still refuses and the licences that narrow it, each licence one rule apart from the verdict it changes: two sides whose real values agree but whose special values differ bit for bit (a NaN against a zero at `x = 1e+30`) are `refuted`, and the same law with `no_infs` (`overflow_licensed`) or with `no_nans` (`nan_licensed`) is `sampled`, because each licence assumes no value is an infinity or a NaN, the two overflowing products and the NaN they make included, so the point where `x * 1e30` leaves `f32`'s range is outside the domain the law claims; two zeros of different sign are refused and the same zero law with `no_signed_zeros` is `sampled`, because that licence makes the sign of a zero unobservable -- as `zero_sign_exact` shows on a rule with no numeric grant at all, where the comparison is bit for bit and the sign of a zero is part of those bits; and `real_difference`, whose two sides are `2x` and `3x`, is `refuted` with the real values named as what differs, so a rounding the licence allows is never read as any difference being allowed."
+desc = "A rule that asks for `reassociate` or `contract` is compared where the real value is: both sides evaluated in the reference's precision, never one element-type result against another (which corrected the method the library's `array_combine_mixed` was refused by). `x*48 + x*(-47) => x*1` at the sample the check draws (`x = 1e+30`) has two element-type results 27 ulps of the result apart -- `1.0000041e+30` against `1e+30`, far outside the 11 the reassociate contract allows -- and one real value, so the rule is right and the verdict is `sampled`. The rules around it pin the half of the proposition that still refuses and the licences that narrow it, each licence one rule apart from the verdict it changes: two sides whose real values agree but whose special values differ bit for bit (a NaN against a zero at `x = 1e+30`) are `refuted`, and the same law with `no_infs` (`overflow_licensed`) or with `no_nans` (`nan_licensed`) is `sampled`, because each licence assumes no value is an infinity or a NaN, the two overflowing products and the NaN they make included, so the point where `x * 1e30` leaves `f32`'s range is outside the domain the law claims; two zeros of different sign are refused and the same zero law with `no_signed_zeros` is `sampled`, because that licence makes the sign of a zero unobservable -- as `zero_sign_exact` shows on a rule with no numeric grant at all, where the comparison is bit for bit and the sign of a zero is part of those bits; and `real_difference`, whose two sides are `2x` and `3x`, is `refuted` with the real values named as what differs, so a rounding the licence allows is never read as any difference being allowed."
 kind = "behavior"
 case = "../../../cases/modules/rules/check_real_equality.cml"
 args = ["${case}", "std::nvm"]
@@ -215,7 +215,7 @@ kind = "behavior"
 case = "../../../cases/modules/rules/verify_report.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["rows 5", "0 sampled equality samples 100 [  ]", "1 refuted equality counterexample [  ]", "2 sampled equality none [ no numeric bound ]", "3 sampled real equality + IEEE on special values samples 100 [ fold ]", "4 sampled error bound samples 100 [  ]"]
+expect_stdout_contains = ["rows 5","0 Verdict::Sampled Proposition::Equality samples 100 [  ]","1 Verdict::Refuted Proposition::Equality counterexample [  ]","2 Verdict::Sampled Proposition::Equality none [ no numeric bound ]","3 Verdict::Sampled Proposition::RealEquality samples 100 [ fold ]","4 Verdict::Sampled Proposition::ErrorBound samples 100 [  ]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 40000
 
@@ -226,23 +226,9 @@ kind = "behavior"
 case = "../../../cases/modules/rules/verify_report_instance.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["rows 2", "row 0 | int_add_zero | int | sampled", "row 1 | int_add_zero | i32 | sampled"]
+expect_stdout_contains = ["rows 2","row 0 | int_add_zero | int | Verdict::Sampled","row 1 | int_add_zero | i32 | Verdict::Sampled"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
-
-[[tests]]
-name = "rules.a_row_the_report_does_not_have_is_an_error"
-desc = "Reading a column of a row the report does not have is an error value (`IndexError`, naming the count), not an empty string that would read like a row whose reason is empty ."
-kind = "negative"
-case = "../../../cases/modules/rules/verify_report_row.cml"
-args = ["${case}", "std::nvm"]
-expect_exit = 0
-expect_stdout_contains = ["IndexError", "the report has 1 row(s), and row 1 was asked for"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 30000
-
-#  ---- The translation layer (slice S1): a rule's two sides as integer scalar terms, and the
-# ---- declaration of what the layer covers (rewrite design 8.1).
 
 [[tests]]
 name = "rules.the_translation_boundary_is_a_declared_table"
@@ -281,7 +267,7 @@ timeout_ms = 40000
 
 [[tests]]
 name = "rules.a_library_law_says_no_premise_yet_and_a_tensor_law_is_out_of_coverage"
-desc = "Two things the library's own rules make visible. A generic law whose declaration carries a condition (`int_add_zero::<T>(x: T) when is_integer::<T>()`) is translated into its two sides with `, no premise yet` written after them: the condition is what makes the proposition conditional, and turning it into a premise is S4's work, not something this slice may assume away. The law has one row per instance, so the column says it twice -- at `int` and at `i32`. A tensor law is refused as a whole-tensor property (design 8.1's first class): `tensor_mul_one` multiplies a tensor by a scalar, and the layer says the property is over a whole tensor rather than pretending a scalar term for it. The floating family follows the same rule for all four of its widths, including the two the check cannot make a value for: `float`, `f32`, `bf16` and `f16` are each refused by their element type, on the row that also says no value could be drawn."
+desc = "Two things the library's own rules make visible. A generic law whose declaration carries a condition (`int_add_zero::<T>(x: T) when is_integer::<T>()`) is translated into its two sides with `, no premise yet` written after them: the condition is what makes the proposition conditional, and turning it into a premise is S4's work, not something this slice may assume away. The law has one row per instance, so the column says it twice -- at `int` and at `i32`. A tensor law is refused as a whole-tensor property (design 8.1's first class): `array_mul_one` multiplies a tensor by a scalar, and the layer says the property is over a whole tensor rather than pretending a scalar term for it. The floating family follows the same rule for all four of its widths, including the two the check cannot make a value for: `float`, `f32`, `bf16` and `f16` are each refused by their element type, on the row that also says no value could be drawn."
 kind = "behavior"
 case = "../../../cases/modules/rules/verify_translate.cml"
 args = ["${case}", "std::nvm"]
@@ -493,7 +479,7 @@ case = "../../../cases/modules/rules/err_requires_unknown.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagNotAPermission"
-expect_diagnostic_line = 6
+expect_diagnostic_line = 5
 expect_diagnostic_column = 11
 expect_output_contains = ["The tag 'reassociate2' grants no numeric permission."]
 
@@ -742,7 +728,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "rules.typed_element_laws_prefer_their_type_f32"
-desc = "The floating half of the same boundary: the floating family's laws (`typed_pass::apply_f32`) rewrite both float combines -- `f32_c` and `f64_c` -- and leave the integer ones alone at both widths. `float32_double` is its own rule because the bound its condition reads is what the type decides, and it is named in the pass on its own."
+desc = "The floating half of the same boundary: the floating family's laws (`typed_pass::apply_f32`) rewrite both float combines -- `f32_c` and `f64_c` -- and leave the integer ones alone at both widths. `float_double` is its own rule because the bound its condition reads is what the type decides, and it is named in the pass on its own."
 kind = "behavior"
 case = "../../../cases/modules/rules/typed_cross.cml"
 args = ["${case}", "typed_cross_counts::report", "typed_pass::apply_f32", "typed_cross_counts::report", "std::nvm"]
@@ -853,12 +839,12 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 [[tests]]
 name = "rules.tensor_laws_counts"
-desc = "The tensor element laws of the standard rules, by operator count: `tensor_combine` folds x*3 + x*5 under the default reassociate, the mixed and the product-chain laws wait for the permissions their guards name, `tensor_double` (exact doubling) needs none, the bare-operand laws fold x*c + x with the same permissions as the two-term combine, `tensor_add_self` turns t + t into t*2, the neutral laws reach a bare tensor, a coefficient is an f32 value (the tensor's element type) so `inexact` folds as any other f32 pair does, and an i64 tensor keeps its own add (the f32 laws are typed and must not read it)."
+desc = "The tensor element laws of the standard rules, by operator count: `array_combine` folds x*3 + x*5 under the default reassociate, the mixed and the product-chain laws wait for the permissions their guards name, `array_double` (exact doubling) needs none, the bare-operand laws fold x*c + x with the same permissions as the two-term combine, `array_add_self` turns t + t into t*2, the neutral laws reach a bare tensor, a coefficient is an f32 value (the tensor's element type) so `inexact` folds as any other f32 pair does, and an i64 tensor takes the same law as an f32 one (the law is generic in the element type, as the f32 laws were typed and must not read it)."
 kind = "behavior"
 case = "../../../cases/modules/rules/tensor_target.cml"
 args = ["${case}", "tensor_counts::report", "rules::simplify", "tensor_counts::report", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["combine 1 2\ncombine_mixed 1 2\ncombine_mixed_granted 1 2\nfold 0 2\nfold_granted 0 2\ndouble 1 2\nself 1 0\none 1 1\none_other 1 1\none_mixed 1 1\none_mixed_granted 1 1\nneutral 1 1\ninexact 1 2\ninexact_one 1 1\ni64_self 1 0\ni64_distribute 1 1\ncombine 0 1\ncombine_mixed 1 2\ncombine_mixed_granted 0 1\nfold 0 2\nfold_granted 0 1\ndouble 0 1\nself 0 1\none 0 1\none_other 0 1\none_mixed 1 1\none_mixed_granted 0 1\nneutral 0 0\ninexact 0 1\ninexact_one 0 1\ni64_self 1 0\ni64_distribute 1 1\n"]
+expect_stdout_contains = ["combine 1 2\ncombine_mixed 1 2\ncombine_mixed_granted 1 2\nfold 0 2\nfold_granted 0 2\ndouble 1 2\nself 1 0\none 1 1\none_other 1 1\none_mixed 1 1\none_mixed_granted 1 1\nneutral 1 1\ninexact 1 2\ninexact_one 1 1\ni64_self 1 0\ni64_distribute 1 1\ncombine 0 1\ncombine_mixed 1 2\ncombine_mixed_granted 0 1\nfold 0 2\nfold_granted 0 1\ndouble 0 1\nself 0 1\none 0 1\none_other 0 1\none_mixed 1 1\none_mixed_granted 0 1\nneutral 0 0\ninexact 0 1\ninexact_one 0 1\ni64_self 0 1\ni64_distribute 1 1\n"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -921,10 +907,10 @@ timeout_ms = 10000
 
 [[tests]]
 name = "rules.strict_policy_keeps_exact_laws"
-desc = "The same program under `rules::simplify_strict`, which grants no permission: the reassociating combine does not fire (1 add, 2 products), while the exact doubling still does (0 adds, 1 product). A uniform policy would either hide the second law or let the first fire."
+desc = "The same program under `rules::simplify strict=true`, which grants no permission: the reassociating combine does not fire (1 add, 2 products), while the exact doubling still does (0 adds, 1 product). A uniform policy would either hide the second law or let the first fire."
 kind = "behavior"
 case = "../../../cases/modules/rules/strict_target.cml"
-args = ["${case}", "strict_target::report", "rules::simplify_strict", "strict_target::report", "std::nvm"]
+args = ["${case}", "strict_target::report", "rules::simplify", "strict=true", "strict_target::report", "std::nvm"]
 expect_exit = 0
 expect_stdout_contains = ["combine 1 2\ndouble 1 2\ncombine 1 2\ndouble 0 1\n"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -935,7 +921,7 @@ name = "rules.strict_saturation_runs"
 desc = "The strict saturation, the two-way pass with the same policy parameter, runs and preserves the values of the program."
 kind = "behavior"
 case = "../../../cases/modules/rules/strict_target.cml"
-args = ["${case}", "rules::saturate_all_strict", "std::nvm"]
+args = ["${case}", "rules::saturate_all", "strict=true", "std::nvm"]
 expect_exit = 0
 expect_stdout_contains = ["16.0 12.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -1353,20 +1339,20 @@ kind = "behavior"
 case = "../../../cases/modules/rules/check_accuracy_library.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["sampled float_log1p<float>: proposition error bound, evidence samples 100, worst error ratio 0.269", "sampled float_log1p<f32>: proposition error bound, evidence samples 100, worst error ratio 0.201", "sampled float_expm1<float>: proposition error bound, evidence samples 100, worst error ratio 0.233", "sampled float_expm1<f32>: proposition error bound, evidence samples 100, worst error ratio 0.201", "sampled tensor_log_softmax_of_softmax: proposition error bound, evidence samples 100, worst error ratio 1, fired 8 of 8"]
+expect_stdout_contains = ["sampled float_log1p<float>: proposition error bound, evidence samples 100, worst error ratio 0.269","sampled float_log1p<f32>: proposition error bound, evidence samples 100, worst error ratio 0.201","sampled float_expm1<float>: proposition error bound, evidence samples 100, worst error ratio 0.233","sampled float_expm1<f32>: proposition error bound, evidence samples 100, worst error ratio 0.201","sampled array_log_softmax_of_softmax: proposition error bound, evidence samples 100, worst error ratio 1, fired 8 of 8"]
 expect_output_not_contains = ["refuted", "ok ", "a generic rule, whose instances are not checked here"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
 
 [[tests]]
 name = "rules.every_exported_rule_enters_the_check"
-desc = "The check's input is the library's own list of exported rules, and a verify script asserts it name by name (the hand-written list is what drifts, and the library's rule -- no rule enters `stdlib/rules.cml` without passing the check -- has to be catchable by a test). The script reads `stdlib/rules.cml` (43 exported rules), the case's own source with its comments stripped, and this run's report, and fails unless the three name the same set: a rule added to the library and not to the case, a name the case invents, a rule the case hands over that reaches no line of the report, and any `refuted` in it. The gap this closes is measured: `tensor_sigmoid_chain` was exported, used by the fusion pass, and reached no `check` call of any case (the check cases handed over 42 of the library's 43 exported rules, and the folding lane counted the same gap as 68 of 69 rules). NO rule of the library is `refuted`, and no rule is registered as excused either: the script holds no set of names it lets a `refuted` line through for, so that finding and every later one fail the run (`refuted` hard-fails, and a law a licence excuses is not registered: it is judged under the licence it asks for). The rules are handed over in the arrangements the two cases beside this one measured, and the seed of a rule now follows its identity rather than its place in the array, so this case's report is the one a check on coverage reads."
+desc = "The check's input is the library's own list of exported rules, and a verify script asserts it name by name (the hand-written list is what drifts, and the library's rule -- no rule enters `stdlib/rules.cml` without passing the check -- has to be catchable by a test). The script reads `stdlib/rules.cml` (43 exported rules), the case's own source with its comments stripped, and this run's report, and fails unless the three name the same set: a rule added to the library and not to the case, a name the case invents, a rule the case hands over that reaches no line of the report, and any `refuted` in it. The gap this closes is measured: `array_sigmoid_chain` was exported, used by the fusion pass, and reached no `check` call of any case (the check cases handed over 42 of the library's 43 exported rules, and the folding lane counted the same gap as 68 of 69 rules). NO rule of the library is `refuted`, and no rule is registered as excused either: the script holds no set of names it lets a `refuted` line through for, so that finding and every later one fail the run (`refuted` hard-fails, and a law a licence excuses is not registered: it is judged under the licence it asks for). The rules are handed over in the arrangements the two cases beside this one measured, and the seed of a rule now follows its identity rather than its place in the array, so this case's report is the one a check on coverage reads."
 kind = "behavior"
 case = "../../../cases/modules/rules/check_every_rule.cml"
 args = ["${case}", "std::nvm"]
 verify_script_path = "./verify/check_covers_every_rule.mjs"
 expect_exit = 0
-expect_stdout_contains = ["sampled tensor_sigmoid_chain: proposition equality, evidence samples 200, fired 8 of 8", "sampled int_add_zero<int>: proposition equality, evidence samples 200, reason the condition selects the instances", "sampled float_log1p<f32>: proposition error bound, evidence samples 100, worst error ratio", "sampled tensor_log_softmax_of_softmax: proposition error bound, evidence samples 100, worst error ratio 1, fired 8 of 8"]
+expect_stdout_contains = ["sampled array_sigmoid_chain: proposition equality, evidence samples 200, fired 8 of 8","sampled int_add_zero<int>: proposition equality, evidence samples 200, reason the condition selects the instances","sampled float_log1p<f32>: proposition error bound, evidence samples 100, worst error ratio","sampled array_log_softmax_of_softmax: proposition error bound, evidence samples 100, worst error ratio 1, fired 8 of 8"]
 expect_output_not_contains = ["ok ", "FAIL ", "refuted", "a generic rule, whose instances are not checked here"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
@@ -1379,7 +1365,7 @@ tool = "node"
 case = "./verify/check_covers_every_rule_rejects_refuted.mjs"
 args = ["${case}", "${test_tmp}"]
 expect_exit = 0
-expect_stdout_contains = ["43 exported rule(s) probed: a report with no rule refuted is accepted, and a report in which any one of them is refuted is refused (43 of 43)"]
+expect_stdout_contains = ["37 exported rule(s) probed: a report with no rule refuted is accepted, and a report in which any one of them is refuted is refused (37 of 37)"]
 timeout_ms = 180000
 
 [[tests]]
@@ -1532,7 +1518,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 [[tests]]
 name = "rules.check_program_parameter"
-desc = "`check`'s `program` parameter is a `Program?` whose default is `null`, and `samples` and `seed` have defaults too, so the one-argument call the rule writes compiles as it stands there. The candidate set of a generic law is the types every operator group registered, and then the types of the values a program the call was given has, each once, in the order its graphs write them: what a group registers is the fixed signatures of the declaration modules, and The `load_npy` element-type change removed `load_npy`'s `(path: string) => Tensor` -- the last one that named a tensor whose element type is open -- so with no program no `sum_swap<Tensor>` instance is made any more (design principles 5.5). The case declares `Vec = f32[3]`, which no group registered, so `sum_swap<Vec>` is an instance only in the report of the call that gives `current()`, and that instance prints under the array's text (`f32[3]`): the printed text of every spelling is the array's (`compile/array_alias.plan.toml`). The first and the third report are the same text: with no program, the candidate set is the registered types alone, which is every reading `check` had before the parameter existed."
+desc = "`check`'s `over` parameter is the function the check is about, and `samples` and `seed` have defaults too, so the one-argument call the rule writes compiles as it stands there. The candidate set of a generic law is the types every operator group registered, and then the types of the values a program the call was given has, each once, in the order its graphs write them: what a group registers is the fixed signatures of the declaration modules, and The `load_npy` element-type change removed `load_npy`'s `(path: string) => Tensor` -- the last one that named a tensor whose element type is open -- so with no program no `sum_swap<Tensor>` instance is made any more (design principles 5.5). The case declares `Vec = f32[3]`, which no group registered, so `sum_swap<Vec>` is an instance only in the report of the call that gives `over: main`, and that instance prints under the array's text (`f32[3]`): the printed text of every spelling is the array's (`compile/array_alias.plan.toml`). The first and the third report are the same text: with no program, the candidate set is the registered types alone, which is every reading `check` had before the parameter existed."
 kind = "behavior"
 case = "../../../cases/modules/rules/check_program_parameter.cml"
 args = ["${case}", "std::nvm"]
@@ -1636,7 +1622,7 @@ case = "../../../cases/modules/rules/err_rule_with_unbound.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::RuleWithParameterUnbound"
-expect_diagnostic_line = 16
+expect_diagnostic_line = 15
 expect_output_contains = ["'shift' is a `with` parameter of the rule 'add_shift', it has no default, and the rule value here binds nothing for it"]
 expect_output_not_contains = ["15 3 5"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
@@ -1684,7 +1670,7 @@ case = "../../../cases/modules/rules/err_rule_with_not_constant.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::RuleWithArgumentNotConstant"
-expect_diagnostic_line = 17
+expect_diagnostic_line = 16
 expect_output_contains = ["The value bound to the `with` parameter 'tile' of the rule 'add_tile' is not a compile-time constant of the type 'int'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000

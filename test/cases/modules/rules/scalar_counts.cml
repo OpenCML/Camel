@@ -5,7 +5,7 @@
  */
 module scalar_counts
 
-import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
+import { Node, Graph, nodes, op, op_name, name, graphs_of } from graph
 
 func opText(n: Node): string {
     return match op(n) {
@@ -30,8 +30,8 @@ func reportGraph(g: Graph) {
         countOf(ops, 'math:expm1_d') + countOf(ops, 'math:expm1_f'))
 }
 
-export func report(p: Program): Program! sync {
-    let gs = graphs(p)->filter<(g: Graph): bool => name(g) != 'main' && name(g) != '__root__'>
+export func report::<F>(p: F): F! sync {
+    let gs = graphs_of(p)->filter<(g: Graph): bool => name(g) != 'main' && name(g) != '__root__'>
     let _ = loop n = 0 for g in gs do sync {
         reportGraph(g)
         return n + 1

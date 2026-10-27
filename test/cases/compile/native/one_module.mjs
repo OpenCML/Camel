@@ -3,7 +3,7 @@
  * A `.cml` beside a `.cmo` of the same name is that C++ module, not a second module beside it
  * (design principles 6.4):
  *
- *   - a type the C++ module exports (`Json`) is written in the `.cml` without an import;
+ *   - a type the C++ module provides (`Json`) is declared in the `.cml` without a right side;
  *   - a constant it exports (`pi`) is written there without an import;
  *   - a type the `.cml` exports (`Tag`) is a name of the module: an importer reads it as
  *     `json::Tag`, beside the C++ module's `json::Json`;
@@ -41,7 +41,10 @@ fs.writeFileSync(
     path.join(SCRATCH, 'json.cml'),
     `module json
 
-/// The type the C++ module exports is this module's own type, written without an import.
+/// The type the C++ module provides is declared here without a right side; the C++ module
+/// registers it under the same name.
+export type Json
+
 #op('json:kind')
 export func kind_of(value: Json): string
 

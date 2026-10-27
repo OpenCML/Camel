@@ -6,15 +6,15 @@
  */
 module graph_constant_import
 
-import { current, root, nodes, constant } from graph
+import { nodes, constant, graph_of } from graph
 
 func main(): int sync {
-    let ns = nodes(root(current()))
-    println(constant(ns[0], i32(0)) == null)
-    println(constant(ns[0], 0) == null)
-    println(constant(ns[0], f32(0.0)) == null)
-    println(constant(ns[0], 0.0) == null)
-    println(constant(ns[0], false) == null)
-    println(constant(ns[0], '') == null)
+    let ns = nodes(graph_of(main))
+    println(constant::<i32>(ns[0]) == null)
+    println(constant::<int>(ns[0]) == null)
+    println(constant::<f32>(ns[0]) == null)
+    println(constant::<float>(ns[0]) == null)
+    println(constant::<bool>(ns[0]) == null)
+    println(constant::<string>(ns[0]) == null)
     return 0
 }

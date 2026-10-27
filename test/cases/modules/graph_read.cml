@@ -1,5 +1,5 @@
 module graph_read
-import { current, graphs, name, nodes, op, op_name, inputs, users, type_of, type_name, is_pure, callee, tags, show, constant, origin } from graph
+import { name, nodes, op, op_name, inputs, users, type_of, type_name, is_pure, callee, tags, show, constant, origin, graphs_of } from graph
 import { Graph, Node } from graph
 
 func compute(x: int): int {
@@ -33,8 +33,8 @@ func calleeText(n: Node): string {
 }
 
 func main(): int sync {
-    let p = current()
-    let found = graphs(p)->filter<(g: Graph): bool => name(g) == 'compute'>
+    let p = main
+    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == 'compute'>
     let g = found[0]
     println(nodes(g)->map<(n: Node): string => show(n)>)
     println(nodes(g)->map<(n: Node): int => len(inputs(n))>)
@@ -43,9 +43,9 @@ func main(): int sync {
     println(nodes(g)->map<opText>)
     println(nodes(g)->map<typeText>)
     println(nodes(g)->map<(n: Node): string => tags(n)>)
-    println(nodes(g)->map<(n: Node): int? => constant(n, 0)>)
+    println(nodes(g)->map<(n: Node): int? => constant::<int>(n)>)
     println(nodes(g)->map<(n: Node): bool => origin(n) > 0>)
-    let wrap_graph = graphs(p)->filter<(g: Graph): bool => name(g) == 'wrap'>
+    let wrap_graph = graphs_of(p)->filter<(g: Graph): bool => name(g) == 'wrap'>
     println(nodes(wrap_graph[0])->map<calleeText>)
     return wrap(1) - 3
 }

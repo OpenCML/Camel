@@ -1187,7 +1187,7 @@ expect_output_contains = ["This value has type 'string[]', which is not the decl
 
 [[tests]]
 name = "native.rewrite_declaration_import"
-desc = "`rewrite`'s declarations are what an importer sees: the engines take a `Program` and an array of `Rule` values, both arities of `rewrite` and `saturate` resolve, `extract` and `check` answer `Program!` and `string`, and `run` answers `Run!` from `stdlib/rewrite.cml`. Checked, not run: the rules plans run the engines."
+desc = "`rewrite`'s declarations are what an importer sees: the engines take a function and an array of `Rule` values in angle brackets, with and without `strict` and `rounds`, `extract` takes a cost function and answers the function it was given, `F!`, `check` answers the `CheckReport`, and `run` answers `Run<F>!`, all from `stdlib/rewrite.cml`. Checked, not run: the rules plans run the engines."
 kind = "behavior"
 case = "../../../cases/compile/native/rewrite_declaration_import.cml"
 args = ["check", "${case}"]
@@ -1195,21 +1195,21 @@ expect_exit = 0
 
 [[tests]]
 name = "native.rewrite_wrong_arity"
-desc = "`rewrite:rewrite` is declared with two ordinary arguments at least: one is refused at the call, and the overloads the message lists are the declaration's own — `stdlib/rewrite.cml`, not the C++ module. Checked, not run."
+desc = "A call of `rewrite` without its rule set is refused at the call, and the candidate in the message is the declaration's own, `stdlib/rewrite.cml`, not the C++ module: the rules and `strict` are with parameters, the function is the one ordinary argument."
 kind = "negative"
 case = "../../../cases/compile/native/rewrite_arity.cml"
 args = ["check", "${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "rewrite_arity.cml:15:20", "argument types: <> (Program)", "<rewrite:rewrite>: (p: Program, rules: Rule[]) => Program!", "<rewrite:rewrite>: (p: Program, rules: Rule[], strict: bool) => Program!"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction","code=0x0300000F","rewrite_arity.cml:15:13","argument types: <> (() => int pure)","<rewrite:rewrite>: <rules: Rule[], strict: bool> (f: F) => F!"]
 
 [[tests]]
 name = "native.rewrite_wrong_type"
-desc = "The second parameter of `rewrite:extract` is the declaration's `string`: an `int` there is refused at the call, and the overload the message lists is the declaration's `(p: Program, cost: string) => Program!` — `stdlib/rewrite.cml`, not the C++ module. Checked, not run."
+desc = "An `int` where the declaration of `rewrite:extract` says a cost function: the call is refused at the declaration's type, and the candidate in the message is the declaration's own, `stdlib/rewrite.cml`, not the C++ module."
 kind = "negative"
 case = "../../../cases/compile/native/rewrite_type.cml"
 args = ["check", "${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "rewrite_type.cml:14:20", "argument types: <> (Program, int)", "<rewrite:extract>: (p: Program, cost: string) => Program!"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction","code=0x0300000F","rewrite_type.cml:16:13","argument types: <int> (() => int pure)","<rewrite:extract>: <cost: (o: Op, inputs: float[]) => float> (f: F) => F!"]
 
 [[tests]]
 name = "native.rule_reader_declaration_import"
@@ -1344,21 +1344,21 @@ expect_stdout_exact = "true\ntrue\ntrue\ntrue\ntrue\ntrue\n"
 
 [[tests]]
 name = "native.graph_constant_wrong_arity"
-desc = "`graph:constant` is declared with two ordinary arguments per sample type: a third one is refused at the call, and the overloads the message lists are the declarations', parameter names included."
+desc = "A second argument to `graph:constant` is refused at the call, and the candidate in the message is the declaration's: one node, and the type of the answer as a type argument."
 kind = "negative"
 case = "../../../cases/compile/native/graph_constant_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "graph_constant_arity.cml:11:21", "argument types: <> (Node, int, int)", "<graph:constant>: (n: Node, sample: i32) => i32?"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction","code=0x0300000F","graph_constant_arity.cml:12:28","argument types: <> (Node, int)","<graph:constant>: (n: Node) => T?"]
 
 [[tests]]
 name = "native.graph_constant_wrong_type"
-desc = "A number where the declarations of `graph:constant` take a node: refused at the declarations' type, and the signature in the message has their own parameter name (`n`) — `stdlib/graph.cml`, not the C++, is the source."
+desc = "A number where the declaration of `graph:constant` says a node: the call is refused at the declaration's type, and the signature in the message carries the declaration's own parameter name (`n`)."
 kind = "negative"
 case = "../../../cases/compile/native/graph_constant_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "graph_constant_type.cml:11:21", "argument types: <> (int, int)", "<graph:constant>: (n: Node, sample: i32) => i32?"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction","code=0x0300000F","graph_constant_type.cml:10:28","argument types: <> (int)","<graph:constant>: (n: Node) => T?"]
 
 # ---- The declarations of `graph` itself: the handles, their operators and `type_of` ----
 #
@@ -1376,25 +1376,25 @@ kind = "behavior"
 case = "../../../cases/compile/native/graph_declaration_import.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_exact = "true\nfalse\n__root__\ntrue\ntrue\n() => int uses stdout\n"
+expect_stdout_exact = "main\ntrue\ntrue\n() => int uses stdout\n"
 
 [[tests]]
 name = "native.graph_wrong_arity"
-desc = "The declaration of `graph:root` takes one ordinary argument: a call with none is refused at the call, and the overload the message lists is the declaration's, parameter name included (`<graph:root>: (p: Program) => Graph`)."
+desc = "A call of `graph:graph_of` with no argument is refused at the call, and the candidate in the message is the declaration's, `(f: F) => Graph`."
 kind = "negative"
 case = "../../../cases/compile/native/graph_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "graph_arity.cml:10:17", "argument types: <> ()", "<graph:root>: (p: Program) => Graph"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction","code=0x0300000F","graph_arity.cml:10:21","argument types: <> ()","<graph:graph_of>: (f: F) => Graph"]
 
 [[tests]]
 name = "native.graph_wrong_type"
-desc = "An integer where the declaration of `graph:root` says `Program`: the call is refused at the declaration's type, and the signature in the message carries the declaration's own parameter name (`p`) — the source is the declaration file, not the C++ module."
+desc = "An integer where the declaration of `graph:graph_of` says a function: no candidate applies, because the declaration's `when` condition is false for it, and the message prints the candidate with the declaration's own parameter name (`f`)."
 kind = "negative"
 case = "../../../cases/compile/native/graph_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "graph_type.cml:11:17", "argument types: <> (int)", "<graph:root>: (p: Program) => Graph"]
+expect_output_contains = ["SemanticDiag::WhenConditionUnmet","code=0x030001AC","graph_type.cml:11:21","every candidate's 'when' condition is false","(f: F) => Graph"]
 
 # ---- The declaration itself is checked: its URI and its result type ----
 

@@ -4,7 +4,7 @@
  * running, must still see the original `target` (design principles 9.1).
  */
 module program_txn
-import { Graph, Node, Program, commit, constant, current, graph_of, graphs, inputs, name, nodes, op, op_name, open, replace } from graph
+import { Graph, Node, commit, constant, graph_of, inputs, name, nodes, op, op_name, open, replace, graphs_of } from graph
 import { ends_with } from str
 
 func target(x: int): int {
@@ -19,7 +19,7 @@ func opText(n: Node): string {
 }
 
 func isOne(n: Node): bool {
-    return match constant(n, 0) {
+    return match constant::<int>(n) {
         case null => false
         case v => v == 1
     }
@@ -45,13 +45,13 @@ func isTarget(g: Graph): bool {
     return name(g)->ends_with<'target'>
 }
 
-func targetIn(p: Program): Graph {
-    let found = graphs(p)->filter<isTarget>
+func targetIn::<F>(p: F): Graph {
+    let found = graphs_of(p)->filter<isTarget>
     return found[0]
 }
 
 func main(): int sync {
-    let p = current()
+    let p = main
     let t = open(p)
     nodes(targetIn(p))->filter<isAddOne>->foreach<(n: Node) => replace(t, n, inputs(n)[0])>
     let q = commit(t) !! p
@@ -60,6 +60,6 @@ func main(): int sync {
     println(`running: ${target(5)} ${addOnes(graph_of(target))}`)
     let later = (x: int): int => target(x) + 1000
     println(`made after: ${later(5)}`)
-    println(`current: ${addOnes(targetIn(current()))}`)
+    println(`current: ${addOnes(targetIn(main))}`)
     return 0
 }

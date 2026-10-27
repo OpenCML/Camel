@@ -4,7 +4,7 @@
  * fact to key by it.
  */
 module fact_arg_not_constant
-import { Program, Node } from graph
+import { Node } from graph
 import { max } from math
 import { rewrite } from rewrite
 

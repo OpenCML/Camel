@@ -14,7 +14,7 @@
  */
 module check_rejected_softmax
 
-import { check } from rewrite
+import { check, check_text } from rewrite
 import { exp, softmax, sum } from tensor
 
 #requires(refine_accuracy)
@@ -23,6 +23,6 @@ rule tensor_softmax_naive(x: f32[3], const axis: int) {
 }
 
 func main(): int sync {
-    println(check([tensor_softmax_naive], 100, 7))
+    println(check_text([tensor_softmax_naive]->check<100, 7>))
     return 0
 }

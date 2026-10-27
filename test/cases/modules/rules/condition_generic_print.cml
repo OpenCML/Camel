@@ -5,7 +5,6 @@
  */
 module condition_generic_print
 
-import { Program, current } from graph
 import { rewrite } from rewrite
 
 rule add_zero::<T>(x: T) when announce(x) { x + 0 => x }
@@ -20,8 +19,8 @@ func redex(x: int): int {
 }
 
 func main(): int sync {
-    let p = current()
-    return match rewrite(p, [add_zero]) {
+    let p = redex
+    return match p->rewrite<[add_zero]> {
         case error e => sync { println('outer error value: ', e.kind); return 1 }
         case q => sync { println('rewritten'); return 0 }
     }

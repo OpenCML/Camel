@@ -3,13 +3,12 @@
  * returns `p`, so the pipeline must go on with `p` (design principles 9.1).
  */
 module discard_pass
-import { Program } from graph
 import { Rule, rewrite } from rewrite
 
 rule drop_one(x: int) { x + 1 => x }
 
-export func discard(p: Program): Program! sync {
+export func discard::<F>(p: F): F! sync {
     let rules: Rule[] = [drop_one]
-    let tried = rewrite(p, rules) !! p
+    let tried = p->rewrite<rules> !! p
     return p
 }

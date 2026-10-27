@@ -6,7 +6,7 @@
  */
 module fact_capture
 
-import { Program, Node, Graph, graphs, nodes, name } from graph
+import { Node, Graph, nodes, name, graphs_of } from graph
 import { max } from math
 
 func base_of(): int {
@@ -20,12 +20,12 @@ fact depth: int match v {
     case _            => base * 1000
 } join (a: int, b: int) => max(a, b)
 
-func nodes_of(p: Program, function: string): Node[] {
-    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+func nodes_of::<F>(p: F, function: string): Node[] {
+    let found = graphs_of(p)->filter<(g: Graph): bool => name(g) == function>
     return nodes(found[0])
 }
 
-export func report(p: Program): Program! sync {
+export func report::<F>(p: F): F! sync {
     let ns = nodes_of(p, 'sum')
     let total = loop running = 0 for n in ns do running + depth(n)
     println('depth ', total)

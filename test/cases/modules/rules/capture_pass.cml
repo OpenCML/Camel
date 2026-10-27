@@ -5,7 +5,6 @@
  */
 module capture_pass
 
-import { Program } from graph
 
 func base_of(): int {
     return 7
@@ -13,7 +12,7 @@ func base_of(): int {
 
 let base = base_of()
 
-with <label: string> export func report(p: Program): Program! sync {
+with <label: string> export func report::<F>(p: F): F! sync {
     println('base ', base, ' label ', label)
     return p
 }

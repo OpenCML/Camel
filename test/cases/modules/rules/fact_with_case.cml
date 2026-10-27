@@ -12,7 +12,6 @@
 module fact_with_case
 
 import { max } from math
-import { Program } from graph
 import { rewrite } from rewrite
 
 with <cap: int = 5>
@@ -26,13 +25,13 @@ rule mul_default(y: int, x: int) when at_cap(y) == 5 { x * y => x + 100 }
 rule mul_nine(y: int, x: int) when at_cap<9>(y) == 9 { x * y => x + 200 }
 
 /// The fact at its default: the rule that asks for 5 fires and the product becomes a sum.
-export func apply_default(p: Program): Program! {
-    return rewrite(p, [mul_default])
+export func apply_default::<F>(p: F): F! {
+    return p->rewrite<[mul_default]>
 }
 
 /// The same fact at `cap = 9`: this is another fact, so the rule that asks for 9 fires.
-export func apply_nine(p: Program): Program! {
-    return rewrite(p, [mul_nine])
+export func apply_nine::<F>(p: F): F! {
+    return p->rewrite<[mul_nine]>
 }
 
 func left(x: int): int { return x * 1 }

@@ -4,11 +4,10 @@
  * reads_pass::apply` has its tag read when the pass is in the pipeline.
  */
 module reads_pass
-import { Program } from graph
 
 export tag marked on func, read_by reads_pass::apply
 
 #[reads(marked)]
-export func apply(p: Program): Program! sync {
+export func apply::<F>(p: F): F! sync {
     return p
 }
