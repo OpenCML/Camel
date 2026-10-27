@@ -449,6 +449,25 @@ Rules buildRules() {
         },
         false,
     };
+    // A type name applied to a one-dimensional numeric array converts every element. A value with
+    // several dimensions or an open rank is not a flat run here, and neither is bf16 or f16 (this
+    // back end has no such element type): those are refused, as the other array operators refuse.
+    for (const auto &[uri, element] : {std::pair<const char *, const char *>{":op/atoi", "int32_t"},
+                                      {":op/atol", "int64_t"},
+                                      {":op/atof", "float"},
+                                      {":op/atod", "double"}}) {
+        r[uri] = {
+            [element](OperatorCall &c) -> std::optional<std::string> {
+                const ArrayType *value = asArrayType(c.normType(0));
+                if (c.normCount() != 1 || value == nullptr || value->anyRank() ||
+                    value->rank() != 1) {
+                    return std::nullopt;
+                }
+                return std::format("rt::convertArray<{}>({})", element, c.operand(0));
+            },
+            true,
+        };
+    }
     r[":struct/len_arr"]      = runtimeFunction("length");
     r[":struct/concat_arr"]   = runtimeFunction("concat");
     r[":struct/append_arr"]   = withArgument("append");
