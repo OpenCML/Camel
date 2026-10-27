@@ -3,7 +3,7 @@
 // shuffle and the merges are sequential; they bound what the parallel scheduler can gain.
 module merge_sort
 
-import { seed, shuffle } from random
+import { seed, shuffle, next_key } from random
 import { sort } from array
 
 func mergesort(arr: int[]): int[] {
@@ -17,7 +17,7 @@ func mergesort(arr: int[]): int[] {
 
 func main(): int sync {
     seed(1)
-    let arr = 0..8000000->shuffle
+    let arr = 0..8000000->shuffle<next_key()>
     let res = mergesort(arr)
     res[0:16]->println
     res[len(res) - 4:len(res)]->println

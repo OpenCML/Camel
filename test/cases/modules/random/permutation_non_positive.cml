@@ -1,0 +1,13 @@
+/**
+ * A permutation of no positions is the empty array, whatever the length: a length of zero or below
+ * is not a fault (design principles 3.9: nothing is asked that the data cannot answer).
+ */
+module permutation_non_positive
+
+import { key, permutation } from random
+
+func main(): int sync {
+    let k = key(42)
+    'permutation empty={} negative={} one={}'->format<permutation(k, 0), permutation(k, -1), permutation(k, 1)>->println
+    return 0
+}

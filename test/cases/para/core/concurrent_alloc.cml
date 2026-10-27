@@ -8,7 +8,7 @@
  */
 module concurrent_alloc
 
-import { seed, shuffle } from random
+import { seed, shuffle, next_key } from random
 import { sort } from array
 
 func mergesort(arr: int[]): int[] {
@@ -26,7 +26,7 @@ func checksum(arr: int[]): int {
 
 func main(): int sync {
     seed(7)
-    let data = 0..96->shuffle
+    let data = 0..96->shuffle<next_key()>
     let sums = 0..12->map<(k: int): int => {
         let part = data[k * 8:96]
         return checksum(mergesort(part))

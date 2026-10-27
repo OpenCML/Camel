@@ -306,17 +306,17 @@ item c
 
 ```cml
 
-import { seed, randint } from random
+import { seed, randint, next_key } from random
 
 func main(): int sync {
     seed(42)
-    // Wrong tool: randint advances a hidden state, so each element depends on which ran first.
-    let drawn = 0..8->map<(i: int): int => randint(0, 99)>
+    // Wrong tool: next_key advances a hidden state, so each element depends on which ran first.
+    let drawn = 0..8->map<(i: int): int => next_key()->randint<0, 100>>
     println(drawn)
 
     seed(42)
     // reduce runs in element order on every back end.
-    let ordered = 0..8->reduce<(acc: int[], i: int): int[] => concat(acc, [randint(0, 99)]), [0][0:0]>
+    let ordered = 0..8->reduce<(acc: int[], i: int): int[] => concat(acc, [next_key()->randint<0, 100>]), [0][0:0]>
     println(ordered)
     return 0
 }
@@ -325,15 +325,15 @@ func main(): int sync {
 在顺序执行的后端上（默认的 `std::nvm`，以及 `std::fvm`、`std::jit`），两行相同，每次运行都一样：
 
 ```text
-[75, 63, 75, 13, 90, 9, 57, 37]
-[75, 63, 75, 13, 90, 9, 57, 37]
+[22, 72, 89, 99, 60, 96, 66, 2]
+[22, 72, 89, 99, 60, 96, 66, 2]
 ```
 
 换成并行调度 `camel docs/tutorial/examples/05_map_order.cml std::prl`，第一行的顺序就不再有保证，每次运行可能不同；下面是其中一次的输出：
 
 ```text
-[37, 57, 9, 90, 13, 75, 63, 75]
-[75, 63, 75, 13, 90, 9, 57, 37]
+[2, 66, 96, 60, 99, 89, 72, 22]
+[22, 72, 89, 99, 60, 96, 66, 2]
 ```
 
 这是语言规定的行为（设计原则 3.6），不是缺陷：正因为元素之间没有顺序，`map` 才能并行。第二行用的 `reduce` 按元素顺序执行，在所有后端上结果相同。规则很简单：**传给 `map`、`filter` 的函数保持纯；必须按顺序做的事用 `foreach`、`reduce` 或尾递归。**

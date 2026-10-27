@@ -230,63 +230,34 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::WhenConditionUnmet", "math_sqrt_type.cml:11:17", "(string)", "is_float::<T>()"]
 
-#  ---- The declarations of `random`: the generator and the keyed functions ----
+#  ---- The declarations of `random`: the global stream and the keyed functions ----
 
 [[tests]]
 name = "native.random_declaration_import"
-desc = "`random`'s declarations are the module's signature: an importer calls the generator functions with their declared types, passes `key(42)`'s `Key` to `split` and `permutation` with their declared results, and calls `choice`, `sample` and `shuffle`, which are generic declarations of the element type of their array; every call reaches the C++ operator."
+desc = "`random`'s declarations are the module's signature: an importer calls the operators of the global stream with their declared types, passes `key(42)`'s `Key` to `split`, `fold` and `permutation`, and calls `randint`, `choice`, `sample` and `shuffle` with the key as a configuration; every call reaches its operator or its Camel definition."
 kind = "behavior"
 case = "../../../cases/compile/native/random_declaration_import.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_exact = "true\ntrue\n3\nsolo\n2\n[7]\nkey={ hi: 1350887118657991639, lo: -7139630017956984517 } a={ hi: -343134353990486859, lo: -1032652826686562345 } b={ hi: 7902514079619341531, lo: -7704411369378599526 }\n[1, 0, 2, 3]\n"
+expect_stdout_exact = "true\ntrue\n3\nsolo\n2\n[7]\nkey={ hi: 0, lo: 42 } a={ hi: -6481381978313301641, lo: -125808508541856219 } b={ hi: 8292705212686920034, lo: 249182360730218723 } folded={ hi: 2800939214687323035, lo: -4480670692642944328 }\n[2, 1, 0, 3]\ntrue\n"
 
 [[tests]]
 name = "native.random_wrong_arity"
-desc = "`rand:randint` is declared with two ordinary arguments: a missing one is refused at the call, and the overload the message lists is the declaration's, parameter names included."
+desc = "`rand:seed` is declared with one ordinary argument: a second one is refused at the call, and the overload the message lists is the declaration's, parameter name and resource included."
 kind = "negative"
 case = "../../../cases/compile/native/random_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "random_arity.cml:10:20", "(int)", "<rand:randint>: (low: int, high: int) => int"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "random_arity.cml:10:5", "(int, int)", "<rand:seed>: (value: int) => void uses rng"]
 
 [[tests]]
 name = "native.random_wrong_type"
-desc = "An `int` where the declaration says `Key`: refused at the declaration's type, and the signature in the message has the declaration's own parameter names (`key`, `n`; the type printer shows the exported `Key` as its struct) — `stdlib/random.cml`, not the C++, is the source."
+desc = "A string where the declaration says `int`: refused at the declaration's type, and the signature in the message has the declaration's own parameter name (`value`) -- `stdlib/random.cml`, not the C++, is the source."
 kind = "negative"
 case = "../../../cases/compile/native/random_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "random_type.cml:11:24", "argument types: <> (int, int)", "<rand:permutation>: (key: { hi: int, lo: int }, n: int) => int[]"]
-
-[[tests]]
-name = "native.random_choice_wrong_arity"
-desc = "`rand:choice` is declared with one array argument: a second one is refused at the call, and the overload the message lists is the declaration's, parameter name included."
-kind = "negative"
-case = "../../../cases/compile/native/random_choice_arity.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "random_choice_arity.cml:10:19", "argument types: <> (string[], int)", "<rand:choice>: (xs: T[]) => T"]
-
-[[tests]]
-name = "native.random_choice_wrong_type"
-desc = "A number where the declarations of `rand:choice` take an array: refused at the declarations' type, and the signature in the message has their own parameter name (`xs`) — `stdlib/random.cml`, not the C++, is the source."
-kind = "negative"
-case = "../../../cases/compile/native/random_choice_type.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "random_choice_type.cml:11:19", "argument types: <> (int)", "<rand:choice>: (xs: T[]) => T"]
-
-[[tests]]
-name = "native.random_sample_count_type"
-desc = "`rand:sample` declares its count as `int`: a `float` count is refused at the call, and the message lists the declaration's signature. The old C++ resolver checked only the array argument, so the count narrowing is pinned here ."
-kind = "negative"
-case = "../../../cases/compile/native/random_sample_count_type.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "random_sample_count_type.cml:11:27", "argument types: <> (int[], float)", "<rand:sample>: (xs: T[], n: int) => T[]"]
-
-#  ---- The declarations of `array`: the native primitives, the sorts and `argsort` ----
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "random_type.cml:11:5", "argument types: <> (string)", "<rand:seed>: (value: int) => void uses rng"]
 
 [[tests]]
 name = "native.array_declaration_import"

@@ -9,7 +9,7 @@
  */
 module gc_born_old
 
-import { seed, sample, shuffle } from random
+import { seed, sample, shuffle, next_key } from random
 
 func label(i: int): string { return 'item-' + string(i) }
 
@@ -22,10 +22,10 @@ func good(xs: string[]): int {
 func main(): int sync {
     seed(7)
     let names = 0..700->map<(i: int): string => label(i)>
-    let picked = sample(names, 600)
+    let picked = names->sample<next_key(), 600>
     let c = churn(64)
     println('picked', len(picked), good(picked), c)
-    let mixed = shuffle(picked)
+    let mixed = picked->shuffle<next_key()>
     let c2 = churn(64)
     println('mixed', len(mixed), good(mixed), c2)
     return 0

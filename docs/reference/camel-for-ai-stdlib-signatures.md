@@ -354,19 +354,25 @@ median: (xs: T[]) => T when is_float::<T>()
 quantile: <q: float> (xs: T[]) => T when is_float::<T>()
 ```
 
-**`random`** — import { ... } from random — 10 name(s)
+**`random`** — import { ... } from random — 16 name(s)
 
 ```text
-seed: (value: int) => void
+key: (seed: int) => Key
+fold: (k: Key, i: int) => Key
+split: (k: Key) => (Key, Key)
+uniform: (k: Key) => T when is_float::<T>()
+uniform_array: <shape: int[]> (k: Key) => T[..] when is_float::<T>()
+normal: (k: Key) => T when is_float::<T>()
+normal_array: <shape: int[]> (k: Key) => T[..] when is_float::<T>()
+randint: <low: int, high: int> (k: Key) => int
+permutation: (k: Key, n: int) => int[]
+shuffle: <k: Key> (xs: T[]) => T[]
+choice: <k: Key> (xs: T[]) => T
+sample: <k: Key, n: int> (xs: T[]) => T[]
+seed: (value: int) => void uses rng
+next_key: () => Key uses rng
 rand: () => float
 randn: () => float
-randint: (low: int, high: int) => int
-choice: (xs: T[]) => T
-sample: (xs: T[], n: int) => T[]
-shuffle: (xs: T[]) => T[]
-key: (seed: int) => { hi: int, lo: int }
-split: (key: { hi: int, lo: int }) => ({ hi: int, lo: int }, { hi: int, lo: int })
-permutation: (key: { hi: int, lo: int }, n: int) => int[]
 ```
 
 **`time`** — import { ... } from time — 3 name(s)

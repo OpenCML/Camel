@@ -482,45 +482,26 @@ Rules buildRules() {
     // ---- Modules with a standalone translation ----
     r["time:now"]         = runtimeFunction("now", false);
     r["env:get_env"]      = runtimeFunction("getEnv", false);
-    // random draws as modules/random does, through camel/utils/random.h (standalone/random.h).
-    r["rand:seed"]    = runtimeFunction("randomSeed", false);
-    r["rand:rand"]    = runtimeFunction("randomUnit", false);
-    r["rand:randn"]   = runtimeFunction("randomNormal", false);
-    r["rand:randint"] = runtimeFunction("randomBetween", false);
-    r["rand:choice"]  = faultingFunction("randomChoice", RuntimeDiag::InvalidArgument, 2);
-    r["rand:sample"]  = faultingFunction("randomSample", RuntimeDiag::InvalidArgument, 2);
-    r["rand:shuffle"] = runtimeFunction("randomShuffle", false);
-    // Keyed random is pure, so these expressions may be inlined and shared (design principles
-    // 13.5): no generator, no state, the same bits as the interpreter.
-    r["rand:key"] = {
+    // The random module (modules/random): the global stream's two operators and the keyed
+    // primitive, through camel/utils/philox.h (standalone/random.h). Keyed random is pure, so its
+    // expressions may be inlined and shared (design principles 13.5).
+    r["rand:seed"]     = runtimeFunction("randomSeed", false);
+    r["rand:next_key"] = {
         [](OperatorCall &c) -> std::optional<std::string> {
-            return std::format(
-                "rt::randomKey<{}>({})", c.cppType(c.resultType()), c.operand(0));
-        },
-        true,
-    };
-    r["rand:split"] = {
-        [](OperatorCall &c) -> std::optional<std::string> {
-            const std::string tuple = c.cppType(c.resultType());
-            const std::string key = c.cppType(c.normType(0));
-            return std::format(
-                "rt::randomSplitKey<{}, {}>({})", tuple, key, c.norm(0).text);
-        },
-        true,
-    };
-    r["rand:permutation"] = {
-        [](OperatorCall &c) -> std::optional<std::string> {
-            const std::string array = c.cppType(c.resultType());
-            const std::string key = c.cppType(c.normType(0));
-            return std::format(
-                "rt::randomPermutationKey<{}, {}>({}, {}, {})",
-                array,
-                key,
-                c.norm(0).text,
-                c.operand(1),
-                c.site(RuntimeDiag::InvalidArgument, marks(2)));
+            return std::format("rt::randomNextKey<{}>()", c.cppType(c.resultType()));
         },
         false,
+    };
+    r["rand:philox"] = {
+        [](OperatorCall &c) -> std::optional<std::string> {
+            return std::format(
+                "rt::randomPhilox<{}, {}>({}, {})",
+                c.cppType(c.resultType()),
+                c.cppType(c.normType(0)),
+                c.norm(0).text,
+                c.operand(1));
+        },
+        true,
     };
     r["math:sqrt"]    = cmath("sqrt", true);
     for (const char *t : {"i", "l"}) {

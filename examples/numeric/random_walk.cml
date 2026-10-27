@@ -1,14 +1,14 @@
 // Seeded random walks: the `random` module with a fixed seed, summary with `statistics`.
 // The steps are a tail recursion, not a `map`, because they must happen in order. The calls
 // of a `map` on different elements have no order among them, and a parallel back end may run
-// them at the same time; a call that depends on state, such as `randint`, placed in the
+// them at the same time; a call that depends on state, such as `next_key`, placed in the
 // function given to `map` therefore gives a result that is stable on the sequential back
 // ends and may differ from run to run under `std::prl`. Steps that happen one after another
 // are written with `foreach`, `reduce` or a tail recursion.
 // Run: camel examples/numeric/random_walk.cml
 module random_walk
 
-import { seed, randint } from random
+import { seed, randint, next_key } from random
 import { stdev } from statistics
 import { max, mean } from array
 import { abs } from math
@@ -16,7 +16,7 @@ import { abs } from math
 // Position after `steps` moves of -1 or +1.
 func walk(steps: int, position: int): int sync {
     return if steps == 0 then position
-        else walk(steps - 1, position + randint(0, 1) * 2 - 1)
+        else walk(steps - 1, position + next_key()->randint<0, 2> * 2 - 1)
 }
 
 // End positions of `count` walks made one after another. The walks share one generator, so

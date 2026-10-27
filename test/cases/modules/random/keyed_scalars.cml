@@ -1,0 +1,21 @@
+/**
+ * The scalar keyed draws and the global stream, which std::cpp translates over camel/utils/philox.h:
+ * a compiled program prints what the interpreter prints. `fold` and `randint` can fail, and
+ * `fail` is not translated yet.
+ */
+module keyed_scalars
+
+import { key, split, uniform, seed, next_key, rand } from random
+
+func main(): int sync {
+    let k = key(42)
+    let (a, b) = split(k)
+    println(k, a, b)
+    println(uniform::<float>(k), uniform::<f32>(k), uniform::<float>(a))
+    seed(7)
+    println(next_key(), next_key())
+    println(rand(), rand())
+    seed(7)
+    println(next_key())
+    return 0
+}

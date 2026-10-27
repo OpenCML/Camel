@@ -306,17 +306,17 @@ There is **no agreed order of execution** between the elements of a `map`. When 
 
 ```cml
 
-import { seed, randint } from random
+import { seed, randint, next_key } from random
 
 func main(): int sync {
     seed(42)
-    // Wrong tool: randint advances a hidden state, so each element depends on which ran first.
-    let drawn = 0..8->map<(i: int): int => randint(0, 99)>
+    // Wrong tool: next_key advances a hidden state, so each element depends on which ran first.
+    let drawn = 0..8->map<(i: int): int => next_key()->randint<0, 100>>
     println(drawn)
 
     seed(42)
     // reduce runs in element order on every back end.
-    let ordered = 0..8->reduce<(acc: int[], i: int): int[] => concat(acc, [randint(0, 99)]), [0][0:0]>
+    let ordered = 0..8->reduce<(acc: int[], i: int): int[] => concat(acc, [next_key()->randint<0, 100>]), [0][0:0]>
     println(ordered)
     return 0
 }
@@ -325,15 +325,15 @@ func main(): int sync {
 On the sequential back ends (the default `std::nvm`, and also `std::fvm` and `std::jit`), the two lines are the same, and the same on every run:
 
 ```text
-[75, 63, 75, 13, 90, 9, 57, 37]
-[75, 63, 75, 13, 90, 9, 57, 37]
+[22, 72, 89, 99, 60, 96, 66, 2]
+[22, 72, 89, 99, 60, 96, 66, 2]
 ```
 
 Switch to parallel scheduling, `camel docs/tutorial/examples/05_map_order.cml std::prl`, and the order of the first line is no longer guaranteed and may differ from run to run; below is the output of one such run:
 
 ```text
-[37, 57, 9, 90, 13, 75, 63, 75]
-[75, 63, 75, 13, 90, 9, 57, 37]
+[2, 66, 96, 60, 99, 89, 72, 22]
+[22, 72, 89, 99, 60, 96, 66, 2]
 ```
 
 This is behaviour laid down by the language (design principles, 3.6), not a defect: it is precisely because there is no order between the elements that `map` can run in parallel. The `reduce` used for the second line runs in element order, and its result is the same on all back ends. The rule is simple: **keep the functions passed to `map` and `filter` pure; do what must be done in order with `foreach`, `reduce` or tail recursion.**
