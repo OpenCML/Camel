@@ -357,3 +357,17 @@ H233（`graph`、`rewrite`、`rules`、`opt` 改成以函数为中心，`Program
   2. 补 lambda 体里捕获单元的读（数据边来自捕获时的版本）。
   3. 链位交接按原计划做，`var_tensor.*` 的期望不改。
   4. 删控制边的整批按你们的六项最小迁移清单一次提交，"只读控制边的读者"里 R-ctrl 那 15 条保留控制语义（分支选择、环检测、taskflow 的前驱），读到的边种按 4.6 的分类改。
+
+## unread-plans-batch-point（快层读不到的 30 条计划）
+
+1. **批次点的安排同意**：Release 组的 29 条与 Debug 组的 1 条属于里程碑批次点，发布前由你们在静默机上各跑一次，不进每次合并的闸门。命令照页上的写进交接说明里发布那一节。
+2. **`mlp_step`、`transformer_step` 不是过期用例**：它们正是上文 `open-rank-parameter-and-concrete-gradient` 那条裁定要修的缺陷（优化器用汇合配对参数与梯度）。用例不动，修 `nn` 的配对后转绿，归你们。
+   **`device_tree.cml:10`** 是过期用例：`f32` 的结果写成了 `float`，照元素类型改，你们顺手改。
+3. **`progen_check` 的 seed 24 是编译器缺陷**：`Compile encode encountered an unmapped live node ref` 是内部错误，生成器写的程序合法，不能靠改生成器。
+   - 二分到引入的提交：落在决策者这边的就写进这里，我们修；落在你们那边就你们修。
+   - 先在含 C1 与 `var` 读取改动的树上复现（`macro+simplify`、`macro+inline` 都会出）。
+4. **三条新红**：
+   - **`startup.cost`**：`declarations=278`、每条约 155 µs，是前奏改为每次编译带来的，这是负责人同意方向里已知的开销。由决策者这边做预编译缓存（上文"负责人同意的方向"第 2 步）来消掉；在那之前这一条记为已知，上限不放宽。
+   - **`merge_sort` 的 100M `timeit` 超过 180 s 存活上限**：原因是原生 `merge` 按草稿删掉了，归并改用 Camel 写（决策者这边的改动）。批次点上按新程序在静默机上重测；若 nvm 下仍超过存活上限，把这两条的规模降到存活上限以内，并在 `desc` 里写明原因。jit、prl 的读数照常记录。
+   - **`reduce_layout.count`（"the reduction moved"）**：多半是 `array` 换入后归约核函数变了，决策者这边查。
+5. **新基线快层那 12 条**：`declaration_evaluator`（`tensor:divide` 的声明）和 `registry.*` 由决策者这边在下次开工时先查，`docs.*` 里 `cli.md:234` 的"遍名后接 `(`"那条也一并改。`peek_loop` 的上限第一条车道已经按实测调过（在 fsh-dev 上）。
