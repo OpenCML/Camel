@@ -230,54 +230,29 @@ is_bool: () => bool
 is_plain: () => bool
 ```
 
-**`array`** — import { ... } from array — 33 name(s)
+**`array`** — import { ... } from array — 35 name(s)
 
 ```text
-argsort: (keys: i32[]) => int[]
-argsort: (keys: int[]) => int[]
-argsort: (keys: f32[]) => int[]
-argsort: (keys: float[]) => int[]
-argsort: (keys: bf16[]) => int[]
-argsort: (keys: f16[]) => int[]
-argsort: (keys: bool[]) => int[]
-argsort: (keys: string[]) => int[]
-sort: (xs: i32[]) => i32[]
-sort: (xs: int[]) => int[]
-sort: (xs: f32[]) => f32[]
-sort: (xs: float[]) => float[]
-insert_sort: (xs: i32[]) => i32[]
-insert_sort: (xs: int[]) => int[]
-insert_sort: (xs: f32[]) => f32[]
-insert_sort: (xs: float[]) => float[]
-quick_sort: (xs: i32[]) => i32[]
-quick_sort: (xs: int[]) => int[]
-quick_sort: (xs: f32[]) => f32[]
-quick_sort: (xs: float[]) => float[]
-merge_sort: (xs: i32[]) => i32[]
-merge_sort: (xs: int[]) => int[]
-merge_sort: (xs: f32[]) => f32[]
-merge_sort: (xs: float[]) => float[]
-merge_sorted_arrays: (left: i32[], right: i32[]) => i32[]
-merge_sorted_arrays: (left: int[], right: int[]) => int[]
-merge_sorted_arrays: (left: f32[], right: f32[]) => f32[]
-merge_sorted_arrays: (left: float[], right: float[]) => float[]
 reverse: (xs: T[]) => T[]
 take: <n: int> (xs: T[]) => T[]
 drop: <n: int> (xs: T[]) => T[]
+chunks: <n: int> (xs: T[]) => T[][]
 enumerate: (xs: T[]) => (int, T)[]
 flatten: (xss: T[][]) => T[]
+flatten: (xs: T[..]) => T[] when !is_array_type::<T>()
 unique: (xs: T[]) => T[]
-index_of: <x: T> (xs: T[]) => int?
+find_index: <pred: (x: T) => bool> (xs: T[]) => int?
 find: <pred: (x: T) => bool> (xs: T[]) => T?
+index_of: <x: T> (xs: T[]) => int?
 any: <pred: (x: T) => bool> (xs: T[]) => bool
 all: <pred: (x: T) => bool> (xs: T[]) => bool
 count: <pred: (x: T) => bool> (xs: T[]) => int
-sum: (xs: T[]) => T when is_numeric::<T>()
-min: (xs: T[]) => T? when is_ordered::<T>()
-max: (xs: T[]) => T? when is_ordered::<T>()
-flat_map: <f: (x: T) => U[]> (xs: T[]) => U[]
-sort_by: <key: (x: T) => K> (xs: T[]) => T[]
-zip_with: <f: (a: T, b: U) => V> (xs: T[], ys: U[]) => V[]
+sum: (xs: T[..]) => T when is_numeric::<T>()
+mean: (xs: T[..]) => T when is_float::<T>()
+min: (xs: T[..]) => T when is_ordered::<T>()
+max: (xs: T[..]) => T when is_ordered::<T>()
+argmax: (xs: T[..]) => int when is_ordered::<T>()
+argmin: (xs: T[..]) => int when is_ordered::<T>()
 sum: <axis: int, keepdims: bool = false> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
 mean: <axis: int, keepdims: bool = false> (xs: T[..]) => T[..] when is_float::<T>()
 min: <axis: int, keepdims: bool = false> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
@@ -288,6 +263,18 @@ shape: (xs: T[..]) => int[]
 numel: (xs: T[..]) => int
 dim: <axis: int> (xs: T[..]) => int
 to_bytes: (xs: T[..]) => Bytes when is_plain::<T>()
+argsort: (keys: i32[]) => int[]
+argsort: (keys: int[]) => int[]
+argsort: (keys: f32[]) => int[]
+argsort: (keys: float[]) => int[]
+argsort: (keys: bf16[]) => int[]
+argsort: (keys: f16[]) => int[]
+argsort: (keys: bool[]) => int[]
+argsort: (keys: string[]) => int[]
+sort: (xs: T[]) => T[] when is_ordered::<T>()
+sort_by: <key: (x: T) => K> (xs: T[]) => T[] when is_ordered::<K>()
+flat_map: <f: (x: T) => U[]> (xs: T[]) => U[]
+zip_with: <f: (a: T, b: U) => V> (xs: T[], ys: U[]) => V[]
 ```
 
 **`stream`** — import { ... } from stream — 2 name(s)

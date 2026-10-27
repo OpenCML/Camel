@@ -29,7 +29,7 @@
  *   - `min` and `max` over a `string[]` and a `bool[]`: each of the two element types has an
  *     executor of its own (the values are checked against `sort` and against each other, `false`
  *     below `true`).
- *   - the empty array: `sum` is +0, `min` and `max` are null.
+ *   - the empty array: `sum` is +0 (`min` and `max` are faults, pinned in array_reduction_faults).
  *
  * The body is the semantics, so it is the reference for the element types both paths can be asked
  * for: `bodySum` and friends are the function values of instances, and a call through one runs the
@@ -91,9 +91,9 @@ func bitsOfF16(value: f16): int[] {
 
 func main(): int sync {
     // ---- the reference paths: the body of an instance, and the rules written out ----
-    let bodySum: (xs: f32[]) => f32 = sum
-    let bodyMin: (xs: f32[]) => f32? = min
-    let bodyMax: (xs: f32[]) => f32? = max
+    let bodySum: (xs: f32[..]) => f32 = sum
+    let bodyMin: (xs: f32[..]) => f32 = min
+    let bodyMax: (xs: f32[..]) => f32 = max
 
     // 2^24 then 1025 ones: the exact sum is 16778241 and the one f32 rounding is 16778240.
     let a = 0..1026->map<(i: int) => if i == 0 then f32(16777216.0) else f32(1.0)>
@@ -113,16 +113,16 @@ func main(): int sync {
     let bfB: bf16[] = [bf16(32768.0), bf16(1.0), bf16(0.5)]
     let sumWideA = sum(wideA)
     let sumWideB = sum(wideB)
-    let halfSum: (xs: f16[]) => f16 = sum
-    let bfSum: (xs: bf16[]) => bf16 = sum
+    let halfSum: (xs: f16[..]) => f16 = sum
+    let bfSum: (xs: bf16[..]) => bf16 = sum
     let tieF16 = sumWideA - sumWideB == f16(0.0) && sumWideA != f16(0.0)
     let tieBf = sum(wideBf) - sum(bfB) == bf16(0.0) && sum(wideBf) == bf16(32768.0)
 
     // ---- the body agrees, element type by element type (the acceptance) ----
     let small: i32[] = [1, 2, 3]
-    let bodyInt: (xs: int[]) => int = sum
-    let intBody: (xs: i32[]) => i32 = sum
-    let f64Sum: (xs: f64[]) => f64 = sum
+    let bodyInt: (xs: int[..]) => int = sum
+    let intBody: (xs: i32[..]) => i32 = sum
+    let f64Sum: (xs: f64[..]) => f64 = sum
     let sameInt = sum([1, 2, 3, 4]) == bodyInt([1, 2, 3, 4])
     let sameI32 = sum(small) == intBody(small)
     let sameF32 = sumA == bodySum(a) && sum(halfway) == bodySum(halfway)
@@ -133,13 +133,13 @@ func main(): int sync {
     // ---- min and max: NaN anywhere, -0 below +0, agreement with the body ----
     let fs: f32[] = [3.0, 9.0, 2.0]
     let withNan: f32[] = [3.0, f32(nan), 2.0]
-    let halfMin: (xs: f16[]) => f16? = min
-    let nanMin = is_nan(min(withNan) ?? f32(0.0)) && is_nan(bodyMin(withNan) ?? f32(0.0))
-    let nanMax = is_nan(max(withNan) ?? f32(0.0)) && is_nan(bodyMax(withNan) ?? f32(0.0))
+    let halfMin: (xs: f16[..]) => f16 = min
+    let nanMin = is_nan(min(withNan)) && is_nan(bodyMin(withNan))
+    let nanMax = is_nan(max(withNan)) && is_nan(bodyMax(withNan))
     // -0 first, +0 second: the minimum must take the -0 it was given (the two compare equal, so
     // only the sign bit decides, and the bytes show which operand came out).
-    let minusZeroBelow = sameBits(bitsOf(min([f32(-0.0), f32(0.0)]) ?? f32(0.0)), zeroBits(true))
-    let minusZeroAbove = sameBits(bitsOf(max([f32(-0.0), f32(0.0)]) ?? f32(0.0)), zeroBits(false))
+    let minusZeroBelow = sameBits(bitsOf(min([f32(-0.0), f32(0.0)])), zeroBits(true))
+    let minusZeroAbove = sameBits(bitsOf(max([f32(-0.0), f32(0.0)])), zeroBits(false))
 
     // The same statement on the reduced-precision element types, where the fold carries the
     // element's own 16-bit pattern and the two operations are not each other's: minimum of a
@@ -150,47 +150,45 @@ func main(): int sync {
     let bzr: bf16[] = [-bf16(0.0), bf16(0.0)]
     let fz: f16[] = [f16(0.0), -f16(0.0)]
     let fzr: f16[] = [-f16(0.0), f16(0.0)]
-    let bfHalfMin: (xs: bf16[]) => bf16? = min
-    let bfHalfMax: (xs: bf16[]) => bf16? = max
-    let f16HalfMin: (xs: f16[]) => f16? = min
-    let f16HalfMax: (xs: f16[]) => f16? = max
+    let bfHalfMin: (xs: bf16[..]) => bf16 = min
+    let bfHalfMax: (xs: bf16[..]) => bf16 = max
+    let f16HalfMin: (xs: f16[..]) => f16 = min
+    let f16HalfMax: (xs: f16[..]) => f16 = max
     let bzeroNeg = bitsOfBf16(-bf16(0.0))
     let bzeroPos = bitsOfBf16(bf16(0.0))
     let fzeroNeg = bitsOfF16(-f16(0.0))
     let fzeroPos = bitsOfF16(f16(0.0))
-    let halfZeroMin = bitsOfBf16(min(bz) ?? bf16(0.0)) == bzeroNeg &&
-        bitsOfBf16(min(bzr) ?? bf16(0.0)) == bzeroNeg &&
-        bitsOfF16(min(fz) ?? f16(0.0)) == fzeroNeg &&
-        bitsOfF16(min(fzr) ?? f16(0.0)) == fzeroNeg
-    let halfZeroMax = bitsOfBf16(max(bz) ?? bf16(0.0)) == bzeroPos &&
-        bitsOfBf16(max(bzr) ?? bf16(0.0)) == bzeroPos &&
-        bitsOfF16(max(fz) ?? f16(0.0)) == fzeroPos &&
-        bitsOfF16(max(fzr) ?? f16(0.0)) == fzeroPos
-    let halfZeroBody = bitsOfBf16(bfHalfMin(bz) ?? bf16(0.0)) == bitsOfBf16(min(bz) ?? bf16(0.0)) &&
-        bitsOfBf16(bfHalfMax(bz) ?? bf16(0.0)) == bitsOfBf16(max(bz) ?? bf16(0.0)) &&
-        bitsOfF16(f16HalfMin(fzr) ?? f16(0.0)) == bitsOfF16(min(fzr) ?? f16(0.0)) &&
-        bitsOfF16(f16HalfMax(fzr) ?? f16(0.0)) == bitsOfF16(max(fzr) ?? f16(0.0))
-    let sameMin = (min(fs) ?? f32(0.0)) == (bodyMin(fs) ?? f32(0.0)) &&
-        (min(wideB) ?? f16(0.0)) == (halfMin(wideB) ?? f16(0.0))
-    let sameMax = (max(fs) ?? f32(0.0)) == (bodyMax(fs) ?? f32(0.0))
+    let halfZeroMin = bitsOfBf16(min(bz)) == bzeroNeg &&
+        bitsOfBf16(min(bzr)) == bzeroNeg &&
+        bitsOfF16(min(fz)) == fzeroNeg &&
+        bitsOfF16(min(fzr)) == fzeroNeg
+    let halfZeroMax = bitsOfBf16(max(bz)) == bzeroPos &&
+        bitsOfBf16(max(bzr)) == bzeroPos &&
+        bitsOfF16(max(fz)) == fzeroPos &&
+        bitsOfF16(max(fzr)) == fzeroPos
+    let halfZeroBody = bitsOfBf16(bfHalfMin(bz)) == bitsOfBf16(min(bz)) &&
+        bitsOfBf16(bfHalfMax(bz)) == bitsOfBf16(max(bz)) &&
+        bitsOfF16(f16HalfMin(fzr)) == bitsOfF16(min(fzr)) &&
+        bitsOfF16(f16HalfMax(fzr)) == bitsOfF16(max(fzr))
+    let sameMin = (min(fs)) == (bodyMin(fs)) &&
+        (min(wideB)) == (halfMin(wideB))
+    let sameMax = (max(fs)) == (bodyMax(fs))
 
     // ---- string and bool: the arms of `min` and `max` over the two non-numeric ordered types ----
     let words: string[] = ["pear", "fig", "apple"]
     // Byte order (the order `math`'s `min_s`/`max_s` state) puts 'apple' first and 'pear' last.
-    let wordsOk = (min(words) ?? "") == "apple" && (max(words) ?? "") == "pear"
+    let wordsOk = (min(words)) == "apple" && (max(words)) == "pear"
     let one: string[] = ["only"]
-    let oneOk = (min(one) ?? "") == "only" && (max(one) ?? "") == "only"
+    let oneOk = (min(one)) == "only" && (max(one)) == "only"
     let bools: bool[] = [false, true, false]
-    let boolsOk = (min(bools) ?? true) == false && (max(bools) ?? false) == true
+    let boolsOk = (min(bools)) == false && (max(bools)) == true
     let allTrue: bool[] = [true, true]
-    let allTrueOk = (min(allTrue) ?? false) == true && (max(allTrue) ?? false) == true
+    let allTrueOk = (min(allTrue)) == true && (max(allTrue)) == true
 
     // ---- the empty array ----
     let none: int[] = []
     let noneF: f32[] = []
-    let noneS: string[] = []
-    let emptySame = sum(none) == 0 && min(none) == null && max(none) == null &&
-        min(noneF) == null && max(noneF) == null && min(noneS) == null && max(noneS) == null
+    let emptySame = sum(none) == 0 && sum(noneF) == f32(0.0)
 
     println("sum {}", sumA)
     println("f64 {}", refA)

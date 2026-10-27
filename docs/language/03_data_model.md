@@ -121,7 +121,7 @@ func main(): int sync {
   | `map`、`filter`、`reduce`、`foreach` | 见 [6.10](06_expressions.md#610-高阶算子) |
   | `xs->append<v>` | 在末尾加上 `v` 的**新数组**，`xs` 不变；要追加到变量上写 `xs = xs->append<v>`（见 3.7）；连接两个数组用 `concat(xs, ys)` |
 
-- 更多的数组函数在 `array` 模块里，使用前要导入（`import { reverse, sum } from array`）：`reverse`、`take`、`drop`、`enumerate`、`flatten`、`unique`、`index_of`、`find`、`any`、`all`、`count`、`sum`、`min`、`max`、`flat_map`、`sort_by`、`zip_with`，见 [标准库参考](../stdlib-reference.md)。
+- 更多的数组函数在 `array` 模块里，使用前要导入（`import { reverse, sum } from array`）：`reverse`、`take`、`drop`、`enumerate`、`flatten`、`unique`、`index_of`、`find`、`find_index`、`any`、`all`、`count`、`chunks`、`sum`、`mean`、`min`、`max`、`argmax`、`argmin`、`flat_map`、`sort_by`、`zip_with`，见 [标准库参考](../stdlib-reference.md)。
 
 ### 3.3.2 元组
 

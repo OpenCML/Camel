@@ -4,14 +4,14 @@
 module merge_sort
 
 import { seed, shuffle } from random
-import { sort, merge_sorted_arrays } from array
+import { sort } from array
 
 func mergesort(arr: int[]): int[] {
     return if len(arr) <= 1000000 then sort(arr) else {
         let mid = len(arr) / 2
         let lhs = arr[0:mid]->mergesort
         let rhs = arr[mid:len(arr)]->mergesort
-        return merge_sorted_arrays(lhs, rhs)
+        return sort(concat(lhs, rhs))
     }
 }
 

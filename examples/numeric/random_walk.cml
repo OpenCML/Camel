@@ -34,6 +34,6 @@ func main(): int sync {
 
     let distances = ends->map<(e: int): int => abs(e)>
     println(format<mean(distances), stdev(distances)>('mean distance {:.2f}  stdev {:.2f}'))
-    println('farthest:', max(distances) ?? 0)
+    println('farthest:', max(distances))
     return 0
 }

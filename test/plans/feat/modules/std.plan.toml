@@ -5,7 +5,7 @@ tags = ["feat", "modules", "std"]
 
 [[tests]]
 name = "array.sort_basic"
-desc = "Exercises the sorting and merge functions of the array module, which now owns the algorithms the deleted algo module used to load."
+desc = "Exercises the sort of the array module on a new array and the merge of two sorted arrays written as `sort(concat(a, b))`."
 kind = "behavior"
 case = "../../../cases/modules/std/array/sort_basic.cml"
 args = ["${case}"]
@@ -15,12 +15,12 @@ timeout_ms = 10000
 
 [[tests]]
 name = "array.every_operator"
-desc = "Every native operator of array, called through `array::`, answers the value it answered as an operator of algo: sort, insert_sort, quick_sort, merge_sort, merge_sorted_arrays, argsort, flatten and unique, and sort leaves its argument unchanged."
+desc = "Every function of array that has a native atom, called through `array::`, answers the value it answered as an operator of algo: sort, argsort, flatten and unique, and sort leaves its argument unchanged."
 kind = "behavior"
 case = "../../../cases/modules/std/array/every_operator.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_exact = "[1, 2, 3]\n[1, 2, 3]\n[1, 2, 3]\n[1, 2, 3]\n[1, 2, 3, 4]\n[1, 2, 0]\n[1, 2, 3]\n[3, 1, 2]\n[1, 2, 3] [3, 1, 2]\n"
+expect_stdout_exact = "[1, 2, 3]\n[1, 2, 0]\n[1, 2, 3]\n[3, 1, 2]\n[1, 2, 3] [3, 1, 2]\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
@@ -256,13 +256,13 @@ timeout_ms = 10000
 
 [[tests]]
 name = "array.sort_reference"
-desc = "Every sorting operator of the array module (sort, quick_sort, insert_sort, merge_sort, merge_sorted_arrays; the `-ed` twins are gone, design principles 11.3) against Python's sorted() on generated int and float arrays (random, duplicates, sorted, reversed, constant; lengths 1 to 257; fixed seed), the input of every form unchanged (no operator sorts its argument in place, 11.3), also as the rebinding `v = v->sort` that sorts in place when nothing else holds the array (11.3), and 200000 already sorted / reversed elements. The sorts once returned unsorted arrays (wrong quicksort partition), and no sort ordered floats (slots were compared as unsigned integers)."
+desc = "The `sort` of the array module (the `-ed` twin is gone, design principles 11.3) against Python's sorted() on generated int and float arrays (random, duplicates, sorted, reversed, constant; lengths 1 to 257; fixed seed), the input of every form unchanged (no operator sorts its argument in place, 11.3), also as the rebinding `v = v->sort` that sorts in place when nothing else holds the array (11.3), and 200000 already sorted / reversed elements. The sorts once returned unsorted arrays (wrong quicksort partition), and no sort ordered floats (slots were compared as unsigned integers)."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/modules/std/array/sort_reference.py"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["1890 results and one large program, 0 wrong", "PASS"]
+expect_stdout_contains = ["450 results and one large program, 0 wrong", "PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000

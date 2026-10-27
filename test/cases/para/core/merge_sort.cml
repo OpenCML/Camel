@@ -5,11 +5,10 @@ module merge_sort
 
 import { now } from time
 import { seed, rand, shuffle } from random
-import { sort, merge_sorted_arrays } from array
+import { sort } from array
 
 func merge(lhs: int[], rhs: int[]): int[] sync {
-    return merge_sorted_arrays(lhs, rhs)
-    // return concat(lhs, rhs)->sort
+    return sort(concat(lhs, rhs))
 }
 
 func mergesort(arr: int[]): int[] sync {

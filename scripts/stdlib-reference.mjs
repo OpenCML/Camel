@@ -133,7 +133,7 @@ const MODULES = [
         title: '`array`: arrays, sorting and higher-order functions',
         kind: 'camel',
         // Most of the module is Camel; a body-less declaration is one of its native operators
-        // (the sorts, argsort, flatten, unique), and the page says so. Those declarations are
+        // (argsort and the kernels of sort, sum, min and max), and the page says so. Those declarations are
         // checked against the registered operators like a C++ module's.
         native: true,
     },
