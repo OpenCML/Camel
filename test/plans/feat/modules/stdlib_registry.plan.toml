@@ -23,7 +23,7 @@ const modules = new Set(ops.map((o) => o.module))
 // `para` is listed through the two operators its declaration carries: they are built-in element
 // calls (`:mark/...`), and `inspect --ops` names the module that declares them, not the one whose
 // executor runs them.
-for (const m of ['<builtin>', 'array', 'fs', 'io', 'json', 'math', 'process', 'para', 'test_support', 'random', 're', 'sim', 'statistics', 'str', 'env', 'this', 'time']) {
+for (const m of ['<builtin>', 'array', 'fs', 'io', 'json', 'math', 'process', 'para', 'test_support', 'random', 're', 'sim', 'str', 'env', 'this', 'time']) {
   assert(modules.has(m), `module ${m} is not listed`)
 }
 const stale = ops.filter((o) => o.uri.startsWith('algo:')).map((o) => o.uri)
@@ -31,7 +31,7 @@ assert(stale.length === 0, `operators of the deleted algo module: ${stale.join('
 const undeclared = ops.filter((o) => o.purity === 'undeclared').map((o) => o.uri)
 assert(undeclared.length === 0, `operators without a purity declaration: ${undeclared.join(', ')}`)
 const purity = Object.fromEntries(ops.map((o) => [o.uri, o.purity]))
-const notPure = ['time:now', 'rand:rand', 'rand:seed', 'rand:shuffle', 'rand:choice', 'env:get_env', 'env:get_cwd',
+const notPure = ['time:now', 'rand:seed', 'rand:next_key', 'env:get_env', 'env:get_cwd',
   'fs:read_bytes', 'fs:list_dir', 'fs:exists', 'fs:file_size', 'fs:write_bytes', 'fs:append_bytes', 'process:user_name', 'process:cpu_count', 'process:sleep', 'process:exit',
   'io:set_terminal_raw_mode', 'io:input', 'io:has_input', 'io:get_chars', 'io:clear_input_buffer',
   ':io/print', ':io/println', ':io/eprintln', ':op/assn', ':op/assn_owned',
@@ -40,7 +40,7 @@ const notPure = ['time:now', 'rand:rand', 'rand:seed', 'rand:shuffle', 'rand:cho
 for (const uri of notPure) {
   assert(purity[uri] === 'effectful', `${uri} is declared ${purity[uri]}, expected effectful`)
 }
-const pure = ['str:to_upper', 'str:codepoints', 'time:strftime', 'time:strptime', 'math:sin_d', 'math:shl_l', 'statistics:median',
+const pure = ['str:to_upper', 'str:codepoints', 'time:strftime', 'time:strptime', 'math:sin_d', 'math:shl_l',
   're:find', 'json:encode', 'json:decode', 'this:zen', ':op/add_l', ':op/idx_str', ':str/format',
   // They return a new array and leave their argument unchanged (design principles 11.3), one
   // operator per element type: the name carries the element type it takes.

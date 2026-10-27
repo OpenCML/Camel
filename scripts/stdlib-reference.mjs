@@ -156,11 +156,8 @@ const MODULES = [
     },
     {
         name: 'statistics',
-        title: '`statistics`',
-        kind: 'cpp',
-        // The declarations, not a signature file: they are what the module compiles.
-        source: 'statistics.cml',
-        declaration: true,
+        title: '`statistics`: variance, standard deviation, median and quantile',
+        kind: 'camel',
     },
     {
         name: 'random',

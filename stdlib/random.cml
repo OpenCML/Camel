@@ -2,93 +2,231 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * One generator for the whole process, and keyed functions that read none. The functions that
- * draw from the generator are declared with effects and are never folded or merged by a pass;
- * the keyed ones are pure, and the same key gives the same bits everywhere.
+ * Random numbers by key. A `Key` is a value; a function that draws takes a key and answers a
+ * number, and the same key gives the same bits on every device and every scheduler. Nothing is
+ * read or changed, so these functions are pure and an optimizer may share, move or batch them.
+ * To get several independent streams from one key, derive keys: `split(k)` gives two,
+ * `fold(k, i)` gives the i-th. A key is used for one draw, or to derive other keys, not both.
  *
- * After a seed the numbers are the same on every platform. The generator is the 64-bit Mersenne
- * Twister (std::mt19937_64, seeded with the value as an unsigned 64-bit integer), and the draws
- * are made by the project's own code (include/camel/utils/random.h), not by the C++ library's
- * distributions, which differ between libraries: a float in [0, 1) is the generator's 64 bits
- * times 2^-64; an integer in a range uses Lemire's method; a normal value uses Marsaglia's polar
- * method (the second value of each pair is dropped); `shuffle` and `sample` take the generator's
- * output modulo the number of places left.
+ * The generator is Philox4x32-10 (design principles 13.5). The integer functions are
+ * identical on every device. The normal distribution uses `log`, `sqrt`, `cos` and so holds
+ * to the error bound of `math`, not to the bit.
+ *
+ * Calls chain on what flows: the key is the data of a draw (`k->uniform::<f32>`), and what shapes
+ * the draw is configuration (`k->randint<1, 7>`, `xs->shuffle<k>`).
+ *
+ * For a program that wants a random number without passing keys there is one global stream, the
+ * resource `rng`: `seed(v)` starts it, `next_key()` takes the next key from it, and everything
+ * else is the keyed function applied to that key: `next_key()->randint<1, 7>`. Without `seed`
+ * the stream starts from seed 0, so a run is the same every time.
  */
 
-// The declarations of the operators of the C++ module `modules/random` (design principles 6.4).
-// This file is the one source of their signatures; the C++ side keeps
-// the kernels, the executor, the operator traits and the resources. Every operator of this
-// module answers on `rand:` rather than on the module's name, so each declaration carries the
-// `#op` tag that names its operator. Every name is declared and no computed signature is left
-// `choice`, `sample` and `shuffle` take the element type of their array
-// argument, which `func choice::<T>(xs: T[])` states exactly.
+import { argsort } from array
+import { cos, log, sqrt } from math
+import { is_float } from types
 
+/// The global stream of keys, `seed` and `next_key` use it.
+export resource rng
 
-/// Sets the state of the generator: the same seed gives the same sequence.
-/// @effect sets the generator
-/// @example seed(42)
-#op('rand:seed')
-export func seed(value: int): void
+/// A 128-bit key. The two fields are its halves, as signed int64.
+export type Key = { hi: int, lo: int }
 
-/// A float drawn uniformly from 0 (included) to 1 (excluded).
-/// @effect advances the generator
-/// @example rand()    // 0.374540
-#op('rand:rand')
-export func rand(): float
+// ---- the one primitive ----
 
-/// A float drawn from the normal distribution with mean 0 and deviation 1.
-/// @effect advances the generator
-/// @example randn()    // -0.138264
-#op('rand:randn')
-export func randn(): float
+// The four 32-bit words (each in 0..2^32 - 1) of Philox4x32-10 for the key and the 64-bit
+// counter. The draws use counters from 0 up; the derived keys use the negative counters, so a
+// key's draws and its children never share a word.
+#op('rand:philox')
+func philox(k: Key, counter: int): int[]
 
-/// An integer drawn uniformly from low to high, both included; the two are swapped when low is
-/// above high.
-/// @effect advances the generator
-/// @example randint(1, 6)    // 4
-#op('rand:randint')
-export func randint(low: int, high: int): int
+// ---- keys ----
 
-/// One element of xs, drawn uniformly.
-/// @effect advances the generator
-/// @fails fault `InvalidArgument` when xs is empty
-/// @example choice(['a', 'b', 'c'])    // 'b'
-#op('rand:choice')
-export func choice::<T>(xs: T[]): T
+// Two words as one 64-bit half; the product wraps on purpose.
+func pack(high: int, low: int): int {
+    return high * 4294967296 + low
+}
 
-/// n elements of xs drawn without replacement, as a new array.
-/// @effect advances the generator
-/// @fails fault `InvalidArgument` when n is negative or above the number of elements
-/// @example sample([1, 2, 3, 4], 2)    // [3, 1]
-#op('rand:sample')
-export func sample::<T>(xs: T[], n: int): T[]
+/// The key of a seed.
+/// @example key(42)    // { hi: 0, lo: 42 }
+export func key(seed: int): Key {
+    return { hi: 0, lo: seed }
+}
+
+/// The i-th key derived from k, i from 0. The same k and i always give the same key, and k is
+/// not changed.
+/// @fails fault `InvalidArgument` when i is negative
+/// @example key(42)->fold(3)
+export func fold(k: Key, i: int): Key {
+    return if i < 0 then fail<'InvalidArgument'>('fold needs a non-negative index') else derive(k, -3 - i)
+}
+
+/// Two independent keys derived from k: the same pair every time, and k is not changed.
+/// @example let (a, b) = split(key(42))
+export func split(k: Key): (Key, Key) {
+    return (derive(k, -1), derive(k, -2))
+}
+
+func derive(k: Key, counter: int): Key {
+    let w = philox(k, counter)
+    return { hi: pack(w[0], w[1]), lo: pack(w[2], w[3]) }
+}
+
+// ---- draws ----
+
+// A float in [0, 1) with the precision of T: 53 bits for float, 24 for f32, 11 for f16 and 8 for
+// bf16, so that no rounding into T reaches 1.
+func uniform_at::<T>(k: Key, counter: int): T when is_float::<T>() {
+    let w = philox(k, counter)
+    return match type T {
+        case float => T(float(w[0] / 32 * 67108864 + w[1] / 64) * 1.1102230246251565e-16)
+        case f32 => T(float(w[0] / 256) * 5.9604644775390625e-8)
+        case f16 => T(float(w[0] / 2097152) * 0.00048828125)
+        case bf16 => T(float(w[0] / 16777216) * 0.00390625)
+    }
+}
+
+/// A number drawn uniformly from 0 (included) to 1 (excluded).
+/// @example key(42)->uniform::<f32>
+export func uniform::<T>(k: Key): T when is_float::<T>() {
+    return uniform_at::<T>(k, 0)
+}
+
+// The kernels of the whole-array draws, one per element width: the bits of element i are those of
+// the scalar draw from `fold(k, i)`, in whatever order or partition they are made (CPU and
+// Tiles alike). A kernel answers one element type, so each width has its own operator.
+#op('rand:uniform_array_d')
+with <shape: int[]>
+func uniform_array_d(k: Key): float[..]
+#op('rand:uniform_array_f')
+with <shape: int[]>
+func uniform_array_f(k: Key): f32[..]
+#op('rand:uniform_array_h')
+with <shape: int[]>
+func uniform_array_h(k: Key): f16[..]
+#op('rand:uniform_array_b')
+with <shape: int[]>
+func uniform_array_b(k: Key): bf16[..]
+#op('rand:normal_array_d')
+with <shape: int[]>
+func normal_array_d(k: Key): float[..]
+#op('rand:normal_array_f')
+with <shape: int[]>
+func normal_array_f(k: Key): f32[..]
+#op('rand:normal_array_h')
+with <shape: int[]>
+func normal_array_h(k: Key): f16[..]
+#op('rand:normal_array_b')
+with <shape: int[]>
+func normal_array_b(k: Key): bf16[..]
+
+/// An array of the given shape; element i (row-major) is the scalar `uniform` of `fold(k, i)`.
+/// @example key(42)->uniform_array::<f32><shape: [3, 4]>
+with <shape: int[]>
+export func uniform_array::<T>(k: Key): T[..] when is_float::<T>() {
+    return match type T {
+        case float => k->uniform_array_d<shape>
+        case f32 => k->uniform_array_f<shape>
+        case f16 => k->uniform_array_h<shape>
+        case bf16 => k->uniform_array_b<shape>
+    }
+}
+
+/// A number drawn from the normal distribution with mean 0 and deviation 1 (Box-Muller).
+/// @example key(42)->normal::<f32>
+export func normal::<T>(k: Key): T when is_float::<T>() {
+    let u = 1.0 - uniform_at::<float>(k, 0)
+    let v = uniform_at::<float>(k, 1)
+    return T(sqrt(-2.0 * log(u)) * cos(6.283185307179586 * v))
+}
+
+// A 62-bit number from the words of a counter.
+func bits62(k: Key, counter: int): int {
+    let w = philox(k, counter)
+    return w[0] % 1073741824 * 4294967296 + w[1]
+}
+
+// An integer in [0, span) without bias: a draw at or above the largest multiple of span below
+// 2^62 is thrown away and the next counter is tried.
+func below(k: Key, span: int): int {
+    let limit = 4611686018427387904 / span * span
+    let (c, v) = loop c = 0, v = bits62(k, 0) while v >= limit do (c + 1, bits62(k, c + 1))
+    return v % span
+}
+
+/// An array of the given shape; element i (row-major) is the scalar `normal` of `fold(k, i)`.
+/// @example key(42)->normal_array::<f32><shape: [3, 4]>
+with <shape: int[]>
+export func normal_array::<T>(k: Key): T[..] when is_float::<T>() {
+    return match type T {
+        case float => k->normal_array_d<shape>
+        case f32 => k->normal_array_f<shape>
+        case f16 => k->normal_array_h<shape>
+        case bf16 => k->normal_array_b<shape>
+    }
+}
+
+/// An integer drawn uniformly from low (included) to high (excluded).
+/// @fails fault `InvalidArgument` when high is not above low, or the range is wider than 2^62
+/// @example key(42)->randint<1, 7>
+with <low: int, high: int>
+export func randint(k: Key): int {
+    let span = high - low
+    return if span <= 0 || span > 4611686018427387904
+        then fail<'InvalidArgument'>('randint needs 0 < high - low <= 2^62')
+        else low + below(k, span)
+}
+
+/// A uniformly random permutation of 0 up to, not including, n: the positions ordered by one
+/// uniform draw each (the key folded with the position), ties keeping position order. Empty when n is not positive.
+/// @example key(42)->permutation(4)
+export func permutation(k: Key, n: int): int[] {
+    return if n <= 0 then [] else argsort(k->uniform_array::<float><shape: [n]> as float[])
+}
 
 /// The elements of xs in a random order, as a new array; xs is not changed.
-/// @effect advances the generator
-/// @example shuffle([1, 2, 3])    // [2, 3, 1]
-#op('rand:shuffle')
-export func shuffle::<T>(xs: T[]): T[]
+/// @example [1, 2, 3]->shuffle<key(42)>
+with <k: Key>
+export func shuffle::<T>(xs: T[]): T[] {
+    return xs[permutation(k, len(xs))]
+}
 
-/// A 128-bit key derived from a seed, as the struct `{ hi: int, lo: int }` (the high and the low
-/// half, as signed int64 bits). Pure: it reads no generator and the same seed gives the same key
-/// on every scheduler, in translated C++, and on every platform.
-/// @pure
-/// @example key(42)    // { hi: 1350887118657991639, lo: -7139630017956984517 }
-#op('rand:key')
-export func key(seed: int): { hi: int, lo: int }
+/// One element of xs, drawn uniformly.
+/// @fails fault `InvalidArgument` when xs is empty
+/// @example ['a', 'b', 'c']->choice<key(42)>
+with <k: Key>
+export func choice::<T>(xs: T[]): T {
+    return xs[k->randint<0, len(xs)>]
+}
 
-/// Two independent keys derived from key: split(key) gives the same pair every time, and does
-/// not change key.
-/// @pure
-/// @example let (a, b) = split(key(42))
-#op('rand:split')
-export func split(key: { hi: int, lo: int }): ({ hi: int, lo: int }, { hi: int, lo: int })
+/// n elements of xs drawn without replacement, as a new array.
+/// @fails fault `IndexOutOfRange` when n is negative or above the number of elements
+/// @example [1, 2, 3, 4]->sample<key(42), 2>
+with <k: Key, n: int>
+export func sample::<T>(xs: T[]): T[] {
+    let mixed = xs->shuffle<k>
+    return mixed[:n]
+}
 
-/// A uniformly random permutation of [0, n) by a Fisher-Yates shuffle driven by key's Philox
-/// stream. Pure: the same key and n give the same permutation everywhere, it reads no generator
-/// and does not change key; n = 0 gives [] and n = 1 gives [0].
-/// @pure
-/// @fails fault `InvalidArgument` when n is negative
-/// @example permutation(key(42), 4)    // [1, 0, 2, 3]
-#op('rand:permutation')
-export func permutation(key: { hi: int, lo: int }, n: int): int[]
+// ---- the global stream ----
+
+/// Starts the global stream: the same seed gives the same sequence of keys.
+/// @example seed(42)
+#op('rand:seed')
+export func seed(value: int): void uses rng
+
+/// The next key of the global stream, and the stream moves on: two calls give two keys.
+/// @example next_key()
+#op('rand:next_key')
+export func next_key(): Key uses rng
+
+/// A number drawn uniformly from 0 (included) to 1 (excluded) from the global stream.
+/// @example rand()
+export func rand(): float {
+    return next_key()->uniform::<float>
+}
+
+/// A number drawn from the normal distribution with mean 0 and deviation 1, from the global stream.
+/// @example randn()
+export func randn(): float {
+    return next_key()->normal::<float>
+}

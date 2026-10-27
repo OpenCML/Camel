@@ -6,7 +6,7 @@
  * one-pass `merge` below, as merge_sort.cml does.)
  */
 
-import { seed, shuffle } from random
+import { seed, shuffle, next_key } from random
 import { sort } from array
 import { rendezvous } from test_support
 
@@ -40,7 +40,7 @@ func mergesort(arr: int[]): (int[], int) {
 
 func main(): int sync {
     seed(1)
-    let arr = 0..64->shuffle
+    let arr = 0..64->shuffle<next_key()>
     let (res, met) = mergesort(arr)
     res->println
     println('leaf sorts that met a peer: {} of 8'->format<met>)

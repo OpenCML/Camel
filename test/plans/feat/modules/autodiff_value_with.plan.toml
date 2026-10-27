@@ -147,7 +147,6 @@ const handled = {
   ':coll/map_put': 'refused-at-construction',
   ':coll/set_add': 'refused-at-construction',
   ':coll/set_contains': 'no-channel',
-  'statistics:quantile': 'refused',
 }
 const known = new Set(Object.keys(handled))
 const missing = valueWith.filter((o) => !known.has(o.uri)).map((o) => o.uri + ' <' + o.params.map((p) => p.name + ': ' + p.type).join(', ') + '>')
