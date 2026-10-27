@@ -23,7 +23,7 @@
  * answers a `Run`.
  *
  * One law is written once. The head declares the type parameter and the condition names the
- * family (`rule mul_one::<T>(x: T) when is_real::<T>()`), so there is one instance per element
+ * family (`rule mul_one::<T>(x: T) when is_integer::<T>() || is_float::<T>()`), so there is one instance per element
  * type and the engine fires the instance whose type the matched node has. A law that is the same
  * for the integers and the floats (`x * 1`, `x / 1`, `x - 0`, `-(-x)`, `x + x`) is one rule for
  * both; a law that differs (`x + 0` for integers, `x + -0.0` for floats), or needs a permission
@@ -41,15 +41,10 @@
 import { Op } from graph
 import { Proof, Rule, Run, rewrite, saturate, extract, run } from rewrite
 import { abs, exp, expm1, log, log1p, trunc } from math
-import { log_softmax, sigmoid, softmax } from nn
+import { exp as exp_array, log as log_array, log_softmax, sigmoid, softmax } from tensor
 import { is_float, is_integer, is_function } from types
 
 // ---- the families ----
-
-// A type whose arithmetic the laws below are about: an integer (wrapping) or a float.
-func is_real::<T>(): bool {
-    return is_integer::<T>() || is_float::<T>()
-}
 
 // The largest integer c for which doubling a rounded product commutes with rounding and 2c is
 // exactly representable: 2^(p - 1) for a significand of p bits.
@@ -66,36 +61,37 @@ func exact_limit::<T>(): float {
 // ---- Real numbers: the laws that are exact for the integers and for the floats ----
 
 /// `x * 1` is `x`.
-export rule mul_one::<T>(x: T) when is_real::<T>() { x * 1 => x }
+export rule mul_one::<T>(x: T) when is_integer::<T>() || is_float::<T>() { x * 1 => x }
 
 /// `x / 1` is `x`.
-export rule div_one::<T>(x: T) when is_real::<T>() { x / 1 => x }
+export rule div_one::<T>(x: T) when is_integer::<T>() || is_float::<T>() { x / 1 => x }
 
 /// `x - 0` is `x`.
-export rule sub_zero::<T>(x: T) when is_real::<T>() { x - 0 => x }
+export rule sub_zero::<T>(x: T) when is_integer::<T>() || is_float::<T>() { x - 0 => x }
 
 /// `-(-x)` is `x`.
-export rule neg_neg::<T>(x: T) when is_real::<T>() { -(-x) => x }
+export rule neg_neg::<T>(x: T) when is_integer::<T>() || is_float::<T>() { -(-x) => x }
 
 /// `x + x` is `x * 2`: doubling is exact in IEEE arithmetic for every value, including the
 /// infinities, the NaNs and the subnormals (the exponent grows by one, the significand is
 /// unchanged), and an integer wraps either way.
-export rule add_self::<T>(x: T) when is_real::<T>() { x + x => x * 2 }
+export rule add_self::<T>(x: T) when is_integer::<T>() || is_float::<T>() { x + x => x * 2 }
 
 /// `x * 1` is `x`, elementwise.
-export rule array_mul_one::<T>(x: T[..]) when is_real::<T>() { x * 1 => x }
+export rule array_mul_one::<T>(x: T[..]) when is_integer::<T>() || is_float::<T>() { x * 1 => x }
 
-/// `x / 1` is `x`, elementwise.
-export rule array_div_one::<T>(x: T[..]) when is_real::<T>() { x / 1 => x }
+/// `x / 1` is `x`, elementwise, for floats: the quotient of two integer arrays is a float array,
+/// so for an integer array the right side would be of another type.
+export rule array_div_one::<T>(x: T[..]) when is_float::<T>() { x / 1 => x }
 
 /// `x - 0` is `x`, elementwise.
-export rule array_sub_zero::<T>(x: T[..]) when is_real::<T>() { x - 0 => x }
+export rule array_sub_zero::<T>(x: T[..]) when is_integer::<T>() || is_float::<T>() { x - 0 => x }
 
 /// `-(-x)` is `x`, elementwise.
-export rule array_neg_neg::<T>(x: T[..]) when is_real::<T>() { -(-x) => x }
+export rule array_neg_neg::<T>(x: T[..]) when is_integer::<T>() || is_float::<T>() { -(-x) => x }
 
 /// `x + x` is `x * 2`, elementwise.
-export rule array_add_self::<T>(x: T[..]) when is_real::<T>() { x + x => x * 2 }
+export rule array_add_self::<T>(x: T[..]) when is_integer::<T>() || is_float::<T>() { x + x => x * 2 }
 
 // ---- Integers: wrapping arithmetic, every law is exact ----
 //
@@ -326,6 +322,10 @@ export rule array_combine_one_mixed::<T>(x: T[..], const c: T)
 
 /// `log(softmax(x))` is `log_softmax(x)`: rounding each probability becomes an absolute error in
 /// its log, and a probability that rounds to zero gives -inf where the true log-softmax is finite.
+#requires(refine_accuracy)
+export rule array_log_softmax_of_softmax(x: f32[..], const axis: int) {
+    log_array(softmax(x, axis)) => log_softmax(x, axis)
+}
 
 /// `log(1 + x)` is `log1p(x)`: `1 + x` rounds before the log, and for |x| below the spacing of 1
 /// the naive log is 0 and its relative error is 100%.
@@ -351,10 +351,13 @@ export rule float_expm1::<T>(x: T) when is_float::<T>() {
 // patterns, rewrite design 3). They are gaps in the engine, not in this file.
 
 /// The sigmoid chain `1 / (1 + exp(-x))` is `sigmoid(x)`. It is exactly the definition of
-/// `sigmoid` (`nn`), the same `exp` runs on both sides, the negation is exact, and the `+` and `/`
+/// `sigmoid` (`tensor`), the same `exp` runs on both sides, the negation is exact, and the `+` and `/`
 /// are the same IEEE operations in the same order, so the rewrite changes no bit
 /// (`rules.fusion_bit_identical`); what changes is the cost: four kernels and four passes over the
 /// data become one.
+export rule array_sigmoid_chain(x: f32[..]) {
+    1.0 / (1.0 + exp_array(-x)) => sigmoid(x)
+}
 
 // ---- the rule sets ----
 
@@ -381,10 +384,10 @@ export let distribution: Rule[] = [int_distribute, array_distribute]
 
 /// The accuracy laws, each behind `#requires(refine_accuracy)`: an unlicensed or `#strict`
 /// program is returned unchanged by them.
-export let accuracy_laws: Rule[] = [float_log1p, float_expm1]
+export let accuracy_laws: Rule[] = [array_log_softmax_of_softmax, float_log1p, float_expm1]
 
 /// The fusion laws.
-export let fusion_laws: Rule[] = []
+export let fusion_laws: Rule[] = [array_sigmoid_chain]
 
 // ---- the passes ----
 
@@ -472,22 +475,22 @@ func plus::<F>(r: Run<F>, next: Run<F>): Run<F> {
 
 // One application of `rules` on the result of `r`, at most `rounds` rounds, its cost added.
 func stage::<F>(r: Run<F>, rules: Rule[], rounds: int, strict: bool): Run<F>! {
-    return r.result->run<rules, rounds: rounds, strict: strict> -> (next) => plus(r, next)
+    return r.result->run<rules, rounds: rounds, strict: strict> -> (next: Run<F>) => plus(r, next)
 }
 
 // Whether the last application reached a fixpoint. An error stops the loop that asks.
 func settled::<F>(r: Run<F>!): bool {
-    return (r -> (x) => x.fixpoint) !! false
+    return (r -> (x: Run<F>) => x.fixpoint) !! false
 }
 
 // Whether `r` has not rewritten anything yet.
 func untouched::<F>(r: Run<F>!): bool {
-    return (r -> (x) => x.rewrites == 0) !! false
+    return (r -> (x: Run<F>) => x.rewrites == 0) !! false
 }
 
 // Whether `done` holds for the function `r` holds; an error stops the loop.
 func finished::<F>(r: Run<F>!, done: (q: F) => bool): bool {
-    return (r -> (x) => done(x.result)) !! true
+    return (r -> (x: Run<F>) => done(x.result)) !! true
 }
 
 /// `seq`: the stages once each, in the written order, each to a fixpoint; a stage that fails fails
@@ -498,7 +501,7 @@ func finished::<F>(r: Run<F>!, done: (q: F) => bool): bool {
 with <stages: Rule[][], rounds: int = 16, strict: bool = false>
 export func seq::<F>(f: F): Run<F>! when is_function::<F>() {
     return loop r = start(f) as Run<F>! for s in stages do
-        r -> (x) => stage(x, s, rounds, strict)
+        r -> (x: Run<F>) => stage(x, s, rounds, strict)
 }
 
 /// `first`: the stages tried in the written order, and the first one that rewrites something is
@@ -510,7 +513,7 @@ export func seq::<F>(f: F): Run<F>! when is_function::<F>() {
 with <stages: Rule[][], rounds: int = 16, strict: bool = false>
 export func first::<F>(f: F): Run<F>! when is_function::<F>() {
     return loop r = start(f) as Run<F>! for s in stages while untouched(r) do
-        r -> (x) => stage(x, s, rounds, strict)
+        r -> (x: Run<F>) => stage(x, s, rounds, strict)
 }
 
 /// `repeat`: one round of the rule set at a time, until a round applies nothing or `rounds`
@@ -522,7 +525,7 @@ export func first::<F>(f: F): Run<F>! when is_function::<F>() {
 with <rules: Rule[], rounds: int = 16, strict: bool = false>
 export func repeat::<F>(f: F): Run<F>! when is_function::<F>() {
     return loop r = start(f) as Run<F>! for i in 0..rounds while !settled(r) do
-        r -> (x) => stage(x, rules, 1, strict)
+        r -> (x: Run<F>) => stage(x, rules, 1, strict)
 }
 
 /// `until`: a round at a time, while `done` is false for the function; stops at a fixpoint, at
@@ -534,7 +537,7 @@ export func repeat::<F>(f: F): Run<F>! when is_function::<F>() {
 with <rules: Rule[], done: (q: F) => bool, rounds: int = 16, strict: bool = false>
 export func until::<F>(f: F): Run<F>! when is_function::<F>() {
     return loop r = start(f) as Run<F>! for i in 0..rounds while !finished(r, done) do
-        r -> (x) => stage(x, rules, 1, strict)
+        r -> (x: Run<F>) => stage(x, rules, 1, strict)
 }
 
 /// `alternate`: one round of `left`, then one round of `right`, until a full pair applies nothing
@@ -545,13 +548,13 @@ export func until::<F>(f: F): Run<F>! when is_function::<F>() {
 with <left: Rule[], right: Rule[], rounds: int = 16, strict: bool = false>
 export func alternate::<F>(f: F): Run<F>! when is_function::<F>() {
     return loop r = start(f) as Run<F>! for i in 0..rounds while !settled(r) do
-        r -> (x) => pair(x, left, right, strict)
+        r -> (x: Run<F>) => pair(x, left, right, strict)
 }
 
 // One round of `left` and one round of `right`, in that order; `fixpoint` says whether the pair
 // changed nothing, which ends `alternate`.
 func pair::<F>(r: Run<F>, left: Rule[], right: Rule[], strict: bool): Run<F>! {
-    return stage(r, left, 1, strict) -> (a) => stage(a, right, 1, strict) -> (b) => {
+    return stage(r, left, 1, strict) -> (a: Run<F>) => stage(a, right, 1, strict) -> (b: Run<F>) => {
         let out: Run<F> = {
             result: b.result,
             rewrites: b.rewrites,

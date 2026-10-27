@@ -681,7 +681,26 @@ bool Builder::isPassDeclaration(const GCT::node_ptr_t &gct) {
             uri = std::move(*tagged);
         }
         if (camel::core::OperatorTable::instance().find(uri).has_value()) {
-            return false;
+            // The operator is the declaration's only when the module declares the name once: a
+            // name declared again is an operator beside a pass of the same name (`export_model`),
+            // and the pass-shaped declaration is the pass.
+            size_t declared = 0;
+            const std::function<void(const GCT::node_ptr_t &)> count =
+                [&](const GCT::node_ptr_t &node) {
+                    if (node->type() == GCT::NodeKind::DECL && node->nativeDeclaration() &&
+                        node->name() == gct->name()) {
+                        ++declared;
+                    }
+                    for (size_t i = 0; i < node->size(); ++i) {
+                        count(node->at(i));
+                    }
+                };
+            if (unit_->tree != nullptr && unit_->tree->root() != nullptr) {
+                count(unit_->tree->root());
+            }
+            if (declared <= 1) {
+                return false;
+            }
         }
     }
     // The text the pipeline reads, normalized the same way: `is_function::<T>()` with any

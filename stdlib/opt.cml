@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * The optimization passes of the standard library written in Camel: `opt::fold`, `opt::cse` and
- * `opt::dce`. A pass is a function from a function to a function of the same type,
+ * The optimization passes of the standard library written in Camel: `opt::fold`, `opt::cse`,
+ * `opt::dce` and `opt::saturate`. A pass is a function from a function to a function of the same type,
  * `(f: F) => F!`, so it applies to one function, `loss->opt::fold->opt::cse`, and the pipeline
  * names it by its module: `camel prog.cml opt::fold std::nvm`. They are the meaning of the
  * native passes of the same names, `std::opt::fold`, `std::opt::cse` and `std::opt::dce`, which
@@ -24,6 +24,8 @@
 
 import { flatten, all, any } from array
 import { Node, Graph, Txn, NodeKind, graphs_of, nodes, inputs, with_inputs, value_users, id, kind, op, op_name, is_pure, is_anchor, is_written_slot, is_constant, type_of, type_name, region_of, permissions, tags, constant, open, replace, erase, eval, commit, abort } from graph
+import { saturate as saturate_rules } from rewrite
+import { algebra, distribution } from rules
 import { is_function } from types
 
 // ---- reading a node as the key of a comparison ----
@@ -266,4 +268,16 @@ func fold_rounds::<F>(f: F): F! sync {
 /// @example ((x: int): int => 1 + 2 + x)->fold
 export func fold::<F>(f: F): F! when is_function::<F>() {
     return if all_nodes(graphs_of(f))->any<evaluated> then fold_rounds(f) else f
+}
+
+// ---- saturation ----
+
+/// The rules library's laws, rearranging ones included, applied both ways to the writings of every
+/// value for at most `rounds` rounds; nothing is extracted, so the function keeps every writing the
+/// saturation found (`f->extract<nodes>` of `rules` chooses among them). With `strict` only the
+/// laws that need no permission are used, as `safe_fp=true` does for `std::opt`.
+/// @example ((x: int): int => x * 3 + x * 4)->saturate
+with <rounds: int = 6, strict: bool = false>
+export func saturate::<F>(f: F): F! when is_function::<F>() {
+    return f->saturate_rules<concat(algebra, distribution), rounds: rounds, strict: strict>
 }

@@ -96,32 +96,11 @@ passParamsOf(const camel::core::type::FunctionType &type, std::vector<CamelParam
     return std::nullopt;
 }
 
-/// Whether `type` has the signature of a pass: one ordinary parameter of type Program, any
-/// number of `with` parameters of a pass parameter type, result `Program!`. `params` receives
-/// the `with` parameters; `problem` says what is wrong when it has not.
-bool hasPassSignature(
-    const camel::core::type::FunctionType &type, std::vector<CamelParam> &params,
-    std::string &problem) {
-    if (type.normTypesCount() != 1 || type.normTypeAt(0)->toString() != "Program") {
-        problem = "a pass is a function (p: Program) => Program! (its `with` parameters are its parameters)";
-        return false;
-    }
-    const auto *result = camel::core::type::asFallible(type.exitType());
-    if (result == nullptr || result->payloadType()->toString() != "Program") {
-        problem = "a pass returns Program! (the program it produced)";
-        return false;
-    }
-    if (auto why = passParamsOf(type, params)) {
-        problem = *why;
-        return false;
-    }
-    return true;
-}
-
-/// Whether `type` has the signature of a pass over a function: one ordinary parameter of a type
-/// variable `F`, any number of `with` parameters of a pass parameter type, result `F!`. A pass is a
-/// function transform `(f: F) => F!` (design principles 9.1); `Program`, the snapshot, is the
-/// implementation's own and is not on the interface.
+/// Whether `type` has the signature of a pass: one ordinary parameter of a type variable `F`, any
+/// number of `with` parameters of a pass parameter type, result `F!`. A pass is a function
+/// transform `(f: F) => F!` (design principles 9.1); `Program`, the snapshot, is the
+/// implementation's own and is not on the interface. `params` receives the `with` parameters;
+/// `problem` says what is wrong when it has not.
 bool hasGenericPassSignature(
     const camel::core::type::FunctionType &type, std::vector<CamelParam> &params,
     std::string &problem) {
@@ -141,16 +120,6 @@ bool hasGenericPassSignature(
     return true;
 }
 
-bool hasPassSignature(
-    const camel::runtime::GCGraph &graph, std::vector<CamelParam> &params, std::string &problem) {
-    const auto *type = graph.funcType();
-    if (type == nullptr) {
-        problem = "a pass is a function (p: Program) => Program! (its `with` parameters are its parameters)";
-        return false;
-    }
-    return hasPassSignature(*type, params, problem);
-}
-
 /// The passes a module provides, by name: the pass declarations of its `.cml` file, which is what
 /// `<module>::<name>` can name . "Which passes it provides" is
 /// read from the declaration and from nothing else: an exported function is a pass because the
@@ -163,7 +132,7 @@ bool hasPassSignature(
 /// the single statement of a native module's surface, and `Context` sets it exactly where a `.cml`
 /// is found beside the `.cmo` it declares (6.4, step 1). A module written in Camel is read the
 /// older way, from the functions it exports: it declares its passes itself, and there the exported
-/// `(p: Program) => Program!` function is its pass — the shape is the whole declaration.
+/// `(f: F) => F!` function is its pass — the shape is the whole declaration.
 std::vector<std::string> passNamesOf(
     const camel::core::module::UserDefinedModule &module, const std::string &name,
     const context_ptr_t &ctx) {
@@ -175,8 +144,7 @@ std::vector<std::string> passNamesOf(
             }
             std::vector<CamelParam> params;
             std::string problem;
-            if (hasPassSignature(*function.type, params, problem) ||
-                (params.clear(), hasGenericPassSignature(*function.type, params, problem))) {
+            if (hasGenericPassSignature(*function.type, params, problem)) {
                 names.push_back(function.name);
             }
         }
@@ -216,33 +184,29 @@ class CamelPass final : public GraphIRPass {
   public:
     CamelPass(
         const context_ptr_t &ctx, std::string module, std::string function,
-        std::vector<CamelParam> params, const PassArgs &args, bool overFunction)
+        std::vector<CamelParam> params, const PassArgs &args)
         : GraphIRPass(ctx),
           module_(std::move(module)),
           function_(std::move(function)),
           params_(std::move(params)),
-          args_(args),
-          overFunction_(overFunction) {}
+          args_(args) {}
 
     const Program *apply(const Program *program, std::ostream &os) override {
         (void)os;
         std::string problem;
-        // A pass over a function is generic in the function (`(f: F) => F!`): the program is
-        // offered to it as its root function, and the instance for that function's type is the
-        // one that runs. The snapshot stays on this side of the interface.
-        camel::core::type::FunctionType *expected = nullptr;
-        if (overFunction_) {
-            const camel::runtime::GCGraph *root = program->root();
-            ASSERT(root != nullptr && root->funcType() != nullptr, "A program has a root function.");
-            camel::core::type::Type *subject = root->funcType();
-            camel::core::type::FunctionTypeFactory factory;
-            for (const CamelParam &param : params_) {
-                factory.addWithArg(param.name, camel::core::type::Type::create(param.code), false);
-            }
-            factory.addNormArg("f", subject, false);
-            factory.setExitType(camel::core::type::TupleType::fallible(subject));
-            expected = factory.build();
+        // A pass is generic in the function (`(f: F) => F!`): the program is offered to it as its
+        // root function, and the instance for that function's type is the one that runs. The
+        // snapshot stays on this side of the interface.
+        const camel::runtime::GCGraph *root = program->root();
+        ASSERT(root != nullptr && root->funcType() != nullptr, "A program has a root function.");
+        camel::core::type::Type *subject = root->funcType();
+        camel::core::type::FunctionTypeFactory factory;
+        for (const CamelParam &param : params_) {
+            factory.addWithArg(param.name, camel::core::type::Type::create(param.code), false);
         }
+        factory.addNormArg("f", subject, false);
+        factory.setExitType(camel::core::type::TupleType::fallible(subject));
+        camel::core::type::FunctionType *expected = factory.build();
         std::optional<camel::core::error::DiagLabel> where;
         const auto tool = context_->definitions().libraryFunction(
             module_, function_, problem, &where, nullptr, expected);
@@ -291,10 +255,10 @@ class CamelPass final : public GraphIRPass {
             }
         }
         NodeVMSchedPass vm(context_);
-        slot_t argument = camel::core::rtdata::toSlot(const_cast<Program *>(program));
-        if (overFunction_) {
-            // The root function of the program: it captures nothing, since the root graph holds
-            // the values of the top level itself.
+        // The root function of the program: it captures nothing, since the root graph holds the
+        // values of the top level itself.
+        slot_t argument = 0;
+        {
             camel::core::mm::NoCollectionScope noCollection;
             static const camel::core::type::TupleType *noClosure =
                 camel::core::type::TupleType::create();
@@ -312,7 +276,7 @@ class CamelPass final : public GraphIRPass {
             std::span(&argument, 1),
             std::span<const slot_t>(withArgs));
         if (camel::core::rtdata::isErrorValue(result)) {
-            // The pass is `(p: Program) => Program!` (design principles 9.1): it failed, and what
+            // The pass is `(f: F) => F!` (design principles 9.1): it failed, and what
             // it returned is an error value like any other. It is handed to the driver, which
             // stops the pipeline there and reports it the way an error value nobody handled is
             // (3.9) -- the same report the value an entry graph returns gets. The module and the
@@ -320,24 +284,17 @@ class CamelPass final : public GraphIRPass {
             failWithErrorValue(result);
             return nullptr;
         }
-        const Program *produced = nullptr;
-        if (overFunction_) {
-            // The function the pass handed back is the root of a program of its own (a commit
-            // makes one); that program is what the pipeline goes on with.
-            const auto *function = camel::core::rtdata::fromSlot<::Function *>(
-                camel::core::rtdata::falliblePayload(result));
-            produced = function->program();
-            if (produced->root() == nullptr || produced->root()->id() != function->graphId()) {
-                failWithErrorValue(camel::core::rtdata::makeError(
-                    "GraphInvalid",
-                    "the function a pass returns must be the root function it was given, "
-                    "transformed",
-                    "<" + module_ + "::" + function_ + ">"));
-                return nullptr;
-            }
-        } else {
-            produced = camel::core::rtdata::fromSlot<const Program *>(
-                camel::core::rtdata::falliblePayload(result));
+        // The function the pass handed back is the root of a program of its own (a commit makes
+        // one); that program is what the pipeline goes on with.
+        const auto *function = camel::core::rtdata::fromSlot<::Function *>(
+            camel::core::rtdata::falliblePayload(result));
+        const Program *produced = function->program();
+        if (produced->root() == nullptr || produced->root()->id() != function->graphId()) {
+            failWithErrorValue(camel::core::rtdata::makeError(
+                "GraphInvalid",
+                "the function a pass returns must be the root function it was given, transformed",
+                "<" + module_ + "::" + function_ + ">"));
+            return nullptr;
         }
         // Only the installed program is replaced. A pass over a private program (onnx.export's
         // working copy, a specialization's detached snapshot) leaves the context's program as it
@@ -353,8 +310,47 @@ class CamelPass final : public GraphIRPass {
     std::string function_;
     std::vector<CamelParam> params_;
     PassArgs args_;
-    bool overFunction_ = false;
 };
+
+/// A Camel pass says which tags it reads with `#reads(...)` on its function: that is what
+/// makes a tag's facts read, exactly as a C++ module's `read_by` does (design principles
+/// 6.2). The module is the one the pass was compiled from (already in the context).
+void declareReads(const context_ptr_t &ctx, const std::string &module, const std::string &function) {
+    try {
+        if (const auto owner = ctx->importModule(module)) {
+            const auto facts =
+                camel::core::tag::ofDeclaration(*owner, Reference(function));
+            const auto value = camel::core::attr::valueOf(facts, camel::core::attr::key("reads"));
+            if (value != camel::core::attr::kNoValue) {
+                const camel::core::attr::Value decoded = camel::core::attr::value(value);
+                const auto declare = [&](const std::string &writen) {
+                    // The reader is recorded under the tag's qualified name, which is what a use
+                    // of it in a program names (the program writes the short name).
+                    std::string key = writen;
+                    if (const auto id = camel::core::tag::find(module, writen)) {
+                        key = camel::core::tag::get(*id)->name;
+                    } else if (const auto core = camel::core::tag::find(writen)) {
+                        key = camel::core::tag::get(*core)->name;
+                    }
+                    camel::core::tag::declareTagReader(key, module + "::" + function);
+                };
+                if (decoded.kind == camel::core::attr::ValueKind::Symbol) {
+                    declare(decoded.text);
+                } else if (decoded.kind == camel::core::attr::ValueKind::Tuple) {
+                    for (const auto item : decoded.items) {
+                        const camel::core::attr::Value tag = camel::core::attr::value(item);
+                        if (tag.kind == camel::core::attr::ValueKind::Symbol) {
+                            declare(tag.text);
+                        }
+                    }
+                }
+            }
+        }
+    } catch (const std::exception &) {
+        // The declaration cannot be read here; the pass still runs and the tag simply has no
+        // reader recorded for it (the pipeline warns when that leaves it unread).
+    }
+}
 
 } // namespace
 
@@ -401,72 +397,22 @@ void registerCamelPass(
                 }
                 generic.make = [module, function, genericParams](
                                    const context_ptr_t &ctx, const PassArgs &args) {
-                    return std::make_unique<CamelPass>(
-                        ctx, module, function, genericParams, args, true);
+                    return std::make_unique<CamelPass>(ctx, module, function, genericParams, args);
                 };
+                declareReads(ctx, module, function);
                 registerModulePass(module + "::" + function, std::move(generic));
                 return;
             }
         }
         return;
     }
-    std::vector<CamelParam> params;
-    if (!hasPassSignature(*tool->graph, params, problem)) {
-        problem = std::format("'{}::{}' is not a pass: {}.", module, function, problem);
-        return;
-    }
-    PassDescriptor descriptor;
-    // The declaration in the module's `.cml` file is the pass's documentation and its
-    // parameters; the signature is read here only as the fallback when it has none.
-    for (const CamelParam &param : params) {
-        descriptor.params.push_back(PassParam{
-            param.name,
-            param.passType,
-            zeroOf(param.passType),
-            "the `with` parameter '" + param.name + "' of " + module + "::" + function,
-            true});
-    }
-    descriptor.make = [module, function, params](const context_ptr_t &ctx, const PassArgs &args) {
-        return std::make_unique<CamelPass>(ctx, module, function, params, args, false);
-    };
-    // A Camel pass says which tags it reads with `#reads(...)` on its function: that is what
-    // makes a tag's facts read, exactly as a C++ module's `read_by` does (design principles
-    // 6.2). The module is the one the pass was compiled from (already in the context).
-    try {
-        if (const auto owner = ctx->importModule(module)) {
-            const auto facts =
-                camel::core::tag::ofDeclaration(*owner, Reference(function));
-            const auto value = camel::core::attr::valueOf(facts, camel::core::attr::key("reads"));
-            if (value != camel::core::attr::kNoValue) {
-                const camel::core::attr::Value decoded = camel::core::attr::value(value);
-                const auto declare = [&](const std::string &writen) {
-                    // The reader is recorded under the tag's qualified name, which is what a use
-                    // of it in a program names (the program writes the short name).
-                    std::string key = writen;
-                    if (const auto id = camel::core::tag::find(module, writen)) {
-                        key = camel::core::tag::get(*id)->name;
-                    } else if (const auto core = camel::core::tag::find(writen)) {
-                        key = camel::core::tag::get(*core)->name;
-                    }
-                    camel::core::tag::declareTagReader(key, module + "::" + function);
-                };
-                if (decoded.kind == camel::core::attr::ValueKind::Symbol) {
-                    declare(decoded.text);
-                } else if (decoded.kind == camel::core::attr::ValueKind::Tuple) {
-                    for (const auto item : decoded.items) {
-                        const camel::core::attr::Value tag = camel::core::attr::value(item);
-                        if (tag.kind == camel::core::attr::ValueKind::Symbol) {
-                            declare(tag.text);
-                        }
-                    }
-                }
-            }
-        }
-    } catch (const std::exception &) {
-        // The declaration cannot be read here; the pass still runs and the tag simply has no
-        // reader recorded for it (the pipeline warns when that leaves it unread).
-    }
-    registerModulePass(module + "::" + function, std::move(descriptor));
+    // A function that was built as it stands, with no type variable to bind to the program's
+    // function, is not a pass.
+    problem = std::format(
+        "'{}::{}' is not a pass: a pass is a function (f: F) => F! of a function f (its `with` "
+        "parameters are its parameters).",
+        module,
+        function);
 }
 
 } // namespace camel::execute

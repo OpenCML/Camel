@@ -95,6 +95,7 @@ export type CheckReport = { rows: CheckRow[] }
 /// @fails error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow
 /// @example-fragment a rule set comes from the caller
 /// @example f->rewrite<rules>
+#op('rewrite:rewrite')
 with <rules: Rule[], strict: bool = false>
 export func rewrite::<F>(f: F): F! when is_function::<F>()
 
@@ -103,6 +104,7 @@ export func rewrite::<F>(f: F): F! when is_function::<F>()
 /// @fails error value `RuleInvalid` when a rule does not compile
 /// @example-fragment a rule set comes from the caller
 /// @example f->saturate<rules, rounds: 20>
+#op('rewrite:saturate')
 with <rules: Rule[], rounds: int = 6, strict: bool = false>
 export func saturate::<F>(f: F): F! when is_function::<F>()
 
@@ -110,6 +112,7 @@ export func saturate::<F>(f: F): F! when is_function::<F>()
 /// a writing is `cost(o, inputs)`: the operator and the costs of the writings of its inputs.
 /// @example-fragment the cost function comes from `rules`
 /// @example f->extract<rules::nodes>
+#op('rewrite:extract')
 with <cost: (o: Op, inputs: float[]) => float>
 export func extract::<F>(f: F): F! when is_function::<F>()
 
