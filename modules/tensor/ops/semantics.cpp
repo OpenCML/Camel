@@ -107,7 +107,8 @@ const std::unordered_map<std::string_view, OperatorSemantics> &declarations() {
                 f32,
                 kApprox,
                 "a / b per element, rounded once in f32 (IEEE: x / 0 is an infinity or NaN, not "
-                "a fault)"));
+                "a fault); integer operands give the quotient truncated towards zero, and a "
+                "zero divisor is a fault"));
         t.emplace(
             "maximum",
             exactFloat(

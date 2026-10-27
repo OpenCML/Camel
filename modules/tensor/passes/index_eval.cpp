@@ -10,6 +10,7 @@
  */
 
 #include "index_eval.h"
+#include "camel/utils/int_div.h"
 
 #include "../interop.h"
 #include "../ops/indexing.h"
@@ -437,7 +438,7 @@ class ArgList final : public ArgsView {
 /// The value of an elementwise operator at one point, from its numeric declaration's
 /// algorithm (semantics.cpp). exp and log are bounded: their reference is the f64 function,
 /// returned as an f64 value that the comparison holds to the declared ulp bound.
-std::optional<Num> pointwise(std::string_view op, const std::vector<Num> &v) {
+std::optional<Num> pointwise(std::string_view op, const std::vector<Num> &v, bool &fault) {
     const Num &a = v[0];
     if (v.size() == 2) {
         const Num &b = v[1];
@@ -449,8 +450,15 @@ std::optional<Num> pointwise(std::string_view op, const std::vector<Num> &v) {
             if (op == "maximum") return f32(ieeeMaximum(a.f, b.f));
             if (op == "minimum") return f32(ieeeMinimum(a.f, b.f));
         } else if (a.type == TypeCode::Int64) {
-            // Division produces f32: both operands converted first.
-            if (op == "divide") return f32(convert(a, TypeCode::Float32).f / convert(b, TypeCode::Float32).f);
+            // The quotient of the language: truncated towards zero, the smallest value over -1
+            // wrapping (int_div.h); a zero divisor is a fault, not an infinity.
+            if (op == "divide") {
+                if (b.i == 0) {
+                    fault = true;
+                    return i64(0);
+                }
+                return i64(camel::utils::quotient<int64_t>(a.i, b.i));
+            }
             if (op == "add") return i64(wrapAdd(a.i, b.i));
             if (op == "subtract") return i64(wrapAdd(a.i, wrapMul(-1, b.i)));
             if (op == "multiply") return i64(wrapMul(a.i, b.i));
@@ -661,8 +669,14 @@ Evaluation evaluate(
                         ev.unsound.push_back("a unique write is written twice");
                         return ev;
                     }
+                    bool pointFault = false;
                     std::optional<Num> v =
-                        isMove(op) ? std::optional(convert(values.at(0), moveDtype)) : pointwise(op, values);
+                        isMove(op) ? std::optional(convert(values.at(0), moveDtype))
+                                   : pointwise(op, values, pointFault);
+                    if (pointFault) {
+                        ev.fault = true;
+                        return ev;
+                    }
                     if (!v) {
                         ev.unsound.push_back("no scalar function for this operator and dtype");
                         return ev;

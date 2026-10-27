@@ -120,6 +120,21 @@ Not in this reference: the profiler (`perf`).
 The operators behind the language's own operators (`+`, `==`, `[]`, `??`, assignment, ...) are
 registered under reserved names (`__add__`, ...) and are not listed here.
 
+These declarations are compiled with every program: a name they write that does not exist fails
+every program, with its location here. They give a call's arguments their expected types (so a
+lambda passed to `filter` needs no parameter types), --verify-ops checks them against the
+operators the core registers, and docs/stdlib-reference.md is generated from them
+(scripts/stdlib-reference.mjs).
+
+The parameter names written here are the names a call binds to by name (`len(x: xs)`), and they
+are the ones the reference page prints: `--verify-ops` compares them with the names of the
+registered rules, position by position, in both the `with` list and the ordinary one. Until
+these declarations also decide which function a call matches (design principles, "the single
+source of a signature"), the C++ rules still do, so the two have to stay equal, and a difference
+is a test failure rather than a silent drift. The names here are the ones to keep:
+the reference page is generated from them, and a position a call names is the position this file
+names (stdlib-conventions.cn.md, section 4).
+
 ### Memory
 
 Data blocks (design principles 10.5): the process-wide counters, read between two operations.
