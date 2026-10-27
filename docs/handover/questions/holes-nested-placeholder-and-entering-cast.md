@@ -12,7 +12,7 @@
 - `rules.*` 12：`test/cases/modules/rules/schedulers.cml:63` 的 `p->seq<[[bump_one], [bump_ten]], false>`（`stdlib/rules.cml:430` 的文档示例同形）逐字 `Cannot insert data of type 'Rule' into a(n) array with element type 'Rule[]'.`
 - `surface.member_chain` 4（nvm/fvm/jit/prl）、`si_tuple_return` 1、`collfuzz.quick` 1、`entering.positions` 10（见第 2 条，两次实验都红）、`context.argument_name` 1（钉的 `12:17` 变成指洞的 `ElementTypeMismatch`、列 `19`；`test/plans/feat/compile/literal_context.plan.toml:599`，这正是裁定自己要改的那条读数，不算缺陷）。
 
-**机制**（都在 GCT 侧，本轮车道没动）：嵌套字面量在 GIR 里是外层字面量的一个"洞"。`src/compile/gct/builder.cpp:4403` 把每个算出来的元素（含嵌套字面量）包成 `RefData` 占位符（位置全空时走 `:3968` 的 `allComputed`；工厂在 `:250` 的 `makeRefData`）；GIR 在 `src/compile/gir/builder_expr.cpp:136` 用占位符的名字找节点、`:138` 取**那个节点的类型**当洞的类型。那个节点是嵌套字面量的构建节点，类型是**叶子**：`((a, b), (b, a))` 的元素 0 记成 `int`，而位置元素型是 `(int, float)`，于是 `builder_control.cpp:1020`/`:1125` 的 `assignableFrom` 必然判否。`wroteAnElement` 今天正好挡住这一类。
+**机制**（都在 GCT 侧，本轮车道没动）：嵌套字面量在 GIR 里是外层字面量的一个"洞"。`src/compile/gct/builder.cpp:4403` 把每个算出来的元素（含嵌套字面量）包成 `RefData` 占位符（位置全空时走 `:3967` 的 `allComputed` 分支，占位符建在 `:3968`；工厂在 `:250` 的 `makeRefData`）；GIR 在 `src/compile/gir/builder_expr.cpp:136` 用占位符的名字找节点、`:138` 取**那个节点的类型**当洞的类型。那个节点是嵌套字面量的构建节点，类型是**叶子**：`((a, b), (b, a))` 的元素 0 记成 `int`，而位置元素型是 `(int, float)`，于是 `builder_control.cpp:1028`/`:1133` 的 `assignableFrom` 必然判否。`wroteAnElement` 今天正好挡住这一类。
 
 - **问**：给占位符带上自己的类型（构建节点/`RefData` 上记下嵌套字面量的类型，GIR 读它），还是让嵌套字面量不进 `CompositeData::holes()`（`include/camel/core/data/composite/array.h:38`、`tuple.h:37` 的 `holeIndices_`，即 `builder.cpp:4403` 不包成占位符、按"写下的元素"放进字面量）？两条都要动 `src/compile/gct/**` 与 `include/camel/core/data/**`。
 
