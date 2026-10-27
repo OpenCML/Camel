@@ -1,7 +1,6 @@
 /**
  * Verifies tuple values survive a small pipeline of calls, indexing, and reconstruction under JIT execution.
  */
-module jit_tuple_pipeline
 
 type Signal = (int, int)
 

@@ -4,7 +4,6 @@
  * consumer takes apart -- the element alone is not the pull. The probe reads the type back
  * out of a declared position, where the compiler names it.
  */
-module stream_step_value_pull
 
 func count(n: int): int.. {
     return step(n)

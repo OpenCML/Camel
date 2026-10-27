@@ -2,7 +2,6 @@
  * Nested closures that capture a var: the capture is a reference, so both closures and the
  * function that declared the variable see every write.
  */
-module closure_var
 
 func main(): int sync {
     var total = 0

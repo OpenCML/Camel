@@ -2,7 +2,6 @@
  * The declaration of `this:zen` takes no ordinary argument: an extra one is refused at the call,
  * and the overload the message lists is the declaration's (step 10).
  */
-module this_arity
 
 import { zen } from this
 

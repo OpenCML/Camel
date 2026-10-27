@@ -1,7 +1,7 @@
 error[SyntaxDiag::MissingInitializer]: The declaration of 'x' has no value.
-  --> <ROOT>/test/cases/compile/diag_render/syntax_missing_initializer.cml:4:9
+  --> <ROOT>/test/cases/compile/diag_render/syntax_missing_initializer.cml:2:9
    |
- 4 |     let x
+ 2 |     let x
    |         ^
 help: A declaration binds a name to a value: let x = <value>, or with a type: let x: <type> = <value>.
 

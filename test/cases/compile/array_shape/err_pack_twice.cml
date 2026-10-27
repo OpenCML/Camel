@@ -1,5 +1,4 @@
 // One array type has one pack: a second one says the same thing twice.
-module array_shape_err_pack_twice
 
 func bad(x: f32[..a, ..b]): int {
     return 0

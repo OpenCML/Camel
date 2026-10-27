@@ -3,7 +3,6 @@
  * a format gives the moment its fields name in UTC, and a text that does not have the format is an
  * error value, not a fault.
  */
-module utc_text
 
 import { strftime, strptime } from time
 

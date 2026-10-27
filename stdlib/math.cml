@@ -18,7 +18,6 @@
 //   - `// value` records a constant the C++ module exports; a value has no declaration to write,
 //     and the C++ module remains the one source of the value itself.
 
-module math
 
 // ---- constants ----
 // Values the module exports (design principles 10.1), written without parentheses.

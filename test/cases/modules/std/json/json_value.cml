@@ -4,7 +4,6 @@
  * The program looks into a `Json` with the operators of the json module, each of which gives a
  * value of a definite type, and a missing member or a value of another kind is null.
  */
-module json_value
 
 import { Json, decode, decode_as, encode, kind, is_null, get, as_bool, as_int, as_float, as_string, as_array, as_object } from json
 

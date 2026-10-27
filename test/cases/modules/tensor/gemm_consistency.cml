@@ -2,7 +2,6 @@
  * Cross-checks blocked GEMM (odd sizes, K beyond one cache block, edge tiles)
  * against a broadcast-multiply-and-reduce formulation of the same product.
  */
-module gemm_consistency
 
 import {
     random, seed, unsqueeze, sum, abs, gemm_backend

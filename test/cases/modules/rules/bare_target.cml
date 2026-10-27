@@ -4,7 +4,6 @@
  * zero coefficient (`c = -1`, where `c + 1` is zero) and a mixed pair that needs the finite_math
  * grant. `wrap` checks the i32 sum wraps like the program does.
  */
-module bare_target
 
 func i32_combine_one(x: i32): i32 { return x * 3 + x }
 func i32_one_combine(x: i32): i32 { return x + x * 3 }

@@ -16,7 +16,6 @@
  * 0.0 -- and red if a rule stops converting and the accumulator refuses instead (the line is then
  * missing and the process exits 1).
  */
-module grad_scalar_width
 
 import { new, sum, where } from tensor
 import { with_grad } from autodiff

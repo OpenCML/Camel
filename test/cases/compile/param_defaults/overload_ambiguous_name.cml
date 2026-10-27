@@ -3,7 +3,6 @@
  * the other it is the second, so `a` names no one parameter of `f` and the call is refused
  * (design principles 4.4).
  */
-module param_overload_ambiguous_name
 
 func f(a: int, b: int): int {
     return a * 10 + b

@@ -3,7 +3,6 @@
 /// the device back end refuses the shape, and the run reports it instead of replaying the graph
 /// on the host (GPU design 6.1). The compile pass defers this case on purpose: shows that a
 /// shape the types do not fix may still compile with the actual arguments.
-module gpu_nofallback_runtime
 
 import { reshape } from tensor
 import { run_preferred_resident, download } from tiles

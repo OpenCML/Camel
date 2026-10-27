@@ -4,7 +4,6 @@
  * is the library's pass now, so these are the observables that say so: each function's graph
  * keeps no operator for the law that fired, while the printed values stay what the source says.
  */
-module algebra_library
 import tensor
 
 

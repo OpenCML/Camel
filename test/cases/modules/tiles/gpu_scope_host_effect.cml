@@ -22,7 +22,6 @@
 ///
 /// Red when: the scope is refused for the effect, the effect does not run (nothing is printed), or
 /// the observation point is not transferred.
-module tiles_gpu_scope_host_effect
 
 import { reshape, sum } from tensor
 

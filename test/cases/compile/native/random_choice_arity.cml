@@ -2,7 +2,6 @@
  * `rand:choice` is declared with one array argument: a second one is refused at the call, and the
  * overload the message lists is the declaration's (bucket 1).
  */
-module random_choice_arity
 
 import { choice } from random
 

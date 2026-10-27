@@ -9,7 +9,6 @@
  * to load. The lowering writes every one of these as Gemm (rank 2) or Einsum (batched), so the
  * model opens and runs; ort_grad_matmul_batched.py checks the values against NumPy.
  */
-module export_grad_matmul_batched
 
 import { reshape, sum } from tensor
 import { with_grad } from autodiff

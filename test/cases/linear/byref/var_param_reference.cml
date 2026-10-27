@@ -20,7 +20,6 @@
  *            first receives the value the variable holds at the call (the principles do not
  *            say whether it should alias; see the open questions), the second the variable
  */
-module var_param_reference
 
 type Point = { x: int, y: int }
 

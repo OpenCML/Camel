@@ -3,7 +3,6 @@
  * old C++ resolver's unchecked count is not reachable through the declaration (
  * The declaration's own signature is what the message lists.
  */
-module random_sample_count_type
 
 import { sample } from random
 

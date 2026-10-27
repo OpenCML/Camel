@@ -15,7 +15,6 @@
  *
  * All of them resolve, so the program loads and runs.
  */
-module dependent_names
 
 import { is_integer } from types
 

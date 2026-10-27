@@ -17,7 +17,6 @@
  * parameter `filename?: string` either, which is why the two arities are separate.
  */
 
-module pyplot
 
 /// Draws the values of `data` and writes the image to `filename` (`plot.png` when it is omitted).
 /// `data` may be an `i32`, `int`, `f32` or `float` array; an empty array is drawn as an empty

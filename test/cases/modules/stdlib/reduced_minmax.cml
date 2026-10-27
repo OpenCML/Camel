@@ -56,7 +56,6 @@
  * overloads are the same `minOf`/`maxOf` (modules/math/minmax.h), which is where the NaN rule is
  * written once for every float type.
  */
-module stdlib_reduced_minmax
 
 import { abs, max as math_max, min as math_min } from math
 import { max, min, sum } from array

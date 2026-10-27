@@ -4,7 +4,6 @@
  * stream of the concrete element (design principles 5.4 -- the library's `unfold` is exactly such
  * a generic function, and this pins the reading on its own).
  */
-module stream_generic
 
 func count(n: int): int.. {
     return step(n)

@@ -2,7 +2,6 @@
 /// shape: `@` takes rank >= 2, and these static types make the right operand rank 1. The host
 /// computes it, so the scope would silently fall back there; the compiler refuses instead.
 /// `test/cases/gpu/nofallback/host.cml` is the same program without the tag.
-module gpu_nofallback_refused_shape
 
 import { reshape, sum } from tensor
 

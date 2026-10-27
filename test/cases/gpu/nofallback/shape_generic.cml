@@ -2,7 +2,6 @@
 /// template cannot be built (the parameter has no static shape), and the run retries with the
 /// actual argument shapes before it decides. The retry must still produce the device program —
 /// a `#gpu` scope may not be refused for a shape it never had at compile time.
-module gpu_nofallback_shape_generic
 
 import { reshape, sum } from tensor
 import { run_preferred_resident, download } from tiles

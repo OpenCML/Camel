@@ -1,5 +1,3 @@
-module specialization_survives_the_round
-
 // std::opt simplifies in rounds. Each round specializes the calls it can bind, folds what that
 // made constant, and inlines; a specialization belongs to the program, so a later round that
 // needs the same (function, values) gets the copy back instead of making a second one -- as long

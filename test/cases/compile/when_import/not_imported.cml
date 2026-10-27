@@ -3,7 +3,6 @@
  * uses it without importing it. The condition of `when_import_unimported_user` resolves in that
  * module, which does not see `predicates`, so the call is reported as not imported.
  */
-module when_import_not_imported
 
 import predicates
 import unimported_user

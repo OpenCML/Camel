@@ -5,7 +5,6 @@
  * resources and every pair that must keep its order; `std::gir` then translates the graph, so
  * the program is not executed (the runner gives the process a pipe, not a terminal).
  */
-module main
 
 import { get_chars, set_terminal_raw_mode } from io
 

@@ -3,7 +3,6 @@
  * indexing, comparison, `&` and `|` on types of the program, next to the built-in overloads
  * of the same operators; `+=` on a type of the program is `x = x + y` through its `+`.
  */
-module basic
 
 type Mask = { bits: int }
 type Vec = { x: float, y: float }

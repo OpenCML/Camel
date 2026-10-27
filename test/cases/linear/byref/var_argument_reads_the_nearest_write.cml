@@ -7,7 +7,6 @@
  * own value -- so the callee still writes the one cell of the variable, and `a` is 2 when it is
  * read back.
  */
-module var_argument_reads_the_nearest_write
 
 func bump(var x: int) sync {
     x = x + 1

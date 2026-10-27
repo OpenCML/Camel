@@ -9,7 +9,6 @@
  *   camel transformer_step.cml --arg steps=20 --arg lr=0.01 std::profile std::nvm
  */
 
-module perf_transformer_step
 
 import { mean, relu, softmax, sqrt, sum, transpose, zeros } from tensor
 import { with_grad } from autodiff

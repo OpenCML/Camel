@@ -7,7 +7,6 @@
  * std::opt::inline, std::opt, std::prl): the call does run.
  * See README.md, "For the owner to decide", J2.
  */
-module bare_arm_var_call_warning
 
 func wr(var c: int, x: int): int sync {
     c += x

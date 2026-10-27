@@ -5,7 +5,6 @@
  * 9.9). Its twin `loop_grad_parameter_array.cml` -- the same loop body over an array built from
  * the parameter -- has both. The gradient of w + w * (1 + 2 + 3) at 2 is 7.
  */
-module loop_grad_literal_array
 
 import { grad } from autodiff
 

@@ -1,6 +1,5 @@
 // A trailing pack stands for the dimensions the type does not name: `..` anonymously, `..rest`
 // with a name a call may bind. A rank-2 array is written `T[3, 4]`, never `T[][]`.
-module array_shape_pack
 
 func rankAtLeastTwo(x: float[3, ..rest]): int {
     return 0

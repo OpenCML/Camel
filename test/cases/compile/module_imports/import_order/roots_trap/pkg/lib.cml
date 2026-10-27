@@ -1,7 +1,6 @@
 /// trap 3: `pkg/lib.cml` beside the entry program itself. The entry's `import pkg.helper`
 /// finds the root's library, and that library's `import lib` must not fall back to this file: the
 /// entry directory is not a module root. Value 9 is never printed.
-module lib
 
 export func n(): int {
     return 9

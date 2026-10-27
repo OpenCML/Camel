@@ -8,7 +8,6 @@
  * `with <k: f32>` declared, `half<3>` still takes the literal as an f32. A name still never
  * converts (`err_context_argument_name`).
  */
-module partial_application_overload_choice
 
 with <k: int>
 func scale(x: int): int { return x * k }

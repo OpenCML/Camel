@@ -1,6 +1,5 @@
 // Three elements written where the parameter states four: the literal's elements are known here,
 // so the length is decided here rather than at the call.
-module array_shape_err_literal_length
 
 func count(x: f32[4]): int {
     return len(x)

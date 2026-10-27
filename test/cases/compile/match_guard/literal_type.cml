@@ -4,7 +4,6 @@
  * for 3.0 and not for 3 of some other type. The comparison a guarded case makes is the `==` of
  * the value's own type, as it is in the branch that dispatches by case value.
  */
-module match_guard_literal_type
 
 func kind(x: f32): string {
     return match x {

@@ -7,7 +7,6 @@
  * the fault named by the environment variable FAULT is raised without isolation and must give
  * the same located diagnostic on every back end.
  */
-module jit_framed_faults
 
 import { get_env } from env
 

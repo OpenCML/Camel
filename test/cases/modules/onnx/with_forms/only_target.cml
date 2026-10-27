@@ -3,7 +3,6 @@
  * named argument jumps over a parameter that has a default (the `dynamic_axes` of the
  * declaration keeps its default, so no axis is left dynamic).
  */
-module with_forms_only_target
 
 import { reshape } from tensor
 import { export_model } from onnx

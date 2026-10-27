@@ -1,4 +1,3 @@
-module tiles_scalar_arithmetic
 import { reshape, sum, abs } from tensor
 import { with_grad } from autodiff
 import { upload, download, inspect, benchmark, run_preferred_resident } from tiles

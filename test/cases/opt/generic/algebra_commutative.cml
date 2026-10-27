@@ -12,7 +12,6 @@
  *   camel algebra_commutative.cml std::opt std::jgir
  *   camel algebra_commutative.cml std::opt::algebra std::jgir
  */
-module algebra_commutative
 
 func left(x: float): float {
     let t = 3.0 * (x + 1.0)

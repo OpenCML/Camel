@@ -1,4 +1,3 @@
-module named_dims_unknown_extent_mismatch
 import { ones, sum, load_npy } from tensor
 // The same call as unknown_extent_checked, with a file of four elements: the extent is unknown
 // statically, so the check is made when the call runs, like `as`.

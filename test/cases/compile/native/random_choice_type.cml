@@ -3,7 +3,6 @@
  * the declaration's type variable and parameter (`xs`) — `stdlib/random.cml`, not the C++, is the
  * source (bucket 1).
  */
-module random_choice_type
 
 import { choice } from random
 

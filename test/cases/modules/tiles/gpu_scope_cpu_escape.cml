@@ -1,4 +1,3 @@
-module tiles_gpu_scope_cpu_escape
 import { reshape, tanh, sum } from tensor
 
 // `#cpu` says the code runs on the host. The same operator that a `#gpu` scope refuses is

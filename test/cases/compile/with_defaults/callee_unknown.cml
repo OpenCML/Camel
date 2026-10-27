@@ -4,7 +4,6 @@
  * names, so `format<x: 1>` names a parameter of nothing and is refused where the argument is
  * written (design principles 4.4).
  */
-module with_defaults_callee_unknown
 
 func main(): int sync {
     'a{}'->format<x: 1>->println

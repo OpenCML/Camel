@@ -2,7 +2,6 @@
  * Trains a residual MLP written as a plain struct model: grad of the loss gives a gradient
  * struct of the same shape, and sgd / adam map (model, gradient) to the updated model.
  */
-module residual_mlp
 
 import { grad, with_grad } from autodiff
 import { full, zeros, sum, tanh } from tensor

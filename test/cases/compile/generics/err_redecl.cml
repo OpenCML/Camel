@@ -1,5 +1,3 @@
-module err_redecl
-
 func id::<T>(x: T): T {
     return x
 }

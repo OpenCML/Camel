@@ -13,7 +13,6 @@
  *   export_ce  export the CE SGD step to CAMEL_BENCH_EXPORT
  *   train_ce   run the fine-tune loop (CAMEL_FT_* protocol of lora_mlp.cml)
  */
-module lora_ce_step_lr
 
 import { relu, mean, sum, neg, log_softmax, load_npy } from tensor
 import { with_grad, stop_gradient } from autodiff

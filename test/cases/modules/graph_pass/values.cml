@@ -3,7 +3,6 @@
 // computed before the pass runs, as a program computes its top-level values before `main`
 // (design principles 10.1): the pass runs as the entry of a program of its own, not as a
 // function graph encoded alone (task).
-module values
 import { Program } from graph
 
 let two = 2

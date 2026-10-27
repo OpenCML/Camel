@@ -1,4 +1,3 @@
-module shape_inference_as_fails
 import { concat, reshape, sum, load_npy } from tensor
 func h(a: f32[4]): float {
     return float(sum(a))

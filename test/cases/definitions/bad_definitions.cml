@@ -1,6 +1,5 @@
 // Definitions the core must refuse when it builds them (test::definitions, src/passes/test/
 // definitions.h): each is declared there as the definition of a tensor operator.
-module bad_definitions
 
 import { softmax, abs, pow } from tensor
 

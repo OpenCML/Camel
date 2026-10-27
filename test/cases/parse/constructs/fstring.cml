@@ -3,7 +3,6 @@
  * a format specification, braces outside an interpolation are literal, and the token may span
  * lines. `\${`, `\`` and `\u{...}` are escapes; a format string nests another one.
  */
-module parse_constructs_fstring
 
 func main(): int sync {
     let name = 'Camel'

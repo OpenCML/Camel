@@ -3,7 +3,6 @@
  * declaring module to look the operator up in; a use from another module cannot reach it
  * through the type (design principles 5.7).
  */
-module anon_models
 
 export func operator +(a: { v: int }, b: { v: int }): { v: int } {
     return { v: a.v + b.v }

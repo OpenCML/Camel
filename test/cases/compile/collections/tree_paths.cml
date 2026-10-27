@@ -1,5 +1,3 @@
-module main
-
 // Collections large enough to be trees, built and taken apart entry by entry so that every
 // structural step of the persistent tree happens: a leaf splits, a branch splits, the root
 // grows; a leaf is merged with its neighbour or shares entries with it, a branch likewise,

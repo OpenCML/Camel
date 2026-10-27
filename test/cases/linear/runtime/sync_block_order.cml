@@ -9,7 +9,6 @@
  *   1 pair | 2 after | 15   `let (p, q) = f()`: f runs where the declaration is written
  *   L1 | 5             a lambda whose body is a sync block ending in a value
  */
-module sync_block_order
 
 func pick(c: bool): int sync {
     let y = if c then sync {

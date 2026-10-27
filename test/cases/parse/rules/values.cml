@@ -3,7 +3,6 @@
  * is the pair of functions name__lhs and name__rhs and the value `name` of type Rule made from
  * them. The module `rewrite` reads the rule back.
  */
-module values
 import { rule_name, rule_two_way, rule_consts } from rewrite
 
 export rule mul_one(x: int) { x * 1 => x }

@@ -110,7 +110,7 @@ case = "../../../cases/consistency/operator_overloads/not_overloadable_logical.c
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::OperatorNotOverloadable"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_diagnostic_column = 1
 expect_output_contains = ["'&&' cannot be overloaded: it is a branch"]
 
@@ -122,7 +122,7 @@ case = "../../../cases/consistency/operator_overloads/not_overloadable_branch.cm
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::OperatorNotOverloadable"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_diagnostic_column = 1
 expect_output_contains = ["'??' cannot be overloaded"]
 
@@ -134,7 +134,7 @@ case = "../../../cases/consistency/operator_overloads/not_overloadable_pipe.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::OperatorNotOverloadable"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_diagnostic_column = 1
 expect_output_contains = ["'->' cannot be overloaded"]
 
@@ -146,7 +146,7 @@ case = "../../../cases/consistency/operator_overloads/compound_assignment.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::OperatorNotOverloadable"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_diagnostic_column = 1
 expect_output_contains = ["'+=' cannot be overloaded", "overload of '+'"]
 
@@ -158,7 +158,7 @@ case = "../../../cases/consistency/operator_overloads/conflict_builtin.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::OperatorOverloadConflict"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_diagnostic_column = 1
 expect_output_contains = ["already defined for (int, int)"]
 
@@ -170,7 +170,7 @@ case = "../../../cases/consistency/operator_overloads/arity.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::OperatorOverloadInvalid"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_diagnostic_column = 1
 expect_output_contains = ["it takes two parameters, and this declaration has 1"]
 
@@ -182,7 +182,7 @@ case = "../../../cases/consistency/operator_overloads/arity_unary.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::OperatorOverloadInvalid"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_diagnostic_column = 1
 expect_output_contains = ["it takes one parameter, and this declaration has 2"]
 
@@ -194,7 +194,7 @@ case = "../../../cases/consistency/operator_overloads/with_param.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::OperatorOverloadInvalid"
-expect_diagnostic_line = 9
+expect_diagnostic_line = 8
 expect_diagnostic_column = 1
 expect_output_contains = ["no with-parameters"]
 
@@ -206,7 +206,7 @@ case = "../../../cases/consistency/operator_overloads/var_param.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::OperatorOverloadInvalid"
-expect_diagnostic_line = 8
+expect_diagnostic_line = 7
 expect_diagnostic_column = 17
 expect_output_contains = ["no var parameters"]
 
@@ -218,7 +218,7 @@ case = "../../../cases/consistency/operator_overloads/ambiguous_generic.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::AmbiguousCall"
-expect_diagnostic_line = 12
+expect_diagnostic_line = 11
 expect_diagnostic_column = 19
 expect_output_contains = ["(a: T[], b: T[]) => T[] (this module)", "(a: T[], b: U[]) => T[] (this module)"]
 
@@ -242,7 +242,7 @@ case = "../../../cases/consistency/operator_overloads/mods/conflict_import.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::OperatorOverloadConflict"
-expect_diagnostic_line = 5
+expect_diagnostic_line = 4
 expect_diagnostic_column = 1
 expect_output_contains = ["by module 'plus_a'"]
 

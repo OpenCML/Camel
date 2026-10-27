@@ -2,7 +2,6 @@
  * `a += b` on a type of the program follows its own `operator +` (design principles 4.2, 4.3):
  * `a = a + b`, whoever declared the type.
  */
-module struct_add_assign
 
 type P = { v: int }
 

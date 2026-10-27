@@ -12,7 +12,6 @@
  * read by inspection there, not asserted here, because the case is about what the two paths
  * compute once a production pass has been through the program.
  */
-module impl_pass_optimizer
 
 #op(':op/add_l')
 func add_kernel(a: int, b: int): int

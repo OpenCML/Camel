@@ -3,7 +3,6 @@
  * drops the `+ 1` from `target`. The Program the transaction was opened on, and the code that is
  * running, must still see the original `target` (design principles 9.1).
  */
-module program_txn
 import { Graph, Node, Program, commit, constant, current, graph_of, graphs, inputs, name, nodes, op, op_name, open, replace } from graph
 import { ends_with } from str
 

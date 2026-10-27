@@ -4,7 +4,6 @@
  * the call of `main`, and onnx::export sees no request. The refusal, at `main` (line 14),
  * says that the budget was exhausted, what it is and which pass parameter raises it.
  */
-module growth_budget
 
 import { reshape } from tensor
 import { export_model } from onnx

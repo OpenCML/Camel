@@ -3,7 +3,6 @@
  * after a type there is the stream suffix, never the interval operator. `xs as int..` is a
  * conversion to the stream type, and it is read as one - not as an expression.
  */
-module stream_type_as
 
 func main(): int sync {
     let xs = [1, 2, 3]

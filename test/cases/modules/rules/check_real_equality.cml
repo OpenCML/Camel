@@ -38,7 +38,6 @@
  *     reassociation is allowed to change the rounding, never the value, so the rule is `refuted`
  *     with the real values named as what differs.
  */
-module check_real_equality
 import { check } from rewrite
 
 /// `x*48 + x*(-47)` and `x*1` are two roundings of one real number: at the sample the check draws

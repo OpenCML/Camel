@@ -4,7 +4,6 @@
  * the target's kernel does — so the export refuses at the `strict` attribute instead of writing
  * a model that is not the program's promise.
  */
-module export_strict
 import { reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env

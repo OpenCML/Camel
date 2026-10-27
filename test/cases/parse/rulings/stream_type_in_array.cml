@@ -6,7 +6,6 @@
  * test/cases/compile/stream/type_in_container.cml); this file is the parse corpus's probe that
  * the spelling is read that way at all, and its tree is locked by feat/parse/frontend.
  */
-module stream_type_in_array
 
 func main(): int sync {
     let s: int..[3] = [1, 2, 3]

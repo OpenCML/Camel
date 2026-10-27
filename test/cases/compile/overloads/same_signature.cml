@@ -3,7 +3,6 @@
  * second is a redeclaration, reported where it is declared, whatever it returns and whatever
  * its parameters are called.
  */
-module same_signature
 
 func f(x: int): string {
     return 'first'

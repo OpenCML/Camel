@@ -2,7 +2,6 @@
  * The `constas n: int` value of a call selects the instance of the declaration: `n = 3` and
  * `n = 5` are two instances, each with the parameter type the value writes.
  */
-module constas_param
 import { ones, sum } from tensor
 
 func total(constas n: int, x: f32[n]): float {

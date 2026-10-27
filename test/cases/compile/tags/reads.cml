@@ -3,7 +3,6 @@
  * 6.2): the arguments are tag names, not values, and there may be any number of them. The
  * facts are the declaration's, and `camel inspect --tags` prints them.
  */
-module reads
 
 tag cost on func
 

@@ -2,7 +2,6 @@
  * `math:sqrt` is declared with one argument per spelling: a second one is refused at the call,
  * and the overloads the message lists are the declarations' (bucket 1).
  */
-module math_sqrt_arity
 
 import { sqrt } from math
 

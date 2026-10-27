@@ -3,7 +3,6 @@
 // the operands are named
 // by their types, and
 // neither of them is generic or unsettled.
-module h428_comp_operand_function_integer
 
 func inc(x: int): int {
     return x + 1

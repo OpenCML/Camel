@@ -1,5 +1,4 @@
 /** Local algebra must preserve strict float rounding and respect permission boundaries. */
-module algebra
 
 func strict(x: float): float {
     let t = x * 3.0

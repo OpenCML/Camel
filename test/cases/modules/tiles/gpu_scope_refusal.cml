@@ -1,4 +1,3 @@
-module tiles_gpu_scope_refusal
 import { reshape, tanh, sum } from tensor
 
 // `tanh` is a pure tensor operator that the device back end does not lower. Inside a `#gpu`

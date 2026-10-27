@@ -5,7 +5,6 @@
  * refused partial application even though the two context parameters could both take a
  * literal.
  */
-module partial_application_overload_choice_name
 
 with <k: f32>
 func scale(x: f32): f32 { return x * k }

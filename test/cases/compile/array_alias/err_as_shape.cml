@@ -2,7 +2,6 @@
 // shaped position through `as`, and a value that turns out not to have the declared shape stops
 // the program at the conversion (plan section 5.1), where the message names the shape the value
 // has. It is a runtime refusal, not a dynamic cast refused at compile time.
-module array_alias_err_as_shape
 
 import { ones } from tensor
 

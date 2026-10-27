@@ -1,7 +1,6 @@
 /**
  * i32(5000000000): an int that does not fit i32 (it used to wrap to 705032704).
  */
-module i32_out_of_range
 
 func conv(x: int): i32 { return i32(x) }
 

@@ -4,7 +4,6 @@
  * parameter name (`keys`) — the one source is `stdlib/array.cml`, not the C++ (
  * step 10).
  */
-module array_type
 
 import { argsort } from array
 

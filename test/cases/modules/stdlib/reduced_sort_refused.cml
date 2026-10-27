@@ -7,7 +7,6 @@
  * raw two-byte slots, and the refusal is no longer the kernel's (the rule's
  * 「不在运行期拒绝」).
  */
-module stdlib_reduced_sort_refused
 
 import { sort } from array
 

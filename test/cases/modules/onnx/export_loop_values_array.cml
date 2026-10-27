@@ -5,7 +5,6 @@
  * rule asks for (growable-array-vs-tensor-in-the-onnx-exporter) — and the model is
  * written. The last statement reads `ks[1]` out of the returned array, which is 7 at k = 6.
  */
-module export_loop_values_array
 import { reshape, sum, tanh } from tensor
 import { export_model } from onnx
 import { get_env } from env

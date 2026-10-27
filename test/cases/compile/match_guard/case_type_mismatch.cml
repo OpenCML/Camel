@@ -4,7 +4,6 @@
  * rather than a report about `==` having no overload — the guard must not change which
  * diagnostic a case of the wrong type gets.
  */
-module match_guard_case_type_mismatch
 
 func f(s: string): int {
     return match s {

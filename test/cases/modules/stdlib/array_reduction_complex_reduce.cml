@@ -20,7 +20,6 @@
  * compiler that refused complex arrays with `is_numeric` would not reach it either; this case is
  * the record of what happens when it is reached.
  */
-module array_reduction_complex_reduce
 
 func main(): int sync {
     let z0: c64 = 1 + 2i

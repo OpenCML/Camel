@@ -1,7 +1,6 @@
 /**
  * Verifies zero-argument callees can be inlined even when the rewritten graph has to reconnect from the return root backward.
  */
-module inline_no_param_reverse_root
 
 func calc(): int {
     let base = 20

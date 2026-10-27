@@ -3,7 +3,6 @@
  * message names the declaration's parameter (`stdlib/array.cml`, not the C++) (
  * bucket 1).
  */
-module array_sort_type
 
 import { sort } from array
 

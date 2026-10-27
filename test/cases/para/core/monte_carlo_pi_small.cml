@@ -2,7 +2,6 @@
  * Feature-sized Monte Carlo estimator: the same parallel map-reduce as monte_carlo_pi, with a
  * workload that fits a routine test budget (the full-size case lives in the perf plan).
  */
-module monte_carlo_pi_small
 
 import { pi_hits } from sim
 

@@ -3,7 +3,6 @@
  * nothing to open. A plain value, by contrast, is allowed with a warning (KnownNotNull;
  * design principles 3.8).
  */
-module err_null_left
 
 func main(): int sync {
     println('never printed')

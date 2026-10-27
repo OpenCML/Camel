@@ -22,7 +22,6 @@
  * results are already f64, and rounding the f64 accumulation once into f32 gives exactly what the
  * f32 tensor's sum and mean give — the two widths agree under the rule.
  */
-module whole_reduction_rounding
 
 import { sum as array_sum } from array
 import { new, sum, mean, numel } from tensor

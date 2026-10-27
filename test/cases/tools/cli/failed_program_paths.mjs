@@ -52,7 +52,7 @@ const file = (name, text) => {
 
 const semantic = file('semantic.cml', 'func main(): int {\n    let x = undefined_name + 1\n    return x\n}\n')
 const missingImport = file('missing_import.cml', 'import no_such_module\n\nfunc main(): int {\n    return 0\n}\n')
-const brokenModule = file('brokenlib.cml', 'module brokenlib\n\nexport func broken(p: int): int sync {\n    println(\n    return p\n}\n')
+const brokenModule = file('brokenlib.cml', 'export func broken(p: int): int sync {\n    println(\n    return p\n}\n')
 const brokenImport = file('broken_import.cml', 'import brokenlib\n\nfunc main(): int {\n    return 0\n}\n')
 const healthy = file('healthy.cml', 'import math\n\nfunc main(): int {\n    return 0\n}\n')
 

@@ -1,7 +1,6 @@
 /**
  * Effects in sync blocks happen in the order written, across calls, branches and recursion.
  */
-module sync_order
 
 func show(tag: string, x: int): int sync {
     println(tag, x)

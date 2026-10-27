@@ -5,7 +5,6 @@
  * finding F25). In either order, in a nested function, at module level, and with a captured
  * variable.
  */
-module nested_function_value
 
 let base = 100
 

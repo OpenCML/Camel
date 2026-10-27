@@ -4,7 +4,6 @@
  * for the string, which both calls read (design principles 4.4).
  * `std::gir` prints the graph instead of running it.
  */
-module param_default_one_constant
 
 func tag(x: int, label: string = "once"): string {
     return label + string(x)

@@ -1,7 +1,6 @@
 /**
  * Hot-call-chain case used to stress repeated small-function dispatch and accumulation under JIT execution.
  */
-module jit_call_chain_hot
 
 func inc(x: int): int {
     return x + 1

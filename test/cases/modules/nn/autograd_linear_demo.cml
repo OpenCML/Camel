@@ -3,7 +3,6 @@
  * the Linear model: grad returns one Linear-shaped gradient, fed to sgd; the targets are also
  * captured `with` data and stay constant. A recursive train loop repeats the step.
  */
-module autograd_linear_demo
 
 import { grad } from autodiff
 import { ones, shape, sum, zeros } from tensor

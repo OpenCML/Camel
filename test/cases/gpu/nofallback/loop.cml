@@ -1,7 +1,6 @@
 /// (g) A loop written in a `#gpu` scope is a segment too (GPU design 2.5): the LOOP node keeps
 /// its condition and its body, so the rounds run where the loop runs instead of falling to the
 /// host because the loop is a statement. `repeat_host` is the same program without the tag.
-module gpu_nofallback_loop
 
 import { reshape, sum } from tensor
 import { regions } from tiles

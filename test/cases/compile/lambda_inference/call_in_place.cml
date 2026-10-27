@@ -3,7 +3,6 @@
  * so nothing fixes the parameter's type and it is reported there (design principles 5.9;
  * item 2, the second example of the reference's list).
  */
-module lambda_inference_call_in_place
 
 func main(): int sync {
     println(((x) => x + 1)(41))

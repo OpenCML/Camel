@@ -8,7 +8,6 @@
  * nothing is dropped; a result nothing depended on would be reported as `EffectNotExecuted`, the
  * same warning the direct call of `noisy` gets.
  */
-module generic_parameter_takes_instantiation
 
 func apply(f: (x: int) => int, x: int): int {
     return f(x)

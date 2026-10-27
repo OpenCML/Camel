@@ -13,7 +13,6 @@
  * Aliased arguments and variables captured by a branch arm or a lambda are covered by
  * test/cases/linear/byref/.
  */
-module var_params
 
 func bump(var x: int) {
     x += 1

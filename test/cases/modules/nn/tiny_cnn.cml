@@ -3,7 +3,6 @@
  * of the loss gives a TinyCnn-shaped gradient (kernel, bias and head), one sgd step lowers the
  * loss, and a recursive train loop repeats the step.
  */
-module tiny_cnn
 
 import { grad, with_grad } from autodiff
 import { reshape, shape, sum, tanh } from tensor

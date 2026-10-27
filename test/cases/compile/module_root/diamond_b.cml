@@ -1,5 +1,4 @@
 /** Helper module: the other side of the diamond. */
-module diamond_b
 import { common } from diamond_d
 
 export func right(): int {

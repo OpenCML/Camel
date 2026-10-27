@@ -6,7 +6,6 @@
  * working directory, the native value and gradient are saved there, and the step is exported
  * when ONNX_OUT is set.
  */
-module ort_grad_loop
 import { load_npy, reshape, save_npy, sum, tanh } from tensor
 import { with_grad } from autodiff
 import { export_model } from onnx

@@ -31,7 +31,6 @@
 // module therefore needs no `stdlib/signatures/rewrite.cml`. The three reserved groups stay in C++
 // because a declaration cannot name a group that has no Camel name.
 
-module rewrite
 
 import { Node, Program } from graph
 

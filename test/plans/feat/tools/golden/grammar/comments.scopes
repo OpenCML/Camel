@@ -9,9 +9,6 @@
 #^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ comment.block.documentation.camel
 > */
 # ^^ comment.block.documentation.camel punctuation.definition.comment.end.camel
->module comments
-#^^^^^^ keyword.control.import.module.camel
-#       ^^^^^^^^ entity.name.namespace.module.camel
 >
 >// line comment with "a string" and /* a block opener
 #^^ comment.line.double-slash.camel punctuation.definition.comment.camel

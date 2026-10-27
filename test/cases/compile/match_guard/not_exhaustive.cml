@@ -7,7 +7,6 @@
  * `case _` gets, rather than the syntax error the case was before the guard was part of a
  * case (`case 1 when n > 0` read `when` as the second word of the pattern).
  */
-module match_guard_not_exhaustive
 
 func a(n: int): int {
     return match n {

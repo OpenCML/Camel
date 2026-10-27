@@ -12,7 +12,6 @@
  * untouched by that rule, so `wrong_precision` is `sampled`: a looser bound would hide the first
  * rule, and the tight one is what catches it.
  */
-module check_bound
 import { check } from rewrite
 
 #requires(reassociate)

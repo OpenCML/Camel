@@ -2,7 +2,6 @@
  * Output written by a foreach and by sync calls before a fault in a later map: every line
  * written before the fault is on standard output, complete and in order.
  */
-module fault_after_map_output
 
 func inv(x: int): int { return 60 / (x - 5) }
 

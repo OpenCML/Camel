@@ -10,7 +10,6 @@
  *   program printed its first lines over and over until the permanent space was exhausted.
  * Reduced by test/tools/progen from seed 5321 (generator version 2, all features).
  */
-module opt_dead_branch_laid_out
 
 func f1(a2: string, a3: (a0: int) => int): string {
     return 'a';

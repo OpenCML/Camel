@@ -3,7 +3,6 @@
  * a struct, the tuple case a tuple, and a leaf is itself. This is the Camel
  * spelling of the C++ `tree_map` expansion, and it is a single instance per field type.
  */
-module comprehensions_rebuild
 
 func rebuild::<T>(t: T) {
     return match type T {

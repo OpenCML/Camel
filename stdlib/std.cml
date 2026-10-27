@@ -11,7 +11,6 @@
 //
 //     camel m.cml std::opt safe_fp=true growth_budget=8192 std::fvm
 
-module std
 
 // -----------------------------------------------------------------------------
 // The program itself

@@ -10,7 +10,6 @@
  * bytes. The native path is not run on this leaf: it would hand back an f32 array under an f64
  * type, and which of the two element types a read of it uses is not specified.
  */
-module optim_dtype_exact
 
 import { new, to_bytes } from tensor
 

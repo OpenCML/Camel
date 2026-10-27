@@ -3,7 +3,6 @@
  * loss differentiates through nested with-context helpers into a Classifier-shaped gradient,
  * one sgd step lowers the loss, and a recursive train loop repeats the step.
  */
-module softmax_classifier
 
 import { grad, with_grad } from autodiff
 import { reshape, zeros } from tensor

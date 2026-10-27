@@ -62,5 +62,5 @@ backends = ["nvm"]
 backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
-expect_output_contains = ["name=SemanticDiag::FunctionNameAsValue", "err_no_function_value.cml:11:29:", "names 2 functions of that name [(x: int) => int pure; (x: float) => float pure]"]
+expect_output_contains = ["name=SemanticDiag::FunctionNameAsValue", "err_no_function_value.cml:10:29:", "names 2 functions of that name [(x: int) => int pure; (x: float) => float pure]"]
 timeout_ms = 20000

@@ -2,7 +2,6 @@
  * Each round's value is the next state, so the body of a one-state `static loop` must give the
  * state's type.
  */
-module static_loop_body_type
 
 func bad(t: {a: int}): int {
     return static loop acc = 0 for n, F in fields {a: int} do "not an int"

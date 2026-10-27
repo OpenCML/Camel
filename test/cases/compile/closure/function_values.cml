@@ -2,7 +2,6 @@
  * Verifies functions are first-class values: a named function passed as an argument, and branch
  * arms whose value is a function literal (with and without captures).
  */
-module function_values
 
 func square(x: float): float {
     return x * x

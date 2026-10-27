@@ -3,7 +3,6 @@
  * where the body stopped matching it, so the note skips past it and lands on the use that is
  * outside the promise (design principles 3.3).
  */
-module err_promise_note
 
 func bump(var c: int): int uses c sync {
     c += 1

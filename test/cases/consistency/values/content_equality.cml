@@ -4,7 +4,6 @@
  * included; float elements as floats (an array that holds a NaN does not equal itself).
  * `contains` on an array uses the same equality, and a string has `contains` too.
  */
-module content_equality
 
 type Point = { x: int, y: int }
 type Named = { name: string, at: Point, tags: string[] }

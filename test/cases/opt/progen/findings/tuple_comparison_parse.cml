@@ -5,7 +5,6 @@
  * ...)` parses.
  * Expected output: (true, x1)
  */
-module tuple_comparison_parse
 
 func main(): int sync {
     let a = 1

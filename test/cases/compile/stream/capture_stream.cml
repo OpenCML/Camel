@@ -4,7 +4,6 @@
  * where it is consumed instead -- handed to a call that reads it, or read by a `for` -- and a
  * stream a closure only hands on, without reading it, is not a capture this rule refuses.
  */
-module stream_capture_stream
 
 let source: int.. = count(3)
 

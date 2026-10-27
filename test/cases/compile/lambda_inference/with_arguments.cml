@@ -7,7 +7,6 @@
  * accumulator that is a float is written `0.0`. The tuple parameter of `map` follows the element
  * type of the array it maps over.
  */
-module lambda_inference_with_arguments
 
 func main(): int sync {
     println([1, 2, 3]->reduce<(a, b) => a + b, 0>)

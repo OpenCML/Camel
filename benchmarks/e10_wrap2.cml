@@ -3,7 +3,6 @@
  * grad call uses plain application. Compare e10_first/e10_second for the
  * graph-stats table.
  */
-module e10_wrap2
 
 import { grad } from autodiff
 import { relu, mean, reshape } from tensor

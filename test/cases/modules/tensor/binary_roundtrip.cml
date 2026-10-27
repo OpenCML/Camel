@@ -1,4 +1,3 @@
-module binary_roundtrip
 import { new, from_bytes, to_bytes, sum, zeros } from tensor
 import { from_array, to_array } from bytes
 func decode_return(b: Bytes): f32[..] { return from_bytes(b, [4]) }

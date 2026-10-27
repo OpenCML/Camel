@@ -5,7 +5,6 @@
  * report, settled). `map` is declared by the builtin module, whose rule is a family of
  * types, so this case also covers the rule that a call fills its with-arguments' types.
  */
-module lambda_inference_generic
 
 func main(): int sync {
     let xs = [1, 2, 3]

@@ -5,7 +5,6 @@
  * (`items`) must enter after the branch, not at the start of main, and the tail
  * call through nested branches must not grow the stack.
  */
-module effect_order_folded
 
 import { range, reshape, concat, zeros, show } from tensor
 

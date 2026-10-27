@@ -2,7 +2,6 @@
  * The tagged forms in other positions: a struct field, array elements, the two marks combined
  * (`int?!`), `void!`, a lambda that returns a `T!`, a `var`, an annotated `let`.
  */
-module combined
 type Rec = { name: string?, n: int }
 
 func total(xs: (int?)[]): int {

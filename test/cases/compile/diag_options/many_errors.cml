@@ -1,7 +1,6 @@
 /**
  * 25 independent errors, to test the limit on reported errors.
  */
-module many_errors
 
 func main(): int sync {
     println(u0)

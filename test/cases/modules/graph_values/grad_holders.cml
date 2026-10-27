@@ -3,7 +3,6 @@
  * and look the same afterwards (design principles 9.1). Run both with the derivative built at run
  * time and with `std::macro` expanding it ahead of time: the output is the same.
  */
-module grad_holders
 import { grad, with_grad } from autodiff
 import { Graph, Node, constant, graph_of, inputs, nodes, op, op_name } from graph
 

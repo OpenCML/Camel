@@ -1,4 +1,3 @@
-module fstring_cpp
 func main(): int sync {
     let name = "cpp"
     let n = 3

@@ -3,7 +3,6 @@
  * stands for. Camel prints tensor([12., 1.5, 6.], dtype=float32) for the example input; the
  * exported model gives the same on ONNX Runtime.
  */
-module export_float_array
 import { reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env

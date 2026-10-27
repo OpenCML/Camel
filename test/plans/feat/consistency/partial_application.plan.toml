@@ -133,7 +133,7 @@ backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_output_not_contains = ["[Error]", "error[", "Segmentation fault", "dumped core"]
-expect_output_contains = ["SemanticDiag::EffectNotExecuted", "var_parameter_effect.cml:34:"]
+expect_output_contains = ["SemanticDiag::EffectNotExecuted", "var_parameter_effect.cml:33:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 verify_script = """
 ({ input, assert }) => {
@@ -215,7 +215,7 @@ backends = ["nvm"]
 backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
-expect_output_contains = ["name=SemanticDiag::PartialApplicationRefused", "err_overload_choice_name.cml:18:13:", "<k: f32> (x: f32) => f32", "<k: float> (x: float) => float"]
+expect_output_contains = ["name=SemanticDiag::PartialApplicationRefused", "err_overload_choice_name.cml:17:13:", "<k: f32> (x: f32) => f32", "<k: float> (x: float) => float"]
 
 [[tests]]
 name = "partial_application.err_context_argument_name"
@@ -227,7 +227,7 @@ backends = ["nvm"]
 backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
-expect_output_contains = ["name=SemanticDiag::PartialApplicationRefused", "err_context_argument_name.cml:13:"]
+expect_output_contains = ["name=SemanticDiag::PartialApplicationRefused", "err_context_argument_name.cml:12:"]
 
 [[tests]]
 name = "partial_application.err_context_argument_out_of_range"
@@ -239,7 +239,7 @@ backends = ["nvm"]
 backends_agree = []
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
-expect_diagnostic_line = 12
+expect_diagnostic_line = 11
 expect_diagnostic_column = 22
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
 expect_output_contains = ["'1e40'", "type 'f32'", "out of range (at most about 3.4e38 in magnitude)"]

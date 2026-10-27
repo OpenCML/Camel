@@ -3,7 +3,6 @@
  * with no `?` has no null to default to, and the declaration says so instead of taking `null`
  * as some universal "no value".
  */
-module param_default_null_not_nullable
 
 func f(p: int = null): int {
     return p

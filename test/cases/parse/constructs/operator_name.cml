@@ -3,7 +3,6 @@
  * `operatorName` is the name `operator` followed by an operator token or by `[ ]`. The
  * declaration is a function of the module, and a call is written with the operator.
  */
-module parse_constructs_operator_name
 
 export type Point = { x: int, y: int }
 

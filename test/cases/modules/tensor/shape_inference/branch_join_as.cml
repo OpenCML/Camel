@@ -1,4 +1,3 @@
-module shape_inference_branch_join_as
 import { concat, sum, ones } from tensor
 func g(x: f32[3], c: bool): f32[?] {
     return if c then x else concat(x, x, 0)

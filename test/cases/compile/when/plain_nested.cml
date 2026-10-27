@@ -3,7 +3,6 @@
  * already asking about `Q`'s fields -- the field's type is bound for the nested call, not left
  * open (design principles 5.5).
  */
-module when_plain_nested
 
 import { is_plain } from types
 

@@ -5,7 +5,6 @@
  * takes the first dimension and drops it. Neither one reads a position on a later dimension, so
  * the subscript is refused rather than read as a slice of the wrong axis.
  */
-module subscript_index_other_dimension
 import { reshape, shape } from tensor
 
 func main(): int sync {

@@ -4,7 +4,6 @@
  * argument, instead of stopping with an internal error that names a node number; the array-returning
  * `scale` is never reached.
  */
-module refuse_tensor
 
 import { ones } from tensor
 

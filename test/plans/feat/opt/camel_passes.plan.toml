@@ -293,7 +293,7 @@ verify_script = """
 assert(input.exit_code === 1, 'the run faults: ' + input.exit_code)
 assert(input.stdout.includes('RuntimeDiag::DivisionByZero'), 'the run reports the fault: ' + input.stdout)
 assert(input.stderr.includes('RuntimeDiag::ConstantExpressionFaults'), 'the fold warns: ' + input.stderr)
-assert(input.stdout.includes('9:15'), 'the run points at the expression: ' + input.stdout)
-assert(input.stderr.includes('9:15'), 'the warning points at the expression: ' + input.stderr)
+assert(input.stdout.includes('8:15'), 'the run points at the expression: ' + input.stdout)
+assert(input.stderr.includes('8:15'), 'the warning points at the expression: ' + input.stderr)
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]

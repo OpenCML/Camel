@@ -4,7 +4,6 @@
  * reads the value on -- the sequence it is handed and the slot of its state that holds it back are
  * one read -- but two of them pull the same stream twice, and the second is refused.
  */
-module stream_two_loops_consume
 
 func count(n: int): int.. {
     return step(n)

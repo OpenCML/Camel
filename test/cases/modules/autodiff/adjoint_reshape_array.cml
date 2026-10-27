@@ -17,7 +17,6 @@
  * 60.0 for the adjoint above and 0.0 for a gradient that left the array out of the reshape,
  * which is the defect this case is about.
  */
-module adjoint_reshape_array
 
 import { reshape, sum } from tensor
 import { grad } from autodiff

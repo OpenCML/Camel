@@ -3,7 +3,6 @@
  * makes a nested array with 2^d leaves (each inner node an array of two arrays); `reps` of them
  * are built, the previous one dying as the next is built.
  */
-module build_tree
 
 func leaf(i: int): int[][] { return [[i, i + 1, i + 2]] }
 

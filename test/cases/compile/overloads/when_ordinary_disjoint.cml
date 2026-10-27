@@ -10,7 +10,6 @@
  * whose parameters are `int` (`is_int::<int>()`), so every call of `label` is the first declaration;
  * a compiler that took the pair by the order it is written in would be free to take either.
  */
-module when_ordinary_disjoint
 
 func is_int::<T>(): bool {
     return match type T {

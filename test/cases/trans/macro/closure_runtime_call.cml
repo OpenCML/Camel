@@ -1,7 +1,6 @@
 /**
  * Verifies a macro can materialize a closure value whose captured static data is later called by the normal runtime.
  */
-module macro_closure_runtime_call
 
 type Adder = (y: int) => int
 

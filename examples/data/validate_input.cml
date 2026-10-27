@@ -1,7 +1,6 @@
 // An error-handling pipeline: functions that may fail return T!, `->` continues only on
 // success, `!!` supplies a fallback and `match ... case error e` inspects the failure.
 // Run: camel examples/data/validate_input.cml
-module validate_input
 
 func check_range(age: int): int! {
     return if age < 0 || age > 150 then {

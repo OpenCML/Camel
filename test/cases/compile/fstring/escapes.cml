@@ -1,4 +1,3 @@
-module fstring_escapes
 func main(): int sync {
     println('single: \`')
     println("double: \`")

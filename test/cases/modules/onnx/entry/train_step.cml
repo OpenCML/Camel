@@ -3,7 +3,6 @@
  * the result is the loss and the updated weights. Exported, the weights are inputs and
  * outputs of the model (`p_w`, `p_b` in, `output_1_w`, `output_1_b` out).
  */
-module train_step
 
 import { tanh, mean } from tensor
 import { with_grad } from autodiff

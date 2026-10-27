@@ -1,7 +1,6 @@
 /**
  * Smoke-checks unordered_foreach can be parsed and executed by the available schedulers.
  */
-module unordered_foreach_smoke
 
 import { unordered_foreach } from para
 import { pi_hits } from sim

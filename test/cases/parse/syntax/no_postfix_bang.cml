@@ -4,7 +4,6 @@
  * column 15): `(a!)` asks the list for the `,` or the `)` it stands in the place of, and says so
  * (`Expected ',' or ')' before '!'`). It was a `ConstructNotSupported`.
  */
-module no_postfix_bang
 
 func main(): int sync {
     let a = 1

@@ -1,4 +1,3 @@
-module binary_aggregate_bytes
 import { to_bytes } from tensor
 import { to_array } from bytes
 

@@ -6,7 +6,6 @@
  * it is counted once no major collection is asked for, if twice (6 MB) one is. The plan asserts
  * the collection count (`major=0`) rather than a timing.
  */
-module gc_block_views
 
 import { reshape, zeros, numel } from tensor
 

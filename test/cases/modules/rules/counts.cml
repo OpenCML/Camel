@@ -2,7 +2,6 @@
  * Prints how many additions and products the functions `coefficients` and `chain` have, then the
  * program goes on.
  */
-module counts
 import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
 
 func opText(n: Node): string {

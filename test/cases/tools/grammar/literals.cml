@@ -1,5 +1,4 @@
 // Literals: every form the lexer accepts (antlr/OpenCMLLex.g4).
-module literals
 
 // INTEGER: DEC, OCT, HEX, BIN, each with an optional exponent
 let dec = 0

@@ -10,7 +10,6 @@
 // `sync` function's return position. An *unnamed* struct
 // state's written order is its type (5.2, "字段顺序"), so a body that writes another order starts
 // from a named value; `both` and `one` keep the state's own order.
-module struct_state
 
 type Point = { x: int, y: int }
 type Inner = { u: int, v: int }

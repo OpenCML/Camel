@@ -20,7 +20,6 @@
  *   the whole program, whichever module calls it (one root graph, design principles 10.1).
  *   `group_by` is not here: it needs the map type.
  */
-module array
 
 import math
 import { is_bool, is_float, is_integer, is_numeric, is_ordered, is_plain, is_string } from types

@@ -1,5 +1,4 @@
 /// A block comment with no end: the lexer reports the line where it starts.
-module unterminated_comment
 
 func main(): int {
     return 0

@@ -4,7 +4,6 @@
  * is not the kind `py_unwrap` was asked for is `PythonTypeError` with the path and what was found.
  * Nothing converts silently: `5` is not a `bool`, `bytes` is not a `string`, `1e300` is not an f32.
  */
-module errors
 
 import { py_exec, py_eval, py_import, py_attr, py_call, py_wrap, py_unwrap, PyObject } from python
 import { split } from str

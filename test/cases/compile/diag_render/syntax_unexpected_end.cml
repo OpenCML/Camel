@@ -1,4 +1,2 @@
-module syntax_unexpected_end
-
 func main(): int {
     let x = 1

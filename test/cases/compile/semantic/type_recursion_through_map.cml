@@ -4,7 +4,6 @@
  * leaving the name unresolved; the array form of a struct field is built
  * (recursive_struct_array.cml).
  */
-module type_recursion_through_map
 
 type Node = { children: Map<int, Node> }
 

@@ -2,7 +2,6 @@
  * `para:unordered_foreach` is declared with one ordinary argument: a second one is refused at the
  * call, and the overload the message lists is the declaration's (bucket 1).
  */
-module para_unordered_arity
 
 import { unordered_foreach } from para
 

@@ -5,7 +5,6 @@
  * overloads fit at once. The warning is the one such a call gets, and no ambiguity is reported:
  * the result is `never`, and an `int[]` position takes it.
  */
-module never_argument_overload
 
 func pick(x: int): int { return x }
 func pick(x: string): string { return x }

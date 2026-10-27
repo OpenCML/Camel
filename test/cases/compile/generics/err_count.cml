@@ -1,5 +1,3 @@
-module err_count
-
 func first::<T>(xs: T[]): T {
     return xs[0]
 }

@@ -4,7 +4,6 @@
  * place where a type stands, and it is reported by name - SyntaxDiag::AsRightSideIsType, at the
  * `..`, saying how to write the interval instead (`(a..b)`).
  */
-module stream_type_as_interval
 
 func main(): int sync {
     let n = 3

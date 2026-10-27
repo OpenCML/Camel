@@ -1,5 +1,3 @@
-module names_lib
-
 namespace Config {
     export let limit = 10
     export func clamp(x: int): int {

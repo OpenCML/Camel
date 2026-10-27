@@ -7,7 +7,6 @@
  * Every function is entered often enough to be compiled; the values are the same on every
  * back end.
  */
-module jit_framed_operators
 
 type Point = {
     x: int,

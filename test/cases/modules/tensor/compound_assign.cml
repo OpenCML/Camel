@@ -3,7 +3,6 @@
  * principles 4.2): nothing is changed in place, so another name of the old tensor keeps
  * its value. Likewise `-=`, `*=`, `/=`, with a tensor or a scalar on the right.
  */
-module compound_assign
 
 import { ones, sum } from tensor
 

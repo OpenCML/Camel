@@ -3,7 +3,6 @@
  * arguments, folds the stop condition, prunes the branch and inlines the step, so `forward` becomes
  * straight-line code. The value must not change.
  */
-module recursion_unroll
 
 func run(t: int, steps: int, h: float): float {
     return if t >= steps then h else run(t + 1, steps, h * 0.5 + float(t))

@@ -1,4 +1,3 @@
-module neutral
 import { flatten } from array
 import { Program, Node, Graph, graphs, nodes, inputs, with_inputs, op, op_name, constant, type_of, type_name, is_anchor, is_written_slot, open, replace, commit } from graph
 

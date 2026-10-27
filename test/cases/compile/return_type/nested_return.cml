@@ -3,7 +3,6 @@
  * lowered twice (the first result was dropped), so each level doubled the work: this file took
  * 45 s to compile, and 2 s at depth 16. It compiles in milliseconds.
  */
-module nested_return
 
 func f(x: int): int {
     return if x > 19 then sync {

@@ -6,7 +6,6 @@
  * `\8`, `\0x`) and the three octal-looking forms that must stop meaning a byte (`\01`,
  * `\012`, `\033`).
  */
-module escapes_plain
 
 func main(): int sync {
     println('101', len('\101'))

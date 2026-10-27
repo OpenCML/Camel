@@ -3,7 +3,6 @@
  * result drops the `+ 1`; the Program it was given and the running `target` stay as they were
  * (design principles 9.1).
  */
-module rewrite_rule
 import { Graph, Node, Program, constant, current, graph_of, graphs, inputs, name, nodes, op, op_name } from graph
 import { Rule, rewrite } from rewrite
 import { ends_with } from str

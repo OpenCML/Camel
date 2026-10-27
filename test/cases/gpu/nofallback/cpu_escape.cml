@@ -2,7 +2,6 @@
 /// program (GPU design 2.1: the inner scope wins). `tanh` would be refused one line up; the label
 /// says the host runs this part on purpose, so the escape is visible in the source, not inferred
 /// from a diagnostic.
-module gpu_nofallback_cpu_escape
 
 import { reshape, tanh, sum } from tensor
 

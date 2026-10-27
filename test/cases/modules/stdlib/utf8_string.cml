@@ -2,7 +2,6 @@
  * A string is always valid UTF-8, indexed and measured in code points (design principles
  * 11.1); binary data is `Bytes`.
  */
-module utf8_string
 
 import { split, trim, replace, index_of, starts_with, repeat, codepoints, to_upper } from str
 import { encode, decode, from_array } from bytes

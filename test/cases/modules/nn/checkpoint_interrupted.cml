@@ -1,5 +1,4 @@
 // Manual crash-publication probe: kill the process after its pending directory appears.
-module checkpoint_interrupted
 import { zeros, set_num_threads } from tensor
 import { save_tree } from ckpt
 func main(out: string): int sync {

@@ -1,7 +1,6 @@
 // A minimal training loop: a linear model as a struct of tensors, the gradient of the loss
 // from `autodiff.grad`, the update from `nn.sgd`, and the loop as a tail recursion.
 // Run: camel examples/ml/train_linear.cml
-module train_linear
 
 import { grad } from autodiff
 import { reshape, shape, sum } from tensor

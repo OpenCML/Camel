@@ -2,7 +2,6 @@
  * A `constas n: int` value parameter of a function declaration: the value is known at each
  * call and is written as an extent of the parameter type, not passed as a runtime argument.
  */
-module constas_param
 import { ones, sum } from tensor
 
 func total(constas n: int, x: f32[n]): float {

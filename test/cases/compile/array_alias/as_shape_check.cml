@@ -1,7 +1,6 @@
 // An array whose type fixes no rank enters a shaped position through `as`, which checks the shape
 // when the conversion runs (plan section 5.1: the two spellings are one type, so the conversion is
 // a checked one and not a dynamic cast that is refused).
-module array_alias_as_shape_check
 
 import { ones } from tensor
 

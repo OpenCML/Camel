@@ -1,7 +1,6 @@
 /**
  *  3 manual probe: keyed random is pure and deterministic.
  */
-module keyed_random
 
 import { key, split, permutation } from random
 

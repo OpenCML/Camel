@@ -2,7 +2,6 @@
  * keyed random does not touch the generator: the draws around a key/split/permutation are the
  * same as the draws alone, and seeding again repeats them.
  */
-module random_independence
 
 import { seed, rand, key, split, permutation } from random
 

@@ -1,7 +1,6 @@
 /**
  * The old spelling is simply not a module: the import is an ordinary unknown-module error.
  */
-module hash_old
 
 import { sha256 } from crypto
 

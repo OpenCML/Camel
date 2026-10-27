@@ -3,7 +3,6 @@
  * names the declarations' parameter (`n`) — `stdlib/graph.cml`, not the C++, is the source
  * (bucket 1).
  */
-module graph_constant_type
 
 import { constant } from graph
 

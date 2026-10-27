@@ -1,7 +1,6 @@
 /**
  * Verifies branch-local helper functions stay distinct so each call site keeps its own inlined subgraph semantics.
  */
-module inline_unique_subgraph
 
 func choose(flag: int, x: int): int {
     func plus1(v: int): int {

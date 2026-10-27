@@ -1,4 +1,3 @@
-module shape_as_checked
 import { ones, sum, load_npy } from tensor
 func f(b: f32[3]): float {
     return float(sum(b))

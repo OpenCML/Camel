@@ -4,7 +4,6 @@
  * carries the captured arguments, the same shape a closure has; no node kind is added and
  * nothing refers to a node of another graph.
  */
-module values
 
 with <step: int>
 func inc(x: int): int { return x + step }

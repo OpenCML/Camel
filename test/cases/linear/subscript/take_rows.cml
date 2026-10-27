@@ -12,7 +12,6 @@
  * `f32[2, 3]` is refused with "Return type 'f32[3, 3]' does not match the function's declared
  * return type" -- so a take that returned its argument's type would not compile here.
  */
-module linear_take_rows
 
 func take(xs: f32[5], idx: int[3]): f32[3] {
     return xs[idx]

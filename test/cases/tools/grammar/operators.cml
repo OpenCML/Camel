@@ -1,5 +1,4 @@
 // Operators and punctuation: the tokens of the parser grammar (include/camel/parse/syntax/token_kinds.def).
-module operators
 
 func compare(a: int, b: int): bool {
     let strict = a === b
