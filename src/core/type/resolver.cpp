@@ -299,13 +299,58 @@ std::optional<FunctionType *> DeclaredFuncTypeResolver::resolve(
     return concrete;
 }
 
+std::optional<type_vec_t> DeclaredFuncTypeResolver::typesFromExpected(Type *expectedResult) const {
+    if (!generic_ || expectedResult == nullptr || !funcType_->hasExitType()) {
+        return std::nullopt;
+    }
+    // Only a variable no parameter mentions is read from the result: the parameters fix the
+    // others, and a call whose arguments do not fit is refused by them, not rescued by the
+    // type it is expected to give.
+    std::vector<std::string> inParameters;
+    for (Type *param : funcType_->withTypesSpan()) {
+        collectTypeVars(param, inParameters);
+    }
+    for (Type *param : funcType_->normTypesSpan()) {
+        collectTypeVars(param, inParameters);
+    }
+    bool onlyInResult = false;
+    for (const std::string &name : bindable_) {
+        onlyInResult = onlyInResult ||
+                       std::find(inParameters.begin(), inParameters.end(), name) == inParameters.end();
+    }
+    if (!onlyInResult) {
+        return std::nullopt;
+    }
+    type_bindings_t found;
+    if (!bindTypeVars(funcType_->exitType(), expectedResult, found)) {
+        return std::nullopt;
+    }
+    type_vec_t written;
+    for (const std::string &name : bindable_) {
+        Type *bound = findTypeBinding(found, name);
+        if (bound == nullptr) {
+            return std::nullopt;
+        }
+        written.push_back(bound);
+    }
+    return written;
+}
+
 std::optional<FunctionType *> DeclaredFuncTypeResolver::resolveForCall(
     const type_vec_t &types, Type *expectedResult, const type_vec_t &with, const type_vec_t &norm,
     static_args_t normStatics) const {
-    (void)expectedResult;
     (void)normStatics;
     if (types.empty()) {
-        return resolve(with, norm);
+        if (auto instance = resolve(with, norm)) {
+            return instance;
+        }
+        // A variable only the result mentions (`load_tree::<T>(dir): T!`) is read from no
+        // argument: the type the call is expected to give fixes it, as it does for a generic
+        // function written in Camel.
+        if (const auto written = typesFromExpected(expectedResult)) {
+            return resolveForCall(*written, nullptr, with, norm, normStatics);
+        }
+        return std::nullopt;
     }
     // The call writes the declaration's own variables (`show::<f32>([])`): they are fixed by
     // position, the way a generic function's `::<...>` fixes its head parameters, and the

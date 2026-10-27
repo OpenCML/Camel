@@ -1,6 +1,6 @@
 # 原生训练状态检查点
 
-接口遵循训练设计稿 8.2：`ckpt::save_tree(dir, state)`、`ckpt::load_tree::<State>(dir): State!`（2026-10-19 起属于 `ckpt` 模块，原在 `nn`；设计原则 13.5）。载入目标也可由直接的期望类型推出，如 `let state: State! = load_tree(dir)`。类型参数在编译期解析，运行时没有类型值参数。
+接口遵循训练设计稿 8.2：`state->save_tree<dir>`（`void!`）、`dir->load_tree::<State>`（`State!`）（2026-10-19 起属于 `ckpt` 模块，原在 `nn`；设计原则 13.5）。载入目标也可由直接的期望类型推出，如 `let state: State! = load_tree(dir)`。类型参数在编译期解析，运行时没有类型值参数。
 
 原生库的服务器验收已通过，尚未接替 DDPM 的旧检查点入口。
 
@@ -8,7 +8,7 @@
 
 每个张量写精确存储 dtype 的 NPY，Bytes 写 `.bin`，其余写 `.txt`，文件名来自树路径：与 `tree_paths` 的结果逐字一致，写作 `blocks.0.w`，根的路径为空（设计原则 13.5）。浮点标量使用固定长度的 IEEE 位模式十六进制文本，避免十进制解析丢失 NaN 载荷和负零；整数用十进制，布尔为 `true/false`，文本是 `string`，按设计原则 13.5 本来就是合法的 UTF-8。树本身就是一个叶子时，路径为空，其文件名固定为 `_root`（清单里记录的路径仍为空）。叶子类型不受支持（数组、映射、函数等）是编译期错误，信息里带路径；`T?`/`T!` 是叶子，不会被当作内部节点展开。
 
-`manifest.json` 记录 schema、Camel 包版本、树结构、各叶子的文件名、字节数、SHA-256 和张量 dtype/shape。`save_tree(dir, state, dataset_manifest_sha256)` 可记录数据清单版本；`load_tree::<State>(dir, expected_dataset_manifest_sha256)` 不匹配时按设计稿警告，实际训练入口仍须执行自己的数据版本准入规则。
+`manifest.json` 记录 schema、Camel 包版本、树结构、各叶子的文件名、字节数、SHA-256 和张量 dtype/shape。`state->save_tree<dir, dataset_manifest_sha256>` 可记录数据清单版本；`dir->load_tree::<State><expected_dataset_manifest_sha256>` 不匹配时按设计稿警告，实际训练入口仍须执行自己的数据版本准入规则。
 
 保存先把值复制成原生持有的字节，不在文件 IO 期间保留 Camel 堆的裸指针。新检查点整体写入同一父目录下的独占临时目录（`dir.pending-<pid>-<序号>`）并逐文件刷盘。发布是同一卷上的两步改名：已有目标先改名为隐藏兄弟目录 `.<名字>.ckpt-previous`（名字是目标目录名，如目标 `out/ckpt` 对应 `out/.ckpt.ckpt-previous`），再把临时目录以不覆盖的改名发布为目标（Linux `renameat2(RENAME_NOREPLACE)`，macOS 用 `renamex_np(RENAME_EXCL)`，Windows 用不带替换标记的目录移动；缺少对应原语的平台明确失败）。第二步失败时把 `.<名字>.ckpt-previous` 改回目标，旧检查点原样保留；成功后删除它，删不掉则留到下次保存清理。目标不存在时直接发布；目标已存在时被整体替换，不会出现新旧叶子混合的状态。目标是符号链接、junction 或其他重解析点时，在动任何东西之前拒绝：改名只会移动该条目本身，而清理不能跟随链接。三个名字同父目录，因而总在同一卷；只有目标是挂载点或指向另一卷的链接时才跨卷，此时明确失败（`EXDEV`/`ERROR_NOT_SAME_DEVICE`），不做复制——复制会破坏“要么旧、要么新”的原子性。进程在两次改名之间死亡时，目标缺失而 `.<名字>.ckpt-previous` 是完整的旧检查点：下次保存先把它改回目标再替换，载入则读取它并在标准错误上警告。第二次改名成功后死亡只留下过期的 `.<名字>.ckpt-previous`，下次保存清除；被杀死时留下的未用 `.pending-*` 目录从不被读取，可手工删除。任何失败只清理本次创建的临时目录和文件，不递归删除其他目录。**并发写同一个检查点不受支持，约定只有一个写者**：两个 `save_tree` 同时写同一目标时不会互相串行化（不加锁文件），其中一个会明确失败，读方始终只看到完整的检查点。
 

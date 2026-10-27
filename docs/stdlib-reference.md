@@ -254,7 +254,7 @@ conversion as bf16, at the other reduced precision (design principles 7.3).
 #### `i32`
 
 ```camel
-i32: (x: T[]) => i32[..] when is_numeric::<T>()
+i32: (x: A) => WithElement<A, i32> when is_compact_array::<A>()
 ```
 
 The conversion `i32` applied to every element of a numeric array: the result has the input's extents and element type `i32`. A scalar converts by the declaration above.
@@ -265,7 +265,7 @@ The conversion `i32` applied to every element of a numeric array: the result has
 #### `i64`
 
 ```camel
-i64: (x: T[]) => int[..] when is_numeric::<T>()
+i64: (x: A) => WithElement<A, int> when is_compact_array::<A>()
 ```
 
 The conversion `i64` applied to every element of a numeric array: the result has the input's extents and element type `int64`. A scalar converts by the declaration above.
@@ -276,7 +276,7 @@ The conversion `i64` applied to every element of a numeric array: the result has
 #### `int`
 
 ```camel
-int: (x: T[]) => int[..] when is_numeric::<T>()
+int: (x: A) => WithElement<A, int> when is_compact_array::<A>()
 ```
 
 The conversion `int` applied to every element of a numeric array: the result has the input's extents and element type `int64`. A scalar converts by the declaration above.
@@ -287,7 +287,7 @@ The conversion `int` applied to every element of a numeric array: the result has
 #### `f32`
 
 ```camel
-f32: (x: T[]) => f32[..] when is_numeric::<T>()
+f32: (x: A) => WithElement<A, f32> when is_compact_array::<A>()
 ```
 
 The conversion `f32` applied to every element of a numeric array: the result has the input's extents and element type `f32`. A scalar converts by the declaration above.
@@ -298,7 +298,7 @@ The conversion `f32` applied to every element of a numeric array: the result has
 #### `f64`
 
 ```camel
-f64: (x: T[]) => float[..] when is_numeric::<T>()
+f64: (x: A) => WithElement<A, float> when is_compact_array::<A>()
 ```
 
 The conversion `f64` applied to every element of a numeric array: the result has the input's extents and element type `f64`. A scalar converts by the declaration above.
@@ -309,7 +309,7 @@ The conversion `f64` applied to every element of a numeric array: the result has
 #### `float`
 
 ```camel
-float: (x: T[]) => float[..] when is_numeric::<T>()
+float: (x: A) => WithElement<A, float> when is_compact_array::<A>()
 ```
 
 The conversion `float` applied to every element of a numeric array: the result has the input's extents and element type `f64`. A scalar converts by the declaration above.
@@ -320,7 +320,7 @@ The conversion `float` applied to every element of a numeric array: the result h
 #### `bf16`
 
 ```camel
-bf16: (x: T[]) => bf16[..] when is_numeric::<T>()
+bf16: (x: A) => WithElement<A, bf16> when is_compact_array::<A>()
 ```
 
 The conversion `bf16` applied to every element of a numeric array: the result has the input's extents and element type `bf16`. A scalar converts by the declaration above. A conversion into `bf16` or `f16` rounds (to nearest, ties to even); writing it asks for that precision, so it needs no numeric permission (`change_precision` governs a computation the compiler moves to lower precision, design principles 7.2-7.3).
@@ -331,7 +331,7 @@ The conversion `bf16` applied to every element of a numeric array: the result ha
 #### `f16`
 
 ```camel
-f16: (x: T[]) => f16[..] when is_numeric::<T>()
+f16: (x: A) => WithElement<A, f16> when is_compact_array::<A>()
 ```
 
 The conversion `f16` applied to every element of a numeric array: the result has the input's extents and element type `f16`. A scalar converts by the declaration above. A conversion into `bf16` or `f16` rounds (to nearest, ties to even); writing it asks for that precision, so it needs no numeric permission (`change_precision` governs a computation the compiler moves to lower precision, design principles 7.2-7.3).
@@ -1164,6 +1164,16 @@ The values of the bytes, each in 0..255.
 
 ## `ckpt`: parameter trees and checkpoints
 
+Checkpoints of a parameter tree. A tree is a struct or a tuple whose members are trees or
+leaves; a checkpoint holds the leaves an array of numbers, `Bytes`, `string`, `bool`, `i32`,
+`int`, `f32` and `float` can be written as (`has_ckpt_form`), and a tree with any other leaf is
+refused where the call is written.
+
+The tree is the data, the directory is where it goes: `tree->save_tree<dir: 'out/ckpt'>` and
+`'out/ckpt'->load_tree::<T>`. A failure of the file system is an error value; a directory that
+holds something other than a tree of the type asked for is an error value too. Walking a tree is
+the tree library's (`stdlib/tree.cml`), not this module's.
+
 #### `tree_leaves`
 
 ```camel
@@ -1178,49 +1188,39 @@ The leaves of a tree, as a tuple.
 #### `save_tree`
 
 ```camel
-save_tree: (dir: string, tree: T, dataset_manifest_sha256?: string) => void
+save_tree: <dir: string, dataset_manifest_sha256: string? = null> (tree: T) => void! uses fs when has_ckpt_form::<T>()
 ```
 
-Saves a tree to a directory, one file per leaf named by its path (`blocks.0.w.npy` for a
-tensor), with a manifest that records the types, sizes and SHA-256 sums and, when
-`dataset_manifest_sha256` is given, that hash of the data manifest. The directory is
-replaced as a whole or not at all: the new checkpoint is written and flushed into a
-temporary sibling and renamed into place, and the old directory is kept beside it as the
-hidden sibling `.<name>.ckpt-previous` (the destination's own directory name between a
-leading dot and `.ckpt-previous`) until that rename succeeds, so a failure puts the old
-directory back. A destination that does not exist is created; one that does is replaced; a
-symbolic link or a reparse point there is refused. If the process dies between the two
-renames, `load_tree` reads `.<name>.ckpt-previous` and the next `save_tree` restores it
-before replacing it. (A directory rename cannot replace a non-empty directory on Windows or
-POSIX, hence the two renames.) A leaf type a checkpoint cannot hold (anything but a tensor,
-`Bytes`, `string`, `bool`, `i32`, `int`, `f32`, `f64`) is a compile-time error that names
-the path. Only one writer may save to a directory at a time: concurrent `save_tree` calls
-for the same directory are not serialized (there is no lock file), so the contract is a
-single writer; one of two racing saves fails explicitly, and a reader still sees a complete
-checkpoint.
+Saves a tree to a directory, one file per leaf named by its path (`blocks.0.w.npy` for an
+array), with a manifest that records the types, sizes and SHA-256 sums and, when
+`dataset_manifest_sha256` is given, that hash of the data manifest. The directory is replaced as
+a whole or not at all: the new checkpoint is written and flushed into a temporary sibling and
+renamed into place, and the old directory is kept beside it as the hidden sibling
+`.<name>.ckpt-previous` until that rename succeeds, so a failure puts the old directory back. A
+destination that does not exist is created; one that does is replaced; a symbolic link there is
+refused. If the process dies between the two renames, `load_tree` reads the sibling and the
+next `save_tree` restores it before replacing it. Only one writer may save to a directory at a
+time; one of two racing saves fails, and a reader still sees a complete checkpoint.
 
-- With effects: writes and replaces the directory.
-- Failure: fault `FileSystemError` when the directory cannot be written or published.
-- Example: `save_tree('out/ckpt', { w: 1.0, step: 10 })`
+- Failure: error value `PermissionDenied` when the file system refuses a write; error value `IOError` when the directory cannot be written or published, or a symbolic link is in the way.
+- Example (a fragment, not compiled): `{ w: 1.0, step: 10 }->save_tree<dir: 'out/ckpt'>`
+- Why it is not compiled: the tree comes from the surrounding program
 
 #### `load_tree`
 
 ```camel
-load_tree: (dir: string, dataset_manifest_sha256?: string) => T!
+load_tree: <dataset_manifest_sha256: string? = null> (dir: string) => T! uses fs, stderr when has_ckpt_form::<T>()
 ```
 
-Reads a tree of the type T back from a directory `save_tree` wrote, checking the structure,
-the types, the sizes and the SHA-256 sums first: a directory that does not fit T is a
-`CheckpointError` value, nothing is partly loaded. A `dataset_manifest_sha256` that differs
-from the one the checkpoint records is a warning on standard error, not an error. T is the
-explicit type argument or the
-expected type of the result. When a save was interrupted after moving the old directory
-aside, the complete `.<name>.ckpt-previous` sibling is read instead, with a warning on
-standard error; the next save restores it before replacing it.
+Reads a tree of the type T back from a directory `save_tree` wrote, checking the structure, the
+types, the sizes and the SHA-256 sums first: nothing is partly loaded. A
+`dataset_manifest_sha256` that differs from the one the checkpoint records is a warning on
+standard error, not an error. T is the explicit type argument or the expected type of the
+result. When a save was interrupted after moving the old directory aside, the complete
+`.<name>.ckpt-previous` sibling is read instead, with a warning on standard error.
 
-- With effects: reads the directory.
-- Failure: error value `CheckpointError` when the directory does not hold a tree of the type T, or a file is missing or does not match its recorded sum.
-- Example: `load_tree::<{ w: float, step: int }>('out/ckpt') !! { w: 0.0, step: 0 }`
+- Failure: error value `NotFound` when there is no checkpoint at the path; error value `CheckpointError` when the directory does not hold a tree of the type T, or a file is missing or does not match its recorded sum.
+- Example: `'out/ckpt'->load_tree::<{ w: float, step: int }> !! { w: 0.0, step: 0 }`
 
 <a id="tree"></a>
 

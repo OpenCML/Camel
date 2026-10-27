@@ -24,7 +24,8 @@ TypeCode TypeCallType::typeCode() {
 
 namespace {
 
-constexpr std::string_view kTypeFunctions[] = {"ElementOf", "PayloadOf", "KeyOf", "ValueOf"};
+constexpr std::string_view kTypeFunctions[] = {
+    "ElementOf", "PayloadOf", "KeyOf", "ValueOf", "WithElement"};
 
 } // namespace
 
@@ -35,6 +36,17 @@ bool TypeCallType::isTypeFunction(std::string_view name) {
 
 Type *TypeCallType::evaluate(
     std::string_view name, std::span<Type *const> arguments, std::string &error) {
+    if (name == "WithElement") {
+        if (arguments.size() != 2 || arguments[0] == nullptr || arguments[1] == nullptr) {
+            error = "it takes an array type and an element type";
+            return nullptr;
+        }
+        if (arguments[0]->code() != TypeCode::Array) {
+            error = arguments[0]->toString() + " is not an array";
+            return nullptr;
+        }
+        return static_cast<ArrayType *>(arguments[0])->withElementType(arguments[1]);
+    }
     if (arguments.size() != 1 || arguments.front() == nullptr) {
         error = "it takes one type";
         return nullptr;

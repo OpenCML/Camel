@@ -2033,6 +2033,28 @@ void Builder::foldRunBody(
         return evaluateCallInsideBody(
             nestedCall, nestedCallee, nestedArguments, eval, nestedVars, nestedDepth);
     };
+    // The names the body calls are the declaring module's, not the module the call is written
+    // in: `has_ckpt_form` calls `is_numeric`, which calls `is_real` of its own module `types`.
+    struct DeclaringScope {
+        Builder &self;
+        camel::core::module::module_ptr_t module;
+        template_scope_ptr_t templates;
+        bool swapped = false;
+        DeclaringScope(Builder &builder, const generic_template_ptr_t &declaring) : self(builder) {
+            if (declaring != nullptr && declaring->module != nullptr &&
+                declaring->module != builder.module_ && declaring->templateScope != nullptr) {
+                module    = std::exchange(builder.module_, declaring->module);
+                templates = std::exchange(builder.templateScope_, declaring->templateScope);
+                swapped   = true;
+            }
+        }
+        ~DeclaringScope() {
+            if (swapped) {
+                self.module_        = std::move(module);
+                self.templateScope_ = std::move(templates);
+            }
+        }
+    } declaringScope(*this, target.declaring);
     try {
         result.data = GctConstantEvaluator::runFunction(
             target.func, target.bindings, *request.arguments, request.withArguments, nullptr,

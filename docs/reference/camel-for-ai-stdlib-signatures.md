@@ -31,14 +31,14 @@ f64: (x: S) => float when is_real::<S>() || is_string::<S>()
 f32: (x: S) => f32 when is_real::<S>() || is_string::<S>()
 bf16: (x: S) => bf16 when is_real::<S>() || is_string::<S>()
 f16: (x: S) => f16 when is_real::<S>() || is_string::<S>()
-i32: (x: T[]) => i32[..] when is_numeric::<T>()
-i64: (x: T[]) => int[..] when is_numeric::<T>()
-int: (x: T[]) => int[..] when is_numeric::<T>()
-f32: (x: T[]) => f32[..] when is_numeric::<T>()
-f64: (x: T[]) => float[..] when is_numeric::<T>()
-float: (x: T[]) => float[..] when is_numeric::<T>()
-bf16: (x: T[]) => bf16[..] when is_numeric::<T>()
-f16: (x: T[]) => f16[..] when is_numeric::<T>()
+i32: (x: A) => WithElement<A, i32> when is_compact_array::<A>()
+i64: (x: A) => WithElement<A, int> when is_compact_array::<A>()
+int: (x: A) => WithElement<A, int> when is_compact_array::<A>()
+f32: (x: A) => WithElement<A, f32> when is_compact_array::<A>()
+f64: (x: A) => WithElement<A, float> when is_compact_array::<A>()
+float: (x: A) => WithElement<A, float> when is_compact_array::<A>()
+bf16: (x: A) => WithElement<A, bf16> when is_compact_array::<A>()
+f16: (x: A) => WithElement<A, f16> when is_compact_array::<A>()
 c64: (x: S) => c64 when is_real::<S>() || is_complex::<S>()
 c128: (x: S) => c128 when is_real::<S>() || is_complex::<S>()
 string: (x: T) => string
@@ -125,8 +125,8 @@ to_array: (content: Bytes) => int[]
 
 ```text
 tree_leaves: (tree: T) => L
-save_tree: (dir: string, tree: T, dataset_manifest_sha256?: string) => void
-load_tree: (dir: string, dataset_manifest_sha256?: string) => T!
+save_tree: <dir: string, dataset_manifest_sha256: string? = null> (tree: T) => void! uses fs when has_ckpt_form::<T>()
+load_tree: <dataset_manifest_sha256: string? = null> (dir: string) => T! uses fs, stderr when has_ckpt_form::<T>()
 ```
 
 **`tree`** — import { ... } from tree — 4 name(s)

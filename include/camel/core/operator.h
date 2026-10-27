@@ -124,6 +124,14 @@ class OperatorGroup {
 
     const auto &resolvers() const { return resolvers_; }
 
+    /// Adds a rule to a group that is already shared: the prelude's declaration of a built-in
+    /// operator is the rule, and the modules that hold the group see it at once.
+    void addRule(const std::string &uri, type::resolver_ptr_t resolver) {
+        resolvers_.emplace_back(uri, std::move(resolver));
+        rejectOverlappingRules();
+        publishResolvers();
+    }
+
     std::optional<oper_idx_ptr_t> resolve(
         const type::type_vec_t &with, const type::type_vec_t &norm) const {
         for (const auto &[uri, resolver] : resolvers_) {
